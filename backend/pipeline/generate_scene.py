@@ -20,7 +20,7 @@ def call_nano_banana_and_store(prompt: str, job_id: str) -> str:
     path = f"{job_id}/scene-1.png"
     supabase = get_supabase_client()
     supabase.storage.from_(BUCKET).upload(
-        path, image_bytes, {"content-type": "image/png"}
+        path, image_bytes, {"content-type": "image/png", "upsert": "true"}
     )
     return path
 

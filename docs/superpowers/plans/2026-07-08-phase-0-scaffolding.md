@@ -1168,7 +1168,7 @@ if __name__ == "__main__":
 
 ```
 web: uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT
-worker: uv run python worker/run_worker.py
+worker: uv run python -m worker.run_worker
 ```
 
 - [ ] **Step 8: Run the full backend suite**
@@ -1707,7 +1707,7 @@ Create a new Railway project (region: Singapore / ap-southeast). Add a **Redis**
 
 Add two services, both pointing at the `backend/` directory of this repo:
 - **web**: start command `uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-- **worker**: start command `uv run python worker/run_worker.py`
+- **worker**: start command `uv run python -m worker.run_worker`
 
 Set these env vars on **both** services (values from Task 2 and your Gemini/Sentry/LangSmith accounts):
 ```
@@ -1760,7 +1760,7 @@ uv run uvicorn app.main:app --reload
 In a second terminal:
 ```bash
 cd backend
-uv run python worker/run_worker.py
+uv run python -m worker.run_worker
 ```
 
 - [ ] **Step 2: Run frontend locally**
