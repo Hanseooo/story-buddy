@@ -2,9 +2,9 @@ from pipeline.graph import build_graph
 
 
 def test_stub_graph_runs_all_nodes_in_order(monkeypatch):
-    monkeypatch.setattr("pipeline.analyze.call_gemini_for_caption", lambda text: "stub caption")
+    monkeypatch.setattr("pipeline.analyze.caption_for", lambda text: "stub caption")
     monkeypatch.setattr(
-        "pipeline.generate_scene.call_nano_banana_and_store",
+        "pipeline.generate_scene.generate_and_store",
         lambda prompt, job_id: "stub/path.png",
     )
 
@@ -22,9 +22,9 @@ def test_stub_graph_runs_all_nodes_in_order(monkeypatch):
 
 
 def test_stub_graph_full_run_with_real_call_points_mocked(monkeypatch):
-    monkeypatch.setattr("pipeline.analyze.call_gemini_for_caption", lambda text: "stub caption")
+    monkeypatch.setattr("pipeline.analyze.caption_for", lambda text: "stub caption")
     monkeypatch.setattr(
-        "pipeline.generate_scene.call_nano_banana_and_store",
+        "pipeline.generate_scene.generate_and_store",
         lambda prompt, job_id: "stub/path.png",
     )
 

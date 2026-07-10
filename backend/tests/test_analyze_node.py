@@ -1,28 +1,29 @@
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-from pipeline.analyze import analyze, call_gemini_for_caption
+from contracts.job_state import SceneCaption
+from pipeline.analyze import analyze, caption_for
 
 
-def test_call_gemini_for_caption_validates_structured_response():
-    fake_response = MagicMock()
-    fake_response.text = '{"caption": "A dog runs through a sunny field."}'
-
-    with patch("pipeline.analyze.genai.Client") as mock_client_cls:
-        mock_client_cls.return_value.models.generate_content.return_value = fake_response
-        caption = call_gemini_for_caption("A dog runs in a field.")
+def test_caption_for_returns_validated_caption():
+    with patch(
+        "pipeline.analyze.structured_text",
+        return_value=SceneCaption(caption="A dog runs through a sunny field."),
+    ):
+        caption = caption_for("A dog runs in a field.")
 
     assert caption == "A dog runs through a sunny field."
 
 
-def test_call_gemini_for_caption_rejects_malformed_response():
-    fake_response = MagicMock()
-    fake_response.text = '{"wrong_field": "oops"}'
+def test_caption_for_passes_the_schema_to_the_provider():
+    with patch(
+        "pipeline.analyze.structured_text",
+        return_value=SceneCaption(caption="x"),
+    ) as mock_structured_text:
+        caption_for("A dog runs in a field.")
 
-    with patch("pipeline.analyze.genai.Client") as mock_client_cls:
-        mock_client_cls.return_value.models.generate_content.return_value = fake_response
-        with pytest.raises(Exception):
-            call_gemini_for_caption("A dog runs in a field.")
+    prompt, schema = mock_structured_text.call_args.args
+    assert "A dog runs in a field." in prompt
+    assert schema is SceneCaption
 
 
 def test_analyze_node_sets_caption_and_stage():
@@ -33,7 +34,7 @@ def test_analyze_node_sets_caption_and_stage():
         "image_path": None,
         "stage": "queued",
     }
-    with patch("pipeline.analyze.call_gemini_for_caption", return_value="stub caption"):
+    with patch("pipeline.analyze.caption_for", return_value="stub caption"):
         result = analyze(state)
     assert result["caption"] == "stub caption"
     assert result["stage"] == "analyze"
