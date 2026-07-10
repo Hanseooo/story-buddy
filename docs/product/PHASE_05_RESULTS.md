@@ -65,6 +65,13 @@ Inter-rater agreement (κ): ______  ← this is also a dress rehearsal of the Ph
 Quill through all three presets, ON only. Second rater column: *"does this read as a
 hand-illustrated children's book, or as AI art?"*
 
+**Prediction, recorded before the run.** From ADR-022's tension — *texture defeats the AI look, but line
+and silhouette are what hold identity.* `ink` has the strongest line, so it should score highest on identity
+and lowest on handmade. `watercolour` has the softest edges, so it should invert: highest handmade, and it is
+**the preset most at risk of losing Quill**, because bleeding edges dissolve a silhouette. `gouache` sits
+between them; that is why it is `PRIMARY`. A result that contradicts this is a finding about the substrate,
+not a scoring error — record it rather than explaining it away.
+
 | Preset | identity (ON) | reads-as-handmade | Verdict |
 |---|---|---|---|
 | `gouache` | | | |
