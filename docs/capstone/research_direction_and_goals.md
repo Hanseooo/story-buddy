@@ -292,3 +292,6 @@ is a weekend. Everything before it is months.
 **Write the Methods section before the Results exist.** It is already almost entirely determined by
 `RESEARCH_PROTOCOL.md`, and writing it early is what makes the pre-registration in §4.4 real rather than
 decorative.
+
+→ **Drafted: `docs/capstone/methods.md`.** Its §7 (analysis plan) is the pre-registration and needs adviser
+sign-off **before the first data point is collected.**
