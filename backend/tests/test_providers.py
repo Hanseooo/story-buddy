@@ -32,6 +32,29 @@ def test_structured_text_raises_when_nothing_parsed():
             providers.structured_text("prompt", SceneCaption)
 
 
+def test_judge_sends_images_as_multimodal_content():
+    """The judge is only ever called with reference + scene. A text-only call is a broken judge."""
+    with patch("providers.OpenAI") as mock_openai:
+        parse = mock_openai.return_value.chat.completions.parse
+        parse.return_value = _fake_completion(SceneCaption(caption="hi"))
+        providers.judge("compare", ["https://ref.png", "https://scene.png"], SceneCaption)
+
+    content = parse.call_args.kwargs["messages"][0]["content"]
+    assert content[0] == {"type": "text", "text": "compare"}
+    assert [part["image_url"]["url"] for part in content[1:]] == ["https://ref.png", "https://scene.png"]
+
+
+def test_judge_omits_openrouter_flag_when_self_hosted():
+    """vLLM rejects OpenRouter's `provider` field; the swap to Modal is config-only (ADR-019)."""
+    with patch("providers.OpenAI") as mock_openai, \
+         patch.object(providers.settings, "judge_base_url", "https://x.modal.run/v1"):
+        parse = mock_openai.return_value.chat.completions.parse
+        parse.return_value = _fake_completion(SceneCaption(caption="hi"))
+        providers.judge("compare", ["https://ref.png"], SceneCaption)
+
+    assert parse.call_args.kwargs["extra_body"] == {}
+
+
 def test_edit_image_passes_references_and_seed_and_returns_bytes():
     fal = MagicMock()
     fal.subscribe.return_value = {"images": [{"url": "https://fal.example/x.png"}], "seed": 7}

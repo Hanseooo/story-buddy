@@ -19,5 +19,14 @@ class Settings(BaseSettings):
     fal_image_model: str = "fal-ai/qwen-image"
     fal_image_edit_model: str = "fal-ai/qwen-image-edit-2511"
 
+    # The judge moves to a self-hosted vLLM server after Phase 2.5 (ADR-019). vLLM speaks the
+    # OpenAI protocol, so the swap is these two vars — no code change.
+    judge_base_url: str = "https://openrouter.ai/api/v1"
+    judge_api_key: str | None = None  # falls back to openrouter_api_key
+
+    # ADR-011's current primary. Qwen3Guard-Gen (Apache-2.0, 119 languages) is the intended
+    # replacement — its OpenRouter model id is unverified, hence the Phase 0.5 moderation probe.
+    moderation_model: str = "meta-llama/llama-guard-4-12b"
+
 
 settings = Settings()

@@ -18,21 +18,48 @@ T = TypeVar("T", bound=BaseModel)
 
 
 def structured_text(prompt: str, schema: type[T], model: str | None = None) -> T:
-    """Strict `json_schema` structured output, validated into `schema`.
+    """Strict `json_schema` structured output, validated into `schema`."""
+    return _chat(
+        OPENROUTER_BASE_URL,
+        settings.openrouter_api_key,
+        model or settings.text_model,
+        prompt,
+        schema,
+    )
 
-    `provider.require_parameters` is load-bearing: without it OpenRouter may route to a
-    provider that lacks structured output and silently downgrade to loose JSON (ADR-002).
+
+def judge(prompt: str, image_urls: list[str], schema: type[T], model: str | None = None) -> T:
+    """Multimodal structured verdict over reference + scene images (ADR-004, ADR-018).
+
+    Field order in `schema` is load-bearing: `differences_observed` must precede
+    `same_character` so the judge reasons before it scores.
     """
-    client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=settings.openrouter_api_key)
-    completion = client.chat.completions.parse(
-        model=model or settings.text_model,
-        messages=[{"role": "user", "content": prompt}],
+    content = [{"type": "text", "text": prompt}]
+    content += [{"type": "image_url", "image_url": {"url": url}} for url in image_urls]
+    return _chat(
+        settings.judge_base_url,
+        settings.judge_api_key or settings.openrouter_api_key,
+        model or settings.vlm_judge_model,
+        content,
+        schema,
+    )
+
+
+def _chat(base_url: str, api_key: str, model: str, content, schema: type[T]) -> T:
+    """`provider.require_parameters` is load-bearing: without it OpenRouter may route to a
+    provider that lacks structured output and silently downgrade to loose JSON (ADR-002).
+    Self-hosted vLLM rejects the unknown field, so it is sent only to OpenRouter.
+    """
+    extra_body = {"provider": {"require_parameters": True}} if base_url == OPENROUTER_BASE_URL else {}
+    completion = OpenAI(base_url=base_url, api_key=api_key).chat.completions.parse(
+        model=model,
+        messages=[{"role": "user", "content": content}],
         response_format=schema,
-        extra_body={"provider": {"require_parameters": True}},
+        extra_body=extra_body,
     )
     parsed = completion.choices[0].message.parsed
     if parsed is None:
-        raise ValueError(f"{model or settings.text_model} returned no parsable structured output")
+        raise ValueError(f"{model} returned no parsable structured output")
     return parsed
 
 
