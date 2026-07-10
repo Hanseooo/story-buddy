@@ -63,7 +63,7 @@ Supabase acts as the infrastructural backbone for application state and security
 
 ### The Open-Weight Mandate
 A core academic requirement for StoryBuddy is the reliance on open-weight models rather than proprietary black-boxes. 
-- **Models:** Text parsing uses `qwen/qwen3-32b`, image generation utilizes `Qwen-Image-Edit`, and the VLM consistency judge is a **prompted `gemma-3-27b-it`**. A fine-tuned `Qwen2.5-VL-7B` is a *candidate replacement* for that judge, evaluated in Phase 2.5 and shipped only if it clears its gate (`model_finetuning.md`).
+- **Models:** Text parsing uses `qwen/qwen3-32b`, image generation utilizes `Qwen-Image-Edit`, and the VLM consistency judge is a **prompted `gemma-3-27b-it`**. A fine-tuned `Qwen2.5-VL-7B` is a *candidate replacement* for that judge, evaluated in Phase 2.5 and shipped only if it clears its gate (as documented in `docs/capstone/model_finetuning.md` in the repository).
 - **Reasoning:** Leveraging open weights guarantees that the infrastructure remains fully self-hostable. It ensures the academic claims of the paper are tied to a transparent, replicable stack that imposes no ongoing vendor lock-in or per-seat licensing costs—an essential factor for deployment in resource-constrained public schools.
 
 ### Safety and Moderation

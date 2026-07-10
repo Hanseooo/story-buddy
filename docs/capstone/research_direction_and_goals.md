@@ -35,9 +35,9 @@ breed. The style shifts halfway through.
 
 No single generative model produces a coherent multi-scene picture book that holds a **stylized, invented,
 frequently non-human** character across pages. This regime is not merely hard; it is *unmeasured*. No open
-image model has published identity-similarity benchmarks split by human vs. non-human subject (ADR-001),
+image model has published identity-similarity benchmarks split by human vs. non-human subject (as established in the project's Architecture Decision Record 001 [ADR-001] available in the source repository, which evaluated candidates like Qwen-Image-Edit and FLUX.1 and found that non-human/stylized identity preservation remains unbenchmarked),
 and **no dataset exists that provides human pairwise identity judgments over stylized invented characters**
-(`docs/specs/judge-finetune.md` §5.1). That absence is itself a contribution of this work.
+(`docs/specs/judge-finetune.md` §5.1 in the repository). That absence is itself a contribution of this work.
 
 ### 1.3 Why these are the same problem
 
@@ -63,14 +63,14 @@ The contribution is a **pipeline**, not a model. Each element exists because a s
 2. **Character Bible + canonical reference image** — each main character (≤ 2 canonical references) is drawn
    *once*, up front. Every scene is then generated **conditioned on that image**, not re-invented from text.
 3. **Style presets** — three hand-authored prompt fragments. Style rides the canonical reference, so a preset
-   is a different constant, not a different mechanism (ADR-022).
+   is a different constant, not a different mechanism (as detailed in ADR-022 in the project repository, which specifies that style is anchored by the canonical character reference itself, allowing presets to be implemented as prompt fragments rather than requiring separate exemplar images).
 4. **VLM-as-judge, reason-then-score** — a vision-language model compares each generated scene against the
    character's canonical reference. It must state *what differs* before it states *whether they match*;
-   field order is load-bearing, because a model that scores first rationalizes afterwards (ADR-004).
+   field order is load-bearing, because a model that scores first rationalizes afterwards (as outlined in ADR-004 in the repository, which notes that VLM judges can conflate category and scene similarity with identity, requiring a reason-then-score field ordering to force the reasoning to condition the verdict).
 5. **Targeted regeneration** — the judge's structured `failure_reasons` (drawn from a closed taxonomy:
    `wrong_colour`, `wrong_species`, `wrong_clothing`, …) are fed back into exactly one corrected retry.
    This is what makes regeneration *purposeful* rather than a random re-roll. If the retry still fails, the
-   higher-scoring image is kept — a child never sees a broken page (ADR-010).
+   higher-scoring image is kept — a child never sees a broken page (per ADR-010 in the repository, which establishes the policy of one targeted retry using the VLM's extracted failure reasons, followed by a best-of fallback to ensure a guaranteed shippable page).
 
 **The shipped judge is a prompted `gemma-3-27b-it`.** A fine-tuned `Qwen2.5-VL-7B` is a candidate replacement
 for that one part, evaluated in Phase 2.5, shipped only if it clears its gate. The pipeline is unchanged
@@ -124,7 +124,7 @@ instrument** — authors know what they meant and will read it into any illustra
 
 The judge drives regeneration inside the pipeline-ON arm. Using that same judge as the outcome measure would
 be circular — the system would be grading its own homework. RQ2's outcomes are **human ratings** and RQ5.
-This is the sharpest question a panel will ask, and the answer is fixed in ADR-004 so it is never improvised.
+This is the sharpest question a panel will ask, and the answer is fixed in ADR-004 (available in the project repository, which explicitly decouples the judge used for pipeline regeneration from the outcome measures of human consistency ratings and reader comprehension to ensure valid, non-circular research claims) so it is never improvised.
 
 ---
 
@@ -247,7 +247,7 @@ rather than a hope, and it is why the system is self-hostable and replicable.
 2. **Evidence on whether consistency actually transmits a story** (RQ5) — the bridge from a technical metric
    to a human outcome.
 3. **A characterization of an unmeasured regime** — identity retention for stylized, invented, non-human
-   characters, where ADR-001 records that no benchmark exists.
+   characters, where ADR-001 (in the repository) records that no published benchmark splits identity similarity by human vs. non-human subject for current open image models.
 4. **A fine-tuned open VLM consistency judge, honestly evaluated** against four baselines with a
    pre-registered claim ladder — including the outcome where it loses.
 5. **Equity by construction** — an open-weight, self-hostable stack with no per-seat licensing cost.
@@ -283,8 +283,8 @@ is a weekend. Everything before it is months.
 | Manuscript section | Draw from |
 |---|---|
 | **Introduction** | §1.1 (motivation, cited to prior work) → §1.2 (the gap) → §1.3 (the research problem + central RQ) → §7 (contributions). Lead with the child and the folder; land on identity drift. |
-| **Related Work** | §1.2's two absences — no non-human identity benchmark (ADR-001), no dataset with human pairwise identity judgments (`judge-finetune.md` §5.1, incl. the rejected-alternatives table). |
-| **Methods** | §2 (system) · §3 (RQs, ablation, comprehension instrument, **§3.3 non-circularity**) · §4 (corpus, tiers, ethics, pre-registration) · §6 (scope & delimitation) |
+| **Related Work** | §1.2's two absences — no non-human identity benchmark (per ADR-001 in the repository, which confirms this gap across current open models), no dataset with human pairwise identity judgments (see `docs/specs/judge-finetune.md` §5.1 in the repository, incl. the rejected-alternatives table). |
+| **Methods** | **Drafted in full: `docs/capstone/methodology.md`** — development methodology, system under test, data collection, datasets, training and validation, instruments, analysis plan, ethics, threats to validity. |
 | **Results** | Phase 0.5 probe results · the ablation table · RQ5 recall scores · RQ6's four-baseline table with CIs |
 | **Discussion** | §5 — what the numbers support, and the four claims we refuse to make. Phase 0.5's non-human boundary belongs here if Quill fails. |
 | **Limitations** | §5's table, §6's delimitation, and the fact that the corpus is one grade band in one country. |
@@ -293,5 +293,6 @@ is a weekend. Everything before it is months.
 `RESEARCH_PROTOCOL.md`, and writing it early is what makes the pre-registration in §4.4 real rather than
 decorative.
 
-→ **Drafted: `docs/capstone/methods.md`.** Its §7 (analysis plan) is the pre-registration and needs adviser
-sign-off **before the first data point is collected.**
+→ **Drafted: `docs/capstone/methodology.md`.** Its §7 (analysis plan) is the pre-registration and needs
+adviser sign-off **before the first data point is collected.** Its §6.4 (ISO/IEC 25010 system-evaluation
+questionnaire) needs the required standard and evaluator profile confirmed with your adviser.
