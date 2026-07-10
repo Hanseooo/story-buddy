@@ -9,6 +9,10 @@ node_modules/
 frontend/.next/
 frontend/.env.local
 
+# Phase 0.5 spike output. `key.csv` unblinds probe 1 — committing it puts the answer key
+# one `git show` away from every rater. After `tally`, `git add -f` the two CSVs deliberately.
+backend/spikes/out/
+
 # General
 .DS_Store
 *.log

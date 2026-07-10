@@ -23,8 +23,15 @@ dependencies = [
 dev = [
     "pytest>=8.3",
     "pytest-mock>=3.14",
+    "ruff>=0.8",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+# `ruff check` only. `ruff format` is deliberately NOT adopted: its 88-column default rewraps
+# every file in the repo, so a one-line change arrives as a 200-line diff. Adopt it only via a
+# single repo-wide formatting commit, never inside a feature change.
+[tool.ruff]
+line-length = 120
