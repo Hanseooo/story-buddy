@@ -2,7 +2,7 @@
 
 Needs OPENROUTER_API_KEY and FAL_KEY in backend/.env.
 
-    uv run python -m spikes.phase_05 consistency   # ~22 images, ~$0.80. Then score by hand.
+    uv run python -m spikes.phase_05 consistency   # ~34 images, ~$1.20. Then score by hand.
     uv run python -m spikes.phase_05 tally         # reads scores.csv -> the kill criterion
     uv run python -m spikes.phase_05 seed
     uv run python -m spikes.phase_05 structured
@@ -12,6 +12,10 @@ Probe 1 is the kill criterion. It generates each scene twice — once conditione
 canonical reference (ON) and once from the character description alone (OFF) — then shuffles
 them behind opaque filenames. Score `scores.csv` blind, with as many raters as you have, then
 run `tally`. This is a dress rehearsal of the Phase 3 instrument (ADR-008), not just an eyeball.
+
+Probe 1 also carries a secondary, NON-GATING arm (ADR-022): Quill through the other two style
+presets, and a second rater question — does this read as a hand-illustrated children's book, or
+as AI art? Only identity, only on the primary preset, decides whether the project lives.
 """
 import csv
 import hashlib
@@ -27,15 +31,27 @@ from app.config import settings
 OUT = Path(__file__).parent / "out"
 SEED = 12345
 
-STYLE = "flat storybook illustration, thick outlines, warm gouache colours"
+# ADR-022's three presets. Each names a *traditional medium and its physical artifacts* — paper
+# grain, brush edges, flat fills. Never "beautiful", "8k", "highly detailed": those produce the
+# airbrushed, plastic, hyper-saturated default that reads as AI art.
+#
+# The tension ADR-022 records: texture defeats the AI look, but line and silhouette are what hold
+# identity across scenes. So identity lives in the line, and character lives in the fill.
+STYLE_PRESETS = {
+    "gouache": "flat gouache storybook illustration, thick confident ink outlines, matte paper grain, limited warm palette, flat colour fills, no gradients, no glossy highlights",
+    "ink": "bold black ink linework with cel shading, screen-printed picture-book look, three flat tones per colour, visible pen texture, no gradients, no glow",
+    "watercolour": "loose watercolour washes over a visible ink line, cold-pressed paper texture, soft bleeding edges, muted palette, uneven pigment, no digital smoothing",
+}
+PRIMARY = "gouache"  # today's ADR-007 constant. The kill criterion is scored on this preset alone.
+SECONDARY = [name for name in STYLE_PRESETS if name != PRIMARY]
 
 # Two characters on purpose. A fox is a real animal with a canonical silhouette and is heavily
 # represented in illustration training data — it is the *easy* case. ADR-001's actual risk is
 # invented, non-human, stylized characters. If Pip passes and Quill fails, that is a finding
 # that maps the product's boundary, not a defeat.
 CHARACTERS = {
-    "pip": f"Pip, a small round fox cub with oversized ears, a cream chest patch, and one bent whisker, {STYLE}",
-    "quill": f"Quill, an invented creature with three amber eyes, a lizard body, stubby feathered wings, and a striped scarf, {STYLE}",
+    "pip": "Pip, a small round fox cub with oversized ears, a cream chest patch, and one bent whisker",
+    "quill": "Quill, an invented creature with three amber eyes, a lizard body, stubby feathered wings, and a striped scarf",
 }
 
 SCENES = [
@@ -47,65 +63,95 @@ SCENES = [
 ]
 
 
-def consistency() -> None:
-    """Probe 1 — non-human character consistency, as a blind ablation. THE KILL CRITERION."""
-    items = []
-    for char_id, description in CHARACTERS.items():
-        reference = providers.text_to_image(f"Character reference sheet, full body, plain background. {description}")
-        _write(f"reference-{char_id}.png", reference)
-        reference_url = providers.upload_reference(reference)
+def _describe(char_id: str, preset: str) -> str:
+    return f"{CHARACTERS[char_id]}, {STYLE_PRESETS[preset]}"
 
+
+def _reference(char_id: str, preset: str) -> str:
+    """Generate the canonical reference for one (character, preset) and return its URL."""
+    image = providers.text_to_image(f"Character reference sheet, full body, plain background. {_describe(char_id, preset)}")
+    _write(f"reference-{char_id}-{preset}.png", image)
+    return providers.upload_reference(image)
+
+
+def consistency() -> None:
+    """Probe 1 — non-human character consistency, as a blind ablation. THE KILL CRITERION.
+
+    Primary arm (gates): both characters, both conditions, primary preset.
+    Secondary arm (ADR-022, does not gate): Quill through the other two presets, ON only.
+    """
+    edit = "The exact same character from the reference image, {}. Keep identity unchanged."
+    items = []
+
+    for char_id in CHARACTERS:
+        reference_url = _reference(char_id, PRIMARY)
         for scene_no, scene in enumerate(SCENES, start=1):
-            on = providers.edit_image(
-                f"The exact same character from the reference image, {scene}. Keep identity unchanged.",
-                [reference_url],
-            )
-            off = providers.text_to_image(f"{description}, {scene}")
-            items.append((char_id, scene_no, "on", on))
-            items.append((char_id, scene_no, "off", off))
+            on = providers.edit_image(edit.format(scene), [reference_url])
+            off = providers.text_to_image(f"{_describe(char_id, PRIMARY)}, {scene}")
+            items.append((char_id, PRIMARY, scene_no, "on", on))
+            items.append((char_id, PRIMARY, scene_no, "off", off))
+
+    for preset in SECONDARY:
+        reference_url = _reference("quill", preset)
+        for scene_no, scene in enumerate(SCENES, start=1):
+            on = providers.edit_image(edit.format(scene), [reference_url])
+            items.append(("quill", preset, scene_no, "on", on))
 
     random.shuffle(items)
     with (OUT / "key.csv").open("w", newline="") as f:
         key = csv.writer(f)
-        key.writerow(["item", "character", "scene", "condition"])
-        for index, (char_id, scene_no, condition, image) in enumerate(items, start=1):
+        key.writerow(["item", "character", "preset", "scene", "condition"])
+        for index, (char_id, preset, scene_no, condition, image) in enumerate(items, start=1):
             _write(f"item-{index:02d}.png", image)
-            key.writerow([f"item-{index:02d}", char_id, scene_no, condition])
+            key.writerow([f"item-{index:02d}", char_id, preset, scene_no, condition])
 
+    raters = [f"rater_{n}_{question}" for n in range(1, 5) for question in ("identity", "handmade")]
     with (OUT / "scores.csv").open("w", newline="") as f:
         scores = csv.writer(f)
-        scores.writerow(["item", "rater_1", "rater_2", "rater_3", "rater_4"])
+        scores.writerow(["item", *raters])
         for index in range(1, len(items) + 1):
-            scores.writerow([f"item-{index:02d}", "", "", "", ""])
+            scores.writerow([f"item-{index:02d}", *[""] * len(raters)])
 
     print(f"\nWrote {len(items)} items to {OUT}.")
-    print("DO NOT OPEN key.csv. Each rater fills one column of scores.csv independently:")
-    print("  1 = same character as the matching reference-*.png, 0 = not the same character.")
+    print("DO NOT OPEN key.csv. Each rater fills their own two columns, independently:")
+    print("  identity: 1 = same character as reference-<character>-<style>.png, 0 = not the same.")
+    print("            Match the reference sharing the item's art style, not just its character.")
+    print("  handmade: 1 = reads as a hand-illustrated children's book, 0 = reads as AI art.")
     print("Then: uv run python -m spikes.phase_05 tally")
 
 
 def tally() -> None:
-    """Score Probe 1. Two criteria, both must hold."""
+    """Score Probe 1. The kill criterion is identity, on the primary preset, and nothing else."""
     key = {row["item"]: row for row in _rows("key.csv")}
-    columns = [c for c in _rows("scores.csv")[0] if c.startswith("rater_")]
 
     verdicts: dict[str, list[int]] = {"on": [], "off": []}
     per_character: dict[tuple[str, str], list[int]] = {}
+    per_preset: dict[tuple[str, str], list[int]] = {}
     for row in _rows("scores.csv"):
-        marks = [int(row[c]) for c in columns if row[c].strip()]
-        if not marks:
-            sys.exit(f"{row['item']} unscored — every item needs at least one rater.")
-        majority = int(sum(marks) * 2 > len(marks))
         entry = key[row["item"]]
-        verdicts[entry["condition"]].append(majority)
-        per_character.setdefault((entry["character"], entry["condition"]), []).append(majority)
+        identity = _majority(row, "identity")
+        per_preset.setdefault((entry["preset"], "handmade"), []).append(_majority(row, "handmade"))
+        if entry["condition"] == "on":
+            per_preset.setdefault((entry["preset"], "identity"), []).append(identity)
+        if entry["preset"] != PRIMARY:
+            continue  # the secondary arm reports, it does not gate — ADR-022
+        verdicts[entry["condition"]].append(identity)
+        per_character.setdefault((entry["character"], entry["condition"]), []).append(identity)
 
     on_rate = _rate(verdicts["on"])
     off_rate = _rate(verdicts["off"])
+    print(f"--- kill criterion ({PRIMARY} preset only) ---")
     print(f"pipeline-ON  identity retained: {on_rate:.0%}  (n={len(verdicts['on'])})")
     print(f"pipeline-OFF identity retained: {off_rate:.0%}  (n={len(verdicts['off'])})")
     for (char_id, condition), marks in sorted(per_character.items()):
         print(f"  {char_id:6s} {condition:3s}: {_rate(marks):.0%}")
+
+    print("\n--- style presets (ADR-022; secondary, does not gate) ---")
+    for preset in STYLE_PRESETS:
+        identity = _rate(per_preset.get((preset, "identity"), []))
+        handmade = _rate(per_preset.get((preset, "handmade"), []))
+        print(f"  {preset:11s} identity(ON) {identity:.0%}   reads-as-handmade {handmade:.0%}")
+    print("  A preset that cannot hold Quill, or that reads as AI art, is re-authored or dropped.")
 
     absolute = on_rate >= 0.8
     separates = on_rate - off_rate >= 0.3
@@ -122,8 +168,8 @@ def tally() -> None:
 def seed() -> None:
     """Probe 2 — is fal.ai's seed deterministic? On BOTH endpoints: the ablation seed-matches
     pipeline-ON (edit_image) against pipeline-OFF (text_to_image), so both must reproduce."""
-    reference_url = providers.upload_reference(_read("reference-pip.png"))
-    description = CHARACTERS["pip"]
+    reference_url = providers.upload_reference(_read(f"reference-pip-{PRIMARY}.png"))
+    description = _describe("pip", PRIMARY)
 
     calls = {
         "edit_image": lambda: providers.edit_image(
@@ -176,7 +222,7 @@ def structured() -> None:
     else:
         print(f"PASS {settings.text_model}: {result!r}")
 
-    reference_url = providers.upload_reference(_read("reference-pip.png"))
+    reference_url = providers.upload_reference(_read(f"reference-pip-{PRIMARY}.png"))
     scene_url = providers.upload_reference(_read("item-01.png"))
     try:
         verdict = providers.judge(
@@ -260,6 +306,13 @@ def _read(name: str) -> bytes:
 def _rows(name: str) -> list[dict]:
     with (OUT / name).open(newline="") as f:
         return list(csv.DictReader(f))
+
+
+def _majority(row: dict, question: str) -> int:
+    marks = [int(row[c]) for c in row if c.endswith(f"_{question}") and row[c].strip()]
+    if not marks:
+        sys.exit(f"{row['item']} unscored for {question} — every item needs at least one rater.")
+    return int(sum(marks) * 2 > len(marks))
 
 
 def _rate(marks: list[int]) -> float:
