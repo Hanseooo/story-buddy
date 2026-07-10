@@ -16,6 +16,7 @@ owns *how the pieces connect* and the engineering rules that keep an AI-assisted
 | The hard rules you must not break | `/CLAUDE.md` |
 | Why a decision was made | `docs/product/ADRs.md` |
 | What the product is / user flow | `docs/product/PRD_v2.md` |
+| The study: RQs, instruments, ethics, defense prep | `docs/product/RESEARCH_PROTOCOL.md` |
 | Build order & phase exit criteria | `docs/product/ROADMAP.md` |
 | How modules connect / where code lives | §2 below (System Map) |
 | The inter-module data contract | §3 below (Story Memory) |
@@ -43,6 +44,9 @@ story-buddy/
   backend/               # FastAPI web + RQ worker — own pyproject (pytest)
     pipeline/            # LangGraph nodes, one file per module
     contracts/           # Pydantic Story Memory schema = the frozen inter-module contract
+    providers.py         # the only place a model vendor is named (ADR-015)
+    spikes/              # Phase 0.5 probes — real models, real money, never CI
+    finetune/            # Phase 2.5 — data manifests, training config, eval (ADR-018)
 ```
 
 **Frontend and backend are independent projects** (different languages; no shared monorepo build
@@ -111,8 +115,10 @@ input_gate ──► analyze ──► segment ──► char_bible ──► [c
 | `output moderation` | each `final_image_ref` | `scenes[].moderation_status` | ADR-011 |
 | `compose` / `export` | passed scenes + captions | storybook + PDF in Storage | ADR-013 |
 
-**The style constant is config, not a node** (ADR-007): a fixed prompt fragment + optional
-style-anchor image, authored once. Identity *and* style both ride the canonical reference.
+**Style presets are config, not a node** (ADR-007, ADR-022): **three** hand-authored prompt fragments, one
+chosen by the author *before* the canonical reference is generated and then frozen for the storybook
+(`style.style_preset_id`). Identity *and* style both ride the canonical reference — which is exactly why
+adding presets costs a dict and no new machinery, and why there is **no style-anchor image**.
 
 ---
 
@@ -121,10 +127,17 @@ style-anchor image, authored once. Identity *and* style both ride the canonical 
 The Pydantic model in `backend/contracts/` (shape sketched in PRD §19) is **the** interface
 between every module. It is authoritative and versioned. Rules:
 
-- Every LLM call uses Gemini structured output → validated into this schema (never raw dict).
+- Every LLM call uses **strict JSON-schema structured output** → validated into this schema (never raw
+  dict). On OpenRouter this means `response_format: {type: "json_schema", strict: true}` **plus
+  `provider.require_parameters: true`** — without the second flag, a routed provider lacking schema
+  support silently downgrades to loose JSON mode and this validation boundary is all that catches it
+  (ADR-002).
 - A module's spec (§7) declares exactly which fields it **reads** and **writes** — its contract slice.
 - Schema change = contract change: update schema + affected specs + every consumer, one change.
+- The judge verdict is **reason-then-score**: `differences_observed` is declared *before*
+  `same_character`. Field order is load-bearing, not cosmetic (ADR-004 amendment).
 - `eval.condition` (`pipeline_on | pipeline_off`) and `eval.seed` drive the ablation (§6, ADR-008).
+  Seed reproducibility is **provider-specific and must be empirically verified** (CC-7, Phase 0.5).
 
 Freeze the schema's *shape* before Phase 1 (ROADMAP dependency map). Field-level detail is
 finalized in the Story Memory feature spec, which is the first spec written.
@@ -141,16 +154,20 @@ Product/architecture choices are in the ADRs; this is the working reference, **i
 | Backend web | FastAPI | Railway (Singapore). ADR-009 |
 | Worker / queue | RQ worker + Redis broker | Separate service. ADR-005 |
 | Pipeline engine | LangGraph (deterministic) + `langgraph-checkpoint-postgres` | ADR-003,005 |
-| LLM / VLM | Gemini (Flash tier for nodes; Gemini vision for judge) | ADR-002,004 |
-| Image model | Nano Banana (Gemini 2.5 Flash Image / Nano Banana 2 Lite) | ADR-001 |
-| Data / auth / storage / realtime | Supabase (Postgres + Auth + Storage + Realtime + RLS) | ADR-006 |
-| Structured extraction | Gemini `response_schema` + Pydantic | §12, §3 |
-| Moderation | OpenAI moderation (text) + Presidio (PII) + Vision SafeSearch/Gemini safety (image) | ADR-011 |
+| LLM / VLM | `qwen/qwen3-32b` (nodes) + judge (`gemma-3-27b-it` → fine-tuned `Qwen2.5-VL-7B` in Phase 2.5) | ADR-002,004,015,018 |
+| Image model | Qwen-Image-Edit 2509/2511 (Apache-2.0), hosted on fal.ai | ADR-001,015 |
+| Judge serving | vLLM on a scale-to-zero GPU container (Modal). OpenAI-compatible — `JUDGE_BASE_URL` is the swap | ADR-019 |
+| Model access layer | `backend/providers.py` — thin functions, one impl each. **The only file naming a vendor** | ADR-015 |
+| Data / auth / storage / realtime | Supabase (Postgres + Auth + Storage + Realtime + RLS). **Classroom-scoped** | ADR-006, ADR-017 |
+| Structured extraction | `json_schema` (strict) + `require_parameters` (OpenRouter only) + Pydantic | §12, §3, ADR-002 |
+| Moderation | **Qwen3Guard-Gen + Granite Guardian** (text, both Apache-2.0) + Presidio **+ Filipino recognizers** (PII) + NSFW ViT & VLM rubric (image) | ADR-011 |
+| Narration | **Kokoro-82M** (Apache-2.0, CPU), pre-rendered per page onto Storage | ADR-020 |
+| Fine-tuning | **The consistency judge only.** Identity = reference conditioning; style = ADR-007 constant; safety = never | ADR-018 (supersedes ADR-016) |
 | Observability | LangSmith **or** Langfuse (tracing) + Sentry (errors) | §16 |
 | Rate limiting | `slowapi` + per-profile daily cap + cost circuit-breaker | §14,§15 |
 | Export | HTML template → PDF (Playwright **or** WeasyPrint — **open, ADR-013**) | §8 |
 | **Testing — FE unit** | **vitest** | mock model calls; component + logic |
-| **Testing — BE unit** | **pytest** | mock Gemini/Nano Banana; node logic, contracts, RLS, routing |
+| **Testing — BE unit** | **pytest** | mock every `providers.py` call; node logic, contracts, RLS, routing |
 | **Testing — e2e** | **Playwright + Playwright CLI** | happy path, auth/RLS isolation, processing→slideshow, export |
 | **Eval harness** | offline scripts + tracing exports | real models, story corpus; **not CI** (§6) |
 
@@ -180,11 +197,11 @@ Concerns that touch many modules. **Every feature spec ticks the ones it affects
 | CC-1 | **Moderation ordering** | input text → char-ref → output image; no image reaches a kid unmoderated | ADR-011 / §13 |
 | CC-2 | **PII redaction** | Presidio before storage/caption/export; redacted text is what's persisted | ADR-011 / §14 |
 | CC-3 | **Cost control** | counts toward per-book ceiling + circuit-breaker; per-profile daily cap | §15 |
-| CC-4 | **Security (RLS + signed URLs)** | DB-layer isolation; no public assets | ADR-006 / §14 |
+| CC-4 | **Security (RLS + signed URLs)** | **classroom**-scoped DB isolation; no public assets | ADR-006, ADR-017 / §14 |
 | CC-5 | **Observability** | emits traces/metrics (gen time, regen count, cost, VLM score) | §16 |
-| CC-6 | **Accessibility** | read-aloud (TTS) captions; large targets; minimal text; STT input where relevant | §17 |
+| CC-6 | **Accessibility** | Kokoro narration per page; large targets; minimal text | §17, ADR-020 |
 | CC-7 | **Reproducibility** | honors `eval.seed`; deterministic where the model allows | §20, ADR-010 |
-| CC-8 | **Kid vs parent design language** | cartoon-pop (kid flow) vs calmer/denser (parent) | §9 |
+| CC-8 | **Student vs teacher design language** | cartoon-pop (student flow) vs calmer/denser (teacher) | §9 |
 | CC-9 | **Failure states = success states** | moderation/failure screens get equal design care; kid-legible | §9,§13 |
 | CC-10 | **Checkpointing / resumability** | node is safe to resume mid-run; no re-roll of completed scenes | ADR-005 |
 
@@ -195,7 +212,7 @@ Concerns that touch many modules. **Every feature spec ticks the ones it affects
 Non-negotiable split. See `/CLAUDE.md` §3.
 
 **Tier A — Deterministic tests (CI, every change, must stay green).**
-Everything with one right answer, **with Gemini/Nano Banana mocked**:
+Everything with one right answer, **with every `providers.py` call mocked**:
 - Contract validation (Story Memory Pydantic round-trips, schema rejects bad shapes).
 - LangGraph routing (moderation pass/fail and consistency pass/fail take the right edges).
 - Job lifecycle & checkpoint/resume (stall at N resumes at N).
@@ -225,18 +242,47 @@ mark done. Behavior change later → update the spec in the same change (CLAUDE.
 
 | Phase | Specs to write |
 |---|---|
-| 1 (core) | `story-memory-contract`, `story-analyzer`, `scene-segmentation`, `character-bible`, `style-constant`, `prompt-optimizer`, `image-generator`, `consistency-checker`, `regeneration-controller` |
-| 2 (safety/accounts) | `moderation-stack`, `self-refusal-fallback`, `length-guard`, `auth-and-profiles`, `parent-dashboard`, `export-pdf`, `rate-limiting`, `data-deletion`, `kid-flow-ui` |
-| 3 (eval) | `ablation-switch`, `tier1-rating-harness`, `tier2-fun-toolkit`, `metrics-export` |
+| 1 (core) | `story-memory-contract`, `story-analyzer`, `scene-segmentation`, `character-bible`, `style-presets`, `prompt-optimizer`, `image-generator`, `consistency-checker`, `regeneration-controller` |
+| 2 (safety/classroom) | `moderation-stack`, `filipino-pii-recognizers`, `self-refusal-fallback`, `length-guard`, `auth-and-classroom`, `teacher-dashboard`, `classroom-sharing`, `peer-reflection`, `story-map`, `narration`, `export-pdf`, `rate-limiting`, `data-deletion`, `kid-flow-ui` |
+| 2.5 (fine-tune) | ✅ `judge-finetune` *(written)* |
+| 3 (eval) | `ablation-switch`, `tier1-rating-harness`, `comprehension-instrument`, `tier2-fun-toolkit`, `metrics-export` |
 
 `story-memory-contract` is written **first** — it freezes §3 for everything downstream.
+The **failure-reason taxonomy** (`judge-finetune` §4) is shared by `regeneration-controller` and the
+Phase-2.5 annotators. Design it once, in Phase 1, or invalidate every label collected under the old one.
 
 ---
 
 ## 8. Open items (AI: do not guess these — flag them)
 
-- **ADR-013 — PDF renderer** (Playwright vs WeasyPrint): decide via a small build-time spike.
-- **Observability** — LangSmith vs Langfuse: pick one in Phase 0, record as a new ADR.
+**Blocking, and un-run:**
+- ⚠️ **Non-human character consistency on Qwen-Image-Edit** — unverified by anyone. The **Phase 0.5 kill
+  criterion**. Two characters (easy + invented), blind ON/OFF ablation, two pass conditions. **Every
+  document downstream is contingent on this.** Do not collect fine-tune labels before it passes.
+- ⚠️ **Seed determinism per hosted provider**, on **both** `edit_image` and `text_to_image` (CC-7). Phase 0.5.
+- ⚠️ **Structured output for the judge with *image* input** — support is per `(model, provider)` *and* per
+  modality. A text-only probe passes while the judge is broken. Phase 0.5.
+- ⚠️ **Filipino / Taglish text-moderation performance** — never measured, and the proprietary backstop is
+  gone. **Release gate for Phase 2.** Phase 0.5 probe 4 (ADR-011).
+
+**Verify at build time (do not guess):**
+- **OpenRouter model ids for `Qwen3Guard-Gen` and `Granite Guardian`**, and whether the backstop is routable
+  or must run on the worker (ADR-011).
+- **DreamBench++ image licensing beyond evaluation** — code is Apache-2.0; the images are "verified for
+  academic suitability," which is a different statement. Confirm with the authors before training on them.
+- **ADR-013 — PDF renderer** (Playwright vs WeasyPrint): small build-time spike.
+- **Modal cold-start budget** for a study session (ADR-019). Measure.
+- **Worker RAM** — Presidio+spaCy, NSFW ViT, Kokoro, and the CPU text gate are all resident (~2–3 GB).
+  Check the plan tier at the *start* of Phase 2.
+
+**Deferred by design:**
 - **Story Memory field-level detail** — finalized in the `story-memory-contract` spec, not before.
+- **The failure-reason taxonomy** — extend it in Phase 1, never during Phase 2.5 annotation.
+
+**Resolved:**
+- ~~Observability — LangSmith vs Langfuse~~ → ADR-014 (LangSmith).
+- ~~ADR-015 is an operating assumption~~ → the mandate was confirmed *and hardened*: no proprietary models
+  anywhere. `backend/providers.py` is what kept the blast radius to a handful of files.
+- ~~`omni-moderation-latest` image-input support~~ → moot; the backstop is removed (ADR-015 hardened).
 
 Anything else that requires changing a locked ADR must go through the ADR process (CLAUDE.md §1).

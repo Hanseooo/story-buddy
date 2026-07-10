@@ -2,8 +2,49 @@
 
 **Subtitle:** An AI-Powered Storyboarding and Picture-Book Generation System with Character and Style Consistency
 **SDG Alignment:** SDG 4 — Quality Education
-**Doc status:** v2 — design review complete; key decisions resolved; ready for implementation
+**Doc status:** v2.2 — **classroom setting, peer sharing, and a fine-tuned judge (2026-07-10)**
 **Supersedes:** PRD Draft v1
+**Study design lives in `docs/product/RESEARCH_PROTOCOL.md`.** §10 below is a summary and a pointer.
+
+---
+
+## 0.2 What changed in v2.2 (2026-07-10) — setting, sharing, fine-tuning
+
+- **The problem statement grew a "so what."** The technical problem (models can't hold characters
+  consistent) and the educational benefit (a child's story finally gets an audience and an artifact) are
+  the same claim from opposite ends. A picture book that drifts doesn't transmit the child's story — it
+  transmits noise. See RESEARCH_PROTOCOL §1–§3.
+- **Setting: Grade 5–6 Philippine students.** Teacher owns the classroom; students are the authors; the
+  parent's role becomes consent-giver. Sharing is classroom-scoped. **No public mode, ever.** ADR-017.
+- **Peer reflection** with fixed prompts — which turns out to be the study's best instrument (RQ5). ADR-021.
+- **The judge is fine-tuned** (`Qwen2.5-VL-7B`, QLoRA), served on vLLM. ADR-018 supersedes ADR-016;
+  ADR-019 adds the fourth service. The **pipeline is still the contribution (§3)**.
+- **No proprietary models at all** (ADR-015 hardened). Removes exactly two things: OpenAI
+  `omni-moderation` → **Granite Guardian** (Apache-2.0), and ElevenLabs → **Kokoro-82M** (Apache-2.0).
+  Both are upgrades. **Qwen3Guard** (119 languages) replaces Llama Guard and closes the Taglish hole.
+- **Two new safety findings**, neither previously in any ADR: Presidio leaks Filipino PII by default, and
+  the text gate's Filipino/Taglish performance was never measured. Both are now Phase-0.5/Phase-2 work.
+- **The ethics submission splits in two**, because Tier 1 was silently blocked on Tier 2. ADR-008.
+
+---
+
+## 0.1 What changed in v2.1 (2026-07-10) — the open-weight switch
+
+An external requirement directs StoryBuddy to use **open-source models**. See **ADR-015**, which
+defines "open source" as **open weight** and records that hosted inference of open weights satisfies it.
+
+- **Image model:** Nano Banana → **Qwen-Image-Edit** (Apache-2.0), hosted on fal.ai. ADR-001 revised.
+- **Text + VLM judge:** Gemini → **`qwen/qwen3-32b`** and **`google/gemma-3-27b-it`** via OpenRouter. ADR-002 revised.
+- **Moderation:** open classifiers primary, free proprietary backstop. ADR-011 revised.
+- **No fine-tuning.** Identity via training-free reference conditioning; style already handled by
+  ADR-007's constant. Scoped, costed, and deliberately deferred — **ADR-016**.
+- **New Phase 0.5 spike** (ROADMAP) with a kill criterion, because non-human character consistency is
+  no longer a vendor-verified feature.
+- **Two capabilities lost, named honestly:** SynthID watermarking (no open equivalent) and the image
+  model's built-in safety filter (which makes ADR-011's gate load-bearing).
+- **The research contribution (§3) is unchanged.** The pipeline is the contribution; the model is the
+  substrate. **This switch does not create a privacy claim** — the child's text still transits a third
+  party. Do not write one into the paper.
 
 ---
 
@@ -11,8 +52,8 @@
 
 This version resolves the open decisions from v1 §11 and the "notes to discuss" from v1 §12, and adds sections that were missing entirely. Highlights:
 
-- **Image model chosen:** Nano Banana (Gemini 2.5 Flash Image family / Nano Banana 2 Lite). Hosted, not open-source. See ADR-001.
-- **Text/orchestration model chosen:** Gemini. See ADR-002.
+- **Image model chosen:** ~~Nano Banana~~ → superseded by §0.1. See ADR-001.
+- **Text/orchestration model chosen:** ~~Gemini~~ → superseded by §0.1. See ADR-002.
 - **Style Bible Generator removed as a module** — style is a fixed *constant* in v1, carried by the canonical character reference image. See §8, ADR-007.
 - **Consistency approach redesigned:** VLM-as-judge control loop (not CLIP embeddings) drives targeted regeneration; human ratings are the headline research metric. See §10, ADR-004.
 - **Evaluation redesigned around a comparative ablation** (pipeline-ON vs pipeline-OFF), Tier 1 made self-sufficient, Tier 2 uses validated child-HCI instruments + behavioral logging. See §10, ADR-008.
@@ -24,11 +65,27 @@ This version resolves the open decisions from v1 §11 and the "notes to discuss"
 
 ## 1. Research Problem
 
-Current AI tools can generate stories and images independently, but they struggle to: maintain character consistency across multiple generated images; maintain a consistent artistic style; determine which scenes deserve illustration; convert a story into a coherent picture-book presentation; and do all of this automatically without manual re-prompting and re-generation.
+**The setting.** A child writes a story. The teacher marks it. It goes in a folder. Nobody reads it. Prior
+work on writing motivation is consistent that an authentic audience and actual publication are among the
+strongest levers on children's writing engagement — and illustrating forty stories is not something a
+Grade 5–6 teacher can do.
+
+**The technical obstacle.** Current AI tools can generate stories and images independently, but they
+struggle to: maintain character consistency across multiple generated images; maintain a consistent
+artistic style; determine which scenes deserve illustration; convert a story into a coherent picture-book
+presentation; and do all of this automatically without manual re-prompting and re-generation.
+
+**Why these are the same problem.** The artifact is only worth publishing if it actually *is* the child's
+story. A book whose hero changes face on page four does not transmit the child's story — it transmits
+noise. The technical problem and the educational benefit are one claim viewed from two ends, which is what
+makes this research rather than integration.
 
 ## 2. Research Goal
 
 Develop an intelligent system that automatically transforms a child-written story into a storyboard-style digital picture book while maintaining narrative coherence, character consistency, and artistic style — with minimal manual intervention.
+
+**Central question:** *Does an automated consistency-verification-and-correction loop produce picture books
+faithful enough that other readers recover the story the child meant to tell?* (RESEARCH_PROTOCOL §2.)
 
 ## 3. Main Research Contribution
 
@@ -38,32 +95,51 @@ Not "we called an image API." The contribution is an **AI Storyboarding Pipeline
 
 ## 4. Target Users
 
-- **Primary: children** (hands-on creators). Reading level, tone, and failure messaging must be kid-appropriate throughout. See accessibility (§17) — many target-age children cannot yet read/type fluently, which shapes the input and caption experience.
-- **Secondary: parent/guardian** (account holder, gatekeeper, exporter, and Tier-1 evaluation audience).
+- **Primary: the Grade 5–6 student author** (ages 10–12, Philippines). Reading level, tone, and failure
+  messaging must be age-appropriate throughout.
+- **Gatekeeper: the teacher** — owns the classroom, creates student profiles, approves books into the
+  classroom gallery, exports. Also the Tier-1 evaluation audience. *(ADR-017 — supersedes ADR-006's role model.)*
+- **Parent/guardian: consent-giver.** Guardian consent and child assent are required by the PH Data Privacy
+  Act regardless of who holds the account. Removing parental *controls* from the product does not remove
+  parental *consent* from the research.
 
-**Out of scope for v1:** teacher/classroom accounts, multi-child collaboration, public sharing/social features.
+**Scope is derived from the research questions**, not chosen for convenience: Grade 5–6 students write
+independently (so the story is unambiguously theirs), read fluently (so peer comprehension is measurable),
+are taught in English from Grade 4 (one language, one moderation regime), and are pre-adolescent (peer
+feedback is unlikely to be cruel). See RESEARCH_PROTOCOL §11.
+
+**Out of scope for v1:** multi-child collaboration; cross-classroom sharing. **Out of scope permanently:
+public sharing** — peer-visible content authored by minors, without a gatekeeper, is a social network for
+ten-year-olds (ADR-017).
 
 ---
 
 ## 5. Scope
 
 ### 5.1 MVP modules
-1. Story Analyzer (grammar-tolerant entity + coreference extraction)
+1. Story Analyzer (grammar-tolerant entity + coreference extraction; tolerant of light Taglish)
 2. Scene Segmentation Engine (selects up to 10–15 scenes; graceful floor behavior for short stories)
 3. Character Bible Generator + auto-generated canonical reference image (multi-character, max 2 canonical refs in v1)
-4. **Style Constant** (fixed style; not a generator — see ADR-007)
+4. **Style Presets** (three fixed styles, author picks one before generation; config, not a generator — ADR-007, ADR-022)
 5. Prompt Optimization Engine
-6. Image Generation Engine (reference-conditioned, Nano Banana)
-7. Consistency Checker (VLM-as-judge; triggers one targeted regeneration)
-8. Slide Composer / Export (PDF + library)
-9. Parent account + kid profile system (Supabase Auth + RLS)
-10. Moderation & Safety Stack (input text, PII, output image, model self-refusal fallback)
+6. Image Generation Engine (reference-conditioned, Qwen-Image-Edit)
+7. Consistency Checker (VLM-as-judge; triggers one targeted regeneration). **Fine-tuned in Phase 2.5** — ADR-018
+8. Slide Composer / Export (PDF + library) + **Kokoro narration** per page — ADR-020
+9. **Teacher account + classroom + student profiles** (Supabase Auth + RLS) — ADR-017
+10. Moderation & Safety Stack (input text, PII incl. **Filipino recognizers**, output image, self-refusal fallback)
+11. **Classroom sharing + peer reflection** (fixed prompts, teacher-gated) + **Story Map** — ADR-021
 
 ### 5.2 Deferred to Future Work (named in paper, not built in v1)
-Kid-uploaded character reference; multiple selectable art styles; multi-language; teacher/classroom tier; public sharing; collaborative multi-child stories; on-device / open-source generation (privacy-preserving) — see ADR-002.
+Kid-uploaded character reference; multiple selectable art styles; multi-language; **"what happens next?"
+continuation**; collaborative multi-child stories; **on-device generation** (the only variant that is
+genuinely privacy-preserving — v1 runs open weights on *hosted* inference, ADR-015); **style LoRA**
+(ADR-016 trigger); **Taglish story-analyzer fine-tune** (ADR-018); **C2PA watermark/provenance** (replaces
+the SynthID capability lost with Nano Banana, ADR-001). **Public sharing is not deferred — it is rejected** (ADR-017).
 
 ### 5.3 Timeline
-~1 month MVP build (solo, agentic-tooling-assisted); ~2–3 months reserved for evaluation and iteration. Ethics/consent process runs **in parallel from week 1** (§10, §18).
+**3–6 months.** Build is solo; the research track has three members. At 3 months the ROADMAP's de-scope
+ladder is not optional; at 6 months it is insurance. **Ethics Stage 1 is filed before Phase 0.5 completes** —
+it is the long pole and cannot be compressed by coding faster (§10, §18, RESEARCH_PROTOCOL §9).
 
 ---
 
@@ -72,14 +148,20 @@ Kid-uploaded character reference; multiple selectable art styles; multi-language
 | Decision | Choice | Why / ADR |
 |---|---|---|
 | Character reference origin | System auto-generates one canonical reference per character, reused via reference-conditioned generation | Stronger contribution; avoids moderating uploads; avoids style mismatch. ADR-001 |
-| Image model | Nano Banana (Gemini 2.5 Flash Image / Nano Banana 2 Lite), hosted | Character consistency is its headline feature; cost ~$0.034–0.039/image; open-source consistency is a research project in itself. ADR-001 |
-| Text/orchestration model | Gemini (Flash tier for pipeline nodes) | Single ecosystem, cheap, strong structured output. Local-model privacy variant is future work. ADR-002 |
+| **Model openness** | Open **weight**; hosted inference; self-hosting always available, never required | External mandate. Hosting is orthogonal to openness. **ADR-015** |
+| Image model | Qwen-Image-Edit 2509/2511 (Apache-2.0), hosted on fal.ai | Multi-reference conditioning, no training; ~$0.02–0.035/image. Non-human consistency **unverified — Phase 0.5 spike**. ADR-001 |
+| Text/orchestration model | `qwen/qwen3-32b` via OpenRouter | Open weight, strict structured output, cheap. **Set `provider.require_parameters: true`.** ADR-002 |
+| Fine-tuning | **None in v1** | Identity needs no training (reference conditioning); style is already a constant (ADR-007). Costed and deferred with an explicit trigger. **ADR-016** |
 | Style in v1 | Single fixed style, authored once as a constant; carried by the character reference image | Removes a module; character ref carries identity *and* style; cleaner consistency eval. ADR-007 |
 | Consistency mechanism | VLM-as-judge control loop → one targeted, prompt-corrected regeneration → best-of fallback | Robust on stylized/non-human characters; interpretable; makes regeneration refinement not resampling. ADR-004, ADR-010 |
 | Consistency metric (research) | Human ratings = headline; VLM-judge = runtime signal; report VLM–human agreement as a secondary result | Avoids circularity of optimizing and reporting the same score. ADR-004, ADR-008 |
-| Auth model | Parent-created Supabase account; kid = nested profile (nickname + avatar, no direct PII from kid) | Avoids collecting PII from minors; RLS isolates data. ADR-006 |
-| Design language | Cartoon-pop (kid flow); calmer/denser variant (parent screens) | Matches storybook tone; density fits parent dashboard. |
-| Moderation | Input text + PII + output image, all moderated; model self-refusal has a fallback | Non-negotiable for child users. §13, ADR-011 |
+| Auth model | **Teacher-owned classroom**; student = profile (nickname + avatar, no PII from the minor) | Avoids collecting PII from minors; RLS isolates by classroom; keeps a human gatekeeper behind sharing. **ADR-017** |
+| Sharing | **Classroom-scoped, teacher-gated. No public mode, ever.** | Peer-visible child content without a gatekeeper is a social network for ten-year-olds. ADR-017 |
+| Peer feedback | Fixed reflection prompts, routed through the input gate; author sees a **Story Map, not a score** | Formative not evaluative; doubles as the RQ5 instrument. ADR-021 |
+| **Fine-tuning** | **The consistency judge** (`Qwen2.5-VL-7B`, QLoRA), served on vLLM | Identity and style are the wrong targets (ADR-016's reasoning survives); the judge is the documented weakest link with a known prompting ceiling. **ADR-018, ADR-019** |
+| Narration | **Kokoro-82M**, pre-rendered on the worker | Open, free, no key, consistent voice on classroom hardware. **ADR-020** |
+| Design language | Cartoon-pop (student flow); calmer/denser variant (teacher screens) | Matches storybook tone; density fits the teacher dashboard. |
+| Moderation | Two independent **open** classifiers per path + PII + image gate + self-refusal fallback | Non-negotiable for child users. Proprietary backstop removed and replaced, not abandoned. §13, ADR-011 |
 | Captions | Kid's **verbatim** text excerpt (not LLM-rewritten) | Preserves story fidelity; no extra generation/moderation surface. |
 | Orchestration style | Deterministic LangGraph state machine (not an autonomous agent) | Reproducibility, debuggability, cost control. ADR-003 |
 
@@ -87,18 +169,22 @@ Kid-uploaded character reference; multiple selectable art styles; multi-language
 
 ## 7. User Flow
 
-1. **Landing page** — parent-facing pitch; Sign up / Log in (SSR for SEO).
-2. **Auth** — parent creates account or logs in (Supabase Auth).
-3. **Kid profile select/create** — nickname + avatar; no PII from the kid.
-4. **Write your story** — large friendly input; optional starter prompt; **read-aloud option** for pre-readers (§17); live length indicator against the word cap.
+1. **Landing page** — teacher-facing pitch; Sign up / Log in (SSR for SEO).
+2. **Auth** — teacher creates account or logs in (Supabase Auth), creates a **classroom**.
+3. **Student profile select** — nickname + avatar, created by the teacher; students never sign up.
+4. **Write your story** — large friendly input; optional starter prompt; live length indicator against the word cap.
 5. **Input gate** — (a) length check → gentle truncate-at-scene-boundary message if over cap (never silent summarization); (b) PII redaction; (c) text moderation → gentle "let's try that again" on failure.
 6. **Processing view** — staged, animated, kid-legible progress via Supabase Realtime on the job row; never frozen/silent. Expect ~1–3 min.
 7. **Character/Style reveal + confirm** — show the **moderated** canonical character reference(s) before full generation; lightweight confirm / "try again." *(Character reference is moderated before the child sees it — see §13.)*
 8. **Full scene generation** — all scenes generated using the confirmed reference(s).
 9. **Output moderation + consistency pass** — before the kid sees results; failed scenes get one targeted regeneration, then best-of fallback (§10, §13).
-10. **Storybook slideshow** — image + verbatim caption + page number; next/prev; optional read-aloud.
-11. **Parent review gate** — ON by default before export/share (may be bypassed inside a supervised study). §11.1.
-12. **Export/Share** — PDF download and/or save to the parent's library (Supabase Storage, signed URLs).
+10. **Storybook slideshow** — image + verbatim caption + page number; next/prev; **narration** (ADR-020).
+11. **Story Map** — the author's own Story Memory reflected back: *"3 characters, 2 places, 5 things happened."* Not a score (ADR-021).
+12. **Teacher review gate** — ON by default before a book enters the classroom gallery or is exported.
+13. **Classroom gallery** — classmates read/listen, then answer fixed reflection prompts. Reflections route
+    through the input gate (moderation + PII) exactly as stories do. The author sees the answers. ADR-021.
+14. **Export** — PDF download and/or save to the classroom library (Supabase Storage, signed URLs).
+    The PDF is the only way a book leaves the container; the child shares the artifact, not the platform.
 
 ---
 
@@ -108,10 +194,11 @@ Kid-uploaded character reference; multiple selectable art styles; multi-language
 - Story Analyzer (grammar-tolerant extraction: characters/locations/objects/events + coreference)
 - Scene Segmentation (up to 10–15 scenes; **floor behavior**: fewer scenes allowed, never invent content)
 - Character Bible + auto-generated canonical reference image (≤2 canonical characters)
-- **Style Constant** (fixed prompt fragment + optional fixed style-anchor image; authored once)
-- Prompt Optimizer (scene + character bible + style constant + story memory → structured prompt)
-- Image Generator (reference-conditioned via Nano Banana)
-- Consistency Checker (VLM-as-judge: presence, identity, key attributes, style; emits structured verdict + failure reasons)
+- **Style Presets** — three hand-authored prompt fragments; the author picks one **before** the canonical
+  reference is generated, and it is then frozen for the storybook. No style-anchor image (ADR-022).
+- Prompt Optimizer (scene + character bible + selected style preset + story memory → structured prompt)
+- Image Generator (reference-conditioned via Qwen-Image-Edit)
+- Consistency Checker (VLM-as-judge: presence, identity, key attributes, style; emits **reasoning first**, then a structured verdict + failure reasons — ADR-004)
 - Regeneration controller (1 targeted retry with corrected prompt; best-of fallback; capped)
 - Moderation stack (text + PII + image + model self-refusal fallback)
 - Slide Composer (image + verbatim caption + page number + layout)
@@ -121,7 +208,7 @@ Kid-uploaded character reference; multiple selectable art styles; multi-language
 - Read-aloud (TTS) for captions — **strongly recommended in MVP** given target age (§17)
 
 ### Stretch / Future Work
-Kid-uploaded reference; selectable art styles; multi-language; teacher/classroom tier; social sharing; on-device/open-source generation.
+Kid-uploaded reference; selectable art styles; multi-language; teacher/classroom tier; social sharing; on-device generation; style LoRA; C2PA provenance.
 
 ---
 
@@ -136,11 +223,23 @@ Kid-uploaded reference; selectable art styles; multi-language; teacher/classroom
 
 ## 10. Research Questions & Evaluation Plan
 
+> **Full study design, instruments, ethics staging, and defense preparation live in
+> `docs/product/RESEARCH_PROTOCOL.md`.** This section is a summary. Where they disagree, ADR-008 wins.
+
 ### Research Questions
 - RQ1: How accurately does StoryBuddy identify key scenes from child-written stories?
-- RQ2: **Does the Character Bible + VLM consistency loop measurably improve visual consistency vs. naive per-scene generation?** *(ablation — the central claim)*
+- RQ2: **Does the Character Bible + VLM consistency loop measurably improve visual consistency vs. naive per-scene generation?** *(ablation — the mechanism)*
 - RQ3: How acceptable is the generated storybook (narrative coherence, visual consistency, illustration quality, usability)?
-- RQ4 (revised): How gracefully does the system handle **under-length** stories (fewer than 10–15 natural scenes) without inventing content? *(replaces the original "does capping at 10–15 help" framing, which rarely arises for short kid stories)*
+- RQ4: How gracefully does the system handle **under-length** stories (fewer than 10–15 natural scenes) without inventing content?
+- **RQ5 (new): Do readers of a pipeline-ON book recover the author's characters and plot more accurately than readers of pipeline-OFF?** *(the outcome — the dependent variable that makes this about education rather than about an API. Runs on Tier-1 adults; peers are the Tier-2 sibling. ADR-008, ADR-021.)*
+- **RQ6 (promoted): Does a fine-tuned open judge agree with humans better than a prompted one — and does the gap widen on non-human characters?** *(instrument validity. ADR-018.)*
+
+⚠️ **RQ2 is never evaluated using the judge.** The judge drives regeneration; using it as an outcome
+measure would be circular. RQ2's outcomes are human ratings and RQ5. See ADR-004's non-circularity note.
+
+⚠️ **Do not claim learning gains.** N ≈ 8–15, no non-illustrated control, no pre/post, no longitudinal
+window. Prior literature on authentic audience is the *warrant* for why fidelity matters; it is not a
+finding of this study.
 
 ### Evaluation design (see ADR-008)
 **Spine = comparative ablation.** Same story corpus generated twice: **pipeline-ON** (character reference + VLM checker + regeneration) vs **pipeline-OFF** (naive per-scene generation, no reference, no checker). Adult raters judge **blind** to condition.
@@ -178,15 +277,23 @@ Formal ethics review (Philippine Data Privacy Act 2012 + your university's ethic
 
 ## 11. Open Decisions — RESOLVED
 
-1. **Parent approval gate before export** → **ON by default** (human backstop over auto-moderation; bypass allowed inside supervised study).
+1. **Teacher approval gate before a book enters the gallery or is exported** → **ON by default** (human backstop over auto-moderation; bypass allowed inside a supervised study). *Was "parent approval gate" — ADR-017.*
 2. **Regeneration cap** → **1 targeted, prompt-corrected retry** (2 attempts total); if still failing, keep the higher-scoring image (best-of), never a broken/placeholder page. ADR-010.
 3. **Story length limit** → **hard word cap (~500–800 words, tunable)** with a gentle "let's make a book of the first part" truncation at a scene boundary. **No silent AI summarization** (it would illustrate the summary, not the child's story). ADR-012.
 4. **Repeated moderation-failure off-ramp** → after **N=3** failed revisions of the same story, suggest starting a fresh story rather than an unbounded retry loop.
 5. **Multiple main characters** → **max 2 canonical references** in v1; generation conditions on multiple reference images; the checker verifies **each character separately** against its own reference. ADR-004.
 6. **Very short stories** → **fewer scenes allowed** (floor, e.g. ≥3); never invent content. Reframed as RQ4.
 7. **Whole-run timeout / stall** → **LangGraph checkpointing + resumability**: a stall at scene N resumes from N, never re-rolls scenes 1…N-1. Kid sees "taking a little longer…" then "we saved your progress — come back soon." ADR-005.
-8. **Image model/API** → Nano Banana. ADR-001.
-9. **Moderation services** → text (OpenAI moderation) + PII (Presidio) + image (Vision SafeSearch or Gemini safety). Not a single provider. §13, ADR-011.
+8. **Image model/API** → **Qwen-Image-Edit (Apache-2.0) on fal.ai.** Open weight, hosted. ADR-001, ADR-015.
+9. **Moderation services** → text (**Qwen3Guard-Gen** + **Granite Guardian**, both Apache-2.0) + PII (Presidio + **Filipino recognizers**) + image (NSFW ViT + VLM safety rubric). **Two independent open classifiers per path.** §13, ADR-011.
+10. **Fine-tuning** → **the consistency judge** (`Qwen2.5-VL-7B`, QLoRA), served on vLLM. Identity and style
+    remain the *wrong* targets — ADR-016's reasoning is preserved and is precisely why the judge is right. **ADR-018, ADR-019.**
+11. **What "open source" means** → **open weight**, hosted inference, self-hosting available — and, as of
+    2026-07-10b, **no proprietary models anywhere**, including backstops and accessories. ADR-015 (hardened).
+12. **Setting and gatekeeper** → **teacher-owned classroom**, Grade 5–6 students as authors, sharing scoped
+    to the classroom, **no public mode**. Parent is the consent-giver. **ADR-017.**
+13. **Author feedback** → **Story Map, not a score.** Peer reflection with fixed prompts is the honest
+    signal, and it doubles as the RQ5 instrument. **ADR-021.**
 
 ---
 
@@ -196,11 +303,11 @@ Formal ethics review (Philippine Data Privacy Act 2012 + your university's ethic
 
 **Backend:** FastAPI (web) + **separate RQ worker** + **Redis** (broker), on Railway (Render/Fly.io equivalent; Singapore region). *A long pipeline cannot run in a request cycle — this is a 3-service deployment, not one.*
 
-**Pipeline engine:** **LangGraph as a deterministic state machine** (explicit nodes; conditional edges only at moderation pass/fail and consistency pass/fail). LangChain omitted unless a concrete need appears. Gemini SDK called directly. ADR-003.
+**Pipeline engine:** **LangGraph as a deterministic state machine** (explicit nodes; conditional edges only at moderation pass/fail and consistency pass/fail). LangChain omitted unless a concrete need appears. Model APIs called directly through `backend/providers.py` — the only file that names a vendor (ADR-003, ADR-015).
 
 **State/persistence:** Supabase Postgres (app data + LangGraph checkpoints via `langgraph-checkpoint-postgres`); Supabase Auth (parent) + RLS; Supabase Storage (images + PDFs, signed URLs); Supabase Realtime (job progress). ADR-006.
 
-**Structured extraction:** Gemini structured output (`response_schema`) + Pydantic validation on every LLM boundary. The Story Memory schema is the contract between modules.
+**Structured extraction:** strict `json_schema` structured output + `provider.require_parameters: true` + Pydantic validation on every LLM boundary. The Story Memory schema is the contract between modules. ADR-002.
 
 **Export:** HTML storybook template → PDF via Playwright/WeasyPrint (server-side) — decide at build (ADR-013).
 
@@ -210,14 +317,39 @@ Formal ethics review (Philippine Data Privacy Act 2012 + your university's ethic
 
 ## 13. Moderation & Safety Stack
 
-Four distinct concerns, four mechanisms:
+Four distinct concerns, four mechanisms. **Open classifier as the gate, free proprietary classifier as
+an independent backstop; either one flagging fails the content** (ADR-011).
 
-1. **Input text moderation** — OpenAI moderation endpoint (free) on the child's story before any processing. Gentle, non-scary failure copy.
+1. **Input text moderation** — **`Qwen3Guard-Gen`** (Apache-2.0, 119 languages) + **IBM `Granite Guardian`**
+   (Apache-2.0, independent backstop) on the child's story before any processing. Gentle, non-scary failure copy.
+   Qwen3Guard's multilingual coverage closes the Filipino/Taglish hole *by construction*; Granite Guardian
+   supplies the vendor independence the removed OpenAI backstop used to. **Both open.**
 2. **PII detection/redaction** — Presidio (open-source) on input. A child narrating real life ("my name is… I live at…") is the *expected* case; redact before storage/captioning/export. This is separate from toxicity moderation.
-3. **Output image moderation** — Vision SafeSearch (or Gemini safety) on **every generated image, including the canonical character reference before the reveal (flow step 7)**. No generated image reaches a child unmoderated.
+   ⚠️ **Presidio's defaults leak Filipino PII.** spaCy NER misses Filipino names; `Barangay`/`Purok`/`Sitio`
+   address structure and `+63 9xx` formats match no built-in pattern. Custom recognizers are a **Phase-2
+   deliverable**, not a polish item (ADR-011).
+3. **Output image moderation** — on **every generated image, including the canonical character reference
+   before the reveal (flow step 7)**. No generated image reaches a child unmoderated.
+   - `Falconsai/nsfw_image_detection` (86M ViT, Apache-2.0, CPU, milliseconds) — sexual content.
+   - `google/gemma-3-27b-it` with a safety rubric — violence, gore, dangerous content, which the
+     NSFW classifier does **not** cover. **Never the fine-tuned judge** (ADR-004 amendment b) — consistency
+     has a best-of fallback, safety has none.
+   - These two are *complementary*, not independent. **ShieldGemma 2** on ADR-019's GPU container is the
+     optional hardening that restores true redundancy.
 4. **Model self-refusal fallback** — the image model may refuse legitimate mild-peril scenes ("fight the dragon"). On refusal: soften-and-retry the prompt, then a gentle "let's imagine that part a little differently." A scary-but-innocent story must not dead-end.
+5. **Peer reflections are child-authored input** and route through mechanisms 1 and 2 unchanged (ADR-021).
+   No new node, no new surface.
 
 Ordering matters: input gate (step 5) → char-ref moderation (before step 7) → output moderation (step 9).
+
+> ⚠️ **The open image model ships no built-in safety filter.** Under the proprietary stack, Google's
+> filter was a silent second line of defense behind SafeSearch. It is gone. Mechanism 3 is now the
+> *only* thing between a generated image and a child — load-bearing, not defense-in-depth. Expect
+> mechanism 4 (self-refusal) to fire *less* often; do not read that as the system being safer.
+>
+> ⚠️ **Both text gates are unverified in Filipino and Taglish until the Phase 0.5 moderation probe runs.**
+> A miss on a harmful case is a child-safety hole; a miss on a benign case dead-ends a child's dragon
+> fight. The probe tests both directions and is a **release gate for Phase 2**.
 
 ---
 
@@ -233,23 +365,52 @@ Ordering matters: input gate (step 5) → char-ref moderation (before step 7) �
 
 ## 15. Cost Model
 
-At ~$0.034–0.039/image (Nano Banana; Batch/Flex ~$0.02): one book ≈ 1 reference + ~12 scenes + regenerations ≈ 15–18 images ≈ **~$0.55–0.70**, ~$1 worst case. Text/VLM calls add pennies.
+At ~$0.02–0.035/image (Qwen-Image-Edit; $0.02 on Novita, $0.035 on fal.ai): one book ≈ 1 reference +
+~12 scenes + regenerations ≈ 15–18 images ≈ **~$0.30–0.65**, ~$1 worst case. Text/VLM calls add pennies.
 
-- **Develop on the free tier + Batch API; spend paid budget only on study runs.** Keeps dev inside a small budget.
-- Recommended budget for comfortable dev + a real study: **~$50–100** (not $15–20). Trivially cheap; don't constrain the research over ~$30.
-- **Cost circuit-breaker:** a per-book worst-case ceiling that trips rather than silently running; per-account daily cap (§14).
+At **200 books/month** (2,000 images), the whole open-weight stack runs **~$60–110/month**, dominated by
+image generation:
+
+| Layer | Monthly |
+|---|---|
+| Image generation (2,000 images) | $40–70 |
+| VLM judge (2,000 calls, two images each) | $5–15 |
+| Text LLM (~200 stories) | $2–10 |
+| Text moderation (Llama Guard 4) | $1–5 |
+| Image moderation (CPU classifiers on the existing worker) | $0–10 |
+
+- **Develop against the cheapest provider; spend paid budget only on study runs.**
+- Recommended budget for comfortable dev + a real study: **~$50–100**. Trivially cheap; don't constrain the research over ~$30.
+- **Cost circuit-breaker:** a per-book worst-case ceiling that trips rather than silently running; per-classroom daily cap (§14).
+- **Fine-tuning the judge is a one-time ~$5–15** on a rented 4090 (ADR-018). **Set a budget alarm.**
+- **Serving the judge *lowers* running cost**: ~2,000 calls/month at ~3 s each is ~100 GPU-minutes on a
+  scale-to-zero container, cheaper than 2,000 Gemma-27B API calls (ADR-019). Keep-warm during a study
+  session is ~$1/hr.
+- **Narration is $0** — Kokoro runs on the existing worker's CPU (ADR-020).
 
 ---
 
 ## 16. Observability (doubles as research instrumentation)
 
-Instrument the pipeline with **LangSmith** (native LangGraph tracing) or **Langfuse** (open-source, self-hostable). This captures generation time, per-scene regeneration counts, cost per book, and VLM-judge scores — i.e. the "AI Resource Usage" metrics and a large share of the eval dataset. Add **Sentry** for error tracking. Instrument from the walking-skeleton phase so data collection is free by the time you evaluate.
+Instrument the pipeline with **LangSmith** (native LangGraph tracing; ADR-014 — resolved). This captures generation time, per-scene regeneration counts, cost per book, and VLM-judge scores — i.e. the "AI Resource Usage" metrics and a large share of the eval dataset. Add **Sentry** for error tracking. Instrument from the walking-skeleton phase so data collection is free by the time you evaluate.
 
 ---
 
 ## 17. Accessibility
 
-The primary user is a child; the core interaction assumes reading and typing, which many target-age children cannot do fluently. Provide **read-aloud (TTS, via Gemini) for captions** (recommended in MVP, not future work), consider **speech-to-text for story input** as a strong enhancement, and ensure large touch targets, high contrast, and minimal on-screen text throughout the kid flow.
+The primary user is a Grade 5–6 student. They read and type, but reading a story aloud is still a
+comprehension aid, and it is what makes a *picture book* feel like a book.
+
+**Narration: `Kokoro-82M`** (Apache-2.0, 82M, CPU) — the worker pre-renders one MP3 per page onto Supabase
+Storage; the frontend is an `<audio>` tag (ADR-020). No new service, no GPU, no vendor, no key. It reads the
+child's **verbatim redacted text**, so it adds no moderation surface.
+
+- **Word-level highlighting is deliberately dropped.** It needs character-level timestamps (the one thing
+  ElevenLabs sells) and it is a fluency aid for *emergent* readers. This age band reads. Add it if a teacher asks.
+- ⚠️ **Kokoro is English-only.** Taglish sentences are read with English phonology. A recorded limitation.
+- **Speech-to-text for story input** (`SpeechRecognition`) remains a possible enhancement, not MVP.
+
+Large touch targets, high contrast, and minimal on-screen text throughout the student flow.
 
 ---
 
@@ -263,7 +424,7 @@ The primary user is a child; the core interaction assumes reading and typing, wh
 
 ```json
 {
-  "account_id": "",
+  "classroom_id": "",
   "profile_id": "",
   "story_id": "",
   "job": { "status": "", "current_stage": "", "created_at": "", "checkpoint_ref": "" },
@@ -274,7 +435,7 @@ The primary user is a child; the core interaction assumes reading and typing, wh
   "locations": [],
   "objects": [],
   "timeline": [],
-  "style": { "style_constant_id": "", "prompt_fragment": "", "style_anchor_image": "" },
+  "style": { "style_preset_id": "", "prompt_fragment": "" },
   "scenes": [
     {
       "scene_id": "",
@@ -283,7 +444,17 @@ The primary user is a child; the core interaction assumes reading and typing, wh
       "characters_present": [],
       "prompt": "",
       "attempts": [
-        { "image_ref": "", "vlm_verdict": {}, "failure_reasons": [], "passed": false }
+        {
+          "image_ref": "",
+          "vlm_verdict": {
+            "differences_observed": "",
+            "same_character": false,
+            "attributes_present": [],
+            "style_match": false
+          },
+          "failure_reasons": [],
+          "passed": false
+        }
       ],
       "final_image_ref": "",
       "consistency_check_status": "",
@@ -291,15 +462,42 @@ The primary user is a child; the core interaction assumes reading and typing, wh
       "moderation_status": ""
     }
   ],
+  "narration": [{ "scene_id": "", "audio_ref": "" }],
+  "sharing": { "teacher_approved": false, "in_gallery": false },
+  "reflections": [
+    { "reader_profile_id": "", "characters_named": "", "what_happened": "", "what_i_learned": "",
+      "moderation_status": "", "redacted": true }
+  ],
   "cost": { "image_count": 0, "regen_count": 0, "usd_estimate": 0 },
   "eval": { "condition": "pipeline_on|pipeline_off", "seed": null }
 }
 ```
+
+**Field order inside `vlm_verdict` is load-bearing.** `differences_observed` is declared *before*
+`same_character` so the judge reasons before it scores — this is the mitigation for VLM judges
+conflating category similarity with instance identity (ADR-004 amendment). It survives the fine-tune:
+`differences_observed` is a **training target**, drawn from a closed taxonomy, never model-generated
+(ADR-018, `docs/specs/judge-finetune.md` §3.4).
+
+**`failure_reasons` is a closed taxonomy**, shared by the judge's training targets and the regeneration
+controller's prompt corrector. Design it once, in Phase 1. See `judge-finetune.md` §4.
+
+**`reflections[]` are child-authored input** and carry the same moderation and PII guarantees as
+`input.raw_text` (ADR-021). They are classroom-scoped under the same RLS policy.
 
 ---
 
 ## 20. Non-Functional Notes
 
 - **Concurrency:** at demo/study scale a single serial worker is fine; "in the wild," concurrent submissions queue (acceptable) or scale RQ workers horizontally. Note the tradeoff; don't over-build for v1.
-- **Reproducibility:** control seeds where the model supports it so the ablation is fair and re-runnable.
-- **SynthID:** Nano Banana images carry an invisible SynthID watermark — useful provenance for a child-safety product; note it in the paper.
+- **Reproducibility:** control seeds so the ablation is fair and re-runnable. ⚠️ **Seed behavior is
+  provider-specific and must be verified empirically, not read off the docs** — fal.ai and Together
+  document reproducible seeds; Replicate has an open, unresolved bug (#334) where seeds are ignored
+  under its fast path, and distilled models (FLUX.1-schnell) are inherently less seed-stable. Probed in
+  the Phase 0.5 spike. Locally, `torch.use_deterministic_algorithms(True)` is required and costs
+  performance — acceptable in the offline eval harness, which is separate from production (MASTER_SPEC §6).
+- **Watermarking / provenance:** ⚠️ **capability lost.** Nano Banana embedded an invisible SynthID
+  watermark. SynthID-*Text* is open-sourced; SynthID-*Image* is not, and there is no drop-in equivalent.
+  The layered replacement is **C2PA Content Credentials** (provenance metadata) + `invisible-watermark`
+  (statistical signal) — neither alone matches SynthID's robustness. **Future Work, not MVP. Do not
+  claim watermark provenance in the paper.** ADR-001.
