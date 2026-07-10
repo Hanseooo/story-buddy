@@ -18,7 +18,9 @@ They need `OPENROUTER_API_KEY` + `FAL_KEY`, and probe 1 is human-scored.
 - [ ] `uv run python -m spikes.phase_05 structured` → verify: judge PASSes **with two images**
 - [ ] `uv run python -m spikes.phase_05 moderation` → verify: no MISS in either direction.
       **Release gate for Phase 2.**
-- [ ] One page written per probe. Green-light Qwen-Image-Edit, or record an ADR amendment naming the fallback.
+- [ ] Fill `Result` + `Decision` for each probe in **`docs/product/PHASE_05_RESULTS.md`** as you run it.
+      The branches are pre-declared there — read probe 1's branch table *before* `tally` prints.
+      Green-light Qwen-Image-Edit, or record an ADR amendment naming the fallback.
 
 **ADR-022 accepted — do these two before running probe 1, or you run it twice:**
 

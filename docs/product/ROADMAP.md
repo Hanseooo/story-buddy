@@ -90,8 +90,12 @@ published Llama Guard's Filipino performance. Run the gate over harmful and beni
 and check **both directions**: a miss on a harmful case is a child-safety hole; a miss on a benign case
 dead-ends a child's dragon fight. A routing error is also a finding — it means the gate runs on the worker.
 
-**Exit criteria:** a one-page written result per probe, and either a green light for Qwen-Image-Edit or a
-recorded ADR amendment naming the fallback that passed. Probe 4's result is a **release gate for Phase 2**.
+**Exit criteria:** a written result per probe in **`docs/product/PHASE_05_RESULTS.md`** — which is filled
+in *before* the probes run, so no number arrives without a pre-declared branch — and either a green light
+for Qwen-Image-Edit or a recorded ADR amendment naming the fallback that passed.
+
+**Gate → Phase 1:** probe 1 only. Both criteria must hold. Probes 2 and 3 record findings and do not block.
+**Gate → Phase 2:** probe 4, no MISS in either direction.
 
 **⚠️ Kill-criterion phase.** The cheapest possible place to learn the substrate does not work.
 
@@ -100,6 +104,10 @@ recorded ADR amendment naming the fallback that passed. Probe 4's result is a **
 ## Phase 1 — Core Pipeline Intelligence *(~2–3 weeks; the research core)*
 
 **Goal:** the pipeline works on a *clean* story you control, and the consistency loop is real.
+
+**Entry:** probe 1 green. Each module gets a feature spec from `docs/specs/TEMPLATE.md` **before** its code
+(CLAUDE.md §4), in the order below. The clean stories are yours — researcher-written dev fixtures, no ethics
+load. They are **not** the corpus (RESEARCH_PROTOCOL §8).
 
 - **Story Memory contract** — the Pydantic schema. Written first; freezes MASTER_SPEC §3.
 - **Story Analyzer** — structured output (`json_schema`, strict) + Pydantic. Entity + coreference extraction tolerant of messy kid text, including light Taglish code-switching.
@@ -117,6 +125,10 @@ recorded ADR amendment naming the fallback that passed. Probe 4's result is a **
 
 **Exit criteria:** A clean multi-scene, multi-character story produces a coherent, character-consistent storybook, and you can point to a case where the VLM-judge caught an off-model image and the targeted retry fixed it. Traces show per-scene verdicts, regen counts, and cost.
 
+**Gate → Phase 2:** the exit criteria above, **plus** probe 4 green and the worker's RAM headroom checked.
+The failure-reason taxonomy is frozen here — extending it after Phase 2.5 labelling starts invalidates
+every collected label (ADR-018).
+
 **⚠️ Highest-risk phase**, and note the sequencing trap: this exit criterion depends on the *prompted*
 judge. If it is weak, the fine-tune (Phase 2.5) arrives too late to rescue Phase 1. ADR-010's best-of
 fallback means Phase 1 wobbles rather than collapses.
@@ -126,6 +138,8 @@ fallback means Phase 1 wobbles rather than collapses.
 ## Phase 2 — Safety, Classroom & Robustness *(~3–4 weeks)*
 
 **Goal:** safe for a real child in a real classroom, and survives messy input.
+
+**Entry:** probe 4 green (§0.5). **Check the worker's RAM tier now, not at the end** — see the warning below.
 
 - **Moderation stack:** input text (Qwen3Guard-Gen + Granite Guardian backstop) → PII redaction (Presidio)
   → output image moderation (NSFW ViT on CPU + VLM safety rubric) on every image **including the canonical
