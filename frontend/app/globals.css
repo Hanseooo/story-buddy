@@ -1,26 +1,132 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Restrained Canvas */
+  --background: #FAF6EE;
+  --foreground: #09090B;
+
+  /* Palette & Explicit Contrast Text (WCAG AA Compliant) */
+  --color-primary: #FF6B9E;
+  --on-primary: #09090B;
+
+  --color-secondary: #06BEE1;
+  --on-secondary: #09090B;
+
+  --color-warning: #FFD166;
+  --on-warning: #09090B;
+
+  --color-success: #06D6A0;
+  --on-success: #09090B;
+
+  --color-destructive: #EF476F;
+  --on-destructive: #09090B;
+
+  --color-admin: #8338EC;
+  --on-admin: #FFFFFF;
+
+  /* Ink / Borders */
+  --color-ink: #09090B;
+
+  /* Surface */
+  --color-surface: #FFFFFF;
+
+  /* Z-index scale */
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-overlay: 20;
+  --z-modal: 40;
+  --z-toast: 100;
+
+  /* Animation tokens */
+  --duration-micro: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
+  --duration-loading: 1200ms;
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Comfort Dark Mode: Softer background and muted text to prevent halation */
+    --background: #12121A;
+    --foreground: #E4E4E7;
+    --color-surface: #1C1C26;
+
+    /* Desaturated accents to prevent optical vibration (neon fatigue) */
+    --color-primary: #F05C8C;
+    --color-secondary: #05AECF;
+    --color-warning: #E8C15D;
+    --color-success: #05C290;
+    --color-destructive: #E03C62;
+    --color-admin: #7533D1;
+
+    /* Borders/Shadows in dark mode use the desaturated secondary cyan */
+    --color-ink: #05AECF;
+  }
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  
+  --color-primary: var(--color-primary);
+  --color-on-primary: var(--on-primary);
+  
+  --color-secondary: var(--color-secondary);
+  --color-on-secondary: var(--on-secondary);
+  
+  --color-warning: var(--color-warning);
+  --color-on-warning: var(--on-warning);
+  
+  --color-success: var(--color-success);
+  --color-on-success: var(--on-success);
+  
+  --color-destructive: var(--color-destructive);
+  --color-on-destructive: var(--on-destructive);
+  
+  --color-admin: var(--color-admin);
+  --color-on-admin: var(--on-admin);
+  
+  --color-ink: var(--color-ink);
+
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-outfit);
+  --font-mono: var(--font-mono);
+  --font-kid: var(--font-kid);
+
+  --color-surface: var(--color-surface);
+
+  --z-base: var(--z-base);
+  --z-sticky: var(--z-sticky);
+  --z-overlay: var(--z-overlay);
+  --z-modal: var(--z-modal);
+  --z-toast: var(--z-toast);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer utilities {
+  .neo-border {
+    border: 3px solid var(--color-ink);
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  .neo-shadow {
+    box-shadow: 4px 4px 0px 0px var(--color-ink);
+  }
+  .neo-shadow-sm {
+    box-shadow: 2px 2px 0px 0px var(--color-ink);
+  }
+  .comic-halftone {
+    background-image: radial-gradient(var(--color-ink) 1px, transparent 1px);
+    background-size: 8px 8px;
+    opacity: 0.05;
+  }
+  .neo-shadow-xs {
+    box-shadow: 1px 1px 0px 0px var(--color-ink);
+  }
+  .neo-shadow-lg {
+    box-shadow: 6px 6px 0px 0px var(--color-ink);
+  }
+  .neo-shadow-xl {
+    box-shadow: 8px 8px 0px 0px var(--color-ink);
+  }
 }
