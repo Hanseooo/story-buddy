@@ -28,5 +28,11 @@ class Settings(BaseSettings):
     # replacement — its OpenRouter model id is unverified, hence the Phase 0.5 moderation probe.
     moderation_model: str = "meta-llama/llama-guard-4-12b"
 
+    # Verified against the live OpenRouter catalog 2026-07-13: NEITHER Qwen3Guard-Gen NOR IBM
+    # Granite Guardian is routable there. ADR-011's pair must run on the worker, or the backstop
+    # needs an ADR amendment (`openai/gpt-oss-safeguard-20b` is the routable open-weight
+    # candidate). Surface this before Phase 2 — do not silently swap (CLAUDE.md §1).
+    moderation_backstop_model: str | None = None
+
 
 settings = Settings()

@@ -57,10 +57,24 @@ def _chat(base_url: str, api_key: str, model: str, content, schema: type[T]) -> 
         response_format=schema,
         extra_body=extra_body,
     )
-    parsed = completion.choices[0].message.parsed
-    if parsed is None:
+    message = completion.choices[0].message
+    if message.parsed is None:
         raise ValueError(f"{model} returned no parsable structured output")
-    return parsed
+    _assert_field_order(message.content or "", schema, model)
+    return message.parsed
+
+
+def _assert_field_order(raw: str, schema: type[BaseModel], model: str) -> None:
+    """Reason-then-score is load-bearing (ADR-004): a provider that emits fields out of schema
+    order voids the mitigation, and Pydantic validation cannot see order — only the raw text can.
+    """
+    # ponytail: substring scan; could false-trigger if a string value quotes a field name.
+    positions = [raw.find(f'"{name}"') for name in schema.model_fields]
+    found = [p for p in positions if p >= 0]
+    if found != sorted(found):
+        raise ValueError(
+            f"{model} emitted structured-output fields out of schema order (ADR-004 reason-then-score)"
+        )
 
 
 def text_to_image(prompt: str, seed: int | None = None) -> bytes:
