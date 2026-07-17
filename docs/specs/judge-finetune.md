@@ -181,6 +181,17 @@ One JSONL manifest and a folder of PNGs. One line = one training example:
 `"Three eyes, striped scarf, feathered wings all present."` A blank rationale on positives teaches the
 model that rationales only exist for failures.
 
+**Where the rationale prose comes from (fixed 2026-07-13 — no human writes it, no model writes it).**
+Annotators only tick checkboxes (§3.4); the `differences_observed` string is rendered
+**deterministically by a fixed template** from the ticked taxonomy entries plus the Character
+Bible's attribute list — one sentence pattern per taxonomy entry (e.g. `wrong_body_feature` +
+bible attribute "three amber eyes" → *"The character does not show the expected three amber
+eyes."*), concatenated for multi-reason items; positives render the attribute checklist as an
+"all present" sentence. Human-supervised (the checkbox is the supervision), zero prose labour —
+which is what keeps step 3's 8-seconds-a-pair estimate honest — and byte-stable, which §6.1's
+training-target/production-schema round-trip already requires. If a model wrote this prose instead,
+§3.4's distillation ceiling would come back through the side door.
+
 ### 5.3 Folder layout
 
 ```
@@ -362,6 +373,12 @@ llamafactory-cli train backend/finetune/train_qlora.yaml
 Watch the eval loss in [Weights & Biases](https://wandb.ai) (free academic tier). Rising eval loss while
 train loss falls means it is memorising 975 examples — stop it, that is what `load_best_model_at_end` is for.
 
+**Checkpoint selection (pre-registered 2026-07-13).** Early stopping stays on eval loss, but the
+**reported** checkpoint per seed is selected by `different_character` F1 on the validation split —
+token-level loss on an ~80/20 split is dominated by the majority class and by rationale tokens, so
+the loss-minimizing checkpoint is not necessarily the best one on the single class the control loop
+acts on. A tiny eval script over the ~75 validation pairs per saved checkpoint is enough.
+
 **Run it three times with `seed: 0, 1, 2`.** At ~1,000 examples a single-seed delta is noise, and a reviewer
 who has trained a model will know that. Report mean ± std. Cost: three times a rounding error.
 
@@ -443,7 +460,13 @@ pipeline.** Write that sentence into the paper before the defense, not during it
 2. The primary metric on the **non-human character slice.** The contribution — and the least-powered slice.
 3. **Cohen's κ vs. human**, overall and split by human / non-human.
 4. **Latency and $/call.** A structural win: 7B beats 27B, self-hosted beats per-call.
-5. **DreamBench++ transfer — descriptive only.** No comparison claim; it is out-of-domain by construction.
+5. **DreamBench++ transfer — descriptive only.** No comparison claim; it is out-of-domain by
+   construction. **Binarization is fixed in the pre-registration, before the transfer eval runs:**
+   DreamBench++'s human scores are *graded* concept-preservation ratings, not binary same/different
+   verdicts, so the threshold mapping them onto the judge's binary output must be declared in
+   advance (per the benchmark's own "preserved" convention — verify the exact scale during the A2
+   citation check, same PDF). Agreement reported as κ and AUROC. A threshold picked after seeing
+   results makes the one transfer number in the paper post-hoc.
 6. **Downstream:** swap the judge, re-run the ablation, and ask whether *human-rated* consistency (RQ2)
    moves. This ties the fine-tune to the central claim instead of leaving it a bolt-on.
 
@@ -468,6 +491,21 @@ minority-class items. **Adjust it once, before pre-registration. Never after.**
 **Rung D is the only failing outcome, and it is a bug.** That is what separating the two gates buys. The
 engineering risk now lives in rung C, where it is survivable — the product keeps the judge it already shipped
 Phases 1 and 2 with. Moving the gate after seeing held-out numbers is the one thing that ends a capstone badly.
+
+**Test-set access policy (pre-registered 2026-07-13 — resolves the rung-D contradiction).** Rung D
+is only *discoverable* by reading the held-out set, and "debug" implies re-evaluating — which would
+be a second read of a set that must be read once. The pre-declared resolution: rung D triggers a
+debugging investigation conducted **exclusively on train and validation**; **one (1)** second
+held-out evaluation is permitted after the defect is identified and fixed; both readings and the
+deviation are reported in full. This is the only circumstance under which the held-out set is read
+twice. Without this paragraph, "read once" and "rung D → debug" are individually correct and
+jointly contradictory, and a panel that notices asks whether you would have re-run until it passed.
+
+**Malformed-output rule (pre-registered 2026-07-13, applies to all four baselines and the
+fine-tune alike).** Every judge runs under constrained decoding where the serving stack supports it
+(vLLM guided decoding; OpenRouter `require_parameters`). Any residual unparseable verdict is scored
+as a **miss on `different_character`** — counted against the judge that produced it. Deciding this
+after seeing which baseline emits broken JSON would be a degree of freedom; it is closed here.
 
 ---
 

@@ -1,0 +1,156 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "id": "rect_nextjs", "type": "rectangle", "x": 100, "y": 100, "width": 240, "height": 80,
+      "backgroundColor": "#a5d8ff", "strokeColor": "#1e1e1e", "strokeWidth": 2, "roughness": 1, "fillStyle": "solid"
+    },
+    {
+      "id": "text_nextjs", "type": "text", "x": 140, "y": 125, "width": 160, "height": 30,
+      "text": "Next.js\n(Vercel)", "fontSize": 20, "fontFamily": 5, "textAlign": "center"
+    },
+    {
+      "id": "rect_fastapi", "type": "rectangle", "x": 600, "y": 100, "width": 240, "height": 80,
+      "backgroundColor": "#b2f2bb", "strokeColor": "#1e1e1e", "strokeWidth": 2, "roughness": 1, "fillStyle": "solid"
+    },
+    {
+      "id": "text_fastapi", "type": "text", "x": 640, "y": 125, "width": 160, "height": 30,
+      "text": "FastAPI Web\n(Railway)", "fontSize": 20, "fontFamily": 5, "textAlign": "center"
+    },
+    {
+      "id": "rect_postgres", "type": "rectangle", "x": 600, "y": 300, "width": 240, "height": 80,
+      "backgroundColor": "#ffd43b", "strokeColor": "#1e1e1e", "strokeWidth": 2, "roughness": 1, "fillStyle": "solid"
+    },
+    {
+      "id": "text_postgres", "type": "text", "x": 640, "y": 325, "width": 160, "height": 30,
+      "text": "Supabase\nPostgres", "fontSize": 20, "fontFamily": 5, "textAlign": "center"
+    },
+    {
+      "id": "rect_realtime", "type": "rectangle", "x": 100, "y": 300, "width": 240, "height": 80,
+      "backgroundColor": "#ffd43b", "strokeColor": "#1e1e1e", "strokeWidth": 2, "roughness": 1, "fillStyle": "solid"
+    },
+    {
+      "id": "text_realtime", "type": "text", "x": 140, "y": 325, "width": 160, "height": 30,
+      "text": "Supabase\nRealtime", "fontSize": 20, "fontFamily": 5, "textAlign": "center"
+    },
+    {
+      "id": "rect_storage", "type": "rectangle", "x": 100, "y": 500, "width": 240, "height": 80,
+      "backgroundColor": "#ffd43b", "strokeColor": "#1e1e1e", "strokeWidth": 2, "roughness": 1, "fillStyle": "solid"
+    },
+    {
+      "id": "text_storage", "type": "text", "x": 140, "y": 525, "width": 160, "height": 30,
+      "text": "Supabase\nStorage", "fontSize": 20, "fontFamily": 5, "textAlign": "center"
+    },
+    {
+      "id": "rect_rq", "type": "rectangle", "x": 600, "y": 500, "width": 240, "height": 80,
+      "backgroundColor": "#b2f2bb", "strokeColor": "#1e1e1e", "strokeWidth": 2, "roughness": 1, "fillStyle": "solid"
+    },
+    {
+      "id": "text_rq", "type": "text", "x": 640, "y": 525, "width": 160, "height": 30,
+      "text": "RQ Worker\n(Railway)", "fontSize": 20, "fontFamily": 5, "textAlign": "center"
+    },
+    {
+      "id": "rect_redis", "type": "rectangle", "x": 600, "y": 700, "width": 240, "height": 80,
+      "backgroundColor": "#ffd43b", "strokeColor": "#1e1e1e", "strokeWidth": 2, "roughness": 1, "fillStyle": "solid"
+    },
+    {
+      "id": "text_redis", "type": "text", "x": 640, "y": 725, "width": 160, "height": 30,
+      "text": "Redis\nBroker", "fontSize": 20, "fontFamily": 5, "textAlign": "center"
+    },
+    {
+      "id": "rect_langgraph", "type": "rectangle", "x": 1000, "y": 500, "width": 240, "height": 80,
+      "backgroundColor": "#ffc9c9", "strokeColor": "#1e1e1e", "strokeWidth": 2, "roughness": 1, "fillStyle": "solid"
+    },
+    {
+      "id": "text_langgraph", "type": "text", "x": 1040, "y": 525, "width": 160, "height": 30,
+      "text": "LangGraph\nPipeline", "fontSize": 20, "fontFamily": 5, "textAlign": "center"
+    },
+    {
+      "id": "rect_aimodels", "type": "rectangle", "x": 1000, "y": 700, "width": 240, "height": 80,
+      "backgroundColor": "#ffc9c9", "strokeColor": "#1e1e1e", "strokeWidth": 2, "roughness": 1, "fillStyle": "solid"
+    },
+    {
+      "id": "text_aimodels", "type": "text", "x": 1010, "y": 715, "width": 220, "height": 50,
+      "text": "AI Models\n(Qwen, Gemma-3,\nQwen-Image)", "fontSize": 16, "fontFamily": 5, "textAlign": "center"
+    },
+    {
+      "id": "arr_next_fast", "type": "arrow", "x": 340, "y": 140, "width": 260, "height": 0,
+      "points": [[0,0], [260, 0]], "strokeColor": "#1e1e1e", "strokeWidth": 2, "roughness": 1
+    },
+    {
+      "id": "t_next_fast", "type": "text", "x": 400, "y": 110, "width": 140, "height": 20,
+      "text": "POST /storybooks", "fontSize": 16, "fontFamily": 5
+    },
+    {
+      "id": "arr_fast_pg", "type": "arrow", "x": 720, "y": 180, "width": 0, "height": 120,
+      "points": [[0,0], [0, 120]], "strokeColor": "#1e1e1e", "strokeWidth": 2, "roughness": 1
+    },
+    {
+      "id": "t_fast_pg", "type": "text", "x": 730, "y": 230, "width": 140, "height": 20,
+      "text": "creates job row", "fontSize": 16, "fontFamily": 5
+    },
+    {
+      "id": "arr_pg_rt", "type": "arrow", "x": 600, "y": 340, "width": 260, "height": 0,
+      "points": [[0,0], [-260, 0]], "strokeColor": "#1e1e1e", "strokeWidth": 2, "roughness": 1
+    },
+    {
+      "id": "t_pg_rt", "type": "text", "x": 400, "y": 310, "width": 140, "height": 20,
+      "text": "updates", "fontSize": 16, "fontFamily": 5
+    },
+    {
+      "id": "arr_rt_next", "type": "arrow", "x": 220, "y": 300, "width": 0, "height": 120,
+      "points": [[0,0], [0, -120]], "strokeColor": "#1e1e1e", "strokeWidth": 2, "roughness": 1
+    },
+    {
+      "id": "t_rt_next", "type": "text", "x": 230, "y": 230, "width": 140, "height": 20,
+      "text": "subscribes", "fontSize": 16, "fontFamily": 5
+    },
+    {
+      "id": "arr_rq_pg", "type": "arrow", "x": 720, "y": 500, "width": 0, "height": 120,
+      "points": [[0,0], [0, -120]], "strokeColor": "#1e1e1e", "strokeWidth": 2, "roughness": 1
+    },
+    {
+      "id": "t_rq_pg", "type": "text", "x": 730, "y": 430, "width": 180, "height": 20,
+      "text": "checkpoint / status", "fontSize": 16, "fontFamily": 5
+    },
+    {
+      "id": "arr_redis_rq", "type": "arrow", "x": 720, "y": 700, "width": 0, "height": 120,
+      "points": [[0,0], [0, -120]], "strokeColor": "#1e1e1e", "strokeWidth": 2, "roughness": 1
+    },
+    {
+      "id": "t_redis_rq", "type": "text", "x": 730, "y": 630, "width": 140, "height": 20,
+      "text": "pulls job", "fontSize": 16, "fontFamily": 5
+    },
+    {
+      "id": "arr_rq_lang", "type": "arrow", "x": 840, "y": 540, "width": 160, "height": 0,
+      "points": [[0,0], [160, 0]], "strokeColor": "#1e1e1e", "strokeWidth": 2, "roughness": 1
+    },
+    {
+      "id": "t_rq_lang", "type": "text", "x": 880, "y": 510, "width": 80, "height": 20,
+      "text": "runs", "fontSize": 16, "fontFamily": 5
+    },
+    {
+      "id": "arr_rq_store", "type": "arrow", "x": 600, "y": 540, "width": 260, "height": 0,
+      "points": [[0,0], [-260, 0]], "strokeColor": "#1e1e1e", "strokeWidth": 2, "roughness": 1
+    },
+    {
+      "id": "t_rq_store", "type": "text", "x": 380, "y": 510, "width": 180, "height": 20,
+      "text": "final images/PDF", "fontSize": 16, "fontFamily": 5
+    },
+    {
+      "id": "arr_lang_ai", "type": "arrow", "x": 1120, "y": 580, "width": 0, "height": 120,
+      "points": [[0,0], [0, 120]], "strokeColor": "#1e1e1e", "strokeWidth": 2, "roughness": 1
+    },
+    {
+      "id": "t_lang_ai", "type": "text", "x": 1130, "y": 630, "width": 140, "height": 20,
+      "text": "requests", "fontSize": 16, "fontFamily": 5
+    }
+  ],
+  "appState": {
+    "viewBackgroundColor": "#ffffff",
+    "gridSize": 20
+  },
+  "files": {}
+}

@@ -12,6 +12,11 @@ Fill in `Result` and `Decision` immediately after each run. Do not edit the `Pas
 or `Branches` rows after seeing a number — if one turns out wrong, say so in `Notes` and leave
 the original visible.
 
+> **Revised 2026-07-13, before any probe ran** (round-2 review, `docs/capstone/review_round2_2026-07-12.md`):
+> probe 1 scaled from 5 to 10 scenes per character (n = 20 per condition) and its tie rule recorded;
+> probe 3 gains a raw field-order condition (Pydantic cannot see order); probe 4 probes the
+> two-classifier **union** over an expanded ~26-case set, both directions.
+
 ---
 
 ## Probe 1 — Non-human character consistency ⬜
@@ -20,9 +25,15 @@ the original visible.
 
 Two characters: **Pip**, a fox cub (real animal, canonical silhouette, heavily represented in
 illustration training data — the *easy* case) and **Quill**, an invented three-eyed lizard-bird
-(the case ADR-001 is actually afraid of). Five scenes each, generated twice: conditioned on the
-canonical reference (**ON**) and from the description alone (**OFF**). Shuffled behind opaque
-filenames. Every team member scores blind. Nobody opens `key.csv`.
+(the case ADR-001 is actually afraid of). **Ten scenes each** (n = 20 items per condition),
+generated twice: conditioned on the canonical reference (**ON**) and from the description alone
+(**OFF**). Shuffled behind opaque filenames. Every team member scores blind. Nobody opens `key.csv`.
+
+Scoring rules, recorded before any number exists: per-item verdict is the **rater majority; a tie
+scores as not-identity** (conservative). The team scorers are not naive raters — they designed the
+mechanism and can often infer condition from pose/composition echo — so the κ and effect size this
+probe yields are treated as **optimistic bounds** when sizing the Tier-1 load (R2), not as unbiased
+estimates.
 
 ```
 uv run python -m spikes.phase_05 consistency
@@ -128,7 +139,11 @@ uv run python -m spikes.phase_05 structured
 ```
 
 **Pass condition:** strict `json_schema` → Pydantic round-trip succeeds for the text model **and**
-for the judge **called with two images**.
+for the judge **called with two images**, **and** the raw response emits `differences_observed`
+before `same_character` — Pydantic validation is order-insensitive, so the reason-then-score
+property (ADR-004) is asserted on the raw text. As of 2026-07-13 `providers._chat` enforces this
+order on every structured call; a provider that emits out of schema order now fails loudly instead
+of silently voiding the mitigation.
 
 **Does not gate Phase 1** — but Phase 1's `consistency_check` node cannot be written without it.
 
@@ -153,6 +168,18 @@ The respondents are Filipino children, the open image model ships **no built-in 
 and the proprietary backstop is gone (ADR-011 revision b). Nobody has published Llama Guard's
 Filipino performance. Run the gate over harmful **and** benign Filipino/Taglish cases and check
 **both directions.**
+
+ADR-011's gate is **two independent classifiers — either one flagging fails the content** — so the
+probe scores the **union**: harmful must be caught by at least one model, benign by neither. The
+~26-case set spans threats, self-harm, bullying, dangerous instructions, abuse disclosure, and
+hate (must flag) vs. mild peril, folklore horror, in-story death, and **fictional Filipino names**
+(must not flag — the R8 false-positive direction).
+
+⚠️ **Verified 2026-07-13 against the live OpenRouter catalog: neither Qwen3Guard-Gen nor Granite
+Guardian is routable there** (only `meta-llama/llama-guard-4-12b` and `openai/gpt-oss-safeguard-20b`
+are). This is the pre-declared "routing error is also a finding" branch arriving early: ADR-011's
+pair must run on the worker, or the backstop needs an ADR amendment. `moderation_backstop_model`
+stays unset until that decision is made.
 
 ```
 uv run python -m spikes.phase_05 moderation

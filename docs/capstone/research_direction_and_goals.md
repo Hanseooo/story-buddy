@@ -34,10 +34,14 @@ breed. The style shifts halfway through.
 > **An inconsistent picture book does not transmit the child's story — it transmits noise.**
 
 No single generative model produces a coherent multi-scene picture book that holds a **stylized, invented,
-frequently non-human** character across pages. This regime is not merely hard; it is *unmeasured*. No open
-image model has published identity-similarity benchmarks split by human vs. non-human subject (as established in the project's Architecture Decision Record 001 [ADR-001] available in the source repository, which evaluated candidates like Qwen-Image-Edit and FLUX.1 and found that non-human/stylized identity preservation remains unbenchmarked),
-and **no dataset exists that provides human pairwise identity judgments over stylized invented characters**
-(`docs/specs/judge-finetune.md` §5.1 in the repository). That absence is itself a contribution of this work.
+frequently non-human** character across pages. This regime is not merely hard; it is *under-measured*. No open
+image model has *established* identity preservation for stylized, invented, non-human subjects — the
+substrate's behaviour in this regime is unverified (recorded in the project's Architecture Decision Record 001
+[ADR-001] available in the source repository, which evaluated candidates like Qwen-Image-Edit and FLUX.1). The
+nearest evaluation benchmarks (e.g. DreamBench++) score *real, photographed* subjects, and **no dataset
+provides human _pairwise_ identity judgments over stylized, invented, frequently non-human characters**
+(`docs/specs/judge-finetune.md` §5.1 in the repository). That specific absence — human pairwise judgments over
+invented non-human characters — is itself a contribution of this work.
 
 ### 1.3 Why these are the same problem
 
@@ -227,7 +231,7 @@ an apology.**
 **In scope:** Story Analyzer · Scene Segmentation (10–15 scenes, floor ≥ 3) · Character Bible + canonical
 reference (≤ 2 canonical references) · three style presets · Prompt Optimizer · Image Generator
 (Qwen-Image-Edit) · prompted VLM consistency judge + targeted regeneration · moderation stack (input text,
-output images, Filipino PII redaction) · slide composer with Kokoro-82M narration · PDF export ·
+output images, Filipino PII redaction) · slide composer with expressive TTS narration (Chatterbox) · PDF export ·
 teacher-gated classroom sharing with peer reflection.
 
 **Permanently excluded:** public sharing. All sharing is classroom-scoped and teacher-gated.
@@ -247,7 +251,9 @@ rather than a hope, and it is why the system is self-hostable and replicable.
 2. **Evidence on whether consistency actually transmits a story** (RQ5) — the bridge from a technical metric
    to a human outcome.
 3. **A characterization of an unmeasured regime** — identity retention for stylized, invented, non-human
-   characters, where ADR-001 (in the repository) records that no published benchmark splits identity similarity by human vs. non-human subject for current open image models.
+   characters, where existing benchmarks (e.g. DreamBench++) evaluate real photographic subjects rather than
+   the stylized, invented, non-human regime this product lives in, and none provides human pairwise identity
+   judgments over it (ADR-001 and `docs/specs/judge-finetune.md` §5.1 in the repository).
 4. **A fine-tuned open VLM consistency judge, honestly evaluated** against four baselines with a
    pre-registered claim ladder — including the outcome where it loses.
 5. **Equity by construction** — an open-weight, self-hostable stack with no per-seat licensing cost.
@@ -283,7 +289,7 @@ is a weekend. Everything before it is months.
 | Manuscript section | Draw from |
 |---|---|
 | **Introduction** | §1.1 (motivation, cited to prior work) → §1.2 (the gap) → §1.3 (the research problem + central RQ) → §7 (contributions). Lead with the child and the folder; land on identity drift. |
-| **Related Work** | §1.2's two absences — no non-human identity benchmark (per ADR-001 in the repository, which confirms this gap across current open models), no dataset with human pairwise identity judgments (see `docs/specs/judge-finetune.md` §5.1 in the repository, incl. the rejected-alternatives table). |
+| **Related Work** | Situate against the crowded character-consistency field (ConsiStory, StoryDiffusion, The Chosen One, DreamBench++), then §1.2's true gap: existing benchmarks are photographic or method-preference studies, and **none provides human pairwise identity judgments over stylized, invented, non-human characters** (`docs/specs/judge-finetune.md` §5.1 in the repository, incl. the rejected-alternatives table). Cite only arXiv IDs you have re-verified (see `design_decisions_and_risks.md`, R6). |
 | **Methods** | **Drafted in full: `docs/capstone/methodology.md`** — development methodology, system under test, data collection, datasets, training and validation, instruments, analysis plan, ethics, threats to validity. |
 | **Results** | Phase 0.5 probe results · the ablation table · RQ5 recall scores · RQ6's four-baseline table with CIs |
 | **Discussion** | §5 — what the numbers support, and the four claims we refuse to make. Phase 0.5's non-human boundary belongs here if Quill fails. |

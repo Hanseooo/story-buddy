@@ -48,16 +48,23 @@ slice through the whole stack rather than a horizontal layer.
 **Exit criteria, not calendar.** Each phase advances on evidence, not on a date. Gates are recorded in
 `docs/product/ROADMAP.md` and are pass/fail.
 
-### 1.2 The phases and their gates
+### 1.2 Spiral Model Quadrant Mapping
 
-| Phase | Purpose | Gate to leave it |
-|---|---|---|
-| **0** — Scaffolding | One story end-to-end through real infrastructure | A real slideshow renders. ✅ done |
-| **0.5** — Open-weight spike | Resolve the substrate risk cheaply | **Kill criterion.** Reference conditioning retains identity on ≥ 80% of items **and** exceeds unconditioned generation by ≥ 30 points |
-| **1** — Core pipeline | The consistency loop is real, on clean stories | A story produces a consistent book; a case exists where the judge caught a drifted image and the retry fixed it |
-| **2** — Safety & classroom | Safe for a real child, survives messy input | The Filipino/Taglish moderation probe passes in **both** directions |
-| **2.5** — Judge fine-tuning | An honestly evaluated specialized judge | A results table exists and the held-out set was read exactly once |
-| **3** — Evaluation & study | The ablation and the user study | One full ablation session end-to-end, clean metrics table |
+While structured chronologically as phases, the development process represents iteration loops mapping directly to the four core quadrants of Boehm's Spiral Model:
+
+1. **Determine Objectives:** Defining goals for the current iteration (e.g., scaffolding, core pipeline, evaluation).
+2. **Identify & Resolve Risks:** The defining feature of this project's SDLC. Identifying the biggest unknown (e.g., Phase 0.5 for substrate risk, Phase 2.5 for judge accuracy) and building a targeted spike to resolve it *before* full implementation.
+3. **Develop & Verify:** Building the vertical slice (Phase 0 walking skeleton, Phase 1 pipeline) and verifying against pre-declared criteria.
+4. **Plan Next Iteration:** Using the evidence from the exit gates to adjust the subsequent phase's architecture.
+
+### 1.3 The phases and their gates
+
+| Phase | Iteration Loop / Spiral Stage | Purpose | Gate to leave it |
+|---|---|---|---|
+| **0** & **0.5** | **Loop 1: Risk Resolution** | Scaffolding and Open-weight spike to resolve the substrate risk cheaply | A real slideshow renders. Reference conditioning retains identity on ≥ 80% of items **and** exceeds unconditioned by ≥ 30 points. ✅ Phase 0 done |
+| **1** | **Loop 2: Core Pipeline** | The consistency loop is real, on clean stories | A story produces a consistent book; a case exists where the judge caught a drifted image and the retry fixed it |
+| **2** & **2.5** | **Loop 3: Integration & Tuning** | Safe for a real child, survives messy input. An honestly evaluated specialized judge | The Filipino/Taglish moderation probe passes in **both** directions. A results table exists and the held-out set was read exactly once |
+| **3** | **Loop 4: Evaluation** | The ablation and the user study | One full ablation session end-to-end, clean metrics table |
 
 Phase 0.5's kill criterion is the sharpest instance of the method. **It has not yet run**, and every claim
 downstream of it is written as contingent, because it is. If the substrate cannot hold an invented non-human
@@ -87,7 +94,11 @@ If asked whether pre-registration is "just Waterfall": pre-registration constrai
 - **Deterministic orchestration.** The pipeline is a fixed state machine (LangGraph). Conditional edges exist
   only at moderation pass/fail and consistency pass/fail. There is **no autonomous agent routing**, so the
   execution path is a function of the input, and worst-case cost is bounded. This is a precondition for the
-  ablation in §7.1: an ON/OFF comparison is only meaningful if the two arms differ in exactly one respect.
+  ablation in §7.1: an ON/OFF comparison is only meaningful if the two arms differ solely in whether the
+  consistency pipeline is applied, and in nothing incidental (routing, seeds, ordering) — determinism
+  guarantees the second. The first is a design choice under review: "pipeline applied" currently *bundles*
+  reference conditioning, the judge, and targeted regeneration, so the ablation attributes an effect to the
+  pipeline as a whole, not to any one component (see `docs/capstone/design_decisions_and_risks.md`, R1).
 - **The testing bright line.** Deterministic tests mock every model call and must stay green in continuous
   integration. Fuzzy quality — "is the character consistent?" — is measured only in an offline evaluation
   harness against real models. The two never mix. A generated-content assertion in CI is a flaky test, not a
@@ -115,7 +126,8 @@ A deterministic pipeline. The stages, in order:
 | Regeneration | One targeted, prompt-corrected retry; best-of fallback; capped |
 
 **Models.** Text analysis: `qwen/qwen3-32b`. Image generation: `Qwen-Image-Edit` (Apache-2.0). Consistency
-judge: prompted `gemma-3-27b-it`. Narration: `Kokoro-82M`. All open-weight. No proprietary vendor model
+judge: prompted `gemma-3-27b-it`. Narration: `Chatterbox` (MIT), served via hosted inference, with
+`Kokoro-82M` retained as a CPU fallback (ADR-020, revised). All open-weight. No proprietary vendor model
 appears anywhere in the pipeline — a constraint that makes the system self-hostable and the equity claim a
 property of the design rather than an aspiration. Model identifiers, versions, and provider routing are
 pinned and reported.
@@ -350,10 +362,10 @@ of ON or OFF.
 
 | Measure | Definition | Scale |
 |---|---|---|
-| Character consistency | Is the same character recognizable across scenes? | Ordinal |
-| Style consistency | Is the visual style maintained across scenes? | Ordinal |
-| Narrative coherence | Do the illustrations tell a connected story? | Ordinal |
-| Illustration quality | Craft, independent of consistency | Ordinal |
+| Character consistency | Is the same character recognizable across scenes? | Ordinal, 1–5 |
+| Style consistency | Is the visual style maintained across scenes? | Ordinal, 1–5 |
+| Narrative coherence | Do the illustrations tell a connected story? | Ordinal, 1–5 |
+| Illustration quality | Craft, independent of consistency | Ordinal, 1–5 |
 | Story completeness | Proportion of annotated major plot points represented in selected scenes | 0–1 |
 
 **How it is evaluated.** Inter-rater reliability (Krippendorff's α) across raters, reported before any
@@ -399,7 +411,12 @@ characteristic, with an interpretation scale declared in advance.
 | Performance efficiency | Is generation time acceptable in a classroom period? |
 | Security | Are classroom data isolation and asset access controls effective? |
 
-Internal consistency of the questionnaire is reported (Cronbach's α), and the evaluator sample is described.
+**Content validity precedes administration.** Before any evaluator sees it, the questionnaire is reviewed by a
+panel of expert validators, who judge each item for clarity and relevance to the characteristic it claims to
+measure; agreement is quantified as a **Content Validity Index (CVI)**, and sub-threshold items are revised or
+removed. The validated questionnaire is then **piloted** on a small group held out from the reported sample, and
+its **internal consistency is reported (Cronbach's α, floor ≥ 0.70)** per subscale before the instrument is used
+for real. Both figures — CVI and Cronbach's α — and the evaluator sample are described.
 
 ### 6.5 What each instrument cannot do — and the trap to avoid
 
@@ -415,7 +432,7 @@ The division of labour is:
 
 | Question | Instrument | What it can support |
 |---|---|---|
-| Does the loop change consistency? | Blind ablation (§6.2) | A **causal** claim — one variable differs |
+| Does the loop change consistency? | Blind ablation (§6.2) | A **causal** claim about the pipeline as a whole — ON and OFF differ only in whether it runs |
 | Does that change matter? | Comprehension instrument (§6.3) | A **human outcome** |
 | Can the judge measure it automatically? | Judge evaluation (§7.3) | **Instrument validity** |
 | Is the software any good? | ISO/IEC 25010 (§6.4) | **Perceived quality.** Not efficacy |

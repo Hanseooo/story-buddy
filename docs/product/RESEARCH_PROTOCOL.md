@@ -64,7 +64,7 @@ That is the SDG-4 hook, and it is a design property, not a hope.
 |---|---|---|---|
 | RQ1 | How accurately does the system identify key scenes from child-written stories? | 1 | Story Completeness vs. annotated major plot points |
 | **RQ2** | **Does the Character Bible + VLM consistency loop measurably improve visual consistency vs. naive per-scene generation?** | 1 | **Blind ablation, human consistency ratings** |
-| RQ3 | How acceptable is the generated storybook (coherence, consistency, illustration quality, usability)? | 1 | Blind scored ratings |
+| RQ3 | How acceptable is the generated storybook (coherence, consistency, illustration quality, usability)? | 1 | Blind scored ratings; usability is measured separately, via the ISO/IEC 25010 evaluator questionnaire (methodology §6.4), never by the blind raters |
 | RQ4 | How gracefully does the system handle **under-length** stories without inventing content? | 1 | Scene-count floor behavior on short corpus items |
 | **RQ5** | **Do readers of a pipeline-ON book recover the author's characters and plot more accurately than readers of pipeline-OFF?** | 1 (adults) + 2 (peers) | **Comprehension instrument, §7** |
 | RQ6 | Does fine-tuning an open VLM judge improve agreement with humans over the un-fine-tuned base — and does the improvement concentrate on **non-human** characters? | — | **Pre-registered superiority test** on held-out ΔF1 (`different_character`) vs. **zero-shot Qwen2.5-VL-7B**; McNemar + character-clustered bootstrap CI. Prompted Gemma-27B is a reported secondary and the **product** gate, not the research gate (ADR-018 amendment a, `docs/specs/judge-finetune.md` §7) |
@@ -117,6 +117,20 @@ A reader who has **never seen the story text** is given the book alone, then ask
 Scoring: recalled characters and events are matched against the **human-annotated major plot points** —
 **the same annotation RQ1 already requires.** One annotation, two uses.
 
+> ⚠️ **Owner-accepted change pending adviser sign-off (2026-07-13 — `design_decisions_and_risks.md` R7):**
+> comprehension sessions present the book **with captions stripped** (images and page order only).
+> The captions are the child's verbatim text (ADR-013), identical in both arms, so a captioned book
+> lets the reader recover characters and plot from the text channel alone and the recall outcomes
+> can null out regardless of what the pipeline does. Image-only sessions measure the visual
+> channel — the only channel the ablation changes. The shipped artifact keeps captions; Methods
+> states the deviation. Do not timestamp the pre-registration before this is signed off.
+
+**Character-recovery scoring (draft for the annotation guide — ⚠️ confirm with adviser):** scored
+over **major characters** — named characters participating in ≥ 2 annotated major plot points —
+which aligns the denominator with what the ≤ 2-canonical-reference Character Bible can actually
+act on. Recovery over *all* annotated characters is reported descriptively. Minor characters are
+un-conditioned in both arms, so including them dilutes rather than biases the comparison.
+
 Two properties worth stating in Methods. First, **the reader need not be a child**, which is why RQ5 runs on
 Tier-1 adults and survives an ethics delay. Second, **asking the author "did it match your intent?" is a
 weaker instrument** — authors know what they meant and will read it into any illustration. A naive reader cannot.
@@ -132,7 +146,7 @@ Test stories must be **real or realistic child writing**, not builder-authored c
 best-case only). Grade 5–6, English with Taglish code-switching tolerated.
 
 **Target: 50 stories, and take 60–70 if recruitment allows.** That number is set by the fine-tune, not the
-ablation — stories yield characters, and characters are the unit of the fine-tune's disjoint 30/5/15 split
+ablation — stories yield characters, and characters are the unit of the fine-tune's disjoint 33 / 5 / 12 split
 (`docs/specs/judge-finetune.md` §5.5). RQ6 makes a **superiority claim**, so its held-out test set must be
 large enough to resolve a few points of F1; **more characters is the cheapest statistical power the project
 has.** The ablation would survive on fewer.
@@ -145,6 +159,13 @@ once the pipeline has drawn it and researchers have labelled the drawings — th
 This is why §9's consent clause is not optional.
 
 **Primary source: Stage-1 story donation (§9).** Document provenance — reviewers will ask.
+
+**PII redaction at intake (added 2026-07-13).** Donated stories are redacted **manually on
+receipt** — one researcher redacts real names, addresses, school names, and contact details before
+the story is stored; a second researcher spot-checks. This step is independent of the product's
+automated Presidio stack, which is a Phase-2 deliverable and does not exist when the corpus starts
+arriving. Fictional character names are kept (they are the story); names co-occurring with
+real-world anchors (addresses, phone numbers, "ako si… taga…" framings) are treated as real.
 
 **Insurance, if Stage 1 slips:** researchers writing deliberately as ten-year-olds (including messy and
 non-linear ones), or a public children's-writing dataset. **Survey what actually exists before assuming one
@@ -186,6 +207,28 @@ Draft language, to be adapted to the ethics board's template:
 
 **If stories are collected before this clause is in the signed form, the only lawful options are to
 re-consent every child or to delete the data.** Do not plan around a fix that does not exist.
+
+**Withdrawal cutoff (added 2026-07-13 — required, because a trained model cannot be untrained).**
+The consent form states a **data-lock date** — the start of image-pair labelling (Phase 2.5).
+Withdrawal before that date removes the story entirely. Withdrawal after it deletes the story and
+every label derived from it from all datasets and excludes them from any future training, but
+models already trained are retained — machine unlearning cannot be promised, and promising it
+anyway is a violation waiting for a DPA reviewer to find. Draft additions:
+
+> *Guardian consent (append):* You may withdraw your child's story at any time. If you withdraw
+> before **[data-lock date]**, the story is removed completely. After that date, the story and all
+> markings made from it will be deleted from our records and never used again, but a computer
+> program that has already been trained cannot have the training removed.
+
+> *Child assent (replace the last sentence):* You can say no, and you can stop any time. If you
+> change your mind before **[date]**, we will take your story out.
+
+**Adult participants need a protocol too (added 2026-07-13).** Tier-1 raters and readers, and the
+ISO/IEC 25010 evaluators, are human-subjects data collection; most boards require review or a
+formal exemption even at minimal risk. **Bundle the adult-rater protocol (recruitment, consent,
+session structure, instruments) into the Stage-1 submission** or file it in the same envelope —
+otherwise "Tier 1 stands alone" still has an unfiled dependency, which is the same deadlock the
+two-stage split exists to prevent.
 
 **Stage 2 — system use.** Children use StoryBuddy, read classmates' books, write reflections. Interactive,
 peer-visible, child-authored content. A materially heavier review. **Gates:** Tier 2 only.

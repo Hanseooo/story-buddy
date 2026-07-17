@@ -150,7 +150,7 @@ Product/architecture choices are in the ADRs; this is the working reference, **i
 
 | Layer | Choice | Notes / ADR |
 |---|---|---|
-| Frontend | Next.js (React) + Tailwind + shadcn/ui (parent) + hand-built cartoon-pop (kid) + Motion + Lottie | Vercel, SSR landing. §9,§12 |
+| Frontend | Next.js (React) + Tailwind + shadcn/ui (teacher) + hand-built cartoon-pop (kid) + Motion + Lottie | Vercel, SSR landing. §9,§12 |
 | Backend web | FastAPI | Railway (Singapore). ADR-009 |
 | Worker / queue | RQ worker + Redis broker | Separate service. ADR-005 |
 | Pipeline engine | LangGraph (deterministic) + `langgraph-checkpoint-postgres` | ADR-003,005 |
@@ -161,7 +161,7 @@ Product/architecture choices are in the ADRs; this is the working reference, **i
 | Data / auth / storage / realtime | Supabase (Postgres + Auth + Storage + Realtime + RLS). **Classroom-scoped** | ADR-006, ADR-017 |
 | Structured extraction | `json_schema` (strict) + `require_parameters` (OpenRouter only) + Pydantic | §12, §3, ADR-002 |
 | Moderation | **Qwen3Guard-Gen + Granite Guardian** (text, both Apache-2.0) + Presidio **+ Filipino recognizers** (PII) + NSFW ViT & VLM rubric (image) | ADR-011 |
-| Narration | **Kokoro-82M** (Apache-2.0, CPU), pre-rendered per page onto Storage | ADR-020 |
+| Narration | **Chatterbox** (MIT, expressive) via hosted inference, pre-rendered per page onto Storage; **Kokoro-82M** CPU fallback | ADR-020 (revised) |
 | Fine-tuning | **The consistency judge only.** Identity = reference conditioning; style = ADR-007 constant; safety = never | ADR-018 (supersedes ADR-016) |
 | Observability | LangSmith **or** Langfuse (tracing) + Sentry (errors) | §16 |
 | Rate limiting | `slowapi` + per-profile daily cap + cost circuit-breaker | §14,§15 |
@@ -172,11 +172,11 @@ Product/architecture choices are in the ADRs; this is the working reference, **i
 | **Eval harness** | offline scripts + tracing exports | real models, story corpus; **not CI** (§6) |
 
 ### Frontend rendering strategy
-Next.js is chosen for **one** load-bearing reason: the parent-facing **landing page is SSR** (SEO —
-parents discover the product). Everything else is DX. Therefore:
+Next.js is chosen for **one** load-bearing reason: the teacher-facing **landing page is SSR** (SEO —
+teachers discover the product). Everything else is DX. Therefore:
 
 - **Landing page:** server-rendered (SEO, fast first paint).
-- **Authenticated app** (kid flow, parent dashboard): **client components + direct Supabase reads**
+- **Authenticated app** (kid flow, teacher dashboard): **client components + direct Supabase reads**
   (RLS-enforced), so navigation is instant/SPA-style with no server round-trip per page. Do **not**
   server-render these — that reintroduces per-navigation latency for zero SEO benefit.
 - **CRUD:** the frontend does **not** host a backend. Light reads/writes → Supabase client directly
@@ -199,7 +199,7 @@ Concerns that touch many modules. **Every feature spec ticks the ones it affects
 | CC-3 | **Cost control** | counts toward per-book ceiling + circuit-breaker; per-profile daily cap | §15 |
 | CC-4 | **Security (RLS + signed URLs)** | **classroom**-scoped DB isolation; no public assets | ADR-006, ADR-017 / §14 |
 | CC-5 | **Observability** | emits traces/metrics (gen time, regen count, cost, VLM score) | §16 |
-| CC-6 | **Accessibility** | Kokoro narration per page; large targets; minimal text | §17, ADR-020 |
+| CC-6 | **Accessibility** | Expressive TTS narration per page (Chatterbox, hosted); large targets; minimal text | §17, ADR-020 |
 | CC-7 | **Reproducibility** | honors `eval.seed`; deterministic where the model allows | §20, ADR-010 |
 | CC-8 | **Student vs teacher design language** | cartoon-pop (student flow) vs calmer/denser (teacher) | §9 |
 | CC-9 | **Failure states = success states** | moderation/failure screens get equal design care; kid-legible | §9,§13 |
@@ -217,7 +217,7 @@ Everything with one right answer, **with every `providers.py` call mocked**:
 - LangGraph routing (moderation pass/fail and consistency pass/fail take the right edges).
 - Job lifecycle & checkpoint/resume (stall at N resumes at N).
 - Moderation ordering; PII redaction; truncate-at-scene-boundary; N=3 off-ramp; cost circuit-breaker.
-- RLS isolation (a parent cannot read another's data); signed-URL access.
+- RLS isolation (one classroom cannot read another classroom's data — ADR-017); signed-URL access.
 - e2e happy path + processing→slideshow via Realtime + PDF export (Playwright).
 - **Never assert on generated content.** "Is the character consistent?" is Tier B.
 
@@ -266,13 +266,16 @@ Phase-2.5 annotators. Design it once, in Phase 1, or invalidate every label coll
   gone. **Release gate for Phase 2.** Phase 0.5 probe 4 (ADR-011).
 
 **Verify at build time (do not guess):**
-- **OpenRouter model ids for `Qwen3Guard-Gen` and `Granite Guardian`**, and whether the backstop is routable
-  or must run on the worker (ADR-011).
-- **DreamBench++ image licensing beyond evaluation** — code is Apache-2.0; the images are "verified for
-  academic suitability," which is a different statement. Confirm with the authors before training on them.
+- ~~OpenRouter model ids for `Qwen3Guard-Gen` and `Granite Guardian`~~ → **verified 2026-07-13
+  against the live catalog: NEITHER is routable on OpenRouter.** The only guard-type open-weight
+  models there are `meta-llama/llama-guard-4-12b` and `openai/gpt-oss-safeguard-20b`. So ADR-011's
+  pair must run **on the worker** (RAM budget!), or the backstop needs an **ADR-011 amendment**
+  (gpt-oss-safeguard-20b is the routable open-weight candidate). ⚠️ Surface at the next checkpoint —
+  this is an ADR decision, not a build detail.
 - **ADR-013 — PDF renderer** (Playwright vs WeasyPrint): small build-time spike.
 - **Modal cold-start budget** for a study session (ADR-019). Measure.
-- **Worker RAM** — Presidio+spaCy, NSFW ViT, Kokoro, and the CPU text gate are all resident (~2–3 GB).
+- **Worker RAM** — Presidio+spaCy, NSFW ViT, and the CPU text gate are resident (~2–3 GB); narration is a
+  hosted TTS call (ADR-020, revised), so Kokoro is only resident if the fallback is kept warm.
   Check the plan tier at the *start* of Phase 2.
 
 **Deferred by design:**
@@ -280,6 +283,9 @@ Phase-2.5 annotators. Design it once, in Phase 1, or invalidate every label coll
 - **The failure-reason taxonomy** — extend it in Phase 1, never during Phase 2.5 annotation.
 
 **Resolved:**
+- ~~DreamBench++ image licensing beyond evaluation~~ → **evaluate only, never train on it, never
+  redistribute it** (`docs/specs/judge-finetune.md` §5.6, §12). Evaluation is the benchmark's
+  intended use; no correspondence with the authors is required.
 - ~~Observability — LangSmith vs Langfuse~~ → ADR-014 (LangSmith).
 - ~~ADR-015 is an operating assumption~~ → the mandate was confirmed *and hardened*: no proprietary models
   anywhere. `backend/providers.py` is what kept the blast radius to a handful of files.

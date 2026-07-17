@@ -20,8 +20,9 @@
 - **The judge is fine-tuned** (`Qwen2.5-VL-7B`, QLoRA), served on vLLM. ADR-018 supersedes ADR-016;
   ADR-019 adds the fourth service. The **pipeline is still the contribution (§3)**.
 - **No proprietary models at all** (ADR-015 hardened). Removes exactly two things: OpenAI
-  `omni-moderation` → **Granite Guardian** (Apache-2.0), and ElevenLabs → **Kokoro-82M** (Apache-2.0).
-  Both are upgrades. **Qwen3Guard** (119 languages) replaces Llama Guard and closes the Taglish hole.
+  `omni-moderation` → **Granite Guardian** (Apache-2.0), and ElevenLabs → an **open expressive TTS**
+  (**Chatterbox**, MIT, hosted inference; Kokoro-82M CPU fallback — ADR-020, revised 2026-07-17).
+  **Qwen3Guard** (119 languages) replaces Llama Guard and closes the Taglish hole.
 - **Two new safety findings**, neither previously in any ADR: Presidio leaks Filipino PII by default, and
   the text gate's Filipino/Taglish performance was never measured. Both are now Phase-0.5/Phase-2 work.
 - **The ethics submission splits in two**, because Tier 1 was silently blocked on Tier 2. ADR-008.
@@ -124,7 +125,7 @@ ten-year-olds (ADR-017).
 5. Prompt Optimization Engine
 6. Image Generation Engine (reference-conditioned, Qwen-Image-Edit)
 7. Consistency Checker (VLM-as-judge; triggers one targeted regeneration). **Fine-tuned in Phase 2.5** — ADR-018
-8. Slide Composer / Export (PDF + library) + **Kokoro narration** per page — ADR-020
+8. Slide Composer / Export (PDF + library) + **expressive TTS narration** (Chatterbox, hosted) per page — ADR-020
 9. **Teacher account + classroom + student profiles** (Supabase Auth + RLS) — ADR-017
 10. Moderation & Safety Stack (input text, PII incl. **Filipino recognizers**, output image, self-refusal fallback)
 11. **Classroom sharing + peer reflection** (fixed prompts, teacher-gated) + **Story Map** — ADR-021
@@ -159,7 +160,7 @@ it is the long pole and cannot be compressed by coding faster (§10, §18, RESEA
 | Sharing | **Classroom-scoped, teacher-gated. No public mode, ever.** | Peer-visible child content without a gatekeeper is a social network for ten-year-olds. ADR-017 |
 | Peer feedback | Fixed reflection prompts, routed through the input gate; author sees a **Story Map, not a score** | Formative not evaluative; doubles as the RQ5 instrument. ADR-021 |
 | **Fine-tuning** | **The consistency judge** (`Qwen2.5-VL-7B`, QLoRA), served on vLLM | Identity and style are the wrong targets (ADR-016's reasoning survives); the judge is the documented weakest link with a known prompting ceiling. **ADR-018, ADR-019** |
-| Narration | **Kokoro-82M**, pre-rendered on the worker | Open, free, no key, consistent voice on classroom hardware. **ADR-020** |
+| Narration | **Chatterbox** (MIT, expressive) via hosted inference, pre-rendered per page; **Kokoro-82M** CPU fallback | Expressive, emotional read-aloud; open-weight so the mandate holds; small metered cost. **ADR-020** (revised) |
 | Design language | Cartoon-pop (student flow); calmer/denser variant (teacher screens) | Matches storybook tone; density fits the teacher dashboard. |
 | Moderation | Two independent **open** classifiers per path + PII + image gate + self-refusal fallback | Non-negotiable for child users. Proprietary backstop removed and replaced, not abandoned. §13, ADR-011 |
 | Captions | Kid's **verbatim** text excerpt (not LLM-rewritten) | Preserves story fidelity; no extra generation/moderation surface. |
@@ -202,8 +203,8 @@ it is the long pole and cannot be compressed by coding faster (§10, §18, RESEA
 - Regeneration controller (1 targeted retry with corrected prompt; best-of fallback; capped)
 - Moderation stack (text + PII + image + model self-refusal fallback)
 - Slide Composer (image + verbatim caption + page number + layout)
-- Parent account + kid profile (Supabase Auth + RLS)
-- Parent library/dashboard of saved storybooks
+- Teacher account + classroom + student profiles (Supabase Auth + RLS) — ADR-017
+- Teacher library/dashboard of classroom storybooks — ADR-017
 - Export (PDF; shareable link optional)
 - Read-aloud (TTS) for captions — **strongly recommended in MVP** given target age (§17)
 
@@ -215,7 +216,7 @@ Kid-uploaded reference; selectable art styles; multi-language; teacher/classroom
 ## 9. Design & UX Direction
 
 - **Kid flow (steps 3–10):** cartoon-pop — rounded shapes, warm saturated palette, soft depth, friendly micro-interactions (Motion), minimal text, large touch targets, Lottie wait-state animations. Every wait state needs a visible, kid-legible explanation.
-- **Parent flow (steps 1–2, 11–12, dashboard):** same color DNA, calmer/denser grid/card layout (shadcn/ui acceptable here).
+- **Teacher flow (steps 1–2, 12, dashboard — ADR-017):** same color DNA, calmer/denser grid/card layout (shadcn/ui acceptable here).
 - Specific tokens (palette hex, type pairing, spacing, radius/shadow) are an implementation decision informed by the cartoon-pop direction; see the frontend-design skill at build time.
 - **Failure/moderation states get the same design care as success states.** A harsh failure screen is a larger UX risk here than in a general-audience app.
 
@@ -376,7 +377,7 @@ image generation:
 | Image generation (2,000 images) | $40–70 |
 | VLM judge (2,000 calls, two images each) | $5–15 |
 | Text LLM (~200 stories) | $2–10 |
-| Text moderation (Llama Guard 4) | $1–5 |
+| Text moderation (Qwen3Guard-Gen + Granite Guardian, ADR-011b) | $1–5 |
 | Image moderation (CPU classifiers on the existing worker) | $0–10 |
 
 - **Develop against the cheapest provider; spend paid budget only on study runs.**
@@ -386,7 +387,8 @@ image generation:
 - **Serving the judge *lowers* running cost**: ~2,000 calls/month at ~3 s each is ~100 GPU-minutes on a
   scale-to-zero container, cheaper than 2,000 Gemma-27B API calls (ADR-019). Keep-warm during a study
   session is ~$1/hr.
-- **Narration is $0** — Kokoro runs on the existing worker's CPU (ADR-020).
+- **Narration is a small metered cost** — ~cents/book of hosted expressive TTS (Chatterbox on fal.ai),
+  minor beside image generation; the Kokoro CPU fallback is $0 if the metered path is dropped (ADR-020, revised).
 
 ---
 
@@ -401,13 +403,17 @@ Instrument the pipeline with **LangSmith** (native LangGraph tracing; ADR-014 �
 The primary user is a Grade 5–6 student. They read and type, but reading a story aloud is still a
 comprehension aid, and it is what makes a *picture book* feel like a book.
 
-**Narration: `Kokoro-82M`** (Apache-2.0, 82M, CPU) — the worker pre-renders one MP3 per page onto Supabase
-Storage; the frontend is an `<audio>` tag (ADR-020). No new service, no GPU, no vendor, no key. It reads the
-child's **verbatim redacted text**, so it adds no moderation surface.
+**Narration: `Chatterbox`** (MIT, expressive open-weight TTS) — served via **hosted inference on fal.ai**; the
+worker pre-renders one MP3 per page onto Supabase Storage during generation and the frontend is an `<audio>`
+tag (ADR-020, revised). Emotion-intensity is tuned once to a warm storyteller register. **`Kokoro-82M`**
+(Apache-2.0, CPU) is the zero-cost fallback. Narration reads the child's **verbatim redacted text**, so it adds
+no moderation surface — but note it now travels to the TTS host (same trust boundary as the image/text calls;
+ADR-015 claims no privacy guarantee).
 
 - **Word-level highlighting is deliberately dropped.** It needs character-level timestamps (the one thing
   ElevenLabs sells) and it is a fluency aid for *emergent* readers. This age band reads. Add it if a teacher asks.
-- ⚠️ **Kokoro is English-only.** Taglish sentences are read with English phonology. A recorded limitation.
+- ⚠️ **English-only, still.** No open expressive TTS supports Tagalog/Taglish; sentences are read with English
+  phonology. A recorded limitation — not a regression from Kokoro.
 - **Speech-to-text for story input** (`SpeechRecognition`) remains a possible enhancement, not MVP.
 
 Large touch targets, high contrast, and minimal on-screen text throughout the student flow.

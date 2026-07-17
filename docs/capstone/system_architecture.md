@@ -56,7 +56,7 @@ Supabase acts as the infrastructural backbone for application state and security
 
 - **Database (Postgres):** Stores application metadata, user profiles, and LangGraph job checkpoints. 
 - **Authentication & RLS:** Employs a teacher-gated model. Teachers own classrooms and create student profiles (nicknames and avatars); students never supply PII or sign up themselves. Strict Row-Level Security ensures data isolation—teachers and students can only access data within their designated classroom.
-- **Storage:** Securely hosts generated images, final PDF storybooks, and pre-rendered narration audio (`Kokoro-82M` MP3s) via signed URLs.
+- **Storage:** Securely hosts generated images, final PDF storybooks, and pre-rendered narration audio (expressive open-weight TTS MP3s — `Chatterbox`, ADR-020) via signed URLs.
 - **Realtime:** Pushes state changes from the Postgres job rows directly to the frontend to drive progress bars.
 
 ## 6. Rationale Behind Key Architectural Choices

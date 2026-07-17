@@ -38,7 +38,7 @@ identity-similarity benchmarks for any open image model split by human vs. non-h
 The code half is done (`backend/providers.py`, `backend/spikes/phase_05.py`). The probes are not.
 
 ```
-uv run python -m spikes.phase_05 consistency   # ~22 images, ~$0.80. Then score scores.csv blind.
+uv run python -m spikes.phase_05 consistency   # ~54 images, ~$1.90. Then score scores.csv blind.
 uv run python -m spikes.phase_05 tally         # the kill criterion
 uv run python -m spikes.phase_05 seed
 uv run python -m spikes.phase_05 structured
@@ -48,9 +48,11 @@ uv run python -m spikes.phase_05 moderation
 **1. Non-human character consistency — THE KILL CRITERION.** Two characters, deliberately: **Pip**, a fox
 cub (a real animal with a canonical silhouette, heavily represented in illustration training data — the
 *easy* case) and **Quill**, an invented three-eyed lizard-bird (the case ADR-001 is actually afraid of).
-Each of 5 scenes is generated **twice**: conditioned on the canonical reference (pipeline-ON) and from the
-character description alone (pipeline-OFF). Items are shuffled behind opaque filenames; every team member
-scores `scores.csv` blind; `tally` computes the result.
+Each of **10 scenes** is generated **twice**: conditioned on the canonical reference (pipeline-ON) and from
+the character description alone (pipeline-OFF) — n = 20 items per condition; at 5 scenes the 80% gate rode
+on 8/10 items, too coarse for the project's most consequential decision (revised 2026-07-13, before any
+probe ran). Items are shuffled behind opaque filenames; every team member scores `scores.csv` blind;
+`tally` computes the result (per-item verdict = rater majority; ties score as not-identity).
 
 Two criteria, **both** must hold:
 - **Absolute:** pipeline-ON identity retained on ≥ 80% of items.
@@ -64,7 +66,8 @@ Phase-0.5 finding, not a Phase-3 catastrophe.
 If Pip passes and Quill fails, that is **not a defeat** — it maps the product's boundary, and it is the most
 interesting sentence in the paper. Record it and decide scope, don't paper over it.
 
-**Secondary arm (ADR-022, non-gating).** Run Quill through all three style presets — ~20 extra images, ~$0.80.
+**Secondary arm (ADR-022, non-gating).** Run Quill through all three style presets — the secondary presets
+run 5 of the 10 scenes, ~12 extra images, ~$0.50.
 The scoring sheet gains one item beside identity: *"does this read as a hand-illustrated children's book, or
 as AI art?"* Neither gates. But a preset that cannot hold an invented chimera, or that reads as generic AI
 art, is re-authored or dropped **before** a child sees it. Author the three fragments before running the probe
@@ -155,7 +158,7 @@ fallback means Phase 1 wobbles rather than collapses.
 - **Teacher dashboard/library** + **teacher review gate** before a book enters the gallery or is exported.
 - **Classroom sharing + peer reflection** — fixed prompts, routed through `input_gate` (ADR-021).
 - **Story Map** — read-only page over Story Memory. No new models.
-- **Narration** — Kokoro-82M pre-rendered per page onto Storage (ADR-020).
+- **Narration** — expressive TTS (Chatterbox, hosted on fal.ai) pre-rendered per page onto Storage; Kokoro-82M CPU fallback (ADR-020, revised).
 - **Export** — HTML template → PDF (Playwright/WeasyPrint).
 - **Rate limiting** (`slowapi`) + per-profile daily cap + cost circuit-breaker.
 - **Data deletion path** for the teacher/owner.
@@ -165,7 +168,7 @@ fallback means Phase 1 wobbles rather than collapses.
 stories all degrade gracefully; a teacher can sign up, see only their own classroom, approve a book into
 the gallery, export a PDF, and delete data. Probe 4 (Filipino moderation) is green.
 
-**⚠️ Worker RAM.** Presidio+spaCy, the NSFW ViT, Kokoro, and the CPU text gate are all resident in one
+**⚠️ Worker RAM.** Presidio+spaCy, the NSFW ViT, and the CPU text gate are resident in one
 container (~2–3 GB). Check the plan tier at the *start* of this phase, not the end.
 
 ---

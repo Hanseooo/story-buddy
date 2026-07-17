@@ -45,8 +45,9 @@ The original decision (Nano Banana / Gemini 2.5 Flash Image) is precluded by the
 - OpenRouter is OpenAI-compatible, so LangSmith tracing (ADR-014) works unchanged.
 - Swapping a model is an env-var change; swapping the *provider* is one file (`backend/providers.py`).
 - **The child's text still leaves our infrastructure** (OpenRouter → upstream host). PII redaction (ADR-011) remains load-bearing. This ADR does **not** deliver a privacy guarantee — see ADR-015.
-- ~~Read-aloud captions use the browser's Web Speech API.~~ **Superseded by ADR-020** — Kokoro-82M,
-  pre-rendered on the worker. Consistent voice on classroom hardware; still zero cost, still open.
+- ~~Read-aloud captions use the browser's Web Speech API.~~ **Superseded by ADR-020** — expressive
+  open-weight TTS (**Chatterbox**, MIT) via **hosted inference on fal.ai**, pre-rendered per page; Kokoro-82M
+  retained as the CPU fallback. Same hosted-open-weights mechanism as this ADR; no proprietary dependency.
 - The **judge's endpoint** is no longer necessarily OpenRouter. After Phase 2.5 it is a self-hosted vLLM
   server (ADR-018, ADR-019), reached through the same OpenAI-compatible client. `JUDGE_BASE_URL` decides.
 
@@ -209,8 +210,10 @@ thing cut (ROADMAP de-scope ladder); dropping it returns the judge to OpenRouter
 change and costs only the "faster and cheaper product" claim, not RQ6.
 
 **Consequences:** Good DX; low regional latency; free-tier spin-down must be handled before demos/study.
-Worker RAM is now a real budget, not an afterthought: Presidio+spaCy, the NSFW ViT, Kokoro, and the
-CPU text gate all resident in one container (~2–3 GB). Check the plan tier before Phase 2, not after.
+Worker RAM is still a real budget, not an afterthought: Presidio+spaCy, the NSFW ViT, and the CPU text gate
+all resident in one container (~2–3 GB). **Narration moved to a hosted TTS call (ADR-020, revised)**, so
+Kokoro is now the *fallback* rather than a resident requirement — it only adds to this budget if kept warm.
+Check the plan tier before Phase 2, not after.
 
 **Alternatives:** Render (fine), Fly.io (more control/ops), DO App Platform (clunkier here), DO droplet (full control, most ops).
 
@@ -343,14 +346,17 @@ LangSmith's zero-code LangGraph wiring is the faster and lower-ops path to Day-1
 > **Hardening (2026-07-10b).** The project owner has ruled out **proprietary models entirely** — not
 > merely as primaries, but as backstops and accessories. An audit of the stack against that rule
 > removes exactly two things: **OpenAI `omni-moderation-latest`** (ADR-011's backstop → replaced by
-> IBM Granite Guardian, Apache-2.0) and **ElevenLabs TTS** (→ replaced by Kokoro-82M, Apache-2.0,
-> ADR-020). Everything else already complies: fal.ai and OpenRouter are *hosted inference of open
-> weights*; Modal (ADR-019) is infrastructure; LangSmith and Sentry are services, not models.
+> IBM Granite Guardian, Apache-2.0) and **ElevenLabs TTS** (→ replaced by an open TTS model — Kokoro-82M
+> originally, **Chatterbox (MIT) via hosted inference as of ADR-020's 2026-07-17 revision**). Everything else
+> already complies: fal.ai and OpenRouter are *hosted inference of open weights* — and the revised narration
+> path is the same mechanism; Modal (ADR-019) is infrastructure; LangSmith and Sentry are services, not models.
 > Gemma is open-weight (though not OSI-licensed) and therefore survives this ADR's own definition.
 >
-> Both replacements are **upgrades**, which is worth recording because it is not the usual outcome of
-> a constraint: Qwen3Guard covers 119 languages where Llama Guard's Filipino performance was
-> unmeasured, and Kokoro removes a vendor, an API key, and a per-character cost.
+> The moderation replacement is an unambiguous **upgrade**: Qwen3Guard covers 119 languages where Llama
+> Guard's Filipino performance was unmeasured. The narration replacement is a deliberate trade, not a free
+> win: dropping ElevenLabs removed a *proprietary* dependency, but the expressive open successor (ADR-020,
+> revised) is served via a hosted vendor with a small metered cost — open weights, not zero cost. The Kokoro
+> CPU fallback preserves the zero-cost, in-infrastructure path when it is wanted.
 >
 > A downstream benefit the paper should claim: an open-weight, self-hostable pipeline carries **no
 > per-seat vendor cost**, which is the difference between a tool a well-funded private school buys and
@@ -777,36 +783,81 @@ file."* Here it is not even one file. The only code concession is that OpenRoute
 
 ---
 
-## ADR-020 — Narration: Kokoro-82M, pre-rendered on the worker
+## ADR-020 — Narration: expressive open-weight TTS (Chatterbox) via hosted inference; Kokoro-82M as CPU fallback
 
-**Status:** Accepted (2026-07-10) · **amends ADR-002's read-aloud consequence and PRD §17**
+**Status:** Accepted (2026-07-10) · **revised 2026-07-17** — expressive narration supersedes the Kokoro-only
+decision. Kokoro is retained as the fallback, not deleted, so nothing about the mandate or the fallback path
+is lost. · **amends ADR-002's read-aloud consequence, ADR-009's worker-RAM budget, and PRD §15/§17**
 
-**Context:** The product needs read-aloud narration (CC-6, PRD §17). Three candidates: the browser's
-Web Speech API (the current decision), ElevenLabs (proposed), and an open TTS model.
+**Context:** The product needs read-aloud narration (CC-6, PRD §17). The original 2026-07-10 decision chose
+**Kokoro-82M** because it runs real-time on the worker's CPU at zero cost. That decision was correct on
+compliance and cost, but it **weighed ElevenLabs only on its word-timestamp feature** (correctly: Grade 5–6
+readers do not need word-highlighting) and on its proprietary licence — it **never weighed expressive prosody
+as a value at all.** Kokoro is flat and neutral by design; that flatness is the price of running on a CPU.
 
-**Decision:** **`Kokoro-82M`** (Apache-2.0, 82M params, real-time on CPU). The worker pre-renders one MP3
-per page during the pipeline and writes it to Supabase Storage behind a signed URL; the frontend is an
-`<audio>` tag.
+Expressive narration — emotional range, natural prosody, breathing — is what makes read-aloud feel like a
+person telling a story rather than a screen reader, which is a real engagement value in a child-facing
+product. It is **not a research variable** (no RQ measures narration; see ADR-008), so this is a product-quality
+decision, not a claims decision, and it must not be allowed to tempt any new research claim.
+
+The 2025–2026 open-TTS landscape has a hard structural fact: **no open model delivers ElevenLabs-grade
+expressivity while running real-time on CPU.** Every genuinely expressive open model (Chatterbox, Orpheus,
+Higgs, Dia) is a 0.5B–4B LM that needs a GPU. But "needs a GPU" is not "needs a proprietary vendor":
+**ADR-015 explicitly permits hosted inference of open weights** — the same mechanism that makes fal.ai
+(images) and OpenRouter (text/VLM) compliant. So an expressive *open* model served as an HTTP call satisfies
+the mandate with no exception to argue.
+
+**Decision:** Narrate with **Chatterbox (Resemble AI, MIT)** served via **hosted inference on fal.ai**
+(Replicate is a drop-in alternate). The worker calls it over HTTP per page — the **same shape as the image
+call** (ADR-001) — with the emotion-intensity dial tuned once to a warm storyteller register and frozen in
+config; it writes one MP3 per page to Supabase Storage behind a signed URL, and the frontend is an `<audio>`
+tag. **Kokoro-82M (Apache-2.0, CPU, on-worker) is retained as the named zero-cost fallback** for host
+outage or if metered cost/latency disappoints; it costs nothing to keep because it is already the worker's
+shape. Narration is isolated behind `providers.narrate()` — swapping the model is an env var, the provider one
+line (ADR-015).
 
 **Consequences:**
-- **No new service and no GPU.** The worker already loads an 86M NSFW ViT (ADR-011); this is the same shape.
-- Zero cost, zero API key, no ADR-015 exception to argue. ElevenLabs is proprietary and would need one.
-- Narration reads the child's **verbatim redacted text** (ADR-013), so it adds **no new moderation surface**.
-- Consistent voice across Android, Windows, and iOS — the Web Speech API's voice quality and `onboundary`
-  support vary by platform, and the target deployment is Philippine classroom hardware.
-- ⚠️ Kokoro is **English-only**. Taglish sentences are read with English phonology. Recorded as a
-  limitation; not solved.
-- **Word-level highlighting is dropped.** It requires character-level timestamps, which is the one thing
-  ElevenLabs buys. It is a fluency aid for *emergent* readers; Grade 5–6 students read. Add it if a
-  teacher asks for it.
+- **Mandate holds, no exception.** Chatterbox is MIT (cleaner than Gemma's community licence) and served as
+  hosted inference of open weights — identical in kind to fal.ai images and OpenRouter text. No proprietary
+  dependency enters the stack. ElevenLabs is still rejected on ADR-015 grounds.
+- ⚠️ **One honest new data flow.** Kokoro ran on the worker, so narration text never left our infrastructure.
+  Chatterbox means the child's **already-PII-redacted verbatim text** (ADR-011, ADR-013) now travels to the
+  TTS host. This is the **same trust-boundary class** as the image prompts already sent to fal.ai and the
+  story text already sent to OpenRouter, so it **does not change the deliberately modest privacy posture**
+  (ADR-015: *no privacy guarantee is claimed*). It is recorded here so it is not discovered later, and it is
+  **not** a reason to claim, or to weaken, any privacy property.
+- **Narration is no longer $0.** ~cents/book of metered TTS (fal.ai Chatterbox, per page), small beside image
+  generation ($0.30–0.65/book, ADR-001). Update PRD §15's "Narration is $0" line.
+- **Worker RAM eases.** Kokoro is now the fallback, not a resident requirement, so ADR-009's ~2–3 GB worker
+  budget relaxes unless the fallback is kept warm.
+- Narration is **pre-rendered during the 1–3 min generation**, off the child's critical path, so the added
+  per-page HTTP latency is invisible in the reading UX.
+- Narration still reads the child's **verbatim redacted text** (ADR-013) — **no new moderation surface**.
+- ⚠️ **English-only is unchanged.** No open expressive TTS ships Tagalog/Filipino/Taglish support (Chatterbox
+  Multilingual's 23 languages do not include it). Taglish is still read with English phonology. Recorded as a
+  limitation; not solved. This is not a regression from Kokoro — both are English-only.
+- **Word-level highlighting stays dropped** — Grade 5–6 students read; it is an emergent-reader aid and not a
+  research need.
 
 **Alternatives:**
-- **ElevenLabs** — rejected: proprietary (ADR-015 hardened), metered, and its timestamp advantage buys a
-  feature this age band does not need.
-- **Web Speech API `SpeechSynthesis`** — the previous decision. Free and zero-dependency, but OS voice
-  quality on Android and Windows is poor and `onboundary` support is inconsistent.
-- **XTTS-v2** — better multilingual coverage; Coqui Public Model License is restrictive. Revisit only if
-  Filipino narration becomes a requirement.
+- **Kokoro-82M as primary** (the previous decision) — zero cost, CPU, fully in-infrastructure, but flat and
+  neutral. Rejected as the *primary* now that expressive narration is a product goal; **retained as the
+  fallback**, so its virtues are not lost.
+- **Orpheus 3B (Canopy Labs, Apache-2.0)** — explicit `<laugh>/<sigh>/<gasp>/<breath>` non-verbal tags, the
+  most literal match to "natural breathing." The designated alternate if tagged non-verbals become wanted;
+  slightly heavier to host (Baseten/Replicate/Together). Chatterbox is preferred first for MIT + the one-line
+  fal.ai path + a continuous emotion dial that needs no markup.
+- **Higgs Audio v2 (Boson AI, Apache-2.0)** — highest raw expressivity, but 3B/~24 GB and the most expensive
+  to serve. Overkill for per-page storybook narration.
+- **Self-host Chatterbox on the ADR-019 Modal GPU** — possible, but ADR-019's container is *first on the
+  de-scope ladder* and **nothing may hard-depend on it** (ADR-011, ADR-019). Narration therefore uses hosted
+  inference, not that container.
+- **ElevenLabs** — rejected: proprietary (ADR-015 hardened). Its timestamp advantage buys a feature this age
+  band does not need.
+- **XTTS-v2 / F5-TTS / Fish-S1** — expressive but non-commercial licences (Coqui CPML / CC-BY-NC); would each
+  need an ADR-015 exception Chatterbox does not. Rejected on licence.
+- **Web Speech API `SpeechSynthesis`** — the pre-Kokoro decision. Free and zero-dependency, but OS voice
+  quality on Android/Windows is poor and `onboundary` support is inconsistent.
 
 ---
 

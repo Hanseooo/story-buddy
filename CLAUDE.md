@@ -19,12 +19,18 @@ swap a library, or change the pipeline shape because a different approach seems 
   implement the change until the ADR is accepted.
 - If a task seems to *require* violating an ADR, stop and surface the conflict. Don't guess.
 
+**Two rules that agents violate by reflex:**
+- **Open-weight models only** (ADR-015). Never reach for Gemini/GPT/Claude to "just make this node
+  work." Vendors are named in `backend/providers.py` and nowhere else.
+- **No fine-tuning** (ADR-016). If you conclude a LoRA is needed, you have found a documented trigger
+  condition — surface it, don't build it.
+
 ## 2. Contract-first
 
 The **Story Memory schema** (`backend/contracts/`) is the contract between every pipeline
 module. It is Pydantic and it is authoritative.
 
-- Validate against it at **every LLM boundary** (Gemini structured output → Pydantic, always).
+- Validate against it at **every LLM boundary** (strict `json_schema` structured output → Pydantic, always).
 - A module reads its inputs and writes its outputs **through the schema**, never via ad-hoc dicts.
 - Changing the schema is a contract change: update the schema, the affected specs, and every
   consumer in the same change.
@@ -33,7 +39,7 @@ module. It is Pydantic and it is authoritative.
 
 Two kinds of tests. Never mix them (see MASTER_SPEC §6).
 
-- **Deterministic tests** (vitest / pytest / Playwright): **mock Gemini and Nano Banana.**
+- **Deterministic tests** (vitest / pytest / Playwright): **mock every model call** (`backend/providers.py`).
   Never assert on generated content ("is the character consistent?" is not a unit test).
   These run in CI and **must stay green** — a change that reddens CI is not done.
 - **Eval harness** (offline, real models, story corpus): the only place fuzzy quality is

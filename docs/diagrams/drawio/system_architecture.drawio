@@ -1,0 +1,87 @@
+<mxfile host="Electron" modified="2026-07-10T00:00:00.000Z" version="26.0.0">
+  <diagram id="architecture" name="System Architecture">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="System Architecture" style="text;strokeColor=none;fillColor=none;fontSize=18;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="30" width="200" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="nextjs" value="Next.js&lt;br&gt;(Vercel)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="100" y="100" width="240" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="fastapi" value="FastAPI Web&lt;br&gt;(Railway)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="600" y="100" width="240" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="postgres" value="Supabase&lt;br&gt;Postgres" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="600" y="300" width="240" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="realtime" value="Supabase&lt;br&gt;Realtime" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="100" y="300" width="240" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="storage" value="Supabase&lt;br&gt;Storage" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="100" y="500" width="240" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="rq" value="RQ Worker&lt;br&gt;(Railway)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="600" y="500" width="240" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="redis" value="Redis&lt;br&gt;Broker" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="600" y="700" width="240" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="langgraph" value="LangGraph&lt;br&gt;Pipeline" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="500" width="240" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="aimodels" value="AI Models&lt;br&gt;(Qwen, Gemma-3,&lt;br&gt;Qwen-Image)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="700" width="240" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e1" value="POST /storybooks" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" source="nextjs" target="fastapi" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e2" value="creates job row" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" source="fastapi" target="postgres" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e3" value="updates" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" source="postgres" target="realtime" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e4" value="subscribes" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" source="realtime" target="nextjs" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e5" value="checkpoint / status" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" source="rq" target="postgres" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e6" value="pulls job" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" source="redis" target="rq" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e7" value="runs" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" source="rq" target="langgraph" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e8" value="final images/PDF" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" source="rq" target="storage" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e9" value="requests" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" source="langgraph" target="aimodels" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
