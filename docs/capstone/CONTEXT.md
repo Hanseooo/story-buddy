@@ -1,0 +1,1 @@
+docs here are the ones to be put in google docs for other researchers to read therefore references must explicitly state statements while also having references if ever members would visit the repo.

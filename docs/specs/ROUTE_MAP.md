@@ -22,10 +22,10 @@ All routes are Next.js App Router filesystem routes under `frontend/app/`.
 | URL pattern | Page | Rendering | Notes |
 |---|---|---|---|
 | `/` | Landing page | **SSR** (SEO) | Teacher-facing pitch, sign up / log in CTAs |
-| `/login` | Auth — login | Client | Supabase Auth UI |
-| `/signup` | Auth — signup | Client | Teacher account creation |
-| `/join` | Student code entry | Client | Public — no auth. Large segmented input for classroom code |
-| `/join/[code]` | Direct join via link | Client | Pre-fills the code, auto-submits. Teachers can share this URL |
+| `/login` | Auth — login | Client | Supabase Auth UI (teacher / BEED student) |
+| `/signup` | Auth — signup | Client | Teacher / BEED-student account creation |
+| `/join` | Student login | Client | Public — no Supabase auth. Classroom code entry, then nickname + password (teacher-issued) |
+| `/join/[code]` | Direct join via link | Client | Pre-fills the classroom code; still requires nickname + password. Teacher shares this URL |
 
 ### Teacher routes (require Supabase Auth session)
 
@@ -37,14 +37,15 @@ All routes are Next.js App Router filesystem routes under `frontend/app/`.
 | `/classroom/[classroomId]/library` | Story library | Client | All stories in this classroom. Status badges (Needs Review / Approved) |
 | `/classroom/[classroomId]/library/[bookId]` | Story review | Client | Full-screen overlay — teacher reads & approves |
 | `/classroom/[classroomId]/gallery` | Classroom gallery (teacher view) | Client | Same gallery students see, but with moderation controls |
-| `/classroom/[classroomId]/settings` | Classroom settings | Client | Rename, review gate toggle, danger zone (delete) |
+| `/classroom/[classroomId]/settings` | Classroom settings | Client | Rename, danger zone (delete). No review-gate toggle — teacher approval is always manual (auto-approve deferred to Future Work, ADR-017) |
 | `/settings` | Teacher account settings | Client | Profile, password, account deletion |
 
-### Student routes (require valid `profileId` — no Supabase Auth)
+### Student routes (require a valid student login — not Supabase Auth)
 
-All student routes are prefixed with `/s/[profileId]/`. The `profileId` is validated against Supabase
-via RLS — it must belong to a classroom the student was added to. There is no direct student auth;
-the session is established by entering a valid classroom code and selecting a profile.
+All student routes are prefixed with `/s/[profileId]/`. `profileId` identifies the child's own
+teacher-issued account and is validated against Supabase via RLS — it must belong to a classroom the
+teacher added it to. Auth is a real login (classroom code + nickname + password set by the teacher, changeable
+by the child), just not the Supabase Auth session teachers use — session is established on successful login.
 
 | URL pattern | Page | Rendering | Notes |
 |---|---|---|---|
@@ -54,10 +55,10 @@ the session is established by entering a valid classroom code and selecting a pr
 | `/s/[profileId]/process/[jobId]` | Processing view | Client | **Full-screen** — no nav. Staged progress via Supabase Realtime |
 | `/s/[profileId]/process/[jobId]/reveal` | Character reveal | Client | Shows moderated canonical character ref(s). Confirm / "try again" |
 | `/s/[profileId]/book/[bookId]` | Storybook reader | Client | **Immersive full-screen**. Image + caption + narration. Next/prev |
-| `/s/[profileId]/book/[bookId]/map` | Story Map | Client | Post-read summary: "3 characters, 2 places, 5 scenes!" |
+| `/s/[profileId]/book/[bookId]/reflect` | Reflection (own book) | Client | Shown only if the teacher toggled a question on for this book. Author types a short answer about their own book — never shown on a classmate's book |
 | `/s/[profileId]/gallery` | Classroom gallery | Client | Browse & read classmates' approved books |
-| `/s/[profileId]/gallery/[bookId]` | Peer book reader | Client | Same reader component, but for a classmate's book |
-| `/s/[profileId]/gallery/[bookId]/reflect` | Peer reflection | Client | Fixed reflection prompts. Submission routes through input gate |
+| `/s/[profileId]/gallery/[bookId]` | Peer book reader | Client | Same reader component, but for a classmate's book. Read-only — no reflection here |
+| `/s/[profileId]/settings` | Student account settings | Client | Change password. No email, no self-serve recovery — reset otherwise is teacher-initiated |
 
 ---
 
@@ -100,11 +101,10 @@ app/
 │   └── s/[profileId]/
 │       ├── layout.tsx                  # StudentShell — bottom tab bar (mobile) / top navbar (desktop)
 │       ├── page.tsx                    # /s/[profileId] (Bookshelf/Home)
+│       ├── settings/page.tsx           # /s/[profileId]/settings (password change)
 │       ├── gallery/
 │       │   ├── page.tsx                # /s/[profileId]/gallery
-│       │   └── [bookId]/
-│       │       ├── page.tsx            # Peer reader (uses ImmersiveLayout)
-│       │       └── reflect/page.tsx
+│       │   └── [bookId]/page.tsx       # Peer reader (uses ImmersiveLayout) — read-only
 │       │
 │       ├── (immersive)/
 │       │   ├── layout.tsx              # ImmersiveLayout — NO nav chrome, full-screen
@@ -116,7 +116,7 @@ app/
 │       │   │   └── reveal/page.tsx     # /s/[profileId]/process/[jobId]/reveal
 │       │   └── book/[bookId]/
 │       │       ├── page.tsx            # /s/[profileId]/book/[bookId]
-│       │       └── map/page.tsx        # /s/[profileId]/book/[bookId]/map
+│       │       └── reflect/page.tsx    # /s/[profileId]/book/[bookId]/reflect — own book only
 │       │
 │       └── (immersive)/layout.tsx      # (same as above — listed for clarity)
 ```
@@ -156,7 +156,7 @@ app/
 
 | Breakpoint | Nav component | Position | Items |
 |---|---|---|---|
-| All | `GhostBackButton` (conditional) | Top-left, absolute, semi-transparent | Single ← button. Only shown on write, process, and map pages. Hidden on book reader (uses in-content controls) |
+| All | `GhostBackButton` (conditional) | Top-left, absolute, semi-transparent | Single ← button. Only shown on write, process, and reflect pages. Hidden on book reader (uses in-content controls) |
 | All (book reader only) | `ReaderControls` | Overlay on tap / bottom fixed | Next/prev tap zones (left/right 30%), page indicator, play/pause narration, close (×) |
 
 ---
@@ -169,8 +169,8 @@ app/
 |---|---|---|
 | **Public** | None | — |
 | **Auth (teacher)** | Supabase Auth session cookie | → `/login?next=<current>` |
-| **Profile (student)** | Valid `profileId` in a classroom (checked via Supabase RLS) | → `/join` |
-| **Classroom-scoped** | Teacher must own the classroom; student profile must belong to it | → `/dashboard` (teacher) or `/join` (student) |
+| **Profile (student)** | Successful classroom-code + nickname + password login; valid `profileId` in a classroom (checked via Supabase RLS) | → `/join` |
+| **Classroom-scoped** | Teacher must own the classroom; student account must belong to it | → `/dashboard` (teacher) or `/join` (student) |
 
 ### Route protection matrix
 
@@ -246,10 +246,10 @@ Use `motion` (Framer Motion) for page transitions. Respect `prefers-reduced-moti
 | `/s/[pid]/process/[jobId]` | `/s/[pid]` | N/A (job continues) | **Yes** — "Your book is still being made!" | Job runs regardless; user can return later |
 | `/s/[pid]/process/[jobId]/reveal` | `/s/[pid]/process/[jobId]` | Yes | No | Can go back to re-see progress |
 | `/s/[pid]/book/[bookId]` | `/s/[pid]` | Yes (page position) | No | Returns to bookshelf |
-| `/s/[pid]/book/[bookId]/map` | `/s/[pid]/book/[bookId]` | Yes | No | — |
+| `/s/[pid]/book/[bookId]/reflect` | `/s/[pid]/book/[bookId]` | **No** — draft lost | **Yes** — if text entered | Own book only; hidden entirely if the teacher hasn't toggled a question on |
 | `/s/[pid]/gallery` | `/s/[pid]` (via tab) | Yes | No | Lateral tab switch |
-| `/s/[pid]/gallery/[bookId]` | `/s/[pid]/gallery` | Yes | No | — |
-| `/s/[pid]/gallery/[bookId]/reflect` | `/s/[pid]/gallery/[bookId]` | **No** — draft lost | **Yes** — if text entered | — |
+| `/s/[pid]/gallery/[bookId]` | `/s/[pid]/gallery` | Yes | No | Read-only — no reflection action on a classmate's book |
+| `/s/[pid]/settings` | `/s/[pid]` | No | Unsaved changes → confirm dialog | Password change |
 
 ---
 
@@ -269,7 +269,7 @@ Which routes must be shareable/bookmarkable (copy-paste URL into another tab and
 | `/s/[pid]/book/[bookId]` | ⚠️ Partial | — | Same — requires active session. **Not shareable outside the app** (by design: no public sharing, ADR-017) |
 | `/s/[pid]/write` | ❌ No | — | Wizard state is ephemeral |
 | `/s/[pid]/process/[jobId]` | ⚠️ Partial | — | Can return to a running/completed job if session is active |
-| `/s/[pid]/gallery/[bookId]/reflect` | ❌ No | — | Reflection form is ephemeral |
+| `/s/[pid]/book/[bookId]/reflect` | ❌ No | — | Reflection form is ephemeral; own book only |
 
 ### URL design rules
 - **No PII in URLs.** `profileId` is a UUID, not a name. Classroom codes are random alphanumeric.
@@ -297,9 +297,8 @@ Every route group gets a `loading.tsx` that renders before the page component hy
 | **Processing** | Full-screen: centered Lottie animation (book pages flipping). No skeleton — the Lottie *is* the loading state | Lottie loop | Nunito, large |
 | **Character Reveal** | Centered card skeleton with image placeholder (1:1 aspect) + 2 button skeletons below | Shimmer | Nunito |
 | **Book Reader** | Full-screen: image placeholder (top 60%) + 2 text-line skeletons (bottom) + page indicator dot | Fade in | — |
-| **Story Map** | Centered column: 3 stat-card skeletons (icon + number) stacked vertically | Staggered fade-in (top to bottom) | Nunito |
 | **Gallery** | Masonry grid (desktop) / vertical stack (mobile) of 4 book-card skeletons | Shimmer | Nunito |
-| **Reflection** | Book thumbnail skeleton + 2 textarea skeletons | Pulse | Nunito |
+| **Reflection** (own book) | Book thumbnail skeleton + 1 textarea skeleton | Pulse | Nunito |
 
 ### Loading state rules
 1. **Skeletons match content shape** — reserve exact layout space to prevent CLS (DESIGN.md §5).
@@ -332,21 +331,21 @@ Each route group also gets an `error.tsx`:
 /classroom/[classroomId]/settings           Classroom settings (teacher)
 /classroom/[classroomId]/students           Student management (teacher)
 /dashboard                                  Teacher home (teacher)
-/join                                       Code entry (public)
-/join/[code]                                Direct join link (public)
-/login                                      Login (public)
+/join                                       Student login — classroom code + nickname + password (public)
+/join/[code]                                Direct join link, code pre-filled (public)
+/login                                      Login (public, teacher/BEED student)
 /s/[profileId]                              Student bookshelf (student)
 /s/[profileId]/book/[bookId]                Storybook reader (student)
-/s/[profileId]/book/[bookId]/map            Story Map (student)
+/s/[profileId]/book/[bookId]/reflect        Reflection, own book only (student)
 /s/[profileId]/gallery                      Classroom gallery (student)
-/s/[profileId]/gallery/[bookId]             Peer book reader (student)
-/s/[profileId]/gallery/[bookId]/reflect     Peer reflection (student)
+/s/[profileId]/gallery/[bookId]             Peer book reader, read-only (student)
 /s/[profileId]/process/[jobId]              Processing view (student)
 /s/[profileId]/process/[jobId]/reveal       Character reveal (student)
+/s/[profileId]/settings                     Password change (student)
 /s/[profileId]/write                        Story editor (student)
 /s/[profileId]/write/style                  Style preset picker (student)
 /settings                                   Teacher account settings (teacher)
-/signup                                     Signup (public)
+/signup                                     Signup (public, teacher/BEED student)
 ```
 
 ---
@@ -371,7 +370,7 @@ Each route group also gets an `error.tsx`:
 ### Linked ADRs / PRD sections
 - **ADR-005** — Job checkpointing drives the `/process/[jobId]` route's resume behavior
 - **ADR-006, ADR-017** — RLS + classroom scoping drives the protection matrix
-- **ADR-021** — Peer reflection routing and fixed prompts
+- **ADR-021** — Author-answered reflection routing (own book only) and teacher-toggled fixed questions
 - **PRD §7** — User flow steps 1–14 map to routes 1:1
 - **PRD §9** — Divergent design registers (kid vs teacher)
 - **MASTER_SPEC §4** — Rendering strategy (SSR landing, client everything else)

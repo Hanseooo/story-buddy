@@ -21,7 +21,7 @@ The original decision (Nano Banana / Gemini 2.5 Flash Image) is precluded by the
 - ⚠️ **Non-human / stylized identity preservation is unverified for this model — and for every candidate.** No published benchmark splits identity similarity by human vs. non-human subject. This is now the project's single largest technical risk. Retired by the **Phase 0.5 spike** (ROADMAP) with a pre-committed kill criterion.
 - **SynthID is lost.** SynthID-*Text* is open-sourced; SynthID-*Image* is not, and has no drop-in equivalent. This is a genuine capability gap, not a substitution. C2PA Content Credentials + `invisible-watermark` is the layered replacement — **Future Work, not MVP**. Do not claim watermark provenance in the paper.
 - **Google's built-in safety filter is lost.** Open image models ship nothing comparable. The output-image moderation gate (ADR-011) is therefore **load-bearing**, not defense-in-depth.
-- **Seed determinism is provider-specific** and must be empirically verified, not assumed from docs — it underpins the Phase 3 ablation (CC-7, ADR-008). Probed in the Phase 0.5 spike.
+- **Seed determinism is provider-specific** and must be empirically verified, not assumed from docs — it underpins reproducible generation and ADR-010's targeted regeneration (CC-7). Probed in the Phase 0.5 spike.
 
 **Alternatives:**
 - **FLUX.1 Kontext [dev]** — stronger community reputation for character consistency. Its license is **non-commercial**, which is acceptable here because StoryBuddy is academic and will not be commercialized (ADR-015). **Designated fallback if the Phase 0.5 spike fails.**
@@ -68,7 +68,7 @@ The original decision (Nano Banana / Gemini 2.5 Flash Image) is precluded by the
 
 **Decision:** Model the pipeline as an explicit **LangGraph state machine** with defined nodes and conditional edges only where genuinely needed. Call model APIs directly through `backend/providers.py` — no agent framework in between.
 
-**Consequences:** Deterministic, debuggable, reproducible (matters for the ablation). Built-in checkpointing (see ADR-005). No autonomous-agent overhead.
+**Consequences:** Deterministic, debuggable, reproducible (matters for pre-registration and RQ6). Built-in checkpointing (see ADR-005). No autonomous-agent overhead.
 
 **Alternatives:** Autonomous agent orchestrator — rejected (nondeterminism, cost, reproducibility). Plain Python without LangGraph — viable but loses checkpointing/persistence and graph structure for free.
 
@@ -93,12 +93,12 @@ A student-trained LoRA is an acceptable risk for the first and an unacceptable o
 
 **Consequences:** Robust on non-human/stylized characters; interpretable failures enable *targeted* regeneration (ADR-010); no circularity in the paper; a bonus publishable result (metric validation). The judge is a *signal*, not an oracle — ADR-010's best-of fallback is what keeps a shaky verdict from producing a broken page.
 
-**The non-circularity argument, stated once so it can be cited.** The judge drives regeneration in
-the pipeline-ON arm. It is therefore **never** an outcome measure. RQ2's outcomes are *human
-consistency ratings* and *reader comprehension* (ADR-008) — neither of which the judge optimizes.
-The judge's own accuracy (RQ6) is measured on a human-labeled, character-disjoint held-out set it
-never trained on. **RQ2 is never evaluated using the judge.** Panels ask this question; the answer
-lives here.
+**The non-circularity argument, stated once so it can be cited.** The judge drives regeneration inside
+the pipeline. It is therefore **never** an outcome measure. The output-quality outcomes are the
+**expert panel + ISO-25010 ratings** and **RQ5 naive-reader recall** (ADR-008) — none of which the
+judge optimizes. The judge's own accuracy (RQ6) is measured on a human-labeled, character-disjoint
+held-out set it never trained on. **The output evaluation is never scored using the judge.** Panels ask
+this question; the answer lives here.
 
 **Alternatives:** CLIP/face-embedding similarity as primary — rejected (fragile here, circular). Retained as *baselines* for RQ6, alongside DINOv2, whose self-supervised features are a stronger instance-identity signal than CLIP's (ADR-018).
 
@@ -149,50 +149,82 @@ ADR-022 also **removes the optional style-anchor image** on provenance grounds.
 
 ---
 
-## ADR-008 — Evaluation: comparative ablation, self-sufficient Tier 1, enrichment Tier 2
+## ADR-008 — Evaluation: two-leg output evaluation (expert panel + ISO-25010) and RQ6 judge assessment
 
-**Status:** Accepted · **amended 2026-07-10** — adds reader comprehension (RQ5) as a Tier-1 measure
-and splits the ethics submission in two. Driver: ADR-017, and the discovery below.
+**Status:** Accepted · **revised 2026-07-20** — the pipeline-ON-vs-OFF comparative ablation (RQ2) is
+**dropped** as the study spine; **RQ6 (fine-tuned judge vs. baseline) becomes the primary comparative
+study**, and generated-output quality is evaluated by an **expert panel + ISO/IEC 25010** rather than by
+causal ablation. This supersedes the 2026-07-10 amendment's ablation framing; the RQ5 answer-key
+mechanism and the "no learning-gains" caution survive, re-specified below. Driver: the October scope
+pivot (`scope_revision_roadmap.md` §0).
 
-**Context:** Absolute satisfaction scores show the *artifact* is decent but not that the *pipeline* caused it. Child self-report is noisy; ethics clearance for child subjects can slip.
+**Context:** The original design made a **blind comparative ablation** (pipeline-ON vs pipeline-OFF) the
+spine — the only thing that showed the *pipeline*, not just the artifact, caused the result. That spine
+is dropped. The October defense is a **technical (type-A) defense** requiring a working system + a
+pre-registered methodology + pilot results, **not** a completed comparative study on corpus-gated data
+(roadmap §0.8). The evaluation is restructured around two questions answerable on generated outputs and
+a held-out judge test set, neither of which needs a second pipeline arm.
 
-**Decision:** Spine = **blind comparative ablation** (pipeline-ON vs pipeline-OFF, same corpus + seed). **Tier 1 (adults)** carries the core claims and needs no special clearance. **Tier 2 (children)** is enrichment: Fun Toolkit (Smileyometer + Again-Again), a story-fidelity item, and behavioral logging. Use a **real/realistic story corpus** with documented provenance; define **inter-rater reliability** for plot-point annotation.
+**Decision:** Evaluation has **two legs**, one per evaluation objective:
 
-**Amendment (2026-07-10) — three changes.**
+- **Leg 1 — generated-output quality (Objective 3, "Evaluate").** An **expert panel** — 1 professor +
+  1 education student + 1 art student — rates the generated storybooks, illustrations, and story
+  consistency, folded into an **ISO/IEC 25010** software-quality frame. This *becomes* Instrument D and
+  is the panel-requested "evaluate the generated outputs" leg — outputs, **not** internal pipeline
+  components (panel note 8). Feature-level rubrics, not a bare "consistent/inconsistent" (tightened in
+  Session 3).
+- **Leg 2 — AI-performance assessment of the consistency judge (Objective 4, "Assess") = RQ6.** The
+  **primary comparative study**: fine-tuned Qwen2.5-VL-7B judge vs. its baselines on a human-labeled,
+  character-disjoint held-out set. Lead claim: **fine-tuned 7B matches/beats prompted Gemma-3-27B** —
+  self-hostable, zero marginal cost; the beat-your-own-zero-shot number is the necessary sanity check
+  and is **never presented alone**. Full machinery in ADR-018 and `judge-finetune.md`.
 
-**(a) Tier 1 was not actually self-sufficient.** The corpus must be *real child writing*, and the
-children who write it are the same children Tier 2 studies. So Tier 1 was silently blocked on Tier-2's
-ethics clearance — the exact dependency this ADR exists to prevent. **The ethics submission splits in
-two.** *Stage 1 — story donation:* children write stories, never touch the system, never see each
-other's work; we collect anonymized text and nothing about the child. Narrow, low-risk, fast.
-*Stage 2 — system use:* children use StoryBuddy, read classmates' books, write reflections.
-Interactive and peer-visible; a heavier review. **Stage 1 unblocks the corpus, the ablation, and the
-judge's training labels. Stage 2 gates only Tier 2.** Stage 1's consent form **must** state that
-donated stories may be used to build and evaluate an AI model — training on participant data without
-that clause is a violation, and it costs one sentence to avoid.
+**RQ5 — reader comprehension — is kept, re-specified single-arm.** With the ablation gone, RQ5 is no
+longer an ON-vs-OFF outcome. It becomes a **single-arm output-fidelity measure**: *can a naive reader
+recover the child's characters and events from the generated book alone?* Give a reader who has never
+seen the story the book by itself; ask them to name the characters and recount what happened; score
+against RQ1's human-annotated major plot points via a **validated recall protocol**, two independent
+raters, **Cohen's κ** reported. **Plot-point recall is the primary outcome; character recovery is
+secondary/confirmatory** (`design_decisions_and_risks.md` R3) — RQ5 is a supporting fidelity measure, not
+the study's headline (RQ6). The reader need not be a child. RQ5 folds into Leg 1's output-evaluation
+track (Objective 3). *(The in-app peer version of RQ5 is cut — see ADR-021.)*
 
-**(b) RQ5 — reader comprehension — is added, and it is the outcome variable.** "Does the picture
-book transmit the story the child meant to tell?" is measured by giving a reader who has never seen
-the story the book alone, then asking them to name the characters and recount what happened, scored
-against human-annotated major plot points. **The reader need not be a child**, so RQ5 runs blind on
-Tier-1 adults under the same ablation. The peer version — real classmates answering the same
-questions inside the app (ADR-021) — is its Tier-2 sibling. Tier 1 still stands alone.
+**The annotation is still nearly free.** RQ1 already requires human annotation of "major plot points"
+with inter-rater reliability, for Story Completeness. **The same annotation is the answer key for RQ5**
+— one annotation, two uses.
 
-The annotation is nearly free: this ADR already requires human annotation of "major plot points" with
-inter-rater reliability, for Story Completeness. **The same annotation is the answer key for RQ5.**
+**Dataset provenance (locked, roadmap §0.7).** Corpus = **donated child writing**; researchers put
+**labels** on the pipeline-generated image pairs. Researcher-written stories are permitted **only in the
+judge-training split** (augmentation) — **never** in the evaluation corpus (RQ1/RQ3/RQ5 stimuli) and
+**never** in the judge val/held-out-test splits. State it as **donated child writing + researcher
+labels**; never "researchers created the stories."
 
-**(c) RQ6 — judge–human agreement — is promoted** from "bonus result" to a reported contribution,
-because the judge is now fine-tuned (ADR-018). Its held-out set is character-disjoint and
-human-labeled. See ADR-004's non-circularity note: **RQ2 is never evaluated using the judge.**
+**Ethics sequencing.** *Stage 1 — story donation:* children write stories, never touch the system; we
+collect anonymized text and nothing about the child. Stage 1's consent form **must** state that donated
+stories may be used to build and evaluate an AI model — one sentence, written before collection.
+**Stage 1 unblocks the real corpus, RQ5/RQ6 evaluation, and the judge's training labels.** Per roadmap
+§0.8 the **October deliverables are ethics-independent** — working pipeline on **fixture stories**, the
+pre-registered methodology, and a **pilot RQ6 run**; full corpus results land after October behind
+Stage-1. Pilot numbers from fixture stories are **demonstration, not evidence** — labeled illustrative,
+never as findings.
 
-**Consequences:** Defensible causal claim; capstone survives a Tier-2 delay *for real this time*;
-RQ5 turns the sharing feature from a product nicety into the study's dependent variable. The cost is
-one extra ethics submission and a comprehension instrument to design. **Do not claim learning gains** —
-N ≈ 8–15, no non-illustrated control, no pre/post, no longitudinal window. Prior literature on
-authentic audience and publication is the *warrant* for why fidelity matters; it is not a finding of
-this study. Overclaiming here is the most likely way the defense goes badly.
+**Consequences:**
+- The study no longer rests on a causal "the pipeline helped" claim; the "so what" now rests on **judge
+  accuracy (RQ6) + expert-rated output quality** (the value-proposition rewrite is Session 6).
+- The capstone survives an ethics delay for real: October runs on fixtures; corpus results follow.
+- **Do not claim learning gains** — N ≈ 8–15, no non-illustrated control, no pre/post, no longitudinal
+  window. Authentic-audience literature is the *warrant* for why fidelity matters, not a finding of this
+  study. Overclaiming here is the most likely way the defense goes badly.
 
-**Alternatives:** Single-tier absolute ratings — rejected (no causal claim). Builder-authored clean stories — rejected (measures best-case only); retained only as *insurance* if Stage-1 ethics slips. Asking the author "did it match your intent?" as the fidelity measure — rejected in favour of RQ5: authors know what they meant and will read it into any illustration. A naive reader cannot.
+**Alternatives:**
+- **Keep the pipeline-ON-vs-OFF ablation** — dropped (roadmap §0.1): corpus-gated, and it made a causal
+  claim the October type-A defense does not require. RQ6 carries the comparative weight instead.
+- **Single-tier absolute ratings** — insufficient alone; the expert panel + ISO-25010 + RQ5 recall
+  replace them with feature-level and fidelity measures.
+- **Builder-authored clean stories as the corpus** — rejected (measures best-case only, and voids RQ5's
+  authentic-audience motivation); permitted only as training-split augmentation (§0.7).
+- **Asking the author "did it match your intent?"** — rejected in favour of RQ5: authors read their
+  intent into any illustration; a naive reader cannot.
 
 ---
 
@@ -268,7 +300,8 @@ and "proprietary" were never the axis — vendor diversity was, and it is achiev
    - **`google/gemma-3-27b-it`** with a safety rubric via OpenRouter — covers violence, gore, and dangerous content, which the NSFW ViT does **not**. Open-weight (Gemma license, not OSI). A separate call with a separate concern — **never the fine-tuned judge** (ADR-004 amendment b).
    - These two are **complementary, not independent** — they cover disjoint categories. True redundancy on the image path is **ShieldGemma 2 (4B)**, and ADR-019's GPU container makes it affordable for the first time (see Alternatives).
 4. **Model self-refusal fallback** — soften-and-retry, then a gentle reframe. Unchanged.
-5. **Peer reflections are child-authored input** (ADR-021) and route through mechanisms 1 and 2 unchanged. No new surface.
+5. **The child's donated story is child-authored input**, entered directly by the child into their own account (ADR-017), and routes through mechanisms 1 and 2 unchanged. Who types it does not lower the bar — the text is a child's narrative and carries a child's PII. No new surface.
+6. **Gallery reflection answers** (ADR-021) are a second child-authored text surface, entered into the child's own account. They route through mechanisms 1 and 2 same as the story, but gated at the heavier peer-visible-content review tier (`RESEARCH_PROTOCOL.md`) before anything is shown to classmates.
 
 Ordering is unchanged and non-negotiable: input gate → char-ref moderation → output moderation.
 
@@ -489,63 +522,96 @@ rented RTX 4090 (~$0.45–0.49/hr) or A100 (~$1.50/hr), via **ai-toolkit** (Ostr
 **Alternatives:** Per-character LoRA at runtime — rejected on latency, permanently. Style LoRA in v1 —
 rejected as speculative (ADR-007 already delivers style consistency; build it only if raters say it
 didn't). Fine-tuning as a research contribution — explicitly not requested; the contribution is the
-pipeline (PRD §3), and adding a training claim would dilute the ablation, not strengthen it.
+pipeline (PRD §3), and adding a training claim would dilute that focus, not strengthen it.
 
 ---
 
-## ADR-017 — Setting: teacher-owned classroom, student authors, no public mode
+## ADR-017 — Setting: teacher-managed classroom; child holds an issued account and operates the app; teacher reviews (manual or auto-approve)
 
-**Status:** Accepted (2026-07-10) · **supersedes the auth *role model* in ADR-006** · **drives ADR-008, ADR-021**
+**Status:** Accepted (2026-07-10) · revised 2026-07-20 (tightened to teacher-only operation, child never
+touches the tool) · **revised 2026-07-20 (later same day)** — **reversed again.** The child now holds a
+**teacher-issued account** and operates the app directly (inputs their own story, sees their own gallery,
+answers optional gallery reflection prompts); the teacher's role narrows from sole operator to **account
+issuer + reviewer**. Driver: giving the child ownership of authoring their own story and their gallery
+reflections is a stated UX goal, and the account model below (teacher-issued, classroom-gated, no
+self-serve signup) keeps the consent/moderation posture this ADR exists to protect. · **supersedes the
+auth *role model* in ADR-006** · **drives ADR-008, ADR-011, ADR-021**
 
 **Context:** The respondents are **Grade 5–6 students in the Philippines** (ages 10–12), and the product
 gains **peer sharing**. The original design had a parent account holding nested kid profiles, and listed
-teacher/classroom as out of scope (PRD §4).
+teacher/classroom as out of scope (PRD §4). The 2026-07-20 revision then moved to a teacher-only-operator
+model specifically to keep the child off the account/moderation surface entirely.
 
-Two pressures collide. Removing the parent as gatekeeper while *adding* peer-visible child-authored
-content does not simplify the product — it converts it into a social network for ten-year-olds, with the
-content moderation, age verification, abuse reporting, and takedown obligations that implies. And
-removing parental *controls* from the product never removes parental *consent* from the research: under
-the PH Data Privacy Act, processing a minor's personal information requires guardian consent regardless
-of who holds the account.
+That model is now reversed for UX reasons: a child who never touches the tool doesn't get to *author*
+their own book or *own* their own gallery presence, and both are core to the product's value to the
+child. The two original pressures — social-network failure modes, and PH Data Privacy Act consent —
+still apply and still shape the decision below; they just no longer rule out child accounts outright.
+**The gate moves from "child has no account" to "child's account can only exist inside a teacher-issued
+classroom, with no self-serve path in or out."**
 
-**Decision:** **Move the gatekeeper; do not delete it.**
+**Decision:** **The child gets a teacher-issued, classroom-scoped account. The teacher stops being the
+sole operator and becomes the account issuer and reviewer.**
 
-- An **owner** (a teacher) signs up, creates a **classroom**, and creates **student profiles**
-  (nickname + avatar). Students never sign up and supply no PII.
+- A **teacher or BEED (education) student** signs up, creates a **classroom**, and gets a **classroom
+  code**. They create each **student account**: nickname + an initial password the teacher sets.
+- **The child logs in** with the classroom code + nickname + password. **They can change their password**
+  during onboarding or from settings. **No self-serve signup, no email on the account, no code that works
+  outside a classroom the teacher created.**
+- **Password reset is teacher-initiated only**, from a classroom admin screen. There is no email-based
+  self-service recovery — student accounts carry no email to recover to.
+- **The child inputs their own story directly**, in their own account. It routes through input moderation
+  and PII redaction unchanged (ADR-011 point 5) — child-entered text gets no lighter a bar than
+  operator-entered text got.
+- **The teacher reviews the generated book before it's visible.** Default is manual approve/reject. The
+  teacher may **toggle auto-approve** for their classroom; this is the teacher's decision, and the system
+  only advises against it — e.g., surfacing a warning if the classroom/model doesn't yet have an
+  established clean moderation track record. Auto-approve only skips the *human* backstop; the automated
+  moderation stack (ADR-011) still runs on every book regardless, unchanged and non-negotiable.
 - **RLS isolates by classroom.** Supabase, Auth, Storage, Realtime, and the RLS posture (ADR-006) are
   otherwise unchanged — only the role names and the isolation boundary move.
-- **Sharing terminates at the classroom.** Not public, not link-based, not cross-classroom.
-- The **teacher review gate** replaces the parent review gate: a book enters the classroom gallery only
-  after the owner approves it. This is the human backstop behind automated moderation (ADR-011).
-- The **parent's role is consent-giver**, which is where the law puts them.
+- **Sharing terminates at the classroom.** Not public, not link-based, not cross-classroom. Inside the
+  classroom it is a **teacher-curated gallery** that may include child-typed reflection answers
+  (ADR-021).
+- **The parent's role is consent-giver**, which is where the law puts them. A child-held account with a
+  password raises the consent bar back up from the teacher-only-operator model — this is a Session 4 /
+  `ethics_and_safety.md` propagation item, not resolved by this ADR.
 - **Scope is Grade 5–6, and it is derived from the research questions, not chosen for convenience.**
   They write independently (so the story is unambiguously the child's, without which RQ5 is meaningless);
-  they read fluently (without which peer comprehension cannot be measured at all); DepEd's medium of
-  instruction is English by Grade 4 (so: one language, one moderation regime, one TTS voice); they are
-  pre-adolescent (so peer feedback is unlikely to be cruel). Remove any boundary and a specific RQ breaks.
+  DepEd's medium of instruction is English by Grade 4 (so: one language, one moderation regime, one TTS
+  voice); they are pre-adolescent (age-appropriate content). Remove any boundary and a specific RQ or
+  safety property breaks.
 
 **Consequences:**
-- Less work than parent signup: the teacher creates profiles; children never authenticate.
-- RLS means something again — classroom isolation is a real, testable boundary (Tier A tests).
-- Peer comprehension (RQ5, ADR-008) becomes measurable, which is what makes sharing a research
-  instrument rather than a feature.
-- **No public mode ever.** See Alternatives.
+- The child now authenticates and has two typed-input surfaces (story, gallery reflections) — more
+  moderation surface, more consent weight, and a real password-reset support burden the teacher owns.
+  This is a deliberate trade against the 2026-07-20 tightening, made for child UX/ownership.
+- RLS still means something — classroom isolation is a real, testable boundary (Tier A tests) — but it
+  now also isolates one child's account from another's within the classroom, not just adult-owned rows.
+- **No public mode ever, and no self-serve signup ever.** See Alternatives. The classroom-code gate is
+  the whole safety argument; removing it removes the argument.
 - **A classroom is just a container with an adult owner.** A tutoring centre owns one; a parent owns one
   with a single member. Same table, same policy, no second mode. Publishing *outside* the container is
   the PDF export (ADR-013) — the child shares the artifact, not the platform.
 - At N ≈ 8–15 the study cannot stratify by age anyway. A tight band is a delimitation, not an apology.
+- Downstream docs (`PRD_v2.md`, `ROUTE_MAP.md`, `RESEARCH_PROTOCOL.md`, `ethics_and_safety.md`,
+  `research_instruments.md`) still describe the teacher-only-operator model and need propagation — not
+  done as part of this ADR edit.
 
 **Alternatives:**
 - **Two modes (classroom-scoped + public-scoped)** — rejected, firmly. It doubles the RLS model, the
-  consent regime, and the spec set (violating CLAUDE.md §6's ban on parallel structures); it makes *mode*
-  an uncontrolled variable inside the ablation; and an ethics board will not approve a public mode for
-  content authored by minors. The underlying worry — "is this only useful in a classroom?" — is answered
+  consent regime, and the spec set (violating CLAUDE.md §6's ban on parallel structures), and an ethics
+  board will not approve a public mode for content authored by minors. The underlying worry — "is this only useful in a classroom?" — is answered
   by the container argument above, at zero cost.
-- **Open student accounts, no gatekeeper** — rejected. This is the social-network failure mode.
+- **Fully open student accounts, no teacher-issued gate, self-serve signup** — still rejected. This is
+  the social-network failure mode the original ADR named; nothing about the UX motivation for this
+  reversal requires removing the gate, only removing "the child never touches the tool."
+- **Teacher-only operator, child never touches the tool** (the 2026-07-20 tightening) — superseded by
+  this revision. Simpler and lower-surface, but at the cost of the child's ownership of their own story
+  and gallery presence.
 - **Keep parent accounts and add sharing** — rejected. Sharing between unlinked families is the hardest
   version to make safe and the hardest to get approved.
 - **Researcher-run sessions only, no real accounts** — rejected as a *product* decision, but adopted as
-  the *recruitment* posture: the researcher occupies the owner role during the study. Same code path, no
+  the *recruitment* posture: the researcher occupies the teacher role during the study. Same code path, no
   throwaway mode, and no school partnership is required to reach N ≈ 8–15.
 
 ---
@@ -638,8 +704,8 @@ The full data-construction recipe, training configuration, baselines, and failur
   tolerated) makes it a robustness note rather than a research problem. Named as Future Work.
 - **Fine-tune a safety classifier** — rejected. Safety wants a proven, independently-evaluated model,
   never a student-trained one.
-- **Fine-tuning as the headline contribution** — not what was asked (PRD §3 stands), and it would dilute
-  the ablation rather than strengthen it.
+- **Fine-tuning as the headline contribution** — not what was asked (PRD §3 stands); the pipeline is the
+  contribution, and making the fine-tune the headline would dilute that rather than strengthen it.
 
 ### Amendment (a) — 2026-07-10 — the evaluation gate is a pre-registered claim ladder
 
@@ -861,46 +927,65 @@ line (ADR-015).
 
 ---
 
-## ADR-021 — Classroom sharing and peer reflection
+## ADR-021 — Classroom sharing: teacher-curated gallery with optional, teacher-toggled reflection questions
 
-**Status:** Accepted (2026-07-10) · **depends on ADR-017** · **instruments ADR-008's RQ5**
+**Status:** Accepted (2026-07-10) · revised 2026-07-20 (peer reflection and the child-facing Story Map
+cut, gallery made display-only) · **revised 2026-07-20 (later same day)** — **structured reflection
+questions reinstated**, following ADR-017's reversal (the child now holds an account and operates the
+app again). Not a return to the original free-form peer loop: the teacher **toggles which fixed
+questions appear** (e.g., "what valuable lesson did you learn?") per book or per classroom, and the
+**child (logged into their own account) types a short answer**. The child-facing Story Map stays cut —
+this ADR reinstates authored reflection text, not the Story Map screen. · **depends on ADR-017**
 
-**Context:** Student authors need a reason to care beyond seeing their own book once. The proposed
-answer — share the book and let classmates respond — is also, unexpectedly, the study's best measurement
-instrument (ADR-008 amendment b).
-
-The rejected framing was "tell the author whether their story is good." Scoring a ten-year-old's story is
-pedagogically hostile, and automated narrative-quality assessment is a separate literature that would
-dilute the ablation. The author-facing benefit must be **formative, not evaluative**.
+**Context:** Student authors benefit from an authentic audience — their book seen by classmates, not read
+once and shelved. The original design delivered this through an in-app peer loop: classmates typed
+fixed-prompt reflections and the author saw a Story Map. The 2026-07-20 tightening cut this because the
+child no longer operated the app at all. ADR-017 now reverses that, so the blocking reason is gone; the
+authentic-audience motivation was never gone. RQ5 still doesn't need this instrument (ADR-008's
+naive-reader recall measure is unrelated and unaffected) — reflection questions come back as a **product
+UX feature**, not a reinstated research instrument.
 
 **Decision:**
 
-1. **Sharing is classroom-scoped and teacher-gated.** A book enters the gallery only after the owner
-   approves it (ADR-017).
-2. **Peer reflection is a fixed, closed set of prompts** — *who was the story about? what happened?
-   what did you learn?* Fixed prompts, not free-form rating, keep feedback kind and make it comparable
-   across readers. The first two double as the **RQ5 comprehension instrument**.
-3. **Reflections are child-authored input.** They route through the existing `input_gate` node — PII
-   redaction and text moderation, unchanged (ADR-011 mechanism 5). No new moderation surface, no new node.
-4. **The author sees a Story Map, not a score.** A read-only page derived from the existing Story Memory:
-   *"you wrote 3 characters, in 2 places, and 5 things happened."* Zero new models, zero new generation,
-   zero new moderation surface. The honest feedback signal is classmates' answers, which come from humans.
+1. **Sharing is classroom-scoped and teacher-gated.** A book enters the gallery only after the teacher
+   approves it — manually, or via auto-approve if the teacher has enabled it (ADR-017). Not public, not
+   link-based, not cross-classroom.
+2. **The gallery is teacher-curated with optional structured reflection.** The teacher posts approved
+   books and may **toggle one or more fixed reflection questions** on for the gallery. When enabled, the
+   book's own author types a short answer in their own account. **Not free-form comments, not
+   peer-to-peer replies** — one author, one fixed question, one typed answer, same book.
+3. **Reflection answers are child-authored, peer-visible text and get their own moderation pass.** They
+   route through the same input moderation + PII redaction as the story (ADR-011), gated at the
+   **heavier peer-visible-content review tier** (`RESEARCH_PROTOCOL.md`'s existing peer-visible-content
+   note) — a private story and a classroom-visible reflection answer are not held to the same bar.
+   Nothing about the storybook's own image/output moderation changes.
 
 **Consequences:**
-- The sharing feature and the comprehension *measure* are **independent**. RQ5 needs a reader, a book, and
-  a questionnaire — that is the Tier-1 rating harness (Phase 3). **If sharing slips, the research does not.**
-- Reflections are stored per (book, reader) and are classroom-scoped under the same RLS policy.
-- Fixed prompts + moderation + teacher visibility are three layers between a child author and an unkind
-  comment. All three are required; none alone is sufficient.
+- The gallery has a real child input surface again — this reopens the consent-language question closed
+  by the 2026-07-20 tightening (`ethics_and_safety.md`, Session 4 propagation item, not resolved here).
+- The gallery is still a **product feature, not a measurement instrument.** RQ5 is measured by
+  naive-reader recall on the generated book (ADR-008), independent of the gallery and its reflection
+  answers.
+- **Post-October** unaffected — the gallery still sits off the October type-A critical path (roadmap
+  §0.8); build it after the ethics-independent deliverables.
+- A new moderation call is added (text-only, reusing existing classifiers) — no new model, no new node,
+  no image-path change.
 
 **Alternatives:**
+- **Free-form, unbounded peer reflection** (the original design) — still rejected. Fixed, teacher-chosen
+  questions bound the surface; open-ended peer prompts reintroduce the unkindness/uncomparable-response
+  problem the original cut was partly about.
+- **Display-only gallery, no reflection** (the 2026-07-20 tightening) — superseded by this revision, for
+  the same UX-ownership reason ADR-017 was reversed.
+- **Child-facing Story Map** — still cut. No motivation for it returned; reflection answers are captured
+  per-book in the gallery, not in a separate child-facing aggregate screen.
 - **Automated story-quality scoring / "is your story good enough?"** — rejected. Hostile to the child,
   and a second research contribution that would dilute the first.
-- **"What happens next?" continuation** — deferred to Phase 4. It is the strongest motivational feature
-  available and nearly free at the UI layer, but it means cross-story character reuse, canonical-reference
-  reuse, and new RLS thinking. It buys the research nothing. Second on the de-scope ladder.
-- **Free-form peer comments** — rejected. Uncomparable across readers, and the unkindness surface is
-  unbounded.
+- **"What happens next?" continuation** — deferred to Phase 4. Strong motivational feature, but it means
+  cross-story character reuse, canonical-reference reuse, and new RLS thinking, and buys the research
+  nothing.
+- **Free-form peer comments (classmate-to-classmate)** — rejected (uncomparable, unbounded unkindness
+  surface). What's reinstated is author-answers-fixed-question, never classmate-to-classmate reply.
 - **Public sharing** — see ADR-017.
 
 ---
@@ -987,10 +1072,8 @@ it, and the number goes in the paper.
   ~20 extra images, ~$0.80. **It does not gate.** The kill criterion stays on the primary style — but a
   preset that cannot hold Quill is deleted before a child ever sees it, not after.
 - Three presets are three substrate risks. This measures them instead of assuming them.
-- **RQ2 is unaffected.** The ablation is within-story paired — same story, same seed, same preset, ON vs OFF
-  — so style is held constant inside every comparison. Record the preset per story; report the distribution.
-- Tier-1 raters will see mixed styles across stories. Report preset as a covariate. **Do not claim a preset
-  effect** — N is nowhere near enough, and it is not an RQ.
+- Tier-1 raters will see mixed styles across stories. **Record the preset per story** and report it as a
+  covariate. **Do not claim a preset effect** — N is nowhere near enough, and it is not an RQ.
 - ⚠️ **Fine-tune.** Training data now spans three styles. Because every pair is within-style, this is
   diversity rather than a three-way split. **Do not attempt per-preset results.** No power.
 - PRD flow gains a style-picker step before generation: three large sample cards, not a dropdown.

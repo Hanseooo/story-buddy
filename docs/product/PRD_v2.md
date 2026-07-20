@@ -1,6 +1,6 @@
 # StoryBuddy — Product Requirements Document (v2)
 
-**Subtitle:** An AI-Powered Storyboarding and Picture-Book Generation System with Character and Style Consistency
+**Subtitle:** An AI-Powered Storyboarding and Picture-Book Generation System
 **SDG Alignment:** SDG 4 — Quality Education
 **Doc status:** v2.2 — **classroom setting, peer sharing, and a fine-tuned judge (2026-07-10)**
 **Supersedes:** PRD Draft v1
@@ -14,8 +14,9 @@
   consistent) and the educational benefit (a child's story finally gets an audience and an artifact) are
   the same claim from opposite ends. A picture book that drifts doesn't transmit the child's story — it
   transmits noise. See RESEARCH_PROTOCOL §1–§3.
-- **Setting: Grade 5–6 Philippine students.** Teacher owns the classroom; students are the authors; the
-  parent's role becomes consent-giver. Sharing is classroom-scoped. **No public mode, ever.** ADR-017.
+- **Setting: Grade 5–6 Philippine students.** Teacher (or BEED student) owns the classroom and issues each
+  student a classroom-scoped account; the child logs in and authors their own story directly; the
+  parent's role stays consent-giver. Sharing is classroom-scoped. **No public mode, ever.** ADR-017.
 - **Peer reflection** with fixed prompts — which turns out to be the study's best instrument (RQ5). ADR-021.
 - **The judge is fine-tuned** (`Qwen2.5-VL-7B`, QLoRA), served on vLLM. ADR-018 supersedes ADR-016;
   ADR-019 adds the fourth service. The **pipeline is still the contribution (§3)**.
@@ -96,13 +97,16 @@ Not "we called an image API." The contribution is an **AI Storyboarding Pipeline
 
 ## 4. Target Users
 
-- **Primary: the Grade 5–6 student author** (ages 10–12, Philippines). Reading level, tone, and failure
+- **Primary: the Grade 5–6 student author** (ages 10–12, Philippines). The child holds a teacher-issued,
+  classroom-scoped account, logs in, and writes their own story directly. Reading level, tone, and failure
   messaging must be age-appropriate throughout.
-- **Gatekeeper: the teacher** — owns the classroom, creates student profiles, approves books into the
-  classroom gallery, exports. Also the Tier-1 evaluation audience. *(ADR-017 — supersedes ADR-006's role model.)*
-- **Parent/guardian: consent-giver.** Guardian consent and child assent are required by the PH Data Privacy
-  Act regardless of who holds the account. Removing parental *controls* from the product does not remove
-  parental *consent* from the research.
+- **Account issuer + reviewer: the teacher or BEED (education) student** — owns the classroom, issues each
+  student account (nickname + teacher-set password), and reviews every generated book (manual
+  approve/reject) before it enters the classroom gallery or is exported. Also the Tier-1 evaluation
+  audience. *(ADR-017 — supersedes ADR-006's role model.)*
+- **Parent/guardian: consent-giver, not an operator.** Guardian consent and child assent are required by
+  the PH Data Privacy Act — a child-held account with a password and peer-visible typed content raises the
+  consent weight above the earlier teacher-only-operator model (Ethics Stage-2 scope; `ethics_and_safety.md`).
 
 **Scope is derived from the research questions**, not chosen for convenience: Grade 5–6 students write
 independently (so the story is unambiguously theirs), read fluently (so peer comprehension is measurable),
@@ -126,9 +130,10 @@ ten-year-olds (ADR-017).
 6. Image Generation Engine (reference-conditioned, Qwen-Image-Edit)
 7. Consistency Checker (VLM-as-judge; triggers one targeted regeneration). **Fine-tuned in Phase 2.5** — ADR-018
 8. Slide Composer / Export (PDF + library) + **expressive TTS narration** (Chatterbox, hosted) per page — ADR-020
-9. **Teacher account + classroom + student profiles** (Supabase Auth + RLS) — ADR-017
+9. **Teacher/BEED-student account + classroom + teacher-issued student accounts** (Supabase Auth for
+   teacher; classroom-scoped nickname+password auth for students; RLS) — ADR-017
 10. Moderation & Safety Stack (input text, PII incl. **Filipino recognizers**, output image, self-refusal fallback)
-11. **Classroom sharing + peer reflection** (fixed prompts, teacher-gated) + **Story Map** — ADR-021
+11. **Classroom sharing + author-answered reflection** (teacher-toggled fixed questions, gallery-gated) — ADR-021
 
 ### 5.2 Deferred to Future Work (named in paper, not built in v1)
 Kid-uploaded character reference; multiple selectable art styles; multi-language; **"what happens next?"
@@ -156,9 +161,9 @@ it is the long pole and cannot be compressed by coding faster (§10, §18, RESEA
 | Style in v1 | Single fixed style, authored once as a constant; carried by the character reference image | Removes a module; character ref carries identity *and* style; cleaner consistency eval. ADR-007 |
 | Consistency mechanism | VLM-as-judge control loop → one targeted, prompt-corrected regeneration → best-of fallback | Robust on stylized/non-human characters; interpretable; makes regeneration refinement not resampling. ADR-004, ADR-010 |
 | Consistency metric (research) | Human ratings = headline; VLM-judge = runtime signal; report VLM–human agreement as a secondary result | Avoids circularity of optimizing and reporting the same score. ADR-004, ADR-008 |
-| Auth model | **Teacher-owned classroom**; student = profile (nickname + avatar, no PII from the minor) | Avoids collecting PII from minors; RLS isolates by classroom; keeps a human gatekeeper behind sharing. **ADR-017** |
+| Auth model | **Teacher-issued classroom account**: child gets nickname + teacher-set password (no email, no self-serve signup); teacher-initiated reset only | Keeps the child off self-serve/social-network surfaces while letting them author and own their story; RLS isolates by classroom (and by child within it). **ADR-017** |
 | Sharing | **Classroom-scoped, teacher-gated. No public mode, ever.** | Peer-visible child content without a gatekeeper is a social network for ten-year-olds. ADR-017 |
-| Peer feedback | Fixed reflection prompts, routed through the input gate; author sees a **Story Map, not a score** | Formative not evaluative; doubles as the RQ5 instrument. ADR-021 |
+| Peer feedback | Teacher-toggled fixed reflection question(s); the book's own author types a short answer about their own book (not classmate-to-classmate) | Formative UX feature, not a research instrument — RQ5 is measured separately by naive-reader recall on the book itself. ADR-021, ADR-008 |
 | **Fine-tuning** | **The consistency judge** (`Qwen2.5-VL-7B`, QLoRA), served on vLLM | Identity and style are the wrong targets (ADR-016's reasoning survives); the judge is the documented weakest link with a known prompting ceiling. **ADR-018, ADR-019** |
 | Narration | **Chatterbox** (MIT, expressive) via hosted inference, pre-rendered per page; **Kokoro-82M** CPU fallback | Expressive, emotional read-aloud; open-weight so the mandate holds; small metered cost. **ADR-020** (revised) |
 | Design language | Cartoon-pop (student flow); calmer/denser variant (teacher screens) | Matches storybook tone; density fits the teacher dashboard. |
@@ -171,8 +176,10 @@ it is the long pole and cannot be compressed by coding faster (§10, §18, RESEA
 ## 7. User Flow
 
 1. **Landing page** — teacher-facing pitch; Sign up / Log in (SSR for SEO).
-2. **Auth** — teacher creates account or logs in (Supabase Auth), creates a **classroom**.
-3. **Student profile select** — nickname + avatar, created by the teacher; students never sign up.
+2. **Auth** — teacher or BEED student creates account or logs in (Supabase Auth), creates a **classroom**,
+   and issues each student a classroom account (nickname + initial teacher-set password).
+3. **Student login** — child logs in with classroom code + nickname + password (their own account, not a
+   profile pick); no self-serve signup, no email; the child can change their password from settings.
 4. **Write your story** — large friendly input; optional starter prompt; live length indicator against the word cap.
 5. **Input gate** — (a) length check → gentle truncate-at-scene-boundary message if over cap (never silent summarization); (b) PII redaction; (c) text moderation → gentle "let's try that again" on failure.
 6. **Processing view** — staged, animated, kid-legible progress via Supabase Realtime on the job row; never frozen/silent. Expect ~1–3 min.
@@ -180,11 +187,14 @@ it is the long pole and cannot be compressed by coding faster (§10, §18, RESEA
 8. **Full scene generation** — all scenes generated using the confirmed reference(s).
 9. **Output moderation + consistency pass** — before the kid sees results; failed scenes get one targeted regeneration, then best-of fallback (§10, §13).
 10. **Storybook slideshow** — image + verbatim caption + page number; next/prev; **narration** (ADR-020).
-11. **Story Map** — the author's own Story Memory reflected back: *"3 characters, 2 places, 5 things happened."* Not a score (ADR-021).
-12. **Teacher review gate** — ON by default before a book enters the classroom gallery or is exported.
-13. **Classroom gallery** — classmates read/listen, then answer fixed reflection prompts. Reflections route
-    through the input gate (moderation + PII) exactly as stories do. The author sees the answers. ADR-021.
-14. **Export** — PDF download and/or save to the classroom library (Supabase Storage, signed URLs).
+11. **Teacher review gate** — every book is manually approved or rejected by the teacher before it enters
+    the classroom gallery or is exported. There is no auto-approve toggle (deferred to Future Work — an
+    ethics re-review is required before that can ship). ADR-017.
+12. **Classroom gallery** — classmates read/listen to approved books. If the teacher has toggled a
+    reflection question on for a book, that book's own author (logged into their own account) types a
+    short answer, which routes through the input gate (moderation + PII) exactly as stories do, at the
+    heavier peer-visible-content tier. ADR-021.
+13. **Export** — PDF download and/or save to the classroom library (Supabase Storage, signed URLs).
     The PDF is the only way a book leaves the container; the child shares the artifact, not the platform.
 
 ---
@@ -203,20 +213,22 @@ it is the long pole and cannot be compressed by coding faster (§10, §18, RESEA
 - Regeneration controller (1 targeted retry with corrected prompt; best-of fallback; capped)
 - Moderation stack (text + PII + image + model self-refusal fallback)
 - Slide Composer (image + verbatim caption + page number + layout)
-- Teacher account + classroom + student profiles (Supabase Auth + RLS) — ADR-017
+- Teacher/BEED-student account + classroom + teacher-issued student accounts (Supabase Auth for the
+  teacher; classroom-scoped nickname+password auth for students) + RLS — ADR-017
 - Teacher library/dashboard of classroom storybooks — ADR-017
 - Export (PDF; shareable link optional)
 - Read-aloud (TTS) for captions — **strongly recommended in MVP** given target age (§17)
 
 ### Stretch / Future Work
-Kid-uploaded reference; selectable art styles; multi-language; teacher/classroom tier; social sharing; on-device generation; style LoRA; C2PA provenance.
+Kid-uploaded reference; selectable art styles; multi-language; auto-approve toggle (deferred behind an
+ethics re-review); social sharing; on-device generation; style LoRA; C2PA provenance.
 
 ---
 
 ## 9. Design & UX Direction
 
 - **Kid flow (steps 3–10):** cartoon-pop — rounded shapes, warm saturated palette, soft depth, friendly micro-interactions (Motion), minimal text, large touch targets, Lottie wait-state animations. Every wait state needs a visible, kid-legible explanation.
-- **Teacher flow (steps 1–2, 12, dashboard — ADR-017):** same color DNA, calmer/denser grid/card layout (shadcn/ui acceptable here).
+- **Teacher flow (steps 1–2, 11, dashboard — ADR-017):** same color DNA, calmer/denser grid/card layout (shadcn/ui acceptable here).
 - Specific tokens (palette hex, type pairing, spacing, radius/shadow) are an implementation decision informed by the cartoon-pop direction; see the frontend-design skill at build time.
 - **Failure/moderation states get the same design care as success states.** A harsh failure screen is a larger UX risk here than in a general-audience app.
 
@@ -229,26 +241,39 @@ Kid-uploaded reference; selectable art styles; multi-language; teacher/classroom
 
 ### Research Questions
 - RQ1: How accurately does StoryBuddy identify key scenes from child-written stories?
-- RQ2: **Does the Character Bible + VLM consistency loop measurably improve visual consistency vs. naive per-scene generation?** *(ablation — the mechanism)*
 - RQ3: How acceptable is the generated storybook (narrative coherence, visual consistency, illustration quality, usability)?
 - RQ4: How gracefully does the system handle **under-length** stories (fewer than 10–15 natural scenes) without inventing content?
-- **RQ5 (new): Do readers of a pipeline-ON book recover the author's characters and plot more accurately than readers of pipeline-OFF?** *(the outcome — the dependent variable that makes this about education rather than about an API. Runs on Tier-1 adults; peers are the Tier-2 sibling. ADR-008, ADR-021.)*
-- **RQ6 (promoted): Does a fine-tuned open judge agree with humans better than a prompted one — and does the gap widen on non-human characters?** *(instrument validity. ADR-018.)*
+- RQ5: Can a naive reader recover the author's characters and events from the generated book alone? *(single-arm output-fidelity measure — scored against RQ1's human-annotated plot points via a validated recall protocol, two raters, Cohen's κ. ADR-008, ADR-021.)*
+- **RQ6 (primary comparative study): Does a fine-tuned open judge agree with humans better than its own un-fine-tuned base and match/beat a prompted Gemma-3-27B — with the gap widening on non-human characters?** *(instrument validity. ADR-018.)*
 
-⚠️ **RQ2 is never evaluated using the judge.** The judge drives regeneration; using it as an outcome
-measure would be circular. RQ2's outcomes are human ratings and RQ5. See ADR-004's non-circularity note.
+**RQ2 (pipeline-ON-vs-OFF ablation) is dropped** — see ADR-008. RQ6 is the primary comparative study;
+RQ5 is the output-fidelity measure; RQ3 is output acceptability; RQ1 and RQ4 are supporting.
+
+⚠️ **The output evaluation (RQ3, RQ5) is never scored using the consistency judge.** The judge drives
+regeneration inside the pipeline; using it as the outcome measure would be circular. The judge's own
+accuracy is the separate RQ6 question, measured on a human-labeled, character-disjoint held-out set. See
+ADR-004's non-circularity note.
 
 ⚠️ **Do not claim learning gains.** N ≈ 8–15, no non-illustrated control, no pre/post, no longitudinal
 window. Prior literature on authentic audience is the *warrant* for why fidelity matters; it is not a
 finding of this study.
 
 ### Evaluation design (see ADR-008)
-**Spine = comparative ablation.** Same story corpus generated twice: **pipeline-ON** (character reference + VLM checker + regeneration) vs **pipeline-OFF** (naive per-scene generation, no reference, no checker). Adult raters judge **blind** to condition.
+**Spine = two legs, one per evaluation objective.**
+- **Leg 1 — generated-output quality (RQ3, RQ5).** An expert panel — 1 professor + 1 education student +
+  1 art student — rates the generated storybooks, illustrations, and story consistency, folded into an
+  ISO/IEC 25010 software-quality frame. RQ5 adds a single-arm naive-reader recall measure: a reader who
+  never saw the source story names the characters and recounts events, scored against RQ1's plot-point
+  annotation.
+- **Leg 2 — AI-performance assessment of the consistency judge (RQ6).** The primary comparative study:
+  fine-tuned Qwen2.5-VL-7B judge vs. its own zero-shot base and vs. prompted Gemma-3-27B, on a
+  human-labeled, character-disjoint held-out set. Full machinery in ADR-018 and `docs/specs/judge-finetune.md`.
 
 **Tier 1 (adults — parents/teachers), no special clearance typically needed. Designed to stand alone.**
 - Blind pairwise/scored ratings of narrative coherence, visual consistency, illustration quality, story completeness.
 - **Inter-rater reliability** defined up front for Story Completeness (annotators agree on "major plot points"; report Cohen's/Krippendorff's).
-- Target N ≈ 15–30 raters. Core claims (RQ1–RQ3) fully supported here so an IRB delay on Tier 2 cannot sink the capstone.
+- Target N ≈ 15–30 raters. Carries every research question (RQ1–RQ6) — designed to stand alone, so an
+  ethics-clearance delay on Tier 2 cannot sink the capstone.
 
 **Tier 2 (children), lighter touch, under parental supervision, contingent on ethics clearance. Enrichment, not load-bearing.**
 - **Validated instruments:** Fun Toolkit (Read & MacFarlane) — Smileyometer (liking) + Again-Again table (engagement proxy). Cite in methods.
@@ -266,10 +291,14 @@ finding of this study.
 | Engagement | Repeat-use / liking | Fun Toolkit + behavioral logs |
 | Generation Time | Submission → completed storybook | Instrumentation (§16) |
 | AI Resource Usage | Avg generation time, image count, regen count, API cost/story | Instrumentation (§16) |
-| **VLM–Human agreement** | Does the automated checker track human judgment? | Derived (bonus result — validates the metric) |
+| **VLM–Human agreement** | Does the fine-tuned judge agree with humans better than its base and prompted Gemma-3-27B? | **Primary comparative result (RQ6)** — pre-registered, not a bonus |
 
 ### Story corpus (validity — do not skip)
-Test stories must be **real or realistic child writing**, not builder-authored clean stories (which measure best-case only). Sources: collected real stories (ties to Tier-2 consent), a public children's-writing dataset, or adults deliberately writing "as a 6/8/10-year-old," including messy/non-linear ones. Document provenance — reviewers will ask.
+Corpus = **donated child writing + researcher labels** (Grade 5–6, Philippines; English with Taglish
+tolerated) — not builder-authored clean text, which would measure best-case behavior only and make RQ4's
+under-length handling unanswerable by construction. Researcher-written stories are permitted **only** as
+judge-training-split augmentation — never as evaluation stimuli (RQ1/RQ3/RQ5) and never in the judge's
+val/held-out-test splits. Document provenance — reviewers will ask.
 
 ### ⚠️ Ethics timeline
 Formal ethics review (Philippine Data Privacy Act 2012 + your university's ethics board; not US "IRB" per se) can take weeks. **Start in parallel with development, week 1.** Tier-1 self-sufficiency (above) is the insurance if Tier-2 clearance slips.
@@ -278,12 +307,12 @@ Formal ethics review (Philippine Data Privacy Act 2012 + your university's ethic
 
 ## 11. Open Decisions — RESOLVED
 
-1. **Teacher approval gate before a book enters the gallery or is exported** → **ON by default** (human backstop over auto-moderation; bypass allowed inside a supervised study). *Was "parent approval gate" — ADR-017.*
+1. **Teacher approval gate before a book enters the gallery or is exported** → **manual, always** (human backstop over auto-moderation; no auto-approve bypass — deferred to Future Work behind an ethics re-review). *Was "parent approval gate" — ADR-017.*
 2. **Regeneration cap** → **1 targeted, prompt-corrected retry** (2 attempts total); if still failing, keep the higher-scoring image (best-of), never a broken/placeholder page. ADR-010.
 3. **Story length limit** → **hard word cap (~500–800 words, tunable)** with a gentle "let's make a book of the first part" truncation at a scene boundary. **No silent AI summarization** (it would illustrate the summary, not the child's story). ADR-012.
 4. **Repeated moderation-failure off-ramp** → after **N=3** failed revisions of the same story, suggest starting a fresh story rather than an unbounded retry loop.
 5. **Multiple main characters** → **max 2 canonical references** in v1; generation conditions on multiple reference images; the checker verifies **each character separately** against its own reference. ADR-004.
-6. **Very short stories** → **fewer scenes allowed** (floor, e.g. ≥3); never invent content. Reframed as RQ4.
+6. **Very short stories** → **fewer scenes allowed**; scene count tracks the story's distinct major plot points, target ≥3 where the arc supports it, never padded to reach it (never-invent overrides the floor). Reframed as RQ4.
 7. **Whole-run timeout / stall** → **LangGraph checkpointing + resumability**: a stall at scene N resumes from N, never re-rolls scenes 1…N-1. Kid sees "taking a little longer…" then "we saved your progress — come back soon." ADR-005.
 8. **Image model/API** → **Qwen-Image-Edit (Apache-2.0) on fal.ai.** Open weight, hosted. ADR-001, ADR-015.
 9. **Moderation services** → text (**Qwen3Guard-Gen** + **Granite Guardian**, both Apache-2.0) + PII (Presidio + **Filipino recognizers**) + image (NSFW ViT + VLM safety rubric). **Two independent open classifiers per path.** §13, ADR-011.
@@ -291,22 +320,25 @@ Formal ethics review (Philippine Data Privacy Act 2012 + your university's ethic
     remain the *wrong* targets — ADR-016's reasoning is preserved and is precisely why the judge is right. **ADR-018, ADR-019.**
 11. **What "open source" means** → **open weight**, hosted inference, self-hosting available — and, as of
     2026-07-10b, **no proprietary models anywhere**, including backstops and accessories. ADR-015 (hardened).
-12. **Setting and gatekeeper** → **teacher-owned classroom**, Grade 5–6 students as authors, sharing scoped
-    to the classroom, **no public mode**. Parent is the consent-giver. **ADR-017.**
-13. **Author feedback** → **Story Map, not a score.** Peer reflection with fixed prompts is the honest
-    signal, and it doubles as the RQ5 instrument. **ADR-021.**
+12. **Setting and gatekeeper** → **teacher- (or BEED-student-) issued classroom account**, Grade 5–6
+    students as authors who log in and operate the app directly, teacher narrowed to account issuer +
+    reviewer, sharing scoped to the classroom, **no public mode**. Parent is the consent-giver, not an
+    operator. **ADR-017.**
+13. **Author feedback** → teacher-toggled fixed reflection question(s); the book's own author types a
+    short answer about their own book. Formative UX feature, not a research instrument — the child-facing
+    Story Map stays cut. **ADR-021.**
 
 ---
 
 ## 12. Technical Architecture
 
-**Frontend:** Next.js (React) + Tailwind + shadcn/ui (parent) + hand-built cartoon-pop components (kid) + Motion (micro-interactions) + Lottie (wait states). Deployed on Vercel.
+**Frontend:** Next.js (React) + Tailwind + shadcn/ui (teacher) + hand-built cartoon-pop components (kid) + Motion (micro-interactions) + Lottie (wait states). Deployed on Vercel.
 
 **Backend:** FastAPI (web) + **separate RQ worker** + **Redis** (broker), on Railway (Render/Fly.io equivalent; Singapore region). *A long pipeline cannot run in a request cycle — this is a 3-service deployment, not one.*
 
 **Pipeline engine:** **LangGraph as a deterministic state machine** (explicit nodes; conditional edges only at moderation pass/fail and consistency pass/fail). LangChain omitted unless a concrete need appears. Model APIs called directly through `backend/providers.py` — the only file that names a vendor (ADR-003, ADR-015).
 
-**State/persistence:** Supabase Postgres (app data + LangGraph checkpoints via `langgraph-checkpoint-postgres`); Supabase Auth (parent) + RLS; Supabase Storage (images + PDFs, signed URLs); Supabase Realtime (job progress). ADR-006.
+**State/persistence:** Supabase Postgres (app data + LangGraph checkpoints via `langgraph-checkpoint-postgres`); Supabase Auth (teacher) + classroom-scoped student auth + RLS; Supabase Storage (images + PDFs, signed URLs); Supabase Realtime (job progress). ADR-006.
 
 **Structured extraction:** strict `json_schema` structured output + `provider.require_parameters: true` + Pydantic validation on every LLM boundary. The Story Memory schema is the contract between modules. ADR-002.
 
@@ -338,8 +370,9 @@ an independent backstop; either one flagging fails the content** (ADR-011).
    - These two are *complementary*, not independent. **ShieldGemma 2** on ADR-019's GPU container is the
      optional hardening that restores true redundancy.
 4. **Model self-refusal fallback** — the image model may refuse legitimate mild-peril scenes ("fight the dragon"). On refusal: soften-and-retry the prompt, then a gentle "let's imagine that part a little differently." A scary-but-innocent story must not dead-end.
-5. **Peer reflections are child-authored input** and route through mechanisms 1 and 2 unchanged (ADR-021).
-   No new node, no new surface.
+5. **Peer-visible reflection answers are child-authored input** — typed by the book's own author, not a
+   classmate — and route through mechanisms 1 and 2, gated at the heavier peer-visible-content tier
+   (ADR-021). No new node, no new surface.
 
 Ordering matters: input gate (step 5) → char-ref moderation (before step 7) → output moderation (step 9).
 
@@ -356,11 +389,15 @@ Ordering matters: input gate (step 5) → char-ref moderation (before step 7) �
 
 ## 14. Security & Data Protection
 
-- **RLS everywhere.** Parents read only their own account's data; enforced at the DB layer, not just the app.
+- **RLS everywhere.** Teachers read only their own classroom's data; children read only their own account's data; enforced at the DB layer, not just the app.
 - **Signed URLs** for all kid-generated images/PDFs; no public buckets.
-- **Data retention & deletion path.** Define what's stored (profile, stories, images, logs), for how long, and give parents a one-action **delete-my-child's-data** path. Required posture under the PH Data Privacy Act.
-- **Minimal kid PII by design** — nickname + avatar only; no direct collection from the minor.
-- **Rate limiting / abuse** — `slowapi` + per-profile daily generation cap (also protects budget). Addresses single-account abuse.
+- **Data retention & deletion path.** Define what's stored (account, stories, images, logs), for how long,
+  and give the teacher a one-action **delete-a-student's-data** path, actionable on a guardian's request.
+  Required posture under the PH Data Privacy Act.
+- **Minimal kid PII by design** — nickname + teacher-set password only; no email, no self-serve signup, no
+  direct collection from the minor beyond the account itself and their own typed story/reflection text
+  (which routes through PII redaction, ADR-011).
+- **Rate limiting / abuse** — `slowapi` + per-account daily generation cap (also protects budget). Addresses single-account abuse.
 
 ---
 
@@ -471,11 +508,10 @@ Large touch targets, high contrast, and minimal on-screen text throughout the st
   "narration": [{ "scene_id": "", "audio_ref": "" }],
   "sharing": { "teacher_approved": false, "in_gallery": false },
   "reflections": [
-    { "reader_profile_id": "", "characters_named": "", "what_happened": "", "what_i_learned": "",
-      "moderation_status": "", "redacted": true }
+    { "question_id": "", "question_text": "", "answer_text": "", "moderation_status": "", "redacted": true }
   ],
   "cost": { "image_count": 0, "regen_count": 0, "usd_estimate": 0 },
-  "eval": { "condition": "pipeline_on|pipeline_off", "seed": null }
+  "eval": { "seed": null }
 }
 ```
 
@@ -488,15 +524,16 @@ conflating category similarity with instance identity (ADR-004 amendment). It su
 **`failure_reasons` is a closed taxonomy**, shared by the judge's training targets and the regeneration
 controller's prompt corrector. Design it once, in Phase 1. See `judge-finetune.md` §4.
 
-**`reflections[]` are child-authored input** and carry the same moderation and PII guarantees as
-`input.raw_text` (ADR-021). They are classroom-scoped under the same RLS policy.
+**`reflections[]` are answered by the book's own author** (a teacher-toggled fixed question, not a
+classmate comment) and carry the same moderation and PII guarantees as `input.raw_text` (ADR-021). They
+are classroom-scoped under the same RLS policy.
 
 ---
 
 ## 20. Non-Functional Notes
 
 - **Concurrency:** at demo/study scale a single serial worker is fine; "in the wild," concurrent submissions queue (acceptable) or scale RQ workers horizontally. Note the tradeoff; don't over-build for v1.
-- **Reproducibility:** control seeds so the ablation is fair and re-runnable. ⚠️ **Seed behavior is
+- **Reproducibility:** control seeds so generation runs are deterministic and re-runnable. ⚠️ **Seed behavior is
   provider-specific and must be verified empirically, not read off the docs** — fal.ai and Together
   document reproducible seeds; Replicate has an open, unresolved bug (#334) where seeds are ignored
   under its fast path, and distilled models (FLUX.1-schnell) are inherently less seed-stable. Probed in

@@ -6,8 +6,14 @@ This document outlines the step-by-step user flow, interaction patterns, and UX 
 
 ## 1. Roles & Perspectives
 
-- **Teacher (Gatekeeper):** Manages the classroom, creates student profiles, and acts as the moderation backstop. Requires a high-density, structured, and informative interface.
-- **Student (Author):** The primary user (Grade 5-6). Needs a playful, forgiving, and guided experience with large touch targets, minimal text, and high structural clarity. No direct signup or PII entry.
+- **Teacher / BEED student (Account issuer + reviewer):** Manages the classroom, issues each student a
+  classroom-scoped account (nickname + initial password), and is the manual human backstop — every
+  generated book is approved or rejected by them before it reaches the gallery or export. Requires a
+  high-density, structured, and informative interface.
+- **Student (Author):** The primary user (Grade 5-6). Logs into their own teacher-issued account (classroom
+  code + nickname + password) and authors their own story directly. Needs a playful, forgiving, and guided
+  experience with large touch targets, minimal text, and high structural clarity. No self-serve signup, no
+  email on the account.
 
 ---
 
@@ -42,25 +48,29 @@ Whenever a table or list is empty, display a friendly placeholder:
 ## 3. Teacher Flow: Classroom Management
 
 1. **Onboarding & Auth:**
-   - Teacher signs up / logs in via Supabase Auth.
+   - Teacher or BEED student signs up / logs in via Supabase Auth.
    - Lands on **Teacher Dashboard** (Grid of classroom cards).
 2. **Classroom Creation:**
    - Clicks "Create Classroom". (Opens a **Bottom Sheet** on mobile, **Dialog** on desktop). Enters a name.
-3. **Student Profile Setup:**
-   - Teacher adds students manually.
+     A single classroom code is generated for sharing with students.
+3. **Student Account Setup:**
+   - Teacher adds each student: sets a nickname + an initial password (which the child can change later).
    - Desktop: Inline table row addition. Mobile: **Bottom Sheet** form.
-   - Generates a unique, simple login code/link for each student.
+   - Shares the classroom code with students (they combine it with their own nickname + password to log in).
 4. **Story Library & Review:**
    - Badges indicate status: "Needs Review" (Warning Yellow), "Approved" (Mint Lime).
    - Teacher clicks a story to read it (opens a **Full-Screen Overlay**).
-   - Toggles "Approved for Gallery" via a large Switch component.
+   - Manually approves or rejects into the gallery via a large Switch component — every book is reviewed;
+     there is no auto-approve mode (deferred to Future Work behind an ethics re-review).
 
 ---
 
 ## 4. Student Flow: Story Creation (The Core Loop)
 
 1. **Login:**
-   - Student enters their unique code in a large, auto-advancing segmented input field.
+   - Student enters the classroom code in a large, auto-advancing segmented input field.
+   - Then enters their nickname + password (teacher-set; changeable from Settings). No email, no
+     self-serve signup — this is a real login, not a profile pick.
 2. **Dashboard (Bookshelf):**
    - Student sees their past stories as 3D book covers (horizontal scrolling carousel on mobile, grid on desktop).
    - Giant primary CTA: **"Write a New Story!"** (Fixed at the bottom of the screen on mobile for easy thumb reach).
@@ -82,21 +92,29 @@ Whenever a table or list is empty, display a friendly placeholder:
    - Immersive, full-screen reader. Landscape orientation is forced or highly encouraged on mobile.
    - **Layout:** Image on top/left, verbatim text caption below/right.
    - **Controls:** Giant Next/Prev tap zones (left 30% and right 30% of screen). Play button for **expressive TTS narration** (Chatterbox; ADR-020).
-8. **The Story Map:**
-   - A summary screen after reading: "You created 3 characters, 2 places, and 5 scenes!" 
+8. **Teacher review:** the book waits for manual teacher approval before it enters the classroom gallery
+   or can be exported (§3.4).
 
 ---
 
-## 5. Student Flow: Peer Reflection
+## 5. Student Flow: Reflection & Classroom Gallery
 
-1. **Classroom Gallery:**
-   - Browse stories written by classmates via a vertical feed of large cards (Mobile) or masonry grid (Desktop).
-2. **Reflection Prompt:**
-   - At the end of a book, a **Bottom Sheet** slides up with fixed reflection prompts.
-   - Example: "What was your favorite part?" (Textarea grows as they type).
-3. **Submission:**
-   - Routed through the input moderation gate.
-   - The author receives this reflection on their Story Map.
+The child-facing Story Map is cut (ADR-021). Reflection is author-only, about the author's own book —
+never a classmate commenting on someone else's book.
+
+1. **Reflection Prompt (own book, if enabled):**
+   - After their own book is approved, if the teacher has toggled a fixed reflection question on for this
+     book/classroom, a **Bottom Sheet** slides up on the author's own book with the question.
+   - Example: "What valuable lesson did you learn?" (Textarea grows as they type). One author, one fixed
+     question, one typed answer — never free-form, never classmate-to-classmate.
+2. **Submission:**
+   - Routed through the input moderation + PII gate, at the heavier peer-visible-content review tier
+     (`RESEARCH_PROTOCOL.md`) since the answer becomes classroom-visible.
+   - The answer is shown alongside the book in the classroom gallery.
+3. **Classroom Gallery:**
+   - Classmates browse and read approved books — and any attached reflection answer — via a vertical feed
+     of large cards (Mobile) or masonry grid (Desktop). Reading is the only peer interaction; there is no
+     reply, comment, or scoring surface.
 
 ---
 

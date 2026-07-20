@@ -64,7 +64,7 @@ While structured chronologically as phases, the development process represents i
 | **0** & **0.5** | **Loop 1: Risk Resolution** | Scaffolding and Open-weight spike to resolve the substrate risk cheaply | A real slideshow renders. Reference conditioning retains identity on ≥ 80% of items **and** exceeds unconditioned by ≥ 30 points. ✅ Phase 0 done |
 | **1** | **Loop 2: Core Pipeline** | The consistency loop is real, on clean stories | A story produces a consistent book; a case exists where the judge caught a drifted image and the retry fixed it |
 | **2** & **2.5** | **Loop 3: Integration & Tuning** | Safe for a real child, survives messy input. An honestly evaluated specialized judge | The Filipino/Taglish moderation probe passes in **both** directions. A results table exists and the held-out set was read exactly once |
-| **3** | **Loop 4: Evaluation** | The ablation and the user study | One full ablation session end-to-end, clean metrics table |
+| **3** | **Loop 4: Evaluation** | The output evaluation (expert panel + ISO-25010), RQ5 recall, and RQ6 | Output-quality ratings collected end-to-end; the RQ6 held-out table read exactly once; clean metrics table |
 
 Phase 0.5's kill criterion is the sharpest instance of the method. **It has not yet run**, and every claim
 downstream of it is written as contingent, because it is. If the substrate cannot hold an invented non-human
@@ -93,12 +93,10 @@ If asked whether pre-registration is "just Waterfall": pre-registration constrai
   boundary rather than propagating.
 - **Deterministic orchestration.** The pipeline is a fixed state machine (LangGraph). Conditional edges exist
   only at moderation pass/fail and consistency pass/fail. There is **no autonomous agent routing**, so the
-  execution path is a function of the input, and worst-case cost is bounded. This is a precondition for the
-  ablation in §7.1: an ON/OFF comparison is only meaningful if the two arms differ solely in whether the
-  consistency pipeline is applied, and in nothing incidental (routing, seeds, ordering) — determinism
-  guarantees the second. The first is a design choice under review: "pipeline applied" currently *bundles*
-  reference conditioning, the judge, and targeted regeneration, so the ablation attributes an effect to the
-  pipeline as a whole, not to any one component (see `docs/capstone/design_decisions_and_risks.md`, R1).
+  execution path is a function of the input, and worst-case cost is bounded. This underwrites
+  **reproducibility**: the same story and seed produce the same book, so every generated artifact reported in
+  the output evaluation and every image-pair fed to RQ6 is regenerable, and per-run traces (verdicts, regen
+  counts, latency, cost) are attributable to a fixed path rather than to nondeterministic routing.
 - **The testing bright line.** Deterministic tests mock every model call and must stay green in continuous
   integration. Fuzzy quality — "is the character consistent?" — is measured only in an offline evaluation
   harness against real models. The two never mix. A generated-content assertion in CI is a flaky test, not a
@@ -117,11 +115,11 @@ A deterministic pipeline. The stages, in order:
 |---|---|
 | Input moderation | Text safety gate, then personally-identifiable-information redaction |
 | Story Analyzer | Entity and coreference extraction into the Story Memory contract |
-| Scene Segmentation | Selects 10–15 scenes; floor of ≥ 3 for short stories; never invents content |
+| Scene Segmentation | Selects **up to** 10–15 scenes; scene count tracks the story's distinct major plot points (target ≥ 3 where the arc supports it); never padded to reach a count and never invents content — never-invent overrides the floor |
 | Character Bible | ≤ 2 canonical characters, each rendered **once** as a reference image |
 | Style preset | One of three hand-authored prompt fragments, frozen for the storybook |
 | Prompt Optimizer | Scene + character bible + style preset + story memory → structured prompt |
-| Image Generator | Reference-conditioned image edit (ON) or plain text-to-image (OFF) |
+| Image Generator | Reference-conditioned image edit — the pipeline's single generation mode |
 | Consistency judge | Vision-language model; emits `differences_observed` **before** `same_character` |
 | Regeneration | One targeted, prompt-corrected retry; best-of fallback; capped |
 
@@ -150,9 +148,9 @@ pipeline's architecture is identical either way.
 
 | Data | Source | Used for |
 |---|---|---|
-| Story text | Donated child writing (Grade 5–6) | Ablation stimuli; rating material; the source of every generated image |
+| Story text | Donated child writing (Grade 5–6) | Evaluation stimuli; rating material; the source of every generated image |
 | Plot-point annotations | Two trained researchers, from text alone | RQ1 scoring; RQ5 scoring |
-| Storybook ratings | Adult raters, blind to condition | RQ2, RQ3 |
+| Storybook & illustration ratings | Expert panel (professor + education student + art student) | RQ3 — output quality |
 | Free-recall responses | Naive adult readers | RQ5 |
 | Image-pair identity labels | Two trained annotators | RQ6 — the judge's training and evaluation data |
 | System-evaluation questionnaire | Evaluators (IT practitioners, teachers) | Software-quality assessment (§6.4) |
@@ -201,21 +199,23 @@ partnership is required to reach N ≈ 8–15.
 
 ### 3.4 Procedure
 
-1. **Phase 0.5 substrate probe** — a blind ON/OFF ablation over two characters (one real animal, one invented
-   non-human), scored by the research team. It doubles as a **pilot of the Phase 3 rating instrument**,
-   yielding a first effect-size estimate and a first inter-rater agreement figure.
+1. **Phase 0.5 substrate probe** — a blind comparison of **reference-conditioned vs. unconditioned**
+   generation over two probe characters (one real animal, one invented non-human), scored by the research
+   team as the substrate kill-criterion. It doubles as a **pilot of the output-quality rating instrument**,
+   yielding a first effect-size estimate and a first inter-rater agreement figure. *(This is a technical
+   substrate gate, not a research arm — the pipeline-ON-vs-OFF study ablation is dropped, ADR-008.)*
 2. **Corpus collection** under Ethics Stage 1.
 3. **Annotation** of plot points and characters from text alone, *before any image is generated* (§6.1).
-4. **Generation.** Each story processed twice, seed-matched, ON and OFF. Traces record per-scene verdicts,
-   regeneration counts, latency, and cost.
-5. **Rating sessions.** Blind, shuffled, condition never disclosed.
-6. **Comprehension sessions.** Independent readers; one book each; one condition each.
+4. **Generation.** Each story processed **once** through the full pipeline. Traces record per-scene verdicts,
+   regeneration counts, latency, and cost. Seeds are fixed and reported for reproducibility.
+5. **Expert-panel rating sessions.** Books presented in shuffled order with provenance stripped.
+6. **Comprehension sessions.** Independent naive readers; one book each; recall scored against the annotation.
 7. **Image-pair labelling**, then fine-tuning and evaluation (§5).
 8. **Tier-2 sessions**, if Stage 2 clearance is granted.
 
-**Blinding is enforced by construction.** Generated items are written to opaque filenames; the file mapping
-each item to its condition is withheld from raters and excluded from version control, so it cannot be
-recovered from the repository's history.
+**Blinding is enforced by construction.** Naive readers never see the source story text before recall.
+Generated items are written to opaque filenames with provenance metadata stripped, so raters cannot infer
+which stories or characters they are scoring; the mapping is excluded from version control.
 
 ---
 
@@ -228,17 +228,20 @@ measure best-case behavior only, and RQ4 — graceful handling of under-length, 
 unanswerable by construction.
 
 - **Population:** Grade 5–6 (ages 10–12), Philippines. English, with Taglish code-switching tolerated.
-- **Target:** 50 stories; 60–70 if recruitment allows.
+- **Target:** 50 stories; **60–70 if the first corpus batch yields fewer than ~1 usable disjoint character per
+  story** — the split (§4.3) needs ≥ 50 disjoint characters, so recruitment is gated on character yield, not story count.
 - **Provenance:** documented. Reviewers will ask.
 
-The corpus size is set by the fine-tune, not by the ablation. Stories yield characters, and **characters** are
-the unit of the judge's character-disjoint split (§4.3). More characters is the cheapest statistical power the
-project has. **The corpus closes once labelling begins and cannot be grown afterwards** — this is a
-recruitment decision, and it is unfixable later.
+The corpus size is set by the fine-tune (RQ6), not by the output evaluation. Stories yield characters, and
+**characters** are the unit of the judge's character-disjoint split (§4.3). More characters is the cheapest
+statistical power the project has. **The corpus closes once labelling begins and cannot be grown afterwards**
+— this is a recruitment decision, and it is unfixable later.
 
-**One corpus, three uses:** the ablation's stimuli (RQ2); the rating material (RQ1, RQ3, RQ5); and — once the
-pipeline has illustrated it and researchers have labelled those illustrations — the judge's training and
-evaluation data (RQ6).
+**One corpus, two uses:** the evaluation stimuli (RQ1, RQ3, RQ5 — expert-panel rating material and
+naive-reader recall); and — once the pipeline has illustrated it and researchers have labelled those
+illustrations — the judge's training and evaluation data (RQ6). Corpus = **donated child writing +
+researcher labels**; researcher-written stories appear only as judge-training-split augmentation (§4.3),
+never as evaluation stimuli or in the judge's val/test splits (ADR-008).
 
 Software development and debugging use **researcher-written fixture stories**. These carry no ethics load,
 are never used as stimuli, and are never reported as evidence.
@@ -260,7 +263,12 @@ Candidates were surveyed and rejected on the record (full table in `docs/specs/j
 
 **That absence is itself a contribution of this work.** The dataset is therefore *manufactured* from the
 pipeline's own output over the donated corpus: roughly 50 stories yield ~50 canonical character references and
-~800 scene images, at a cost of about US$29 in generation credits, producing ~1,200 labelled pairs.
+up to ~750 scene images (≈ 800 images including references — fewer for under-length stories, which yield fewer
+scenes by design), at a cost of up to about US$29 in generation credits, producing on the order of ~1,000–1,200
+labelled pairs. These counts assume near-maximum scene yield; the realistic mean runs lower, so pair count and
+cost are upper bounds. Crucially, RQ6's statistical power is set by the number of held-out **characters** (§4.3) —
+the effect-size bootstrap clusters by character — not by the pair total, so corpus recruitment is sized to the
+character split rather than to a pair target.
 
 ### 4.3 Splits, and the three ways this dataset can lie to you
 
@@ -355,10 +363,12 @@ This single annotation serves RQ1 (did the system select scenes covering these p
 reader recover these points from the finished book?). **One annotation, two uses.** It is produced before any
 image exists, which is what prevents it from being contaminated by what the system happened to draw.
 
-### 6.2 The blind rating instrument (RQ1, RQ2, RQ3)
+### 6.2 The output-quality rating instrument (RQ1, RQ3)
 
-Raters see storybooks with condition and provenance stripped: opaque filenames, shuffled order, no indication
-of ON or OFF.
+The expert panel (§3.3; the three named evaluators and the feature-level indicators are finalized in
+`docs/capstone/research_instruments.md`) rates the generated storybooks with provenance stripped: opaque
+filenames, shuffled order. Ratings are **absolute** on the single generated arm — there is no ON/OFF
+condition, because the comparative ablation is dropped (ADR-008).
 
 | Measure | Definition | Scale |
 |---|---|---|
@@ -372,7 +382,7 @@ of ON or OFF.
 inferential test. The instrument is **piloted in Phase 0.5** on the two-character probe, which yields both a
 first α and a first effect-size estimate — the rating instrument is thus tested before the study, not during it.
 
-### 6.3 The comprehension instrument (RQ5) — the study's outcome measure
+### 6.3 The comprehension instrument (RQ5) — the output-fidelity measure
 
 A reader who has **never seen the story text** receives the book alone, then answers:
 
@@ -381,7 +391,8 @@ A reader who has **never seen the story text** receives the book alone, then ans
 3. *What can you say about the story?* — reflective, **unscored**; retained as a qualitative source
 
 Responses are scored against the §6.1 annotation: proportion of annotated characters recovered, and proportion
-of annotated major plot points recovered. Two scorers, blind to condition; α reported.
+of annotated major plot points recovered. Two independent scorers rate recovery via a validated recall
+protocol; **Cohen's κ** is reported.
 
 **Design justifications, because each will be challenged:**
 
@@ -389,10 +400,9 @@ of annotated major plot points recovered. Two scorers, blind to condition; α re
 - **A naive reader, not the author.** Asking the child "did the book match what you meant?" is a weaker
   instrument: authors know what they intended and will read it into any illustration. A stranger cannot.
 - **The reader need not be a child.** This is why RQ5 runs on Tier-1 adults and **survives an ethics delay.**
-- **Between-reader by necessity.** A reader who has seen the pipeline-ON book already knows the story; their
-  recall from the OFF book would measure memory, not transmission. Each reader sees exactly one book in
-  exactly one condition, counterbalanced across stories. *This roughly doubles the readers required, and is
-  not negotiable.*
+- **Single-arm, one book per reader.** Each reader sees the one generated book and has never read its source
+  text, so recall measures transmission, not memory of the text. There is no ON/OFF pairing (the ablation is
+  dropped, ADR-008); the measure is the recovery proportion itself, not a between-arm difference.
 
 ### 6.4 The system-evaluation questionnaire (software quality) ⚠️
 
@@ -424,20 +434,22 @@ for real. Both figures — CVI and Cronbach's α — and the evaluator sample ar
 
 This is the single most common way a capstone's evaluation is quietly hollow. The ISO/IEC 25010 questionnaire
 measures **perceived software quality**. It is a software-engineering deliverable and it belongs in the
-paper. It does **not** answer RQ2 (does the loop improve consistency?) or RQ5 (does the improvement transmit
-the story?), because it involves no control condition, no blinding, and no ground truth. Presenting it as
-though it did would be an error of the same class as claiming learning gains.
+paper. It does **not** substitute for the expert panel's feature-level output ratings (RQ3) or for RQ5's
+naive-reader fidelity measure — it involves no ground truth and no reader-recall task. Nor does any of the
+output evaluation make a **causal** "the pipeline helped" claim: with the ablation dropped there is no
+control arm, and the October type-A defense does not require one (ADR-008). Reading perceived quality as
+efficacy would be an error of the same class as claiming learning gains.
 
 The division of labour is:
 
 | Question | Instrument | What it can support |
 |---|---|---|
-| Does the loop change consistency? | Blind ablation (§6.2) | A **causal** claim about the pipeline as a whole — ON and OFF differ only in whether it runs |
-| Does that change matter? | Comprehension instrument (§6.3) | A **human outcome** |
-| Can the judge measure it automatically? | Judge evaluation (§7.3) | **Instrument validity** |
+| Are the generated outputs good? | Expert panel + ISO-25010 (§6.2, §6.4) | **Feature-level output quality** — absolute, on the single generated arm; not a causal claim |
+| Does the book transmit the story? | Comprehension instrument (§6.3) | A **human fidelity outcome** |
+| Can the judge measure consistency automatically? | Judge evaluation (§7.3) | **Instrument validity** — the study's primary comparative result |
 | Is the software any good? | ISO/IEC 25010 (§6.4) | **Perceived quality.** Not efficacy |
 
-Likewise, the fine-tuned judge is **never** used to score RQ2 (§7.5).
+Likewise, the fine-tuned judge is **never** used to score the output evaluation (§7.5).
 
 ---
 
@@ -446,28 +458,37 @@ Likewise, the fine-tuned judge is **never** used to score RQ2 (§7.5).
 **Written and timestamped before the first data point.** Almost no capstone does this. It is the cheapest
 defensive move available, and it converts a null result from a failure into a finding.
 
-### 7.1 RQ2 — does the consistency loop work?
+### 7.1 RQ3 — output quality (expert panel + ISO/IEC 25010)
 
-- **Design.** Within-story: every story is generated twice, seed-matched, ON and OFF. Raters are blind.
-- **Unit of analysis.** The **storybook**. Scene-level ratings from one book are not independent observations
-  and are averaged within book before testing.
-- **Primary test.** Wilcoxon signed-rank on paired (ON, OFF) storybook-level consistency ratings.
-- **Secondary.** A cumulative-link mixed model on the ordinal ratings with random intercepts for story and for
-  rater, using the item-level data without pretending it is independent.
-- **Effect size.** Rank-biserial correlation with a 95% bootstrap confidence interval, resampled **by story**.
-- **Reliability.** Krippendorff's α, reported before any inferential test.
-- **Pre-registered direction.** ON > OFF. A null result is reported as a finding about the substrate.
+With the comparative ablation dropped (ADR-008), generated-output quality is measured **directly** on the
+single generated arm, not by an ON/OFF contrast.
 
-### 7.2 RQ5 — does consistency transmit the story?
+- **Design.** The expert panel (§6.2) rates each generated storybook on feature-level indicators —
+  character consistency, style consistency, narrative coherence, illustration quality — and Story
+  Completeness (RQ1) is scored against the §6.1 annotation. Absolute ratings; no control condition.
+- **Unit of analysis.** The **storybook**; scene-level ratings are averaged within book before reporting.
+- **Reporting.** Descriptive statistics (median/IQR for ordinal ratings, mean/SD for the ISO/IEC 25010
+  characteristics per §6.4) per indicator, with inter-rater reliability (Krippendorff's α) reported first.
+- **What it cannot support.** No causal "the pipeline caused this quality" claim — there is no control arm,
+  and the type-A defense does not require one (§6.5). It reports what the outputs are, as experts rate them.
 
-- **Unit.** Reader × book. Between-groups, since each reader sees one condition (§6.3).
+### 7.2 RQ5 — does the book transmit the story?
+
+- **Unit.** Reader × book, **single-arm**: each reader sees the one generated book (§6.3). No ON/OFF contrast.
 - **Primary outcome.** Proportion of annotated major plot points recovered in free recall.
 - **Secondary outcome.** Proportion of annotated characters recovered.
-- **Test.** Mann–Whitney U on the primary outcome; a mixed model with a random intercept for story as
-  secondary, since the same story appears in both arms with different readers.
-- **This is the study's dependent variable of record.** RQ2 shows the mechanism moves; RQ5 shows it matters.
+- **Reporting.** Descriptive recovery proportions with a 95% CI, scored by two independent raters against the
+  §6.1 annotation via a validated recall protocol; **Cohen's κ** reported. This is a fidelity *measure*, not
+  a between-arm comparison — there is no second arm to test against.
+- **This is the output-side dependent variable of record.** It shows whether the generated book, on its own,
+  carries the child's characters and events to a naive reader.
 
 ### 7.3 RQ6 — does fine-tuning the judge improve agreement with humans?
+
+**This is the study's primary comparative study (ADR-008)** — the panel-requested AI-performance
+evaluation leg. The lead claim is that the **fine-tuned 7B matches or beats prompted Gemma-3-27B**
+(self-hostable, zero marginal cost); the beat-your-own-zero-shot-base number is the necessary sanity check
+and is never presented alone.
 
 **Two gates, deliberately separated, because one number was being asked to decide two questions.**
 
@@ -512,12 +533,12 @@ scene contains content absent from the source text; the failure mode under test 
 
 ### 7.5 Non-circularity — the constraint that governs everything above
 
-> **RQ2 is never evaluated using the judge.**
+> **The output evaluation is never scored using the judge.**
 
-The judge drives regeneration inside the pipeline-ON arm. Using that same judge as the outcome measure would
-be the system grading its own homework. RQ2's outcomes are **human ratings** (§6.2) and **RQ5** (§6.3). The
-judge's own accuracy is a separate question with a separate instrument (§7.3), and its results are never
-substituted for RQ2's.
+The judge drives regeneration inside the pipeline. Using that same judge as the outcome measure would be
+the system grading its own homework. The output-quality outcomes are the **expert panel + ISO/IEC 25010
+ratings** (§6.2) and **RQ5's naive-reader recall** (§6.3). The judge's own accuracy is a separate question
+with a separate instrument (§7.3), and its results are never substituted for either.
 
 This is the sharpest question a panel can ask, and the answer is fixed in the project's Architecture Decision
 Records (`docs/product/ADRs.md`, ADR-004) so that it is never improvised under pressure.
@@ -558,8 +579,9 @@ Detail: `docs/capstone/ethics_and_safety.md` and `docs/product/ADRs.md` (ADR-011
 | **Novelty confound** (Tier 2) | Within-session repeat use weighted over first-reaction delight. |
 | **Researcher-as-teacher.** The researcher occupies the teacher role. | Acknowledged. All Tier-1 scoring is done by raters with no stake in the outcome. |
 | **Author bias** in fidelity self-report | The story-fidelity item is explicitly secondary; RQ5's naive reader is the instrument of record. |
-| **Perceived quality mistaken for efficacy** | §6.5. The ISO/IEC 25010 result is never presented as an answer to RQ2 or RQ5. |
+| **Perceived quality mistaken for efficacy** | §6.5. The ISO/IEC 25010 result is never presented as an answer to RQ3 or RQ5. |
 | **Small N** | Tier 1 (15–30) carries every research question. Tier 2 is enrichment and may slip. **No learning-gain claim is made.** |
+| **Optimistic corpus yield.** Dataset size assumes near-max scene counts and ~1 disjoint character/story. | Image, pair, and cost totals reported as upper-bound ranges. RQ6 power tracks the held-out **character** count (bootstrap clusters by character), protected by the 60–70 recruitment buffer gated on first-batch character yield. |
 | **Generalizability** | One grade band, one country, one language regime. A delimitation derived from the research questions, not an apology. |
 
 **No formal power analysis precedes Phase 0.5**, because the effect size of reference conditioning in this

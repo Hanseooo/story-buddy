@@ -22,7 +22,9 @@ swap a library, or change the pipeline shape because a different approach seems 
 **Two rules that agents violate by reflex:**
 - **Open-weight models only** (ADR-015). Never reach for Gemini/GPT/Claude to "just make this node
   work." Vendors are named in `backend/providers.py` and nowhere else.
-- **No fine-tuning** (ADR-016). If you conclude a LoRA is needed, you have found a documented trigger
+- **No fine-tuning except the consistency judge** (ADR-016, superseded by ADR-018). The judge is
+  fine-tuned per `docs/specs/judge-finetune.md` — that is the one sanctioned LoRA. Nothing else is:
+  if you conclude a LoRA is needed anywhere else (identity, style), you have found a documented trigger
   condition — surface it, don't build it.
 
 ## 2. Contract-first

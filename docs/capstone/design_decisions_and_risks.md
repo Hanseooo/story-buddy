@@ -17,21 +17,30 @@ final defense (~4–5 months out).
 
 | # | Risk | Severity | Resolve by | Status |
 |---|---|---|---|---|
-| **R1** | Ablation is a 3-component *bundle* presented as a single-variable test | High | Before generation run (Phase 3) | **Owner-accepted (3 arms, 2026-07-13)** — pending adviser |
-| **R2** | RQ5 (outcome of record) underpowered; no RQ5-specific power analysis | High | After Phase 0.5 (needs effect size) | Blocked on Phase 0.5 |
-| **R3** | RQ5 primary outcome (plot recall) may be blind to the fix (character identity) | High | Before pre-registration sign-off | Recommendation ready (now applies *within* R7's image-only instrument) |
-| **R4** | RQ6 (fine-tune) is load-bearing but 4 hops past a months-long ethics gate | High | Ethics Stage 1 submission (now) | Recommendation ready |
+| **R1** | Ablation is a 3-component *bundle* presented as a single-variable test | — | — | **MOOT (2026-07-20)** — the RQ2 ablation itself is dropped (ADR-008, roadmap §0.1). No arms exist to bundle. |
+| **R2** | RQ5 (outcome of record) underpowered; no RQ5-specific power analysis | High | After Phase 0.5 (needs effect size) | **Reframed (2026-07-20)** — no more between-arm comparison; the open question is now the precision of a single-arm recall-rate estimate. Still blocked on Phase 0.5; (b)'s multi-book-per-reader recommendation still stands. |
+| **R3** | RQ5 primary outcome (plot recall) may be blind to the fix (character identity) | High | Before pre-registration sign-off | **Resolved (2026-07-20)** — owner decision: plot recall stays primary, character recovery is secondary. RQ5 is a supporting measure (Objective 3), not the study's headline (RQ6), so the residual risk below is accepted rather than engineered around. `RESEARCH_PROTOCOL.md` §7, `ADR-008`, and `research_direction_and_goals.md` now state this explicitly. |
+| **R4** | RQ6 (fine-tune) is load-bearing but 4 hops past a months-long ethics gate | High | Ethics Stage 1 submission (now) | **Reframed (2026-07-20)** — RQ6 is now the primary study and can no longer be de-scoped away (superseding this item's part 2). The timeline risk is instead handled by the October/type-A defense split: a pilot RQ6 run on fixtures ships in October, full corpus results follow after Stage 1 (roadmap §0.8). Part 1 (submit Ethics Stage 1 now) still stands. |
 | **R5** | Novelty/gap claim has a thin related-work moat; one sub-claim was falsifiable | Medium | Before final defense | Partially fixed |
 | **R6** | Unverified arXiv citations + gap-claim overstatement in *frozen* docs | Medium | Before any Word export | Action list ready |
-| **R7** | RQ5's "naive reader" reads the story text via verbatim captions — both recall outcomes contaminated | High | Before pre-registration sign-off | **Owner-accepted (image-only sessions, 2026-07-13)** — pending adviser |
+| **R7** | RQ5's "naive reader" reads the story text via verbatim captions — the recall outcome is contaminated | High | Before pre-registration sign-off | **Owner-accepted (image-only sessions, 2026-07-13)** — still stands post-pivot; drafted into `RESEARCH_PROTOCOL.md` §7; pending adviser |
 | **R8** | Presidio redacts *fictional* character names → breaks captions, narration, RQ5 scoring | Medium | Before Phase-2 PII/moderation specs | **Owner-accepted (context-gated redaction, 2026-07-13)** |
-| **R9** | Rater-assignment matrix undesigned (IRR overlap × RQ5 naivety × fatigue caps jointly set the real N) | Medium | With R2, before pre-registration | Design task ready |
-| m1–m3 | Minor: seed cross-endpoint · α-gate validity · "meant to tell" vs "wrote" | Low | Before final defense | Noted |
+| **R9** | Rater-assignment matrix undesigned (IRR overlap × RQ5 naivety × fatigue caps jointly set the real N) | Medium | With R2, before pre-registration | Design task ready — now sized for a single condition (~50 books), not 2–3 arms |
+| m1–m3 | Minor: seed cross-endpoint (**m1 now moot — ablation dropped**) · α-gate validity · "meant to tell" vs "wrote" | Low | Before final defense | Noted |
 | m4–m7 | Minor: test-set access policy · checkpoint-selection rule · DreamBench++ binarization · adult-rater ethics + withdrawal cutoff | Low | Pre-registration / Stage-1 submission | **Drafted into docs 2026-07-13** — need sign-off |
 
 ---
 
 ## R1 — The ablation bundles three components but is described as single-variable
+
+**Status: MOOT (2026-07-20).** The RQ2 pipeline-ON-vs-OFF ablation this entire risk is about is
+**dropped as the study spine** (`ADRs.md` ADR-008, `scope_revision_roadmap.md` §0.1) — generated-output
+quality is now evaluated directly on pipeline-ON books (expert panel + ISO/IEC 25010), not by comparing
+arms. There is no OFF or REF-ONLY condition left to bundle or unbundle, and no third-arm decision to make.
+Kept below for the historical record of what the panel asked and why the owner accepted a 3-arm design at
+the time; nothing here should be acted on.
+
+<details><summary>Original content (pre-pivot, 2026-07-13) — historical only</summary>
 
 **Panel's question.** *"Your pipeline-ON = reference conditioning + judge + regeneration; pipeline-OFF =
 none. You changed three things at once. How do you know the judge+regeneration loop — your actual research
@@ -49,77 +58,103 @@ shelf)? And OFF-as-nothing is a strawman that inflates your effect."*
   place, and REF-ONLY is the strong simple baseline a reviewer imagines. Cost: ~$10 on a ~$29 generation
   budget. The loop is the novel contribution — do not leave it unmeasured.
 
-**Recommendation.** (b). **Decision status:** `OWNER-ACCEPTED (2026-07-13)` — three arms
-(OFF · REF-ONLY · FULL). Pending adviser sign-off before the Phase 3 generation run. Note the cost
-that matters is not the ~$10 of generation but the **+50% blind-rating workload** — factor it into
-R2/R9's rater budget. Side benefit: REF-ONLY vs FULL is a within-model comparison
-(`qwen-image-edit` in both), which contains the model-identity confound in m1 (OFF runs
-`fal-ai/qwen-image`, a sibling checkpoint, not the same weights with conditioning removed — state
-this in Methods).
+**Recommendation.** (b). **Decision status (superseded):** `OWNER-ACCEPTED (2026-07-13)` — three arms
+(OFF · REF-ONLY · FULL). Note the cost that matters was not the ~$10 of generation but the **+50%
+blind-rating workload** — this concern is now moot along with the arms themselves.
+
+</details>
 
 ---
 
 ## R2 — RQ5, the outcome of record, is underpowered
 
-**Panel's question.** *"Each reader reads one book; N ≈ 15–30 total, between-subjects → ~8–15 per arm across
-~50 stories. Most stories are read once or not at all. A Mann–Whitney U on ~10 vs ~10 with story as a random
-effect has almost no power. A null on your headline outcome would be uninterpretable — underpowered-null looks
-identical to substrate-null."*
+**Status: reframed (2026-07-20).** RQ2's ablation is dropped, so RQ5 is no longer a between-arm comparison
+(ADR-008) — there is no "~8–15 per arm" and no Mann–Whitney U against an OFF condition. The underlying
+concern survives in a milder form: with N ≈ 15–30 readers and each reader currently reading **one** book,
+the *precision* of the single-arm recall-rate estimate (not a between-group power calculation) is still set
+by a small N spread thin across ~50 stories. Most stories are still read once or not at all.
 
-**Root cause.** The only power statement (`methodology.md` §9) sizes the *RQ2 rating* load from the Phase 0.5
-effect estimate — it does **not** size the *RQ5 reader* load, which is far larger because RQ5 is
-between-subjects and each reader is a single datapoint.
+**Panel's question (as originally posed, pre-pivot).** *"Each reader reads one book; N ≈ 15–30 total,
+between-subjects → ~8–15 per arm across ~50 stories. Most stories are read once or not at all. A
+Mann–Whitney U on ~10 vs ~10 with story as a random effect has almost no power. A null on your headline
+outcome would be uninterpretable — underpowered-null looks identical to substrate-null."* The arm-comparison
+framing no longer applies; the precision concern does.
+
+**Root cause.** The only power statement (`methodology.md` §9, now updated to size the **Tier-1 rating**
+load rather than the dropped RQ2's) still does **not** size the *RQ5 reader* load specifically, and RQ5
+remains a single-datapoint-per-reader design.
 
 **Options.**
 - **(a)** Compute the required RQ5 reader N explicitly once Phase 0.5 yields an effect estimate, and state
   openly it is probably the binding N of the whole study.
-- **(b) — RECOMMENDED, combine with (a)** Revise "one book per reader." You correctly rejected *within-reader,
-  same story* (a reader who saw ON already knows the plot). But *within-reader, **different** stories* is
-  clean: one reader reads several *different* books, never the same story twice, conditions counterbalanced.
-  Each reader then contributes multiple datapoints and power multiplies — with **no** contamination. The
-  §6.3 rule appears to have conflated these two cases.
+- **(b) — RECOMMENDED, combine with (a)** Revise "one book per reader." *Within-reader, **different** stories*
+  is clean: one reader reads several *different* books, never the same story twice. Each reader then
+  contributes multiple datapoints and precision improves — with **no** contamination. This recommendation is
+  unaffected by the ablation drop; it still tightens the single-arm recall-rate estimate.
 
 **Recommendation.** (a)+(b). **Decision status:** `BLOCKED ON PHASE 0.5` for the number; the design change (b)
-can be decided now. Needs adviser sign-off (changes pre-registration).
+can be decided now. Needs adviser sign-off (changes pre-registration). Not yet adopted in `RESEARCH_PROTOCOL.md`
+§7, which still describes "one book per reader" — flag to whoever next signs off the RQ5 instrument.
 
 ---
 
 ## R3 — RQ5's primary outcome may be insensitive to the exact thing the pipeline fixes
 
-**Panel's question.** *"Your intervention improves character *identity consistency*. Your pre-registered
-*primary* outcome is *plot-point* recall. But a reader recovers 'a boy found treasure' even if the boy looks
-different on every page — plot recall is robust to character drift. You could get a null on your primary while
-your secondary (character recall) moves, and pre-registration will have locked plot as primary."*
+**Status: resolved (2026-07-20) — owner decision.** Plot-point recall stays RQ5's primary outcome;
+character recovery is scored as a secondary/confirmatory outcome, not co-primary. Rationale: RQ5 sits
+inside Objective 3 as a supporting fidelity measure — the study's headline is RQ6 (judge fine-tune) —
+so the residual risk described below is accepted as a stated limitation rather than resolved by
+re-weighting a secondary instrument. `RESEARCH_PROTOCOL.md` §7, `ADR-008`, and
+`research_direction_and_goals.md` now all state plot-primary/character-secondary explicitly.
 
-Not addressed anywhere in the current docs. This is a self-inflicted risk and it is **free to fix now**,
-because the pre-registration is not yet signed.
+**Panel's question (original framing still explains why this matters).** *"Your intervention improves
+character *identity consistency*. Your pre-registered *primary* outcome is *plot-point* recall. But a reader
+recovers 'a boy found treasure' even if the boy looks different on every page — plot recall is robust to
+character drift. You could get a null on your primary while your secondary (character recall) moves, and
+pre-registration will have locked plot as primary."* This still applies to the single-arm RQ5: the pipeline's
+actual mechanism is character identity, not plot transmission, so plot recall alone would still be an
+insensitive primary outcome.
 
-**Recommendation.** Make **character recovery co-primary** (or primary) — it is the causally-proximal outcome
-of a character-consistency intervention. Keep plot-point recall as the "does it still hold the narrative"
-secondary. Pre-register **both**, with this rationale stated, so neither looks like post-hoc selection.
+**Original recommendation (2026-07-13, superseded below).** Make **character recovery co-primary** (or
+primary) — it is the causally-proximal outcome of a character-consistency intervention. Keep plot-point
+recall as the "does it still hold the narrative" secondary.
 
-**Decision status:** `PENDING` — adviser sign-off before pre-registration is timestamped.
+**Decision status:** `RESOLVED (2026-07-20)` — owner decided against the original recommendation: plot
+recall remains primary, character recovery secondary. Pre-register **both**, with this rationale (and
+the panel's objection above) stated openly as a limitation, so it doesn't look like post-hoc selection.
+Still worth a one-line mention to the adviser for the record, but not blocking.
 
 ---
 
 ## R4 — RQ6 (the fine-tune) is load-bearing but the most timeline-fragile piece
 
-**The problem.** RQ6 sits four hops past the long pole: *Ethics Stage 1 → corpus → a Phase 1 run → image-pair
-labelling → train.* The docs frame RQ6 as integral ("instrument validity… one study, not six") and, unlike
-Tier-2 children, do **not** mark the *research question* droppable. With the final defense ~4–5 months out and
-Ethics Stage 1 taking "months," RQ6 is what fails to finish if anything slips. No document reconciles the
-calendar.
+**Status: reframed (2026-07-20).** RQ6 is now the study's **primary comparative study** (ADR-008,
+roadmap §0.2) — the old part-2 recommendation, "build a de-scope position where RQ2+RQ5 stand alone and RQ6
+is the droppable reach piece," is now backwards: RQ2 is gone, so RQ6 *is* the spine, not a reach contribution
+to retreat from. The timeline risk this item worried about is real and still open, but it's now handled by a
+scope split rather than a de-scope option:
 
-**Recommendation — two parts.**
-1. **Submit Ethics Stage 1 now.** It is the only thing on the critical path that cannot be compressed by
-   working faster. Everything after `images` is a weekend; everything before it is months.
-2. **Build the explicit de-scope position that RQ2 + RQ5 are a complete, defendable study on their own**, with
-   RQ6 as the *reach* contribution. Rung C ("fine-tune loses to prompted Gemma, keep prompting") is honest and
-   publishable for a *paper*, but a *capstone must be done by a date* — you need a story that survives RQ6 not
-   finishing. The current framing forbids that retreat; loosen it.
+- **October is a technical (type-A) defense**, requiring a working system + pre-registered methodology +
+  **pilot results**, not completed corpus-gated results (roadmap §0.8). The October deliverable is a **pilot
+  RQ6 run on fixture stories**, explicitly labeled illustrative/demonstration, never presented as findings.
+  Full corpus RQ6 results land after October, behind Ethics Stage 1.
+- This is what makes RQ6-primary survivable despite being the most timeline-fragile piece: the piece that's
+  load-bearing for October is fixture-gated, not corpus-gated.
 
-**Decision status:** `PENDING` — (1) is an action to take immediately; (2) needs a framing decision with your
-adviser. Confirm your actual defense date against the ethics timeline.
+**Original problem (still accurate).** RQ6 sits four hops past the long pole: *Ethics Stage 1 → corpus → a
+Phase 1 run → image-pair labelling → train.* With the final defense ~4–5 months out (now dated: October 2026)
+and Ethics Stage 1 taking "months," the full-corpus RQ6 result is what's most likely to not finish if anything
+slips — the fixture pilot is the insurance.
+
+**Recommendation.**
+1. **Submit Ethics Stage 1 now** — unchanged, still the critical-path item nothing else compresses.
+2. ~~Build the de-scope position that RQ2+RQ5 stand alone~~ — **superseded.** There is no RQ2 to stand
+   alongside, and RQ6 cannot be dropped. Rely on the October fixture-pilot / post-October full-corpus split
+   (§0.8) instead of a droppability argument.
+
+**Decision status:** `PARTIALLY RESOLVED` — the framing decision (2) is made at the roadmap level (§0.8);
+(1) is still an action to take immediately. Confirm the actual October defense date against the Ethics
+Stage 1 timeline, same as before.
 
 ---
 
@@ -171,16 +206,21 @@ alignment outstanding.
 
 ---
 
-## R7 — RQ5's naive reader reads the story text: captions contaminate both recall outcomes
+## R7 — RQ5's naive reader reads the story text: captions contaminate the recall outcome
 
-**Panel's question.** *"Your 'naive reader who has never seen the story text' is handed a book whose
-captions ARE the story text, verbatim (ADR-013), identical in both arms. Character names and plot
-events are recoverable from the captions alone. What exactly does your outcome of record measure —
-the visual pipeline, or reading comprehension?"*
+**Status: survives the pivot unchanged (2026-07-20).** RQ5 is now single-arm, but the caption-contamination
+problem isn't about arms — it's about whether the recall instrument measures the visual pipeline or reading
+comprehension, which applies just as much to a single generated book as it did to a pair. Still owner-accepted
+and still pending adviser sign-off.
 
-This is the structural version of R3: not "the primary outcome might miss the effect" but "*both*
-recall outcomes measure a channel the ablation never touches." Likely empirical signature: high
-recall in both arms, an uninterpretable null on the study's dependent variable of record.
+**Panel's question (as originally posed).** *"Your 'naive reader who has never seen the story text' is
+handed a book whose captions ARE the story text, verbatim (ADR-013). Character names and plot events are
+recoverable from the captions alone. What exactly does your outcome of record measure — the visual pipeline,
+or reading comprehension?"*
+
+This is the structural version of R3: not "the primary outcome might miss the effect" but "the recall
+outcome measures a channel the pipeline never touches." Likely empirical signature: high recall regardless
+of image quality, an uninterpretable result on the study's dependent variable of record.
 
 **Options considered:** (a) image-only comprehension sessions (captions stripped); (b) keep
 captions, switch primary to visually-grounded items (appearance recovery vs. the Character Bible,
@@ -216,17 +256,18 @@ redaction protocol (`RESEARCH_PROTOCOL.md` §8) applies the same fiction-vs-real
 
 ## R9 — Nobody has designed the rater-assignment matrix, and it silently sets the study's real N
 
-~50 stories × 3 arms (R1) ≈ 150 books; blind ratings on 5 dimensions plus RQ5 comprehension, from
-a pool of 15–30 adults, under interacting constraints: IRR needs overlap (α is uncomputable on
-disjoint assignments); RQ5 readers must be naive to the story (a rater who rated any arm of story X
-is burned for story X); R2(b)'s multi-book readers must never see the same story twice,
-counterbalanced; methodology §5.2's fatigue caps bound books-per-rater. These jointly determine the
-required N — and the *structure* is independent of effect size, so it can be designed now rather
-than after Phase 0.5.
+**Reworked (2026-07-20) — no longer sized for arms.** With R1 moot, there's one pipeline-ON condition, not
+2–3 arms: **~50 stories ≈ 50 books**, not 100–150. The rest of the constraint set is unaffected by the
+ablation drop: blind ratings on the expert-panel/Tier-1 dimensions plus RQ5 comprehension, from a pool of
+15–30 adults, under interacting constraints — IRR needs overlap (α is uncomputable on disjoint assignments);
+RQ5 readers must be naive to the story (a rater who rated story X is burned for story X); R2(b)'s multi-book
+readers must never see the same story twice; methodology §5.2's fatigue caps bound books-per-rater. These
+jointly determine the required N — and the *structure* is independent of effect size, so it can be designed
+now rather than after Phase 0.5.
 
-**Recommendation.** A one-page assignment design (raters × stories × arms; overlap fraction for α;
+**Recommendation.** A one-page assignment design (raters × stories; overlap fraction for α;
 RQ5-naivety bookkeeping) inside the `tier1-rating-harness` spec, before pre-registration. R2's
-power answer is meaningless without it.
+precision answer is meaningless without it.
 
 **Decision status:** `DESIGN TASK` — no adviser decision needed, just the page.
 
@@ -234,11 +275,13 @@ power answer is meaningless without it.
 
 ## Minor items (m1–m3)
 
-- **m1 — Seed comparability across endpoints.** Probe 2 verifies each endpoint (`edit_image`, `text_to_image`)
-  reproduces *on itself*. It does **not** establish that a matched seed means the same starting state *across*
-  a text-to-image vs an image-edit endpoint — the fairness assumption RQ2 leans on. If REF-ONLY is added (R1),
-  ON and REF-ONLY share the edit endpoint, which strengthens the within-edit comparison. State the
-  cross-endpoint seed caveat as a limitation rather than an equivalence claim.
+- **m1 — Seed comparability across endpoints (partially moot 2026-07-20).** The RQ2 fairness assumption this
+  originally described is dropped along with the ablation. The underlying probe concern still stands, though,
+  for **Phase 0.5's own kill-criterion probe**, which still pipeline-ON/OFF-compares `edit_image` vs.
+  `text_to_image` internally (a technical substrate check, not the dropped research arm — `methodology.md`
+  §3.4). Probe 2 verifies each endpoint reproduces *on itself*; it does **not** establish that a matched seed
+  means the same starting state *across* the two endpoints. State the cross-endpoint seed caveat as a
+  limitation of the Phase 0.5 result rather than an equivalence claim.
 - **m2 — α-gate validity.** "Revise the guide and recalibrate until α ≥ 0.67" (methodology §5.2) can inflate
   *reliability* at the cost of *validity* if raters converge on an easy-to-agree-but-invalid rubric. Cap the
   number of guide revisions, and report how many occurred.
@@ -271,16 +314,14 @@ Phase 0.5 is not just a build gate; it feeds three of these decisions. Order of 
 
 1. **Probe 1 (kill criterion) passes** → substrate holds identity → Phase 1 opens **and** you get the *first
    effect-size estimate + first inter-rater α* from the rating-instrument dress rehearsal. → **This unblocks
-   R2** (size the RQ5 reader N) and validates the R1 rating instrument.
+   R2** (size the RQ5 reader N) and validates the rating instrument.
    - *If Probe 1 fails / Quill fails:* that is a **reportable finding**, not a catastrophe (see
      `PHASE_05_RESULTS.md` branches). The product's scope narrows and the paper gains its most interesting
      sentence. R2/R3 then apply to whatever regime survives.
-2. **Probe 2 (seed determinism).** Confirms each endpoint reproduces. Necessary but **not sufficient** for R1's
-   cross-arm fairness — see m1. If either endpoint fails, drop the reproducibility claim from RQ2's method or
-   change provider (do not silently keep the claim). Decide R1's arm structure with the Probe 2 result in hand,
-   since a 3-arm design shares the edit endpoint for two of the three arms.
+2. **Probe 2 (seed determinism).** Confirms each endpoint reproduces — see m1. If either endpoint fails, drop
+   the reproducibility claim from the affected method or change provider (do not silently keep the claim).
 3. **In parallel, independent of the probes:** submit **Ethics Stage 1** (R4) and run the **citation
-   verification** (R6). Neither needs the probes and both are on the critical path to the final defense.
+   verification** (R6). Neither needs the probes and both are on the critical path to the October defense.
 
-**Bottom line for the proposal defense:** present R1–R6 from this document as *known, planned* risks. Solve
-none of them yet. The plan is the deliverable.
+**Bottom line for the proposal defense:** present R2–R9 (R1 is moot post-pivot) from this document as *known,
+planned* risks. Solve none of them yet. The plan is the deliverable.

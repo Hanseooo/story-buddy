@@ -32,16 +32,25 @@ That is what makes this research rather than integration.
 > **Does an automated consistency-verification-and-correction loop produce picture books faithful enough
 > that other readers recover the story the child meant to tell?**
 
-- **RQ2** (the ablation) is the **mechanism**.
-- **RQ5** (reader comprehension) is the **outcome** — the dependent variable.
-- **RQ6** (judge–human agreement) is **instrument validity** — it shows the mechanism can be measured automatically.
+- **RQ6** (fine-tuned judge vs. its baselines) is the **primary comparative study** — the panel-requested
+  AI-performance evaluation leg.
+- **RQ5** (naive-reader recall) is the **fidelity outcome** — does the generated book, on its own, transmit
+  the child's characters and events to a reader who never saw the source text?
+- **RQ3** (expert panel + ISO/IEC 25010) is **output quality** — are the generated books good?
 
-RQ1, RQ3, and RQ4 are supporting. This is **one study**, not six.
+RQ1 and RQ4 are supporting. **RQ2 (the pipeline ON-vs-OFF ablation) is dropped** — see ADR-008. This is
+**one study**, not six.
 
 ## 3. What we claim, and what we must not
 
-**Claim:** that the pipeline causes measurably higher character/style consistency (RQ2), and that this
-consistency measurably improves a naive reader's recovery of the story (RQ5).
+**Claim:** that the generated outputs are rated acceptable by an expert panel and ISO/IEC 25010 (RQ3), that a
+naive reader can recover the child's characters and events from the generated book alone (RQ5), and that a
+fine-tuned open VLM judge matches or beats a prompted 27B incumbent on held-out identity judgments (RQ6).
+
+**Do not claim a causal "the pipeline helped" effect.** The pipeline-ON-vs-OFF ablation (RQ2) is dropped
+(ADR-008); there is no control arm, and the October type-A defense does not require one (roadmap §0.8). The
+output-quality and fidelity results describe the single generated arm, not a comparison against a naive
+baseline.
 
 **Do not claim learning gains.** N ≈ 8–15 children, no non-illustrated control group, no pre/post design,
 no longitudinal window. Prior literature on authentic audience is the **warrant** for why fidelity matters;
@@ -63,45 +72,57 @@ That is the SDG-4 hook, and it is a design property, not a hope.
 | RQ | Question | Tier | Instrument |
 |---|---|---|---|
 | RQ1 | How accurately does the system identify key scenes from child-written stories? | 1 | Story Completeness vs. annotated major plot points |
-| **RQ2** | **Does the Character Bible + VLM consistency loop measurably improve visual consistency vs. naive per-scene generation?** | 1 | **Blind ablation, human consistency ratings** |
-| RQ3 | How acceptable is the generated storybook (coherence, consistency, illustration quality, usability)? | 1 | Blind scored ratings; usability is measured separately, via the ISO/IEC 25010 evaluator questionnaire (methodology §6.4), never by the blind raters |
+| RQ3 | How acceptable are the generated outputs (coherence, consistency, illustration quality, usability)? | 1 | Expert-panel + ISO/IEC 25010 output-quality ratings, feature-level; usability is measured separately, via the ISO/IEC 25010 evaluator questionnaire (methodology §6.4), never by the expert panel |
 | RQ4 | How gracefully does the system handle **under-length** stories without inventing content? | 1 | Scene-count floor behavior on short corpus items |
-| **RQ5** | **Do readers of a pipeline-ON book recover the author's characters and plot more accurately than readers of pipeline-OFF?** | 1 (adults) + 2 (peers) | **Comprehension instrument, §7** |
-| RQ6 | Does fine-tuning an open VLM judge improve agreement with humans over the un-fine-tuned base — and does the improvement concentrate on **non-human** characters? | — | **Pre-registered superiority test** on held-out ΔF1 (`different_character`) vs. **zero-shot Qwen2.5-VL-7B**; McNemar + character-clustered bootstrap CI. Prompted Gemma-27B is a reported secondary and the **product** gate, not the research gate (ADR-018 amendment a, `docs/specs/judge-finetune.md` §7) |
+| RQ5 | Can a naive reader recover the author's characters and events from the generated book alone? | 1 (adults) | Single-arm naive-reader recall vs. RQ1's plot points; two raters, Cohen's κ |
+| **RQ6** | Does fine-tuning an open VLM judge improve agreement with humans over the un-fine-tuned base — and does the improvement concentrate on **non-human** characters? | — | **Primary comparative study** — pre-registered superiority test on held-out ΔF1 (`different_character`) vs. **zero-shot Qwen2.5-VL-7B**; McNemar + character-clustered bootstrap CI. Prompted Gemma-27B is a reported secondary and the **product** gate, not the research gate (ADR-018 amendment a, `docs/specs/judge-finetune.md` §7) |
 
-**RQ2 is never evaluated using the judge.** The judge drives regeneration in the pipeline-ON arm; using it
-as an outcome measure would be circular. RQ2's outcomes are human ratings and RQ5. This is the sharpest
-question a panel will ask — the answer lives in ADR-004 and is repeated here so it is never improvised.
+**The output evaluation is never scored using the judge.** The judge drives regeneration inside the
+pipeline; using it as an outcome measure would be circular. The output-quality outcomes are the expert
+panel + ISO/IEC 25010 ratings (RQ3) and RQ5's naive-reader recall — neither of which the judge optimizes.
+This is the sharpest question a panel will ask — the answer lives in ADR-004 and is repeated here so it is
+never improvised.
 
 ---
 
-## 5. Design: the ablation
+## 5. Design: the two evaluation legs
 
-Same story corpus, generated twice, same seed:
+Output quality is evaluated **directly on the generated books**, not by an ON-vs-OFF ablation (dropped —
+ADR-008):
 
-- **pipeline-ON** — canonical character reference + VLM consistency checker + targeted regeneration.
-- **pipeline-OFF** — naive per-scene generation. No reference, no checker, no regeneration.
+- **Expert panel + ISO/IEC 25010 (RQ3).** 1 professor + 1 education student + 1 art student rate the
+  storybooks, illustrations, and story consistency with feature-level rubrics, folded into an ISO/IEC 25010
+  frame. This is the panel-requested "evaluate the generated outputs" leg — outputs, not internal pipeline
+  components.
+- **AI-performance assessment of the judge (RQ6).** The study's primary comparative study — fine-tuned
+  Qwen2.5-VL-7B vs. its baselines on a human-labeled, character-disjoint held-out set. Full treatment in
+  ADR-018 and `docs/specs/judge-finetune.md`.
 
-Adult raters judge **blind to condition**. Seed-matching makes the comparison fair, and requires that seeds
-actually reproduce on **both** `edit_image` (ON) and `text_to_image` (OFF) — verified empirically in the
-Phase 0.5 spike, not assumed from documentation (CC-7).
+RQ5 (§7) adds the reader-side fidelity measure: a naive reader is given the generated book alone and asked
+to recall its characters and events, scored against the same human-annotated plot points RQ1 requires.
 
 ---
 
 ## 6. Tiers
 
-### Tier 1 — adults (N ≈ 15–30). **Carries RQ1, RQ2, RQ3, RQ4, RQ5, RQ6. Designed to stand alone.**
-Blind scored ratings of narrative coherence, visual consistency, illustration quality, story completeness,
-plus the RQ5 comprehension instrument. **Inter-rater reliability defined up front** for "major plot points"
-(Cohen's / Krippendorff's).
+### Tier 1 — adults (N ≈ 15–30). **Carries RQ1, RQ3, RQ4, RQ5, RQ6. Designed to stand alone.**
+Expert-panel and blind scored ratings of narrative coherence, visual consistency, illustration quality,
+story completeness, plus the RQ5 comprehension instrument. **Inter-rater reliability defined up front** for
+"major plot points" (Cohen's / Krippendorff's).
 
 ### Tier 2 — children (N ≈ 8–15). **Enrichment. May slip without sinking the capstone.**
 - **Validated instruments:** Fun Toolkit (Read & MacFarlane) — Smileyometer (liking) + Again-Again (engagement proxy). Cite in Methods.
 - **Story fidelity item** (author-only): "Did the book tell the story you wanted to tell?"
-- **Peer comprehension**, in-app (ADR-021): the same RQ5 instrument, answered by classmates.
+- ~~**Peer comprehension**, in-app: the same RQ5 instrument, answered by classmates.~~ **Cut as an RQ5
+  instrument (ADR-008/ADR-021, 2026-07-20).** RQ5 is now a single-arm naive-reader recall measure scored on
+  Tier-1 adult readers (§7, ADR-008), so the in-app peer-comprehension instrument isn't needed. The gallery's
+  reflection questions (ADR-021, reinstated 2026-07-20) are a **product UX feature** — author answers a fixed
+  question about their own book — not this comprehension instrument.
 - **Behavioral logging** (more reliable than child self-report): completion rate, time-on-task, spontaneous
   second-story starts, "try again" frequency. Watch the novelty confound — repeat use *within* a session
-  matters more than first-reaction delight.
+  matters more than first-reaction delight. The child operates the app directly (ADR-017, reversed
+  2026-07-20), so this data is collectable — but it stays **Tier-2 enrichment gated on Ethics Stage 2**,
+  tied to no research question, and post-October.
 
 ---
 
@@ -115,21 +136,23 @@ A reader who has **never seen the story text** is given the book alone, then ask
    author's benefit (ADR-021) and as a qualitative source.
 
 Scoring: recalled characters and events are matched against the **human-annotated major plot points** —
-**the same annotation RQ1 already requires.** One annotation, two uses.
+**the same annotation RQ1 already requires.** One annotation, two uses. **Plot-point recall is the
+primary outcome; character recovery is secondary/confirmatory** (owner decision, `design_decisions_and_risks.md`
+R3, 2026-07-20) — RQ5 is a supporting fidelity measure inside Objective 3, not the study's headline (RQ6).
 
 > ⚠️ **Owner-accepted change pending adviser sign-off (2026-07-13 — `design_decisions_and_risks.md` R7):**
 > comprehension sessions present the book **with captions stripped** (images and page order only).
-> The captions are the child's verbatim text (ADR-013), identical in both arms, so a captioned book
-> lets the reader recover characters and plot from the text channel alone and the recall outcomes
-> can null out regardless of what the pipeline does. Image-only sessions measure the visual
-> channel — the only channel the ablation changes. The shipped artifact keeps captions; Methods
-> states the deviation. Do not timestamp the pre-registration before this is signed off.
+> The captions are the child's verbatim text (ADR-013); a captioned book lets the reader recover
+> characters and plot from the text channel alone, which would inflate recall regardless of the
+> illustrations' fidelity. Image-only sessions isolate the visual channel — the one this study's
+> consistency claims are actually about. The shipped artifact keeps captions; Methods states the
+> deviation. Do not timestamp the pre-registration before this is signed off.
 
 **Character-recovery scoring (draft for the annotation guide — ⚠️ confirm with adviser):** scored
 over **major characters** — named characters participating in ≥ 2 annotated major plot points —
 which aligns the denominator with what the ≤ 2-canonical-reference Character Bible can actually
 act on. Recovery over *all* annotated characters is reported descriptively. Minor characters are
-un-conditioned in both arms, so including them dilutes rather than biases the comparison.
+un-conditioned by the Character Bible, so including them dilutes rather than biases the measure.
 
 Two properties worth stating in Methods. First, **the reader need not be a child**, which is why RQ5 runs on
 Tier-1 adults and survives an ethics delay. Second, **asking the author "did it match your intent?" is a
@@ -146,16 +169,18 @@ Test stories must be **real or realistic child writing**, not builder-authored c
 best-case only). Grade 5–6, English with Taglish code-switching tolerated.
 
 **Target: 50 stories, and take 60–70 if recruitment allows.** That number is set by the fine-tune, not the
-ablation — stories yield characters, and characters are the unit of the fine-tune's disjoint 33 / 5 / 12 split
-(`docs/specs/judge-finetune.md` §5.5). RQ6 makes a **superiority claim**, so its held-out test set must be
-large enough to resolve a few points of F1; **more characters is the cheapest statistical power the project
-has.** The ablation would survive on fewer.
+output evaluation — stories yield characters, and characters are the unit of the fine-tune's disjoint
+33 / 5 / 12 split (`docs/specs/judge-finetune.md` §5.5). RQ6 makes a **superiority claim**, so its held-out
+test set must be large enough to resolve a few points of F1; **more characters is the cheapest statistical
+power the project has.** The expert-panel and RQ5 output evaluation would need fewer.
 
 **This is a recruitment decision and it is unfixable later.** By Phase 2.5 the corpus is closed. Ask for the
 extra stories at Stage 1.
 
-**One corpus, three uses:** the ablation's stimuli (RQ2), Tier-1's rating material (RQ1, RQ3, RQ5), and —
-once the pipeline has drawn it and researchers have labelled the drawings — the judge's training data (RQ6).
+**One corpus, two uses:** the evaluation stimuli (RQ1, RQ3, RQ5 — Tier-1 rating material and naive-reader
+recall), and — once the pipeline has drawn it and researchers have labelled the drawings — the judge's
+training and evaluation data (RQ6). Corpus = **donated child writing + researcher labels** (ADR-008);
+researcher-written stories appear only as judge-training-split augmentation, never as evaluation stimuli.
 This is why §9's consent clause is not optional.
 
 **Primary source: Stage-1 story donation (§9).** Document provenance — reviewers will ask.
@@ -182,7 +207,7 @@ exact thing Tier-1 self-sufficiency exists to prevent. Splitting the submission 
 
 **Stage 1 — story donation.** Children write stories. They never touch the system, never see each other's
 work. We collect anonymized text and nothing about the child. Narrow, low-risk, comparatively fast.
-**Unblocks:** corpus → Tier 1 → the ablation → the judge's training labels.
+**Unblocks:** corpus → Tier 1 → the output evaluation → the judge's training labels.
 
 > **The Stage-1 consent form must state that donated stories may be used to build and evaluate an AI model.**
 > Training on participant data without that clause is a violation, not a technicality. It costs one sentence,
@@ -296,8 +321,9 @@ moderation thresholds, failure copy, and narration voice are all calibrated to a
 
 For RQ6 in particular this converts a risk into an asset: a fine-tuned judge that *loses* to prompted
 Gemma-27B becomes a publishable finding (*"prompting remains competitive at this scale; the bottleneck is
-data, not capacity"*) rather than a result to be spun. The same logic protects RQ2: pre-committing to the
-ablation's success criteria means a null result is a finding about the substrate, not a failed capstone.
+data, not capacity"*) rather than a result to be spun. The same discipline governs the output evaluation and
+RQ5: the success criteria and the recall protocol are fixed before data, so a weak result is a finding, not
+a fudge.
 
 Almost no capstone does this. It is the cheapest defensive move available.
 
@@ -307,8 +333,8 @@ Almost no capstone does this. It is the cheapest defensive move available.
 
 | Question | Where the answer lives |
 |---|---|
-| "Isn't this just an API wrapper?" | The ablation (§5) measures the pipeline's *causal* contribution. |
-| "Isn't the fine-tuned judge circular?" | ADR-004 non-circularity note. **RQ2 is never evaluated using the judge.** |
+| "Isn't this just an API wrapper?" | The expert panel + ISO/IEC 25010 (§5, RQ3) rate the outputs the architecture actually produces, not a bare API call. |
+| "Isn't the fine-tuned judge circular?" | ADR-004 non-circularity note. **The output evaluation is never evaluated using the judge.** |
 | "Does it improve children's writing?" | We do not claim that (§3). Prior work is the warrant; fidelity is the finding. |
 | "Only twelve children?" | Tier 1 (15–30 adults) carries every core RQ. Tier 2 enriches (§6). |
 | "Is a LoRA on ~1,000 examples meaningful?" | Character-disjoint splits, four baselines, CIs, ≥3 seeds, pre-registered plan (§13). |

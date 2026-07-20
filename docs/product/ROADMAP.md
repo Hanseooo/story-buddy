@@ -58,8 +58,8 @@ Two criteria, **both** must hold:
 - **Absolute:** pipeline-ON identity retained on ≥ 80% of items.
 - **Separation:** pipeline-ON exceeds pipeline-OFF by ≥ 30 points.
 
-Absolute-but-no-separation is a **fail**: the reference is not doing the work, ADR-007's mechanism has no
-measurable effect on this substrate, and RQ2 has no story. *Fail →* escalate to FLUX.1 Kontext [dev]
+Absolute-but-no-separation is a **fail**: the reference is not doing the work, and ADR-007's mechanism has no
+measurable effect on this substrate. *Fail →* escalate to FLUX.1 Kontext [dev]
 (non-commercial, permitted — ADR-015) and re-run. If both fail, **stop and surface it** — that is a
 Phase-0.5 finding, not a Phase-3 catastrophe.
 
@@ -76,7 +76,7 @@ so this is one probe, not two.
 This probe is also a **dress rehearsal of the Phase 3 instrument** (ADR-008): it yields an absolute rate, a
 mini-ablation, and an inter-rater agreement number, before anything has been built.
 
-**2. Seed determinism.** Same seed twice, on **both** `edit_image` and `text_to_image` — the ablation
+**2. Seed determinism.** Same seed twice, on **both** `edit_image` and `text_to_image` — the probe
 seed-matches pipeline-ON against pipeline-OFF, so both endpoints must reproduce. Diff the bytes.
 Replicate has an open, unresolved bug (#334) where seeds are ignored under its fast path. Verify
 empirically; do not trust the docs. *Fail →* record against CC-7 and drop the reproducibility claim or
@@ -217,16 +217,20 @@ substrate swap invalidates the weekend.
 
 ## Phase 3 — Evaluation Instrumentation & Study *(~3–4 weeks; overlaps the ethics window)*
 
-- **Ablation switch** — a `condition` flag runs pipeline-ON vs pipeline-OFF on the same story + seed.
+- **Expert-panel + ISO/IEC 25010 harness** — 1 professor + 1 education student + 1 art student rate generated
+  storybooks, illustrations, and story consistency with feature-level rubrics, folded into an ISO/IEC 25010
+  frame (ADR-008 Leg 1, Instrument D).
 - **Story corpus** assembled from **Stage-1 story donation** (below), provenance documented.
 - **Tier-1 harness** — blind rating interface (coherence, consistency, illustration quality, completeness)
-  **plus the RQ5 comprehension instrument** (name the characters, recount what happened) scored against
-  human-annotated major plot points. IRR annotation guide. Target N ≈ 15–30 adults.
+  **plus the RQ5 comprehension instrument** (images only, captions stripped; name the characters, recount
+  what happened) scored against human-annotated major plot points. IRR annotation guide. Target N ≈ 15–30
+  adults.
 - **Tier-2 harness** — Fun Toolkit (Smileyometer + Again-Again), story-fidelity item, peer comprehension in
   the app, behavioral logging. Target N ≈ 8–15 children. **Enrichment, not load-bearing.**
-- **Metrics export** — generation time, image/regen counts, cost, VLM scores from tracing; VLM–human agreement.
+- **Metrics export** — generation time, image/regen counts, cost, VLM scores from tracing (RQ6's
+  VLM–human agreement is computed in Phase 2.5, against the judge's held-out set).
 
-**Exit criteria:** one full ablation session end-to-end, and a clean metrics table.
+**Exit criteria:** one full Tier-1 rating + RQ5 comprehension session end-to-end, and a clean metrics table.
 
 ---
 
@@ -254,7 +258,7 @@ so Tier 1 was blocked on Tier-2 clearance — the exact thing ADR-008 exists to 
 work; we collect anonymized text and nothing about the child. Narrow, low-risk, comparatively fast.
 **The consent form must state that donated stories may be used to build and evaluate an AI model** —
 training on participant data without that clause is a violation, and it costs one sentence.
-*Unblocks:* the corpus → Tier 1 → the ablation → the judge's training labels.
+*Unblocks:* the corpus → Tier 1 → the judge's training labels.
 
 **Stage 2 — system use.** Children use StoryBuddy, read classmates' books, write reflections. Interactive,
 peer-visible, child-authored content. A heavier review. *Gates:* Tier 2 only.
@@ -283,7 +287,7 @@ Phase 0 skeleton ──► Phase 0.5 spike ──► Phase 1 pipeline ───�
        │                   └── seed determinism ──────────────► (CC-7)              │
        └──► Phase 2 safety + classroom ─────────────────────────────────────────────┴──► Phase 3 study
 
-Ethics Stage 1 ──► story donation ──► CORPUS ──┬──► Tier 1 (RQ1,2,3,5,6)  ← carries the capstone
+Ethics Stage 1 ──► story donation ──► CORPUS ──┬──► Tier 1 (RQ1,3,5,6)  ← carries the capstone
                                                │
                                                └──► Phase 1 run ──► images ──► human labels ──►
                                                     Phase 2.5 fine-tune ──► gate ──► serve or don't (RQ6)
@@ -308,7 +312,7 @@ Two edges nobody draws, and they are the two likeliest ways the schedule dies:
 | 3 | PDF export | The out-of-container escape hatch; slideshow still works |
 | 4 | **Fine-tuned judge *ships*** → evaluate it offline instead | The "faster, cheaper product" claim. **RQ6 survives.** Modal disappears (ADR-019) |
 | 5 | Tier-2 (children) | Enrichment only — ADR-008 already says the capstone survives |
-| **Never** | Phase 0.5, the ablation, the moderation stack | The project |
+| **Never** | Phase 0.5, RQ6's judge evaluation, the moderation stack | The project — RQ6 is the primary comparative study (ADR-008, 2026-07-20), not the reach piece this ladder originally treated it as |
 
 ---
 

@@ -56,6 +56,30 @@ on page four has not published the child — it has published the model.
 > *Does an automated consistency-verification-and-correction loop produce picture books faithful enough
 > that other readers recover the story the child meant to tell?*
 
+**The pipeline itself is fully automated** — no person edits a scene, caption, or image between the child's
+submitted story and the generated book. Human judgment enters only afterward: the teacher-gated review before
+classroom sharing (§6), and the study's evaluation instruments (the RQ3 expert panel, RQ5's naive readers).
+This is what makes *AI-Powered* the accurate word for the title; *AI-Assisted* would misdescribe generation
+as something a human helps produce.
+
+---
+
+## Objectives
+
+Four objectives, one verb each, in the order the panel asked for them — **Develop → Implement →
+Evaluate → Assess.** This section is the canonical statement of the objectives; the manuscript draws
+from here.
+
+1. **Develop** the StoryBuddy pipeline — child story → consistent illustrated storybook.
+2. **Implement** the pipeline as a deployable, teacher-operated system.
+3. **Evaluate** the generated outputs — storybook, illustrations, story consistency — via an expert
+   panel and ISO/IEC 25010.
+4. **Assess** the AI performance of the consistency judge — fine-tuned Qwen2.5-VL-7B vs. the prompted
+   Gemma-3-27B baseline (RQ6).
+
+Objective 3 carries the output-evaluation leg (RQ1, RQ3, RQ5 — §3); Objective 4 is RQ6, the study's
+**primary comparative study** (§3). Objectives 1–2 are the built artifact, verified by RQ1 and RQ4.
+
 ---
 
 ## 2. How StoryBuddy solves it
@@ -84,28 +108,38 @@ either way. See `model_finetuning.md`.
 
 ## 3. How we measure it
 
+The study has two evaluation legs (ADR-008), mapped to Objectives 3 and 4:
+
+- **Objective 4 — the primary comparative study (RQ6).** The fine-tuned judge vs. its baselines. This is
+  the panel-requested *AI-performance evaluation* leg, and it is the study's spine.
+- **Objective 3 — generated-output quality (RQ3 + RQ5), plus supporting RQ1 and RQ4.** An expert panel and
+  ISO/IEC 25010 rate the outputs; a naive-reader recall measure tests whether the book transmits the story.
+
 | RQ | Question | Instrument |
 |---|---|---|
 | RQ1 | How accurately does the system identify key scenes from child-written stories? | Story Completeness vs. human-annotated major plot points |
-| **RQ2** | **Does the Character Bible + VLM consistency loop measurably improve visual consistency vs. naive per-scene generation?** | **Blind ablation; human consistency ratings** |
-| RQ3 | How acceptable is the storybook (coherence, consistency, illustration quality, usability)? | Blind scored ratings |
+| RQ3 | How acceptable are the generated outputs (coherence, consistency, illustration quality, usability)? | Expert-panel + ISO/IEC 25010 output-quality ratings, feature-level |
 | RQ4 | How gracefully does the system handle **under-length** stories without inventing content? | Scene-count floor behavior |
-| **RQ5** | **Do readers of a pipeline-ON book recover the author's characters and plot more accurately than readers of pipeline-OFF?** | **Naive-reader comprehension instrument** |
-| RQ6 | Does fine-tuning an open VLM judge improve agreement with humans over the **un-fine-tuned base**, and does the gain concentrate on **non-human** characters? | Pre-registered superiority test on held-out ΔF1 |
+| RQ5 | Can a naive reader recover the author's characters and events from the generated book alone? | Single-arm naive-reader recall vs. RQ1's plot points (primary); character recovery (secondary); two raters, Cohen's κ |
+| **RQ6** | Does fine-tuning an open VLM judge improve agreement with humans over the **un-fine-tuned base** and match/beat prompted Gemma-3-27B, and does the gain concentrate on **non-human** characters? | **Primary comparative study** — pre-registered test on held-out ΔF1 |
 
-**RQ2 is the mechanism. RQ5 is the outcome. RQ6 is instrument validity.** RQ1, RQ3 and RQ4 are supporting.
-This is **one study**, not six.
+**RQ6 is the primary comparative study; RQ5 is the fidelity outcome; RQ3 is output quality; RQ1 and RQ4 are
+supporting.** RQ2 (the pipeline ON-vs-OFF ablation) is **dropped** — see ADR-008. This is **one study**.
 
-### 3.1 The ablation (RQ2)
+### 3.1 The two evaluation legs
 
-The same story corpus is generated **twice, from the same seed**:
+Output quality is evaluated **directly on the generated books**, not by an ON-vs-OFF ablation (dropped —
+ADR-008):
 
-- **pipeline-ON** — canonical reference + VLM consistency checker + targeted regeneration.
-- **pipeline-OFF** — naive per-scene generation. No reference, no checker, no regeneration.
+- **Expert panel + ISO/IEC 25010 (RQ3).** 1 professor + 1 education student + 1 art student rate the
+  storybooks, illustrations, and story consistency with feature-level rubrics, folded into an ISO/IEC 25010
+  frame. This is the panel-requested "evaluate the generated outputs" leg — outputs, not internal pipeline
+  components.
+- **AI-performance assessment of the judge (RQ6).** The study's primary comparative study; full treatment
+  in §2's judge paragraph, ADR-018, and `docs/specs/judge-finetune.md`.
 
-Adult raters judge **blind to condition**. Seed-matching is what makes the comparison fair, and it requires
-that seeds actually reproduce on both generation endpoints — verified empirically in the Phase 0.5 spike,
-not assumed from vendor documentation.
+RQ5 (§3.2) adds the reader-side fidelity measure. The judge is **never** used to score any of these
+outcomes (§3.3).
 
 ### 3.2 The comprehension instrument (RQ5)
 
@@ -116,7 +150,11 @@ A reader who has **never seen the story text** is given the book alone, then ask
 3. *What can you say about the story?* — reflective, unscored; it exists for the author's benefit.
 
 Recalled characters and events are matched against the **same human-annotated plot points RQ1 already
-requires.** One annotation, two uses.
+requires.** One annotation, two uses. This is a **single-arm** fidelity measure — the reader sees the one
+generated book, not an ON/OFF pair. Two independent raters score recovery against the annotation via a
+validated recall protocol, and **Cohen's κ** is reported. **Plot-point recall is the primary outcome;
+character recovery is secondary/confirmatory** (owner decision, `design_decisions_and_risks.md` R3,
+2026-07-20) — RQ5 is a supporting measure inside Objective 3, not the study's headline (RQ6).
 
 Two properties worth stating in Methods. **The reader need not be a child**, which is why RQ5 runs on
 adult raters and survives an ethics delay. And **asking the author "did it match your intent?" is a weaker
@@ -124,11 +162,14 @@ instrument** — authors know what they meant and will read it into any illustra
 
 ### 3.3 The non-circularity constraint
 
-> **RQ2 is never evaluated using the judge.**
+> **The output evaluation is never scored using the judge.**
 
-The judge drives regeneration inside the pipeline-ON arm. Using that same judge as the outcome measure would
-be circular — the system would be grading its own homework. RQ2's outcomes are **human ratings** and RQ5.
-This is the sharpest question a panel will ask, and the answer is fixed in ADR-004 (available in the project repository, which explicitly decouples the judge used for pipeline regeneration from the outcome measures of human consistency ratings and reader comprehension to ensure valid, non-circular research claims) so it is never improvised.
+The judge drives regeneration inside the pipeline. Using that same judge as an outcome measure would be
+circular — the system grading its own homework. The output-quality outcomes are the **expert panel +
+ISO/IEC 25010 ratings** and **RQ5's naive-reader recall**; none of them the judge optimizes. The judge's
+own accuracy is the separate RQ6 question, measured on a human-labeled, character-disjoint held-out set it
+never trained on. This is the sharpest question a panel will ask, and the answer is fixed in ADR-004 so it
+is never improvised.
 
 ---
 
@@ -139,13 +180,15 @@ This is the sharpest question a panel will ask, and the answer is fixed in ADR-0
 Test stories must be **real or realistic child writing**, not builder-authored clean prose — which would
 measure best-case only. Grade 5–6, English with Taglish code-switching tolerated.
 
-**Target: 50 donated stories; take 60–70 if recruitment allows.** That number is set by the fine-tune, not
-the ablation: stories yield characters, and characters are the unit of RQ6's character-disjoint 33 / 5 / 12
-split. More characters is the cheapest statistical power the project has, **and the corpus is closed after
-Phase 2.5 — it is unfixable later.**
+**Target: 50 donated stories; take 60–70 if recruitment allows.** That number is set by the fine-tune (RQ6),
+not the output evaluation: stories yield characters, and characters are the unit of RQ6's character-disjoint
+33 / 5 / 12 split. More characters is the cheapest statistical power the project has, **and the corpus is
+closed after Phase 2.5 — it is unfixable later.**
 
-**One corpus, three uses:** the ablation's stimuli (RQ2), the rating material (RQ1, RQ3, RQ5), and — once
-the pipeline has drawn it and researchers have labelled the drawings — the judge's training data (RQ6).
+**One corpus, two uses:** the evaluation stimuli (RQ1, RQ3, RQ5 — expert-panel material and naive-reader
+recall), and — once the pipeline has drawn it and researchers have labelled the drawings — the judge's
+training and evaluation data (RQ6). Corpus = **donated child writing + researcher labels** (ADR-008);
+researcher-written stories appear only as training-split augmentation, never as evaluation stimuli.
 
 Development and debugging use **researcher-written fixture stories**. These are not the corpus, carry no
 ethics load, and are never used as stimuli or as evidence.
@@ -184,8 +227,8 @@ Both stages require guardian informed consent **and** age-appropriate child asse
 **The analysis plan — hypotheses, baselines, metrics, success criteria — is written and timestamped before
 anything is run.** For RQ6 this converts a risk into an asset: a fine-tuned judge that *loses* to the prompted
 incumbent becomes a publishable finding ("prompting remains competitive at this scale; the bottleneck is data,
-not capacity") rather than a result to be spun. The same logic protects RQ2 — a null result becomes a finding
-about the substrate, not a failed capstone.
+not capacity") rather than a result to be spun. The same discipline governs the output evaluation and RQ5:
+the success criteria and the recall protocol are fixed before data, so a weak result is a finding, not a fudge.
 
 Almost no capstone does this. It is the cheapest defensive move available.
 
@@ -228,7 +271,7 @@ At N ≈ 8–15 the study cannot stratify by age, and age is one of the largest 
 writing. Broadening the band would add variance, not generality. **A tight population is a delimitation, not
 an apology.**
 
-**In scope:** Story Analyzer · Scene Segmentation (10–15 scenes, floor ≥ 3) · Character Bible + canonical
+**In scope:** Story Analyzer · Scene Segmentation (up to 10–15 scenes, floor ≥ 3) · Character Bible + canonical
 reference (≤ 2 canonical references) · three style presets · Prompt Optimizer · Image Generator
 (Qwen-Image-Edit) · prompted VLM consistency judge + targeted regeneration · moderation stack (input text,
 output images, Filipino PII redaction) · slide composer with expressive TTS narration (Chatterbox) · PDF export ·
@@ -246,16 +289,19 @@ rather than a hope, and it is why the system is self-hostable and replicable.
 
 ## 7. Intended contributions
 
-1. **A pipeline whose causal contribution is measured, not asserted** (RQ2's blind, seed-matched ablation).
-   This is the answer to *"isn't this just an API wrapper?"*
-2. **Evidence on whether consistency actually transmits a story** (RQ5) — the bridge from a technical metric
-   to a human outcome.
+1. **A multi-module consistency pipeline, evaluated on its outputs** — Story Memory, canonical reference,
+   and judge-driven targeted regeneration, whose generated books are rated by an expert panel and against
+   ISO/IEC 25010 (RQ3), not asserted from a bare API call. This is the answer to *"isn't this just an API
+   wrapper?"*: the contribution is the architecture and the demonstration that it produces outputs experts
+   rate as coherent.
+2. **Evidence on whether consistency transmits a story** (RQ5's single-arm naive-reader recall) — the bridge
+   from a technical property to a human outcome.
 3. **A characterization of an unmeasured regime** — identity retention for stylized, invented, non-human
    characters, where existing benchmarks (e.g. DreamBench++) evaluate real photographic subjects rather than
    the stylized, invented, non-human regime this product lives in, and none provides human pairwise identity
    judgments over it (ADR-001 and `docs/specs/judge-finetune.md` §5.1 in the repository).
-4. **A fine-tuned open VLM consistency judge, honestly evaluated** against four baselines with a
-   pre-registered claim ladder — including the outcome where it loses.
+4. **A fine-tuned open VLM consistency judge as the study's primary comparative result**, honestly evaluated
+   against four baselines with a pre-registered claim ladder — including the outcome where it loses.
 5. **Equity by construction** — an open-weight, self-hostable stack with no per-seat licensing cost.
 
 ---
@@ -271,7 +317,7 @@ Riskiest assumptions first. Build track and research track run in parallel and m
 | 1 | Core pipeline + prompted consistency judge | blocked on 0.5 |
 | 2 | Moderation, classroom auth, sharing, narration, export | blocked on probe 4 |
 | 2.5 | Judge fine-tuning + evaluation | blocked on Ethics Stage 1 → corpus → a Phase 1 run |
-| 3 | Ablation, Tier-1 harness, Tier-2 | blocked on corpus |
+| 3 | Output evaluation (expert panel + ISO-25010) + RQ5 recall, Tier-1 harness, Tier-2 | blocked on corpus |
 
 **Phase 0.5 is a kill criterion, and it has not run.** If the image model cannot hold an invented non-human
 character, that is a finding worth reporting and the product's scope changes. It is the cheapest possible
@@ -291,7 +337,7 @@ is a weekend. Everything before it is months.
 | **Introduction** | §1.1 (motivation, cited to prior work) → §1.2 (the gap) → §1.3 (the research problem + central RQ) → §7 (contributions). Lead with the child and the folder; land on identity drift. |
 | **Related Work** | Situate against the crowded character-consistency field (ConsiStory, StoryDiffusion, The Chosen One, DreamBench++), then §1.2's true gap: existing benchmarks are photographic or method-preference studies, and **none provides human pairwise identity judgments over stylized, invented, non-human characters** (`docs/specs/judge-finetune.md` §5.1 in the repository, incl. the rejected-alternatives table). Cite only arXiv IDs you have re-verified (see `design_decisions_and_risks.md`, R6). |
 | **Methods** | **Drafted in full: `docs/capstone/methodology.md`** — development methodology, system under test, data collection, datasets, training and validation, instruments, analysis plan, ethics, threats to validity. |
-| **Results** | Phase 0.5 probe results · the ablation table · RQ5 recall scores · RQ6's four-baseline table with CIs |
+| **Results** | Phase 0.5 probe results · expert-panel + ISO-25010 output-quality ratings · RQ5 recall scores · RQ6's four-baseline table with CIs (the primary comparative result) |
 | **Discussion** | §5 — what the numbers support, and the four claims we refuse to make. Phase 0.5's non-human boundary belongs here if Quill fails. |
 | **Limitations** | §5's table, §6's delimitation, and the fact that the corpus is one grade band in one country. |
 

@@ -215,9 +215,14 @@ bookkeeping, and if they leaked into the prompt the model could read the answer 
 Assume the Stage-1 corpus lands at **~50 donated stories** — the same corpus Tier 1 rates. One corpus,
 two uses.
 
+> **These are upper-bound planning numbers.** They assume a near-maximum ~15 scenes per story; under-length
+> corpus items (the RQ4 case) yield fewer, so real image, pair, and cost totals run lower. The split in §5.5 is
+> sized to the **character** count — what RQ6's character-clustered bootstrap actually resolves — not to a pair
+> total; pair counts scale with scenes but are not the binding unit for power.
+
 1. **Run the Phase 1 pipeline over all 50 stories.** Each yields one canonical character reference and
-   ~15 scene images. ≈ 800 images total, ≈ **$29** in fal.ai credits, a few hours of wall-clock.
-2. **Pair each scene against its own character's reference.** 750 candidate pairs. This is a loop, not a
+   up to ~15 scene images. ≈ 800 images total, up to ≈ **$29** in fal.ai credits, a few hours of wall-clock.
+2. **Pair each scene against its own character's reference.** Up to ~750 candidate pairs. This is a loop, not a
    labelling task — `build_dataset.py` does it.
 3. **Two researchers label all 750 independently; the third adjudicates.** Reference and scene side by
    side, *"same character?"* plus the §4 checkboxes. About **8 seconds a pair — two hours each.**
@@ -467,8 +472,10 @@ pipeline.** Write that sentence into the paper before the defense, not during it
    advance (per the benchmark's own "preserved" convention — verify the exact scale during the A2
    citation check, same PDF). Agreement reported as κ and AUROC. A threshold picked after seeing
    results makes the one transfer number in the paper post-hoc.
-6. **Downstream:** swap the judge, re-run the ablation, and ask whether *human-rated* consistency (RQ2)
-   moves. This ties the fine-tune to the central claim instead of leaving it a bolt-on.
+6. **Downstream:** serve the fine-tuned judge in the pipeline and ask whether the expert panel's
+   *human-rated* output consistency (RQ3, `research_instruments.md` §A) is at least as good as under the
+   prompted judge. This ties the fine-tune to the shipped outputs instead of leaving it a bolt-on.
+   (Non-comparative — the pipeline ON-vs-OFF ablation that RQ2 once carried is dropped, ADR-008.)
 
 Also report AUROC from the verdict-token logprob, and precision and recall separately — they are different
 failures with different costs.
@@ -568,7 +575,8 @@ Models mocked. Never assert on generated content.
 
 ## 11. Eval / quality checks (Tier B — never CI)
 
-Everything in §7. Real models, real money, offline. Feeds **RQ6**, and via the downstream swap, **RQ2**.
+Everything in §7. Real models, real money, offline. Feeds **RQ6**, and via the downstream swap, the expert
+panel's output-consistency rating (**RQ3**).
 
 ---
 

@@ -36,11 +36,12 @@ the whole point: a panel can attack each layer, and each has its own answer.
 |---|---|---|---|
 | **Warrant** (why it matters) | An *authentic audience* and *actual publication* are among the strongest levers on children's writing engagement. | **Cited prior literature — not our finding.** We inherit it; we do not test it. | External, established |
 | **Design property** (who it reaches) | Open-weight, self-hostable, **zero per-seat vendor cost** → a provincial public school can run what only a well-funded private school could otherwise afford. SDG-4 (Quality Education). | **True by construction.** It is a property of the architecture (open-weight mandate, ADR-015), provable without any study. | Architectural |
-| **Measured finding** (what we prove) | A reader who never saw the text recovers the child's characters and events *from the finished book alone* — the book **is** the child's story, not the model's. | **RQ5, our study's outcome of record.** Blind, between-reader, scored against text-only plot-point annotations. | Empirical (this study) |
+| **Measured finding** (what we prove) | The consistency machinery works, and the resulting book **is** the child's story, not the model's. | **Two legs.** (1) The automated judge that drives regeneration is itself accurate — it matches/beats a much larger prompted baseline (**RQ6**, the study's primary comparative result). (2) Independent experts rate the generated books as coherent and consistent (**RQ3**), and a reader who never saw the text recovers the child's characters and events *from the finished book alone* (**RQ5**). | Empirical (this study) |
 
 The chain reads top to bottom: *prior work says an authentic audience matters → publishing 40 illustrated
 books was effectively infinite-cost → we collapse that cost → **but only if the book faithfully transmits the
-child's story**, else you have published the model, not the child → RQ5 measures exactly that fidelity.*
+child's story**, else you have published the model, not the child → RQ6 shows the automated machinery that
+produces that fidelity is itself trustworthy, and RQ3 + RQ5 show the resulting books actually deliver it.*
 
 **The technical problem and the community value are the same claim from opposite ends.** That is what makes
 this research rather than integration.
@@ -57,18 +58,19 @@ never a finding of this study. Already refused in `research_direction_and_goals.
 ### Trap B — "Illustrated stories are easier to understand / attract more readers than plain text"
 Tempting, and **worse than it looks**, for two independent reasons:
 
-1. **We did not design to measure it.** RQ5 compares an *illustrated* book (pipeline-ON) against another
-   *illustrated* book (pipeline-OFF). There is **no text-only control arm anywhere in the study.** To claim
-   "pictures beat text," you would need a third condition — raw text, no illustration — that does not exist,
-   and adding it is expensive and off-mission.
+1. **We did not design to measure it.** RQ5 is **single-arm**: a naive reader sees *one* generated,
+   illustrated book, scored against text-only plot-point annotations. There is **no text-only-book condition
+   and no pipeline-off condition anywhere in the study.** To claim "pictures beat text," you would need a
+   control arm that does not exist, and adding one is expensive and off-mission.
 2. **It is already established, so it would be a warrant, not a finding.** "Pictures aid comprehension" is
    dual-coding / multimedia-learning theory — decades old. Swapping the creativity warrant for the
    picture-superiority warrant changes nothing: it is *still* not our contribution.
 
 **The correct reframing of the "readership" instinct** is Layer 3 above: not *"pictures beat text,"* but
-*"the generated book faithfully re-tells what the child wrote, and the consistency machinery (ON vs OFF) is
-what buys that fidelity."* That is a finding you own. Hold this line if a panelist says *"aren't pictures
-obviously easier to read?"* — RQ5 is about **transmission fidelity of the child's story**, not picture-vs-text.
+*"the generated book faithfully re-tells what the child wrote, and an accurate automated judge (RQ6) plus
+independent expert ratings (RQ3) are the evidence that the consistency machinery producing it actually
+works."* That is a finding you own. Hold this line if a panelist says *"aren't pictures obviously easier to
+read?"* — RQ5 is about **transmission fidelity of the child's story**, not picture-vs-text.
 
 ---
 
@@ -83,5 +85,6 @@ the list of refusals.
 ## 5. Where this lands in the manuscript
 
 - **Introduction** — open with the child and the folder (Layer 1 warrant), land on identity drift (the gap).
-- **Discussion** — Layers 2 and 3: the equity property, then what RQ5 actually demonstrated about fidelity.
+- **Discussion** — Layers 2 and 3: the equity property, then what RQ6 (judge accuracy), RQ3 (expert ratings),
+  and RQ5 (naive-reader recall) actually demonstrated about the machinery and its fidelity.
 - **Limitations** — restate Traps A and B explicitly as claims deliberately *not* made.
