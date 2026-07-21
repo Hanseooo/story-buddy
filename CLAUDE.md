@@ -18,6 +18,12 @@ swap a library, or change the pipeline shape because a different approach seems 
   context / decision / consequences / alternatives, and **flag it to the human**. Do not
   implement the change until the ADR is accepted.
 - If a task seems to *require* violating an ADR, stop and surface the conflict. Don't guess.
+- **Architectural decisions get their own session — never decided inline while building.** The
+  open ones are queued in `docs/product/DECISION_BACKLOG.md`; each is resolved in a dedicated
+  ADR-writing session, then its row is deleted. If building a module forces an *undecided*
+  architectural question (schema shape, LangGraph node/edge convention, resilience policy, a new
+  cross-cutting concern, a library swap), **stop and log it to the backlog** — do not settle it by
+  writing code. A convention chosen implicitly in a build PR is a decision made without an ADR.
 
 **Two rules that agents violate by reflex:**
 - **Open-weight models only** (ADR-015). Never reach for Gemini/GPT/Claude to "just make this node

@@ -269,7 +269,9 @@ Check the plan tier before Phase 2, not after.
 ## ADR-011 — Moderation & safety stack (four mechanisms)
 
 **Status:** Accepted · **revised 2026-07-10** — open classifiers become primary · **revised 2026-07-10b**
-— the proprietary backstop is removed and replaced with an open one. Drivers: ADR-015 (hardened), ADR-017.
+— the proprietary backstop is removed and replaced with an open one · **revised 2026-07-21c** — text
+backstop routed to `gpt-oss-safeguard-20b` on OpenRouter (D-1 resolved: the ADR-011b pair is not
+routable). Drivers: ADR-015 (hardened), ADR-017.
 
 **Context:** Child users require moderation of input and output; a child narrating real life will include PII; the image model itself may refuse legitimate mild-peril scenes. One provider does not cover all of this.
 
@@ -285,12 +287,16 @@ both unbacked and unmeasured in the respondents' language is not a gate.
 data. Either signal flagging fails the content.** Independence is the property that matters; "open"
 and "proprietary" were never the axis — vendor diversity was, and it is achievable without a closed model.
 
-1. **Input text** — **`Qwen3Guard-Gen`** (Apache-2.0, **119 languages**) as primary, with
-   **IBM `Granite Guardian`** (Apache-2.0, tops GuardBench) as the independent backstop. Qwen3Guard's
-   multilingual coverage closes the Filipino/Taglish hole *by construction*; Granite Guardian's separate
-   taxonomy and training data provide the independence `omni-moderation` used to.
-   The 0.6B Qwen3Guard variant runs on the worker's CPU. **Verify at build time:** OpenRouter model ids
-   for both, and whether the backstop is routable or must also run on the worker.
+1. **Input text** — **`Qwen3Guard-Gen`** (Apache-2.0, **119 languages**), the **0.6B variant on the
+   worker's CPU**, as primary, with **`openai/gpt-oss-safeguard-20b`** (Apache-2.0, open *weights* — not
+   the OpenAI API) via **OpenRouter** as the independent backstop. Qwen3Guard's multilingual coverage
+   closes the Filipino/Taglish hole *by construction*; gpt-oss-safeguard's separate vendor, taxonomy, and
+   training data provide the independence `omni-moderation` used to.
+   **D-1 resolved (2026-07-21):** neither ADR-011b classifier is routable on OpenRouter (verified
+   2026-07-13). The primary was always CPU-resident, so only the backstop needed a home. Running Granite
+   Guardian *also* on the worker adds a 2B model to a 2–3 GB RAM budget (§9); routing to gpt-oss-safeguard
+   keeps the worker lean and adds **no new privacy surface** — input already leaves to OpenRouter for
+   analysis (ADR-002), and the backstop is **one call per story**, not per scene, so its cost is noise.
 2. **PII** — **Presidio** redaction on input before storage/captioning/export. **Its default recognizers
    are English/US-centric and will miss Filipino PII**: spaCy NER misses Filipino names, and
    `Barangay`/`Purok`/`Sitio` address structure and `+63 9xx` mobile formats match no built-in pattern.
@@ -308,7 +314,8 @@ Ordering is unchanged and non-negotiable: input gate → char-ref moderation →
 
 **Consequences:**
 - No unmoderated generated image reaches a child; PII kept out of stored/exported content; scary-but-innocent stories don't dead-end.
-- Both CPU classifiers bundle into the existing worker — no extra service for moderation, no GPU.
+- The primary text classifier and the image NSFW ViT are CPU-resident on the worker; the text backstop is
+  a hosted OpenRouter call (one per story). No GPU, and no extra service to stand up for moderation.
 - ⚠️ **Both gates are unverified in Filipino and Taglish until the Phase 0.5 moderation probe runs.**
   A miss on a harmful case is a child-safety hole; a miss on a benign case dead-ends a child's dragon
   fight. The probe tests both directions and is a **release gate for Phase 2**, not a curiosity.
@@ -318,7 +325,10 @@ Ordering is unchanged and non-negotiable: input gate → char-ref moderation →
 **Alternatives:**
 - **Llama Guard 4 12B** — the previous primary. Demoted: Llama Community License (not OSI-approved), English-centric, and beaten by Granite Guardian on GuardBench. Still a usable fallback.
 - **ShieldGemma 2 (4B)** — purpose-built image-safety filter, broadest category coverage. Previously rejected because no hosted provider existed and self-hosting a 4B model was a new operational surface. **ADR-019 stands that surface up anyway for the judge**, so ShieldGemma 2 becomes cheap optional hardening on the image path. It must remain *optional*: image moderation may not hard-depend on the GPU container, because the ROADMAP's de-scope ladder allows dropping it.
-- **OpenAI `omni-moderation-latest`** — removed. Proprietary (ADR-015, hardened). Its independence is replaced by Granite Guardian, not abandoned.
+- **IBM `Granite Guardian`** — the backstop named in ADR-011b. **Not routable on OpenRouter** (verified
+  2026-07-13); usable only self-hosted on the worker, which the RAM budget (§9) doesn't favor. Retained as
+  a fallback if gpt-oss-safeguard underperforms on Taglish in the Phase 0.5 probe.
+- **OpenAI `omni-moderation-latest`** — removed. Proprietary (ADR-015, hardened). Its independence is replaced by gpt-oss-safeguard-20b, not abandoned.
 - **Vision SafeSearch** — dropped: proprietary and paid.
 - **LlavaGuard** — research license; unusable.
 - **Single-classifier moderation** — rejected. Independence is the whole design; one classifier is one bug away from a child seeing something.
@@ -341,15 +351,15 @@ Ordering is unchanged and non-negotiable: input gate → char-ref moderation →
 
 ## ADR-013 — Caption source and PDF export
 
-**Status:** Accepted (caption) · Open (PDF renderer — decide at build)
+**Status:** Accepted · **revised 2026-07-21** — PDF renderer resolved to WeasyPrint (D-2)
 
 **Context:** Captions can be the child's words or LLM-rewritten; each generated surface adds a moderation surface and a fidelity risk. Export needs a PDF renderer.
 
-**Decision:** Captions are the **child's verbatim text excerpt** (post-PII-redaction), not rewritten. PDF export renders an **HTML storybook template → PDF server-side** (Playwright or WeasyPrint — pick at build; `@react-pdf/renderer` is the lighter client-side fallback).
+**Decision:** Captions are the **child's verbatim text excerpt** (post-PII-redaction), not rewritten. PDF export renders an **HTML storybook template → PDF server-side with WeasyPrint** (`@react-pdf/renderer` is the lighter client-side fallback).
 
-**Consequences:** Preserves fidelity; no extra generation/moderation surface for captions. PDF renderer choice deferred to a small build-time spike.
+**Consequences:** Preserves fidelity; no extra generation/moderation surface for captions. **D-2 resolved (2026-07-21): WeasyPrint**, not Playwright — the storybook is a static paged-media template (one page per scene: image + verbatim caption, no JS-driven layout), which is WeasyPrint's purpose-built domain. Pure-Python, small runtime footprint (pango/cairo system libs, no browser binary), the right call on a RAM-constrained worker (§9).
 
-**Alternatives:** LLM-polished captions — rejected for MVP (fidelity + moderation surface); could be an opt-in Future Work toggle.
+**Alternatives:** LLM-polished captions — rejected for MVP (fidelity + moderation surface); could be an opt-in Future Work toggle. **Playwright** (server-side Chromium) — rejected as the PDF renderer: a full browser engine and its RAM cost to render a static template that needs no JS.
 
 ---
 

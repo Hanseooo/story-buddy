@@ -266,13 +266,6 @@ Phase-2.5 annotators. Design it once, in Phase 1, or invalidate every label coll
   gone. **Release gate for Phase 2.** Phase 0.5 probe 4 (ADR-011).
 
 **Verify at build time (do not guess):**
-- ~~OpenRouter model ids for `Qwen3Guard-Gen` and `Granite Guardian`~~ → **verified 2026-07-13
-  against the live catalog: NEITHER is routable on OpenRouter.** The only guard-type open-weight
-  models there are `meta-llama/llama-guard-4-12b` and `openai/gpt-oss-safeguard-20b`. So ADR-011's
-  pair must run **on the worker** (RAM budget!), or the backstop needs an **ADR-011 amendment**
-  (gpt-oss-safeguard-20b is the routable open-weight candidate). ⚠️ Surface at the next checkpoint —
-  this is an ADR decision, not a build detail.
-- **ADR-013 — PDF renderer** (Playwright vs WeasyPrint): small build-time spike.
 - **Modal cold-start budget** for a study session (ADR-019). Measure.
 - **Worker RAM** — Presidio+spaCy, NSFW ViT, and the CPU text gate are resident (~2–3 GB); narration is a
   hosted TTS call (ADR-020, revised), so Kokoro is only resident if the fallback is kept warm.
@@ -283,6 +276,11 @@ Phase-2.5 annotators. Design it once, in Phase 1, or invalidate every label coll
 - **The failure-reason taxonomy** — extend it in Phase 1, never during Phase 2.5 annotation.
 
 **Resolved:**
+- ~~Moderation backstop routing (D-1)~~ → **ADR-011c:** primary `Qwen3Guard-Gen` on the worker CPU,
+  backstop routed to `gpt-oss-safeguard-20b` on OpenRouter (the ADR-011b pair is not routable). One
+  backstop call per story; no new privacy surface (input already leaves to OpenRouter, ADR-002).
+- ~~ADR-013 PDF renderer (D-2)~~ → **WeasyPrint** — static paged-media template; lighter than Playwright's
+  Chromium on a RAM-constrained worker.
 - ~~DreamBench++ image licensing beyond evaluation~~ → **evaluate only, never train on it, never
   redistribute it** (`docs/specs/judge-finetune.md` §5.6, §12). Evaluation is the benchmark's
   intended use; no correspondence with the authors is required.

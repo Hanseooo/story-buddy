@@ -144,7 +144,7 @@ fallback means Phase 1 wobbles rather than collapses.
 
 **Entry:** probe 4 green (§0.5). **Check the worker's RAM tier now, not at the end** — see the warning below.
 
-- **Moderation stack:** input text (Qwen3Guard-Gen + Granite Guardian backstop) → PII redaction (Presidio)
+- **Moderation stack:** input text (Qwen3Guard-Gen on the worker + `gpt-oss-safeguard-20b` OpenRouter backstop, ADR-011c) → PII redaction (Presidio)
   → output image moderation (NSFW ViT on CPU + VLM safety rubric) on every image **including the canonical
   reference before reveal**. The open image model ships **no built-in safety filter** and the proprietary
   backstop is gone — this gate is load-bearing (ADR-011).

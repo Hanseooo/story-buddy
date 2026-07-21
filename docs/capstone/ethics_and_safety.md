@@ -22,7 +22,7 @@ The strict, non-negotiable ordering of the moderation pipeline is as follows:
 ### Stage 1: Input Text Moderation
 Before any processing begins, the child's raw story is evaluated.
 * **Primary Classifier:** `Qwen3Guard-Gen` (Apache-2.0). Supporting 119 languages, it closes the Filipino/Taglish safety gap by construction.
-* **Independent Backstop:** IBM's `Granite Guardian` (Apache-2.0). It replaces proprietary backstops and provides vendor independence. 
+* **Independent Backstop:** `gpt-oss-safeguard-20b` (Apache-2.0, open weights) via OpenRouter. It replaces proprietary backstops and provides vendor independence (Granite Guardian was the original pick but is not routable on OpenRouter — ADR-011c). 
 * *Action:* If flagged, the system returns a gentle, non-scary "let's try that again" message to the child. 
 
 ### Stage 2: PII Detection
