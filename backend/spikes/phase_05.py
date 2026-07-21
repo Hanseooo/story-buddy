@@ -14,8 +14,8 @@ them behind opaque filenames. Score `scores.csv` blind, with as many raters as y
 run `tally`. This is a dress rehearsal of the Phase 3 instrument (ADR-008), not just an eyeball.
 
 Probe 1 also carries a secondary, NON-GATING arm (ADR-022): Quill through the other two style
-presets, and a second rater question — does this read as a hand-illustrated children's book, or
-as AI art? Only identity, only on the primary preset, decides whether the project lives.
+presets, and a second rater question — does this read as an intentionally hand-drawn illustration,
+or as generic AI art? Only identity, only on the primary preset, decides whether the project lives.
 """
 import csv
 import hashlib
@@ -31,18 +31,24 @@ from app.config import settings
 OUT = Path(__file__).parent / "out"
 SEED = 12345
 
-# ADR-022's three presets. Each names a *traditional medium and its physical artifacts* — paper
-# grain, brush edges, flat fills. Never "beautiful", "8k", "highly detailed": those produce the
-# airbrushed, plastic, hyper-saturated default that reads as AI art.
+# ADR-022's three presets, authored 2026-07-21. Every preset is strong-line + flat-fill: the line
+# holds identity across scenes, the flat fill kills the airbrushed / plastic / hyper-saturated
+# default that reads as AI art. Each names its own physical anti-slop artifacts — a clean or halftoned
+# comic surface, matte paper grain for gouache. Never "beautiful", "8k", "highly detailed".
 #
 # The tension ADR-022 records: texture defeats the AI look, but line and silhouette are what hold
-# identity across scenes. So identity lives in the line, and character lives in the fill.
+# identity across scenes. So identity lives in the line, and character lives in the fill. These three
+# resolve it by staying line-forward and dropping watercolour, whose soft bleeding edges dissolve an
+# invented silhouette — the fragile, non-human case (ADR-001).
 STYLE_PRESETS = {
+    "cel": "flat cel-shaded cartoon, thick clean black outlines of even weight, bright solid colour fills, two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing",
+    "comic": "bold comic-book illustration, heavy ink outlines of varied weight, flat spot colours, ben-day halftone dot shading, limited palette, no gradients, no glow",
     "gouache": "flat gouache storybook illustration, thick confident ink outlines, matte paper grain, limited warm palette, flat colour fills, no gradients, no glossy highlights",
-    "ink": "bold black ink linework with cel shading, screen-printed picture-book look, three flat tones per colour, visible pen texture, no gradients, no glow",
-    "watercolour": "loose watercolour washes over a visible ink line, cold-pressed paper texture, soft bleeding edges, muted palette, uneven pigment, no digital smoothing",
 }
-PRIMARY = "gouache"  # today's ADR-007 constant. The kill criterion is scored on this preset alone.
+PRIMARY = "comic"  # the representative-middle substrate: line-forward enough to hold identity, but
+                   # textured enough (halftone) that the no-reference OFF baseline can't fake the
+                   # separation gate. Kill criterion scored on this preset alone; `cel` is validated
+                   # for identity in the non-gating secondary arm below.
 SECONDARY = [name for name in STYLE_PRESETS if name != PRIMARY]
 
 # Two characters on purpose. A fox is a real animal with a canonical silhouette and is heavily
@@ -124,7 +130,8 @@ def consistency() -> None:
     print("DO NOT OPEN key.csv. Each rater fills their own two columns, independently:")
     print("  identity: 1 = same character as reference-<character>-<style>.png, 0 = not the same.")
     print("            Match the reference sharing the item's art style, not just its character.")
-    print("  handmade: 1 = reads as a hand-illustrated children's book, 0 = reads as AI art.")
+    print("  handmade: 1 = reads as an intentionally hand-drawn illustration (comic/cartoon/storybook),")
+    print("            0 = reads as generic AI art.")
     print("Then: uv run python -m spikes.phase_05 tally")
 
 

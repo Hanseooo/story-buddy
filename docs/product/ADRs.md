@@ -125,7 +125,7 @@ this question; the answer lives here.
 
 **Context:** Need parent accounts, kid profiles, generated-image storage, live progress, and strict data isolation for a children's product — fast, solo.
 
-**Decision:** Use **Supabase** for Postgres (app data + LangGraph checkpoints), **Auth** (parent accounts; kid profiles as linked rows), **Storage** (images + PDFs via signed URLs), and **Realtime** (job progress). Enforce **Row-Level Security** so a parent can only access their own account's data.
+**Decision:** Use **Supabase** for Postgres (app data + LangGraph checkpoints), **Auth** (classroom-scoped accounts — teacher/BEED-student issuer, child/student rows as the current role model; originally parent accounts + kid profiles, see status line), **Storage** (images + PDFs via signed URLs), and **Realtime** (job progress). Enforce **Row-Level Security** so a classroom's data is isolated from every other classroom, and a child's account from another child's within it.
 
 **Consequences:** Large portion of the stack handled by one service; RLS gives DB-layer data isolation (correct design + strong paper point). Vendor dependency on Supabase.
 
@@ -169,10 +169,11 @@ a held-out judge test set, neither of which needs a second pipeline arm.
 
 - **Leg 1 — generated-output quality (Objective 3, "Evaluate").** An **expert panel** — 1 professor +
   1 education student + 1 art student — rates the generated storybooks, illustrations, and story
-  consistency, folded into an **ISO/IEC 25010** software-quality frame. This *becomes* Instrument D and
-  is the panel-requested "evaluate the generated outputs" leg — outputs, **not** internal pipeline
-  components (panel note 8). Feature-level rubrics, not a bare "consistent/inconsistent" (tightened in
-  Session 3).
+  consistency on feature-level rubrics (**Instrument A**), not a bare "consistent/inconsistent"
+  (tightened in Session 3). This is the panel-requested "evaluate the generated outputs" leg — outputs,
+  **not** internal pipeline components (panel note 8). The **ISO/IEC 25010** software-quality
+  questionnaire (**Instrument D**) is a separate instrument administered to IT practitioners and
+  teachers, never to this panel (`research_instruments.md` §D).
 - **Leg 2 — AI-performance assessment of the consistency judge (Objective 4, "Assess") = RQ6.** The
   **primary comparative study**: fine-tuned Qwen2.5-VL-7B judge vs. its baselines on a human-labeled,
   character-disjoint held-out set. Lead claim: **fine-tuned 7B matches/beats prompted Gemma-3-27B** —
@@ -301,7 +302,7 @@ and "proprietary" were never the axis — vendor diversity was, and it is achiev
    - These two are **complementary, not independent** — they cover disjoint categories. True redundancy on the image path is **ShieldGemma 2 (4B)**, and ADR-019's GPU container makes it affordable for the first time (see Alternatives).
 4. **Model self-refusal fallback** — soften-and-retry, then a gentle reframe. Unchanged.
 5. **The child's donated story is child-authored input**, entered directly by the child into their own account (ADR-017), and routes through mechanisms 1 and 2 unchanged. Who types it does not lower the bar — the text is a child's narrative and carries a child's PII. No new surface.
-6. **Gallery reflection answers** (ADR-021) are a second child-authored text surface, entered into the child's own account. They route through mechanisms 1 and 2 same as the story, but gated at the heavier peer-visible-content review tier (`RESEARCH_PROTOCOL.md`) before anything is shown to classmates.
+6. **The classroom gallery is display-only** (ADR-021) — the approved storybook is the only peer-visible artifact. There is no second child-authored text surface; nothing beyond the story's own moderation pass is needed.
 
 Ordering is unchanged and non-negotiable: input gate → char-ref moderation → output moderation.
 
@@ -526,16 +527,18 @@ pipeline (PRD §3), and adding a training claim would dilute that focus, not str
 
 ---
 
-## ADR-017 — Setting: teacher-managed classroom; child holds an issued account and operates the app; teacher reviews (manual or auto-approve)
+## ADR-017 — Setting: teacher-managed classroom; child holds an issued account and operates the app; teacher reviews manually (auto-approve deferred)
 
 **Status:** Accepted (2026-07-10) · revised 2026-07-20 (tightened to teacher-only operation, child never
 touches the tool) · **revised 2026-07-20 (later same day)** — **reversed again.** The child now holds a
-**teacher-issued account** and operates the app directly (inputs their own story, sees their own gallery,
-answers optional gallery reflection prompts); the teacher's role narrows from sole operator to **account
-issuer + reviewer**. Driver: giving the child ownership of authoring their own story and their gallery
-reflections is a stated UX goal, and the account model below (teacher-issued, classroom-gated, no
-self-serve signup) keeps the consent/moderation posture this ADR exists to protect. · **supersedes the
-auth *role model* in ADR-006** · **drives ADR-008, ADR-011, ADR-021**
+**teacher-issued account** and operates the app directly (inputs their own story, sees their own gallery
+entry); the teacher's role narrows from sole operator to **account issuer + reviewer**. Driver: giving
+the child ownership of authoring their own story is a stated UX goal, and the account model below
+(teacher-issued, classroom-gated, no self-serve signup) keeps the consent/moderation posture this ADR
+exists to protect. · **revised 2026-07-21** — auto-approve clarified as **deferred to Future Work**
+(manual review only, no toggle); see ADR-021 for the reversal of its own reflection-question
+reinstatement — the gallery is display-only, storybooks are the only peer-visible artifact. ·
+**supersedes the auth *role model* in ADR-006** · **drives ADR-008, ADR-011, ADR-021**
 
 **Context:** The respondents are **Grade 5–6 students in the Philippines** (ages 10–12), and the product
 gains **peer sharing**. The original design had a parent account holding nested kid profiles, and listed
@@ -562,16 +565,15 @@ sole operator and becomes the account issuer and reviewer.**
 - **The child inputs their own story directly**, in their own account. It routes through input moderation
   and PII redaction unchanged (ADR-011 point 5) — child-entered text gets no lighter a bar than
   operator-entered text got.
-- **The teacher reviews the generated book before it's visible.** Default is manual approve/reject. The
-  teacher may **toggle auto-approve** for their classroom; this is the teacher's decision, and the system
-  only advises against it — e.g., surfacing a warning if the classroom/model doesn't yet have an
-  established clean moderation track record. Auto-approve only skips the *human* backstop; the automated
-  moderation stack (ADR-011) still runs on every book regardless, unchanged and non-negotiable.
+- **The teacher reviews every generated book before it's visible — manual approve/reject only.** An
+  **auto-approve** toggle is deliberately **deferred to Future Work**: skipping the human backstop
+  removes a safety layer and cannot ship without an ethics re-review. The automated moderation stack
+  (ADR-011) still runs on every book regardless, unchanged and non-negotiable.
 - **RLS isolates by classroom.** Supabase, Auth, Storage, Realtime, and the RLS posture (ADR-006) are
   otherwise unchanged — only the role names and the isolation boundary move.
 - **Sharing terminates at the classroom.** Not public, not link-based, not cross-classroom. Inside the
-  classroom it is a **teacher-curated gallery** that may include child-typed reflection answers
-  (ADR-021).
+  classroom it is a **teacher-curated, display-only gallery of approved storybooks** — the storybook
+  itself is the only peer-visible artifact; there is no reflection or comment surface (ADR-021).
 - **The parent's role is consent-giver**, which is where the law puts them. A child-held account with a
   password raises the consent bar back up from the teacher-only-operator model — this is a Session 4 /
   `ethics_and_safety.md` propagation item, not resolved by this ADR.
@@ -582,9 +584,9 @@ sole operator and becomes the account issuer and reviewer.**
   safety property breaks.
 
 **Consequences:**
-- The child now authenticates and has two typed-input surfaces (story, gallery reflections) — more
-  moderation surface, more consent weight, and a real password-reset support burden the teacher owns.
-  This is a deliberate trade against the 2026-07-20 tightening, made for child UX/ownership.
+- The child now authenticates and inputs their own story — more moderation surface, more consent
+  weight, and a real password-reset support burden the teacher owns. This is a deliberate trade against
+  the 2026-07-20 tightening, made for child UX/ownership.
 - RLS still means something — classroom isolation is a real, testable boundary (Tier A tests) — but it
   now also isolates one child's account from another's within the classroom, not just adult-owned rows.
 - **No public mode ever, and no self-serve signup ever.** See Alternatives. The classroom-code gate is
@@ -927,65 +929,54 @@ line (ADR-015).
 
 ---
 
-## ADR-021 — Classroom sharing: teacher-curated gallery with optional, teacher-toggled reflection questions
+## ADR-021 — Classroom sharing: teacher-curated, display-only gallery of approved storybooks
 
 **Status:** Accepted (2026-07-10) · revised 2026-07-20 (peer reflection and the child-facing Story Map
-cut, gallery made display-only) · **revised 2026-07-20 (later same day)** — **structured reflection
-questions reinstated**, following ADR-017's reversal (the child now holds an account and operates the
-app again). Not a return to the original free-form peer loop: the teacher **toggles which fixed
-questions appear** (e.g., "what valuable lesson did you learn?") per book or per classroom, and the
-**child (logged into their own account) types a short answer**. The child-facing Story Map stays cut —
-this ADR reinstates authored reflection text, not the Story Map screen. · **depends on ADR-017**
+cut, gallery made display-only) · revised 2026-07-20 (later same day) — structured reflection questions
+reinstated, following ADR-017's reversal · **revised 2026-07-21 — reflection reinstatement reversed.**
+Owner call: only the **storybook itself** is peer-visible. The gallery is **display-only again** — no
+reflection prompt, comment, or scoring surface of any kind. The child-facing Story Map stays cut.
+**depends on ADR-017**
 
 **Context:** Student authors benefit from an authentic audience — their book seen by classmates, not read
 once and shelved. The original design delivered this through an in-app peer loop: classmates typed
 fixed-prompt reflections and the author saw a Story Map. The 2026-07-20 tightening cut this because the
-child no longer operated the app at all. ADR-017 now reverses that, so the blocking reason is gone; the
-authentic-audience motivation was never gone. RQ5 still doesn't need this instrument (ADR-008's
-naive-reader recall measure is unrelated and unaffected) — reflection questions come back as a **product
-UX feature**, not a reinstated research instrument.
+child no longer operated the app at all; ADR-017's reversal briefly reinstated a bounded reflection
+feature the same day. That reinstatement is now reversed: the gallery delivers the authentic-audience
+benefit through the storybook alone, with no additional child-typed, peer-visible surface. RQ5 was never
+served by this feature either way — it's measured by naive-reader recall on the generated book (ADR-008).
 
 **Decision:**
 
 1. **Sharing is classroom-scoped and teacher-gated.** A book enters the gallery only after the teacher
-   approves it — manually, or via auto-approve if the teacher has enabled it (ADR-017). Not public, not
-   link-based, not cross-classroom.
-2. **The gallery is teacher-curated with optional structured reflection.** The teacher posts approved
-   books and may **toggle one or more fixed reflection questions** on for the gallery. When enabled, the
-   book's own author types a short answer in their own account. **Not free-form comments, not
-   peer-to-peer replies** — one author, one fixed question, one typed answer, same book.
-3. **Reflection answers are child-authored, peer-visible text and get their own moderation pass.** They
-   route through the same input moderation + PII redaction as the story (ADR-011), gated at the
-   **heavier peer-visible-content review tier** (`RESEARCH_PROTOCOL.md`'s existing peer-visible-content
-   note) — a private story and a classroom-visible reflection answer are not held to the same bar.
-   Nothing about the storybook's own image/output moderation changes.
+   **manually** approves it (ADR-017 — no auto-approve). Not public, not link-based, not cross-classroom.
+2. **The gallery is display-only.** Classmates browse and read/listen to approved books. There is no
+   reflection prompt, comment, reply, or scoring surface of any kind — reading the storybook is the only
+   peer interaction.
+3. **No additional moderation surface.** With no reflection text, no new input-moderation pass is needed
+   beyond the storybook's own pipeline (ADR-011); the already-moderated generated book is the only
+   peer-visible artifact.
 
 **Consequences:**
-- The gallery has a real child input surface again — this reopens the consent-language question closed
-  by the 2026-07-20 tightening (`ethics_and_safety.md`, Session 4 propagation item, not resolved here).
-- The gallery is still a **product feature, not a measurement instrument.** RQ5 is measured by
-  naive-reader recall on the generated book (ADR-008), independent of the gallery and its reflection
-  answers.
+- No new consent-language question is opened beyond the account itself (ADR-017) — there is no
+  gallery-specific typed-input surface to weigh.
+- The gallery is a **product feature, not a measurement instrument.** RQ5 is measured independently by
+  naive-reader recall on the generated book (ADR-008).
 - **Post-October** unaffected — the gallery still sits off the October type-A critical path (roadmap
-  §0.8); build it after the ethics-independent deliverables.
-- A new moderation call is added (text-only, reusing existing classifiers) — no new model, no new node,
-  no image-path change.
+  §0.8).
+- No reflection route, schema field, or moderation tier ships. `PRD_v2.md`, `USER_FLOW.md`,
+  `ROUTE_MAP.md`, `ethics_and_safety.md` need propagation to drop reflection references.
 
 **Alternatives:**
-- **Free-form, unbounded peer reflection** (the original design) — still rejected. Fixed, teacher-chosen
-  questions bound the surface; open-ended peer prompts reintroduce the unkindness/uncomparable-response
-  problem the original cut was partly about.
-- **Display-only gallery, no reflection** (the 2026-07-20 tightening) — superseded by this revision, for
-  the same UX-ownership reason ADR-017 was reversed.
-- **Child-facing Story Map** — still cut. No motivation for it returned; reflection answers are captured
-  per-book in the gallery, not in a separate child-facing aggregate screen.
+- **Structured, teacher-toggled reflection questions** (the 2026-07-20 later-same-day reinstatement) —
+  reversed. Reopened a child-authored, peer-visible typed-content surface and its consent/moderation
+  weight for a feature RQ5 never needed.
+- **Free-form, unbounded peer reflection** (the original design) — rejected. Open-ended peer prompts are
+  the unkindness/uncomparable-response problem this ADR exists to avoid.
+- **Child-facing Story Map** — still cut. No motivation for it returned.
 - **Automated story-quality scoring / "is your story good enough?"** — rejected. Hostile to the child,
   and a second research contribution that would dilute the first.
-- **"What happens next?" continuation** — deferred to Phase 4. Strong motivational feature, but it means
-  cross-story character reuse, canonical-reference reuse, and new RLS thinking, and buys the research
-  nothing.
-- **Free-form peer comments (classmate-to-classmate)** — rejected (uncomparable, unbounded unkindness
-  surface). What's reinstated is author-answers-fixed-question, never classmate-to-classmate reply.
+- **"What happens next?" continuation** — deferred to Phase 4.
 - **Public sharing** — see ADR-017.
 
 ---
@@ -1039,8 +1030,14 @@ mechanism.** Nothing in the pipeline shape changes.
 silhouette carry identity across scenes; heavy texture and photorealism destroy it — and non-human characters
 are the fragile case (ADR-001).
 
-- Recommended: **(1) flat gouache storybook** (today's constant), **(2) bold ink outline with cel shading**,
-  **(3) soft watercolour with a visible ink line.**
+- Authored **2026-07-21** (resolving the open question below): **(1) bold comic-book with ben-day halftone**
+  (`comic`, the gating primary), **(2) flat cel-shaded cartoon** (`cel`, the flagship default kids see first),
+  **(3) flat gouache storybook** (`gouache`). All three are strong-line + flat-fill. `watercolour` was
+  considered and **dropped** — soft bleeding edges dissolve an invented silhouette, the fragile non-human
+  case. `comic` is the gating primary because it is the *representative-middle* substrate — line-forward
+  enough to hold identity, but textured enough (halftone) that the no-reference baseline can't fake the
+  separation gate; gating on the *most* reproducible style (`cel`) would make that gate too lenient. `cel`
+  and `gouache` are identity-checked in the non-gating secondary arm, so neither ships unvalidated.
 - **Do not offer photorealistic or 3D-render styles.** Highest identity drift, uncanny on invented creatures,
   and photoreal imagery of child-authored characters worsens the moderation surface for no pedagogical gain.
 
@@ -1057,12 +1054,12 @@ imperfection are what defeat the AI look. Strong line and flat silhouette are wh
 scenes (ADR-001; non-human characters are the fragile case). Maximize one and you erode the other.
 
 **The resolution is why the recommended three are what they are:** put *identity* in the line and *character*
-in the fill. An ink line holds the silhouette, the eye count, the scarf; a watercolour wash or gouache
-texture kills the airbrushed sheen. Styles that carry identity *in the texture* — impressionist, painterly,
+in the fill. A clean cel or comic ink line holds the silhouette, the eye count, the scarf; a halftone screen
+or gouache grain kills the airbrushed sheen. Styles that carry identity *in the texture* — impressionist, painterly,
 photorealistic — are the ones to refuse.
 
 **This is measured, not asserted.** Probe 1's blind scoring sheet gains one item alongside identity:
-*"Does this read as a hand-illustrated children's book, or as AI art?"* It does **not** gate — the kill
+*"Does this read as an intentionally hand-drawn illustration, or as generic AI art?"* It does **not** gate — the kill
 criterion stays on identity — but a preset that scores badly is re-authored or dropped before a child sees
 it, and the number goes in the paper.
 
@@ -1091,6 +1088,8 @@ it, and the number goes in the paper.
 
 **Open questions:**
 
-- The three exact prompt fragments. Author them, then probe them in Phase 0.5's secondary arm.
+- ~~The three exact prompt fragments.~~ **Resolved 2026-07-21:** authored as `cel` / `comic` / `gouache`
+  in `backend/spikes/phase_05.py`; probed by Phase 0.5's secondary arm. `comic` is the gating primary;
+  `cel` is the flagship default.
 - Does the teacher lock one preset per classroom, or does each child choose? A product question (ADR-017's
   teacher-owner model makes either possible). Not blocking; decide at Phase 2.

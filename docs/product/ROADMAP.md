@@ -156,7 +156,7 @@ fallback means Phase 1 wobbles rather than collapses.
 - **Auth & classroom** — Supabase Auth (teacher/owner) + classroom + student profiles + **RLS policies**
   (classroom isolation). Signed URLs. *(ADR-017 — supersedes ADR-006's role model.)*
 - **Teacher dashboard/library** + **teacher review gate** before a book enters the gallery or is exported.
-- **Classroom sharing + peer reflection** — fixed prompts, routed through `input_gate` (ADR-021).
+- **Classroom sharing** — teacher-curated, display-only gallery of approved storybooks (ADR-021).
 - **Story Map** — read-only page over Story Memory. No new models.
 - **Narration** — expressive TTS (Chatterbox, hosted on fal.ai) pre-rendered per page onto Storage; Kokoro-82M CPU fallback (ADR-020, revised).
 - **Export** — HTML template → PDF (Playwright/WeasyPrint).
@@ -217,9 +217,10 @@ substrate swap invalidates the weekend.
 
 ## Phase 3 — Evaluation Instrumentation & Study *(~3–4 weeks; overlaps the ethics window)*
 
-- **Expert-panel + ISO/IEC 25010 harness** — 1 professor + 1 education student + 1 art student rate generated
-  storybooks, illustrations, and story consistency with feature-level rubrics, folded into an ISO/IEC 25010
-  frame (ADR-008 Leg 1, Instrument D).
+- **Expert-panel harness** — 1 professor + 1 education student + 1 art student rate generated storybooks,
+  illustrations, and story consistency with feature-level rubrics (ADR-008 Leg 1, Instrument A). The
+  ISO/IEC 25010 software-quality questionnaire (Instrument D) is a separate harness, administered to IT
+  practitioners and teachers, never to this panel.
 - **Story corpus** assembled from **Stage-1 story donation** (below), provenance documented.
 - **Tier-1 harness** — blind rating interface (coherence, consistency, illustration quality, completeness)
   **plus the RQ5 comprehension instrument** (images only, captions stripped; name the characters, recount
@@ -260,8 +261,8 @@ work; we collect anonymized text and nothing about the child. Narrow, low-risk, 
 training on participant data without that clause is a violation, and it costs one sentence.
 *Unblocks:* the corpus → Tier 1 → the judge's training labels.
 
-**Stage 2 — system use.** Children use StoryBuddy, read classmates' books, write reflections. Interactive,
-peer-visible, child-authored content. A heavier review. *Gates:* Tier 2 only.
+**Stage 2 — system use.** Children use StoryBuddy and read classmates' books in the display-only gallery.
+Interactive, peer-visible, child-authored content (their own storybook). A heavier review. *Gates:* Tier 2 only.
 
 **File Stage 1 immediately.** Guardian informed consent **and** age-appropriate child assent are required
 for both stages regardless of who owns the account (PH Data Privacy Act). Removing parental controls from
@@ -329,6 +330,6 @@ Two edges nobody draws, and they are the two likeliest ways the schedule dies:
 - **Seed determinism** fails silently at Phase 3, months after provider choice. Probed in Phase 0.5.
 - **Image moderation carries more weight than it used to.** No built-in filter, no proprietary backstop.
   Under-scoping it is a safety bug, not a polish item.
-- **Phase 2 is much larger than the old "week 4."** Classroom auth, sharing, reflections, teacher gate,
-  Filipino PII, and narration all landed in it.
+- **Phase 2 is much larger than the old "week 4."** Classroom auth, sharing, teacher gate, Filipino PII,
+  and narration all landed in it.
 - **At 3 months, the de-scope ladder is not optional.** At 6 months it is insurance.

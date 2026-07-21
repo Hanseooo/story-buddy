@@ -113,6 +113,31 @@ performance (RQ6 judge fine-tune)** — one verb, one objective, no compound obj
       independent of this reversal. Session 4 should propagate the **reversed** ADR-017/021 as ground
       truth, not "child never touches the tool."
 
+11. **PDF-reconciliation pass (2026-07-20) — panel's section-by-section manuscript analysis vs. Sessions 1–6.**
+    Verified Sessions 1–6 against the panel's PDF critique. Most panel asks are met; three are *deliberately
+    superseded* by §0 and were re-confirmed (reconciled case-by-case with the owner), not reversed:
+    - **Child-interaction scope narrowed — split (refines item 10).** Owner call: keep the child login +
+      **own-story authorship** (research-essential — RQ5 needs the child's real story; the 50 authors were
+      always in scope), but **defer the peer-visible typed reflections (ADR-021 gallery reflections) to Future
+      Work**, alongside the already-deferred auto-approve toggle. Rationale: reflections are tied to no RQ
+      (item 10's own note) yet carry the heaviest ethics surface (peer-visible child-generated text) — exactly
+      the dimension the panel asked to narrow. **Propagation owed** (decided, not yet applied): `ethics_and_safety.md`
+      §4 (reflection bullet + consent-weight line), `PRD_v2.md`, `USER_FLOW.md`, `ROUTE_MAP.md`, and **ADR-021**
+      still describe reflections as live — a follow-up session removes/defers them; ADR-021 collapses toward
+      "child sees own Story Map only" (revisit whether it survives).
+    - **RQ6-primary held (item 2).** Rider: the manuscript must **explicitly pre-empt** the panel's "remove the
+      comparison among AI models" objection *at RQ6's introduction* — state that RQ6 is a single contained
+      component evaluation on an annotated, character-disjoint test set (automated metrics), **not** the dropped
+      multi-condition, human-rated generation ablation the panel flagged for scope. Lead with the deployment
+      claim (self-hostable 7B matches prompted 27B → zero marginal cost), not "benchmarking a component."
+    - **Four single-verb objectives held (item 9).** The panel's real complaint (via the PDF) was *compound*
+      objectives, not the count; Develop / Implement / Evaluate / Assess each carry one verb. Objective 4 stands
+      or falls with RQ6-primary.
+    - **Drift fixes applied this pass:** PRD §RQ1 reworded from "how accurately does StoryBuddy identify key
+      scenes" (read as internal-pipeline accuracy) to Story-Completeness / plot-point-coverage framing;
+      `methodology.md` §5.2 blinding scrubbed of the dead "condition (ON/OFF)" reference; `BEED` added to
+      `ethics_and_safety.md` §4 account-issuer role.
+
 ---
 
 ## 1. Session plan
@@ -129,7 +154,7 @@ root `CLAUDE.md`. Don't load the whole `docs/` tree per project rule ("lean cont
 | 5 | Risk/tracking cleanup | `design_decisions_and_risks.md`, `action_checklist.md`, `ROADMAP.md`; **deleted** `review_round2_2026-07-12.md` (self-marked, fully migrated, confirmed) | Retired R1 (3rd ablation arm — moot, no arms left) and m1 (partially — the RQ2-fairness half is moot, the Phase-0.5-probe half survives). Reframed R2 (power → single-arm precision), R3 (co-primary — found already adopted in `RESEARCH_PROTOCOL.md` §7, flagged as a doc-consistency gap vs. ADR-008/`research_direction_and_goals.md`, not fixed here — out of row scope), R4 (RQ6 can no longer be de-scoped away; timeline risk now handled by the October fixture-pilot / post-October corpus split, roadmap §0.8), and R9 (rater matrix sized for ~50 books, not 2–3 arms × 50). R7 and R8 survive unchanged — neither was ablation-dependent. Mirrored the same retirements into `action_checklist.md` B1/B2/B3/B5/C3/D3. Fixed `ROADMAP.md`'s de-scope ladder ("Never" row: replaced "the ablation" with "RQ6's judge evaluation" since RQ6, not the ablation, is now the never-cuttable piece), Phase 3 (dropped the dead `condition`-flag ablation-switch bullet, added the expert-panel+ISO-25010 harness), and the dependency map (`RQ1,2,3,5,6` → `RQ1,3,5,6`). | Depends on Session 2's RQ5 call. | 2 | ☑ |
 | 6 | Value proposition & framing | `value_proposition.md`, AI-Powered vs. AI-Assisted language pass across `research_direction_and_goals.md` Introduction (panel note 4) | Rewrote `value_proposition.md`'s Layer-3 "measured finding" (§2 table + chain paragraph) and Trap B to drop the pipeline-ON/OFF ablation framing — RQ5 is single-arm now, no OFF condition exists in the study at all, not just no text-only arm. The "machinery works" claim now rests on **RQ6** (the automated judge matches/beats its prompted baseline) + **RQ3** (independent expert-panel ratings), with **RQ5** kept as the transmission-fidelity leg (reader recovers the child's story from the book alone). Mirrored the same trio into §5's Discussion-mapping bullet. Added an explicit "the pipeline is fully automated; human judgment enters only at teacher-gated review and at evaluation (RQ3/RQ5)" statement to `research_direction_and_goals.md` §1.3, right after the central RQ — the Introduction had no *AI-Assisted*-reading language to begin with, so this was an addition (a missing explicit claim), not a correction. | — | 2, 3 | ☑ |
 | 7 | Paper reconciliation (deferred) | `paper_draft_review_2026-07-18.md` | This reviewed an old draft against old protocol; once the manuscript itself is rewritten to match Sessions 1–6, re-run the adversarial pass (or delete and redo) rather than patching it now. **Do not start this until the manuscript is actually updated.** | — | 1–6 | ☐ |
-| 8 | Drift sweep (final gate) | whole `docs/` tree + root `CLAUDE.md` | See §2 below. | — | 1–6 | ☐ |
+| 8 | Drift sweep (final gate) | whole `docs/` tree + root `CLAUDE.md` | See §2 below. | — | 1–6 | ☑ |
 
 ---
 
@@ -165,10 +190,42 @@ should resolve on its own:
   make it look resolved
 - Whether the three-illustration-style limit (panel note 13) is already reflected in
   `hardware_and_hosting.md` — verify, don't assume
+- **Divergence memo (before Session 7):** a one-page adviser artifact packaging the three reconciled PDF
+  divergences (child-scope split, RQ6-primary framing, four single-verb objectives) + the defense for each, so
+  the manuscript rewrite doesn't surprise the panel. Recorded here (§0 item 11); not yet written.
+- **Adviser-confirm: October = technical/methodology defense** (working system + pre-registration + fixture
+  pilot), **not** completed primary-study results. RQ6-primary is only safe if the adviser agrees October needs
+  no real RQ6 numbers — ties to §0.8.
+- **Evaluator-panel qualification:** §0.4's panel (professor + education student + art student) vs. the panel's
+  own "teaching-practitioner, not unfamiliar with the education context" bar (PDF §XIII). Confirm the education/
+  art students clear that bar, or adjust composition. Distinct from the still-open panel-*size* / CVI / α
+  question above (`action_checklist.md` B8/B9).
 
 > The **dataset rule is now decided** (§0.7) — no longer deferred. What remains is *propagation*
 > (state "donated child writing + researcher labels" wherever datasets are described, and scrub any
 > "researchers created the stories" phrasing) — that's session work, not an owner-call.
+
+12. **Reflection reinstatement reversed, auto-approve re-confirmed deferred (2026-07-21).** A drift sweep
+    (Session 8's grep list, run ahead of schedule) surfaced that ADR-021's text said reflections were
+    "reinstated" (2026-07-20) while this roadmap's item 11 said the owner had decided to defer them —
+    a direct contradiction, not just lag. **Owner resolved 2026-07-21: no peer-visible reflections at
+    all — only the storybook itself is peer-visible.** ADR-021 rewritten in place (gallery is
+    display-only, no reflection/comment/scoring surface); ADR-017's auto-approve clause rewritten to
+    match item 10 (manual review only, no toggle — the gap `§4` flagged as still-open is now closed,
+    including the second stale instance in ADR-021 point 1 that `§4` didn't list). Propagated to
+    `ethics_and_safety.md`, `PRD_v2.md`, `USER_FLOW.md`, `ROUTE_MAP.md`, `ROADMAP.md`,
+    `RESEARCH_PROTOCOL.md`, `methodology.md`, `research_direction_and_goals.md`, `system_architecture.md`
+    — all now describe a display-only gallery, no reflection route/schema field/moderation tier. The
+    RQ5 comprehension instrument's third question ("what can you say about the story?") survives
+    unchanged — it was never actually served by the product feature (`RESEARCH_PROTOCOL.md`'s stale
+    "(ADR-021)" citation on that question was removed).
+    Same pass also fixed pre-existing, unrelated drift found by the same sweep: `MASTER_SPEC.md` (never
+    in any session's file scope) still described the dropped pipeline-ON/OFF ablation as live in three
+    places (`eval.condition`, the Tier-B metric list, the `ablation-switch`/`peer-reflection`/`story-map`
+    spec-index entries); `system_architecture.md` cited the same dead ablation as its LangGraph
+    justification; `AGENTS.md` (outside Session 1's file scope, which only covered root `CLAUDE.md`)
+    still had the flat "No fine-tuning (ADR-016)" line with no ADR-018 judge exception; `ADRs.md`
+    ADR-006's Decision text still asserted the pre-pivot parent-account model as current.
 
 ## 4. Pre-existing, unrelated drift (noticed, not part of this pivot)
 

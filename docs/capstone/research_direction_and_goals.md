@@ -131,10 +131,11 @@ supporting.** RQ2 (the pipeline ON-vs-OFF ablation) is **dropped** — see ADR-0
 Output quality is evaluated **directly on the generated books**, not by an ON-vs-OFF ablation (dropped —
 ADR-008):
 
-- **Expert panel + ISO/IEC 25010 (RQ3).** 1 professor + 1 education student + 1 art student rate the
-  storybooks, illustrations, and story consistency with feature-level rubrics, folded into an ISO/IEC 25010
-  frame. This is the panel-requested "evaluate the generated outputs" leg — outputs, not internal pipeline
-  components.
+- **Expert panel (RQ3).** 1 professor + 1 education student + 1 art student rate the storybooks,
+  illustrations, and story consistency with feature-level rubrics (Instrument A). This is the
+  panel-requested "evaluate the generated outputs" leg — outputs, not internal pipeline components.
+  RQ3's usability dimension is measured separately, by the ISO/IEC 25010 software-quality questionnaire
+  (Instrument D) administered to IT practitioners and teachers — never by this panel.
 - **AI-performance assessment of the judge (RQ6).** The study's primary comparative study; full treatment
   in §2's judge paragraph, ADR-018, and `docs/specs/judge-finetune.md`.
 
@@ -211,8 +212,8 @@ self-sufficiency exists to prevent. Splitting the submission is the fix.
 
 - **Stage 1 — story donation.** Children write stories. They never touch the system. Anonymized text, nothing
   about the child. Narrow, low-risk, comparatively fast. *Unblocks the entire research track.*
-- **Stage 2 — system use.** Children use StoryBuddy, read classmates' books, write reflections. Interactive,
-  peer-visible, child-authored content. Materially heavier review. *Gates Tier 2 only.*
+- **Stage 2 — system use.** Children use StoryBuddy and read classmates' books in the display-only gallery.
+  Interactive, peer-visible, child-authored content (their own storybook). Materially heavier review. *Gates Tier 2 only.*
 
 > **The Stage-1 consent form must state that donated stories may be used to build and evaluate an AI model.**
 > The donated story becomes illustrations, researchers label those illustrations, and those labels become
@@ -275,7 +276,7 @@ an apology.**
 reference (≤ 2 canonical references) · three style presets · Prompt Optimizer · Image Generator
 (Qwen-Image-Edit) · prompted VLM consistency judge + targeted regeneration · moderation stack (input text,
 output images, Filipino PII redaction) · slide composer with expressive TTS narration (Chatterbox) · PDF export ·
-teacher-gated classroom sharing with peer reflection.
+teacher-gated, display-only classroom sharing.
 
 **Permanently excluded:** public sharing. All sharing is classroom-scoped and teacher-gated.
 

@@ -167,8 +167,9 @@ clearance for the heavier, interactive child-facing study. Splitting the submiss
 work. Anonymized text is collected; nothing about the child is. Narrow, low-risk, comparatively fast. This
 stage unblocks the entire research track.
 
-**Stage 2 — system use.** Children use StoryBuddy, read classmates' books, and write reflections.
-Interactive, peer-visible, child-authored content; a materially heavier review. It gates Tier 2 only.
+**Stage 2 — system use.** Children use StoryBuddy and read classmates' books in the display-only gallery.
+Interactive, peer-visible, child-authored content (their own storybook); a materially heavier review. It
+gates Tier 2 only.
 
 > **The Stage-1 consent form states that donated stories may be used to build and evaluate an AI model.**
 > The donated story is turned into illustrations, researchers label those illustrations, and those labels
@@ -190,7 +191,7 @@ fine-tune.* Everything after `images` takes a weekend. Everything before it take
 Recruited as naive readers and blind raters; no expertise in generative modelling is required or desired.
 
 **Tier 2 — children (N ≈ 8–15). Enrichment; may slip without sinking the study.** Grade 5–6 students who
-write stories in the system, read classmates' books, and answer reflection prompts.
+write stories in the system and read classmates' books in the display-only gallery.
 
 Recruitment order, by speed: private school (principal's discretion) → tutoring or learning centre →
 parent-recruited convenience sample. A public school requires a Schools Division Office permit and is the
@@ -340,8 +341,7 @@ protocol:
 4. **Adjudication.** Disagreements on real data are resolved by a third researcher, and the adjudication rate
    is reported.
 5. **Drift check.** Agreement is recomputed midway through scoring. Raters relax over long sessions.
-6. **Blinding.** No rater ever sees the condition (ON/OFF), and no rater sees the story text before scoring a
-   comprehension response.
+6. **Blinding.** No rater sees the story text before scoring a comprehension response.
 
 The final inter-rater reliability on the real data is **reported alongside every human measure.** A measure
 without its α is not a measure.

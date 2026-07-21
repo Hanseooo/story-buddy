@@ -82,7 +82,7 @@ Two independent projects, no shared root tooling — run commands from the named
 - Story Memory (`backend/contracts/`) is the only channel between pipeline modules — no ad-hoc dicts crossing module boundaries.
 - Every structured-output call is validated into the Pydantic schema, never used as a raw dict. On OpenRouter, always send `provider.require_parameters: true` — without it a routed provider silently downgrades `json_schema` to loose JSON mode (ADR-002).
 - **Only open-weight models** (ADR-015). Prefer Apache-2.0/MIT. Never adopt a FLUX.1-dev-based adapter (InstantCharacter, DreamO, UNO, ACE++, InstantID, PuLID) — their permissive wrapper licenses do not override the restrictive base.
-- **No fine-tuning** (ADR-016). If you think a LoRA is needed, you have found a trigger condition — surface it, don't build it.
+- **No fine-tuning except the consistency judge** (ADR-016, superseded by ADR-018). If you think a LoRA is needed anywhere else, you have found a trigger condition — surface it, don't build it.
 - Model vendors are named in `backend/providers.py` and nowhere else.
 - LangGraph nodes are deterministic; conditional edges exist only at moderation pass/fail and consistency pass/fail (ADR-003) — no autonomous-agent routing.
 - One pipeline module = one file in `backend/pipeline/`.

@@ -97,24 +97,15 @@ Whenever a table or list is empty, display a friendly placeholder:
 
 ---
 
-## 5. Student Flow: Reflection & Classroom Gallery
+## 5. Student Flow: Classroom Gallery
 
-The child-facing Story Map is cut (ADR-021). Reflection is author-only, about the author's own book —
-never a classmate commenting on someone else's book.
+The child-facing Story Map is cut (ADR-021). The gallery is **display-only** — the approved storybook is
+the only peer-visible artifact; there is no reflection, comment, or scoring surface of any kind.
 
-1. **Reflection Prompt (own book, if enabled):**
-   - After their own book is approved, if the teacher has toggled a fixed reflection question on for this
-     book/classroom, a **Bottom Sheet** slides up on the author's own book with the question.
-   - Example: "What valuable lesson did you learn?" (Textarea grows as they type). One author, one fixed
-     question, one typed answer — never free-form, never classmate-to-classmate.
-2. **Submission:**
-   - Routed through the input moderation + PII gate, at the heavier peer-visible-content review tier
-     (`RESEARCH_PROTOCOL.md`) since the answer becomes classroom-visible.
-   - The answer is shown alongside the book in the classroom gallery.
-3. **Classroom Gallery:**
-   - Classmates browse and read approved books — and any attached reflection answer — via a vertical feed
-     of large cards (Mobile) or masonry grid (Desktop). Reading is the only peer interaction; there is no
-     reply, comment, or scoring surface.
+1. **Classroom Gallery:**
+   - Classmates browse and read approved books via a vertical feed of large cards (Mobile) or masonry
+     grid (Desktop). Reading is the only peer interaction; there is no reply, comment, reflection, or
+     scoring surface.
 
 ---
 

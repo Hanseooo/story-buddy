@@ -45,7 +45,7 @@ The process is modeled as a directed graph with explicit nodes:
 6. **Compose & Export:** Assembles the approved scenes, renders the final HTML template, and exports to PDF.
 
 **Why Not Autonomous Agents?**
-Autonomous orchestrator agents introduce non-determinism, unpredictable loops, and high costs. A fixed LangGraph state machine ensures debuggability, bounds worst-case generation costs, and is critically important for the academic ablation study (comparing the pipeline turned "ON" vs. "OFF" under controlled conditions).
+Autonomous orchestrator agents introduce non-determinism, unpredictable loops, and high costs. A fixed LangGraph state machine ensures debuggability, bounds worst-case generation costs, and keeps the pipeline's behavior reproducible for the eval harness (RQ1, RQ3–RQ6).
 
 **The Frozen Data Contract:**
 Every node communicates through a strictly versioned Pydantic model (`StoryMemory`). Enforcing strict JSON-schema structured output ensures that LLMs cannot inject malformed data that could derail downstream pipeline steps.
@@ -78,4 +78,4 @@ Standard metrics like CLIP image embeddings fail at evaluating non-human and sty
 - **Targeted Regeneration:** These reasons feed back into the prompt for exactly one retry, making regeneration purposeful rather than a random re-roll, maximizing the chance of producing a consistent character.
 
 ### Teacher-Gated Setting over Public Networks
-The system inherently rejects a public "social network" model. By tightly scoping sharing features to the classroom and placing the teacher as the mandatory reviewer for published storybooks, StoryBuddy complies with strict data privacy laws for minors while enabling a safe environment for peer reflection—a key instrument in measuring reader comprehension for the study.
+The system inherently rejects a public "social network" model. By tightly scoping sharing features to the classroom and placing the teacher as the mandatory reviewer for published storybooks, StoryBuddy complies with strict data privacy laws for minors. The classroom gallery is display-only — the approved storybook is the only peer-visible artifact.

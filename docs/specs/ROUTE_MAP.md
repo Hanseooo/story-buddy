@@ -55,9 +55,8 @@ by the child), just not the Supabase Auth session teachers use — session is es
 | `/s/[profileId]/process/[jobId]` | Processing view | Client | **Full-screen** — no nav. Staged progress via Supabase Realtime |
 | `/s/[profileId]/process/[jobId]/reveal` | Character reveal | Client | Shows moderated canonical character ref(s). Confirm / "try again" |
 | `/s/[profileId]/book/[bookId]` | Storybook reader | Client | **Immersive full-screen**. Image + caption + narration. Next/prev |
-| `/s/[profileId]/book/[bookId]/reflect` | Reflection (own book) | Client | Shown only if the teacher toggled a question on for this book. Author types a short answer about their own book — never shown on a classmate's book |
-| `/s/[profileId]/gallery` | Classroom gallery | Client | Browse & read classmates' approved books |
-| `/s/[profileId]/gallery/[bookId]` | Peer book reader | Client | Same reader component, but for a classmate's book. Read-only — no reflection here |
+| `/s/[profileId]/gallery` | Classroom gallery | Client | Browse & read classmates' approved books. Display-only — no reflection surface |
+| `/s/[profileId]/gallery/[bookId]` | Peer book reader | Client | Same reader component, but for a classmate's book. Read-only |
 | `/s/[profileId]/settings` | Student account settings | Client | Change password. No email, no self-serve recovery — reset otherwise is teacher-initiated |
 
 ---
@@ -115,8 +114,7 @@ app/
 │       │   │   ├── page.tsx            # /s/[profileId]/process/[jobId]
 │       │   │   └── reveal/page.tsx     # /s/[profileId]/process/[jobId]/reveal
 │       │   └── book/[bookId]/
-│       │       ├── page.tsx            # /s/[profileId]/book/[bookId]
-│       │       └── reflect/page.tsx    # /s/[profileId]/book/[bookId]/reflect — own book only
+│       │       └── page.tsx            # /s/[profileId]/book/[bookId]
 │       │
 │       └── (immersive)/layout.tsx      # (same as above — listed for clarity)
 ```
@@ -156,7 +154,7 @@ app/
 
 | Breakpoint | Nav component | Position | Items |
 |---|---|---|---|
-| All | `GhostBackButton` (conditional) | Top-left, absolute, semi-transparent | Single ← button. Only shown on write, process, and reflect pages. Hidden on book reader (uses in-content controls) |
+| All | `GhostBackButton` (conditional) | Top-left, absolute, semi-transparent | Single ← button. Only shown on write and process pages. Hidden on book reader (uses in-content controls) |
 | All (book reader only) | `ReaderControls` | Overlay on tap / bottom fixed | Next/prev tap zones (left/right 30%), page indicator, play/pause narration, close (×) |
 
 ---
@@ -246,9 +244,8 @@ Use `motion` (Framer Motion) for page transitions. Respect `prefers-reduced-moti
 | `/s/[pid]/process/[jobId]` | `/s/[pid]` | N/A (job continues) | **Yes** — "Your book is still being made!" | Job runs regardless; user can return later |
 | `/s/[pid]/process/[jobId]/reveal` | `/s/[pid]/process/[jobId]` | Yes | No | Can go back to re-see progress |
 | `/s/[pid]/book/[bookId]` | `/s/[pid]` | Yes (page position) | No | Returns to bookshelf |
-| `/s/[pid]/book/[bookId]/reflect` | `/s/[pid]/book/[bookId]` | **No** — draft lost | **Yes** — if text entered | Own book only; hidden entirely if the teacher hasn't toggled a question on |
 | `/s/[pid]/gallery` | `/s/[pid]` (via tab) | Yes | No | Lateral tab switch |
-| `/s/[pid]/gallery/[bookId]` | `/s/[pid]/gallery` | Yes | No | Read-only — no reflection action on a classmate's book |
+| `/s/[pid]/gallery/[bookId]` | `/s/[pid]/gallery` | Yes | No | Read-only, display-only |
 | `/s/[pid]/settings` | `/s/[pid]` | No | Unsaved changes → confirm dialog | Password change |
 
 ---
@@ -269,7 +266,6 @@ Which routes must be shareable/bookmarkable (copy-paste URL into another tab and
 | `/s/[pid]/book/[bookId]` | ⚠️ Partial | — | Same — requires active session. **Not shareable outside the app** (by design: no public sharing, ADR-017) |
 | `/s/[pid]/write` | ❌ No | — | Wizard state is ephemeral |
 | `/s/[pid]/process/[jobId]` | ⚠️ Partial | — | Can return to a running/completed job if session is active |
-| `/s/[pid]/book/[bookId]/reflect` | ❌ No | — | Reflection form is ephemeral; own book only |
 
 ### URL design rules
 - **No PII in URLs.** `profileId` is a UUID, not a name. Classroom codes are random alphanumeric.
@@ -298,7 +294,6 @@ Every route group gets a `loading.tsx` that renders before the page component hy
 | **Character Reveal** | Centered card skeleton with image placeholder (1:1 aspect) + 2 button skeletons below | Shimmer | Nunito |
 | **Book Reader** | Full-screen: image placeholder (top 60%) + 2 text-line skeletons (bottom) + page indicator dot | Fade in | — |
 | **Gallery** | Masonry grid (desktop) / vertical stack (mobile) of 4 book-card skeletons | Shimmer | Nunito |
-| **Reflection** (own book) | Book thumbnail skeleton + 1 textarea skeleton | Pulse | Nunito |
 
 ### Loading state rules
 1. **Skeletons match content shape** — reserve exact layout space to prevent CLS (DESIGN.md §5).
@@ -336,7 +331,6 @@ Each route group also gets an `error.tsx`:
 /login                                      Login (public, teacher/BEED student)
 /s/[profileId]                              Student bookshelf (student)
 /s/[profileId]/book/[bookId]                Storybook reader (student)
-/s/[profileId]/book/[bookId]/reflect        Reflection, own book only (student)
 /s/[profileId]/gallery                      Classroom gallery (student)
 /s/[profileId]/gallery/[bookId]             Peer book reader, read-only (student)
 /s/[profileId]/process/[jobId]              Processing view (student)
@@ -370,7 +364,7 @@ Each route group also gets an `error.tsx`:
 ### Linked ADRs / PRD sections
 - **ADR-005** — Job checkpointing drives the `/process/[jobId]` route's resume behavior
 - **ADR-006, ADR-017** — RLS + classroom scoping drives the protection matrix
-- **ADR-021** — Author-answered reflection routing (own book only) and teacher-toggled fixed questions
+- **ADR-021** — Display-only gallery routing; no reflection surface
 - **PRD §7** — User flow steps 1–14 map to routes 1:1
 - **PRD §9** — Divergent design registers (kid vs teacher)
 - **MASTER_SPEC §4** — Rendering strategy (SSR landing, client everything else)

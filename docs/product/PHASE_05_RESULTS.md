@@ -41,7 +41,7 @@ uv run python -m spikes.phase_05 consistency
 uv run python -m spikes.phase_05 tally
 ```
 
-**Pass condition — both must hold, on the `gouache` preset only:**
+**Pass condition — both must hold, on the `comic` preset only:**
 
 | | Threshold |
 |---|---|
@@ -73,21 +73,31 @@ Inter-rater agreement (κ): ______  ← this is also a dress rehearsal of the Ph
 
 ### Secondary arm — style presets (ADR-022, **does not gate**)
 
-Quill through all three presets, ON only. Second rater column: *"does this read as a
-hand-illustrated children's book, or as AI art?"*
+> **Revised 2026-07-21, before any probe ran.** The preset set is re-authored to `cel` / `comic` /
+> `gouache` (was `gouache` / `ink` / `watercolour`); `watercolour` is dropped — soft bleeding edges
+> dissolve an invented silhouette, the fragile case. All three are now strong-line + flat-fill (the
+> consistent family), because the shipped book is expert-scored on character consistency (ADR-008
+> Leg 1). **`comic` is `PRIMARY`** — the representative-middle substrate: line-forward enough to hold
+> identity, but textured enough (ben-day halftone) that the no-reference OFF baseline can't reproduce
+> the character by luck, so the separation gate stays honest. `cel` (the flagship default kids see
+> first) and `gouache` are validated for identity in the non-gating secondary arm.
+
+Quill through all three presets, ON only. Second rater column: *"does this read as an intentionally
+hand-drawn illustration, or as generic AI art?"*
 
 **Prediction, recorded before the run.** From ADR-022's tension — *texture defeats the AI look, but line
-and silhouette are what hold identity.* `ink` has the strongest line, so it should score highest on identity
-and lowest on handmade. `watercolour` has the softest edges, so it should invert: highest handmade, and it is
-**the preset most at risk of losing Quill**, because bleeding edges dissolve a silhouette. `gouache` sits
-between them; that is why it is `PRIMARY`. A result that contradicts this is a finding about the substrate,
-not a scoring error — record it rather than explaining it away.
+and silhouette are what hold identity.* `cel` has the strongest, cleanest line and the flattest fill, so it
+should score highest on identity; its anti-AI-slop signal is the deliberate flat-cartoon look, not paper
+grain. `comic` adds ben-day halftone, so it should read as the most deliberately *drawn*. `gouache` has the
+softest fill and visible paper grain, so it should score warmest, and is now **the preset most at risk of
+losing Quill**. A result that contradicts this is a finding about the substrate, not a scoring error —
+record it rather than explaining it away.
 
-| Preset | identity (ON) | reads-as-handmade | Verdict |
+| Preset | identity (ON) | reads-as-drawn | Verdict |
 |---|---|---|---|
+| `cel` | | | |
+| `comic` | | | |
 | `gouache` | | | |
-| `ink` | | | |
-| `watercolour` | | | |
 
 Neither number gates Phase 1. But **a preset that cannot hold an invented chimera, or that reads
 as generic AI art, is re-authored or dropped before a child sees it** — that is the binding

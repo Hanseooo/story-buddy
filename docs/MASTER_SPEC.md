@@ -136,8 +136,8 @@ between every module. It is authoritative and versioned. Rules:
 - Schema change = contract change: update schema + affected specs + every consumer, one change.
 - The judge verdict is **reason-then-score**: `differences_observed` is declared *before*
   `same_character`. Field order is load-bearing, not cosmetic (ADR-004 amendment).
-- `eval.condition` (`pipeline_on | pipeline_off`) and `eval.seed` drive the ablation (§6, ADR-008).
-  Seed reproducibility is **provider-specific and must be empirically verified** (CC-7, Phase 0.5).
+- `eval.seed` drives reproducibility (§6, ADR-008). Seed reproducibility is **provider-specific and must
+  be empirically verified** (CC-7, Phase 0.5).
 
 Freeze the schema's *shape* before Phase 1 (ROADMAP dependency map). Field-level detail is
 finalized in the Story Memory feature spec, which is the first spec written.
@@ -223,8 +223,8 @@ Everything with one right answer, **with every `providers.py` call mocked**:
 
 **Tier B — Eval harness (offline, real models, on demand — never CI).**
 The only place fuzzy quality is measured, on the real/realistic story corpus (PRD §10):
-- Scene-selection quality (RQ1), consistency (RQ2 ablation pipeline-ON vs -OFF), acceptability (RQ3),
-  under-length grace (RQ4), VLM–human agreement.
+- Scene-selection / Story-Completeness (RQ1), acceptability (RQ3), under-length grace (RQ4), naive-reader
+  recall (RQ5), judge fine-tune vs. zero-shot baseline (RQ6), VLM–human agreement.
 - **Is the same instrumentation as the Phase 3 study** (LangSmith/Langfuse) — build once, use for
   both dev feedback and research data. Costs money and is non-deterministic; that's why it's not CI.
 
@@ -243,9 +243,9 @@ mark done. Behavior change later → update the spec in the same change (CLAUDE.
 | Phase | Specs to write |
 |---|---|
 | 1 (core) | `story-memory-contract`, `story-analyzer`, `scene-segmentation`, `character-bible`, `style-presets`, `prompt-optimizer`, `image-generator`, `consistency-checker`, `regeneration-controller` |
-| 2 (safety/classroom) | `moderation-stack`, `filipino-pii-recognizers`, `self-refusal-fallback`, `length-guard`, `auth-and-classroom`, `teacher-dashboard`, `classroom-sharing`, `peer-reflection`, `story-map`, `narration`, `export-pdf`, `rate-limiting`, `data-deletion`, `kid-flow-ui` |
+| 2 (safety/classroom) | `moderation-stack`, `filipino-pii-recognizers`, `self-refusal-fallback`, `length-guard`, `auth-and-classroom`, `teacher-dashboard`, `classroom-sharing` (display-only gallery — no `peer-reflection`/`story-map`, both cut per ADR-021), `narration`, `export-pdf`, `rate-limiting`, `data-deletion`, `kid-flow-ui` |
 | 2.5 (fine-tune) | ✅ `judge-finetune` *(written)* |
-| 3 (eval) | `ablation-switch`, `tier1-rating-harness`, `comprehension-instrument`, `tier2-fun-toolkit`, `metrics-export` |
+| 3 (eval) | `tier1-rating-harness`, `comprehension-instrument`, `tier2-fun-toolkit`, `metrics-export` |
 
 `story-memory-contract` is written **first** — it freezes §3 for everything downstream.
 The **failure-reason taxonomy** (`judge-finetune` §4) is shared by `regeneration-controller` and the

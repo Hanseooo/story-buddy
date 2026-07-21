@@ -72,7 +72,7 @@ That is the SDG-4 hook, and it is a design property, not a hope.
 | RQ | Question | Tier | Instrument |
 |---|---|---|---|
 | RQ1 | How accurately does the system identify key scenes from child-written stories? | 1 | Story Completeness vs. annotated major plot points |
-| RQ3 | How acceptable are the generated outputs (coherence, consistency, illustration quality, usability)? | 1 | Expert-panel + ISO/IEC 25010 output-quality ratings, feature-level; usability is measured separately, via the ISO/IEC 25010 evaluator questionnaire (methodology §6.4), never by the expert panel |
+| RQ3 | How acceptable are the generated outputs (coherence, consistency, illustration quality, usability)? | 1 | Expert-panel feature-level ratings (Instrument A) for coherence/consistency/illustration quality; usability is measured separately via the ISO/IEC 25010 evaluator questionnaire (Instrument D, methodology §6.4), administered to IT practitioners and teachers — never by the expert panel |
 | RQ4 | How gracefully does the system handle **under-length** stories without inventing content? | 1 | Scene-count floor behavior on short corpus items |
 | RQ5 | Can a naive reader recover the author's characters and events from the generated book alone? | 1 (adults) | Single-arm naive-reader recall vs. RQ1's plot points; two raters, Cohen's κ |
 | **RQ6** | Does fine-tuning an open VLM judge improve agreement with humans over the un-fine-tuned base — and does the improvement concentrate on **non-human** characters? | — | **Primary comparative study** — pre-registered superiority test on held-out ΔF1 (`different_character`) vs. **zero-shot Qwen2.5-VL-7B**; McNemar + character-clustered bootstrap CI. Prompted Gemma-27B is a reported secondary and the **product** gate, not the research gate (ADR-018 amendment a, `docs/specs/judge-finetune.md` §7) |
@@ -90,10 +90,11 @@ never improvised.
 Output quality is evaluated **directly on the generated books**, not by an ON-vs-OFF ablation (dropped —
 ADR-008):
 
-- **Expert panel + ISO/IEC 25010 (RQ3).** 1 professor + 1 education student + 1 art student rate the
-  storybooks, illustrations, and story consistency with feature-level rubrics, folded into an ISO/IEC 25010
-  frame. This is the panel-requested "evaluate the generated outputs" leg — outputs, not internal pipeline
-  components.
+- **Expert panel (RQ3).** 1 professor + 1 education student + 1 art student rate the storybooks,
+  illustrations, and story consistency with feature-level rubrics (Instrument A). This is the
+  panel-requested "evaluate the generated outputs" leg — outputs, not internal pipeline components.
+  RQ3's usability dimension is measured separately, by the ISO/IEC 25010 software-quality questionnaire
+  (Instrument D) administered to IT practitioners and teachers — never by this panel.
 - **AI-performance assessment of the judge (RQ6).** The study's primary comparative study — fine-tuned
   Qwen2.5-VL-7B vs. its baselines on a human-labeled, character-disjoint held-out set. Full treatment in
   ADR-018 and `docs/specs/judge-finetune.md`.
@@ -115,9 +116,8 @@ story completeness, plus the RQ5 comprehension instrument. **Inter-rater reliabi
 - **Story fidelity item** (author-only): "Did the book tell the story you wanted to tell?"
 - ~~**Peer comprehension**, in-app: the same RQ5 instrument, answered by classmates.~~ **Cut as an RQ5
   instrument (ADR-008/ADR-021, 2026-07-20).** RQ5 is now a single-arm naive-reader recall measure scored on
-  Tier-1 adult readers (§7, ADR-008), so the in-app peer-comprehension instrument isn't needed. The gallery's
-  reflection questions (ADR-021, reinstated 2026-07-20) are a **product UX feature** — author answers a fixed
-  question about their own book — not this comprehension instrument.
+  Tier-1 adult readers (§7, ADR-008), so the in-app peer-comprehension instrument isn't needed. The gallery
+  is display-only (ADR-021, revised 2026-07-21) — there is no in-product reflection surface at all.
 - **Behavioral logging** (more reliable than child self-report): completion rate, time-on-task, spontaneous
   second-story starts, "try again" frequency. Watch the novelty confound — repeat use *within* a session
   matters more than first-reaction delight. The child operates the app directly (ADR-017, reversed
@@ -132,8 +132,8 @@ A reader who has **never seen the story text** is given the book alone, then ask
 
 1. **Who was the story about?** (free recall of characters)
 2. **What happened?** (free recall of events)
-3. *What did you learn / what can you say about the story?* — reflective, not scored; it exists for the
-   author's benefit (ADR-021) and as a qualitative source.
+3. *What did you learn / what can you say about the story?* — reflective, not scored; retained as a
+   qualitative source.
 
 Scoring: recalled characters and events are matched against the **human-annotated major plot points** —
 **the same annotation RQ1 already requires.** One annotation, two uses. **Plot-point recall is the
@@ -255,8 +255,9 @@ session structure, instruments) into the Stage-1 submission** or file it in the 
 otherwise "Tier 1 stands alone" still has an unfiled dependency, which is the same deadlock the
 two-stage split exists to prevent.
 
-**Stage 2 — system use.** Children use StoryBuddy, read classmates' books, write reflections. Interactive,
-peer-visible, child-authored content. A materially heavier review. **Gates:** Tier 2 only.
+**Stage 2 — system use.** Children use StoryBuddy and read classmates' books in the display-only gallery.
+Interactive, peer-visible, child-authored content (their own storybook). A materially heavier review.
+**Gates:** Tier 2 only.
 
 **Both stages require guardian informed consent *and* age-appropriate child assent** (PH Data Privacy Act
 2012 + the university ethics board). Removing parental controls from the *product* (ADR-017) did not remove
