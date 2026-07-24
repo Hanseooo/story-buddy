@@ -19,8 +19,8 @@ final defense (~4–5 months out).
 |---|---|---|---|---|
 | **R1** | Ablation is a 3-component *bundle* presented as a single-variable test | — | — | **MOOT (2026-07-20)** — the RQ2 ablation itself is dropped (ADR-008, roadmap §0.1). No arms exist to bundle. |
 | **R2** | RQ5 (outcome of record) underpowered; no RQ5-specific power analysis | High | After Phase 0.5 (needs effect size) | **Reframed (2026-07-20)** — no more between-arm comparison; the open question is now the precision of a single-arm recall-rate estimate. Still blocked on Phase 0.5; (b)'s multi-book-per-reader recommendation still stands. |
-| **R3** | RQ5 primary outcome (plot recall) may be blind to the fix (character identity) | High | Before pre-registration sign-off | **Resolved (2026-07-20)** — owner decision: plot recall stays primary, character recovery is secondary. RQ5 is a supporting measure (Objective 3), not the study's headline (RQ6), so the residual risk below is accepted rather than engineered around. `RESEARCH_PROTOCOL.md` §7, `ADR-008`, and `research_direction_and_goals.md` now state this explicitly. |
-| **R4** | RQ6 (fine-tune) is load-bearing but 4 hops past a months-long ethics gate | High | Ethics Stage 1 submission (now) | **Reframed (2026-07-20)** — RQ6 is now the primary study and can no longer be de-scoped away (superseding this item's part 2). The timeline risk is instead handled by the October/type-A defense split: a pilot RQ6 run on fixtures ships in October, full corpus results follow after Stage 1 (roadmap §0.8). Part 1 (submit Ethics Stage 1 now) still stands. |
+| **R3** | RQ5 primary outcome (plot recall) may be blind to the fix (character identity) | High | Before pre-registration sign-off | **Resolved (2026-07-20)** — owner decision: plot recall stays primary, character recovery is secondary. RQ5 is one of Objective 3's two output measures (with RQ6 demoted, there is no headline comparative study behind it), so the residual risk below is accepted rather than engineered around. `RESEARCH_PROTOCOL.md` §7, `ADR-008`, and `research_direction_and_goals.md` now state this explicitly. |
+| **R4** | RQ6 (fine-tune) is load-bearing but 4 hops past a months-long ethics gate | High | Ethics Stage 1 submission (now) | **Demoted (2026-07-21)** — the fine-tune-vs-baseline *comparison* is dropped for the October timeline; the judge is still fine-tuned and its results reported *descriptively*. Supersedes the 2026-07-20 "RQ6 = primary comparative study" reframing; recorded in **ADR-008, revised 2026-07-22**, and propagated across the capstone docs. Ethics Stage 1 submission still stands. |
 | **R5** | Novelty/gap claim has a thin related-work moat; one sub-claim was falsifiable | Medium | Before final defense | Partially fixed |
 | **R6** | Unverified arXiv citations + gap-claim overstatement in *frozen* docs | Medium | Before any Word export | Action list ready |
 | **R7** | RQ5's "naive reader" reads the story text via verbatim captions — the recall outcome is contaminated | High | Before pre-registration sign-off | **Owner-accepted (image-only sessions, 2026-07-13)** — still stands post-pivot; drafted into `RESEARCH_PROTOCOL.md` §7; pending adviser |
@@ -102,8 +102,8 @@ can be decided now. Needs adviser sign-off (changes pre-registration). Not yet a
 
 **Status: resolved (2026-07-20) — owner decision.** Plot-point recall stays RQ5's primary outcome;
 character recovery is scored as a secondary/confirmatory outcome, not co-primary. Rationale: RQ5 sits
-inside Objective 3 as a supporting fidelity measure — the study's headline is RQ6 (judge fine-tune) —
-so the residual risk described below is accepted as a stated limitation rather than resolved by
+inside Objective 3 as one of its two output measures, alongside the expert panel (with RQ6 demoted there is
+no headline comparative study for RQ5 to sit behind — R4, ADR-008 revised 2026-07-22) — so the residual risk described below is accepted as a stated limitation rather than resolved by
 re-weighting a secondary instrument. `RESEARCH_PROTOCOL.md` §7, `ADR-008`, and
 `research_direction_and_goals.md` now all state plot-primary/character-secondary explicitly.
 
@@ -128,18 +128,35 @@ Still worth a one-line mention to the adviser for the record, but not blocking.
 
 ## R4 — RQ6 (the fine-tune) is load-bearing but the most timeline-fragile piece
 
-**Status: reframed (2026-07-20).** RQ6 is now the study's **primary comparative study** (ADR-008,
-roadmap §0.2) — the old part-2 recommendation, "build a de-scope position where RQ2+RQ5 stand alone and RQ6
-is the droppable reach piece," is now backwards: RQ2 is gone, so RQ6 *is* the spine, not a reach contribution
-to retreat from. The timeline risk this item worried about is real and still open, but it's now handled by a
-scope split rather than a de-scope option:
+**Status: DEMOTED (2026-07-21) — owner decision.** To fit the October capstone deadline, the
+**fine-tuned-vs-baseline comparison is dropped as a research claim.** The judge is **still fine-tuned** (the
+one sanctioned LoRA, ADR-016→018) and its performance is **reported descriptively** — its agreement with human
+labels on the character-disjoint held-out set — with no "fine-tuned beats prompted/base" claim. For that
+descriptive number to be trustworthy, the human labels still need inter-rater reliability reported and the
+held-out set read once. **This reverses the 2026-07-20 reframing below** (and `scope_revision_roadmap.md`
+§0.2), which had made RQ6 the study's *primary comparative study*. Consequence: **Objective 4 is now ISO/IEC
+25010 software quality**, not the judge comparison (`research_direction_and_goals.md` §Objectives). The study
+therefore has **no primary comparative study** and makes no causal or comparative claim at all. ADR-008 was
+revised **2026-07-22** to record this, and the demotion has been **propagated** across `methodology.md` §7.3,
+`research_direction_and_goals.md` §Objectives/§3, `value_proposition.md`, `research_instruments.md`,
+`action_checklist.md`, `model_finetuning.md`, and `scope_revision_roadmap.md`. **ADR-018's δ = 3
+non-inferiority gate is unaffected** — it is a *deployment* gate (does the fine-tuned judge replace the
+prompted incumbent in the product), not a reported finding. The superseded reframing is retained below for the
+record.
+
+**Status: reframed (2026-07-20) — SUPERSEDED by the 2026-07-21 demotion above; retained for the record.**
+The 2026-07-20 position made RQ6 the study's **primary comparative study** (ADR-008 as then written,
+roadmap §0.2) — on that reading the old part-2 recommendation, "build a de-scope position where RQ2+RQ5 stand
+alone and RQ6 is the droppable reach piece," was backwards: RQ2 was gone, so RQ6 *was* the spine, not a reach
+contribution to retreat from. The timeline risk this item worried about is real and still open, and it is
+handled by a scope split rather than a de-scope option — this part survives the demotion:
 
 - **October is a technical (type-A) defense**, requiring a working system + pre-registered methodology +
   **pilot results**, not completed corpus-gated results (roadmap §0.8). The October deliverable is a **pilot
   RQ6 run on fixture stories**, explicitly labeled illustrative/demonstration, never presented as findings.
   Full corpus RQ6 results land after October, behind Ethics Stage 1.
-- This is what makes RQ6-primary survivable despite being the most timeline-fragile piece: the piece that's
-  load-bearing for October is fixture-gated, not corpus-gated.
+- This is what made RQ6-primary survivable despite being the most timeline-fragile piece: the piece that's
+  load-bearing for October is fixture-gated, not corpus-gated. It still holds for the descriptive report.
 
 **Original problem (still accurate).** RQ6 sits four hops past the long pole: *Ethics Stage 1 → corpus → a
 Phase 1 run → image-pair labelling → train.* With the final defense ~4–5 months out (now dated: October 2026)

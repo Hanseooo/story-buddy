@@ -37,7 +37,7 @@ Several strict safeguards are implemented to prevent the model from learning sho
 
 ## 4. Evaluation Strategy
 
-The evaluation architecture explicitly separates the *research* question ("Did fine-tuning work?") from the *engineering* decision ("Should this judge replace the one in the product?"). 
+The evaluation architecture explicitly separates the *build* question ("Did fine-tuning work?") from the *engineering* decision ("Should this judge replace the one in the product?"). Neither is a research claim: per **ADR-008 (revised 2026-07-22)** the fine-tuned-vs-baseline comparison is **dropped as a research claim**, and what the paper reports is the fine-tuned judge's **agreement with human labels on the character-disjoint held-out set**, descriptively. Everything below is the build/deployment machinery that produces and gates that artifact. 
 
 ### 4.1 Baselines
 The fine-tuned model is evaluated against four strict baselines:
@@ -47,7 +47,8 @@ The fine-tuned model is evaluated against four strict baselines:
 4. **DINOv2 Cosine**: A stronger scientific control representing self-supervised instance identity embeddings. *(Note: While DINOv2 may be strong, it emits a scalar and cannot provide the categorical failure reasons required by the regeneration controller).*
 
 ### 4.2 Metrics
-- **Primary Metric:** $\Delta$F1 score on the `different_character` class (the minority class) measured on a held-out, human-labeled test set compared to the zero-shot base model. Success requires the 95% bootstrap confidence interval (resampled by character, not by pair) to exclude zero.
+- **Reported Metric (descriptive):** F1, precision, and recall on the `different_character` class on the held-out, human-labeled test set, with 95% bootstrap confidence intervals resampled by character, not by pair. This is what the paper reports.
+- **Build Metric:** $\Delta$F1 score on the `different_character` class (the minority class) measured on a held-out, human-labeled test set compared to the zero-shot base model. Success requires the 95% bootstrap confidence interval (resampled by character, not by pair) to exclude zero.
 - **Secondary Metrics:**
   - $\Delta$F1 against the prompted `gemma-3-27b-it` incumbent.
   - F1 performance on the **non-human character slice** (a core research contribution).
@@ -55,14 +56,16 @@ The fine-tuned model is evaluated against four strict baselines:
   - Latency and cost-per-call improvements.
   - Transfer evaluation on **DreamBench++** (descriptive only, as it consists of out-of-domain photographic subjects).
 
-### 4.3 Pre-Registered Claim Ladder and Deployment Gate
-To prevent moving goalposts, success is categorized into a pre-registered claim ladder:
+### 4.3 Pre-Registered Deployment Gate
+To prevent moving goalposts, the ship/no-ship decision is categorized into a pre-registered ladder. This is a **deployment/build gate, not a claim ladder** — none of the interpretations below appears in the paper as a finding (ADR-008 revised 2026-07-22; the δ = 3 non-inferiority gate itself is ADR-018 and is unaffected):
 
-| Rung | Condition | Claim | Ship to Production? |
+| Rung | Condition | Build interpretation (not a reported claim) | Ship to Production? |
 |---|---|---|---|
 | **A** | Beats base **and** beats prompted Gemma | Specialized 7B judge outperforms a prompted 27B incumbent in-domain, at lower latency. | **Yes** |
 | **B** | Beats base; within 3 F1 points of Gemma; no recall regression | Specialization recovers 27B-level quality at 7B. | **Yes** |
-| **C** | Beats base; loses to Gemma by > 3 F1 points | Fine-tuning worked, but the bottleneck is data, not capacity. (Honest negative result). | **No** (Keep prompted judge) |
+| **C** | Beats base; loses to Gemma by > 3 F1 points | Fine-tuning worked, but the bottleneck is data, not capacity. | **No** (Keep prompted judge) |
 | **D** | Does not beat base | The LoRA adapter did nothing. (A bug, not a result). | **No** (Debug) |
+
+Whichever rung lands, the paper reports the same thing: the shipped judge's agreement with human labels, and which judge the gate selected.
 
 If the model achieves Rung A or B, it is deployed behind **vLLM** on a scale-to-zero GPU container. Because vLLM is OpenAI-compatible, the application swap requires changing only two environment variables, making rollback instantaneous.

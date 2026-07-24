@@ -151,12 +151,19 @@ ADR-022 also **removes the optional style-anchor image** on provenance grounds.
 
 ## ADR-008 — Evaluation: two-leg output evaluation (expert panel + ISO-25010) and RQ6 judge assessment
 
-**Status:** Accepted · **revised 2026-07-20** — the pipeline-ON-vs-OFF comparative ablation (RQ2) is
-**dropped** as the study spine; **RQ6 (fine-tuned judge vs. baseline) becomes the primary comparative
-study**, and generated-output quality is evaluated by an **expert panel + ISO/IEC 25010** rather than by
-causal ablation. This supersedes the 2026-07-10 amendment's ablation framing; the RQ5 answer-key
-mechanism and the "no learning-gains" caution survive, re-specified below. Driver: the October scope
-pivot (`scope_revision_roadmap.md` §0).
+**Status:** Accepted · **revised 2026-07-22** — supersedes the 2026-07-20 revision's promotion of RQ6.
+The judge fine-tune is **kept and reported descriptively**; the **fine-tuned-vs-baseline comparison is
+dropped as a research claim**, so the study has **no primary comparative study** at all. Objective 4
+becomes **ISO/IEC 25010 software quality**. Driver: the October timeline
+(`evaluation_instruments_brief.md` §6, `design_decisions_and_risks.md` R4).
+
+> **Revision history.** *2026-07-20:* the pipeline-ON-vs-OFF ablation (RQ2) was dropped as the study
+> spine and RQ6 was promoted to primary comparative study in its place. *2026-07-22 (this revision):*
+> RQ6 is demoted too. Both revisions have the same cause — an October type-A defense does not require a
+> completed comparative study — and the second is the honest end of the first: having cut the ablation
+> for being corpus-gated and timeline-infeasible, the judge comparison carried the same two costs.
+> **The study now makes no causal or comparative claim.** Its "so what" rests on a working pipeline
+> (Obj 1–2), expert-rated output quality + naive-reader fidelity (Obj 3), and software quality (Obj 4).
 
 **Context:** The original design made a **blind comparative ablation** (pipeline-ON vs pipeline-OFF) the
 spine — the only thing that showed the *pipeline*, not just the artifact, caused the result. That spine
@@ -174,11 +181,21 @@ a held-out judge test set, neither of which needs a second pipeline arm.
   **not** internal pipeline components (panel note 8). The **ISO/IEC 25010** software-quality
   questionnaire (**Instrument D**) is a separate instrument administered to IT practitioners and
   teachers, never to this panel (`research_instruments.md` §D).
-- **Leg 2 — AI-performance assessment of the consistency judge (Objective 4, "Assess") = RQ6.** The
-  **primary comparative study**: fine-tuned Qwen2.5-VL-7B judge vs. its baselines on a human-labeled,
-  character-disjoint held-out set. Lead claim: **fine-tuned 7B matches/beats prompted Gemma-3-27B** —
-  self-hostable, zero marginal cost; the beat-your-own-zero-shot number is the necessary sanity check
-  and is **never presented alone**. Full machinery in ADR-018 and `judge-finetune.md`.
+- **Leg 2 — software quality (Objective 4, "Evaluate the software").** The **ISO/IEC 25010**
+  questionnaire (**Instrument D**), administered to IT practitioners and teachers. This is Objective 4's
+  whole content as of this revision.
+
+**RQ6 — judge fine-tune — kept, reported descriptively, no longer a leg.** We still fine-tune the
+consistency judge (the one sanctioned LoRA, ADR-016→018) and report **its agreement with human labels on
+the character-disjoint held-out set**. What is dropped is the **comparison** — no "fine-tuned 7B
+matches/beats prompted Gemma-3-27B" claim is made in the paper. The methodological requirements survive
+unchanged, because a descriptive number is only trustworthy under them: human labels still need
+inter-rater reliability reported, and the held-out set is still **read once**. Full machinery stays in
+ADR-018 and `judge-finetune.md`.
+
+> **ADR-018's δ = 3 non-inferiority gate is a *deployment* gate and is unaffected** — it decides whether
+> the fine-tuned judge replaces the prompted incumbent *in the product*, which is a build decision, not a
+> reported finding. Only the research-facing comparative claim is dropped.
 
 **RQ5 — reader comprehension — is kept, re-specified single-arm.** With the ablation gone, RQ5 is no
 longer an ON-vs-OFF outcome. It becomes a **single-arm output-fidelity measure**: *can a naive reader
@@ -186,8 +203,9 @@ recover the child's characters and events from the generated book alone?* Give a
 seen the story the book by itself; ask them to name the characters and recount what happened; score
 against RQ1's human-annotated major plot points via a **validated recall protocol**, two independent
 raters, **Cohen's κ** reported. **Plot-point recall is the primary outcome; character recovery is
-secondary/confirmatory** (`design_decisions_and_risks.md` R3) — RQ5 is a supporting fidelity measure, not
-the study's headline (RQ6). The reader need not be a child. RQ5 folds into Leg 1's output-evaluation
+secondary/confirmatory** (`design_decisions_and_risks.md` R3). With RQ6 demoted, RQ5 is no longer a
+*supporting* measure behind a headline — it is one of Objective 3's two output measures. The reader need
+not be a child. RQ5 folds into Leg 1's output-evaluation
 track (Objective 3). *(The in-app peer version of RQ5 is cut — see ADR-021.)*
 
 **The annotation is still nearly free.** RQ1 already requires human annotation of "major plot points"
@@ -210,8 +228,12 @@ Stage-1. Pilot numbers from fixture stories are **demonstration, not evidence** 
 never as findings.
 
 **Consequences:**
-- The study no longer rests on a causal "the pipeline helped" claim; the "so what" now rests on **judge
-  accuracy (RQ6) + expert-rated output quality** (the value-proposition rewrite is Session 6).
+- The study rests on **no causal and no comparative claim**. The "so what" is a working pipeline,
+  expert-rated output quality + naive-reader fidelity (Obj 3), and ISO-25010 software quality (Obj 4).
+  **This is the weakest the contribution has been** — it is a systems-and-instrument contribution, and
+  the validated picture-book rubric (`evaluation_instruments_brief.md` §0) has to carry real weight for
+  it to hold. Accepted deliberately: a defensible narrow claim beats a comparative study that does not
+  finish by October.
 - The capstone survives an ethics delay for real: October runs on fixtures; corpus results follow.
 - **Do not claim learning gains** — N ≈ 8–15, no non-illustrated control, no pre/post, no longitudinal
   window. Authentic-audience literature is the *warrant* for why fidelity matters, not a finding of this
@@ -219,7 +241,13 @@ never as findings.
 
 **Alternatives:**
 - **Keep the pipeline-ON-vs-OFF ablation** — dropped (roadmap §0.1): corpus-gated, and it made a causal
-  claim the October type-A defense does not require. RQ6 carries the comparative weight instead.
+  claim the October type-A defense does not require.
+- **Keep RQ6 as the primary comparative study** (the 2026-07-20 position) — dropped 2026-07-22: it
+  inherits the ablation's two defects. The comparison needs the human-labeled held-out set, which is
+  Stage-1-gated like the corpus, and a defensible baseline sweep is weeks of work the October timeline
+  does not have. Reporting the judge descriptively costs the headline and keeps the fine-tune.
+- **Drop the judge fine-tune entirely** — rejected: it is the pipeline's consistency mechanism (ADR-018),
+  so it is built regardless of whether the paper compares it. Reporting it descriptively is free.
 - **Single-tier absolute ratings** — insufficient alone; the expert panel + ISO-25010 + RQ5 recall
   replace them with feature-level and fidelity measures.
 - **Builder-authored clean stories as the corpus** — rejected (measures best-case only, and voids RQ5's
@@ -390,7 +418,9 @@ LangSmith's zero-code LangGraph wiring is the faster and lower-ops path to Day-1
 > **Hardening (2026-07-10b).** The project owner has ruled out **proprietary models entirely** — not
 > merely as primaries, but as backstops and accessories. An audit of the stack against that rule
 > removes exactly two things: **OpenAI `omni-moderation-latest`** (ADR-011's backstop → replaced by
-> IBM Granite Guardian, Apache-2.0) and **ElevenLabs TTS** (→ replaced by an open TTS model — Kokoro-82M
+> IBM Granite Guardian, Apache-2.0 — **subsequently re-routed to `openai/gpt-oss-safeguard-20b`, also
+> Apache-2.0 open weights, when Granite proved not routable on OpenRouter; ADR-011 revised 2026-07-21c**)
+> and **ElevenLabs TTS** (→ replaced by an open TTS model — Kokoro-82M
 > originally, **Chatterbox (MIT) via hosted inference as of ADR-020's 2026-07-17 revision**). Everything else
 > already complies: fal.ai and OpenRouter are *hosted inference of open weights* — and the revised narration
 > path is the same mechanism; Modal (ADR-019) is infrastructure; LangSmith and Sentry are services, not models.
@@ -1103,3 +1133,350 @@ it, and the number goes in the paper.
   `cel` is the flagship default.
 - Does the teacher lock one preset per classroom, or does each child choose? A product question (ADR-017's
   teacher-owner model makes either possible). Not blocking; decide at Phase 2.
+
+---
+
+## ADR-023 — Story Memory is the LangGraph state; single-int versioning; status lives in the job row
+
+**Status:** Accepted (2026-07-22) · resolves **D-A** (DECISION_BACKLOG) · governs the `story-memory-contract` spec
+
+**Context:** MASTER_SPEC §3 names the Story Memory Pydantic model "the" inter-module contract and calls it
+"authoritative and versioned," but leaves three things unresolved that every Phase-1 node depends on. Today
+`backend/contracts/job_state.py` is an explicit *"Phase 0 provisional"* 5-field `TypedDict`; the real shape
+exists only as prose (PRD §19 sketch, MASTER_SPEC §2/§3). This ADR freezes the **structural** decisions;
+field-level detail is frozen in the `story-memory-contract` spec written in the same change. The **node
+signature / reducer / per-scene-loop conventions are deliberately out of scope** — they are D-B (amends
+ADR-003), decided in their own session. The seam is: this ADR fixes *what the state is*; D-B fixes *how nodes
+write to it*.
+
+**Decision:**
+
+1. **The LangGraph runtime state *is* the `StoryMemory` Pydantic model** — not a `TypedDict` wrapper holding
+   it, and not a decomposition into section channels. One object is simultaneously the inter-module contract,
+   the object that flows node-to-node, and the blob checkpointed to Postgres (ADR-005). There is no
+   projection layer, so the checkpoint bytes *are* the contract: resume-at-scene-N and export read the same
+   validated object with zero translation, and `CLAUDE.md §2` ("a module reads/writes through the schema") is
+   satisfied literally because no ad-hoc dict can exist between nodes.
+2. **`schema_version: int` (starts at `1`), fail-fast on mismatch, no migration machinery.** Bump it **only**
+   on a *breaking* change; additive changes (a new `Optional` field) do not bump it and deserialize via
+   Pydantic defaults. On resume the worker compares the checkpoint's `schema_version` to the current one; on
+   mismatch it **does not migrate — it restarts the job** (reusing `eval.seed`, so the rebuild is
+   reproducible — CC-7). One version covers the whole contract, **including the failure-reason enum**: an enum
+   change is a contract change (`CLAUDE.md §2`) and rides the same number. Migration functions are a
+   documented later option the version field already makes room for — not built now (YAGNI for 1–3 min jobs
+   whose schema changes are human-gated and rare).
+3. **Live status/progress is owned solely by the Supabase job row, never by Story Memory.** The job row is
+   what Realtime watches (RLS-scoped, cheap to update) and it *references* the checkpoint. Story Memory
+   therefore carries **content + durable provenance** (`story_id`, `classroom_id`, `profile_id`, `style`,
+   `cost`, `eval.seed`) and **no mutable job/status block** — dropping the PRD §19 `job` sketch object from
+   the contract. This removes a dual-source-of-truth for status that Decision 1 would otherwise create.
+4. **The failure-reason taxonomy is frozen as a closed 7-value set** (`wrong_colour`, `wrong_species`,
+   `wrong_body_feature`, `wrong_clothing`, `wrong_style`, `different_face`, `character_absent` — `judge-finetune.md`
+   §4), defined **once** in `backend/contracts/` and imported by the judge verdict schema, the
+   regeneration-controller, *and* the Phase-2.5 finetune tooling in `backend/finetune/` (import direction:
+   finetune → contracts). Pydantic must reject any value outside it. Extend only in Phase 1, never during
+   Phase-2.5 annotation (MASTER_SPEC §7) — a mid-annotation change invalidates every label.
+
+**Consequences:**
+
+- **Nodes read/write `StoryMemory` directly; the top-level model is a mostly-`Optional` container.** Early in a
+  run it is nearly empty, so almost every field is `Optional` / `default_factory`. The top-level model is
+  therefore a *weak* validator — real per-field validation lives in the **structured-output sub-schemas** at
+  each LLM boundary (ADR-002), which is exactly where `CLAUDE.md §2` puts it. "It's Pydantic" must not be
+  mistaken for "the pipeline validates completeness mid-run"; it does not.
+- **This ADR creates a hard obligation on D-B:** because the whole model is one state object, scene fan-out
+  needs a merge reducer on `scenes[]` (and `attempts[]`) or parallel scene writes clobber. Reducer
+  annotations will live as `Annotated[...]` metadata **on the contract model's list fields** — a contained,
+  honest coupling (the object genuinely *is* the runtime state); Pydantic ignores it for serialization.
+  **Resolved by ADR-024:** the reducer is on `scenes[]` **only** — `Annotated[list[Scene], upsert_scenes]`,
+  upsert-by-`scene_id` — and there is **no** `attempts[]` reducer (the unit of parallelism is the scene, so
+  attempts never collide; a nested-field reducer is not buildable in LangGraph anyway). D-B also chose a
+  *sequential* loop over fan-out, so the reducer is not even correctness-critical today; it is kept for the
+  slice-write convention and the `Send` escape hatch.
+- **Asset fields store durable Storage *paths*, never signed URLs** (`canonical_ref_image`, `image_ref`,
+  `final_image_ref`, `audio_ref`) — signed URLs are minted on read (CC-4) and would otherwise expire inside a
+  checkpoint.
+- **`vlm_verdict` declares `differences_observed` before `same_character`** at the schema level (ADR-004
+  amendment). This ADR freezes the *order*; the enforcement technique is **D-D (resolved 2026-07-22):**
+  `providers._assert_field_order` compares parsed JSON key order (`json.loads` preserves document order)
+  against `schema.model_fields`, immune to a value that quotes a field name (MASTER_SPEC §3).
+- The escape hatch, recorded so it is not a re-decision later: if D-B's fan-out design proves section-level
+  channels are unavoidable, moving to a `TypedDict` of section channels is a mechanical refactor of the state
+  wiring — the frozen field-level schema and this versioning/enum decision are unaffected.
+
+**Alternatives:**
+
+- **`TypedDict` wrapper holding `StoryMemory` as a field** — rejected. Its only benefit (contract stays
+  LangGraph-agnostic) is portability to a second runtime that ADR-003/005 guarantees will never exist (YAGNI),
+  and a single `story` channel makes fan-out *harder*: parallel scene writes force a reducer that merges whole
+  `StoryMemory` objects, burying D-B's problem instead of enabling it.
+- **`TypedDict` of top-level section channels** (`input`, `characters`, `scenes`, …), with `StoryMemory` as an
+  assembled persistence view — the serious alternative; it fits the §2 node-I/O table and makes per-section
+  reducers natural. Rejected *for now* because it buys that fit with a second representation plus
+  project/assemble glue — speculative machinery (`CLAUDE.md §6`) until D-B's fan-out proves it necessary. Kept
+  as the documented escape hatch above.
+- **`schema_version` + migration functions** — rejected as speculative for 1–3 min, human-gated jobs; the
+  version field leaves the door open to add them iff a breaking-change-on-live-data case ever appears.
+- **No version field (additive-only + drain the queue)** — rejected: contradicts MASTER_SPEC §3 ("versioned"),
+  leaves stored artifacts un-stampable, and turns an incompatible mismatch into a silent misparse instead of a
+  clean restart.
+
+**Open questions:**
+
+- ~~**D-B** (amends ADR-003): node signature + partial-return convention, the `scenes[]`/`attempts[]` reducers
+  this ADR requires, the per-scene loop shape (loop node vs. `Send` fan-out vs. subgraph), and the two
+  routing-function branch points.~~ **Resolved → ADR-024** (partial-return; sequential loop; upsert-by-`scene_id`
+  reducer on `scenes[]` only; two pure routers).
+- ~~**D-D**: robust field-order enforcement for `differences_observed` → `same_character` (this ADR freezes the
+  order, not the mechanism).~~ **Resolved (2026-07-22):** parsed-key-order check in `providers._assert_field_order`
+  (MASTER_SPEC §3).
+
+**Amendment (2026-07-22) — resolves D-F and D-G** (DECISION_BACKLOG Tier 2; unblocks the
+`story-memory-contract` freeze). Both are conventions the contract needs; neither warrants a new ADR number.
+
+- **D-F — where structured-output sub-schemas live.** The dividing line is **embedding, not
+  LLM-boundary-ness**: a sub-schema lives in `backend/contracts/` **iff `StoryMemory` embeds it**
+  (`VlmVerdict` inside `Attempt`, `CharacterDescription` inside `Character`); a **transient wrapper** the node
+  unpacks into contract fields and never persists as-is (`SceneCaption` → `scenes[].caption`) lives **beside
+  its node** in `backend/pipeline/`. This is *forced*, not stylistic: `contracts/` must never import from
+  `pipeline/`, so any embedded sub-schema **must** be in `contracts/` — "all sub-schemas beside their node" is
+  impossible. The CLAUDE.md §6 "crosses a module boundary → through `contracts/`" rule is satisfied because the
+  thing that crosses is `StoryMemory`; a transient wrapper is consumed only by its own node (+ generic
+  `providers.structured_text` + tests) and **is never imported cross-node** — peers read each other through the
+  contract, never through a peer's LLM schema. Note `VlmVerdict` is an LLM-boundary schema that lives in
+  `contracts/` *because it is embedded* — do not read this rule as "LLM schemas go beside the node."
+
+- **D-G — id minting for `scene_id` / `char_id` / `loc_id` / `obj_id`.** Format `{prefix}{zero-based-index}`
+  with prefixes `s` / `c` / `loc` / `obj` (`loc`/`obj` spelled out — `l0`/`o0` misread as `10`/`00` in traces,
+  and these ids exist partly for CC-5 debugging). **Minted once by the node that creates the collection**
+  (`segment` → scenes; `story-analyzer` → characters/locations/objects), by assigning the index over the
+  parsed list. **The LLM boundary schema carries NO id fields** — the model returns names/descriptions, the
+  node assigns ids post-parse; an LLM that emits ids would hallucinate/vary them and defeat mint-once. Ids are
+  **stable within a run and across a resume** (LangGraph checkpoints after the minting node, so resume reuses
+  persisted ids and never re-mints); a schema-version **restart** discards the checkpoint and mints a fresh set
+  from the re-run, which is fine because nothing survives a restart to be inconsistent with. This corrects the
+  DECISION_BACKLOG framing "must be deterministic or a restart differs": the real requirement is within-run /
+  resume stability (the ADR-024 `scenes[]` reducer keys on `scene_id`), **not** reproducibility from `eval.seed`
+  — which LLM non-determinism cannot guarantee anyway. Ids are **run-scoped**, unique within one `StoryMemory`
+  (cross-job uniqueness comes from `story_id`), not global. **Invariant (documented ceiling, not guarded):**
+  entities are minted once and **never merged or re-indexed** within a run — the reducer trusts this (it
+  silently overwrites a duplicate id and silently keeps an orphan); a future merge/dedup node would have to
+  revisit this.
+
+**Amendment (2026-07-22b) — resolves the §9 construction gate** (`story-memory-contract` §9; DECISION_BACKLOG
+"Recommended next session"). This is provenance-*sourcing*, so it amends Decision 3 rather than opening a new
+ADR. The three required provenance fields had no equal Phase-1 source; nothing could construct a `StoryMemory`.
+
+- **`story_id = job_id`.** One job produces one story, so the job's existing `id` (the uuid minted at
+  `app/main.py:create_storybook`) *is* the story identity — no new column, no separate uuid. It stays `= job_id`
+  across a schema-version restart (same `thread_id`).
+- **`classroom_id` / `profile_id` carry Phase-1 dev sentinels** — `settings.dev_classroom_id` /
+  `settings.dev_profile_id` in `backend/app/config.py` (values `"dev-classroom"` / `"dev-profile"`, deliberately
+  non-uuid so they read as placeholders in CC-5 traces). Both are genuinely Phase-2 concepts (`auth-and-classroom`);
+  Phase 1 has no classroom or child profile to name.
+- **The worker (`worker/run_job.py`) is the supplier.** It constructs
+  `StoryMemory(schema_version=CURRENT_SCHEMA_VERSION, story_id=job_id, classroom_id=settings.dev_classroom_id,
+  profile_id=settings.dev_profile_id, input=Input(raw_text=input_text))`. The `create_storybook` insert path and
+  the jobs table are unchanged — no provenance columns added.
+- **The contract is unweakened.** All three fields stay required and non-defaulted (spec §2 unchanged) — provenance
+  is never silently null. When `auth-and-classroom` lands, real selection replaces the two sentinels: a value swap
+  at the one construction site, **additive — no contract change and no data migration** (Phase-1 sentinel rows name
+  no real classroom, so nothing needs backfilling).
+
+Rejected: **(a) land `auth-and-classroom` first** — inverts the roadmap to build the classroom system before the
+pipeline runs, and with no Phase-1 auth flow you would seed a default row anyway (= this decision, plus FK
+ceremony); **(b) make the two fields `Optional`** — reopens this frozen contract and spreads null-handling across
+every consumer plus a Phase-2 backfill, the exact silent-missing failure Decision 3 exists to prevent.
+
+This closes `story-memory-contract` §9; the `job_state.py` port is now unblocked.
+
+---
+
+## ADR-024 — LangGraph node & edge conventions (partial-return, sequential per-scene loop, pure routers)
+
+**Status:** Accepted (2026-07-22) · resolves **D-B** (DECISION_BACKLOG) · **amends ADR-003** (deterministic
+state machine) and **ADR-023** (state = `StoryMemory`)
+
+**Context:** ADR-003 froze the pipeline as a deterministic LangGraph state machine; ADR-023 froze the runtime
+state as the single `StoryMemory` Pydantic model but explicitly deferred *how nodes write to it*. Today the
+Phase-0 nodes mutate a 5-field `TypedDict` in place (`state["stage"] = ...; return state`) — a convention no
+ADR sanctions and not the LangGraph idiom. Eight Phase-1 nodes will each reinvent the write convention, the
+per-scene loop, and the branch wiring unless it is fixed first. This ADR fixes them. It does **not** decide
+provider resilience or the failure-screen policy (**D-C**) or the field-order enforcement technique (**D-D**).
+
+**Decision:**
+
+1. **Node signature = partial-return, never in-place mutation.** `def node(state: StoryMemory) -> dict` returns
+   a dict of **only the channels it writes**; LangGraph merges each through its channel reducer. Nodes never
+   mutate `state` and return the whole object. This replaces the Phase-0 `state[...] = ...; return state`
+   pattern wholesale.
+
+2. **`scenes[]` uses an upsert-by-`scene_id` reducer (replace-matching, keep-others).** Declared
+   `Annotated[list[Scene], upsert_scenes]` on the contract. A per-scene node reads the current `Scene` from
+   `state`, produces a complete updated copy (appending its own `Attempt` if any), and returns
+   `{"scenes": [that_scene]}`. The reducer replaces the scene with the matching `scene_id` and leaves the rest
+   untouched:
+
+   ```python
+   def upsert_scenes(current: list[Scene], update: list[Scene]) -> list[Scene]:
+       by_id = {s.scene_id: s for s in current}
+       for s in update:
+           by_id[s.scene_id] = s      # replace-by-id; the node already built the full scene
+       return list(by_id.values())
+   ```
+
+   **This corrects ADR-023's "reducer on `scenes[]` *and* `attempts[]`."** There is no separate `attempts`
+   reducer, and none is needed: the unit of any future parallelism is the *scene* (unique `scene_id`), so two
+   writes never target the same scene's `attempts` concurrently — even under the `Send` escape hatch below.
+   Attempts are appended by the owning node against current state, not merged in the reducer. (LangGraph reduces
+   top-level channels only, so a nested-field `attempts` reducer was never buildable regardless.) Because scene
+   writes never collide, the reducer is not even correctness-critical under the sequential loop — it is kept for
+   the slice-write convention and to hold the `Send` escape hatch open at zero cost.
+
+3. **The per-scene loop is sequential; position is derived from data, not a cursor.** No `Send` fan-out, no
+   per-scene subgraph, and **no cursor field** (which would reintroduce the mutable-status block ADR-023
+   Decision 3 removed). The "current scene" is the first `Scene` whose `final_image_ref is None`. Reference
+   wiring:
+
+   ```
+   char_bible → [char-ref moderation] → route_next_scene ─ none unprocessed → compose
+                                                          └ scene remains    → generate_scene
+   generate_scene → consistency_check → route_after_check ─ not finalized → regenerate → consistency_check
+                                                           └ finalized     → route_next_scene
+   ```
+
+   - **Loop invariant (load-bearing):** every entry into `generate_scene`…`consistency_check` finalizes exactly
+     one scene — sets its `final_image_ref` — whether by a passing attempt or by ADR-010 best-of after the one
+     allowed retry. The loop terminates because each pass reduces the count of `final_image_ref is None` scenes
+     by one.
+   - **`recursion_limit` is set explicitly**, derived from the scene cap (a function of ADR-012's word cap):
+     `≈ max_scenes × 4 + fixed_prelude`. A normal book exceeds LangGraph's default of 25 super-steps, so this is
+     required, not optional. It also **backstops the invariant**: a scene that never finalizes (e.g. a hard
+     provider failure) trips `GraphRecursionError` instead of looping forever. The failure *policy* that
+     prevents that (retry / off-ramp / failure screen) is **D-C**, not this ADR.
+   - **`route_next_scene` sits at the loop head**, so it also handles the empty-`scenes[]` case (segment produced
+     none) → straight to `compose`.
+
+4. **Routing functions are pure and label-returning; state writes never happen in a router.** Registered via
+   `add_conditional_edges`. A router reads state and returns an edge label; any decision that mutates state
+   (best-of selection, setting `final_image_ref`) happens in a **node**. The two real branch points (ADR-003):
+   - `route_after_check` (after `consistency_check`): `"regenerate"` if the scene is not finalized and the
+     ADR-010 retry budget remains, else loop back to `route_next_scene`.
+   - `route_moderation` (char-ref gate now; output-image gate in Phase 2): `"pass" | "fail"`. **The fail-branch
+     destination and policy are D-C** (CC-9 failure screen, N=3 off-ramp); this ADR only fixes that the gate is
+     a conditional edge with a pure router and a single terminal fail target.
+   - *Which node sets `final_image_ref`, and how best-of ranks two failing attempts, are node-internal* — owned
+     by the `consistency-checker` / `regeneration-controller` specs, not this ADR.
+
+**Consequences:**
+- The Phase-0 nodes are rewritten to partial-return when each is built from its spec; `graph.py` gains the two
+  routers and the loop-back edge. Not done in this decision session (CLAUDE.md §1) — this ADR unblocks those
+  builds.
+- Checkpointing is finer than ADR-005's "per scene": LangGraph checkpoints after every node (super-step), so a
+  resume never re-runs an already-completed, already-paid-for `generate_scene`. The at-least-once gap (a crash
+  *after* the image API call but *before* the checkpoint re-pays on resume) is a worker idempotency concern —
+  **D-C**.
+- The `Send` fan-out escape hatch stays open at zero extra design cost: because the reducer is
+  upsert-by-`scene_id`, switching the loop to `Send` later is a wiring change in `graph.py`, not a contract
+  change. Concurrency policy (rate limits, cost spike) is the reason it is *not* done now — **D-C**.
+
+**Alternatives:** `Send` map fan-out and subgraph-per-scene were considered in the D-B session; sequential was
+chosen for ADR-005-literal resumability and to avoid settling D-C's concurrency policy inline. A cursor field
+for loop position — rejected (reintroduces mutable status into the contract, ADR-023 Decision 3).
+
+**Handoffs (named so they are not silently absorbed into a build):**
+- **D-C** owns: the provider-failure → scene-finalization guarantee (the invariant's teeth), the moderation
+  fail-branch policy, worker idempotency, and `recursion_limit`'s exact constant if it becomes cost-relevant.
+- **`consistency-checker` / `regeneration-controller` specs** own: which node writes `final_image_ref`, and the
+  **best-of ranking signal** — `VlmVerdict` currently carries no scalar score, so ADR-010's "keep the
+  higher-scoring image" is under-defined and may force an *additive* `VlmVerdict` field (a normal, non-breaking
+  schema change).
+- **Build-time verification:** confirm that `Annotated`-field reducers on a Pydantic *model* state (not a
+  `TypedDict`) behave as specified against the pinned LangGraph version before relying on it (same discipline as
+  ADR-002's "re-query before implementing") — do not assume it from docs.
+
+---
+
+## ADR-025 — Provider resilience & failure-mode policy (D-C)
+
+**Status:** Accepted (2026-07-22) · resolves **D-C** · gives ADR-024's loop invariant its failure exit ·
+defines the backend pattern for CC-3 and CC-9
+
+**Context:** The provider *layer* exists (ADR-015, `providers.py`) but its resilience did not. `providers.py`
+had no retry/backoff/rate-limit handling and one hardcoded `httpx` timeout (`60.0`); CC-3 (cost
+circuit-breaker) and CC-9 (failure screens) were principles with **no backend pattern**. ADR-024 finalized
+the per-scene loop and explicitly handed D-C four things: the provider-failure → scene-finalization
+guarantee, the moderation fail-branch policy, worker idempotency, and the failure policy behind
+`recursion_limit`. This ADR settles the **Phase-1 teeth** and the failure-state **contract**; the four
+Phase-2 mechanisms it leans on (the N=3 moderation off-ramp — PRD §310; the per-classroom daily cap; the
+self-refusal soften-and-retry, ADR-011 mech. 4; the kid-flow failure *screen*) are **deferred to their named
+specs**, with any cross-cutting contract field they need frozen here so Phase 2 need not reopen this ADR.
+
+**Decision:**
+
+1. **Provider resilience — transient-vs-hard taxonomy + retry.** Taxonomy: *transient* = connection error,
+   timeout, HTTP 429, 5xx → retry with bounded exponential backoff; *hard* = 4xx (400/401/403/422),
+   `message.parsed is None`, field-order violation (ADR-004) → fail fast, no retry; *content-refusal* (a model
+   refusing a benign scene) is **not** a resilience concern → handed to `self-refusal-fallback` (Phase 2,
+   ADR-011 mech. 4). Mechanism: the text/judge path uses the **`openai` SDK's own retry/backoff** — a free,
+   MIT-licensed protocol client pointed at OpenRouter, **not** an OpenAI-model dependency (ADR-015; the SDK is
+   in the same bucket as OpenRouter/fal — "hosted inference of open weights") — by setting explicit `timeout`
+   and `max_retries` on the client, replacing the invisible SDK defaults (~10-min timeout, 2 retries) that are
+   wrong for a kid-facing latency budget. The two fal/httpx calls (`fal_client.subscribe`, the image-download
+   `httpx.get` — the only genuinely bare paths) get **one small transient-only retry helper** in `providers.py`.
+   **No new dependency** (tenacity is only a transitive dep and is deliberately not adopted); resilience stays
+   inside the four thin functions (ADR-015 — "not a plugin framework").
+
+2. **Provider-failure → scene-finalization guarantee (the loop invariant's teeth).** `generate_scene` either
+   sets `final_image_ref` **or raises** once retries are exhausted; the raise propagates out of the graph to
+   `run_job.py`'s top-level `except` → job `failed`. The pipeline **never** ships a placeholder or partial book.
+   This extends ADR-010, whose placeholder rejection was about a *slightly-off* image — a hard provider failure
+   means *no* image, so failing the job cleanly is the honest outcome (a provider outage is all-or-nothing
+   anyway). `recursion_limit` (ADR-024) remains the backstop for a *logic* bug — a scene that never finalizes
+   *without* raising — not for the provider-outage case.
+
+3. **Worker idempotency / at-least-once re-pay.** Accepted in Phase 1 and documented. LangGraph checkpoints
+   after every node (ADR-024), so the re-pay window is the milliseconds between a fal call returning and the
+   checkpoint commit — a rare crash, cents of cost, capped by the per-book breaker (4). Sanctioned upgrade path
+   (owned by `image-generator`, optional): on resume, skip the fal call if the deterministic Storage asset path
+   already exists.
+
+4. **Per-book cost circuit-breaker (CC-3, per-book half).** A **count-based** breaker on the `cost.image_count`
+   contract field (§3): trip → job `failed` when it exceeds `max_scenes × 2 + prelude` — the same bound
+   `recursion_limit` derives from (ADR-024), so the domain-level and graph-level backstops share **one number**.
+   No pricing table (a breaker catches *runaways*, not accounting drift); `usd_estimate` stays a best-effort
+   observability field (CC-5). The per-classroom **daily cap** (PRD §14) is deferred to Phase 2 `rate-limiting`
+   — it needs auth (ADR-017). Tier-A testable (MASTER_SPEC §6 already lists "cost circuit-breaker").
+
+5. **Failure-state contract (CC-9 — the field the Phase-2 UI reads).** The `jobs` table gains a `failure_reason`
+   enum column — `{moderation_input, provider_error, system_error}`, documented **extensible** (Phase 2 adds
+   `off_ramp`, etc.). `run_job.py`'s `except` maps the taxonomized exception to it. The raw `error` string
+   becomes **dev-only** (Sentry/logs) and is **never rendered to a child** — it can carry internals or
+   un-redacted PII. The kid-flow UI branches on `failure_reason`, never on `error`. ADR-024's char-ref
+   moderation fail-branch routes to **one terminal failure node** that stamps this field (the single terminal
+   fail target ADR-024 specified); the classifier itself and the N=3 off-ramp remain `moderation-stack` /
+   `self-refusal-fallback` (Phase 2).
+
+**Consequences:**
+- Every Phase-1 node inherits one resilience policy instead of reinventing it; the loop invariant (ADR-024) now
+  has a defined failure exit (raise → job `failed`), not only the `recursion_limit` trip.
+- **Consequences to build** (not this decision session — CLAUDE.md §1): the `providers.py` client-config +
+  retry helper; the `failure_reason` migration; the count breaker in the loop. Each lands against its module
+  spec with Tier-A tests (MASTER_SPEC §6: cost circuit-breaker and N=3 off-ramp are already listed there).
+- A hard provider outage fails the whole book (product call, 2026-07-22) — reversible if partial books are
+  later wanted; that would need a `failed`-page UI and per-scene real/placeholder tracking, deliberately not
+  built now.
+- CC-3 and CC-9 gain a backend pattern; MASTER_SPEC §5 now points them at this ADR.
+
+**Alternatives:**
+- **tenacity on all four provider functions** — rejected: promotes a transitive dep to a direct one for what
+  ~10 lines cover, and double-retries the SDK path unless `max_retries=0` is also set; splits retry policy
+  across a decorator library and SDK config.
+- **USD-based cost breaker** — rejected: a price-per-model table that drifts and is provider-specific, for a
+  breaker whose only job is catching a runaway loop; a count is sufficient and pricing-free.
+- **Ship partial books on provider failure** — rejected (2026-07-22): contradicts ADR-010's no-broken-page
+  rule and adds Phase-1 state/UI for a rare case.
+- **Idempotency key / content-addressed dedup now** — deferred: the re-pay window is milliseconds and the cost
+  is cents; the Storage-existence skip is the cheap upgrade if it ever matters.
+- **Parse the `error` string for the UI** — rejected: fragile and leaks internals/PII to a child; the enum is
+  the contract.

@@ -24,9 +24,9 @@ exist.** The fine-tune is not a prerequisite for anything. It is an upgrade to o
 | 6 | Two researchers label those images → **the dataset** | one weekend | — |
 | 7 | Train the LoRA on a rented GPU | 2–3 hours, ~$5–15 | — |
 | 8 | Evaluate against four baselines | 1–2 days | — |
-| 9 | **Gates:** research (beats the base model) + product (matches prompted Gemma). §7.5's ladder | | |
+| 9 | **Gates** (both deployment, not paper claims): did the fine-tune work (beats the base model) + product (matches prompted Gemma). §7.5's ladder | | |
 | 10a | Rung A or B → serve it behind vLLM, flip two env vars | ~2 days | **fine-tuned** |
-| 10b | Rung C → RQ6 stands; the product keeps the prompted judge | 0 days | prompted |
+| 10b | Rung C → RQ6's descriptive number stands; the product keeps the prompted judge | 0 days | prompted |
 | 10c | Rung D → the LoRA did nothing. Debug; do not report | | prompted |
 
 **The product is finished before step 7.** Phases 1 and 2 ship on the *prompted* judge. The fine-tune swaps
@@ -45,7 +45,8 @@ step 4.** Ethics is the long pole. Everything else is a weekend.
 
 Fine-tune an open VLM to decide whether two images show **the same character instance**, and to say
 *why* before it says *whether*. It replaces the prompted `gemma-3-27b-it` judge that drives targeted
-regeneration (ADR-010), and its human-agreement numbers are RQ6.
+regeneration (ADR-010), and its human-agreement numbers are RQ6 — reported **descriptively**, with no
+comparative claim against the base model or the prompted incumbent (ADR-008, revised 2026-07-22).
 
 The judge is a **control signal, never an outcome measure.** Read ADR-004's non-circularity note before
 writing a single line of the results section.
@@ -404,14 +405,22 @@ Base model **revision hash** · LoRA rank + alpha · seed(s) · the exact `manif
 
 The external requirement is that the fine-tune **demonstrate measurable improvement.** ADR-018 amendment (a)
 is binding here; this section is its operational form. Its central move: **two questions were being decided
-by one number.** *Did fine-tuning work?* is a research question, and its comparator is the un-fine-tuned base.
-*Should this judge replace the one in the product?* is an engineering question, and its comparator is the
-prompted incumbent. Separate them and RQ6 stops being hostage to a coin flip.
+by one number.** *Did fine-tuning work?* is answered against the un-fine-tuned base. *Should this judge
+replace the one in the product?* is an engineering question, and its comparator is the prompted incumbent.
+Separate them and neither is hostage to a coin flip.
 
-### 7.1 The primary endpoint — the research gate
+> ⚠️ **What of this reaches the paper (ADR-008, revised 2026-07-22).** Both comparisons below are
+> **build/deployment gates**, not research claims. **RQ6 in the paper is descriptive only**: the fine-tuned
+> judge's *agreement with human labels* on the character-disjoint held-out set, with inter-rater reliability
+> on those labels reported and the held-out set **read once**. No "fine-tuned 7B matches or beats prompted
+> Gemma-3-27B" claim is made, and no superiority test is a pre-registered research endpoint. Everything in
+> this section still **runs** — it is how we decide what ships.
+
+### 7.1 The primary endpoint — the "did the fine-tune work" gate
 
 > ΔF1 on the `different_character` class, held-out test set, **fine-tuned Qwen2.5-VL-7B vs. zero-shot
-> `Qwen2.5-VL-7B`.** Superiority is claimed only if the 95% CI on ΔF1 excludes zero.
+> `Qwen2.5-VL-7B`.** The gate passes only if the 95% CI on ΔF1 excludes zero. (A build gate, not a paper
+> claim — ADR-008, revised 2026-07-22.)
 
 Same architecture, same weights, same prompt; the adapter is the only difference. It is the cleanest causal
 statement available about the fine-tune, it is the ablation every fine-tuning paper reports, and on ~900
@@ -426,7 +435,7 @@ in-domain training pairs the expected gap is large.
 > in-domain fine-tuning beats zero-shot."* It satisfies the requirement; it is not the contribution.
 > **Never present it alone.** §7.4's first two items go on the same slide.
 
-### 7.2 The product gate — separate, and non-blocking for RQ6
+### 7.2 The product gate — separate, and non-blocking for RQ6's reported number
 
 Ship the fine-tuned judge only if **both** hold against prompted `gemma-3-27b-it`:
 
@@ -434,9 +443,9 @@ Ship the fine-tuned judge only if **both** hold against prompted `gemma-3-27b-it
 2. **No recall regression.** A judge that buys precision with recall ships broken pages. Consistency has a
    best-of fallback (ADR-010); a missed failure has none.
 
-**Failing this does not fail RQ6.** It means the product keeps the prompted judge it already shipped Phases 1
-and 2 with, ADR-019's Modal deployment is dropped (de-scope ladder, rung 4), and the paper reports that
-specialization at 7B did not close the gap. That is rung C in §7.5, and it is publishable.
+**Failing this does not change what RQ6 reports.** It means the product keeps the prompted judge it already
+shipped Phases 1 and 2 with, and ADR-019's Modal deployment is dropped (de-scope ladder, rung 4). That is
+rung C in §7.5. RQ6 still reports the fine-tuned judge's human agreement descriptively either way.
 
 **Why the Gemma comparison is winnable anyway.** You are not beating Gemma-27B at general vision-language.
 You are beating it on ~50 Filipino children's invented characters, in one fixed style, drawn by one image
@@ -460,8 +469,10 @@ pipeline.** Write that sentence into the paper before the defense, not during it
 
 ### 7.4 Secondary endpoints — ordered in advance, reported regardless of the primary
 
-1. **Fine-tuned vs. prompted `gemma-3-27b-it`.** Same metric, same test set. The number the panel actually
-   cares about, and the input to the product gate.
+1. **Fine-tuned vs. prompted `gemma-3-27b-it`.** Same metric, same test set. **The input to the product
+   gate** — it decides whether the fine-tuned judge replaces the incumbent in the pipeline (δ = 3
+   non-inferiority, §7.5). It is an engineering number, **not a paper claim**: the comparative claim is
+   dropped (ADR-008, revised 2026-07-22).
 2. The primary metric on the **non-human character slice.** The contribution — and the least-powered slice.
 3. **Cohen's κ vs. human**, overall and split by human / non-human.
 4. **Latency and $/call.** A structural win: 7B beats 27B, self-hosted beats per-call.
@@ -485,11 +496,15 @@ failures with different costs.
 **Write and timestamp the analysis plan before any label is collected.** It is the only thing separating a
 pre-declared ladder from a moved goalpost, and almost no capstone does it.
 
-| Rung | Condition | Requirement met? | Claim | Ship? |
+**The ladder is a deployment/build gate, not a claim ladder for the paper** (ADR-008, revised 2026-07-22).
+Read the "Outcome" column as *the engineering conclusion that decides what ships* — none of it is a
+research-facing comparative claim, and none of it changes RQ6's reported number.
+
+| Rung | Condition | Requirement met? | Outcome (engineering) | Ship? |
 |---|---|---|---|---|
-| **A** | Beats base **and** beats prompted Gemma | Yes | Specialized 7B judge **outperforms** the prompted 27B incumbent in-domain, at lower latency and zero marginal cost | Yes |
-| **B** | Beats base; within δ = 3 F1 of Gemma; no recall regression | Yes | Specialization **recovers 27B-level quality at 7B**, self-hostable, zero marginal cost | Yes |
-| **C** | Beats base; loses to Gemma by > δ | **Yes** | Fine-tuning worked, but specialization at 7B did not close the gap: *"the bottleneck is data, not capacity."* An honest, publishable negative result | No — keep the prompted judge |
+| **A** | Beats base **and** beats prompted Gemma | Yes | Specialized 7B judge outperforms the prompted 27B incumbent on our in-domain held-out set, at lower latency and zero marginal cost — a clear swap | Yes |
+| **B** | Beats base; within δ = 3 F1 of Gemma; no recall regression | Yes | Specialization recovers 27B-level quality at 7B, self-hostable, zero marginal cost — non-inferiority satisfied, swap | Yes |
+| **C** | Beats base; loses to Gemma by > δ | **Yes** | Fine-tuning worked, but specialization at 7B did not close the gap. Keep the incumbent; note it as a limitation, not a finding | No — keep the prompted judge |
 | **D** | Does not beat base | No | The LoRA did nothing. A **bug report, not a result** | No — debug |
 
 δ = 3 F1 points is a judgment call, chosen because it sits inside one annotator's disagreement band on ~60

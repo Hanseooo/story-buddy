@@ -18,6 +18,12 @@ Every heavy model runs off-device, in one of two ways:
   over HTTP on a managed GPU provider (fal.ai for images and narration, OpenRouter for text/VLM). We do not
   own or operate the GPU; we make an API call. This is what satisfies the open-weight mandate (ADR-015):
   *openness is a property of the weights; hosting is a separate question.*
+  > ⚠️ **This reading is an operating assumption, not a confirmed one.** ADR-015 records that the project
+  > owner — not the supervisor — judged hosted inference of open weights to satisfy the requirement, and
+  > flags it for explicit confirmation before Phase 2 hardening. If the mandate turns out to mean
+  > *self-hosted*, this section's architecture changes: a GPU service and its ops. The pipeline code does
+  > not, because every vendor call is isolated in `backend/providers.py` — that isolation is the insurance
+  > premium for this assumption.
 - **A couple of small CPU models on our own server worker** — the moderation classifiers (and, as a fallback,
   Kokoro narration) are small enough to run on the CPU of the backend worker container (Railway). No GPU.
 
@@ -40,7 +46,7 @@ architecture entirely ("on-device," ADR-015 Reading 3), and it is explicitly **F
 | Image generation | `Qwen-Image-Edit` (Apache-2.0) | **fal.ai** (hosted open weights) | Reference-conditioned edit per scene (ADR-001) |
 | **Narration (TTS)** | **`Chatterbox`** (MIT, expressive) | **fal.ai** (hosted open weights) | Expressive read-aloud; open-weight; per-page HTTP call (ADR-020, revised) |
 | Narration fallback | `Kokoro-82M` (Apache-2.0) | **Railway worker CPU** | Zero-cost fallback if the hosted TTS is unavailable (ADR-020) |
-| Input-text moderation | `Qwen3Guard-Gen` 0.6B + Granite Guardian | **Railway worker CPU** / OpenRouter | Two independent open classifiers (ADR-011) |
+| Input-text moderation | `Qwen3Guard-Gen` 0.6B + `gpt-oss-safeguard-20b` | **Railway worker CPU** / OpenRouter | Two independent open classifiers, both Apache-2.0 (ADR-011, revised 2026-07-21c — Granite Guardian is not routable on OpenRouter) |
 | PII redaction | Presidio + spaCy | **Railway worker CPU** | Redact before storage/captioning/export (ADR-011) |
 | Output-image moderation | `Falconsai/nsfw_image_detection` ViT (CPU) + `gemma-3-27b-it` (hosted) | **Railway worker CPU** + OpenRouter | NSFW gate on-worker; violence/gore rubric hosted (ADR-011) |
 | Tracing / errors | LangSmith, Sentry | Managed services | Observability, not models (ADR-014) |

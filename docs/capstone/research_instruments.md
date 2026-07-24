@@ -28,8 +28,9 @@ the **perceived quality of the software artifact** — whether the delivered sys
 reliable, efficient, and secure — and is answered by a structured questionnaire administered to practitioner
 evaluators.
 
-The study's one **comparative** result lives outside both families, in the fine-tuned judge's agreement with
-human labels (RQ6, §D and `docs/specs/judge-finetune.md`), which is the primary comparative study (ADR-008).
+A third measurement lives outside both families: the fine-tuned judge's agreement with human labels (RQ6, §D
+and `docs/specs/judge-finetune.md`), reported **descriptively**. The study makes **no comparative claim** —
+the fine-tuned-vs-baseline comparison was dropped as a research claim (ADR-008, revised 2026-07-22).
 
 ### A. The expert-panel output-quality rating instrument (RQ1, RQ3)
 
@@ -60,12 +61,23 @@ trained and evaluated on** (`docs/specs/judge-finetune.md` §4): `wrong_colour`,
 taxonomy for the human rubric and the model's targets means the human ratings and RQ6's judge evaluation speak
 about consistency in exactly the same vocabulary — one taxonomy, designed once (Phase 1), used everywhere.
 
+**Published grounding (⚠️ citations adviser-confirm).** No single validated instrument rates AI-generated
+picture books across all of these dimensions, so the rubric is a **validated composite** rather than an
+invented scale. The character-/style-consistency and story-faithfulness rows adapt **DreamBench++** (Peng et
+al., 2024; ICLR 2025) — specifically its per-level *anchor descriptions* and its Krippendorff's-α rater
+protocol — and the narrative-coherence/layout, illustration-craft, and educational-suitability rows draw item
+language from the **Caldecott/ALSC** illustration criteria (recognized criteria, not a validated psychometric
+scale, so used for wording only). Each ordinal level carries an explicit **anchor description**; a bare 1–5
+with no anchors is precisely what raters fail to agree on. The composite earns its validity through the
+procedure in *Validation* below, and producing that validated instrument is itself part of the contribution.
+
 This instrument carries the output-quality claim of Objective 3 (RQ3) and, via Story completeness, the
 scene-selection claim (RQ1). It is a quality measure, not a causal one.
 
 ### B. The naive-reader comprehension instrument (RQ5) — the output-fidelity measure
 
-A reader who has **never seen the original story text** is given the finished book alone and then asked:
+A reader who has **never seen the original story text** is given the finished book alone — **with the captions
+stripped**, so the book is presented as images and page order only — and then asked:
 
 1. **Who was the story about?** — free recall of characters.
 2. **What happened?** — free recall of events.
@@ -74,7 +86,12 @@ A reader who has **never seen the original story text** is given the finished bo
 Free recall is used rather than multiple choice because a recognition item contains its own answer, whereas
 free recall does not. The reader is a naive third party rather than the child author because an author knows
 what they intended and will read that intention into any illustration, whereas a stranger can only recover what
-the book actually transmits. **This is a single-arm measure: each reader sees the one generated book and has
+the book actually transmits. **Captions are stripped for the session** (⚠️ owner-accepted, adviser sign-off
+pending — `RESEARCH_PROTOCOL.md` §7, `design_decisions_and_risks.md` R7): the captions are the child's verbatim
+text (ADR-013), so a captioned book would let the reader recover characters and plot from the text channel
+alone and inflate recall regardless of the illustrations' fidelity. Image-only sessions isolate the visual
+channel, which is what the consistency claims are about; the shipped artifact keeps its captions and Methods
+states the deviation. **This is a single-arm measure: each reader sees the one generated book and has
 never read its source text**, so recall measures transmission, not memory of a text already seen. There is no
 ON/OFF pairing (the ablation is dropped, ADR-008); the measure is the **recovery proportion itself** — the
 proportion of annotated characters and of annotated major plot points recovered — not a between-arm difference.
@@ -141,8 +158,8 @@ The pipeline's own vision-language consistency judge is itself treated as a meas
 validity is established empirically, against human labels, on a character-disjoint held-out set. Its
 construction, training, and evaluation are described under *Data Set* and *Training and Validation* and in
 `docs/specs/judge-finetune.md`; it is noted here only to record that it is held to the same standard of
-demonstrated validity as the human instruments, that its agreement with humans (RQ6) is the study's **primary
-comparative result** (ADR-008), and — critically — that it is **never** used to score the output evaluation,
+demonstrated validity as the human instruments, that its agreement with humans (RQ6) is reported
+**descriptively** and carries no comparative claim (ADR-008, revised 2026-07-22), and — critically — that it is **never** used to score the output evaluation,
 since the judge drives regeneration inside the pipeline and using it to score the outputs it helped produce
 would be circular (ADR-004).
 
@@ -164,6 +181,19 @@ ambiguity. Item-level and scale-level agreement is quantified with a **Content V
 items falling below the accepted threshold are revised or removed. The questionnaire is not administered to
 real evaluators until this review is complete. This step establishes that the questionnaire measures the ISO/IEC
 25010 characteristics it claims to, rather than assuming it.
+
+### Content validity of the expert output rubric ⚠️
+
+The same content-validity step applies to the expert output rubric (Instrument A). Because item-level content
+validity is not statistically meaningful with only the three rating experts, it is scored by a **separate,
+larger validator pool (≥ 5)** — not the three-person rating panel, which continues to *rate the books*.
+Item-level and scale-level agreement are quantified as a **Content Validity Index** (target **I-CVI > 0.78**,
+**S-CVI/Ave ≥ 0.90**), and sub-threshold items are revised or removed before any book is rated. The
+three-person panel's own inter-rater agreement (Krippendorff's α, below) is then reported **descriptively**,
+without inferential claims a three-rater sample cannot support. This keeps the statistical weight on content
+validity, where a ≥ 5 pool makes the index meaningful, while preserving the defense-endorsed three-person
+rating panel. ⚠️ **Adviser-confirm** the validator-pool size and the CVI/α thresholds
+(`action_checklist.md` B8/B9).
 
 ### Reliability pilot of the questionnaire
 
@@ -208,7 +238,7 @@ advance:
 |---|---|---|
 | Are the generated outputs good? | Expert-panel output rating (A) | **Feature-level output quality** — absolute, on the single generated arm; not a causal claim (RQ1, RQ3) |
 | Does the book transmit the story? | Naive-reader comprehension (B) | A **human fidelity outcome** — whether the story is transmitted (RQ5) |
-| Can the judge measure consistency automatically? | Judge evaluation (RQ6) | **Instrument validity** of the automated judge — the study's primary comparative result |
+| Can the judge measure consistency automatically? | Judge evaluation (RQ6) | **Instrument validity** of the automated judge — its descriptive agreement with human labels; not a comparative claim |
 | Is the delivered software any good? | ISO/IEC 25010 questionnaire (D) | **Perceived software quality** — explicitly *not* output quality or efficacy |
 | Do children enjoy and re-use it? | Fun Toolkit and usage logs (E) | **Engagement**, as Tier-2 enrichment |
 

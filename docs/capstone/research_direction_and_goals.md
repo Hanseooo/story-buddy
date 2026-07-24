@@ -73,12 +73,13 @@ from here.
 1. **Develop** the StoryBuddy pipeline — child story → consistent illustrated storybook.
 2. **Implement** the pipeline as a deployable, teacher-operated system.
 3. **Evaluate** the generated outputs — storybook, illustrations, story consistency — via an expert
-   panel and ISO/IEC 25010.
-4. **Assess** the AI performance of the consistency judge — fine-tuned Qwen2.5-VL-7B vs. the prompted
-   Gemma-3-27B baseline (RQ6).
+   panel, plus a naive-reader recall measure (RQ5).
+4. **Assess** the software quality of StoryBuddy against **ISO/IEC 25010**.
 
-Objective 3 carries the output-evaluation leg (RQ1, RQ3, RQ5 — §3); Objective 4 is RQ6, the study's
-**primary comparative study** (§3). Objectives 1–2 are the built artifact, verified by RQ1 and RQ4.
+Objective 3 carries the output-evaluation leg (RQ3 and RQ5, supported by RQ1 — §3); Objective 4 is the
+ISO/IEC 25010 software-quality questionnaire (ADR-008, revised 2026-07-22). Objectives 1–2 are the built
+artifact, verified by RQ1 and RQ4. The judge fine-tune (RQ6) is **reported descriptively** and is not an
+objective of its own.
 
 ---
 
@@ -110,21 +111,27 @@ either way. See `model_finetuning.md`.
 
 The study has two evaluation legs (ADR-008), mapped to Objectives 3 and 4:
 
-- **Objective 4 — the primary comparative study (RQ6).** The fine-tuned judge vs. its baselines. This is
-  the panel-requested *AI-performance evaluation* leg, and it is the study's spine.
-- **Objective 3 — generated-output quality (RQ3 + RQ5), plus supporting RQ1 and RQ4.** An expert panel and
-  ISO/IEC 25010 rate the outputs; a naive-reader recall measure tests whether the book transmits the story.
+- **Objective 3 — generated-output quality (RQ3 + RQ5), plus supporting RQ1 and RQ4.** An expert panel rates
+  the outputs on feature-level rubrics; a naive-reader recall measure tests whether the book transmits the
+  story.
+- **Objective 4 — software quality.** The ISO/IEC 25010 questionnaire, administered to IT practitioners and
+  teachers.
+
+The judge fine-tune (RQ6) sits outside both legs: it is **reported descriptively** — its agreement with human
+labels on the character-disjoint held-out set — and makes no comparative claim (ADR-008, revised 2026-07-22).
 
 | RQ | Question | Instrument |
 |---|---|---|
 | RQ1 | How accurately does the system identify key scenes from child-written stories? | Story Completeness vs. human-annotated major plot points |
 | RQ3 | How acceptable are the generated outputs (coherence, consistency, illustration quality, usability)? | Expert-panel + ISO/IEC 25010 output-quality ratings, feature-level |
-| RQ4 | How gracefully does the system handle **under-length** stories without inventing content? | Scene-count floor behavior |
+| RQ4 | How gracefully does the system handle **under-length** stories without inventing content? | Scene count as a function of story length against the ≥ 3 target, plus a human check that no content was invented — the never-invent rule overrides the target |
 | RQ5 | Can a naive reader recover the author's characters and events from the generated book alone? | Single-arm naive-reader recall vs. RQ1's plot points (primary); character recovery (secondary); two raters, Cohen's κ |
-| **RQ6** | Does fine-tuning an open VLM judge improve agreement with humans over the **un-fine-tuned base** and match/beat prompted Gemma-3-27B, and does the gain concentrate on **non-human** characters? | **Primary comparative study** — pre-registered test on held-out ΔF1 |
+| **RQ6** | How well does the fine-tuned VLM judge agree with human labels on the character-disjoint held-out set, and does agreement differ on **non-human** characters? | **Descriptive** — held-out F1 with character-clustered bootstrap CIs; no comparative claim |
 
-**RQ6 is the primary comparative study; RQ5 is the fidelity outcome; RQ3 is output quality; RQ1 and RQ4 are
-supporting.** RQ2 (the pipeline ON-vs-OFF ablation) is **dropped** — see ADR-008. This is **one study**.
+**RQ3 is output quality and RQ5 is the fidelity outcome (Objective 3); ISO/IEC 25010 is Objective 4; RQ1 and
+RQ4 are supporting; RQ6 is reported descriptively.** RQ2 (the pipeline ON-vs-OFF ablation) is **dropped** —
+see ADR-008. **The study has no primary comparative study and makes no causal or comparative claim.** This is
+**one study**.
 
 ### 3.1 The two evaluation legs
 
@@ -136,8 +143,11 @@ ADR-008):
   panel-requested "evaluate the generated outputs" leg — outputs, not internal pipeline components.
   RQ3's usability dimension is measured separately, by the ISO/IEC 25010 software-quality questionnaire
   (Instrument D) administered to IT practitioners and teachers — never by this panel.
-- **AI-performance assessment of the judge (RQ6).** The study's primary comparative study; full treatment
-  in §2's judge paragraph, ADR-018, and `docs/specs/judge-finetune.md`.
+- **ISO/IEC 25010 software quality (Objective 4).** The questionnaire (Instrument D) administered to IT
+  practitioners and teachers — the software leg, separate from the panel above.
+
+The judge's own agreement with human labels (RQ6) is reported descriptively alongside these, not as a leg;
+full treatment in §2's judge paragraph, ADR-018, and `docs/specs/judge-finetune.md`.
 
 RQ5 (§3.2) adds the reader-side fidelity measure. The judge is **never** used to score any of these
 outcomes (§3.3).
@@ -155,7 +165,7 @@ requires.** One annotation, two uses. This is a **single-arm** fidelity measure 
 generated book, not an ON/OFF pair. Two independent raters score recovery against the annotation via a
 validated recall protocol, and **Cohen's κ** is reported. **Plot-point recall is the primary outcome;
 character recovery is secondary/confirmatory** (owner decision, `design_decisions_and_risks.md` R3,
-2026-07-20) — RQ5 is a supporting measure inside Objective 3, not the study's headline (RQ6).
+2026-07-20) — RQ5 is one of Objective 3's two output measures, alongside the expert panel (RQ3).
 
 Two properties worth stating in Methods. **The reader need not be a child**, which is why RQ5 runs on
 adult raters and survives an ethics delay. And **asking the author "did it match your intent?" is a weaker
@@ -181,7 +191,9 @@ is never improvised.
 Test stories must be **real or realistic child writing**, not builder-authored clean prose — which would
 measure best-case only. Grade 5–6, English with Taglish code-switching tolerated.
 
-**Target: 50 donated stories; take 60–70 if recruitment allows.** That number is set by the fine-tune (RQ6),
+**Target: 50 donated stories; take 60–70 if the first corpus batch yields fewer than ~1 usable disjoint
+character per story** — recruitment is gated on character yield, not story count (`methodology.md` §4.1).
+That number is set by the fine-tune (RQ6),
 not the output evaluation: stories yield characters, and characters are the unit of RQ6's character-disjoint
 33 / 5 / 12 split. More characters is the cheapest statistical power the project has, **and the corpus is
 closed after Phase 2.5 — it is unfixable later.**
@@ -226,9 +238,10 @@ Both stages require guardian informed consent **and** age-appropriate child asse
 ### 4.4 Pre-registration
 
 **The analysis plan — hypotheses, baselines, metrics, success criteria — is written and timestamped before
-anything is run.** For RQ6 this converts a risk into an asset: a fine-tuned judge that *loses* to the prompted
-incumbent becomes a publishable finding ("prompting remains competitive at this scale; the bottleneck is data,
-not capacity") rather than a result to be spun. The same discipline governs the output evaluation and RQ5:
+anything is run.** For RQ6 this fixes the descriptive report before the held-out set is read once: the judge's
+agreement with human labels is reported whatever it turns out to be, and the deployment gate that decides
+whether the fine-tuned judge replaces the prompted incumbent is declared in advance rather than chosen after
+seeing the numbers. The same discipline governs the output evaluation and RQ5:
 the success criteria and the recall protocol are fixed before data, so a weak result is a finding, not a fudge.
 
 Almost no capstone does this. It is the cheapest defensive move available.
@@ -253,7 +266,7 @@ authentic-audience artifact the motivating literature calls for.
 | **Learning gains** in children's writing | N ≈ 8–15, no non-illustrated control, no pre/post design, no longitudinal window. Prior literature is the **warrant** for why fidelity matters; it is not our finding. Overclaiming here is the single most likely way the defense goes badly. |
 | **Privacy preservation** | The child's text transits a hosted provider. Only on-device generation could claim otherwise (Future Work). |
 | **Watermark provenance** | No open equivalent to SynthID-Image exists; C2PA is Future Work. |
-| **That the fine-tuned judge will ship** | It ships only if it clears a pre-registered gate. Rung C — it beats its base but loses to the prompted incumbent — satisfies RQ6 and keeps the prompted judge in the product. |
+| **That the fine-tuned judge will ship** | It ships only if it clears a pre-registered deployment gate. Rung C — it beats its base but loses to the prompted incumbent — keeps the prompted judge in the product; RQ6's descriptive report is unaffected either way. |
 
 ---
 
@@ -272,7 +285,8 @@ At N ≈ 8–15 the study cannot stratify by age, and age is one of the largest 
 writing. Broadening the band would add variance, not generality. **A tight population is a delimitation, not
 an apology.**
 
-**In scope:** Story Analyzer · Scene Segmentation (up to 10–15 scenes, floor ≥ 3) · Character Bible + canonical
+**In scope:** Story Analyzer · Scene Segmentation (up to 10–15 scenes, target ≥ 3 where the arc supports it —
+never padded, and never-invent overrides the floor) · Character Bible + canonical
 reference (≤ 2 canonical references) · three style presets · Prompt Optimizer · Image Generator
 (Qwen-Image-Edit) · prompted VLM consistency judge + targeted regeneration · moderation stack (input text,
 output images, Filipino PII redaction) · slide composer with expressive TTS narration (Chatterbox) · PDF export ·
@@ -301,8 +315,8 @@ rather than a hope, and it is why the system is self-hostable and replicable.
    characters, where existing benchmarks (e.g. DreamBench++) evaluate real photographic subjects rather than
    the stylized, invented, non-human regime this product lives in, and none provides human pairwise identity
    judgments over it (ADR-001 and `docs/specs/judge-finetune.md` §5.1 in the repository).
-4. **A fine-tuned open VLM consistency judge as the study's primary comparative result**, honestly evaluated
-   against four baselines with a pre-registered claim ladder — including the outcome where it loses.
+4. **A fine-tuned open VLM consistency judge**, reported descriptively — its agreement with human labels on a
+   character-disjoint held-out set read exactly once, reported whatever it shows. No comparative claim is made.
 5. **Equity by construction** — an open-weight, self-hostable stack with no per-seat licensing cost.
 
 ---
@@ -338,7 +352,7 @@ is a weekend. Everything before it is months.
 | **Introduction** | §1.1 (motivation, cited to prior work) → §1.2 (the gap) → §1.3 (the research problem + central RQ) → §7 (contributions). Lead with the child and the folder; land on identity drift. |
 | **Related Work** | Situate against the crowded character-consistency field (ConsiStory, StoryDiffusion, The Chosen One, DreamBench++), then §1.2's true gap: existing benchmarks are photographic or method-preference studies, and **none provides human pairwise identity judgments over stylized, invented, non-human characters** (`docs/specs/judge-finetune.md` §5.1 in the repository, incl. the rejected-alternatives table). Cite only arXiv IDs you have re-verified (see `design_decisions_and_risks.md`, R6). |
 | **Methods** | **Drafted in full: `docs/capstone/methodology.md`** — development methodology, system under test, data collection, datasets, training and validation, instruments, analysis plan, ethics, threats to validity. |
-| **Results** | Phase 0.5 probe results · expert-panel + ISO-25010 output-quality ratings · RQ5 recall scores · RQ6's four-baseline table with CIs (the primary comparative result) |
+| **Results** | Phase 0.5 probe results · expert-panel + ISO-25010 output-quality ratings · RQ5 recall scores · RQ6's held-out agreement table with CIs (descriptive) |
 | **Discussion** | §5 — what the numbers support, and the four claims we refuse to make. Phase 0.5's non-human boundary belongs here if Quill fails. |
 | **Limitations** | §5's table, §6's delimitation, and the fact that the corpus is one grade band in one country. |
 

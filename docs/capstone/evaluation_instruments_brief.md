@@ -183,8 +183,13 @@ freely recalls *who* and *what happened*; recall is scored against the plot-poin
   prompted" claim.
 - **Note for the record:** this **reverses** the earlier locked decision (`scope_revision_roadmap.md` §0.2,
   which made RQ6 the *primary comparative study*). Because it's a reversal of a locked decision, it is logged
-  in `design_decisions_and_risks.md`. Full propagation of the demotion across `methodology.md §7.3`,
-  `research_direction_and_goals.md §3`, `value_proposition.md`, and `MASTER_SPEC.md` is a follow-up task.
+  in `design_decisions_and_risks.md` (R4). **ADR-008 was revised 2026-07-22** to make this the authoritative
+  position, and **propagation is done** across `methodology.md §7.3`, `research_direction_and_goals.md`
+  (§Objectives and §3), `value_proposition.md`, `research_instruments.md`, `action_checklist.md`,
+  `model_finetuning.md`, and `scope_revision_roadmap.md`. The study consequently has **no primary comparative
+  study** and makes no causal or comparative claim. **ADR-018's δ = 3 non-inferiority gate is unaffected** —
+  it is a *deployment* gate (does the fine-tuned judge replace the prompted incumbent in the product), not a
+  reported finding.
 
 ---
 

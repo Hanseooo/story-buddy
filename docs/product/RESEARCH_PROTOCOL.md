@@ -32,20 +32,28 @@ That is what makes this research rather than integration.
 > **Does an automated consistency-verification-and-correction loop produce picture books faithful enough
 > that other readers recover the story the child meant to tell?**
 
-- **RQ6** (fine-tuned judge vs. its baselines) is the **primary comparative study** — the panel-requested
-  AI-performance evaluation leg.
 - **RQ5** (naive-reader recall) is the **fidelity outcome** — does the generated book, on its own, transmit
   the child's characters and events to a reader who never saw the source text?
 - **RQ3** (expert panel + ISO/IEC 25010) is **output quality** — are the generated books good?
+- **RQ6** (judge agreement with human labels) is **descriptive instrument validity** — reported, not
+  compared. Its fine-tuned-vs-baseline comparison was dropped as a research claim (ADR-008, revised
+  2026-07-22).
 
-RQ1 and RQ4 are supporting. **RQ2 (the pipeline ON-vs-OFF ablation) is dropped** — see ADR-008. This is
-**one study**, not six.
+RQ1 and RQ4 are supporting. **RQ2 (the pipeline ON-vs-OFF ablation) is dropped** — see ADR-008. **There is
+no primary comparative study**: RQ5 + RQ3 answer Objective 3 (evaluate the generated outputs), ISO/IEC
+25010 answers Objective 4 (software quality). This is **one study**, not six.
 
 ## 3. What we claim, and what we must not
 
-**Claim:** that the generated outputs are rated acceptable by an expert panel and ISO/IEC 25010 (RQ3), that a
-naive reader can recover the child's characters and events from the generated book alone (RQ5), and that a
-fine-tuned open VLM judge matches or beats a prompted 27B incumbent on held-out identity judgments (RQ6).
+**Claim:** that the generated outputs are rated acceptable by an expert panel (RQ3), that a naive reader can
+recover the child's characters and events from the generated book alone (RQ5), and that the software is
+rated acceptable on ISO/IEC 25010 (Objective 4). RQ6 is reported **descriptively** — the fine-tuned judge's
+agreement with human labels on the character-disjoint held-out set.
+
+**Do not claim the fine-tuned judge matches or beats a prompted 27B incumbent** (ADR-008, revised
+2026-07-22). That comparison is dropped as a research claim; the paper reports agreement, not a contest.
+ADR-018's δ = 3 non-inferiority test still runs — as a **deployment** gate deciding whether the fine-tuned
+judge replaces the prompted incumbent in the product — but it is a build decision, not a reported finding.
 
 **Do not claim a causal "the pipeline helped" effect.** The pipeline-ON-vs-OFF ablation (RQ2) is dropped
 (ADR-008); there is no control arm, and the October type-A defense does not require one (roadmap §0.8). The
@@ -75,7 +83,7 @@ That is the SDG-4 hook, and it is a design property, not a hope.
 | RQ3 | How acceptable are the generated outputs (coherence, consistency, illustration quality, usability)? | 1 | Expert-panel feature-level ratings (Instrument A) for coherence/consistency/illustration quality; usability is measured separately via the ISO/IEC 25010 evaluator questionnaire (Instrument D, methodology §6.4), administered to IT practitioners and teachers — never by the expert panel |
 | RQ4 | How gracefully does the system handle **under-length** stories without inventing content? | 1 | Scene-count floor behavior on short corpus items |
 | RQ5 | Can a naive reader recover the author's characters and events from the generated book alone? | 1 (adults) | Single-arm naive-reader recall vs. RQ1's plot points; two raters, Cohen's κ |
-| **RQ6** | Does fine-tuning an open VLM judge improve agreement with humans over the un-fine-tuned base — and does the improvement concentrate on **non-human** characters? | — | **Primary comparative study** — pre-registered superiority test on held-out ΔF1 (`different_character`) vs. **zero-shot Qwen2.5-VL-7B**; McNemar + character-clustered bootstrap CI. Prompted Gemma-27B is a reported secondary and the **product** gate, not the research gate (ADR-018 amendment a, `docs/specs/judge-finetune.md` §7) |
+| **RQ6** | How well does the fine-tuned open VLM judge agree with human labels on the character-disjoint held-out set — overall and on the **non-human** slice? | — | **Descriptive only** (ADR-008, revised 2026-07-22) — agreement (F1/κ) with human labels, character-clustered bootstrap CI, held-out set **read once**, IRR on the human labels reported. **No comparative claim** against the zero-shot base or prompted Gemma-27B. The δ = 3 non-inferiority test remains a **deployment** gate (ADR-018 amendment a, `docs/specs/judge-finetune.md` §7), not a reported finding |
 
 **The output evaluation is never scored using the judge.** The judge drives regeneration inside the
 pipeline; using it as an outcome measure would be circular. The output-quality outcomes are the expert
@@ -95,9 +103,13 @@ ADR-008):
   panel-requested "evaluate the generated outputs" leg — outputs, not internal pipeline components.
   RQ3's usability dimension is measured separately, by the ISO/IEC 25010 software-quality questionnaire
   (Instrument D) administered to IT practitioners and teachers — never by this panel.
-- **AI-performance assessment of the judge (RQ6).** The study's primary comparative study — fine-tuned
-  Qwen2.5-VL-7B vs. its baselines on a human-labeled, character-disjoint held-out set. Full treatment in
-  ADR-018 and `docs/specs/judge-finetune.md`.
+- **Software quality (Objective 4).** The ISO/IEC 25010 questionnaire (Instrument D), administered to IT
+  practitioners and teachers. This is Objective 4's whole content (ADR-008, revised 2026-07-22).
+
+**RQ6 is no longer a leg** (ADR-008, revised 2026-07-22). The fine-tuned Qwen2.5-VL-7B judge is still
+trained and its **agreement with human labels on the character-disjoint held-out set is reported
+descriptively**; the comparison against its zero-shot base and prompted Gemma-27B is not a research claim.
+Full treatment in ADR-018 and `docs/specs/judge-finetune.md`.
 
 RQ5 (§7) adds the reader-side fidelity measure: a naive reader is given the generated book alone and asked
 to recall its characters and events, scored against the same human-annotated plot points RQ1 requires.
@@ -138,7 +150,8 @@ A reader who has **never seen the story text** is given the book alone, then ask
 Scoring: recalled characters and events are matched against the **human-annotated major plot points** —
 **the same annotation RQ1 already requires.** One annotation, two uses. **Plot-point recall is the
 primary outcome; character recovery is secondary/confirmatory** (owner decision, `design_decisions_and_risks.md`
-R3, 2026-07-20) — RQ5 is a supporting fidelity measure inside Objective 3, not the study's headline (RQ6).
+R3, 2026-07-20) — RQ5 is one of Objective 3's two output measures, alongside the expert panel (ADR-008,
+revised 2026-07-22: with RQ6 demoted there is no headline comparative study for RQ5 to sit behind).
 
 > ⚠️ **Owner-accepted change pending adviser sign-off (2026-07-13 — `design_decisions_and_risks.md` R7):**
 > comprehension sessions present the book **with captions stripped** (images and page order only).
@@ -161,6 +174,12 @@ weaker instrument** — authors know what they meant and will read it into any i
 **The sharing feature and this measure are independent.** RQ5 needs a reader, a book, and a questionnaire —
 that is the Tier-1 harness. If in-app sharing slips, the research does not.
 
+> **Open alternative to "one book per reader" (not decided here).** `design_decisions_and_risks.md`
+> **R2(b)** recommends *within-reader, different stories* — one reader reads several different books, never
+> the same story twice — to tighten the single-arm recall-rate estimate without contamination. It is
+> **not yet adopted**; this section still specifies one book per reader. Needs adviser sign-off (it changes
+> the pre-registration) and interacts with R9's rater-assignment matrix.
+
 ---
 
 ## 8. Corpus
@@ -170,9 +189,10 @@ best-case only). Grade 5–6, English with Taglish code-switching tolerated.
 
 **Target: 50 stories, and take 60–70 if recruitment allows.** That number is set by the fine-tune, not the
 output evaluation — stories yield characters, and characters are the unit of the fine-tune's disjoint
-33 / 5 / 12 split (`docs/specs/judge-finetune.md` §5.5). RQ6 makes a **superiority claim**, so its held-out
-test set must be large enough to resolve a few points of F1; **more characters is the cheapest statistical
-power the project has.** The expert-panel and RQ5 output evaluation would need fewer.
+33 / 5 / 12 split (`docs/specs/judge-finetune.md` §5.5). RQ6 no longer makes a superiority claim (ADR-008,
+revised 2026-07-22), but its held-out test set must still be large enough for the reported agreement figure
+to have a usable confidence interval — and ADR-018's δ = 3 deployment gate resolves a few points of F1
+either way; **more characters is the cheapest statistical power the project has.** The expert-panel and RQ5 output evaluation would need fewer.
 
 **This is a recruitment decision and it is unfixable later.** By Phase 2.5 the corpus is closed. Ask for the
 extra stories at Stage 1.
@@ -288,7 +308,9 @@ questions, not chosen for convenience, and each boundary is load-bearing:
 
 - They **write independently** → the story is unambiguously the child's. Scaffold a Grade 2 student and
   RQ5 is meaningless: whose story did we illustrate?
-- They **read fluently** → peer comprehension is measurable at all.
+- They **read fluently** → they can author at length, and the books they produce are readable stimuli.
+  *(This boundary originally rested on in-app peer comprehension, which is cut — §6, ADR-021. It survives
+  on authoring fluency, not on the cut instrument.)*
 - **English is the medium of instruction** from Grade 4 (DepEd) → one language, one moderation regime, one
   TTS voice.
 - They are **pre-adolescent** → peer feedback is unlikely to be cruel.
@@ -309,10 +331,23 @@ moderation thresholds, failure copy, and narration voice are all calibrated to a
 | Style Consistency | Fixed style maintained across scenes | Human + VLM-judge |
 | **Reader Comprehension (RQ5)** | Does the book transmit the story? | Naive-reader free recall vs. annotated plot points |
 | Story Fidelity | Book matches child's intent | Child (Tier 2) |
-| Engagement | Repeat-use / liking | Fun Toolkit + behavioral logs |
+| Engagement | Repeat-use / liking | Fun Toolkit + ⚠️ behavioral logs — **not instrumented** (see below) |
 | Generation Time | Submission → completed storybook | Instrumentation (LangSmith) |
-| AI Resource Usage | Avg generation time, image count, regen count, API cost/story | Instrumentation |
-| **VLM–Human agreement (RQ6)** | Does the automated checker track human judgment? | Held-out κ, split by human/non-human character |
+| AI Resource Usage | Avg generation time, image count, regen count | Instrumentation (LangSmith; `Cost.image_count` / `Cost.regen_count`) |
+| AI Resource Usage — cost | API cost/story | ⚠️ **not instrumented** (see below) |
+| **VLM–Human agreement (RQ6)** | How well does the fine-tuned judge agree with human labels? | Held-out agreement (F1/κ), split by human/non-human character — **descriptive**, no comparison (ADR-008, revised 2026-07-22) |
+
+> ⚠️ **Two rows require instrumentation that does not exist yet (2026-07-22).** Do not report them until
+> it does; if it never lands, drop them from Methods rather than estimating.
+> - **API cost/story.** `Cost.usd_estimate` is declared in `docs/specs/story-memory-contract.md`, but
+>   `backend/providers.py` does **no** token or cost accounting and no spec owns populating the field.
+>   Needs a per-call token/price capture at the provider boundary before this metric is producible.
+> - **Behavioral logs** (completion rate, time-on-task, spontaneous second-story starts, "try again"
+>   frequency). These fields appear in no schema, no spec, and no backlog row. Engagement currently rests
+>   on the Fun Toolkit self-report alone. (Already Tier-2, Ethics-Stage-2-gated and post-October — §6.)
+>
+> Generation time, image count and regen count **are** covered: LangSmith tracing is wired and
+> `Cost.image_count` / `Cost.regen_count` are in the Story Memory contract.
 
 ---
 
@@ -320,11 +355,12 @@ moderation thresholds, failure copy, and narration voice are all calibrated to a
 
 **Write the analysis plan — hypotheses, baselines, metrics, and success criteria — before running anything.**
 
-For RQ6 in particular this converts a risk into an asset: a fine-tuned judge that *loses* to prompted
-Gemma-27B becomes a publishable finding (*"prompting remains competitive at this scale; the bottleneck is
-data, not capacity"*) rather than a result to be spun. The same discipline governs the output evaluation and
-RQ5: the success criteria and the recall protocol are fixed before data, so a weak result is a finding, not
-a fudge.
+For RQ6 the discipline is what makes a *descriptive* number trustworthy: the human labels carry reported
+inter-rater reliability, and the held-out set is **read once**, against an analysis plan fixed in advance —
+so the reported agreement figure is the one we committed to, whatever it turns out to be. (ADR-008, revised
+2026-07-22: no superiority test is pre-registered, because no comparative claim is made.) The same
+discipline governs the output evaluation and RQ5: the success criteria and the recall protocol are fixed
+before data, so a weak result is a finding, not a fudge.
 
 Almost no capstone does this. It is the cheapest defensive move available.
 
@@ -341,8 +377,7 @@ Almost no capstone does this. It is the cheapest defensive move available.
 | "Is a LoRA on ~1,000 examples meaningful?" | Character-disjoint splits, four baselines, CIs, ≥3 seeds, pre-registered plan (§13). |
 | "Why not train on an existing dataset?" | None exists for this task. Surveyed and rejected with reasons: `judge-finetune.md` §5.1. |
 | "Isn't your training data just the model's own output?" | Positives are **human-confirmed**, never auto-labelled. That is the §3.1 shortcut, and we name it. |
-| "Your 7B beat a 27B? Isn't that suspicious?" | It is *domain-specialized* on the exact distribution and the comparator is *prompted*. That is the expected direction, and the zero-shot 7B baseline shows the LoRA — not the base model — did it. |
-| "**You only beat your own base model. So what?**" | Expected — and it is the standard fine-tuning ablation, pre-registered. The contribution is *where* the gain lands: the non-human slice ADR-001 says nobody has measured. We report the prompted-Gemma comparison unconditionally, alongside latency and cost. |
+| "So is your fine-tuned judge better than the prompted 27B?" | **We do not claim either way** (ADR-008, revised 2026-07-22). The paper reports the fine-tuned judge's *agreement with human labels* on a character-disjoint held-out set, read once. Whether it replaces the prompted incumbent *in the product* is a deployment gate (ADR-018's δ = 3), not a finding of this study. |
 | "**DINOv2 beat your judge on F1.**" | Then it is a finding about metrics, not a product decision. DINOv2 emits a scalar; ADR-010's regeneration controller needs `failure_reasons` to correct a prompt. A cosine cannot say "restate the scarf." Pre-declared: `judge-finetune.md` §7.3. |
 | "Did you pick the test set after seeing results?" | The split, the stratification, the primary endpoint, and δ were timestamped before the first label was collected. The held-out set was read once. |
 | "Why not just use GPT/Gemini?" | Open-weight mandate (ADR-015) — and the equity claim it enables (§3). |

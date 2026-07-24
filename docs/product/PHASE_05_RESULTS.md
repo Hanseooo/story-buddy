@@ -53,7 +53,7 @@ uv run python -m spikes.phase_05 tally
 | Outcome | Meaning | Do this |
 |---|---|---|
 | Both hold | The reference does the work. ADR-007's mechanism is real. | **Phase 1 opens.** |
-| Absolute holds, separation fails | The model draws a good fox with or without the reference. **This is a fail** — the reference is not doing the work, ADR-007 has no measurable effect on this substrate, and **RQ2 has no story.** | Escalate to **FLUX.1 Kontext [dev]** (non-commercial, permitted — ADR-015). Re-run. |
+| Absolute holds, separation fails | The model draws a good fox with or without the reference. **This is a fail** — the reference is not doing the work and ADR-007 has no measurable effect on this substrate. *(RQ2 was dropped in ADR-008; this probe is a **technical substrate gate**, not a research arm — `methodology.md` §3.4. It still fails: the pipeline's consistency mechanism would be doing nothing.)* | Escalate to **FLUX.1 Kontext [dev]** (non-commercial, permitted — ADR-015). Re-run. |
 | Both fail | The substrate cannot hold identity. | **Stop and surface it.** A Phase-0.5 finding, not a Phase-3 catastrophe. |
 | Pip passes, Quill fails | **Not a defeat.** It maps the product's boundary and it is the most interesting sentence in the paper. | Record it. Decide scope deliberately. Do not paper over it. |
 
@@ -127,7 +127,7 @@ uv run python -m spikes.phase_05 seed
 | Outcome | Do this |
 |---|---|
 | Both reproduce | Record against CC-7. Proceed. |
-| Either fails | Record against **CC-7**, then choose: drop the reproducibility claim from RQ2's method, or change provider. Do not silently keep the claim. |
+| Either fails | Record against **CC-7**, then choose: drop the reproducibility claim from the methodology (RQ2 itself is gone — ADR-008), or change provider. Do not silently keep the claim. |
 
 **Result:** `edit_image` ______ · `text_to_image` ______
 

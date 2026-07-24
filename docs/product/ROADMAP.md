@@ -175,8 +175,11 @@ container (~2–3 GB). Check the plan tier at the *start* of this phase, not the
 
 ## Phase 2.5 — Judge Fine-Tuning *(~1.5–2 weeks; gated on Phase 1 output)*
 
-**Goal:** an open, fine-tuned consistency judge that beats the prompted incumbent — and a results table
-that survives a hostile question. Full recipe: `docs/specs/judge-finetune.md` — **start at its §0, which is
+**Goal:** an open, fine-tuned consistency judge that (i) improves over its own zero-shot base — the
+research gate — and (ii) is **non-inferior to the prompted incumbent within δ = 3 F1** — the product gate
+that decides whether it ships (ADR-018 amendment a; the older "beats the prompted incumbent" one-liner is
+superseded). Plus a results table that survives a hostile question. Its **human-agreement numbers are
+reported descriptively**; no comparative claim goes in the paper (ADR-008, revised 2026-07-22). Full recipe: `docs/specs/judge-finetune.md` — **start at its §0, which is
 the step-by-step order of operations.**
 
 **The product is finished before this phase starts.** Phases 1–2 ship with the *prompted* judge; this phase
@@ -189,10 +192,12 @@ swaps one replaceable part. If it fails its gate, nothing else changes.
   Splits are **character-disjoint**: 33 / 5 / **12 characters**, test stratified human vs. non-human and
   oversampled. Two annotators, IRR reported.
 - **Pre-register the analysis plan before a single label is collected.** **Two gates, not one**
-  (ADR-018 amendment a). *Research gate (RQ6):* held-out ΔF1 on `different_character` vs. **zero-shot
+  (ADR-018 amendment a). *Research gate (did the fine-tune work):* held-out ΔF1 on `different_character` vs. **zero-shot
   Qwen2.5-VL-7B**, 95% CI excluding zero, McNemar + bootstrap **clustered by character**. *Product gate:*
   non-inferiority to prompted Gemma-27B within δ = 3 F1, no recall regression. Claim ladder A/B/C/D declared
-  in advance; **only rung D fails, and rung D is a bug.**
+  in advance; **only rung D fails, and rung D is a bug.** Both gates are **build/deployment** decisions as of
+  ADR-008 (revised 2026-07-22) — RQ6 itself is reported descriptively (agreement with human labels, IRR
+  reported, held-out set read once), and neither comparison is a claim in the paper.
 - **Train.** `Qwen2.5-VL-7B-Instruct` + QLoRA via LLaMA-Factory, on a rented 4090 (~$5–15, 1–2 hours,
   ≥3 seeds). W&B for runs. Output is a ~tens-of-MB **LoRA adapter**, not a model.
 - **Evaluate.** Four baselines: zero-shot Qwen2.5-VL-7B, prompted Gemma-3-27B, CLIP cosine, DINOv2 cosine.
@@ -204,10 +209,11 @@ swaps one replaceable part. If it fails its gate, nothing else changes.
   change — no code. Rollback is the same two variables.
 
 **Exit criteria:** the results table exists and is honest, and the held-out set was read exactly once.
-**Gates:** rung A or B ships the fine-tuned judge. **Rung C still satisfies RQ6** — fine-tuning worked, the
-gap to a prompted 27B did not close, the product keeps the prompted judge and ADR-019 is dropped. Rung D
-means the LoRA did nothing: a bug, not a result. Losing to prompted Gemma is a publishable finding — that is
-what pre-registration buys, and it only works if the ladder was written down first.
+**Gates:** rung A or B ships the fine-tuned judge. **Rung C is still a fine and reportable outcome** —
+fine-tuning worked, the gap to a prompted 27B did not close, the product keeps the prompted judge and
+ADR-019 is dropped. Rung D means the LoRA did nothing: a bug, not a result. The ladder is a **deployment**
+ladder as of ADR-008 (revised 2026-07-22): it decides what ships, not what the paper claims — RQ6 reports
+the fine-tuned judge's agreement with human labels either way, so no rung is an embarrassment to write up.
 
 **Blocked on:** Ethics Stage 1 → corpus → Phase 1 run over the corpus. **Do not label before Phase 0.5
 passes** — the judge learns the drift signature of the image model that drew its training images, so a
@@ -226,8 +232,10 @@ substrate swap invalidates the weekend.
   **plus the RQ5 comprehension instrument** (images only, captions stripped; name the characters, recount
   what happened) scored against human-annotated major plot points. IRR annotation guide. Target N ≈ 15–30
   adults.
-- **Tier-2 harness** — Fun Toolkit (Smileyometer + Again-Again), story-fidelity item, peer comprehension in
-  the app, behavioral logging. Target N ≈ 8–15 children. **Enrichment, not load-bearing.**
+- **Tier-2 harness** — Fun Toolkit (Smileyometer + Again-Again), story-fidelity item, behavioral logging.
+  Target N ≈ 8–15 children. **Enrichment, not load-bearing.** *(**In-app peer comprehension is cut**
+  — ADR-008/ADR-021, 2026-07-20: RQ5 is a single-arm naive-reader measure run on Tier-1 adults, and the
+  gallery is display-only, so there is no in-product reflection surface to build. `RESEARCH_PROTOCOL.md` §6.)*
 - **Metrics export** — generation time, image/regen counts, cost, VLM scores from tracing (RQ6's
   VLM–human agreement is computed in Phase 2.5, against the judge's held-out set).
 
@@ -313,7 +321,7 @@ Two edges nobody draws, and they are the two likeliest ways the schedule dies:
 | 3 | PDF export | The out-of-container escape hatch; slideshow still works |
 | 4 | **Fine-tuned judge *ships*** → evaluate it offline instead | The "faster, cheaper product" claim. **RQ6 survives.** Modal disappears (ADR-019) |
 | 5 | Tier-2 (children) | Enrichment only — ADR-008 already says the capstone survives |
-| **Never** | Phase 0.5, RQ6's judge evaluation, the moderation stack | The project — RQ6 is the primary comparative study (ADR-008, 2026-07-20), not the reach piece this ladder originally treated it as |
+| **Never** | Phase 0.5, RQ6's judge evaluation, the moderation stack | The project — the judge evaluation is the instrument-validity leg and the moderation stack is non-negotiable. (RQ6 is reported **descriptively**; it is no longer the primary comparative study — ADR-008, revised 2026-07-22 — but it is still not the reach piece this ladder originally treated it as) |
 
 ---
 

@@ -2,9 +2,25 @@
 
 **Subtitle:** An AI-Powered Storyboarding and Picture-Book Generation System
 **SDG Alignment:** SDG 4 — Quality Education
-**Doc status:** v2.2 — **classroom setting, peer sharing, and a fine-tuned judge (2026-07-10)**
+**Doc status:** v2.3 — **RQ6 demoted to descriptive; no comparative claim (2026-07-22)**
 **Supersedes:** PRD Draft v1
 **Study design lives in `docs/product/RESEARCH_PROTOCOL.md`.** §10 below is a summary and a pointer.
+
+---
+
+## 0.3 What changed in v2.3 (2026-07-22) — the study drops its comparative claim
+
+- **RQ6 is demoted from primary comparative study to a descriptive report.** The judge fine-tune is
+  **kept**; its **agreement with human labels** on the character-disjoint held-out set is reported. The
+  **fine-tuned-vs-baseline comparison is dropped as a research claim** — no "fine-tuned 7B matches/beats
+  prompted Gemma-3-27B" in the paper. **ADR-008, revised 2026-07-22.**
+- **The study has no primary comparative study and makes no causal or comparative claim.** Objective 3 =
+  evaluate the generated outputs (expert panel + RQ5 naive-reader recall); Objective 4 = **ISO/IEC 25010**
+  software quality.
+- **Methodological requirements survive:** inter-rater reliability on the human labels, held-out set
+  **read once**.
+- **ADR-018's δ = 3 non-inferiority gate is unaffected** — it is a *deployment* gate (does the fine-tuned
+  judge replace the prompted incumbent in the product), not a reported finding.
 
 ---
 
@@ -240,10 +256,13 @@ ethics re-review); social sharing; on-device generation; style LoRA; C2PA proven
 - RQ3: How acceptable is the generated storybook (narrative coherence, visual consistency, illustration quality, usability)?
 - RQ4: How gracefully does the system handle **under-length** stories (fewer than 10–15 natural scenes) without inventing content?
 - RQ5: Can a naive reader recover the author's characters and events from the generated book alone? *(single-arm output-fidelity measure — scored against RQ1's human-annotated plot points via a validated recall protocol, two raters, Cohen's κ. ADR-008, ADR-021.)*
-- **RQ6 (primary comparative study): Does a fine-tuned open judge agree with humans better than its own un-fine-tuned base and match/beat a prompted Gemma-3-27B — with the gap widening on non-human characters?** *(instrument validity. ADR-018.)*
+- **RQ6 (descriptive, not comparative): How well does the fine-tuned open judge agree with human labels on the character-disjoint held-out set — overall and on non-human characters?** *(instrument validity. ADR-008 rev. 2026-07-22, ADR-018.)*
 
-**RQ2 (pipeline-ON-vs-OFF ablation) is dropped** — see ADR-008. RQ6 is the primary comparative study;
-RQ5 is the output-fidelity measure; RQ3 is output acceptability; RQ1 and RQ4 are supporting.
+**RQ2 (pipeline-ON-vs-OFF ablation) is dropped** — see ADR-008. **RQ6's fine-tuned-vs-baseline
+comparison is dropped as a research claim too** (ADR-008 rev. 2026-07-22): the judge fine-tune is kept
+and reported **descriptively**, and the study makes **no comparative and no causal claim**. Objective 3 is
+output evaluation (expert panel + RQ5 naive-reader recall); Objective 4 is ISO/IEC 25010 software quality.
+RQ3 is output acceptability; RQ1 and RQ4 are supporting.
 
 ⚠️ **The output evaluation (RQ3, RQ5) is never scored using the consistency judge.** The judge drives
 regeneration inside the pipeline; using it as the outcome measure would be circular. The judge's own
@@ -262,9 +281,15 @@ finding of this study.
   software-quality questionnaire (Instrument D) administered to IT practitioners and teachers — never
   by this panel. RQ5 adds a single-arm naive-reader recall measure: a reader who never saw the source
   story names the characters and recounts events, scored against RQ1's plot-point annotation.
-- **Leg 2 — AI-performance assessment of the consistency judge (RQ6).** The primary comparative study:
-  fine-tuned Qwen2.5-VL-7B judge vs. its own zero-shot base and vs. prompted Gemma-3-27B, on a
-  human-labeled, character-disjoint held-out set. Full machinery in ADR-018 and `docs/specs/judge-finetune.md`.
+- **Leg 2 — software quality (Objective 4).** The ISO/IEC 25010 questionnaire (Instrument D),
+  administered to IT practitioners and teachers. This is Objective 4's whole content.
+
+**RQ6 is not a leg.** The fine-tuned Qwen2.5-VL-7B judge is still trained and its **agreement with human
+labels on the character-disjoint held-out set is reported descriptively** — no "matches or beats prompted
+Gemma-3-27B" claim is made. The methodological requirements survive: inter-rater reliability on the human
+labels, held-out set **read once**. ADR-018's δ = 3 non-inferiority test remains a **deployment gate**
+(does the fine-tuned judge replace the prompted incumbent in the product), not a reported finding. Full
+machinery in ADR-018 and `docs/specs/judge-finetune.md`.
 
 **Tier 1 (adults — parents/teachers), no special clearance typically needed. Designed to stand alone.**
 - Blind pairwise/scored ratings of narrative coherence, visual consistency, illustration quality, story completeness.
@@ -288,7 +313,7 @@ finding of this study.
 | Engagement | Repeat-use / liking | Fun Toolkit + behavioral logs |
 | Generation Time | Submission → completed storybook | Instrumentation (§16) |
 | AI Resource Usage | Avg generation time, image count, regen count, API cost/story | Instrumentation (§16) |
-| **VLM–Human agreement** | Does the fine-tuned judge agree with humans better than its base and prompted Gemma-3-27B? | **Primary comparative result (RQ6)** — pre-registered, not a bonus |
+| **VLM–Human agreement** | How well does the fine-tuned judge agree with human labels on the held-out set? | **Descriptive (RQ6)** — no comparative claim; held-out set read once, IRR reported (ADR-008 rev. 2026-07-22) |
 
 ### Story corpus (validity — do not skip)
 Corpus = **donated child writing + researcher labels** (Grade 5–6, Philippines; English with Taglish

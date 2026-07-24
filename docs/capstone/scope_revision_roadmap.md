@@ -30,6 +30,13 @@ of these is wrong, stop and flag it back rather than working around it.
    **fine-tuned 7B matches/beats prompted Gemma-3-27B** — self-hostable, zero marginal cost; the
    beat-your-own-zero-shot-base number is the necessary sanity check and is **never presented alone**
    (`judge-finetune.md` §7.1).
+   > **⚠️ Reversed — ADR-008 revised 2026-07-22 (`design_decisions_and_risks.md` R4).** RQ6 is **demoted**:
+   > the fine-tune is kept and **reported descriptively** (its agreement with human labels on the
+   > character-disjoint held-out set), and the **fine-tuned-vs-baseline comparison is dropped as a research
+   > claim** — no "matches/beats prompted Gemma-3-27B" claim appears in the paper. The study has **no primary
+   > comparative study** and makes no causal or comparative claim. Objective 4 becomes **ISO/IEC 25010
+   > software quality** (item 9 below). ADR-018's δ = 3 non-inferiority gate is unaffected — it is a
+   > *deployment* gate, not a reported finding. Everything below that reads "RQ6-primary" is superseded.
 3. **Target-user reframing adopted:** teacher / BEED student = the actual system operator (inputs
    the child's story, reviews/generates the storybook). Grade 5–6 learner = story-source and
    beneficiary, not an account holder or evaluator.
@@ -74,7 +81,8 @@ of these is wrong, stop and flag it back rather than working around it.
    the governing scope criterion for every session: the load-bearing deliverables are ethics-independent
    (working pipeline on fixture stories, the `methodology.md` §7 pre-registration, a pilot RQ6 run). Full
    corpus results (real RQ6 / RQ5 / expert-eval on donated writing) land after October behind Ethics
-   Stage-1. **This is what makes RQ6-primary safe despite it being the most timeline-fragile piece.**
+   Stage-1. **This is what made RQ6-primary safe despite it being the most timeline-fragile piece** — it
+   still holds for RQ6's descriptive report (item 2's reversal note).
    Bright line: pilot numbers generated from fixture stories are *demonstration, not evidence* — label
    them illustrative, never as findings.
 9. **Objectives — canonical home + locked draft.** They currently live only in the manuscript, which the
@@ -85,10 +93,16 @@ of these is wrong, stop and flag it back rather than working around it.
      3. **Evaluate** the generated outputs — storybook, illustrations, story consistency — via expert
         panel and ISO/IEC 25010.
      4. **Assess** the AI performance of the consistency judge (fine-tuned 7B vs. the 27B baseline) — RQ6.
+   > **⚠️ Objectives 3–4 revised — ADR-008, 2026-07-22 (item 2's reversal note).** Objective 3 =
+   > **Evaluate the generated outputs** — expert panel **plus naive-reader recall (RQ5)**. Objective 4 =
+   > **Evaluate the software quality** against **ISO/IEC 25010**. The judge fine-tune is no longer an
+   > objective; it is reported descriptively. Canonical wording: `research_direction_and_goals.md`
+   > §Objectives, mirrored in `evaluation_instruments_brief.md` §1.
 
 Net effect on the objective structure: adopt the panel's suggested flow verbatim — **Develop the
 pipeline → Implement it → Evaluate the generated outputs (expert panel + ISO-25010) → Assess AI
-performance (RQ6 judge fine-tune)** — one verb, one objective, no compound objectives.
+performance (RQ6 judge fine-tune)** — one verb, one objective, no compound objectives. *(The last verb is now
+"Evaluate the software quality (ISO/IEC 25010)" — see the note above.)*
 
 10. **Child-interaction model reversed (2026-07-20, later same day) — supersedes item 3's "child never
     touches the tool."** After items 1–9 were locked, the owner reversed the teacher-only-operator model:
@@ -125,14 +139,17 @@ performance (RQ6 judge fine-tune)** — one verb, one objective, no compound obj
       §4 (reflection bullet + consent-weight line), `PRD_v2.md`, `USER_FLOW.md`, `ROUTE_MAP.md`, and **ADR-021**
       still describe reflections as live — a follow-up session removes/defers them; ADR-021 collapses toward
       "child sees own Story Map only" (revisit whether it survives).
-    - **RQ6-primary held (item 2).** Rider: the manuscript must **explicitly pre-empt** the panel's "remove the
+    - **RQ6-primary held (item 2).** *(Superseded 2026-07-22 — RQ6 is demoted and reported descriptively;
+      see item 2's reversal note. With no comparative claim made, the panel's "remove the comparison among AI
+      models" objection no longer has a target, and the rider below is moot.)* Rider: the manuscript must **explicitly pre-empt** the panel's "remove the
       comparison among AI models" objection *at RQ6's introduction* — state that RQ6 is a single contained
       component evaluation on an annotated, character-disjoint test set (automated metrics), **not** the dropped
       multi-condition, human-rated generation ablation the panel flagged for scope. Lead with the deployment
       claim (self-hostable 7B matches prompted 27B → zero marginal cost), not "benchmarking a component."
     - **Four single-verb objectives held (item 9).** The panel's real complaint (via the PDF) was *compound*
-      objectives, not the count; Develop / Implement / Evaluate / Assess each carry one verb. Objective 4 stands
-      or falls with RQ6-primary.
+      objectives, not the count; Develop / Implement / Evaluate / Assess each carry one verb. Objective 4 stood
+      or fell with RQ6-primary — *and it fell: as of 2026-07-22 Objective 4 is ISO/IEC 25010 software quality
+      (item 9's revision note). The four single-verb objectives survive.*
     - **Drift fixes applied this pass:** PRD §RQ1 reworded from "how accurately does StoryBuddy identify key
       scenes" (read as internal-pipeline accuracy) to Story-Completeness / plot-point-coverage framing;
       `methodology.md` §5.2 blinding scrubbed of the dead "condition (ON/OFF)" reference; `BEED` added to
@@ -152,7 +169,7 @@ root `CLAUDE.md`. Don't load the whole `docs/` tree per project rule ("lean cont
 | 3 | Evaluation/instruments | `research_instruments.md`, `docs/specs/judge-finetune.md`, `model_finetuning.md` | Update Instrument D to the 3 named evaluators; tighten every rubric to feature-level indicators (per panel's character-consistency example: appearance/clothing/hairstyle/face/color/missing-elements — not a bare "consistent/inconsistent"). Keep RQ6's claim-ladder and stats machinery (McNemar's, bootstrap CI) — that part isn't in question. | **Which metrics tool(s)** — keep the two evaluations as **separate instruments** (Owen note 11 listed them separately): ISO-25010 questionnaire for the *software* leg (operator-facing), a feature-level artifact rubric for the *output* leg. Reuse `judge-finetune.md` §4's closed taxonomy as the consistency rubric's indicators. RQ5's recall-instrument *method* is locked (§0.6); the exact **named** tools remain adviser-confirm — name them, don't leave "a tool for valid metrics" unspecified. | 1 | ☑ |
 | 4 | Target users & product | `docs/product/PRD_v2.md`, `docs/specs/ROUTE_MAP.md`, `docs/specs/USER_FLOW.md`, `ethics_and_safety.md` (consent language) | Apply teacher/BEED-student-as-operator reframing throughout, using Session 1's rewritten ADR-017/ADR-021 as ground truth (don't re-decide the interaction model here, just propagate it); fix the stale "Parent account" references already flagged in `review_round2` (D-item) since this touches the same user-role model anyway; drop "Style/Character Consistency" emphasis from the title per panel note 13. | Confirm parent/guardian stays consent-only (not an operator role) — should already be true, verify it didn't drift. | 1 | ☑ |
 | 5 | Risk/tracking cleanup | `design_decisions_and_risks.md`, `action_checklist.md`, `ROADMAP.md`; **deleted** `review_round2_2026-07-12.md` (self-marked, fully migrated, confirmed) | Retired R1 (3rd ablation arm — moot, no arms left) and m1 (partially — the RQ2-fairness half is moot, the Phase-0.5-probe half survives). Reframed R2 (power → single-arm precision), R3 (co-primary — found already adopted in `RESEARCH_PROTOCOL.md` §7, flagged as a doc-consistency gap vs. ADR-008/`research_direction_and_goals.md`, not fixed here — out of row scope), R4 (RQ6 can no longer be de-scoped away; timeline risk now handled by the October fixture-pilot / post-October corpus split, roadmap §0.8), and R9 (rater matrix sized for ~50 books, not 2–3 arms × 50). R7 and R8 survive unchanged — neither was ablation-dependent. Mirrored the same retirements into `action_checklist.md` B1/B2/B3/B5/C3/D3. Fixed `ROADMAP.md`'s de-scope ladder ("Never" row: replaced "the ablation" with "RQ6's judge evaluation" since RQ6, not the ablation, is now the never-cuttable piece), Phase 3 (dropped the dead `condition`-flag ablation-switch bullet, added the expert-panel+ISO-25010 harness), and the dependency map (`RQ1,2,3,5,6` → `RQ1,3,5,6`). | Depends on Session 2's RQ5 call. | 2 | ☑ |
-| 6 | Value proposition & framing | `value_proposition.md`, AI-Powered vs. AI-Assisted language pass across `research_direction_and_goals.md` Introduction (panel note 4) | Rewrote `value_proposition.md`'s Layer-3 "measured finding" (§2 table + chain paragraph) and Trap B to drop the pipeline-ON/OFF ablation framing — RQ5 is single-arm now, no OFF condition exists in the study at all, not just no text-only arm. The "machinery works" claim now rests on **RQ6** (the automated judge matches/beats its prompted baseline) + **RQ3** (independent expert-panel ratings), with **RQ5** kept as the transmission-fidelity leg (reader recovers the child's story from the book alone). Mirrored the same trio into §5's Discussion-mapping bullet. Added an explicit "the pipeline is fully automated; human judgment enters only at teacher-gated review and at evaluation (RQ3/RQ5)" statement to `research_direction_and_goals.md` §1.3, right after the central RQ — the Introduction had no *AI-Assisted*-reading language to begin with, so this was an addition (a missing explicit claim), not a correction. | — | 2, 3 | ☑ |
+| 6 | Value proposition & framing | `value_proposition.md`, AI-Powered vs. AI-Assisted language pass across `research_direction_and_goals.md` Introduction (panel note 4) | Rewrote `value_proposition.md`'s Layer-3 "measured finding" (§2 table + chain paragraph) and Trap B to drop the pipeline-ON/OFF ablation framing — RQ5 is single-arm now, no OFF condition exists in the study at all, not just no text-only arm. The "machinery works" claim then rested on **RQ6** (the automated judge matches/beats its prompted baseline) + **RQ3** (independent expert-panel ratings), with **RQ5** kept as the transmission-fidelity leg (reader recovers the child's story from the book alone). **Re-propagated 2026-07-22** after ADR-008's revision (item 2's reversal note): the claim now rests on **RQ3 + RQ5**, with RQ6 mentioned descriptively only. Mirrored the same trio into §5's Discussion-mapping bullet. Added an explicit "the pipeline is fully automated; human judgment enters only at teacher-gated review and at evaluation (RQ3/RQ5)" statement to `research_direction_and_goals.md` §1.3, right after the central RQ — the Introduction had no *AI-Assisted*-reading language to begin with, so this was an addition (a missing explicit claim), not a correction. | — | 2, 3 | ☑ |
 | 7 | Paper reconciliation (deferred) | `paper_draft_review_2026-07-18.md` | This reviewed an old draft against old protocol; once the manuscript itself is rewritten to match Sessions 1–6, re-run the adversarial pass (or delete and redo) rather than patching it now. **Do not start this until the manuscript is actually updated.** | — | 1–6 | ☐ |
 | 8 | Drift sweep (final gate) | whole `docs/` tree + root `CLAUDE.md` | See §2 below. | — | 1–6 | ☑ |
 
@@ -191,11 +208,12 @@ should resolve on its own:
 - Whether the three-illustration-style limit (panel note 13) is already reflected in
   `hardware_and_hosting.md` — verify, don't assume
 - **Divergence memo (before Session 7):** a one-page adviser artifact packaging the three reconciled PDF
-  divergences (child-scope split, RQ6-primary framing, four single-verb objectives) + the defense for each, so
+  divergences (child-scope split, RQ6's framing — now *demoted and descriptive*, item 2's reversal note —
+  four single-verb objectives) + the defense for each, so
   the manuscript rewrite doesn't surprise the panel. Recorded here (§0 item 11); not yet written.
 - **Adviser-confirm: October = technical/methodology defense** (working system + pre-registration + fixture
-  pilot), **not** completed primary-study results. RQ6-primary is only safe if the adviser agrees October needs
-  no real RQ6 numbers — ties to §0.8.
+  pilot), **not** completed primary-study results. There is no primary comparative study to complete as of
+  2026-07-22; the adviser still needs to agree October needs no real RQ6 numbers — ties to §0.8.
 - **Evaluator-panel qualification:** §0.4's panel (professor + education student + art student) vs. the panel's
   own "teaching-practitioner, not unfamiliar with the education context" bar (PDF §XIII). Confirm the education/
   art students clear that bar, or adjust composition. Distinct from the still-open panel-*size* / CVI / α
@@ -239,7 +257,8 @@ should resolve on its own:
   reproducibility note carried the **full pre-pivot RQ2 ablation spine** — same content Session 2
   removed from `research_direction_and_goals.md`/`methodology.md`/`RESEARCH_PROTOCOL.md`, but Session 2's
   row never listed `PRD_v2.md`, so it was missed there. Resolved by hand-propagating ADR-008's two-leg
-  design (expert panel + ISO-25010 for RQ3/RQ5, RQ6 as the primary comparative study) into §10's RQ list,
+  design (expert panel + ISO-25010 for RQ3/RQ5, RQ6 as the primary comparative study — **that last part is
+  now superseded by ADR-008's 2026-07-22 revision, so `PRD_v2.md` needs a re-propagation pass**) into §10's RQ list,
   evaluation-design section, metrics table, and corpus paragraph; dropped the dead `condition` field from
   §19's sketch; reworded §20's reproducibility note to drop the ablation framing. §0 line 61's changelog
   entry ("Evaluation redesigned around a comparative ablation") is left as-is — it's a dated historical

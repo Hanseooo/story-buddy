@@ -97,10 +97,12 @@ If asked whether pre-registration is "just Waterfall": pre-registration constrai
   **reproducibility**: the same story and seed produce the same book, so every generated artifact reported in
   the output evaluation and every image-pair fed to RQ6 is regenerable, and per-run traces (verdicts, regen
   counts, latency, cost) are attributable to a fixed path rather than to nondeterministic routing.
-- **The testing bright line.** Deterministic tests mock every model call and must stay green in continuous
-  integration. Fuzzy quality — "is the character consistent?" — is measured only in an offline evaluation
-  harness against real models. The two never mix. A generated-content assertion in CI is a flaky test, not a
-  measurement.
+- **The testing bright line.** Deterministic tests mock every model call; fuzzy quality — "is the character
+  consistent?" — is measured only in an offline evaluation harness against real models. The two never mix. A
+  generated-content assertion in a deterministic suite is a flaky test, not a measurement. *Continuous
+  integration is planned, not yet standing:* the repository has no CI configuration at the time of writing, so
+  the deterministic suite is run locally and the "must stay green" rule is an intended practice rather than an
+  enforced one.
 - **Frozen decisions.** Architectural decisions are recorded in `docs/product/ADRs.md` and are not revised
   silently; changing one requires appending a new record stating context, decision, consequences, and
   alternatives.
@@ -282,7 +284,8 @@ character split rather than to a pair target.
 
 **Character leakage.** Splits are by **character, never by pair**. Every image derived from a given canonical
 reference belongs to exactly one split. If one character appears in both train and test, agreement inflates
-and nothing in the metrics reveals it. This is enforced in code and tested in continuous integration.
+and nothing in the metrics reveals it. This is enforced in code, with a dedicated leakage test in the
+deterministic suite (run locally today; continuous integration is planned, §1.4).
 
 **Shortcut learning.** Hard negatives are free and clean: character A's reference against a scene generated
 from character B's reference. Positives are **not** free. Treating *"the same reference was used"* as a
@@ -446,7 +449,7 @@ The division of labour is:
 |---|---|---|
 | Are the generated outputs good? | Expert panel + ISO-25010 (§6.2, §6.4) | **Feature-level output quality** — absolute, on the single generated arm; not a causal claim |
 | Does the book transmit the story? | Comprehension instrument (§6.3) | A **human fidelity outcome** |
-| Can the judge measure consistency automatically? | Judge evaluation (§7.3) | **Instrument validity** — the study's primary comparative result |
+| Can the judge measure consistency automatically? | Judge evaluation (§7.3) | **Instrument validity** — the judge's descriptive agreement with human labels; not a comparative claim |
 | Is the software any good? | ISO/IEC 25010 (§6.4) | **Perceived quality.** Not efficacy |
 
 Likewise, the fine-tuned judge is **never** used to score the output evaluation (§7.5).
@@ -483,45 +486,53 @@ single generated arm, not by an ON/OFF contrast.
 - **This is the output-side dependent variable of record.** It shows whether the generated book, on its own,
   carries the child's characters and events to a naive reader.
 
-### 7.3 RQ6 — does fine-tuning the judge improve agreement with humans?
+### 7.3 RQ6 — how well does the fine-tuned judge agree with human labels?
 
-**This is the study's primary comparative study (ADR-008)** — the panel-requested AI-performance
-evaluation leg. The lead claim is that the **fine-tuned 7B matches or beats prompted Gemma-3-27B**
-(self-hostable, zero marginal cost); the beat-your-own-zero-shot-base number is the necessary sanity check
-and is never presented alone.
+**The judge fine-tune is kept and reported descriptively (ADR-008, revised 2026-07-22).** What is reported is
+**the fine-tuned judge's agreement with human labels on the character-disjoint held-out set** — F1 on the
+`different_character` class, precision and recall, and the human/non-human slice, each with a 95% bootstrap
+confidence interval, 10,000 resamples, **clustered by character, not by pair.** Fifteen scenes of one character
+are not fifteen independent observations; a pair-level bootstrap yields an interval that is too narrow, and
+this is the likeliest place a statistics reviewer finds a hole.
 
-**Two gates, deliberately separated, because one number was being asked to decide two questions.**
+**The fine-tuned-versus-baseline comparison is dropped as a research claim.** The paper makes **no**
+"fine-tuned 7B matches or beats prompted Gemma-3-27B" claim, and RQ6 is **not** a comparative study — the study
+has no primary comparative study and makes no causal or comparative claim at all (§6.5). The comparison
+machinery is retained where it belongs: as the **deployment gate** that decides whether the fine-tuned judge
+replaces the prompted incumbent in the product.
 
-- **Research gate (the research question).** Held-out ΔF1 on the `different_character` class, fine-tuned model
-  versus **zero-shot `Qwen2.5-VL-7B`** — its own un-fine-tuned base. Significance by **McNemar's exact test**
-  on paired per-item decisions. Effect size by ΔF1 with a 95% bootstrap confidence interval, 10,000 resamples,
-  **clustered by character, not by pair.** Fifteen scenes of one character are not fifteen independent
-  observations; a pair-level bootstrap yields an interval that is too narrow, and this is the likeliest place a
-  statistics reviewer finds a hole. **Pass = the interval excludes zero.**
-- **Product gate (the engineering decision).** Non-inferiority to the prompted `gemma-3-27b-it` incumbent
-  within **δ = 3 F1 points**, with **no regression in recall** on `different_character` — a missed failure
-  ships a broken page to a child.
-- **Reported baselines.** Zero-shot `Qwen2.5-VL-7B`; prompted `gemma-3-27b-it`; CLIP cosine similarity;
-  DINOv2 cosine similarity. The two embedding baselines are **scientific controls, not product candidates**:
+**The methodological requirements survive unchanged**, because a descriptive number is only trustworthy under
+them: the human labels carry two annotators plus adjudication with **inter-rater reliability reported**, and
+the **held-out set is read exactly once** (§7.5).
+
+- **Deployment gate (the engineering decision, ADR-018 — unaffected by the revision).** Non-inferiority to the
+  prompted `gemma-3-27b-it` incumbent within **δ = 3 F1 points**, with **no regression in recall** on
+  `different_character` — a missed failure ships a broken page to a child. A build decision, not a reported
+  finding.
+- **Build sanity check.** Held-out ΔF1 against **zero-shot `Qwen2.5-VL-7B`**, the model's own un-fine-tuned
+  base, by **McNemar's exact test** on paired per-item decisions. Beating one's own base is **necessary, not
+  impressive**; failing to is a defect to debug. Neither direction is presented as a finding.
+- **Reference numbers.** Zero-shot `Qwen2.5-VL-7B`; prompted `gemma-3-27b-it`; CLIP cosine similarity;
+  DINOv2 cosine similarity, with latency and cost. Reported for context and for the deployment decision, not as
+  a comparative result. The two embedding baselines are **scientific controls, not product candidates**:
   they emit a scalar, and the regeneration controller consumes structured failure reasons. A cosine cannot say
-  *"restate the scarf."* If an embedding baseline wins on F1, that is a finding about metrics, not a product
-  decision.
-- **Secondary endpoint.** The human versus non-human character slice — where the contribution is claimed to lie.
+  *"restate the scarf."*
+- **Secondary descriptive endpoint.** The human versus non-human character slice — where the judge's difficulty
+  is expected to concentrate.
 - **Transfer.** DreamBench++, evaluated only.
 
-**Pre-registered claim ladder**, declared before results exist:
+**Pre-registered decision ladder** — a **deployment/build gate**, declared before results exist. It no longer
+carries a research claim; nothing in it appears in the paper as a finding:
 
-| Rung | Condition | RQ6 answered? | Ship the fine-tuned judge? |
-|---|---|---|---|
-| A | Beats base **and** beats prompted Gemma | Yes | Yes |
-| B | Beats base; within δ = 3 F1 of Gemma; no recall regression | Yes | Yes |
-| C | Beats base; loses to Gemma by more than δ | **Yes** | No — keep the prompted judge |
-| D | Does not beat base | No | No — this is a bug, not a result |
+| Rung | Condition | Ship the fine-tuned judge? |
+|---|---|---|
+| A | Beats base **and** beats prompted Gemma | Yes |
+| B | Beats base; within δ = 3 F1 of Gemma; no recall regression | Yes |
+| C | Beats base; loses to Gemma by more than δ | No — keep the prompted judge |
+| D | Does not beat base | No — this is a bug to debug, not a result |
 
-Beating one's own base model is **necessary, not impressive**, and is never presented alone. The
-prompted-Gemma comparison, latency, and cost are reported unconditionally. **Rung C is a publishable negative
-result**: *prompting remains competitive at this scale; the bottleneck is data, not capacity.* Rung D means
-the adapter did nothing, which is a defect to debug rather than a finding to report.
+Whichever rung lands, the paper reports the same thing: the shipped judge's agreement with human labels, and
+which judge the gate selected.
 
 ### 7.4 RQ1, RQ3, RQ4, and the software evaluation
 
@@ -573,7 +584,7 @@ Detail: `docs/capstone/ethics_and_safety.md` and `docs/product/ADRs.md` (ADR-011
 |---|---|
 | **Substrate dependence.** Results characterize one image model. | Reported as scope. The Phase 0.5 probe names the substrate and its non-human boundary explicitly. |
 | **Circularity** of judge-as-metric | §7.5. Structural, not procedural. |
-| **Character leakage** across judge splits inflates RQ6 | Character-disjoint splits, enforced in code and tested in CI. |
+| **Character leakage** across judge splits inflates RQ6 | Character-disjoint splits, enforced in code with a leakage test in the deterministic suite (§4.3; CI is planned, not yet standing). |
 | **Shortcut learning** on auto-labelled positives | Positives are human-confirmed; constructed negatives are train-only. |
 | **Rater fatigue and order effects** | Item shuffling; condition never disclosed; session length capped; mid-session drift check. |
 | **Novelty confound** (Tier 2) | Within-session repeat use weighted over first-reaction delight. |
@@ -595,8 +606,9 @@ effect-size estimate, which is then used to size the Tier-1 rating load.
 Random seeds are fixed and reported, and seed reproduction is **verified empirically on both generation
 endpoints** rather than assumed from vendor documentation. Model identifiers, versions, and provider routing
 are pinned. Every pipeline run is traced: per-scene verdicts, regeneration counts, latency, and cost.
-Deterministic software tests mock every model call and run in continuous integration; fuzzy quality is
-measured only in an offline evaluation harness, never in CI. The trained artifact is a LoRA adapter of a few
+Deterministic software tests mock every model call; fuzzy quality is measured only in an offline evaluation
+harness, never in the deterministic suite. (Those tests are run locally; continuous integration is planned but
+not yet configured in the repository — see §1.4.) The trained artifact is a LoRA adapter of a few
 tens of megabytes over public, Apache-2.0 base weights.
 
 **Released:** the pipeline source, the Story Memory schema, the judge prompt and its structured output schema,

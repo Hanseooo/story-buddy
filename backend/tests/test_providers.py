@@ -74,6 +74,29 @@ def test_chat_accepts_fields_in_schema_order():
     assert verdict.same_character is True
 
 
+class _Verdict3(BaseModel):
+    differences_observed: str
+    failure_reason: str
+    same_character: bool
+
+
+def test_chat_accepts_when_early_value_quotes_a_later_field_name():
+    """Regression (D-D): the old substring scan false-triggered on 3+ field verdicts when an early
+    field's value quoted a later field's name. Parsed-key-order reads real keys and is immune."""
+    raw = (
+        '{"differences_observed": "mentions \\"same_character\\" here", '
+        '"failure_reason": "none", "same_character": true}'
+    )
+    with patch("providers.OpenAI") as mock_openai:
+        parse = mock_openai.return_value.chat.completions.parse
+        parse.return_value = _fake_completion(
+            _Verdict3(differences_observed="x", failure_reason="none", same_character=True),
+            content=raw,
+        )
+        verdict = providers.judge("compare", ["https://ref.png"], _Verdict3)
+    assert verdict.same_character is True
+
+
 def test_judge_omits_openrouter_flag_when_self_hosted():
     """vLLM rejects OpenRouter's `provider` field; the swap to Modal is config-only (ADR-019)."""
     with patch("providers.OpenAI") as mock_openai, \

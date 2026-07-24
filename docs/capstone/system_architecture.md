@@ -68,7 +68,10 @@ A core academic requirement for StoryBuddy is the reliance on open-weight models
 
 ### Safety and Moderation
 Rather than relying on proprietary filters, StoryBuddy integrates robust open classifiers directly into the worker:
-- **Input text** is screened by `Qwen3Guard-Gen` and IBM `Granite Guardian`.
+- **Input text** is screened by `Qwen3Guard-Gen` (primary, worker CPU) and `gpt-oss-safeguard-20b`
+  (backstop, via OpenRouter) — two independent open-weight classifiers, both Apache-2.0. *(IBM Granite
+  Guardian was the originally named backstop; it is not routable on OpenRouter — ADR-011, revised
+  2026-07-21c.)*
 - **Output images** are evaluated by an NSFW ViT and a safety rubric running on `gemma-3-27b-it`. 
 This guarantees independence between filters and prevents unsafe or off-topic content from reaching a child.
 

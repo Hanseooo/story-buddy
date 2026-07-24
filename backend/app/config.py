@@ -24,14 +24,15 @@ class Settings(BaseSettings):
     judge_base_url: str = "https://openrouter.ai/api/v1"
     judge_api_key: str | None = None  # falls back to openrouter_api_key
 
-    # ADR-011's current primary. Qwen3Guard-Gen (Apache-2.0, 119 languages) is the intended
-    # replacement — its OpenRouter model id is unverified, hence the Phase 0.5 moderation probe.
+    # D-1 resolved (ADR-011c, 2026-07-21): the primary is Qwen3Guard-Gen 0.6B running on the
+    # worker CPU — NOT an OpenRouter model id — so this field stays Llama Guard 4 (the demoted
+    # fallback) until the Phase-2 `moderation-stack` spec defines the CPU-resident config shape.
     moderation_model: str = "meta-llama/llama-guard-4-12b"
 
-    # Verified against the live OpenRouter catalog 2026-07-13: NEITHER Qwen3Guard-Gen NOR IBM
-    # Granite Guardian is routable there. ADR-011's pair must run on the worker, or the backstop
-    # needs an ADR amendment (`openai/gpt-oss-safeguard-20b` is the routable open-weight
-    # candidate). Surface this before Phase 2 — do not silently swap (CLAUDE.md §1).
+    # D-1 resolved (ADR-011c): backstop is `openai/gpt-oss-safeguard-20b` on OpenRouter (the
+    # ADR-011b pair — Qwen3Guard-Gen / Granite Guardian — is not routable there; verified
+    # 2026-07-13). Left unset here so the Phase-0.5 probe (`spikes/phase_05.py`) stays opt-in;
+    # the Phase-2 `moderation-stack` spec wires the real primary+backstop config shape.
     moderation_backstop_model: str | None = None
 
 

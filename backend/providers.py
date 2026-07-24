@@ -3,6 +3,7 @@
 Text + VLM judge go through OpenRouter (OpenAI-compatible). Images go through fal.ai.
 Deterministic tests mock these functions; nothing here runs in CI (MASTER_SPEC §6).
 """
+import json
 from typing import TypeVar
 
 import fal_client
@@ -66,12 +67,19 @@ def _chat(base_url: str, api_key: str, model: str, content, schema: type[T]) -> 
 
 def _assert_field_order(raw: str, schema: type[BaseModel], model: str) -> None:
     """Reason-then-score is load-bearing (ADR-004): a provider that emits fields out of schema
-    order voids the mitigation, and Pydantic validation cannot see order — only the raw text can.
+    order voids the mitigation, and Pydantic validates order-insensitively — only the emitted
+    JSON key order shows it. `json.loads` preserves document order (D-D), so this reads real keys
+    rather than substring-scanning, immune to a value that quotes a field name. Verdict fields must
+    serialize under their Python names (no aliases) or the check silently finds nothing to compare.
     """
-    # ponytail: substring scan; could false-trigger if a string value quotes a field name.
-    positions = [raw.find(f'"{name}"') for name in schema.model_fields]
-    found = [p for p in positions if p >= 0]
-    if found != sorted(found):
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return  # no raw JSON object echoed — same blind spot as before, can't verify order
+    if not isinstance(parsed, dict):
+        return
+    emitted = [k for k in parsed if k in schema.model_fields]
+    if emitted != [name for name in schema.model_fields if name in emitted]:
         raise ValueError(
             f"{model} emitted structured-output fields out of schema order (ADR-004 reason-then-score)"
         )
