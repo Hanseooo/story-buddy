@@ -44,8 +44,25 @@ The process is modeled as a directed graph with explicit nodes:
 5. **Consistency Check & Regenerate:** A Vision-Language Model (VLM) evaluates the generated scene for character consistency. If it fails, the pipeline performs one targeted regeneration using the VLM's extracted failure reasons, eventually falling back to the "best-of" attempt.
 6. **Compose & Export:** Assembles the approved scenes, renders the final HTML template, and exports to PDF.
 
+**Manuscript's ten logical modules ↔ implementation nodes:** the capstone manuscript describes the pipeline
+as ten logical modules. They reconcile with the six flow groups above (and the frozen node graph in
+`MASTER_SPEC.md` §2, ADR-003/022) as follows — no node is added or renamed here:
+
+| Manuscript module | Implemented as |
+|---|---|
+| Input Moderation | `input_gate` node |
+| Story Analyzer | `analyze` node |
+| Scene Segmentation | `segment` node |
+| Story Memory Manager | the `StoryMemory` Pydantic contract — every node reads/writes through it, not a node itself |
+| Character Bible | `char_bible` node |
+| Style Preset | config chosen before generation and frozen (`style.style_preset_id`) — an input to `generate_scene`, not its own node (ADR-007, ADR-022) |
+| Prompt Optimizer | folded into `generate_scene`'s prompt construction — a node input, not a separate node |
+| AI Scene Generation | `generate_scene` node |
+| Consistency Judge & Targeted Regeneration | `consistency_check` + `regenerate` nodes |
+| Picture Book Composition | `compose` / `export` nodes |
+
 **Why Not Autonomous Agents?**
-Autonomous orchestrator agents introduce non-determinism, unpredictable loops, and high costs. A fixed LangGraph state machine ensures debuggability, bounds worst-case generation costs, and keeps the pipeline's behavior reproducible for the eval harness (RQ1, RQ3–RQ6).
+Autonomous orchestrator agents introduce non-determinism, unpredictable loops, and high costs. A fixed LangGraph state machine ensures debuggability, bounds worst-case generation costs, and keeps the pipeline's behavior reproducible for the eval harness (Objectives 3–5).
 
 **The Frozen Data Contract:**
 Every node communicates through a strictly versioned Pydantic model (`StoryMemory`). Enforcing strict JSON-schema structured output ensures that LLMs cannot inject malformed data that could derail downstream pipeline steps.
@@ -55,7 +72,7 @@ Every node communicates through a strictly versioned Pydantic model (`StoryMemor
 Supabase acts as the infrastructural backbone for application state and security.
 
 - **Database (Postgres):** Stores application metadata, user profiles, and LangGraph job checkpoints. 
-- **Authentication & RLS:** Employs a teacher-gated model. Teachers own classrooms and create student profiles (nicknames and avatars); students never supply PII or sign up themselves. Strict Row-Level Security ensures data isolation—teachers and students can only access data within their designated classroom.
+- **Authentication & RLS:** Employs a **teacher-issued account** model (ADR-017). A teacher creates the classroom and issues each student account — nickname plus an initial password — and the child then logs in and operates the app directly, authoring their own story. There is **no self-serve signup, no email on a student account, and no code that works outside a teacher-created classroom**; password reset is teacher-initiated only. Because the child enters free text, their input routes through input moderation and PII redaction on the same path as any other text (ADR-011) — the account carries no PII, but the *story* may, and redaction rather than non-collection is what handles it. Every generated book is manually reviewed by the teacher before it becomes visible to peers. Strict Row-Level Security ensures data isolation—teachers and students can only access data within their designated classroom.
 - **Storage:** Securely hosts generated images, final PDF storybooks, and pre-rendered narration audio (expressive open-weight TTS MP3s — `Chatterbox`, ADR-020) via signed URLs.
 - **Realtime:** Pushes state changes from the Postgres job rows directly to the frontend to drive progress bars.
 
@@ -63,7 +80,7 @@ Supabase acts as the infrastructural backbone for application state and security
 
 ### The Open-Weight Mandate
 A core academic requirement for StoryBuddy is the reliance on open-weight models rather than proprietary black-boxes. 
-- **Models:** Text parsing uses `qwen/qwen3-32b`, image generation utilizes `Qwen-Image-Edit`, and the VLM consistency judge is a **prompted `gemma-3-27b-it`**. A fine-tuned `Qwen2.5-VL-7B` is a *candidate replacement* for that judge, evaluated in Phase 2.5 and shipped only if it clears its gate (as documented in `docs/capstone/model_finetuning.md` in the repository).
+- **Models:** Text parsing uses `qwen/qwen3-32b`, image generation utilizes `Qwen-Image-Edit`, and the VLM consistency judge shipped in Phases 1–2 is a **prompted `gemma-3-27b-it`**. In Phase 2.5, a `Qwen2.5-VL-7B` fine-tuned with QLoRA is evaluated as the study's **Objective 4** — its character-consistency classification performance (precision, recall, F1; F1 primary) against human-established reference labels is a core evaluation objective in its own right, not contingent on deployment. Whether it *replaces* the prompted judge in the shipped product is a separate build decision, gated on matching the incumbent (as documented in `docs/capstone/model_finetuning.md` and `docs/specs/judge-finetune.md` §7.5).
 - **Reasoning:** Leveraging open weights guarantees that the infrastructure remains fully self-hostable. It ensures the academic claims of the paper are tied to a transparent, replicable stack that imposes no ongoing vendor lock-in or per-seat licensing costs—an essential factor for deployment in resource-constrained public schools.
 
 ### Safety and Moderation
@@ -76,7 +93,7 @@ Rather than relying on proprietary filters, StoryBuddy integrates robust open cl
 This guarantees independence between filters and prevents unsafe or off-topic content from reaching a child.
 
 ### VLM-as-Judge Control Loop
-Standard metrics like CLIP image embeddings fail at evaluating non-human and stylized characters. StoryBuddy addresses this by integrating a Vision-Language Model directly into the loop as a judge. The shipped judge is a **prompted `gemma-3-27b-it`**; the fine-tuned `Qwen2.5-VL-7B` replaces it only on passing the Phase 2.5 gate. The loop's architecture is identical either way — the judge is a swappable part behind two environment variables. 
+Standard metrics like CLIP image embeddings fail at evaluating non-human and stylized characters. StoryBuddy addresses this by integrating a Vision-Language Model directly into the loop as a judge. The shipped judge is a **prompted `gemma-3-27b-it`**. A `Qwen2.5-VL-7B` fine-tuned with QLoRA is evaluated against human-established reference labels as **Objective 4** — that evaluation runs and is reported regardless of outcome. Separately, it replaces the prompted judge in production only if it also clears the Phase 2.5 *deployment* gate (non-inferiority against the incumbent, no recall regression). The loop's architecture is identical either way — the judge is a swappable part behind two environment variables. 
 - **Reason-then-Score Schema:** The judge is forced to output explicit failure reasons (e.g., missing scarf, wrong color) before issuing a binary pass/fail verdict.
 - **Targeted Regeneration:** These reasons feed back into the prompt for exactly one retry, making regeneration purposeful rather than a random re-roll, maximizing the chance of producing a consistent character.
 

@@ -6,58 +6,72 @@
 > (and `methodology.md` above it) win. Decisions marked ⚠️ still need **adviser sign-off** before we run them.
 >
 > **Date of decisions:** 2026-07-21.
+> **Realigned to manuscript:** 2026-07-25 (ADR-008 revised same date).
 
 ---
 
 ## 0. TL;DR
 
-- The study has **four objectives**, built around the **pipeline as the core**: **Develop → Implement →
-  Evaluate the outputs → Evaluate the software.**
-- We use **three evaluation tools**, one per evaluation job:
+- The study has **five objectives**, built around the **pipeline as the core**: **Implement the pipeline →
+  Produce picture books through it → Determine acceptability via expert validation → Evaluate judge
+  classification performance → Evaluate software quality.**
+- We use **four tools**, one per objective (Tool A supports Objectives 1–2 jointly):
   - **Tool A — Functional Verification Matrix:** did each pipeline stage run and produce valid output?
     (Evidence for Objectives 1–2.)
-  - **Tool B — Expert Picture Book Evaluation:** are the generated books *good*, judged by experts against
-    feature-level criteria? (Objective 3.)
+  - **Tool B — Expert Validation Interview:** are the generated books acceptable in presentation quality and
+    classroom suitability, judged by expert validators through a written, open-ended interview? (Objective 3.)
+  - **Judge classification:** does the fine-tuned consistency judge classify character consistency to a
+    standard comparable with human-established labels — precision, recall, F1 (F1 primary)? (Objective 4.)
   - **Tool C — ISO/IEC 25010 questionnaire:** is the *software* functional, usable, reliable, efficient,
-    secure? (Objective 4.)
-- **Key research finding on Tool B:** there is **no ready-made, validated instrument** for rating
-  AI-generated children's picture books. The honest, defensible path is to **adopt a validated protocol
-  (DreamBench++) + recognized picture-book criteria (Caldecott), then re-validate the combined rubric
-  ourselves** (content validity + inter-rater reliability). Producing that validated instrument is part of
-  our contribution.
-- **The judge fine-tune stays, but the fine-tuned-vs-baseline *comparison* is dropped** to fit the October
-  timeline. We fine-tune the judge and **report its results descriptively** — no comparative claim.
-- **RQ5 (naive-reader recall) is kept**, unchanged, as part of Objective 3.
+    secure? (Objective 5.)
+- **Key decision on Tool B:** there is **no ready-made, validated instrument** for rating AI-generated
+  children's picture books on a numeric scale, and with only a three-person validator panel a numeric rubric's
+  statistics (CVI, Krippendorff's α) aren't meaningful anyway. The defensible path is a **written, open-ended
+  interview form analysed by content analysis** — pre-set categories from five criteria, each response coded
+  positive / negative / suggestion, tallied per criterion.
+- **The judge fine-tune is now a full objective (4), not a descriptive footnote.** We fine-tune the judge and
+  report **precision, recall, and F1 (F1 primary)** against human-established reference labels, split at the
+  character-identity level. An optional, secondary comparison against a zero-shot base model and the existing
+  prompted baseline may also be reported.
+- **The naive-reader recall study and the Tier-2 Fun Toolkit engagement instrument are dropped entirely** —
+  those studies no longer exist.
 
 ---
 
-## 1. The four objectives (locked)
+## 1. The five objectives (locked)
 
-The pipeline is the core of the study; the objectives are structured around it — one verb each.
+The pipeline is the core of the study; the objectives are structured around it.
 
-1. **Develop** the StoryBuddy pipeline — child story → consistent illustrated storybook.
-2. **Implement** the pipeline as a deployable, teacher-operated system.
-3. **Evaluate the generated outputs** — storybook, illustrations, story consistency — by expert panel,
-   plus a naive-reader recall measure.
-4. **Evaluate the software quality** of StoryBuddy against ISO/IEC 25010.
+1. **Implement** an orchestrated AI pipeline as the core processing framework of StoryBuddy.
+2. **Produce** digital picture books from child-written stories through the implemented pipeline.
+3. **Determine the acceptability** of the generated digital picture books in terms of presentation quality and
+   classroom suitability, through **expert validation**.
+4. **Evaluate the character-consistency classification performance** of the fine-tuned lightweight
+   vision-language model against human-established reference labels, using precision, recall, and F1-score
+   (F1 primary).
+5. **Evaluate the software quality** of StoryBuddy using applicable ISO/IEC 25010 quality characteristics.
 
-*(Source of truth: `research_direction_and_goals.md` §Objectives. The earlier Objective 4 — "assess the
-judge fine-tune as the primary comparative study" — has been demoted; see §6.)*
+*(Source of truth: `research_direction_and_goals.md` §Objectives — that file needs to match this numbering;
+flagged as a cross-reference to check, not confirmed fixed by this edit. The earlier framing of judge
+fine-tuning as "the primary comparative study" is retired: the fine-tuned judge's classification performance
+against human labels is Objective 4 in its own right, with a baseline comparison optional and secondary —
+see §6.)*
 
 ---
 
-## 2. The three tools at a glance
+## 2. The tools at a glance
 
 | Tool | What it measures | Answers | Instrument type |
 |---|---|---|---|
 | **A — Functional Verification Matrix** | Did each pipeline stage complete and emit valid output? | Objectives 1–2 (pipeline works) | System-generated pass/fail records |
-| **B — Expert Picture Book Evaluation** | Is the generated book *good* (style/character consistency, faithfulness, layout, craft, suitability)? | Objective 3 (output quality) | Expert-rated feature-level rubric |
-| **C — ISO/IEC 25010 questionnaire** | Is the *software* good (functional, usable, reliable, efficient, secure)? | Objective 4 (software quality) | Likert questionnaire |
-| *RQ5 — Naive-reader recall* | Does the finished book *transmit the child's story* to someone who never read it? | Objective 3 (fidelity) | Free-recall, scored vs. plot-point annotation |
+| **B — Expert Validation Interview** | Are the generated books acceptable — narrative coherence, story faithfulness, visual presentation, visual style consistency, suitability for classroom use? | Objective 3 (acceptability) | Written, open-ended interview form, analysed by content analysis |
+| **Judge classification** | Does the fine-tuned judge classify character consistency to a standard comparable with human-established labels? | Objective 4 (classification performance) | Precision / recall / F1 (F1 primary) against human reference labels |
+| **C — ISO/IEC 25010 questionnaire** | Is the *software* good (functional, usable, reliable, efficient, secure)? | Objective 5 (software quality) | 5-point Likert questionnaire |
 
-**Why the split matters:** perceived software quality (Tool C) is **not** evidence that the outputs are good
-(Tool B), and neither proves the book transmits the story (RQ5). Keeping them separate is what stops a high
-questionnaire score from being mistaken for "the pipeline works."
+**Why the split matters:** perceived software quality (Tool C) is **not** evidence that the outputs are
+acceptable (Tool B), and neither is evidence about the judge's classification performance (Objective 4).
+Keeping the legs separate is what stops a high questionnaire score from being mistaken for "the pipeline
+works."
 
 ---
 
@@ -91,105 +105,106 @@ clearance** and is valid October-defense material.
 
 ---
 
-## 4. Tool B — Expert Picture Book Evaluation (Objective 3) — the researched decision
+## 4. Tool B — Expert Validation Interview (Objective 3) — the researched decision
 
-### 4.1 What the literature sweep found
+### 4.1 Why not a numeric rubric
 
-- **There is no single published, psychometrically validated instrument** that rates AI-generated children's
-  picture books across all our constructs (style consistency, character consistency, narrative layout,
-  story faithfulness, illustration craft, educational suitability).
-- What exists splits in two, and each covers only part:
-  - **Validated AI/HCI rating protocols** (DreamBench++, TIFA) — cover **character/style consistency** and
-    **story faithfulness**, and come with real **reliability protocols** — but say nothing about layout,
-    craft, or educational suitability.
-  - **Children's-literature criteria** (Caldecott/ALSC, classroom rubrics) — cover **layout, craft,
-    suitability** — but carry **no validity/reliability evidence** (they are award criteria and teaching
-    tools, not validated instruments).
+Earlier drafts scored the generated books on a numeric feature-level rubric (adapted from DreamBench++ and
+Caldecott/ALSC criteria), validated via Content Validity Index and Krippendorff's α. Two problems didn't go
+away: there is still **no single published, psychometrically validated instrument** that rates AI-generated
+children's picture books across our constructs, and — more decisively — **CVI and Krippendorff's α are not
+statistically meaningful with a 3-person validator panel** (the math needs a much larger rater/expert pool than
+this study can field). Rather than force statistics the sample can't support, the manuscript's answer is a
+**written, open-ended interview form, analysed by content analysis** — a method built for exactly this
+respondent count, whose trustworthiness comes from a transparent coding procedure rather than an under-powered
+statistic.
 
-### 4.2 The decision: adopt + adapt + re-validate
+### 4.2 The instrument
 
-We build **one rubric** by combining the two, on a **single 0–4 ordinal scale with anchor descriptions per
-level** (DreamBench++'s scale, because it ships with published anchors that make raters agree):
+Three purposively selected validators, each judging what they're best placed to judge:
 
-| Our construct | Based on |
+| Validator | Judges |
 |---|---|
-| Character consistency | DreamBench++ "concept preservation" (shape, color, texture, face) — = our closed failure taxonomy (`wrong_colour`, `wrong_species`, `wrong_body_feature`, `wrong_clothing`, `wrong_style`, `different_face`, `character_absent`) |
-| Visual style consistency | DreamBench++ texture/shape + `wrong_style` |
-| Story faithfulness | DreamBench++ "prompt following" (relevance, accuracy, completeness) |
-| Narrative layout & flow | Caldecott — pictorial interpretation / visual pacing |
-| Illustration craft | Caldecott — excellence of execution |
-| Overall suitability | Caldecott — appropriateness of style to audience |
+| Dean/Professor of the Arts College | Visual/artistic presentation |
+| Arts student/intern | Visual/artistic presentation |
+| Education student/intern | Educational suitability |
 
-**Note:** this is *not* "making up our own tool." Each construct is anchored to a published source, and the
-combined rubric earns its validity through the validation procedure below. **The good news:** our existing
-`research_instruments.md §A` already does feature-level indicators and already uses the closed taxonomy and
-Krippendorff's α — so this decision mostly *grounds and cites* what we already had, and replaces the weaker
-"bare Likert, mean/SD, no reliability" draft.
+Each validator completes a **written, open-ended interview form** against **five pre-set criteria**: narrative
+coherence, story faithfulness, visual presentation, visual style consistency, and suitability for classroom
+use. There is no numeric scale.
 
-### 4.3 How we validate it (this is what makes the metrics trustworthy)
+### 4.3 The analysis: content analysis
 
-1. **Content validity, first, before any book is rated.** A **separate expert pool** scores each rubric item
-   for relevance; we compute the **Content Validity Index (CVI)** — target **I-CVI > 0.78**, **S-CVI/Ave ≥
-   0.90**. Sub-threshold items are revised or removed.
-2. **Pilot** the rubric on 2–3 books with the anchored scoring guide; revise ambiguous items.
-3. **Inter-rater reliability on real ratings:** **Krippendorff's α** (primary; ≥ 0.667 acceptable, ≥ 0.80
-   good) and/or **ICC(2,k)** for the averaged 3-rater score.
-4. **Internal consistency:** **Cronbach's α ≥ 0.70** across the items.
+Each written response is coded against the five criteria and, within each criterion, coded as **positive
+feedback**, **negative feedback**, or a **suggestion for improvement**. Codes are tallied per criterion. This
+produces a systematic, auditable account of validator feedback without leaning on a rating scale or an
+under-powered reliability statistic.
 
-### 4.4 The 3-rater problem, and the safe fix ⚠️
-
-Our rating panel is **3 people** (professor + education student + art student) — locked, and the one the
-defense panel asked for. But with only 3 raters, CVI/κ/α are statistically fragile (content-validity math
-isn't meaningful below ~5 experts). **Decision (⚠️ adviser-confirm):**
-
-- **Keep the 3-person panel for rating the books.**
-- **Run the content-validity (CVI) step with a *separate, larger* expert pool (≥ 5)** — reuse the same
-  validator-panel concept we already use for the ISO/IEC 25010 questionnaire. This does **not** change the
-  locked 3-person rating panel; it is a different group doing a different job (validating the instrument, not
-  scoring the books).
-- **Report the 3-panel reliability descriptively** — show the α, don't over-claim from n = 3.
-
-This puts the statistical weight where it holds (content validity, ≥ 5 experts), keeps the rating panel the
-defense endorsed, and claims nothing the sample can't support.
+**Note:** the closed failure taxonomy we already use for the judge (`wrong_colour`, `wrong_species`,
+`wrong_body_feature`, `wrong_clothing`, `wrong_style`, `different_face`, `character_absent`) is **not** part of
+this interview instrument — that taxonomy now lives entirely under Objective 4 (judge classification), where it
+grounds the judge's structured failure-reason output.
 
 ---
 
-## 5. Tool C — ISO/IEC 25010 questionnaire (Objective 4)
+## 5. Tool C — ISO/IEC 25010 questionnaire (Objective 5)
 
-**Keep as-is** — it is the one genuinely validated *standard* in the set. Five characteristics: functional
-suitability, usability, reliability, performance efficiency, security. Reported as **mean and SD** per
-characteristic against an interpretation scale declared in advance.
+**Keep as-is** — it is the one genuinely validated *standard* in the set. Five characteristics: **Functional
+Suitability, Performance Efficiency, Usability, Reliability, Security.** Items use a **5-point Likert scale
+(1 = Poor … 5 = Excellent)**, administered to **designated software-quality evaluators** (a group separate
+from the Objective 3 expert validators). Reported as **weighted mean and standard deviation** per
+characteristic, against the Table 4 interpretation bands declared in advance:
+
+| Range | Interpretation |
+|---|---|
+| 4.20–5.00 | Excellent |
+| 3.40–4.19 | Very Good |
+| 2.60–3.39 | Good |
+| 1.80–2.59 | Fair |
+| 1.00–1.79 | Poor |
 
 **Before administration** (already required by `methodology.md §6.4`): run **CVI** on the items, then a
 **pilot** with **Cronbach's α ≥ 0.70** per subscale. Report both figures with the results.
 
 ---
 
-## 6. RQ5 and RQ6 — status
+## 6. Fidelity measure and judge classification — status
 
-**RQ5 (naive-reader recall) — kept, unchanged.** A reader who never saw the story gets the finished book and
-freely recalls *who* and *what happened*; recall is scored against the plot-point annotation by two raters
-(Cohen's κ). It is the study's **output-fidelity** measure and lives under **Objective 3**. Instrument text:
-`research_instruments.md §B`. *(No new tool needed — this already exists.)*
+**Naive-reader recall — dropped entirely.** The comprehension study — a reader who never saw the story given
+the finished book and scored on free recall against a story-grammar protocol — no longer exists as an
+instrument. There is no reader-recall Cohen's κ, no story-grammar scoring, and no captions-stripped session.
+Objective 3's acceptability claim now rests entirely on the expert validation interview (§4); there is no
+separate fidelity/comprehension leg. *(Any reference to a `comprehension-instrument` build spec, or to a
+Tier-2 / Fun Toolkit child-engagement instrument, in the roadmap or backlog is stale and should be removed —
+outside the scope of this brief, but flagged here.)*
 
-**RQ6 (judge fine-tune) — fine-tune kept, comparison dropped.**
+**Judge classification — now Objective 4 in full, not a descriptive footnote.**
 
-- **What stays:** we still **fine-tune the consistency judge** (the one sanctioned LoRA, ADR-016→018) and
-  **report its results descriptively** (its agreement with human labels on the character-disjoint held-out
-  set). For that number to be trustworthy, the human labels still need inter-rater reliability reported and
-  the held-out set read once.
-- **What's dropped:** the **fine-tuned-vs-baseline comparison** as a formal research claim. **Reason:** to
-  finish the capstone by **October**, the comparative study leg was cut. We do not make a "fine-tuned beats
-  prompted" claim.
-- **Note for the record:** this **reverses** the earlier locked decision (`scope_revision_roadmap.md` §0.2,
-  which made RQ6 the *primary comparative study*). Because it's a reversal of a locked decision, it is logged
-  in `design_decisions_and_risks.md` (R4). **ADR-008 was revised 2026-07-22** to make this the authoritative
-  position, and **propagation is done** across `methodology.md §7.3`, `research_direction_and_goals.md`
-  (§Objectives and §3), `value_proposition.md`, `research_instruments.md`, `action_checklist.md`,
-  `model_finetuning.md`, and `scope_revision_roadmap.md`. The study consequently has **no primary comparative
-  study** and makes no causal or comparative claim. **ADR-018's δ = 3 non-inferiority gate is unaffected** —
-  it is a *deployment* gate (does the fine-tuned judge replace the prompted incumbent in the product), not a
-  reported finding.
+- **Model:** the consistency judge, **Qwen2.5-VL-7B-Instruct fine-tuned with QLoRA** (the one sanctioned LoRA,
+  ADR-016→018), performs binary character-consistency classification: **1 = Different Character** (positive
+  class), **0 = Same Character**.
+- **Metrics:** **precision, recall, and F1-score**, with **F1 as the primary summary metric**, computed
+  against human-established reference labels.
+- **Split:** at the **character-identity level** (train / validation / held-out test) — the same identity
+  never appears in two subsets, so there's no identity leakage inflating the number.
+- **Human labels:** two researchers annotate independently; disagreements resolved via the established
+  criteria procedure; inter-annotator agreement is reported (an agreement statistic per
+  `docs/specs/judge-finetune.md` — a different figure from the now-dropped reader-recall κ).
+- **Optional, secondary:** the fine-tuned judge may additionally be compared against a **zero-shot base
+  model** and the **existing prompted Consistency Judge baseline**, on the same held-out pairs and labels.
+  This is optional and secondary to the fine-tuned judge's absolute classification performance against human
+  labels — it is not a required deliverable, and it is not "forbidden" or "build-gate only" either.
+- **ADR-018's δ = 3 non-inferiority gate is unaffected** — it is a *deployment* gate (does the fine-tuned
+  judge replace the prompted incumbent in the product), not a reported research finding.
+
+**Note for the record:** this changes the earlier framing, where this leg was reported "descriptively" with
+"no comparative claim" and no F1/precision/recall metrics. Per the manuscript realignment (ADR-008, revised
+2026-07-25), the fine-tuned judge's classification performance against human labels is Objective 4 outright,
+scored with standard classification metrics, with an optional secondary baseline comparison.
+**Propagation to `action_checklist.md`, `model_finetuning.md`, and `research_direction_and_goals.md` is
+NOT covered by this edit** — those files are outside this brief's ownership and should be checked
+separately for RQ-numbering and Objective-4-framing drift. *(A fourth target, `scope_revision_roadmap.md`,
+was deleted 2026-07-27; the drift check no longer applies to it.)*
 
 ---
 
@@ -197,21 +212,25 @@ freely recalls *who* and *what happened*; recall is scored against the plot-poin
 
 | Method | Used for | Target |
 |---|---|---|
-| **Content Validity Index (CVI)** — Lawshe (1975); Polit & Beck (2006) | Every instrument, before use, scored by a **separate ≥5 expert pool** | I-CVI > 0.78; S-CVI/Ave ≥ 0.90 |
-| **Krippendorff's α** | Inter-rater reliability of expert ratings (Tool B) and recall scoring | ≥ 0.80 good; ≥ 0.667 tentative floor |
-| **ICC(2,k)** | Reliability of the averaged 3-rater score (alternative to α) | — |
-| **Cohen's κ** | Two-rater recall scoring (RQ5) | reported |
-| **Cronbach's α** | Internal consistency (Tool C questionnaire; Tool B if treated as one scale) | ≥ 0.70 |
+| **Content Validity Index (CVI)** — Lawshe (1975); Polit & Beck (2006) | ISO/IEC 25010 questionnaire (Tool C), before administration | I-CVI > 0.78; S-CVI/Ave ≥ 0.90 |
+| **Cronbach's α** | Internal consistency of the ISO/IEC 25010 questionnaire (Tool C) | ≥ 0.70 |
+| **Inter-annotator agreement** (statistic per `docs/specs/judge-finetune.md`) | Human reference labels for judge classification (Objective 4) | per `judge-finetune.md` |
+| **Content analysis coding** | Expert validation interview responses (Tool B) — positive / negative / suggestion, tallied per criterion | Qualitative; not a reliability statistic |
+
+**Dropped from this study:** Krippendorff's α and ICC(2,k) for a numeric expert rubric, and Cohen's κ for
+naive-reader recall scoring — all tied to instruments that no longer exist (the feature-level rubric and the
+comprehension study).
 
 ---
 
 ## 8. Still open — needs adviser / owner sign-off ⚠️
 
-1. **Validator-pool size and CVI/α thresholds** — recommendation is *3-person rating panel + separate ≥5
-   CVI pool*; confirm with adviser (`action_checklist.md` B8/B9).
-2. **Named recall protocol for RQ5** — story-grammar scoring, fit to Grade 5–6 English + Taglish; adviser-confirm.
-3. **Citation verification** — verify every citation below independently before it enters the manuscript
-   (we have a history of unverified citations; see `action_checklist.md` A1/A2).
+1. **Confirm the citation set below still applies.** DreamBench++ and Caldecott/ALSC were cited to ground the
+   now-removed numeric feature-level rubric; verify whether they're still needed anywhere now that Objective 3
+   uses an open-ended interview + content analysis instead (`action_checklist.md` A1/A2 history of unverified
+   citations still applies to what remains).
+2. **Judge-classification split sizes and the human-label agreement statistic/threshold** — deferred to
+   `docs/specs/judge-finetune.md`, not finalized in this brief.
 
 ---
 
@@ -220,14 +239,20 @@ freely recalls *who* and *what happened*; recall is scored against the plot-poin
 **Verified (high confidence) — safe to cite after a final check:**
 
 - **DreamBench++** — Peng, Y. et al. (2024/2025), *DreamBench++: A Human-Aligned Benchmark for Personalized
-  Image Generation.* arXiv:2406.16855; ICLR 2025.
+  Image Generation.* arXiv:2406.16855; ICLR 2025. *(Now relevant to Objective 4's closed failure taxonomy —
+  `wrong_colour`, `wrong_species`, etc. — not to Tool B, which dropped the numeric rubric this taxonomy
+  originally anchored.)*
 - **TIFA** — Hu, Y. et al. (2023), *TIFA: Accurate and Interpretable Text-to-Image Faithfulness Evaluation
-  with Question Answering.* ICCV 2023; arXiv:2303.11897.
+  with Question Answering.* ICCV 2023; arXiv:2303.11897. *(No longer directly used by any surviving
+  instrument in this brief — verify before citing.)*
 - **Lawshe, C. H. (1975)** — *A quantitative approach to content validity.* Personnel Psychology, 28(4),
-  563–575.
+  563–575. *(Still used — grounds the ISO/IEC 25010 questionnaire's CVI step, Tool C.)*
 - **Polit, D. F., & Beck, C. T. (2006)** — the Content Validity Index (CVI), Research in Nursing & Health.
+  *(Still used — Tool C.)*
 - **Caldecott Medal criteria** — Association for Library Service to Children (ALSC/ALA). *(Recognized
-  criteria, not a validated instrument — use for item language only.)*
+  criteria, not a validated instrument; its relevance to Tool B's five interview criteria — narrative
+  coherence, visual presentation, suitability — is plausible but unconfirmed now that Tool B is qualitative;
+  verify before citing.)*
 
 **Do NOT cite (unverified / could not be traced):**
 

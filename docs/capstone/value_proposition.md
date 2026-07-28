@@ -36,13 +36,15 @@ the whole point: a panel can attack each layer, and each has its own answer.
 |---|---|---|---|
 | **Warrant** (why it matters) | An *authentic audience* and *actual publication* are among the strongest levers on children's writing engagement. | **Cited prior literature — not our finding.** We inherit it; we do not test it. | External, established |
 | **Design property** (who it reaches) | Open-weight, self-hostable, **zero per-seat vendor cost** → a provincial public school can run what only a well-funded private school could otherwise afford. SDG-4 (Quality Education). | **True by construction.** It is a property of the architecture (open-weight mandate, ADR-015), provable without any study. | Architectural |
-| **Measured finding** (what we prove) | The resulting book **is** the child's story, not the model's. | **Two output measures.** (1) Independent experts rate the generated books as coherent and consistent on feature-level rubrics (**RQ3**). (2) A reader who never saw the text recovers the child's characters and events *from the finished book alone* (**RQ5**). The judge that drives regeneration is reported **descriptively** — its agreement with human labels on a held-out set (**RQ6**) — as a property of the machinery, **not** as a comparative claim against a baseline (ADR-008, revised 2026-07-22). | Empirical (this study) |
+| **Measured finding** (what we prove) | The pipeline **works**: it produces picture books that domain experts validate as acceptable, and the consistency mechanism that drives it classifies correctly against human judgment. | **Three output measures — Objectives 3, 4, 5.** (1) Purposively selected expert validators (the Arts college Dean/Professor, an Arts student/intern, an Education student/intern) judge the finished books through an open-ended interview, coded by content analysis across five criteria — narrative coherence, story faithfulness, visual presentation, visual style consistency, classroom suitability (**Objective 3**). (2) The fine-tuned open-weight consistency judge is scored against human-established reference labels with **precision, recall, and F1** (F1 primary) on a character-disjoint held-out set (**Objective 4**). (3) The system's software quality is rated on applicable ISO/IEC 25010 characteristics by designated evaluators (**Objective 5**). | Empirical (this study) |
 
-The chain reads top to bottom: *prior work says an authentic audience matters → publishing 40 illustrated
-books was effectively infinite-cost → we collapse that cost → **but only if the book faithfully transmits the
-child's story**, else you have published the model, not the child → RQ3 + RQ5 show the resulting books
-actually deliver that fidelity, with RQ6's descriptive agreement number characterizing the machinery that
-produces it.*
+The chain reads top to bottom: *prior work says an authentic audience matters → publishing many illustrated
+books was effectively infinite-cost → an orchestrated 10-module pipeline collapses that cost → **but only if
+the pipeline reliably produces books worth publishing**, else you have shipped a model output, not the
+child's story → Objective 3's expert validation shows the finished books are judged acceptable on exactly the
+criteria that matter (coherence, faithfulness, presentation, style consistency, classroom fit), Objective 4
+shows the mechanism that enforces character consistency classifies correctly against human judgment, and
+Objective 5 shows the system holds up as software.*
 
 **The technical problem and the community value are the same claim from opposite ends.** That is what makes
 this research rather than integration.
@@ -59,18 +61,20 @@ never a finding of this study. Already refused in `research_direction_and_goals.
 ### Trap B — "Illustrated stories are easier to understand / attract more readers than plain text"
 Tempting, and **worse than it looks**, for two independent reasons:
 
-1. **We did not design to measure it.** RQ5 is **single-arm**: a naive reader sees *one* generated,
-   illustrated book, scored against text-only plot-point annotations. There is **no text-only-book condition
-   and no pipeline-off condition anywhere in the study.** To claim "pictures beat text," you would need a
-   control arm that does not exist, and adding one is expensive and off-mission.
+1. **We did not design to measure it.** There is **no reader-comprehension instrument, no text-only-book
+   condition, and no pipeline-off condition anywhere in the study.** To claim "pictures beat text," you would
+   need a control arm and a comprehension measure that do not exist, and adding either is expensive and
+   off-mission.
 2. **It is already established, so it would be a warrant, not a finding.** "Pictures aid comprehension" is
    dual-coding / multimedia-learning theory — decades old. Swapping the creativity warrant for the
    picture-superiority warrant changes nothing: it is *still* not our contribution.
 
 **The correct reframing of the "readership" instinct** is Layer 3 above: not *"pictures beat text,"* but
-*"the generated book faithfully re-tells what the child wrote, and independent expert ratings (RQ3) plus a
-naive reader's recall of it (RQ5) are the evidence."* That is a finding you own. Hold this line if a panelist says *"aren't pictures obviously easier to
-read?"* — RQ5 is about **transmission fidelity of the child's story**, not picture-vs-text.
+*"expert validators judge the finished book faithful to the story the child wrote"* — story faithfulness is
+one of Objective 3's five content-analysis criteria — *"and the mechanism enforcing character consistency is
+independently shown to classify correctly against human judgment"* (Objective 4). That is a finding you own.
+Hold this line if a panelist says *"aren't pictures obviously easier to read?"* — the study measures
+**whether the pipeline's output is judged faithful and consistent**, not picture-vs-text comprehension.
 
 ---
 
@@ -85,7 +89,7 @@ the list of refusals.
 ## 5. Where this lands in the manuscript
 
 - **Introduction** — open with the child and the folder (Layer 1 warrant), land on identity drift (the gap).
-- **Discussion** — Layers 2 and 3: the equity property, then what RQ3 (expert ratings) and RQ5 (naive-reader
-  recall) actually demonstrated about output quality and fidelity, with RQ6's judge agreement reported
-  descriptively alongside them.
+- **Discussion** — Layers 2 and 3: the equity property, then what Objective 3 (expert validation) and
+  Objective 4 (judge classification performance) actually demonstrated about output quality and pipeline
+  reliability, with Objective 5's software-quality ratings alongside them.
 - **Limitations** — restate Traps A and B explicitly as claims deliberately *not* made.

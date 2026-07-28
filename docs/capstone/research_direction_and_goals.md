@@ -2,8 +2,9 @@
 
 > **This document is derived, not authoritative.** It exists so an adviser or panel can understand the
 > research without reading an ADR. The sources of truth are `docs/product/RESEARCH_PROTOCOL.md` (method),
-> `docs/product/ADRs.md` (why), `docs/product/PRD_v2.md` (what), `docs/product/ROADMAP.md` (when).
-> **Where this document and those disagree, they win and this one is a bug.**
+> `docs/product/ADRs.md` (why), `docs/product/PRD_v2.md` (what), `docs/product/ROADMAP.md` (when), and
+> above all the **capstone manuscript**, which is authoritative on scope, objectives, respondents, and
+> instruments. **Where this document and those disagree, they win and this one is a bug.**
 
 Target output format is **IMRaD / IEEE**. Section 9 maps each part below onto the manuscript.
 
@@ -20,9 +21,9 @@ A child writes a story. The teacher marks it. It goes in a folder. Nobody reads 
 motivation is unusually consistent that an **authentic audience** and **actual publication** are among the
 strongest levers on children's writing engagement.
 
-But illustrating and publishing forty stories is not something a Grade 5–6 teacher can do. The cost of
-publishing a child's story as an illustrated book is, in practice, *infinite*. Generative AI could collapse
-that cost to three minutes and a few pesos.
+But illustrating and publishing a class set of stories is not something a Grade 5–6 teacher can do. The
+cost of publishing a child's story as an illustrated book is, in practice, *infinite*. Generative AI could
+collapse that cost to minutes and a few pesos.
 
 **This is the motivation. It is established by prior literature, and it is not a finding of this study.**
 
@@ -51,35 +52,39 @@ on page four has not published the child — it has published the model.
 > **The technical problem and the educational benefit are the same claim viewed from opposite ends.**
 > That is what makes this research rather than integration.
 
-**Central research question:**
+**Central research problem:**
 
-> *Does an automated consistency-verification-and-correction loop produce picture books faithful enough
-> that other readers recover the story the child meant to tell?*
+> *Can an automated consistency-verification-and-correction pipeline transform child-written stories into
+> coherent, visually consistent digital picture books — holding a stylized, invented, frequently non-human
+> character across scenes — that expert validators judge acceptable in presentation quality and classroom
+> suitability?*
 
 **The pipeline itself is fully automated** — no person edits a scene, caption, or image between the child's
 submitted story and the generated book. Human judgment enters only afterward: the teacher-gated review before
-classroom sharing (§6), and the study's evaluation instruments (the RQ3 expert panel, RQ5's naive readers).
-This is what makes *AI-Powered* the accurate word for the title; *AI-Assisted* would misdescribe generation
-as something a human helps produce.
+classroom sharing (§6), and the study's evaluation instruments (the expert validation panel, the human
+reference labels for the Consistency Judge). This is what makes *AI-Powered* the accurate word for the title;
+*AI-Assisted* would misdescribe generation as something a human helps produce.
 
 ---
 
 ## Objectives
 
-Four objectives, one verb each, in the order the panel asked for them — **Develop → Implement →
-Evaluate → Assess.** This section is the canonical statement of the objectives; the manuscript draws
-from here.
+Five objectives, in the manuscript's order — **Implement → Produce → Determine → Evaluate → Evaluate.**
+This section restates the manuscript's objectives; the manuscript is authoritative.
 
-1. **Develop** the StoryBuddy pipeline — child story → consistent illustrated storybook.
-2. **Implement** the pipeline as a deployable, teacher-operated system.
-3. **Evaluate** the generated outputs — storybook, illustrations, story consistency — via an expert
-   panel, plus a naive-reader recall measure (RQ5).
-4. **Assess** the software quality of StoryBuddy against **ISO/IEC 25010**.
+1. **Implement** an orchestrated AI pipeline as the core processing framework of StoryBuddy.
+2. **Produce** digital picture books from child-written stories through the implemented pipeline.
+3. **Determine the acceptability** of the generated digital picture books — presentation quality and
+   classroom suitability — through **expert validation**.
+4. **Evaluate the character-consistency classification performance** of the fine-tuned lightweight
+   vision-language model against human-established reference labels, using standard classification
+   metrics: **precision, recall, and F1-score (F1 primary)**.
+5. **Evaluate the software quality** of StoryBuddy against applicable **ISO/IEC 25010** quality
+   characteristics.
 
-Objective 3 carries the output-evaluation leg (RQ3 and RQ5, supported by RQ1 — §3); Objective 4 is the
-ISO/IEC 25010 software-quality questionnaire (ADR-008, revised 2026-07-22). Objectives 1–2 are the built
-artifact, verified by RQ1 and RQ4. The judge fine-tune (RQ6) is **reported descriptively** and is not an
-objective of its own.
+The three evaluation legs are Objectives 3, 4, and 5 (ADR-008, revised 2026-07-25). Objectives 1–2 are the
+built artifact. There is no reader-comprehension study and no pipeline ON/OFF ablation; the study makes no
+causal or comparative claim about superiority over other methods.
 
 ---
 
@@ -101,86 +106,71 @@ The contribution is a **pipeline**, not a model. Each element exists because a s
    This is what makes regeneration *purposeful* rather than a random re-roll. If the retry still fails, the
    higher-scoring image is kept — a child never sees a broken page (per ADR-010 in the repository, which establishes the policy of one targeted retry using the VLM's extracted failure reasons, followed by a best-of fallback to ensure a guaranteed shippable page).
 
-**The shipped judge is a prompted `gemma-3-27b-it`.** A fine-tuned `Qwen2.5-VL-7B` is a candidate replacement
-for that one part, evaluated in Phase 2.5, shipped only if it clears its gate. The pipeline is unchanged
-either way. See `model_finetuning.md`.
+**The consistency judge is a vision-language model.** The study **fine-tunes a lightweight open VLM —
+`Qwen2.5-VL-7B-Instruct`, QLoRA — for the character-consistency classification task**, and evaluates its
+performance against human reference labels (Objective 4, §3). A prompted `gemma-3-27b-it` serves as the
+existing baseline the fine-tuned model is measured against. Whether the fine-tuned judge replaces the
+prompted incumbent *in the shipped product* is a separate deployment decision (ADR-018); the pipeline is
+unchanged either way. See `model_finetuning.md` and `docs/specs/judge-finetune.md`.
 
 ---
 
 ## 3. How we measure it
 
-The study has two evaluation legs (ADR-008), mapped to Objectives 3 and 4:
+The study has **three evaluation legs** (ADR-008), one per evaluation objective:
 
-- **Objective 3 — generated-output quality (RQ3 + RQ5), plus supporting RQ1 and RQ4.** An expert panel rates
-  the outputs on feature-level rubrics; a naive-reader recall measure tests whether the book transmits the
-  story.
-- **Objective 4 — software quality.** The ISO/IEC 25010 questionnaire, administered to IT practitioners and
-  teachers.
+- **Objective 3 — acceptability of the generated picture books (expert validation).** Purposively selected
+  expert validators judge the generated books on presentation quality and classroom suitability.
+- **Objective 4 — character-consistency classification performance of the fine-tuned judge.** The
+  fine-tuned VLM's Same/Different-Character predictions are scored against human reference labels with
+  precision, recall, and F1.
+- **Objective 5 — software quality.** The ISO/IEC 25010 questionnaire, administered to designated
+  software-quality evaluators.
 
-The judge fine-tune (RQ6) sits outside both legs: it is **reported descriptively** — its agreement with human
-labels on the character-disjoint held-out set — and makes no comparative claim (ADR-008, revised 2026-07-22).
+There is no reader-comprehension leg and no pipeline ON/OFF ablation (both removed — ADR-008). Former RQ1
+(scene coverage against major plot points) and former RQ4 (graceful handling of under-length stories without
+inventing content) are **not standalone measured questions**; they are described in `methodology.md` as
+properties of Scene Segmentation.
 
-| RQ | Question | Instrument |
-|---|---|---|
-| RQ1 | How accurately does the system identify key scenes from child-written stories? | Story Completeness vs. human-annotated major plot points |
-| RQ3 | How acceptable are the generated outputs (coherence, consistency, illustration quality, usability)? | Expert-panel + ISO/IEC 25010 output-quality ratings, feature-level |
-| RQ4 | How gracefully does the system handle **under-length** stories without inventing content? | Scene count as a function of story length against the ≥ 3 target, plus a human check that no content was invented — the never-invent rule overrides the target |
-| RQ5 | Can a naive reader recover the author's characters and events from the generated book alone? | Single-arm naive-reader recall vs. RQ1's plot points (primary); character recovery (secondary); two raters, Cohen's κ |
-| **RQ6** | How well does the fine-tuned VLM judge agree with human labels on the character-disjoint held-out set, and does agreement differ on **non-human** characters? | **Descriptive** — held-out F1 with character-clustered bootstrap CIs; no comparative claim |
+### 3.1 Objective 3 — expert validation (the method)
 
-**RQ3 is output quality and RQ5 is the fidelity outcome (Objective 3); ISO/IEC 25010 is Objective 4; RQ1 and
-RQ4 are supporting; RQ6 is reported descriptively.** RQ2 (the pipeline ON-vs-OFF ablation) is **dropped** —
-see ADR-008. **The study has no primary comparative study and makes no causal or comparative claim.** This is
-**one study**.
+The generated books are evaluated **directly**, by expert validators purposively selected from the Arts and
+Education colleges:
 
-### 3.1 The two evaluation legs
+- the **Dean/Professor of the Arts College**,
+- one **Arts student/intern**, and
+- one **Education student/intern**.
 
-Output quality is evaluated **directly on the generated books**, not by an ON-vs-OFF ablation (dropped —
-ADR-008):
+The **Arts-sector validators** judge the visual and artistic presentation; the **Education-sector validator**
+judges educational suitability and appropriateness. The instrument is a **written, open-ended interview form**
+(Tool B). Responses are analysed by **content analysis**: pre-set categories are defined from the five
+criteria — **narrative coherence, story faithfulness, visual presentation, visual style consistency, and
+suitability for classroom use** — and each written response is coded **positive / negative / suggestion** and
+tallied per criterion to summarise the level of acceptability. Software usability is *not* judged by this
+panel; it is measured separately by the ISO/IEC 25010 questionnaire (Objective 5).
 
-- **Expert panel (RQ3).** 1 professor + 1 education student + 1 art student rate the storybooks,
-  illustrations, and story consistency with feature-level rubrics (Instrument A). This is the
-  panel-requested "evaluate the generated outputs" leg — outputs, not internal pipeline components.
-  RQ3's usability dimension is measured separately, by the ISO/IEC 25010 software-quality questionnaire
-  (Instrument D) administered to IT practitioners and teachers — never by this panel.
-- **ISO/IEC 25010 software quality (Objective 4).** The questionnaire (Instrument D) administered to IT
-  practitioners and teachers — the software leg, separate from the panel above.
+### 3.2 Objective 4 — Consistency Judge classification performance (the method)
 
-The judge's own agreement with human labels (RQ6) is reported descriptively alongside these, not as a leg;
-full treatment in §2's judge paragraph, ADR-018, and `docs/specs/judge-finetune.md`.
-
-RQ5 (§3.2) adds the reader-side fidelity measure. The judge is **never** used to score any of these
-outcomes (§3.3).
-
-### 3.2 The comprehension instrument (RQ5)
-
-A reader who has **never seen the story text** is given the book alone, then asked:
-
-1. **Who was the story about?** (free recall of characters)
-2. **What happened?** (free recall of events)
-3. *What can you say about the story?* — reflective, unscored; it exists for the author's benefit.
-
-Recalled characters and events are matched against the **same human-annotated plot points RQ1 already
-requires.** One annotation, two uses. This is a **single-arm** fidelity measure — the reader sees the one
-generated book, not an ON/OFF pair. Two independent raters score recovery against the annotation via a
-validated recall protocol, and **Cohen's κ** is reported. **Plot-point recall is the primary outcome;
-character recovery is secondary/confirmatory** (owner decision, `design_decisions_and_risks.md` R3,
-2026-07-20) — RQ5 is one of Objective 3's two output measures, alongside the expert panel (RQ3).
-
-Two properties worth stating in Methods. **The reader need not be a child**, which is why RQ5 runs on
-adult raters and survives an ethics delay. And **asking the author "did it match your intent?" is a weaker
-instrument** — authors know what they meant and will read it into any illustration. A naive reader cannot.
+The fine-tuned `Qwen2.5-VL-7B-Instruct` predicts, for each held-out image pair, whether the generated scene
+shows the **Same Character** or a **Different Character** relative to the canonical reference. Predictions are
+matched to the human reference labels by unique pair ID and scored with **precision, recall, and F1-score**;
+**F1 is the primary summary metric** because it balances precision and recall. The held-out split is
+**character-disjoint** — the same character identity never appears in more than one subset — so the model is
+never evaluated on identities it trained on. **Optionally**, the fine-tuned model is reported alongside its
+**zero-shot base** and the **existing prompted baseline** on the same held-out pairs, to characterise the
+effect of fine-tuning; this comparison is secondary to the fine-tuned model's absolute agreement with human
+labels. Full machinery in `docs/specs/judge-finetune.md` and ADR-018.
 
 ### 3.3 The non-circularity constraint
 
-> **The output evaluation is never scored using the judge.**
+> **The expert-validation outcome is never scored using the judge.**
 
-The judge drives regeneration inside the pipeline. Using that same judge as an outcome measure would be
-circular — the system grading its own homework. The output-quality outcomes are the **expert panel +
-ISO/IEC 25010 ratings** and **RQ5's naive-reader recall**; none of them the judge optimizes. The judge's
-own accuracy is the separate RQ6 question, measured on a human-labeled, character-disjoint held-out set it
-never trained on. This is the sharpest question a panel will ask, and the answer is fixed in ADR-004 so it
-is never improvised.
+The judge drives regeneration inside the pipeline. Using that same judge as the acceptability outcome would be
+circular — the system grading its own homework. The Objective-3 acceptability outcome is the **expert
+validators' content-analysed judgments**; the ISO/IEC 25010 outcome (Objective 5) is a separate questionnaire.
+The judge's own accuracy is the separate Objective-4 question, measured on a human-labeled, character-disjoint
+held-out set it never trained on. This is the sharpest question a panel will ask, and the answer is fixed in
+ADR-004 so it is never improvised.
 
 ---
 
@@ -188,44 +178,46 @@ is never improvised.
 
 ### 4.1 Corpus
 
-Test stories must be **real or realistic child writing**, not builder-authored clean prose — which would
-measure best-case only. Grade 5–6, English with Taglish code-switching tolerated.
+Test stories must be **real child writing**, not builder-authored clean prose — which would measure best-case
+only. Grade 5–6, English with Taglish code-switching tolerated.
 
-**Target: 50 donated stories; take 60–70 if the first corpus batch yields fewer than ~1 usable disjoint
-character per story** — recruitment is gated on character yield, not story count (`methodology.md` §4.1).
-That number is set by the fine-tune (RQ6),
-not the output evaluation: stories yield characters, and characters are the unit of RQ6's character-disjoint
-33 / 5 / 12 split. More characters is the cheapest statistical power the project has, **and the corpus is
-closed after Phase 2.5 — it is unfixable later.**
+**Fifteen (15) original stories** are collected from qualified Grade 5–6 learners; after screening against the
+inclusion/exclusion criteria, **ten (10) eligible stories comprise the primary corpus and five (5) are
+retained as backup** if a primary story is later excluded (`methodology.md` §4.1). Learners participate by
+**submitting stories only** — they do not validate the books or evaluate the software. Stories are anonymized
+and assigned unique identifiers before processing.
 
-**One corpus, two uses:** the evaluation stimuli (RQ1, RQ3, RQ5 — expert-panel material and naive-reader
-recall), and — once the pipeline has drawn it and researchers have labelled the drawings — the judge's
-training and evaluation data (RQ6). Corpus = **donated child writing + researcher labels** (ADR-008);
-researcher-written stories appear only as training-split augmentation, never as evaluation stimuli.
+**One corpus, two uses:** the picture books generated from these stories are the expert-validation stimuli
+(Objective 3), and — once the pipeline has drawn them and researchers have labelled the character image pairs
+— the Consistency Judge's training and evaluation data (Objective 4). The judge's image-pair dataset is
+derived from the pipeline's own outputs on this corpus; researcher-written stories appear only as
+training-split augmentation, never as evaluation stimuli or in the judge's held-out test split (ADR-008).
 
 Development and debugging use **researcher-written fixture stories**. These are not the corpus, carry no
 ethics load, and are never used as stimuli or as evidence.
 
-### 4.2 Participants, in two tiers
+### 4.2 Respondents
 
-**Tier 1 — adults (N ≈ 15–30). Carries RQ1–RQ6. Designed to stand alone.** Blind scored ratings plus the
-RQ5 comprehension instrument. Inter-rater reliability defined up front.
+Three groups, treated separately because they address different aspects of the study:
 
-**Tier 2 — children (N ≈ 8–15). Enrichment. May slip without sinking the capstone.** Validated instruments
-(Fun Toolkit: Smileyometer + Again-Again), a story-fidelity item, in-app peer comprehension, and behavioral
-logging — which is more reliable than child self-report. Watch the novelty confound: repeat use *within* a
-session matters more than first-reaction delight.
+- **Grade 5–6 learners** — provide the child-written stories (15 → 10 primary + 5 backup). Story submission
+  only; no evaluation role.
+- **Expert validators** — the Dean/Professor of the Arts College + one Arts student/intern + one Education
+  student/intern, purposively selected (§3.1). They validate the generated picture books.
+- **Software-quality evaluators** — a separate designated group who complete the ISO/IEC 25010 questionnaire
+  (§3, Objective 5).
 
 ### 4.3 Ethics — two stages, because the original design had a hidden deadlock
 
-The corpus is real child writing; the children who write it are the Tier-2 participants. A single ethics
-submission therefore silently blocked Tier 1 on Tier-2 clearance — the exact dependency Tier-1
-self-sufficiency exists to prevent. Splitting the submission is the fix.
+The corpus is real child writing. A single ethics submission would bundle low-risk story donation with the
+heavier review of children using the system. Splitting the submission is the fix.
 
-- **Stage 1 — story donation.** Children write stories. They never touch the system. Anonymized text, nothing
-  about the child. Narrow, low-risk, comparatively fast. *Unblocks the entire research track.*
-- **Stage 2 — system use.** Children use StoryBuddy and read classmates' books in the display-only gallery.
-  Interactive, peer-visible, child-authored content (their own storybook). Materially heavier review. *Gates Tier 2 only.*
+- **Stage 1 — story donation.** Children write stories; they never touch the system. Anonymized text, nothing
+  about the child. Narrow, low-risk, comparatively fast. *Unblocks the corpus, the expert-validation stimuli,
+  and the judge's training/evaluation labels.*
+- **Stage 2 — system use.** Children use StoryBuddy in a teacher-guided, classroom-scoped setting. Interactive,
+  child-authored content. Materially heavier review, and not on the critical path for the three evaluation
+  legs.
 
 > **The Stage-1 consent form must state that donated stories may be used to build and evaluate an AI model.**
 > The donated story becomes illustrations, researchers label those illustrations, and those labels become
@@ -233,16 +225,19 @@ self-sufficiency exists to prevent. Splitting the submission is the fix.
 > **there is no retroactive fix** — collect first and the only lawful options are to re-consent every child
 > or delete the data.
 
-Both stages require guardian informed consent **and** age-appropriate child assent (PH Data Privacy Act 2012).
+Both stages require guardian informed consent **and** age-appropriate child assent, in compliance with the
+**Data Privacy Act of 2012 (Republic Act No. 10173)**. Stories are collected at **Matina Aplaya Elementary
+School**; development and evaluation are conducted at **Holy Cross of Davao College (HCDC), Davao City**,
+subject to institutional and ethics clearances.
 
 ### 4.4 Pre-registration
 
-**The analysis plan — hypotheses, baselines, metrics, success criteria — is written and timestamped before
-anything is run.** For RQ6 this fixes the descriptive report before the held-out set is read once: the judge's
-agreement with human labels is reported whatever it turns out to be, and the deployment gate that decides
-whether the fine-tuned judge replaces the prompted incumbent is declared in advance rather than chosen after
-seeing the numbers. The same discipline governs the output evaluation and RQ5:
-the success criteria and the recall protocol are fixed before data, so a weak result is a finding, not a fudge.
+**The analysis plan — objectives, metrics, success criteria — is written and timestamped before anything is
+run.** For Objective 4 this fixes the reporting before the held-out set is read once: the judge's precision,
+recall, and F1 against human labels are reported whatever they turn out to be, and the deployment gate that
+decides whether the fine-tuned judge replaces the prompted incumbent is declared in advance rather than chosen
+after seeing the numbers. The same discipline governs the expert validation: the criteria and the
+content-analysis coding frame are fixed before data, so a weak result is a finding, not a fudge.
 
 Almost no capstone does this. It is the cheapest defensive move available.
 
@@ -255,42 +250,42 @@ An open-weight, self-hostable pipeline carries **no per-seat vendor cost** — t
 well-funded private school buys and one a provincial public school can run. That is the SDG-4 (Quality
 Education) hook. It is a property of the system, not a hope about its effects.
 
-Within the study, the demonstrated benefit is **fidelity of transmission**: RQ5 shows whether a reader
-recovers the characters and events the child actually wrote. A book that transmits the child's story is the
-authentic-audience artifact the motivating literature calls for.
+Within the study, the demonstrated benefit is **acceptability of the generated books**: expert validators
+judge whether the outputs are coherent, faithful, and suitable for classroom use. A book experts validate as
+faithful is the authentic-audience artifact the motivating literature calls for.
 
 **What this study does not claim, and why:**
 
 | We do not claim | Why not |
 |---|---|
-| **Learning gains** in children's writing | N ≈ 8–15, no non-illustrated control, no pre/post design, no longitudinal window. Prior literature is the **warrant** for why fidelity matters; it is not our finding. Overclaiming here is the single most likely way the defense goes badly. |
-| **Privacy preservation** | The child's text transits a hosted provider. Only on-device generation could claim otherwise (Future Work). |
+| **Learning gains** in children's writing/literacy | No control or comparison group, no pre/post design, no longitudinal window. Prior literature is the **warrant** for why fidelity matters; it is not our finding. The manuscript's delimitations exclude creativity, literacy, writing-ability, and long-term learning outcomes. |
+| **Superiority over other methods** | No control/comparison group; the study makes no causal or comparative claim of superiority. |
+| **Privacy preservation** | The child's text transits a hosted provider; the study does not claim complete on-device privacy (Future Work). |
+| **Perfect preservation** | Story content, character appearance, and visual style are not guaranteed to be perfectly preserved in every generated book. |
 | **Watermark provenance** | No open equivalent to SynthID-Image exists; C2PA is Future Work. |
-| **That the fine-tuned judge will ship** | It ships only if it clears a pre-registered deployment gate. Rung C — it beats its base but loses to the prompted incumbent — keeps the prompted judge in the product; RQ6's descriptive report is unaffected either way. |
 
 ---
 
 ## 6. Scope and boundaries
 
-**Grade 5–6 (ages 10–12), Philippines, English with Taglish tolerated.** Each boundary is derived from a
-research question, not chosen for convenience:
+**Grade 5–6 (ages 10–12), Philippines, English with Taglish tolerated.** Each boundary is derived from the
+study's needs, not chosen for convenience:
 
-- They **write independently** → the story is unambiguously the child's. Scaffold a Grade 2 student and RQ5
-  is meaningless: whose story did we illustrate?
-- They **read fluently** → peer comprehension is measurable at all.
+- They **write independently** → the story is unambiguously the child's. Scaffold a Grade 2 student and it is
+  unclear whose story was illustrated.
 - **English is the medium of instruction** from Grade 4 → one language, one moderation regime, one TTS voice.
-- They are **pre-adolescent** → peer feedback is unlikely to be cruel.
+- They are **pre-adolescent** → appropriate for a teacher-guided classroom setting.
 
-At N ≈ 8–15 the study cannot stratify by age, and age is one of the largest sources of variance in children's
-writing. Broadening the band would add variance, not generality. **A tight population is a delimitation, not
-an apology.**
+The corpus is one grade band in one country. **A tight population is a delimitation, not an apology.**
 
-**In scope:** Story Analyzer · Scene Segmentation (up to 10–15 scenes, target ≥ 3 where the arc supports it —
-never padded, and never-invent overrides the floor) · Character Bible + canonical
-reference (≤ 2 canonical references) · three style presets · Prompt Optimizer · Image Generator
-(Qwen-Image-Edit) · prompted VLM consistency judge + targeted regeneration · moderation stack (input text,
-output images, Filipino PII redaction) · slide composer with expressive TTS narration (Chatterbox) · PDF export ·
-teacher-gated, display-only classroom sharing.
+**In scope (the pipeline's ten logical modules):** Input Moderation · Story Analyzer · Scene Segmentation
+(up to 10–15 scenes, target ≥ 3 distinct major plot points where the arc supports it — never padded, and
+never-invent overrides the floor) · Story Memory Manager · Character Bible + canonical reference (≤ 2
+canonical references) · Style Preset (three presets) · Prompt Optimizer · AI Scene Generation
+(Qwen-Image-Edit) · Consistency Judge & Targeted Regeneration (prompted judge in the product; fine-tuned
+`Qwen2.5-VL-7B` evaluated in Objective 4) · Picture Book Composition (slide composer with expressive TTS
+narration via Chatterbox, PDF export). Moderation stack (input text, output images, Filipino PII redaction)
+and teacher-gated, display-only classroom sharing wrap the pipeline.
 
 **Permanently excluded:** public sharing. All sharing is classroom-scoped and teacher-gated.
 
@@ -298,25 +293,28 @@ teacher-gated, display-only classroom sharing.
 on-device generation · more than three art styles.
 
 **Open-weight mandate.** No proprietary vendor models. This is what makes the equity claim a design property
-rather than a hope, and it is why the system is self-hostable and replicable.
+rather than a hope, and it is why the system is self-hostable and replicable. StoryBuddy nonetheless remains
+dependent on compute, network connectivity, and some external hosted services — it does not claim complete
+on-device operation.
 
 ---
 
 ## 7. Intended contributions
 
 1. **A multi-module consistency pipeline, evaluated on its outputs** — Story Memory, canonical reference,
-   and judge-driven targeted regeneration, whose generated books are rated by an expert panel and against
-   ISO/IEC 25010 (RQ3), not asserted from a bare API call. This is the answer to *"isn't this just an API
-   wrapper?"*: the contribution is the architecture and the demonstration that it produces outputs experts
-   rate as coherent.
-2. **Evidence on whether consistency transmits a story** (RQ5's single-arm naive-reader recall) — the bridge
-   from a technical property to a human outcome.
+   and judge-driven targeted regeneration, whose generated books are validated by an expert panel and
+   against ISO/IEC 25010 (Objectives 3 and 5), not asserted from a bare API call. This is the answer to
+   *"isn't this just an API wrapper?"*: the contribution is the architecture and the demonstration that it
+   produces outputs experts validate as acceptable.
+2. **A fine-tuned open VLM consistency judge, evaluated as a classifier** — its precision, recall, and F1
+   against human reference labels on a character-disjoint held-out set (Objective 4), optionally alongside
+   its zero-shot base and the prompted baseline.
 3. **A characterization of an unmeasured regime** — identity retention for stylized, invented, non-human
    characters, where existing benchmarks (e.g. DreamBench++) evaluate real photographic subjects rather than
    the stylized, invented, non-human regime this product lives in, and none provides human pairwise identity
    judgments over it (ADR-001 and `docs/specs/judge-finetune.md` §5.1 in the repository).
-4. **A fine-tuned open VLM consistency judge**, reported descriptively — its agreement with human labels on a
-   character-disjoint held-out set read exactly once, reported whatever it shows. No comparative claim is made.
+4. **A human-labeled character-consistency image-pair dataset** over stylized, invented, frequently non-human
+   characters — the specific absence identified in §1.2.
 5. **Equity by construction** — an open-weight, self-hostable stack with no per-seat licensing cost.
 
 ---
@@ -331,8 +329,8 @@ Riskiest assumptions first. Build track and research track run in parallel and m
 | **0.5** | **Open-weight spike — can the image model hold a non-human character?** | **⚠️ not run. Everything below is contingent on it.** |
 | 1 | Core pipeline + prompted consistency judge | blocked on 0.5 |
 | 2 | Moderation, classroom auth, sharing, narration, export | blocked on probe 4 |
-| 2.5 | Judge fine-tuning + evaluation | blocked on Ethics Stage 1 → corpus → a Phase 1 run |
-| 3 | Output evaluation (expert panel + ISO-25010) + RQ5 recall, Tier-1 harness, Tier-2 | blocked on corpus |
+| 2.5 | Judge fine-tuning + classification evaluation (Objective 4) | blocked on Ethics Stage 1 → corpus → a Phase 1 run |
+| 3 | Expert validation (Objective 3) + ISO/IEC 25010 (Objective 5) | blocked on corpus |
 
 **Phase 0.5 is a kill criterion, and it has not run.** If the image model cannot hold an invented non-human
 character, that is a finding worth reporting and the product's scope changes. It is the cheapest possible
@@ -349,17 +347,17 @@ is a weekend. Everything before it is months.
 
 | Manuscript section | Draw from |
 |---|---|
-| **Introduction** | §1.1 (motivation, cited to prior work) → §1.2 (the gap) → §1.3 (the research problem + central RQ) → §7 (contributions). Lead with the child and the folder; land on identity drift. |
+| **Introduction** | §1.1 (motivation, cited to prior work) → §1.2 (the gap) → §1.3 (the research problem) → §7 (contributions). Lead with the child and the folder; land on identity drift. |
 | **Related Work** | Situate against the crowded character-consistency field (ConsiStory, StoryDiffusion, The Chosen One, DreamBench++), then §1.2's true gap: existing benchmarks are photographic or method-preference studies, and **none provides human pairwise identity judgments over stylized, invented, non-human characters** (`docs/specs/judge-finetune.md` §5.1 in the repository, incl. the rejected-alternatives table). Cite only arXiv IDs you have re-verified (see `design_decisions_and_risks.md`, R6). |
-| **Methods** | **Drafted in full: `docs/capstone/methodology.md`** — development methodology, system under test, data collection, datasets, training and validation, instruments, analysis plan, ethics, threats to validity. |
-| **Results** | Phase 0.5 probe results · expert-panel + ISO-25010 output-quality ratings · RQ5 recall scores · RQ6's held-out agreement table with CIs (descriptive) |
-| **Discussion** | §5 — what the numbers support, and the four claims we refuse to make. Phase 0.5's non-human boundary belongs here if Quill fails. |
+| **Methods** | **Drafted in full: `docs/capstone/methodology.md`** — development methodology (quantitative-developmental; Boehm's Spiral Model), system under test, data collection, datasets, training and validation, instruments, analysis plan, ethics, threats to validity. |
+| **Results** | Phase 0.5 probe results · expert-validation content-analysis summary (Objective 3) · Consistency-Judge precision/recall/F1 on the held-out set (Objective 4) · ISO/IEC 25010 weighted means + SD (Objective 5) |
+| **Discussion** | §5 — what the numbers support, and the claims we refuse to make. Phase 0.5's non-human boundary belongs here if the substrate fails. |
 | **Limitations** | §5's table, §6's delimitation, and the fact that the corpus is one grade band in one country. |
 
 **Write the Methods section before the Results exist.** It is already almost entirely determined by
 `RESEARCH_PROTOCOL.md`, and writing it early is what makes the pre-registration in §4.4 real rather than
 decorative.
 
-→ **Drafted: `docs/capstone/methodology.md`.** Its §7 (analysis plan) is the pre-registration and needs
-adviser sign-off **before the first data point is collected.** Its §6.4 (ISO/IEC 25010 system-evaluation
-questionnaire) needs the required standard and evaluator profile confirmed with your adviser.
+→ **Drafted: `docs/capstone/methodology.md`.** Its analysis plan is the pre-registration and needs adviser
+sign-off **before the first data point is collected.** Its ISO/IEC 25010 questionnaire section needs the
+evaluator profile confirmed with your adviser.
