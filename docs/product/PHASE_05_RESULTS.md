@@ -12,7 +12,8 @@ Fill in `Result` and `Decision` immediately after each run. Do not edit the `Pas
 or `Branches` rows after seeing a number — if one turns out wrong, say so in `Notes` and leave
 the original visible.
 
-> **Revised 2026-07-13, before any probe ran** (round-2 review, `docs/capstone/review_round2_2026-07-12.md`):
+> **Revised 2026-07-13, before any probe ran** (round-2 review, 2026-07-12 — the review file was never
+> committed; this note is the only surviving record of it):
 > probe 1 scaled from 5 to 10 scenes per character (n = 20 per condition) and its tie rule recorded;
 > probe 3 gains a raw field-order condition (Pydantic cannot see order); probe 4 probes the
 > two-classifier **union** over an expanded ~26-case set, both directions.
@@ -35,6 +36,21 @@ mechanism and can often infer condition from pose/composition echo — so the κ
 probe yields are treated as **optimistic bounds** when sizing the Tier-1 load (R2), not as unbiased
 estimates.
 
+> **Revised 2026-07-28, before any probe ran: one rater, not four.** Scorer availability, not
+> methodology. The gates are unchanged and still compute — `_majority` degrades correctly to a
+> single column. Three things are lost, and they are losses, not simplifications:
+> 1. **No inter-rater κ.** Undefined with one rater. Phase 3's instrument therefore gets **no
+>    dress rehearsal** here (ADR-008); that rehearsal has to happen somewhere else before Phase 3.
+> 2. **The conservative tie rule never fires** — with one column there are no ties, so the
+>    single scorer's call *is* the verdict on every item.
+> 3. **The designer-bias caveat above gets sharper, not softer.** It was already an optimistic
+>    bound with four mutually-checking scorers; with one it is a single unchecked judgement by
+>    someone who knows what the probe is trying to prove.
+>
+> Consequence for how the result may be reported: a PASS here licenses **"Phase 1 opens"** and
+> nothing stronger. It is not a measured consistency rate fit for the paper. If any Probe-1 number
+> is to appear as a finding rather than as a build gate, it is re-scored with ≥3 raters first.
+
 ```
 uv run python -m spikes.phase_05 consistency
 # ...all four raters fill spikes/out/scores.csv, blind...
@@ -53,7 +69,7 @@ uv run python -m spikes.phase_05 tally
 | Outcome | Meaning | Do this |
 |---|---|---|
 | Both hold | The reference does the work. ADR-007's mechanism is real. | **Phase 1 opens.** |
-| Absolute holds, separation fails | The model draws a good fox with or without the reference. **This is a fail** — the reference is not doing the work and ADR-007 has no measurable effect on this substrate. *(RQ2 was dropped in ADR-008; this probe is a **technical substrate gate**, not a research arm — `methodology.md` §3.4. It still fails: the pipeline's consistency mechanism would be doing nothing.)* | Escalate to **FLUX.1 Kontext [dev]** (non-commercial, permitted — ADR-015). Re-run. |
+| Absolute holds, separation fails | The model draws a good fox with or without the reference. **This is a fail** — the reference is not doing the work and ADR-007 has no measurable effect on this substrate. *(RQ2 was dropped in ADR-008; this probe is a **technical substrate gate**, not a research arm — `methodology.md` §3.4. It still fails: the pipeline's consistency mechanism would be doing nothing.)* | Escalate to **OmniGen2** — rung 1 of ADR-001's fallback ladder, re-ordered 2026-07-28 before any probe ran (FLUX.1 Kontext is now rung 4). Verify fal routes it first. Re-run. |
 | Both fail | The substrate cannot hold identity. | **Stop and surface it.** A Phase-0.5 finding, not a Phase-3 catastrophe. |
 | Pip passes, Quill fails | **Not a defeat.** It maps the product's boundary and it is the most interesting sentence in the paper. | Record it. Decide scope deliberately. Do not paper over it. |
 
@@ -65,7 +81,8 @@ uv run python -m spikes.phase_05 tally
 | Quill | | | | |
 | **Combined (gates)** | | | | |
 
-Inter-rater agreement (κ): ______  ← this is also a dress rehearsal of the Phase 3 instrument (ADR-008).
+Inter-rater agreement (κ): **N/A — single rater** (2026-07-28 revision). The Phase-3 instrument
+dress rehearsal (ADR-008) does **not** happen in this probe and is still owed before Phase 3.
 
 **Decision:** _____________________________________________
 

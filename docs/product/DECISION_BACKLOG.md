@@ -83,7 +83,7 @@ roadmap order. Source: MASTER_SPEC §7.
 - [ ] `regeneration-controller`   *(no file yet; needs the ADR-023 failure-reason enum + ADR-024 loop shape; owns the best-of ranking signal ADR-024 flagged as under-defined)*
 
 **Phase 2 (safety / classroom):**
-- [ ] `moderation-stack`   *(D-1 decided → ADR-011c; `input_gate` + output-moderation have no file yet)*
+- [ ] `moderation-stack`   *(D-1 decided → ADR-011c; spec: **draft 2026-07-28** — `docs/specs/moderation-stack.md`; no code yet)*
 - [ ] `filipino-pii-recognizers`
 - [ ] `self-refusal-fallback`
 - [ ] `length-guard`
@@ -98,16 +98,30 @@ roadmap order. Source: MASTER_SPEC §7.
 
 **Phase 2.5 (fine-tune):**
 - [x] `judge-finetune`  ✅ written
+- [x] `annotation-surface`  ✅ written *(ADR-026 — the `(research)/annotate/` + `adjudicate/` routes and the
+  `annotations` table; supersedes `judge-finetune` §5's `labels/*.csv`)*
 
 **Phase 3 (eval):**
-- [ ] `tier1-rating-harness`
-- [ ] `comprehension-instrument`
-- [ ] `tier2-fun-toolkit`
 - [ ] `metrics-export`
+- [x] `functional-verification-matrix`  ✅ written *(Tool A, Objectives 1–2 — an offline script over tracing
+  exports, no UI and no new table)*
+
+*(Objectives 3 and 5 are **written instruments, not code**: the expert-validation interview (Objective 3) and
+the ISO/IEC 25010 questionnaire (Objective 5) live in `docs/capstone/research_instruments.md` and are
+administered on paper/by form. Objective 4's classification evaluation lives in `judge-finetune` (written);
+its labels now come from `annotation-surface`. **Objectives 1–2 do have a code spec** —
+`functional-verification-matrix` — added 2026-07-28; Tool A was previously absent from every product doc.
+The former `tier1-rating-harness`, `comprehension-instrument`, and `tier2-fun-toolkit` specs remain
+**dropped** — the naive-reader comprehension study and the Tier-2 child cohort were removed per ADR-008,
+revised 2026-07-25.)*
 
 ---
 
 ## Recommended next session
+
+> ⚠️ **Phase 0.5 probes have not been run.** The ROADMAP gate ("probe 1 only, both criteria must hold")
+> still stands, so the build work below is *unblocked as a decision* but not yet cleared to start.
+> Run the probes and record `PHASE_05_RESULTS.md` first.
 
 **Migrate off `job_state.py`** (build, not a decision — the §9 construction gate is resolved by the ADR-023
 amendment 2026-07-22b). The 12 consumers are enumerated in `story-memory-contract` §9: `StateGraph(JobState)` →

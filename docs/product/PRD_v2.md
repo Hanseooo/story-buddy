@@ -2,9 +2,39 @@
 
 **Subtitle:** An AI-Powered Storyboarding and Picture-Book Generation System
 **SDG Alignment:** SDG 4 — Quality Education
-**Doc status:** v2.3 — **RQ6 demoted to descriptive; no comparative claim (2026-07-22)**
+**Doc status:** v2.4 — **RQ apparatus retired; realigned to the manuscript's five objectives (2026-07-25)**
 **Supersedes:** PRD Draft v1
 **Study design lives in `docs/product/RESEARCH_PROTOCOL.md`.** §10 below is a summary and a pointer.
+
+---
+
+## 0.4 What changed in v2.4 (2026-07-25) — the RQ apparatus is retired; five objectives replace it
+
+The updated capstone manuscript is now authoritative for the study design (ADR-008, revised 2026-07-25).
+- **"RQ1"–"RQ6" are retired.** The study is organized around the manuscript's **five objectives**
+  (Implement → Produce → Determine acceptability via expert validation → Evaluate judge classification →
+  Evaluate ISO/IEC 25010 software quality). See §10.
+- **The RQ5 naive-reader/child-comprehension recall study is dropped entirely** — no reader-recall leg, no
+  Tier-1/Tier-2 respondent tiers, no Fun Toolkit (Smileyometer, Again-Again), no child engagement
+  instruments. Respondents are now: **Grade 5–6 learners** (write stories only, no evaluation role),
+  **expert validators** (Dean/Professor of the Arts College, one Arts student/intern, one Education
+  student/intern), and separate **designated software-quality evaluators** (ISO/IEC 25010).
+- **Objective 3 (expert validation) uses a written, open-ended interview form + content analysis**
+  (positive / negative / suggestion per criterion, five criteria), not the earlier feature-level scored
+  rubric (CVI / Krippendorff's α).
+- **Objective 4 (judge classification) is a formal, reported objective**: precision / recall / F1 (F1
+  primary) against human reference labels, character-identity-level split, with an **optional** secondary
+  comparison against the zero-shot base model and the existing prompted baseline. This is no longer
+  "descriptive only / no comparative claim / build-gate only."
+- **Objective 5 is ISO/IEC 25010 software quality** — five characteristics (Functional Suitability,
+  Performance Efficiency, Usability, Reliability, Security), 5-point Likert, weighted mean + SD, Table 4
+  interpretation bands.
+- **Corpus renumbered and located:** ~~"~50 (60–70) donated stories"~~ → **15 stories collected → 10
+  primary + 5 backup**, Grade 5–6. Stories collected at **Matina Aplaya Elementary School**; system
+  development and evaluation at **Holy Cross of Davao College (HCDC)**, Davao City, Philippines.
+- **ADR-018's δ = 3 non-inferiority gate is unaffected** — still a *deployment* gate (does the fine-tuned
+  judge replace the prompted incumbent in the product), not a reported finding.
+- Full detail: `docs/product/RESEARCH_PROTOCOL.md` (rewritten to match) and ADR-008 (revised 2026-07-25).
 
 ---
 
@@ -36,7 +66,8 @@
 - **The judge is fine-tuned** (`Qwen2.5-VL-7B`, QLoRA), served on vLLM. ADR-018 supersedes ADR-016;
   ADR-019 adds the fourth service. The **pipeline is still the contribution (§3)**.
 - **No proprietary models at all** (ADR-015 hardened). Removes exactly two things: OpenAI
-  `omni-moderation` → **Granite Guardian** (Apache-2.0), and ElevenLabs → an **open expressive TTS**
+  `omni-moderation` → **`gpt-oss-safeguard-20b`** (Apache-2.0 open weights, via OpenRouter — Granite
+  Guardian was the ADR-011b pick but is not routable there; ADR-011c), and ElevenLabs → an **open expressive TTS**
   (**Chatterbox**, MIT, hosted inference; Kokoro-82M CPU fallback — ADR-020, revised 2026-07-17).
   **Qwen3Guard** (119 languages) replaces Llama Guard and closes the Taglish hole.
 - **Two new safety findings**, neither previously in any ADR: Presidio leaks Filipino PII by default, and
@@ -101,8 +132,9 @@ makes this research rather than integration.
 
 Develop an intelligent system that automatically transforms a child-written story into a storyboard-style digital picture book while maintaining narrative coherence, character consistency, and artistic style — with minimal manual intervention.
 
-**Central question:** *Does an automated consistency-verification-and-correction loop produce picture books
-faithful enough that other readers recover the story the child meant to tell?* (RESEARCH_PROTOCOL §2.)
+**Evaluated through five objectives** — implement the pipeline, produce the books, then determine
+acceptability via expert validation, evaluate the judge's classification performance, and evaluate
+software quality (ISO/IEC 25010). (RESEARCH_PROTOCOL §2.)
 
 ## 3. Main Research Contribution
 
@@ -117,16 +149,17 @@ Not "we called an image API." The contribution is an **AI Storyboarding Pipeline
   messaging must be age-appropriate throughout.
 - **Account issuer + reviewer: the teacher or BEED (education) student** — owns the classroom, issues each
   student account (nickname + teacher-set password), and reviews every generated book (manual
-  approve/reject) before it enters the classroom gallery or is exported. Also the Tier-1 evaluation
-  audience. *(ADR-017 — supersedes ADR-006's role model.)*
+  approve/reject) before it enters the classroom gallery or is exported. *(ADR-017 — supersedes ADR-006's
+  role model.)*
 - **Parent/guardian: consent-giver, not an operator.** Guardian consent and child assent are required by
   the PH Data Privacy Act — a child-held account with a password and peer-visible typed content raises the
   consent weight above the earlier teacher-only-operator model (Ethics Stage-2 scope; `ethics_and_safety.md`).
 
-**Scope is derived from the research questions**, not chosen for convenience: Grade 5–6 students write
-independently (so the story is unambiguously theirs), read fluently (so peer comprehension is measurable),
-are taught in English from Grade 4 (one language, one moderation regime), and are pre-adolescent (peer
-feedback is unlikely to be cruel). See RESEARCH_PROTOCOL §11.
+**Scope is derived from the study's objectives**, not chosen for convenience: Grade 5–6 students write
+independently (so the story is unambiguously theirs), read fluently (so the books produced from their
+stories are substantive enough for expert validators to judge), are taught in English from Grade 4 (one
+language, one moderation regime), and are pre-adolescent (age-appropriate content and design throughout).
+See RESEARCH_PROTOCOL §11.
 
 **Out of scope for v1:** multi-child collaboration; cross-classroom sharing. **Out of scope permanently:
 public sharing** — peer-visible content authored by minors, without a gatekeeper, is a social network for
@@ -246,84 +279,115 @@ ethics re-review); social sharing; on-device generation; style LoRA; C2PA proven
 
 ---
 
-## 10. Research Questions & Evaluation Plan
+## 10. Objectives & Evaluation Plan
 
 > **Full study design, instruments, ethics staging, and defense preparation live in
 > `docs/product/RESEARCH_PROTOCOL.md`.** This section is a summary. Where they disagree, ADR-008 wins.
 
-### Research Questions
-- RQ1: How completely do the generated book's scenes cover the story's key events? *(Story Completeness — proportion of human-annotated major plot points captured; shares RQ5's plot-point annotation.)*
-- RQ3: How acceptable is the generated storybook (narrative coherence, visual consistency, illustration quality, usability)?
-- RQ4: How gracefully does the system handle **under-length** stories (fewer than 10–15 natural scenes) without inventing content?
-- RQ5: Can a naive reader recover the author's characters and events from the generated book alone? *(single-arm output-fidelity measure — scored against RQ1's human-annotated plot points via a validated recall protocol, two raters, Cohen's κ. ADR-008, ADR-021.)*
-- **RQ6 (descriptive, not comparative): How well does the fine-tuned open judge agree with human labels on the character-disjoint held-out set — overall and on non-human characters?** *(instrument validity. ADR-008 rev. 2026-07-22, ADR-018.)*
+### The five objectives
 
-**RQ2 (pipeline-ON-vs-OFF ablation) is dropped** — see ADR-008. **RQ6's fine-tuned-vs-baseline
-comparison is dropped as a research claim too** (ADR-008 rev. 2026-07-22): the judge fine-tune is kept
-and reported **descriptively**, and the study makes **no comparative and no causal claim**. Objective 3 is
-output evaluation (expert panel + RQ5 naive-reader recall); Objective 4 is ISO/IEC 25010 software quality.
-RQ3 is output acceptability; RQ1 and RQ4 are supporting.
+There is **no RQ apparatus** — "RQ1".."RQ6" are retired (ADR-008, revised 2026-07-25). The manuscript
+states five objectives:
 
-⚠️ **The output evaluation (RQ3, RQ5) is never scored using the consistency judge.** The judge drives
-regeneration inside the pipeline; using it as the outcome measure would be circular. The judge's own
-accuracy is the separate RQ6 question, measured on a human-labeled, character-disjoint held-out set. See
-ADR-004's non-circularity note.
+1. **Implement** an orchestrated AI pipeline as the core processing framework of StoryBuddy.
+2. **Produce** digital picture books from child-written stories through the implemented pipeline.
+3. **Determine the acceptability** of the generated digital picture books in terms of presentation quality
+   and classroom suitability, through **expert validation**.
+4. **Evaluate the character-consistency classification performance** of the fine-tuned lightweight VLM
+   against human-established reference labels — **precision, recall, and F1-score (F1 primary)**.
+5. **Evaluate the software quality** of StoryBuddy using applicable **ISO/IEC 25010** quality
+   characteristics.
 
-⚠️ **Do not claim learning gains.** N ≈ 8–15, no non-illustrated control, no pre/post, no longitudinal
-window. Prior literature on authentic audience is the *warrant* for why fidelity matters; it is not a
-finding of this study.
+Objectives 1–2 are the build. **Objectives 3, 4, and 5 are the three evaluation legs.** Scene coverage
+against a story's major plot points and graceful under-length handling are described **pipeline
+behaviours** of Scene Segmentation (§5.1, §8), not standalone measured objectives with their own
+instrument.
+
+⚠️ **Objective 3 is never scored using the consistency judge.** The judge drives regeneration inside the
+pipeline; using it as the outcome measure would be circular. The judge's own accuracy is the separate
+Objective 4 question, measured on a human-labeled, character-disjoint held-out set. See ADR-004's
+non-circularity note.
+
+⚠️ **Do not claim learning gains.** The corpus is 15 stories (10 primary + 5 backup, below), no
+non-illustrated control, no pre/post, no longitudinal window. Prior literature on authentic audience is
+the *warrant* for why acceptability matters; it is not a finding of this study.
 
 ### Evaluation design (see ADR-008)
-**Spine = two legs, one per evaluation objective.**
-- **Leg 1 — generated-output quality (RQ3, RQ5).** An expert panel — 1 professor + 1 education student +
-  1 art student — rates the generated storybooks, illustrations, and story consistency on feature-level
-  rubrics (Instrument A). RQ3's usability dimension is measured separately, by the ISO/IEC 25010
-  software-quality questionnaire (Instrument D) administered to IT practitioners and teachers — never
-  by this panel. RQ5 adds a single-arm naive-reader recall measure: a reader who never saw the source
-  story names the characters and recounts events, scored against RQ1's plot-point annotation.
-- **Leg 2 — software quality (Objective 4).** The ISO/IEC 25010 questionnaire (Instrument D),
-  administered to IT practitioners and teachers. This is Objective 4's whole content.
 
-**RQ6 is not a leg.** The fine-tuned Qwen2.5-VL-7B judge is still trained and its **agreement with human
-labels on the character-disjoint held-out set is reported descriptively** — no "matches or beats prompted
-Gemma-3-27B" claim is made. The methodological requirements survive: inter-rater reliability on the human
-labels, held-out set **read once**. ADR-018's δ = 3 non-inferiority test remains a **deployment gate**
-(does the fine-tuned judge replace the prompted incumbent in the product), not a reported finding. Full
-machinery in ADR-018 and `docs/specs/judge-finetune.md`.
+**Three legs, one per evaluation objective — no reader-comprehension leg.**
+- **Objective 3 — expert validation.** Purposively selected expert validators — the Dean/Professor of the
+  Arts College, one Arts student/intern, one Education student/intern — respond to a **written,
+  open-ended interview form** (Tool B). Responses are analysed by **content analysis**: each is
+  coded **positive / negative / suggestion** per criterion, across five criteria (narrative coherence,
+  story faithfulness, visual presentation, visual style consistency, classroom suitability). This replaces
+  the earlier feature-level scored rubric (CVI / Krippendorff's α).
+- **Objective 4 — judge classification.** The fine-tuned `Qwen2.5-VL-7B-Instruct` (QLoRA) judge predicts
+  Same/Different Character on the character-disjoint held-out set; scored against human reference labels
+  with **precision, recall, F1 (F1 primary)**. **Optionally**, reported alongside the zero-shot base model
+  and the existing prompted baseline on the same held-out pairs — secondary to the absolute agreement
+  figure, not a replacement for it. ADR-018's δ = 3 non-inferiority test remains a **deployment gate**
+  (does the fine-tuned judge replace the prompted incumbent in the product), not a reported finding. Full
+  machinery in ADR-018 and `docs/specs/judge-finetune.md`.
+- **Objective 5 — software quality.** The ISO/IEC 25010 questionnaire (Tool C) — five applicable
+  characteristics (Functional Suitability, Performance Efficiency, Usability, Reliability, Security),
+  5-point Likert, weighted mean + SD per characteristic, interpreted against Table 4 bands
+  (4.20–5.00 Excellent · 3.40–4.19 Very Good · 2.60–3.39 Good · 1.80–2.59 Fair · 1.00–1.79 Poor) —
+  administered to **designated software-quality evaluators** (IT practitioners and teachers), separate
+  from the expert validators.
 
-**Tier 1 (adults — parents/teachers), no special clearance typically needed. Designed to stand alone.**
-- Blind pairwise/scored ratings of narrative coherence, visual consistency, illustration quality, story completeness.
-- **Inter-rater reliability** defined up front for Story Completeness (annotators agree on "major plot points"; report Cohen's/Krippendorff's).
-- Target N ≈ 15–30 raters. Carries every research question (RQ1–RQ6) — designed to stand alone, so an
-  ethics-clearance delay on Tier 2 cannot sink the capstone.
+**Objectives 1–2 are the built artifact, verified — not judged — by Tool A.** The **Functional Verification
+Matrix** records system-generated pass/fail per functional category (input validation & moderation, story
+analysis, scene structuring, visual planning, scene generation & refinement, picture book production) as
+`Successful ÷ Total × 100`. It has **no human respondents**, runs on **fixture stories** — so it carries no
+ethics load and is defensible in October — and is computed by an offline script over tracing exports, not a
+dashboard (`docs/specs/functional-verification-matrix.md`, ADR-026).
 
-**Tier 2 (children), lighter touch, under parental supervision, contingent on ethics clearance. Enrichment, not load-bearing.**
-- **Validated instruments:** Fun Toolkit (Read & MacFarlane) — Smileyometer (liking) + Again-Again table (engagement proxy). Cite in methods.
-- **Story fidelity item** (kid-only ground truth): "Did the book tell the story you wanted to tell?"
-- **Behavioral logging** (more reliable than child self-report): completion rate, time-on-task, spontaneous second-story starts, "try again" frequency. Watch the novelty confound — repeat-use within a session matters more than first-reaction delight.
-- Target N ≈ 8–15 children.
+⚠️ **A Pass is not a quality claim.** A Pass means the stage executed and emitted valid output. For scene
+generation a Pass means *the loop shipped a page* — **including a page the judge flagged and best-of-fell-back
+on**. Defining Pass as "the judge approved it" would score outputs with the judge and break non-circularity
+(ADR-004).
+
+### Researcher-facing surfaces
+
+Two authenticated routes, built in Phase 2.5 on the Phase-2 `researcher` role — **`(research)/annotate/`** (with
+`adjudicate/`) for Objective 4's labelling, and **`(research)/books/`** to serve Objective 3's stimuli with
+provenance stripped and order shuffled. Blinding is enforced in code rather than by discipline. There is no
+metrics dashboard and no run-trace viewer; the latter is what LangSmith is for (ADR-014). Objectives 3 and 5
+collect their responses on paper and by form, not in-app. Rationale and rejected alternatives: **ADR-026**.
+
+### Respondents
+
+| Group | Role | Contributes to |
+|---|---|---|
+| Grade 5–6 learners | Write original stories only — no evaluation role | Corpus |
+| Expert validators (Dean/Professor Arts College, Arts student, Education student) | Written open-ended interview + content analysis | Objective 3 |
+| Designated software-quality evaluators (IT practitioners, teachers) | ISO/IEC 25010 questionnaire | Objective 5 |
+
+Full detail (recruitment, instruments, ethics staging): `docs/product/RESEARCH_PROTOCOL.md` §4–§10.
 
 ### Metrics
 | Metric | What it measures | Source |
 |---|---|---|
-| Story Completeness | Major plot points represented in selected scenes | Human annotation + IRR |
-| Character Consistency | Same character recognizable across scenes | **Human (headline)** + VLM-judge (secondary) |
-| Style Consistency | Fixed style maintained across scenes | Human + VLM-judge |
-| Story Fidelity | Book matches child's intent | Child (Tier 2) |
-| Engagement | Repeat-use / liking | Fun Toolkit + behavioral logs |
+| Functional verification (Objectives 1–2) | Per-category success rate, `Successful ÷ Total × 100` | Tool A — offline script over tracing exports, on fixture stories |
+| Expert validation (Objective 3) | Positive / negative / suggestion tallies per criterion | Content analysis, Tool B |
+| Judge classification (Objective 4) | Precision, recall, F1 (F1 primary) vs human reference labels | Held-out test set; optional comparison vs zero-shot base + prompted baseline |
+| Software quality (Objective 5) | Weighted mean + SD per ISO/IEC 25010 characteristic | Tool C |
 | Generation Time | Submission → completed storybook | Instrumentation (§16) |
 | AI Resource Usage | Avg generation time, image count, regen count, API cost/story | Instrumentation (§16) |
-| **VLM–Human agreement** | How well does the fine-tuned judge agree with human labels on the held-out set? | **Descriptive (RQ6)** — no comparative claim; held-out set read once, IRR reported (ADR-008 rev. 2026-07-22) |
 
 ### Story corpus (validity — do not skip)
-Corpus = **donated child writing + researcher labels** (Grade 5–6, Philippines; English with Taglish
-tolerated) — not builder-authored clean text, which would measure best-case behavior only and make RQ4's
-under-length handling unanswerable by construction. Researcher-written stories are permitted **only** as
-judge-training-split augmentation — never as evaluation stimuli (RQ1/RQ3/RQ5) and never in the judge's
-val/held-out-test splits. Document provenance — reviewers will ask.
+Corpus = **donated child writing + researcher labels**: **15 stories collected from Grade 5–6 learners at
+Matina Aplaya Elementary School → 10 primary + 5 backup.** System development and evaluation take place at
+**Holy Cross of Davao College (HCDC)**, Davao City, Philippines. Not builder-authored clean text, which
+would measure best-case behavior only. Researcher-written stories are permitted **only** as
+judge-training-split augmentation — never as evaluation stimuli and never in the judge's val/held-out-test
+splits. Document provenance — reviewers will ask.
 
 ### ⚠️ Ethics timeline
-Formal ethics review (Philippine Data Privacy Act 2012 + your university's ethics board; not US "IRB" per se) can take weeks. **Start in parallel with development, week 1.** Tier-1 self-sufficiency (above) is the insurance if Tier-2 clearance slips.
+Formal ethics review (**Data Privacy Act of 2012, Republic Act No. 10173** + your university's ethics
+board; not US "IRB" per se) can take weeks. **Start in parallel with development, week 1.** Stage-1 story
+donation (RESEARCH_PROTOCOL §9) is the long pole and unblocks the corpus; Stage 2 gates classroom system
+use only, not any evaluation leg.
 
 ---
 
@@ -334,10 +398,10 @@ Formal ethics review (Philippine Data Privacy Act 2012 + your university's ethic
 3. **Story length limit** → **hard word cap (~500–800 words, tunable)** with a gentle "let's make a book of the first part" truncation at a scene boundary. **No silent AI summarization** (it would illustrate the summary, not the child's story). ADR-012.
 4. **Repeated moderation-failure off-ramp** → after **N=3** failed revisions of the same story, suggest starting a fresh story rather than an unbounded retry loop.
 5. **Multiple main characters** → **max 2 canonical references** in v1; generation conditions on multiple reference images; the checker verifies **each character separately** against its own reference. ADR-004.
-6. **Very short stories** → **fewer scenes allowed**; scene count tracks the story's distinct major plot points, target ≥3 where the arc supports it, never padded to reach it (never-invent overrides the floor). Reframed as RQ4.
+6. **Very short stories** → **fewer scenes allowed**; scene count tracks the story's distinct major plot points, target ≥3 where the arc supports it, never padded to reach it (never-invent overrides the floor). Described as a pipeline behaviour of Scene Segmentation, not a standalone evaluation objective (RESEARCH_PROTOCOL §4).
 7. **Whole-run timeout / stall** → **LangGraph checkpointing + resumability**: a stall at scene N resumes from N, never re-rolls scenes 1…N-1. Kid sees "taking a little longer…" then "we saved your progress — come back soon." ADR-005.
 8. **Image model/API** → **Qwen-Image-Edit (Apache-2.0) on fal.ai.** Open weight, hosted. ADR-001, ADR-015.
-9. **Moderation services** → text (**Qwen3Guard-Gen** + **Granite Guardian**, both Apache-2.0) + PII (Presidio + **Filipino recognizers**) + image (NSFW ViT + VLM safety rubric). **Two independent open classifiers per path.** §13, ADR-011.
+9. **Moderation services** → text (**Qwen3Guard-Gen** on the worker CPU + **`gpt-oss-safeguard-20b`** on OpenRouter, both Apache-2.0) + PII (Presidio + **Filipino recognizers**) + image (NSFW ViT + VLM safety rubric). **Two independent open classifiers per path.** §13, ADR-011.
 10. **Fine-tuning** → **the consistency judge** (`Qwen2.5-VL-7B`, QLoRA), served on vLLM. Identity and style
     remain the *wrong* targets — ADR-016's reasoning is preserved and is precisely why the judge is right. **ADR-018, ADR-019.**
 11. **What "open source" means** → **open weight**, hosted inference, self-hosting available — and, as of
@@ -375,10 +439,13 @@ Formal ethics review (Philippine Data Privacy Act 2012 + your university's ethic
 Four distinct concerns, four mechanisms. **Open classifier as the gate, free proprietary classifier as
 an independent backstop; either one flagging fails the content** (ADR-011).
 
-1. **Input text moderation** — **`Qwen3Guard-Gen`** (Apache-2.0, 119 languages) + **IBM `Granite Guardian`**
-   (Apache-2.0, independent backstop) on the child's story before any processing. Gentle, non-scary failure copy.
-   Qwen3Guard's multilingual coverage closes the Filipino/Taglish hole *by construction*; Granite Guardian
+1. **Input text moderation** — **`Qwen3Guard-Gen`** (Apache-2.0, 119 languages, the 0.6B variant on the
+   worker CPU) + **`openai/gpt-oss-safeguard-20b`** (Apache-2.0 open *weights*, via OpenRouter, independent
+   backstop) on the child's story before any processing. Gentle, non-scary failure copy.
+   Qwen3Guard's multilingual coverage closes the Filipino/Taglish hole *by construction*; gpt-oss-safeguard
    supplies the vendor independence the removed OpenAI backstop used to. **Both open.**
+   *(Granite Guardian was the ADR-011b backstop; it is **not routable on OpenRouter** — verified 2026-07-13,
+   D-1 resolved in ADR-011 revision c.)*
 2. **PII detection/redaction** — Presidio (open-source) on input. A child narrating real life ("my name is… I live at…") is the *expected* case; redact before storage/captioning/export. This is separate from toxicity moderation.
    ⚠️ **Presidio's defaults leak Filipino PII.** spaCy NER misses Filipino names; `Barangay`/`Purok`/`Sitio`
    address structure and `+63 9xx` formats match no built-in pattern. Custom recognizers are a **Phase-2
@@ -433,7 +500,7 @@ image generation:
 | Image generation (2,000 images) | $40–70 |
 | VLM judge (2,000 calls, two images each) | $5–15 |
 | Text LLM (~200 stories) | $2–10 |
-| Text moderation (Qwen3Guard-Gen + Granite Guardian, ADR-011b) | $1–5 |
+| Text moderation (Qwen3Guard-Gen on worker CPU + `gpt-oss-safeguard-20b`, ADR-011c) | $1–5 |
 | Image moderation (CPU classifiers on the existing worker) | $0–10 |
 
 - **Develop against the cheapest provider; spend paid budget only on study runs.**

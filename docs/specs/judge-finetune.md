@@ -24,9 +24,9 @@ exist.** The fine-tune is not a prerequisite for anything. It is an upgrade to o
 | 6 | Two researchers label those images → **the dataset** | one weekend | — |
 | 7 | Train the LoRA on a rented GPU | 2–3 hours, ~$5–15 | — |
 | 8 | Evaluate against four baselines | 1–2 days | — |
-| 9 | **Gates** (both deployment, not paper claims): did the fine-tune work (beats the base model) + product (matches prompted Gemma). §7.5's ladder | | |
+| 9 | **Objective 4** result: precision/recall/F1 vs. human labels on held-out set (F1 primary). **Deployment gate** (separate, engineering): did the fine-tune beat the base model + does it match prompted Gemma. §7.5's ladder | | |
 | 10a | Rung A or B → serve it behind vLLM, flip two env vars | ~2 days | **fine-tuned** |
-| 10b | Rung C → RQ6's descriptive number stands; the product keeps the prompted judge | 0 days | prompted |
+| 10b | Rung C → Objective 4's F1 result stands regardless; the product keeps the prompted judge | 0 days | prompted |
 | 10c | Rung D → the LoRA did nothing. Debug; do not report | | prompted |
 
 **The product is finished before step 7.** Phases 1 and 2 ship on the *prompted* judge. The fine-tune swaps
@@ -45,8 +45,14 @@ step 4.** Ethics is the long pole. Everything else is a weekend.
 
 Fine-tune an open VLM to decide whether two images show **the same character instance**, and to say
 *why* before it says *whether*. It replaces the prompted `gemma-3-27b-it` judge that drives targeted
-regeneration (ADR-010), and its human-agreement numbers are RQ6 — reported **descriptively**, with no
-comparative claim against the base model or the prompted incumbent (ADR-008, revised 2026-07-22).
+regeneration (ADR-010), and its classification performance against human-established reference labels is
+the study's **Objective 4**: precision, recall, and F1 (F1 primary) on the character-disjoint held-out set.
+That absolute agreement is the reported result; an **optional secondary comparison** against the zero-shot
+base model and the existing prompted incumbent is permitted on the same pairs (ADR-008, revised 2026-07-25) —
+see §7.
+
+*(The manuscript states labels as integers — 1 = Different Character, 0 = Same Character; the schema below
+encodes the same distinction as the boolean `same_character` field. Same meaning, different serialization.)*
 
 The judge is a **control signal, never an outcome measure.** Read ADR-004's non-circularity note before
 writing a single line of the results section.
@@ -198,27 +204,45 @@ training-target/production-schema round-trip already requires. If a model wrote 
 ```
 backend/finetune/
   manifest.py          # Pydantic record above + the split-disjointness guard (CI-tested)
-  build_dataset.py     # pipeline output + annotator CSVs -> manifest.jsonl
+  build_dataset.py     # pipeline output + the `annotations` table -> manifest.jsonl
   to_llamafactory.py   # manifest.jsonl -> sharegpt JSON + dataset_info.json
   train_qlora.yaml     # the training config (§6.3)
   evaluate.py          # the four baselines (§7)
-  labels/              # raw annotator CSVs, one per researcher
 data/judge/            # gitignored — images + manifest.jsonl live here
   ref/    scene/    manifest.jsonl
 ```
+
+> **⚠️ Superseded (2026-07-28, ADR-026): `labels/` no longer exists.** This spec originally kept raw
+> annotator CSVs on disk, one per researcher. Labels now live in the **`annotations` table**, written by the
+> `(research)/annotate/` surface — see `docs/specs/annotation-surface.md`. The CSV mechanism was rejected
+> because a private-bucket asset cannot be rendered from a local file without a session to mint a signed URL,
+> and because silent row misalignment across ~1500 rows is undetectable after the fact and would invalidate
+> Objective 4. `build_dataset.py` reads the table. **Polarity note:** the table's `same_character` boolean is
+> `true` for *same*, so the manuscript's positive class is `label = not same_character` — converted once, in
+> `build_dataset.py`, and nowhere else.
 
 The manifest is the source of truth. The LLaMA-Factory JSON is a **build artifact** — regenerate it, never
 edit it. That is why `char_id` and `split` live in the manifest and not in the training file: they are
 bookkeeping, and if they leaked into the prompt the model could read the answer off them.
 
-### 5.4 How the ~1,200 examples get made
+### 5.4 How the examples get made
 
-Assume the Stage-1 corpus lands at **~50 donated stories** — the same corpus Tier 1 rates. One corpus,
-two uses.
+> **⚠️ Open reconciliation item — the numbers in §5.4–§5.5 predate the updated manuscript.** They assume
+> **~50 donated stories**. The manuscript now fixes the picture-book corpus at **15 collected → 10 primary +
+> 5 backup** (`docs/capstone/methodology.md` §4.1). Ten primary stories yield far fewer distinct characters
+> than the ~50-character split in §5.5 assumes, and the "60–70 stories" recruitment target below no longer
+> matches the manuscript. **This needs an adviser decision:** either the judge dataset draws more scene images
+> per character (more pairs — but the *character* count, the binding unit for Objective-4 power, still tracks
+> the corpus), or the judge's image-pair collection is scoped beyond the ten picture-book stories, or the
+> split sizes shrink and Objective-4 power is reported honestly against the achieved held-out character count.
+> The figures below are retained as **illustrative planning targets** under the ~50-story assumption until that
+> decision is made.
+
+The worked example below assumes ~50 donated stories. One corpus, two uses.
 
 > **These are upper-bound planning numbers.** They assume a near-maximum ~15 scenes per story; under-length
-> corpus items (the RQ4 case) yield fewer, so real image, pair, and cost totals run lower. The split in §5.5 is
-> sized to the **character** count — what RQ6's character-clustered bootstrap actually resolves — not to a pair
+> corpus items yield fewer, so real image, pair, and cost totals run lower. The split in §5.5 is sized to the
+> **character** count — what Objective 4's character-clustered bootstrap actually resolves — not to a pair
 > total; pair counts scale with scenes but are not the binding unit for power.
 
 1. **Run the Phase 1 pipeline over all 50 stories.** Each yields one canonical character reference and
@@ -237,8 +261,10 @@ two uses.
 
 Total ≈ **1,200 examples for ~$29 and one weekend.**
 
-> **Reuse the Phase-3 Tier-1 rating harness for step 3.** It already shows a human a reference and a scene
-> and asks "same character?" Pull it forward. **Every rating is a training label.** One instrument, two uses.
+> **Reuse the labelling instrument for step 3.** The same interface that shows a human a reference and a scene
+> and asks "same character?" produces both the human reference labels and the training labels. One instrument,
+> two uses. **That interface is now specified**: `docs/specs/annotation-surface.md` (ADR-026) — the
+> `(research)/annotate/` route, with `adjudicate/` covering the third researcher in step 3.
 
 ### 5.5 Splits — by character, always
 
@@ -264,9 +290,11 @@ Three consequences worth internalizing:
 - **Induce drift deliberately** — weaker reference conditioning, higher temperature — to harvest natural
   negatives. **Training split only.** The test set must keep the deployment distribution (§3.3).
 
-**If Stage-1 recruitment can reach 60–70 stories instead of 50, take it.** More characters is the cheapest
-statistical power available, it is a recruitment decision rather than a modelling one, and it is unfixable
-by Phase 2.5. RESEARCH_PROTOCOL §8.
+**More distinct characters is the cheapest statistical power available** — it is a recruitment/scoping
+decision rather than a modelling one, and it is unfixable by Phase 2.5. But the manuscript fixes the
+picture-book corpus at 10 primary + 5 backup, so the character count for the judge's split is now bounded by
+that corpus unless the judge's image-pair collection is scoped separately — the open reconciliation item at
+the top of §5.4. RESEARCH_PROTOCOL §8.
 
 ### 5.6 Why DreamBench++ is a *test* set and not a *training* set
 
@@ -403,24 +431,28 @@ Base model **revision hash** · LoRA rank + alpha · seed(s) · the exact `manif
 
 ## 7. Evaluation
 
-The external requirement is that the fine-tune **demonstrate measurable improvement.** ADR-018 amendment (a)
-is binding here; this section is its operational form. Its central move: **two questions were being decided
-by one number.** *Did fine-tuning work?* is answered against the un-fine-tuned base. *Should this judge
-replace the one in the product?* is an engineering question, and its comparator is the prompted incumbent.
-Separate them and neither is hostage to a coin flip.
+The external requirement is that the fine-tune **demonstrate measurable classification performance.**
+ADR-018 amendment (a) is binding here; this section is its operational form. Its central move: **two
+questions were being decided by one number.** *Did fine-tuning work?* is answered against the un-fine-tuned
+base. *Should this judge replace the one in the product?* is an engineering question, and its comparator is
+the prompted incumbent. Separate them and neither is hostage to a coin flip.
 
-> ⚠️ **What of this reaches the paper (ADR-008, revised 2026-07-22).** Both comparisons below are
-> **build/deployment gates**, not research claims. **RQ6 in the paper is descriptive only**: the fine-tuned
-> judge's *agreement with human labels* on the character-disjoint held-out set, with inter-rater reliability
-> on those labels reported and the held-out set **read once**. No "fine-tuned 7B matches or beats prompted
-> Gemma-3-27B" claim is made, and no superiority test is a pre-registered research endpoint. Everything in
-> this section still **runs** — it is how we decide what ships.
+> **What reaches the paper (ADR-008, revised 2026-07-25).** **Objective 4** is the fine-tuned judge's
+> *agreement with human-established reference labels* on the character-disjoint held-out set — precision,
+> recall, and F1, **F1 primary** — with inter-rater reliability on those labels reported and the held-out set
+> **read once**. That absolute number is the reported result. An **optional secondary comparison** against
+> the zero-shot base model (§7.1) and the existing prompted Consistency Judge baseline (§7.2, §7.4) is
+> permitted on the same held-out pairs and human labels — not required to satisfy Objective 4, and not
+> forbidden either. The **deployment gates** below (§7.2, §7.5) answer a separate, engineering question —
+> *does this judge replace the one already shipped* — and stay build decisions regardless of how the optional
+> comparison reads.
 
 ### 7.1 The primary endpoint — the "did the fine-tune work" gate
 
 > ΔF1 on the `different_character` class, held-out test set, **fine-tuned Qwen2.5-VL-7B vs. zero-shot
-> `Qwen2.5-VL-7B`.** The gate passes only if the 95% CI on ΔF1 excludes zero. (A build gate, not a paper
-> claim — ADR-008, revised 2026-07-22.)
+> `Qwen2.5-VL-7B`.** The gate passes only if the 95% CI on ΔF1 excludes zero. (The deployment build gate;
+> as Objective 4's optional secondary comparison it may also be reported alongside the primary F1-vs-human-
+> labels result — ADR-008, revised 2026-07-25.)
 
 Same architecture, same weights, same prompt; the adapter is the only difference. It is the cleanest causal
 statement available about the fine-tune, it is the ablation every fine-tuning paper reports, and on ~900
@@ -435,7 +467,7 @@ in-domain training pairs the expected gap is large.
 > in-domain fine-tuning beats zero-shot."* It satisfies the requirement; it is not the contribution.
 > **Never present it alone.** §7.4's first two items go on the same slide.
 
-### 7.2 The product gate — separate, and non-blocking for RQ6's reported number
+### 7.2 The product gate — separate, and non-blocking for Objective 4's reported number
 
 Ship the fine-tuned judge only if **both** hold against prompted `gemma-3-27b-it`:
 
@@ -443,9 +475,11 @@ Ship the fine-tuned judge only if **both** hold against prompted `gemma-3-27b-it
 2. **No recall regression.** A judge that buys precision with recall ships broken pages. Consistency has a
    best-of fallback (ADR-010); a missed failure has none.
 
-**Failing this does not change what RQ6 reports.** It means the product keeps the prompted judge it already
-shipped Phases 1 and 2 with, and ADR-019's Modal deployment is dropped (de-scope ladder, rung 4). That is
-rung C in §7.5. RQ6 still reports the fine-tuned judge's human agreement descriptively either way.
+**Failing this does not change what Objective 4 reports.** It means the product keeps the prompted judge it
+already shipped Phases 1 and 2 with, and ADR-019's Modal deployment is dropped (de-scope ladder, rung 4).
+That is rung C in §7.5. Objective 4 still reports the fine-tuned judge's absolute agreement with human
+labels either way; the optional secondary comparison against Gemma (§7.4.1) is reported alongside it
+regardless of which way the gate falls.
 
 **Why the Gemma comparison is winnable anyway.** You are not beating Gemma-27B at general vision-language.
 You are beating it on ~50 Filipino children's invented characters, in one fixed style, drawn by one image
@@ -471,8 +505,8 @@ pipeline.** Write that sentence into the paper before the defense, not during it
 
 1. **Fine-tuned vs. prompted `gemma-3-27b-it`.** Same metric, same test set. **The input to the product
    gate** — it decides whether the fine-tuned judge replaces the incumbent in the pipeline (δ = 3
-   non-inferiority, §7.5). It is an engineering number, **not a paper claim**: the comparative claim is
-   dropped (ADR-008, revised 2026-07-22).
+   non-inferiority, §7.5). It also doubles as Objective 4's **optional secondary comparison** against the
+   existing prompted baseline — permitted, not required (ADR-008, revised 2026-07-25).
 2. The primary metric on the **non-human character slice.** The contribution — and the least-powered slice.
 3. **Cohen's κ vs. human**, overall and split by human / non-human.
 4. **Latency and $/call.** A structural win: 7B beats 27B, self-hosted beats per-call.
@@ -483,10 +517,10 @@ pipeline.** Write that sentence into the paper before the defense, not during it
    advance (per the benchmark's own "preserved" convention — verify the exact scale during the A2
    citation check, same PDF). Agreement reported as κ and AUROC. A threshold picked after seeing
    results makes the one transfer number in the paper post-hoc.
-6. **Downstream:** serve the fine-tuned judge in the pipeline and ask whether the expert panel's
-   *human-rated* output consistency (RQ3, `research_instruments.md` §A) is at least as good as under the
-   prompted judge. This ties the fine-tune to the shipped outputs instead of leaving it a bolt-on.
-   (Non-comparative — the pipeline ON-vs-OFF ablation that RQ2 once carried is dropped, ADR-008.)
+6. **Downstream:** serve the fine-tuned judge in the pipeline and ask whether the expert panel's feedback
+   (**Objective 3**, `research_instruments.md` §A) is at least as favorable as under the prompted judge.
+   This ties the fine-tune to the shipped outputs instead of leaving it a bolt-on.
+   (Non-comparative — the pipeline on/off ablation once planned here stays dropped.)
 
 Also report AUROC from the verdict-token logprob, and precision and recall separately — they are different
 failures with different costs.
@@ -496,9 +530,11 @@ failures with different costs.
 **Write and timestamp the analysis plan before any label is collected.** It is the only thing separating a
 pre-declared ladder from a moved goalpost, and almost no capstone does it.
 
-**The ladder is a deployment/build gate, not a claim ladder for the paper** (ADR-008, revised 2026-07-22).
-Read the "Outcome" column as *the engineering conclusion that decides what ships* — none of it is a
-research-facing comparative claim, and none of it changes RQ6's reported number.
+**The ladder decides deployment — which judge ships — not what Objective 4 reports** (ADR-008, revised
+2026-07-25). Read the "Outcome" column as *the engineering conclusion that decides what ships*. Objective
+4's primary result (F1 vs. human labels) is unaffected by this ladder; the ladder only gates whether the
+fine-tuned judge replaces the prompted incumbent in the product, and whether the optional Gemma comparison
+(§7.4 item 1) reads as a win, a tie, or a loss.
 
 | Rung | Condition | Requirement met? | Outcome (engineering) | Ship? |
 |---|---|---|---|---|
@@ -590,8 +626,8 @@ Models mocked. Never assert on generated content.
 
 ## 11. Eval / quality checks (Tier B — never CI)
 
-Everything in §7. Real models, real money, offline. Feeds **RQ6**, and via the downstream swap, the expert
-panel's output-consistency rating (**RQ3**).
+Everything in §7. Real models, real money, offline. Feeds **Objective 4**, and via the downstream swap, the
+expert panel's feedback under **Objective 3**.
 
 ---
 

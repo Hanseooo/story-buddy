@@ -291,6 +291,13 @@ migration is a checklist rather than a discovery. Verified against the tree 2026
 
 **State type — `JobState` (TypedDict) → `StoryMemory`:**
 - `pipeline/graph.py:4,14` — `StateGraph(JobState)` → `StateGraph(StoryMemory)`.
+  **Also during this migration:** add `input_gate` as a pass-through stub node and set it as
+  the new entry point (`set_entry_point("input_gate")`). The stub (`backend/pipeline/input_gate.py`)
+  reads `state.input.raw_text` and returns
+  `{"input": Input(raw_text=..., redacted_text=state.input.raw_text, moderation=ModerationResult(passed=True))}`
+  — a no-op that keeps the graph shape correct so Phase 2 (`moderation-stack` spec) is a
+  single-file replacement, not a topology change. Mark it
+  `# ponytail: stub — Phase 2 moderation-stack replaces with real Qwen3Guard-Gen + Presidio`.
 - Six nodes, all currently `def node(state: JobState) -> JobState` with mutate-and-return, the pattern
   ADR-024 §1 replaces wholesale → `def node(state: StoryMemory) -> dict`, partial-return:
   `analyze.py:13`, `segment.py:4`, `char_bible.py:4`, `generate_scene.py:21`, `consistency_check.py:4`,
