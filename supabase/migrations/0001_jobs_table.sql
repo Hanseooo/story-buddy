@@ -19,6 +19,8 @@ create policy "anon can read jobs by id"
   on jobs for select
   to anon
   using (true);
+-- ponytail: Phase 2 `auth-and-classroom` migration must DROP this policy and replace it
+-- with classroom-scoped RLS on an auth'd role before any real child text enters the system.
 
 alter publication supabase_realtime add table jobs;
 

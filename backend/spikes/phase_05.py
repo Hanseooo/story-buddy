@@ -119,7 +119,12 @@ def consistency() -> None:
             _write(f"item-{index:02d}.png", image)
             key.writerow([f"item-{index:02d}", char_id, preset, scene_no, condition])
 
-    raters = [f"rater_{n}_{question}" for n in range(1, 5) for question in ("identity", "handmade")]
+    # One rater, not four (decided 2026-07-28, before any probe ran). `_majority` already
+    # degrades correctly to a single column, so the gates still compute. What is lost is real
+    # and recorded in PHASE_05_RESULTS: no inter-rater kappa, so the Phase-3 instrument gets no
+    # dress rehearsal (ADR-008), and the conservative tie rule never fires. Raise this back to
+    # range(1, 5) the moment more scorers are available.
+    raters = [f"rater_{n}_{question}" for n in range(1, 2) for question in ("identity", "handmade")]
     with (OUT / "scores.csv").open("w", newline="") as f:
         scores = csv.writer(f)
         scores.writerow(["item", *raters])
@@ -176,7 +181,8 @@ def tally() -> None:
         print("\nFAIL. ON is good but OFF is nearly as good — the reference is not doing the work.")
         print("The pipeline (ADR-007) has no measurable effect on this substrate. RQ2 has no story.")
     else:
-        print("\nFAIL. Identity is not retained. Escalate to FLUX.1 Kontext [dev] (ADR-001) and re-run.")
+        print("\nFAIL. Identity is not retained. Escalate to OmniGen2 — rung 1 of ADR-001's fallback")
+        print("ladder (re-ordered 2026-07-28) — and re-run. Check fal routes it first.")
         print("If that also fails, stop and surface it — this is a Phase-0.5 finding, not a workaround.")
 
 
@@ -313,7 +319,10 @@ def moderation() -> None:
     if settings.moderation_backstop_model:
         models.append(settings.moderation_backstop_model)
 
-    wrong = []
+    flag_wrong: list[str] = []   # combined miss on harmful — child-safety hole
+    allow_wrong: list[str] = []  # combined miss on benign — dead-ends innocent story
+    per_model: dict[str, dict[str, int]] = {m: {"flag_miss": 0, "allow_miss": 0} for m in models}
+
     for text, should_flag in MODERATION_CASES:
         flags: dict[str, bool] = {}
         for model in models:
@@ -329,19 +338,35 @@ def moderation() -> None:
                 print("If this is a routing error, the model is not on OpenRouter — run it on the worker.")
                 return
             flags[model] = verdict.unsafe
+            if flags[model] != should_flag:
+                per_model[model]["flag_miss" if should_flag else "allow_miss"] += 1
+
         flagged = any(flags.values())  # ADR-011: either classifier flagging fails the content
         ok = flagged == should_flag
         kind = "flag" if should_flag else "allow"
         detail = " ".join(f"{m.rsplit('/', 1)[-1]}={u!s:5s}" for m, u in flags.items())
         print(f"{'ok  ' if ok else 'MISS'} expected {kind:5s} {detail}  {text[:45]}")
         if not ok:
-            wrong.append(text)
+            (flag_wrong if should_flag else allow_wrong).append(text)
 
-    if wrong:
-        print(f"\nFAIL: {len(wrong)}/{len(MODERATION_CASES)} wrong. A miss on a `flag` case is a")
-        print("child-safety hole; a miss on an `allow` case dead-ends a scary-but-innocent story.")
-    else:
-        print(f"\nPASS: {' + '.join(models)} handles this set. Extend the set before trusting it.")
+    harmful_n = sum(1 for _, f in MODERATION_CASES if f)
+    benign_n = sum(1 for _, f in MODERATION_CASES if not f)
+
+    if len(models) > 1:
+        print("\n--- per-model (primary-only miss = backstop is load-bearing) ---")
+        for m in models:
+            short = m.rsplit("/", 1)[-1]
+            print(f"  {short}: {per_model[m]['flag_miss']} flag-miss, {per_model[m]['allow_miss']} allow-miss")
+
+    if flag_wrong:
+        print(f"\nFAIL {len(flag_wrong)}/{harmful_n} harmful cases missed — child-safety hole.")
+        print("Primary-only miss: backstop is load-bearing, do not treat it as optional.")
+        print("Both missed: need a different primary or third classifier — see ADR-011 alternatives.")
+    if allow_wrong:
+        print(f"\nFAIL {len(allow_wrong)}/{benign_n} benign cases flagged — dead-ends innocent stories.")
+        print("Consider threshold tuning or a two-strike soft-block before hard fail.")
+    if not flag_wrong and not allow_wrong:
+        print(f"\nPASS: {' + '.join(models)} handles this set. Extend before trusting it in production.")
 
 
 def _write(name: str, data: bytes) -> None:
