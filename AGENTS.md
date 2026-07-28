@@ -2,94 +2,310 @@
 
 ## Metadata
 - Owner: Hanseooo (solo build)
-- Last reviewed: 2026-07-08
+- Last reviewed: 2026-07-27
 - Review cadence: monthly, or whenever an ADR is added
 
-## Scope & Precedence
-- This file records repo-specific deltas only.
-- Global behavioral rules in `~/.claude/CLAUDE.md` remain primary (Karpathy principles, workflow orchestration, task management).
-- Project-specific hard rules (locked ADRs, contract-first, testing bright line, safety) live in `/CLAUDE.md` — read that file every session, it is not restated here.
-- Conflict order: Safety > Security > User intent > `/CLAUDE.md` > Workflow > Style.
+---
+
+## Baseline Rules
+> Inlined verbatim from `~/.claude/CLAUDE.md` — the global source of truth. Included so agents
+> that cannot read `~/.claude/` (Codex, Cursor, Copilot) still get these rules.
+> Omitted: *Asking Questions* (personal; uses `AskUserQuestion` which those agents lack) and
+> *Project Context* (this file is the project context). Survivors renumbered 1–5;
+> cross-references name their target section instead of a number.
+
+### 1. Think Before Coding
+
+- State assumptions explicitly. Uncertain → ask, don't guess and run.
+- Claiming something is unused, dead, or deprecated? Grep the whole repo first.
+  One file is not evidence.
+- Multiple valid interpretations → present them. Never pick silently.
+- Confused → stop, name what's confusing, ask one focused question.
+
+### 2. Architectural Decisions
+
+Don't decide these alone. Ask before implementing:
+
+- New dependency, service, or datastore
+- Schema, API contract, or public interface change
+- Auth, billing, or infra
+- A change spanning more than ~3 modules, or one that's hard to reverse
+
+Ask at the moment you notice, not after writing the code.
+
+**This gate is for decisions, not for permission to work.** Bugs, failing tests,
+and clearly-scoped fixes: just fix them.
+
+If the decision needs more exploration than the remaining context supports, say so
+and offer to run `/handoff` and continue in a fresh session. Never start a handoff
+without approval.
+
+### 3. Surgical Changes
+
+- Don't improve adjacent code, comments, or formatting.
+- Match existing style, even if you'd do it differently.
+- Notice unrelated dead code → mention it, don't delete it.
+- Remove orphans **your** change created (imports, vars, functions). Nothing else.
+
+Test: every changed line traces to the request.
+
+### 4. Verification
+
+- State success criteria before starting.
+- Work that skips the plan chain still starts with a failing test
+  (`superpowers:test-driven-development`).
+- TDD scope: anything with a branch, loop, parser, or money/security path.
+  One-liners, config, and pure renames are exempt — ponytail wins there.
+- Never claim done without running the check and showing its output.
+- Report faithfully: tests failed → say so, with output. Step skipped → say so.
+
+### 5. Security
+
+- Never read `.env` or secret files. Ask for sanitized inputs.
+- Never log or echo credentials, tokens, or keys.
+- Flag auth/billing/infra changes before implementing (see Architectural Decisions).
+
+---
+
+## StoryBuddy Hard Rules
+> Project-specific constraints. No agent may override these. Previously in `/CLAUDE.md`.
+
+### Architecture is locked
+
+Every decision in `docs/product/ADRs.md` is **frozen**. Do not refactor around a decision,
+swap a library, or change the pipeline shape because a different approach seems cleaner.
+
+- To change a locked decision: **write a new ADR** (append to `docs/product/ADRs.md`) stating
+  context / decision / consequences / alternatives, and **flag it to the human**. Do not implement
+  until the ADR is accepted.
+- If a task seems to *require* violating an ADR, stop and surface the conflict. Don't guess.
+- **Architectural decisions get their own session — never decided inline while building.** Open
+  ones are queued in `docs/product/DECISION_BACKLOG.md`; each is resolved in a dedicated
+  ADR-writing session, then its row is deleted. If building a module forces an *undecided*
+  architectural question (schema shape, LangGraph node/edge convention, resilience policy, a new
+  cross-cutting concern, a library swap), **stop and log it to the backlog** — do not settle it by
+  writing code.
+
+**Two rules agents violate by reflex:**
+- **Open-weight models only** (ADR-015). Never reach for Gemini/GPT/Claude to "just make this
+  node work." **Provider SDKs, endpoints, and API keys live in `backend/providers.py` and nowhere
+  else.** Model *IDs* live in `backend/app/config.py` as env-overridable settings — a model swap is
+  an env change, a provider swap is a `providers.py` change (`config.py:16`). Never hardcode either
+  at a call site.
+- **No fine-tuning except the consistency judge** (ADR-016, superseded by ADR-018). The judge is
+  fine-tuned per `docs/specs/judge-finetune.md` — that is the one sanctioned LoRA. If you
+  conclude a LoRA is needed anywhere else, surface it, don't build it.
+
+### Contract-first
+
+The **Story Memory schema** (`backend/contracts/`) is the contract between every pipeline module.
+It is Pydantic and it is authoritative.
+
+> **State of play (Phase 0.5):** `StoryMemory` is **frozen as a spec** (`docs/specs/story-memory-contract.md`,
+> approved 2026-07-22) but **not yet written as code**. What exists is `backend/contracts/job_state.py` —
+> a provisional `TypedDict` subset, deleted by the Phase-1 port (spec §9). Don't mistake `JobState` for
+> the contract, and don't extend it: build against the spec.
+
+- Validate against it at **every LLM boundary** (strict `json_schema` structured output →
+  Pydantic, always).
+- A module reads its inputs and writes its outputs **through the schema**, never via ad-hoc dicts.
+- Changing the schema is a contract change: update the schema, the affected specs, and every
+  consumer in the same change.
+
+### Testing bright line
+
+Two kinds of tests. Never mix them (see `docs/MASTER_SPEC.md` §6).
+
+- **Deterministic tests** (Vitest / pytest / Playwright): **mock every model call**
+  (`backend/providers.py`). Never assert on generated content ("is the character consistent?"
+  is not a unit test). These run in CI and **must stay green** — a change that reddens CI is
+  not done.
+- **Eval harness** (offline, real models, story corpus): the only place fuzzy quality is
+  measured. Never put it in CI. It doubles as research instrumentation (LangSmith/Langfuse).
+
+### Feature spec is the unit of work
+
+Before writing code for a module, read its spec in `docs/specs/` **and** the cross-cutting
+concerns registry (MASTER_SPEC §5). If a spec doesn't exist, write it from
+`docs/specs/TEMPLATE.md` and get it approved before implementing.
+
+- Behavior change → update the spec **in the same change**. Specs that lie are worse than none.
+
+**Artifact hygiene (one home per type — avoid noise):**
+- `brainstorming` writes feature specs into `docs/specs/` — never a parallel tree.
+- `writing-plans` writes into `docs/specs/plans/`.
+- **Specs are durable, plans are disposable.** Delete a plan once its module is built + tests
+  green + spec updated — git keeps the history. `docs/specs/plans/` should only ever contain
+  *in-flight* work.
+- To build a module, load only `AGENTS.md` + that module's spec + the CC registry — not the
+  whole docs tree. Lean context = better output.
+
+### Safety non-negotiables (child-facing product)
+
+- **No unmoderated generated image ever reaches a child** — including the canonical character
+  reference before the reveal. Moderation order: input text → char-ref → output image.
+- **PII is redacted (Presidio) before** storage, captioning, or export. A child narrating real
+  life is the expected case, not the exception.
+- **RLS on every table**; signed URLs for every asset; no public buckets.
+  ⚠️ **Not satisfied today.** `supabase/migrations/0001_jobs_table.sql:18-21` is the only policy and it
+  reads `for select to anon using (true)` — RLS is *enabled*, but nothing is *restricted*; scoping is a
+  client-side `.eq('id', …)` convention, and no classroom/profile columns exist to scope by. Closes in
+  Phase 2 (CC-4). Treat any `jobs`-table work as touching this gap.
+- Failure and moderation screens get the **same** design care as success screens.
+  ⚠️ Likewise **not built**: there is no `input_gate` node, no moderation call, and no Presidio
+  dependency anywhere in `backend/` today. The two bullets above are the Phase-2 target, not the
+  current state — don't read them as satisfied.
+
+### Maintainability
+
+- **Deterministic LangGraph nodes.** No autonomous-agent routing; conditional edges only at
+  moderation pass/fail and consistency pass/fail (ADR-003).
+- **One module = one concern**, one file per pipeline node. Rough ceiling: ~300 lines or mixed
+  concerns is the signal to split, not a hard limit to game.
+- **No parallel structures.** One canonical location per artifact type. Don't create a second
+  folder that does the same job.
+- **Follow the map.** New pipeline module → a file in `backend/pipeline/`; anything crossing a
+  module boundary → through `backend/contracts/`. Don't invent new top-level folders without a
+  reason.
+
+### When in doubt
+
+Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong build.
+
+---
 
 ## Project Context
-- Stack: **Frontend** — Next.js 16 (App Router) + React 19 + Tailwind 4, pnpm-managed, Vitest unit tests, Sentry. **Backend** — FastAPI + RQ worker + LangGraph (deterministic graph) on Python 3.12, uv-managed, pytest. **Data** — Supabase (Postgres + Auth + Storage + Realtime, RLS everywhere), Redis (RQ broker). **Models** — open weight only (ADR-015): `qwen/qwen3-32b` (text) + `google/gemma-3-27b-it` (VLM judge) via OpenRouter; Qwen-Image-Edit (image gen) via fal.ai. All vendor calls live in `backend/providers.py`.
-- Architecture: Frontend (Vercel) posts to FastAPI (Railway), which writes a job row and returns immediately. A separate RQ worker runs the LangGraph pipeline (`input_gate → analyze → segment → char_bible → generate_scene → consistency_check → compose/export`), checkpointing to Postgres after each scene. Frontend watches the job row via Supabase Realtime. Full detail: `docs/MASTER_SPEC.md` §2.
-- Critical paths (extra review): moderation ordering (input text → char-ref → output image), PII redaction (Presidio) before any storage/caption/export, RLS + signed URLs on every table/asset, job checkpoint/resume logic — see `docs/product/ADRs.md` and `/CLAUDE.md` §5.
+- Stack: **Frontend** — Next.js 16.2.10 (App Router) + React 19 + Tailwind 4, pnpm-managed,
+  Vitest unit tests, Sentry. **Backend** — FastAPI + RQ worker + LangGraph (deterministic graph)
+  on Python 3.12, uv-managed, pytest + ruff. **Data** — Supabase (Postgres + Auth + Storage +
+  Realtime, RLS everywhere), Redis (RQ broker). **Models** — open-weight only (ADR-015):
+  `qwen/qwen3-32b` (text) + `google/gemma-3-27b-it` (VLM judge) via OpenRouter; Qwen-Image-Edit
+  (image gen) via fal.ai. All vendor calls live in `backend/providers.py`.
+  (evidence: `frontend/package.json`, `backend/pyproject.toml`)
+- Architecture: Frontend (Vercel) posts to FastAPI (Railway), which writes a job row and returns
+  immediately. A separate RQ worker runs the LangGraph pipeline, checkpointing to Postgres after
+  each scene. Frontend watches the job row via Supabase Realtime.
+  **Target shape** — `docs/MASTER_SPEC.md` §2 is canonical and finer-grained (it splits char-ref
+  moderation, `regenerate`, output moderation, and `export` into their own nodes):
+  `input_gate → analyze → segment → char_bible → [char-ref moderation] → generate_scene →
+  consistency_check → [regenerate] → [output moderation] → compose → export`.
+  **Built today** (`backend/pipeline/graph.py`): `analyze → segment → char_bible → generate_scene →
+  consistency_check → compose` — linear, **zero conditional edges**, and every node except `analyze`
+  and `generate_scene` is a pass-through stub. Fill these in per ADR-024's conventions; don't invent
+  a different shape.
+- Critical paths (extra review): moderation ordering (input text → char-ref → output image), PII
+  redaction (Presidio) before any storage/caption/export, RLS + signed URLs on every table/asset,
+  job checkpoint/resume logic — see `docs/product/ADRs.md` and StoryBuddy Hard Rules above.
 
-## Documentation Context Map
-- Always read: `/CLAUDE.md` (hard rules), `docs/MASTER_SPEC.md` (how pieces connect).
+## Documentation Map
+- Always read: `./AGENTS.md` (this file — all hard rules + commands), `docs/MASTER_SPEC.md`
+  (how pieces connect).
 - Read when:
-  - Visual styling / UI/UX decisions -> `DESIGN.md` (neo-pop / neo-brutalist theme reference)
-  - Product rationale / why a decision was made -> `docs/product/ADRs.md` (frozen — see `/CLAUDE.md` §1 before touching anything it governs)
-  - What the product is / user flow -> `docs/product/PRD_v2.md`
-  - Build order / what phase we're in -> `docs/product/ROADMAP.md`
-  - Day-to-day "what tool, what size" -> `docs/WORKFLOW.md`
-  - Building/changing a pipeline module -> its spec in `docs/specs/<module>.md` (from `docs/specs/TEMPLATE.md`); write one before implementing if it doesn't exist
-  - Frontend-specific framework notes -> `frontend/AGENTS.md` (Next.js version-delta notes, auto-generated by the framework — not a project doc)
-  - DB schema work -> `supabase/migrations/`
-- Fallback: if a module has no spec yet, don't guess its contract slice — write the spec first (`/CLAUDE.md` §4).
+  - Visual styling / UI/UX decisions → `DESIGN.md` (neo-pop / neo-brutalist theme reference)
+  - Product rationale / why a decision was made → `docs/product/ADRs.md` (frozen — see
+    "Architecture is locked" above before touching anything it governs)
+  - What the product is / user flow → `docs/product/PRD_v2.md`
+  - Build order / what phase we're in → `docs/product/ROADMAP.md`
+  - Day-to-day "what tool, what size" → `docs/WORKFLOW.md`
+  - Building/changing a pipeline module → its spec in `docs/specs/<module>.md` (from
+    `docs/specs/TEMPLATE.md`); write one before implementing if it doesn't exist
+  - Frontend-specific framework notes → `frontend/AGENTS.md` (Next.js version-delta notes,
+    auto-generated — not a project doc)
+  - DB schema work → `supabase/migrations/`
+- Fallback: if a module has no spec yet, don't guess its contract slice — write the spec first.
+
+---
 
 ## Commands (Use Exactly)
 Two independent projects, no shared root tooling — run commands from the named directory.
 
 ### Frontend (`frontend/`)
-- Install: `pnpm install` (evidence: `frontend/pnpm-lock.yaml`, `frontend/pnpm-workspace.yaml`)
-- Lint: `pnpm lint`
+- Install: `pnpm install` (evidence: `frontend/pnpm-lock.yaml`)
+- Lint: `pnpm lint` (evidence: `frontend/package.json` scripts)
 - Build (includes type checking): `pnpm build`
-- Unit tests: `pnpm test` (evidence: `package.json` → `vitest run`)
+- Unit tests: `pnpm test` (evidence: `frontend/package.json` → `vitest run`)
 - Dev server: `pnpm dev`
 
 ### Backend (`backend/`)
 - Install: `uv sync` (evidence: `backend/uv.lock`)
-- Unit tests: `uv run pytest` (evidence: `pyproject.toml` `[tool.pytest.ini_options]`, `testpaths = ["tests"]`)
-- Run web: `uv run uvicorn app.main:app --reload` (evidence: `backend/Procfile`)
-- Run worker: `uv run python worker/run_worker.py` (evidence: `backend/Procfile`)
-- No lint/typecheck tool is configured yet in `pyproject.toml` — don't invent one; flag it if the task needs it.
+- Lint: `uv run ruff check .` (evidence: `backend/pyproject.toml` dev deps + `[tool.ruff]`)
+  Note: `ruff format` is **not** adopted — see the comment in `backend/pyproject.toml` for why.
+- Unit tests: `uv run pytest` (evidence: `pyproject.toml` `[tool.pytest.ini_options]`,
+  `testpaths = ["tests"]`)
+- Run web (dev): `uv run uvicorn app.main:app --reload`
+  (prod form, evidence `backend/Procfile:1`: `uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT`)
+- Run worker: `uv run python -m worker.run_worker` (evidence: `backend/Procfile:2`)
+  Must be the `-m` module form — `python worker/run_worker.py` puts `worker/` on `sys.path` instead of
+  `backend/` and dies with `ModuleNotFoundError: No module named 'app'`.
 
 ### Pre-merge verify
-- No CI workflow exists yet (`.github/workflows/` absent) — there is no single canonical gate. Until one exists, run both projects' test suites before calling work done: `frontend`: `pnpm lint && pnpm test`; `backend`: `uv run pytest`.
+No CI workflow exists yet — run both suites manually before merging:
+- Frontend (from `frontend/`): `pnpm lint && pnpm test`
+- Backend (from `backend/`): `uv run ruff check . && uv run pytest`
 
 ### Granular Testing
-- Frontend, single file: `pnpm exec vitest run app/write/page.test.tsx` (path relative to `frontend/`)
-- Frontend, watch mode: `pnpm exec vitest` (no `run` flag) — use for iterating, not for verification
+- Frontend, single file: `pnpm exec vitest run app/write/page.test.tsx` (path relative to
+  `frontend/`)
+- Frontend, watch mode: `pnpm exec vitest` (no `run` flag) — for iteration, not verification
 - Backend, single file: `uv run pytest tests/test_analyze_node.py`
 - Backend, single case: `uv run pytest tests/test_analyze_node.py -k "case_name"`
+
+---
+
+## Tooling Lock
+- Frontend package manager: **pnpm only** (evidence: `frontend/pnpm-lock.yaml`). Forbidden:
+  npm, yarn, bun.
+- Backend package manager: **uv only** (evidence: `backend/uv.lock`). Forbidden: bare
+  `pip install`, `poetry`, `pipenv`.
+- Python env: always `uv run <cmd>` from `backend/` (pinned to `backend/.venv`, Python ≥3.12
+  per `pyproject.toml`). Never install globally.
+
+## Testing Contract
+- What "passing" means: `pnpm lint && pnpm test` green (frontend) + `uv run ruff check . &&
+  uv run pytest` green (backend).
+- No CI gate exists yet — passing is a manual pre-merge obligation.
+- Deterministic tests mock every `providers.py` call. Never assert on generated content quality;
+  that belongs to the offline eval harness, never CI.
+- Intentional skips / known flaky: none documented yet.
+
+## Project-Specific Invariants
+- Story Memory (`backend/contracts/`) is the only channel between pipeline modules — no ad-hoc
+  dicts crossing module boundaries.
+- Every structured-output call is validated into the Pydantic schema. On OpenRouter, always send
+  `provider.require_parameters: true` — without it a routed provider silently downgrades
+  `json_schema` to loose JSON mode (ADR-002).
+- **Only open-weight models** (ADR-015). Prefer Apache-2.0/MIT. Never adopt a FLUX.1-dev-based
+  adapter (InstantCharacter, DreamO, UNO, ACE++, InstantID, PuLID) — their permissive wrapper
+  licenses do not override the restrictive base.
+- Provider SDKs, endpoints, and keys are named in `backend/providers.py` and nowhere else; model IDs
+  are env-overridable settings in `backend/app/config.py`.
+- LangGraph nodes are deterministic; conditional edges exist only at moderation pass/fail and
+  consistency pass/fail (ADR-003).
+- One pipeline module = one file in `backend/pipeline/`.
 
 ## Critical Paths & Extra Review Triggers
 - Moderation stack and ordering (input → char-ref → output) — ADR-011
 - PII redaction (Presidio) — ADR-011
 - RLS policies / signed URL generation — ADR-006
 - Job checkpoint/resume (LangGraph + Postgres) — ADR-005
-- Anything touching `backend/contracts/` (Story Memory schema) — it's the frozen inter-module contract, changing it changes every consumer
-- Any change that conflicts with a decision in `docs/product/ADRs.md` — stop, write a new ADR, flag it (don't implement first)
+- Anything touching `backend/contracts/` — it's the frozen inter-module contract; changing it
+  changes every consumer
+- Any change that conflicts with a decision in `docs/product/ADRs.md` — stop, write a new ADR,
+  flag it
 
 ## Definition of Done
 - Completion report includes: commands run, key results, what was verified vs not, residual risks.
 - Never mark complete without proof (passing tests, logs, demonstrated correctness).
-- Behavior change → the relevant spec in `docs/specs/` is updated in the same change (specs that lie are worse than none).
-- Ask: "Would a staff engineer approve this?"
+- Behavior change → the relevant spec in `docs/specs/` is updated in the same change (specs
+  that lie are worse than none).
 
-## Security
-- Never read `.env`, `.env.local`, or other secret files. Request sanitized inputs from the user instead.
-- Never log or expose Supabase service-role keys, OpenRouter/fal.ai/OpenAI/LangSmith API keys, or DB URLs.
-
-## Tooling Lock
-- Frontend package manager: **pnpm only** (evidence: `pnpm-lock.yaml`, `pnpm-workspace.yaml`). Forbidden: npm, yarn, bun.
-- Backend package manager: **uv only** (evidence: `uv.lock`). Forbidden: bare `pip install`, `poetry`, `pipenv`.
-- Python env: always `uv run <cmd>` from `backend/` (pinned to `backend/.venv`, Python >=3.12 per `pyproject.toml`). Never install globally.
-
-## Project-Specific Invariants
-- Story Memory (`backend/contracts/`) is the only channel between pipeline modules — no ad-hoc dicts crossing module boundaries.
-- Every structured-output call is validated into the Pydantic schema, never used as a raw dict. On OpenRouter, always send `provider.require_parameters: true` — without it a routed provider silently downgrades `json_schema` to loose JSON mode (ADR-002).
-- **Only open-weight models** (ADR-015). Prefer Apache-2.0/MIT. Never adopt a FLUX.1-dev-based adapter (InstantCharacter, DreamO, UNO, ACE++, InstantID, PuLID) — their permissive wrapper licenses do not override the restrictive base.
-- **No fine-tuning except the consistency judge** (ADR-016, superseded by ADR-018). If you think a LoRA is needed anywhere else, you have found a trigger condition — surface it, don't build it.
-- Model vendors are named in `backend/providers.py` and nowhere else.
-- LangGraph nodes are deterministic; conditional edges exist only at moderation pass/fail and consistency pass/fail (ADR-003) — no autonomous-agent routing.
-- One pipeline module = one file in `backend/pipeline/`.
-- Deterministic tests (Vitest/pytest) mock every `providers.py` call — never assert on generated content quality; that belongs to the offline eval harness, never CI.
+---
 
 ## Validation Notes
-- No CI config found (`.github/workflows/` absent) — "pre-merge verify" above is a manual substitute, not a real gate. Flag to the human if CI should be added.
-- No lint/type tool configured for the backend — assumption: none wanted yet at this phase.
-- `docs/superpowers/plans/2026-07-08-phase-0-scaffolding.md` exists outside the canonical `docs/specs/plans/` location that `docs/WORKFLOW.md` specifies — likely leftover from before the workflow doc's location rule was written; flagging rather than moving it unasked.
-- Repo is mid **Phase 0** (scaffolding) per `docs/WORKFLOW.md` "Right now" — next real module is `story-memory-contract` (Phase 1), which re-enters the brainstorming → spec → plan loop.
+- No CI config found (`.github/workflows/` absent) — "pre-merge verify" above is a manual
+  substitute, not a real gate. Flag to the human if CI should be added.
+- `ruff format` is not adopted — only `ruff check` is. See comment in `backend/pyproject.toml`
+  for rationale (single repo-wide formatting commit, never inside a feature change).
+- **Current phase: Phase 0.5 (Open-Weight Model Spike).** Phase 0 (Scaffolding) is ✅ complete.
+  Phase 0.5 probes are not yet run — see `docs/product/ROADMAP.md` for commands and kill
+  criteria. Phase 1 (`story-memory-contract`) begins after Phase 0.5 exit criteria are met.

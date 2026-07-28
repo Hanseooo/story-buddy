@@ -16,7 +16,7 @@ owns *how the pieces connect* and the engineering rules that keep an AI-assisted
 | The hard rules you must not break | `/CLAUDE.md` |
 | Why a decision was made | `docs/product/ADRs.md` |
 | What the product is / user flow | `docs/product/PRD_v2.md` |
-| The study: RQs, instruments, ethics, defense prep | `docs/product/RESEARCH_PROTOCOL.md` |
+| The study: objectives, instruments, ethics, defense prep | `docs/product/RESEARCH_PROTOCOL.md` |
 | Build order & phase exit criteria | `docs/product/ROADMAP.md` |
 | How modules connect / where code lives | §2 below (System Map) |
 | The inter-module data contract | §3 below (Story Memory) |
@@ -56,7 +56,13 @@ story-buddy/
 ```
 
 **Not built yet** (listed so they are not invented elsewhere): `backend/finetune/` — Phase 2.5 data
-manifests, training config, eval (ADR-018). `.github/workflows/` — see §6.
+manifests, training config, eval (ADR-018). `backend/eval/` — Phase 3 offline eval scripts, starting with
+`functional_verification.py` (Tool A). `frontend/app/(research)/` — the Phase-2.5 researcher route group
+(`annotate/`, `adjudicate/`, `books/`), behind the `researcher` role (ADR-026). `.github/workflows/` — see §6.
+
+**The research track gets two screens and one table, and no more.** No metrics dashboard (Tool A is a script
+— §4's "offline scripts + tracing exports"), no run-trace viewer (that is LangSmith, ADR-014), and no separate
+researcher application. Objectives 3 and 5 are collected on paper and by form, not in-app. ADR-026.
 
 **Frontend and backend are independent projects** (different languages; no shared monorepo build
 tooling — that would be speculative for a solo build). Their only contract is the HTTP API and the
@@ -139,6 +145,15 @@ input_gate ──► analyze ──► segment ──► char_bible ──► [c
 chosen by the author *before* the canonical reference is generated and then frozen for the storybook
 (`style.style_preset_id`). Identity *and* style both ride the canonical reference — which is exactly why
 adding presets costs a dict and no new machinery, and why there is **no style-anchor image**.
+
+**Manuscript's ten logical modules → this table.** The capstone manuscript presents the pipeline as ten
+logical modules (Input Moderation, Story Analyzer, Scene Segmentation, Story Memory Manager, Character
+Bible, Style Preset, Prompt Optimizer, AI Scene Generation, Consistency Judge & Targeted Regeneration,
+Picture Book Composition). They map onto the node table above one-for-one except: **Story Memory Manager**
+is the `StoryMemory` Pydantic contract (§3), not a graph node — every node reads/writes through it; **Style
+Preset** and **Prompt Optimizer** are inputs to `generate_scene` (config + prompt construction, as above),
+not standalone nodes. No node is added or renamed for this reconciliation (ADR-003/022 stay frozen) — see
+`docs/capstone/system_architecture.md` for the full mapping table.
 
 ---
 
@@ -266,10 +281,15 @@ Everything with one right answer, **with every `providers.py` call mocked**:
 - **Never assert on generated content.** "Is the character consistent?" is Tier B.
 
 **Tier B — Eval harness (offline, real models, on demand — never CI).**
-The only place fuzzy quality is measured, on the real/realistic story corpus (PRD §10):
-- Scene-selection / Story-Completeness (RQ1), acceptability (RQ3), under-length grace (RQ4), naive-reader
-  recall (RQ5), judge agreement with human labels on the held-out set (RQ6 — **descriptive only; the
-  fine-tuned-vs-baseline comparison was dropped**, ADR-008 rev. 2026-07-22), VLM–human agreement.
+The only place fuzzy quality is measured, on the real/realistic story corpus (PRD §10). Reframed around the
+study's three evaluation legs (Objectives 3–5; scene-selection completeness and under-length grace are
+pipeline behaviours exercised here, not standalone evaluation legs):
+- **Expert validation** — narrative coherence, story faithfulness, visual presentation, visual style
+  consistency, suitability for classroom use, via open-ended interview + content analysis (**Objective 3**).
+- **Judge classification** — precision/recall/F1 (F1 primary) against human-established reference labels on
+  the held-out set (**Objective 4**; an optional secondary comparison vs. the zero-shot base model and the
+  existing prompted baseline is permitted, ADR-008 rev. 2026-07-25), VLM–human agreement.
+- **Software quality** — ISO/IEC 25010 characteristics, 5-point Likert, weighted mean + SD (**Objective 5**).
 - **Is the same instrumentation as the Phase 3 study** (LangSmith/Langfuse) — build once, use for
   both dev feedback and research data. Costs money and is non-deterministic; that's why it's not CI.
 
@@ -310,8 +330,8 @@ mark done. Behavior change later → update the spec in the same change (CLAUDE.
 |---|---|
 | 1 (core) | `story-memory-contract`, `story-analyzer`, `scene-segmentation`, `character-bible`, `style-presets`, `prompt-optimizer`, `image-generator`, `consistency-checker`, `regeneration-controller` |
 | 2 (safety/classroom) | `moderation-stack`, `filipino-pii-recognizers`, `self-refusal-fallback`, `length-guard`, `auth-and-classroom`, `teacher-dashboard`, `classroom-sharing` (display-only gallery — no `peer-reflection`/`story-map`, both cut per ADR-021), `narration`, `export-pdf`, `rate-limiting`, `data-deletion`, `kid-flow-ui` |
-| 2.5 (fine-tune) | ✅ `judge-finetune` *(written)* |
-| 3 (eval) | `tier1-rating-harness`, `comprehension-instrument`, `tier2-fun-toolkit`, `metrics-export` |
+| 2.5 (fine-tune) | ✅ `judge-finetune` *(written)*, `annotation-surface` (ADR-026) |
+| 3 (eval) | `functional-verification-matrix` (Tool A), `metrics-export` |
 
 `story-memory-contract` is written **first** — it freezes §3 for everything downstream.
 The **failure-reason taxonomy** (`judge-finetune` §4) is shared by `regeneration-controller` and the
@@ -347,12 +367,11 @@ Phase-2.5 annotators. Design it once, in Phase 1, or invalidate every label coll
   Check the plan tier at the *start* of Phase 2.
 
 **Deferred by design:**
-- **Story Memory field-level detail** — the `story-memory-contract` spec is **written and awaiting owner
-  approval**, not yet frozen. §3 above describes its intended shape; until the spec is accepted, treat
-  that shape as provisional and do not build consumers against it.
 - **The failure-reason taxonomy** — extend it in Phase 1, never during Phase 2.5 annotation.
 
 **Resolved:**
+- ~~Story Memory field-level detail~~ → the `story-memory-contract` spec is **approved, shape frozen
+  2026-07-22**. §3 above describes it; build consumers against the spec, not against this section.
 - ~~Moderation backstop routing (D-1)~~ → **ADR-011c:** primary `Qwen3Guard-Gen` on the worker CPU,
   backstop routed to `gpt-oss-safeguard-20b` on OpenRouter (the ADR-011b pair is not routable). One
   backstop call per story; no new privacy surface (input already leaves to OpenRouter, ADR-002).

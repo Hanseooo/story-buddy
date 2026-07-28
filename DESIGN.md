@@ -154,7 +154,6 @@ We do not use one responsive sizing rule for the whole app. The scaling diverges
 
 *   **Kid Workspace (Saturated & Chunky):** Must remain radically oversized everywhere. Even on a 4K desktop monitor, a giant 80px "GO" button feels satisfying. Massive touch targets (`44x44px` minimum), playful starter prompt capsules, a giant handwriting-style textbox. Avoid horizontal scrolling.
 *   **Teacher / Researcher Center (Structured & Clean):** Must instantly snap to high-density, technical observability scaling (`text-sm`, `Inter`, `JetBrains Mono`, compact tables, breadcrumb navigation). The contrast reinforces that one is a playground and the other is a control room.
-*   **Ablation Sandbox Player:** A side-by-side split screen contrasting the consistent vector outputs of the **Pipeline-ON** model with the erratic results of the **Pipeline-OFF** naive generations.
 
 ---
 

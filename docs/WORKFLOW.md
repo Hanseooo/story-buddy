@@ -97,7 +97,7 @@ checklists is exactly the noise you were worried about.
 
 ## Right now
 
-You're mid Phase 0. Next action: **`writing-plans` for the Phase 0 scaffold** (frameworks, deps,
-service provisioning, walking skeleton) — based on the ROADMAP Phase 0 exit criteria and the
-tech-stack table in MASTER_SPEC §4. Brainstorming re-enters at the first real module,
-`story-memory-contract`, which is the first thing Phase 1 builds.
+You're in **Phase 0.5 (open-weight model spike)**; Phase 0 scaffolding is ✅ complete. Next action:
+**run the Phase 0.5 probes** — commands and kill criteria are in ROADMAP Phase 0.5, results go in
+`docs/product/PHASE_05_RESULTS.md`. Brainstorming re-enters at the first real module,
+`story-memory-contract`, which is the first thing Phase 1 builds — gated on probe 1 passing.
