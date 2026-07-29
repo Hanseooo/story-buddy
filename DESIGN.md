@@ -12,7 +12,7 @@ We use warm, tinted pastels for all structural canvases to act as a neutral back
 
 **Surface & Background Layers**
 *   **Page Background Canvas:** `#FAF6EE` (Warm, tinted pastel cream). Prevents eye strain compared to pure white.
-*   **Foreground Card/Surface:** `#FFFFFF` (Pure White). Used for reading panels, modal sheets, and text inputs to maximize readability against the cream background.
+*   **Foreground Card/Surface:** `#FFFFFF` (Pure White). Clearly lifts cards off the cream canvas — the warm surrounding context makes white read warm, not cold.
 
 **Semantic Palette & Accessibility Pairings**
 *(Rule: Never guess text colors. Always use the specified "On-[Color]" pairing to guarantee WCAG 4.5:1 contrast).*
@@ -21,15 +21,31 @@ We use warm, tinted pastels for all structural canvases to act as a neutral back
 *   **Warning/Alert (Sunburst Yellow):** `#FFD166` | *Text:* `#09090B` (Ink Black)
 *   **Success (Mint Lime):** `#06D6A0` | *Text:* `#09090B` (Ink Black)
 *   **Error/Destructive (Comic Red):** `#EF476F` | *Text:* `#09090B` (Ink Black)
+*   **Info/Advisory (Sky Blue):** `#4A90D9` | *Text:* `#09090B` (Ink Black). Neutral callouts, advisory banners, tooltips — intent-neutral so it doesn't collide with Secondary Cyan.
 *   **Parental/Admin (Royal Violet):** `#8338EC` | *Text:* `#FFFFFF` (White)
 *   **Ink Black (True Black):** `#09090B` | *Text:* `#FFFFFF` (White). Used for thick solid outlines, heavy drop shadows, and primary text.
+
+*   **Color Consistency Lock:** Despite having a full 6-color palette, **pick 1-2 primary accents per screen or flow** and stick to them. Do not fluctuate wildly within a single view just because all colors exist.
 
 **Dark Mode ("Comfort Cosmic Night")**
 *   **Page Background Canvas:** `#12121A` (Softer deep indigo). Lifted from pure black to reduce halation and astigmatism strain.
 *   **Foreground Card/Surface:** `#1C1C26` (Slightly lighter indigo for panels).
 *   **Text/Foreground:** `#E4E4E7` (Soft slate/zinc). Reduces the harsh glow of pure white text.
-*   **Accents & Semantic Colors:** Desaturated by ~10% from their light mode equivalents (e.g., `#FF6B9E` becomes `#F05C8C`). This prevents optical vibration ("neon fatigue") when placed against dark backgrounds.
-*   **Borders & Shadows (Ink):** We use a desaturated flat cyan (`#05AECF`) for the neo-brutalist tactile shadows to maintain the "laser-cut acrylic" feel without burning the retina.
+*   **Accents & Semantic Colors (exact dark mode values):** Both saturation (~10%) and lightness (~8%) are reduced to prevent neon fatigue without losing color identity. Use these values exactly — do not interpolate at runtime:
+
+    | Semantic | Dark Mode Hex |
+    |----------|---------------|
+    | Primary (Pink) | `#E8547F` |
+    | Secondary (Cyan) | `#05A0C8` |
+    | Warning (Yellow) | `#EFC050` |
+    | Success (Mint) | `#05C090` |
+    | Error (Red) | `#DC3B60` |
+    | Info (Sky Blue) | `#3A7EC4` |
+    | Parental/Admin (Violet) | `#7228D8` |
+
+    ⚠️ **Dark mode usage rule:** Semantic colors on dark backgrounds are for interactive elements and status indicators only — buttons, badges, toast borders, icons. Never use them as large panel or page fills — the luminance contrast against `#12121A` would cause glare at scale.
+
+*   **Borders & Shadows (Ink):** `var(--color-ink)` resolves to `#3C3C54` in dark mode — a neutral indigo-grey visibly lighter than the `#1C1C26` card surface, creating a hard offset ledge without neon glow.
 
 *(Accessibility Rule: Text on any background must maintain a contrast ratio of at least 4.5:1. Use Ink Black on brightly colored buttons if white fails contrast checks.)*
 
@@ -46,7 +62,7 @@ To maximize both emotional playfulness for kids and high technical readability f
 ### 3. Key Layout & Neo-Brutalist Utility Accents
 *   **Spacing Scale:** Stick strictly to a 4px/8px incremental spacing scale. Maintain at least `8px` gap between interactive elements.
 *   **Thick Borders:** `.neo-border` applies `border: 3px solid var(--color-ink)`.
-*   **Flat Shadows:** `.neo-shadow` applies `box-shadow: 4px 4px 0px 0px var(--color-ink)`.
+*   **Flat Shadows:** `.neo-shadow` applies `box-shadow: 4px 4px 0px 0px var(--color-ink)`. *(Note: Standard UX rules forbid pure black drop shadows on light backgrounds, but this `var(--color-ink)` shadow is the deliberate stylistic anchor of our Neo-Brutalist theme).*
 *   **Soft Rounded Corners:** Generous rounding (`rounded-xl` to `rounded-3xl`) keeps the UI friendly.
 *   **Z-Index Scale:** 0 (base) / 10 (sticky nav) / 20 (overlays) / 40 (bottom sheets/modals) / 100 (toasts).
 *   **Touch Targets (Critical):** All interactive elements in the Kid Workspace MUST have a minimum size of `44x44px`.
@@ -98,7 +114,7 @@ All shadows use the flat, unblurred Neo-Brutalist shadow style. This scale gover
 
 *   **Hover:** Increase one level (e.g., md → lg) with a `translate(-2px, -2px)` lift.
 *   **Active/Pressed:** Drop to level 0 with `translate(4px, 4px)` (button "depresses").
-*   **Dark mode:** Same sizes; `var(--color-ink)` resolves to flat cyan `#06BEE1`.
+*   **Dark mode:** Same sizes; `var(--color-ink)` resolves to `#3C3C54` (neutral indigo-grey ledge, not neon).
 
 ### 3.7 Border Radius by Context
 
@@ -133,17 +149,27 @@ Mobile-first. Styles default to the smallest breakpoint, then scale up.
 
 Which font is used where — preventing accidental use of the wrong typeface.
 
-| Context | Font | Variable | Base Size (Mobile / Desktop) | Line Height |
-|---------|------|----------|------|------|
-| All headings (H1–H3) | Outfit | `--font-display` | `24px / 32px` | `1.2` |
-| Kid body text, story editor, captions | Nunito | `--font-kid` | `18px / 20px` | `1.6` |
-| Teacher body text, dashboard, forms | Inter | `--font-sans` | `14px / 14px` | `1.5` |
-| Data, stats, logs, console output | JetBrains Mono | `--font-mono` | `13px / 13px` | `1.5` |
+| Context | Font | Variable | Mobile Size | Desktop Size | Line Height |
+|---------|------|----------|-------------|--------------|-------------|
+| H1 (page title) | Outfit | `--font-display` | `28px` | `48px` | `1.1` |
+| H2 (section heading) | Outfit | `--font-display` | `22px` | `36px` | `1.2` |
+| H3 (subsection / card title) | Outfit | `--font-display` | `18px` | `28px` | `1.3` |
+| Kid body text, story editor, captions | Nunito | `--font-kid` | `18px` | `20px` | `1.6` |
+| Teacher body text, dashboard, forms | Inter | `--font-sans` | `14px` | `14px` | `1.5` |
+| Data, stats, logs, console output | JetBrains Mono | `--font-mono` | `13px` | `13px` | `1.5` |
+
+*Note: Outfit is used for H1–H3 across both kid and teacher contexts. Teacher dashboard headings use the same Outfit scale — Inter is body/form copy only.*
+
+### 4. Layout Discipline (Anti-Slop)
+*   **CTA Wrap Ban:** Button text MUST fit on one line at desktop. Max 3 words (e.g., "Generate Story"). Wrapped CTAs at desktop are broken design.
+*   **No Duplicate CTA Intent:** Do not have two CTAs with the same intent on one page (e.g., "Start Story" and "Begin Story"). Pick one label and lock it.
+*   **Bento Grid Discipline (Teacher Dashboard):** Bento grids must have exactly as many cells as content (never leave an empty cell). At least 2-3 cells in any grid need background diversity (a pattern, image, or tinted background)—not just white cards on a white canvas.
+*   **Eyebrow Restraint:** Avoid the AI default of adding small uppercase tracking text (`EYEBROW`) above every section headline. Maximum 1 eyebrow per 3 sections.
 
 ### 5. Interactive States & Micro-behaviors
-*   **Hover:** Flat-shadow buttons translate slightly (`translate-x-[-2px] translate-y-[-2px]`) while the shadow expands to `6px 6px`.
-*   **Active (Click):** Button depresses completely (`translate-x-[4px] translate-y-[4px]`) and the shadow reduces to `0px`.
-*   **Focus (A11y):** Visible focus rings are mandatory. Use a `4px` outline in Electric Cyan (`#06BEE1`) offset by `2px` for keyboard navigation.
+*   **Hover:** Flat-shadow buttons translate slightly (`translate-x-[-2px] translate-y-[-2px]`) while the shadow expands to `6px 6px`. **Color does not change on hover** — transform is the sole signal. Hue shifts on hover would dilute the semantic meaning of the palette.
+*   **Active (Click):** Button depresses completely (`translate-x-[4px] translate-y-[4px]`) and the shadow reduces to `0px`. Color stays the same.
+*   **Focus (A11y):** Visible focus rings are mandatory. Use a `4px` outline in Sunburst Yellow (`#FFD166`) offset by `2px` for keyboard navigation. Yellow is used (not Cyan) because Cyan is already the Secondary action color — a focused Secondary button would be indistinguishable from its rest state.
 *   **Disabled:** Reduce opacity to `0.5`, remove the drop shadow, change cursor to `not-allowed`.
 *   **Motion & Easing:** Use spring physics for interactions rather than linear easing, but keep durations snappy (`150ms–300ms`). Respect `prefers-reduced-motion` to disable bouncy animations.
 
@@ -162,6 +188,7 @@ To ensure the app feels alive, highly responsive, and forgiving:
 
 *   **Loading States (Spatial Skeletons + Micro-Narrative):** 
     *   Skeletons must match the exact shape of incoming content to reserve space and prevent layout shift (CLS).
+    *   **Skeleton colors:** Light mode — base `#EDE8DF`, shimmer sweep `#F5F1E8`. Dark mode — base `#242430`, shimmer sweep `#2E2E3E`. The shimmer is a CSS `linear-gradient` animation running on `--duration-loading` (`1200ms`).
     *   Inside the flat-color skeleton block, inject a small, looping diegetic animation (e.g., a cartoon pencil scribbling or a wand spinning) to hold the space technically while entertaining narratively.
     *   Buttons should show an internal spinner and disable themselves when submitting.
 *   **Success States (Toasts & Confetti):**
@@ -171,8 +198,10 @@ To ensure the app feels alive, highly responsive, and forgiving:
     *   Errors should never feel punishing. Use Comic Red panels with a gentle, confused mascot icon.
     *   Provide clear, jargon-free actionable steps (e.g., "Oops! The story machine needs a break. Let's try that again!").
     *   Inline form errors appear immediately below the input with a subtle horizontal shake animation. Validation should happen on blur or submit, not keystroke.
-*   **Empty States:**
-    *   Show a helpful message and illustration. Example: A sad pencil for "No stories here yet! Let's write one."
+    *   **Accessibility (A11y):** Form errors MUST use `aria-live` regions or `role="alert"` to notify screen readers dynamically.
+*   **Empty States & Progressive Disclosure:**
+    *   Show a helpful message and illustration, but **always include a clear recovery path or primary action** (e.g., A sad pencil + a "Write your first story" button).
+    *   **Progressive Disclosure:** For the Teacher Dashboard, reveal complex data progressively. Use accordions or "View Details" to avoid cognitive overload on the primary view.
 
 ---
 
