@@ -80,3 +80,22 @@ def test_stub_graph_full_run_with_real_call_points_mocked(monkeypatch):
     assert [s.scene_id for s in result["scenes"]] == ["s0"]
     assert result["scenes"][0].caption == "stub caption"
     assert result["scenes"][0].final_image_ref == "stub/path.png"
+
+
+def test_analyze_roster_survives_the_graph(monkeypatch):
+    """Spec §6: patch the single helper and assert the roster reaches the end of the run.
+    `analyze` runs before `segment`, so a roster that is dropped by a reducer or overwritten
+    by a later node shows up here and nowhere else."""
+    _mock_call_points(monkeypatch)
+    app_graph = build_graph()
+
+    result = app_graph.invoke(
+        _initial_state("test-job-3"), config={"configurable": {"thread_id": "test-job-3"}}
+    )
+
+    assert [c.char_id for c in result["characters"]] == ["c0"]
+    assert result["characters"][0].name == "the orange dog"
+    assert result["characters"][0].description.species == "dog"
+    assert [loc.loc_id for loc in result["locations"]] == ["loc0"]
+    assert result["objects"] == []
+    assert [e.order for e in result["timeline"]] == [0]
