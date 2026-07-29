@@ -1,7 +1,7 @@
 # Feature Spec — story-memory-contract
 
-**Status:** approved (shape frozen 2026-07-22; D-F + D-G resolved via the ADR-023 amendment; **§9 construction gate resolved 2026-07-22b** via a second ADR-023 amendment — the `job_state.py` port is unblocked) · **Phase:** 1 · **Owner:** `backend/contracts/` (the Pydantic contract itself — not a pipeline node)
-**Derived from:** MASTER_SPEC §2 (system map), §3 (frozen contract) · **Rationale:** ADR-023, ADR-004, ADR-002, PRD §19
+**Status:** approved (shape frozen 2026-07-22; D-F + D-G resolved via the ADR-023 amendment; **§9 construction gate resolved 2026-07-22b** via a second ADR-023 amendment; **D-H resolved 2026-07-29 → ADR-028** — `FailureReason` frozen permanently, `VlmVerdict.anatomy_intact` and `Character.ref_verdict` added, both additive, no `schema_version` bump — the `job_state.py` port is unblocked) · **Phase:** 1 · **Owner:** `backend/contracts/` (the Pydantic contract itself — not a pipeline node)
+**Derived from:** MASTER_SPEC §2 (system map), §3 (frozen contract) · **Rationale:** ADR-023, ADR-004, ADR-002, ADR-028, PRD §19
 
 > This is the one spec that is not a node. It freezes the **field-level shape** of the Story Memory
 > Pydantic model — the inter-module contract every Phase-1 node reads and writes (`CLAUDE.md §2`).
@@ -55,12 +55,19 @@ class CharacterDescription(BaseModel):
     clothing: list[str] = Field(default_factory=list)
     notes: Optional[str] = None
 
+# --- Reference acceptance verdict (ADR-028 Decision 3). Reason-then-score, like every judge call. ---
+class RefVerdict(BaseModel):
+    differences_observed: str          # MUST be declared before matches_description (ADR-004)
+    matches_description: bool
+    attributes_present: list[str] = Field(default_factory=list)   # best-of key when all draws fail
+
 class Character(BaseModel):
     char_id: str
     name: str
     description: CharacterDescription = Field(default_factory=CharacterDescription)
     canonical_ref_image: Optional[str] = None       # durable Storage PATH, never a signed URL
     ref_moderation_status: Optional[str] = None
+    ref_verdict: Optional[RefVerdict] = None        # ADR-028: the reference is checked, not assumed
 
 class Location(BaseModel):     # minimal; refined by `story-analyzer` (§8, additive)
     loc_id: str
@@ -99,6 +106,11 @@ class VlmVerdict(BaseModel):
     same_character: bool
     attributes_present: list[str] = Field(default_factory=list)
     style_match: bool = False
+    anatomy_intact: bool = True        # ADR-028: merged, missing or duplicated body parts. Declared
+                                       # LAST so the ADR-004 ordering above is untouched. Additive →
+                                       # no schema_version bump. Best-of (ADR-010) ranks
+                                       # lexicographically: same_character → anatomy_intact → style_match.
+                                       # ponytail: bool, not a score — widen only if a measured tie forces it.
 
 class Attempt(BaseModel):
     image_ref: str                     # durable Storage PATH
@@ -211,7 +223,16 @@ node's own spec declares its contract slice against the fields above.
 The 7 values in `FailureReason` above are the **closed set** from `judge-finetune.md §4`. Defined once here in
 `backend/contracts/`; imported by the judge verdict schema, the regeneration-controller, and the Phase-2.5
 finetune tooling in `backend/finetune/` (import direction: **finetune → contracts**). Pydantic rejects any
-value outside it. **Extend only in Phase 1**, never during Phase-2.5 annotation (MASTER_SPEC §7).
+value outside it. ~~**Extend only in Phase 1**, never during Phase-2.5 annotation (MASTER_SPEC §7).~~
+
+🔒 **Frozen permanently — ADR-028 Decision 1 (2026-07-29).** The Phase-1 window to extend it was the decision
+above, and the decision is **not to**. This is the **identity** taxonomy: every value names an attribute of the
+*character* that a regeneration prompt can restate. Anatomy and composition are properties of the *rendering*,
+not of the character, and they live on `VlmVerdict.anatomy_intact` instead (ADR-028 Decision 2) — additive, no
+version bump, and outside the closed set Objective 4's F1 is computed over. The 7 values are also enumerated
+verbatim in four capstone manuscript sources (`methodology.md`, `research_instruments.md`,
+`evaluation_instruments_brief.md`, `model_finetuning.md`), so an enum change is a manuscript edit, not a schema
+edit. Read ADR-028 before proposing an eighth value.
 
 ## 5. Cross-cutting checklist (MASTER_SPEC §5)
 
@@ -247,6 +268,10 @@ Models mocked (there are no model calls here — this is pure schema). Assertion
   spec's job: `providers._assert_field_order` (`backend/providers.py:68-85`) checks parsed key order on every
   structured call, with a regression test at `tests/test_providers.py:83`.
 - `Attempt(failure_reasons=["not_a_real_reason"])` raises `ValidationError` (closed taxonomy).
+- **`anatomy_intact` is declared last** (ADR-028): `list(VlmVerdict.model_fields)[-1] == "anatomy_intact"`, and
+  the §245 `differences_observed`-before-`same_character` assertion still holds with it present.
+- **`RefVerdict` reason-then-score:** `model_json_schema()["properties"]` lists `differences_observed` before
+  `matches_description` (ADR-004 applies to every judge call, not only the two-image one).
 - Assets: no field is asserted to be a URL — a plain path validates. *(Guards against signed-URL storage by
   convention; documented, not type-enforced.)*
 
@@ -269,9 +294,16 @@ N/A — the contract produces no generated content.
 - ~~**Open → D-F / D-G**~~ → **Resolved 2026-07-22 (ADR-023 amendment):** D-F — sub-schema lives in
   `contracts/` iff `StoryMemory` embeds it, else beside its node (so `SceneCaption` → `pipeline/`, §9). D-G —
   id convention in §2.1. Both freeze this spec's shape.
-- **Deferred, additive when its spec lands:** a scalar ranking signal on `Attempt` / `VlmVerdict`. ADR-010's
-  best-of *"keep the higher-scoring image"* has no defined score, and ADR-024 flagged it as under-defined.
-  Owned by `regeneration-controller`, which may add an `Optional` field — additive, no version bump.
+- ~~**Deferred, additive when its spec lands:** a scalar ranking signal on `Attempt` / `VlmVerdict`.~~
+  → **Resolved 2026-07-29 (ADR-028 Decision 2).** No scalar. `VlmVerdict` now carries three booleans, and
+  ADR-010's *"keep the higher-scoring image"* is a **lexicographic order** over `same_character` →
+  `anatomy_intact` → `style_match`. `regeneration-controller` still owns the rule (and any tie-break); what it
+  was missing — something to rank on — now exists. Widen to a scalar only if a measured tie forces it.
+- **Resolved 2026-07-29 (ADR-028 Decision 3):** the canonical reference is no longer assumed correct
+  (amends ADR-007). `char_bible` judges each draw against `CharacterDescription`, re-rolls to a cap of 3 draws,
+  keeps the draw with the most `attributes_present` on exhaustion, and persists `Character.ref_verdict`. This is
+  a **node-internal loop, not a conditional edge** — ADR-003's two branch points and ADR-024's routers are
+  unchanged.
 - **Deferred:** `pdf_ref` / composed-book reference for the export leg (MASTER_SPEC §2). Nothing in Phase 1
   writes it; `export-pdf` (Phase 2) adds it additively.
 - **Removed 2026-07-22:** `Scene.consistency_check_status` — an untyped `Optional[str]` with no owner spec and
@@ -286,8 +318,17 @@ N/A — the contract produces no generated content.
 
 ## 9. Migration off `job_state.py` (every consumer, per `CLAUDE.md §2`)
 
-§2 deletes `backend/contracts/job_state.py`. That is a **breaking change across 12 files**, listed here so the
-migration is a checklist rather than a discovery. Verified against the tree 2026-07-22.
+§2 deletes `backend/contracts/job_state.py`. That is a **breaking change across 14 files**, listed here so the
+migration is a checklist rather than a discovery. Verified against the tree 2026-07-22; **re-verified and
+corrected 2026-07-29** — every line citation below still resolves exactly, but the count was two short.
+
+> ⚠️ **The original 12 was a grep for `JobState` / `SceneCaption`, and two consumers don't import either.**
+> `tests/test_graph_stub.py` and `tests/test_generate_scene_node.py` construct the 5-key state as a **dict
+> literal** and assert on `result["caption"]` / `result["image_path"]` — both keys vanish in `StoryMemory`.
+> They are invisible to a symbol search and break immediately on `StateGraph(StoryMemory)`. Listed under
+> *Tests* below. **The lesson generalises past this migration:** a `TypedDict` contract has consumers coupled
+> to its *shape* that no grep for its *name* will find. `StoryMemory` being a real Pydantic model is what
+> removes that failure mode.
 
 **State type — `JobState` (TypedDict) → `StoryMemory`:**
 - `pipeline/graph.py:4,14` — `StateGraph(JobState)` → `StateGraph(StoryMemory)`.
@@ -323,6 +364,17 @@ embedded in `StoryMemory`).
   (`"dev-classroom"` / `"dev-profile"`), replaced by real selection when `auth-and-classroom` lands — a value
   swap at this one site, no contract change. The `create_storybook` insert path (`app/main.py`) and the jobs
   table are unchanged; `:10`'s `select("input_text")` stays as-is.
+
+**Tests coupled to the state shape without importing it** (added 2026-07-29 — see the ⚠️ above):
+- `tests/test_graph_stub.py:12-19,32-43` — builds the 5-key dict literal, invokes the real compiled graph, and
+  asserts `result["stage"] == "compose"`, `result["caption"]`, `result["image_path"]`. The one test that fails
+  the instant `StateGraph(JobState)` becomes `StateGraph(StoryMemory)`. Rewrite to construct `StoryMemory` and
+  assert against `scenes[].caption` / `scenes[].final_image_ref`.
+- `tests/test_generate_scene_node.py:18-29` — same dict-literal pattern; asserts `result["image_path"]` and
+  `result["stage"]`.
+
+Both also assert on `stage`, which `StoryMemory` does not carry — job status lives on the **job row**, not in
+state (ADR-023). Porting them is not a mechanical rename; decide what they assert on now.
 
 **Also fix while porting** (pre-existing, not caused by this spec): `analyze.py:14` writes a top-level
 `caption`, while MASTER_SPEC §2's node-I/O table assigns `scenes[].caption` to `segment`.

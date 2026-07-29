@@ -8,8 +8,8 @@ spec edit). Per `CLAUDE.md §1`, architectural decisions are made in their own s
 inline while building a module. When a row is decided: write the ADR, delete the row from
 this file (git keeps the history), and update the affected spec in the same change.
 
-**ADR numbering.** ADRs are append-only sequential; the last is **ADR-025**, so the next free
-number is **ADR-026**. Numbers are assigned *when the ADR is written*, not reserved here —
+**ADR numbering.** ADRs are append-only sequential; the last is **ADR-028**, so the next free
+number is **ADR-029**. Numbers are assigned *when the ADR is written*, not reserved here —
 the items below use stable `D-*` ids instead, because the write order can shift.
 
 **Two non-decisions, recorded so they don't get reopened by reflex:**
@@ -55,6 +55,20 @@ N=3 moderation off-ramp, per-classroom daily cap, self-refusal soften-and-retry 
 
 ---
 
+## Tier 2b — opened by Phase 0.5 — **closed**
+
+*(D-H · Image acceptance → **ADR-028**, 2026-07-29. All three sub-questions resolved: **(1)** `FailureReason`
+is **frozen permanently at 7** — it is the *identity* taxonomy, and anatomy/composition are properties of the
+rendering, so they stay out of the closed set Objective 4's F1 is computed over; **(2)** `VlmVerdict` gains
+`anatomy_intact: bool = True`, declared last so ADR-004's ordering is untouched — additive, no `schema_version`
+bump, and it also resolves the best-of ranking signal ADR-024 handed to `regeneration-controller`
+(lexicographic over `same_character` → `anatomy_intact` → `style_match`, no scalar); **(3)** the canonical
+reference is judged against its description inside `char_bible` with a **3-draw cap and best-of fallback**,
+persisted as `Character.ref_verdict` — a node-internal loop, **not** a conditional edge, so ADR-003 and ADR-024
+are unamended. ADR-007 is amended. No capstone document changes. Nothing blocks the `job_state.py` port.)*
+
+---
+
 ## Tier 3 — convention formalizations (likely MASTER_SPEC edits, not ADRs)
 
 *(D-E · Testing-seam convention → MASTER_SPEC §6 "The node test seam", 2026-07-22: one module-level
@@ -75,12 +89,13 @@ roadmap order. Source: MASTER_SPEC §7.
       Phase-1 dev sentinels). Next: the `job_state.py` migration (build).
 - [ ] `story-analyzer`   *(code: `pipeline/analyze.py` — partial)*
 - [ ] `scene-segmentation`   *(code: `pipeline/segment.py` — stub)*
-- [ ] `character-bible`   *(code: `pipeline/char_bible.py` — stub)*
+- [ ] `character-bible`   *(code: `pipeline/char_bible.py` — stub; owns ADR-028's reference-acceptance loop —
+      draw → judge vs `CharacterDescription` → re-roll, 3-draw cap, best-of by `attributes_present`)*
 - [ ] `style-presets`   *(ADR-022; 3 presets)*
 - [ ] `prompt-optimizer`
 - [ ] `image-generator`   *(code: `pipeline/generate_scene.py` — partial, still text-to-image)*
 - [ ] `consistency-checker`   *(code: `pipeline/consistency_check.py` — stub)*
-- [ ] `regeneration-controller`   *(no file yet; needs the ADR-023 failure-reason enum + ADR-024 loop shape; owns the best-of ranking signal ADR-024 flagged as under-defined)*
+- [ ] `regeneration-controller`   *(no file yet; needs the ADR-023 failure-reason enum + ADR-024 loop shape; owns the best-of **rule** — ADR-028 supplied the signal: lexicographic over `same_character` → `anatomy_intact` → `style_match`)*
 
 **Phase 2 (safety / classroom):**
 - [ ] `moderation-stack`   *(D-1 decided → ADR-011c; spec: **draft 2026-07-28** — `docs/specs/moderation-stack.md`; no code yet)*
@@ -119,14 +134,18 @@ revised 2026-07-25.)*
 
 ## Recommended next session
 
-> ⚠️ **Phase 0.5 probes have not been run.** The ROADMAP gate ("probe 1 only, both criteria must hold")
-> still stands, so the build work below is *unblocked as a decision* but not yet cleared to start.
-> Run the probes and record `PHASE_05_RESULTS.md` first.
+> **Phase 0.5 is closed (2026-07-29).** Probe 1 resolved over three runs and Probe 3 passed both arms;
+> nothing in Phase 0.5 blocks Phase 1. Numbers and branches in `docs/product/PHASE_05_RESULTS.md` — not
+> restated here (AGENTS.md → *Definition of Done*, "point, don't copy").
+>
+> ✅ **D-H, which Phase 0.5 opened, is closed too — ADR-028 (2026-07-29).** Nothing blocks the port.
 
 **Migrate off `job_state.py`** (build, not a decision — the §9 construction gate is resolved by the ADR-023
 amendment 2026-07-22b). The 12 consumers are enumerated in `story-memory-contract` §9: `StateGraph(JobState)` →
 `StateGraph(StoryMemory)`, six nodes → partial-return, `SceneCaption` → `pipeline/analyze.py` (D-F), the worker
 constructs `StoryMemory` with the resolved provenance (`story_id=job_id` + `config.py` sentinels, adding the two
-`settings` keys in the same change), and `run_job.py`'s dead `caption`/`image_path` keys get fixed.
+`settings` keys in the same change), and `run_job.py`'s dead `caption`/`image_path` keys get fixed. The port
+carries ADR-028's two additive types (`VlmVerdict.anatomy_intact`, `RefVerdict` + `Character.ref_verdict`) and
+the two §6 assertions that guard them.
 
 After that: `story-analyzer`. Do not start `story-analyzer` first.
