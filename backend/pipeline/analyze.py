@@ -6,18 +6,6 @@ from contracts.story_memory import Character, CharacterDescription, Location, St
 from providers import structured_text
 
 
-class SceneCaption(BaseModel):
-    caption: str
-
-
-def caption_for(text: str) -> str:
-    result = structured_text(
-        f"Write one short, kid-friendly caption (max 20 words) for this story: {text}",
-        SceneCaption,
-    )
-    return result.caption
-
-
 # --- LLM boundary (D-F: transient wrapper, so it lives beside its node) ---
 # The contract types all carry a REQUIRED id and D-G forbids an id at the boundary, so the
 # boundary uses id-less mirrors that the node maps into contract types.

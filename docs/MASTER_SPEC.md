@@ -73,7 +73,7 @@ Story Memory shape. New ADRs **append** to `docs/product/ADRs.md` — there is n
 - New pipeline module → a new file in `backend/pipeline/`, named for its single concern.
 - Anything crossing the module boundary goes **through** `backend/contracts/`, never ad-hoc.
 - Structured-output sub-schema → `backend/contracts/` **iff `StoryMemory` embeds it** (e.g. `VlmVerdict`);
-  a transient wrapper the node unpacks into contract fields and never persists (e.g. `SceneCaption`) lives
+  a transient wrapper the node unpacks into contract fields and never persists (e.g. `SceneSegmentation`) lives
   **beside its node** in `backend/pipeline/`. Keys on *embedding*, not on being an LLM boundary (ADR-023 D-F).
 - Docs: product rationale → `docs/product/`; engineering how → here; per-feature → `docs/specs/`;
   research/manuscript → `docs/capstone/`.
@@ -133,7 +133,7 @@ input_gate ──► analyze ──► segment ──► char_bible ──► [c
 |---|---|---|---|
 | `input_gate` | `input.raw_text` | `input.redacted_text`, `word_count`, `truncated`, `moderation` | ADR-011,012 / §5,§13 |
 | `analyze` | `input.redacted_text` | `characters[]`, `locations[]`, `objects[]`, `timeline[]` | §8 |
-| `segment` | analysis + timeline | `scenes[].text_excerpt`, `caption` | ADR-012 / §5,§8 |
+| `segment` | analysis + timeline | `scenes[].text_excerpt`, `caption`, `characters_present` | ADR-012 / §5,§8 |
 | `char_bible` | `characters[]` | `characters[].canonical_ref_image`, `ref_moderation_status` | ADR-001,007 |
 | `generate_scene` | scene + char refs + `style` | `scenes[].attempts[].image_ref` | ADR-001,010 |
 | `consistency_check` | ref + attempt image | `scenes[].attempts[].vlm_verdict`, `failure_reasons`, `passed` | ADR-004 |
@@ -299,7 +299,7 @@ changed** and **never mutates `state`** (ADR-024; §3 above). All non-determinis
 calls, storage/DB) live in **one module-level helper per node** that the node calls and that returns
 plain data. This yields two patch seams at two altitudes:
 
-- **Helper seam** — node & graph tests patch the helper by name (`pipeline.analyze.caption_for`,
+- **Helper seam** — node & graph tests patch the helper by name (`pipeline.segment.segment_scenes`,
   `pipeline.generate_scene.generate_and_store`). One helper per node ⇒ one patch point per node in graph tests.
 - **Provider seam** — the helper's *own* tests patch the `providers.py` function **as imported into the
   node module** (`pipeline.analyze.structured_text`).

@@ -20,8 +20,7 @@ the redacted input text, so `char_bible` has a stable roster to draw canonical r
   the same fallback `segment` already uses)
 - **Writes:** `characters[]`, `locations[]`, `objects[]`, `timeline[]`
 - **Does not write:** `scenes[]`. Scenes do not exist yet — `segment` runs after this node. The
-  `caption_for` helper lives in this file per D-F but belongs to `segment`; this spec does not
-  change it.
+  `caption_for` and `SceneCaption` have been **deleted** from this file — they were orphans created by ADR-013 and removed by the `scene-segmentation` spec (2026-07-29).
 
 **Invariants** (each guarded by a test in §6):
 
@@ -235,8 +234,7 @@ sufficient for every Phase-1 consumer. No contract change, no `schema_version` b
 **Hands off — named here, owned elsewhere:**
 - **`Scene.characters_present`** → **`scene-segmentation`**. Nothing mints it today, and `analyze`
   cannot: it runs before scenes exist. `segment` creates scenes and already reads the analysis, so
-  the mapping belongs there. The join key is `Character.name`. Until that spec lands,
-  `generate_scene` stays text-to-image — which is what it already does.
+  the mapping belongs there. The join key is `Character.name`. **Landed 2026-07-29**: `segment` maps `Character.name → char_id` using the join key named here.
 - **Description *richness*** → **`character-bible`**. Narrowed, not handed off whole: the silent
   half of this gap is closed here by requiring `species` at the boundary (§4), so ADR-028's re-roll
   can no longer collapse without anyone noticing. What remains is a judgement call — is
