@@ -69,6 +69,24 @@ are unamended. ADR-007 is amended. No capstone document changes. Nothing blocks 
 
 ---
 
+## Tier 2c — opened by `character-bible` (2026-07-30)
+
+- **D-I · The character/style reveal + confirm step has no graph representation.** PRD §8 flow step 7
+  promises the child sees the **moderated** canonical reference(s) before full generation, with a
+  lightweight confirm / *"try again."* **ADR-024's canonical graph contains no such interrupt** and
+  `backend/pipeline/graph.py` runs `char_bible → generate_scene` straight through. Three sub-questions,
+  all open: **(1)** is the confirm a LangGraph interrupt, or does the run end and a confirm re-invoke
+  the graph? **(2)** whose draw budget does a child's "try again" spend — a fresh ADR-028 allowance of
+  3, the unspent remainder, or its own? **(3)** how does it account against CC-3's `image_count`
+  breaker, whose `prelude` term `character-bible` §5 fixes at 6 on the assumption of exactly one
+  machine-driven pass? Load-bearing, not cosmetic: ADR-028 records that ~42% of books still ship an
+  off-spec reference even with the 3-draw cap, which makes this button the largest un-designed
+  mitigation in the flow. Touches the graph shape ADR-024 froze, ADR-003's two-branch-point rule, the
+  `jobs` table, and CC-1's char-ref moderation leg — so it is an ADR session, not a spec edit.
+  *Surfaced by `docs/specs/character-bible.md` §8; deliberately scoped out of it.*
+
+---
+
 ## Tier 3 — convention formalizations (likely MASTER_SPEC edits, not ADRs)
 
 *(D-E · Testing-seam convention → MASTER_SPEC §6 "The node test seam", 2026-07-22: one module-level
@@ -95,8 +113,10 @@ roadmap order. Source: MASTER_SPEC §7.
 - [x] `scene-segmentation`   *(spec **built 2026-07-29** — `docs/specs/scene-segmentation.md`;
       `pipeline/segment.py` splits into scenes (≤15), enforces verbatim excerpts, maps names → char_ids.
       Retired `caption_for`/`SceneCaption` per ADR-013. Hands `scenes[].prompt` to `prompt-optimizer`.)*
-- [ ] `character-bible`   *(code: `pipeline/char_bible.py` — stub; owns ADR-028's reference-acceptance loop —
-      draw → judge vs `CharacterDescription` → re-roll, 3-draw cap, best-of by `attributes_present`)*
+- [ ] `character-bible`   *(spec **written 2026-07-30**, status `draft` — `docs/specs/character-bible.md`;
+      code: `pipeline/char_bible.py` — still a stub. Owns ADR-028's reference-acceptance loop —
+      draw → judge vs `CharacterDescription` → re-roll, 3-draw cap, best-of by `attributes_present`.
+      Caps references at **2** per ADR-004, not 3 — see the `story-analyzer` §5 correction. Opened **D-I**.)*
 - [ ] `style-presets`   *(ADR-022; 3 presets)*
 - [ ] `prompt-optimizer`
 - [ ] `image-generator`   *(code: `pipeline/generate_scene.py` — partial, still text-to-image)*
@@ -148,8 +168,13 @@ revised 2026-07-25.)*
 >
 > ✅ **`scene-segmentation` is built (2026-07-29).** See `docs/specs/scene-segmentation.md`.
 
-**Write and build `character-bible`** — no spec exists yet (`docs/specs/`), so this is a brainstorm-then-plan session. It owns ADR-028’s reference-acceptance loop (draw → judge vs `CharacterDescription` → re-roll, 3-draw cap, best-of by `attributes_present`) and the `canonical_ref_image` field. `pipeline/char_bible.py` is a pass-through stub.
+**Build `character-bible`** — spec **written 2026-07-30** (`docs/specs/character-bible.md`, status `draft`).
+It owns ADR-028’s reference-acceptance loop (draw → judge vs `CharacterDescription` → re-roll, 3-draw cap,
+best-of by `attributes_present`) and the `canonical_ref_image` field. `pipeline/char_bible.py` is still a
+pass-through stub. Next step is the implementation plan, then the build.
 
-**No open decision blocks Phase 1.** Tiers 1, 2, 2b, and 3 are all resolved.
+**No open decision blocks Phase 1.** Tiers 1, 2, 2b, and 3 are all resolved. **D-I (Tier 2c) is open but
+does not block** — `character-bible` builds and ships without the reveal step; the gap is between the PRD
+and the frozen graph, and it comes due when `kid-flow-ui` is designed.
 
 After `character-bible`, in roadmap order: `style-presets`, `prompt-optimizer`, `image-generator`, `consistency-checker`, `regeneration-controller`.

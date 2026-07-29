@@ -157,8 +157,11 @@ later.
   `raw_text` into `redacted_text`, and Presidio is not a dependency anywhere in `backend/`. This
   node is correct *by construction*; the redaction it depends on lands with `moderation-stack`
   (Phase 2). Do not read the tick as "PII is redacted today".
-- [x] **CC-3 Cost control** — the 3-character cap **is** the pre-scene cost ceiling: at most 9
-  reference draws (3 characters × ADR-028's 3-draw cap) before a single scene is generated. This
+- [x] **CC-3 Cost control** — the 3-character cap is the roster ceiling, but **not** the pre-scene
+  image ceiling. ~~at most 9 reference draws (3 characters × ADR-028's 3-draw cap)~~ — corrected
+  2026-07-30 by `character-bible` §8: ADR-004 caps canonical references at **2** per book, so the real
+  pre-scene ceiling is **6 draws** (2 references × ADR-028's 3-draw cap). The character cap and the
+  reference cap are different numbers; a third character simply gets no reference. This
   node writes no `cost` fields; its own text-token spend is untracked in `cost.usd_estimate`
   (noise against image cost — ADR-001).
 - [x] **CC-5 Observability** — the helper logs extracted counts and the minted ids, so a wrong
