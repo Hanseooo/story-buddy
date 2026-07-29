@@ -110,20 +110,6 @@ def test_story_analysis_accepts_the_four_collections():
     assert analysis.timeline[0].summary == "They go to the beach."
 
 
-def test_analyze_is_a_pass_through_stub():
-    """`analyze`'s real content is the story-analyzer spec, deliberately not started
-    (DECISION_BACKLOG). It owns `caption_for` (D-F) but writes no state — `segment` owns
-    scenes[].caption per MASTER_SPEC §2's node-I/O table."""
-    state = StoryMemory(
-        schema_version=CURRENT_SCHEMA_VERSION,
-        story_id="t1",
-        classroom_id="dev-classroom",
-        profile_id="dev-profile",
-        input=Input(raw_text="A dog runs in a field.", redacted_text="A dog runs in a field."),
-    )
-    assert analyze(state) == {}
-
-
 def _analysis(**overrides) -> StoryAnalysis:
     """A minimal valid StoryAnalysis; override any collection per test."""
     return StoryAnalysis.model_validate(
@@ -192,3 +178,118 @@ def test_extract_entities_logs_the_extracted_counts(caplog):
             extract_entities("I went to the beach.")
 
     assert "1 characters" in caplog.text
+
+
+def _state(raw_text="A dog runs in a field.", redacted_text="A dog runs in a field.") -> StoryMemory:
+    return StoryMemory(
+        schema_version=CURRENT_SCHEMA_VERSION,
+        story_id="t1",
+        classroom_id="dev-classroom",
+        profile_id="dev-profile",
+        input=Input(raw_text=raw_text, redacted_text=redacted_text),
+    )
+
+
+def _character(name: str, species: str = "girl") -> dict:
+    return {"name": name, "description": {"species": species}}
+
+
+def test_analyze_mints_ids_by_list_position():
+    analysis = _analysis(
+        characters=[_character("the narrator"), _character("the younger sister")],
+        locations=[{"name": "the beach"}, {"name": "the car"}],
+        objects=[{"name": "a red bucket"}],
+    )
+    with patch("pipeline.analyze.extract_entities", return_value=analysis):
+        result = analyze(_state())
+
+    assert [c.char_id for c in result["characters"]] == ["c0", "c1"]
+    assert [loc.loc_id for loc in result["locations"]] == ["loc0", "loc1"]
+    assert [o.obj_id for o in result["objects"]] == ["obj0"]
+
+
+def test_analyze_caps_characters_at_three_keeping_the_first_three():
+    """Invariant 1. Prominence survives the cut — index 0 is the protagonist. The prompt also
+    asks for <=3, so this is belt-and-braces; the node is the control (spec §4)."""
+    names = ["first", "second", "third", "fourth", "fifth"]
+    analysis = _analysis(characters=[_character(n) for n in names])
+    with patch("pipeline.analyze.extract_entities", return_value=analysis):
+        result = analyze(_state())
+
+    assert [c.name for c in result["characters"]] == ["first", "second", "third"]
+    assert [c.char_id for c in result["characters"]] == ["c0", "c1", "c2"]
+
+
+@pytest.mark.parametrize("model_orders", [[1, 2, 5], [0, 0, 0], [3, 1, 2]])
+def test_analyze_reindexes_timeline_order_from_list_position(model_orders):
+    """Invariant 4. Gapped or duplicated `order` values validate fine against Pydantic and
+    would silently corrupt the only ordering `segment` receives."""
+    analysis = _analysis(
+        timeline=[{"order": o, "summary": f"event {i}"} for i, o in enumerate(model_orders)]
+    )
+    with patch("pipeline.analyze.extract_entities", return_value=analysis):
+        result = analyze(_state())
+
+    assert [e.order for e in result["timeline"]] == [0, 1, 2]
+    assert [e.summary for e in result["timeline"]] == ["event 0", "event 1", "event 2"]
+
+
+def test_analyze_accepts_an_empty_roster_without_raising():
+    """CC-9: an empty roster is valid, not a failure. `char_bible` mints no references and
+    scenes generate unreferenced — a book with drifting art beats no book (ADR-010)."""
+    analysis = _analysis(characters=[], timeline=[])
+    with patch("pipeline.analyze.extract_entities", return_value=analysis):
+        result = analyze(_state())
+
+    assert result["characters"] == []
+    assert result["timeline"] == []
+    assert [loc.loc_id for loc in result["locations"]] == ["loc0"]
+
+
+def test_analyze_prefers_redacted_text():
+    """CC-2: `redacted_text` is what downstream nodes consume."""
+    with patch("pipeline.analyze.extract_entities", return_value=_analysis()) as mock_extract:
+        analyze(_state(raw_text="raw version", redacted_text="redacted version"))
+
+    assert mock_extract.call_args.args[0] == "redacted version"
+
+
+def test_analyze_falls_back_to_raw_text():
+    """The same fallback `segment` already uses — `input_gate` is a pass-through stub today."""
+    with patch("pipeline.analyze.extract_entities", return_value=_analysis()) as mock_extract:
+        analyze(_state(raw_text="raw version", redacted_text=None))
+
+    assert mock_extract.call_args.args[0] == "raw version"
+
+
+def test_analyze_partial_returns_exactly_four_keys_and_does_not_mutate_state():
+    """ADR-024: nodes partial-return; they never mutate `state`."""
+    state = _state()
+    before = state.model_dump()
+    with patch("pipeline.analyze.extract_entities", return_value=_analysis()):
+        result = analyze(state)
+
+    assert set(result) == {"characters", "locations", "objects", "timeline"}
+    assert state.model_dump() == before
+
+
+def test_analyze_persists_the_contract_type_not_the_strict_subclass():
+    """What is persisted is exactly `CharacterDescription`, never `ExtractedDescription` —
+    the strictness is a boundary concern and must not leak into the checkpoint."""
+    with patch("pipeline.analyze.extract_entities", return_value=_analysis()):
+        result = analyze(_state())
+
+    description = result["characters"][0].description
+    assert type(description) is CharacterDescription
+    assert description.species == "girl"
+
+
+def test_analyze_logs_the_minted_ids(caplog):
+    """CC-5: a wrong reference downstream traces back to a specific roster entry."""
+    analysis = _analysis(characters=[_character("the narrator"), _character("the cat", "cat")])
+    with caplog.at_level(logging.INFO, logger="pipeline.analyze"):
+        with patch("pipeline.analyze.extract_entities", return_value=analysis):
+            analyze(_state())
+
+    assert "c0" in caplog.text
+    assert "c1" in caplog.text

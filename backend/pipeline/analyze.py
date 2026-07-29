@@ -2,7 +2,7 @@ import logging
 
 from pydantic import BaseModel
 
-from contracts.story_memory import CharacterDescription, StoryMemory, TimelineEvent
+from contracts.story_memory import Character, CharacterDescription, Location, StoryMemory, StoryObject, TimelineEvent
 from providers import structured_text
 
 
@@ -108,7 +108,52 @@ def extract_entities(text: str) -> StoryAnalysis:
 
 
 def analyze(state: StoryMemory) -> dict:
-    # ponytail: stub — the `story-analyzer` spec fills this in (characters, locations, objects,
-    # timeline) and mints c/loc/obj ids per §2.1. Deliberately not started: DECISION_BACKLOG.
-    # `caption_for` lives here per D-F (transient wrapper beside its node); `segment` calls it.
-    return {}
+    """One extraction call, one roster. Every downstream node works from `characters[]`
+    instead of re-reading the child's prose (spec `docs/specs/story-analyzer.md`).
+
+    This body does no I/O — it truncates, mints, re-indexes, and partial-returns (ADR-024).
+    `caption_for` above lives here per D-F but belongs to `segment`; it is not called here.
+    """
+    analysis = extract_entities(state.input.redacted_text or state.input.raw_text)
+
+    # The 3-character cap IS the pre-scene cost ceiling (CC-3): at most 9 reference draws
+    # (3 characters x ADR-028's 3-draw cap) before a single scene is generated. The prompt
+    # asks for <=3 too, but a prompt is not enforceable — this slice is the control.
+    characters = [
+        Character(
+            char_id=f"c{i}",
+            name=extracted.name,
+            # the strict subclass is a boundary concern; what is persisted is the contract type
+            description=CharacterDescription(**extracted.description.model_dump()),
+        )
+        for i, extracted in enumerate(analysis.characters[:3])
+    ]
+    # locations/objects are deliberately uncapped — neither costs an image, so neither is a
+    # CC-3 lever. Cap them only if a measured checkpoint problem appears (spec §4).
+    locations = [
+        Location(loc_id=f"loc{i}", name=extracted.name, description=extracted.description)
+        for i, extracted in enumerate(analysis.locations)
+    ]
+    objects = [
+        StoryObject(obj_id=f"obj{i}", name=extracted.name, description=extracted.description)
+        for i, extracted in enumerate(analysis.objects)
+    ]
+    # `order` is re-assigned from list position, never trusted from the model: a returned
+    # `1, 2, 5` or a duplicate validates fine against Pydantic and would silently corrupt the
+    # only ordering `segment` receives.
+    timeline = [
+        TimelineEvent(order=i, summary=event.summary) for i, event in enumerate(analysis.timeline)
+    ]
+
+    log.info(
+        "analyze: minted %s",
+        [c.char_id for c in characters]
+        + [loc.loc_id for loc in locations]
+        + [o.obj_id for o in objects],
+    )
+    return {
+        "characters": characters,
+        "locations": locations,
+        "objects": objects,
+        "timeline": timeline,
+    }

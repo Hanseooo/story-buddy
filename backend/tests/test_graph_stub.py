@@ -6,6 +6,7 @@ identical state. `stream_mode="updates"` yields exactly one chunk per node execu
 node name, in order, INCLUDING nodes that return {}. That is the replacement for `stage`.
 """
 from contracts.story_memory import CURRENT_SCHEMA_VERSION, Input, StoryMemory
+from pipeline.analyze import StoryAnalysis
 from pipeline.graph import build_graph
 
 EXPECTED_ORDER = [
@@ -29,8 +30,19 @@ def _initial_state(story_id: str) -> StoryMemory:
     )
 
 
+STUB_ANALYSIS = StoryAnalysis.model_validate(
+    {
+        "characters": [{"name": "the orange dog", "description": {"species": "dog"}}],
+        "locations": [{"name": "a field"}],
+        "objects": [],
+        "timeline": [{"order": 0, "summary": "A dog runs."}],
+    }
+)
+
+
 def _mock_call_points(monkeypatch):
-    monkeypatch.setattr("pipeline.analyze.caption_for", lambda text: "stub caption")
+    # One patch point per node (MASTER_SPEC §6 rule 1): `extract_entities` is analyze's seam.
+    monkeypatch.setattr("pipeline.analyze.extract_entities", lambda text: STUB_ANALYSIS)
     monkeypatch.setattr("pipeline.segment.caption_for", lambda text: "stub caption")
     monkeypatch.setattr(
         "pipeline.generate_scene.generate_and_store",
