@@ -92,7 +92,9 @@ roadmap order. Source: MASTER_SPEC §7.
       against ADR-028's 3-draw cap. Requires `species` at the LLM boundary so ADR-028's re-roll can't collapse
       on an empty description; `contracts/` untouched. Hands `Scene.characters_present` to `scene-segmentation`
       and description *richness* to `character-bible`)*
-- [ ] `scene-segmentation`   *(code: `pipeline/segment.py` — stub)*
+- [x] `scene-segmentation`   *(spec **built 2026-07-29** — `docs/specs/scene-segmentation.md`;
+      `pipeline/segment.py` splits into scenes (≤15), enforces verbatim excerpts, maps names → char_ids.
+      Retired `caption_for`/`SceneCaption` per ADR-013. Hands `scenes[].prompt` to `prompt-optimizer`.)*
 - [ ] `character-bible`   *(code: `pipeline/char_bible.py` — stub; owns ADR-028's reference-acceptance loop —
       draw → judge vs `CharacterDescription` → re-roll, 3-draw cap, best-of by `attributes_present`)*
 - [ ] `style-presets`   *(ADR-022; 3 presets)*
@@ -138,24 +140,16 @@ revised 2026-07-25.)*
 
 ## Recommended next session
 
-> **Phase 0.5 is closed (2026-07-29).** Numbers and branches in `docs/product/PHASE_05_RESULTS.md` — not
-> restated here (AGENTS.md → *Definition of Done*, "point, don't copy").
+> **Phase 0.5 is closed (2026-07-29).** See `docs/product/PHASE_05_RESULTS.md`.
 >
-> ✅ **The `job_state.py` migration is done (2026-07-29).** See `docs/specs/story-memory-contract.md`
-> (status `built`).
+> ✅ **`story-memory-contract` is built (2026-07-29).** See `docs/specs/story-memory-contract.md`.
 >
-> ✅ **`story-analyzer` is built (2026-07-29).** `pipeline/analyze.py` mints `characters[]` (capped at 3),
-> `locations[]`, `objects[]`, and a densely re-indexed `timeline[]`. See `docs/specs/story-analyzer.md`
-> (status `built`).
+> ✅ **`story-analyzer` is built (2026-07-29).** See `docs/specs/story-analyzer.md`.
+>
+> ✅ **`scene-segmentation` is built (2026-07-29).** See `docs/specs/scene-segmentation.md`.
 
-**Write and build `scene-segmentation`** — no spec exists yet (`docs/specs/`), so this is a
-brainstorm-then-plan session. It owns `Scene.characters_present`, handed to it by `story-analyzer` §8;
-the join key is `Character.name`. `pipeline/segment.py` mints `s0` only today.
+**Write and build `character-bible`** — no spec exists yet (`docs/specs/`), so this is a brainstorm-then-plan session. It owns ADR-028’s reference-acceptance loop (draw → judge vs `CharacterDescription` → re-roll, 3-draw cap, best-of by `attributes_present`) and the `canonical_ref_image` field. `pipeline/char_bible.py` is a pass-through stub.
 
-**No open decision blocks Phase 1.** Tiers 1, 2, 2b, and 3 are all resolved. `story-analyzer`'s two
-recorded limitations — CC-7 seed reproducibility for text extraction, and unmeasured Filipino/Taglish
-extraction quality — are deliberately **not** rows here. The first needs a `providers.py` seed parameter
-and is its own decision if it is ever taken; the second is a measurement gap to flag before Phase 2
-hardening, not a decision. Both live in `docs/specs/story-analyzer.md` §5/§8.
+**No open decision blocks Phase 1.** Tiers 1, 2, 2b, and 3 are all resolved.
 
-After that, in roadmap order: `character-bible`.
+After `character-bible`, in roadmap order: `style-presets`, `prompt-optimizer`, `image-generator`, `consistency-checker`, `regeneration-controller`.

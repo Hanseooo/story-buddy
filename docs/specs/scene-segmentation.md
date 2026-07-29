@@ -1,6 +1,6 @@
 # Feature Spec — scene-segmentation
 
-**Status:** draft · **Phase:** 1 · **Owner node:** `backend/pipeline/segment.py`
+**Status:** built (2026-07-29, commits 6f53f29..c879680) · **Phase:** 1 · **Owner node:** `backend/pipeline/segment.py`
 **Derived from:** MASTER_SPEC §2 (system map), §3 (frozen contract), §6 (test seam) · **Rationale:** ADR-003, ADR-010, ADR-012, ADR-013, ADR-023 (D-F, D-G), ADR-024, ADR-025, PRD §8/§11.6, methodology §2
 
 > The model chooses *where* the cuts go; the node builds the text. Every `text_excerpt` is sliced

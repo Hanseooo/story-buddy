@@ -1350,7 +1350,7 @@ write to it*.
 - **D-F — where structured-output sub-schemas live.** The dividing line is **embedding, not
   LLM-boundary-ness**: a sub-schema lives in `backend/contracts/` **iff `StoryMemory` embeds it**
   (`VlmVerdict` inside `Attempt`, `CharacterDescription` inside `Character`); a **transient wrapper** the node
-  unpacks into contract fields and never persists as-is (`SceneCaption` → `scenes[].caption`) lives **beside
+  unpacks into contract fields and never persists as-is (`SceneSegmentation` → `scenes[]`) lives **beside
   its node** in `backend/pipeline/`. This is *forced*, not stylistic: `contracts/` must never import from
   `pipeline/`, so any embedded sub-schema **must** be in `contracts/` — "all sub-schemas beside their node" is
   impossible. The CLAUDE.md §6 "crosses a module boundary → through `contracts/`" rule is satisfied because the

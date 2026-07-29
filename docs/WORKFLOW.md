@@ -98,12 +98,11 @@ checklists is exactly the noise you were worried about.
 ## Right now
 
 **Phase 1 is in progress.** Phase 0.5 closed 2026-07-29 — see `docs/product/PHASE_05_RESULTS.md`.
-`story-memory-contract` is **built** (2026-07-29): `StoryMemory` Pydantic contract exists, `job_state.py`
-deleted, seven nodes on partial-return, `input_gate` is the graph entry point.
+`story-memory-contract` is **built** (2026-07-29).
+`story-analyzer` is **built** (2026-07-29): `backend/pipeline/analyze.py`.
+`scene-segmentation` is **built** (2026-07-29): `backend/pipeline/segment.py` splits into ≤15 scenes,
+enforces verbatim excerpts, maps roster names → char_ids, enforces `caption = text_excerpt` (ADR-013).
 
-`story-analyzer` is **built** (2026-07-29): `backend/pipeline/analyze.py` mints `characters[]` (capped at 3),
-`locations[]`, `objects[]`, and a densely re-indexed `timeline[]`. See `docs/specs/story-analyzer.md`.
-
-**Next action: `scene-segmentation` spec** — write `docs/specs/scene-segmentation.md` from
-`docs/specs/TEMPLATE.md` before writing any code (CLAUDE.md §2). It owns `Scene.characters_present`,
-handed to it by `story-analyzer` §8. `backend/pipeline/segment.py` mints `s0` only today.
+**Next action: `character-bible` spec** — write `docs/specs/character-bible.md` from
+`docs/specs/TEMPLATE.md` before writing any code (AGENTS.md §2). It owns ADR-028’s 3-draw
+reference-acceptance loop. `backend/pipeline/char_bible.py` is a pass-through stub.

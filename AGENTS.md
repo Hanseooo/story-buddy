@@ -103,8 +103,8 @@ It is Pydantic and it is authoritative.
 
 > **State of play (Phase 1 in progress):** `StoryMemory` is **built** (`backend/contracts/story_memory.py`,
 > 2026-07-29). `job_state.py` is **deleted**. All seven nodes are on partial-return `(state: StoryMemory) -> dict`;
-> `input_gate` is the graph entry point. Remaining Phase-1 nodes are pass-through stubs — fill them in per
-> spec before implementing. See `docs/specs/story-memory-contract.md` for the contract and ADR-023/024 for conventions.
+> `input_gate` is the graph entry point. `analyze` and `segment` are built; remaining nodes are pass-through stubs —
+> fill them in per spec before implementing. See `docs/specs/story-memory-contract.md` for the contract and ADR-023/024 for conventions.
 
 - Validate against it at **every LLM boundary** (strict `json_schema` structured output →
   Pydantic, always).
@@ -192,7 +192,7 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
   **Built today** (`backend/pipeline/graph.py`): `input_gate → analyze → segment → char_bible →
   generate_scene → consistency_check → compose` — linear, **zero conditional edges**. `input_gate`,
   `char_bible`, `consistency_check`, and `compose` are pass-through stubs; `analyze` mints the entity
-  roster; `segment` mints `s0` and writes `scenes[].caption`; `generate_scene` has real behavior. Fill the
+  roster; `segment` splits into scenes (≤15), maps names → char_ids, and sets `caption = text_excerpt` (ADR-013); `generate_scene` has real behavior. Fill the
   stubs in per ADR-024's partial-return conventions; don't invent a different graph shape.
 - Critical paths (extra review): moderation ordering (input text → char-ref → output image), PII
   redaction (Presidio) before any storage/caption/export, RLS + signed URLs on every table/asset,
@@ -352,5 +352,7 @@ is not documentation of a good design; it is the blast radius, written down so t
   `job_state.py` deleted, seven nodes on partial-return, `input_gate` is the graph entry point.
   **`story-analyzer` is built (2026-07-29):** `pipeline/analyze.py` mints `characters[]` (≤3),
   `locations[]`, `objects[]`, `timeline[]`.
-  Remaining Phase-1 specs: `scene-segmentation`, `character-bible`, `consistency-check`,
+  **`scene-segmentation` is built (2026-07-29):** `pipeline/segment.py` splits into ≤15 scenes,
+  enforces verbatim excerpts, maps roster names → char_ids, sets `caption = text_excerpt` (ADR-013).
+  Remaining Phase-1 specs: `character-bible`, `consistency-check`,
   `regeneration-controller`, `compose`.
