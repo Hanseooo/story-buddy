@@ -90,9 +90,29 @@ def text_to_image(prompt: str, seed: int | None = None) -> bytes:
     return _run_fal(settings.fal_image_model, {"prompt": prompt}, seed)
 
 
+# fal endpoints disagree on what the reference-image field is called, and fal **silently ignores
+# unknown arguments** — a wrong name does not raise, it degrades every reference-conditioned call to
+# plain text-to-image. Caught in the ADR-001 rung-1 pre-flight (2026-07-29): OmniGen2 names it
+# `input_image_urls`, and sending Qwen's `image_urls` returned a confident, well-formed image of an
+# entirely different character with the reference ignored. Escalating the fallback ladder is
+# therefore NOT a pure env change, as ADR-001 assumed — it needs a row here. Verify against
+# https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=<endpoint> before adding one.
+REFERENCE_FIELD = {
+    "fal-ai/qwen-image-edit-2511": "image_urls",
+    "fal-ai/omnigen-v2": "input_image_urls",
+}
+
+
 def edit_image(prompt: str, image_urls: list[str], seed: int | None = None) -> bytes:
     """Reference-conditioned image. The mechanism character consistency rests on (ADR-007)."""
-    return _run_fal(settings.fal_image_edit_model, {"prompt": prompt, "image_urls": image_urls}, seed)
+    endpoint = settings.fal_image_edit_model
+    if endpoint not in REFERENCE_FIELD:
+        raise ValueError(
+            f"{endpoint}: reference-image field name unknown. Add it to REFERENCE_FIELD after "
+            "checking fal's openapi. Failing loudly is deliberate — an unrecognised key is dropped "
+            "silently, so the alternative is every scene quietly ignoring its character reference."
+        )
+    return _run_fal(endpoint, {"prompt": prompt, REFERENCE_FIELD[endpoint]: image_urls}, seed)
 
 
 def upload_reference(image_bytes: bytes) -> str:

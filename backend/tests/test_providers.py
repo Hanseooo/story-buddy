@@ -109,12 +109,16 @@ def test_judge_omits_openrouter_flag_when_self_hosted():
 
 
 def test_edit_image_passes_references_and_seed_and_returns_bytes():
+    """The endpoint is pinned, not read from the ambient default: this asserts Qwen's `image_urls`
+    mapping, and without the pin a `FAL_IMAGE_EDIT_MODEL` line in a developer's `.env` fails it
+    (2026-07-29, Phase-0.5 Run 3). Unit tests must not depend on local env."""
     fal = MagicMock()
     fal.subscribe.return_value = {"images": [{"url": "https://fal.example/x.png"}], "seed": 7}
     response = MagicMock(content=b"png-bytes")
 
     with patch("providers._fal", return_value=fal), \
-         patch("providers.httpx.get", return_value=response) as mock_get:
+         patch("providers.httpx.get", return_value=response) as mock_get, \
+         patch.object(providers.settings, "fal_image_edit_model", "fal-ai/qwen-image-edit-2511"):
         image_bytes = providers.edit_image("a fox", ["https://ref/1.png"], seed=7)
 
     assert image_bytes == b"png-bytes"
@@ -127,6 +131,29 @@ def test_edit_image_passes_references_and_seed_and_returns_bytes():
         "seed": 7,
     }
     mock_get.assert_called_once()
+
+
+def test_edit_image_renames_reference_field_per_endpoint():
+    """OmniGen2 calls it `input_image_urls`. fal drops unknown keys silently, so sending Qwen's
+    name here would degrade every scene to text-to-image with no error (pre-flight 2026-07-29)."""
+    fal = MagicMock()
+    fal.subscribe.return_value = {"images": [{"url": "https://fal.example/x.png"}], "seed": 1}
+
+    with patch("providers._fal", return_value=fal), \
+         patch("providers.httpx.get", return_value=MagicMock(content=b"png")), \
+         patch.object(providers.settings, "fal_image_edit_model", "fal-ai/omnigen-v2"):
+        providers.edit_image("a fox", ["https://ref/1.png"])
+
+    arguments = fal.subscribe.call_args.kwargs["arguments"]
+    assert arguments["input_image_urls"] == ["https://ref/1.png"]
+    assert "image_urls" not in arguments
+
+
+def test_edit_image_refuses_endpoint_with_unverified_reference_field():
+    """A new fallback rung must fail loudly, not silently ignore the reference (ADR-001)."""
+    with patch.object(providers.settings, "fal_image_edit_model", "fal-ai/some-new-rung"), \
+         pytest.raises(ValueError, match="reference-image field name unknown"):
+        providers.edit_image("a fox", ["https://ref/1.png"])
 
 
 def test_text_to_image_omits_seed_when_not_given():
