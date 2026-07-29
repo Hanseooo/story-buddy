@@ -133,7 +133,7 @@ def upsert_scenes(current: list["Scene"], update: list["Scene"]) -> list["Scene"
     by_id = {s.scene_id: s for s in current}
     for s in update:
         by_id[s.scene_id] = s      # replace-by-id; the node already built the full scene
-    return list(by_id.values())
+    return list(by_id.values())  # insertion order preserved — Python 3.7+ dict guarantee
 
 
 # --- Accessory blocks ---
