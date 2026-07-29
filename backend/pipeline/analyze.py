@@ -1,5 +1,11 @@
-from contracts.job_state import JobState, SceneCaption
+from pydantic import BaseModel
+
+from contracts.job_state import JobState
 from providers import structured_text
+
+
+class SceneCaption(BaseModel):
+    caption: str
 
 
 def caption_for(text: str) -> str:

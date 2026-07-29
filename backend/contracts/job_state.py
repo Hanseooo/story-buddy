@@ -4,8 +4,6 @@ this file with Phase 1 fields; add them there instead.
 """
 from typing import Optional, TypedDict
 
-from pydantic import BaseModel
-
 
 class JobState(TypedDict):
     job_id: str
@@ -13,7 +11,3 @@ class JobState(TypedDict):
     caption: Optional[str]
     image_path: Optional[str]
     stage: str
-
-
-class SceneCaption(BaseModel):
-    caption: str
