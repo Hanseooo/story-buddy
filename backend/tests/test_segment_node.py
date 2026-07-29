@@ -1,7 +1,37 @@
+from pipeline.segment import split_sentences
+
 from unittest.mock import patch
 
 from contracts.story_memory import CURRENT_SCHEMA_VERSION, Input, StoryMemory
 from pipeline.segment import segment
+
+
+def test_split_sentences_on_period():
+    assert split_sentences("Hello. World.") == ["Hello.", "World."]
+
+def test_split_sentences_on_exclamation():
+    assert split_sentences("Hello! World.") == ["Hello!", "World."]
+
+def test_split_sentences_on_question():
+    assert split_sentences("Hello? World.") == ["Hello?", "World."]
+
+def test_split_sentences_on_ellipsis():
+    assert split_sentences("Hello… World.") == ["Hello…", "World."]
+
+def test_split_sentences_on_newline():
+    assert split_sentences("Hello.\nWorld.") == ["Hello.", "World."]
+
+def test_split_sentences_drops_whitespace_only_units():
+    assert split_sentences("Hello.   World.") == ["Hello.", "World."]
+
+def test_split_sentences_empty_string():
+    assert split_sentences("") == []
+
+def test_split_sentences_whitespace_only():
+    assert split_sentences("   ") == []
+
+def test_split_sentences_single_sentence_no_split():
+    assert split_sentences("A dog runs in a field.") == ["A dog runs in a field."]
 
 
 def _state(raw: str, redacted: str | None) -> StoryMemory:

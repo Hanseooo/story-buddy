@@ -1,5 +1,14 @@
+import re
+
+from pydantic import BaseModel
+
 from contracts.story_memory import Scene, StoryMemory
 from pipeline.analyze import caption_for
+
+
+def split_sentences(text: str) -> list[str]:
+    units = re.split(r'(?<=[.!?…])\s+|\n+', text)
+    return [u.strip() for u in units if u.strip()]
 
 
 def segment(state: StoryMemory) -> dict:
