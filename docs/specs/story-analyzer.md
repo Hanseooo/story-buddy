@@ -1,6 +1,6 @@
 # Feature Spec — story-analyzer
 
-**Status:** approved (2026-07-29) · **Phase:** 1 · **Owner node:** `backend/pipeline/analyze.py`
+**Status:** built (2026-07-29, commits e8906e9–8a5a1ed) · **Phase:** 1 · **Owner node:** `backend/pipeline/analyze.py`
 **Derived from:** MASTER_SPEC §2 (system map), §3 (frozen contract), §6 (test seam) · **Rationale:** ADR-002, ADR-023 (D-F, D-G), ADR-024, ADR-025, ADR-028, PRD §8
 
 > One extraction call, one roster. Every downstream node works from `characters[]` instead of

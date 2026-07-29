@@ -101,5 +101,9 @@ checklists is exactly the noise you were worried about.
 `story-memory-contract` is **built** (2026-07-29): `StoryMemory` Pydantic contract exists, `job_state.py`
 deleted, seven nodes on partial-return, `input_gate` is the graph entry point.
 
-**Next action: `story-analyzer` spec** — write `docs/specs/story-analyzer.md` from `docs/specs/TEMPLATE.md`
-before writing any code (CLAUDE.md §2). The node is already a pass-through stub in `backend/pipeline/analyze.py`.
+`story-analyzer` is **built** (2026-07-29): `backend/pipeline/analyze.py` mints `characters[]` (capped at 3),
+`locations[]`, `objects[]`, and a densely re-indexed `timeline[]`. See `docs/specs/story-analyzer.md`.
+
+**Next action: `scene-segmentation` spec** — write `docs/specs/scene-segmentation.md` from
+`docs/specs/TEMPLATE.md` before writing any code (CLAUDE.md §2). It owns `Scene.characters_present`,
+handed to it by `story-analyzer` §8. `backend/pipeline/segment.py` mints `s0` only today.

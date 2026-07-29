@@ -312,7 +312,9 @@ N/A — the contract produces no generated content.
 - **Field-level details deliberately left minimal, refined later by the normal schema-change process**
   (`CLAUDE.md §2`); all are **additive** (`Optional`), so none bump `schema_version`:
   - `CharacterDescription` — refined by the `character-bible` spec (Phase 1).
-  - `Location` / `StoryObject` / `TimelineEvent` — refined by the `story-analyzer` spec (Phase 1).
+  - ~~`Location` / `StoryObject` / `TimelineEvent` — refined by the `story-analyzer` spec (Phase 1).~~
+    → **Resolved 2026-07-29: no refinement.** `docs/specs/story-analyzer.md` decided the minimal shapes
+    are sufficient for every Phase-1 consumer. No contract change, no `schema_version` bump.
   - `ModerationResult` and the `*_moderation_status` string fields — refined by the `moderation-stack` spec
     (Phase 2).
 

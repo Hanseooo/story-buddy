@@ -87,8 +87,8 @@ roadmap order. Source: MASTER_SPEC §7.
 - [x] `story-memory-contract`  spec **`approved`, shape frozen 2026-07-22** (ADR-023/024 + D-F/D-G amendment);
       **§9 construction gate resolved 2026-07-22b** (ADR-023 amendment — worker supplies `story_id=job_id` +
       Phase-1 dev sentinels). Next: the `job_state.py` migration (build).
-- [ ] `story-analyzer`   *(spec **approved 2026-07-29** — `docs/specs/story-analyzer.md`; code:
-      `pipeline/analyze.py` still the pass-through stub. Caps characters at 3 — the pre-scene cost ceiling
+- [x] `story-analyzer`   *(spec **built 2026-07-29** — `docs/specs/story-analyzer.md`;
+      `pipeline/analyze.py` mints the roster. Caps characters at 3 — the pre-scene cost ceiling
       against ADR-028's 3-draw cap. Requires `species` at the LLM boundary so ADR-028's re-roll can't collapse
       on an empty description; `contracts/` untouched. Hands `Scene.characters_present` to `scene-segmentation`
       and description *richness* to `character-bible`)*
@@ -138,25 +138,24 @@ revised 2026-07-25.)*
 
 ## Recommended next session
 
-> **Phase 0.5 is closed (2026-07-29).** Probe 1 resolved over three runs and Probe 3 passed both arms;
-> nothing in Phase 0.5 blocks Phase 1. Numbers and branches in `docs/product/PHASE_05_RESULTS.md` — not
+> **Phase 0.5 is closed (2026-07-29).** Numbers and branches in `docs/product/PHASE_05_RESULTS.md` — not
 > restated here (AGENTS.md → *Definition of Done*, "point, don't copy").
 >
-> ✅ **D-H, which Phase 0.5 opened, is closed too — ADR-028 (2026-07-29).**
+> ✅ **The `job_state.py` migration is done (2026-07-29).** See `docs/specs/story-memory-contract.md`
+> (status `built`).
 >
-> ✅ **The `job_state.py` migration is done (2026-07-29, commits b4fb044–8777217).** `StoryMemory` is built,
-> `job_state.py` is deleted, seven nodes are on partial-return, `input_gate` is the graph entry point. See
-> `docs/specs/story-memory-contract.md` (status `built`).
+> ✅ **`story-analyzer` is built (2026-07-29).** `pipeline/analyze.py` mints `characters[]` (capped at 3),
+> `locations[]`, `objects[]`, and a densely re-indexed `timeline[]`. See `docs/specs/story-analyzer.md`
+> (status `built`).
 
-**Build `story-analyzer`** — its spec is written (`docs/specs/story-analyzer.md`, draft 2026-07-29), so this is
-a plan-and-build session, **not** a decision session. Nothing in it is an open architectural question: it adds
-no contract field, bumps no `schema_version`, and adds no conditional edge. Its §9 *Definition of done* is the
-checklist, including the finding-change grep across `WORKFLOW.md`, `AGENTS.md`, this file, and
-`story-memory-contract` §8.
+**Write and build `scene-segmentation`** — no spec exists yet (`docs/specs/`), so this is a
+brainstorm-then-plan session. It owns `Scene.characters_present`, handed to it by `story-analyzer` §8;
+the join key is `Character.name`. `pipeline/segment.py` mints `s0` only today.
 
-**No open decision blocks Phase 1.** Tiers 1, 2, 2b, and 3 are all resolved. The two gaps `story-analyzer`
-records are deliberately *not* backlog rows — each is owned by a spec that has yet to be written
-(`Scene.characters_present` → `scene-segmentation`; empty `CharacterDescription` → `character-bible`), and
-neither needs an ADR. Do not open a row for them here.
+**No open decision blocks Phase 1.** Tiers 1, 2, 2b, and 3 are all resolved. `story-analyzer`'s two
+recorded limitations — CC-7 seed reproducibility for text extraction, and unmeasured Filipino/Taglish
+extraction quality — are deliberately **not** rows here. The first needs a `providers.py` seed parameter
+and is its own decision if it is ever taken; the second is a measurement gap to flag before Phase 2
+hardening, not a decision. Both live in `docs/specs/story-analyzer.md` §5/§8.
 
-After that, in roadmap order: `scene-segmentation`, then `character-bible`.
+After that, in roadmap order: `character-bible`.
