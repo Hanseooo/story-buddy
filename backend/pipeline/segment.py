@@ -66,18 +66,20 @@ def repair(scenes: list[ExtractedScene], n: int) -> list[ExtractedScene]:
     if n == 0:
         return []
 
-    # Step 1: Clamp into [0, n-1]; drop ranges where start > end after clamping
+    # Clamp into [0, n-1]; drop ranges where start > end after clamping
     clamped = []
     for s in scenes:
         start = max(0, min(s.start, n - 1))
         end = max(0, min(s.end, n - 1))
         if start <= end:
             clamped.append(ExtractedScene(start=start, end=end, characters_present=s.characters_present))
+    if len(clamped) != len(scenes):
+        log.info("segment/repair: clamp dropped %d of %d ranges", len(scenes) - len(clamped), len(scenes))
 
-    # Step 2: Sort by start
+    # Sort by start
     clamped.sort(key=lambda s: s.start)
 
-    # Step 3: De-overlap — earlier scene wins
+    # De-overlap — earlier scene wins
     deoverlapped: list[ExtractedScene] = []
     prev_end = -1
     for s in clamped:
@@ -85,25 +87,36 @@ def repair(scenes: list[ExtractedScene], n: int) -> list[ExtractedScene]:
         if new_start <= s.end:
             deoverlapped.append(ExtractedScene(start=new_start, end=s.end, characters_present=s.characters_present))
             prev_end = s.end
+    if len(deoverlapped) != len(clamped):
+        log.info("segment/repair: de-overlap dropped %d ranges", len(clamped) - len(deoverlapped))
 
-    # Step 5 (floor): if nothing survived steps 1-3, one whole-story range
+    # Floor: if nothing survived clamp + de-overlap, emit one whole-story range
     if not deoverlapped:
+        log.info("segment/repair: floor fired — emitting whole-story range")
         return [ExtractedScene(start=0, end=n - 1, characters_present=[])]
 
-    # Step 4: Close gaps
+    # Close gaps (leading, interior, trailing)
+    gaps_closed = 0
     first = deoverlapped[0]
     if first.start > 0:
         deoverlapped[0] = ExtractedScene(start=0, end=first.end, characters_present=first.characters_present)
+        gaps_closed += 1
     for i in range(len(deoverlapped) - 1):
         curr = deoverlapped[i]
         nxt = deoverlapped[i + 1]
         if curr.end + 1 < nxt.start:
             deoverlapped[i] = ExtractedScene(start=curr.start, end=nxt.start - 1, characters_present=curr.characters_present)
+            gaps_closed += 1
     last = deoverlapped[-1]
     if last.end < n - 1:
         deoverlapped[-1] = ExtractedScene(start=last.start, end=n - 1, characters_present=last.characters_present)
+        gaps_closed += 1
+    if gaps_closed:
+        log.info("segment/repair: gap-fill closed %d gap(s)", gaps_closed)
 
-    # Step 6: Merge to ≤15 — smallest combined unit count, ties → earliest
+    # Merge to ≤15 — smallest combined unit count, ties → earliest
+    if len(deoverlapped) > 15:
+        log.info("segment/repair: merging %d scenes → 15", len(deoverlapped))
     while len(deoverlapped) > 15:
         best_idx = 0
         best_size = (deoverlapped[0].end - deoverlapped[0].start + 1) + (deoverlapped[1].end - deoverlapped[1].start + 1)
