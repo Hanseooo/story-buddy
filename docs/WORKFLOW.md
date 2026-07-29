@@ -97,12 +97,9 @@ checklists is exactly the noise you were worried about.
 
 ## Right now
 
-**Phase 0.5 is done blocking (2026-07-29).** Probe 1 resolved (absolute PASS 80%, separation FAIL +25 —
-Qwen stays primary under the ADR-001 amendment) and probe 3 passed both arms. Probes 2 and 4 are
-outstanding and neither gates Phase 1: probe 2 needs fal credit, probe 4 waits on the Phase-2
-`moderation-stack` spec.
+**Phase 1 is in progress.** Phase 0.5 closed 2026-07-29 — see `docs/product/PHASE_05_RESULTS.md`.
+`story-memory-contract` is **built** (2026-07-29): `StoryMemory` Pydantic contract exists, `job_state.py`
+deleted, seven nodes on partial-return, `input_gate` is the graph entry point.
 
-**Next action: start Phase 1 with `story-memory-contract`** — the spec is already written and approved
-(`docs/specs/story-memory-contract.md`, 2026-07-22), so brainstorming is *not* the entry point here;
-`writing-plans` is. The work is porting `backend/contracts/job_state.py` (a provisional `TypedDict`) to
-the real Pydantic contract and deleting it, per spec §9.
+**Next action: `story-analyzer` spec** — write `docs/specs/story-analyzer.md` from `docs/specs/TEMPLATE.md`
+before writing any code (CLAUDE.md §2). The node is already a pass-through stub in `backend/pipeline/analyze.py`.

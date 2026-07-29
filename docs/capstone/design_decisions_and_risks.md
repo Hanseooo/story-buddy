@@ -251,3 +251,7 @@ Phase 0.5 is a build gate for pipeline substrate validity. Order of operations:
 
 **Bottom line for the proposal defense:** present R2–R6 from this document as *known, planned* risks (R1 is
 moot post-pivot). Solve none of them yet. The plan is the deliverable.
+
+> **Phase 1 update (2026-07-29):** Phase 0.5 closed per `PHASE_05_RESULTS.md`. Phase 1 is in progress:
+> `story-memory-contract` is built — `StoryMemory` Pydantic contract, seven nodes on partial-return,
+> `input_gate` entry point, `job_state.py` deleted. Next: `story-analyzer` spec.

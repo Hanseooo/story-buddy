@@ -1,0 +1,135 @@
+"""Deterministic contract tests (spec §6). Pure schema — no model calls, no graph."""
+import pytest
+from pydantic import ValidationError
+
+from contracts.story_memory import (
+    CURRENT_SCHEMA_VERSION,
+    Attempt,
+    Character,
+    Input,
+    RefVerdict,
+    Scene,
+    StoryMemory,
+    VlmVerdict,
+    upsert_scenes,
+)
+
+
+def _minimal() -> StoryMemory:
+    return StoryMemory(
+        schema_version=CURRENT_SCHEMA_VERSION,
+        story_id="job-1",
+        classroom_id="dev-classroom",
+        profile_id="dev-profile",
+        input=Input(raw_text="A dog runs in a field."),
+    )
+
+
+def _populated() -> StoryMemory:
+    sm = _minimal()
+    sm.characters.append(
+        Character(
+            char_id="c0",
+            name="Rex",
+            canonical_ref_image="job-1/ref-c0.png",
+            ref_verdict=RefVerdict(differences_observed="none", matches_description=True),
+        )
+    )
+    sm.scenes.append(
+        Scene(
+            scene_id="s0",
+            text_excerpt="A dog runs in a field.",
+            caption="A happy dog runs.",
+            characters_present=["c0"],
+            attempts=[
+                Attempt(
+                    image_ref="job-1/scene-1.png",
+                    prompt="A happy dog runs.",
+                    vlm_verdict=VlmVerdict(differences_observed="none", same_character=True),
+                    failure_reasons=["wrong_colour"],
+                    passed=True,
+                )
+            ],
+            final_image_ref="job-1/scene-1.png",
+        )
+    )
+    return sm
+
+
+def test_populated_story_memory_round_trips():
+    sm = _populated()
+    assert StoryMemory(**sm.model_dump()) == sm
+
+
+def test_minimal_story_memory_validates():
+    """Proves the mostly-optional container (ADR-023, Consequences)."""
+    sm = _minimal()
+    assert sm.scenes == []
+    assert sm.characters == []
+
+
+def test_schema_version_is_required():
+    """No default, deliberately: a checkpoint missing the key must NOT deserialize as current."""
+    data = _minimal().model_dump()
+    del data["schema_version"]
+    with pytest.raises(ValidationError):
+        StoryMemory(**data)
+
+
+def test_schema_version_survives_model_dump():
+    assert _minimal().model_dump()["schema_version"] == CURRENT_SCHEMA_VERSION
+
+
+def test_upsert_keeps_a_replaced_scene_in_its_original_slot():
+    """Scene list order is the contract — the ADR-024 loop and page sequence both rely on it."""
+    current = [Scene(scene_id=f"s{i}", text_excerpt=str(i)) for i in range(3)]
+    updated = Scene(scene_id="s1", text_excerpt="1", final_image_ref="p.png")
+    result = upsert_scenes(current, [updated])
+
+    assert [s.scene_id for s in result] == ["s0", "s1", "s2"]
+    assert result[1].final_image_ref == "p.png"
+
+
+def test_upsert_appends_a_new_scene_id():
+    current = [Scene(scene_id="s0", text_excerpt="0")]
+    result = upsert_scenes(current, [Scene(scene_id="s1", text_excerpt="1")])
+    assert [s.scene_id for s in result] == ["s0", "s1"]
+
+
+def test_vlm_verdict_declares_reason_before_score():
+    """ADR-004: the judge must reason before it scores. Declaration order only —
+    runtime enforcement is providers._assert_field_order, tested in test_providers.py."""
+    props = list(VlmVerdict.model_json_schema()["properties"])
+    assert props.index("differences_observed") < props.index("same_character")
+
+
+def test_anatomy_intact_is_declared_last():
+    """ADR-028: appended at the end so the ADR-004 ordering above is untouched."""
+    assert list(VlmVerdict.model_fields)[-1] == "anatomy_intact"
+
+
+def test_ref_verdict_declares_reason_before_score():
+    """ADR-004 applies to every judge call, not only the two-image one."""
+    props = list(RefVerdict.model_json_schema()["properties"])
+    assert props.index("differences_observed") < props.index("matches_description")
+
+
+def test_failure_reason_is_a_closed_set():
+    with pytest.raises(ValidationError):
+        Attempt(image_ref="p.png", failure_reasons=["not_a_real_reason"])
+
+
+def test_asset_fields_accept_a_plain_storage_path():
+    """CC-4: durable paths, never signed URLs. Documented by convention, not type-enforced —
+    this asserts nothing rejects a path."""
+    scene = Scene(scene_id="s0", text_excerpt="x", final_image_ref="job-1/scene-1.png")
+    assert scene.final_image_ref == "job-1/scene-1.png"
+
+
+def test_dev_provenance_sentinels_exist():
+    """Phase-1 sentinels (ADR-023 amendment 2026-07-22b). Replaced by real selection when
+    `auth-and-classroom` lands — a value swap at one site in worker/run_job.py, no contract change."""
+    from app.config import settings
+
+    assert settings.dev_classroom_id == "dev-classroom"
+    assert settings.dev_profile_id == "dev-profile"

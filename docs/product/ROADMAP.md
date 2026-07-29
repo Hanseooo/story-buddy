@@ -132,7 +132,7 @@ for Qwen-Image-Edit or a recorded ADR amendment naming the fallback that passed.
 (CLAUDE.md §4), in the order below. The clean stories are yours — researcher-written dev fixtures, no ethics
 load. They are **not** the corpus (RESEARCH_PROTOCOL §8).
 
-- **Story Memory contract** — the Pydantic schema. Written first; freezes MASTER_SPEC §3.
+- **Story Memory contract** — the Pydantic schema. Written first; freezes MASTER_SPEC §3. ✅ **built 2026-07-29** (`feat/story-memory-contract`; `job_state.py` deleted; seven nodes on partial-return; `input_gate` entry point wired).
 - **Story Analyzer** — structured output (`json_schema`, strict) + Pydantic. Entity + coreference extraction tolerant of messy kid text, including light Taglish code-switching.
 - **Scene Segmentation** — select up to 10–15 scenes; **floor behavior** for short stories (≥3, never invent content).
 - **Character Bible + canonical reference image** — ≤2 canonical characters in the fixed style.

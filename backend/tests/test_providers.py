@@ -3,7 +3,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import BaseModel
 
-from contracts.job_state import SceneCaption
 import providers
 
 
@@ -13,16 +12,22 @@ def _fake_completion(parsed, content: str = ""):
     return completion
 
 
+class _Caption(BaseModel):
+    """Local throwaway schema. Provider tests must not import a pipeline node —
+    the dependency runs backwards (spec §9)."""
+    caption: str
+
+
 def test_structured_text_requires_provider_parameters():
     """Without require_parameters, OpenRouter silently downgrades strict json_schema (ADR-002)."""
     with patch("providers.OpenAI") as mock_openai:
         parse = mock_openai.return_value.chat.completions.parse
-        parse.return_value = _fake_completion(SceneCaption(caption="hi"))
-        providers.structured_text("prompt", SceneCaption)
+        parse.return_value = _fake_completion(_Caption(caption="hi"))
+        providers.structured_text("prompt", _Caption)
 
     kwargs = parse.call_args.kwargs
     assert kwargs["extra_body"] == {"provider": {"require_parameters": True}}
-    assert kwargs["response_format"] is SceneCaption
+    assert kwargs["response_format"] is _Caption
     assert kwargs["model"] == "qwen/qwen3-32b"
 
 
@@ -30,15 +35,15 @@ def test_structured_text_raises_when_nothing_parsed():
     with patch("providers.OpenAI") as mock_openai:
         mock_openai.return_value.chat.completions.parse.return_value = _fake_completion(None)
         with pytest.raises(ValueError):
-            providers.structured_text("prompt", SceneCaption)
+            providers.structured_text("prompt", _Caption)
 
 
 def test_judge_sends_images_as_multimodal_content():
     """The judge is only ever called with reference + scene. A text-only call is a broken judge."""
     with patch("providers.OpenAI") as mock_openai:
         parse = mock_openai.return_value.chat.completions.parse
-        parse.return_value = _fake_completion(SceneCaption(caption="hi"))
-        providers.judge("compare", ["https://ref.png", "https://scene.png"], SceneCaption)
+        parse.return_value = _fake_completion(_Caption(caption="hi"))
+        providers.judge("compare", ["https://ref.png", "https://scene.png"], _Caption)
 
     content = parse.call_args.kwargs["messages"][0]["content"]
     assert content[0] == {"type": "text", "text": "compare"}
@@ -102,8 +107,8 @@ def test_judge_omits_openrouter_flag_when_self_hosted():
     with patch("providers.OpenAI") as mock_openai, \
          patch.object(providers.settings, "judge_base_url", "https://x.modal.run/v1"):
         parse = mock_openai.return_value.chat.completions.parse
-        parse.return_value = _fake_completion(SceneCaption(caption="hi"))
-        providers.judge("compare", ["https://ref.png"], SceneCaption)
+        parse.return_value = _fake_completion(_Caption(caption="hi"))
+        providers.judge("compare", ["https://ref.png"], _Caption)
 
     assert parse.call_args.kwargs["extra_body"] == {}
 

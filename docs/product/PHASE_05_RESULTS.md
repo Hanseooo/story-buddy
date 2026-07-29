@@ -721,3 +721,5 @@ Phase 0.5 is done when every section above has a `Result` and a `Decision`, and 
 - a recorded **ADR amendment** naming the fallback that passed.
 
 Then, and only then, update `tasks/todo.md` and open Phase 1.
+
+> **Phase 0.5 closed 2026-07-29.** Probe 1 resolved — Qwen stays primary under the ADR-001 amendment; missed separation gate carried as stated limitation. Probe 3 PASS. Probes 2 and 4 not run; neither gates Phase 1. Phase 1 opened the same day. `story-memory-contract` is **built** (commits b4fb044–8777217 on `feat/story-memory-contract`): `StoryMemory` Pydantic contract exists in `backend/contracts/story_memory.py`, seven nodes are on partial-return, `input_gate` is the entry point, and `job_state.py` is deleted. Numbers are in `PHASE_05_RESULTS.md`.

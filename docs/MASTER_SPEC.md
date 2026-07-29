@@ -341,7 +341,7 @@ Phase-2.5 annotators. Design it once, in Phase 1, or invalidate every label coll
 
 ## 8. Open items (AI: do not guess these — flag them)
 
-**Status 2026-07-29 — two of these four are now run:**
+**Status 2026-07-29 — two of these four are now run. Phase 1 is in progress: `story-memory-contract` is built (commits b4fb044–8777217, `feat/story-memory-contract`; `job_state.py` deleted; see `docs/specs/story-memory-contract.md`):**
 - ✅ **Non-human character consistency on Qwen-Image-Edit** — the **Phase 0.5 kill criterion**, run three
   times. Absolute gate **met** (identity retained on 80% of pipeline-ON items); pooled separation gate
   **missed** (+25 vs ≥30), driven entirely by the easy character showing zero ON/OFF difference. The
