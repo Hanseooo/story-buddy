@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import patch
 
 import pytest
@@ -11,6 +12,7 @@ from contracts.story_memory import (
     StoryMemory,
 )
 from pipeline.analyze import (
+    EXTRACTION_PROMPT,
     ExtractedCharacter,
     ExtractedDescription,
     ExtractedLocation,
@@ -19,6 +21,7 @@ from pipeline.analyze import (
     StoryAnalysis,
     analyze,
     caption_for,
+    extract_entities,
 )
 
 
@@ -119,3 +122,73 @@ def test_analyze_is_a_pass_through_stub():
         input=Input(raw_text="A dog runs in a field.", redacted_text="A dog runs in a field."),
     )
     assert analyze(state) == {}
+
+
+def _analysis(**overrides) -> StoryAnalysis:
+    """A minimal valid StoryAnalysis; override any collection per test."""
+    return StoryAnalysis.model_validate(
+        {
+            "characters": [{"name": "the narrator", "description": {"species": "girl"}}],
+            "locations": [{"name": "the beach"}],
+            "objects": [{"name": "a red bucket"}],
+            "timeline": [{"order": 0, "summary": "They go to the beach."}],
+            **overrides,
+        }
+    )
+
+
+def test_extract_entities_passes_the_text_and_schema_to_the_provider():
+    with patch("pipeline.analyze.structured_text", return_value=_analysis()) as mock_provider:
+        extract_entities("I went to the beach with my sister.")
+
+    prompt, schema = mock_provider.call_args.args
+    assert "I went to the beach with my sister." in prompt
+    assert schema is StoryAnalysis
+
+
+def test_extract_entities_returns_the_parsed_wrapper_unchanged():
+    analysis = _analysis()
+    with patch("pipeline.analyze.structured_text", return_value=analysis):
+        assert extract_entities("I went to the beach.") is analysis
+
+
+def test_extract_entities_does_not_name_a_model():
+    """Model IDs are env-overridable settings in app/config.py; a call site never names one
+    (AGENTS.md, ADR-015)."""
+    with patch("pipeline.analyze.structured_text", return_value=_analysis()) as mock_provider:
+        extract_entities("I went to the beach.")
+
+    assert mock_provider.call_args.kwargs == {}
+    assert len(mock_provider.call_args.args) == 2
+
+
+def test_extract_entities_propagates_a_provider_failure():
+    """ADR-025: a hard provider failure (including `message.parsed is None` on a self-refusal)
+    raises → job `failed`. No node-level retry, never a partial roster."""
+    with patch("pipeline.analyze.structured_text", side_effect=ValueError("no parsable output")):
+        with pytest.raises(ValueError):
+            extract_entities("A story about mild peril.")
+
+
+def test_extraction_prompt_carries_the_three_asks():
+    """The prompt string is the one artifact spec §4 states rules for but does not write, so
+    a prompt that quietly drops an ask passes every other test in §6. Loose substring checks:
+    rewording is fine, deleting an ask is not.
+
+    - the <=3 character cap (belt-and-braces; the node is the real control)
+    - the short-descriptive-label rule, so no proper noun or `<PERSON_1>` reaches a prompt
+    - the always-answerable `species` ask that keeps ADR-028's re-roll from collapsing
+    """
+    prompt = EXTRACTION_PROMPT.lower()
+    assert "3" in prompt
+    assert "descriptive label" in prompt
+    assert "species" in prompt
+
+
+def test_extract_entities_logs_the_extracted_counts(caplog):
+    """CC-5: a wrong reference downstream traces back to a specific roster entry."""
+    with caplog.at_level(logging.INFO, logger="pipeline.analyze"):
+        with patch("pipeline.analyze.structured_text", return_value=_analysis()):
+            extract_entities("I went to the beach.")
+
+    assert "1 characters" in caplog.text
