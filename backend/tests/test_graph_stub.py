@@ -6,6 +6,7 @@ identical state. `stream_mode="updates"` yields exactly one chunk per node execu
 node name, in order, INCLUDING nodes that return {}. That is the replacement for `stage`.
 """
 from contracts.story_memory import CURRENT_SCHEMA_VERSION, Input, StoryMemory
+from pipeline.analyze import StoryAnalysis
 from pipeline.graph import build_graph
 
 EXPECTED_ORDER = [
@@ -29,8 +30,19 @@ def _initial_state(story_id: str) -> StoryMemory:
     )
 
 
+STUB_ANALYSIS = StoryAnalysis.model_validate(
+    {
+        "characters": [{"name": "the orange dog", "description": {"species": "dog"}}],
+        "locations": [{"name": "a field"}],
+        "objects": [],
+        "timeline": [{"order": 0, "summary": "A dog runs."}],
+    }
+)
+
+
 def _mock_call_points(monkeypatch):
-    monkeypatch.setattr("pipeline.analyze.caption_for", lambda text: "stub caption")
+    # One patch point per node (MASTER_SPEC §6 rule 1): `extract_entities` is analyze's seam.
+    monkeypatch.setattr("pipeline.analyze.extract_entities", lambda text: STUB_ANALYSIS)
     monkeypatch.setattr("pipeline.segment.caption_for", lambda text: "stub caption")
     monkeypatch.setattr(
         "pipeline.generate_scene.generate_and_store",
@@ -68,3 +80,22 @@ def test_stub_graph_full_run_with_real_call_points_mocked(monkeypatch):
     assert [s.scene_id for s in result["scenes"]] == ["s0"]
     assert result["scenes"][0].caption == "stub caption"
     assert result["scenes"][0].final_image_ref == "stub/path.png"
+
+
+def test_analyze_roster_survives_the_graph(monkeypatch):
+    """Spec §6: patch the single helper and assert the roster reaches the end of the run.
+    `analyze` runs before `segment`, so a roster that is dropped by a reducer or overwritten
+    by a later node shows up here and nowhere else."""
+    _mock_call_points(monkeypatch)
+    app_graph = build_graph()
+
+    result = app_graph.invoke(
+        _initial_state("test-job-3"), config={"configurable": {"thread_id": "test-job-3"}}
+    )
+
+    assert [c.char_id for c in result["characters"]] == ["c0"]
+    assert result["characters"][0].name == "the orange dog"
+    assert result["characters"][0].description.species == "dog"
+    assert [loc.loc_id for loc in result["locations"]] == ["loc0"]
+    assert result["objects"] == []
+    assert [e.order for e in result["timeline"]] == [0]

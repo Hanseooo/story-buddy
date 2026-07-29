@@ -191,9 +191,9 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
   consistency_check → [regenerate] → [output moderation] → compose → export`.
   **Built today** (`backend/pipeline/graph.py`): `input_gate → analyze → segment → char_bible →
   generate_scene → consistency_check → compose` — linear, **zero conditional edges**. `input_gate`,
-  `analyze`, `char_bible`, `consistency_check`, and `compose` are pass-through stubs; `segment`
-  mints `s0` and writes `scenes[].caption`; `generate_scene` has real behavior. Fill the stubs in per
-  ADR-024's partial-return conventions; don't invent a different graph shape.
+  `char_bible`, `consistency_check`, and `compose` are pass-through stubs; `analyze` mints the entity
+  roster; `segment` mints `s0` and writes `scenes[].caption`; `generate_scene` has real behavior. Fill the
+  stubs in per ADR-024's partial-return conventions; don't invent a different graph shape.
 - Critical paths (extra review): moderation ordering (input text → char-ref → output image), PII
   redaction (Presidio) before any storage/caption/export, RLS + signed URLs on every table/asset,
   job checkpoint/resume logic — see `docs/product/ADRs.md` and StoryBuddy Hard Rules above.
@@ -350,5 +350,7 @@ is not documentation of a good design; it is the blast radius, written down so t
   gates Phase 1. Numbers in `docs/product/PHASE_05_RESULTS.md`.
   **`story-memory-contract` is built (2026-07-29):** `backend/contracts/story_memory.py` exists,
   `job_state.py` deleted, seven nodes on partial-return, `input_gate` is the graph entry point.
-  Remaining Phase-1 specs: `story-analyzer`, `character-bible`, `consistency-check`,
-  `regeneration-controller`, `compose` (pass-through stubs in the graph today).
+  **`story-analyzer` is built (2026-07-29):** `pipeline/analyze.py` mints `characters[]` (≤3),
+  `locations[]`, `objects[]`, `timeline[]`.
+  Remaining Phase-1 specs: `scene-segmentation`, `character-bible`, `consistency-check`,
+  `regeneration-controller`, `compose`.

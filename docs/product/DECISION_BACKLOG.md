@@ -87,7 +87,11 @@ roadmap order. Source: MASTER_SPEC §7.
 - [x] `story-memory-contract`  spec **`approved`, shape frozen 2026-07-22** (ADR-023/024 + D-F/D-G amendment);
       **§9 construction gate resolved 2026-07-22b** (ADR-023 amendment — worker supplies `story_id=job_id` +
       Phase-1 dev sentinels). Next: the `job_state.py` migration (build).
-- [ ] `story-analyzer`   *(code: `pipeline/analyze.py` — partial)*
+- [x] `story-analyzer`   *(spec **built 2026-07-29** — `docs/specs/story-analyzer.md`;
+      `pipeline/analyze.py` mints the roster. Caps characters at 3 — the pre-scene cost ceiling
+      against ADR-028's 3-draw cap. Requires `species` at the LLM boundary so ADR-028's re-roll can't collapse
+      on an empty description; `contracts/` untouched. Hands `Scene.characters_present` to `scene-segmentation`
+      and description *richness* to `character-bible`)*
 - [ ] `scene-segmentation`   *(code: `pipeline/segment.py` — stub)*
 - [ ] `character-bible`   *(code: `pipeline/char_bible.py` — stub; owns ADR-028's reference-acceptance loop —
       draw → judge vs `CharacterDescription` → re-roll, 3-draw cap, best-of by `attributes_present`)*
@@ -134,18 +138,24 @@ revised 2026-07-25.)*
 
 ## Recommended next session
 
-> **Phase 0.5 is closed (2026-07-29).** Probe 1 resolved over three runs and Probe 3 passed both arms;
-> nothing in Phase 0.5 blocks Phase 1. Numbers and branches in `docs/product/PHASE_05_RESULTS.md` — not
+> **Phase 0.5 is closed (2026-07-29).** Numbers and branches in `docs/product/PHASE_05_RESULTS.md` — not
 > restated here (AGENTS.md → *Definition of Done*, "point, don't copy").
 >
-> ✅ **D-H, which Phase 0.5 opened, is closed too — ADR-028 (2026-07-29).** Nothing blocks the port.
+> ✅ **The `job_state.py` migration is done (2026-07-29).** See `docs/specs/story-memory-contract.md`
+> (status `built`).
+>
+> ✅ **`story-analyzer` is built (2026-07-29).** `pipeline/analyze.py` mints `characters[]` (capped at 3),
+> `locations[]`, `objects[]`, and a densely re-indexed `timeline[]`. See `docs/specs/story-analyzer.md`
+> (status `built`).
 
-**Migrate off `job_state.py`** (build, not a decision — the §9 construction gate is resolved by the ADR-023
-amendment 2026-07-22b). The 12 consumers are enumerated in `story-memory-contract` §9: `StateGraph(JobState)` →
-`StateGraph(StoryMemory)`, six nodes → partial-return, `SceneCaption` → `pipeline/analyze.py` (D-F), the worker
-constructs `StoryMemory` with the resolved provenance (`story_id=job_id` + `config.py` sentinels, adding the two
-`settings` keys in the same change), and `run_job.py`'s dead `caption`/`image_path` keys get fixed. The port
-carries ADR-028's two additive types (`VlmVerdict.anatomy_intact`, `RefVerdict` + `Character.ref_verdict`) and
-the two §6 assertions that guard them.
+**Write and build `scene-segmentation`** — no spec exists yet (`docs/specs/`), so this is a
+brainstorm-then-plan session. It owns `Scene.characters_present`, handed to it by `story-analyzer` §8;
+the join key is `Character.name`. `pipeline/segment.py` mints `s0` only today.
 
-After that: `story-analyzer`. Do not start `story-analyzer` first.
+**No open decision blocks Phase 1.** Tiers 1, 2, 2b, and 3 are all resolved. `story-analyzer`'s two
+recorded limitations — CC-7 seed reproducibility for text extraction, and unmeasured Filipino/Taglish
+extraction quality — are deliberately **not** rows here. The first needs a `providers.py` seed parameter
+and is its own decision if it is ever taken; the second is a measurement gap to flag before Phase 2
+hardening, not a decision. Both live in `docs/specs/story-analyzer.md` §5/§8.
+
+After that, in roadmap order: `character-bible`.
