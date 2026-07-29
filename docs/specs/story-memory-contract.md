@@ -1,6 +1,6 @@
 # Feature Spec — story-memory-contract
 
-**Status:** approved (shape frozen 2026-07-22; D-F + D-G resolved via the ADR-023 amendment; **§9 construction gate resolved 2026-07-22b** via a second ADR-023 amendment; **D-H resolved 2026-07-29 → ADR-028** — `FailureReason` frozen permanently, `VlmVerdict.anatomy_intact` and `Character.ref_verdict` added, both additive, no `schema_version` bump — the `job_state.py` port is unblocked) · **Phase:** 1 · **Owner:** `backend/contracts/` (the Pydantic contract itself — not a pipeline node)
+**Status:** built (2026-07-29, commits b4fb044–8777217, branch `feat/story-memory-contract` — `backend/contracts/story_memory.py` exists, `job_state.py` deleted, seven nodes on partial-return, `input_gate` entry point wired; shape frozen 2026-07-22; D-F + D-G resolved via ADR-023 amendment; §9 construction gate resolved 2026-07-22b; D-H resolved 2026-07-29 → ADR-028) · **Phase:** 1 · **Owner:** `backend/contracts/` (the Pydantic contract itself — not a pipeline node)
 **Derived from:** MASTER_SPEC §2 (system map), §3 (frozen contract) · **Rationale:** ADR-023, ADR-004, ADR-002, ADR-028, PRD §19
 
 > This is the one spec that is not a node. It freezes the **field-level shape** of the Story Memory

@@ -101,10 +101,10 @@ swap a library, or change the pipeline shape because a different approach seems 
 The **Story Memory schema** (`backend/contracts/`) is the contract between every pipeline module.
 It is Pydantic and it is authoritative.
 
-> **State of play (Phase 0.5):** `StoryMemory` is **frozen as a spec** (`docs/specs/story-memory-contract.md`,
-> approved 2026-07-22) but **not yet written as code**. What exists is `backend/contracts/job_state.py` —
-> a provisional `TypedDict` subset, deleted by the Phase-1 port (spec §9). Don't mistake `JobState` for
-> the contract, and don't extend it: build against the spec.
+> **State of play (Phase 1 in progress):** `StoryMemory` is **built** (`backend/contracts/story_memory.py`,
+> 2026-07-29). `job_state.py` is **deleted**. All seven nodes are on partial-return `(state: StoryMemory) -> dict`;
+> `input_gate` is the graph entry point. Remaining Phase-1 nodes are pass-through stubs — fill them in per
+> spec before implementing. See `docs/specs/story-memory-contract.md` for the contract and ADR-023/024 for conventions.
 
 - Validate against it at **every LLM boundary** (strict `json_schema` structured output →
   Pydantic, always).
@@ -189,10 +189,11 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
   moderation, `regenerate`, output moderation, and `export` into their own nodes):
   `input_gate → analyze → segment → char_bible → [char-ref moderation] → generate_scene →
   consistency_check → [regenerate] → [output moderation] → compose → export`.
-  **Built today** (`backend/pipeline/graph.py`): `analyze → segment → char_bible → generate_scene →
-  consistency_check → compose` — linear, **zero conditional edges**, and every node except `analyze`
-  and `generate_scene` is a pass-through stub. Fill these in per ADR-024's conventions; don't invent
-  a different shape.
+  **Built today** (`backend/pipeline/graph.py`): `input_gate → analyze → segment → char_bible →
+  generate_scene → consistency_check → compose` — linear, **zero conditional edges**. `input_gate`,
+  `analyze`, `char_bible`, `consistency_check`, and `compose` are pass-through stubs; `segment`
+  mints `s0` and writes `scenes[].caption`; `generate_scene` has real behavior. Fill the stubs in per
+  ADR-024's partial-return conventions; don't invent a different graph shape.
 - Critical paths (extra review): moderation ordering (input text → char-ref → output image), PII
   redaction (Presidio) before any storage/caption/export, RLS + signed URLs on every table/asset,
   job checkpoint/resume logic — see `docs/product/ADRs.md` and StoryBuddy Hard Rules above.
@@ -239,7 +240,7 @@ Two independent projects, no shared root tooling — run commands from the named
   `backend/` and dies with `ModuleNotFoundError: No module named 'app'`.
 
 ### Pre-merge verify
-No CI workflow exists yet — run both suites manually before merging:
+`.github/workflows/ci.yml` runs both on PRs to `main` and pushes to `main`. Run them locally first:
 - Frontend (from `frontend/`): `pnpm lint && pnpm test`
 - Backend (from `backend/`): `uv run ruff check . && uv run pytest`
 
@@ -263,7 +264,8 @@ No CI workflow exists yet — run both suites manually before merging:
 ## Testing Contract
 - What "passing" means: `pnpm lint && pnpm test` green (frontend) + `uv run ruff check . &&
   uv run pytest` green (backend).
-- No CI gate exists yet — passing is a manual pre-merge obligation.
+- Enforced by CI (`.github/workflows/ci.yml`) on PRs to `main` and pushes to `main`. Branch
+  protection is not configured, so the check reports but does not block merge.
 - Deterministic tests mock every `providers.py` call. Never assert on generated content quality;
   that belongs to the offline eval harness, never CI.
 - Intentional skips / known flaky: none documented yet.
@@ -338,15 +340,15 @@ is not documentation of a good design; it is the blast radius, written down so t
 ---
 
 ## Validation Notes
-- No CI config found (`.github/workflows/` absent) — "pre-merge verify" above is a manual
-  substitute, not a real gate. Flag to the human if CI should be added.
+- CI added 2026-07-29 (`.github/workflows/ci.yml`): runs the pre-merge verify commands verbatim.
+  Not yet a *gate* — `main` has no branch protection requiring the check.
 - `ruff format` is not adopted — only `ruff check` is. See comment in `backend/pyproject.toml`
   for rationale (single repo-wide formatting commit, never inside a feature change).
-- **Current phase: Phase 0.5 (Open-Weight Model Spike).** Phase 0 (Scaffolding) is ✅ complete.
-  **Probe 1 is resolved (2026-07-29)** — three runs, absolute PASS / separation FAIL, branch taken
-  in the ADR-001 amendment: **Qwen-Image-Edit stays primary**, OmniGen2 (rung 1) is a targeted
-  escalation, not the default. **Probe 3 PASS (2026-07-29)** — strict `json_schema` round-trips for
-  the text model and for the judge called with two images, so `consistency_check` is unblocked.
-  Probes 2 and 4 not run and neither gates Phase 1. **Phase 1 (`story-memory-contract`) is clear to
-  start.** Commands and kill criteria in `docs/product/ROADMAP.md`, numbers in
-  `docs/product/PHASE_05_RESULTS.md`.
+- **Current phase: Phase 1 (Core Pipeline Intelligence) — in progress.** Phase 0 ✅ done.
+  Phase 0.5 ✅ closed 2026-07-29 — Probe 1 resolved (Qwen stays primary, ADR-001 amendment; missed
+  separation gate carried as stated limitation), Probe 3 PASS; Probes 2 and 4 not run and neither
+  gates Phase 1. Numbers in `docs/product/PHASE_05_RESULTS.md`.
+  **`story-memory-contract` is built (2026-07-29):** `backend/contracts/story_memory.py` exists,
+  `job_state.py` deleted, seven nodes on partial-return, `input_gate` is the graph entry point.
+  Remaining Phase-1 specs: `story-analyzer`, `character-bible`, `consistency-check`,
+  `regeneration-controller`, `compose` (pass-through stubs in the graph today).

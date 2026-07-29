@@ -69,8 +69,8 @@ directly to the four core quadrants of Boehm's Spiral Model:
 
 | Phase | Iteration loop / Spiral stage | Purpose | Gate to leave it |
 |---|---|---|---|
-| **0** & **0.5** | **Loop 1: Risk resolution** | Scaffolding and open-weight spike to resolve the substrate risk cheaply | A real slideshow renders. Reference conditioning retains identity on ≥ 80% of items **and** exceeds unconditioned by ≥ 30 points. ✅ Phase 0 done |
-| **1** | **Loop 2: Core pipeline** | The consistency loop is real, on clean stories | A story produces a consistent book; a case exists where the judge caught a drifted image and the retry fixed it |
+| **0** & **0.5** | **Loop 1: Risk resolution** | Scaffolding and open-weight spike to resolve the substrate risk cheaply | A real slideshow renders. Reference conditioning retains identity on ≥ 80% of items **and** exceeds unconditioned by ≥ 30 points. ✅ Phase 0 done. ✅ Phase 0.5 closed 2026-07-29 — see `PHASE_05_RESULTS.md`. |
+| **1** | **Loop 2: Core pipeline** | The consistency loop is real, on clean stories | A story produces a consistent book; a case exists where the judge caught a drifted image and the retry fixed it. **In progress (2026-07-29): `story-memory-contract` built** — `StoryMemory` Pydantic contract, seven nodes on partial-return, `input_gate` entry point. |
 | **2** & **2.5** | **Loop 3: Integration & tuning** | Safe for a real child, survives messy input. An honestly evaluated specialized judge | The Filipino/Taglish moderation probe passes in **both** directions. A results table exists and the held-out set was read exactly once |
 | **3** | **Loop 4: Evaluation** | Expert validation (Obj 3), judge classification (Obj 4), and ISO/IEC 25010 software quality (Obj 5) | Expert-validation responses collected and content-analysed; the judge held-out classification table read exactly once; ISO/IEC 25010 questionnaire administered |
 

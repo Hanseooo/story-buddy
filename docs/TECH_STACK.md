@@ -276,8 +276,9 @@ Be honest — these are open, not silently resolved:
   *system* RAM — not 32 GB VRAM. QLoRA on a 7B VLM with two-image inputs needs ~16 GB+ VRAM, so an 8 GB
   card likely OOMs. The rented RTX 4090/A100 fallback (~$5–15, ADR-018) exists precisely for this case —
   verify the exact GPU model and VRAM before committing the training run.
-- **The output-image safety gate is entirely unbuilt.** `AGENTS.md` is explicit: there is no `input_gate`
-  node, no moderation call, and no Presidio dependency anywhere in `backend/` today. §1's moderation rows
-  and §6's forbidden list describe the Phase-2 *target*, not the current state.
+- **The output-image safety gate is entirely unbuilt.** `input_gate` now exists as a pass-through stub
+  (built 2026-07-29, `feat/story-memory-contract`) — it copies `raw_text` to `redacted_text` and marks
+  `moderation.passed=True`. No Qwen3Guard-Gen, no Presidio call, no NSFW gate exists yet. §1's moderation
+  rows describe the Phase-2 *target*; the stub is only the graph slot so Phase 2 is a single-file swap.
 - **Both moderation gates (input text, output image) are unverified in Filipino and Taglish** until the
   Phase 0.5 moderation probe runs — a release gate for Phase 2, not a curiosity (ADR-011).
