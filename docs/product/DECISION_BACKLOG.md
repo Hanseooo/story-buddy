@@ -87,10 +87,11 @@ roadmap order. Source: MASTER_SPEC §7.
 - [x] `story-memory-contract`  spec **`approved`, shape frozen 2026-07-22** (ADR-023/024 + D-F/D-G amendment);
       **§9 construction gate resolved 2026-07-22b** (ADR-023 amendment — worker supplies `story_id=job_id` +
       Phase-1 dev sentinels). Next: the `job_state.py` migration (build).
-- [ ] `story-analyzer`   *(spec **draft 2026-07-29** — `docs/specs/story-analyzer.md`; code: `pipeline/analyze.py`
-      still the pass-through stub. Caps characters at 3 — the pre-scene cost ceiling against ADR-028's 3-draw
-      cap. Hands `Scene.characters_present` to `scene-segmentation` and the empty-`CharacterDescription` gap to
-      `character-bible`; neither is absorbed into the node)*
+- [ ] `story-analyzer`   *(spec **approved 2026-07-29** — `docs/specs/story-analyzer.md`; code:
+      `pipeline/analyze.py` still the pass-through stub. Caps characters at 3 — the pre-scene cost ceiling
+      against ADR-028's 3-draw cap. Requires `species` at the LLM boundary so ADR-028's re-roll can't collapse
+      on an empty description; `contracts/` untouched. Hands `Scene.characters_present` to `scene-segmentation`
+      and description *richness* to `character-bible`)*
 - [ ] `scene-segmentation`   *(code: `pipeline/segment.py` — stub)*
 - [ ] `character-bible`   *(code: `pipeline/char_bible.py` — stub; owns ADR-028's reference-acceptance loop —
       draw → judge vs `CharacterDescription` → re-roll, 3-draw cap, best-of by `attributes_present`)*

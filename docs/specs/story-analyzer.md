@@ -1,6 +1,6 @@
 # Feature Spec — story-analyzer
 
-**Status:** draft (2026-07-29) · **Phase:** 1 · **Owner node:** `backend/pipeline/analyze.py`
+**Status:** approved (2026-07-29) · **Phase:** 1 · **Owner node:** `backend/pipeline/analyze.py`
 **Derived from:** MASTER_SPEC §2 (system map), §3 (frozen contract), §6 (test seam) · **Rationale:** ADR-002, ADR-023 (D-F, D-G), ADR-024, ADR-025, ADR-028, PRD §8
 
 > One extraction call, one roster. Every downstream node works from `characters[]` instead of
@@ -33,6 +33,8 @@ the redacted input text, so `char_bible` has a stable roster to draw canonical r
 4. `timeline[].order` is **re-assigned by the node** from list index: zero-based and dense. It is
    not trusted from the model. A model that returns `1, 2, 5` or a duplicate `order` validates
    fine against Pydantic and would silently corrupt the only ordering `segment` receives.
+5. Every emitted `Character` has a non-empty `description.species` — enforced at the LLM boundary,
+   not in the contract. See §4.
 
 ## 3. Position in the system map
 
@@ -57,9 +59,16 @@ forbids an id at the LLM boundary. The boundary therefore uses id-less mirrors i
 `backend/pipeline/analyze.py`, which the node maps into contract types:
 
 ```python
+class ExtractedDescription(CharacterDescription):
+    """Boundary-strict subclass. The contract's `CharacterDescription` is all-Optional by
+    design (ADR-023: mostly-optional container); real per-field validation belongs at the
+    LLM boundary (ADR-002). Subclassed rather than mirrored so the axes stay in one place.
+    """
+    species: str                        # required HERE, Optional in the contract — see below
+
 class ExtractedCharacter(BaseModel):
     name: str
-    description: CharacterDescription   # reused from contracts/ — it carries no id
+    description: ExtractedDescription
 
 class ExtractedLocation(BaseModel):
     name: str
@@ -76,9 +85,30 @@ class StoryAnalysis(BaseModel):         # the transient wrapper; never persisted
     timeline: list[TimelineEvent]          # already id-less in contracts/
 ```
 
-`CharacterDescription` is reused rather than mirrored: it has no id, and its axes
+`CharacterDescription` is subclassed rather than mirrored: it has no id, and its axes
 (`species`, `colours`, `body_features`, `clothing`) are deliberately aligned to the `FailureReason`
 taxonomy the judge scores against. Re-deriving them here would create a second source of truth.
+
+**Why `species` is required at the boundary.** ADR-028's reference-acceptance loop judges each draw
+against `CharacterDescription`. An entirely empty description makes `matches_description` vacuously
+true, so the 3-draw re-roll silently collapses to 1 draw and ADR-028's mitigation quietly stops
+working. Requiring one always-answerable string ("girl", "dog", "robot") guarantees the judge always
+has something to check against.
+
+Two things this deliberately does **not** do:
+
+- **It does not touch the contract.** `CharacterDescription.species` stays `Optional` in
+  `backend/contracts/`. Making it required there would be a contract change — an ADR session, never
+  settled inline while building a module (AGENTS.md) — and it would break
+  `Character.description`'s `default_factory`.
+- **It does not require a visual attribute** (one of `colours` / `body_features` / `clothing`).
+  Strict `json_schema` cannot express "at least one of three lists is non-empty", so the constraint
+  would have to be a Pydantic validator firing *after* a successful, paid call — which under ADR-025
+  is a hard failure that fails the child's whole job because they never said what their dog was
+  wearing. Wrong trade. Whether a description is *rich enough* remains `character-bible`'s call.
+
+The node maps `CharacterDescription(**extracted.description.model_dump())` at the mint step, so what
+is persisted is exactly the contract type, never the strict subclass.
 
 ### Happy path
 
@@ -111,7 +141,7 @@ later.
 | **Same character named twice** ("my sister", "Ate") | **Documented ceiling, not guarded.** Two `char_id`s, two reference images, two of the three budget slots. Consistent with `story-memory-contract` §2.1 — entities are minted once and never merged or re-indexed within a run. A dedup pass would be a new node, and nothing in Phase 1 justifies one. |
 | **Unbounded `locations[]` / `objects[]`** | **Deliberately uncapped.** Neither costs an image, so neither is a CC-3 lever; the only cost is checkpoint size, which is bounded in practice by a ≤800-word story (ADR-012). Cap them only if a measured checkpoint problem appears — not preemptively. |
 | **Character vs object ambiguity** ("my teddy bear") | Whichever collection the model picks stands; there is no reconciliation. Landing in `objects[]` means no reference image and no consistency guarantee for that entity. Ceiling, not a bug. |
-| **Character with an empty `CharacterDescription`** | Validates — every field is Optional. **This is a live gap for `character-bible`,** not for this node: ADR-028's acceptance loop judges each draw *against* the description, so an empty description makes `matches_description` vacuously true and defeats the re-roll entirely. Named as a handoff in §8; do not close it here by inventing a required field, which would be a contract change. |
+| **Character with an empty description** | **Cannot happen for `species`** — it is required at the LLM boundary (see above), so `matches_description` always has at least one attribute to judge against and ADR-028's re-roll never silently collapses. A character with a species but no `colours` / `body_features` / `clothing` is still valid and still emitted; whether that is *rich enough* to draw from is `character-bible`'s call, not this node's. |
 | **Empty `timeline[]`** | Valid. `segment` falls back to text order. |
 | **Very short input** ("I like dogs") | Valid. Extraction yields whatever it yields; a minimum-length gate is `length-guard`'s job (Phase 2), not this node's. |
 | **Input was truncated** (ADR-012) | No special handling. `analyze` sees the kept portion, which is correct — the book illustrates what was kept, and ADR-012 forbids summarizing the tail back in. |
@@ -166,6 +196,18 @@ definition.
 - **Partial-return (ADR-024):** result keys are exactly the four; `state` is unmutated afterwards
 - **D-G guard:** no extraction model declares an id field —
   `"char_id" not in ExtractedCharacter.model_fields`, and likewise for `loc_id` / `obj_id`
+- **Persisted type is the contract type:** an emitted `Character.description` is a
+  `CharacterDescription`, not the strict subclass (`type(c.description) is CharacterDescription`)
+
+**Boundary strictness** — schema-level, no provider needed:
+- `ExtractedDescription` **requires** `species`: validating `{"colours": ["red"]}` raises
+  `ValidationError` (guards invariant 5 and ADR-028's re-roll)
+- the contract is **unchanged**: `CharacterDescription()` with no arguments still validates, and
+  `Character(char_id="c0", name="x")` still gets its `default_factory` description
+- `ExtractedDescription` inherits every axis — `set(CharacterDescription.model_fields) <=
+  set(ExtractedDescription.model_fields)` — so the axes have one source of truth
+- no visual attribute is required: `ExtractedDescription(species="dog")` validates (guards against
+  someone later "tightening" this into an after-the-call failure — see §4)
 
 **Graph** — patch the single helper and assert the roster survives `input_gate → analyze → segment`
 (one patch point per node, per MASTER_SPEC §6 rule 1).
@@ -195,10 +237,11 @@ sufficient for every Phase-1 consumer. No contract change, no `schema_version` b
   cannot: it runs before scenes exist. `segment` creates scenes and already reads the analysis, so
   the mapping belongs there. The join key is `Character.name`. Until that spec lands,
   `generate_scene` stays text-to-image — which is what it already does.
-- **Empty `CharacterDescription`** → **`character-bible`**. See §4's edge-case table: an empty
-  description makes ADR-028's `matches_description` vacuous and defeats the re-roll. That spec must
-  decide what to do — draw from the name alone, or refuse the character. Closing it here would mean
-  making a `CharacterDescription` field required, which is a contract change and out of scope.
+- **Description *richness*** → **`character-bible`**. Narrowed, not handed off whole: the silent
+  half of this gap is closed here by requiring `species` at the boundary (§4), so ADR-028's re-roll
+  can no longer collapse without anyone noticing. What remains is a judgement call — is
+  species-only enough to draw a canonical reference from, or should that character be refused? —
+  and it belongs to the node that does the drawing.
 - **Character dedup** → **unowned**, documented ceiling (§4).
 
 **Open:**
@@ -240,5 +283,6 @@ Per AGENTS.md *Definition of Done*. This module is done when **all** of the foll
 6. **No new file is added to the status surface** (AGENTS.md's nine-file table). This spec points
    at `PHASE_05_RESULTS.md` and asserts no probe numbers of its own.
 
-**Not done** if: any §6 test is skipped, the roster caps are enforced only by prompt text, or a
-handoff in §8 is silently absorbed into this node instead of being left to its owner.
+**Not done** if: any §6 test is skipped, the roster caps are enforced only by prompt text,
+`species` is relaxed to Optional at the boundary, `backend/contracts/` is modified, or a handoff in
+§8 is silently absorbed into this node instead of being left to its owner.
