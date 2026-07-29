@@ -3,7 +3,7 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 
-from contracts.job_state import JobState  # noqa: F401  (removed in Task 5)
+from contracts.story_memory import CURRENT_SCHEMA_VERSION, Input, StoryMemory
 from pipeline.analyze import SceneCaption, analyze, caption_for
 
 
@@ -39,15 +39,15 @@ def test_caption_for_passes_the_schema_to_the_provider():
     assert schema is SceneCaption
 
 
-def test_analyze_node_sets_caption_and_stage():
-    state = {
-        "job_id": "t1",
-        "input_text": "A dog runs in a field.",
-        "caption": None,
-        "image_path": None,
-        "stage": "queued",
-    }
-    with patch("pipeline.analyze.caption_for", return_value="stub caption"):
-        result = analyze(state)
-    assert result["caption"] == "stub caption"
-    assert result["stage"] == "analyze"
+def test_analyze_is_a_pass_through_stub():
+    """`analyze`'s real content is the story-analyzer spec, deliberately not started
+    (DECISION_BACKLOG). It owns `caption_for` (D-F) but writes no state — `segment` owns
+    scenes[].caption per MASTER_SPEC §2's node-I/O table."""
+    state = StoryMemory(
+        schema_version=CURRENT_SCHEMA_VERSION,
+        story_id="t1",
+        classroom_id="dev-classroom",
+        profile_id="dev-profile",
+        input=Input(raw_text="A dog runs in a field.", redacted_text="A dog runs in a field."),
+    )
+    assert analyze(state) == {}

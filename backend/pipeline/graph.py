@@ -1,7 +1,8 @@
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
-from contracts.job_state import JobState
+from contracts.story_memory import StoryMemory
+from pipeline.input_gate import input_gate
 from pipeline.analyze import analyze
 from pipeline.segment import segment
 from pipeline.char_bible import char_bible
@@ -11,7 +12,8 @@ from pipeline.compose import compose
 
 
 def build_graph(checkpointer=None):
-    graph = StateGraph(JobState)
+    graph = StateGraph(StoryMemory)
+    graph.add_node("input_gate", input_gate)
     graph.add_node("analyze", analyze)
     graph.add_node("segment", segment)
     graph.add_node("char_bible", char_bible)
@@ -19,7 +21,8 @@ def build_graph(checkpointer=None):
     graph.add_node("consistency_check", consistency_check)
     graph.add_node("compose", compose)
 
-    graph.set_entry_point("analyze")
+    graph.set_entry_point("input_gate")
+    graph.add_edge("input_gate", "analyze")
     graph.add_edge("analyze", "segment")
     graph.add_edge("segment", "char_bible")
     graph.add_edge("char_bible", "generate_scene")

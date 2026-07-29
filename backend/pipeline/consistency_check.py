@@ -1,6 +1,6 @@
-from contracts.job_state import JobState
+from contracts.story_memory import StoryMemory
 
 
-def consistency_check(state: JobState) -> JobState:
-    state["stage"] = "consistency_check"
-    return state
+def consistency_check(state: StoryMemory) -> dict:
+    # ponytail: stub — the `consistency-check` spec fills this in (VLM verdict per attempt).
+    return {}

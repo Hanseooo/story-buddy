@@ -1,6 +1,6 @@
-from contracts.job_state import JobState
+from contracts.story_memory import StoryMemory
 
 
-def char_bible(state: JobState) -> JobState:
-    state["stage"] = "char_bible"
-    return state
+def char_bible(state: StoryMemory) -> dict:
+    # ponytail: stub — the `character-bible` spec fills this in (canonical refs + ref_verdict).
+    return {}
