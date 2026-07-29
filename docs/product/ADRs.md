@@ -57,11 +57,87 @@ exist — OmniGen2, HiDream-O1-Image (MIT), Z-Image (Apache-2.0). The old ladder
 toward a *non-commercial* model when a *license-clean* one plausibly scores better on the exact axis being
 probed. ADR-015 permits non-commercial weights as fallbacks; permitting them is not a reason to prefer them.
 
-⚠️ **Open, must be checked before any escalation is acted on:** whether fal.ai routes OmniGen2, HiDream-O1, or
+~~⚠️ **Open, must be checked before any escalation is acted on:** whether fal.ai routes OmniGen2, HiDream-O1, or
 Z-Image. If fal hosts the chosen rung, escalation is a `fal_image_edit_model` env change; if it does not,
-escalation becomes a `providers.py` provider change — a materially larger move. Unverified as of 2026-07-28.
+escalation becomes a `providers.py` provider change — a materially larger move. Unverified as of 2026-07-28.~~
+
+✅ **Resolved 2026-07-29 for rung 1.** fal.ai routes OmniGen2 as **`fal-ai/omnigen-v2`**, a unified
+multi-modal model covering image editing and personalized generation. Rungs 2–4 (FLUX.2 [klein],
+HiDream-O1, FLUX.1 Kontext) remain unverified on fal; check each before it is reached, not now.
+
+🔴 **But this ADR's core assumption was wrong, and the pre-flight proved it. Escalating the ladder is NOT an
+env change.** Pre-flight, 2026-07-29:
+
+- OmniGen2 names the reference field **`input_image_urls`**. Qwen-Image-Edit names it `image_urls`.
+  Only `prompt` is *required* on the OmniGen2 schema.
+- **fal silently ignores unknown arguments.** Sending Qwen's `image_urls` to OmniGen2 returned **HTTP 200 and
+  a confident, well-formed image** — of a **human boy in a blue tracksuit**, with the Quill reference entirely
+  discarded and the art style, which rides on the reference (ADR-007), discarded with it. No error, no warning.
+- With `input_image_urls` the same call returns Quill: three amber eyes, crest, striped scarf, halftone
+  surface, style carried across. The mechanism works on this rung.
+
+**The near-miss is the finding.** Had Probe 1 Run 3 been executed on the assumption in this ADR's original
+text, all 20 pipeline-ON items would have been unconditioned text-to-image from a prompt containing neither
+character description nor style. Identity would have scored ≈0%, rung 1 would have been recorded as a failed
+escalation, and under the settled branch rule (PHASE_05_RESULTS) that verdict **stops the project.** A
+one-call, ~$0.03 pre-flight separated a contract mismatch from a substrate finding. This is structurally the
+same defect that voided Probe 1 Run 1 — a silent bad input read as a substrate result — arriving twice in two
+days on the same seam.
+
+**Mitigation, in code:** `providers.REFERENCE_FIELD` now maps endpoint → reference field name, and
+`edit_image` **raises on any endpoint not in that map** rather than sending a key that would be silently
+dropped. Adding a fallback rung therefore requires a verified row in that map — checked against
+`https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=<endpoint>` — not just an env var. Covered by
+`tests/test_providers.py::test_edit_image_renames_reference_field_per_endpoint` and
+`::test_edit_image_refuses_endpoint_with_unverified_reference_field`.
+
+**Secondary finding — a safety capability this ADR records as lost is partly available on rung 1.**
+`fal-ai/omnigen-v2` exposes `enable_safety_checker` and returns `has_nsfw_concepts` per image. That does not
+restore SynthID and does not relieve ADR-011's output-image gate of being load-bearing, but "open image models
+ship nothing comparable" is **too strong as written** for this rung. Do not claim it as a mitigation without
+testing it — an untested filter is worse than none, because it invites reliance.
+
+**Escalation triggered 2026-07-29.** Probe 1 Run 2 failed both gates (ON 75% vs ≥80%; separation +15 vs ≥30) —
+see `docs/product/PHASE_05_RESULTS.md`. Recorded honestly: the pooled gate that triggered this is one
+**Quill alone would have passed on separation** (+30), and Pip contributed exactly zero separation across two
+runs. The escalation is being taken because the pre-committed rule says so, not because the evidence is
+unambiguous that the substrate is the problem.
+
+**Escalation resolved 2026-07-29 — rung 1 stays a rung. Primary remains Qwen-Image-Edit.**
+
+Run 3 ran the full ablation on `fal-ai/omnigen-v2` (45 items; the 5 `gouache` items were lost to an
+exhausted balance, and nothing that gates was affected). Result: **absolute gate PASS at 80%**, separation
+FAIL at +25, and the pre-registered Quill-only secondary **holds at 80% / +50**. Rung 1 measurably beats
+rung 0 on identity — Quill 70%→80%, separation +30→+50.
+
+**And the escalation is still not being promoted.** Identity is not the only axis the product is graded on.
+The `fused` diagnostic, added before Run 3 was scored, measured OmniGen2 merging the character into scene
+objects at a **~20–25% floor across every scene**, rising to **80%** where the character is *inside* something
+and **60%** where it is *behind* something. A body that becomes the mushroom it hides behind is unusable in a
+children's book at any identity score. Qwen's output was judged qualitatively better composed by the scorer.
+
+**Decision: Qwen-Image-Edit remains default; OmniGen2 becomes a targeted escalation for identity failures,
+not a replacement.** This is the ladder working as designed — a rung is reached for the failure mode it
+fixes and abandoned for the one it causes.
+
+⚠️ **Three honest qualifications, because this decision runs against part of its own evidence:**
+1. **The shipping model failed the kill criterion.** Qwen scored 75% absolute (Run 2) against a ≥80% bar.
+   Phase 1 opens on a model that did not pass its own gate, and the justification is an axis
+   (**composition**) that the gate never measured. Stated plainly rather than buried.
+2. **"Qwen's fusion is 0" is an unverified recollection, not a measurement.** `fused` did not exist when
+   Run 2 was scored and Run 2's images were deleted during Run 3 setup. It is credible — the scorer had seen
+   all 50 items — and it is consistent with the composition preference, but it is **not** a number. Phase 1
+   generates images continuously; verify it there at zero marginal cost before it hardens into a fact.
+3. **The cascade has no trigger yet.** "Use OmniGen2 when identity is wrong" requires something to *detect*
+   that identity is wrong. ADR-008's VLM judge is Phase 3; there is no automated identity check in Phase 1,
+   and no composition check anywhere in this plan. Until the judge exists, the honest implementation is
+   **human-triggered**: Qwen by default, OmniGen2 behind a user-facing regenerate. `providers.REFERENCE_FIELD`
+   already carries both endpoints, so this is a per-call model override, not new infrastructure. A runtime
+   auto-cascade is deferred to Phase 3 and is **not** approved by this amendment.
 
 **Alternatives:**
+- **Promote OmniGen2 to primary on its identity win** — rejected above. It trades a measured 25% floor of
+  unusable compositions for a 5-point identity gain, on a product whose output a child looks at.
 - **Promote FLUX.1 [dev] + a storybook LoRA to primary** (the "more artistic flair" argument) — **rejected on
   three counts**: it makes a non-commercial model primary (ADR-015 permits these as fallbacks only), it
   reintroduces a style LoRA (ADR-016), and it runs two *different-family* image models where ADR-007 has style
