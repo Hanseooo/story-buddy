@@ -8,6 +8,7 @@ node name, in order, INCLUDING nodes that return {}. That is the replacement for
 from contracts.story_memory import CURRENT_SCHEMA_VERSION, Input, StoryMemory
 from pipeline.analyze import StoryAnalysis
 from pipeline.graph import build_graph
+from pipeline.segment import ExtractedScene, SceneSegmentation
 
 EXPECTED_ORDER = [
     "input_gate",
@@ -41,9 +42,14 @@ STUB_ANALYSIS = StoryAnalysis.model_validate(
 
 
 def _mock_call_points(monkeypatch):
-    # One patch point per node (MASTER_SPEC §6 rule 1): `extract_entities` is analyze's seam.
+    # One patch point per node (MASTER_SPEC §6 rule 1)
     monkeypatch.setattr("pipeline.analyze.extract_entities", lambda text: STUB_ANALYSIS)
-    monkeypatch.setattr("pipeline.segment.caption_for", lambda text: "stub caption")
+    monkeypatch.setattr(
+        "pipeline.segment.segment_scenes",
+        lambda units, chars, timeline: SceneSegmentation(scenes=[
+            ExtractedScene(start=0, end=len(units) - 1, characters_present=[])
+        ]),
+    )
     monkeypatch.setattr(
         "pipeline.generate_scene.generate_and_store",
         lambda prompt, story_id: "stub/path.png",
@@ -78,7 +84,7 @@ def test_stub_graph_full_run_with_real_call_points_mocked(monkeypatch):
     assert result["input"].redacted_text == "A dog runs in a field."
     assert result["input"].moderation.passed is True
     assert [s.scene_id for s in result["scenes"]] == ["s0"]
-    assert result["scenes"][0].caption == "stub caption"
+    assert result["scenes"][0].caption == "A dog runs in a field."
     assert result["scenes"][0].final_image_ref == "stub/path.png"
 
 

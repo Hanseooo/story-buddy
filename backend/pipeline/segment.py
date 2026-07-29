@@ -4,7 +4,6 @@ import re
 from pydantic import BaseModel
 
 from contracts.story_memory import Character, Scene, StoryMemory, TimelineEvent
-from pipeline.analyze import caption_for
 from providers import structured_text
 
 log = logging.getLogger(__name__)
@@ -92,17 +91,14 @@ def repair(scenes: list[ExtractedScene], n: int) -> list[ExtractedScene]:
         return [ExtractedScene(start=0, end=n - 1, characters_present=[])]
 
     # Step 4: Close gaps
-    # Leading gap
     first = deoverlapped[0]
     if first.start > 0:
         deoverlapped[0] = ExtractedScene(start=0, end=first.end, characters_present=first.characters_present)
-    # Interior gaps: uncovered run attaches to preceding scene
     for i in range(len(deoverlapped) - 1):
         curr = deoverlapped[i]
         nxt = deoverlapped[i + 1]
         if curr.end + 1 < nxt.start:
             deoverlapped[i] = ExtractedScene(start=curr.start, end=nxt.start - 1, characters_present=curr.characters_present)
-    # Trailing gap
     last = deoverlapped[-1]
     if last.end < n - 1:
         deoverlapped[-1] = ExtractedScene(start=last.start, end=n - 1, characters_present=last.characters_present)
@@ -128,7 +124,30 @@ def repair(scenes: list[ExtractedScene], n: int) -> list[ExtractedScene]:
 
 
 def segment(state: StoryMemory) -> dict:
-    # ponytail: one scene per story. The real segmenter splits into pages and mints s0..sN;
-    # this mints s0 only. scene_id convention: §2.1.
     text = state.input.redacted_text or state.input.raw_text
-    return {"scenes": [Scene(scene_id="s0", text_excerpt=text, caption=caption_for(text))]}
+    units = split_sentences(text)
+    if not units:
+        return {"scenes": []}
+
+    raw = segment_scenes(units, state.characters, state.timeline)
+    repaired = repair(raw.scenes, len(units))
+    if len(repaired) != len(raw.scenes):
+        log.info("segment: repair changed scene count %d → %d", len(raw.scenes), len(repaired))
+
+    name_to_ids: dict[str, list[str]] = {}
+    for c in state.characters:
+        name_to_ids.setdefault(c.name, []).append(c.char_id)
+
+    scenes = []
+    for i, r in enumerate(repaired):
+        excerpt = " ".join(units[r.start : r.end + 1])
+        char_ids: list[str] = []
+        for name in r.characters_present:
+            if name in name_to_ids:
+                char_ids.extend(name_to_ids[name])
+            else:
+                log.warning("segment: name %r not in roster, dropped", name)
+        scenes.append(Scene(scene_id=f"s{i}", text_excerpt=excerpt, caption=excerpt, characters_present=char_ids))
+
+    log.info("segment: minted %s", [s.scene_id for s in scenes])
+    return {"scenes": scenes}

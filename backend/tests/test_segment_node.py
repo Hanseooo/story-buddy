@@ -2,7 +2,7 @@ from pipeline.segment import split_sentences
 
 from unittest.mock import patch
 
-from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, Input, StoryMemory, TimelineEvent
+from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, Input, StoryMemory
 from pipeline.segment import ExtractedScene, SceneSegmentation, repair, segment, segment_scenes
 
 
@@ -140,31 +140,143 @@ def test_repair_merges_18_ranges_to_15_with_union_of_characters():
     assert any("alice" in c and "bob" in c for c in merged_pairs)
 
 
-def _state(raw: str, redacted: str | None) -> StoryMemory:
+# --- Node helpers ---
+
+def _state(
+    raw: str = "The dog ran. He found a ball.",
+    redacted: str | None = None,
+    characters: list | None = None,
+    timeline: list | None = None,
+) -> StoryMemory:
     return StoryMemory(
         schema_version=CURRENT_SCHEMA_VERSION,
         story_id="t1",
         classroom_id="dev-classroom",
         profile_id="dev-profile",
         input=Input(raw_text=raw, redacted_text=redacted),
+        characters=characters or [],
+        timeline=timeline or [],
     )
 
 
-def test_segment_mints_a_zero_based_scene_id():
-    """§2.1: ids are `{prefix}{zero-based-index}`, minted by the node that creates the collection."""
-    with patch("pipeline.segment.caption_for", return_value="stub caption"):
-        result = segment(_state("A dog runs in a field.", "A dog runs in a field."))
-
-    scene, = result["scenes"]
-    assert scene.scene_id == "s0"
-    assert scene.caption == "stub caption"
-    assert scene.text_excerpt == "A dog runs in a field."
+def _char(char_id: str, name: str) -> Character:
+    return Character(char_id=char_id, name=name)
 
 
-def test_segment_captions_the_redacted_text_not_the_raw_text():
-    """CC-2: redacted_text is what downstream nodes consume. Sending raw_text to the model
-    leaks exactly the PII the gate removed."""
-    with patch("pipeline.segment.caption_for", return_value="x") as mock_caption_for:
-        segment(_state("Ana lives on Elm St.", "[NAME] lives on [ADDRESS]."))
+_STUB_SEG = SceneSegmentation(scenes=[
+    ExtractedScene(start=0, end=0, characters_present=["the dog"]),
+    ExtractedScene(start=1, end=1, characters_present=[]),
+])
 
-    mock_caption_for.assert_called_once_with("[NAME] lives on [ADDRESS].")
+
+# --- Node tests ---
+
+def test_segment_mints_zero_based_scene_ids():
+    """D-G §2.1: ids are s0, s1, ... minted by list position."""
+    with patch("pipeline.segment.segment_scenes", return_value=_STUB_SEG):
+        result = segment(_state(characters=[_char("c0", "the dog")]))
+    assert [s.scene_id for s in result["scenes"]] == ["s0", "s1"]
+
+
+def test_segment_text_excerpt_is_verbatim_join_of_source_units():
+    """Invariant 3: text_excerpt is sliced from source units, never model prose."""
+    seg = SceneSegmentation(scenes=[
+        ExtractedScene(start=0, end=0, characters_present=[]),
+        ExtractedScene(start=1, end=1, characters_present=[]),
+    ])
+    with patch("pipeline.segment.segment_scenes", return_value=seg):
+        result = segment(_state(raw="The dog ran. He found a ball."))
+    assert result["scenes"][0].text_excerpt == "The dog ran."
+    assert result["scenes"][1].text_excerpt == "He found a ball."
+    # Concatenating all excerpts in order reproduces the source sentences
+    all_text = " ".join(s.text_excerpt for s in result["scenes"])
+    assert all_text == "The dog ran. He found a ball."
+
+
+def test_segment_caption_equals_text_excerpt():
+    """ADR-013: caption is the child's verbatim text, not a generated string."""
+    with patch("pipeline.segment.segment_scenes", return_value=_STUB_SEG):
+        result = segment(_state(characters=[_char("c0", "the dog")]))
+    for s in result["scenes"]:
+        assert s.caption == s.text_excerpt
+
+
+def test_segment_maps_roster_names_to_char_ids():
+    """Invariant 6: characters_present contains only char_ids from state.characters."""
+    seg = SceneSegmentation(scenes=[
+        ExtractedScene(start=0, end=0, characters_present=["the dog"]),
+        ExtractedScene(start=1, end=1, characters_present=["the cat"]),
+    ])
+    with patch("pipeline.segment.segment_scenes", return_value=seg):
+        result = segment(_state(characters=[_char("c0", "the dog"), _char("c1", "the cat")]))
+    assert result["scenes"][0].characters_present == ["c0"]
+    assert result["scenes"][1].characters_present == ["c1"]
+
+
+def test_segment_drops_names_not_in_roster():
+    """Invariant 6: a name absent from state.characters is silently dropped."""
+    seg = SceneSegmentation(scenes=[
+        ExtractedScene(start=0, end=0, characters_present=["the dog", "unknown character"]),
+        ExtractedScene(start=1, end=1, characters_present=[]),
+    ])
+    with patch("pipeline.segment.segment_scenes", return_value=seg):
+        result = segment(_state(characters=[_char("c0", "the dog")]))
+    assert result["scenes"][0].characters_present == ["c0"]
+
+
+def test_segment_empty_roster_gives_empty_characters_present_no_raise():
+    """Edge case: roster is empty → every scene gets [] and the node does not raise."""
+    seg = SceneSegmentation(scenes=[
+        ExtractedScene(start=0, end=0, characters_present=[]),
+        ExtractedScene(start=1, end=1, characters_present=[]),
+    ])
+    with patch("pipeline.segment.segment_scenes", return_value=seg):
+        result = segment(_state())  # characters=[]
+    for s in result["scenes"]:
+        assert s.characters_present == []
+
+
+def test_segment_prefers_redacted_text():
+    """CC-2: segment_scenes receives units from redacted_text, not raw_text."""
+    seg = SceneSegmentation(scenes=[ExtractedScene(start=0, end=1, characters_present=[])])
+    with patch("pipeline.segment.segment_scenes", return_value=seg) as mock_seg:
+        segment(_state(raw="raw version. Still raw.", redacted="redacted version. Still redacted."))
+    units_arg = mock_seg.call_args.args[0]
+    assert all("redacted" in u for u in units_arg)
+
+
+def test_segment_falls_back_to_raw_text_when_redacted_is_none():
+    """CC-2 fallback: uses raw_text when redacted_text is None."""
+    seg = SceneSegmentation(scenes=[ExtractedScene(start=0, end=1, characters_present=[])])
+    with patch("pipeline.segment.segment_scenes", return_value=seg) as mock_seg:
+        segment(_state(raw="raw version. Still raw.", redacted=None))
+    units_arg = mock_seg.call_args.args[0]
+    assert all("raw" in u for u in units_arg)
+
+
+def test_segment_empty_text_returns_empty_scenes_without_calling_provider():
+    """Edge case: empty/whitespace text → {"scenes": []} with no LLM call (spec §4)."""
+    with patch("pipeline.segment.segment_scenes") as mock_seg:
+        result = segment(_state(raw=""))
+    assert result == {"scenes": []}
+    mock_seg.assert_not_called()
+
+
+def test_segment_partial_returns_exactly_scenes_key_and_does_not_mutate_state():
+    """ADR-024: partial-return; state is unmutated."""
+    state = _state()
+    before = state.model_dump()
+    seg = SceneSegmentation(scenes=[ExtractedScene(start=0, end=1, characters_present=[])])
+    with patch("pipeline.segment.segment_scenes", return_value=seg):
+        result = segment(state)
+    assert set(result.keys()) == {"scenes"}
+    assert state.model_dump() == before
+
+
+# --- Regression guard (spec §4 retirement) ---
+
+def test_caption_for_and_scene_caption_not_in_analyze_module():
+    """Guards against LLM caption writer being reintroduced against ADR-013."""
+    import pipeline.analyze as analyze_module
+    assert not hasattr(analyze_module, "caption_for")
+    assert not hasattr(analyze_module, "SceneCaption")
