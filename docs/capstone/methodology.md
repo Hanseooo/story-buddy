@@ -74,10 +74,15 @@ directly to the four core quadrants of Boehm's Spiral Model:
 | **2** & **2.5** | **Loop 3: Integration & tuning** | Safe for a real child, survives messy input. An honestly evaluated specialized judge | The Filipino/Taglish moderation probe passes in **both** directions. A results table exists and the held-out set was read exactly once |
 | **3** | **Loop 4: Evaluation** | Expert validation (Obj 3), judge classification (Obj 4), and ISO/IEC 25010 software quality (Obj 5) | Expert-validation responses collected and content-analysed; the judge held-out classification table read exactly once; ISO/IEC 25010 questionnaire administered |
 
-Phase 0.5's kill criterion is the sharpest instance of the method. **It has not yet run**, and every claim
-downstream of it is written as contingent, because it is. If the substrate cannot hold an invented non-human
-character, that is a reportable finding and the product's scope changes — discovered for one dollar rather
-than in month five.
+Phase 0.5's kill criterion is the sharpest instance of the method. **It ran on 2026-07-29 and split its
+two gates**: reference conditioning retained identity on **80%** of pipeline-ON items (absolute gate met)
+but exceeded pipeline-OFF by only **+25 points** against a pre-committed ≥30 (separation gate missed).
+Per ADR-001 the project escalated one rung, re-ran, and got the same split on the fallback — so the
+escalation was declined and Qwen-Image-Edit remains primary, with the missed gate carried as a stated
+limitation rather than reported as a pass. The method's value showed exactly where it was supposed to:
+the substrate question was answered for about **$12**, in month one, and the answer was neither the
+clean pass the plan hoped for nor the kill the plan feared. Claims downstream stay contingent on the
+separation result, not on whether the probe ran.
 
 ### 1.4 Why the build track is iterative and the research track is not
 

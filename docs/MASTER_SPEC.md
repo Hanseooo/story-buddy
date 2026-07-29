@@ -341,13 +341,18 @@ Phase-2.5 annotators. Design it once, in Phase 1, or invalidate every label coll
 
 ## 8. Open items (AI: do not guess these — flag them)
 
-**Blocking, and un-run:**
-- ⚠️ **Non-human character consistency on Qwen-Image-Edit** — unverified by anyone. The **Phase 0.5 kill
-  criterion**. Two characters (easy + invented), blind ON/OFF ablation, two pass conditions. **Every
-  document downstream is contingent on this.** Do not collect fine-tune labels before it passes.
+**Status 2026-07-29 — two of these four are now run:**
+- ✅ **Non-human character consistency on Qwen-Image-Edit** — the **Phase 0.5 kill criterion**, run three
+  times. Absolute gate **met** (identity retained on 80% of pipeline-ON items); pooled separation gate
+  **missed** (+25 vs ≥30), driven entirely by the easy character showing zero ON/OFF difference. The
+  invented character separated +50. Escalation to ADR-001 rung 1 reproduced the split and was declined.
+  Phase 1 opens with the missed gate as a stated limitation. Numbers are single-rater and non-blind —
+  a build gate, not a reportable finding. **Do not collect fine-tune labels against them.**
 - ⚠️ **Seed determinism per hosted provider**, on **both** `edit_image` and `text_to_image` (CC-7). Phase 0.5.
-- ⚠️ **Structured output for the judge with *image* input** — support is per `(model, provider)` *and* per
-  modality. A text-only probe passes while the judge is broken. Phase 0.5.
+  **Still un-run** — needs fal credit. CC-7's reproducibility claim is unsupported until it runs.
+- ✅ **Structured output for the judge with *image* input** — support is per `(model, provider)` *and* per
+  modality. Probe 3 **passed** both arms on 2026-07-29 (`qwen/qwen3-32b` text; `google/gemma-3-27b-it`
+  with two images), including the ADR-004 raw field-order assertion. `consistency_check` is unblocked.
 - ⚠️ **Filipino / Taglish text-moderation performance** — never measured, and the proprietary backstop is
   gone. **Release gate for Phase 2.** Phase 0.5 probe 4 (ADR-011).
 

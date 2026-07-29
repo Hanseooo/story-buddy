@@ -17,6 +17,10 @@ is solo; the research track is not. They run in parallel and meet at Phase 2.5 a
 3. **Instrument from Day 1.** LangSmith tracing is your research dataset — turn it on in the skeleton.
 4. **Exit criteria, not calendar.** Each phase has a definition of done.
 5. **Ethics is the long pole and cannot be compressed by coding faster.** It starts before Phase 0.5.
+6. **Findings propagate the same day they land.** A probe result or an ADR amendment silently
+   falsifies sentences in *other* docs — phase status here, model IDs in `AGENTS.md`, procedure
+   notes in `PHASE_05_RESULTS.md`. Grep for what changed and fix every hit in the same change;
+   rule and blast radius in `AGENTS.md` → *Definition of Done*.
 
 ---
 
@@ -38,7 +42,11 @@ dependency tree entirely.
 This phase exists because ADR-001's headline capability is no longer vendor-verified: nobody has published
 identity-similarity benchmarks for any open image model split by human vs. non-human subject.
 
-The code half is done (`backend/providers.py`, `backend/spikes/phase_05.py`). The probes are not.
+The code half is done (`backend/providers.py`, `backend/spikes/phase_05.py`). **Status 2026-07-29:**
+probe 1 run three times and resolved (Run 1 void, Run 2 FAIL, Run 3 FAIL on separation only) — branch
+taken in the ADR-001 amendment, Qwen stays primary. Probe 3 **PASS** (both arms). Probes 2 and 4 not
+run — 2 needs fal credit, 4 waits on the Phase-2 moderation spec; neither gates Phase 1. Results and
+rationale in `PHASE_05_RESULTS.md`.
 
 ```
 uv run python -m spikes.phase_05 consistency   # ~54 images, ~$1.90. Then score scores.csv blind.
@@ -62,9 +70,12 @@ Two criteria, **both** must hold:
 - **Separation:** pipeline-ON exceeds pipeline-OFF by ≥ 30 points.
 
 Absolute-but-no-separation is a **fail**: the reference is not doing the work, and ADR-007's mechanism has no
-measurable effect on this substrate. *Fail →* escalate to FLUX.1 Kontext [dev]
-(non-commercial, permitted — ADR-015) and re-run. If both fail, **stop and surface it** — that is a
-Phase-0.5 finding, not a Phase-3 catastrophe.
+measurable effect on this substrate. *Fail →* ~~escalate to FLUX.1 Kontext [dev]
+(non-commercial, permitted — ADR-015) and re-run.~~ escalate **one rung down ADR-001's ladder** and
+re-run — rung 1 is **OmniGen2**; Kontext is rung 4. *(Corrected 2026-07-29: this branch was authored
+before the 2026-07-28 ladder reorder and still named the old first choice. Run 3 did escalate, and
+correctly went to OmniGen2 per the ADR, not to Kontext per this line.)* If both fail, **stop and
+surface it** — that is a Phase-0.5 finding, not a Phase-3 catastrophe.
 
 If Pip passes and Quill fails, that is **not a defeat** — it maps the product's boundary, and it is the most
 interesting sentence in the paper. Record it and decide scope, don't paper over it.
@@ -102,6 +113,12 @@ for Qwen-Image-Edit or a recorded ADR amendment naming the fallback that passed.
 
 **Gate → Phase 1:** probe 1 only. Both criteria must hold. Probes 2 and 3 record findings and do not block.
 **Gate → Phase 2:** probe 4, no MISS in either direction.
+
+> **Resolved 2026-07-29.** Probe 1 passed absolute (80%) and failed separation (+25 vs ≥30). Phase 1
+> opens anyway under the ADR-001 amendment, which records the failed gate as a stated limitation
+> rather than treating it as satisfied — see PHASE_05_RESULTS.md *Result — Run 3*. Probe 3 — the
+> only remaining practical blocker, gating Phase 1's `consistency_check` node — **passed the same
+> day**. Nothing in Phase 0.5 blocks Phase 1 now.
 
 **⚠️ Kill-criterion phase.** The cheapest possible place to learn the substrate does not work.
 
@@ -356,9 +373,12 @@ Two edges nobody draws, and they are the two likeliest ways the schedule dies:
 
 ## Schedule risk flags
 
-- **Non-human character consistency is the top risk and it is still unverified.** Phase 0.5 exists solely
-  to find out cheaply, and it has not run. Every document downstream is written as though this is contingent,
-  because it is.
+- ~~**Non-human character consistency is the top risk and it is still unverified.**~~ **Retired
+  2026-07-29.** Probe 1 ran: the invented non-human character held identity on 80% of pipeline-ON items
+  and separated +50 from the control. The residual risk is narrower and inverted — the *pooled*
+  separation gate failed (+25 vs ≥30) because the **easy** character shows zero separation, so ADR-007's
+  mechanism is unproven on subjects the model already knows. That is a measurement/limitation problem,
+  not a substrate risk.
 - **Ethics latency, now with no participant access started.** The Stage-1/Stage-2 split is the mitigation.
   Nothing else compresses it.
 - **The corpus gates Objective 3 (expert validation).** See the dependency map.

@@ -326,16 +326,28 @@ Riskiest assumptions first. Build track and research track run in parallel and m
 | Phase | What | Status |
 |---|---|---|
 | 0 | Scaffolding & walking skeleton | ✅ done |
-| **0.5** | **Open-weight spike — can the image model hold a non-human character?** | **⚠️ not run. Everything below is contingent on it.** |
-| 1 | Core pipeline + prompted consistency judge | blocked on 0.5 |
+| **0.5** | **Open-weight spike — can the image model hold a non-human character?** | **⚠️ Run 2026-07-29. Split result: absolute gate met (80%), separation gate missed (+25 vs ≥30). Probe 3 passed; probes 2 and 4 outstanding.** |
+| 1 | Core pipeline + prompted consistency judge | **unblocked** — opens on a stated limitation, not a clean pass |
 | 2 | Moderation, classroom auth, sharing, narration, export | blocked on probe 4 |
 | 2.5 | Judge fine-tuning + classification evaluation (Objective 4) | blocked on Ethics Stage 1 → corpus → a Phase 1 run |
 | 3 | Expert validation (Objective 3) + ISO/IEC 25010 (Objective 5) | blocked on corpus |
 
-**Phase 0.5 is a kill criterion, and it has not run.** If the image model cannot hold an invented non-human
-character, that is a finding worth reporting and the product's scope changes. It is the cheapest possible
-place to learn the substrate does not work — roughly one dollar. Every document downstream is written as
-contingent, because it is.
+**Phase 0.5 is a kill criterion, and it has now run (2026-07-29).** It did not kill the project and it did
+not clear it either. Reference conditioning held the invented non-human character (Quill) on **80%** of
+items — the absolute gate — but beat the unconditioned control by only **+25 points** against a
+pre-committed **≥30**. Escalating one rung down ADR-001's fallback ladder reproduced the same split, so
+the escalation was declined and Qwen-Image-Edit stayed primary.
+
+The interesting sentence turned out to be the opposite of the one anticipated. The *invented* character
+separated strongly (+50, ON 80% vs OFF 30%); the *easy* character, a fox cub, separated not at all (80%
+vs 80%, three runs running) — the model already knows what a fox looks like, so the reference adds
+nothing measurable and drags the pooled separation below its threshold. Reference conditioning appears to
+buy the most exactly where the product needs it most, which is the reverse of the risk this probe was
+built to expose. That is a claim from a single-rater, non-blind build gate and is **not** reportable as a
+finding without a blind re-score (`PHASE_05_RESULTS.md`).
+
+Downstream documents stay contingent — but on the *separation* result and the limitation it forces into
+the writeup, no longer on whether the substrate works at all.
 
 **Ethics Stage 1 is the long pole and cannot be compressed by coding faster.** The fine-tune sits four hops
 downstream of an ethics form: *Stage 1 → stories → images → labels → fine-tune.* Everything after `images`

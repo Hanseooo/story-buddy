@@ -298,6 +298,42 @@ No CI workflow exists yet — run both suites manually before merging:
 - Never mark complete without proof (passing tests, logs, demonstrated correctness).
 - Behavior change → the relevant spec in `docs/specs/` is updated in the same change (specs
   that lie are worse than none).
+- **Finding change → same rule, wider blast radius.** A probe result, a new ADR, or an ADR
+  amendment settles a question that other docs still describe as open, or names a model/phase
+  other docs still name differently. Before calling it done: `grep -rn` the repo for what changed
+  (the model ID, the ADR number, the phase name, the probe number) and fix every hit in the same
+  change. One doc updated is not done.
+  - In pre-registered docs (`PHASE_05_RESULTS.md`, `RESEARCH_PROTOCOL.md`) superseded prose is
+    **struck through and left visible**, never deleted — what was believed before the numbers
+    arrived is part of the method. Elsewhere, just correct it.
+
+### The status surface (grep target — keep it this short)
+
+Nine files independently asserted "what phase are we in / did the probes run" as of 2026-07-29, and
+a single day's results made **nine** of them wrong at once. The list below is the whole surface. It
+is not documentation of a good design; it is the blast radius, written down so the grep is bounded:
+
+| File | What it asserts |
+|---|---|
+| `docs/product/PHASE_05_RESULTS.md` | **Source of truth.** Probe numbers, gates, branches taken. |
+| `docs/product/ROADMAP.md` | Phase status line, entry/exit gates, schedule risk flags |
+| `AGENTS.md` (*Validation Notes*, *Project Context*) | Current phase, primary models, what's built vs specced |
+| `docs/MASTER_SPEC.md` §"un-run" | Which unknowns are still blocking |
+| `docs/TECH_STACK.md` §8 | Known gaps / unverified |
+| `docs/WORKFLOW.md` §"Right now" | The single next action |
+| `docs/capstone/methodology.md`, `research_direction_and_goals.md`, `design_decisions_and_risks.md` | Phase table, contingency framing, sequencing branches |
+| `backend/.env.example` | Which model overrides are live |
+
+**Rules:**
+- **Point, don't copy.** A doc that needs a probe result links to `PHASE_05_RESULTS.md`; it does not
+  restate the number. Restating creates the tenth copy and the tenth rot site.
+- **Do not add a file to this table.** A new doc asserting current state must instead link to one
+  that already does. If you genuinely need a tenth, the right change is deleting one of the nine.
+- **Capstone docs are the easiest to forget and the worst to get wrong** — they're the submitted
+  artifact. They are last in the grep and first in the consequences.
+- A gate with **N criteria has 2^N outcomes.** Pre-registered branch tables must enumerate all of
+  them, or say which they're ignoring. Probe 1's table wrote 2 of 4 and the project landed on one of
+  the missing two (identity held, separation failed) with no pre-committed action.
 
 ---
 
@@ -307,5 +343,10 @@ No CI workflow exists yet — run both suites manually before merging:
 - `ruff format` is not adopted — only `ruff check` is. See comment in `backend/pyproject.toml`
   for rationale (single repo-wide formatting commit, never inside a feature change).
 - **Current phase: Phase 0.5 (Open-Weight Model Spike).** Phase 0 (Scaffolding) is ✅ complete.
-  Phase 0.5 probes are not yet run — see `docs/product/ROADMAP.md` for commands and kill
-  criteria. Phase 1 (`story-memory-contract`) begins after Phase 0.5 exit criteria are met.
+  **Probe 1 is resolved (2026-07-29)** — three runs, absolute PASS / separation FAIL, branch taken
+  in the ADR-001 amendment: **Qwen-Image-Edit stays primary**, OmniGen2 (rung 1) is a targeted
+  escalation, not the default. **Probe 3 PASS (2026-07-29)** — strict `json_schema` round-trips for
+  the text model and for the judge called with two images, so `consistency_check` is unblocked.
+  Probes 2 and 4 not run and neither gates Phase 1. **Phase 1 (`story-memory-contract`) is clear to
+  start.** Commands and kill criteria in `docs/product/ROADMAP.md`, numbers in
+  `docs/product/PHASE_05_RESULTS.md`.

@@ -231,11 +231,14 @@ the one-file, not one-env-var, case.
 
 Be honest — these are open, not silently resolved:
 
-- **Phase 0.5 probes have not been run yet.** The entire fallback ladder in §4, the non-human-identity
-  kill criterion, and the moderation Filipino/Taglish probe are all *pre-committed but unexecuted*
-  (`AGENTS.md` — "Current phase: Phase 0.5"; ROADMAP.md).
-- **`backend/.env` does not exist** — only `backend/.env.example` (confirmed by directory listing during
-  this doc's generation). `Settings` in `config.py` will fail to instantiate without it.
+- **Phase 0.5 probes: partly run (2026-07-29).** Probe 1 (non-human identity) ran three times — absolute
+  gate met at 80%, separation gate missed at +25 vs ≥30; Qwen-Image-Edit stays primary per the ADR-001
+  amendment. Probe 3 (structured output) **passed** both arms. **Probe 2 (seed determinism) and probe 4
+  (Filipino/Taglish moderation) are still unexecuted**, so §4's fallback ladder below rung 1 remains
+  unverified on fal and the moderation gate is untested in either direction. See
+  `docs/product/PHASE_05_RESULTS.md`.
+- ~~**`backend/.env` does not exist**~~ — resolved; `backend/.env` exists and `Settings` instantiates
+  (verified 2026-07-29 by resolving `fal_image_edit_model`). Only `.env.example` is in git, by design.
 - **`settings.moderation_backstop_model` is `None`** in `config.py:36`. ADR-011's actual decided backstop
   is `openai/gpt-oss-safeguard-20b` on OpenRouter, but the field is deliberately left unset so the
   Phase-0.5 probe stays opt-in — the Phase-2 `moderation-stack` spec is what wires the real

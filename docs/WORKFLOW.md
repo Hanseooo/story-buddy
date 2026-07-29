@@ -97,7 +97,12 @@ checklists is exactly the noise you were worried about.
 
 ## Right now
 
-You're in **Phase 0.5 (open-weight model spike)**; Phase 0 scaffolding is ✅ complete. Next action:
-**run the Phase 0.5 probes** — commands and kill criteria are in ROADMAP Phase 0.5, results go in
-`docs/product/PHASE_05_RESULTS.md`. Brainstorming re-enters at the first real module,
-`story-memory-contract`, which is the first thing Phase 1 builds — gated on probe 1 passing.
+**Phase 0.5 is done blocking (2026-07-29).** Probe 1 resolved (absolute PASS 80%, separation FAIL +25 —
+Qwen stays primary under the ADR-001 amendment) and probe 3 passed both arms. Probes 2 and 4 are
+outstanding and neither gates Phase 1: probe 2 needs fal credit, probe 4 waits on the Phase-2
+`moderation-stack` spec.
+
+**Next action: start Phase 1 with `story-memory-contract`** — the spec is already written and approved
+(`docs/specs/story-memory-contract.md`, 2026-07-22), so brainstorming is *not* the entry point here;
+`writing-plans` is. The work is porting `backend/contracts/job_state.py` (a provisional `TypedDict`) to
+the real Pydantic contract and deleting it, per spec §9.

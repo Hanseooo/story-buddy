@@ -237,6 +237,12 @@ Phase 0.5 is a build gate for pipeline substrate validity. Order of operations:
    - *If Probe 1 fails / Quill fails:* that is a **reportable finding**, not a catastrophe (see
      `PHASE_05_RESULTS.md` branches). The product's scope narrows and the paper gains its most interesting
      sentence.
+   - **What actually happened (2026-07-29) — a case this ordering did not enumerate.** Quill *passed*
+     and the pooled **separation** gate failed, on the primary model and again one rung down. Neither
+     branch above fits: the substrate holds identity, so there is nothing to narrow, but a
+     pre-committed gate is red, so "passes → opens" overstates it. Resolution: Phase 1 opens under the
+     ADR-001 amendment with the missed gate carried as an explicit limitation. The lesson for the
+     remaining probes is that a two-criteria gate has **four** outcomes and this list wrote down two.
 2. **Probe 2 (seed determinism).** Confirms each endpoint reproduces on itself — see m1. If either endpoint
    fails, drop the reproducibility claim from the affected method or change provider (do not silently keep
    the claim).
