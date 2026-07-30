@@ -25,6 +25,15 @@ class Settings(BaseSettings):
     fal_image_model: str = "fal-ai/qwen-image"
     fal_image_edit_model: str = "fal-ai/qwen-image-edit-2511"
 
+    # ADR-022's `cel` preset — "the flagship default kids see first" — authored 2026-07-21 in
+    # backend/spikes/phase_05.py. This is ADR-007 as originally written (one fixed style). The
+    # three-preset `style_presets` dict, `style_preset_id` resolution and the picker UI stay
+    # wholly owned by the `style-presets` spec; `char_bible` only needs *a* fragment to exist.
+    default_style_fragment: str = (
+        "flat cel-shaded cartoon, thick clean black outlines of even weight, bright solid colour fills, "
+        "two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing"
+    )
+
     # The judge moves to a self-hosted vLLM server after Phase 2.5 (ADR-019). vLLM speaks the
     # OpenAI protocol, so the swap is these two vars — no code change.
     judge_base_url: str = "https://openrouter.ai/api/v1"
