@@ -2,8 +2,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from contracts.story_memory import CharacterDescription, RefVerdict
-from pipeline.char_bible import best_draw, mint_reference, reference_prompt
+from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, CharacterDescription, Cost, Input, RefVerdict, StoryMemory, Style
+from pipeline.char_bible import best_draw, char_bible, mint_reference, reference_prompt
 
 FRAG = "flat cel-shaded cartoon, thick clean black outlines"
 DRAWS = [b"draw-1-bytes", b"draw-2-bytes", b"draw-3-bytes"]
@@ -225,3 +225,213 @@ def test_mint_reference_passes_no_seed_to_the_image_model():
     for call in t2i.call_args_list:
         assert call.kwargs.get("seed") is None
         assert len(call.args) == 1   # prompt only — no positional seed
+
+
+# --- char_bible node (mint_reference mocked) ---
+
+def _char(char_id: str, name: str, ref: str | None = None) -> Character:
+    return Character(
+        char_id=char_id,
+        name=name,
+        description=CharacterDescription(species="dog"),
+        canonical_ref_image=ref,
+    )
+
+
+def _state(characters: list[Character], style: Style | None = None, cost: Cost | None = None) -> StoryMemory:
+    return StoryMemory(
+        schema_version=CURRENT_SCHEMA_VERSION,
+        story_id="story-1",
+        classroom_id="dev-classroom",
+        profile_id="dev-profile",
+        input=Input(raw_text="The dog ran.", redacted_text="The dog ran."),
+        characters=characters,
+        style=style or Style(),
+        cost=cost or Cost(),
+    )
+
+
+def _minted(path: str = "story-1/ref.png", draws: int = 1):
+    """A mint_reference stand-in: same 3-tuple shape, one accepted draw."""
+    return (path, _verdict(True, ["dog"]), draws)
+
+
+def test_char_bible_references_at_most_two_characters():
+    """Invariant 1 (ADR-004: max 2 canonical refs, v1): a 3-character roster calls the helper
+    exactly twice, for c0 and c1."""
+    state = _state([_char("c0", "the dog"), _char("c1", "the cat"), _char("c2", "the bird")])
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()) as mint:
+        char_bible(state)
+
+    assert mint.call_count == 2
+    assert [call.args[4] for call in mint.call_args_list] == ["c0", "c1"]
+
+
+def test_char_bible_returns_the_complete_character_list():
+    """Invariant 2 — THE REDUCER TRAP. `characters` has no reducer, so a partial return
+    REPLACES the list. Returning only the two modified entries deletes c2 silently."""
+    c2 = _char("c2", "the bird")
+    state = _state([_char("c0", "the dog"), _char("c1", "the cat"), c2])
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()):
+        result = char_bible(state)
+
+    assert len(result["characters"]) == 3
+    assert result["characters"][2] == c2          # byte-identical to input
+    assert result["characters"][2].canonical_ref_image is None
+    assert [c.char_id for c in result["characters"]] == ["c0", "c1", "c2"]
+
+
+def test_char_bible_writes_the_path_and_verdict_onto_the_referenced_characters():
+    state = _state([_char("c0", "the dog")])
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted("story-1/ref-c0.png")):
+        result = char_bible(state)
+
+    assert result["characters"][0].canonical_ref_image == "story-1/ref-c0.png"
+    assert result["characters"][0].ref_verdict.matches_description is True
+
+
+def test_char_bible_persists_a_failing_verdict_rather_than_failing_the_job():
+    """ADR-010/ADR-028: a failed acceptance loop is loud, never a failed job, never a placeholder."""
+    failing = ("story-1/ref-c0.png", _verdict(False, ["dog"]), 3)
+    state = _state([_char("c0", "the dog")])
+
+    with patch("pipeline.char_bible.mint_reference", return_value=failing):
+        result = char_bible(state)
+
+    assert result["characters"][0].canonical_ref_image == "story-1/ref-c0.png"
+    assert result["characters"][0].ref_verdict.matches_description is False
+
+
+def test_char_bible_accepts_a_null_verdict_from_a_degraded_judge():
+    """Spec §4: ref_verdict=None is honest and distinguishable from a FAILED verdict."""
+    state = _state([_char("c0", "the dog")])
+
+    with patch("pipeline.char_bible.mint_reference", return_value=("story-1/ref-c0.png", None, 1)):
+        result = char_bible(state)
+
+    assert result["characters"][0].canonical_ref_image == "story-1/ref-c0.png"
+    assert result["characters"][0].ref_verdict is None
+
+
+def test_char_bible_bumps_image_count_by_the_draws_made_and_preserves_the_rest_of_cost():
+    """Invariant 4: cost has no reducer, so it is COPIED and bumped — never rebuilt from zero,
+    which would erase any field a future node has written."""
+    state = _state(
+        [_char("c0", "the dog"), _char("c1", "the cat")],
+        cost=Cost(image_count=4, regen_count=2, usd_estimate=1.25),
+    )
+
+    with patch("pipeline.char_bible.mint_reference", side_effect=[_minted(draws=3), _minted(draws=2)]):
+        result = char_bible(state)
+
+    assert result["cost"].image_count == 4 + 3 + 2
+    assert result["cost"].regen_count == 2
+    assert result["cost"].usd_estimate == 1.25
+
+
+def test_char_bible_on_an_empty_roster_returns_without_calling_the_helper():
+    """Spec §4 edge case: zero characters → no refs, no cost change, and the node does NOT raise.
+    Scenes generate unreferenced — a book with drifting art beats no book (ADR-010)."""
+    with patch("pipeline.char_bible.mint_reference") as mint:
+        result = char_bible(_state([]))
+
+    mint.assert_not_called()
+    assert result == {}
+
+
+def test_char_bible_on_a_single_character_mints_exactly_one_reference():
+    """Spec §4: the cap is a ceiling, not a quota."""
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()) as mint:
+        result = char_bible(_state([_char("c0", "the dog")]))
+
+    assert mint.call_count == 1
+    assert len(result["characters"]) == 1
+
+
+def test_char_bible_skips_a_character_that_already_has_a_reference():
+    """Invariant 6 / CC-10: idempotent re-entry — zero draws, zero cost for an existing ref."""
+    state = _state([_char("c0", "the dog", ref="story-1/ref-c0.png"), _char("c1", "the cat")])
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted(draws=1)) as mint:
+        result = char_bible(state)
+
+    assert mint.call_count == 1
+    assert mint.call_args.args[4] == "c1"
+    assert result["characters"][0].canonical_ref_image == "story-1/ref-c0.png"
+
+
+def test_char_bible_makes_zero_helper_calls_when_both_references_already_exist():
+    """Invariant 6: full re-entry after success costs nothing."""
+    state = _state([
+        _char("c0", "the dog", ref="story-1/ref-c0.png"),
+        _char("c1", "the cat", ref="story-1/ref-c1.png"),
+    ])
+
+    with patch("pipeline.char_bible.mint_reference") as mint:
+        result = char_bible(state)
+
+    mint.assert_not_called()
+    assert result == {}
+
+
+def test_char_bible_caps_before_it_filters():
+    """Spec §4's trap. A 3-character roster where c0 is already referenced calls the helper
+    ONCE, for c1 only — never for c2. Filtering before capping slides the 2-slot window onto c2
+    and mints a THIRD canonical reference against ADR-004."""
+    state = _state([
+        _char("c0", "the dog", ref="story-1/ref-c0.png"),
+        _char("c1", "the cat"),
+        _char("c2", "the bird"),
+    ])
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()) as mint:
+        result = char_bible(state)
+
+    assert mint.call_count == 1
+    assert mint.call_args.args[4] == "c1"
+    assert result["characters"][2].canonical_ref_image is None
+
+
+def test_char_bible_leaves_ref_moderation_status_untouched():
+    """Contract slice: ref_moderation_status is owned by the Phase-2 char-ref moderation node.
+    CC-1 is NOT closed by this node completing (spec §5)."""
+    state = _state([_char("c0", "the dog"), _char("c1", "the cat"), _char("c2", "the bird")])
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()):
+        result = char_bible(state)
+
+    for character in result["characters"]:
+        assert character.ref_moderation_status is None
+
+
+def test_char_bible_partial_returns_exactly_characters_and_cost_without_mutating_state():
+    """ADR-024: partial-return, never mutate."""
+    state = _state([_char("c0", "the dog")])
+    before = state.model_dump()
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()):
+        result = char_bible(state)
+
+    assert set(result) == {"characters", "cost"}
+    assert state.model_dump() == before
+
+
+def test_char_bible_falls_back_to_the_default_style_fragment():
+    """Spec §4: nothing writes `style` today, so the fallback is the NORMAL Phase-1 path."""
+    from app.config import settings
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()) as mint:
+        char_bible(_state([_char("c0", "the dog")], style=Style(prompt_fragment=None)))
+
+    assert mint.call_args.args[2] == settings.default_style_fragment
+
+
+def test_char_bible_prefers_the_state_style_fragment_when_set():
+    """ADR-022: the style is frozen before the reference is drawn, and state wins over the default."""
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()) as mint:
+        char_bible(_state([_char("c0", "the dog")], style=Style(prompt_fragment="flat gouache storybook")))
+
+    assert mint.call_args.args[2] == "flat gouache storybook"

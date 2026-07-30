@@ -12,8 +12,9 @@ for the rate is swapping `fal_image_model` (ADR-001's named seam), not anything 
 import base64
 import logging
 
+from app.config import settings
 from app.db import get_supabase_client
-from contracts.story_memory import CharacterDescription, RefVerdict
+from contracts.story_memory import CharacterDescription, RefVerdict, StoryMemory
 from providers import judge, text_to_image
 
 log = logging.getLogger(__name__)
@@ -148,6 +149,44 @@ def mint_reference(
     return _upload(image, story_id, char_id), verdict, draws
 
 
-def char_bible(state) -> dict:
-    # ponytail: stub — Plan B Task 4 fills this in (select, mint, map, bump cost).
-    return {}
+def char_bible(state: StoryMemory) -> dict:
+    """Pure: select, map, bump, partial-return. Every effect is behind `mint_reference`.
+
+    Linear in the graph — no conditional edge (ADR-003's two branch points are moderation
+    pass/fail and consistency pass/fail, and this is neither).
+    """
+    # Cap FIRST (invariant 1, ADR-004), THEN filter (invariant 6). The order is load-bearing:
+    # filtering first slides the 2-slot window onto c2 when c0 is already referenced, producing
+    # three canonical references and breaking the cap.
+    selected = [c for c in state.characters[:2] if c.canonical_ref_image is None]
+    if not selected:
+        return {}
+
+    # Nothing writes `style` today, so this fallback is the normal Phase-1 path, not an error
+    # path. The three-preset dict and `style_preset_id` resolution belong to `style-presets`.
+    style_fragment = state.style.prompt_fragment or settings.default_style_fragment
+
+    minted: dict[str, tuple[str, RefVerdict | None]] = {}
+    draws_made = 0
+    for character in selected:
+        path, verdict, draws = mint_reference(
+            character.description, character.name, style_fragment, state.story_id, character.char_id
+        )
+        minted[character.char_id] = (path, verdict)
+        draws_made += draws
+
+    # Invariant 2: `characters` has NO reducer, so a partial return REPLACES the list —
+    # returning only the modified entries would silently delete every other character.
+    characters = [
+        c.model_copy(update={"canonical_ref_image": minted[c.char_id][0], "ref_verdict": minted[c.char_id][1]})
+        if c.char_id in minted
+        else c
+        for c in state.characters
+    ]
+    # Invariant 4: `cost` has no reducer either — copy and bump, never rebuild from zero.
+    # CC-3: this node's prelude bound is 6 (2 references x 3 draws). `image-generator` owns the
+    # scene-image half of `image_count`; the breaker cannot trip until it writes its share.
+    cost = state.cost.model_copy(update={"image_count": state.cost.image_count + draws_made})
+
+    log.info("char_bible: minted %s in %d draws", sorted(minted), draws_made)
+    return {"characters": characters, "cost": cost}
