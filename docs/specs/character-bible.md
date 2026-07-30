@@ -30,7 +30,7 @@ seam), not anything in this file.
 
 - **Reads:** `characters[]` (`name`, `description`, `canonical_ref_image`), `style.prompt_fragment`,
   `story_id`, `cost`
-- **Writes:** `characters[]` (the **full** list), `cost.image_count`
+- **Writes:** `characters[]` (the **full** list, with `canonical_ref_image` and `ref_verdict` set on minted characters), `cost.image_count`
 - **Does not write:** `ref_moderation_status` (owned by the Phase-2 char-ref moderation node — see
   §8), `scenes[]`, `style`
 
