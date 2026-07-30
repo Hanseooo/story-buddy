@@ -113,10 +113,12 @@ roadmap order. Source: MASTER_SPEC §7.
 - [x] `scene-segmentation`   *(spec **built 2026-07-29** — `docs/specs/scene-segmentation.md`;
       `pipeline/segment.py` splits into scenes (≤15), enforces verbatim excerpts, maps names → char_ids.
       Retired `caption_for`/`SceneCaption` per ADR-013. Hands `scenes[].prompt` to `prompt-optimizer`.)*
-- [ ] `character-bible`   *(spec **written 2026-07-30**, status `draft` — `docs/specs/character-bible.md`;
-      code: `pipeline/char_bible.py` — still a stub. Owns ADR-028's reference-acceptance loop —
-      draw → judge vs `CharacterDescription` → re-roll, 3-draw cap, best-of by `attributes_present`.
-      Caps references at **2** per ADR-004, not 3 — see the `story-analyzer` §5 correction. Opened **D-I**.)*
+- [x] `character-bible`   *(spec **built 2026-07-30** — `docs/specs/character-bible.md`;
+      `pipeline/char_bible.py` owns ADR-028's reference-acceptance loop — draw → judge vs
+      `CharacterDescription` → re-roll, 3-draw cap, best-of by `attributes_present`. Caps references at
+      **2** per ADR-004. Authored `settings.default_style_fragment` (ADR-022 `cel`); `contracts/`
+      untouched. Opened **D-I**. Hands the reveal step to D-I, deterministic-path idempotency and
+      scene-image `cost.image_count` to `image-generator`, and the preset dict to `style-presets`.)*
 - [ ] `style-presets`   *(ADR-022; 3 presets)*
 - [ ] `prompt-optimizer`
 - [ ] `image-generator`   *(code: `pipeline/generate_scene.py` — partial, still text-to-image)*
@@ -168,13 +170,15 @@ revised 2026-07-25.)*
 >
 > ✅ **`scene-segmentation` is built (2026-07-29).** See `docs/specs/scene-segmentation.md`.
 
-**Build `character-bible`** — spec **written 2026-07-30** (`docs/specs/character-bible.md`, status `draft`).
-It owns ADR-028’s reference-acceptance loop (draw → judge vs `CharacterDescription` → re-roll, 3-draw cap,
-best-of by `attributes_present`) and the `canonical_ref_image` field. `pipeline/char_bible.py` is still a
-pass-through stub. Next step is the implementation plan, then the build.
+> ✅ **`character-bible` is built (2026-07-30).** See `docs/specs/character-bible.md`.
+
+**Build `style-presets`** — ADR-022’s three presets (`cel` / `comic` / `gouache`), `style_preset_id`
+resolution and the picker UI. `char_bible` authored one default fragment and nothing else; the preset
+dict and ADR-022’s binding "must not read as generic AI art" acceptance condition are still unowned in
+code. Write `docs/specs/style-presets.md` from `docs/specs/TEMPLATE.md` before any code (AGENTS.md).
 
 **No open decision blocks Phase 1.** Tiers 1, 2, 2b, and 3 are all resolved. **D-I (Tier 2c) is open but
 does not block** — `character-bible` builds and ships without the reveal step; the gap is between the PRD
 and the frozen graph, and it comes due when `kid-flow-ui` is designed.
 
-After `character-bible`, in roadmap order: `style-presets`, `prompt-optimizer`, `image-generator`, `consistency-checker`, `regeneration-controller`.
+After `style-presets`, in roadmap order: `prompt-optimizer`, `image-generator`, `consistency-checker`, `regeneration-controller`.

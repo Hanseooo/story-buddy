@@ -1,6 +1,6 @@
 # Feature Spec — character-bible
 
-**Status:** draft · **Phase:** 1 · **Owner node:** `backend/pipeline/char_bible.py`
+**Status:** built (2026-07-30, `901f50b..1cca83a`) · **Phase:** 1 · **Owner node:** `backend/pipeline/char_bible.py`
 **Derived from:** MASTER_SPEC §2 (system map), §3 (frozen contract), §5 (CC registry), §6 (test seam)
 **Rationale:** ADR-002, ADR-004, ADR-007 (as amended by ADR-028), ADR-010, ADR-022, ADR-023 (D-F, D-G),
 ADR-024, ADR-025, ADR-028, PRD §8
