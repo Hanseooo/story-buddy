@@ -73,11 +73,13 @@ def generate_scene(state: StoryMemory) -> dict:
     )
 
     by_id = {c.char_id: c for c in state.characters}
-    ref_paths = [
-        c.canonical_ref_image
-        for char_id in scene.characters_present
-        if (c := by_id.get(char_id)) and c.canonical_ref_image
-    ]
+    ref_paths = []
+    for char_id in scene.characters_present:
+        c = by_id.get(char_id)
+        if c is None:
+            log.warning("generate_scene: char_id %r in characters_present but absent from state.characters, skipped", char_id)
+        elif c.canonical_ref_image:
+            ref_paths.append(c.canonical_ref_image)
 
     path, paid = generate_and_store(prompt, state.story_id, scene.scene_id, ref_paths)
 

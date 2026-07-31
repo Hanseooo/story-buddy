@@ -62,7 +62,6 @@ STYLE_PRESETS: dict[str, str] = {
 }
 
 # Spec `docs/specs/image-generator.md` §4: ADR-025 D4 domain-level breaker.
-# ADR-024's `recursion_limit` is set to this same number in `graph.py` so both
-# share one source of truth. Writing 39 here would create a second copy of 15.
+# IMAGE_BUDGET derives from MAX_SCENES so both share one source of truth.
 MAX_SCENES = 15
 IMAGE_BUDGET = MAX_SCENES * 2 + 9   # 15 scenes × 2 + 9-image prelude (ADR-029)
