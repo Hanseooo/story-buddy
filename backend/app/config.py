@@ -1,4 +1,3 @@
-from pydantic import computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -35,15 +34,6 @@ class Settings(BaseSettings):
         "two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing"
     )
 
-    @computed_field  # type: ignore[misc]
-    @property
-    def style_presets(self) -> dict[str, str]:
-        return {
-            "cel": self.default_style_fragment,
-            "comic": "bold comic-book illustration, heavy ink outlines of varied weight, flat spot colours, ben-day halftone dot shading, limited palette, no gradients, no glow",
-            "gouache": "flat gouache storybook illustration, thick confident ink outlines, matte paper grain, limited warm palette, flat colour fills, no gradients, no glossy highlights",
-        }
-
     # The judge moves to a self-hosted vLLM server after Phase 2.5 (ADR-019). vLLM speaks the
     # OpenAI protocol, so the swap is these two vars — no code change.
     judge_base_url: str = "https://openrouter.ai/api/v1"
@@ -62,3 +52,11 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# ponytail: module-level dict — style presets are not env-driven; BaseSettings adds nothing here.
+# Keys mirror the CHECK constraint in supabase/migrations/0002_jobs_style_preset_id.sql.
+STYLE_PRESETS: dict[str, str] = {
+    "cel": settings.default_style_fragment,
+    "comic": "bold comic-book illustration, heavy ink outlines of varied weight, flat spot colours, ben-day halftone dot shading, limited palette, no gradients, no glow",
+    "gouache": "flat gouache storybook illustration, thick confident ink outlines, matte paper grain, limited warm palette, flat colour fills, no gradients, no glossy highlights",
+}

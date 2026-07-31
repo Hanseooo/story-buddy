@@ -119,7 +119,11 @@ roadmap order. Source: MASTER_SPEC §7.
       untouched. Opened **D-I**, since closed → **ADR-029** (the reveal is a Phase-2 `reveal` node; this
       spec's CC-3 `prelude` corrected 6 → 9). Hands deterministic-path idempotency and scene-image
       `cost.image_count` to `image-generator`, and the preset dict to `style-presets`.)*
-- [ ] `style-presets`   *(ADR-022; 3 presets)*
+- [x] `style-presets`   *(spec **built 2026-07-31** — `docs/specs/style-presets.md`; `settings.style_presets`
+      computed field with three ADR-022 fragments, `POST /storybooks` validates and stores `style_preset_id`,
+      worker resolves `None → "cel"` and constructs `StoryMemory.style` before the graph starts.
+      `supabase/migrations/0002_jobs_style_preset_id.sql` ships the nullable column. Hands the preset dict and
+      frozen `style.prompt_fragment` to `prompt-optimizer` and `image-generator`.)*
 - [ ] `prompt-optimizer`
 - [ ] `image-generator`   *(code: `pipeline/generate_scene.py` — partial, still text-to-image)*
 - [ ] `consistency-checker`   *(code: `pipeline/consistency_check.py` — stub)*
@@ -174,13 +178,11 @@ revised 2026-07-25.)*
 
 > ✅ **`character-bible` is built (2026-07-30).** See `docs/specs/character-bible.md`.
 
-**Build `style-presets`** — ADR-022’s three presets (`cel` / `comic` / `gouache`), `style_preset_id`
-resolution and the picker UI. `char_bible` authored one default fragment and nothing else; the preset
-dict and ADR-022’s binding "must not read as generic AI art" acceptance condition are still unowned in
-code. Write `docs/specs/style-presets.md` from `docs/specs/TEMPLATE.md` before any code (AGENTS.md).
+> ✅ **`style-presets` is built (2026-07-31).** See `docs/specs/style-presets.md`.
+
+**Build `prompt-optimizer`** — write `docs/specs/prompt-optimizer.md` from `docs/specs/TEMPLATE.md` before any code (AGENTS.md).
 
 **No open decision blocks Phase 1, and the backlog has no open rows.** Tiers 1, 2, 2b, 2c, and 3 are all
-resolved. D-I closed 2026-07-31 → ADR-029; it builds in Phase 2 behind the char-ref moderation gate, so
-`style-presets` and everything after it are unaffected.
+resolved. D-I closed 2026-07-31 → ADR-029; it builds in Phase 2 behind the char-ref moderation gate.
 
-After `style-presets`, in roadmap order: `prompt-optimizer`, `image-generator`, `consistency-checker`, `regeneration-controller`.
+After `prompt-optimizer`, in roadmap order: `image-generator`, `consistency-checker`, `regeneration-controller`.

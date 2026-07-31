@@ -1,6 +1,6 @@
 # Feature Spec — style-presets
 
-**Status:** draft · **Phase:** 1 · **Owner:** `backend/app/config.py`, `backend/app/main.py`,
+**Status:** built · 2026-07-31 · **Phase:** 1 · **Owner:** `backend/app/config.py`, `backend/app/main.py`,
 `backend/worker/run_job.py` — **config + wiring, not a graph node**
 **Derived from:** MASTER_SPEC §2 (system map), §3 (frozen contract)
 **Rationale:** ADR-022 (amends ADR-007), PRD §8 flow step 4

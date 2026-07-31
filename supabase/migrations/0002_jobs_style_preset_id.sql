@@ -3,4 +3,5 @@
 -- Existing rows default to NULL; the worker resolves NULL → "cel" (ADR-022's flagship default).
 alter table jobs
   add column if not exists style_preset_id text
+    -- keep in sync with STYLE_PRESETS keys in backend/app/config.py
     check (style_preset_id in ('cel', 'comic', 'gouache'));

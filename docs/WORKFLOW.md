@@ -108,6 +108,9 @@ enforces verbatim excerpts, maps roster names → char_ids, enforces `caption = 
 references (ADR-004), judges each against its `CharacterDescription` and re-rolls up to 3 times
 (ADR-028), persists the verdict — including a failing one — and bumps `cost.image_count`.
 
-**Next action: `style-presets` spec** — write `docs/specs/style-presets.md` from
-`docs/specs/TEMPLATE.md` before writing any code (AGENTS.md). `char_bible` authored
-`settings.default_style_fragment` only; ADR-022’s three-preset dict and picker are still unowned.
+`style-presets` is **built** (2026-07-31): `settings.style_presets` computed field, `POST /storybooks`
+validates and stores `style_preset_id`, worker resolves `None → "cel"` and writes `StoryMemory.style`
+before the graph starts. Migration: `supabase/migrations/0002_jobs_style_preset_id.sql`.
+
+**Next action: `prompt-optimizer`** — write `docs/specs/prompt-optimizer.md` from `docs/specs/TEMPLATE.md`
+before writing any code (AGENTS.md).

@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from app.config import settings
+from app.config import STYLE_PRESETS
 from contracts.story_memory import CURRENT_SCHEMA_VERSION, Scene
 from worker.run_job import run_storybook_job
 
@@ -122,7 +122,7 @@ def test_run_storybook_job_resolves_gouache_style_preset():
 
     state = fake_graph.invoke.call_args.args[0]
     assert state.style.style_preset_id == "gouache"
-    assert state.style.prompt_fragment == settings.style_presets["gouache"]
+    assert state.style.prompt_fragment == STYLE_PRESETS["gouache"]
 
 
 def test_run_storybook_job_defaults_style_to_cel_when_preset_is_null():
@@ -139,4 +139,4 @@ def test_run_storybook_job_defaults_style_to_cel_when_preset_is_null():
 
     state = fake_graph.invoke.call_args.args[0]
     assert state.style.style_preset_id == "cel"
-    assert state.style.prompt_fragment == settings.style_presets["cel"]
+    assert state.style.prompt_fragment == STYLE_PRESETS["cel"]

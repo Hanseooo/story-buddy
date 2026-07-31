@@ -2075,7 +2075,7 @@ and every consumer that switches on status should have to see that.
   the trust boundary). `char_bible` targeted mode: exactly one `text_to_image` and one `judge`, only the flagged
   character mutates, `image_count` +1, `reference_retry` cleared.
 - **Phase 1 is unaffected.** `graph.py`, `char_bible.py` and the `jobs` table are untouched by this decision;
-  `style-presets` remains the next build.
+  `style-presets` is now built (2026-07-31); `prompt-optimizer` is next.
 
 ⚠️ **Open, named rather than solved: a job can sit in `awaiting_confirm` forever.** There is no TTL and no
 reaper. A child who closes the tab leaves a paused thread and a checkpoint behind. No resource is held — the
