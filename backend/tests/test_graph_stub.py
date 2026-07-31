@@ -52,7 +52,7 @@ def _mock_call_points(monkeypatch):
     )
     monkeypatch.setattr(
         "pipeline.generate_scene.generate_and_store",
-        lambda prompt, story_id: "stub/path.png",
+        lambda prompt, story_id, scene_id, ref_paths: ("stub/path.png", True),
     )
     monkeypatch.setattr(
         "pipeline.char_bible.mint_reference",
@@ -130,4 +130,4 @@ def test_char_bible_references_survive_the_graph(monkeypatch):
     assert character.canonical_ref_image == "test-job-4/ref-c0.png"
     assert character.ref_verdict.matches_description is True
     assert character.ref_moderation_status is None   # Phase-2 owner, not this node
-    assert result["cost"].image_count == 2           # the draws mint_reference reported
+    assert result["cost"].image_count == 3           # 2 from mint_reference + 1 from generate_scene

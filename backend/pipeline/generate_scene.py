@@ -1,22 +1,59 @@
+import logging
+from functools import lru_cache
+
+from app.config import IMAGE_BUDGET
 from app.db import get_supabase_client
 from contracts.story_memory import Attempt, StoryMemory
 from pipeline.prompt_optimizer import build_prompt
-from providers import text_to_image
+from providers import edit_image, text_to_image, upload_reference
+
+log = logging.getLogger(__name__)
 
 BUCKET = "storybook-images"
 
 
-def generate_and_store(prompt: str, job_id: str) -> str:
-    # ponytail: text-to-image, no character reference yet. Phase 1's char_bible node
-    # produces the reference and this switches to providers.edit_image (ADR-007).
-    image_bytes = text_to_image(prompt)
+@lru_cache(maxsize=8)
+def _fal_ref_url(ref_path: str) -> str:
+    """Download a canonical reference from Storage and upload it to fal.
 
-    path = f"{job_id}/scene-1.png"
+    Keyed on `ref_path` which already contains story_id + char_id, so collisions
+    across jobs are impossible. Cache is process-local; a worker restart re-uploads
+    at the cost of latency, no correctness loss (spec §8).
+    """
+    image_bytes = get_supabase_client().storage.from_(BUCKET).download(ref_path)
+    return upload_reference(image_bytes)
+
+
+def generate_and_store(
+    prompt: str, story_id: str, scene_id: str, ref_paths: list[str]
+) -> tuple[str, bool]:
+    """The node's ONE effect boundary (MASTER_SPEC §6). Returns (storage_path, paid).
+
+    CC-10: if the path already exists in Storage, reuse it — a re-executed
+    super-step is free. The Attempt is still appended by the caller.
+    """
+    path = f"{story_id}/{scene_id}.png"
     supabase = get_supabase_client()
+
+    try:
+        supabase.storage.from_(BUCKET).download(path)
+        log.info("generate_scene: reusing existing %s (paid=False)", path)
+        return path, False
+    except Exception:
+        pass
+
+    fal_urls = [_fal_ref_url(r) for r in ref_paths]
+    if fal_urls:
+        image_bytes = edit_image(prompt, fal_urls)
+    else:
+        # ponytail: text-to-image path — no canonical references for this scene.
+        # ADR-007's identity+style mechanism fires only when ref images are present.
+        image_bytes = text_to_image(prompt)
+
     supabase.storage.from_(BUCKET).upload(
         path, image_bytes, {"content-type": "image/png", "upsert": "true"}
     )
-    return path
+    return path, True
 
 
 def generate_scene(state: StoryMemory) -> dict:
@@ -25,20 +62,44 @@ def generate_scene(state: StoryMemory) -> dict:
     if scene is None:
         return {}
 
+    # ADR-025 D4: breaker before any spend. IMAGE_BUDGET = MAX_SCENES * 2 + 9.
+    if state.cost.image_count >= IMAGE_BUDGET:
+        raise RuntimeError(
+            f"image budget exceeded: {state.cost.image_count} >= {IMAGE_BUDGET} (ADR-025)"
+        )
+
     prompt = build_prompt(
         scene.text_excerpt, scene.characters_present, state.characters, state.style.prompt_fragment
     )
-    path = generate_and_store(prompt, state.story_id)
+
+    by_id = {c.char_id: c for c in state.characters}
+    ref_paths = [
+        c.canonical_ref_image
+        for char_id in scene.characters_present
+        if (c := by_id.get(char_id)) and c.canonical_ref_image
+    ]
+
+    path, paid = generate_and_store(prompt, state.story_id, scene.scene_id, ref_paths)
+
+    log.info(
+        "generate_scene: scene_id=%s refs=%d paid=%s prompt_len=%d",
+        scene.scene_id, len(ref_paths), paid, len(prompt),
+    )
+
     return {
         "scenes": [
             scene.model_copy(
                 update={
                     "prompt": prompt,
-                    # CC-5: the attempt carries the prompt THIS draw used; regeneration corrects
-                    # Scene.prompt and would otherwise erase the provenance (ADR-010).
-                    "attempts": [*scene.attempts, Attempt(image_ref=path, prompt=prompt, passed=True)],
+                    # CC-5: per-attempt prompt provenance (ADR-010).
+                    "attempts": [*scene.attempts, Attempt(image_ref=path, prompt=prompt, passed=False)],
+                    # ponytail: provisional — consistency_check takes final_image_ref ownership (spec §3).
                     "final_image_ref": path,
                 }
             )
-        ]
+        ],
+        # Invariant 6: copy-and-bump, never rebuild from zero (char_bible §4 precedent).
+        "cost": state.cost.model_copy(
+            update={"image_count": state.cost.image_count + (1 if paid else 0)}
+        ),
     }
