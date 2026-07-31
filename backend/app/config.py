@@ -1,3 +1,4 @@
+from pydantic import computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,6 +34,15 @@ class Settings(BaseSettings):
         "flat cel-shaded cartoon, thick clean black outlines of even weight, bright solid colour fills, "
         "two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing"
     )
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def style_presets(self) -> dict[str, str]:
+        return {
+            "cel": self.default_style_fragment,
+            "comic": "bold comic-book illustration, heavy ink outlines of varied weight, flat spot colours, ben-day halftone dot shading, limited palette, no gradients, no glow",
+            "gouache": "flat gouache storybook illustration, thick confident ink outlines, matte paper grain, limited warm palette, flat colour fills, no gradients, no glossy highlights",
+        }
 
     # The judge moves to a self-hosted vLLM server after Phase 2.5 (ADR-019). vLLM speaks the
     # OpenAI protocol, so the swap is these two vars — no code change.
