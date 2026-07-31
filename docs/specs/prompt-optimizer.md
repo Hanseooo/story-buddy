@@ -1,6 +1,6 @@
 # Feature Spec — prompt-optimizer
 
-**Status:** draft · **Phase:** 1 · **Owner:** `backend/pipeline/prompt_optimizer.py` — **pure helpers, not a graph node**
+**Status:** built · c0e73d4–6850321 · **Phase:** 1 · **Owner:** `backend/pipeline/prompt_optimizer.py` — **pure helpers, not a graph node**
 **Derived from:** MASTER_SPEC §2 (system map, node-I/O table), §3 (frozen contract)
 **Rationale:** ADR-004 (`FailureReason` closed set), ADR-007 (style rides the reference), ADR-010
 (targeted-retry correction), ADR-022 (style fragment content rules)
@@ -52,9 +52,13 @@ input_gate ──► analyze ──► segment ──► char_bible ──► ge
 ## 4. Behavior & edge cases
 
 ```python
-def build_prompt(text_excerpt: str, characters: list[Character], style_fragment: str | None) -> str
-def correct_prompt(prompt: str, failure_reasons: list[FailureReason], characters: list[Character]) -> str
+def build_prompt(text_excerpt: str, characters_present: list[str], characters: list[Character], style_fragment: str | None) -> str
+def correct_prompt(prompt: str, failure_reasons: list[FailureReason], characters: list[Character], style_fragment: str | None) -> str
 ```
+
+(Corrected during implementation: `build_prompt` needs `characters_present` to do its own
+characters_present → characters join per §4's own prose and the §6 node-level test, which passes
+the full unfiltered roster; `correct_prompt` needs `style_fragment` to restate it for `wrong_style`.)
 
 ### `build_prompt`
 
