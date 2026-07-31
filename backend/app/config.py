@@ -60,3 +60,9 @@ STYLE_PRESETS: dict[str, str] = {
     "comic": "bold comic-book illustration, heavy ink outlines of varied weight, flat spot colours, ben-day halftone dot shading, limited palette, no gradients, no glow",
     "gouache": "flat gouache storybook illustration, thick confident ink outlines, matte paper grain, limited warm palette, flat colour fills, no gradients, no glossy highlights",
 }
+
+# Spec `docs/specs/image-generator.md` §4: ADR-025 D4 domain-level breaker.
+# ADR-024's `recursion_limit` is set to this same number in `graph.py` so both
+# share one source of truth. Writing 39 here would create a second copy of 15.
+MAX_SCENES = 15
+IMAGE_BUDGET = MAX_SCENES * 2 + 9   # 15 scenes × 2 + 9-image prelude (ADR-029)
