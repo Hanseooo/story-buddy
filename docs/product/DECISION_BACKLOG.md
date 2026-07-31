@@ -124,7 +124,10 @@ roadmap order. Source: MASTER_SPEC §7.
       worker resolves `None → "cel"` and constructs `StoryMemory.style` before the graph starts.
       `supabase/migrations/0002_jobs_style_preset_id.sql` ships the nullable column. Hands the preset dict and
       frozen `style.prompt_fragment` to `prompt-optimizer` and `image-generator`.)*
-- [ ] `prompt-optimizer`
+- [x] `prompt-optimizer`   *(spec **built 2026-07-31** — `docs/specs/prompt-optimizer.md`;
+      `pipeline/prompt_optimizer.py` implements `build_prompt` (wired into `generate_scene`, replacing
+      the caption stub) and `correct_prompt` (no caller yet — hands off to `regeneration-controller`).
+      `contracts/` untouched.)*
 - [ ] `image-generator`   *(code: `pipeline/generate_scene.py` — partial, still text-to-image)*
 - [ ] `consistency-checker`   *(code: `pipeline/consistency_check.py` — stub)*
 - [ ] `regeneration-controller`   *(no file yet; needs the ADR-023 failure-reason enum + ADR-024 loop shape; owns the best-of **rule** — ADR-028 supplied the signal: lexicographic over `same_character` → `anatomy_intact` → `style_match`)*
@@ -180,9 +183,11 @@ revised 2026-07-25.)*
 
 > ✅ **`style-presets` is built (2026-07-31).** See `docs/specs/style-presets.md`.
 
-**Build `prompt-optimizer`** — write `docs/specs/prompt-optimizer.md` from `docs/specs/TEMPLATE.md` before any code (AGENTS.md).
+> ✅ **`prompt-optimizer` is built (2026-07-31).** See `docs/specs/prompt-optimizer.md`.
+
+**Build `image-generator`** — write `docs/specs/image-generator.md` from `docs/specs/TEMPLATE.md` before any code (AGENTS.md).
 
 **No open decision blocks Phase 1, and the backlog has no open rows.** Tiers 1, 2, 2b, 2c, and 3 are all
 resolved. D-I closed 2026-07-31 → ADR-029; it builds in Phase 2 behind the char-ref moderation gate.
 
-After `prompt-optimizer`, in roadmap order: `image-generator`, `consistency-checker`, `regeneration-controller`.
+After `image-generator`, in roadmap order: `consistency-checker`, `regeneration-controller`.

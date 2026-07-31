@@ -112,5 +112,9 @@ references (ADR-004), judges each against its `CharacterDescription` and re-roll
 validates and stores `style_preset_id`, worker resolves `None → "cel"` and writes `StoryMemory.style`
 before the graph starts. Migration: `supabase/migrations/0002_jobs_style_preset_id.sql`.
 
-**Next action: `prompt-optimizer`** — write `docs/specs/prompt-optimizer.md` from `docs/specs/TEMPLATE.md`
+`prompt-optimizer` is **built** (2026-07-31): `backend/pipeline/prompt_optimizer.py` — `build_prompt`
+(wired into `generate_scene`, replacing the `scene.caption or scene.text_excerpt` stub) and
+`correct_prompt` (no caller yet; hands off to `regeneration-controller`).
+
+**Next action: `image-generator`** — write `docs/specs/image-generator.md` from `docs/specs/TEMPLATE.md`
 before writing any code (AGENTS.md).

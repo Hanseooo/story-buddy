@@ -1,5 +1,5 @@
-from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, CharacterDescription
-from pipeline.prompt_optimizer import build_prompt
+from contracts.story_memory import Character, CharacterDescription, FailureReason
+from pipeline.prompt_optimizer import build_prompt, correct_prompt
 
 FRAG = "flat cel-shaded cartoon, thick clean black outlines"
 
@@ -52,10 +52,6 @@ def test_build_prompt_never_invents_detail_for_an_empty_description():
     bare = _char("c0", "the mystery creature")
     prompt = build_prompt("It appeared.", ["c0"], [bare], FRAG)
     assert "the mystery creature" in prompt
-
-
-from contracts.story_memory import FailureReason
-from pipeline.prompt_optimizer import correct_prompt
 
 
 def test_correct_prompt_wrong_colour_appends_the_documented_clause():

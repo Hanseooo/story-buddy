@@ -360,4 +360,7 @@ is not documentation of a good design; it is the blast radius, written down so t
   (ADR-004), judges each against its `CharacterDescription` with a 3-draw cap and best-of fallback
   (ADR-028), persists `ref_verdict` — failing verdicts included — and bumps `cost.image_count`.
   Added `settings.default_style_fragment` (ADR-022 `cel`). CC-1 is **not** closed for the char-ref leg.
-  Remaining Phase-1 specs: `consistency-check`, `regeneration-controller`, `compose`.
+  **`prompt-optimizer` is built (2026-07-31):** `pipeline/prompt_optimizer.py` — `build_prompt` (wired
+  into `generate_scene`, replacing the `caption`-stub prompt line) and `correct_prompt` (pure, no
+  caller yet — `regeneration-controller` wires it in when that spec lands). `contracts/` untouched.
+  Remaining Phase-1 specs: `image-generator`, `consistency-check`, `regeneration-controller`.
