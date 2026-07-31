@@ -194,7 +194,7 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
   `input_gate`, `consistency_check`, and `compose` are pass-through stubs; `analyze` mints the entity
   roster; `segment` splits into scenes (≤15), maps names → char_ids, and sets `caption = text_excerpt`
   (ADR-013); `char_bible` mints ≤2 canonical references with ADR-028's 3-draw acceptance loop;
-  `generate_scene` has real behavior. Fill the stubs in per ADR-024's partial-return conventions; don't
+  `generate_scene` is reference-conditioned (edit_image when canonical refs present, text_to_image otherwise), with Storage-based idempotent resume and an ADR-025 D4 cost breaker. Fill the stubs in per ADR-024's partial-return conventions; don't
   invent a different graph shape.
 - Critical paths (extra review): moderation ordering (input text → char-ref → output image), PII
   redaction (Presidio) before any storage/caption/export, RLS + signed URLs on every table/asset,
@@ -363,4 +363,9 @@ is not documentation of a good design; it is the blast radius, written down so t
   **`prompt-optimizer` is built (2026-07-31):** `pipeline/prompt_optimizer.py` — `build_prompt` (wired
   into `generate_scene`, replacing the `caption`-stub prompt line) and `correct_prompt` (pure, no
   caller yet — `regeneration-controller` wires it in when that spec lands). `contracts/` untouched.
-  Remaining Phase-1 specs: `image-generator`, `consistency-check`, `regeneration-controller`.
+  **`image-generator` is built (2026-07-31):** `generate_scene` is reference-conditioned —
+  `edit_image` when `canonical_ref_image` is present for a character, `text_to_image` otherwise.
+  Fixes `scene-1.png` Storage-path collision (now `{story_id}/{scene_id}.png`). ADR-025 D4 breaker
+  live at `IMAGE_BUDGET = 39`. CC-10 Storage-exists skip (idempotent resume). `final_image_ref` is
+  provisional — `consistency_check` takes ownership. `MAX_SCENES` and `IMAGE_BUDGET` in
+  `app/config.py`. Remaining Phase-1 specs: `consistency-check`, `regeneration-controller`.

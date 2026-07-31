@@ -60,3 +60,8 @@ STYLE_PRESETS: dict[str, str] = {
     "comic": "bold comic-book illustration, heavy ink outlines of varied weight, flat spot colours, ben-day halftone dot shading, limited palette, no gradients, no glow",
     "gouache": "flat gouache storybook illustration, thick confident ink outlines, matte paper grain, limited warm palette, flat colour fills, no gradients, no glossy highlights",
 }
+
+# Spec `docs/specs/image-generator.md` §4: ADR-025 D4 domain-level breaker.
+# IMAGE_BUDGET derives from MAX_SCENES so both share one source of truth.
+MAX_SCENES = 15
+IMAGE_BUDGET = MAX_SCENES * 2 + 9   # 15 scenes × 2 + 9-image prelude (ADR-029)

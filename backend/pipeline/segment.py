@@ -3,6 +3,7 @@ import re
 
 from pydantic import BaseModel
 
+from app.config import MAX_SCENES
 from contracts.story_memory import Character, Scene, StoryMemory, TimelineEvent
 from providers import structured_text
 
@@ -114,10 +115,10 @@ def repair(scenes: list[ExtractedScene], n: int) -> list[ExtractedScene]:
     if gaps_closed:
         log.info("segment/repair: gap-fill closed %d gap(s)", gaps_closed)
 
-    # Merge to ≤15 — smallest combined unit count, ties → earliest
-    if len(deoverlapped) > 15:
-        log.info("segment/repair: merging %d scenes → 15", len(deoverlapped))
-    while len(deoverlapped) > 15:
+    # Merge to ≤MAX_SCENES — smallest combined unit count, ties → earliest
+    if len(deoverlapped) > MAX_SCENES:
+        log.info("segment/repair: merging %d scenes → %d", len(deoverlapped), MAX_SCENES)
+    while len(deoverlapped) > MAX_SCENES:
         best_idx = 0
         best_size = (deoverlapped[0].end - deoverlapped[0].start + 1) + (deoverlapped[1].end - deoverlapped[1].start + 1)
         for i in range(1, len(deoverlapped) - 1):
