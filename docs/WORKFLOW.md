@@ -116,5 +116,9 @@ before the graph starts. Migration: `supabase/migrations/0002_jobs_style_preset_
 (wired into `generate_scene`, replacing the `scene.caption or scene.text_excerpt` stub) and
 `correct_prompt` (no caller yet; hands off to `regeneration-controller`).
 
-**Next action: `image-generator`** — write `docs/specs/image-generator.md` from `docs/specs/TEMPLATE.md`
-before writing any code (AGENTS.md).
+`image-generator` is **built** (2026-07-31): `backend/pipeline/generate_scene.py` is now
+reference-conditioned (`edit_image` when canonical refs present, `text_to_image` otherwise).
+Fixes the `scene-1.png` path collision. ADR-025 D4 breaker live. `final_image_ref` is provisional.
+
+**Next action: `consistency-checker`** — write `docs/specs/consistency-checker.md` from
+`docs/specs/TEMPLATE.md` before writing any code (AGENTS.md).

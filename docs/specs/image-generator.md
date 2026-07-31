@@ -1,6 +1,6 @@
 # Feature Spec — image-generator
 
-**Status:** draft · **Phase:** 1 · **Owner node:** `backend/pipeline/generate_scene.py`
+**Status:** built · acebc6f–6291502 · **Phase:** 1 · **Owner node:** `backend/pipeline/generate_scene.py`
 **Derived from:** MASTER_SPEC §2 (system map, node-I/O table), §3 (frozen contract), §5 (CC registry)
 **Rationale:** ADR-001 (fal image models), ADR-004 (≤2 references), ADR-007 (style rides the
 reference), ADR-010 (no placeholder page), ADR-024 (per-scene loop, partial return), ADR-025

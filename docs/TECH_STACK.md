@@ -258,10 +258,10 @@ Be honest — these are open, not silently resolved:
 - **The 8–10× WebP ratio is an estimate, not a measurement.** ADR-027's storage math rests on ~1.2–2 MB PNG vs
   ~120–200 KB WebP for 1024×1024 illustrated art. Phase 0.5 is where real encoded byte sizes get recorded — the
   probes already generate the images, so this costs one `os.path.getsize` call, not a new experiment.
-- **`generate_scene.py` still writes raw PNG.** ADR-027 is accepted but unbuilt: `backend/pipeline/generate_scene.py:13-17`
-  uploads fal's bytes unmodified to `{job_id}/scene-1.png`, and `tests/test_generate_scene_node.py:28` asserts
-  that extension. Both change when the ADR is implemented. Until then the free-tier headroom in §7 is a plan,
-  not a fact.
+- **`generate_scene.py` still writes raw PNG.** ADR-027 is accepted but unbuilt: `backend/pipeline/generate_scene.py`
+  uploads fal's bytes unmodified (now to `{story_id}/{scene_id}.png` — the `scene-1.png` collision was fixed
+  by the `image-generator` spec, 2026-07-31). Both the path template and PNG upload change when ADR-027 is
+  implemented. Until then the free-tier headroom in §7 is a plan, not a fact.
 - **Supabase project region is unconfirmed against Railway's Singapore pin** (ADR-009). Relevant to latency and
   to the Philippine Data Privacy Act framing in `docs/capstone/ethics_and_safety.md`, and **not changeable after
   project creation** without a migration. Not decided by ADR-027 — it sits with ADR-006.
