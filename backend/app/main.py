@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 
-from app.config import settings
+from app.config import STYLE_PRESETS, settings
 from app.db import get_supabase_client
 from app.queue import get_queue
 
@@ -29,7 +29,7 @@ class CreateStorybookRequest(BaseModel):
     @field_validator("style_preset_id")
     @classmethod
     def validate_style_preset(cls, v: str | None) -> str | None:
-        if v is not None and v not in settings.style_presets:
+        if v is not None and v not in STYLE_PRESETS:
             raise ValueError(f"Unknown style_preset_id: {v!r}")
         return v
 

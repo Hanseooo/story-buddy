@@ -1,6 +1,6 @@
 from langgraph.checkpoint.postgres import PostgresSaver
 
-from app.config import settings
+from app.config import STYLE_PRESETS, settings
 from app.db import get_supabase_client
 from contracts.story_memory import CURRENT_SCHEMA_VERSION, Input, Style, StoryMemory
 from pipeline.graph import build_graph
@@ -10,7 +10,8 @@ def run_storybook_job(job_id: str) -> None:
     supabase = get_supabase_client()
     row = supabase.table("jobs").select("input_text, style_preset_id").eq("id", job_id).single().execute()
     input_text = row.data["input_text"]
-    chosen_id = row.data.get("style_preset_id") or "cel"
+    preset_id = row.data.get("style_preset_id")
+    chosen_id = preset_id if preset_id is not None else "cel"
 
     supabase.table("jobs").update({"status": "running"}).eq("id", job_id).execute()
 
@@ -23,7 +24,7 @@ def run_storybook_job(job_id: str) -> None:
         classroom_id=settings.dev_classroom_id,
         profile_id=settings.dev_profile_id,
         input=Input(raw_text=input_text),
-        style=Style(style_preset_id=chosen_id, prompt_fragment=settings.style_presets[chosen_id]),
+        style=Style(style_preset_id=chosen_id, prompt_fragment=STYLE_PRESETS[chosen_id]),
     )
 
     try:

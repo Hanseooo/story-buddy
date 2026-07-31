@@ -153,8 +153,7 @@ def char_bible(state: StoryMemory) -> dict:
     """Pure: select, map, bump, partial-return. Every effect is behind `mint_reference`.
 
     Linear in the graph — this node branches at none of ADR-003's points (moderation pass/fail,
-    consistency pass/fail, and ADR-029's reveal confirm/try-again). ADR-029 makes it the *target*
-    of the reveal's "try_again" edge in Phase 2 — a destination, not a router.
+    consistency pass/fail, and ADR-029's reveal confirm/try-again).
     """
     # Cap FIRST (invariant 1, ADR-004), THEN filter (invariant 6). The order is load-bearing:
     # filtering first slides the 2-slot window onto c2 when c0 is already referenced, producing
