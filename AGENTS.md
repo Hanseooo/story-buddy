@@ -191,9 +191,11 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
   consistency_check → [regenerate] → [output moderation] → compose → export`.
   **Built today** (`backend/pipeline/graph.py`): `input_gate → analyze → segment → char_bible →
   generate_scene → consistency_check → compose` — linear, **zero conditional edges**. `input_gate`,
-  `char_bible`, `consistency_check`, and `compose` are pass-through stubs; `analyze` mints the entity
-  roster; `segment` splits into scenes (≤15), maps names → char_ids, and sets `caption = text_excerpt` (ADR-013); `generate_scene` has real behavior. Fill the
-  stubs in per ADR-024's partial-return conventions; don't invent a different graph shape.
+  `input_gate`, `consistency_check`, and `compose` are pass-through stubs; `analyze` mints the entity
+  roster; `segment` splits into scenes (≤15), maps names → char_ids, and sets `caption = text_excerpt`
+  (ADR-013); `char_bible` mints ≤2 canonical references with ADR-028's 3-draw acceptance loop;
+  `generate_scene` has real behavior. Fill the stubs in per ADR-024's partial-return conventions; don't
+  invent a different graph shape.
 - Critical paths (extra review): moderation ordering (input text → char-ref → output image), PII
   redaction (Presidio) before any storage/caption/export, RLS + signed URLs on every table/asset,
   job checkpoint/resume logic — see `docs/product/ADRs.md` and StoryBuddy Hard Rules above.
@@ -354,5 +356,8 @@ is not documentation of a good design; it is the blast radius, written down so t
   `locations[]`, `objects[]`, `timeline[]`.
   **`scene-segmentation` is built (2026-07-29):** `pipeline/segment.py` splits into ≤15 scenes,
   enforces verbatim excerpts, maps roster names → char_ids, sets `caption = text_excerpt` (ADR-013).
-  Remaining Phase-1 specs: `character-bible`, `consistency-check`,
-  `regeneration-controller`, `compose`.
+  **`character-bible` is built (2026-07-30):** `pipeline/char_bible.py` mints ≤2 canonical references
+  (ADR-004), judges each against its `CharacterDescription` with a 3-draw cap and best-of fallback
+  (ADR-028), persists `ref_verdict` — failing verdicts included — and bumps `cost.image_count`.
+  Added `settings.default_style_fragment` (ADR-022 `cel`). CC-1 is **not** closed for the char-ref leg.
+  Remaining Phase-1 specs: `consistency-check`, `regeneration-controller`, `compose`.

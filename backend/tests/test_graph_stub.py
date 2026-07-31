@@ -5,7 +5,7 @@ with four pass-through stubs a graph that runs every node and one that runs none
 identical state. `stream_mode="updates"` yields exactly one chunk per node execution, keyed by
 node name, in order, INCLUDING nodes that return {}. That is the replacement for `stage`.
 """
-from contracts.story_memory import CURRENT_SCHEMA_VERSION, Input, StoryMemory
+from contracts.story_memory import CURRENT_SCHEMA_VERSION, Input, RefVerdict, StoryMemory
 from pipeline.analyze import StoryAnalysis
 from pipeline.graph import build_graph
 from pipeline.segment import ExtractedScene, SceneSegmentation
@@ -53,6 +53,14 @@ def _mock_call_points(monkeypatch):
     monkeypatch.setattr(
         "pipeline.generate_scene.generate_and_store",
         lambda prompt, story_id: "stub/path.png",
+    )
+    monkeypatch.setattr(
+        "pipeline.char_bible.mint_reference",
+        lambda description, name, style_fragment, story_id, char_id: (
+            f"{story_id}/ref-{char_id}.png",
+            RefVerdict(differences_observed="none", matches_description=True, attributes_present=["dog"]),
+            2,
+        ),
     )
 
 
@@ -105,3 +113,21 @@ def test_analyze_roster_survives_the_graph(monkeypatch):
     assert [loc.loc_id for loc in result["locations"]] == ["loc0"]
     assert result["objects"] == []
     assert [e.order for e in result["timeline"]] == [0]
+
+
+def test_char_bible_references_survive_the_graph(monkeypatch):
+    """Spec §6: patch the single helper and assert the references survive
+    input_gate → analyze → segment → char_bible. `characters` has no reducer, so a later node
+    replacing the list shows up here and nowhere else."""
+    _mock_call_points(monkeypatch)
+    app_graph = build_graph()
+
+    result = app_graph.invoke(
+        _initial_state("test-job-4"), config={"configurable": {"thread_id": "test-job-4"}}
+    )
+
+    character, = result["characters"]
+    assert character.canonical_ref_image == "test-job-4/ref-c0.png"
+    assert character.ref_verdict.matches_description is True
+    assert character.ref_moderation_status is None   # Phase-2 owner, not this node
+    assert result["cost"].image_count == 2           # the draws mint_reference reported

@@ -102,7 +102,12 @@ checklists is exactly the noise you were worried about.
 `story-analyzer` is **built** (2026-07-29): `backend/pipeline/analyze.py`.
 `scene-segmentation` is **built** (2026-07-29): `backend/pipeline/segment.py` splits into ≤15 scenes,
 enforces verbatim excerpts, maps roster names → char_ids, enforces `caption = text_excerpt` (ADR-013).
+`character-bible` is **built** (2026-07-30): `backend/pipeline/char_bible.py`.
 
-**Next action: `character-bible` spec** — write `docs/specs/character-bible.md` from
-`docs/specs/TEMPLATE.md` before writing any code (AGENTS.md §2). It owns ADR-028’s 3-draw
-reference-acceptance loop. `backend/pipeline/char_bible.py` is a pass-through stub.
+`character-bible` is **built** (2026-07-30): `backend/pipeline/char_bible.py` mints at most 2 canonical
+references (ADR-004), judges each against its `CharacterDescription` and re-rolls up to 3 times
+(ADR-028), persists the verdict — including a failing one — and bumps `cost.image_count`.
+
+**Next action: `style-presets` spec** — write `docs/specs/style-presets.md` from
+`docs/specs/TEMPLATE.md` before writing any code (AGENTS.md). `char_bible` authored
+`settings.default_style_fragment` only; ADR-022’s three-preset dict and picker are still unowned.
