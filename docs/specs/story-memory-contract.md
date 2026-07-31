@@ -155,9 +155,14 @@ class Cost(BaseModel):                 # CC-3
     image_count: int = 0
     regen_count: int = 0
     usd_estimate: float = 0.0
+    ref_retry_count: int = 0           # ADR-029 — the child's 3-tap reveal budget, per book
 
 class Eval(BaseModel):                 # CC-7
     seed: Optional[int] = None
+
+class ReferenceRetry(BaseModel):       # ADR-029 — set by `reveal`, consumed by `char_bible`
+    char_id: str
+    attribute: str                     # the tapped chip, restated verbatim in the redraw prompt
 
 # --- Root ---
 class StoryMemory(BaseModel):
@@ -177,6 +182,7 @@ class StoryMemory(BaseModel):
     sharing: Sharing = Field(default_factory=Sharing)
     cost: Cost = Field(default_factory=Cost)
     eval: Eval = Field(default_factory=Eval)
+    reference_retry: Optional[ReferenceRetry] = None   # ADR-029; None except between `reveal` and `char_bible`
 ```
 
 ### 2.1 ID minting (D-G, ADR-023 amendment)
@@ -239,6 +245,8 @@ edit. Read ADR-028 before proposing an eighth value.
 - [x] **CC-2 PII redaction** — `Input.redacted_text` is the field downstream nodes consume; the contract makes
   the redacted text the persisted/consumed one.
 - [x] **CC-3 Cost control** — `Cost` block carries the running per-book counters the circuit-breaker reads.
+  `ref_retry_count` (ADR-029) is the one counter that is a *budget* rather than a metric: `route_reveal` caps
+  the child's reveal taps at 3, and the breaker bound is `max_scenes × 2 + 9`.
 - [x] **CC-4 Security** — all asset fields (`canonical_ref_image`, `image_ref`, `final_image_ref`, `audio_ref`)
   store durable Storage **paths**, never signed URLs; URLs are minted on read.
 - [x] **CC-7 Reproducibility** — `Eval.seed` is carried and drives job restarts on version mismatch.
@@ -302,8 +310,9 @@ N/A — the contract produces no generated content.
 - **Resolved 2026-07-29 (ADR-028 Decision 3):** the canonical reference is no longer assumed correct
   (amends ADR-007). `char_bible` judges each draw against `CharacterDescription`, re-rolls to a cap of 3 draws,
   keeps the draw with the most `attributes_present` on exhaustion, and persists `Character.ref_verdict`. This is
-  a **node-internal loop, not a conditional edge** — ADR-003's two branch points and ADR-024's routers are
-  unchanged.
+  a **node-internal loop, not a conditional edge** — ADR-003's branch points and ADR-024's routers are
+  unchanged *by ADR-028*. (ADR-029 later added a third branch point for the reveal; that is a separate change
+  and does not affect this loop.)
 - **Deferred:** `pdf_ref` / composed-book reference for the export leg (MASTER_SPEC §2). Nothing in Phase 1
   writes it; `export-pdf` (Phase 2) adds it additively.
 - **Removed 2026-07-22:** `Scene.consistency_check_status` — an untyped `Optional[str]` with no owner spec and

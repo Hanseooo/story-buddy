@@ -41,8 +41,8 @@ LLM-rewritten; the stub's caption call predates that and contradicts it (§4).
 input_gate ──► analyze ──► segment ──► char_bible ──► ...
 ```
 
-Linear. **No conditional edge** — ADR-003's two branch points are moderation pass/fail and
-consistency pass/fail, and this node is neither.
+Linear. **No conditional edge** — ADR-003's branch points are moderation pass/fail, consistency
+pass/fail, and the reveal confirm/try-again (ADR-029, Phase 2); this node is none of them.
 
 **Test seam (MASTER_SPEC §6):** one module-level helper, `segment_scenes`, is the node's entire
 effect boundary. `split_sentences` and `repair` are **pure** and tested directly, with no patching.

@@ -8,8 +8,8 @@ spec edit). Per `CLAUDE.md §1`, architectural decisions are made in their own s
 inline while building a module. When a row is decided: write the ADR, delete the row from
 this file (git keeps the history), and update the affected spec in the same change.
 
-**ADR numbering.** ADRs are append-only sequential; the last is **ADR-028**, so the next free
-number is **ADR-029**. Numbers are assigned *when the ADR is written*, not reserved here —
+**ADR numbering.** ADRs are append-only sequential; the last is **ADR-029**, so the next free
+number is **ADR-030**. Numbers are assigned *when the ADR is written*, not reserved here —
 the items below use stable `D-*` ids instead, because the write order can shift.
 
 **Two non-decisions, recorded so they don't get reopened by reflex:**
@@ -69,21 +69,20 @@ are unamended. ADR-007 is amended. No capstone document changes. Nothing blocks 
 
 ---
 
-## Tier 2c — opened by `character-bible` (2026-07-30)
+## Tier 2c — opened by `character-bible` (2026-07-30) — **closed**
 
-- **D-I · The character/style reveal + confirm step has no graph representation.** PRD §8 flow step 7
-  promises the child sees the **moderated** canonical reference(s) before full generation, with a
-  lightweight confirm / *"try again."* **ADR-024's canonical graph contains no such interrupt** and
-  `backend/pipeline/graph.py` runs `char_bible → generate_scene` straight through. Three sub-questions,
-  all open: **(1)** is the confirm a LangGraph interrupt, or does the run end and a confirm re-invoke
-  the graph? **(2)** whose draw budget does a child's "try again" spend — a fresh ADR-028 allowance of
-  3, the unspent remainder, or its own? **(3)** how does it account against CC-3's `image_count`
-  breaker, whose `prelude` term `character-bible` §5 fixes at 6 on the assumption of exactly one
-  machine-driven pass? Load-bearing, not cosmetic: ADR-028 records that ~42% of books still ship an
-  off-spec reference even with the 3-draw cap, which makes this button the largest un-designed
-  mitigation in the flow. Touches the graph shape ADR-024 froze, ADR-003's two-branch-point rule, the
-  `jobs` table, and CC-1's char-ref moderation leg — so it is an ADR session, not a spec edit.
-  *Surfaced by `docs/specs/character-bible.md` §8; deliberately scoped out of it.*
+*(D-I · The character/style reveal + confirm step → **ADR-029**, 2026-07-31. All three sub-questions resolved:
+**(1)** a dedicated `reveal` node holding an `interrupt()` and **no effects** — so a resumed re-execution re-pays
+nothing — with a pure `route_reveal` looping `"try_again"` back to `char_bible`; **(2)** one tap = **one** draw +
+**one** judge call for the flagged character only, capped at **3 taps per book**, the redraw targeted by the
+attribute the child tapped, the overwrite unconditional because the child is the judge; **(3)** CC-3's `prelude`
+**6 → 9**, and ADR-024's `fixed_prelude` +7 super-steps. Amends ADR-003 on its branch **count** but not its
+rationale — the router is pure and the nondeterminism is a human, not an orchestrator — plus ADR-024 (wiring) and
+ADR-025 Decision 4 (breaker bound). Adds `awaiting_confirm` to `jobs.status` (a Phase-2 migration; `0002` goes to
+`style-presets`) and
+`POST /jobs/{id}/confirm`. **Nothing is built in Phase 1:** CC-1 requires the Phase-2 char-ref moderation gate to
+precede the reveal, so the node, migration and endpoint land together with it. `character-bible` §5 and
+`story-memory-contract` are corrected in the same change.)*
 
 ---
 
@@ -117,8 +116,9 @@ roadmap order. Source: MASTER_SPEC §7.
       `pipeline/char_bible.py` owns ADR-028's reference-acceptance loop — draw → judge vs
       `CharacterDescription` → re-roll, 3-draw cap, best-of by `attributes_present`. Caps references at
       **2** per ADR-004. Authored `settings.default_style_fragment` (ADR-022 `cel`); `contracts/`
-      untouched. Opened **D-I**. Hands the reveal step to D-I, deterministic-path idempotency and
-      scene-image `cost.image_count` to `image-generator`, and the preset dict to `style-presets`.)*
+      untouched. Opened **D-I**, since closed → **ADR-029** (the reveal is a Phase-2 `reveal` node; this
+      spec's CC-3 `prelude` corrected 6 → 9). Hands deterministic-path idempotency and scene-image
+      `cost.image_count` to `image-generator`, and the preset dict to `style-presets`.)*
 - [ ] `style-presets`   *(ADR-022; 3 presets)*
 - [ ] `prompt-optimizer`
 - [ ] `image-generator`   *(code: `pipeline/generate_scene.py` — partial, still text-to-image)*
@@ -136,7 +136,9 @@ roadmap order. Source: MASTER_SPEC §7.
 - [ ] `narration`   *(ADR-020; `providers.narrate()` not yet implemented)*
 - [ ] `export-pdf`   *(D-2 decided → ADR-013: WeasyPrint)*
 - [ ] `rate-limiting`
-- [ ] `data-deletion`
+- [ ] `data-deletion`   *(must own ADR-029's ⚠️: a job can sit in `awaiting_confirm` forever. The sweep is one
+      line over the existing `jobs.updated_at`; what this spec has to **decide** is the terminal status it writes,
+      since a swept pause is not ADR-025-`failed` and `FailureReason` is frozen at 7 by ADR-028.)*
 - [ ] `kid-flow-ui`
 
 **Phase 2.5 (fine-tune):**
@@ -177,8 +179,8 @@ resolution and the picker UI. `char_bible` authored one default fragment and not
 dict and ADR-022’s binding "must not read as generic AI art" acceptance condition are still unowned in
 code. Write `docs/specs/style-presets.md` from `docs/specs/TEMPLATE.md` before any code (AGENTS.md).
 
-**No open decision blocks Phase 1.** Tiers 1, 2, 2b, and 3 are all resolved. **D-I (Tier 2c) is open but
-does not block** — `character-bible` builds and ships without the reveal step; the gap is between the PRD
-and the frozen graph, and it comes due when `kid-flow-ui` is designed.
+**No open decision blocks Phase 1, and the backlog has no open rows.** Tiers 1, 2, 2b, 2c, and 3 are all
+resolved. D-I closed 2026-07-31 → ADR-029; it builds in Phase 2 behind the char-ref moderation gate, so
+`style-presets` and everything after it are unaffected.
 
 After `style-presets`, in roadmap order: `prompt-optimizer`, `image-generator`, `consistency-checker`, `regeneration-controller`.

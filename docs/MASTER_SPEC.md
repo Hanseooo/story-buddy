@@ -109,7 +109,9 @@ via **Supabase Realtime**. A stall at scene N resumes from N — never re-rolls 
 
 ### The LangGraph pipeline (deterministic state machine — ADR-003)
 
-Explicit nodes; conditional edges **only** at moderation and consistency branch points.
+Explicit nodes; conditional edges only at moderation, consistency, and the character reveal
+(ADR-029 — a third branch point, added to ADR-003's two; its router is pure and the nondeterminism is a child,
+not an orchestrator).
 Each node ↔ one module ↔ one file in `backend/pipeline/`. **The spec mapping is not 1:1** and §7's index
 is not phase-aligned with this table: `style-presets` and `prompt-optimizer` are Phase-1 specs covering
 node *inputs* rather than nodes of their own, and the `input_gate` / output-moderation / `export` nodes
@@ -118,9 +120,13 @@ this table for what runs.
 
 ```
 input_gate ──► analyze ──► segment ──► char_bible ──► [char-ref moderation]
-   (length,                                                  │ pass
-    PII,                                                     ▼
-    text mod)                                          generate_scene ──► consistency_check
+   (length,                                  ▲               │ pass
+    PII,                                     │               ▼
+    text mod)                                │            reveal ──┐ try again (≤3, 1 draw each)
+                                             └─────────────────────┘
+                                                                 │ confirm
+                                                                 ▼
+                                                          generate_scene ──► consistency_check
                                                             ▲                    │
                                                             │ fail: 1 targeted   │ pass
                                                             └──── regenerate ◄────┤
@@ -136,6 +142,7 @@ input_gate ──► analyze ──► segment ──► char_bible ──► [c
 | `segment` | analysis + timeline | `scenes[].text_excerpt`, `caption`, `characters_present` | ADR-012 / §5,§8 |
 | `char_bible` | `characters[]`, `style.prompt_fragment` | `characters[].canonical_ref_image`, `ref_verdict`, `cost.image_count` | ADR-001,007,028 |
 | *char-ref moderation* (Phase 2) | `characters[].canonical_ref_image` | `characters[].ref_moderation_status` | ADR-011 |
+| *`reveal`* (Phase 2) | `characters[]`, `ref_verdict` | `reference_retry`, `cost.ref_retry_count` — **no effects**; pauses on `interrupt()` | ADR-029 |
 | `generate_scene` | scene + char refs + `style` | `scenes[].attempts[].image_ref` | ADR-001,010 |
 | `consistency_check` | ref + attempt image | `scenes[].attempts[].vlm_verdict`, `failure_reasons`, `passed` | ADR-004 |
 | `regenerate` | `failure_reasons` | corrected `prompt` → new attempt; `final_image_ref` (best-of) | ADR-010 |
@@ -186,7 +193,8 @@ DB job row, not the contract; the failure-reason enum is a closed 7-value set), 
 frozen in the **`story-memory-contract`** spec (`docs/specs/`). Node/reducer/loop conventions are frozen in
 **ADR-024**: nodes **partial-return** (never mutate-and-return); `scenes[]` carries an upsert-by-`scene_id`
 reducer; the per-scene loop is **sequential** (position derived from `final_image_ref is None`, no cursor); the
-two branch points (moderation, consistency) use **pure routers** that return a label and never write state.
+branch points (moderation, consistency, and ADR-029's reveal) use **pure routers** that return a label and never
+write state.
 
 ---
 
@@ -246,9 +254,9 @@ Concerns that touch many modules. **Every feature spec ticks the ones it affects
 
 | # | Concern | What a spec must show | ADR/§ |
 |---|---|---|---|
-| CC-1 | **Moderation ordering** | input text → char-ref → output image; no image reaches a kid unmoderated | ADR-011 / §13 |
+| CC-1 | **Moderation ordering** | input text → char-ref → **reveal** → output image; no image reaches a kid unmoderated. The reveal is the surface the char-ref gate exists for, so it ships behind it (ADR-029) | ADR-011, ADR-029 / §13 |
 | CC-2 | **PII redaction** | Presidio before storage/caption/export; redacted text is what's persisted | ADR-011 / §14 |
-| CC-3 | **Cost control** | count-based per-book breaker on `cost.image_count` (trips → job `failed`); per-classroom daily cap deferred to Phase 2 | ADR-025, §15 |
+| CC-3 | **Cost control** | count-based per-book breaker on `cost.image_count`, bound `max_scenes × 2 + 9` (trips → job `failed`); per-classroom daily cap deferred to Phase 2 | ADR-025, ADR-029, §15 |
 | CC-4 | **Security (RLS + signed URLs)** | **classroom**-scoped DB isolation; no public assets | ADR-006, ADR-017 / §14 |
 | CC-5 | **Observability** | emits traces/metrics (gen time, regen count, cost, VLM score) | §16 |
 | CC-6 | **Accessibility** | Expressive TTS narration per page (Chatterbox, hosted); large targets; minimal text | §17, ADR-020 |

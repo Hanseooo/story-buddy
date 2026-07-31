@@ -57,8 +57,10 @@ seam), not anything in this file.
 input_gate ──► analyze ──► segment ──► char_bible ──► generate_scene ──► ...
 ```
 
-Linear. **No conditional edge.** ADR-003's two branch points are moderation pass/fail and consistency
-pass/fail, and this node is neither.
+Linear. **No conditional edge.** ADR-003's branch points are moderation pass/fail, consistency
+pass/fail, and the reveal confirm/try-again (ADR-029, Phase 2); this node *branches* at none of them.
+It does become the **target** of the reveal's `"try_again"` edge in Phase 2 (§8) — a destination, not a
+router, so this section is unchanged in substance.
 
 **The acceptance loop adds no edge and no super-step.** ADR-028 Decision 3 settles this explicitly: a
 node that re-rolls its own output and returns once is node-internal. ADR-003 constrains the *graph*;
@@ -193,8 +195,11 @@ fragment to exist.
 ## 5. Cross-cutting checklist (MASTER_SPEC §5)
 
 - [x] **CC-3 Cost control** — writes `cost.image_count` (invariant 4) and supplies the number ADR-025
-  Decision 4 left unstated: the breaker bound `max_scenes × 2 + prelude` has **`prelude = 6`**
-  (2 references × 3 draws). The 2-reference cap *is* the pre-scene ceiling.
+  Decision 4 left unstated: the breaker bound `max_scenes × 2 + prelude` has ~~**`prelude = 6`**
+  (2 references × 3 draws)~~ → **`prelude = 9`, corrected by ADR-029 (2026-07-31)**: 2 references × 3
+  draws **+ 3 reveal taps × 1 draw**. The 6 was written *"on the assumption of exactly one
+  machine-driven pass"*, and D-I removed that assumption. This node's own ceiling is still 6 — the
+  extra 3 are spent by the Phase-2 `reveal` loop re-entering this node in targeted mode.
   ⚠️ **One inaccuracy in ADR-025 to record, not amend.** ADR-025 states the domain-level breaker and
   `recursion_limit` *"share one number"*. They no longer track together: ADR-028's loop is
   node-internal, so it consumes **zero** super-steps (`recursion_limit`'s `fixed_prelude` is
@@ -207,9 +212,10 @@ fragment to exist.
   Only a `text_to_image` hard failure does, through the ADR-025 `failure_reason` enum.
 - [x] **CC-10 Checkpointing** — idempotent re-entry (invariant 6), one partial-return, no partial
   writes. The widened mid-node re-pay window is stated in §4 rather than hidden behind this tick.
-- [ ] **CC-1 Moderation ordering** — **not satisfied.** No image from this node reaches a child
-  *today*, but the surface where one would — PRD §8 flow step 7's reveal — has no graph
-  representation at all (§8, `D-I`). `ref_moderation_status` is left `None` for its Phase-2 owner.
+- [ ] **CC-1 Moderation ordering** — **not satisfied, but now owned.** No image from this node reaches
+  a child *today*. The surface where one would — PRD §8 flow step 7's reveal — is the `reveal` node
+  decided in **ADR-029**, which ships in Phase 2 *behind* the char-ref moderation gate precisely so
+  this ordering holds by construction. `ref_moderation_status` is left `None` for that Phase-2 owner.
   Do not read this node's completion as CC-1 being closed for the char-ref leg.
 - [ ] **CC-2 PII redaction** — inherited: descriptions derive from `redacted_text` via `analyze`, and
   `analyze`'s descriptive-label convention means neither a real name nor a `<PERSON_1>` placeholder
@@ -324,15 +330,17 @@ build):
 
 **Hands off — named here, owned elsewhere:**
 
-- **PRD flow step 7 (reveal + confirm)** → **`D-I`, opened in `DECISION_BACKLOG.md` by this spec.**
-  The PRD promises the child sees the moderated reference and gets a lightweight "try again" before
-  full generation. **ADR-024's canonical graph has no such interrupt and `graph.py` runs straight
-  through.** Three things are undefined: whether the confirm is a graph interrupt or a separate
-  invocation; whose budget a child's "try again" spends (a fresh 3 draws? the remainder?); and how it
-  accounts against CC-3. Given ADR-028's own ⚠️ that ~42% of books still ship an off-spec reference,
-  that button is arguably the *real* mitigation — so this gap is load-bearing, not cosmetic. It
-  changes the graph shape ADR-024 froze and touches the `jobs` table, which makes it an ADR session,
-  never something settled inline while building a module (AGENTS.md).
+- **PRD flow step 7 (reveal + confirm)** → **`D-I`, opened by this spec — closed 2026-07-31 as
+  ADR-029.** The reveal is a dedicated, **effect-free** `reveal` node holding an `interrupt()`, sitting
+  after the Phase-2 char-ref moderation gate, with a pure `route_reveal` looping `"try_again"` back
+  into **this node**. Two consequences land here, both Phase-2 build work, neither changing the code
+  this spec ships today:
+  - **This node gains a targeted mode.** When `reference_retry` is set it makes exactly **one**
+    `text_to_image` call for that `char_id` with the tapped attribute restated, **one** `judge` call,
+    overwrites `canonical_ref_image` / `ref_verdict` **unconditionally** (no best-of — the child is
+    the judge), bumps `image_count` by 1, and clears `reference_retry`. Invariant 6 needs no
+    exception: the targeted mode overwrites rather than skips.
+  - **CC-3's `prelude` is 9, not 6** (§5, struck through in place).
 - **`cost.image_count` for scene images** → **`image-generator`**. This spec starts the field because
   this node makes a job's first images; `generate_scene` does not write it today and CC-3's breaker
   cannot trip until it does.
