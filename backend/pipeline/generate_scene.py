@@ -1,5 +1,6 @@
 from app.db import get_supabase_client
 from contracts.story_memory import Attempt, StoryMemory
+from pipeline.prompt_optimizer import build_prompt
 from providers import text_to_image
 
 BUCKET = "storybook-images"
@@ -24,7 +25,9 @@ def generate_scene(state: StoryMemory) -> dict:
     if scene is None:
         return {}
 
-    prompt = scene.caption or scene.text_excerpt
+    prompt = build_prompt(
+        scene.text_excerpt, scene.characters_present, state.characters, state.style.prompt_fragment
+    )
     path = generate_and_store(prompt, state.story_id)
     return {
         "scenes": [
