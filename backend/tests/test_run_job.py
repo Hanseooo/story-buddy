@@ -1,13 +1,17 @@
 from unittest.mock import MagicMock, patch
 
+from app.config import settings
 from contracts.story_memory import CURRENT_SCHEMA_VERSION, Scene
 from worker.run_job import run_storybook_job
 
 
-def _fake_supabase() -> MagicMock:
+def _fake_supabase(style_preset_id: str | None = None) -> MagicMock:
     fake = MagicMock()
     select_chain = fake.table.return_value.select.return_value.eq.return_value.single.return_value
-    select_chain.execute.return_value.data = {"input_text": "A dog runs in a field."}
+    select_chain.execute.return_value.data = {
+        "input_text": "A dog runs in a field.",
+        "style_preset_id": style_preset_id,
+    }
     return fake
 
 
@@ -100,3 +104,39 @@ def test_run_storybook_job_marks_failed_on_exception():
     failed_update = update_calls[-1][0][0]
     assert failed_update["status"] == "failed"
     assert "db down" in failed_update["error"]
+
+
+# --- style-presets spec: worker resolution (tests 6–7) ---
+
+def test_run_storybook_job_resolves_gouache_style_preset():
+    """Given style_preset_id='gouache', StoryMemory.style carries the correct preset and fragment."""
+    fake_supabase = _fake_supabase(style_preset_id="gouache")
+    fake_cm = MagicMock()
+    fake_cm.__enter__.return_value = MagicMock()
+    fake_graph = _fake_graph()
+
+    with patch("worker.run_job.get_supabase_client", return_value=fake_supabase), \
+         patch("worker.run_job.PostgresSaver.from_conn_string", return_value=fake_cm), \
+         patch("worker.run_job.build_graph", return_value=fake_graph):
+        run_storybook_job("job-1")
+
+    state = fake_graph.invoke.call_args.args[0]
+    assert state.style.style_preset_id == "gouache"
+    assert state.style.prompt_fragment == settings.style_presets["gouache"]
+
+
+def test_run_storybook_job_defaults_style_to_cel_when_preset_is_null():
+    """Given style_preset_id=None in the jobs row, StoryMemory.style defaults to 'cel'."""
+    fake_supabase = _fake_supabase(style_preset_id=None)
+    fake_cm = MagicMock()
+    fake_cm.__enter__.return_value = MagicMock()
+    fake_graph = _fake_graph()
+
+    with patch("worker.run_job.get_supabase_client", return_value=fake_supabase), \
+         patch("worker.run_job.PostgresSaver.from_conn_string", return_value=fake_cm), \
+         patch("worker.run_job.build_graph", return_value=fake_graph):
+        run_storybook_job("job-1")
+
+    state = fake_graph.invoke.call_args.args[0]
+    assert state.style.style_preset_id == "cel"
+    assert state.style.prompt_fragment == settings.style_presets["cel"]

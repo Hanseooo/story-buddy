@@ -3,7 +3,7 @@ import uuid
 import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.config import settings
 from app.db import get_supabase_client
@@ -24,6 +24,14 @@ app.add_middleware(
 
 class CreateStorybookRequest(BaseModel):
     text: str
+    style_preset_id: str | None = None
+
+    @field_validator("style_preset_id")
+    @classmethod
+    def validate_style_preset(cls, v: str | None) -> str | None:
+        if v is not None and v not in settings.style_presets:
+            raise ValueError(f"Unknown style_preset_id: {v!r}")
+        return v
 
 
 class CreateStorybookResponse(BaseModel):
@@ -40,7 +48,13 @@ def create_storybook(payload: CreateStorybookRequest) -> CreateStorybookResponse
     job_id = str(uuid.uuid4())
     supabase = get_supabase_client()
     supabase.table("jobs").insert(
-        {"id": job_id, "status": "queued", "current_stage": "queued", "input_text": payload.text}
+        {
+            "id": job_id,
+            "status": "queued",
+            "current_stage": "queued",
+            "input_text": payload.text,
+            "style_preset_id": payload.style_preset_id,
+        }
     ).execute()
 
     queue = get_queue()

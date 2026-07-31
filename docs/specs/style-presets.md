@@ -94,8 +94,12 @@ spec — this spec only ships the fragments and the wiring, it doesn't re-run th
 - **ADR-022** — the three presets, their content direction, and the "config not a node" mechanism are
   frozen there; this spec implements it, it doesn't reopen it.
 - **ADR-007** — style rides the canonical character reference; unchanged.
-- **Schema note:** `jobs.style_preset_id` is a new nullable column. No migration files exist in-repo
-  (schema is managed Supabase-side); this is called out here since it's an additive, non-breaking
-  column, not a decision that needs its own ADR.
-- **No open questions.** D-I (Tier 2c, the reveal/confirm step) is explicitly out of scope here — it
-  governs when the child *sees* the reference, not which style fragment gets chosen.
+- **Schema note:** `jobs.style_preset_id` is a new nullable column, and it needs a migration file —
+  the repo tracks schema in `supabase/migrations/` (`0001_jobs_table.sql` today). This spec ships
+  **`0002_jobs_style_preset_id.sql`**; `0002` is claimed here because this is the next thing built,
+  ahead of ADR-029's `awaiting_confirm` widening, which lands in Phase 2 and takes a later number.
+  Called out rather than ADR'd since it's an additive, non-breaking column.
+- **No open questions.** The reveal/confirm step (D-I, closed 2026-07-31 → **ADR-029**) is out of scope
+  here — it governs when the child *sees* the reference, not which style fragment gets chosen. ADR-029's
+  targeted redraw restates a `CharacterDescription` attribute, never the style fragment, so the frozen
+  `style.prompt_fragment` survives a reveal retry unchanged.
