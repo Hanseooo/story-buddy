@@ -95,8 +95,6 @@ def generate_scene(state: StoryMemory) -> dict:
                     "prompt": prompt,
                     # CC-5: per-attempt prompt provenance (ADR-010).
                     "attempts": [*scene.attempts, Attempt(image_ref=path, prompt=prompt, passed=False)],
-                    # ponytail: provisional — consistency_check takes final_image_ref ownership (spec §3).
-                    "final_image_ref": path,
                 }
             )
         ],

@@ -27,7 +27,7 @@ def _initial_state(story_id: str) -> StoryMemory:
         story_id=story_id,
         classroom_id="dev-classroom",
         profile_id="dev-profile",
-        input=Input(raw_text="A dog runs in a field."),
+        input=Input(raw_text="A dog runs in a field. The dog barks."),
     )
 
 
@@ -52,7 +52,11 @@ def _mock_call_points(monkeypatch):
     )
     monkeypatch.setattr(
         "pipeline.generate_scene.generate_and_store",
-        lambda prompt, story_id, scene_id, ref_paths: ("stub/path.png", True),
+        lambda prompt, story_id, scene_id, ref_paths: (f"stub/{scene_id}.png", True),
+    )
+    monkeypatch.setattr(
+        "pipeline.consistency_check.judge_attempt",
+        lambda image_path, subjects: [],   # unchecked — every path still finalizes
     )
     monkeypatch.setattr(
         "pipeline.char_bible.mint_reference",
@@ -89,11 +93,11 @@ def test_stub_graph_full_run_with_real_call_points_mocked(monkeypatch):
     )
 
     # invoke() returns a dict; the values inside are still model instances.
-    assert result["input"].redacted_text == "A dog runs in a field."
+    assert result["input"].redacted_text == "A dog runs in a field. The dog barks."
     assert result["input"].moderation.passed is True
     assert [s.scene_id for s in result["scenes"]] == ["s0"]
-    assert result["scenes"][0].caption == "A dog runs in a field."
-    assert result["scenes"][0].final_image_ref == "stub/path.png"
+    assert result["scenes"][0].caption == "A dog runs in a field. The dog barks."
+    assert result["scenes"][0].final_image_ref == "stub/s0.png"
 
 
 def test_analyze_roster_survives_the_graph(monkeypatch):
@@ -131,3 +135,42 @@ def test_char_bible_references_survive_the_graph(monkeypatch):
     assert character.ref_verdict.matches_description is True
     assert character.ref_moderation_status is None   # Phase-2 owner, not this node
     assert result["cost"].image_count == 3           # 2 from mint_reference + 1 from generate_scene
+
+
+def test_two_scene_run_loops_once_per_scene_and_reaches_compose(monkeypatch):
+    """The ADR-024 loop-termination test, and the reason route_next_scene is worth testing.
+
+    Two scenes must produce two generate_scene/consistency_check pairs, both finalized, exactly
+    two attempts total, and a run that terminates at compose rather than spinning to
+    recursion_limit.
+    """
+    _mock_call_points(monkeypatch)
+    monkeypatch.setattr(
+        "pipeline.segment.segment_scenes",
+        lambda units, chars, timeline: SceneSegmentation(scenes=[
+            ExtractedScene(start=0, end=0, characters_present=[]),
+            ExtractedScene(start=1, end=len(units) - 1, characters_present=[]),
+        ]),
+    )
+    app_graph = build_graph()
+
+    ran = [
+        next(iter(chunk))
+        for chunk in app_graph.stream(
+            _initial_state("test-job-loop"),
+            config={"configurable": {"thread_id": "test-job-loop"}},
+            stream_mode="updates",
+        )
+    ]
+    result = app_graph.invoke(
+        _initial_state("test-job-loop"), config={"configurable": {"thread_id": "test-job-loop"}}
+    )
+
+    assert ran == [
+        "input_gate", "analyze", "segment", "char_bible",
+        "generate_scene", "consistency_check",
+        "generate_scene", "consistency_check",
+        "compose",
+    ]
+    assert [s.final_image_ref for s in result["scenes"]] == ["stub/s0.png", "stub/s1.png"]
+    assert sum(len(s.attempts) for s in result["scenes"]) == 2

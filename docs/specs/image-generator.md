@@ -20,8 +20,7 @@ the reference — actually fires; today it does not, because the node still call
 - **Reads:** `story_id`; `scenes[]` (`scene_id`, `text_excerpt`, `characters_present`,
   `final_image_ref`); `characters[]` (`char_id`, `canonical_ref_image`, `description`);
   `style.prompt_fragment`; `cost.image_count`.
-- **Writes:** `scenes[].prompt`, `scenes[].attempts[]` (appended), `scenes[].final_image_ref`
-  (provisional — see §3), `cost.image_count`.
+- **Writes:** `scenes[].prompt`, `scenes[].attempts[]` (appended), `cost.image_count`.
 - **Invariants:**
   1. The Storage path is `{story_id}/{scene_id}.png` — deterministic and unique per scene.
   2. Exactly one scene is finalized per invocation, **or the node raises** (ADR-025 Decision 2).
@@ -41,23 +40,19 @@ a simplification, and this spec is where it is fixed.
 
 ## 3. Position in the system map
 
-Unchanged and linear. `graph.py` is **not** touched by this spec.
+**Taken by `consistency-checker` (2026-07-31).** `graph.py` is no longer linear: `route_next_scene`
+is registered on `char_bible` and `consistency_check`, and this node no longer writes
+`final_image_ref` — it appends an `Attempt` and leaves the scene unfinalized so
+`consistency_check`'s identical selection rule lands on the same scene. See
+`docs/specs/consistency-checker.md` §3.
 
 ```
-char_bible ──► generate_scene ──► consistency_check ──► compose
-                     ▲
-         build_prompt (prompt-optimizer, already wired)
+char_bible ────────────┐
+                       ├──► route_next_scene ─ a scene remains ──► generate_scene
+consistency_check ─────┘         └─ none remain ──► compose             │
+        ▲                                                               │
+        └───────────────────────── (direct edge) ────────────────────────┘
 ```
-
-**No conditional edge.** ADR-024 specifies `route_next_scene` at the loop head and
-`route_after_check` after the consistency gate; neither exists, and both are handed to
-`consistency-checker` (§8) so the two halves of one loop land in one change.
-
-**Provisional `final_image_ref`.** Under ADR-024 the finalizing write belongs to
-`consistency_check` / `regenerate`. Until those nodes are real, dropping the write here means no
-scene ever finalizes, `compose` reads nothing, and the job regresses against what works today. The
-node therefore keeps setting it, marked in code as provisional and named in §8 as
-`consistency-checker`'s to take.
 
 ## 4. Behavior & edge cases
 
@@ -96,7 +91,7 @@ exactly the drift AGENTS.md's *Definition of Done* grep exists to prevent.
    Otherwise `edit_image(prompt, [fal urls])` — or `text_to_image(prompt)` when `ref_paths` is
    empty — then upload, `paid=True`.
 6. Partial-return the scene with `prompt`, the appended `Attempt(image_ref=path, prompt=prompt,
-   passed=False)`, the provisional `final_image_ref`, and `cost` bumped **iff `paid`**.
+   passed=False)`, and `cost` bumped **iff `paid`**.
 
 ### Edge cases
 
@@ -177,8 +172,8 @@ breaker) · ADR-028 (a failing `ref_verdict` still ships its reference).
 
 **Hands off — named here, owned elsewhere:**
 - **`final_image_ref` ownership and the loop wiring** (`route_next_scene`, `route_after_check`, the
-  loop-back edge) → **`consistency-checker`**. Both routers are halves of one loop; splitting them
-  across specs would leave `graph.py` in a shape ADR-024 does not describe.
+  loop-back edge) → **`consistency-checker`** ✅ **taken (2026-07-31)**. `route_next_scene` is
+  registered; `route_after_check` deliberately not built yet (no regenerate node).
 - **`correct_prompt` wiring and the ADR-010 retry draw** → **`regeneration-controller`**.
 - **Output-image moderation (CC-1)** → **`moderation-stack`** (Phase 2).
 - **`jobs.failure_reason` migration + `run_job.py`'s taxonomy map** (ADR-025 Decision 5) →
@@ -217,8 +212,7 @@ Per AGENTS.md *Definition of Done*. This module is done when **all** of the foll
    - `AGENTS.md` *Validation Notes* (add `image-generator` built) **and** *Project Context* — the
      "Built today" graph line still describes `generate_scene` as text-to-image.
 
-**Not done** if: `backend/contracts/` is modified; `graph.py` gains an edge or a router; the
-`scene-1.png` path collision survives; `passed=True` is written on a fresh attempt; `cost.image_count`
-is bumped on a reused asset; a failing `ref_verdict` is used to filter out a reference; or the
-`consistency-checker` hand-off (`final_image_ref` ownership, the loop wiring) is silently absorbed
-into this change.
+**Not done** if: `backend/contracts/` is modified; the `scene-1.png` path collision survives;
+`passed=True` is written on a fresh attempt; `cost.image_count` is bumped on a reused asset; or
+a failing `ref_verdict` is used to filter out a reference. The `consistency-checker` hand-off
+(`final_image_ref` ownership, the loop wiring) has been **taken (2026-07-31)**.
