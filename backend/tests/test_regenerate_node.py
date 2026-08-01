@@ -1,0 +1,331 @@
+"""Deterministic tests for `regenerate` (spec `docs/specs/regeneration-controller.md` §6).
+
+One seam (MASTER_SPEC §6): the node with `generate_and_store` patched. Everything else in this
+node is pure — `correct_prompt` has no model call, and the selection rule is a list scan.
+"""
+import pytest
+from unittest.mock import patch
+
+from app.config import IMAGE_BUDGET
+from contracts.story_memory import (
+    CURRENT_SCHEMA_VERSION,
+    Attempt,
+    Character,
+    CharacterDescription,
+    Cost,
+    FailureReason,
+    Input,
+    Scene,
+    StoryMemory,
+    Style,
+    VlmVerdict,
+)
+from pipeline.prompt_optimizer import ANATOMY_CLAUSE, IDENTITY_CLAUSE
+from pipeline.regenerate import regenerate
+
+
+def _char(char_id: str = "c0", name: str = "the dog", ref: str | None = "job-1/ref-c0.png") -> Character:
+    return Character(
+        char_id=char_id,
+        name=name,
+        description=CharacterDescription(species="dog", colours=["orange"]),
+        canonical_ref_image=ref,
+    )
+
+
+def _verdict(*, same: bool = False, anatomy: bool = True, style: bool = True) -> VlmVerdict:
+    return VlmVerdict(
+        differences_observed="the face is wrong",
+        same_character=same,
+        style_match=style,
+        anatomy_intact=anatomy,
+    )
+
+
+def _failed_attempt(
+    *,
+    verdict: VlmVerdict | None = None,
+    reasons: list[FailureReason] | None = None,
+    prompt: str | None = "the original prompt",
+) -> Attempt:
+    return Attempt(
+        image_ref="job-1/s0-1.png",
+        prompt=prompt,
+        vlm_verdict=verdict if verdict is not None else _verdict(),
+        failure_reasons=reasons or [],
+        passed=False,
+    )
+
+
+def _state(
+    scenes: list[Scene],
+    characters: list[Character] | None = None,
+    cost: Cost | None = None,
+) -> StoryMemory:
+    return StoryMemory(
+        schema_version=CURRENT_SCHEMA_VERSION,
+        story_id="job-1",
+        classroom_id="dev-classroom",
+        profile_id="dev-profile",
+        input=Input(raw_text="x", redacted_text="x"),
+        characters=characters if characters is not None else [_char()],
+        style=Style(prompt_fragment="flat cel-shaded cartoon"),
+        scenes=scenes,
+        cost=cost or Cost(),
+    )
+
+
+def _scene(attempts: list[Attempt] | None = None, **kwargs) -> Scene:
+    return Scene(
+        scene_id="s0",
+        text_excerpt="The dog ran.",
+        characters_present=["c0"],
+        prompt="the original prompt",
+        attempts=attempts if attempts is not None else [_failed_attempt()],
+        **kwargs,
+    )
+
+
+def _run(state: StoryMemory, *, paid: bool = True):
+    with patch(
+        "pipeline.regenerate.generate_and_store", return_value=("job-1/s0-2.png", paid)
+    ) as store:
+        return regenerate(state), store
+
+
+# --- the partial return (invariant 1) ---
+
+def test_appends_exactly_one_attempt_and_returns_both_keys():
+    result, _ = _run(_state([_scene()]))
+
+    assert set(result) == {"scenes", "cost"}
+    scene, = result["scenes"]
+    assert len(scene.attempts) == 2
+    assert scene.attempts[-1].image_ref == "job-1/s0-2.png"
+    assert scene.attempts[-1].passed is False
+
+
+def test_returns_the_pre_existing_attempt_byte_identical():
+    """Only consistency_check judges and mutates attempts. This node appends and nothing else."""
+    first = _failed_attempt()
+    result, _ = _run(_state([_scene([first])]))
+
+    assert result["scenes"][0].attempts[0] == first
+
+
+def test_never_returns_an_empty_dict_on_any_reachable_path():
+    """Invariant 1: `{}` leaves state unchanged, so consistency_check re-judges the same attempt,
+    reaches the same verdict, and route_after_check sends control straight back — an infinite
+    loop bounded only by recursion_limit."""
+    result, _ = _run(_state([_scene()]))
+
+    assert result != {}
+
+
+# --- attempt_n (the per-attempt Storage path) ---
+
+def test_passes_attempt_n_of_len_attempts_plus_one():
+    _, store = _run(_state([_scene()]))
+
+    assert store.call_args.args[3] == 2
+
+
+def test_attempt_n_tracks_the_attempt_list_rather_than_a_stored_counter():
+    """ADR-024 rejected a loop cursor for the same reason: derived beats stored."""
+    scene = _scene([_failed_attempt(), Attempt(image_ref="job-1/s0-2.png", prompt="second")])
+    _, store = _run(_state([scene]))
+
+    assert store.call_args.args[3] == 3
+
+
+# --- cost (invariant 6) ---
+
+def test_bumps_image_count_and_regen_count_when_paid():
+    result, _ = _run(_state([_scene()], cost=Cost(image_count=4, regen_count=1)), paid=True)
+
+    assert result["cost"].image_count == 5
+    assert result["cost"].regen_count == 2
+
+
+def test_bumps_regen_count_but_not_image_count_when_the_asset_was_reused():
+    """Resume mid-retry: the checkpoint predates this return, so both counters start from their
+    pre-regenerate values. image_count + 0 records that the Storage skip meant no re-pay;
+    regen_count + 1 records the regeneration the lost checkpoint never persisted. Gating
+    regen_count on `paid` would count it as zero."""
+    result, _ = _run(_state([_scene()], cost=Cost(image_count=4, regen_count=1)), paid=False)
+
+    assert result["cost"].image_count == 4
+    assert result["cost"].regen_count == 2
+
+
+# --- what this node must NOT write (invariants 2, 3, 7) ---
+
+def test_never_writes_final_image_ref():
+    """Invariant 2: consistency_check remains its only writer."""
+    result, _ = _run(_state([_scene()]))
+
+    assert result["scenes"][0].final_image_ref is None
+
+
+def test_never_writes_the_scene_prompt():
+    """Invariant 3: scenes[].prompt holds the ORIGINAL build_prompt output. Per-attempt
+    provenance is Attempt.prompt, which is what that field exists for (CC-5 tracing)."""
+    result, _ = _run(_state([_scene()]))
+
+    assert result["scenes"][0].prompt == "the original prompt"
+
+
+def test_never_writes_regeneration_count():
+    """Invariant 7: it equals len(attempts) - 1. A stored copy of a derived fact is a second
+    source of truth that a resume can desynchronise."""
+    result, _ = _run(_state([_scene()]))
+
+    assert result["scenes"][0].regeneration_count == 0
+
+
+def test_does_not_mutate_the_state_it_was_handed():
+    state = _state([_scene()])
+    before = state.model_dump()
+
+    _run(state)
+
+    assert state.model_dump() == before
+
+
+# --- ref_paths (identical to generate_scene's loop) ---
+
+def test_collects_refs_only_for_present_characters_carrying_a_canonical_image():
+    cat = _char("c1", "the cat", ref=None)
+    scene = _scene()
+    scene = scene.model_copy(update={"characters_present": ["c0", "c1"]})
+    _, store = _run(_state([scene], characters=[_char(), cat]))
+
+    assert store.call_args.args[4] == ["job-1/ref-c0.png"]
+
+
+def test_skips_an_unresolvable_char_id_without_raising():
+    """This node may not extend the roster — identical posture to generate_scene."""
+    scene = _scene().model_copy(update={"characters_present": ["c0", "ghost-id"]})
+    _, store = _run(_state([scene], characters=[_char()]))
+
+    assert store.call_args.args[4] == ["job-1/ref-c0.png"]
+
+
+def test_falls_back_to_text_to_image_refs_when_the_scene_has_none():
+    """ref_paths == [] → the same text_to_image branch generate_scene takes. The corrected
+    prompt still applies."""
+    scene = _scene().model_copy(update={"characters_present": []})
+    _, store = _run(_state([scene]))
+
+    assert store.call_args.args[4] == []
+
+
+# --- invariant 5: the prompt is ALWAYS corrected, never resampled ---
+
+def test_corrected_prompt_differs_from_the_previous_attempts_prompt_on_reasons():
+    scene = _scene([_failed_attempt(reasons=[FailureReason.different_face])])
+    _, store = _run(_state([scene]))
+
+    sent = store.call_args.args[0]
+    assert sent != "the original prompt"
+    assert sent.startswith("the original prompt")
+    assert "match the reference character's face exactly" in sent
+
+
+def test_corrected_prompt_differs_on_an_anatomy_only_failure():
+    """ADR-028 froze anatomy out of FailureReason, so without the boolean this retry would send
+    a byte-identical prompt — a pure resample."""
+    scene = _scene([_failed_attempt(verdict=_verdict(same=True, anatomy=False), reasons=[])])
+    _, store = _run(_state([scene]))
+
+    sent = store.call_args.args[0]
+    assert sent != "the original prompt"
+    assert ANATOMY_CLAUSE in sent
+
+
+def test_corrected_prompt_differs_on_same_character_false_with_no_reasons():
+    """The judge named the failure but gave no reason for it."""
+    scene = _scene([_failed_attempt(verdict=_verdict(same=False), reasons=[])])
+    _, store = _run(_state([scene]))
+
+    sent = store.call_args.args[0]
+    assert sent != "the original prompt"
+    assert IDENTITY_CLAUSE in sent
+
+
+def test_the_identity_clause_is_suppressed_when_the_judge_gave_a_reason():
+    """No duplication with different_face."""
+    scene = _scene([_failed_attempt(verdict=_verdict(same=False), reasons=[FailureReason.different_face])])
+    _, store = _run(_state([scene]))
+
+    assert IDENTITY_CLAUSE not in store.call_args.args[0]
+
+
+def test_the_new_attempt_records_the_corrected_prompt_not_the_original():
+    """CC-5: per-attempt provenance is the whole reason Attempt.prompt exists."""
+    scene = _scene([_failed_attempt(reasons=[FailureReason.different_face])])
+    result, store = _run(_state([scene]))
+
+    assert result["scenes"][0].attempts[-1].prompt == store.call_args.args[0]
+
+
+def test_corrects_from_the_scene_prompt_when_the_attempt_carries_none():
+    scene = _scene([_failed_attempt(prompt=None, reasons=[FailureReason.different_face])])
+    _, store = _run(_state([scene]))
+
+    assert store.call_args.args[0].startswith("the original prompt")
+
+
+def test_treats_a_missing_verdict_as_no_boolean_correction():
+    """`v.same_character if v else True` — an attempt with no verdict cannot have failed on
+    identity or anatomy, so neither boolean clause fires."""
+    scene = _scene([_failed_attempt(verdict=None, reasons=[FailureReason.wrong_colour])])
+    _, store = _run(_state([scene]))
+
+    sent = store.call_args.args[0]
+    assert IDENTITY_CLAUSE not in sent
+    assert ANATOMY_CLAUSE not in sent
+
+
+# --- the guards that raise (invariant 1, ADR-025 D4) ---
+
+def test_raises_when_no_scene_is_unfinalized():
+    state = _state([_scene(final_image_ref="job-1/s0-1.png")])
+
+    with patch("pipeline.regenerate.generate_and_store") as store, pytest.raises(RuntimeError):
+        regenerate(state)
+
+    store.assert_not_called()
+
+
+def test_raises_when_the_selected_scene_has_no_attempts():
+    """A scene with no attempts belongs to generate_scene, and route_after_check says so.
+    Returning {} here instead would ping-pong forever."""
+    state = _state([_scene([])])
+
+    with patch("pipeline.regenerate.generate_and_store") as store, pytest.raises(RuntimeError):
+        regenerate(state)
+
+    store.assert_not_called()
+
+
+def test_raises_before_any_spend_when_the_image_budget_is_reached():
+    """ADR-025 D4. A retry is not exempt from the breaker — same posture as generate_scene."""
+    state = _state([_scene()], cost=Cost(image_count=IMAGE_BUDGET))
+
+    with patch("pipeline.regenerate.generate_and_store") as store, pytest.raises(RuntimeError):
+        regenerate(state)
+
+    store.assert_not_called()
+
+
+def test_raises_when_neither_the_attempt_nor_the_scene_carries_a_prompt():
+    """Unreachable today. The alternative — drawing from correction clauses with no base prompt —
+    is a guaranteed-garbage PAID image, so an ADR-025 hard failure is the honest outcome."""
+    scene = _scene([_failed_attempt(prompt=None)]).model_copy(update={"prompt": None})
+    state = _state([scene])
+
+    with patch("pipeline.regenerate.generate_and_store") as store, pytest.raises(RuntimeError):
+        regenerate(state)
+
+    store.assert_not_called()
