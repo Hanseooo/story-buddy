@@ -190,15 +190,18 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
   `input_gate → analyze → segment → char_bible → [char-ref moderation] → generate_scene →
   consistency_check → [regenerate] → [output moderation] → compose → export`.
   **Built today** (`backend/pipeline/graph.py`): `input_gate → analyze → segment → char_bible →
-  [route_next_scene] → generate_scene → consistency_check → [route_next_scene] → compose` — one
-  pure router registered on two nodes (ADR-024), so the per-scene loop is closed. `compose` is the
-  only remaining pass-through stub; `analyze` mints the entity roster; `segment` splits into scenes
-  (≤15), maps names → char_ids, and sets `caption = text_excerpt` (ADR-013); `char_bible` mints ≤2
-  canonical references with ADR-028's 3-draw acceptance loop; `generate_scene` is
-  reference-conditioned (`edit_image` when canonical refs present, `text_to_image` otherwise), with
-  Storage-based idempotent resume and an ADR-025 D4 cost breaker; `consistency_check` judges each
-  scene against those references and finalizes it. Fill the remaining stub in per ADR-024's
-  partial-return conventions; don't invent a different graph shape.
+  [route_next_scene] → generate_scene → consistency_check → [route_after_check] → regenerate →
+  consistency_check → … → compose` — `route_next_scene` is the loop head's registration and the
+  fall-through of `route_after_check`; `route_after_check` handles the consistency pass/fail branch
+  (ADR-003). `compose` is the only remaining pass-through stub. `analyze` mints the entity roster;
+  `segment` splits into scenes (≤15), maps names → char_ids, and sets `caption = text_excerpt`
+  (ADR-013); `char_bible` mints ≤2 canonical references with ADR-028's 3-draw acceptance loop;
+  `generate_scene` is reference-conditioned (`edit_image` when canonical refs present,
+  `text_to_image` otherwise), with Storage-based idempotent resume and an ADR-025 D4 cost breaker;
+  `consistency_check` judges each scene against those references, gates on
+  `same_character and anatomy_intact`, and finalizes by best-of; `regenerate` draws once with a
+  corrected prompt (ADR-010). Fill the remaining stub in per ADR-024's partial-return conventions;
+  don't invent a different graph shape.
 - Critical paths (extra review): moderation ordering (input text → char-ref → output image), PII
   redaction (Presidio) before any storage/caption/export, RLS + signed URLs on every table/asset,
   job checkpoint/resume logic — see `docs/product/ADRs.md` and StoryBuddy Hard Rules above.
@@ -377,7 +380,13 @@ is not documentation of a good design; it is the blast radius, written down so t
   `same_character and anatomy_intact` (`style_match` recorded but non-gating), and finalizes every
   scene: pass, fail, or unchecked. Takes `final_image_ref` ownership from `generate_scene`.
   `route_next_scene` (in `graph.py`) closes ADR-024's per-scene loop — the graph's first conditional
-  edges. `route_after_check` deliberately not built; `contracts/` untouched. Known open gaps handed
-  to `regeneration-controller`: the anatomy correction gap (an anatomy-only failure yields no
-  `FailureReason`, so its retry is a pure resample) and the ADR-010 retry branch. CC-3 judge calls
-  remain uncounted by `Cost`. Remaining Phase-1 spec: `regeneration-controller`.
+  edges. `contracts/` untouched. Open gaps passed to `regeneration-controller`: the anatomy
+  correction gap, the ADR-010 retry branch, and `recursion_limit` — all now discharged. CC-3 judge
+  calls remain uncounted by `Cost` (widened to up to 4 per scene by `regeneration-controller`).
+  **`regeneration-controller` is built (2026-08-02):** `pipeline/regenerate.py` implements
+  ADR-010's one corrected retry; `consistency_check` gains `_rank`, the three-term finalize rule
+  (`passed or verdict is None or len(attempts) >= 2`), and reverse-ordered best-of selection;
+  `route_after_check` closes the consistency pass/fail branch (ADR-003); `recursion_limit` set to
+  `MAX_SCENES * 4 + 9 = 69`; `correct_prompt` gains `same_character` / `anatomy_intact` booleans
+  and `IDENTITY_CLAUSE` / `ANATOMY_CLAUSE` fixed strings; per-attempt Storage path
+  `{story_id}/{scene_id}-{n}.png`. `contracts/` untouched. Remaining Phase-1 spec: `compose`.

@@ -1,6 +1,6 @@
 # Feature Spec — regeneration-controller
 
-**Status:** draft · **Phase:** 1 · **Owner node:** `backend/pipeline/regenerate.py`
+**Status:** built · c04e87a–b08cbf0 · **Phase:** 1 · **Owner node:** `backend/pipeline/regenerate.py`
 **Derived from:** MASTER_SPEC §2 (system map, node-I/O table), §3 (frozen contract), §5 (CC registry), §6 (test seam)
 **Rationale:** ADR-003 (conditional edges only at real branch points), ADR-004 (VLM-as-judge, each
 character judged separately), ADR-010 (one targeted retry, best-of fallback, never a broken page),
