@@ -1,5 +1,5 @@
 from contracts.story_memory import Character, CharacterDescription, FailureReason
-from pipeline.prompt_optimizer import build_prompt, correct_prompt
+from pipeline.prompt_optimizer import ANATOMY_CLAUSE, IDENTITY_CLAUSE, build_prompt, correct_prompt
 
 FRAG = "flat cel-shaded cartoon, thick clean black outlines"
 
@@ -140,3 +140,74 @@ def test_correct_prompt_an_empty_axis_still_appends_an_empty_clause():
     dog = _char("c0", "the dog", colours=[])
     result = correct_prompt("base prompt", [FailureReason.wrong_colour], [dog], FRAG)
     assert "match the reference's exact colours: " in result
+
+
+# --- regeneration-controller §4: the two booleans that make the correction total ---
+
+def test_correct_prompt_anatomy_intact_false_appends_the_anatomy_clause():
+    """ADR-028 froze anatomy OUT of FailureReason, so an anatomy-only failure yields no
+    reason clause. Without this the retry is a pure resample — what ADR-010 rejects."""
+    result = correct_prompt("draw a dog", [], [], "cel", anatomy_intact=False)
+
+    assert result.startswith("draw a dog")
+    assert ANATOMY_CLAUSE in result
+
+
+def test_correct_prompt_anatomy_intact_true_appends_nothing():
+    assert correct_prompt("draw a dog", [], [], "cel", anatomy_intact=True) == "draw a dog"
+
+
+def test_correct_prompt_same_character_false_with_no_reasons_appends_the_identity_clause():
+    """The judge named the failure but no reason for it — a generic identity clause is the
+    only correction available, and it beats resampling."""
+    result = correct_prompt("draw a dog", [], [], "cel", same_character=False)
+
+    assert result.startswith("draw a dog")
+    assert IDENTITY_CLAUSE in result
+
+
+def test_correct_prompt_same_character_false_with_reasons_omits_the_identity_clause():
+    """Guarded on EMPTY failure_reasons so it never duplicates different_face."""
+    result = correct_prompt(
+        "draw a dog", [FailureReason.different_face], [], "cel", same_character=False
+    )
+
+    assert IDENTITY_CLAUSE not in result
+    assert "match the reference character's face exactly" in result
+
+
+def test_correct_prompt_both_booleans_false_appends_identity_then_anatomy():
+    result = correct_prompt("draw a dog", [], [], "cel", same_character=False, anatomy_intact=False)
+
+    assert result.index(IDENTITY_CLAUSE) < result.index(ANATOMY_CLAUSE)
+
+
+def test_correct_prompt_reason_clauses_precede_the_two_boolean_clauses():
+    """Enum-order reason clauses first, then identity, then anatomy — so a reader of the
+    prompt sees the specific corrections before the generic ones."""
+    result = correct_prompt(
+        "draw a dog",
+        [FailureReason.different_face],
+        [],
+        "cel",
+        same_character=False,
+        anatomy_intact=False,
+    )
+
+    assert result.index("match the reference character's face exactly") < result.index(ANATOMY_CLAUSE)
+
+
+def test_correct_prompt_defaults_reproduce_the_previous_behaviour_exactly():
+    """The existing call signature stays byte-compatible: four positional args, no clauses
+    added by the new params. Every pre-existing assertion in this file depends on it."""
+    assert correct_prompt("draw a dog", [], [], "cel") == "draw a dog"
+    assert correct_prompt("draw a dog", [FailureReason.different_face], [], "cel") == (
+        "draw a dog\nmatch the reference character's face exactly"
+    )
+
+
+def test_correct_prompt_never_drops_the_base_prompt_under_either_boolean():
+    """Invariant 3: correct_prompt only ever APPENDS."""
+    for kwargs in ({"same_character": False}, {"anatomy_intact": False}):
+        result = correct_prompt("the base prompt survives", [], [], "cel", **kwargs)
+        assert "the base prompt survives" in result

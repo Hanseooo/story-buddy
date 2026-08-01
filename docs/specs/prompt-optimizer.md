@@ -44,16 +44,14 @@ input_gate ──► analyze ──► segment ──► char_bible ──► ge
 - `generate_scene` calls `build_prompt` for the first attempt — **wired in this spec**, replacing the
   `scene.caption or scene.text_excerpt` line (`pipeline/generate_scene.py:27`, the `# ponytail:
   text-to-image, no character reference yet` stub).
-- `correct_prompt` has **no caller yet**. `regeneration-controller` (unbuilt; next-but-one in roadmap
-  order after `image-generator`) wires it in when that spec lands. Named here so it isn't reinvented
-  differently there (ADR-010 already dictates its shape).
+- `correct_prompt` is called by `regenerate` (the node built in `regeneration-controller`, Part 2). `FailureReason` was **not** touched — it remains frozen at 7 values (ADR-028); the two new boolean params drive corrections outside those 7 without adding an 8th enum value.
 - No conditional edge. No contract change.
 
 ## 4. Behavior & edge cases
 
 ```python
 def build_prompt(text_excerpt: str, characters_present: list[str], characters: list[Character], style_fragment: str | None) -> str
-def correct_prompt(prompt: str, failure_reasons: list[FailureReason], characters: list[Character], style_fragment: str | None) -> str
+def correct_prompt(prompt: str, failure_reasons: list[FailureReason], characters: list[Character], style_fragment: str | None, same_character: bool = True, anatomy_intact: bool = True) -> str
 ```
 
 (Corrected during implementation: `build_prompt` needs `characters_present` to do its own
@@ -69,6 +67,13 @@ appends the verbatim `text_excerpt` and the style fragment. `style_fragment=None
 `settings.default_style_fragment`, the same fallback `char_bible` already uses.
 
 ### `correct_prompt`
+
+Two module-level constants close the holes where reason clauses alone append nothing (making the retry a pure resample, which ADR-010 rejects):
+
+- `IDENTITY_CLAUSE = "the characters must match the reference images exactly"` — fires when `same_character=False` and `failure_reasons` is empty (i.e. the judge named the failure but gave no reason; anatomy is outside the frozen 7 so it has no FailureReason entry).
+- `ANATOMY_CLAUSE = "anatomy must be correct: no merged, missing or duplicated body parts"` — fires when `anatomy_intact=False` (ADR-028 froze anatomy out of `FailureReason`; this is the only correction available).
+
+Both params default to `True` so the four-positional-arg signature stays call-compatible.
 
 A fixed, module-level dict maps each of the 7 `FailureReason` values (`backend/contracts/story_memory.py`)
 to an emphasis-clause template:
@@ -103,7 +108,7 @@ single named character requires the judge to attribute a reason to a `char_id`, 
 | **Empty `characters_present`** | `build_prompt` returns a character-free prompt: `text_excerpt` + style fragment only. Valid — `char_bible`'s and `segment`'s precedent is scenes may be unreferenced. |
 | **`char_id` in `characters_present` not found in `state.characters`** | Skipped, logged. Same posture as `segment`'s "name not in roster" case — this function may not extend the roster. |
 | **`style_fragment is None`** | Falls back to `settings.default_style_fragment`, matching `char_bible`. |
-| **Empty `failure_reasons`** | `correct_prompt` returns `prompt` unchanged. Should never be invoked this way by its future caller, but no crash either way. |
+| **Empty `failure_reasons`** | `correct_prompt` returns `prompt` unchanged when both booleans are `True`. With `same_character=False` it appends `IDENTITY_CLAUSE`; with `anatomy_intact=False` it appends `ANATOMY_CLAUSE`. |
 | **Multiple `failure_reasons` on one attempt** | All matching clauses appended, in enum-declaration order, no duplicates even if a reason repeats. |
 | **A description axis referenced by a clause is empty** (e.g. `wrong_colour` but `colours == []`) | The clause still appends with an empty list rendered — this function does not invent colours that `analyze`/`char_bible` never captured; a thin description stays thin, same posture as `char_bible` §4's "species-only description" case. |
 
@@ -158,8 +163,7 @@ ADR-007 (style rides the canonical reference; the fragment is belt-and-suspender
 content rules — names a medium and its artifacts, never generic quality words).
 
 **Hands off — named here, owned elsewhere:**
-- **Wiring `correct_prompt` into a graph path** → `regeneration-controller` (unbuilt). This spec
-  defines and tests the function; it has no caller until that spec lands.
+- **Wiring `correct_prompt` into a graph path** → `regeneration-controller` Part 2 (`regenerate` node). This spec defines and tests the function; the caller is built there.
 - **The `text_to_image` → `edit_image` swap and reference-image plumbing** → `image-generator`. This
   spec only replaces the *prompt* line in `generate_scene.py`, not the provider call it feeds.
 
