@@ -9,6 +9,7 @@ from pipeline.char_bible import char_bible
 from pipeline.generate_scene import generate_scene
 from pipeline.consistency_check import consistency_check
 from pipeline.compose import compose
+from pipeline.regenerate import regenerate
 
 
 def route_next_scene(state: StoryMemory) -> str:
@@ -19,11 +20,27 @@ def route_next_scene(state: StoryMemory) -> str:
     At the head it also covers ADR-024's empty-`scenes[]` case — segment produced none, so there
     is no loop to enter.
 
-    `route_after_check` is deliberately NOT built: this node always finalizes, so that router
-    would have exactly one outcome today. `regeneration-controller` introduces the branch and
-    re-points the `consistency_check` registration below in the same change (spec §3).
+    `route_after_check` below wraps it: this node no longer finalizes unconditionally, so the
+    fail branch is real now. This router stays the loop head's registration and the fall-through
+    of the tail's — it is called BY route_after_check, not replaced by it.
     """
     return "generate_scene" if any(s.final_image_ref is None for s in state.scenes) else "compose"
+
+
+def route_after_check(state: StoryMemory) -> str:
+    """Pure label-returning router (ADR-024 Decision 4) — ADR-003's consistency pass/fail branch.
+
+    Holds no policy: it reads what `consistency_check` wrote. An unfinalized scene means the
+    judge failed it and the retry budget is not spent, so ADR-010's one redraw is owed.
+
+    The `scene.attempts` guard is load-bearing, not padding: it is what stops
+    `consistency_check`'s "scene has no attempts → return {}" guard from becoming a
+    check ⇄ regenerate ping-pong. A scene with no attempts belongs to `generate_scene`.
+    """
+    scene = next((s for s in state.scenes if s.final_image_ref is None), None)
+    if scene is not None and scene.attempts:
+        return "regenerate"
+    return route_next_scene(state)
 
 
 def build_graph(checkpointer=None):
@@ -34,6 +51,7 @@ def build_graph(checkpointer=None):
     graph.add_node("char_bible", char_bible)
     graph.add_node("generate_scene", generate_scene)
     graph.add_node("consistency_check", consistency_check)
+    graph.add_node("regenerate", regenerate)
     graph.add_node("compose", compose)
 
     graph.set_entry_point("input_gate")
@@ -42,7 +60,8 @@ def build_graph(checkpointer=None):
     graph.add_edge("segment", "char_bible")
     graph.add_conditional_edges("char_bible", route_next_scene)
     graph.add_edge("generate_scene", "consistency_check")
-    graph.add_conditional_edges("consistency_check", route_next_scene)
+    graph.add_conditional_edges("consistency_check", route_after_check)
+    graph.add_edge("regenerate", "consistency_check")
     graph.add_edge("compose", END)
 
     return graph.compile(checkpointer=checkpointer or MemorySaver())

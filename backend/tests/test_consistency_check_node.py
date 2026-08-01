@@ -20,7 +20,7 @@ from contracts.story_memory import (
     VlmVerdict,
 )
 from pipeline.consistency_check import SceneVerdict, consistency_check, judge_attempt
-from pipeline.graph import route_next_scene
+from pipeline.graph import route_after_check, route_next_scene
 
 
 def _uri(path: str) -> str:
@@ -541,3 +541,36 @@ def test_router_sends_a_fully_finalized_book_to_compose():
 def test_router_sends_an_empty_scene_list_to_compose():
     """ADR-024: segment produced no scenes. The loop head must not enter a loop with no work."""
     assert route_next_scene(_state([])) == "compose"
+
+
+# --- route_after_check (pure — no mocks) ---
+
+def test_route_after_check_sends_a_checked_failing_scene_to_regenerate():
+    state = _state([_scene_with_attempt(characters_present=["c0"])])
+    assert route_after_check(state) == "regenerate"
+
+
+def test_route_after_check_sends_a_scene_with_no_attempts_to_generate_scene():
+    """The ping-pong guard. Without the `scene.attempts` term this returns "regenerate", which
+    raises, or — if it returned {} instead — loops until recursion_limit. A scene with no
+    attempts belongs to generate_scene, and route_next_scene says so."""
+    state = _state([Scene(scene_id="s0", text_excerpt="0")])
+    assert route_after_check(state) == "generate_scene"
+
+
+def test_route_after_check_sends_a_fully_finalized_book_to_compose():
+    state = _state([Scene(scene_id="s0", text_excerpt="0", final_image_ref="job-1/s0-1.png")])
+    assert route_after_check(state) == "compose"
+
+
+def test_route_after_check_sends_an_empty_scene_list_to_compose():
+    assert route_after_check(_state([])) == "compose"
+
+
+def test_route_after_check_skips_finalized_scenes_when_selecting():
+    """Same selection rule as every other node in the loop — the FIRST unfinalized scene."""
+    state = _state([
+        Scene(scene_id="s0", text_excerpt="0", final_image_ref="job-1/s0-1.png"),
+        _scene_with_attempt("s1", "job-1/s1-1.png"),
+    ])
+    assert route_after_check(state) == "regenerate"

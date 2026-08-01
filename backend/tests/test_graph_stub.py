@@ -5,8 +5,9 @@ with four pass-through stubs a graph that runs every node and one that runs none
 identical state. `stream_mode="updates"` yields exactly one chunk per node execution, keyed by
 node name, in order, INCLUDING nodes that return {}. That is the replacement for `stage`.
 """
-from contracts.story_memory import CURRENT_SCHEMA_VERSION, Input, RefVerdict, StoryMemory
+from contracts.story_memory import CURRENT_SCHEMA_VERSION, FailureReason, Input, RefVerdict, StoryMemory
 from pipeline.analyze import StoryAnalysis
+from pipeline.consistency_check import SceneVerdict
 from pipeline.graph import build_graph
 from pipeline.segment import ExtractedScene, SceneSegmentation
 
@@ -52,6 +53,12 @@ def _mock_call_points(monkeypatch):
     )
     monkeypatch.setattr(
         "pipeline.generate_scene.generate_and_store",
+        lambda prompt, story_id, scene_id, attempt_n, ref_paths: (f"stub/{scene_id}-{attempt_n}.png", True),
+    )
+    # regenerate.py does `from ... import generate_and_store`, binding it into ITS namespace at
+    # import time — patching only pipeline.generate_scene would leave the retry path live.
+    monkeypatch.setattr(
+        "pipeline.regenerate.generate_and_store",
         lambda prompt, story_id, scene_id, attempt_n, ref_paths: (f"stub/{scene_id}-{attempt_n}.png", True),
     )
     monkeypatch.setattr(
@@ -174,3 +181,86 @@ def test_two_scene_run_loops_once_per_scene_and_reaches_compose(monkeypatch):
     ]
     assert [s.final_image_ref for s in result["scenes"]] == ["stub/s0-1.png", "stub/s1-1.png"]
     assert sum(len(s.attempts) for s in result["scenes"]) == 2
+
+
+def _judge_returning(*, same: bool, anatomy: bool = True) -> SceneVerdict:
+    return SceneVerdict(
+        differences_observed="d",
+        same_character=same,
+        attributes_present=[],
+        style_match=True,
+        anatomy_intact=anatomy,
+        failure_reasons=[FailureReason.different_face] if not same else [],
+    )
+
+
+def _two_scenes(monkeypatch):
+    monkeypatch.setattr(
+        "pipeline.segment.segment_scenes",
+        lambda units, chars, timeline: SceneSegmentation(scenes=[
+            ExtractedScene(start=0, end=0, characters_present=[]),
+            ExtractedScene(start=1, end=len(units) - 1, characters_present=[]),
+        ]),
+    )
+
+
+def test_a_failing_scene_retries_once_then_passes_and_the_run_reaches_compose(monkeypatch):
+    """Spec §6: three attempts total, both scenes finalized, cost.regen_count == 1."""
+    _mock_call_points(monkeypatch)
+    _two_scenes(monkeypatch)
+
+    # Keyed on the PATH, not a call counter: this test streams once and invokes once, so a
+    # counter would carry across both runs and the second would never see a failure.
+    monkeypatch.setattr(
+        "pipeline.consistency_check.judge_attempt",
+        lambda image_path, subjects: [_judge_returning(same=not image_path.endswith("s0-1.png"))],
+    )
+    app_graph = build_graph()
+
+    ran = [
+        next(iter(chunk))
+        for chunk in app_graph.stream(
+            _initial_state("test-job-retry"),
+            config={"configurable": {"thread_id": "test-job-retry"}},
+            stream_mode="updates",
+        )
+    ]
+    result = app_graph.invoke(
+        _initial_state("test-job-retry-2"),
+        config={"configurable": {"thread_id": "test-job-retry-2"}},
+    )
+
+    assert ran == [
+        "input_gate", "analyze", "segment", "char_bible",
+        "generate_scene", "consistency_check", "regenerate", "consistency_check",
+        "generate_scene", "consistency_check",
+        "compose",
+    ]
+    assert sum(len(s.attempts) for s in result["scenes"]) == 3
+    assert all(s.final_image_ref is not None for s in result["scenes"])
+    assert result["scenes"][0].final_image_ref == "stub/s0-2.png"   # attempt 2 won on its own score
+    assert result["cost"].regen_count == 1
+
+
+def test_a_book_whose_every_judge_call_fails_still_reaches_compose(monkeypatch):
+    """The ADR-010 best-of termination test: four attempts, both scenes finalized, never a
+    broken page and never an infinite loop. `len(attempts) >= 2` is what bounds it."""
+    _mock_call_points(monkeypatch)
+    _two_scenes(monkeypatch)
+    monkeypatch.setattr(
+        "pipeline.consistency_check.judge_attempt",
+        lambda image_path, subjects: [_judge_returning(same=False)],
+    )
+    app_graph = build_graph()
+
+    result = app_graph.invoke(
+        _initial_state("test-job-allfail"),
+        config={"configurable": {"thread_id": "test-job-allfail"}},
+    )
+
+    assert sum(len(s.attempts) for s in result["scenes"]) == 4
+    assert all(s.final_image_ref is not None for s in result["scenes"])
+    assert all(a.passed is False for s in result["scenes"] for a in s.attempts)
+    assert result["cost"].regen_count == 2
+    # Tie on every ranking term → attempt 2, the `reversed` behaviour, end to end.
+    assert [s.final_image_ref for s in result["scenes"]] == ["stub/s0-2.png", "stub/s1-2.png"]
