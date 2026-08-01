@@ -52,7 +52,7 @@ def _mock_call_points(monkeypatch):
     )
     monkeypatch.setattr(
         "pipeline.generate_scene.generate_and_store",
-        lambda prompt, story_id, scene_id, ref_paths: (f"stub/{scene_id}.png", True),
+        lambda prompt, story_id, scene_id, attempt_n, ref_paths: (f"stub/{scene_id}-{attempt_n}.png", True),
     )
     monkeypatch.setattr(
         "pipeline.consistency_check.judge_attempt",
@@ -97,7 +97,7 @@ def test_stub_graph_full_run_with_real_call_points_mocked(monkeypatch):
     assert result["input"].moderation.passed is True
     assert [s.scene_id for s in result["scenes"]] == ["s0"]
     assert result["scenes"][0].caption == "A dog runs in a field. The dog barks."
-    assert result["scenes"][0].final_image_ref == "stub/s0.png"
+    assert result["scenes"][0].final_image_ref == "stub/s0-1.png"
 
 
 def test_analyze_roster_survives_the_graph(monkeypatch):
@@ -172,5 +172,5 @@ def test_two_scene_run_loops_once_per_scene_and_reaches_compose(monkeypatch):
         "generate_scene", "consistency_check",
         "compose",
     ]
-    assert [s.final_image_ref for s in result["scenes"]] == ["stub/s0.png", "stub/s1.png"]
+    assert [s.final_image_ref for s in result["scenes"]] == ["stub/s0-1.png", "stub/s1-1.png"]
     assert sum(len(s.attempts) for s in result["scenes"]) == 2

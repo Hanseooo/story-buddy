@@ -22,7 +22,7 @@ the reference — actually fires; today it does not, because the node still call
   `style.prompt_fragment`; `cost.image_count`.
 - **Writes:** `scenes[].prompt`, `scenes[].attempts[]` (appended), `cost.image_count`.
 - **Invariants:**
-  1. The Storage path is `{story_id}/{scene_id}.png` — deterministic and unique per scene.
+  1. The Storage path is `{story_id}/{scene_id}-{attempt_n}.png` — deterministic and unique per attempt. CC-10's exists-skip is now per-attempt; a shared per-scene path would make ADR-010's best-of rank an image against itself (see `docs/specs/regeneration-controller.md` §4).
   2. Exactly one scene is finalized per invocation, **or the node raises** (ADR-025 Decision 2).
      Never a placeholder, never a partial book.
   3. `providers.edit_image` is used whenever at least one present character has a
@@ -68,7 +68,7 @@ IMAGE_BUDGET = MAX_SCENES * 2 + 9    # ADR-025 D4; prelude 9 per ADR-029
 def _fal_ref_url(ref_path: str) -> str: ...        # Storage download → providers.upload_reference
 
 def generate_and_store(
-    prompt: str, story_id: str, scene_id: str, ref_paths: list[str]
+    prompt: str, story_id: str, scene_id: str, attempt_n: int, ref_paths: list[str]
 ) -> tuple[str, bool]:               # (storage_path, paid)
 ```
 
@@ -87,7 +87,7 @@ exactly the drift AGENTS.md's *Definition of Done* grep exists to prevent.
    state.style.prompt_fragment)` — unchanged from `prompt-optimizer`.
 4. Collect `canonical_ref_image` for each `char_id` in `characters_present` that resolves to a
    `Character` carrying one.
-5. Helper: if `{story_id}/{scene_id}.png` already exists in Storage → return it with `paid=False`.
+5. Helper: if `{story_id}/{scene_id}-{attempt_n}.png` already exists in Storage → return it with `paid=False`.
    Otherwise `edit_image(prompt, [fal urls])` — or `text_to_image(prompt)` when `ref_paths` is
    empty — then upload, `paid=True`.
 6. Partial-return the scene with `prompt`, the appended `Attempt(image_ref=path, prompt=prompt,
@@ -141,7 +141,7 @@ exactly the drift AGENTS.md's *Definition of Done* grep exists to prevent.
   `upload_reference`.
 
 **Node (`generate_scene`, helper patched — the node seam):**
-- The path is `{story_id}/{scene_id}.png`, and two successive invocations over evolving state
+- The path is `{story_id}/{scene_id}-{attempt_n}.png`, and two successive invocations over evolving state
   produce **two distinct paths**. *(Regression test for the `scene-1.png` collision, §2.)*
 - The appended `Attempt` has `passed is False`.
 - `cost.image_count` is +1 when `paid`, and unchanged when the asset was reused.
@@ -197,7 +197,7 @@ Per AGENTS.md *Definition of Done*. This module is done when **all** of the foll
 1. `backend/app/config.py` gains `MAX_SCENES = 15`; `backend/pipeline/segment.py` imports it in
    place of its bare literals.
 2. `backend/pipeline/generate_scene.py` implements §4: `_fal_ref_url`, the widened
-   `generate_and_store` returning `(path, paid)`, the deterministic per-scene path, the breaker, the
+   `generate_and_store` returning `(path, paid)`, the deterministic per-attempt path, the breaker, the
    `edit_image`/`text_to_image` branch, `passed=False`, and the conditional `cost` bump. The
    `# ponytail: text-to-image, no character reference yet` comment is removed — this spec is the
    change it was waiting for.
