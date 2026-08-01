@@ -118,7 +118,15 @@ before the graph starts. Migration: `supabase/migrations/0002_jobs_style_preset_
 
 `image-generator` is **built** (2026-07-31): `backend/pipeline/generate_scene.py` is now
 reference-conditioned (`edit_image` when canonical refs present, `text_to_image` otherwise).
-Fixes the `scene-1.png` path collision. ADR-025 D4 breaker live. `final_image_ref` is provisional.
+Fixes the `scene-1.png` path collision. ADR-025 D4 breaker live. `final_image_ref` ownership
+transferred to `consistency_check`.
 
-**Next action: `consistency-checker`** — write `docs/specs/consistency-checker.md` from
+`consistency-checker` is **built** (2026-07-31): `backend/pipeline/consistency_check.py` judges each
+scene image against its canonical references (one judge call per character, ADR-004), folds
+worst-wins, gates on `same_character and anatomy_intact`, and finalizes every scene — pass, fail,
+or unchecked. Takes `final_image_ref` ownership from `generate_scene`. `graph.py` gains its first
+conditional edges: `route_next_scene` registered on `char_bible` and `consistency_check`
+(ADR-024). `route_after_check` and the retry branch are `regeneration-controller`'s.
+
+**Next action: `regeneration-controller`** — write `docs/specs/regeneration-controller.md` from
 `docs/specs/TEMPLATE.md` before writing any code (AGENTS.md).

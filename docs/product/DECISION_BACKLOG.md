@@ -134,7 +134,13 @@ roadmap order. Source: MASTER_SPEC §7.
       per-scene paths). ADR-025 D4 cost breaker live. CC-10 Storage-exists skip (idempotent resume).
       `MAX_SCENES` and `IMAGE_BUDGET` extracted to `app/config.py`. `contracts/` untouched.
       `final_image_ref` is provisional — `consistency-checker` takes ownership.)*
-- [ ] `consistency-checker`   *(code: `pipeline/consistency_check.py` — stub)*
+- [x] `consistency-checker`   *(spec **built 2026-07-31** — `docs/specs/consistency-checker.md`;
+      `consistency_check` judges each scene against its canonical references (one `judge` call per
+      character, ADR-004), folds worst-wins, gates on `same_character and anatomy_intact`, and
+      finalizes every scene — pass, fail, or unchecked. Takes `final_image_ref` ownership from
+      `generate_scene`. `route_next_scene` closes ADR-024's loop; `route_after_check` deliberately
+      not built. `contracts/` untouched. Open: the anatomy correction gap and the ADR-010 retry
+      branch go to `regeneration-controller`.)*
 - [ ] `regeneration-controller`   *(no file yet; needs the ADR-023 failure-reason enum + ADR-024 loop shape; owns the best-of **rule** — ADR-028 supplied the signal: lexicographic over `same_character` → `anatomy_intact` → `style_match`)*
 
 **Phase 2 (safety / classroom):**
@@ -192,9 +198,9 @@ revised 2026-07-25.)*
 
 > ✅ **`image-generator` is built (2026-07-31).** See `docs/specs/image-generator.md`.
 
-**Build `consistency-checker`** — write `docs/specs/consistency-checker.md` from `docs/specs/TEMPLATE.md` before any code (AGENTS.md).
+> ✅ **`consistency-checker` is built (2026-07-31).** See `docs/specs/consistency-checker.md`.
+
+**Build `regeneration-controller`** — write `docs/specs/regeneration-controller.md` from `docs/specs/TEMPLATE.md` before any code (AGENTS.md).
 
 **No open decision blocks Phase 1, and the backlog has no open rows.** Tiers 1, 2, 2b, 2c, and 3 are all
 resolved. D-I closed 2026-07-31 → ADR-029; it builds in Phase 2 behind the char-ref moderation gate.
-
-After `consistency-checker`, in roadmap order: `regeneration-controller`.

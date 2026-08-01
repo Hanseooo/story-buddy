@@ -103,8 +103,8 @@ It is Pydantic and it is authoritative.
 
 > **State of play (Phase 1 in progress):** `StoryMemory` is **built** (`backend/contracts/story_memory.py`,
 > 2026-07-29). `job_state.py` is **deleted**. All seven nodes are on partial-return `(state: StoryMemory) -> dict`;
-> `input_gate` is the graph entry point. `analyze` and `segment` are built; remaining nodes are pass-through stubs —
-> fill them in per spec before implementing. See `docs/specs/story-memory-contract.md` for the contract and ADR-023/024 for conventions.
+> `input_gate` is the graph entry point. `analyze`, `segment`, `char_bible`, `generate_scene`, and `consistency_check` are built; `compose` is the only remaining pass-through stub —
+> fill it in per spec before implementing. See `docs/specs/story-memory-contract.md` for the contract and ADR-023/024 for conventions.
 
 - Validate against it at **every LLM boundary** (strict `json_schema` structured output →
   Pydantic, always).
@@ -190,12 +190,15 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
   `input_gate → analyze → segment → char_bible → [char-ref moderation] → generate_scene →
   consistency_check → [regenerate] → [output moderation] → compose → export`.
   **Built today** (`backend/pipeline/graph.py`): `input_gate → analyze → segment → char_bible →
-  generate_scene → consistency_check → compose` — linear, **zero conditional edges**. `input_gate`,
-  `input_gate`, `consistency_check`, and `compose` are pass-through stubs; `analyze` mints the entity
-  roster; `segment` splits into scenes (≤15), maps names → char_ids, and sets `caption = text_excerpt`
-  (ADR-013); `char_bible` mints ≤2 canonical references with ADR-028's 3-draw acceptance loop;
-  `generate_scene` is reference-conditioned (edit_image when canonical refs present, text_to_image otherwise), with Storage-based idempotent resume and an ADR-025 D4 cost breaker. Fill the stubs in per ADR-024's partial-return conventions; don't
-  invent a different graph shape.
+  [route_next_scene] → generate_scene → consistency_check → [route_next_scene] → compose` — one
+  pure router registered on two nodes (ADR-024), so the per-scene loop is closed. `compose` is the
+  only remaining pass-through stub; `analyze` mints the entity roster; `segment` splits into scenes
+  (≤15), maps names → char_ids, and sets `caption = text_excerpt` (ADR-013); `char_bible` mints ≤2
+  canonical references with ADR-028's 3-draw acceptance loop; `generate_scene` is
+  reference-conditioned (`edit_image` when canonical refs present, `text_to_image` otherwise), with
+  Storage-based idempotent resume and an ADR-025 D4 cost breaker; `consistency_check` judges each
+  scene against those references and finalizes it. Fill the remaining stub in per ADR-024's
+  partial-return conventions; don't invent a different graph shape.
 - Critical paths (extra review): moderation ordering (input text → char-ref → output image), PII
   redaction (Presidio) before any storage/caption/export, RLS + signed URLs on every table/asset,
   job checkpoint/resume logic — see `docs/product/ADRs.md` and StoryBuddy Hard Rules above.
@@ -366,6 +369,15 @@ is not documentation of a good design; it is the blast radius, written down so t
   **`image-generator` is built (2026-07-31):** `generate_scene` is reference-conditioned —
   `edit_image` when `canonical_ref_image` is present for a character, `text_to_image` otherwise.
   Fixes `scene-1.png` Storage-path collision (now `{story_id}/{scene_id}.png`). ADR-025 D4 breaker
-  live at `IMAGE_BUDGET = 39`. CC-10 Storage-exists skip (idempotent resume). `final_image_ref` is
-  provisional — `consistency_check` takes ownership. `MAX_SCENES` and `IMAGE_BUDGET` in
-  `app/config.py`. Remaining Phase-1 specs: `consistency-check`, `regeneration-controller`.
+  live at `IMAGE_BUDGET = 39`. CC-10 Storage-exists skip (idempotent resume). `final_image_ref`
+  ownership transferred to `consistency_check`. `MAX_SCENES` and `IMAGE_BUDGET` in `app/config.py`.
+  **`consistency-checker` is built (2026-07-31):** `pipeline/consistency_check.py` judges each scene
+  image against the canonical reference each present character was drawn from — one `providers.judge`
+  call per character (ADR-004) — folds the verdicts worst-wins, gates on
+  `same_character and anatomy_intact` (`style_match` recorded but non-gating), and finalizes every
+  scene: pass, fail, or unchecked. Takes `final_image_ref` ownership from `generate_scene`.
+  `route_next_scene` (in `graph.py`) closes ADR-024's per-scene loop — the graph's first conditional
+  edges. `route_after_check` deliberately not built; `contracts/` untouched. Known open gaps handed
+  to `regeneration-controller`: the anatomy correction gap (an anatomy-only failure yields no
+  `FailureReason`, so its retry is a pure resample) and the ADR-010 retry branch. CC-3 judge calls
+  remain uncounted by `Cost`. Remaining Phase-1 spec: `regeneration-controller`.

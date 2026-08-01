@@ -1,6 +1,6 @@
 # Feature Spec — consistency-checker
 
-**Status:** draft · **Phase:** 1 · **Owner node:** `backend/pipeline/consistency_check.py`
+**Status:** built · b8f357f–13ef224 · **Phase:** 1 · **Owner node:** `backend/pipeline/consistency_check.py`
 **Derived from:** MASTER_SPEC §2 (system map, node-I/O table), §3 (frozen contract), §5 (CC registry), §6 (test seam)
 **Rationale:** ADR-003 (conditional edges only at real branch points), ADR-004 (VLM-as-judge,
 reason-then-score, each character judged separately), ADR-010 (best-of, never a broken page),
