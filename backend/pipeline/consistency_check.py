@@ -11,7 +11,7 @@ import logging
 from pydantic import BaseModel, Field
 
 from app.db import get_supabase_client
-from contracts.story_memory import FailureReason, StoryMemory, VlmVerdict
+from contracts.story_memory import Attempt, FailureReason, StoryMemory, VlmVerdict
 from providers import judge
 
 log = logging.getLogger(__name__)
@@ -79,6 +79,17 @@ def judge_attempt(image_path: str, subjects: list[tuple[str, str]]) -> list[Scen
         return []
 
 
+def _rank(a: Attempt) -> tuple[int, int, int, int]:
+    """ADR-028's lexicographic best-of signal, with unchecked sorting below every checked attempt.
+
+    A pass scores (1, 1, 1, …) and beats anything that gated, so `max` needs no special case for
+    it. Unchecked scores (0, 0, 0, 0): promoting an unjudged image over a judged one would let a
+    judge outage silently decide the page, contradicting invariant 4 (unchecked is never a pass).
+    """
+    v = a.vlm_verdict
+    return (0, 0, 0, 0) if v is None else (1, v.same_character, v.anatomy_intact, v.style_match)
+
+
 def consistency_check(state: StoryMemory) -> dict:
     """Pure: select, fold, gate, partial-return. Every effect is behind `judge_attempt`.
 
@@ -136,28 +147,48 @@ def consistency_check(state: StoryMemory) -> dict:
     # Invariant 4: unchecked is never a pass.
     passed = verdict is not None and verdict.same_character and verdict.anatomy_intact
 
+    updated = [
+        *scene.attempts[:-1],
+        attempt.model_copy(
+            update={"vlm_verdict": verdict, "failure_reasons": reasons, "passed": passed}
+        ),
+    ]
+
+    # A pass finalizes; so does an UNCHECKED attempt — a judge or Storage outage must not buy a
+    # second paid draw with no signal to correct on (that redraw would be the uncorrected
+    # resample ADR-010 rejects; ADR-025: the CHECK failed, not the artifact). Only a real verdict
+    # saying *fail* buys the one retry, and only the first time — ADR-010 caps it at one, and the
+    # budget is len(attempts), derived, because ADR-024 rejected stored cursors.
+    finalize = passed or verdict is None or len(scene.attempts) >= 2
+
+    # ADR-028's best-of. Ranked over `updated`, not scene.attempts — the attempt judged THIS pass
+    # must carry its own verdict into the comparison. Iterating in REVERSE is load-bearing: max
+    # returns the FIRST maximal element, so ranking forward would keep attempt 1 on a tie, and the
+    # rule is tie → attempt 2 (the corrected prompt is the better prior; ADR-010 calls attempt 2
+    # refinement, not resampling). Indices rather than the Attempts themselves so CC-5 below can
+    # log WHICH attempt won — `updated.index(winner)` compares by value and would report attempt 1
+    # on exactly the tie this line exists to break.
+    best = max(reversed(range(len(updated))), key=lambda i: _rank(updated[i])) if finalize else None
+
     # CC-5: a wrong character in the finished book traces to a scene, an attempt, and the verdict
-    # that let it through.
+    # that let it through. `best_of` is what tells a reader whether a retry ran and lost or never
+    # ran at all — without it an off-character page gives no way to distinguish the two.
     log.info(
-        "consistency_check: scene_id=%s subjects=%d %s same_character=%s anatomy_intact=%s "
-        "style_match=%s failure_reasons=%s passed=%s",
-        scene.scene_id, len(subjects), "checked" if verdict else "unchecked",
+        "consistency_check: scene_id=%s attempt=%d/%d subjects=%d %s same_character=%s "
+        "anatomy_intact=%s style_match=%s failure_reasons=%s passed=%s best_of=%s",
+        scene.scene_id, len(updated), len(updated), len(subjects), "checked" if verdict else "unchecked",
         verdict and verdict.same_character, verdict and verdict.anatomy_intact,
         verdict and verdict.style_match, [r.value for r in reasons], passed,
+        None if best is None else best + 1,
     )
 
     return {
         "scenes": [
             scene.model_copy(
                 update={
-                    "attempts": [
-                        *scene.attempts[:-1],
-                        attempt.model_copy(
-                            update={"vlm_verdict": verdict, "failure_reasons": reasons, "passed": passed}
-                        ),
-                    ],
+                    "attempts": updated,
                     # Invariant 2: this node, and only this node, finalizes a scene.
-                    "final_image_ref": attempt.image_ref,
+                    "final_image_ref": None if best is None else updated[best].image_ref,
                 }
             )
         ]
