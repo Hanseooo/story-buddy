@@ -152,7 +152,10 @@ def test_generate_scene_returns_scenes_and_cost_keys():
     assert set(result) == {"scenes", "cost"}
     scene, = result["scenes"]
     assert scene.scene_id == "s0"
-    assert scene.final_image_ref == "job-123/s0.png"
+    # Ownership transfer (consistency-checker §3): generate_scene appends an Attempt and leaves
+    # the scene UNFINALIZED so consistency_check's identical selection rule finds the same scene.
+    assert scene.final_image_ref is None
+    assert scene.attempts[-1].image_ref == "job-123/s0.png"
     assert scene.prompt == "a friendly dog"
 
 
@@ -221,7 +224,8 @@ def test_generate_scene_uses_scene_id_in_storage_path():
         result = generate_scene(state)
 
     mock_store.assert_called_once_with("p", "job-123", "scene-abc", [])
-    assert result["scenes"][0].final_image_ref == "job-123/scene-abc.png"
+    assert result["scenes"][0].final_image_ref is None
+    assert result["scenes"][0].attempts[-1].image_ref == "job-123/scene-abc.png"
 
 
 def test_generate_scene_two_successive_invocations_produce_distinct_paths():
@@ -245,8 +249,8 @@ def test_generate_scene_two_successive_invocations_produce_distinct_paths():
          patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s1.png", True)):
         result2 = generate_scene(updated)
 
-    path1 = result1["scenes"][0].final_image_ref
-    path2 = result2["scenes"][0].final_image_ref
+    path1 = result1["scenes"][0].attempts[-1].image_ref
+    path2 = result2["scenes"][0].attempts[-1].image_ref
     assert path1 != path2
 
 
