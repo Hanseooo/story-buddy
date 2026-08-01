@@ -138,10 +138,13 @@ roadmap order. Source: MASTER_SPEC §7.
       `consistency_check` judges each scene against its canonical references (one `judge` call per
       character, ADR-004), folds worst-wins, gates on `same_character and anatomy_intact`, and
       finalizes every scene — pass, fail, or unchecked. Takes `final_image_ref` ownership from
-      `generate_scene`. `route_next_scene` closes ADR-024's loop; `route_after_check` deliberately
-      not built. `contracts/` untouched. Open: the anatomy correction gap and the ADR-010 retry
-      branch go to `regeneration-controller`.)*
-- [ ] `regeneration-controller`   *(no file yet; needs the ADR-023 failure-reason enum + ADR-024 loop shape; owns the best-of **rule** — ADR-028 supplied the signal: lexicographic over `same_character` → `anatomy_intact` → `style_match`)*
+      `generate_scene`. `route_next_scene` closes ADR-024's loop. `contracts/` untouched.)*
+- [x] `regeneration-controller`   *(spec **built 2026-08-02** — `docs/specs/regeneration-controller.md`;
+      `pipeline/regenerate.py` implements ADR-010's one corrected retry. `consistency_check` gains
+      `_rank`, the three-term finalize rule, and best-of selection. `route_after_check` closes the
+      retry branch. `recursion_limit` set. `correct_prompt` gains `same_character` / `anatomy_intact`
+      params and `IDENTITY_CLAUSE` / `ANATOMY_CLAUSE`. Per-attempt Storage path. `contracts/` untouched.
+      Remaining Phase-1 spec: `compose`.)*
 
 **Phase 2 (safety / classroom):**
 - [ ] `moderation-stack`   *(D-1 decided → ADR-011c; spec: **draft 2026-07-28** — `docs/specs/moderation-stack.md`; no code yet)*
@@ -200,7 +203,11 @@ revised 2026-07-25.)*
 
 > ✅ **`consistency-checker` is built (2026-07-31).** See `docs/specs/consistency-checker.md`.
 
-**Build `regeneration-controller`** — write `docs/specs/regeneration-controller.md` from `docs/specs/TEMPLATE.md` before any code (AGENTS.md).
+> ✅ **`regeneration-controller` is built (2026-08-02).** See `docs/specs/regeneration-controller.md`.
+
+**Every Phase-1 feature-spec row is now built except `compose`, which is still a pass-through stub
+and has no row in this list — it was never added.** Next session: `compose` — write
+`docs/specs/compose.md` from `docs/specs/TEMPLATE.md` before any code (AGENTS.md).
 
 **No open decision blocks Phase 1, and the backlog has no open rows.** Tiers 1, 2, 2b, 2c, and 3 are all
 resolved. D-I closed 2026-07-31 → ADR-029; it builds in Phase 2 behind the char-ref moderation gate.

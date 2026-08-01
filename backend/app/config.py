@@ -65,3 +65,9 @@ STYLE_PRESETS: dict[str, str] = {
 # IMAGE_BUDGET derives from MAX_SCENES so both share one source of truth.
 MAX_SCENES = 15
 IMAGE_BUDGET = MAX_SCENES * 2 + 9   # 15 scenes × 2 + 9-image prelude (ADR-029)
+# Spec `docs/specs/regeneration-controller.md` §4: LangGraph's graph-level backstop.
+# ADR-024's formula — max_scenes × 4 + fixed_prelude. The ×4 is the deepest a single scene
+# can go: generate_scene → consistency_check → regenerate → consistency_check. The prelude
+# term is 9, the same one IMAGE_BUDGET uses (ADR-025 D4: the two backstops share one number).
+# It is generous — today's prelude is 5 — as deliberate headroom for ADR-029's `reveal` node.
+RECURSION_LIMIT = MAX_SCENES * 4 + 9

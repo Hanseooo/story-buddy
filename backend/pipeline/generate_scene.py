@@ -25,14 +25,20 @@ def _fal_ref_url(ref_path: str) -> str:
 
 
 def generate_and_store(
-    prompt: str, story_id: str, scene_id: str, ref_paths: list[str]
+    prompt: str, story_id: str, scene_id: str, attempt_n: int, ref_paths: list[str]
 ) -> tuple[str, bool]:
     """The node's ONE effect boundary (MASTER_SPEC §6). Returns (storage_path, paid).
 
     CC-10: if the path already exists in Storage, reuse it — a re-executed
     super-step is free. The Attempt is still appended by the caller.
+
+    The path carries `attempt_n` (1-based) because ADR-010's best-of needs two DISTINCT
+    objects: at a shared per-scene path the exists-skip above would hand attempt 2 back
+    attempt 1's own bytes, and best-of would rank an image against itself. The skip stays
+    correct — a re-executed super-step recomputes the same len(attempts) and the same path —
+    it is just per-attempt idempotency now instead of per-scene.
     """
-    path = f"{story_id}/{scene_id}.png"
+    path = f"{story_id}/{scene_id}-{attempt_n}.png"
     supabase = get_supabase_client()
 
     try:
@@ -81,7 +87,9 @@ def generate_scene(state: StoryMemory) -> dict:
         elif c.canonical_ref_image:
             ref_paths.append(c.canonical_ref_image)
 
-    path, paid = generate_and_store(prompt, state.story_id, scene.scene_id, ref_paths)
+    path, paid = generate_and_store(
+        prompt, state.story_id, scene.scene_id, len(scene.attempts) + 1, ref_paths
+    )
 
     log.info(
         "generate_scene: scene_id=%s refs=%d paid=%s prompt_len=%d",

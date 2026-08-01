@@ -125,8 +125,13 @@ transferred to `consistency_check`.
 scene image against its canonical references (one judge call per character, ADR-004), folds
 worst-wins, gates on `same_character and anatomy_intact`, and finalizes every scene — pass, fail,
 or unchecked. Takes `final_image_ref` ownership from `generate_scene`. `graph.py` gains its first
-conditional edges: `route_next_scene` registered on `char_bible` and `consistency_check`
-(ADR-024). `route_after_check` and the retry branch are `regeneration-controller`'s.
+conditional edges: `route_next_scene` registered on `char_bible` and `consistency_check` (ADR-024).
 
-**Next action: `regeneration-controller`** — write `docs/specs/regeneration-controller.md` from
-`docs/specs/TEMPLATE.md` before writing any code (AGENTS.md).
+`regeneration-controller` is **built** (2026-08-02): `backend/pipeline/regenerate.py` implements
+ADR-010's one corrected retry. `consistency_check` gains `_rank`, the three-term finalize rule, and
+best-of selection. `route_after_check` closes the retry branch. `recursion_limit` set.
+`correct_prompt` gains `same_character` / `anatomy_intact` params and fixed correction clauses.
+Per-attempt Storage path. `contracts/` untouched.
+
+**Next action: `compose`** — write `docs/specs/compose.md` from `docs/specs/TEMPLATE.md` before
+writing any code (AGENTS.md).

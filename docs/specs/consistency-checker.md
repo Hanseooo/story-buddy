@@ -26,8 +26,12 @@ scene finalizes per pass* — gets its teeth.
   `scenes[].final_image_ref`.
 - **Invariants:**
   1. Exactly one scene is finalized per invocation, or the node returns `{}` (nothing left to do).
-     Unlike `generate_scene` this node never raises — see §4.
+     Unlike `generate_scene` this node never raises — see §4. Finalization is now conditional on
+     `passed or verdict is None or len(attempts) >= 2` — a checked failure with one attempt is left
+     unfinalized so `route_after_check` can send it to `regenerate`.
   2. `final_image_ref` is written by **this node only**. `generate_scene` stops writing it (§3).
+     Unchanged and still true after `regeneration-controller` — `regenerate` deliberately does not
+     write it.
   3. Only the last `Attempt` is judged and mutated. Earlier attempts are never rewritten.
   4. `vlm_verdict is None` means **unchecked**, never "checked and clean."
   5. Each character is judged against **its own** reference in a **separate** `providers.judge`
@@ -51,12 +55,10 @@ consistency_check ─────┘         └─ none remain ──► compos
 `consistency_check`. Sitting at the loop head it also handles ADR-024's empty-`scenes[]` case
 (segment produced none) → straight to `compose`.
 
-**`route_after_check` is deliberately not built.** ADR-024 specifies it as
-`"regenerate" if not finalized and retry budget remains, else loop back`. This node always
-finalizes — pass, fail, or unchecked — so today that router would have exactly one outcome.
-`regeneration-controller` introduces the branch *and* the node it points at, and re-points the
-`consistency_check` registration in the same change; a one-outcome router built now would be
-edited identically. Named here so the omission is a decision, not an oversight.
+**`route_after_check` is now built** — see `regeneration-controller` §3. It wraps `route_next_scene`:
+an unfinalized scene with attempts routes to `regenerate`; everything else falls through to
+`route_next_scene`. The `consistency_check` registration is re-pointed to `route_after_check` in the
+same change, with a plain `add_edge("regenerate", "consistency_check")` completing the retry loop.
 
 ### `generate_scene` gives up `final_image_ref`
 
@@ -151,19 +153,20 @@ hidden: a genuinely off-style page can ship.
 | **`char_id` present but absent from `state.characters`** | Skipped, logged. Same posture as `generate_scene` and `build_prompt` — this node may not extend the roster. |
 | **A `judge` call raises after ADR-025 retries** | Unchecked, finalized, `WARNING` with `exc_info`. `char_bible`'s deliberate asymmetry: the artifact exists and is paid for, only the *check* failed. Never a job failure. |
 | **Storage download of the scene or a reference raises** | Same as above. Failing a job over a check would violate ADR-010's shippable-page rule for a reason unrelated to the page. |
-| **The attempt fails the gate** | Finalized anyway **today** — with no `regenerate` node, ADR-010's best-of degenerates to the single attempt, which is still a real image and still better than a placeholder. `regeneration-controller` inserts the branch ahead of finalization. |
-| **Two attempts already exist** | Cannot occur yet. ADR-028's lexicographic best-of ranking (`same_character` → `anatomy_intact` → `style_match`) is **not** built here — the backlog assigns the best-of *rule* to `regeneration-controller`, which is also the only thing that can produce a second attempt. |
+| **The attempt fails the gate** | Left unfinalized (`final_image_ref` stays `None`). `route_after_check` routes to `regenerate`, which draws once with a corrected prompt. `consistency_check` then runs again and finalizes by best-of (see below). |
+| **Two attempts already exist** | Finalized by best-of: `max(reversed(updated), key=_rank)` where `_rank` is ADR-028's lexicographic signal (`same_character` → `anatomy_intact` → `style_match`, unchecked sorts last). Iterating in reverse ensures a genuine tie goes to attempt 2 (the corrected prompt is the better prior — ADR-010 calls it refinement, not resampling). |
 | **A reference with a failing `ref_verdict`** | Judged against normally (above). |
 
-### ⚠️ The anatomy correction gap
+### The anatomy correction gap — closed
 
 `FailureReason` is frozen permanently at 7 and ADR-028 explicitly excluded anatomy from it —
-anatomy is a property of the rendering, not of identity. So an **anatomy-only** failure gates the
-attempt while producing `failure_reasons == []`, `correct_prompt` appends no clause, and the
-resulting retry is a pure resample — precisely what ADR-010 rejects as "not refinement."
+anatomy is a property of the rendering, not of identity. An **anatomy-only** failure gates the
+attempt while producing `failure_reasons == []`. Without a fix, `correct_prompt` would append no
+clause and the retry would be a pure resample.
 
-This is recorded, not solved. Inventing an 8th enum value here would reopen a closed-set decision
-that Objective 4's F1 is computed over. Handed to `regeneration-controller` (§8).
+This gap is **closed by `ANATOMY_CLAUSE`** in `regeneration-controller` §4: `correct_prompt` now
+accepts `anatomy_intact: bool = True` and appends a fixed anatomy clause when `False`. No 8th enum
+value was invented; `FailureReason` stays frozen at 7.
 
 ## 5. Cross-cutting checklist (MASTER_SPEC §5)
 
@@ -177,8 +180,8 @@ that Objective 4's F1 is computed over. Handed to `regeneration-controller` (§8
 - [ ] **CC-3 Cost control** — *partial.* No image spend, so `IMAGE_BUDGET` is untouched. But judge
       calls are **uncounted**: `Cost` has `image_count`, `regen_count`, `usd_estimate` and no judge
       counter, so this node's ≤2 calls per scene and `char_bible`'s ≤3 per reference are both
-      invisible. Pre-existing gap, widened here, not closed — a `Cost` field is a `contracts/`
-      change and belongs in one deliberate pass, not smuggled into a node build.
+      invisible. Pre-existing gap, **widened by `regeneration-controller`** — a retried scene costs
+      up to 4 judge calls, not 2. Still a `contracts/` change, still unowned.
 - [ ] **CC-4 Security** — *partial.* Durable Storage paths are read and persisted, never signed
       URLs. But a child's generated scene and character reference are sent as base64 to OpenRouter.
       Same posture as `char_bible`; noted, not closed.
@@ -207,9 +210,10 @@ that Objective 4's F1 is computed over. Handed to `regeneration-controller` (§8
 - `passed` is `True` only when `same_character and anatomy_intact`; a `style_match is False`
   verdict still passes.
 - `[]` from the helper → `vlm_verdict is None`, `failure_reasons == []`, `passed is False`, and
-  `final_image_ref` **is still set**.
+  `final_image_ref` **is still set** (the `verdict is None` term of the three-term finalize rule).
 - Only `attempts[-1]` is mutated; a pre-existing earlier attempt is returned byte-identical.
-- `final_image_ref == attempts[-1].image_ref`.
+- `final_image_ref == updated[best].image_ref` — on a single attempt this is `attempts[-1].image_ref`
+  as before; on two attempts it is the winner of `max(reversed(updated), key=_rank)`.
 - `{}` when every scene is finalized, and when the selected scene has no attempts.
 - A `char_id` absent from `state.characters` is skipped without raising.
 - A `Character` whose `ref_verdict.matches_description is False` still contributes a subject.
@@ -251,15 +255,12 @@ still ships its reference).
 
 **Hands off — named here, owned elsewhere:**
 - **`route_after_check`, the `regenerate` node, ADR-010's one corrected retry, `correct_prompt`
-  wiring, and ADR-028's lexicographic best-of ranking** → **`regeneration-controller`**. It
-  re-points this node's `add_conditional_edges` registration in the same change.
-- **The anatomy correction gap** (⚠️ §4) → **`regeneration-controller`**. An anatomy-only failure
-  currently yields no correction clause, making its retry a resample.
+  wiring, ADR-028's lexicographic best-of ranking, the anatomy correction gap, and
+  `recursion_limit`** → **discharged by `regeneration-controller`** (2026-08-02).
 - **Output-image moderation (CC-1)** → **`moderation-stack`** (Phase 2).
-- **A judge-call counter on `Cost` (CC-3)** → **unowned.** A `contracts/` change covering this node
-  and `char_bible` together; flagged rather than absorbed.
-- **`recursion_limit`** (ADR-024) → **unowned.** It belongs to `run_job.py`'s invocation, not to a
-  node, and ADR-025 Decision 4 already ties it to `IMAGE_BUDGET`'s source number.
+- **A judge-call counter on `Cost` (CC-3)** → **unowned.** A `contracts/` change covering this node,
+  `char_bible`, and `consistency_check` together; widened by `regeneration-controller`, flagged
+  rather than absorbed.
 
 **Open:**
 - ⚠️ **Two base64 images per call is untested against OpenRouter's body limit.** `char_bible` sends
@@ -298,8 +299,8 @@ Per AGENTS.md *Definition of Done*. This module is done when **all** of the foll
    - `AGENTS.md` *Validation Notes* **and** *Project Context* — the "Built today" graph line still
      says "linear, **zero conditional edges**" and lists `consistency_check` as a pass-through stub.
 
-**Not done** if: `backend/contracts/` is modified; `FailureReason` gains a value; `route_after_check`
-or a `regenerate` node is built; `generate_scene` still writes `final_image_ref`; a judge or Storage
-failure raises out of the node; `passed` is `True` when `vlm_verdict is None`; one judge call is
-sent for two characters; an earlier `Attempt` is rewritten; or the `regeneration-controller`
-hand-offs (the retry branch, the best-of ranking, the anatomy gap) are silently absorbed.
+**Not done** if: `backend/contracts/` is modified; `FailureReason` gains a value;
+`generate_scene` still writes `final_image_ref`; a judge or Storage failure raises out of the node;
+`passed` is `True` when `vlm_verdict is None`; one judge call is sent for two characters; an earlier
+`Attempt` is rewritten. *(The `regeneration-controller` hand-offs — retry branch, best-of ranking,
+anatomy gap, `recursion_limit` — are discharged. CC-3 judge counter remains unowned.)*

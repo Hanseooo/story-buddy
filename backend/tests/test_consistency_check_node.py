@@ -17,9 +17,10 @@ from contracts.story_memory import (
     RefVerdict,
     Scene,
     StoryMemory,
+    VlmVerdict,
 )
 from pipeline.consistency_check import SceneVerdict, consistency_check, judge_attempt
-from pipeline.graph import route_next_scene
+from pipeline.graph import route_after_check, route_next_scene
 
 
 def _uri(path: str) -> str:
@@ -163,7 +164,7 @@ def _state(scenes: list[Scene], characters: list[Character] | None = None, cost:
     )
 
 
-def _scene_with_attempt(scene_id: str = "s0", image_ref: str = "job-1/s0.png", **kwargs) -> Scene:
+def _scene_with_attempt(scene_id: str = "s0", image_ref: str = "job-1/s0-1.png", **kwargs) -> Scene:
     return Scene(
         scene_id=scene_id,
         text_excerpt="The dog ran.",
@@ -255,7 +256,7 @@ def test_node_finalizes_unchecked_when_the_helper_returns_nothing():
     assert attempt.vlm_verdict is None
     assert attempt.failure_reasons == []
     assert attempt.passed is False
-    assert scene.final_image_ref == "job-1/s0.png"
+    assert scene.final_image_ref == "job-1/s0-1.png"
 
 
 def test_node_sets_final_image_ref_to_the_last_attempts_image():
@@ -289,8 +290,8 @@ def test_node_selects_the_first_unfinalized_scene():
     """ADR-024: same selection rule as generate_scene — no cursor, no second rule."""
     state = _state(
         [
-            Scene(scene_id="s0", text_excerpt="0", final_image_ref="job-1/s0.png"),
-            _scene_with_attempt("s1", "job-1/s1.png"),
+            Scene(scene_id="s0", text_excerpt="0", final_image_ref="job-1/s0-1.png"),
+            _scene_with_attempt("s1", "job-1/s1-1.png"),
         ]
     )
     result = _run(state, [])
@@ -301,7 +302,7 @@ def test_node_selects_the_first_unfinalized_scene():
 
 def test_node_returns_empty_when_every_scene_is_finalized():
     """Invariant 1: exactly one scene finalizes per invocation, or nothing is left to do."""
-    state = _state([Scene(scene_id="s0", text_excerpt="0", final_image_ref="job-1/s0.png")])
+    state = _state([Scene(scene_id="s0", text_excerpt="0", final_image_ref="job-1/s0-1.png")])
 
     with patch("pipeline.consistency_check.judge_attempt") as helper:
         result = consistency_check(state)
@@ -331,7 +332,7 @@ def test_node_skips_a_char_id_absent_from_the_roster():
     with patch("pipeline.consistency_check.judge_attempt", return_value=[_verdict(True)]) as helper:
         consistency_check(state)
 
-    helper.assert_called_once_with("job-1/s0.png", [("the dog", "job-1/ref-c0.png")])
+    helper.assert_called_once_with("job-1/s0-1.png", [("the dog", "job-1/ref-c0.png")])
 
 
 def test_node_skips_a_character_carrying_no_reference():
@@ -344,7 +345,7 @@ def test_node_skips_a_character_carrying_no_reference():
     with patch("pipeline.consistency_check.judge_attempt", return_value=[_verdict(True)]) as helper:
         consistency_check(state)
 
-    helper.assert_called_once_with("job-1/s0.png", [("the dog", "job-1/ref-c0.png")])
+    helper.assert_called_once_with("job-1/s0-1.png", [("the dog", "job-1/ref-c0.png")])
 
 
 def test_node_judges_against_a_reference_whose_ref_verdict_failed():
@@ -359,7 +360,7 @@ def test_node_judges_against_a_reference_whose_ref_verdict_failed():
     with patch("pipeline.consistency_check.judge_attempt", return_value=[_verdict(True)]) as helper:
         consistency_check(state)
 
-    helper.assert_called_once_with("job-1/s0.png", [("the dog", "job-1/ref-c0.png")])
+    helper.assert_called_once_with("job-1/s0-1.png", [("the dog", "job-1/ref-c0.png")])
 
 
 def test_node_returns_only_scenes_and_never_touches_cost_or_state():
@@ -374,21 +375,202 @@ def test_node_returns_only_scenes_and_never_touches_cost_or_state():
     assert state.model_dump() == before
 
 
+# --- ADR-010 best-of and the three-term finalize rule (regeneration-controller §4) ---
+
+def _attempt(image_ref: str, *, same: bool | None = None, anatomy: bool = True, style: bool = True) -> Attempt:
+    """An already-judged attempt. same=None means UNCHECKED (vlm_verdict is None)."""
+    if same is None:
+        return Attempt(image_ref=image_ref, prompt="p", passed=False)
+    return Attempt(
+        image_ref=image_ref,
+        prompt="p",
+        vlm_verdict=VlmVerdict(
+            differences_observed="d", same_character=same, style_match=style, anatomy_intact=anatomy
+        ),
+        passed=same and anatomy,
+    )
+
+
+def _two_attempt_scene(first: Attempt, second: Attempt) -> Scene:
+    return Scene(scene_id="s0", text_excerpt="x", characters_present=["c0"], attempts=[first, second])
+
+
+def test_node_defers_finalization_when_a_single_attempt_fails_the_gate():
+    """The whole point of the change: a checked FAILURE with one attempt is left unfinalized so
+    route_after_check can send it to regenerate."""
+    state = _state([_scene_with_attempt(characters_present=["c0"])], [_char("c0", "the dog")])
+    result = _run(state, [_verdict(False)])
+
+    assert result["scenes"][0].final_image_ref is None
+
+
+def test_node_finalizes_a_single_unchecked_attempt_rather_than_retrying():
+    """The `verdict is None` term is load-bearing. A judge or Storage outage must not buy a
+    second paid draw with no signal to correct on — that redraw would be a pure resample."""
+    state = _state([_scene_with_attempt(characters_present=[])])
+    result = _run(state, [])
+
+    assert result["scenes"][0].final_image_ref == "job-1/s0-1.png"
+
+
+def test_node_finalizes_a_single_passing_attempt():
+    state = _state([_scene_with_attempt(characters_present=["c0"])], [_char("c0", "the dog")])
+    result = _run(state, [_verdict(True)])
+
+    assert result["scenes"][0].final_image_ref == "job-1/s0-1.png"
+
+
+def test_best_of_prefers_the_attempt_that_wins_on_same_character():
+    """Lexicographic: same_character is the first term and outranks everything below it."""
+    scene = _two_attempt_scene(
+        _attempt("job-1/s0-1.png", same=True, anatomy=False, style=False),
+        _attempt("job-1/s0-2.png", same=False, anatomy=True, style=True),
+    )
+    result = _run(_state([scene], [_char("c0", "the dog")]), [_verdict(False, anatomy=True, style=True)])
+
+    assert result["scenes"][0].final_image_ref == "job-1/s0-1.png"
+
+
+def test_best_of_prefers_the_attempt_that_wins_on_anatomy_when_identity_ties():
+    scene = _two_attempt_scene(
+        _attempt("job-1/s0-1.png", same=False, anatomy=True, style=False),
+        _attempt("job-1/s0-2.png", same=False, anatomy=False, style=True),
+    )
+    result = _run(_state([scene], [_char("c0", "the dog")]), [_verdict(False, anatomy=False, style=True)])
+
+    assert result["scenes"][0].final_image_ref == "job-1/s0-1.png"
+
+
+def test_best_of_prefers_the_attempt_that_wins_on_style_when_the_first_two_terms_tie():
+    """style_match does not GATE, but it is the third term of the ranking (ADR-028)."""
+    scene = _two_attempt_scene(
+        _attempt("job-1/s0-1.png", same=False, anatomy=True, style=False),
+        _attempt("job-1/s0-2.png", same=False, anatomy=True, style=True),
+    )
+    result = _run(_state([scene], [_char("c0", "the dog")]), [_verdict(False, anatomy=True, style=True)])
+
+    assert result["scenes"][0].final_image_ref == "job-1/s0-2.png"
+
+
+def test_best_of_breaks_a_genuine_tie_in_favour_of_attempt_two():
+    """Pinned explicitly: max returns the FIRST maximal element, so this only holds because the
+    ranking iterates in reverse. On a tie the corrected prompt is the better prior — ADR-010
+    calls attempt 2 refinement, not resampling."""
+    scene = _two_attempt_scene(
+        _attempt("job-1/s0-1.png", same=False, anatomy=True, style=True),
+        _attempt("job-1/s0-2.png", same=False, anatomy=True, style=True),
+    )
+    result = _run(_state([scene], [_char("c0", "the dog")]), [_verdict(False, anatomy=True, style=True)])
+
+    assert result["scenes"][0].final_image_ref == "job-1/s0-2.png"
+
+
+def test_best_of_ranks_a_checked_failure_above_an_unchecked_attempt():
+    """Unchecked sorts last (0,0,0,0). Promoting an unjudged image over a judged one would let
+    a judge outage silently decide the page — invariant 4 says unchecked is never a pass."""
+    scene = _two_attempt_scene(
+        _attempt("job-1/s0-1.png", same=False, anatomy=False, style=False),
+        _attempt("job-1/s0-2.png", same=None),
+    )
+    result = _run(_state([scene], [_char("c0", "the dog")]), [])
+
+    assert result["scenes"][0].final_image_ref == "job-1/s0-1.png"
+
+
+def test_two_attempts_always_finalize_even_when_both_fail():
+    """ADR-010: at most one regeneration per scene, and never a broken page. A real image ships."""
+    scene = _two_attempt_scene(
+        _attempt("job-1/s0-1.png", same=False, anatomy=False),
+        _attempt("job-1/s0-2.png", same=False, anatomy=False),
+    )
+    result = _run(_state([scene], [_char("c0", "the dog")]), [_verdict(False, anatomy=False)])
+
+    finalized = result["scenes"][0]
+    assert finalized.final_image_ref is not None
+    assert all(a.passed is False for a in finalized.attempts)
+
+
+def test_best_of_uses_the_verdict_written_this_pass_not_the_stale_one():
+    """Ranking runs over `updated`, not scene.attempts. If it ranked the pre-fold list, attempt 2
+    would carry no verdict, sort last, and attempt 1 would win every retry."""
+    scene = _two_attempt_scene(
+        _attempt("job-1/s0-1.png", same=False, anatomy=False, style=False),
+        Attempt(image_ref="job-1/s0-2.png", prompt="corrected", passed=False),   # unjudged going in
+    )
+    result = _run(_state([scene], [_char("c0", "the dog")]), [_verdict(True, anatomy=True)])
+
+    assert result["scenes"][0].final_image_ref == "job-1/s0-2.png"
+
+
+def test_the_second_pass_never_rewrites_attempt_ones_verdict():
+    """consistency-checker invariant 3: only the last attempt is judged and mutated."""
+    first = _attempt("job-1/s0-1.png", same=False, anatomy=False, style=False)
+    scene = _two_attempt_scene(first, Attempt(image_ref="job-1/s0-2.png", prompt="corrected"))
+    result = _run(_state([scene], [_char("c0", "the dog")]), [_verdict(True)])
+
+    assert result["scenes"][0].attempts[0] == first
+
+
+def test_the_returned_attempt_list_replaces_rather_than_appends():
+    """len(updated) == len(scene.attempts). Appending here would let a scene reach three attempts
+    and break ADR-010's at-most-one-regeneration rule."""
+    scene = _two_attempt_scene(
+        _attempt("job-1/s0-1.png", same=False),
+        Attempt(image_ref="job-1/s0-2.png", prompt="corrected"),
+    )
+    result = _run(_state([scene], [_char("c0", "the dog")]), [_verdict(True)])
+
+    assert len(result["scenes"][0].attempts) == 2
+
+
 # --- route_next_scene (pure — no mocks) ---
 
 def test_router_sends_an_unfinalized_scene_back_to_generate_scene():
     state = _state([
-        Scene(scene_id="s0", text_excerpt="0", final_image_ref="job-1/s0.png"),
+        Scene(scene_id="s0", text_excerpt="0", final_image_ref="job-1/s0-1.png"),
         Scene(scene_id="s1", text_excerpt="1"),
     ])
     assert route_next_scene(state) == "generate_scene"
 
 
 def test_router_sends_a_fully_finalized_book_to_compose():
-    state = _state([Scene(scene_id="s0", text_excerpt="0", final_image_ref="job-1/s0.png")])
+    state = _state([Scene(scene_id="s0", text_excerpt="0", final_image_ref="job-1/s0-1.png")])
     assert route_next_scene(state) == "compose"
 
 
 def test_router_sends_an_empty_scene_list_to_compose():
     """ADR-024: segment produced no scenes. The loop head must not enter a loop with no work."""
     assert route_next_scene(_state([])) == "compose"
+
+
+# --- route_after_check (pure — no mocks) ---
+
+def test_route_after_check_sends_a_checked_failing_scene_to_regenerate():
+    state = _state([_scene_with_attempt(characters_present=["c0"])])
+    assert route_after_check(state) == "regenerate"
+
+
+def test_route_after_check_sends_a_scene_with_no_attempts_to_generate_scene():
+    """The ping-pong guard. Without the `scene.attempts` term this returns "regenerate", which
+    raises, or — if it returned {} instead — loops until recursion_limit. A scene with no
+    attempts belongs to generate_scene, and route_next_scene says so."""
+    state = _state([Scene(scene_id="s0", text_excerpt="0")])
+    assert route_after_check(state) == "generate_scene"
+
+
+def test_route_after_check_sends_a_fully_finalized_book_to_compose():
+    state = _state([Scene(scene_id="s0", text_excerpt="0", final_image_ref="job-1/s0-1.png")])
+    assert route_after_check(state) == "compose"
+
+
+def test_route_after_check_sends_an_empty_scene_list_to_compose():
+    assert route_after_check(_state([])) == "compose"
+
+
+def test_route_after_check_skips_finalized_scenes_when_selecting():
+    """Same selection rule as every other node in the loop — the FIRST unfinalized scene."""
+    state = _state([
+        Scene(scene_id="s0", text_excerpt="0", final_image_ref="job-1/s0-1.png"),
+        _scene_with_attempt("s1", "job-1/s1-1.png"),
+    ])
+    assert route_after_check(state) == "regenerate"

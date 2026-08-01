@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from app.config import STYLE_PRESETS
+from app.config import RECURSION_LIMIT, STYLE_PRESETS
 from contracts.story_memory import CURRENT_SCHEMA_VERSION, Scene
 from worker.run_job import run_storybook_job
 
@@ -140,3 +140,21 @@ def test_run_storybook_job_defaults_style_to_cel_when_preset_is_null():
     state = fake_graph.invoke.call_args.args[0]
     assert state.style.style_preset_id == "cel"
     assert state.style.prompt_fragment == STYLE_PRESETS["cel"]
+
+
+def test_run_storybook_job_passes_the_recursion_limit_to_invoke():
+    """Spec §6 regression: without this, LangGraph's default of 25 super-steps applies and a
+    13-scene book dies with GraphRecursionError before it ever reaches compose."""
+    fake_supabase = _fake_supabase()
+    fake_cm = MagicMock()
+    fake_cm.__enter__.return_value = MagicMock()
+    fake_graph = _fake_graph()
+
+    with patch("worker.run_job.get_supabase_client", return_value=fake_supabase), \
+         patch("worker.run_job.PostgresSaver.from_conn_string", return_value=fake_cm), \
+         patch("worker.run_job.build_graph", return_value=fake_graph):
+        run_storybook_job("job-1")
+
+    config = fake_graph.invoke.call_args.kwargs["config"]
+    assert config["recursion_limit"] == RECURSION_LIMIT
+    assert config["configurable"]["thread_id"] == "job-1"

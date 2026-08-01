@@ -87,24 +87,24 @@ def test_generate_and_store_uploads_image_bytes_and_returns_paid_true():
     with patch("pipeline.generate_scene.get_supabase_client", return_value=fake_supabase), \
          patch("pipeline.generate_scene.text_to_image", return_value=b"fake-png-bytes"), \
          patch("pipeline.generate_scene._fal_ref_url"):
-        path, paid = generate_and_store("a friendly dog", "job-123", "s0", [])
+        path, paid = generate_and_store("a friendly dog", "job-123", "s0", 1, [])
 
-    assert path == "job-123/s0.png"
+    assert path == "job-123/s0-1.png"
     assert paid is True
     fake_supabase.storage.from_.assert_called_with("storybook-images")
     fake_supabase.storage.from_.return_value.upload.assert_called_once()
 
 
 def test_generate_and_store_reuses_existing_storage_asset():
-    """CC-10: a re-executed super-step is free."""
+    """CC-10: a re-executed super-step is free. Now per-ATTEMPT, not per-scene."""
     fake_supabase = _make_supabase(has_existing=True)
 
     with patch("pipeline.generate_scene.get_supabase_client", return_value=fake_supabase), \
          patch("pipeline.generate_scene.edit_image") as mock_edit, \
          patch("pipeline.generate_scene.text_to_image") as mock_text:
-        path, paid = generate_and_store("a dog", "job-1", "s0", [])
+        path, paid = generate_and_store("a dog", "job-1", "s0", 1, [])
 
-    assert path == "job-1/s0.png"
+    assert path == "job-1/s0-1.png"
     assert paid is False
     mock_edit.assert_not_called()
     mock_text.assert_not_called()
@@ -117,9 +117,9 @@ def test_generate_and_store_calls_edit_image_when_refs_given():
          patch("pipeline.generate_scene._fal_ref_url", side_effect=lambda p: f"https://fal/{p}"), \
          patch("pipeline.generate_scene.edit_image", return_value=b"img-bytes") as mock_edit, \
          patch("pipeline.generate_scene.text_to_image") as mock_text:
-        path, paid = generate_and_store("a dog", "job-1", "s0", ["ref-c0.png"])
+        path, paid = generate_and_store("a dog", "job-1", "s0", 1, ["ref-c0.png"])
 
-    assert path == "job-1/s0.png"
+    assert path == "job-1/s0-1.png"
     assert paid is True
     mock_edit.assert_called_once_with("a dog", ["https://fal/ref-c0.png"])
     mock_text.assert_not_called()
@@ -131,12 +131,28 @@ def test_generate_and_store_calls_text_to_image_when_no_refs():
     with patch("pipeline.generate_scene.get_supabase_client", return_value=fake_supabase), \
          patch("pipeline.generate_scene.text_to_image", return_value=b"img-bytes") as mock_text, \
          patch("pipeline.generate_scene.edit_image") as mock_edit:
-        path, paid = generate_and_store("a dog", "job-1", "s0", [])
+        path, paid = generate_and_store("a dog", "job-1", "s0", 1, [])
 
-    assert path == "job-1/s0.png"
+    assert path == "job-1/s0-1.png"
     assert paid is True
     mock_text.assert_called_once_with("a dog")
     mock_edit.assert_not_called()
+
+
+def test_generate_and_store_gives_two_attempts_of_one_scene_distinct_paths():
+    """The prerequisite for ADR-010 best-of (spec §4). At a shared per-scene path the CC-10
+    exists-skip would find attempt 1, return paid=False, and hand back attempt 1's OWN bytes —
+    so attempt 2 is never drawn and best-of ranks an image against itself."""
+    fake_supabase = _make_supabase(has_existing=False)
+
+    with patch("pipeline.generate_scene.get_supabase_client", return_value=fake_supabase), \
+         patch("pipeline.generate_scene.text_to_image", return_value=b"img-bytes"):
+        path1, _ = generate_and_store("a dog", "job-1", "s0", 1, [])
+        path2, _ = generate_and_store("a corrected dog", "job-1", "s0", 2, [])
+
+    assert path1 == "job-1/s0-1.png"
+    assert path2 == "job-1/s0-2.png"
+    assert path1 != path2
 
 
 # --- generate_scene (generate_and_store patched — the node seam) ---
@@ -146,7 +162,7 @@ def test_generate_scene_returns_scenes_and_cost_keys():
     state = _state([Scene(scene_id="s0", text_excerpt="x")])
 
     with patch("pipeline.generate_scene.build_prompt", return_value="a friendly dog"), \
-         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0.png", True)):
+         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0-1.png", True)):
         result = generate_scene(state)
 
     assert set(result) == {"scenes", "cost"}
@@ -155,7 +171,7 @@ def test_generate_scene_returns_scenes_and_cost_keys():
     # Ownership transfer (consistency-checker §3): generate_scene appends an Attempt and leaves
     # the scene UNFINALIZED so consistency_check's identical selection rule finds the same scene.
     assert scene.final_image_ref is None
-    assert scene.attempts[-1].image_ref == "job-123/s0.png"
+    assert scene.attempts[-1].image_ref == "job-123/s0-1.png"
     assert scene.prompt == "a friendly dog"
 
 
@@ -164,11 +180,11 @@ def test_generate_scene_records_the_attempt_with_passed_false():
     state = _state([Scene(scene_id="s0", text_excerpt="x")])
 
     with patch("pipeline.generate_scene.build_prompt", return_value="a friendly dog"), \
-         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0.png", True)):
+         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0-1.png", True)):
         result = generate_scene(state)
 
     attempt, = result["scenes"][0].attempts
-    assert attempt.image_ref == "job-123/s0.png"
+    assert attempt.image_ref == "job-123/s0-1.png"
     assert attempt.prompt == "a friendly dog"
     assert attempt.passed is False
 
@@ -181,7 +197,7 @@ def test_generate_scene_picks_the_first_scene_without_an_image():
     ])
 
     with patch("pipeline.generate_scene.build_prompt", return_value="next"), \
-         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s1.png", True)):
+         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s1-1.png", True)):
         result = generate_scene(state)
 
     scene, = result["scenes"]
@@ -209,7 +225,7 @@ def test_generate_scene_calls_build_prompt_with_the_scenes_roster_and_style():
     )
 
     with patch("pipeline.generate_scene.build_prompt", return_value="built") as build, \
-         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0.png", True)):
+         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0-1.png", True)):
         generate_scene(state)
 
     build.assert_called_once_with("The dog ran.", ["c0"], [dog], "flat gouache storybook")
@@ -220,12 +236,12 @@ def test_generate_scene_uses_scene_id_in_storage_path():
     state = _state([Scene(scene_id="scene-abc", text_excerpt="x")])
 
     with patch("pipeline.generate_scene.build_prompt", return_value="p"), \
-         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/scene-abc.png", True)) as mock_store:
+         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/scene-abc-1.png", True)) as mock_store:
         result = generate_scene(state)
 
-    mock_store.assert_called_once_with("p", "job-123", "scene-abc", [])
+    mock_store.assert_called_once_with("p", "job-123", "scene-abc", 1, [])
     assert result["scenes"][0].final_image_ref is None
-    assert result["scenes"][0].attempts[-1].image_ref == "job-123/scene-abc.png"
+    assert result["scenes"][0].attempts[-1].image_ref == "job-123/scene-abc-1.png"
 
 
 def test_generate_scene_two_successive_invocations_produce_distinct_paths():
@@ -236,17 +252,17 @@ def test_generate_scene_two_successive_invocations_produce_distinct_paths():
     ])
 
     with patch("pipeline.generate_scene.build_prompt", return_value="p"), \
-         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0.png", True)):
+         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0-1.png", True)):
         result1 = generate_scene(state)
 
     # Simulate LangGraph applying the partial return before the second invocation
     updated = state.model_copy(update={"scenes": [
-        Scene(scene_id="s0", text_excerpt="0", final_image_ref="job-123/s0.png"),
+        Scene(scene_id="s0", text_excerpt="0", final_image_ref="job-123/s0-1.png"),
         Scene(scene_id="s1", text_excerpt="1"),
     ]})
 
     with patch("pipeline.generate_scene.build_prompt", return_value="p"), \
-         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s1.png", True)):
+         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s1-1.png", True)):
         result2 = generate_scene(updated)
 
     path1 = result1["scenes"][0].attempts[-1].image_ref
@@ -258,7 +274,7 @@ def test_generate_scene_bumps_cost_image_count_when_paid():
     state = _state([Scene(scene_id="s0", text_excerpt="x")])
 
     with patch("pipeline.generate_scene.build_prompt", return_value="p"), \
-         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0.png", True)):
+         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0-1.png", True)):
         result = generate_scene(state)
 
     assert result["cost"].image_count == 1
@@ -268,7 +284,7 @@ def test_generate_scene_does_not_bump_cost_when_asset_reused():
     state = _state([Scene(scene_id="s0", text_excerpt="x")])
 
     with patch("pipeline.generate_scene.build_prompt", return_value="p"), \
-         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0.png", False)):
+         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0-1.png", False)):
         result = generate_scene(state)
 
     assert result["cost"].image_count == 0
@@ -299,10 +315,10 @@ def test_generate_scene_collects_refs_only_for_present_characters_with_canonical
     )
 
     with patch("pipeline.generate_scene.build_prompt", return_value="p"), \
-         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0.png", True)) as mock_store:
+         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0-1.png", True)) as mock_store:
         generate_scene(state)
 
-    mock_store.assert_called_once_with("p", "job-123", "s0", ["job-123/ref-c0.png"])
+    mock_store.assert_called_once_with("p", "job-123", "s0", 1, ["job-123/ref-c0.png"])
 
 
 def test_generate_scene_skips_absent_char_id_when_collecting_refs():
@@ -314,10 +330,10 @@ def test_generate_scene_skips_absent_char_id_when_collecting_refs():
     )
 
     with patch("pipeline.generate_scene.build_prompt", return_value="p"), \
-         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0.png", True)) as mock_store:
+         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0-1.png", True)) as mock_store:
         generate_scene(state)
 
-    mock_store.assert_called_once_with("p", "job-123", "s0", ["job-123/ref-c0.png"])
+    mock_store.assert_called_once_with("p", "job-123", "s0", 1, ["job-123/ref-c0.png"])
 
 
 def test_generate_scene_includes_ref_even_when_verdict_failed():
@@ -334,7 +350,19 @@ def test_generate_scene_includes_ref_even_when_verdict_failed():
     )
 
     with patch("pipeline.generate_scene.build_prompt", return_value="p"), \
-         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0.png", True)) as mock_store:
+         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0-1.png", True)) as mock_store:
         generate_scene(state)
 
-    mock_store.assert_called_once_with("p", "job-123", "s0", ["job-123/ref-c0.png"])
+    mock_store.assert_called_once_with("p", "job-123", "s0", 1, ["job-123/ref-c0.png"])
+
+
+def test_generate_scene_passes_attempt_n_of_one_for_a_scene_with_no_attempts():
+    """Spec §6: attempt_n is len(scene.attempts) + 1 at BOTH call sites. generate_scene only
+    ever sees a scene with no attempts, so it is always 1 here — regenerate is where it is 2."""
+    state = _state([Scene(scene_id="s0", text_excerpt="x")])
+
+    with patch("pipeline.generate_scene.build_prompt", return_value="p"), \
+         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0-1.png", True)) as mock_store:
+        generate_scene(state)
+
+    assert mock_store.call_args.args[3] == 1

@@ -65,12 +65,24 @@ FAILURE_CLAUSES: dict[FailureReason, str] = {
     FailureReason.character_absent: "make sure {name} is clearly visible in the scene",
 }
 
+# The two corrections that have no FailureReason to hang on (spec `regeneration-controller` §4).
+# Fixed strings, no .format — neither has a per-character value to fill: the judge named no
+# reason, or the failure is a rendering property rather than an attribute. Driven by a BOOLEAN,
+# never an 8th enum value — FailureReason stays frozen at 7 (ADR-028), so the closed set
+# Objective 4's F1 is computed over is untouched.
+IDENTITY_CLAUSE = "the characters must match the reference images exactly"
+# Mirrors consistency_check.JUDGE_PROMPT's phrasing, so the correction restates the thing the
+# judge was actually asked about.
+ANATOMY_CLAUSE = "anatomy must be correct: no merged, missing or duplicated body parts"
+
 
 def correct_prompt(
     prompt: str,
     failure_reasons: list[FailureReason],
     characters: list[Character],
     style_fragment: str | None,
+    same_character: bool = True,
+    anatomy_intact: bool = True,
 ) -> str:
     """Pure. Never drops content from `prompt` (invariant 3) — only appends emphasis clauses, one
     per `FailureReason` present in `failure_reasons`, in enum-declaration order, no duplicates.
@@ -78,6 +90,10 @@ def correct_prompt(
     Attribution ceiling (spec §4): `VlmVerdict`/`Attempt.failure_reasons` carry no per-character
     breakdown, so axis-based clauses fill from EVERY character in `characters`, joining multiple
     values — over-specifying rather than guessing wrong.
+
+    `same_character` / `anatomy_intact` close the two holes where the reason clauses alone
+    append NOTHING, which would make the retry a pure resample (ADR-010 rejects resampling).
+    Defaulted so the four-positional-arg signature stays call-compatible.
     """
     style = style_fragment or settings.default_style_fragment
     values = {
@@ -92,4 +108,9 @@ def correct_prompt(
     }
     present = set(failure_reasons)
     clauses = [FAILURE_CLAUSES[reason].format(**values) for reason in FailureReason if reason in present]
+    # Guarded on EMPTY failure_reasons so it never duplicates different_face's clause.
+    if not same_character and not failure_reasons:
+        clauses.append(IDENTITY_CLAUSE)
+    if not anatomy_intact:
+        clauses.append(ANATOMY_CLAUSE)
     return "\n".join([prompt, *clauses]) if clauses else prompt
