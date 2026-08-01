@@ -1,6 +1,6 @@
 from langgraph.checkpoint.postgres import PostgresSaver
 
-from app.config import STYLE_PRESETS, settings
+from app.config import RECURSION_LIMIT, STYLE_PRESETS, settings
 from app.db import get_supabase_client
 from contracts.story_memory import CURRENT_SCHEMA_VERSION, Input, Style, StoryMemory
 from pipeline.graph import build_graph
@@ -32,7 +32,11 @@ def run_storybook_job(job_id: str) -> None:
             checkpointer.setup()
             app_graph = build_graph(checkpointer=checkpointer)
             result = app_graph.invoke(
-                initial_state, config={"configurable": {"thread_id": job_id}}
+                initial_state,
+                config={
+                    "configurable": {"thread_id": job_id},
+                    "recursion_limit": RECURSION_LIMIT,
+                },
             )
     except Exception as exc:
         supabase.table("jobs").update(
