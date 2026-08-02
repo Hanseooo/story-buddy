@@ -65,7 +65,7 @@ its own one-retry loop and its own fail edge. The `consistency_router` is a sepa
 ### 4a. `input_gate`
 
 1. Run `Qwen3Guard-Gen 0.6B` (CPU-resident on the worker) on `input.raw_text`.
-2. Run `Presidio` (with custom Filipino recognizers — `filipino-pii-recognizers` spec) on
+2. Run `Presidio` (with custom Filipino recognizers — `input-gate-hardening` spec) on
    `input.raw_text` → `input.redacted_text`. Steps 1 and 2 are independent; run concurrently
    (both must complete before the edge fires).
 3. If Qwen3Guard-Gen flags: set `input.moderation = ModerationResult(passed=False, categories=[...])`.
@@ -180,12 +180,16 @@ and Taglish cases, both directions). Feed it to the real classifiers in an offli
 - **ADR-004 (amendment b)** — the fine-tuned judge never sits on the safety path.
 - **ADR-025** — hard-error policy: no partial book on moderation failure; `failure_reason` enum
   contract for CC-9.
-- **`filipino-pii-recognizers` spec** — custom Presidio recognizers this spec depends on.
-  Write and approve this spec before building `input_gate`; shipping with stock Presidio is
+- **`input-gate-hardening` spec** (2026-08-02; absorbed the former `filipino-pii-recognizers` stub) —
+  owns the custom Presidio recognizers this spec depends on. Shipping with stock Presidio is
   permissible only with an explicit `# ponytail: stock Presidio, Filipino names leak` comment
-  and a filed spec.
+  and a filed spec. ⚠️ It also changes `redact_pii`'s **output form** for person entities from
+  `<PH_PERSON>` placeholders to consistent pseudonyms, because `analyze` and `segment` build the
+  story *from* `redacted_text`. CC-2 is unchanged; the replacement token is not.
 - **`self-refusal-fallback` spec** — owns the soften-and-retry strategy `output_mod` invokes.
-- **`length-guard` spec** — runs before `input_gate`; this spec assumes truncation is already done.
+- **`input-gate-hardening` spec** (also owns the former `length-guard` row) — clamps at
+  `POST /storybooks`, before the job is queued; this spec's assumption that `input_gate` always sees
+  final text is satisfied literally.
 - **`kid-flow-ui` spec** — owns the kid-appropriate teacher-facing failure message.
 - **Open — output moderation failure granularity:** this spec chooses "fail the whole job" on a
   flagged scene (consistent with ADR-025's no-partial-book rule). An alternative — silently drop

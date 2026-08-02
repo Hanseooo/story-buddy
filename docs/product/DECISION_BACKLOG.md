@@ -159,13 +159,26 @@ roadmap order. Source: MASTER_SPEC §7.
       `pipeline/output_mod.py` (same two-classifier check + soften-and-retry). `moderation_router` and
       `route_after_output_mod` added to `graph.py` (ADR-024 pure-router pattern). `providers.py` gains
       `get_signed_url`, `_parse_guard_response`, `redact_pii`, `classify_text_primary/backstop`,
-      `classify_image_primary/backstop`. Stub spec `docs/specs/filipino-pii-recognizers.md` filed.
-      Worker RAM budget open (§8). `self-refusal-fallback` and `length-guard` deferred to their own specs.)*
-- [ ] `filipino-pii-recognizers`   *(stub spec filed 2026-08-02 — `docs/specs/filipino-pii-recognizers.md`;
-      custom recognizers for Filipino names / TIN / SSS / Taglish; ships under `# ponytail:` comment in
-      `providers.py:_presidio` until this spec lands)*
-- [ ] `self-refusal-fallback`
-- [ ] `length-guard`
+      `classify_image_primary/backstop`. Worker RAM budget open (§8). The custom Presidio recognizers and
+      the length guard are now `input-gate-hardening`; the soften-and-retry is `self-refusal-fallback`.)*
+- [ ] `input-gate-hardening`   *(spec **written 2026-08-02, not yet built** —
+      `docs/specs/input-gate-hardening.md`. **Replaces the `filipino-pii-recognizers` and `length-guard`
+      rows**, which shared a seam and neither of which touches `graph.py` or `contracts/`; the
+      `filipino-pii-recognizers` stub spec is deleted (git keeps it). Ships: `app/length.py` `clamp_story`
+      (ADR-012 cap, paragraph→sentence boundary with a retains-half floor) + a **minimum**-length 422 at
+      `POST /storybooks` — the floor is the gate `story-analyzer`, `scene-segmentation` and `compose` each
+      deferred here, and it closes `compose`'s reachable zero-scene raise; `ph_recognizers.py`
+      (deny-list + **Tagalog `si`/`ni`/`kay` marker patterns**, the signal English NER can't see) wired into
+      `providers._presidio`; `redact_pii` switches persons to **consistent pseudonyms** (Maria→Ana) because
+      `analyze.py:105` / `segment.py:141` build the story *from* `redacted_text` — a `<PH_PERSON>` protagonist
+      would destroy the narrative. Activates the already-reserved `Input.word_count` / `Input.truncated`
+      (`contracts/` untouched). One `jobs.truncated` migration, number TBD at merge — contends with
+      `job-failure-reason` for `0003`. Resolves ADR-012's unimplementable "truncate at a **scene** boundary"
+      (no scene exists at API time) without amending it, and reassigns the N=3 off-ramp.)*
+- [ ] `self-refusal-fallback`   *(**now also owns the N=3 repeated-failure off-ramp.** Three docs disagreed:
+      `ROADMAP.md:174` filed it under the length guard, ADR-025 twice assigned it here, PRD §11.4 defines it
+      as a *moderation*-failure counter across story revisions. `moderation-stack` shipped without it, so it
+      was orphaned. Assigned here 2026-08-02; the ROADMAP bullet is corrected in the same PR.)*
 - [ ] `auth-and-classroom`
 - [ ] `teacher-dashboard`
 - [ ] `classroom-sharing`   *(display-only gallery — no `peer-reflection`/`story-map`, cut per ADR-021)*
@@ -235,8 +248,11 @@ revised 2026-07-25.)*
 
 > ✅ **`moderation-stack` is built (2026-08-02).** See `docs/specs/moderation-stack.md`.
 
-**Phase 1 is complete. Phase 2 has begun** with `moderation-stack`. Next session: continue Phase 2
-(`filipino-pii-recognizers`, `self-refusal-fallback`, `length-guard`, `auth-and-classroom`) or the two
+> 📝 **`input-gate-hardening` spec is written (2026-08-02), not built.** See
+> `docs/specs/input-gate-hardening.md`. It replaced the `filipino-pii-recognizers` and `length-guard` rows.
+
+**Phase 1 is complete. Phase 2 has begun** with `moderation-stack`. Next session: **build
+`input-gate-hardening`**, or continue Phase 2 (`self-refusal-fallback`, `auth-and-classroom`) or the two
 gaps `compose` flagged (`data-deletion`'s `awaiting_confirm` sweep, `kid-flow-ui`'s multi-page
 persistence gap).
 
