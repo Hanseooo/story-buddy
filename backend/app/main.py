@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 import sentry_sdk
@@ -12,6 +13,8 @@ from app.queue import get_queue
 
 if settings.sentry_dsn_backend:
     sentry_sdk.init(dsn=settings.sentry_dsn_backend, traces_sample_rate=0.1)
+
+_log = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -54,7 +57,11 @@ def health() -> dict:
 @app.post("/storybooks", response_model=CreateStorybookResponse)
 def create_storybook(payload: CreateStorybookRequest) -> CreateStorybookResponse:
     job_id = str(uuid.uuid4())
+    before = word_count(payload.text)
     text, truncated = clamp_story(payload.text)
+    if truncated:
+        # CC-5: log counts only, never the text (ADR-025 D5).
+        _log.info("story truncated: %d words → %d words", before, word_count(text))
     supabase = get_supabase_client()
     supabase.table("jobs").insert(
         {

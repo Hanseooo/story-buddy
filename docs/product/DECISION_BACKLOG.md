@@ -193,7 +193,8 @@ roadmap order. Source: MASTER_SPEC §7.
 - [ ] `job-failure-reason`   *(orphaned decision: ADR-025 Decision 5 already froze the shape —
       `jobs.failure_reason` enum column — but no spec claims it. `image-generator` §8 flagged it
       unowned first; `compose` §8 flags it again as a second producer of job-level failures with
-      nothing to name itself by. Scope: migration `0003` + a taxonomy map in `run_job.py`'s except
+      nothing to name itself by. Scope: migration `0004` (migration `0003` was claimed by
+      `input-gate-hardening`'s `jobs.truncated` column) + a taxonomy map in `run_job.py`'s except
       block. `FailureReason` in `contracts/` is frozen at 7 by ADR-028 and is a *different*, scene-
       identity taxonomy — this is a job-level enum, and conflating them would corrupt Objective 4's
       F1 denominator.)*

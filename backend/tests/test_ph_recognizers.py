@@ -57,3 +57,29 @@ def test_nino_and_pena_are_detected():
     engine = _analyzer()
     assert _ph_entity_types(engine, "Kasama ko si Niño kahapon.") == {"PH_PERSON"}
     assert _ph_entity_types(engine, "Nakita ko si Peña sa palengke.") == {"PH_PERSON"}
+
+
+# --- providers integration: registration + totality invariant (§4b, §4c) ---
+# These call providers._presidio and providers.redact_pii against real Presidio —
+# the spec sanctions real Presidio only in this file (AGENTS.md Testing bright line).
+
+def test_presidio_registers_ph_recognizers():
+    """providers._presidio() must register every PH_* entity type from ph_recognizers."""
+    from providers import _presidio
+    _presidio.cache_clear()
+    analyzer, _ = _presidio()
+    supported = {entity for r in analyzer.registry.recognizers for entity in r.supported_entities}
+    assert {"PH_PERSON", "PH_MOBILE", "PH_ADDRESS", "PH_TIN", "PH_SSS", "PH_PHILHEALTH"} <= supported
+    _presidio.cache_clear()
+
+
+def test_redact_pii_never_leaks_the_original_value():
+    """§2's totality invariant: end-to-end against real Presidio + real ph_recognizers."""
+    from providers import _presidio, redact_pii
+    _presidio.cache_clear()
+    text = "Ako si Juan dela Cruz, taga Purok 3, Barangay San Isidro."
+    result = redact_pii(text)
+    assert "Juan" not in result
+    assert "Cruz" not in result
+    assert "Purok 3" not in result
+    _presidio.cache_clear()
