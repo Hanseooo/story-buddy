@@ -161,20 +161,17 @@ roadmap order. Source: MASTER_SPEC §7.
       `get_signed_url`, `_parse_guard_response`, `redact_pii`, `classify_text_primary/backstop`,
       `classify_image_primary/backstop`. Worker RAM budget open (§8). The custom Presidio recognizers and
       the length guard are now `input-gate-hardening`; the soften-and-retry is `self-refusal-fallback`.)*
-- [ ] `input-gate-hardening`   *(spec **written 2026-08-02, not yet built** —
-      `docs/specs/input-gate-hardening.md`. **Replaces the `filipino-pii-recognizers` and `length-guard`
-      rows**, which shared a seam and neither of which touches `graph.py` or `contracts/`; the
-      `filipino-pii-recognizers` stub spec is deleted (git keeps it). Ships: `app/length.py` `clamp_story`
-      (ADR-012 cap, paragraph→sentence boundary with a retains-half floor) + a **minimum**-length 422 at
-      `POST /storybooks` — the floor is the gate `story-analyzer`, `scene-segmentation` and `compose` each
-      deferred here, and it closes `compose`'s reachable zero-scene raise; `ph_recognizers.py`
-      (deny-list + **Tagalog `si`/`ni`/`kay` marker patterns**, the signal English NER can't see) wired into
-      `providers._presidio`; `redact_pii` switches persons to **consistent pseudonyms** (Maria→Ana) because
-      `analyze.py:105` / `segment.py:141` build the story *from* `redacted_text` — a `<PH_PERSON>` protagonist
-      would destroy the narrative. Activates the already-reserved `Input.word_count` / `Input.truncated`
-      (`contracts/` untouched). One `jobs.truncated` migration, number TBD at merge — contends with
-      `job-failure-reason` for `0003`. Resolves ADR-012's unimplementable "truncate at a **scene** boundary"
-      (no scene exists at API time) without amending it, and reassigns the N=3 off-ramp.)*
+- [x] `input-gate-hardening`   *(spec: **built 2026-08-02** — `docs/specs/input-gate-hardening.md`;
+      replaces the `filipino-pii-recognizers` and `length-guard` rows. `app/length.py` `clamp_story`
+      (ADR-012 cap, paragraph→sentence boundary with a retains-half floor) + a minimum-length 422 at
+      `POST /storybooks` — closes `compose`'s reachable zero-scene raise. `ph_recognizers.py`:
+      Tagalog marker patterns (`si`/`ni`/`kay`/`sina`/`nina`/`kina`) + structured-format recognizers
+      (`PH_MOBILE`, `PH_ADDRESS`, `PH_TIN`, `PH_SSS`, `PH_PHILHEALTH`) wired into `providers._presidio`
+      (now `@lru_cache(maxsize=1)`); `redact_pii` pseudonymizes `PERSON`/`PH_PERSON` (Maria→Ana) so
+      `redacted_text` survives as a narrative; structured identifiers hard-redact. PSA surname deny-list
+      deferred — marker patterns alone are shippable per spec §8's own escape hatch; deny-list is
+      additive to `ph_recognizers.py` when a licensed source is confirmed. One `jobs.truncated`
+      migration (number resolved at merge). `contracts/` untouched.)*
 - [ ] `self-refusal-fallback`   *(**now also owns the N=3 repeated-failure off-ramp.** Three docs disagreed:
       `ROADMAP.md:174` filed it under the length guard, ADR-025 twice assigned it here, PRD §11.4 defines it
       as a *moderation*-failure counter across story revisions. `moderation-stack` shipped without it, so it
@@ -248,11 +245,9 @@ revised 2026-07-25.)*
 
 > ✅ **`moderation-stack` is built (2026-08-02).** See `docs/specs/moderation-stack.md`.
 
-> 📝 **`input-gate-hardening` spec is written (2026-08-02), not built.** See
-> `docs/specs/input-gate-hardening.md`. It replaced the `filipino-pii-recognizers` and `length-guard` rows.
+> ✅ **`input-gate-hardening` is built (2026-08-02).** See `docs/specs/input-gate-hardening.md`.
 
-**Phase 1 is complete. Phase 2 has begun** with `moderation-stack`. Next session: **build
-`input-gate-hardening`**, or continue Phase 2 (`self-refusal-fallback`, `auth-and-classroom`) or the two
+**Phase 1 is complete. Phase 2 has begun** with `moderation-stack` and `input-gate-hardening`. Next session: continue Phase 2 (`self-refusal-fallback`, `auth-and-classroom`) or the two
 gaps `compose` flagged (`data-deletion`'s `awaiting_confirm` sweep, `kid-flow-ui`'s multi-page
 persistence gap).
 

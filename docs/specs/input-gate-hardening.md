@@ -341,10 +341,14 @@ deliberately does not build a second harness.
   not a length concern and nothing here implements it.
 
 **Open / handed off:**
-- ⚠️ **Deny-list provenance.** The PSA surname list needs a citable source and a license check before
-  it ships in-repo — it is a data artifact in a capstone, not just code. Bound its size too: a
-  multi-thousand-entry Presidio deny-list compiles to one large regex. If sourcing stalls, the marker
-  patterns alone are shippable and the deny-list can land second.
+- ✅ **Deny-list provenance — resolved 2026-08-02.** Shipped without the deny-list: `ph_recognizers.py`
+  ships the Tagalog marker patterns (`si`/`ni`/`kay`/`sina`/`nina`/`kina`) and the structured-format
+  recognizers (`PH_MOBILE`, `PH_ADDRESS`, `PH_TIN`, `PH_SSS`, `PH_PHILHEALTH`) only, per this
+  section's own escape hatch — the marker patterns are §4b's "the point of this spec," and a PSA
+  surname list is a licensable data artifact this capstone hasn't sourced. `PH_PERSON` is therefore
+  marker-triggered only: a bare name with no `si`/`ni`/`kay`/... nearby and no built-in-Presidio
+  match is not redacted. A licensed deny-list is a follow-up change, additive to
+  `ph_recognizers.py` — no other file changes when it lands.
 - ⚠️ **`kid-flow-ui` owes two surfaces:** the 422 message, and the `jobs.truncated` *"first part"*
   message. Additionally — a child may notice their protagonist was renamed. Whether to explain that
   is a kid-facing copy decision, and it is **`kid-flow-ui`'s**, not this spec's.
