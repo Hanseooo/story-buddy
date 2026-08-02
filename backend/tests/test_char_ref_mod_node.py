@@ -72,6 +72,21 @@ def test_gemma_flags_sets_ref_moderation_status_flagged():
     assert result["characters"][0].ref_moderation_status == "flagged"
 
 
+def test_early_character_flagged_does_not_drop_later_characters():
+    """A flag on a non-last character must not truncate `characters[]` on the checkpointed state —
+    `characters` has no reducer, so the return value replaces the whole list."""
+    with patch("pipeline.char_ref_mod.get_signed_url", return_value="https://signed/c.png"), \
+         patch("pipeline.char_ref_mod.classify_image_primary", side_effect=[False, True]), \
+         patch("pipeline.char_ref_mod.classify_image_backstop", return_value=True):
+        from pipeline.char_ref_mod import char_ref_mod
+        result = char_ref_mod(_state([_char("c0"), _char("c1")]))
+
+    chars = result["characters"]
+    assert [c.char_id for c in chars] == ["c0", "c1"]
+    assert chars[0].ref_moderation_status == "flagged"
+    assert chars[1].ref_moderation_status == "passed"
+
+
 # --- backstop error ---
 
 def test_gemma_error_raises_moderation_error():

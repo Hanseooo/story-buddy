@@ -38,7 +38,7 @@ def char_ref_mod(state: StoryMemory) -> dict:
                 char.char_id, primary_safe, backstop_safe,
             )
             updated.append(char.model_copy(update={"ref_moderation_status": "flagged"}))
-            break  # moderation_router reads this and raises content_flagged
+            continue  # moderation_router reads this and raises content_flagged
 
         log.info("char_ref_mod: char_id=%s passed", char.char_id)
         updated.append(char.model_copy(update={"ref_moderation_status": "passed"}))
