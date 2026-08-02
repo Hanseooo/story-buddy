@@ -62,6 +62,9 @@ STYLE_PRESETS: dict[str, str] = {
 # Spec `docs/specs/image-generator.md` §4: ADR-025 D4 domain-level breaker.
 # IMAGE_BUDGET derives from MAX_SCENES so both share one source of truth.
 MAX_SCENES = 15
+# Spec `docs/specs/input-gate-hardening.md` §4a: the API-boundary length guard.
+MIN_STORY_WORDS = 5     # a book needs at least one scene's worth of text
+MAX_STORY_WORDS = 800   # ADR-012 range 500-800, top of range, tunable
 IMAGE_BUDGET = MAX_SCENES * 2 + 9   # 15 scenes × 2 + 9-image prelude (ADR-029)
 # Spec `docs/specs/regeneration-controller.md` §4: LangGraph's graph-level backstop.
 # ADR-024's formula — max_scenes × 4 + fixed_prelude. The ×4 is the deepest a single scene
