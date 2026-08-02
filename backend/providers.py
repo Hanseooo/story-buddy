@@ -4,6 +4,7 @@ Text + VLM judge go through OpenRouter (OpenAI-compatible). Images go through fa
 Deterministic tests mock these functions; nothing here runs in CI (MASTER_SPEC §6).
 """
 import json
+from functools import lru_cache
 from typing import TypeVar
 
 import fal_client
@@ -152,16 +153,18 @@ def _parse_guard_response(response: str) -> tuple[bool, list[str]]:
     categories = [c.strip() for c in response.split("\n", 1)[1].split(",") if c.strip()] if not safe and "\n" in response else []
     return safe, categories
 
+@lru_cache(maxsize=1)
 def _presidio():
     from presidio_analyzer import AnalyzerEngine
-    from presidio_analyzer.nlp_engine import NlpEngineProvider
+    from presidio_analyzer.nlp_engine import SpacyNlpEngine
     from presidio_anonymizer import AnonymizerEngine
-    # ponytail: stock Presidio, Filipino names leak — filed as filipino-pii-recognizers spec
-    nlp_config = {
-        "nlp_engine_name": "spacy",
-        "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}],
-    }
-    analyzer = AnalyzerEngine(nlp_engine_provider=NlpEngineProvider(nlp_configuration=nlp_config))
+
+    from ph_recognizers import ph_recognizers
+
+    nlp_engine = SpacyNlpEngine(models=[{"lang_code": "en", "model_name": "en_core_web_sm"}])
+    analyzer = AnalyzerEngine(nlp_engine=nlp_engine)
+    for recognizer in ph_recognizers():
+        analyzer.registry.add_recognizer(recognizer)
     return analyzer, AnonymizerEngine()
 
 

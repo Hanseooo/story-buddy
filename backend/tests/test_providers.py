@@ -274,3 +274,23 @@ def test_classify_image_backstop_returns_true_when_safe():
         from providers import classify_image_backstop
         result = classify_image_backstop("https://example.com/image.png")
     assert result is True
+
+
+# --- input-gate-hardening spec: ph_recognizers registration + caching (§4b, §4c) ---
+# Real Presidio — same rationale as test_ph_recognizers.py: registration/caching can't be
+# meaningfully verified against a mock of the thing being registered into.
+
+def test_presidio_registers_ph_recognizers():
+    from providers import _presidio
+    _presidio.cache_clear()
+    analyzer, _ = _presidio()
+    supported = {entity for r in analyzer.registry.recognizers for entity in r.supported_entities}
+    assert {"PH_PERSON", "PH_MOBILE", "PH_ADDRESS", "PH_TIN", "PH_SSS", "PH_PHILHEALTH"} <= supported
+
+
+def test_presidio_is_cached_across_calls():
+    from providers import _presidio
+    _presidio.cache_clear()
+    first = _presidio()
+    second = _presidio()
+    assert first is second
