@@ -101,10 +101,11 @@ swap a library, or change the pipeline shape because a different approach seems 
 The **Story Memory schema** (`backend/contracts/`) is the contract between every pipeline module.
 It is Pydantic and it is authoritative.
 
-> **State of play (Phase 1 in progress):** `StoryMemory` is **built** (`backend/contracts/story_memory.py`,
+> **State of play (Phase 1 complete):** `StoryMemory` is **built** (`backend/contracts/story_memory.py`,
 > 2026-07-29). `job_state.py` is **deleted**. All seven nodes are on partial-return `(state: StoryMemory) -> dict`;
-> `input_gate` is the graph entry point. `analyze`, `segment`, `char_bible`, `generate_scene`, and `consistency_check` are built; `compose` is the only remaining pass-through stub —
-> fill it in per spec before implementing. See `docs/specs/story-memory-contract.md` for the contract and ADR-023/024 for conventions.
+> `input_gate` is the graph entry point. `analyze`, `segment`, `char_bible`, `generate_scene`, `consistency_check`,
+> and `compose` are all built — no pass-through stubs remain in the core pipeline. See
+> `docs/specs/story-memory-contract.md` for the contract and ADR-023/024 for conventions.
 
 - Validate against it at **every LLM boundary** (strict `json_schema` structured output →
   Pydantic, always).
@@ -193,7 +194,7 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
   [route_next_scene] → generate_scene → consistency_check → [route_after_check] → regenerate →
   consistency_check → … → compose` — `route_next_scene` is the loop head's registration and the
   fall-through of `route_after_check`; `route_after_check` handles the consistency pass/fail branch
-  (ADR-003). `compose` is the only remaining pass-through stub. `analyze` mints the entity roster;
+  (ADR-003). `compose` is built — the graph's terminal gate, no stub remains. `analyze` mints the entity roster;
   `segment` splits into scenes (≤15), maps names → char_ids, and sets `caption = text_excerpt`
   (ADR-013); `char_bible` mints ≤2 canonical references with ADR-028's 3-draw acceptance loop;
   `generate_scene` is reference-conditioned (`edit_image` when canonical refs present,
@@ -389,4 +390,8 @@ is not documentation of a good design; it is the blast radius, written down so t
   `route_after_check` closes the consistency pass/fail branch (ADR-003); `recursion_limit` set to
   `MAX_SCENES * 4 + 9 = 69`; `correct_prompt` gains `same_character` / `anatomy_intact` booleans
   and `IDENTITY_CLAUSE` / `ANATOMY_CLAUSE` fixed strings; per-attempt Storage path
-  `{story_id}/{scene_id}-{n}.png`. `contracts/` untouched. Remaining Phase-1 spec: `compose`.
+  `{story_id}/{scene_id}-{n}.png`. `contracts/` untouched.
+  **`compose` is built (2026-08-02):** `pipeline/compose.py` implements the terminal gate — asserts
+  ≥1 scene and every scene finalized (raise → job `failed`), classifies each page by the attempt
+  that won, emits the one per-book summary log line. Returns `{}`. `contracts/` untouched.
+  **Every Phase-1 feature spec is now built.**

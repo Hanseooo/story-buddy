@@ -1,6 +1,6 @@
 # Feature Spec — compose
 
-**Status:** draft · **Phase:** 1 · **Owner node:** `backend/pipeline/compose.py`
+**Status:** built · bab3351 · **Phase:** 1 · **Owner node:** `backend/pipeline/compose.py`
 **Derived from:** MASTER_SPEC §2 (system map) · **Rationale:** ADR-003, ADR-010, ADR-013, ADR-024,
 ADR-025, ADR-028
 

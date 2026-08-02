@@ -133,5 +133,9 @@ best-of selection. `route_after_check` closes the retry branch. `recursion_limit
 `correct_prompt` gains `same_character` / `anatomy_intact` params and fixed correction clauses.
 Per-attempt Storage path. `contracts/` untouched.
 
-**Next action: `compose`** — write `docs/specs/compose.md` from `docs/specs/TEMPLATE.md` before
-writing any code (AGENTS.md).
+`compose` is **built** (2026-08-02): `backend/pipeline/compose.py` implements the terminal gate —
+asserts ≥1 scene and every scene finalized (raise → job `failed`), classifies each page by the
+attempt that won, emits the one per-book summary log line. Returns `{}`. `contracts/` untouched.
+
+**Phase 1 is complete — every core feature spec is built.** Next action: pick up Phase 2
+(`moderation-stack` has a spec already drafted) per `docs/product/DECISION_BACKLOG.md`.
