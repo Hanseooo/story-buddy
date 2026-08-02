@@ -16,8 +16,10 @@ EXPECTED_ORDER = [
     "analyze",
     "segment",
     "char_bible",
+    "char_ref_mod",
     "generate_scene",
     "consistency_check",
+    "output_mod",
     "compose",
 ]
 
@@ -73,6 +75,15 @@ def _mock_call_points(monkeypatch):
             2,
         ),
     )
+    monkeypatch.setattr("pipeline.input_gate.classify_text_primary", lambda text: (True, []))
+    monkeypatch.setattr("pipeline.input_gate.classify_text_backstop", lambda text: (True, []))
+    monkeypatch.setattr("pipeline.input_gate.redact_pii", lambda text: text)
+    monkeypatch.setattr("pipeline.char_ref_mod.classify_image_primary", lambda url: True)
+    monkeypatch.setattr("pipeline.char_ref_mod.classify_image_backstop", lambda url: True)
+    monkeypatch.setattr("pipeline.char_ref_mod._get_signed_url", lambda path: f"https://signed/{path}")
+    monkeypatch.setattr("pipeline.output_mod.classify_image_primary", lambda url: True)
+    monkeypatch.setattr("pipeline.output_mod.classify_image_backstop", lambda url: True)
+    monkeypatch.setattr("pipeline.output_mod._get_signed_url", lambda path: f"https://signed/{path}")
 
 
 def test_stub_graph_runs_all_nodes_in_order(monkeypatch):
@@ -140,7 +151,7 @@ def test_char_bible_references_survive_the_graph(monkeypatch):
     character, = result["characters"]
     assert character.canonical_ref_image == "test-job-4/ref-c0.png"
     assert character.ref_verdict.matches_description is True
-    assert character.ref_moderation_status is None   # Phase-2 owner, not this node
+    assert character.ref_moderation_status == "passed"   # char_ref_mod sets this
     assert result["cost"].image_count == 3           # 2 from mint_reference + 1 from generate_scene
 
 
@@ -175,9 +186,10 @@ def test_two_scene_run_loops_once_per_scene_and_reaches_compose(monkeypatch):
 
     assert ran == [
         "input_gate", "analyze", "segment", "char_bible",
+        "char_ref_mod",
         "generate_scene", "consistency_check",
         "generate_scene", "consistency_check",
-        "compose",
+        "output_mod", "compose",
     ]
     assert [s.final_image_ref for s in result["scenes"]] == ["stub/s0-1.png", "stub/s1-1.png"]
     assert sum(len(s.attempts) for s in result["scenes"]) == 2
@@ -232,9 +244,10 @@ def test_a_failing_scene_retries_once_then_passes_and_the_run_reaches_compose(mo
 
     assert ran == [
         "input_gate", "analyze", "segment", "char_bible",
+        "char_ref_mod",
         "generate_scene", "consistency_check", "regenerate", "consistency_check",
         "generate_scene", "consistency_check",
-        "compose",
+        "output_mod", "compose",
     ]
     assert sum(len(s.attempts) for s in result["scenes"]) == 3
     assert all(s.final_image_ref is not None for s in result["scenes"])
@@ -264,3 +277,47 @@ def test_a_book_whose_every_judge_call_fails_still_reaches_compose(monkeypatch):
     assert result["cost"].regen_count == 2
     # Tie on every ranking term → attempt 2, the `reversed` behaviour, end to end.
     assert [s.final_image_ref for s in result["scenes"]] == ["stub/s0-2.png", "stub/s1-2.png"]
+
+
+def test_route_next_scene_routes_to_output_mod_when_all_scenes_have_final_image_ref():
+    """Spec §3: route_next_scene goes to output_mod (not compose) when the scene loop is done."""
+    from pipeline.graph import route_next_scene
+    from contracts.story_memory import CURRENT_SCHEMA_VERSION, Input, ModerationResult, Scene, StoryMemory
+
+    state = StoryMemory(
+        schema_version=CURRENT_SCHEMA_VERSION,
+        story_id="job-1",
+        classroom_id="dev-classroom",
+        profile_id="dev-profile",
+        input=Input(raw_text="A story.", redacted_text="A story.", moderation=ModerationResult(passed=True)),
+        scenes=[
+            Scene(scene_id="s0", text_excerpt="text", final_image_ref="job-1/s0-1.png"),
+            Scene(scene_id="s1", text_excerpt="text", final_image_ref="job-1/s1-1.png"),
+        ],
+    )
+    assert route_next_scene(state) == "output_mod"
+
+
+def test_route_next_scene_routes_to_generate_scene_when_scenes_unfinished():
+    """route_next_scene still routes to generate_scene while the loop is in progress."""
+    from pipeline.graph import route_next_scene
+    from contracts.story_memory import CURRENT_SCHEMA_VERSION, Input, ModerationResult, Scene, StoryMemory
+
+    state = StoryMemory(
+        schema_version=CURRENT_SCHEMA_VERSION,
+        story_id="job-1",
+        classroom_id="dev-classroom",
+        profile_id="dev-profile",
+        input=Input(raw_text="A story.", redacted_text="A story.", moderation=ModerationResult(passed=True)),
+        scenes=[Scene(scene_id="s0", text_excerpt="text", final_image_ref=None)],
+    )
+    assert route_next_scene(state) == "generate_scene"
+
+
+def test_graph_has_char_ref_mod_and_output_mod_nodes():
+    """Task 6 integration: both new nodes are registered in the compiled graph."""
+    from pipeline.graph import build_graph
+    graph = build_graph()
+    node_names = set(graph.get_graph().nodes.keys())
+    assert "char_ref_mod" in node_names
+    assert "output_mod" in node_names
