@@ -170,3 +170,107 @@ def test_text_to_image_omits_seed_when_not_given():
         providers.text_to_image("a fox")
 
     assert "seed" not in fal.subscribe.call_args.kwargs["arguments"]
+
+
+# --- redact_pii ---
+
+def test_redact_pii_returns_string():
+    """Smoke test: redact_pii returns a string (real Presidio is an integration concern)."""
+    with patch("providers._presidio", return_value=(MagicMock(analyze=lambda **kw: []), MagicMock(anonymize=lambda **kw: MagicMock(text="clean text")))):
+        from providers import redact_pii
+        result = redact_pii("My name is Juan dela Cruz")
+    assert isinstance(result, str)
+
+
+# --- classify_text_primary ---
+
+def test_classify_text_primary_returns_safe_tuple():
+    mock_tokenizer = MagicMock()
+    mock_tokenizer.apply_chat_template.return_value = MagicMock(shape=MagicMock(__getitem__=lambda s, i: 5))
+    mock_tokenizer.decode.return_value = "safe"
+    mock_model = MagicMock()
+    mock_model.generate.return_value = [[0] * 10]
+
+    with patch("providers._qwen3_guard", return_value=(mock_tokenizer, mock_model)):
+        from providers import classify_text_primary
+        safe, categories = classify_text_primary("A dog runs in a field.")
+
+    assert isinstance(safe, bool)
+    assert isinstance(categories, list)
+
+
+def test_classify_text_primary_unsafe_response_is_not_safe():
+    mock_tokenizer = MagicMock()
+    mock_tokenizer.apply_chat_template.return_value = MagicMock(shape=MagicMock(__getitem__=lambda s, i: 5))
+    mock_tokenizer.decode.return_value = "unsafe\nS1: Violence"
+    mock_model = MagicMock()
+    mock_model.generate.return_value = [[0] * 10]
+
+    with patch("providers._qwen3_guard", return_value=(mock_tokenizer, mock_model)):
+        from providers import classify_text_primary
+        safe, categories = classify_text_primary("graphic violence")
+
+    assert safe is False
+    assert len(categories) > 0
+
+
+# --- classify_text_backstop ---
+
+def test_classify_text_backstop_returns_safe_tuple():
+    with patch("providers.OpenAI") as mock_openai_cls:
+        mock_openai_cls.return_value.chat.completions.create.return_value.choices = [
+            MagicMock(message=MagicMock(content="safe"))
+        ]
+        from providers import classify_text_backstop
+        safe, categories = classify_text_backstop("A happy dog story.")
+
+    assert safe is True
+    assert categories == []
+
+
+def test_classify_text_backstop_parses_unsafe_with_categories():
+    with patch("providers.OpenAI") as mock_openai_cls:
+        mock_openai_cls.return_value.chat.completions.create.return_value.choices = [
+            MagicMock(message=MagicMock(content="unsafe\nviolence, gore"))
+        ]
+        from providers import classify_text_backstop
+        safe, categories = classify_text_backstop("graphic violence")
+
+    assert safe is False
+    assert "violence" in categories
+
+
+# --- classify_image_primary ---
+
+def test_classify_image_primary_returns_true_for_normal():
+    with patch("providers.httpx") as mock_httpx, \
+         patch("providers._falconsai") as mock_falconsai, \
+         patch("PIL.Image.open", return_value=MagicMock()):
+        mock_httpx.get.return_value.content = b"fake-image-bytes"
+        mock_falconsai.return_value.return_value = [{"label": "normal", "score": 0.99}, {"label": "nsfw", "score": 0.01}]
+        from providers import classify_image_primary
+        result = classify_image_primary("https://example.com/image.png")
+    assert result is True
+
+
+def test_classify_image_primary_returns_false_for_nsfw():
+    with patch("providers.httpx") as mock_httpx, \
+         patch("providers._falconsai") as mock_falconsai, \
+         patch("PIL.Image.open", return_value=MagicMock()):
+        mock_httpx.get.return_value.content = b"fake-image-bytes"
+        mock_falconsai.return_value.return_value = [{"label": "nsfw", "score": 0.95}, {"label": "normal", "score": 0.05}]
+        from providers import classify_image_primary
+        result = classify_image_primary("https://example.com/bad.png")
+    assert result is False
+
+
+# --- classify_image_backstop ---
+
+def test_classify_image_backstop_returns_true_when_safe():
+    with patch("providers.OpenAI") as mock_openai_cls:
+        mock_openai_cls.return_value.chat.completions.parse.return_value.choices = [
+            MagicMock(message=MagicMock(parsed=MagicMock(is_safe=True), content='{"safety_reasoning":"ok","is_safe":true}'))
+        ]
+        from providers import classify_image_backstop
+        result = classify_image_backstop("https://example.com/image.png")
+    assert result is True

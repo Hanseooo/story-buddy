@@ -39,16 +39,14 @@ class Settings(BaseSettings):
     judge_base_url: str = "https://openrouter.ai/api/v1"
     judge_api_key: str | None = None  # falls back to openrouter_api_key
 
-    # D-1 resolved (ADR-011c, 2026-07-21): the primary is Qwen3Guard-Gen 0.6B running on the
-    # worker CPU — NOT an OpenRouter model id — so this field stays Llama Guard 4 (the demoted
-    # fallback) until the Phase-2 `moderation-stack` spec defines the CPU-resident config shape.
-    moderation_model: str = "meta-llama/llama-guard-4-12b"
-
-    # D-1 resolved (ADR-011c): backstop is `openai/gpt-oss-safeguard-20b` on OpenRouter (the
-    # ADR-011b pair — Qwen3Guard-Gen / Granite Guardian — is not routable there; verified
-    # 2026-07-13). Left unset here so the Phase-0.5 probe (`spikes/phase_05.py`) stays opt-in;
-    # the Phase-2 `moderation-stack` spec wires the real primary+backstop config shape.
-    moderation_backstop_model: str | None = None
+    # ADR-011c: CPU-resident primary (HF hub id — downloaded at worker startup by transformers).
+    # Model swap is env-var change; provider swap is providers.py.
+    moderation_primary_model: str = "Qwen/Qwen3-Guard-Gen-0.6B"
+    # ADR-011c: text backstop on OpenRouter.
+    moderation_backstop_model: str = "openai/gpt-oss-safeguard-20b"
+    # ADR-011c / spec §4b-c: Gemma for image safety rubric (violence, gore, dangerous content).
+    # Reuses the same model as vlm_judge_model; separate field so the two can diverge.
+    moderation_backstop_image_model: str = "google/gemma-3-27b-it"
 
 
 settings = Settings()

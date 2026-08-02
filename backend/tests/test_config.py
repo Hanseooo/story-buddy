@@ -20,3 +20,15 @@ def test_recursion_limit_shares_its_prelude_term_with_image_budget():
     The prelude is 9 in both, deliberately generous today (it is really 5) to leave
     headroom for ADR-029's Phase-2 `reveal` node."""
     assert RECURSION_LIMIT - MAX_SCENES * 4 == IMAGE_BUDGET - MAX_SCENES * 2
+
+
+def test_moderation_primary_model_is_qwen3_guard_gen():
+    assert settings.moderation_primary_model == "Qwen/Qwen3-Guard-Gen-0.6B"
+
+
+def test_moderation_backstop_model_is_gpt_oss_safeguard():
+    assert settings.moderation_backstop_model == "openai/gpt-oss-safeguard-20b"
+
+
+def test_moderation_backstop_image_model_is_gemma():
+    assert settings.moderation_backstop_image_model == "google/gemma-3-27b-it"

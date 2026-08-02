@@ -133,5 +133,15 @@ best-of selection. `route_after_check` closes the retry branch. `recursion_limit
 `correct_prompt` gains `same_character` / `anatomy_intact` params and fixed correction clauses.
 Per-attempt Storage path. `contracts/` untouched.
 
-**Next action: `compose`** — write `docs/specs/compose.md` from `docs/specs/TEMPLATE.md` before
-writing any code (AGENTS.md).
+`compose` is **built** (2026-08-02): `backend/pipeline/compose.py` implements the terminal gate —
+asserts ≥1 scene and every scene finalized (raise → job `failed`), classifies each page by the
+attempt that won, emits the one per-book summary log line. Returns `{}`. `contracts/` untouched.
+
+**Phase 1 is complete. Phase 2 has begun.**
+
+`moderation-stack` is **built** (2026-08-02): `pipeline/input_gate.py` (real), `pipeline/char_ref_mod.py`,
+`pipeline/output_mod.py`. `moderation_router` + `route_after_output_mod` in `graph.py`. `providers.py`
+gains five moderation functions + `get_signed_url`. Stub spec `docs/specs/filipino-pii-recognizers.md` filed.
+
+**Next action:** continue Phase 2 per `docs/product/DECISION_BACKLOG.md` — `filipino-pii-recognizers`,
+`self-refusal-fallback`, `length-guard`, or `auth-and-classroom`.

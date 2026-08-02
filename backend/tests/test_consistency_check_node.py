@@ -533,14 +533,14 @@ def test_router_sends_an_unfinalized_scene_back_to_generate_scene():
     assert route_next_scene(state) == "generate_scene"
 
 
-def test_router_sends_a_fully_finalized_book_to_compose():
+def test_router_sends_a_fully_finalized_book_to_output_mod():
     state = _state([Scene(scene_id="s0", text_excerpt="0", final_image_ref="job-1/s0-1.png")])
-    assert route_next_scene(state) == "compose"
+    assert route_next_scene(state) == "output_mod"
 
 
-def test_router_sends_an_empty_scene_list_to_compose():
+def test_router_sends_an_empty_scene_list_to_output_mod():
     """ADR-024: segment produced no scenes. The loop head must not enter a loop with no work."""
-    assert route_next_scene(_state([])) == "compose"
+    assert route_next_scene(_state([])) == "output_mod"
 
 
 # --- route_after_check (pure — no mocks) ---
@@ -558,13 +558,13 @@ def test_route_after_check_sends_a_scene_with_no_attempts_to_generate_scene():
     assert route_after_check(state) == "generate_scene"
 
 
-def test_route_after_check_sends_a_fully_finalized_book_to_compose():
+def test_route_after_check_sends_a_fully_finalized_book_to_output_mod():
     state = _state([Scene(scene_id="s0", text_excerpt="0", final_image_ref="job-1/s0-1.png")])
-    assert route_after_check(state) == "compose"
+    assert route_after_check(state) == "output_mod"
 
 
-def test_route_after_check_sends_an_empty_scene_list_to_compose():
-    assert route_after_check(_state([])) == "compose"
+def test_route_after_check_sends_an_empty_scene_list_to_output_mod():
+    assert route_after_check(_state([])) == "output_mod"
 
 
 def test_route_after_check_skips_finalized_scenes_when_selecting():
