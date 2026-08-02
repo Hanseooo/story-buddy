@@ -1,6 +1,8 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from presidio_analyzer import RecognizerResult
+from presidio_anonymizer import AnonymizerEngine
 from pydantic import BaseModel
 
 import providers
@@ -279,6 +281,99 @@ def test_classify_image_backstop_returns_true_when_safe():
 # --- input-gate-hardening spec: ph_recognizers registration + caching (§4b, §4c) ---
 # Real Presidio — same rationale as test_ph_recognizers.py: registration/caching can't be
 # meaningfully verified against a mock of the thing being registered into.
+
+# --- input-gate-hardening spec: pseudonymized person redaction (§4c) ---
+
+
+def _fake_presidio(results):
+    """Fake analyzer (canned results, no spaCy load) + REAL AnonymizerEngine, so these tests
+    exercise the actual operator wiring without needing en_core_web_sm."""
+    analyzer = MagicMock()
+    analyzer.analyze = lambda **kwargs: results
+    return analyzer, AnonymizerEngine()
+
+
+def test_redact_pii_pseudonymizes_repeated_name_consistently():
+    text = "Si Maria ay pumunta sa bukid. Tinawag ni Maria si Juan."
+    first_maria = text.index("Maria")
+    second_maria = text.index("Maria", first_maria + 1)
+    juan = text.index("Juan")
+    results = [
+        RecognizerResult(entity_type="PH_PERSON", start=first_maria, end=first_maria + 5, score=0.85),
+        RecognizerResult(entity_type="PH_PERSON", start=second_maria, end=second_maria + 5, score=0.85),
+        RecognizerResult(entity_type="PH_PERSON", start=juan, end=juan + 4, score=0.85),
+    ]
+    with patch("providers._presidio", return_value=_fake_presidio(results)):
+        from providers import redact_pii
+        result = redact_pii(text)
+
+    assert result.count("Ana") == 2
+    assert "Ben" in result
+    assert "Maria" not in result
+    assert "Juan" not in result
+
+
+def test_redact_pii_different_names_get_different_stand_ins():
+    text = "Si Pedro at si Rosario ay magkaibigan."
+    pedro = text.index("Pedro")
+    rosario = text.index("Rosario")
+    results = [
+        RecognizerResult(entity_type="PH_PERSON", start=pedro, end=pedro + 5, score=0.85),
+        RecognizerResult(entity_type="PH_PERSON", start=rosario, end=rosario + 7, score=0.85),
+    ]
+    with patch("providers._presidio", return_value=_fake_presidio(results)):
+        from providers import redact_pii
+        result = redact_pii(text)
+
+    assert "Pedro" not in result
+    assert "Rosario" not in result
+    assert "Ana" in result
+    assert "Ben" in result
+
+
+def test_redact_pii_two_calls_do_not_share_a_mapping():
+    text = "Si Marcos ang pangalan niya."
+    marcos = text.index("Marcos")
+    results = [RecognizerResult(entity_type="PH_PERSON", start=marcos, end=marcos + 6, score=0.85)]
+    with patch("providers._presidio", return_value=_fake_presidio(results)):
+        from providers import redact_pii
+        first_result = redact_pii(text)
+        second_result = redact_pii(text)
+
+    # Same input, fresh mapping each call — both independently land on the pool's first entry.
+    assert first_result == second_result
+    assert "Ana" in first_result
+
+
+def test_redact_pii_hard_redacts_structured_identifiers_not_pseudonyms():
+    text = "Ang TIN ko ay 123-456-789."
+    tin = text.index("123-456-789")
+    results = [RecognizerResult(entity_type="PH_TIN", start=tin, end=tin + 11, score=0.6)]
+    with patch("providers._presidio", return_value=_fake_presidio(results)):
+        from providers import redact_pii
+        result = redact_pii(text)
+
+    assert "123-456-789" not in result
+    assert "<PH_TIN>" in result
+
+
+def test_redact_pii_returns_text_unchanged_when_no_entities():
+    with patch("providers._presidio", return_value=_fake_presidio([])):
+        from providers import redact_pii
+        result = redact_pii("Walang laman dito.")
+    assert result == "Walang laman dito."
+
+
+def test_redact_pii_never_leaks_the_original_value_real_presidio():
+    """§2's totality invariant, end-to-end against real Presidio + real ph_recognizers."""
+    from providers import _presidio, redact_pii
+    _presidio.cache_clear()
+    text = "Ako si Juan dela Cruz, taga Purok 3, Barangay San Isidro."
+    result = redact_pii(text)
+    assert "Juan" not in result
+    assert "Cruz" not in result
+    assert "Purok 3" not in result
+
 
 def test_presidio_registers_ph_recognizers():
     from providers import _presidio

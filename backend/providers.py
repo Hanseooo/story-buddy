@@ -168,11 +168,44 @@ def _presidio():
     return analyzer, AnonymizerEngine()
 
 
+_PSEUDONYM_POOL = ["Ana", "Ben", "Cielo", "Dado", "Elena", "Fabio"]
+
+
+def _pseudonymizer():
+    """Fresh mapping per call — caching this would leak names between stories (spec §4c)."""
+    mapping: dict[str, str] = {}
+
+    def assign(value: str) -> str:
+        key = value.casefold()
+        if key not in mapping:
+            mapping[key] = _PSEUDONYM_POOL[len(mapping) % len(_PSEUDONYM_POOL)]
+        return mapping[key]
+
+    return assign
+
+
 def redact_pii(text: str) -> str:
-    """Presidio PII redaction (CC-2). en_core_web_sm must be downloaded before first call."""
+    """Presidio PII redaction (CC-2). Persons pseudonymized so the story survives with a
+    protagonist an illustrator can draw; structured identifiers hard-redact (spec §4c).
+    en_core_web_sm must be downloaded before first call."""
+    from presidio_anonymizer.entities import OperatorConfig
+
     analyzer, anonymizer = _presidio()
     results = analyzer.analyze(text=text, language="en")
-    return anonymizer.anonymize(text=text, analyzer_results=results).text
+
+    # Pre-populate the mapping in reading order: the anonymizer calls the lambda right-to-left
+    # (to avoid offset shifts), so without this the last name in the text would get pool[0].
+    assign = _pseudonymizer()
+    _PERSON_ENTITIES = {"PERSON", "PH_PERSON"}
+    for r in sorted(results, key=lambda r: r.start):
+        if r.entity_type in _PERSON_ENTITIES:
+            assign(text[r.start : r.end])
+
+    person = OperatorConfig("custom", {"lambda": assign})
+    return anonymizer.anonymize(
+        text=text, analyzer_results=results,
+        operators={"PERSON": person, "PH_PERSON": person},
+    ).text
 
 
 def _qwen3_guard():
