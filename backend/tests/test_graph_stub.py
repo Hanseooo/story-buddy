@@ -80,10 +80,10 @@ def _mock_call_points(monkeypatch):
     monkeypatch.setattr("pipeline.input_gate.redact_pii", lambda text: text)
     monkeypatch.setattr("pipeline.char_ref_mod.classify_image_primary", lambda url: True)
     monkeypatch.setattr("pipeline.char_ref_mod.classify_image_backstop", lambda url: True)
-    monkeypatch.setattr("pipeline.char_ref_mod._get_signed_url", lambda path: f"https://signed/{path}")
+    monkeypatch.setattr("pipeline.char_ref_mod.get_signed_url", lambda path: f"https://signed/{path}")
     monkeypatch.setattr("pipeline.output_mod.classify_image_primary", lambda url: True)
     monkeypatch.setattr("pipeline.output_mod.classify_image_backstop", lambda url: True)
-    monkeypatch.setattr("pipeline.output_mod._get_signed_url", lambda path: f"https://signed/{path}")
+    monkeypatch.setattr("pipeline.output_mod.get_signed_url", lambda path: f"https://signed/{path}")
 
 
 def test_stub_graph_runs_all_nodes_in_order(monkeypatch):

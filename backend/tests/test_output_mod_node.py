@@ -39,7 +39,7 @@ def _scene(scene_id: str = "s0", final_image_ref: str | None = "job-1/s0-1.png",
 
 def test_all_scenes_pass_sets_moderation_status_passed():
     """Spec §4c step 3: all pass → moderation_status = 'passed' for each scene."""
-    with patch("pipeline.output_mod._get_signed_url", return_value="https://signed/s0.png"), \
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"), \
          patch("pipeline.output_mod.classify_image_primary", return_value=True), \
          patch("pipeline.output_mod.classify_image_backstop", return_value=True):
         from pipeline.output_mod import output_mod
@@ -56,7 +56,7 @@ def test_first_check_fails_soften_retry_triggers_and_passes():
     check_calls = [False, True]  # first call fails, retry call passes
     primary_iter = iter(check_calls)
 
-    with patch("pipeline.output_mod._get_signed_url", return_value="https://signed/s0.png"), \
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"), \
          patch("pipeline.output_mod.classify_image_primary", side_effect=primary_iter), \
          patch("pipeline.output_mod.classify_image_backstop", return_value=True), \
          patch("pipeline.output_mod.generate_and_store", return_value=("job-1/s0-2.png", True)) as mock_gen:
@@ -79,7 +79,7 @@ def test_retry_uses_softened_prompt():
 
     check_responses = iter([False, True])
 
-    with patch("pipeline.output_mod._get_signed_url", return_value="https://signed/s0.png"), \
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"), \
          patch("pipeline.output_mod.classify_image_primary", side_effect=check_responses), \
          patch("pipeline.output_mod.classify_image_backstop", return_value=True), \
          patch("pipeline.output_mod.generate_and_store", side_effect=_gen):
@@ -92,22 +92,40 @@ def test_retry_uses_softened_prompt():
 
 # --- retry also fails ---
 
-def test_retry_also_fails_raises_output_moderation_failed():
-    """Spec §4c step 5: first and retry both fail → RuntimeError('output_moderation_failed')."""
-    with patch("pipeline.output_mod._get_signed_url", return_value="https://signed/s0.png"), \
+def test_retry_also_fails_sets_moderation_status_failed():
+    """Spec §4c step 5: first and retry both fail → moderation_status='failed' (route_after_output_mod raises)."""
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"), \
          patch("pipeline.output_mod.classify_image_primary", return_value=False), \
          patch("pipeline.output_mod.classify_image_backstop", return_value=True), \
          patch("pipeline.output_mod.generate_and_store", return_value=("job-1/s0-2.png", True)):
         from pipeline.output_mod import output_mod
-        with pytest.raises(RuntimeError, match="output_moderation_failed"):
-            output_mod(_state([_scene("s0")]))
+        result = output_mod(_state([_scene("s0")]))
+
+    assert result["scenes"][0].moderation_status == "failed"
+
+
+def test_route_after_output_mod_raises_when_scene_failed():
+    """route_after_output_mod raises RuntimeError('output_moderation_failed') on failed scene."""
+    from pipeline.graph import route_after_output_mod
+    from contracts.story_memory import CURRENT_SCHEMA_VERSION, Input, ModerationResult, Scene, StoryMemory
+
+    state = StoryMemory(
+        schema_version=CURRENT_SCHEMA_VERSION,
+        story_id="job-1",
+        classroom_id="dev-classroom",
+        profile_id="dev-profile",
+        input=Input(raw_text="text", redacted_text="text", moderation=ModerationResult(passed=True)),
+        scenes=[Scene(scene_id="s0", text_excerpt="text", moderation_status="failed")],
+    )
+    with pytest.raises(RuntimeError, match="output_moderation_failed"):
+        route_after_output_mod(state)
 
 
 # --- scene with no final_image_ref ---
 
 def test_scene_with_no_final_image_ref_is_skipped():
     """Spec §4c edge case: final_image_ref is None → output_mod only runs on resolved refs."""
-    with patch("pipeline.output_mod._get_signed_url") as mock_sign, \
+    with patch("pipeline.output_mod.get_signed_url") as mock_sign, \
          patch("pipeline.output_mod.classify_image_primary", return_value=True), \
          patch("pipeline.output_mod.classify_image_backstop", return_value=True):
         from pipeline.output_mod import output_mod

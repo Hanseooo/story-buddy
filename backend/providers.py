@@ -12,6 +12,7 @@ from openai import OpenAI
 from pydantic import BaseModel
 
 from app.config import settings
+from app.db import get_supabase_client
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
@@ -138,6 +139,19 @@ def _run_fal(endpoint: str, arguments: dict, seed: int | None) -> bytes:
 # All lazy-loaded to avoid importing GB-sized weights at import time.
 # ---------------------------------------------------------------------------
 
+_STORAGE_BUCKET = "storybook-images"
+
+
+def get_signed_url(path: str) -> str:
+    resp = get_supabase_client().storage.from_(_STORAGE_BUCKET).create_signed_url(path, expires_in=300)
+    return resp["signedURL"]
+
+
+def _parse_guard_response(response: str) -> tuple[bool, list[str]]:
+    safe = response.startswith("safe")
+    categories = [c.strip() for c in response.split("\n", 1)[1].split(",") if c.strip()] if not safe and "\n" in response else []
+    return safe, categories
+
 def _presidio():
     from presidio_analyzer import AnalyzerEngine
     from presidio_analyzer.nlp_engine import NlpEngineProvider
@@ -186,11 +200,7 @@ def classify_text_primary(text: str) -> tuple[bool, list[str]]:
     with torch.no_grad():
         output_ids = model.generate(input_ids, max_new_tokens=64, do_sample=False)
     response = tokenizer.decode(output_ids[0][input_ids.shape[-1]:], skip_special_tokens=True).strip().lower()
-    safe = response.startswith("safe")
-    categories: list[str] = []
-    if not safe and "\n" in response:
-        categories = [c.strip() for c in response.split("\n", 1)[1].split(",") if c.strip()]
-    return safe, categories
+    return _parse_guard_response(response)
 
 
 def classify_text_backstop(text: str) -> tuple[bool, list[str]]:
@@ -209,11 +219,7 @@ def classify_text_backstop(text: str) -> tuple[bool, list[str]]:
         extra_body={"provider": {"require_parameters": True}},
     )
     response = (completion.choices[0].message.content or "").strip().lower()
-    safe = response.startswith("safe")
-    categories: list[str] = []
-    if not safe and "\n" in response:
-        categories = [c.strip() for c in response.split("\n", 1)[1].split(",") if c.strip()]
-    return safe, categories
+    return _parse_guard_response(response)
 
 
 def _falconsai():

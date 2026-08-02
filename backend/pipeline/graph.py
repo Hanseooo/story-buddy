@@ -14,13 +14,37 @@ from pipeline.output_mod import output_mod
 from pipeline.regenerate import regenerate
 
 
-def route_next_scene(state: StoryMemory) -> str:
-    """Pure label-returning router (ADR-024 Decision 4) — the graph's first conditional edge.
+def moderation_router(state: StoryMemory) -> str:
+    """Pure ADR-024 router: reads moderation state written by input_gate and char_ref_mod (spec §3).
 
-    Registered on BOTH `char_ref_mod` (loop head) and `consistency_check` (loop back via
-    route_after_check). Same selection rule: a scene with no `final_image_ref` is unfinished.
-    Destination changed from "compose" to "output_mod" — compose is now reached only after
-    output moderation passes.
+    Called after input_gate (routes to analyze or raises) and after char_ref_mod (routes to the
+    scene loop or raises). One function covers both: after input_gate state.scenes is empty;
+    after char_ref_mod scenes exist.
+    """
+    mod = state.input.moderation
+    if mod is not None and not mod.passed:
+        if "moderation_error" in mod.categories:
+            raise RuntimeError("moderation_error")
+        raise RuntimeError("content_flagged")
+    if any(c.ref_moderation_status == "flagged" for c in state.characters):
+        raise RuntimeError("content_flagged")
+    if state.scenes:
+        return "generate_scene" if any(s.final_image_ref is None for s in state.scenes) else "output_mod"
+    return "analyze"
+
+
+def route_after_output_mod(state: StoryMemory) -> str:
+    """Pure ADR-024 router: reads moderation_status written by output_mod (spec §3)."""
+    if any(s.moderation_status == "failed" for s in state.scenes):
+        raise RuntimeError("output_moderation_failed")
+    return "compose"
+
+
+def route_next_scene(state: StoryMemory) -> str:
+    """Pure label-returning router (ADR-024 Decision 4) — the graph's scene-loop router.
+
+    Used by route_after_check. Destination changed from "compose" to "output_mod" — compose is
+    now reached only after output moderation passes.
     """
     return "generate_scene" if any(s.final_image_ref is None for s in state.scenes) else "output_mod"
 
@@ -55,15 +79,15 @@ def build_graph(checkpointer=None):
     graph.add_node("compose", compose)
 
     graph.set_entry_point("input_gate")
-    graph.add_edge("input_gate", "analyze")       # input_gate raises on fail; no conditional edge needed
+    graph.add_conditional_edges("input_gate", moderation_router)    # raises on fail; routes to analyze
     graph.add_edge("analyze", "segment")
     graph.add_edge("segment", "char_bible")
-    graph.add_edge("char_bible", "char_ref_mod")  # char_ref_mod raises on fail
-    graph.add_conditional_edges("char_ref_mod", route_next_scene)   # loop head (was char_bible)
+    graph.add_edge("char_bible", "char_ref_mod")                    # char_ref_mod writes status, never raises on flag
+    graph.add_conditional_edges("char_ref_mod", moderation_router)  # raises on flag; routes to scene loop
     graph.add_edge("generate_scene", "consistency_check")
     graph.add_conditional_edges("consistency_check", route_after_check)
     graph.add_edge("regenerate", "consistency_check")
-    graph.add_edge("output_mod", "compose")       # output_mod raises on fail
+    graph.add_conditional_edges("output_mod", route_after_output_mod)  # raises on failed; routes to compose
     graph.add_edge("compose", END)
 
     return graph.compile(checkpointer=checkpointer or MemorySaver())

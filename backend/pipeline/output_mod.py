@@ -1,16 +1,10 @@
 import logging
 
-from app.db import get_supabase_client
 from contracts.story_memory import Attempt, StoryMemory
-from pipeline.generate_scene import BUCKET, generate_and_store
-from providers import classify_image_backstop, classify_image_primary
+from pipeline.generate_scene import generate_and_store
+from providers import classify_image_backstop, classify_image_primary, get_signed_url
 
 log = logging.getLogger(__name__)
-
-
-def _get_signed_url(path: str) -> str:
-    resp = get_supabase_client().storage.from_(BUCKET).create_signed_url(path, expires_in=300)
-    return resp["signedURL"]
 
 
 def _check_image(image_url: str) -> bool:
@@ -31,8 +25,15 @@ def output_mod(state: StoryMemory) -> dict:
             updated_scenes.append(scene)
             continue
 
-        signed_url = _get_signed_url(scene.final_image_ref)
-        if _check_image(signed_url):
+        signed_url = get_signed_url(scene.final_image_ref)
+
+        try:
+            passed = _check_image(signed_url)
+        except Exception as exc:
+            log.error("output_mod: scene_id=%s classifier error (%s)", scene.scene_id, exc)
+            raise RuntimeError("moderation_error") from exc
+
+        if passed:
             log.info("output_mod: scene_id=%s passed", scene.scene_id)
             updated_scenes.append(scene.model_copy(update={"moderation_status": "passed"}))
             continue
@@ -50,9 +51,15 @@ def output_mod(state: StoryMemory) -> dict:
 
         retry_n = len(scene.attempts) + 1
         retry_path, _ = generate_and_store(softened, state.story_id, scene.scene_id, retry_n, ref_paths)
-        retry_url = _get_signed_url(retry_path)
+        retry_url = get_signed_url(retry_path)
 
-        if _check_image(retry_url):
+        try:
+            retry_passed = _check_image(retry_url)
+        except Exception as exc:
+            log.error("output_mod: scene_id=%s retry classifier error (%s)", scene.scene_id, exc)
+            raise RuntimeError("moderation_error") from exc
+
+        if retry_passed:
             log.info("output_mod: scene_id=%s retry passed", scene.scene_id)
             updated_scenes.append(scene.model_copy(update={
                 "final_image_ref": retry_path,
@@ -60,7 +67,11 @@ def output_mod(state: StoryMemory) -> dict:
                 "attempts": [*scene.attempts, Attempt(image_ref=retry_path, prompt=softened, passed=True)],
             }))
         else:
-            log.error("output_mod: scene_id=%s still flagged after retry — failing job", scene.scene_id)
-            raise RuntimeError("output_moderation_failed")
+            log.error("output_mod: scene_id=%s still flagged after retry — route_after_output_mod will fail job", scene.scene_id)
+            updated_scenes.append(scene.model_copy(update={
+                "final_image_ref": retry_path,
+                "moderation_status": "failed",
+                "attempts": [*scene.attempts, Attempt(image_ref=retry_path, prompt=softened, passed=False)],
+            }))
 
     return {"scenes": updated_scenes}

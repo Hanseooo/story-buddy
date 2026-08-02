@@ -28,23 +28,30 @@ def input_gate(state: StoryMemory) -> dict:
     if primary_safe is False:
         # Primary flagged — no backstop call needed (spec §4a step 3).
         log.info("input_gate: primary flagged (categories=%s)", categories)
-        raise RuntimeError("content_flagged")
+        return {
+            "input": Input(raw_text=text, redacted_text=redacted_text,
+                           moderation=ModerationResult(passed=False, categories=categories))
+        }
 
     # Primary passed or errored → always call backstop.
     try:
         backstop_safe, backstop_categories = classify_text_backstop(text)
     except Exception as exc:
         log.error("input_gate: backstop error — hard fail per ADR-025 (%s)", exc)
-        raise RuntimeError("moderation_error") from exc
+        # "moderation_error" category signals the router to raise RuntimeError("moderation_error").
+        return {
+            "input": Input(raw_text=text, redacted_text=redacted_text,
+                           moderation=ModerationResult(passed=False, categories=["moderation_error"]))
+        }
 
     if not backstop_safe:
         log.info("input_gate: backstop flagged (categories=%s)", backstop_categories)
-        raise RuntimeError("content_flagged")
+        return {
+            "input": Input(raw_text=text, redacted_text=redacted_text,
+                           moderation=ModerationResult(passed=False, categories=backstop_categories))
+        }
 
     return {
-        "input": Input(
-            raw_text=text,
-            redacted_text=redacted_text,
-            moderation=ModerationResult(passed=True),
-        )
+        "input": Input(raw_text=text, redacted_text=redacted_text,
+                       moderation=ModerationResult(passed=True))
     }

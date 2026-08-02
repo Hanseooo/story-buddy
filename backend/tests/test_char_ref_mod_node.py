@@ -36,7 +36,7 @@ def _char(char_id: str, ref_path: str | None = "job-1/c0.png") -> Character:
 
 def test_all_characters_pass_both_classifiers_sets_status_passed():
     """Spec §4b step 5: all chars pass → ref_moderation_status = 'passed' for each."""
-    with patch("pipeline.char_ref_mod._get_signed_url", return_value="https://signed/c0.png"), \
+    with patch("pipeline.char_ref_mod.get_signed_url", return_value="https://signed/c0.png"), \
          patch("pipeline.char_ref_mod.classify_image_primary", return_value=True), \
          patch("pipeline.char_ref_mod.classify_image_backstop", return_value=True):
         from pipeline.char_ref_mod import char_ref_mod
@@ -48,37 +48,39 @@ def test_all_characters_pass_both_classifiers_sets_status_passed():
 
 # --- primary flags ---
 
-def test_falconsai_flags_raises_content_flagged():
-    """Spec §4b step 4: primary flags → raise (job fails)."""
-    with patch("pipeline.char_ref_mod._get_signed_url", return_value="https://signed/c0.png"), \
+def test_falconsai_flags_sets_ref_moderation_status_flagged():
+    """Spec §4b step 4: primary flags → ref_moderation_status='flagged' (router raises content_flagged)."""
+    with patch("pipeline.char_ref_mod.get_signed_url", return_value="https://signed/c0.png"), \
          patch("pipeline.char_ref_mod.classify_image_primary", return_value=False), \
          patch("pipeline.char_ref_mod.classify_image_backstop", return_value=True):
         from pipeline.char_ref_mod import char_ref_mod
-        with pytest.raises(RuntimeError, match="content_flagged"):
-            char_ref_mod(_state([_char("c0")]))
+        result = char_ref_mod(_state([_char("c0")]))
+
+    assert result["characters"][0].ref_moderation_status == "flagged"
 
 
 # --- backstop flags ---
 
-def test_gemma_flags_raises_content_flagged():
-    """Spec §4b step 4: backstop flags → raise (even if primary passed)."""
-    with patch("pipeline.char_ref_mod._get_signed_url", return_value="https://signed/c0.png"), \
+def test_gemma_flags_sets_ref_moderation_status_flagged():
+    """Spec §4b step 4: backstop flags → ref_moderation_status='flagged' (even if primary passed)."""
+    with patch("pipeline.char_ref_mod.get_signed_url", return_value="https://signed/c0.png"), \
          patch("pipeline.char_ref_mod.classify_image_primary", return_value=True), \
          patch("pipeline.char_ref_mod.classify_image_backstop", return_value=False):
         from pipeline.char_ref_mod import char_ref_mod
-        with pytest.raises(RuntimeError, match="content_flagged"):
-            char_ref_mod(_state([_char("c0")]))
+        result = char_ref_mod(_state([_char("c0")]))
+
+    assert result["characters"][0].ref_moderation_status == "flagged"
 
 
 # --- backstop error ---
 
-def test_gemma_error_raises_hard_fail():
-    """Spec §4b edge case: Gemma OpenRouter error → hard fail (not a skip — no proceed-without-one-check path)."""
-    with patch("pipeline.char_ref_mod._get_signed_url", return_value="https://signed/c0.png"), \
+def test_gemma_error_raises_moderation_error():
+    """Spec §4b edge case: classifier error → RuntimeError('moderation_error') — no proceed-without-one-check path."""
+    with patch("pipeline.char_ref_mod.get_signed_url", return_value="https://signed/c0.png"), \
          patch("pipeline.char_ref_mod.classify_image_primary", return_value=True), \
          patch("pipeline.char_ref_mod.classify_image_backstop", side_effect=Exception("OpenRouter 503")):
         from pipeline.char_ref_mod import char_ref_mod
-        with pytest.raises(Exception):
+        with pytest.raises(RuntimeError, match="moderation_error"):
             char_ref_mod(_state([_char("c0")]))
 
 
@@ -86,7 +88,7 @@ def test_gemma_error_raises_hard_fail():
 
 def test_character_with_no_canonical_ref_image_is_skipped_as_passed():
     """Spec §4b: char with no canonical_ref_image has nothing to moderate — mark passed."""
-    with patch("pipeline.char_ref_mod._get_signed_url") as mock_sign, \
+    with patch("pipeline.char_ref_mod.get_signed_url") as mock_sign, \
          patch("pipeline.char_ref_mod.classify_image_primary", return_value=True), \
          patch("pipeline.char_ref_mod.classify_image_backstop", return_value=True):
         from pipeline.char_ref_mod import char_ref_mod
@@ -100,7 +102,7 @@ def test_character_with_no_canonical_ref_image_is_skipped_as_passed():
 
 def test_signed_url_failure_retries_once_then_raises():
     """Spec §4b edge case: image download fails → one retry per ADR-025, then hard fail."""
-    with patch("pipeline.char_ref_mod._get_signed_url", side_effect=Exception("Storage error")):
+    with patch("pipeline.char_ref_mod.get_signed_url", side_effect=Exception("Storage error")):
         from pipeline.char_ref_mod import char_ref_mod
         with pytest.raises(RuntimeError, match="char_ref_mod"):
             char_ref_mod(_state([_char("c0")]))
