@@ -131,3 +131,120 @@ def _run_fal(endpoint: str, arguments: dict, seed: int | None) -> bytes:
     response = httpx.get(result["images"][0]["url"], timeout=60.0)
     response.raise_for_status()
     return response.content
+
+
+# ---------------------------------------------------------------------------
+# Moderation providers — CPU-resident primaries + OpenRouter backstops
+# All lazy-loaded to avoid importing GB-sized weights at import time.
+# ---------------------------------------------------------------------------
+
+def _presidio():
+    from presidio_analyzer import AnalyzerEngine
+    from presidio_analyzer.nlp_engine import NlpEngineProvider
+    from presidio_anonymizer import AnonymizerEngine
+    # ponytail: stock Presidio, Filipino names leak — filed as filipino-pii-recognizers spec
+    nlp_config = {
+        "nlp_engine_name": "spacy",
+        "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}],
+    }
+    analyzer = AnalyzerEngine(nlp_engine_provider=NlpEngineProvider(nlp_configuration=nlp_config))
+    return analyzer, AnonymizerEngine()
+
+
+def redact_pii(text: str) -> str:
+    """Presidio PII redaction (CC-2). en_core_web_sm must be downloaded before first call."""
+    analyzer, anonymizer = _presidio()
+    results = analyzer.analyze(text=text, language="en")
+    return anonymizer.anonymize(text=text, analyzer_results=results).text
+
+
+def _qwen3_guard():
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    model_id = settings.moderation_primary_model
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float32)
+    model.eval()
+    return tokenizer, model
+
+
+# Guard prompt template — verify against https://huggingface.co/Qwen/Qwen3-Guard-Gen-0.6B
+# before deploying. The model outputs "safe" or "unsafe\n<categories>" in its response.
+_GUARD_SYSTEM = (
+    "You are a content safety classifier for a children's education platform (ages 5–12). "
+    "Classify the user message as 'safe' or 'unsafe'. "
+    "If unsafe, list the violated categories on the next line."
+)
+
+
+def classify_text_primary(text: str) -> tuple[bool, list[str]]:
+    """Qwen3Guard-Gen 0.6B (CPU-resident). Returns (is_safe, categories)."""
+    import torch
+    tokenizer, model = _qwen3_guard()
+    messages = [{"role": "system", "content": _GUARD_SYSTEM}, {"role": "user", "content": text}]
+    input_ids = tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True)
+    with torch.no_grad():
+        output_ids = model.generate(input_ids, max_new_tokens=64, do_sample=False)
+    response = tokenizer.decode(output_ids[0][input_ids.shape[-1]:], skip_special_tokens=True).strip().lower()
+    safe = response.startswith("safe")
+    categories: list[str] = []
+    if not safe and "\n" in response:
+        categories = [c.strip() for c in response.split("\n", 1)[1].split(",") if c.strip()]
+    return safe, categories
+
+
+def classify_text_backstop(text: str) -> tuple[bool, list[str]]:
+    """gpt-oss-safeguard-20b via OpenRouter. Returns (is_safe, categories)."""
+    prompt = (
+        "You are a content safety classifier for a children's education platform (ages 5–12). "
+        "Classify the following text as 'safe' or 'unsafe'.\n"
+        "If unsafe, list violated categories on the next line.\n\n"
+        f"Text: {text}"
+    )
+    client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=settings.openrouter_api_key)
+    completion = client.chat.completions.create(
+        model=settings.moderation_backstop_model,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=100,
+        extra_body={"provider": {"require_parameters": True}},
+    )
+    response = (completion.choices[0].message.content or "").strip().lower()
+    safe = response.startswith("safe")
+    categories: list[str] = []
+    if not safe and "\n" in response:
+        categories = [c.strip() for c in response.split("\n", 1)[1].split(",") if c.strip()]
+    return safe, categories
+
+
+def _falconsai():
+    from transformers import pipeline as hf_pipeline
+    return hf_pipeline("image-classification", model="Falconsai/nsfw_image_detection", device="cpu")
+
+
+def classify_image_primary(image_url: str) -> bool:
+    """Falconsai/nsfw_image_detection ViT-base (CPU-resident). Returns True if safe."""
+    import io
+    from PIL import Image
+    response = httpx.get(image_url, timeout=30.0)
+    response.raise_for_status()
+    image = Image.open(io.BytesIO(response.content))
+    results = _falconsai()(image)
+    top = max(results, key=lambda r: r["score"])
+    return top["label"] == "normal"
+
+
+class _ImageSafetyVerdict(BaseModel):
+    # Reason-before-score per ADR-004.
+    safety_reasoning: str
+    is_safe: bool
+
+
+def classify_image_backstop(image_url: str) -> bool:
+    """gemma-3-27b-it via OpenRouter — violence, gore, dangerous content check."""
+    prompt = (
+        "You are reviewing an image for a children's educational storybook platform (ages 5–12). "
+        "Assess whether the image is safe for children. "
+        "Flag: violence, gore, sexual content, frightening imagery, dangerous activities."
+    )
+    verdict = judge(prompt, [image_url], _ImageSafetyVerdict, model=settings.moderation_backstop_image_model)
+    return verdict.is_safe
