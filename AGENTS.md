@@ -101,10 +101,11 @@ swap a library, or change the pipeline shape because a different approach seems 
 The **Story Memory schema** (`backend/contracts/`) is the contract between every pipeline module.
 It is Pydantic and it is authoritative.
 
-> **State of play (Phase 1 complete):** `StoryMemory` is **built** (`backend/contracts/story_memory.py`,
-> 2026-07-29). `job_state.py` is **deleted**. All seven nodes are on partial-return `(state: StoryMemory) -> dict`;
-> `input_gate` is the graph entry point. `analyze`, `segment`, `char_bible`, `generate_scene`, `consistency_check`,
-> and `compose` are all built — no pass-through stubs remain in the core pipeline. See
+> **State of play (Phase 2 in progress):** `StoryMemory` is **built** (`backend/contracts/story_memory.py`,
+> 2026-07-29). `job_state.py` is **deleted**. All nine pipeline nodes are on partial-return
+> `(state: StoryMemory) -> dict`; `input_gate` is the graph entry point. Phase-1 nodes — `analyze`,
+> `segment`, `char_bible`, `generate_scene`, `consistency_check`, `regenerate`, `compose` — plus
+> Phase-2 nodes `char_ref_mod` and `output_mod` are all built. No pass-through stubs remain. See
 > `docs/specs/story-memory-contract.md` for the contract and ADR-023/024 for conventions.
 
 - Validate against it at **every LLM boundary** (strict `json_schema` structured output →
@@ -153,9 +154,11 @@ concerns registry (MASTER_SPEC §5). If a spec doesn't exist, write it from
   client-side `.eq('id', …)` convention, and no classroom/profile columns exist to scope by. Closes in
   Phase 2 (CC-4). Treat any `jobs`-table work as touching this gap.
 - Failure and moderation screens get the **same** design care as success screens.
-  ⚠️ Likewise **not built**: there is no `input_gate` node, no moderation call, and no Presidio
-  dependency anywhere in `backend/` today. The two bullets above are the Phase-2 target, not the
-  current state — don't read them as satisfied.
+  ✅ **Now built (2026-08-02):** `input_gate` (Qwen3Guard-Gen + Presidio + OpenRouter backstop),
+  `char_ref_mod` (Falconsai ViT + Gemma safety rubric), `output_mod` (same two-classifier check +
+  soften-and-retry). `moderation_router` and `route_after_output_mod` enforce the ordering in
+  `graph.py`. PII redaction via Presidio is live. Stock Presidio ships under a `# ponytail:` comment
+  pending `filipino-pii-recognizers` spec.
 
 ### Maintainability
 
@@ -190,19 +193,16 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
   moderation, `regenerate`, output moderation, and `export` into their own nodes):
   `input_gate → analyze → segment → char_bible → [char-ref moderation] → generate_scene →
   consistency_check → [regenerate] → [output moderation] → compose → export`.
-  **Built today** (`backend/pipeline/graph.py`): `input_gate → analyze → segment → char_bible →
-  [route_next_scene] → generate_scene → consistency_check → [route_after_check] → regenerate →
-  consistency_check → … → compose` — `route_next_scene` is the loop head's registration and the
-  fall-through of `route_after_check`; `route_after_check` handles the consistency pass/fail branch
-  (ADR-003). `compose` is built — the graph's terminal gate, no stub remains. `analyze` mints the entity roster;
-  `segment` splits into scenes (≤15), maps names → char_ids, and sets `caption = text_excerpt`
-  (ADR-013); `char_bible` mints ≤2 canonical references with ADR-028's 3-draw acceptance loop;
-  `generate_scene` is reference-conditioned (`edit_image` when canonical refs present,
-  `text_to_image` otherwise), with Storage-based idempotent resume and an ADR-025 D4 cost breaker;
-  `consistency_check` judges each scene against those references, gates on
-  `same_character and anatomy_intact`, and finalizes by best-of; `regenerate` draws once with a
-  corrected prompt (ADR-010). Fill the remaining stub in per ADR-024's partial-return conventions;
-  don't invent a different graph shape.
+  **Built today** (`backend/pipeline/graph.py`):
+  `input_gate → [moderation_router] → analyze → segment → char_bible → char_ref_mod →
+  [moderation_router] → generate_scene → consistency_check → [route_after_check] → regenerate →
+  consistency_check → … → output_mod → [route_after_output_mod] → compose`.
+  `moderation_router` (ADR-024 pure router) handles both post-`input_gate` and post-`char_ref_mod`
+  edges; `route_after_output_mod` reads `moderation_status="failed"` and raises.
+  `char_ref_mod` runs Falconsai ViT + Gemma safety rubric on each canonical ref image.
+  `output_mod` runs the same two-classifier check on each output scene, with one soften-and-retry.
+  All provider calls (Qwen3Guard-Gen, Presidio, Falconsai, OpenRouter backstops) go through
+  `backend/providers.py`; `get_signed_url` lives there too (Storage seam). `export` is not yet built.
 - Critical paths (extra review): moderation ordering (input text → char-ref → output image), PII
   redaction (Presidio) before any storage/caption/export, RLS + signed URLs on every table/asset,
   job checkpoint/resume logic — see `docs/product/ADRs.md` and StoryBuddy Hard Rules above.
@@ -353,7 +353,7 @@ is not documentation of a good design; it is the blast radius, written down so t
   Not yet a *gate* — `main` has no branch protection requiring the check.
 - `ruff format` is not adopted — only `ruff check` is. See comment in `backend/pyproject.toml`
   for rationale (single repo-wide formatting commit, never inside a feature change).
-- **Current phase: Phase 1 (Core Pipeline Intelligence) — in progress.** Phase 0 ✅ done.
+- **Current phase: Phase 2 (Safety / Classroom) — in progress.** Phase 0 ✅ done. Phase 1 ✅ complete.
   Phase 0.5 ✅ closed 2026-07-29 — Probe 1 resolved (Qwen stays primary, ADR-001 amendment; missed
   separation gate carried as stated limitation), Probe 3 PASS; Probes 2 and 4 not run and neither
   gates Phase 1. Numbers in `docs/product/PHASE_05_RESULTS.md`.
@@ -395,3 +395,11 @@ is not documentation of a good design; it is the blast radius, written down so t
   ≥1 scene and every scene finalized (raise → job `failed`), classifies each page by the attempt
   that won, emits the one per-book summary log line. Returns `{}`. `contracts/` untouched.
   **Every Phase-1 feature spec is now built.**
+  **`moderation-stack` is built (2026-08-02):** `pipeline/input_gate.py` (real implementation —
+  Qwen3Guard-Gen 0.6B CPU-resident + Presidio PII redaction concurrent, OpenRouter backstop);
+  `pipeline/char_ref_mod.py` (Falconsai ViT + Gemma safety rubric, two-classifier check per char ref);
+  `pipeline/output_mod.py` (same two-classifier check + soften-and-retry on each output scene).
+  `moderation_router` and `route_after_output_mod` added to `graph.py`. `providers.py` gains
+  `get_signed_url`, `_parse_guard_response`, and five moderation provider functions.
+  `docs/specs/filipino-pii-recognizers.md` stub filed; stock Presidio ships under `# ponytail:`.
+  **Phase 2 has begun.**
