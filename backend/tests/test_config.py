@@ -1,4 +1,12 @@
-from app.config import IMAGE_BUDGET, MAX_SCENES, RECURSION_LIMIT, STYLE_PRESETS, settings
+from app.config import (
+    IMAGE_BUDGET,
+    MAX_SCENES,
+    MAX_STORY_WORDS,
+    MIN_STORY_WORDS,
+    RECURSION_LIMIT,
+    STYLE_PRESETS,
+    settings,
+)
 
 
 def test_style_presets_has_exactly_three_keys():
@@ -32,3 +40,11 @@ def test_moderation_backstop_model_is_gpt_oss_safeguard():
 
 def test_moderation_backstop_image_model_is_gemma():
     assert settings.moderation_backstop_image_model == "google/gemma-3-27b-it"
+
+
+def test_min_story_words_is_five():
+    assert MIN_STORY_WORDS == 5
+
+
+def test_max_story_words_is_eight_hundred():
+    assert MAX_STORY_WORDS == 800

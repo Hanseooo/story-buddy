@@ -5,12 +5,13 @@ from contracts.story_memory import CURRENT_SCHEMA_VERSION, Scene
 from worker.run_job import run_storybook_job
 
 
-def _fake_supabase(style_preset_id: str | None = None) -> MagicMock:
+def _fake_supabase(style_preset_id: str | None = None, truncated: bool = False) -> MagicMock:
     fake = MagicMock()
     select_chain = fake.table.return_value.select.return_value.eq.return_value.single.return_value
     select_chain.execute.return_value.data = {
         "input_text": "A dog runs in a field.",
         "style_preset_id": style_preset_id,
+        "truncated": truncated,
     }
     return fake
 
@@ -158,3 +159,36 @@ def test_run_storybook_job_passes_the_recursion_limit_to_invoke():
     config = fake_graph.invoke.call_args.kwargs["config"]
     assert config["recursion_limit"] == RECURSION_LIMIT
     assert config["configurable"]["thread_id"] == "job-1"
+
+
+# --- input-gate-hardening spec: Input.word_count / Input.truncated (§2) ---
+
+def test_run_storybook_job_populates_word_count_and_truncated_from_the_row():
+    fake_supabase = _fake_supabase(truncated=True)
+    fake_cm = MagicMock()
+    fake_cm.__enter__.return_value = MagicMock()
+    fake_graph = _fake_graph()
+
+    with patch("worker.run_job.get_supabase_client", return_value=fake_supabase), \
+         patch("worker.run_job.PostgresSaver.from_conn_string", return_value=fake_cm), \
+         patch("worker.run_job.build_graph", return_value=fake_graph):
+        run_storybook_job("job-1")
+
+    state = fake_graph.invoke.call_args.args[0]
+    assert state.input.word_count == 6  # "A dog runs in a field." — six words
+    assert state.input.truncated is True
+
+
+def test_run_storybook_job_defaults_truncated_false_when_not_truncated():
+    fake_supabase = _fake_supabase(truncated=False)
+    fake_cm = MagicMock()
+    fake_cm.__enter__.return_value = MagicMock()
+    fake_graph = _fake_graph()
+
+    with patch("worker.run_job.get_supabase_client", return_value=fake_supabase), \
+         patch("worker.run_job.PostgresSaver.from_conn_string", return_value=fake_cm), \
+         patch("worker.run_job.build_graph", return_value=fake_graph):
+        run_storybook_job("job-1")
+
+    state = fake_graph.invoke.call_args.args[0]
+    assert state.input.truncated is False

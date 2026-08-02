@@ -141,7 +141,10 @@ attempt that won, emits the one per-book summary log line. Returns `{}`. `contra
 
 `moderation-stack` is **built** (2026-08-02): `pipeline/input_gate.py` (real), `pipeline/char_ref_mod.py`,
 `pipeline/output_mod.py`. `moderation_router` + `route_after_output_mod` in `graph.py`. `providers.py`
-gains five moderation functions + `get_signed_url`. Stub spec `docs/specs/filipino-pii-recognizers.md` filed.
+gains five moderation functions + `get_signed_url`.
 
-**Next action:** continue Phase 2 per `docs/product/DECISION_BACKLOG.md` — `filipino-pii-recognizers`,
-`self-refusal-fallback`, `length-guard`, or `auth-and-classroom`.
+`input-gate-hardening` **spec is written, not built** (2026-08-02): `docs/specs/input-gate-hardening.md`,
+which absorbed and replaced the `filipino-pii-recognizers` stub and the `length-guard` row.
+
+**Next action:** build `input-gate-hardening`, or continue Phase 2 per
+`docs/product/DECISION_BACKLOG.md` — `self-refusal-fallback` or `auth-and-classroom`.

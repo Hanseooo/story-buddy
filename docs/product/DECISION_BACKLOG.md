@@ -159,13 +159,23 @@ roadmap order. Source: MASTER_SPEC §7.
       `pipeline/output_mod.py` (same two-classifier check + soften-and-retry). `moderation_router` and
       `route_after_output_mod` added to `graph.py` (ADR-024 pure-router pattern). `providers.py` gains
       `get_signed_url`, `_parse_guard_response`, `redact_pii`, `classify_text_primary/backstop`,
-      `classify_image_primary/backstop`. Stub spec `docs/specs/filipino-pii-recognizers.md` filed.
-      Worker RAM budget open (§8). `self-refusal-fallback` and `length-guard` deferred to their own specs.)*
-- [ ] `filipino-pii-recognizers`   *(stub spec filed 2026-08-02 — `docs/specs/filipino-pii-recognizers.md`;
-      custom recognizers for Filipino names / TIN / SSS / Taglish; ships under `# ponytail:` comment in
-      `providers.py:_presidio` until this spec lands)*
-- [ ] `self-refusal-fallback`
-- [ ] `length-guard`
+      `classify_image_primary/backstop`. Worker RAM budget open (§8). The custom Presidio recognizers and
+      the length guard are now `input-gate-hardening`; the soften-and-retry is `self-refusal-fallback`.)*
+- [x] `input-gate-hardening`   *(spec: **built 2026-08-02** — `docs/specs/input-gate-hardening.md`;
+      replaces the `filipino-pii-recognizers` and `length-guard` rows. `app/length.py` `clamp_story`
+      (ADR-012 cap, paragraph→sentence boundary with a retains-half floor) + a minimum-length 422 at
+      `POST /storybooks` — closes `compose`'s reachable zero-scene raise. `ph_recognizers.py`:
+      Tagalog marker patterns (`si`/`ni`/`kay`/`sina`/`nina`/`kina`) + structured-format recognizers
+      (`PH_MOBILE`, `PH_ADDRESS`, `PH_TIN`, `PH_SSS`, `PH_PHILHEALTH`) wired into `providers._presidio`
+      (now `@lru_cache(maxsize=1)`); `redact_pii` pseudonymizes `PERSON`/`PH_PERSON` (Maria→Ana) so
+      `redacted_text` survives as a narrative; structured identifiers hard-redact. PSA surname deny-list
+      deferred — marker patterns alone are shippable per spec §8's own escape hatch; deny-list is
+      additive to `ph_recognizers.py` when a licensed source is confirmed. One `jobs.truncated`
+      migration (number resolved at merge). `contracts/` untouched.)*
+- [ ] `self-refusal-fallback`   *(**now also owns the N=3 repeated-failure off-ramp.** Three docs disagreed:
+      `ROADMAP.md:174` filed it under the length guard, ADR-025 twice assigned it here, PRD §11.4 defines it
+      as a *moderation*-failure counter across story revisions. `moderation-stack` shipped without it, so it
+      was orphaned. Assigned here 2026-08-02; the ROADMAP bullet is corrected in the same PR.)*
 - [ ] `auth-and-classroom`
 - [ ] `teacher-dashboard`
 - [ ] `classroom-sharing`   *(display-only gallery — no `peer-reflection`/`story-map`, cut per ADR-021)*
@@ -183,7 +193,8 @@ roadmap order. Source: MASTER_SPEC §7.
 - [ ] `job-failure-reason`   *(orphaned decision: ADR-025 Decision 5 already froze the shape —
       `jobs.failure_reason` enum column — but no spec claims it. `image-generator` §8 flagged it
       unowned first; `compose` §8 flags it again as a second producer of job-level failures with
-      nothing to name itself by. Scope: migration `0003` + a taxonomy map in `run_job.py`'s except
+      nothing to name itself by. Scope: migration `0004` (migration `0003` was claimed by
+      `input-gate-hardening`'s `jobs.truncated` column) + a taxonomy map in `run_job.py`'s except
       block. `FailureReason` in `contracts/` is frozen at 7 by ADR-028 and is a *different*, scene-
       identity taxonomy — this is a job-level enum, and conflating them would corrupt Objective 4's
       F1 denominator.)*
@@ -235,8 +246,9 @@ revised 2026-07-25.)*
 
 > ✅ **`moderation-stack` is built (2026-08-02).** See `docs/specs/moderation-stack.md`.
 
-**Phase 1 is complete. Phase 2 has begun** with `moderation-stack`. Next session: continue Phase 2
-(`filipino-pii-recognizers`, `self-refusal-fallback`, `length-guard`, `auth-and-classroom`) or the two
+> ✅ **`input-gate-hardening` is built (2026-08-02).** See `docs/specs/input-gate-hardening.md`.
+
+**Phase 1 is complete. Phase 2 has begun** with `moderation-stack` and `input-gate-hardening`. Next session: continue Phase 2 (`self-refusal-fallback`, `auth-and-classroom`) or the two
 gaps `compose` flagged (`data-deletion`'s `awaiting_confirm` sweep, `kid-flow-ui`'s multi-page
 persistence gap).
 

@@ -4,6 +4,9 @@ Text + VLM judge go through OpenRouter (OpenAI-compatible). Images go through fa
 Deterministic tests mock these functions; nothing here runs in CI (MASTER_SPEC §6).
 """
 import json
+import logging
+from collections import Counter
+from functools import lru_cache
 from typing import TypeVar
 
 import fal_client
@@ -13,6 +16,8 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.db import get_supabase_client
+
+_log = logging.getLogger(__name__)
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
@@ -152,24 +157,61 @@ def _parse_guard_response(response: str) -> tuple[bool, list[str]]:
     categories = [c.strip() for c in response.split("\n", 1)[1].split(",") if c.strip()] if not safe and "\n" in response else []
     return safe, categories
 
+@lru_cache(maxsize=1)
 def _presidio():
     from presidio_analyzer import AnalyzerEngine
-    from presidio_analyzer.nlp_engine import NlpEngineProvider
+    from presidio_analyzer.nlp_engine import SpacyNlpEngine
     from presidio_anonymizer import AnonymizerEngine
-    # ponytail: stock Presidio, Filipino names leak — filed as filipino-pii-recognizers spec
-    nlp_config = {
-        "nlp_engine_name": "spacy",
-        "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}],
-    }
-    analyzer = AnalyzerEngine(nlp_engine_provider=NlpEngineProvider(nlp_configuration=nlp_config))
+
+    from ph_recognizers import ph_recognizers
+
+    nlp_engine = SpacyNlpEngine(models=[{"lang_code": "en", "model_name": "en_core_web_sm"}])
+    analyzer = AnalyzerEngine(nlp_engine=nlp_engine)
+    for recognizer in ph_recognizers():
+        analyzer.registry.add_recognizer(recognizer)
     return analyzer, AnonymizerEngine()
 
 
+_PSEUDONYM_POOL = ["Ana", "Ben", "Cielo", "Dado", "Elena", "Fabio"]
+
+
+def _pseudonymizer():
+    """Fresh mapping per call — caching this would leak names between stories (spec §4c)."""
+    mapping: dict[str, str] = {}
+
+    def assign(value: str) -> str:
+        key = value.casefold()
+        if key not in mapping:
+            mapping[key] = _PSEUDONYM_POOL[len(mapping) % len(_PSEUDONYM_POOL)]
+        return mapping[key]
+
+    return assign
+
+
 def redact_pii(text: str) -> str:
-    """Presidio PII redaction (CC-2). en_core_web_sm must be downloaded before first call."""
+    """Presidio PII redaction (CC-2). Persons pseudonymized so the story survives with a
+    protagonist an illustrator can draw; structured identifiers hard-redact (spec §4c).
+    en_core_web_sm must be downloaded before first call."""
+    from presidio_anonymizer.entities import OperatorConfig
+
     analyzer, anonymizer = _presidio()
     results = analyzer.analyze(text=text, language="en")
-    return anonymizer.anonymize(text=text, analyzer_results=results).text
+    # CC-5: log entity-type counts only — never the detected values (ADR-025 D5).
+    _log.info("pii_redaction entity_counts=%s", dict(Counter(r.entity_type for r in results)))
+
+    # Pre-populate the mapping in reading order: the anonymizer calls the lambda right-to-left
+    # (to avoid offset shifts), so without this the last name in the text would get pool[0].
+    assign = _pseudonymizer()
+    _PERSON_ENTITIES = {"PERSON", "PH_PERSON"}
+    for r in sorted(results, key=lambda r: r.start):
+        if r.entity_type in _PERSON_ENTITIES:
+            assign(text[r.start : r.end])
+
+    person = OperatorConfig("custom", {"lambda": assign})
+    return anonymizer.anonymize(
+        text=text, analyzer_results=results,
+        operators={"PERSON": person, "PH_PERSON": person},
+    ).text
 
 
 def _qwen3_guard():
