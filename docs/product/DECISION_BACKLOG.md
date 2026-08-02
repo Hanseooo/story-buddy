@@ -145,6 +145,11 @@ roadmap order. Source: MASTER_SPEC §7.
       retry branch. `recursion_limit` set. `correct_prompt` gains `same_character` / `anatomy_intact`
       params and `IDENTITY_CLAUSE` / `ANATOMY_CLAUSE`. Per-attempt Storage path. `contracts/` untouched.
       Remaining Phase-1 spec: `compose`.)*
+- [ ] `compose`   *(spec **draft 2026-08-02** — `docs/specs/compose.md`; no code yet. A pure terminal
+      gate: nothing to assemble, because `scenes[]` order already **is** the page sequence. Asserts
+      ≥1 scene and every scene finalized (raise → job `failed`), emits the one per-book summary line
+      that `functional-verification-matrix` reads, returns `{}`. `contracts/` untouched, no migration,
+      no new branch point. Opens no decision — but flags **two unowned gaps** below.)*
 
 **Phase 2 (safety / classroom):**
 - [ ] `moderation-stack`   *(D-1 decided → ADR-011c; spec: **draft 2026-07-28** — `docs/specs/moderation-stack.md`; no code yet)*
@@ -160,7 +165,11 @@ roadmap order. Source: MASTER_SPEC §7.
 - [ ] `data-deletion`   *(must own ADR-029's ⚠️: a job can sit in `awaiting_confirm` forever. The sweep is one
       line over the existing `jobs.updated_at`; what this spec has to **decide** is the terminal status it writes,
       since a swept pause is not ADR-025-`failed` and `FailureReason` is frozen at 7 by ADR-028.)*
-- [ ] `kid-flow-ui`
+- [ ] `kid-flow-ui`   *(must own the **multi-page persistence gap** `compose` flagged: `run_job.py:50-59`
+      writes only `scenes[0]`'s caption + image into the single-scene `jobs.caption` / `jobs.image_path`
+      columns, and `/book/[jobId]` renders that one page — Phase 1 generates a multi-page book that
+      nothing outside the LangGraph checkpoint blob can read. A `jobs` migration plus a worker and a
+      frontend change; `export-pdf` is the other consumer.)*
 
 **Phase 2.5 (fine-tune):**
 - [x] `judge-finetune`  ✅ written
@@ -205,9 +214,9 @@ revised 2026-07-25.)*
 
 > ✅ **`regeneration-controller` is built (2026-08-02).** See `docs/specs/regeneration-controller.md`.
 
-**Every Phase-1 feature-spec row is now built except `compose`, which is still a pass-through stub
-and has no row in this list — it was never added.** Next session: `compose` — write
-`docs/specs/compose.md` from `docs/specs/TEMPLATE.md` before any code (AGENTS.md).
+**Every Phase-1 feature-spec row is now built except `compose`, whose spec is written
+(`docs/specs/compose.md`, draft 2026-08-02) but whose node is still the pass-through stub.**
+Next session: build `compose` — plan → TDD → verify, per the spec's §6.
 
 **No open decision blocks Phase 1, and the backlog has no open rows.** Tiers 1, 2, 2b, 2c, and 3 are all
 resolved. D-I closed 2026-07-31 → ADR-029; it builds in Phase 2 behind the char-ref moderation gate.

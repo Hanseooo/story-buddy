@@ -337,7 +337,7 @@ mark done. Behavior change later → update the spec in the same change (CLAUDE.
 
 | Phase | Specs to write |
 |---|---|
-| 1 (core) | `story-memory-contract`, `story-analyzer`, `scene-segmentation`, `character-bible`, `style-presets`, `prompt-optimizer`, `image-generator`, `consistency-checker`, `regeneration-controller` |
+| 1 (core) | `story-memory-contract`, `story-analyzer`, `scene-segmentation`, `character-bible`, `style-presets`, `prompt-optimizer`, `image-generator`, `consistency-checker`, `regeneration-controller`, `compose` |
 | 2 (safety/classroom) | `moderation-stack`, `filipino-pii-recognizers`, `self-refusal-fallback`, `length-guard`, `auth-and-classroom`, `teacher-dashboard`, `classroom-sharing` (display-only gallery — no `peer-reflection`/`story-map`, both cut per ADR-021), `narration`, `export-pdf`, `rate-limiting`, `data-deletion`, `kid-flow-ui` |
 | 2.5 (fine-tune) | ✅ `judge-finetune` *(written)*, `annotation-surface` (ADR-026) |
 | 3 (eval) | `functional-verification-matrix` (Tool A), `metrics-export` |
