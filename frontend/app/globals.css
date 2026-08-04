@@ -1,34 +1,34 @@
 @import "tailwindcss";
 
 :root {
-  /* Restrained Canvas */
-  --background: #FAF6EE;
-  --foreground: #09090B;
+  /* Cobalt Playroom: light-first brand foundation */
+  --background: #F8F4E9;
+  --foreground: #18204A;
+  --color-surface: #FFFDF7;
+  --color-muted: #E9E3D7;
 
-  /* Palette & Explicit Contrast Text (WCAG AA Compliant) */
-  --color-primary: #FF6B9E;
-  --on-primary: #09090B;
+  /* Brand actions */
+  --color-primary: #3155D9;
+  --color-primary-deep: #213C9A;
+  --on-primary: #FFFDF7;
+  --color-secondary: #F2C85F;
+  --on-secondary: #18204A;
+  --color-coral: #EC6A51;
 
-  --color-secondary: #06BEE1;
-  --on-secondary: #09090B;
+  /* Product-state colors, not decorative brand accents */
+  --color-warning: #D69520;
+  --on-warning: #18204A;
+  --color-success: #36785A;
+  --on-success: #FFFDF7;
+  --color-destructive: #C5485C;
+  --on-destructive: #FFFDF7;
+  --color-info: #3B6BC4;
+  --on-info: #FFFDF7;
+  --color-admin: #7047A3;
+  --on-admin: #FFFDF7;
 
-  --color-warning: #FFD166;
-  --on-warning: #09090B;
-
-  --color-success: #06D6A0;
-  --on-success: #09090B;
-
-  --color-destructive: #EF476F;
-  --on-destructive: #09090B;
-
-  --color-admin: #8338EC;
-  --on-admin: #FFFFFF;
-
-  /* Ink / Borders */
-  --color-ink: #09090B;
-
-  /* Surface */
-  --color-surface: #FFFFFF;
+  /* Legacy utility alias used by existing product screens */
+  --color-ink: #18204A;
 
   /* Z-index scale */
   --z-base: 0;
@@ -37,66 +37,44 @@
   --z-modal: 40;
   --z-toast: 100;
 
-  /* Animation tokens */
+  /* Motion tokens */
   --duration-micro: 150ms;
   --duration-normal: 250ms;
   --duration-slow: 400ms;
   --duration-loading: 1200ms;
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Comfort Dark Mode: Softer background and muted text to prevent halation */
-    --background: #12121A;
-    --foreground: #E4E4E7;
-    --color-surface: #1C1C26;
-
-    /* Desaturated accents to prevent optical vibration (neon fatigue) */
-    --color-primary: #F05C8C;
-    --color-secondary: #05AECF;
-    --color-warning: #E8C15D;
-    --color-success: #05C290;
-    --color-destructive: #E03C62;
-    --color-admin: #7533D1;
-
-    /* Borders/Shadows in dark mode use the desaturated secondary cyan */
-    --color-ink: #05AECF;
-  }
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  
+  --color-surface: var(--color-surface);
+  --color-muted: var(--color-muted);
+
   --color-primary: var(--color-primary);
+  --color-primary-deep: var(--color-primary-deep);
   --color-on-primary: var(--on-primary);
-  
   --color-secondary: var(--color-secondary);
   --color-on-secondary: var(--on-secondary);
-  
+  --color-coral: var(--color-coral);
+
   --color-warning: var(--color-warning);
   --color-on-warning: var(--on-warning);
-  
   --color-success: var(--color-success);
   --color-on-success: var(--on-success);
-  
   --color-destructive: var(--color-destructive);
   --color-on-destructive: var(--on-destructive);
-  
+  --color-info: var(--color-info);
+  --color-on-info: var(--on-info);
   --color-admin: var(--color-admin);
   --color-on-admin: var(--on-admin);
-  
   --color-ink: var(--color-ink);
 
   --font-sans: var(--font-inter);
   --font-display: var(--font-outfit);
   --font-mono: var(--font-mono);
   --font-kid: var(--font-kid);
-
-  --color-surface: var(--color-surface);
 
   --z-base: var(--z-base);
   --z-sticky: var(--z-sticky);
@@ -105,37 +83,43 @@
   --z-toast: var(--z-toast);
 }
 
-@layer utilities {
-  .neo-border {
-    border: 3px solid var(--color-ink);
+@layer base {
+  :focus-visible {
+    outline: 3px solid var(--color-secondary);
+    outline-offset: 3px;
   }
-  .neo-shadow {
-    box-shadow: 4px 4px 0px 0px var(--color-ink);
-  }
-  .neo-shadow-sm {
-    box-shadow: 2px 2px 0px 0px var(--color-ink);
-  }
-  .comic-halftone {
-    background-image: radial-gradient(var(--color-ink) 1px, transparent 1px);
-    background-size: 8px 8px;
-    opacity: 0.05;
-  }
-  .neo-shadow-xs {
-    box-shadow: 1px 1px 0px 0px var(--color-ink);
-  }
-  .neo-shadow-lg {
-    box-shadow: 6px 6px 0px 0px var(--color-ink);
-  }
-  .neo-shadow-xl {
-    box-shadow: 8px 8px 0px 0px var(--color-ink);
+
+  ::selection {
+    color: var(--on-primary);
+    background: var(--color-primary);
   }
 }
 
-/* ── S4 animation tokens ──────────────────────────────────────────────────── */
+@layer utilities {
+  /* Compatibility names; treatment now follows the softer Cobalt system. */
+  .neo-border {
+    border: 1px solid color-mix(in srgb, var(--color-primary) 24%, transparent);
+  }
+  .neo-shadow-xs {
+    box-shadow: 0 3px 10px rgb(49 85 217 / 8%);
+  }
+  .neo-shadow-sm {
+    box-shadow: 0 6px 18px rgb(49 85 217 / 10%);
+  }
+  .neo-shadow {
+    box-shadow: 0 10px 28px rgb(49 85 217 / 12%);
+  }
+  .neo-shadow-lg {
+    box-shadow: 0 16px 42px rgb(49 85 217 / 14%);
+  }
+  .neo-shadow-xl {
+    box-shadow: 0 22px 60px rgb(49 85 217 / 16%);
+  }
+}
 
 @keyframes stepper-pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  50% { opacity: 0.58; }
 }
 
 @keyframes shimmer {
@@ -160,11 +144,15 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .animate-stepper-pulse {
-    animation-duration: var(--duration-micro);
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
+
+  .animate-stepper-pulse,
   .animate-shimmer {
     animation: none;
-    opacity: 0.7;
   }
 }
