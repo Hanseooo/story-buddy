@@ -1,225 +1,265 @@
-# StoryBuddy — Design & Theme Bible
+# StoryBuddy Design System
 
-This document acts as the high-level visual, structural, and behavioral reference for styling the **StoryBuddy** application.
+StoryBuddy uses the **Cobalt Playroom** visual direction: a bright creative-tool identity on top of a calm, book-like reading surface. This document is the canonical reference for product and marketing UI.
 
----
+## 1. Design principles
 
-## 🎨 Visual Identity: Cartoon-Pop meets Neo-Brutalist
-The interface blends the high-energy, expressive vibes of childhood cartoons with the structured, high-contrast clarity of modern neo-brutalism. This creates an environment that feels both like a playground and a highly responsive tool.
+1. **Imagination first.** The child’s words and finished story remain more prominent than controls or system status.
+2. **Bold entry, calm reading.** Cobalt creates a memorable first impression. Ivory and soft surfaces support writing and reading.
+3. **Playful, not noisy.** Use strong shape, scale, and illustration before adding more colors or decoration.
+4. **Friendly clarity.** Labels are direct, recovery choices are visible, and technical pipeline language stays out of child-facing UI.
+5. **Mobile first.** Every layout starts as one column and earns additional columns only when space allows.
+6. **Accessible by default.** Preserve keyboard access, visible focus, readable contrast, reduced motion, and 44px minimum touch targets.
 
-### 1. Color Strategy (Restrained but Punchy)
-We use warm, tinted pastels for all structural canvases to act as a neutral background, but reserve High-Chroma colors exclusively for primary calls-to-action. The generated story remains the hero.
+## 2. Theme
 
-**Surface & Background Layers**
-*   **Page Background Canvas:** `#FAF6EE` (Warm, tinted pastel cream). Prevents eye strain compared to pure white.
-*   **Foreground Card/Surface:** `#FFFFFF` (Pure White). Clearly lifts cards off the cream canvas — the warm surrounding context makes white read warm, not cold.
+StoryBuddy is **light-first**. The default experience does not change automatically with `prefers-color-scheme`.
 
-**Semantic Palette & Accessibility Pairings**
-*(Rule: Never guess text colors. Always use the specified "On-[Color]" pairing to guarantee WCAG 4.5:1 contrast).*
-*   **Primary Action (Bubblegum Pink):** `#FF6B9E` | *Text:* `#09090B` (Ink Black)
-*   **Secondary Action (Electric Cyan):** `#06BEE1` | *Text:* `#09090B` (Ink Black)
-*   **Warning/Alert (Sunburst Yellow):** `#FFD166` | *Text:* `#09090B` (Ink Black)
-*   **Success (Mint Lime):** `#06D6A0` | *Text:* `#09090B` (Ink Black)
-*   **Error/Destructive (Comic Red):** `#EF476F` | *Text:* `#09090B` (Ink Black)
-*   **Info/Advisory (Sky Blue):** `#4A90D9` | *Text:* `#09090B` (Ink Black). Neutral callouts, advisory banners, tooltips — intent-neutral so it doesn't collide with Secondary Cyan.
-*   **Parental/Admin (Royal Violet):** `#8338EC` | *Text:* `#FFFFFF` (White)
-*   **Ink Black (True Black):** `#09090B` | *Text:* `#FFFFFF` (White). Used for thick solid outlines, heavy drop shadows, and primary text.
+The physical scene is a child or adult writing, reviewing, or reading a picture book in a normally lit home or classroom. An ivory canvas reduces glare while keeping illustrations and controls bright.
 
-*   **Color Consistency Lock:** Despite having a full 6-color palette, **pick 1-2 primary accents per screen or flow** and stick to them. Do not fluctuate wildly within a single view just because all colors exist.
+Dark mode is not part of the current visual system. Add it only as a separately designed and tested feature, not as an automatic token inversion.
 
-**Dark Mode ("Comfort Cosmic Night")**
-*   **Page Background Canvas:** `#12121A` (Softer deep indigo). Lifted from pure black to reduce halation and astigmatism strain.
-*   **Foreground Card/Surface:** `#1C1C26` (Slightly lighter indigo for panels).
-*   **Text/Foreground:** `#E4E4E7` (Soft slate/zinc). Reduces the harsh glow of pure white text.
-*   **Accents & Semantic Colors (exact dark mode values):** Both saturation (~10%) and lightness (~8%) are reduced to prevent neon fatigue without losing color identity. Use these values exactly — do not interpolate at runtime:
+## 3. Color system
 
-    | Semantic | Dark Mode Hex |
-    |----------|---------------|
-    | Primary (Pink) | `#E8547F` |
-    | Secondary (Cyan) | `#05A0C8` |
-    | Warning (Yellow) | `#EFC050` |
-    | Success (Mint) | `#05C090` |
-    | Error (Red) | `#DC3B60` |
-    | Info (Sky Blue) | `#3A7EC4` |
-    | Parental/Admin (Violet) | `#7228D8` |
+Use semantic CSS variables from `frontend/app/globals.css`. Do not hardcode brand colors in reusable product components.
 
-    ⚠️ **Dark mode usage rule:** Semantic colors on dark backgrounds are for interactive elements and status indicators only — buttons, badges, toast borders, icons. Never use them as large panel or page fills — the luminance contrast against `#12121A` would cause glare at scale.
+### Brand foundation
 
-*   **Borders & Shadows (Ink):** `var(--color-ink)` resolves to `#3C3C54` in dark mode — a neutral indigo-grey visibly lighter than the `#1C1C26` card surface, creating a hard offset ledge without neon glow.
+| Role | Token | Value | Use |
+|---|---|---:|---|
+| Canvas | `--background` | `#F8F4E9` | Page background and reading space |
+| Surface | `--color-surface` | `#FFFDF7` | Cards, story pages, inputs, raised panels |
+| Muted surface | `--color-muted` | `#E9E3D7` | Dividers, disabled fills, quiet grouping |
+| Ink | `--foreground` | `#18204A` | Primary text and icons |
+| Cobalt | `--color-primary` | `#3155D9` | Brand fields, primary product actions, links |
+| Deep cobalt | `--color-primary-deep` | `#213C9A` | Pressed ledges and deep brand detail |
+| Sun yellow | `--color-secondary` | `#F2C85F` | Primary CTA on cobalt, focus indication |
+| Coral | `--color-coral` | `#EC6A51` | Illustration detail only |
 
-*(Accessibility Rule: Text on any background must maintain a contrast ratio of at least 4.5:1. Use Ink Black on brightly colored buttons if white fails contrast checks.)*
+### Color rules
 
-### 2. Typography Pairings & Scales (Upgraded)
-To maximize both emotional playfulness for kids and high technical readability for parents/educators, we use a divergent typography system:
+- Cobalt is the committed brand color and may occupy a large surface such as a hero or final CTA section.
+- Ivory is the default writing and reading canvas.
+- Sun yellow is the high-attention action color on cobalt. Pair it with navy ink.
+- Coral does not compete with actions. Keep it inside illustrations or rare decorative moments.
+- A screen should not display every available color simply because the tokens exist.
+- Never use pure black or pure white for primary surfaces.
+- Verify WCAG AA contrast when introducing a new pairing. Do not infer contrast from visual similarity.
 
-*   **Display / Headings (Global):** `"Outfit"`. Modern, friendly, and geometric. Used for all H1-H3.
-*   **Kid Workspace Body (Primary):** `"Nunito"`. With its rounded terminals and balanced proportions, Nunito is exceptionally friendly and highly legible for early-to-mid readers (Grade 5-6).
-    *   *Scale:* Mobile Base `18px`, Desktop Base `20px` (Extremely large for readability). Line height: `1.6`.
-*   **Teacher Dashboard Body (Secondary):** `"Inter"`. Highly functional and crisp. Perfect for data tables, settings, and dense UI.
-    *   *Scale:* Mobile Base `14px`, Desktop Base `14px`. Line height: `1.5`.
-*   **Data, Stats, Console, PII Logs:** `"JetBrains Mono"` for diagnostic outputs, model scores, and server log sequences.
+### Product-state colors
 
-### 3. Key Layout & Neo-Brutalist Utility Accents
-*   **Spacing Scale:** Stick strictly to a 4px/8px incremental spacing scale. Maintain at least `8px` gap between interactive elements.
-*   **Thick Borders:** `.neo-border` applies `border: 3px solid var(--color-ink)`.
-*   **Flat Shadows:** `.neo-shadow` applies `box-shadow: 4px 4px 0px 0px var(--color-ink)`. *(Note: Standard UX rules forbid pure black drop shadows on light backgrounds, but this `var(--color-ink)` shadow is the deliberate stylistic anchor of our Neo-Brutalist theme).*
-*   **Soft Rounded Corners:** Generous rounding (`rounded-xl` to `rounded-3xl`) keeps the UI friendly.
-*   **Z-Index Scale:** 0 (base) / 10 (sticky nav) / 20 (overlays) / 40 (bottom sheets/modals) / 100 (toasts).
-*   **Touch Targets (Critical):** All interactive elements in the Kid Workspace MUST have a minimum size of `44x44px`.
+These colors communicate state and are not part of decorative brand composition.
 
-### 3.5 Animation Token System
+| State | Token | Value | Text token |
+|---|---|---:|---|
+| Success | `--color-success` | `#36785A` | `--on-success` |
+| Warning | `--color-warning` | `#D69520` | `--on-warning` |
+| Destructive | `--color-destructive` | `#C5485C` | `--on-destructive` |
+| Information | `--color-info` | `#3B6BC4` | `--on-info` |
+| Adult or admin context | `--color-admin` | `#7047A3` | `--on-admin` |
 
-We define explicit animation tokens to enforce consistent motion behavior across the app.
+Use state color only when the state is real. Do not expose moderation categories or machine errors to children.
 
-**Durations**
+## 4. Typography
+
+StoryBuddy has two primary voices.
+
+### Primary fonts
+
+- **Outfit** (`--font-display`): wordmark, H1-H3, major labels, and short high-emphasis text.
+- **Nunito** (`--font-kid`): child-facing body copy, story text, captions, buttons, and form guidance.
+
+### Restricted utility fonts
+
+- **Inter** (`--font-sans`): compact adult-facing forms and dense classroom or administrative UI only.
+- **JetBrains Mono** (`--font-mono`): diagnostics, identifiers, and machine-readable values only. Never use it as marketing decoration.
+
+### Type guidance
+
+| Role | Mobile | Desktop | Line height |
+|---|---:|---:|---:|
+| Landing hero | `48px` | `72-88px` | `0.95-1.0` |
+| Page H1 | `36px` | `48px` | `1.05` |
+| Section H2 | `32px` | `48px` | `1.05-1.15` |
+| Card H3 | `22px` | `28px` | `1.2` |
+| Child body | `18px` | `18-20px` | `1.6` |
+| Adult body | `14-16px` | `14-16px` | `1.5` |
+
+- Use tight tracking only on large Outfit headings.
+- Keep body lines under `65ch`; story text should stay under `60ch`.
+- Hero headlines should fit within two lines on desktop.
+- Avoid uppercase body copy. Short kickers may use uppercase with restrained tracking.
+
+## 5. Layout and spacing
+
+### Container
+
+- Maximum content width: `1280px` (`max-w-7xl`).
+- Mobile gutter: `20px`.
+- Large phone and tablet gutter: `32px`.
+- Desktop gutter: `48px`.
+- Use full-width color fields only when color is carrying narrative structure.
+
+### Responsive breakpoints
+
+Follow Tailwind’s mobile-first breakpoints.
+
+| Range | Expected behavior |
+|---|---|
+| Below `640px` | One column, full-width actions when useful, simplified decoration |
+| `640-767px` | One column with wider gutters and occasional inline actions |
+| `768-1023px` | Two-column compositions may begin if both columns remain readable |
+| `1024px+` | Full split heroes, larger type, and asymmetric content grids |
+
+Every multi-column component must define its own mobile collapse. Do not depend on accidental wrapping.
+
+### Spacing rhythm
+
+Use the 4px base scale, but do not apply identical padding to every section.
+
+- Control gaps: `8-16px`.
+- Component padding: `16-32px`.
+- Section spacing on mobile: `64-80px`.
+- Section spacing on desktop: `96-128px`.
+- Keep closely related heading and body copy visually grouped.
+
+## 6. Shape, borders, and elevation
+
+Cobalt Playroom is soft and tactile, not hard neo-brutalist.
+
+### Radius
+
+| Element | Radius |
+|---|---:|
+| Buttons and inputs | `12-16px` |
+| Cards and story frames | `16-24px` |
+| Large feature panels | `24px` |
+| Avatars and true circular controls | `9999px` |
+
+Pills are for tags or compact status only. Do not turn every control into a pill.
+
+### Borders
+
+- Default border: `1px` using cobalt at roughly 15-24% opacity.
+- Dividers may use the same tint at lower emphasis.
+- Avoid thick black outlines and colored side stripes.
+
+### Shadows
+
+Use soft cobalt-tinted shadows to communicate elevation.
+
+- Small: `0 6px 18px rgb(49 85 217 / 10%)`.
+- Medium: `0 10px 28px rgb(49 85 217 / 12%)`.
+- Large: `0 22px 60px rgb(49 85 217 / 16%)`.
+
+Do not use pure black shadows, decorative glow, or elevation on every container. Existing `.neo-*` utility names are compatibility aliases and now resolve to this softer treatment.
+
+## 7. Buttons and interaction
+
+### Action hierarchy
+
+- **Primary on ivory:** cobalt background with surface-colored text.
+- **Primary on cobalt:** sun-yellow background with navy text.
+- **Secondary:** text link or quiet outlined control. Do not create a second competing filled action.
+- Use one label for each action intent. Do not mix “Start,” “Begin,” and “Create” for the same destination on one screen.
+
+### States
+
+- Minimum interactive target: `44x44px`.
+- Hover: lift by no more than `2px`; do not change semantic hue.
+- Active: return toward the surface and reduce the shadow.
+- Focus: `3px` sun-yellow outline with `3px` offset.
+- Disabled: lower contrast, remove lift, use `not-allowed`, and retain a readable label.
+- CTA labels remain on one line on desktop.
+
+## 8. Motion
+
+Motion communicates feedback or state change. It is not ambient decoration.
+
 | Token | Value | Use |
-|-------|-------|-----|
-| `--duration-micro` | `150ms` | Button press, toggle, checkbox, tooltip |
-| `--duration-normal` | `250ms` | Panel expand, bottom sheet slide, card hover |
-| `--duration-slow` | `400ms` | Page transition, wizard step change, stepper advance |
-| `--duration-loading` | `1200ms` | Lottie loop cycle, skeleton shimmer sweep |
+|---|---:|---|
+| `--duration-micro` | `150ms` | Press and hover feedback |
+| `--duration-normal` | `250ms` | Small state transitions |
+| `--duration-slow` | `400ms` | Major step transitions |
+| `--duration-loading` | `1200ms` | Progress pulse or shimmer |
 
-**Easing Curves**
-| Token | Value | Use |
-|-------|-------|-----|
-| `--ease-spring` | `cubic-bezier(0.34, 1.56, 0.64, 1)` | Enter animations — bouncy, playful overshoot |
-| `--ease-out` | `cubic-bezier(0.16, 1, 0.3, 1)` | Exit animations — natural deceleration |
-| `--ease-in-out` | `cubic-bezier(0.65, 0, 0.35, 1)` | Symmetric transitions — crossfades, looping |
+Use exponential ease-out for entrances and direct feedback. Avoid bounce, elastic easing, parallax, scroll hijacking, and perpetual decorative motion.
 
-**Motion Rules**
-*   Exit animations use 60–70% of enter duration (exit feels snappier).
-*   Stagger list/grid item entrances by `40ms` per item.
-*   Maximum 2 animated elements per viewport simultaneously.
-*   Forward navigation animates left/up; backward animates right/down.
+Under `prefers-reduced-motion: reduce`, remove repeating animation and reduce transitions to effectively instant feedback.
 
-**`prefers-reduced-motion` Behavior:**
-*   Replace `--ease-spring` with `--ease-out` (no overshoot).
-*   Cap all durations at `150ms` — never instant (instant feels broken).
-*   Disable Lottie animation loops; show static first frame.
-*   Replace slide/scale transitions with crossfade (opacity only).
-*   Keep simple opacity fades — these are universally safe.
+## 9. Imagery and illustration
 
-### 3.6 Elevation Scale (Flat Shadow)
+Illustration is the main source of visual variety.
 
-All shadows use the flat, unblurred Neo-Brutalist shadow style. This scale governs which component type gets which shadow level.
+- Favor open books, page stacks, paper layers, and child-authored worlds.
+- Use cobalt, yellow, green, and coral inside artwork without turning controls into a rainbow.
+- Generated story images must remain the hero in reader and reveal screens.
+- Decorative visuals use `aria-hidden="true"`. Informative images require concise, specific alt text.
+- Reserve image space to prevent layout shift.
+- Do not use generic fake dashboards, stock child photography, or decorative mascot clutter.
 
-| Level | CSS | Use For |
-|-------|-----|---------|  
-| 0 | `none` | Flat inline elements, disabled states |
-| xs | `1px 1px 0px 0px var(--color-ink)` | Tags, badges, pills |
-| sm | `2px 2px 0px 0px var(--color-ink)` | Inline cards, secondary buttons |
-| md | `4px 4px 0px 0px var(--color-ink)` | Elevated cards, primary buttons |
-| lg | `6px 6px 0px 0px var(--color-ink)` | Bottom sheets, modals, floating panels |
-| xl | `8px 8px 0px 0px var(--color-ink)` | Hero cards, storybook cover, feature highlights |
+## 10. Landing-page composition
 
-*   **Hover:** Increase one level (e.g., md → lg) with a `translate(-2px, -2px)` lift.
-*   **Active/Pressed:** Drop to level 0 with `translate(4px, 4px)` (button "depresses").
-*   **Dark mode:** Same sizes; `var(--color-ink)` resolves to `#3C3C54` (neutral indigo-grey ledge, not neon).
+The canonical landing-page sequence is:
 
-### 3.7 Border Radius by Context
+1. Compact cobalt navigation with one action.
+2. Split cobalt and ivory hero with copy first in the DOM.
+3. Open storybook hero visual on the ivory side.
+4. A concise creation sequence: write, preview, read.
+5. One large character-continuity story.
+6. Calm child-friendly safety reassurance.
+7. Final cobalt CTA and compact footer.
 
-Radius is not uniform — kid-facing elements are rounder and friendlier, teacher-facing elements are tighter and more functional.
+Below `1024px`, the hero stays stacked: cobalt copy followed by an ivory book stage. At `lg` and above, it becomes the split composition. The CTA stays visible before the decorative visual, and no horizontal scrolling is allowed.
 
-| Context | Radius | Tailwind Class |
-|---------|--------|----------------|
-| Kid buttons / primary CTAs | `16px` | `rounded-2xl` |
-| Kid cards / story panels | `24px` | `rounded-3xl` |
-| Teacher form inputs | `8px` | `rounded-lg` |
-| Teacher cards / data panels | `12px` | `rounded-xl` |
-| Avatars / thumbnails | `9999px` | `rounded-full` |
-| Tags / badges / pills | `9999px` | `rounded-full` |
-| Bottom sheets (top only) | `24px` top | `rounded-t-3xl` |
-| Storybook pages | `16px` | `rounded-2xl` |
+## 11. Product states
 
-### 3.8 Responsive Breakpoints & Container Strategy
+### Loading
 
-Mobile-first. Styles default to the smallest breakpoint, then scale up.
+- Match the final content shape to prevent layout shift.
+- Use a quiet pulse or shimmer only while progress is real.
+- Pair progress visuals with plain language about what is happening.
 
-| Breakpoint | Width | Container | Gutter | Kid Nav | Teacher Nav |
-|------------|-------|-----------|--------|---------|-------------|
-| xs (phone) | `0–639px` | Full width | `16px` | Bottom Tab Bar (3 items) | Top Bar + Bottom Sheet drawer |
-| sm (large phone) | `640–767px` | Full width | `16px` | Same as xs | Same as xs |
-| md (tablet) | `768–1023px` | Full width | `24px` | Top Navbar | Collapsible Sidebar |
-| lg (desktop) | `1024–1439px` | `max-w-6xl` | `32px` | Top Navbar | Persistent Sidebar |
-| xl (wide) | `1440px+` | `max-w-7xl` | `32px` | Same as lg | Same as lg |
+### Errors and recovery
 
-**Content line length:** Kid body text capped at `60ch` on desktop for readability. Teacher data tables appear at `md+`; below `md`, use accordions or stacked cards.
+- Use the same visual quality as success screens.
+- Explain what the child can do next: revise, redraw, or retry.
+- Never show raw `jobs.error`, moderation categories, provider names, or stack traces.
+- Error messages use `role="alert"` or an appropriate live region.
 
-### 3.9 Font Usage Map
+### Empty states
 
-Which font is used where — preventing accidental use of the wrong typeface.
+- State what is missing.
+- Provide one clear recovery action.
+- Use illustration only when it supports comprehension.
 
-| Context | Font | Variable | Mobile Size | Desktop Size | Line Height |
-|---------|------|----------|-------------|--------------|-------------|
-| H1 (page title) | Outfit | `--font-display` | `28px` | `48px` | `1.1` |
-| H2 (section heading) | Outfit | `--font-display` | `22px` | `36px` | `1.2` |
-| H3 (subsection / card title) | Outfit | `--font-display` | `18px` | `28px` | `1.3` |
-| Kid body text, story editor, captions | Nunito | `--font-kid` | `18px` | `20px` | `1.6` |
-| Teacher body text, dashboard, forms | Inter | `--font-sans` | `14px` | `14px` | `1.5` |
-| Data, stats, logs, console output | JetBrains Mono | `--font-mono` | `13px` | `13px` | `1.5` |
+## 12. Accessibility checklist
 
-*Note: Outfit is used for H1–H3 across both kid and teacher contexts. Teacher dashboard headings use the same Outfit scale — Inter is body/form copy only.*
+Before shipping a UI change, verify:
 
-### 4. Layout Discipline (Anti-Slop)
-*   **CTA Wrap Ban:** Button text MUST fit on one line at desktop. Max 3 words (e.g., "Generate Story"). Wrapped CTAs at desktop are broken design.
-*   **No Duplicate CTA Intent:** Do not have two CTAs with the same intent on one page (e.g., "Start Story" and "Begin Story"). Pick one label and lock it.
-*   **Bento Grid Discipline (Teacher Dashboard):** Bento grids must have exactly as many cells as content (never leave an empty cell). At least 2-3 cells in any grid need background diversity (a pattern, image, or tinted background)—not just white cards on a white canvas.
-*   **Eyebrow Restraint:** Avoid the AI default of adding small uppercase tracking text (`EYEBROW`) above every section headline. Maximum 1 eyebrow per 3 sections.
+- Body text and controls meet WCAG AA contrast.
+- Keyboard focus is always visible.
+- Touch targets are at least `44x44px`.
+- Heading levels follow document order.
+- Decorative art is hidden from assistive technology.
+- Informative imagery has meaningful alt text.
+- Layout works at `320px` without horizontal overflow.
+- Text remains usable at 200% zoom.
+- Reduced-motion behavior has been tested.
+- Loading and dynamic errors use appropriate live regions.
 
-### 5. Interactive States & Micro-behaviors
-*   **Hover:** Flat-shadow buttons translate slightly (`translate-x-[-2px] translate-y-[-2px]`) while the shadow expands to `6px 6px`. **Color does not change on hover** — transform is the sole signal. Hue shifts on hover would dilute the semantic meaning of the palette.
-*   **Active (Click):** Button depresses completely (`translate-x-[4px] translate-y-[4px]`) and the shadow reduces to `0px`. Color stays the same.
-*   **Focus (A11y):** Visible focus rings are mandatory. Use a `4px` outline in Sunburst Yellow (`#FFD166`) offset by `2px` for keyboard navigation. Yellow is used (not Cyan) because Cyan is already the Secondary action color — a focused Secondary button would be indistinguishable from its rest state.
-*   **Disabled:** Reduce opacity to `0.5`, remove the drop shadow, change cursor to `not-allowed`.
-*   **Motion & Easing:** Use spring physics for interactions rather than linear easing, but keep durations snappy (`150ms–300ms`). Respect `prefers-reduced-motion` to disable bouncy animations.
+## 13. Explicit non-goals
 
----
+The following are not part of Cobalt Playroom:
 
-## 📐 Divergent Register Scaling (Layout Hierarchy)
-We do not use one responsive sizing rule for the whole app. The scaling diverges based on the user:
+- Automatic dark mode.
+- Thick black neo-brutalist borders and flat black shadows.
+- Bubblegum pink and electric cyan as competing brand actions.
+- Rainbow color use on a single screen.
+- Comic halftones, speech bubbles, starburst badges, or “BOOM” decoration.
+- Confetti as a default success treatment.
+- Glassmorphism, neon glow, gradient text, and AI-purple effects.
+- Decorative monospace labels, section numbering, and repeated eyebrow text.
+- Identical three-card feature grids when spacing or a structured sequence is clearer.
 
-*   **Kid Workspace (Saturated & Chunky):** Must remain radically oversized everywhere. Even on a 4K desktop monitor, a giant 80px "GO" button feels satisfying. Massive touch targets (`44x44px` minimum), playful starter prompt capsules, a giant handwriting-style textbox. Avoid horizontal scrolling.
-*   **Teacher / Researcher Center (Structured & Clean):** Must instantly snap to high-density, technical observability scaling (`text-sm`, `Inter`, `JetBrains Mono`, compact tables, breadcrumb navigation). The contrast reinforces that one is a playground and the other is a control room.
-
----
-
-## ⚡ Form, Feedback, & States
-To ensure the app feels alive, highly responsive, and forgiving:
-
-*   **Loading States (Spatial Skeletons + Micro-Narrative):** 
-    *   Skeletons must match the exact shape of incoming content to reserve space and prevent layout shift (CLS).
-    *   **Skeleton colors:** Light mode — base `#EDE8DF`, shimmer sweep `#F5F1E8`. Dark mode — base `#242430`, shimmer sweep `#2E2E3E`. The shimmer is a CSS `linear-gradient` animation running on `--duration-loading` (`1200ms`).
-    *   Inside the flat-color skeleton block, inject a small, looping diegetic animation (e.g., a cartoon pencil scribbling or a wand spinning) to hold the space technically while entertaining narratively.
-    *   Buttons should show an internal spinner and disable themselves when submitting.
-*   **Success States (Toasts & Confetti):**
-    *   **Toasts:** Slide up from the bottom center, styled as mini comic panels (`.neo-border`, `.neo-shadow`) with a distinct Mint Lime left-border. Auto-dismiss in 4 seconds. Provide aria-live regions.
-    *   **Micro-animations:** Subtle starburst or confetti particle bursts on primary goal completions.
-*   **Error States (Friendly & Actionable):**
-    *   Errors should never feel punishing. Use Comic Red panels with a gentle, confused mascot icon.
-    *   Provide clear, jargon-free actionable steps (e.g., "Oops! The story machine needs a break. Let's try that again!").
-    *   Inline form errors appear immediately below the input with a subtle horizontal shake animation. Validation should happen on blur or submit, not keystroke.
-    *   **Accessibility (A11y):** Form errors MUST use `aria-live` regions or `role="alert"` to notify screen readers dynamically.
-*   **Empty States & Progressive Disclosure:**
-    *   Show a helpful message and illustration, but **always include a clear recovery path or primary action** (e.g., A sad pencil + a "Write your first story" button).
-    *   **Progressive Disclosure:** For the Teacher Dashboard, reveal complex data progressively. Use accordions or "View Details" to avoid cognitive overload on the primary view.
-
----
-
-## 📚 6. Comic-Book Theme Addendum (Toggleable & Reversible)
-To make the interface even more immersive for older kids and teenagers, a **Comic Book / Graphic Novel Theme overlay** is available. This aesthetic applies **extreme contrast by region**:
-
-*   **Heavy Structure, Clean Content:** The Ben-Day radial gradient dots (`.comic-halftone`) and double-thick borders go heavy on the structural panels, gutters, and navigation. However, the actual reading panels (the "balloons") remain stark, clean, and dot-free to ensure 100% accessibility for reading.
-*   **Speech Bubble Captions:** Story captions style as clean dialog balloons with an upward-pointing speech tail (`.comic-bubble-tail-up`) and a solid black backing outline.
-*   **Dynamic Action Badges:** Retro starburst badges (like `⚡ BOOM!` or `✨ NEW!`) overlay key hero components.
-*   **Diegetic UI:** The "Write your story" input area is styled as a large lined notebook paper or a clean speech bubble, grounding the UI in the physical world of a comic.
-*   **Comic Motion (Bursts):** When interacting with primary actions (like "Generate Story"), buttons use spring physics to depress deeply and trigger tiny SVG starburst background flashes instead of standard ripples.
-
----
-
-## 🎭 7. Avatars & Student Profiles
-To adhere strictly to PII/privacy requirements (preventing minors from uploading real photos) while maintaining a highly engaging, playful environment, we use **deterministic generative avatars**.
-
-*   **Generative Engine:** We utilize deterministic SVG avatar generators (e.g., **DiceBear** API) using styles like `bottts`, `fun-emoji`, or `adventurer`.
-*   **Determinism:** The avatar seed is tied to the student's nickname or profile ID so their character remains consistent across sessions.
-*   **Loading States:** All avatars must render a circular `.shimmer` skeleton of the exact final dimensions (`rounded-full`) to prevent layout shift while the external SVG loads.
-*   **Fallbacks:** If the generative service fails, the `onError` fallback is a flat, highly-saturated circle (from our semantic palette) displaying the first 1-2 initials of the student's nickname in Ink Black text.
+When adding a new pattern, extend this system rather than creating a parallel theme.
