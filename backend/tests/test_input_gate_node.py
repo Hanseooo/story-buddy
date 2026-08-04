@@ -159,9 +159,9 @@ def test_moderation_router_raises_moderation_error_when_category_set():
         moderation_router(state)
 
 
-def test_moderation_router_raises_content_flagged_when_char_flagged():
-    """moderation_router raises RuntimeError('content_flagged') when a char has ref_moderation_status='flagged'."""
+def test_moderation_router_raises_ref_flagged_when_char_flagged():
+    """moderation_router raises RuntimeError('ref_flagged') when a char has ref_moderation_status='flagged'."""
     from pipeline.graph import moderation_router
     state = _moderation_router_state(passed=True, flagged_char=True)
-    with pytest.raises(RuntimeError, match="content_flagged"):
+    with pytest.raises(RuntimeError, match="ref_flagged"):
         moderation_router(state)

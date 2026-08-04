@@ -130,3 +130,41 @@
     box-shadow: 8px 8px 0px 0px var(--color-ink);
   }
 }
+
+/* ── S4 animation tokens ──────────────────────────────────────────────────── */
+
+@keyframes stepper-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@layer utilities {
+  .animate-stepper-pulse {
+    animation: stepper-pulse var(--duration-loading) var(--ease-in-out) infinite;
+  }
+  .animate-shimmer {
+    background: linear-gradient(
+      90deg,
+      var(--color-surface) 25%,
+      var(--background) 50%,
+      var(--color-surface) 75%
+    );
+    background-size: 200% auto;
+    animation: shimmer var(--duration-loading) linear infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-stepper-pulse {
+    animation-duration: var(--duration-micro);
+  }
+  .animate-shimmer {
+    animation: none;
+    opacity: 0.7;
+  }
+}

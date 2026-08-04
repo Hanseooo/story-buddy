@@ -327,8 +327,8 @@ Riskiest assumptions first. Build track and research track run in parallel and m
 |---|---|---|
 | 0 | Scaffolding & walking skeleton | ✅ done |
 | **0.5** | **Open-weight spike — can the image model hold a non-human character?** | **⚠️ Run 2026-07-29. Split result: absolute gate met (80%), separation gate missed (+25 vs ≥30). Probe 3 passed; probes 2 and 4 outstanding.** |
-| 1 | Core pipeline + prompted consistency judge | **in progress (2026-07-29)** — `story-memory-contract` built; opens on a stated limitation, not a clean pass |
-| 2 | Moderation, classroom auth, sharing, narration, export | blocked on probe 4 |
+| 1 | Core pipeline + prompted consistency judge | ✅ **complete (2026-08-02)** — all ten specs built; opened on a stated limitation, not a clean pass |
+| 2 | Moderation, classroom auth, sharing, narration, export | **in progress (2026-08-04)** — moderation stack, input-gate hardening and the kid-facing flow built; auth/RLS, teacher review, narration, export, data deletion open. Release still gated on probe 4 |
 | 2.5 | Judge fine-tuning + classification evaluation (Objective 4) | blocked on Ethics Stage 1 → corpus → a Phase 1 run |
 | 3 | Expert validation (Objective 3) + ISO/IEC 25010 (Objective 5) | blocked on corpus |
 

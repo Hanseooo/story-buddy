@@ -1,0 +1,139 @@
+"""Deterministic tests for the reveal node and its projection (spec §7)."""
+from unittest.mock import patch
+
+from contracts.story_memory import (
+    CURRENT_SCHEMA_VERSION,
+    Character,
+    CharacterDescription,
+    Cost,
+    Input,
+    ReferenceRetry,
+    RefVerdict,
+    StoryMemory,
+)
+from pipeline.reveal import _project_reveal, reveal
+
+
+def _char(
+    char_id: str,
+    name: str,
+    ref: str | None = "job-1/ref-c0-1.png",
+    description: CharacterDescription | None = None,
+    verdict: RefVerdict | None = None,
+) -> Character:
+    return Character(
+        char_id=char_id,
+        name=name,
+        description=description or CharacterDescription(),
+        canonical_ref_image=ref,
+        ref_verdict=verdict,
+    )
+
+
+def _state(characters: list[Character], cost: Cost | None = None, reference_retry=None) -> StoryMemory:
+    return StoryMemory(
+        schema_version=CURRENT_SCHEMA_VERSION,
+        story_id="job-1",
+        classroom_id="dev-classroom",
+        profile_id="dev-profile",
+        input=Input(raw_text="The dog ran."),
+        characters=characters,
+        cost=cost or Cost(),
+        reference_retry=reference_retry,
+    )
+
+
+# --- _project_reveal (pure) ---
+
+def test_project_reveal_lists_only_characters_with_a_reference():
+    state = _state([_char("c0", "Kiko", ref="job-1/ref-c0-1.png"), _char("c1", "Milo", ref=None)])
+    payload = _project_reveal(state)
+    assert [c["char_id"] for c in payload["characters"]] == ["c0"]
+
+
+def test_project_reveal_image_path_is_the_durable_storage_path():
+    state = _state([_char("c0", "Kiko", ref="job-1/ref-c0-1.png")])
+    payload = _project_reveal(state)
+    assert payload["characters"][0]["image_path"] == "job-1/ref-c0-1.png"
+
+
+def test_project_reveal_taps_left_is_three_minus_ref_retry_count():
+    state = _state([_char("c0", "Kiko")], cost=Cost(ref_retry_count=1))
+    assert _project_reveal(state)["taps_left"] == 2
+
+
+def test_project_reveal_chips_are_described_minus_attributes_present_case_insensitive():
+    description = CharacterDescription(species="dog", colours=["Orange"], body_features=["one floppy ear"])
+    verdict = RefVerdict(differences_observed="d", matches_description=False, attributes_present=["dog", "orange"])
+    state = _state([_char("c0", "Kiko", description=description, verdict=verdict)])
+    chips = _project_reveal(state)["characters"][0]["chips"]
+    assert chips == ["one floppy ear"]
+
+
+def test_project_reveal_falls_back_to_full_axis_list_when_ref_verdict_is_none():
+    description = CharacterDescription(species="dog", colours=["orange"])
+    state = _state([_char("c0", "Kiko", description=description, verdict=None)])
+    chips = _project_reveal(state)["characters"][0]["chips"]
+    assert chips == ["dog", "orange"]
+
+
+def test_project_reveal_falls_back_to_full_axis_list_when_matches_description_is_true():
+    description = CharacterDescription(species="dog", colours=["orange"])
+    verdict = RefVerdict(differences_observed="d", matches_description=True, attributes_present=["dog", "orange"])
+    state = _state([_char("c0", "Kiko", description=description, verdict=verdict)])
+    chips = _project_reveal(state)["characters"][0]["chips"]
+    assert chips == ["dog", "orange"]
+
+
+def test_project_reveal_falls_back_to_name_when_description_has_no_axes():
+    state = _state([_char("c0", "Kiko", description=CharacterDescription(), verdict=None)])
+    chips = _project_reveal(state)["characters"][0]["chips"]
+    assert chips == ["Kiko"]
+
+
+def test_project_reveal_never_offers_notes_as_a_chip():
+    description = CharacterDescription(species="dog", notes="always smiling")
+    state = _state([_char("c0", "Kiko", description=description, verdict=None)])
+    chips = _project_reveal(state)["characters"][0]["chips"]
+    assert "always smiling" not in chips
+    assert chips == ["dog"]
+
+
+# --- reveal (the node) ---
+
+def test_reveal_with_no_referenced_character_returns_empty_and_never_interrupts():
+    state = _state([_char("c0", "Kiko", ref=None)])
+    with patch("pipeline.reveal.interrupt") as mock_interrupt:
+        result = reveal(state)
+    mock_interrupt.assert_not_called()
+    assert result == {}
+
+
+def test_reveal_confirm_resume_returns_empty_dict():
+    state = _state([_char("c0", "Kiko")])
+    with patch("pipeline.reveal.interrupt", return_value={"action": "confirm"}):
+        result = reveal(state)
+    assert result == {}
+
+
+def test_reveal_try_again_resume_returns_reference_retry_only():
+    state = _state([_char("c0", "Kiko")])
+    answer = {"action": "try_again", "char_id": "c0", "attribute": "orange sock"}
+    with patch("pipeline.reveal.interrupt", return_value=answer):
+        result = reveal(state)
+    assert set(result) == {"reference_retry"}
+    assert result["reference_retry"] == ReferenceRetry(char_id="c0", attribute="orange sock")
+
+
+def test_reveal_treats_an_unrecognised_resume_payload_as_a_confirm():
+    state = _state([_char("c0", "Kiko")])
+    with patch("pipeline.reveal.interrupt", return_value={"action": "nonsense"}):
+        result = reveal(state)
+    assert result == {}
+
+
+def test_reveal_never_touches_cost():
+    state = _state([_char("c0", "Kiko")], cost=Cost(image_count=5))
+    with patch("pipeline.reveal.interrupt", return_value={"action": "confirm"}):
+        result = reveal(state)
+    assert "cost" not in result

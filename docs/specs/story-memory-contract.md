@@ -222,6 +222,11 @@ node's own spec declares its contract slice against the fields above.
   checkpoint's `schema_version` to `CURRENT_SCHEMA_VERSION`; on mismatch, and on a `ValidationError` from a
   missing/unparseable version, it **restarts the job** (reusing `eval.seed` — CC-7). It does **not** migrate.
   No migration machinery in v1.
+
+**`ReferenceRetry`, `Cost.ref_retry_count`, `StoryMemory.reference_retry`** (added by
+`kid-flow-pause-lifecycle.md` §2) are exactly this kind of change: `reference_retry` defaults to `None`,
+`ref_retry_count` defaults to `0`, and neither bumped `CURRENT_SCHEMA_VERSION`.
+
 - One version covers the whole contract, **including `FailureReason`** — an enum change is a contract change.
 
 ## 4. Failure-reason taxonomy (frozen — ADR-023 Decision 4)

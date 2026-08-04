@@ -53,6 +53,11 @@ class Character(BaseModel):
     ref_verdict: Optional[RefVerdict] = None        # ADR-028: the reference is checked, not assumed
 
 
+class ReferenceRetry(BaseModel):        # ADR-029 — set by `reveal`, consumed by `char_bible`
+    char_id: str
+    attribute: str        # the tapped chip, restated verbatim in the redraw prompt
+
+
 class Location(BaseModel):     # minimal; refined by `story-analyzer` (§8, additive)
     loc_id: str
     name: str
@@ -151,6 +156,7 @@ class Cost(BaseModel):                 # CC-3
     image_count: int = 0
     regen_count: int = 0
     usd_estimate: float = 0.0
+    ref_retry_count: int = 0            # ADR-029 — the 3-tap budget, per book
 
 
 class Eval(BaseModel):                 # CC-7
@@ -175,3 +181,4 @@ class StoryMemory(BaseModel):
     sharing: Sharing = Field(default_factory=Sharing)
     cost: Cost = Field(default_factory=Cost)
     eval: Eval = Field(default_factory=Eval)
+    reference_retry: Optional[ReferenceRetry] = None   # set by `reveal`, consumed by `char_bible`

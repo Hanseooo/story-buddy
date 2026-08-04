@@ -269,14 +269,14 @@ optional"; `consistency-checker` §8 marked it **unowned**. This change takes th
 
 ```python
 # app/config.py, beside IMAGE_BUDGET
-RECURSION_LIMIT = MAX_SCENES * 4 + 9    # ADR-024: max_scenes × 4 + fixed_prelude
+RECURSION_LIMIT = MAX_SCENES * 4 + SUPER_STEP_PRELUDE    # ADR-024: max_scenes × 4 + fixed_prelude
 ```
 
 Passed as `config={"configurable": {"thread_id": job_id}, "recursion_limit": RECURSION_LIMIT}`. The
-`+ 9` is the same prelude term `IMAGE_BUDGET` uses, honouring ADR-025 D4's requirement that the
-domain-level and graph-level backstops share **one number**. It is generous today (the prelude is 5)
-because ADR-029's Phase-2 `reveal` node will add to it; that is deliberate headroom, not a
-miscalculation.
+prelude term is now `SUPER_STEP_PRELUDE = 15` (`kid-flow-pause-lifecycle.md` §4.13), **not** the `9` this
+section originally shared with `IMAGE_BUDGET`. That sharing was only ever coincidental: `SUPER_STEP_PRELUDE`
+counts super-steps (graph visits), `IMAGE_BUDGET`'s prelude counts images (provider calls) — different
+units, corrected once ADR-029's `reveal` node actually landed.
 
 ### Edge cases
 

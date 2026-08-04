@@ -51,7 +51,10 @@ amendment 2026-07-22b — the worker supplies `story_id = job_id` + Phase-1 dev 
 
 *(D-C · Provider resilience & failure-mode policy → ADR-025, 2026-07-22. Phase-2 mechanisms it deferred —
 N=3 moderation off-ramp, per-classroom daily cap, self-refusal soften-and-retry — are owned by the
-`moderation-stack` / `rate-limiting` / `self-refusal-fallback` specs, not this backlog.)*
+`repeated-failure-offramp` / `rate-limiting` / `self-refusal-fallback` specs, not this backlog.
+**Reassignment note (2026-08-02):** ADR-025 pointed the N=3 off-ramp at `moderation-stack`, which shipped
+without it; ownership now sits on its own row below. ADR-025 is **not** amended — the backlog is the live
+owner map, same convention `input-gate-hardening` used for the length guard.)*
 
 ---
 
@@ -149,8 +152,9 @@ roadmap order. Source: MASTER_SPEC §7.
       implements the terminal gate: nothing to assemble, because `scenes[]` order already **is** the
       page sequence. Asserts ≥1 scene and every scene finalized (raise → job `failed`), emits the one
       per-book summary line that `functional-verification-matrix` reads, returns `{}`. `contracts/`
-      untouched, no migration, no new branch point. Opened no decision — flagged **two unowned gaps**,
-      still owned by `data-deletion` and `kid-flow-ui` below.)*
+      untouched, no migration, no new branch point. Opened no decision — flagged **two unowned gaps**:
+      the multi-page persistence gap, **closed 2026-08-02** by `kid-flow-book-persistence` (S1), and the
+      `awaiting_confirm` sweep, still owned by `data-deletion` below.)*
 
 **Phase 2 (safety / classroom):**
 - [x] `moderation-stack`   *(D-1 decided → ADR-011c; spec: **built 2026-08-02** — `docs/specs/moderation-stack.md`;
@@ -172,32 +176,126 @@ roadmap order. Source: MASTER_SPEC §7.
       deferred — marker patterns alone are shippable per spec §8's own escape hatch; deny-list is
       additive to `ph_recognizers.py` when a licensed source is confirmed. One `jobs.truncated`
       migration (number resolved at merge). `contracts/` untouched.)*
-- [ ] `self-refusal-fallback`   *(**now also owns the N=3 repeated-failure off-ramp.** Three docs disagreed:
-      `ROADMAP.md:174` filed it under the length guard, ADR-025 twice assigned it here, PRD §11.4 defines it
-      as a *moderation*-failure counter across story revisions. `moderation-stack` shipped without it, so it
-      was orphaned. Assigned here 2026-08-02; the ROADMAP bullet is corrected in the same PR.)*
+- [ ] `self-refusal-fallback`   *(**scoped 2026-08-02 to true model refusal only** — the case PRD §13.4 /
+      ADR-011 mech. 4 / `ethics_and_safety.md` Stage 4 all describe: the model **declines** a benign
+      mild-peril prompt. Text-side that is `message.parsed is None` (`analyze.py:84`, ADR-025 D1);
+      image-side it is a fal provider error (`character-bible` §7). Both hard-fail the job today, which
+      makes PRD §13.4's *"a scary-but-innocent story must not dead-end"* false — closing that is this
+      spec's whole job (soften-and-retry → gentle reframe). **Not in scope:** `output_mod`'s
+      soften-and-retry, which is the opposite trigger (the model complied, the classifier flagged) and
+      already **shipped** in `output_mod.py` with a stock softener; this spec may lend it a better
+      softener later, but does not own or redesign it. **N=3 split out** to its own row below.
+      **Spec written 2026-08-02 — `docs/specs/self-refusal-fallback.md`, status `draft`.** Adds
+      `providers.RefusalError` (detected via the SDK's `message.refusal`, checked *before* the
+      `parsed is None` branch) + `pipeline/refusal.py` (`soften`, `retry_on_refusal` — one retry, no
+      ladder). `contracts/` untouched, no node, no edge, no ADR amended. ⚠️ **Not `approved`:** the
+      image half is gated on a rung-1 fal probe (§8 Q1) — Qwen-Image-Edit ships no safety filter and
+      may never refuse, in which case the image half is YAGNI and only the text half builds. Building
+      it would also move ADR-025 D4's `IMAGE_BUDGET` and change `generate_and_store`'s `paid` bool
+      to a count.
+      **⏸ DEFERRED 2026-08-02 — do not build, do not spike yet.** The mechanism only fires on a *false*
+      refusal (the model being overcautious about a safe story); genuinely unsafe content is already
+      caught by `input_gate` and `output_mod`. PRD §13.4 was written when the stack was proprietary,
+      where refusals were common — the open-weight switch may have deleted the trigger, and ADR-011's
+      own warning says open image models refuse **less**. Failing closed is today's behavior, so
+      deferring costs nothing but the lost book on a refusal that may never happen.
+      **Reopen when any ONE of these is true:**
+      **(a)** a job fails with `parsed is None` on a story that *passed* the input gate — that is the
+      refusal signature, and it means the trigger is real;
+      **(b)** the CC-5 logs show any refusal at a `providers.py` boundary once real kid stories flow;
+      **(c)** the donated corpus turns out peril-heavy (monsters, fights, ghosts) — check this before
+      Objective 3's stimuli runs, not after;
+      **(d)** `settings.fal_image_model` / `text_model` is swapped for a model that ships a built-in
+      safety filter, which reintroduces the trigger by construction.
+      The spec is written, so reopening is a build, not a design session.)*
+- [ ] `repeated-failure-offramp`   *(split from `self-refusal-fallback` 2026-08-02. PRD §11.4: after **N=3**
+      failed revisions of the same story, suggest a fresh story instead of an unbounded retry loop.
+      Previously homeless — `ROADMAP.md` filed it under the length guard (corrected in the same change),
+      ADR-025 assigned it to `moderation-stack` / `self-refusal-fallback`, and `moderation-stack` shipped
+      without it. ⚠️ **Blocked, and possibly YAGNI.** "Revisions of the same story" spans **job
+      submissions**, but `StoryMemory` is per-run and `story_id = job_id` (ADR-023 amendment) — there is no
+      cross-run counter and no story lineage. It needs a `jobs` column or a lineage id, i.e. a schema
+      decision (`CLAUDE.md §2`), **and** there is no revision flow shipped to count: `kid-flow-ui` owns
+      "try again with a different story". Do not write this before that flow exists.
+      **Half-unblocked 2026-08-02 by `kid-flow-failure-semantics` (docket S3):** the revision flow is
+      now specified — `revise` (child edits, new job) and `retry` (same text, new job), both plain
+      `POST /storybooks`. S3 ships N=3 as a **client-side, reason-blind counter that suggests and
+      never gates**, so PRD §11.4 is satisfied without a column. This row therefore only survives if
+      the count must become durable, cross-device, or teacher-visible — and it is **still blocked on
+      the same schema decision**, now named: `jobs.parent_job_id`. **The flow is now built (S4, 2026-08-04)** —
+      `/write` carries the client-side `sb.failChain` counter and the third-failure offer, so PRD §11.4 is
+      satisfied in shipped code and this row buys only durability.)*
 - [ ] `auth-and-classroom`
 - [ ] `teacher-dashboard`
 - [ ] `classroom-sharing`   *(display-only gallery — no `peer-reflection`/`story-map`, cut per ADR-021)*
-- [ ] `narration`   *(ADR-020; `providers.narrate()` not yet implemented)*
+- [ ] `narration`   *(ADR-020; `providers.narrate()` not yet implemented. The book reader ships in S4 without a play button. TTS narration is `narration`'s deliverable.)*
 - [ ] `export-pdf`   *(D-2 decided → ADR-013: WeasyPrint)*
 - [ ] `rate-limiting`
 - [ ] `data-deletion`   *(must own ADR-029's ⚠️: a job can sit in `awaiting_confirm` forever. The sweep is one
-      line over the existing `jobs.updated_at`; what this spec has to **decide** is the terminal status it writes,
-      since a swept pause is not ADR-025-`failed` and `FailureReason` is frozen at 7 by ADR-028.)*
-- [ ] `kid-flow-ui`   *(must own the **multi-page persistence gap** `compose` flagged: `run_job.py:50-59`
-      writes only `scenes[0]`'s caption + image into the single-scene `jobs.caption` / `jobs.image_path`
-      columns, and `/book/[jobId]` renders that one page — Phase 1 generates a multi-page book that
-      nothing outside the LangGraph checkpoint blob can read. A `jobs` migration plus a worker and a
-      frontend change; `export-pdf` is the other consumer.)*
-- [ ] `job-failure-reason`   *(orphaned decision: ADR-025 Decision 5 already froze the shape —
-      `jobs.failure_reason` enum column — but no spec claims it. `image-generator` §8 flagged it
-      unowned first; `compose` §8 flags it again as a second producer of job-level failures with
-      nothing to name itself by. Scope: migration `0004` (migration `0003` was claimed by
-      `input-gate-hardening`'s `jobs.truncated` column) + a taxonomy map in `run_job.py`'s except
-      block. `FailureReason` in `contracts/` is frozen at 7 by ADR-028 and is a *different*, scene-
-      identity taxonomy — this is a job-level enum, and conflating them would corrupt Objective 4's
-      F1 denominator.)*
+      line over the existing `jobs.updated_at`; must name the swept-pause status value — S4 maps it to `asleep` FailureScreen kind. Until named, unknown status falls to `retry`. See `kid-flow-reader-and-wait-states.md` §4.4.4.)*
+- [x] `kid-flow-ui` → **decomposed into four specs, all built** *(docket `docs/specs/kid-flow-ui-docket.md`,
+      DONE 2026-08-04; MASTER_SPEC §7 carries the four rows). The **multi-page persistence gap** `compose`
+      flagged is **closed**: `run_job.py`'s `_finish` is the only writer of `pages`/`reveal`, and
+      `/book/[jobId]` reads the ordered `jobs.pages` array. `export-pdf` is the second reader of that
+      same shape.*
+  - [x] `kid-flow-book-persistence` (S1)   *(**built 2026-08-02** — `docs/specs/kid-flow-book-persistence.md`;
+        `supabase/migrations/0004_jobs_pages.sql` adds the ordered JSONB `{scene_id, caption, image_path}`
+        array, durable Storage paths only. One writer, one write, atomic with `status='complete'`;
+        `compose` stays pure. Access is capability-link (the job UUID); kid routes stay flat until
+        `auth-and-classroom`. `contracts/` untouched.)*
+  - [x] `kid-flow-pause-lifecycle` (S2)   *(**built 2026-08-02** — `docs/specs/kid-flow-pause-lifecycle.md`;
+        ADR-029's `reveal` node ships — `backend/pipeline/reveal.py` (effect-free, one `interrupt()`,
+        pure projection), `supabase/migrations/0005_jobs_awaiting_confirm.sql`, and
+        `POST /jobs/{id}/confirm` as the only exit from a pause (404 → 422 → CAS). The 3-tap cap is
+        enforced in `route_reveal`. `SUPER_STEP_PRELUDE = 15`.)*
+  - [x] `kid-flow-failure-semantics` (S3)   *(**built 2026-08-02** — `docs/specs/kid-flow-failure-semantics.md`;
+        three verbs only — `redraw` / `revise` / `retry`. A terminal job is immutable; recovery is always a
+        new job. Four render buckets on every URL-reachable surface. The child never sees a moderation
+        category or `jobs.error`. N=3 is a client-side, reason-blind, non-gating counter.)*
+  - [x] `kid-flow-reader-and-wait-states` (S4)   *(**built 2026-08-04** — `docs/specs/kid-flow-reader-and-wait-states.md`;
+        the multi-page reader over `jobs.pages` with sign-at-read-time, the Realtime-driven wait stepper
+        off `current_stage`, the inline reveal on `/process/[jobId]`, and the four `FailureScreen` kinds.
+        `useJob` subscribes **and** seeds from a `SELECT`, so a child returning to a paused job sees it.
+        No orientation lock — CSS `landscape:` only. No new policy surface.)*
+- [x] `job-failure-reason`   *(**built 2026-08-04** — `supabase/migrations/0006_jobs_failure_reason.sql`
+      adds a nullable `failure_reason text` with **no check constraint** (an unknown future value must not be
+      DB-rejected), plus the taxonomy map in `run_job.py`'s except blocks. ADR-025 Decision 5's shape is
+      satisfied. Exactly one value — `child_text` — means *the child's own text was rejected*, written only
+      where `moderation_router` raises for the input text; every other value, every unknown value and `null`
+      map to `machine` → the `retry` screen, so a future value can never accidentally blame a child.
+      `moderation_error`, a flagged canonical reference, an output-moderation failure and a provider error
+      all take the `machine` path. Consumed by S4's `FailureScreen`. Next free migration is **`0007`**.
+      `FailureReason` in `contracts/` is untouched — frozen at 7 by ADR-028, a *different*, scene-identity
+      taxonomy; conflating them would corrupt Objective 4's F1 denominator.)*
+
+### ⏸ Deferral watch — rows with no trigger yet
+
+Added 2026-08-02 alongside `self-refusal-fallback`'s deferral. Same test applied to every open row:
+**does the thing this builds have anything to fire on, or anyone to read it, today?** A row here is
+*not* cancelled and *not* re-decided — it is sequenced behind a named condition, so it stops competing
+for a session until that condition is real. Rows are listed above as normal; this is the reason index.
+
+| Row | Why it has no trigger yet | Reopen when |
+|---|---|---|
+| `self-refusal-fallback` | ⏸ **Deferred** (see row above). Fires only on a *false* refusal; open weights refuse least. | Any of (a)–(d) in the row above. |
+| `repeated-failure-offramp` | ⚠️ **Possibly deletable.** S3 satisfies PRD §11.4 with a client-side counter, so this row now only buys *durability* of the count. | The count must survive a device switch or reach a teacher. Then `jobs.parent_job_id` first (`CLAUDE.md §2`). |
+| `job-failure-reason` | ✅ **Built 2026-08-04** — migration `0006` + the map in `run_job.py`. Row closed; kept here only so the reopen note above is not re-derived. | — |
+| `metrics-export` | ⚠️ **Scope undefined** — it appears only in MASTER_SPEC §7's roster with no description anywhere, and `functional-verification-matrix` (Tool A) already covers Objectives 1–2 as an offline script over tracing exports. Possibly not a deferral but a **deletion**. | Someone names a metric that Tool A + `judge-finetune` do not already produce. If no one can, delete the row. |
+| ADR-029's `reveal` node | ✅ **Built 2026-08-02** by `kid-flow-pause-lifecycle` (docket S2) — the condition below fired: `pipeline/reveal.py`, migration `0005`, `POST /jobs/{id}/confirm` and S4's reveal surface all landed. Row closed. | — |
+| `rate-limiting` | ⚠️ **Judgement call, flagged not decided.** ADR-025 D4's per-book cost breaker is already live, and ADR-017 means no self-serve signup — every account is teacher-issued, so the abuse surface is a known classroom, not the internet. That is *mitigation*, not absence of risk. | Any public or self-serve path appears, **or** a measured cost overrun. Do **not** defer this silently past a public deployment (`CLAUDE.md §7`). |
+
+**Considered and rejected as deferrals** — recorded so the next session does not re-derive them:
+- **`narration`** — tempting (ADR-020 itself says it is *"not a research variable"*), **but it is inside a
+  measured category**: `functional-verification-matrix.md:65` scores "assembled + **narrated** + exported"
+  as a Tool A row, and MASTER_SPEC CC-6 names it as the accessibility mechanism. Deferring it narrows a
+  reported evaluation row and drops an accessibility claim — a documented cost, not a free win. Defer only
+  as a deliberate trade, with the Tool A row narrowed in the same change.
+- **`auth-and-classroom`** — MASTER_SPEC §6 already flags the missing RLS as *"a **child-facing** gap, not a
+  paperwork one"*. Not deferrable.
+- **`data-deletion`** — Data Privacy Act (RA 10173) + ethics clearance. Not deferrable.
+- **`kid-flow-ui`** — the multi-page persistence gap meant Phase 1 produced books **nothing could read**.
+  It was the bottleneck, and it is now **built** as four specs (S1–S4, 2026-08-02 → 2026-08-04).
+- **`teacher-dashboard`** — carries the manual approval gate that `ethics_and_safety.md` §4 rests on.
 
 **Phase 2.5 (fine-tune):**
 - [x] `judge-finetune`  ✅ written
@@ -248,9 +346,26 @@ revised 2026-07-25.)*
 
 > ✅ **`input-gate-hardening` is built (2026-08-02).** See `docs/specs/input-gate-hardening.md`.
 
-**Phase 1 is complete. Phase 2 has begun** with `moderation-stack` and `input-gate-hardening`. Next session: continue Phase 2 (`self-refusal-fallback`, `auth-and-classroom`) or the two
-gaps `compose` flagged (`data-deletion`'s `awaiting_confirm` sweep, `kid-flow-ui`'s multi-page
-persistence gap).
+> ⏸ **`self-refusal-fallback` spec written, then DEFERRED (2026-08-02).** See
+> `docs/specs/self-refusal-fallback.md` and the ⏸ deferral-watch table above.
+
+> ✅ **`kid-flow-ui` is built as four specs (2026-08-02 → 2026-08-04).** See
+> `docs/specs/kid-flow-ui-docket.md` (DONE) and S1–S4: `kid-flow-book-persistence.md`,
+> `kid-flow-pause-lifecycle.md`, `kid-flow-failure-semantics.md`, `kid-flow-reader-and-wait-states.md`.
+> ADR-029's `reveal` node and `job-failure-reason` (migration `0006`) landed with it.
+
+**Phase 1 is complete. Phase 2 is in progress** — `moderation-stack`, `input-gate-hardening` and
+`kid-flow-ui` (S1–S4) are built.
+
+**Next session: `auth-and-classroom`.** It is the remaining child-facing gap, not a paperwork one:
+`0001_jobs_table.sql:18-21` and `0004`'s `storage.objects` policy are still the only two policy surfaces
+and both are effectively unrestricted (MASTER_SPEC §6). S1 constraint 4 explicitly hands it both — *"`auth-and-classroom` replaces both in one migration"* — and S1 constraint 5 keeps the kid routes flat
+(`/write`, `/process/[jobId]`, `/book/[jobId]`) until it lands, so `ROUTE_MAP.md` §1's `/s/[profileId]`
+tree is also waiting on it. Next free migration is `0007`.
+
+Alternatives: `data-deletion` (ethics-gated, and owes the `awaiting_confirm` sweep the swept-pause status
+value S4's `asleep` screen is waiting for) or `export-pdf` (the second reader of `jobs.pages`, now that
+the shape exists).
 
 **No open decision blocks Phase 1 or Phase 2 entry, and the decision backlog has no open rows.** Tiers 1, 2, 2b,
 2c, and 3 are all resolved. D-I closed 2026-07-31 → ADR-029; it builds in Phase 2 behind the moderation gate

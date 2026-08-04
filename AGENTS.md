@@ -102,10 +102,11 @@ The **Story Memory schema** (`backend/contracts/`) is the contract between every
 It is Pydantic and it is authoritative.
 
 > **State of play (Phase 2 in progress):** `StoryMemory` is **built** (`backend/contracts/story_memory.py`,
-> 2026-07-29). `job_state.py` is **deleted**. All nine pipeline nodes are on partial-return
+> 2026-07-29). `job_state.py` is **deleted**. All **eleven** pipeline nodes are on partial-return
 > `(state: StoryMemory) -> dict`; `input_gate` is the graph entry point. Phase-1 nodes — `analyze`,
 > `segment`, `char_bible`, `generate_scene`, `consistency_check`, `regenerate`, `compose` — plus
-> Phase-2 nodes `char_ref_mod` and `output_mod` are all built. No pass-through stubs remain. See
+> Phase-2 nodes `char_ref_mod`, `output_mod` and `reveal` (ADR-029, effect-free, holds the one
+> `interrupt()`) are all built. No pass-through stubs remain. See
 > `docs/specs/story-memory-contract.md` for the contract and ADR-023/024 for conventions.
 
 - Validate against it at **every LLM boundary** (strict `json_schema` structured output →
@@ -149,16 +150,19 @@ concerns registry (MASTER_SPEC §5). If a spec doesn't exist, write it from
 - **PII is redacted (Presidio) before** storage, captioning, or export. A child narrating real
   life is the expected case, not the exception.
 - **RLS on every table**; signed URLs for every asset; no public buckets.
-  ⚠️ **Not satisfied today.** `supabase/migrations/0001_jobs_table.sql:18-21` is the only policy and it
-  reads `for select to anon using (true)` — RLS is *enabled*, but nothing is *restricted*; scoping is a
-  client-side `.eq('id', …)` convention, and no classroom/profile columns exist to scope by. Closes in
-  Phase 2 (CC-4). Treat any `jobs`-table work as touching this gap.
+  ⚠️ **Not satisfied today.** `supabase/migrations/0001_jobs_table.sql:18-21` and
+  `0004_jobs_pages.sql`'s `storage.objects` policy are the only policies, and both read
+  `using (true)` / `using (bucket_id = 'storybook-images')` — RLS is *enabled*, but nothing is
+  *restricted*; scoping is a client-side `.eq('id', …)` convention, and no classroom/profile
+  columns exist to scope by. Closes in Phase 2 (CC-4). Treat any `jobs`-table or storage-policy work
+  as touching this gap.
 - Failure and moderation screens get the **same** design care as success screens.
   ✅ **Now built (2026-08-02):** `input_gate` (Qwen3Guard-Gen + Presidio + OpenRouter backstop),
   `char_ref_mod` (Falconsai ViT + Gemma safety rubric), `output_mod` (same two-classifier check +
   soften-and-retry). `moderation_router` and `route_after_output_mod` enforce the ordering in
-  `graph.py`. PII redaction via Presidio is live. Stock Presidio ships under a `# ponytail:` comment
-  pending `filipino-pii-recognizers` spec.
+  `graph.py`. PII redaction via Presidio is live, with the Filipino recognizers from
+  `input-gate-hardening` (`ph_recognizers.py`) wired into `providers._presidio` — stock Presidio no
+  longer ships bare.
 
 ### Maintainability
 
@@ -195,11 +199,14 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
   consistency_check → [regenerate] → [output moderation] → compose → export`.
   **Built today** (`backend/pipeline/graph.py`):
   `input_gate → [moderation_router] → analyze → segment → char_bible → char_ref_mod →
-  [moderation_router] → generate_scene → consistency_check → [route_after_check] → regenerate →
-  consistency_check → … → output_mod → [route_after_output_mod] → compose`.
+  [moderation_router] → reveal → [route_reveal] → generate_scene → consistency_check →
+  [route_after_check] → regenerate → consistency_check → … → output_mod →
+  [route_after_output_mod] → compose`.
   `moderation_router` (ADR-024 pure router) handles both post-`input_gate` and post-`char_ref_mod`
   edges; `route_after_output_mod` reads `moderation_status="failed"` and raises.
   `char_ref_mod` runs Falconsai ViT + Gemma safety rubric on each canonical ref image.
+  `reveal` (ADR-029) is effect-free and holds one `interrupt()`; `route_reveal` loops `"try_again"`
+  back to `char_bible` and enforces the 3-tap cap.
   `output_mod` runs the same two-classifier check on each output scene, with one soften-and-retry.
   All provider calls (Qwen3Guard-Gen, Presidio, Falconsai, OpenRouter backstops) go through
   `backend/providers.py`; `get_signed_url` lives there too (Storage seam). `export` is not yet built.
@@ -401,5 +408,28 @@ is not documentation of a good design; it is the blast radius, written down so t
   `pipeline/output_mod.py` (same two-classifier check + soften-and-retry on each output scene).
   `moderation_router` and `route_after_output_mod` added to `graph.py`. `providers.py` gains
   `get_signed_url`, `_parse_guard_response`, and five moderation provider functions.
-  `docs/specs/filipino-pii-recognizers.md` stub filed; stock Presidio ships under `# ponytail:`.
-  **Phase 2 has begun.**
+  **`input-gate-hardening` is built (2026-08-02):** supersedes the `filipino-pii-recognizers` stub and the
+  `length-guard` row. `app/length.py` `clamp_story` (ADR-012 cap, paragraph→sentence boundary with a
+  retains-half floor) + a minimum-length 422 at `POST /storybooks`; `ph_recognizers.py` adds Tagalog
+  marker patterns and the structured PH identifier recognizers, wired into `providers._presidio`;
+  `redact_pii` pseudonymizes `PERSON`/`PH_PERSON` so `redacted_text` survives as a narrative.
+  Migration `0003_jobs_truncated.sql`. Stock Presidio no longer ships bare.
+  **`kid-flow-ui` is built as four specs (2026-08-02 → 2026-08-04)** — docket
+  `docs/specs/kid-flow-ui-docket.md` is DONE. **S1 `kid-flow-book-persistence`:** a book is the ordered
+  JSONB `jobs.pages` array of `{scene_id, caption, image_path}` (migration `0004`, durable Storage paths
+  only); `run_job.py`'s `_finish` is the **only** writer of `pages` *or* `reveal`, atomically with the
+  terminal status; `compose` stays pure. **S2 `kid-flow-pause-lifecycle`:** ADR-029's reveal ships —
+  `pipeline/reveal.py`, migration `0005` (`awaiting_confirm` + `jobs.reveal`), `POST /jobs/{id}/confirm`
+  as the only exit from a pause (404 → 422 → CAS; duplicate/late/swept → 200 with current status), 3-tap
+  cap in `route_reveal`, `SUPER_STEP_PRELUDE = 15`. **S3 `kid-flow-failure-semantics`:** three verbs only
+  — `redraw` / `revise` / `retry`; a terminal job is immutable (recovery is always a new job); four render
+  buckets on every URL-reachable surface; the child never sees a moderation category or `jobs.error`.
+  **S4 `kid-flow-reader-and-wait-states`:** the multi-page reader over `jobs.pages` (sign at read time),
+  the Realtime wait stepper off `current_stage`, the inline reveal on `/process/[jobId]`, four
+  `FailureScreen` kinds, and `useJob` seeding from a `SELECT` **and** subscribing. No orientation lock.
+  **`job-failure-reason` is built (2026-08-04):** migration `0006` (nullable, no check constraint) + the
+  taxonomy map in `run_job.py` — `child_text` only where `moderation_router` raises for the input text;
+  every other value, every unknown value and `null` → `machine`. Next free migration is **`0007`**.
+  `contracts/` untouched by all five. Still exactly **two** policy surfaces.
+  **Phase 2 is in progress. Next: `auth-and-classroom`** (the classroom RLS gap; it replaces both policy
+  surfaces in one migration).

@@ -64,7 +64,61 @@ Decided in earlier sessions. Later sessions treat these as given, not open.
    `pages`. S4 may make `current_stage` advance without an amendment.
 7. **A book that cannot be fully read fails as a whole** (ADR-025). No partial render, no
    page-shaped holes.
-8. **Migration `0004` is claimed** by S1's spec. Next free number is `0005`.
+8. **Migration `0004` is claimed** by S1's spec. Next free number is `0005`. *(Superseded by
+   constraint 16 — S2 took `0005`; next free is `0006`.)*
+
+**From S2** (`docs/specs/kid-flow-pause-lifecycle.md`, 2026-08-02):
+
+9. **A pause is `status='awaiting_confirm'` + `jobs.reveal`** — a jsonb projection
+   `{characters: [{char_id, name, image_path, chips}], taps_left}`, computed pure in `reveal.py`,
+   carried as the `interrupt()` payload and written verbatim by the worker. Durable Storage paths only.
+   **Consumers switch on `status`, never on the presence of `reveal`**; it is deliberately left stale
+   on finished rows.
+10. **One tail, one terminal write.** Both worker entrypoints converge on `_finish`, the only writer of
+    `pages` *or* `reveal`. `resume_storybook_job` never constructs a `StoryMemory`. Constraint 2
+    survives unchanged — no later session adds a second writer of either.
+11. **`POST /jobs/{id}/confirm` is the only exit from a pause,** checked `404` → `422` (identity,
+    per-character, against that row) → CAS on `awaiting_confirm`. Duplicate, late, finished or swept →
+    **200 with the current status**, never an error. **A rejected payload or a failed enqueue never
+    consumes the pause.**
+12. **The 3-tap cap is enforced in `route_reveal`** — not the endpoint, not the UI.
+    `cost.ref_retry_count` increments in `char_bible`'s targeted mode and counts only taps that bought
+    a draw. A tap past the cap becomes a confirm.
+13. **A redraw never reuses a Storage path.** References are `{story_id}/ref-{char_id}-{n}.png` from
+    the first draw onward; superseded objects are left in place for `data-deletion` to sweep.
+14. **A pause is entered only when at least one character has a reference, and every projected
+    character offers at least one chip.** Both are what stop the pause from becoming a hang or a
+    dead-ended button.
+15. **A swept pause is not ADR-025 `failed`** and must not read to the child as their story breaking.
+    `data-deletion` picks the terminal value and the TTL. A confirm against a swept job takes the same
+    CAS-miss path as a double-confirm.
+16. **Migration `0005` is claimed** by S2's spec; `job-failure-reason` moves to `0006`. **Still exactly
+    two policy surfaces** (constraint 4 unchanged). `SUPER_STEP_PRELUDE = 15` is separate from
+    `IMAGE_BUDGET`'s 9-**image** prelude.
+
+**From S3** (`docs/specs/kid-flow-failure-semantics.md`, 2026-08-02):
+
+17. **Three verbs, and only three** — `redraw` (S2's `POST /jobs/{id}/confirm`, same job), `revise`
+    (the child edits their words, brand-new job), `retry` (the same text unchanged, brand-new job).
+    No later session adds a fourth or renames these. A re-sign creates nothing and is not a verb.
+18. **A terminal job is immutable.** Recovery is always a new job; a `failed` job's checkpoint is
+    never resumed. Reopening that needs an ADR.
+19. **One bit from `job-failure-reason`, defaulting away from blame.** Exactly one enum value means
+    *the child's own text was rejected*; every other value, every unknown value, and `null` map to
+    `retry`. It is written only where `moderation_router` raises for the input text
+    (`passed is False` and not `moderation_error`). **That row is reopened** and is a build-order
+    prerequisite for S4's screens.
+20. **Four render buckets, and every URL-reachable surface handles all four** — in-flight
+    (`queued`/`running`), paused (`awaiting_confirm`), terminal-success (`complete` + non-empty
+    `pages`), terminal-failure (`failed` + the swept value). **`failed` is never not-ready.**
+21. **The child is never shown a moderation category, a flagged span, or `jobs.error`.** The reason
+    selects a screen and is never rendered as text; the teacher-facing reading is
+    `teacher-dashboard`'s.
+22. **The N=3 counter is client-side, reason-blind, counts presses that follow a `failed` job, and
+    never gates.** `jobs.parent_job_id` is the named upgrade path.
+23. **No new surface** — no migration, no endpoint, no contract change. **Still exactly two policy
+    surfaces** (constraints 4 and 16 unchanged). Next free migration after `job-failure-reason`'s
+    `0006` is `0007`.
 
 **Pre-existing constraints from ADRs, not from this docket.** These are already frozen and are
 listed so no session re-decides them:
@@ -116,7 +170,9 @@ readers, don't build for the second.
 
 ---
 
-### S2 · Pause & resume lifecycle — READY
+### S2 · Pause & resume lifecycle — DONE
+
+**Spec:** `docs/specs/kid-flow-pause-lifecycle.md` (2026-08-02) · constraints 9–16 above.
 
 **Cluster:** the job's life across a human-shaped pause. How the worker distinguishes "returned
 with an interrupt pending" from "returned complete" and writes `awaiting_confirm`; the shape and
@@ -138,7 +194,9 @@ including the ones a client can force by retrying, and each has a chosen behavio
 
 ---
 
-### S3 · Failure & retry semantics — BLOCKED (needs S2)
+### S3 · Failure & retry semantics — DONE
+
+**Spec:** `docs/specs/kid-flow-failure-semantics.md` (2026-08-02) · constraints 17–23 above.
 
 **Cluster:** what the child can do when something goes wrong, and what each thing means.
 **"Try again" is currently two different actions wearing one label** — ADR-029's redraw-this-
@@ -159,9 +217,18 @@ chosen action, and the two "try again"s have distinct names.
 
 **Open questions:** carried in from the cluster above; add here as they surface.
 
+- **From S2:** one of the two "try again"s is now built and named — the ADR-029 reference redraw,
+  addressed by `char_id` + `attribute` against a paused job via `POST /jobs/{id}/confirm`. Whatever
+  this session names the resubmit-a-different-story action, **it is not that endpoint**, and the
+  vocabulary must keep the two apart.
+- **From S2:** a swept pause needs a child-facing meaning that is not `failed` (constraint 15). This
+  session may name what the child is shown; `data-deletion` still picks the status value.
+
 ---
 
-### S4 · Reader & wait-state experience — BLOCKED (needs S3; S1 satisfied)
+### S4 · Reader & wait-state experience — DONE
+
+**Spec:** `docs/specs/kid-flow-reader-and-wait-states.md` (2026-08-04) · Docket complete. `kid-flow-ui` now maps to four feature specs: S1 (book-persistence), S2 (pause-lifecycle), S3 (failure-semantics), S4 (reader-and-wait-states). Update MASTER_SPEC §7 accordingly.
 
 **Cluster:** every state the child observes, rendered. The multi-page reader over whatever S1
 stores (paging, controls, page position); the generation wait — a per-scene stepper driven by
@@ -179,6 +246,24 @@ design care as success screens; a wait state is a state, not an absence of one.
 
 **Open questions:** `DESIGN.md` and `USER_FLOW.md` §4/§6 already commit to a register
 (cartoon-pop, Lottie, giant tap zones) — read them as input, not as decisions to re-derive.
+
+- **From S2 (required, not optional):** any surface rendering the pause must seed from a `SELECT`
+  and then subscribe. `/process/[jobId]` subscribes today with no initial fetch, so a child
+  returning to a paused job sees nothing until the next UPDATE — which, at a pause, never comes.
+- **From S2:** render *"use this one"* at `taps_left == 0` (ADR-029 — the button never dead-ends),
+  and re-read the row after each resume so a stale chip list cannot surface a `422` to a child.
+- **From S2:** the reveal screen renders constraint 9's projection as-is. It signs `image_path` at
+  read time; it does not re-derive chips, and it never reads graph state.
+- **From S3 (build order, not design):** the differentiated failure screens select on
+  `job-failure-reason`, which is not built. S4 designs **both** screens regardless — because
+  constraint 19's default is `retry`, only the *selector* waits on that row, so S4 does not stall.
+- **From S3 (required):** constraint 20's four-bucket render applies to **every** URL-reachable
+  surface, not only the reader. `book/[jobId]/page.tsx:61` currently renders a `failed` job as
+  not-ready — an infinite wait state — and that is a regression test S4 owes.
+- **From S3:** a complete book whose images will not sign re-signs in place before any failure
+  screen; it never offers a rebuild for an expired URL (spec §4.7).
+- **From S3:** the N=3 off-ramp counter lives in the flow, increments on press, and never gates
+  (constraint 22). Where the suggestion appears is S4's; when it fires is not.
 
 ---
 
@@ -199,4 +284,10 @@ docket's work.
 
 ## Amendments
 
-*(none yet)*
+- **2026-08-02 (from S3): `job-failure-reason` is reopened and becomes a prerequisite of S4's
+  screens.** Its `DECISION_BACKLOG.md` deferral-watch row gave two reopen triggers —
+  *"`teacher-dashboard` ships, **or** a Phase-2 failure needs naming."* S3's two-action vocabulary is
+  the second clause: the child-facing screen needs one bit off the row to choose between "change your
+  words" and "try again", and only that enum supplies it. S3 did **not** build it (the docket's
+  Explicitly-out line holds); it states the one requirement in constraint 19 and hands the build to
+  that row. This is a build-order dependency, not a design one — S4 is READY.

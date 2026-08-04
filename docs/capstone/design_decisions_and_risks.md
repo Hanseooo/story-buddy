@@ -252,6 +252,11 @@ Phase 0.5 is a build gate for pipeline substrate validity. Order of operations:
 **Bottom line for the proposal defense:** present R2–R6 from this document as *known, planned* risks (R1 is
 moot post-pivot). Solve none of them yet. The plan is the deliverable.
 
-> **Phase 1 update (2026-07-29):** Phase 0.5 closed per `PHASE_05_RESULTS.md`. Phase 1 is in progress:
-> `story-memory-contract` is built — `StoryMemory` Pydantic contract, seven nodes on partial-return,
-> `input_gate` entry point, `job_state.py` deleted. Next: `story-analyzer` spec.
+> **Phase 2 update (2026-08-04):** Phase 0.5 closed per `PHASE_05_RESULTS.md`. **Phase 1 is complete
+> (2026-08-02)** — all ten specs built, from the `StoryMemory` contract through `compose`. **Phase 2 is in
+> progress:** the moderation stack (input text → char-ref → output image, ADR-011 ordering enforced in
+> `graph.py`), input-gate hardening (ADR-012 length clamp + Filipino PII recognizers), and the kid-facing
+> flow (`jobs.pages` persistence, the ADR-029 reveal + `POST /jobs/{id}/confirm`, failure semantics, and
+> the reader/wait-state surfaces) are built. Open: `auth-and-classroom` (the classroom RLS gap),
+> `teacher-dashboard`, `narration`, `export-pdf`, `rate-limiting`, `data-deletion`. Probe 4
+> (Filipino/Taglish moderation) is still un-run and remains a Phase-2 *release* gate.

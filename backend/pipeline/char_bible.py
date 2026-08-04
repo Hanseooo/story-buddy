@@ -84,8 +84,8 @@ def _data_uri(image: bytes) -> str:
     return "data:image/png;base64," + base64.b64encode(image).decode()
 
 
-def _upload(image: bytes, story_id: str, char_id: str) -> str:
-    path = f"{story_id}/ref-{char_id}.png"
+def _upload(image: bytes, story_id: str, char_id: str, n: int) -> str:
+    path = f"{story_id}/ref-{char_id}-{n}.png"
     get_supabase_client().storage.from_(BUCKET).upload(
         path, image, {"content-type": "image/png", "upsert": "true"}
     )
@@ -128,7 +128,7 @@ def mint_reference(
                 "char_bible: %s judge failed on draw %d — accepting unchecked, ref_verdict=None",
                 char_id, draws, exc_info=True,
             )
-            return _upload(image, story_id, char_id), None, draws
+            return _upload(image, story_id, char_id, 1), None, draws
 
         # CC-5: a wrong character downstream traces back to a specific reference and draw.
         log.info(
@@ -137,7 +137,7 @@ def mint_reference(
         )
         if verdict.matches_description:
             log.info("char_bible: %s accepted draw %d", char_id, draws)
-            return _upload(image, story_id, char_id), verdict, draws
+            return _upload(image, story_id, char_id, 1), verdict, draws
         candidates.append((image, verdict))
 
     winner = best_draw([v for _, v in candidates])
@@ -146,15 +146,52 @@ def mint_reference(
         char_id, draws, winner + 1,
     )
     image, verdict = candidates[winner]
-    return _upload(image, story_id, char_id), verdict, draws
+    return _upload(image, story_id, char_id, 1), verdict, draws
+
+
+def _mint_targeted(state: StoryMemory) -> dict:
+    """ADR-029 §2: one draw, one judge call, unconditional overwrite. `n` is a uniqueness
+    suffix, not a per-character draw count — `ref_retry_count` is per BOOK (spec §4.6), so a
+    second tap on a different character still advances `n`. A per-character counter would be a
+    second source of truth for something that only needs to be unique.
+    """
+    retry = state.reference_retry
+    character = next(c for c in state.characters if c.char_id == retry.char_id)
+    style_fragment = state.style.prompt_fragment or settings.default_style_fragment
+    description = character.description.model_copy(update={"notes": retry.attribute})
+    prompt = reference_prompt(description, character.name, style_fragment)
+    if retry.attribute not in prompt:
+        prompt = f"{prompt}\n\nBe sure to include: {retry.attribute}."
+    judge_prompt = JUDGE_PROMPT.format(subject=_describe(description, character.name))
+
+    image = text_to_image(prompt)
+    verdict = judge(judge_prompt, [_data_uri(image)], RefVerdict)
+    n = state.cost.ref_retry_count + 2  # post-bump: rc is incremented below; +2 = +1(initial) +1(this tap)
+    path = _upload(image, state.story_id, character.char_id, n)
+
+    characters = [
+        c.model_copy(update={"canonical_ref_image": path, "ref_verdict": verdict, "ref_moderation_status": None})
+        if c.char_id == character.char_id
+        else c
+        for c in state.characters
+    ]
+    cost = state.cost.model_copy(
+        update={"image_count": state.cost.image_count + 1, "ref_retry_count": state.cost.ref_retry_count + 1}
+    )
+    log.info(
+        "char_bible: targeted redraw for %s, attribute=%r, ref_retry_count=%d",
+        character.char_id, retry.attribute, cost.ref_retry_count,
+    )
+    return {"characters": characters, "cost": cost, "reference_retry": None}
 
 
 def char_bible(state: StoryMemory) -> dict:
-    """Pure: select, map, bump, partial-return. Every effect is behind `mint_reference`.
-
-    Linear in the graph — this node branches at none of ADR-003's points (moderation pass/fail,
-    consistency pass/fail, and ADR-029's reveal confirm/try-again).
+    """Pure: select, map, bump, partial-return. Every effect is behind `mint_reference` (or,
+    on a retry, `_mint_targeted`).
     """
+    if state.reference_retry is not None:
+        return _mint_targeted(state)
+
     # Cap FIRST (invariant 1, ADR-004), THEN filter (invariant 6). The order is load-bearing:
     # filtering first slides the 2-slot window onto c2 when c0 is already referenced, producing
     # three canonical references and breaking the cap.

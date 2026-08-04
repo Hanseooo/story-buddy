@@ -28,8 +28,8 @@ def _attempt(ref: str, *, passed: bool | None = None) -> Attempt:
     return Attempt(image_ref=ref, vlm_verdict=verdict, passed=passed)
 
 
-def _scene(scene_id: str, final_ref: str | None, attempts: list[Attempt]) -> Scene:
-    return Scene(scene_id=scene_id, text_excerpt="x", final_image_ref=final_ref, attempts=attempts)
+def _scene(scene_id: str, final_ref: str | None, attempts: list[Attempt], caption: str | None = None) -> Scene:
+    return Scene(scene_id=scene_id, text_excerpt="x", final_image_ref=final_ref, attempts=attempts, caption=caption)
 
 
 def _mem(*scenes: Scene, image_count: int = 0, regen_count: int = 0) -> StoryMemory:
@@ -62,9 +62,9 @@ def test_unfinalized_scene_raises_and_names_scene_id():
 def test_mixed_three_page_book_returns_empty_dict_and_logs(caplog):
     """Spec §6 test 3: one passed / one failing / one unchecked → {} + correct log line."""
     scenes = [
-        _scene("s1", "p/s1-1.png", [_attempt("p/s1-1.png", passed=True)]),   # passed
-        _scene("s2", "p/s2-1.png", [_attempt("p/s2-1.png", passed=False)]),  # failing
-        _scene("s3", "p/s3-1.png", [_attempt("p/s3-1.png")]),                # unchecked (no verdict)
+        _scene("s1", "p/s1-1.png", [_attempt("p/s1-1.png", passed=True)], caption="c1"),   # passed
+        _scene("s2", "p/s2-1.png", [_attempt("p/s2-1.png", passed=False)], caption="c2"),  # failing
+        _scene("s3", "p/s3-1.png", [_attempt("p/s3-1.png")], caption="c3"),                # unchecked (no verdict)
     ]
     state = _mem(*scenes, image_count=5, regen_count=2)
 
@@ -91,6 +91,7 @@ def test_best_of_attempt_2_classified_by_attempt_2(caplog):
             _attempt("p/s1-1.png", passed=True),   # passed but NOT the winner
             _attempt("p/s1-2.png", passed=False),  # failing, IS the winner
         ],
+        caption="c1",
     )
 
     with caplog.at_level(logging.INFO, logger="pipeline.compose"):
@@ -101,9 +102,17 @@ def test_best_of_attempt_2_classified_by_attempt_2(caplog):
     assert "passed=0" in caplog.text
 
 
+def test_uncaptioned_scene_raises_and_names_scene_id():
+    """kid-flow-book-persistence spec §4.2: a page is an image plus a verbatim caption
+    (ADR-013). A finalized scene with no caption must fail the job, not ship a blank page."""
+    scene = _scene("page-3", final_ref="p/page-3-1.png", attempts=[_attempt("p/page-3-1.png", passed=True)])
+    with pytest.raises(ValueError, match="page-3"):
+        compose(_mem(scene))
+
+
 def test_cost_reported_from_state(caplog):
     """Spec §6 test 5: image_count and regen_count come from state, not recomputed."""
-    scene = _scene("s1", "p/s1-1.png", [_attempt("p/s1-1.png", passed=True)])
+    scene = _scene("s1", "p/s1-1.png", [_attempt("p/s1-1.png", passed=True)], caption="c1")
 
     with caplog.at_level(logging.INFO, logger="pipeline.compose"):
         compose(_mem(scene, image_count=7, regen_count=3))

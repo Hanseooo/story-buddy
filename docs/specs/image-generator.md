@@ -173,12 +173,13 @@ breaker) · ADR-028 (a failing `ref_verdict` still ships its reference).
 **Hands off — named here, owned elsewhere:**
 - **`final_image_ref` ownership and the loop wiring** (`route_next_scene`, `route_after_check`, the
   loop-back edge) → **`consistency-checker`** ✅ **taken (2026-07-31)**. `route_next_scene` is
-  registered; `route_after_check` deliberately not built yet (no regenerate node).
-- **`correct_prompt` wiring and the ADR-010 retry draw** → **`regeneration-controller`**.
-- **Output-image moderation (CC-1)** → **`moderation-stack`** (Phase 2).
+  registered; `route_after_check` ✅ **built by `regeneration-controller`** (2026-08-02).
+- **`correct_prompt` wiring and the ADR-010 retry draw** → **`regeneration-controller`** ✅ **taken
+  (2026-08-02)**.
+- **Output-image moderation (CC-1)** → **`moderation-stack`** ✅ **built (2026-08-02)**.
 - **`jobs.failure_reason` migration + `run_job.py`'s taxonomy map** (ADR-025 Decision 5) →
-  **unowned.** `run_job.py:38` writes only `{status: failed, error: str(exc)}`. It is a migration
-  `0003` plus a second-module change; flagged rather than absorbed.
+  **`job-failure-reason`** ✅ **built (2026-08-04)** — migration `0006` (not `0003`, which went to
+  `input-gate-hardening`) plus the map in `run_job.py`'s except blocks.
 - **Seed / CC-7** → blocked on Probe 2 (`PHASE_05_RESULTS.md`), which does not gate Phase 1.
 
 **Open:**
