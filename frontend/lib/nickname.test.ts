@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { composeStudentEmail, normalizeNickname } from "./nickname";
+import { normalizeNickname } from "./nickname";
 
 // Spec §5.1 — transcribed verbatim. Do not edit without updating the Python suite too.
 const PASS_VECTORS: [string, string][] = [
@@ -32,10 +32,3 @@ describe("normalizeNickname", () => {
   });
 });
 
-describe("composeStudentEmail", () => {
-  it("composes the login address from a raw nickname and classroom code", () => {
-    expect(composeStudentEmail("Juan Dela Cruz", "k4m7pq")).toBe(
-      "juan-dela-cruz@k4m7pq.students.storybuddy.invalid"
-    );
-  });
-});

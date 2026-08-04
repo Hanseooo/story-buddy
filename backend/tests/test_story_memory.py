@@ -145,3 +145,12 @@ def test_reference_retry_round_trips_on_story_memory():
 def test_reference_retry_requires_char_id_and_attribute():
     with pytest.raises(ValidationError):
         ReferenceRetry()
+
+
+def test_dev_provenance_sentinels_exist():
+    """Phase-1 sentinels (ADR-023 amendment 2026-07-22b). Replaced by real selection when
+    `auth-and-classroom` lands — a value swap at one site in worker/run_job.py, no contract change."""
+    from app.config import settings
+
+    assert settings.dev_classroom_id == "dev-classroom"
+    assert settings.dev_profile_id == "dev-profile"

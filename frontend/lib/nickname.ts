@@ -20,7 +20,3 @@ export function normalizeNickname(raw: string): string {
   }
   return collapsed;
 }
-
-export function composeStudentEmail(nickname: string, classroomCode: string): string {
-  return `${normalizeNickname(nickname)}@${classroomCode}.students.storybuddy.invalid`;
-}

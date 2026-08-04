@@ -4,11 +4,8 @@ from unittest.mock import MagicMock, patch
 from langgraph.types import Command
 
 from app.config import RECURSION_LIMIT, STYLE_PRESETS
-from contracts.story_memory import Scene
+from contracts.story_memory import CURRENT_SCHEMA_VERSION, Scene
 from worker.run_job import _run_with_progress, _stage_string, resume_storybook_job, run_storybook_job
-
-_FAKE_CLASSROOM_ID = "11111111-1111-1111-1111-111111111111"
-_FAKE_PROFILE_ID = "22222222-2222-2222-2222-222222222222"
 
 
 def _fake_supabase(style_preset_id: str | None = None, truncated: bool = False) -> MagicMock:
@@ -18,8 +15,6 @@ def _fake_supabase(style_preset_id: str | None = None, truncated: bool = False) 
         "input_text": "A dog runs in a field.",
         "style_preset_id": style_preset_id,
         "truncated": truncated,
-        "profile_id": _FAKE_PROFILE_ID,
-        "classroom_id": _FAKE_CLASSROOM_ID,
     }
     return fake
 
@@ -91,8 +86,9 @@ def test_run_storybook_job_writes_pages_in_scene_order():
     ]
 
 
-def test_run_storybook_job_constructs_story_memory_from_row():
-    """spec §9 test 13: classroom_id and profile_id come from the job row, not settings."""
+def test_run_storybook_job_constructs_story_memory_with_dev_provenance():
+    """ADR-023 amendment 2026-07-22b: the worker is the supplier. story_id = job_id
+    (one job = one story); classroom/profile are Phase-1 sentinels swapped at this one site."""
     fake_supabase = _fake_supabase()
     fake_checkpointer_cm = MagicMock()
     fake_checkpointer_cm.__enter__.return_value = MagicMock()
@@ -104,9 +100,11 @@ def test_run_storybook_job_constructs_story_memory_from_row():
         run_storybook_job("job-1")
 
     initial_state = fake_graph.stream.call_args.args[0]
-    assert initial_state.classroom_id == _FAKE_CLASSROOM_ID
-    assert initial_state.profile_id == _FAKE_PROFILE_ID
+    assert initial_state.schema_version == CURRENT_SCHEMA_VERSION
     assert initial_state.story_id == "job-1"
+    assert initial_state.classroom_id == "dev-classroom"
+    assert initial_state.profile_id == "dev-profile"
+    assert initial_state.input.raw_text == "A dog runs in a field."
 
 
 def test_run_storybook_job_tolerates_a_run_that_produced_no_scenes():

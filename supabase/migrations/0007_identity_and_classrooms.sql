@@ -69,4 +69,4 @@ create function public.auth_classroom_id() returns uuid
 alter table classrooms enable row level security;
 alter table profiles   enable row level security;
 -- ponytail: no policies here. Default-deny is correct until S3 writes them;
--- 0007 and S3's policy migration ship together (spec §7 ③).
+-- 0007 and S3's policy migration ship together (spec §7 ⑤).
