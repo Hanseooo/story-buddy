@@ -2,6 +2,7 @@
 Requires a local Supabase instance with migration 0007 applied.
 Set SUPABASE_DB_URL to run; tests skip automatically when it is absent.
 """
+import json
 import os
 import uuid
 
@@ -141,3 +142,93 @@ def test_invalid_role_violates_check_constraint(conn):
             "INSERT INTO profiles (id, role, display_name) VALUES (%s, 'admin', 'Hacker')",
             (uid,),
         )
+
+
+# ── Tests 9–11: triggers ──────────────────────────────────────────────────────
+# ponytail: uses direct SQL with raw_app_meta_data instead of the admin API;
+# avoids a GoTrue key-format mismatch with the Python SDK while still exercising
+# the trigger (which reads new.raw_app_meta_data, not GoTrue's enriched copy).
+
+def _triggered_auth_user(conn, meta: dict) -> uuid.UUID:
+    """Insert into auth.users WITH triggers enabled so handle_new_user fires."""
+    uid = uuid.uuid4()
+    conn.execute(
+        "INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, raw_app_meta_data)"
+        " VALUES (%s, %s, 'x', now(), %s::jsonb)",
+        (uid, f"{uid}@trigger-test.invalid", json.dumps(meta)),
+    )
+    return uid
+
+
+@_skip
+def test_insert_auth_user_creates_profile_row(conn):
+    """spec §9 test 9: handle_new_user trigger fires on auth.users insert."""
+    uid = _triggered_auth_user(conn, {"role": "teacher", "display_name": "Trigger Teacher"})
+
+    row = conn.execute(
+        "SELECT role, display_name FROM profiles WHERE id = %s", (uid,)
+    ).fetchone()
+    assert row is not None, "trigger did not create a profiles row"
+    assert row[0] == "teacher"
+    assert row[1] == "Trigger Teacher"
+
+
+@_skip
+def test_delete_profile_row_deletes_auth_user(conn):
+    """spec §9 test 10: handle_profile_deleted trigger fires on profiles delete."""
+    uid = _triggered_auth_user(conn, {"role": "teacher", "display_name": "Delete Me"})
+
+    assert conn.execute("SELECT 1 FROM profiles WHERE id = %s", (uid,)).fetchone() is not None
+
+    # Delete the profile — trigger should cascade to auth.users
+    conn.execute("DELETE FROM profiles WHERE id = %s", (uid,))
+    conn.commit()
+
+    assert conn.execute(
+        "SELECT 1 FROM auth.users WHERE id = %s", (uid,)
+    ).fetchone() is None, "handle_profile_deleted did not delete the auth.users row"
+
+
+@_skip
+def test_delete_classroom_cascades_to_profiles_and_auth_users(conn):
+    """spec §9 test 11: cascade chain — classroom → profiles → auth.users via trigger."""
+    # Create a teacher (owner) — trigger creates their profile
+    teacher_uid = _triggered_auth_user(conn, {"role": "teacher", "display_name": "Cascade Owner"})
+    conn.commit()
+
+    # Create a classroom owned by the teacher
+    cid = uuid.uuid4()
+    code = "csc001"
+    conn.execute(
+        "INSERT INTO classrooms (id, code, name, owner_id) VALUES (%s, %s, %s, %s)",
+        (cid, code, "Cascade Class", teacher_uid),
+    )
+    conn.commit()
+
+    # Create a student in that classroom — trigger creates their profile
+    student_uid = _triggered_auth_user(conn, {
+        "role": "student",
+        "classroom_id": str(cid),
+        "nickname": "juan",
+        "display_nickname": "Juan",
+    })
+    conn.commit()
+
+    assert conn.execute(
+        "SELECT 1 FROM profiles WHERE id = %s", (student_uid,)
+    ).fetchone() is not None
+
+    # Delete the classroom — cascade: classroom → profiles → (trigger) auth.users
+    conn.execute("DELETE FROM classrooms WHERE id = %s", (cid,))
+    conn.commit()
+
+    assert conn.execute(
+        "SELECT 1 FROM profiles WHERE id = %s", (student_uid,)
+    ).fetchone() is None, "cascade did not delete student profile"
+    assert conn.execute(
+        "SELECT 1 FROM auth.users WHERE id = %s", (student_uid,)
+    ).fetchone() is None, "trigger did not delete student auth.users row"
+
+    # Cleanup teacher
+    conn.execute("DELETE FROM auth.users WHERE id = %s", (teacher_uid,))
+    conn.commit()
