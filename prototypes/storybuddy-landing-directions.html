@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>StoryBuddy Landing Directions</title>
+  <style>
+    :root {
+      --switcher-bg: #20201e;
+      --switcher-text: #f8f5ed;
+      --switcher-muted: #b9b6ae;
+      --focus: #f4b942;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: #dedbd2;
+      color: #20201e;
+      font-family: "Segoe UI", Arial, sans-serif;
+    }
+    button, a { font: inherit; }
+    button:focus-visible, a:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 3px;
+    }
+
+    .direction-switcher {
+      position: sticky;
+      inset-block-start: 0;
+      z-index: 100;
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) auto;
+      gap: 24px;
+      align-items: center;
+      min-height: 72px;
+      padding: 12px clamp(18px, 4vw, 56px);
+      color: var(--switcher-text);
+      background: var(--switcher-bg);
+      box-shadow: 0 10px 28px rgb(32 32 30 / 18%);
+    }
+    .switcher-title { font-weight: 750; letter-spacing: -0.02em; }
+    .switcher-title small {
+      display: block;
+      margin-top: 2px;
+      color: var(--switcher-muted);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0;
+    }
+    .switcher-buttons { display: flex; gap: 8px; }
+    .switcher-buttons button {
+      min-height: 42px;
+      padding: 9px 14px;
+      border: 1px solid #4d4c48;
+      border-radius: 10px;
+      color: var(--switcher-muted);
+      background: transparent;
+      cursor: pointer;
+      transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+    }
+    .switcher-buttons button:hover { color: var(--switcher-text); }
+    .switcher-buttons button:active { transform: translateY(1px); }
+    .switcher-buttons button[aria-selected="true"] {
+      border-color: #f8f5ed;
+      color: #20201e;
+      background: #f8f5ed;
+    }
+
+    .direction { display: none; min-height: calc(100dvh - 72px); }
+    .direction.active { display: block; }
+    .landing-shell { min-height: calc(100dvh - 72px); overflow: hidden; }
+    .landing-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 72px;
+      padding-inline: clamp(20px, 5vw, 76px);
+    }
+    .brand {
+      color: inherit;
+      font-size: 21px;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      text-decoration: none;
+    }
+    .brand-mark {
+      display: inline-grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      margin-right: 8px;
+      border-radius: 9px 9px 9px 2px;
+      font-size: 16px;
+      vertical-align: -2px;
+    }
+    .nav-links { display: flex; align-items: center; gap: 28px; }
+    .nav-links a { color: inherit; font-size: 14px; font-weight: 650; text-decoration: none; }
+    .nav-action { padding: 10px 16px; border-radius: 10px; }
+    .hero-title {
+      margin: 0;
+      max-width: 760px;
+      font-size: clamp(48px, 7vw, 94px);
+      font-weight: 800;
+      letter-spacing: -0.065em;
+      line-height: 0.94;
+      text-wrap: balance;
+    }
+    .hero-copy {
+      max-width: 540px;
+      margin: 24px 0 0;
+      font-size: clamp(17px, 1.4vw, 20px);
+      line-height: 1.55;
+    }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+    .button {
+      display: inline-flex;
+      min-height: 50px;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 20px;
+      border: 1px solid transparent;
+      border-radius: 12px;
+      font-weight: 750;
+      text-decoration: none;
+      transition: transform 160ms ease, box-shadow 160ms ease;
+    }
+    .button:hover { transform: translateY(-2px); }
+    .button:active { transform: translateY(0); }
+    .button-secondary { background: transparent; }
+    .direction-note {
+      display: grid;
+      grid-template-columns: minmax(220px, .7fr) minmax(300px, 1.3fr);
+      gap: clamp(24px, 5vw, 72px);
+      align-items: start;
+      padding: 44px clamp(20px, 5vw, 76px) 52px;
+    }
+    .direction-note h2 { margin: 0; font-size: 24px; letter-spacing: -0.035em; }
+    .direction-note p { margin: 0; max-width: 70ch; line-height: 1.65; }
+    .swatches { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 20px; }
+    .swatch { display: grid; grid-template-columns: 34px auto; gap: 9px; align-items: center; font-size: 12px; }
+    .swatch i { width: 34px; height: 34px; border: 1px solid rgb(0 0 0 / 10%); border-radius: 10px; }
+    .swatch b { display: block; font-size: 12px; }
+    .swatch span { color: rgb(0 0 0 / 58%); }
+
+    /* Direction A: Quiet Storybook */
+    .direction-a { background: #f7f1e5; color: #18372f; }
+    .direction-a .landing-shell { background: #f7f1e5; }
+    .direction-a .brand-mark { color: #f7f1e5; background: #235947; }
+    .direction-a .nav-action { color: #f7f1e5; background: #235947; }
+    .a-hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(360px, .92fr);
+      gap: clamp(32px, 6vw, 90px);
+      align-items: center;
+      min-height: calc(100dvh - 144px);
+      padding: 40px clamp(20px, 5vw, 76px) 70px;
+    }
+    .direction-a .hero-title { font-family: "Trebuchet MS", "Segoe UI", sans-serif; }
+    .direction-a .hero-copy { color: #48655d; }
+    .direction-a .button-primary {
+      color: #f8f3e8;
+      background: #235947;
+      box-shadow: 0 8px 0 #b9cdb4;
+    }
+    .direction-a .button-secondary { border-color: #9db1a9; color: #235947; }
+    .book-stage {
+      position: relative;
+      min-height: 520px;
+      isolation: isolate;
+    }
+    .sun-disc {
+      position: absolute;
+      inset: 5% 3% auto auto;
+      width: 220px;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: #efb45f;
+      opacity: .52;
+    }
+    .leaf {
+      position: absolute;
+      z-index: 0;
+      width: 94px;
+      height: 170px;
+      border-radius: 100% 0 100% 0;
+      background: #9cb792;
+      transform-origin: bottom center;
+    }
+    .leaf.one { inset: 12% auto auto 4%; transform: rotate(-20deg); }
+    .leaf.two { inset: auto 2% 8% auto; width: 120px; height: 210px; transform: rotate(25deg); background: #cf7b59; }
+    .open-book {
+      position: absolute;
+      inset: 50% auto auto 50%;
+      z-index: 2;
+      width: min(92%, 520px);
+      aspect-ratio: 1.25;
+      transform: translate(-50%, -46%) rotate(-3deg);
+      filter: drop-shadow(0 28px 24px rgb(45 69 61 / 20%));
+    }
+    .page {
+      position: absolute;
+      inset-block: 0;
+      width: 51%;
+      overflow: hidden;
+      border: 1px solid #d7cdbb;
+      background: #fffdf6;
+    }
+    .page.left { inset-inline-start: 0; border-radius: 18px 4px 8px 18px; transform: perspective(600px) rotateY(7deg); }
+    .page.right { inset-inline-end: 0; border-radius: 4px 18px 18px 8px; transform: perspective(600px) rotateY(-7deg); }
+    .storybook-landscape { position: absolute; inset: 0; overflow: hidden; }
+    .storybook-landscape .sky { position: absolute; inset: 0 0 40%; background: #d9e6da; }
+    .storybook-landscape .hill-a { position: absolute; inset: 40% -20% -20% -20%; border-radius: 50% 50% 0 0; background: #6c9279; }
+    .storybook-landscape .hill-b { position: absolute; inset: 56% -28% -20% 10%; border-radius: 50% 50% 0 0; background: #315e4d; }
+    .storybook-landscape .moon { position: absolute; inset: 16% auto auto 16%; width: 48px; aspect-ratio: 1; border-radius: 50%; background: #f6c972; }
+    .storybook-landscape .fox {
+      position: absolute;
+      inset: auto 14% 20% auto;
+      width: 66px;
+      height: 82px;
+      border-radius: 45% 45% 42% 42%;
+      background: #d96c4c;
+    }
+    .storybook-landscape .fox::before,
+    .storybook-landscape .fox::after {
+      content: "";
+      position: absolute;
+      inset-block-start: -22px;
+      width: 30px;
+      height: 36px;
+      background: #d96c4c;
+      clip-path: polygon(50% 0, 100% 100%, 0 100%);
+    }
+    .storybook-landscape .fox::before { inset-inline-start: 2px; transform: rotate(-10deg); }
+    .storybook-landscape .fox::after { inset-inline-end: 2px; transform: rotate(10deg); }
+    .page-lines { padding: 48px 28px; }
+    .page-lines i { display: block; height: 7px; margin-bottom: 12px; border-radius: 10px; background: #d8d0bf; }
+    .page-lines i:nth-child(2) { width: 82%; }
+    .page-lines i:nth-child(3) { width: 92%; }
+    .page-lines i:nth-child(4) { width: 66%; }
+    .page-lines strong { display: block; margin-top: 30px; color: #235947; font: 700 24px/1.2 "Trebuchet MS", sans-serif; }
+    .direction-a .direction-note { border-top: 1px solid #d8cfbf; background: #f2eadb; }
+
+    /* Direction B: Cobalt Playroom */
+    .direction-b { color: #151d44; background: #f8f4e9; }
+    .direction-b .landing-shell {
+      background: linear-gradient(90deg, #3155d9 0 54%, #f8f4e9 54% 100%);
+    }
+    .direction-b .landing-nav { color: #f9f6ed; }
+    .direction-b .brand-mark { color: #3155d9; background: #f9f6ed; }
+    .direction-b .nav-action { color: #3155d9; background: #f9f6ed; }
+    .b-hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(380px, .95fr);
+      min-height: calc(100dvh - 144px);
+    }
+    .b-copy {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 54px clamp(24px, 5vw, 76px) 80px;
+      color: #f9f6ed;
+    }
+    .direction-b .hero-title { max-width: 700px; font-size: clamp(54px, 7vw, 102px); }
+    .direction-b .hero-copy { max-width: 500px; color: #dfe5ff; }
+    .direction-b .button-primary { color: #25223d; background: #f2c85f; box-shadow: 0 8px 0 #182b7f; }
+    .direction-b .button-secondary { border-color: #aab8ff; color: #f9f6ed; }
+    .b-art {
+      position: relative;
+      display: grid;
+      place-items: center;
+      padding: 50px clamp(24px, 5vw, 72px) 70px;
+      overflow: hidden;
+    }
+    .poster-stack { position: relative; width: min(92%, 480px); aspect-ratio: .9; }
+    .poster {
+      position: absolute;
+      width: 73%;
+      aspect-ratio: .78;
+      overflow: hidden;
+      border: 2px solid #152152;
+      border-radius: 18px;
+      background: #fffaf0;
+      box-shadow: 12px 14px 0 rgb(21 33 82 / 14%);
+    }
+    .poster.back { inset: 2% 0 auto auto; transform: rotate(9deg); background: #f0b2a4; }
+    .poster.middle { inset: 10% auto auto 0; transform: rotate(-7deg); background: #c9dd9b; }
+    .poster.front { inset: 20% auto auto 14%; transform: rotate(1deg); }
+    .poster-title { padding: 24px 22px 0; color: #3155d9; font-size: 28px; font-weight: 850; letter-spacing: -0.05em; }
+    .rocket-scene { position: absolute; inset: 30% 0 0; background: #efc55c; }
+    .planet { position: absolute; inset: 18% auto auto 12%; width: 92px; aspect-ratio: 1; border-radius: 50%; background: #3155d9; }
+    .planet::after { content: ""; position: absolute; inset: 34% -22%; height: 20%; border: 8px solid #ec6a51; border-radius: 50%; transform: rotate(-17deg); }
+    .rocket {
+      position: absolute;
+      inset: 24% 16% auto auto;
+      width: 74px;
+      height: 150px;
+      border-radius: 60% 60% 26% 26%;
+      background: #f9f6ed;
+      transform: rotate(17deg);
+    }
+    .rocket::before { content: ""; position: absolute; inset: 24% auto auto 25%; width: 36px; aspect-ratio: 1; border: 7px solid #3155d9; border-radius: 50%; background: #c8dcff; }
+    .rocket::after { content: ""; position: absolute; inset: auto 20% -48px; width: 44px; height: 60px; background: #ec6a51; clip-path: polygon(50% 100%, 0 0, 100% 0); }
+    .scribble { position: absolute; border: 6px solid #3155d9; border-left-color: transparent; border-radius: 50%; }
+    .scribble.one { inset: 8% 8% auto auto; width: 74px; height: 38px; transform: rotate(22deg); }
+    .scribble.two { inset: auto auto 7% 3%; width: 90px; height: 42px; transform: rotate(-16deg); }
+    .direction-b .direction-note { color: #18204a; background: #eef0fb; }
+
+    /* Direction C: Berry Workshop */
+    .direction-c { color: #2e2630; background: #fbf4e8; }
+    .direction-c .landing-shell { background: #fbf4e8; }
+    .direction-c .landing-nav { border-bottom: 1px solid #d9cec0; }
+    .direction-c .brand-mark { color: #fff8ed; background: #9b315a; }
+    .direction-c .nav-action { color: #fff8ed; background: #9b315a; }
+    .c-hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(350px, .92fr);
+      gap: 0;
+      min-height: calc(100dvh - 145px);
+      padding-inline: clamp(20px, 5vw, 76px);
+    }
+    .c-copy {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 60px clamp(30px, 5vw, 78px) 70px 0;
+      border-right: 1px solid #d9cec0;
+    }
+    .direction-c .hero-title { color: #872a50; font-family: "Trebuchet MS", "Segoe UI", sans-serif; }
+    .direction-c .hero-copy { color: #665762; }
+    .direction-c .button-primary { color: #fff8ed; background: #9b315a; box-shadow: 0 8px 0 #dec0cc; }
+    .direction-c .button-secondary { border-color: #bdaeb7; color: #872a50; }
+    .c-art { display: grid; place-items: center; padding: 44px 0 64px clamp(28px, 5vw, 72px); }
+    .workshop-board {
+      display: grid;
+      grid-template-columns: 1.15fr .85fr;
+      grid-template-rows: 1fr .75fr;
+      gap: 12px;
+      width: min(100%, 550px);
+      aspect-ratio: 1;
+      transform: rotate(1.5deg);
+    }
+    .workshop-tile { position: relative; overflow: hidden; border-radius: 16px; }
+    .workshop-tile.big { grid-row: 1 / 3; background: #9b315a; }
+    .workshop-tile.top { background: #bdcf86; }
+    .workshop-tile.bottom { background: #e5a857; }
+    .night-sky { position: absolute; inset: 0; background: linear-gradient(#9b315a 0 54%, #6e2041 54%); }
+    .night-sky .star { position: absolute; width: 10px; aspect-ratio: 1; border-radius: 50%; background: #f7d680; }
+    .night-sky .star.s1 { inset: 15% auto auto 16%; }
+    .night-sky .star.s2 { inset: 23% 22% auto auto; width: 7px; }
+    .night-sky .star.s3 { inset: 36% auto auto 42%; width: 5px; }
+    .castle { position: absolute; inset: auto 13% 12% 14%; height: 44%; background: #f5cf81; clip-path: polygon(0 100%, 0 35%, 13% 35%, 13% 15%, 28% 15%, 28% 42%, 48% 42%, 48% 0, 66% 0, 66% 32%, 83% 32%, 83% 16%, 100% 16%, 100% 100%); }
+    .pencil-lines { position: absolute; inset: 22% 18%; transform: rotate(-8deg); }
+    .pencil-lines i { display: block; height: 6px; margin: 11px 0; border-radius: 8px; background: #5d6e3a; }
+    .pencil-lines i:nth-child(2) { width: 76%; }
+    .pencil-lines i:nth-child(3) { width: 90%; }
+    .tiny-book { position: absolute; inset: 25% 20%; border-radius: 8px; background: #fff7e9; transform: rotate(9deg); box-shadow: 7px 7px 0 #c27839; }
+    .tiny-book::before { content: ""; position: absolute; inset: 18% 12%; border-top: 6px solid #9b315a; border-bottom: 6px solid #9b315a; }
+    .direction-c .direction-note { border-top: 1px solid #d9cec0; background: #f5eadc; }
+
+    .footer-hint {
+      padding: 18px clamp(20px, 5vw, 76px) 24px;
+      color: #716d65;
+      background: #dedbd2;
+      font-size: 13px;
+      text-align: center;
+    }
+
+    @media (max-width: 900px) {
+      .direction-switcher { position: relative; grid-template-columns: 1fr; gap: 10px; }
+      .switcher-buttons { display: grid; grid-template-columns: repeat(3, 1fr); }
+      .switcher-buttons button { padding-inline: 8px; font-size: 13px; }
+      .nav-links a:not(.nav-action) { display: none; }
+      .a-hero, .b-hero, .c-hero { grid-template-columns: 1fr; }
+      .a-hero { padding-top: 44px; }
+      .book-stage { min-height: 430px; }
+      .direction-b .landing-shell { background: #3155d9; }
+      .b-art { min-height: 540px; background: #f8f4e9; }
+      .c-copy { border-right: 0; border-bottom: 1px solid #d9cec0; }
+      .c-art { padding: 42px 0 60px; }
+      .workshop-board { width: min(92vw, 530px); }
+      .direction-note { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 560px) {
+      .direction-switcher { min-height: auto; }
+      .switcher-title small { display: none; }
+      .switcher-buttons button { min-height: 46px; }
+      .landing-nav { min-height: 64px; }
+      .hero-title { font-size: clamp(44px, 15vw, 66px); }
+      .hero-copy { margin-top: 18px; }
+      .hero-actions { display: grid; grid-template-columns: 1fr; }
+      .button { width: 100%; }
+      .a-hero, .b-copy, .c-copy { padding-inline: 20px; }
+      .book-stage { min-height: 360px; }
+      .sun-disc { width: 150px; }
+      .b-art { min-height: 450px; padding-inline: 18px; }
+      .poster-stack { width: 96%; }
+      .c-hero { padding-inline: 20px; }
+      .direction-note { padding-inline: 20px; }
+      .swatches { display: grid; grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <header class="direction-switcher">
+    <div class="switcher-title">
+      StoryBuddy visual directions
+      <small>Light-first, ivory-led landing-page studies. Select a direction to compare.</small>
+    </div>
+    <div class="switcher-buttons" role="tablist" aria-label="Landing page direction">
+      <button id="tab-a" role="tab" aria-selected="true" aria-controls="direction-a" data-target="direction-a">A · Storybook</button>
+      <button id="tab-b" role="tab" aria-selected="false" aria-controls="direction-b" data-target="direction-b">B · Cobalt</button>
+      <button id="tab-c" role="tab" aria-selected="false" aria-controls="direction-c" data-target="direction-c">C · Workshop</button>
+    </div>
+  </header>
+
+  <main>
+    <article class="direction direction-a active" id="direction-a" role="tabpanel" aria-labelledby="tab-a">
+      <div class="landing-shell">
+        <nav class="landing-nav" aria-label="Prototype navigation">
+          <a class="brand" href="#"><span class="brand-mark">S</span>StoryBuddy</a>
+          <div class="nav-links">
+            <a href="#">How it works</a>
+            <a href="#">For classrooms</a>
+            <a class="nav-action" href="#">Start a story</a>
+          </div>
+        </nav>
+        <section class="a-hero">
+          <div>
+            <h1 class="hero-title">Every story deserves pictures.</h1>
+            <p class="hero-copy">Turn a child’s words into a picture book with characters that stay familiar from page to page.</p>
+            <div class="hero-actions">
+              <a class="button button-primary" href="#">Make a book</a>
+              <a class="button button-secondary" href="#">See how it works</a>
+            </div>
+          </div>
+          <div class="book-stage" aria-label="An open picture book showing a fox in green hills">
+            <div class="sun-disc"></div>
+            <div class="leaf one"></div>
+            <div class="leaf two"></div>
+            <div class="open-book">
+              <div class="page left">
+                <div class="storybook-landscape">
+                  <div class="sky"></div><div class="moon"></div><div class="hill-a"></div><div class="hill-b"></div><div class="fox"></div>
+                </div>
+              </div>
+              <div class="page right">
+                <div class="page-lines"><i></i><i></i><i></i><i></i><strong>Maya found a tiny door beneath the old mango tree.</strong></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+      <section class="direction-note">
+        <div>
+          <h2>A. Quiet Storybook</h2>
+          <div class="swatches">
+            <div class="swatch"><i style="background:#f7f1e5"></i><div><b>Ivory</b><span>#F7F1E5</span></div></div>
+            <div class="swatch"><i style="background:#235947"></i><div><b>Evergreen</b><span>#235947</span></div></div>
+            <div class="swatch"><i style="background:#efb45f"></i><div><b>Honey</b><span>#EFB45F</span></div></div>
+            <div class="swatch"><i style="background:#cf7b59"></i><div><b>Clay</b><span>#CF7B59</span></div></div>
+          </div>
+        </div>
+        <p><strong>Best for:</strong> warmth, trust, reading comfort, and a product that feels like a modern picture book. It replaces hard neo-brutalism with soft paper depth, uses evergreen as the single interactive color, and reserves the supporting colors for illustration. This is my recommended foundation.</p>
+      </section>
+    </article>
+
+    <article class="direction direction-b" id="direction-b" role="tabpanel" aria-labelledby="tab-b" hidden>
+      <div class="landing-shell">
+        <nav class="landing-nav" aria-label="Prototype navigation">
+          <a class="brand" href="#"><span class="brand-mark">S</span>StoryBuddy</a>
+          <div class="nav-links">
+            <a href="#">How it works</a>
+            <a href="#">For classrooms</a>
+            <a class="nav-action" href="#">Start a story</a>
+          </div>
+        </nav>
+        <section class="b-hero">
+          <div class="b-copy">
+            <h1 class="hero-title">Big ideas. Bright pages.</h1>
+            <p class="hero-copy">Write the adventure. StoryBuddy turns it into a picture book that is ready to share.</p>
+            <div class="hero-actions">
+              <a class="button button-primary" href="#">Make a book</a>
+              <a class="button button-secondary" href="#">See how it works</a>
+            </div>
+          </div>
+          <div class="b-art" aria-label="A playful stack of illustrated story posters">
+            <div class="scribble one"></div><div class="scribble two"></div>
+            <div class="poster-stack">
+              <div class="poster back"></div>
+              <div class="poster middle"></div>
+              <div class="poster front">
+                <div class="poster-title">Lina and the Moon Rocket</div>
+                <div class="rocket-scene"><div class="planet"></div><div class="rocket"></div></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+      <section class="direction-note">
+        <div>
+          <h2>B. Cobalt Playroom</h2>
+          <div class="swatches">
+            <div class="swatch"><i style="background:#f8f4e9"></i><div><b>Ivory</b><span>#F8F4E9</span></div></div>
+            <div class="swatch"><i style="background:#3155d9"></i><div><b>Cobalt</b><span>#3155D9</span></div></div>
+            <div class="swatch"><i style="background:#f2c85f"></i><div><b>Sun</b><span>#F2C85F</span></div></div>
+            <div class="swatch"><i style="background:#ec6a51"></i><div><b>Coral</b><span>#EC6A51</span></div></div>
+          </div>
+        </div>
+        <p><strong>Best for:</strong> an energetic, memorable brand that still avoids rainbow overload. Cobalt carries the identity at scale, while ivory gives the reading experience a calm base. It feels more like a creative tool and less like a traditional children’s book.</p>
+      </section>
+    </article>
+
+    <article class="direction direction-c" id="direction-c" role="tabpanel" aria-labelledby="tab-c" hidden>
+      <div class="landing-shell">
+        <nav class="landing-nav" aria-label="Prototype navigation">
+          <a class="brand" href="#"><span class="brand-mark">S</span>StoryBuddy</a>
+          <div class="nav-links">
+            <a href="#">How it works</a>
+            <a href="#">For classrooms</a>
+            <a class="nav-action" href="#">Start a story</a>
+          </div>
+        </nav>
+        <section class="c-hero">
+          <div class="c-copy">
+            <h1 class="hero-title">Words in. Wonder out.</h1>
+            <p class="hero-copy">A calm creative space where young writers can turn their own stories into illustrated books.</p>
+            <div class="hero-actions">
+              <a class="button button-primary" href="#">Make a book</a>
+              <a class="button button-secondary" href="#">See how it works</a>
+            </div>
+          </div>
+          <div class="c-art" aria-label="A collage of a castle story, writing lines, and a small book">
+            <div class="workshop-board">
+              <div class="workshop-tile big"><div class="night-sky"><i class="star s1"></i><i class="star s2"></i><i class="star s3"></i><div class="castle"></div></div></div>
+              <div class="workshop-tile top"><div class="pencil-lines"><i></i><i></i><i></i></div></div>
+              <div class="workshop-tile bottom"><div class="tiny-book"></div></div>
+            </div>
+          </div>
+        </section>
+      </div>
+      <section class="direction-note">
+        <div>
+          <h2>C. Berry Workshop</h2>
+          <div class="swatches">
+            <div class="swatch"><i style="background:#fbf4e8"></i><div><b>Porcelain</b><span>#FBF4E8</span></div></div>
+            <div class="swatch"><i style="background:#9b315a"></i><div><b>Berry</b><span>#9B315A</span></div></div>
+            <div class="swatch"><i style="background:#bdcf86"></i><div><b>Leaf</b><span>#BDCF86</span></div></div>
+            <div class="swatch"><i style="background:#e5a857"></i><div><b>Marigold</b><span>#E5A857</span></div></div>
+          </div>
+        </div>
+        <p><strong>Best for:</strong> balancing child creativity with an art-studio sensibility. Berry feels distinctive without relying on generic AI purple. The structured collage can extend naturally into writing, processing, and reader screens.</p>
+      </section>
+    </article>
+  </main>
+
+  <div class="footer-hint">This file is a visual study only. Copy, illustration style, and exact tokens can be refined after choosing a direction.</div>
+
+  <script>
+    const tabs = [...document.querySelectorAll('[role="tab"]')];
+    const panels = [...document.querySelectorAll('[role="tabpanel"]')];
+
+    function selectDirection(tab) {
+      tabs.forEach((item) => item.setAttribute('aria-selected', String(item === tab)));
+      panels.forEach((panel) => {
+        const selected = panel.id === tab.dataset.target;
+        panel.classList.toggle('active', selected);
+        panel.hidden = !selected;
+      });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    tabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => selectDirection(tab));
+      tab.addEventListener('keydown', (event) => {
+        if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+        event.preventDefault();
+        const delta = event.key === 'ArrowRight' ? 1 : -1;
+        const next = tabs[(index + delta + tabs.length) % tabs.length];
+        next.focus();
+        selectDirection(next);
+      });
+    });
+  </script>
+</body>
+</html>
