@@ -108,7 +108,7 @@ def test_mint_reference_accepts_a_passing_first_draw():
     assert verdict is passing
     assert draws == 1
     assert _uploaded_bytes(supabase) == b"draw-1-bytes"
-    assert path == "story-1/ref-c0.png"
+    assert path == "story-1/ref-c0-1.png"
 
 
 def test_mint_reference_rerolls_until_a_draw_passes():
@@ -165,7 +165,7 @@ def test_mint_reference_degrades_to_a_null_verdict_when_the_judge_fails():
     assert verdict is None
     assert draws == 1
     assert t2i.call_count == 1
-    assert path == "story-1/ref-c0.png"
+    assert path == "story-1/ref-c0-1.png"
     assert _uploaded_bytes(supabase) == b"draw-1-bytes"
 
 
@@ -187,8 +187,8 @@ def test_mint_reference_uploads_to_the_exact_reference_path():
     """Spec §6 upload target: `{story_id}/ref-{char_id}.png`, in the storybook-images bucket."""
     (path, _, _), _, _, supabase = _mint([_verdict(True)])
 
-    assert path == "story-1/ref-c0.png"
-    assert _uploaded_path(supabase) == "story-1/ref-c0.png"
+    assert path == "story-1/ref-c0-1.png"
+    assert _uploaded_path(supabase) == "story-1/ref-c0-1.png"
     supabase.storage.from_.assert_called_with("storybook-images")
 
 
@@ -286,22 +286,22 @@ def test_char_bible_returns_the_complete_character_list():
 def test_char_bible_writes_the_path_and_verdict_onto_the_referenced_characters():
     state = _state([_char("c0", "the dog")])
 
-    with patch("pipeline.char_bible.mint_reference", return_value=_minted("story-1/ref-c0.png")):
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted("story-1/ref-c0-1.png")):
         result = char_bible(state)
 
-    assert result["characters"][0].canonical_ref_image == "story-1/ref-c0.png"
+    assert result["characters"][0].canonical_ref_image == "story-1/ref-c0-1.png"
     assert result["characters"][0].ref_verdict.matches_description is True
 
 
 def test_char_bible_persists_a_failing_verdict_rather_than_failing_the_job():
     """ADR-010/ADR-028: a failed acceptance loop is loud, never a failed job, never a placeholder."""
-    failing = ("story-1/ref-c0.png", _verdict(False, ["dog"]), 3)
+    failing = ("story-1/ref-c0-1.png", _verdict(False, ["dog"]), 3)
     state = _state([_char("c0", "the dog")])
 
     with patch("pipeline.char_bible.mint_reference", return_value=failing):
         result = char_bible(state)
 
-    assert result["characters"][0].canonical_ref_image == "story-1/ref-c0.png"
+    assert result["characters"][0].canonical_ref_image == "story-1/ref-c0-1.png"
     assert result["characters"][0].ref_verdict.matches_description is False
 
 
@@ -309,10 +309,10 @@ def test_char_bible_accepts_a_null_verdict_from_a_degraded_judge():
     """Spec §4: ref_verdict=None is honest and distinguishable from a FAILED verdict."""
     state = _state([_char("c0", "the dog")])
 
-    with patch("pipeline.char_bible.mint_reference", return_value=("story-1/ref-c0.png", None, 1)):
+    with patch("pipeline.char_bible.mint_reference", return_value=("story-1/ref-c0-1.png", None, 1)):
         result = char_bible(state)
 
-    assert result["characters"][0].canonical_ref_image == "story-1/ref-c0.png"
+    assert result["characters"][0].canonical_ref_image == "story-1/ref-c0-1.png"
     assert result["characters"][0].ref_verdict is None
 
 
@@ -353,21 +353,21 @@ def test_char_bible_on_a_single_character_mints_exactly_one_reference():
 
 def test_char_bible_skips_a_character_that_already_has_a_reference():
     """Invariant 6 / CC-10: idempotent re-entry — zero draws, zero cost for an existing ref."""
-    state = _state([_char("c0", "the dog", ref="story-1/ref-c0.png"), _char("c1", "the cat")])
+    state = _state([_char("c0", "the dog", ref="story-1/ref-c0-1.png"), _char("c1", "the cat")])
 
     with patch("pipeline.char_bible.mint_reference", return_value=_minted(draws=1)) as mint:
         result = char_bible(state)
 
     assert mint.call_count == 1
     assert mint.call_args.args[4] == "c1"
-    assert result["characters"][0].canonical_ref_image == "story-1/ref-c0.png"
+    assert result["characters"][0].canonical_ref_image == "story-1/ref-c0-1.png"
 
 
 def test_char_bible_makes_zero_helper_calls_when_both_references_already_exist():
     """Invariant 6: full re-entry after success costs nothing."""
     state = _state([
-        _char("c0", "the dog", ref="story-1/ref-c0.png"),
-        _char("c1", "the cat", ref="story-1/ref-c1.png"),
+        _char("c0", "the dog", ref="story-1/ref-c0-1.png"),
+        _char("c1", "the cat", ref="story-1/ref-c1-1.png"),
     ])
 
     with patch("pipeline.char_bible.mint_reference") as mint:
@@ -382,7 +382,7 @@ def test_char_bible_caps_before_it_filters():
     ONCE, for c1 only — never for c2. Filtering before capping slides the 2-slot window onto c2
     and mints a THIRD canonical reference against ADR-004."""
     state = _state([
-        _char("c0", "the dog", ref="story-1/ref-c0.png"),
+        _char("c0", "the dog", ref="story-1/ref-c0-1.png"),
         _char("c1", "the cat"),
         _char("c2", "the bird"),
     ])
@@ -435,3 +435,105 @@ def test_char_bible_prefers_the_state_style_fragment_when_set():
         char_bible(_state([_char("c0", "the dog")], style=Style(prompt_fragment="flat gouache storybook")))
 
     assert mint.call_args.args[2] == "flat gouache storybook"
+
+
+# --- targeted mode (ADR-029, spec §4.5-4.7) ---
+
+def _targeted_state(char_id: str = "c0", attribute: str = "orange sock", ref_retry_count: int = 0) -> StoryMemory:
+    from contracts.story_memory import ReferenceRetry
+
+    c0 = _char("c0", "the dog", ref="story-1/ref-c0-1.png")
+    c0.ref_verdict = _verdict(True, ["dog"])
+    c0.ref_moderation_status = "passed"
+    return _state(
+        [c0, _char("c1", "the cat", ref="story-1/ref-c1-1.png")],
+        cost=Cost(image_count=2, ref_retry_count=ref_retry_count),
+    ).model_copy(update={"reference_retry": ReferenceRetry(char_id=char_id, attribute=attribute)})
+
+
+def test_char_bible_targeted_mode_makes_exactly_one_draw_and_one_judge_call():
+    state = _targeted_state()
+    with patch("pipeline.char_bible.text_to_image", return_value=b"redraw-bytes") as t2i, \
+         patch("pipeline.char_bible.judge", return_value=_verdict(True, ["dog"])) as judge_mock, \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+        result = char_bible(state)
+
+    assert t2i.call_count == 1
+    assert judge_mock.call_count == 1
+    assert result["characters"][0].char_id == "c0"
+
+
+def test_char_bible_targeted_mode_restates_the_tapped_attribute_in_the_prompt():
+    state = _targeted_state(attribute="orange sock")
+    with patch("pipeline.char_bible.text_to_image", return_value=b"x") as t2i, \
+         patch("pipeline.char_bible.judge", return_value=_verdict(True)), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+        char_bible(state)
+
+    assert "orange sock" in t2i.call_args.args[0]
+
+
+def test_char_bible_targeted_mode_only_mutates_the_flagged_character():
+    state = _targeted_state()
+    c1_before = next(c for c in state.characters if c.char_id == "c1")
+    with patch("pipeline.char_bible.text_to_image", return_value=b"x"), \
+         patch("pipeline.char_bible.judge", return_value=_verdict(True)), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+        result = char_bible(state)
+
+    c1_after = next(c for c in result["characters"] if c.char_id == "c1")
+    assert c1_after == c1_before
+
+
+def test_char_bible_targeted_mode_bumps_image_count_and_ref_retry_count_and_clears_retry():
+    state = _targeted_state(ref_retry_count=1)
+    with patch("pipeline.char_bible.text_to_image", return_value=b"x"), \
+         patch("pipeline.char_bible.judge", return_value=_verdict(True)), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+        result = char_bible(state)
+
+    assert result["cost"].image_count == 3
+    assert result["cost"].ref_retry_count == 2
+    assert result["reference_retry"] is None
+
+
+def test_char_bible_targeted_mode_overwrites_unconditionally():
+    """ADR-029 §2: best-of over old-versus-new would risk showing the child the same picture
+    back, the worst answer to "try again". The overwrite never compares to the prior verdict."""
+    state = _targeted_state()
+    with patch("pipeline.char_bible.text_to_image", return_value=b"x"), \
+         patch("pipeline.char_bible.judge", return_value=_verdict(False, ["dog"])), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+        result = char_bible(state)
+
+    c0 = next(c for c in result["characters"] if c.char_id == "c0")
+    assert c0.ref_verdict.matches_description is False   # overwritten even though it "got worse"
+
+
+def test_char_bible_targeted_mode_uploads_to_a_new_path_and_clears_moderation_status():
+    """Invariant 6 (spec §4.6-4.7): first tap (ref_retry_count=0) must write ref-c0-2.png, not
+    ref-c0-1.png (the initial mint's path). Uses the realistic first-tap state so the Storage-path
+    collision the spec warns against is directly covered."""
+    state = _targeted_state()   # ref_retry_count=0: the first tap
+    fake_supabase = MagicMock()
+    with patch("pipeline.char_bible.text_to_image", return_value=b"x"), \
+         patch("pipeline.char_bible.judge", return_value=_verdict(True)), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=fake_supabase):
+        result = char_bible(state)
+
+    c0 = next(c for c in result["characters"] if c.char_id == "c0")
+    assert c0.canonical_ref_image == "story-1/ref-c0-2.png"
+    assert c0.ref_moderation_status is None
+    assert _uploaded_path(fake_supabase) == "story-1/ref-c0-2.png"
+
+
+def test_char_bible_ignores_invariant_six_skip_when_reference_retry_targets_an_existing_ref():
+    """The targeted overwrite applies even though c0 already has canonical_ref_image set —
+    invariant 6's skip is for the first-pass path only (spec §3)."""
+    state = _targeted_state()
+    with patch("pipeline.char_bible.text_to_image", return_value=b"x") as t2i, \
+         patch("pipeline.char_bible.judge", return_value=_verdict(True)), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+        char_bible(state)
+
+    assert t2i.call_count == 1

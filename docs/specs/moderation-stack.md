@@ -102,6 +102,14 @@ its own one-retry loop and its own fail edge. The `consistency_router` is a sepa
 - Gemma OpenRouter error: hard fail (not a skip). The safety path has no "proceed without one
   of the two checks" fallback.
 
+⚠️ **A reveal retry re-moderates every character on the row, not only the redrawn one** — `char_ref_mod`
+iterates `state.characters` unconditionally and has no skip on `ref_moderation_status == "passed"`. The
+obvious optimisation — skip a character already marked `"passed"` — is a **CC-1 safety hole** unless
+`char_bible`'s targeted mode also clears `ref_moderation_status` on the character it overwrote (it does:
+`kid-flow-pause-lifecycle.md` §4.7). A status describes the image that was in `canonical_ref_image` when
+it was written; overwriting the image without clearing the status would route an unmoderated image
+straight to a child.
+
 ### 4c. `output_mod`
 
 1. Load `scene.final_image_ref` from Storage (signed URL, short TTL).
@@ -186,7 +194,11 @@ and Taglish cases, both directions). Feed it to the real classifiers in an offli
   and a filed spec. ⚠️ It also changes `redact_pii`'s **output form** for person entities from
   `<PH_PERSON>` placeholders to consistent pseudonyms, because `analyze` and `segment` build the
   story *from* `redacted_text`. CC-2 is unchanged; the replacement token is not.
-- **`self-refusal-fallback` spec** — owns the soften-and-retry strategy `output_mod` invokes.
+- **`self-refusal-fallback` spec** — ⚠️ **does not own** `output_mod`'s soften-and-retry (corrected
+  2026-08-02). That spec covers the model *declining* a prompt; `output_mod`'s retry is the opposite
+  trigger — the model complied and a classifier flagged the result. `output_mod` ships its own stock
+  softener (`_soften_prompt`, `# ponytail`-marked) and owns it. If that softener proves weak in practice,
+  `output_mod` may adopt `self-refusal-fallback`'s; nothing here is blocked on that spec.
 - **`input-gate-hardening` spec** (also owns the former `length-guard` row) — clamps at
   `POST /storybooks`, before the job is queued; this spec's assumption that `input_gate` always sees
   final text is satisfied literally.

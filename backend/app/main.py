@@ -1,8 +1,9 @@
 import logging
 import uuid
+from typing import Literal
 
 import sentry_sdk
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 
@@ -49,6 +50,16 @@ class CreateStorybookResponse(BaseModel):
     job_id: str
 
 
+class ConfirmRequest(BaseModel):
+    action: Literal["confirm", "try_again"]
+    char_id: str | None = None
+    attribute: str | None = None
+
+
+class ConfirmResponse(BaseModel):
+    status: str
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
@@ -78,3 +89,42 @@ def create_storybook(payload: CreateStorybookRequest) -> CreateStorybookResponse
     queue.enqueue("worker.run_job.run_storybook_job", job_id)
 
     return CreateStorybookResponse(job_id=job_id)
+
+
+@app.post("/jobs/{job_id}/confirm", response_model=ConfirmResponse)
+def confirm_job(job_id: str, payload: ConfirmRequest) -> ConfirmResponse:
+    supabase = get_supabase_client()
+
+    rows = supabase.table("jobs").select("reveal, status").eq("id", job_id).execute().data
+    if not rows:
+        raise HTTPException(404, "job not found")
+    row = rows[0]
+
+    if payload.action == "try_again":
+        characters = row["reveal"].get("characters", [])
+        character = next((c for c in characters if c["char_id"] == payload.char_id), None)
+        if character is None or payload.attribute not in character["chips"]:
+            raise HTTPException(422, "char_id or attribute not offered on this job's current reveal")
+
+    cas = (
+        supabase.table("jobs")
+        .update({"status": "queued"})
+        .eq("id", job_id)
+        .eq("status", "awaiting_confirm")
+        .execute()
+    )
+    if not cas.data:
+        # Zero rows affected: already resumed, never paused, or swept. A double-tapping child
+        # must not see an error (spec §4.9) — report the current status, enqueue nothing.
+        return ConfirmResponse(status=row["status"])
+
+    queue = get_queue()
+    try:
+        queue.enqueue("worker.run_job.resume_storybook_job", job_id, payload.model_dump())
+    except Exception:
+        # The CAS already flipped status to 'queued'; a Redis outage here would strand the book
+        # with no worker coming and no way to re-confirm. Roll it back — nothing else ran.
+        supabase.table("jobs").update({"status": "awaiting_confirm"}).eq("id", job_id).execute()
+        raise HTTPException(503, "could not resume — try again")
+
+    return ConfirmResponse(status="queued")

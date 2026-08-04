@@ -337,8 +337,10 @@ deliberately does not build a second harness.
 - **N=3 repeated-failure off-ramp ownership.** `ROADMAP.md:174` files it under the Length guard
   bullet; ADR-025 twice assigns it to `moderation-stack` / `self-refusal-fallback`; PRD §11.4 defines
   it as a *moderation*-failure counter across story revisions. `moderation-stack` shipped without it.
-  **Assigned to `self-refusal-fallback`**, and the ROADMAP bullet is corrected in the same PR. It is
-  not a length concern and nothing here implements it.
+  Assigned to `self-refusal-fallback`, and the ROADMAP bullet corrected. It is not a length concern and
+  nothing here implements it. **Superseded 2026-08-02:** split into its own backlog row,
+  `repeated-failure-offramp` — it counts across *job submissions*, which needs a cross-run counter that
+  does not exist, so it does not belong to a single-run spec. The ROADMAP correction did land, later.
 
 **Open / handed off:**
 - ✅ **Deny-list provenance — resolved 2026-08-02.** Shipped without the deny-list: `ph_recognizers.py`

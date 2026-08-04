@@ -5,6 +5,7 @@ from app.config import (
     MIN_STORY_WORDS,
     RECURSION_LIMIT,
     STYLE_PRESETS,
+    SUPER_STEP_PRELUDE,
     settings,
 )
 
@@ -17,17 +18,21 @@ def test_cel_preset_equals_default_style_fragment():
     assert STYLE_PRESETS["cel"] == settings.default_style_fragment
 
 
-def test_recursion_limit_derives_from_max_scenes_at_four_visits_per_scene():
-    """ADR-024's formula: max_scenes × 4 + fixed_prelude. The ×4 is generate_scene,
-    consistency_check, regenerate, consistency_check — the deepest a single scene can go."""
-    assert RECURSION_LIMIT == MAX_SCENES * 4 + 9
+def test_recursion_limit_derives_from_max_scenes_and_the_super_step_prelude():
+    """ADR-024's ×4 formula, corrected prelude: 6 linear steps + 3 retry cycles of 3
+    (char_bible, char_ref_mod, reveal) = 15 (spec §4.13)."""
+    assert SUPER_STEP_PRELUDE == 15
+    assert RECURSION_LIMIT == MAX_SCENES * 4 + SUPER_STEP_PRELUDE
 
 
-def test_recursion_limit_shares_its_prelude_term_with_image_budget():
-    """ADR-025 D4: the domain-level and graph-level backstops share ONE number.
-    The prelude is 9 in both, deliberately generous today (it is really 5) to leave
-    headroom for ADR-029's Phase-2 `reveal` node."""
-    assert RECURSION_LIMIT - MAX_SCENES * 4 == IMAGE_BUDGET - MAX_SCENES * 2
+def test_recursion_limit_and_image_budget_no_longer_share_a_prelude_term():
+    """Spec §4.13: the two backstops are different units and were only ever coincidentally
+    equal at 9. Raising one in sympathy with the other would weaken a cost guard."""
+    assert RECURSION_LIMIT - MAX_SCENES * 4 != IMAGE_BUDGET - MAX_SCENES * 2
+
+
+def test_image_budget_is_unchanged_by_the_reveal_prelude():
+    assert IMAGE_BUDGET == MAX_SCENES * 2 + 9
 
 
 def test_moderation_primary_model_is_qwen3_guard_gen():

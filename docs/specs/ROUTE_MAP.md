@@ -52,12 +52,17 @@ by the child), just not the Supabase Auth session teachers use — session is es
 | `/s/[profileId]` | Student home (Bookshelf) | Client | Past stories as book covers + "Write a New Story!" CTA |
 | `/s/[profileId]/write` | Story editor | Client | **Full-screen wizard** — nav hidden. Large textarea, live word count |
 | `/s/[profileId]/write/style` | Style preset picker | Client | Part of the write wizard flow. 3 large tappable image cards |
-| `/s/[profileId]/process/[jobId]` | Processing view | Client | **Full-screen** — no nav. Staged progress via Supabase Realtime |
-| `/s/[profileId]/process/[jobId]/reveal` | Character reveal | Client | Shows moderated canonical character ref(s). Confirm / "try again" |
+| `/s/[profileId]/process/[jobId]` | Processing view | Client | **Full-screen** — no nav. Staged progress via Supabase Realtime; inline character reveal |
 | `/s/[profileId]/book/[bookId]` | Storybook reader | Client | **Immersive full-screen**. Image + caption + narration. Next/prev |
 | `/s/[profileId]/gallery` | Classroom gallery | Client | Browse & read classmates' approved books. Display-only — no reflection surface |
 | `/s/[profileId]/gallery/[bookId]` | Peer book reader | Client | Same reader component, but for a classmate's book. Read-only |
 | `/s/[profileId]/settings` | Student account settings | Client | Change password. No email, no self-serve recovery — reset otherwise is teacher-initiated |
+
+> **Status note (2026-08-02, `kid-flow-book-persistence` S1):** the kid routes above stay flat
+> (`/write`, `/process/[jobId]`, `/book/[jobId]`) until `auth-and-classroom` lands. Moving to the
+> `/s/[profileId]/…` tree now would put `settings.dev_profile_id` in a URL — a sentinel as a route
+> segment, guarding nothing, easily mistaken for a guard. The later move is a directory rename plus
+> a middleware entry; nothing built under the flat routes is affected.
 
 ---
 
@@ -111,8 +116,7 @@ app/
 │       │   │   ├── page.tsx            # /s/[profileId]/write
 │       │   │   └── style/page.tsx      # /s/[profileId]/write/style
 │       │   ├── process/[jobId]/
-│       │   │   ├── page.tsx            # /s/[profileId]/process/[jobId]
-│       │   │   └── reveal/page.tsx     # /s/[profileId]/process/[jobId]/reveal
+│       │   │   └── page.tsx            # /s/[profileId]/process/[jobId] (includes inline reveal)
 │       │   └── book/[bookId]/
 │       │       └── page.tsx            # /s/[profileId]/book/[bookId]
 │       │
@@ -242,7 +246,6 @@ Use `motion` (Framer Motion) for page transitions. Respect `prefers-reduced-moti
 | `/s/[pid]/write` | `/s/[pid]` | **No** — draft lost | **Yes** — "Your story isn't saved yet" | Critical: prevent accidental loss |
 | `/s/[pid]/write/style` | `/s/[pid]/write` | Yes (story text kept) | No | — |
 | `/s/[pid]/process/[jobId]` | `/s/[pid]` | N/A (job continues) | **Yes** — "Your book is still being made!" | Job runs regardless; user can return later |
-| `/s/[pid]/process/[jobId]/reveal` | `/s/[pid]/process/[jobId]` | Yes | No | Can go back to re-see progress |
 | `/s/[pid]/book/[bookId]` | `/s/[pid]` | Yes (page position) | No | Returns to bookshelf |
 | `/s/[pid]/gallery` | `/s/[pid]` (via tab) | Yes | No | Lateral tab switch |
 | `/s/[pid]/gallery/[bookId]` | `/s/[pid]/gallery` | Yes | No | Read-only, display-only |
@@ -292,7 +295,7 @@ Every route group gets a `loading.tsx` that renders before the page component hy
 | **Student Write** | Full-screen: large textarea skeleton + floating button skeleton | Pulse | Nunito |
 | **Processing** | Full-screen: centered Lottie animation (book pages flipping). No skeleton — the Lottie *is* the loading state | Lottie loop | Nunito, large |
 | **Character Reveal** | Centered card skeleton with image placeholder (1:1 aspect) + 2 button skeletons below | Shimmer | Nunito |
-| **Book Reader** | Full-screen: image placeholder (top 60%) + 2 text-line skeletons (bottom) + page indicator dot | Fade in | — |
+| **Book Reader** | Full-screen: image placeholder (top 60%) + 2 text-line skeletons (bottom) + page indicator dot. *Note: `/book/[jobId]` handles all four job buckets.* | Fade in | — |
 | **Gallery** | Masonry grid (desktop) / vertical stack (mobile) of 4 book-card skeletons | Shimmer | Nunito |
 
 ### Loading state rules
@@ -334,7 +337,6 @@ Each route group also gets an `error.tsx`:
 /s/[profileId]/gallery                      Classroom gallery (student)
 /s/[profileId]/gallery/[bookId]             Peer book reader, read-only (student)
 /s/[profileId]/process/[jobId]              Processing view (student)
-/s/[profileId]/process/[jobId]/reveal       Character reveal (student)
 /s/[profileId]/settings                     Password change (student)
 /s/[profileId]/write                        Story editor (student)
 /s/[profileId]/write/style                  Style preset picker (student)
@@ -372,4 +374,4 @@ Each route group also gets an `error.tsx`:
 ### Open questions
 - ⚠️ **Shared-element transitions** — feasibility depends on View Transitions API support in target browsers (Chrome 111+, Safari 18+). If unsupported, fall back to scale/fade transitions.
 - ⚠️ **Student session persistence** — `sessionStorage` (tab-scoped, dies on close) vs a short-lived cookie (survives refresh). Cookie is better UX but raises the question of session expiry policy. Decision needed before `auth-and-classroom` spec.
-- ⚠️ **Landscape lock on mobile book reader** — `screen.orientation.lock('landscape')` requires a fullscreen context and is not supported on iOS Safari. May need to show a "rotate your device" prompt instead. Verify at build time.
+- ✅ **Landscape lock on mobile book reader** — Resolved by S4: CSS `landscape:` media query, no JS orientation lock.

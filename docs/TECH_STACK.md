@@ -239,18 +239,20 @@ Be honest — these are open, not silently resolved:
   `docs/product/PHASE_05_RESULTS.md`.
 - ~~**`backend/.env` does not exist**~~ — resolved; `backend/.env` exists and `Settings` instantiates
   (verified 2026-07-29 by resolving `fal_image_edit_model`). Only `.env.example` is in git, by design.
-- **`settings.moderation_backstop_model` is `None`** in `config.py:36`. ADR-011's actual decided backstop
-  is `openai/gpt-oss-safeguard-20b` on OpenRouter, but the field is deliberately left unset so the
-  Phase-0.5 probe stays opt-in — the Phase-2 `moderation-stack` spec is what wires the real
-  primary+backstop config shape. `settings.moderation_model` still points at the **demoted** fallback
-  (`meta-llama/llama-guard-4-12b`), not the actual current primary (`Qwen3Guard-Gen`, which isn't an
-  OpenRouter model ID at all — it's CPU-resident on the worker and has no config field yet).
-- **RLS is not actually restrictive today.** `supabase/migrations/0001_jobs_table.sql:18-21` is the only
-  policy on `jobs`, and it reads `for select to anon using (true)` — RLS is *enabled* but nothing is
-  *restricted*. Scoping today is a client-side `.eq('id', job_id)` convention (the UUID is the capability
-  link), and no classroom/profile columns exist yet to scope by. The migration file itself carries a
-  `ponytail:` comment flagging that Phase 2's `auth-and-classroom` migration must drop this policy before
-  any real child text enters the system.
+- ~~**`settings.moderation_backstop_model` is `None`**~~ — resolved 2026-08-02 by `moderation-stack`.
+  `config.py` now carries three moderation settings, all set: `moderation_primary_model =
+  "Qwen/Qwen3-Guard-Gen-0.6B"` (a HuggingFace hub id, downloaded at worker startup — not an OpenRouter
+  model), `moderation_backstop_model = "openai/gpt-oss-safeguard-20b"` (ADR-011c), and
+  `moderation_backstop_image_model = "google/gemma-3-27b-it"` (a separate field from `vlm_judge_model` so
+  the safety rubric and the consistency judge can diverge). The old `moderation_model` field pointing at
+  the demoted `llama-guard-4-12b` is gone.
+- **RLS is not actually restrictive today.** There are exactly **two** policy surfaces:
+  `supabase/migrations/0001_jobs_table.sql:18-21` on `jobs` (`for select to anon using (true)`) and
+  `0004_jobs_pages.sql:19-22` on `storage.objects` (scoped only to the bucket) — RLS is *enabled* but
+  nothing is *restricted*. Scoping today is a client-side `.eq('id', job_id)` convention (the UUID is the
+  capability link), and no classroom/profile columns exist yet to scope by. Both migrations carry a
+  `ponytail:` comment flagging that Phase 2's `auth-and-classroom` migration must drop both and replace
+  them in one change (`kid-flow-book-persistence` constraint 4); no later spec may add a third surface.
 - **Whether fal.ai actually routes OmniGen2, HiDream-O1, or Z-Image is unverified** (ADR-001). This gates
   whether escalating the fallback ladder is a one-env-var change or a `providers.py` provider change.
 - **Whether fal accepts an `output_format` arg is unverified** (ADR-027). This gates whether WebP encoding is a
@@ -276,9 +278,12 @@ Be honest — these are open, not silently resolved:
   *system* RAM — not 32 GB VRAM. QLoRA on a 7B VLM with two-image inputs needs ~16 GB+ VRAM, so an 8 GB
   card likely OOMs. The rented RTX 4090/A100 fallback (~$5–15, ADR-018) exists precisely for this case —
   verify the exact GPU model and VRAM before committing the training run.
-- **The output-image safety gate is entirely unbuilt.** `input_gate` now exists as a pass-through stub
-  (built 2026-07-29, `feat/story-memory-contract`) — it copies `raw_text` to `redacted_text` and marks
-  `moderation.passed=True`. No Qwen3Guard-Gen, no Presidio call, no NSFW gate exists yet. §1's moderation
-  rows describe the Phase-2 *target*; the stub is only the graph slot so Phase 2 is a single-file swap.
+- ~~**The output-image safety gate is entirely unbuilt.**~~ — resolved 2026-08-02 by `moderation-stack`:
+  `input_gate` is a real implementation (Qwen3Guard-Gen 0.6B CPU-resident + Presidio PII redaction,
+  concurrent, with an OpenRouter backstop), `char_ref_mod` gates every canonical reference before the
+  reveal, and `output_mod` gates every output scene (Falconsai NSFW ViT + Gemma safety rubric, one
+  soften-and-retry). `moderation_router` and `route_after_output_mod` enforce the ADR-011 ordering in
+  `graph.py`. §1's moderation rows now describe shipped code, not a target. **Still open:** the worker RAM
+  budget with Presidio+spaCy, the ViT and the CPU text gate all resident (`moderation-stack` §8).
 - **Both moderation gates (input text, output image) are unverified in Filipino and Taglish** until the
   Phase 0.5 moderation probe runs — a release gate for Phase 2, not a curiosity (ADR-011).

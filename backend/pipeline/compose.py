@@ -35,6 +35,10 @@ def compose(state: StoryMemory) -> dict:
         # regression fails the job HERE rather than shipping a book with a blank page.
         raise ValueError(f"compose: scenes not finalized: {unfinalized}")
 
+    uncaptioned = [s.scene_id for s in state.scenes if not s.caption]
+    if uncaptioned:
+        raise ValueError(f"compose: scenes without a caption: {uncaptioned}")
+
     outcomes = [_outcome(s) for s in state.scenes]
     # CC-5: the only per-book terminal record the run produces.
     log.info(

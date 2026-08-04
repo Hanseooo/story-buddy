@@ -96,6 +96,11 @@ char_bible(state) -> dict                                      # pure: select, m
    (invariant 6). The order matters: filtering first and *then* taking two would slide the window onto
    `c2` when `c0` is already referenced, producing three canonical references and breaking ADR-004's
    cap.
+
+   **The targeted retry path is exempt from this cap-then-filter step entirely.** When
+   `state.reference_retry` is set, `char_bible` takes a second, earlier branch (`kid-flow-pause-lifecycle.md`
+   §4.5) that overwrites the named character's `canonical_ref_image` unconditionally, whether or not
+   it already has one. Invariant 6's skip is for the first-pass path only.
 2. `style_fragment = state.style.prompt_fragment or settings.default_style_fragment`.
 3. For each selected character, `mint_reference(...)` → `(path, verdict, draws)`; accumulate `draws`.
 4. Build the **full** `characters` list: modified entries via `model_copy(update=...)`, everything

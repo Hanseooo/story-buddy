@@ -12,6 +12,7 @@ from pipeline.consistency_check import consistency_check
 from pipeline.compose import compose
 from pipeline.output_mod import output_mod
 from pipeline.regenerate import regenerate
+from pipeline.reveal import MAX_RETRY_TAPS, reveal
 
 
 def moderation_router(state: StoryMemory) -> str:
@@ -27,9 +28,9 @@ def moderation_router(state: StoryMemory) -> str:
             raise RuntimeError("moderation_error")
         raise RuntimeError("content_flagged")
     if any(c.ref_moderation_status == "flagged" for c in state.characters):
-        raise RuntimeError("content_flagged")
+        raise RuntimeError("ref_flagged")
     if state.scenes:
-        return "generate_scene" if any(s.final_image_ref is None for s in state.scenes) else "output_mod"
+        return "reveal"
     return "analyze"
 
 
@@ -47,6 +48,15 @@ def route_next_scene(state: StoryMemory) -> str:
     now reached only after output moderation passes.
     """
     return "generate_scene" if any(s.final_image_ref is None for s in state.scenes) else "output_mod"
+
+
+def route_reveal(state: StoryMemory) -> str:
+    """Pure ADR-024 router, holds no policy beyond the cap (spec §3). The cap is enforced HERE,
+    not only in the UI: a resume payload arrives from a client and is a trust boundary.
+    """
+    if state.reference_retry is not None and state.cost.ref_retry_count < MAX_RETRY_TAPS:
+        return "try_again"
+    return route_next_scene(state)
 
 
 def route_after_check(state: StoryMemory) -> str:
@@ -72,6 +82,7 @@ def build_graph(checkpointer=None):
     graph.add_node("segment", segment)
     graph.add_node("char_bible", char_bible)
     graph.add_node("char_ref_mod", char_ref_mod)
+    graph.add_node("reveal", reveal)
     graph.add_node("generate_scene", generate_scene)
     graph.add_node("consistency_check", consistency_check)
     graph.add_node("regenerate", regenerate)
@@ -83,7 +94,10 @@ def build_graph(checkpointer=None):
     graph.add_edge("analyze", "segment")
     graph.add_edge("segment", "char_bible")
     graph.add_edge("char_bible", "char_ref_mod")                    # char_ref_mod writes status, never raises on flag
-    graph.add_conditional_edges("char_ref_mod", moderation_router)  # raises on flag; routes to scene loop
+    graph.add_conditional_edges("char_ref_mod", moderation_router)  # raises on flag; routes to "reveal"
+    graph.add_conditional_edges(
+        "reveal", route_reveal, {"try_again": "char_bible", "generate_scene": "generate_scene", "output_mod": "output_mod"}
+    )
     graph.add_edge("generate_scene", "consistency_check")
     graph.add_conditional_edges("consistency_check", route_after_check)
     graph.add_edge("regenerate", "consistency_check")

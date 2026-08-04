@@ -171,8 +171,13 @@ fallback means Phase 1 wobbles rather than collapses.
 - **Filipino PII recognizers** — custom Presidio recognizers for Filipino names, `Barangay`/`Purok`/`Sitio`
   address structure, and `+63 9xx` mobile formats. **Not a polish item**: the stock configuration leaks the
   exact case ADR-011 calls expected. A small, reusable, publishable artifact in its own right.
-- **Model self-refusal fallback** (soften-and-retry → gentle reframe).
-- **Length guard** — word cap + truncate-at-scene-boundary (no summarization); repeated-failure off-ramp (N=3).
+- **Model self-refusal fallback** (soften-and-retry → gentle reframe) — for the model *declining* a benign
+  mild-peril prompt. Distinct from `output_mod`'s soften-and-retry (model complied, classifier flagged),
+  which shipped with `moderation-stack`.
+- **Length guard** — word cap + truncate-at-scene-boundary (no summarization).
+- **Repeated moderation-failure off-ramp (N=3)** — PRD §11.4; its own item, *not* part of the length guard.
+  Counts failed revisions **across job submissions**, so it needs a cross-run counter that does not exist
+  yet and a revision flow (`kid-flow-ui`) to count. Sequence it after both.
 - **Auth & classroom** — Supabase Auth (teacher/owner) + classroom + student profiles + **RLS policies**
   (classroom isolation). Signed URLs. *(ADR-017 — supersedes ADR-006's role model.)* Add the **`researcher`
   role** here, while the role model is open: it is one enum value now, and a reopened auth decision in

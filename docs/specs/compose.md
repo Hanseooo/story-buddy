@@ -30,8 +30,9 @@ is every page in it real* — and the terminal log line that says how the book c
      the whole book and changes none of it.
   2. **No effects.** No provider call, no Storage, no DB — therefore **no helper**, which is why
      MASTER_SPEC §6 rule 1 names this node as its example of a node that needs none.
-  3. **A book reaching `END` has ≥ 1 scene, and every scene has a `final_image_ref`.** This node
-     is where that becomes true or the job fails.
+  3. **A book reaching `END` has ≥ 1 scene, every scene has a `final_image_ref`, and every scene
+     has a `caption`.** This node is where that becomes true or the job fails
+     (`kid-flow-book-persistence.md` §4.2 — a page is an image plus a verbatim caption, ADR-013).
   4. Purity ⇒ idempotent re-entry at zero cost (CC-10).
 
 `contracts/` is **untouched** by this spec.
@@ -97,6 +98,10 @@ def compose(state: StoryMemory) -> dict:
         # Unreachable while `route_next_scene` is correct, and that is the point: a routing
         # regression fails the job HERE rather than shipping a book with a blank page.
         raise ValueError(f"compose: scenes not finalized: {unfinalized}")
+
+    uncaptioned = [s.scene_id for s in state.scenes if not s.caption]
+    if uncaptioned:
+        raise ValueError(f"compose: scenes without a caption: {uncaptioned}")
 
     outcomes = [_outcome(s) for s in state.scenes]
     # CC-5: the only per-book terminal record the run produces.
@@ -177,13 +182,10 @@ ADR-025 (never a partial book; a raise becomes job `failed`), MASTER_SPEC §6 ru
 
 **Handed off — flagged, not absorbed:**
 
-- **The multi-page persistence gap → unowned.** `run_job.py:50-59` writes `scenes[0].caption` and
-  `scenes[0].final_image_ref` into the single-scene `jobs.caption` / `jobs.image_path` columns, and
-  `frontend/app/book/[jobId]/page.tsx` renders exactly that one page. **Phase 1 generates a
-  multi-page book that nothing outside the checkpoint blob can read.** Closing it is a `jobs`
-  migration plus a second- and third-module change (worker + frontend), which is why it is not in
-  this spec; it is the natural scope of `kid-flow-ui`, with `export-pdf` as the other consumer.
-  Logged to `DECISION_BACKLOG.md`.
+- **The multi-page persistence gap → closed by `kid-flow-book-persistence.md`.** `run_job.py` now
+  projects every scene into `jobs.pages`, `frontend/app/book/[jobId]/page.tsx` renders the whole
+  array, and this node's invariant 3 gates the caption half of that contract (ADR-013: a page is an
+  image plus a verbatim caption). `export-pdf` remains the other consumer of `jobs.pages`.
 - **`jobs.failure_reason` (ADR-025 Decision 5) → unowned**, as `image-generator` §8 already
   records. This node adds a second producer of job-level failures with no enum to name itself by.
   Migration `0003` plus a taxonomy map in `run_job.py`. Note the constraint: `FailureReason` in

@@ -58,7 +58,8 @@ story-buddy/
 **Not built yet** (listed so they are not invented elsewhere): `backend/finetune/` — Phase 2.5 data
 manifests, training config, eval (ADR-018). `backend/eval/` — Phase 3 offline eval scripts, starting with
 `functional_verification.py` (Tool A). `frontend/app/(research)/` — the Phase-2.5 researcher route group
-(`annotate/`, `adjudicate/`, `books/`), behind the `researcher` role (ADR-026). `.github/workflows/` — see §6.
+(`annotate/`, `adjudicate/`, `books/`), behind the `researcher` role (ADR-026). *(`.github/workflows/ci.yml`
+is now built — added 2026-07-29; see §6.)*
 
 **The research track gets two screens and one table, and no more.** No metrics dashboard (Tool A is a script
 — §4's "offline scripts + tracing exports"), no run-trace viewer (that is LangSmith, ADR-014), and no separate
@@ -142,7 +143,7 @@ input_gate ──► analyze ──► segment ──► char_bible ──► [c
 | `segment` | analysis + timeline | `scenes[].text_excerpt`, `caption`, `characters_present` | ADR-012 / §5,§8 |
 | `char_bible` | `characters[]`, `style.prompt_fragment` | `characters[].canonical_ref_image`, `ref_verdict`, `cost.image_count` | ADR-001,007,028 |
 | *char-ref moderation* (Phase 2) | `characters[].canonical_ref_image` | `characters[].ref_moderation_status` | ADR-011 |
-| *`reveal`* (Phase 2) | `characters[]`, `ref_verdict` | `reference_retry`, `cost.ref_retry_count` — **no effects**; pauses on `interrupt()` | ADR-029 |
+| *`reveal`* | `characters[]`, `ref_verdict` | `reference_retry`, `cost.ref_retry_count` — **no effects**; pauses on `interrupt()` | ADR-029 |
 | `generate_scene` | scene + char refs + `style` | `scenes[].attempts[].image_ref` | ADR-001,010 |
 | `consistency_check` | ref + attempt image | `scenes[].attempts[].vlm_verdict`, `failure_reasons`, `passed` | ADR-004 |
 | `regenerate` | `failure_reasons` | corrected `prompt` → new attempt; `final_image_ref` (best-of) | ADR-010 |
@@ -281,11 +282,16 @@ Everything with one right answer, **with every `providers.py` call mocked**:
 - Contract validation (Story Memory Pydantic round-trips, schema rejects bad shapes).
 - LangGraph routing (moderation pass/fail and consistency pass/fail take the right edges).
 - Job lifecycle & checkpoint/resume (stall at N resumes at N).
-- Moderation ordering; PII redaction; truncate-at-scene-boundary; N=3 off-ramp; cost circuit-breaker.
+- Moderation ordering; PII redaction; truncate-at-scene-boundary; cost circuit-breaker.
+  *(N=3 off-ramp belongs here too, but is not testable until `repeated-failure-offramp` has a cross-run
+  counter to test — see the backlog row.)*
 - RLS isolation (one classroom cannot read another classroom's data — ADR-017); signed-URL access.
-  ⚠️ **Not true today.** The only migration (`supabase/migrations/0001_jobs_table.sql`) grants
-  `select ... to anon using (true)` — no classroom scoping, and no classroom/profile tables exist. There
-  is no RLS test. This is a **child-facing** gap, not a paperwork one; it closes in Phase 2 (CC-4).
+  ⚠️ **Not true today.** There are exactly two policy surfaces —
+  `supabase/migrations/0001_jobs_table.sql` on `jobs` (`select ... to anon using (true)`) and
+  `0004_jobs_pages.sql` on `storage.objects` (bucket-scoped only) — so there is no classroom scoping and no
+  classroom/profile tables to scope by. There is no RLS test. This is a **child-facing** gap, not a
+  paperwork one; `auth-and-classroom` replaces **both** surfaces in one migration (CC-4,
+  `kid-flow-book-persistence` constraint 4).
 - e2e happy path + processing→slideshow via Realtime + PDF export (Playwright ⚙️).
 - **Never assert on generated content.** "Is the character consistent?" is Tier B.
 
@@ -338,7 +344,7 @@ mark done. Behavior change later → update the spec in the same change (CLAUDE.
 | Phase | Specs to write |
 |---|---|
 | 1 (core) | `story-memory-contract`, `story-analyzer`, `scene-segmentation`, `character-bible`, `style-presets`, `prompt-optimizer`, `image-generator`, `consistency-checker`, `regeneration-controller`, `compose` |
-| 2 (safety/classroom) | `moderation-stack`, `input-gate-hardening` (absorbed `filipino-pii-recognizers` + `length-guard`), `self-refusal-fallback`, `auth-and-classroom`, `teacher-dashboard`, `classroom-sharing` (display-only gallery — no `peer-reflection`/`story-map`, both cut per ADR-021), `narration`, `export-pdf`, `rate-limiting`, `data-deletion`, `kid-flow-ui` |
+| 2 (safety/classroom) | `moderation-stack`, `input-gate-hardening` (absorbed `filipino-pii-recognizers` + `length-guard`), `self-refusal-fallback`, `repeated-failure-offramp` (split out of it 2026-08-02 — counts across job submissions, needs a cross-run counter), `auth-and-classroom`, `teacher-dashboard`, `classroom-sharing` (display-only gallery — no `peer-reflection`/`story-map`, both cut per ADR-021), `narration`, `export-pdf`, `rate-limiting`, `data-deletion`, `kid-flow-book-persistence` (S1), `kid-flow-pause-lifecycle` (S2), `kid-flow-failure-semantics` (S3), `kid-flow-reader-and-wait-states` (S4) |
 | 2.5 (fine-tune) | ✅ `judge-finetune` *(written)*, `annotation-surface` (ADR-026) |
 | 3 (eval) | `functional-verification-matrix` (Tool A), `metrics-export` |
 

@@ -17,6 +17,7 @@ EXPECTED_ORDER = [
     "segment",
     "char_bible",
     "char_ref_mod",
+    "reveal",
     "generate_scene",
     "consistency_check",
     "output_mod",
@@ -75,6 +76,7 @@ def _mock_call_points(monkeypatch):
             2,
         ),
     )
+    monkeypatch.setattr("pipeline.graph.reveal", lambda state: {})   # no interrupt in stub runs
     monkeypatch.setattr("pipeline.input_gate.classify_text_primary", lambda text: (True, []))
     monkeypatch.setattr("pipeline.input_gate.classify_text_backstop", lambda text: (True, []))
     monkeypatch.setattr("pipeline.input_gate.redact_pii", lambda text: text)
@@ -186,7 +188,7 @@ def test_two_scene_run_loops_once_per_scene_and_reaches_compose(monkeypatch):
 
     assert ran == [
         "input_gate", "analyze", "segment", "char_bible",
-        "char_ref_mod",
+        "char_ref_mod", "reveal",
         "generate_scene", "consistency_check",
         "generate_scene", "consistency_check",
         "output_mod", "compose",
@@ -244,7 +246,7 @@ def test_a_failing_scene_retries_once_then_passes_and_the_run_reaches_compose(mo
 
     assert ran == [
         "input_gate", "analyze", "segment", "char_bible",
-        "char_ref_mod",
+        "char_ref_mod", "reveal",
         "generate_scene", "consistency_check", "regenerate", "consistency_check",
         "generate_scene", "consistency_check",
         "output_mod", "compose",
@@ -321,3 +323,119 @@ def test_graph_has_char_ref_mod_and_output_mod_nodes():
     node_names = set(graph.get_graph().nodes.keys())
     assert "char_ref_mod" in node_names
     assert "output_mod" in node_names
+
+
+def test_route_reveal_returns_try_again_under_the_cap():
+    from pipeline.graph import route_reveal
+    from contracts.story_memory import Cost, ReferenceRetry
+
+    state = _initial_state("job-1")
+    state.reference_retry = ReferenceRetry(char_id="c0", attribute="orange sock")
+    state.cost = Cost(ref_retry_count=2)
+    assert route_reveal(state) == "try_again"
+
+
+def test_route_reveal_returns_confirm_at_the_cap():
+    """The trust boundary, pinned: a resume payload is client-supplied, so the cap is enforced
+    here, not only in a future UI (spec §3)."""
+    from pipeline.graph import route_reveal
+    from contracts.story_memory import Cost, ReferenceRetry, Input, ModerationResult, Scene
+
+    state = _initial_state("job-1")
+    state.reference_retry = ReferenceRetry(char_id="c0", attribute="orange sock")
+    state.cost = Cost(ref_retry_count=3)
+    state.input = Input(raw_text="x", redacted_text="x", moderation=ModerationResult(passed=True))
+    state.scenes = [Scene(scene_id="s0", text_excerpt="x", final_image_ref=None)]
+    assert route_reveal(state) == "generate_scene"
+
+
+def test_route_reveal_with_no_reference_retry_defers_to_route_next_scene():
+    from pipeline.graph import route_reveal
+    from contracts.story_memory import Input, ModerationResult, Scene
+
+    state = _initial_state("job-1")
+    state.input = Input(raw_text="x", redacted_text="x", moderation=ModerationResult(passed=True))
+    state.scenes = [Scene(scene_id="s0", text_excerpt="x", final_image_ref="job-1/s0-1.png")]
+    assert route_reveal(state) == "output_mod"
+
+
+def test_moderation_router_with_scenes_present_routes_to_reveal():
+    from pipeline.graph import moderation_router
+    from contracts.story_memory import Input, ModerationResult, Scene
+
+    state = _initial_state("job-1")
+    state.input = Input(raw_text="x", redacted_text="x", moderation=ModerationResult(passed=True))
+    state.scenes = [Scene(scene_id="s0", text_excerpt="x")]
+    assert moderation_router(state) == "reveal"
+
+
+def test_graph_has_a_reveal_node():
+    from pipeline.graph import build_graph
+    graph = build_graph()
+    assert "reveal" in graph.get_graph().nodes.keys()
+
+
+def test_moderation_router_raises_ref_flagged_not_content_flagged_for_flagged_character():
+    """Pins the rename: a flagged canonical reference is machine error, not the child's text (spec §4.2)."""
+    import pytest
+    from pipeline.graph import moderation_router
+    from contracts.story_memory import (
+        CURRENT_SCHEMA_VERSION, Character, Input, ModerationResult, StoryMemory,
+    )
+
+    state = StoryMemory(
+        schema_version=CURRENT_SCHEMA_VERSION,
+        story_id="job-1",
+        classroom_id="dev-classroom",
+        profile_id="dev-profile",
+        input=Input(raw_text="x", redacted_text="x", moderation=ModerationResult(passed=True)),
+    )
+    state.characters = [
+        Character(char_id="c0", name="the dog", ref_moderation_status="flagged")
+    ]
+    with pytest.raises(RuntimeError) as exc_info:
+        moderation_router(state)
+    assert str(exc_info.value) == "ref_flagged"
+
+
+def test_a_run_that_taps_once_visits_char_ref_mod_twice(monkeypatch):
+    """Graph-level: the loop-back targets char_bible, so a tap re-enters char_ref_mod before
+    reaching a child again (spec §3, CC-1 ordering holds on the retry path)."""
+    _mock_call_points(monkeypatch)
+    tap_state = {"tapped": False}
+
+    def fake_reveal(state):
+        if not tap_state["tapped"]:
+            tap_state["tapped"] = True
+            from contracts.story_memory import ReferenceRetry
+            return {"reference_retry": ReferenceRetry(char_id="c0", attribute="orange sock")}
+        return {}
+
+    def fake_char_bible_targeted(state):
+        # ponytail: targeted-path stub for graph routing test — real implementation is Task 4
+        if state.reference_retry is not None:
+            return {
+                "characters": state.characters,
+                "cost": state.cost.model_copy(update={
+                    "image_count": state.cost.image_count + 1,
+                    "ref_retry_count": state.cost.ref_retry_count + 1,
+                }),
+                "reference_retry": None,
+            }
+        from pipeline.char_bible import char_bible as _real
+        return _real(state)
+
+    monkeypatch.setattr("pipeline.graph.reveal", fake_reveal)
+    monkeypatch.setattr("pipeline.graph.char_bible", fake_char_bible_targeted)
+    app_graph = build_graph()
+
+    ran = [
+        next(iter(chunk))
+        for chunk in app_graph.stream(
+            _initial_state("test-job-tap"),
+            config={"configurable": {"thread_id": "test-job-tap"}},
+            stream_mode="updates",
+        )
+    ]
+    assert ran.count("char_ref_mod") == 2
+    assert ran.count("reveal") == 2

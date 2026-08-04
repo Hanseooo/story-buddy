@@ -13,7 +13,9 @@ def _check_image(image_url: str) -> bool:
 
 
 def _soften_prompt(prompt: str) -> str:
-    # ponytail: stock softening — prepend safety qualifier; self-refusal-fallback spec owns the full strategy
+    # ponytail: stock softening — prepend safety qualifier. Owned here, not by `self-refusal-fallback`
+    # (that spec covers the model *refusing*; this is the model complying and the classifier flagging).
+    # Upgrade path: if flagged scenes survive this retry in practice, borrow that spec's softener.
     return f"child-safe, gentle, age-appropriate illustration, no violence or inappropriate content: {prompt}"
 
 

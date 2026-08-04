@@ -97,7 +97,8 @@ checklists is exactly the noise you were worried about.
 
 ## Right now
 
-**Phase 1 is in progress.** Phase 0.5 closed 2026-07-29 — see `docs/product/PHASE_05_RESULTS.md`.
+**Phase 2 is in progress.** Phase 1 is complete; Phase 0.5 closed 2026-07-29 — see
+`docs/product/PHASE_05_RESULTS.md`. The build log below is chronological.
 `story-memory-contract` is **built** (2026-07-29).
 `story-analyzer` is **built** (2026-07-29): `backend/pipeline/analyze.py`.
 `scene-segmentation` is **built** (2026-07-29): `backend/pipeline/segment.py` splits into ≤15 scenes,
@@ -143,8 +144,31 @@ attempt that won, emits the one per-book summary log line. Returns `{}`. `contra
 `pipeline/output_mod.py`. `moderation_router` + `route_after_output_mod` in `graph.py`. `providers.py`
 gains five moderation functions + `get_signed_url`.
 
-`input-gate-hardening` **spec is written, not built** (2026-08-02): `docs/specs/input-gate-hardening.md`,
-which absorbed and replaced the `filipino-pii-recognizers` stub and the `length-guard` row.
+`input-gate-hardening` is **built** (2026-08-02): `docs/specs/input-gate-hardening.md`, which absorbed and
+replaced the `filipino-pii-recognizers` stub and the `length-guard` row. `app/length.py` `clamp_story`
+(ADR-012 cap, paragraph→sentence boundary) + a minimum-length 422 at `POST /storybooks`;
+`ph_recognizers.py` adds Tagalog marker patterns and the structured PH identifier recognizers, wired into
+`providers._presidio`. Migration: `supabase/migrations/0003_jobs_truncated.sql`.
 
-**Next action:** build `input-gate-hardening`, or continue Phase 2 per
-`docs/product/DECISION_BACKLOG.md` — `self-refusal-fallback` or `auth-and-classroom`.
+`kid-flow-ui` is **built as four specs** (2026-08-02 → 2026-08-04) — the docket
+(`docs/specs/kid-flow-ui-docket.md`) is DONE:
+- **S1 `kid-flow-book-persistence`** — `supabase/migrations/0004_jobs_pages.sql`; a book is an ordered
+  JSONB `pages` array of `{scene_id, caption, image_path}` on the `jobs` row, durable Storage paths only.
+  `run_job.py`'s `_finish` is the single writer; `compose` stays pure.
+- **S2 `kid-flow-pause-lifecycle`** — ADR-029's reveal ships: `backend/pipeline/reveal.py` (effect-free,
+  one `interrupt()`, pure projection), `0005_jobs_awaiting_confirm.sql`, `POST /jobs/{id}/confirm` as the
+  only exit from a pause, 3-tap cap enforced in `route_reveal`.
+- **S3 `kid-flow-failure-semantics`** — three verbs only (`redraw` / `revise` / `retry`); a terminal job is
+  immutable; four render buckets on every URL-reachable surface.
+- **S4 `kid-flow-reader-and-wait-states`** — the multi-page reader over `jobs.pages` with sign-at-read-time,
+  the Realtime wait stepper off `current_stage`, the inline reveal on `/process/[jobId]`, and the four
+  `FailureScreen` kinds. `useJob` seeds from a `SELECT` **and** subscribes.
+
+`job-failure-reason` is **built** (2026-08-04): `supabase/migrations/0006_jobs_failure_reason.sql` plus the
+taxonomy map in `run_job.py` — `child_text` only where `moderation_router` raises for the input text,
+everything else and `null` → `machine`. Next free migration is `0007`.
+
+**Next action:** build `auth-and-classroom` — the remaining child-facing gap (both policy surfaces are
+still effectively unrestricted, and S1 constraint 4 hands it both in one migration). Alternatives per
+`docs/product/DECISION_BACKLOG.md`: `data-deletion` (owes S4 the swept-pause status value) or `export-pdf`
+(second reader of `jobs.pages`).

@@ -6,8 +6,10 @@ from contracts.story_memory import (
     CURRENT_SCHEMA_VERSION,
     Attempt,
     Character,
+    Cost,
     Input,
     RefVerdict,
+    ReferenceRetry,
     Scene,
     StoryMemory,
     VlmVerdict,
@@ -124,6 +126,25 @@ def test_asset_fields_accept_a_plain_storage_path():
     this asserts nothing rejects a path."""
     scene = Scene(scene_id="s0", text_excerpt="x", final_image_ref="job-1/scene-1.png")
     assert scene.final_image_ref == "job-1/scene-1.png"
+
+
+def test_cost_ref_retry_count_defaults_to_zero():
+    assert Cost().ref_retry_count == 0
+
+
+def test_story_memory_defaults_reference_retry_to_none():
+    assert _minimal().reference_retry is None
+
+
+def test_reference_retry_round_trips_on_story_memory():
+    sm = _minimal()
+    sm.reference_retry = ReferenceRetry(char_id="c0", attribute="orange sock")
+    assert StoryMemory(**sm.model_dump()) == sm
+
+
+def test_reference_retry_requires_char_id_and_attribute():
+    with pytest.raises(ValidationError):
+        ReferenceRetry()
 
 
 def test_dev_provenance_sentinels_exist():
