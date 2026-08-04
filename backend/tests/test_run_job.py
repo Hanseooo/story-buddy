@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 from langgraph.types import Command
 
 from app.config import RECURSION_LIMIT, STYLE_PRESETS
-from contracts.story_memory import CURRENT_SCHEMA_VERSION, Scene
+from contracts.story_memory import Scene
 from worker.run_job import _run_with_progress, _stage_string, resume_storybook_job, run_storybook_job
 
 _FAKE_CLASSROOM_ID = "11111111-1111-1111-1111-111111111111"
