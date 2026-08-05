@@ -59,7 +59,31 @@ draft spec before the constraint extract, so constraints come off the final text
 
 Decided in earlier sessions. Later sessions treat these as given, not open.
 
-*(None yet — S1 has not run. Constraints are numbered from 1 as they are confirmed.)*
+### From S1 · Identity, roles & classroom schema (`docs/specs/auth-identity-and-classroom-schema.md`)
+
+Confirmed 2026-08-05.
+
+- **S1-1 — Students are real `auth.users` rows.** Login address is `{nickname}@{code}.students.storybuddy.invalid`. Supabase owns all password material. `auth.uid()` exists for students; S3 writes student policies in the ordinary way.
+- **S1-2 — The role is `profiles.role`** (values: `teacher`, `student`, `researcher`), read through `public.auth_role()` security definer. A revoked role takes effect on the next query, not the next token refresh.
+- **S1-3 — The classroom code is a 6-character immutable string** from a 31-symbol alphabet (a–z + digits, minus 0, O, 1, I, l). Regeneration is permanently off — it would invalidate every student's login address with no atomic remedy.
+- **S1-4 — `jobs.profile_id` and `jobs.classroom_id` are both `NOT NULL` with `ON DELETE CASCADE`.** Deleting a student deletes their books; deleting a classroom deletes everything in it.
+- **S1-5 — A student belongs to one classroom for life.** No transfer mechanism exists or may be added; transfer would change the login address (the same N-rewrite problem as the code).
+- **S1-6 — The approval bit is `jobs.approved_at timestamptz`, nullable.** `null` = not peer-visible. S3 scopes the gallery with `approved_at is not null`.
+- **S1-7 — Migration `0007_identity_and_classrooms.sql` creates `classrooms`, `profiles`, triggers, and helper functions, and enables RLS with zero policies (default-deny).** `0007` and S3's policy migration ship together or not at all.
+- **S1-8 — The `jobs` ALTER (adding `profile_id`, `classroom_id`, `approved_at`) is executed by S3's migration.** Column definitions are frozen in S1; S3 transcribes them rather than re-deriving them.
+- **S1-9 — `backend/contracts/` is unchanged.** `StoryMemory.classroom_id` and `.profile_id` stop receiving sentinels and start receiving real UUIDs.
+
+### From S2 · Session model & trust boundary (`docs/specs/auth-session-model.md`)
+
+Confirmed 2026-08-05.
+
+- **S2-1 — One session mechanism for all three roles.** Supabase `signInWithPassword` → access token stored in a cookie via `@supabase/ssr`'s `createBrowserClient`. No second substrate, no custom session.
+- **S2-2 — The frontend composes the synthetic email at login.** Nickname is normalized per S1 §5, then assembled as `{nickname}@{code}.students.storybuddy.invalid` in the browser before calling `signInWithPassword`. The S1 §5.1 test vectors bind both the creation-time and login-time implementations.
+- **S2-3 — `POST /storybooks` and `POST /jobs/{id}/confirm` require a valid Bearer JWT.** FastAPI verifies via `supabase.auth.get_user(jwt)`. No token → 401. Teacher or researcher token on `/storybooks` → 403 (null `classroom_id` blocks insert). Valid token for the wrong profile on `/confirm` → 403.
+- **S2-4 — Ownership in `POST /storybooks` is always server-derived.** Profile ID and classroom ID are read from the authenticated user's `profiles` row, never from the request body.
+- **S2-5 — The worker retains `service_role` deliberately.** Any future worker entrypoint must state this explicitly, not inherit it silently.
+- **S2-6 — `middleware.ts` (S4) uses `createServerClient` from `@supabase/ssr`.** Student session expiry → `/join`. Teacher/researcher expiry → `/login`. Mid-process expiry: the job continues server-side; the child re-logs in and returns.
+- **S2-7 — Session lifetime is Supabase defaults.** 1-hour access token, auto-refreshed. 60-day refresh token. No custom lifetime.
 
 ### Pre-existing constraints, not from this docket
 
@@ -115,7 +139,7 @@ Already frozen. Listed so no session re-decides them.
 Statuses: DONE (spec linked **and** constraints confirmed) · PARTIAL (stopped early,
 resumable) · READY · BLOCKED (needs Sn)
 
-### S1 · Identity, roles & classroom schema — READY
+### S1 · Identity, roles & classroom schema — DONE (`docs/specs/auth-identity-and-classroom-schema.md`)
 
 **Cluster:** what rows exist and who owns what. Whether teachers live in `auth.users` plus a profile
 table or somewhere else; what a classroom row is and what a student row is; **how a role is
@@ -149,7 +173,7 @@ S2 discover it.
 
 ---
 
-### S2 · Session model & trust boundary — BLOCKED (needs S1)
+### S2 · Session model & trust boundary — DONE (`docs/specs/auth-session-model.md`)
 
 **Cluster:** how each of the three roles proves who it is, and what the server trusts. **The load-bearing
 question: is a student a real Supabase Auth user (e.g. a synthetic email) or a custom session?** — because
@@ -181,7 +205,7 @@ UUID get". Done is not "we chose JWTs".
 
 ---
 
-### S3 · Authorization surface — BLOCKED (needs S1, S2)
+### S3 · Authorization surface — READY
 
 **Cluster:** the single migration that replaces both existing policy surfaces, and everything that must
 be true for it to be safe. The `jobs` policies per role and per verb; **four distinct read paths on one
