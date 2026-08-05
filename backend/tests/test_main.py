@@ -1,10 +1,23 @@
+import pytest
 from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.main import app, get_current_user
 
 client = TestClient(app)
+
+FAKE_USER_ID = "user-student-123"
+
+
+@pytest.fixture(autouse=True)
+def _bypass_auth():
+    """Inject a fake student user for all tests. Auth-boundary tests pop this override."""
+    fake_user = MagicMock()
+    fake_user.id = FAKE_USER_ID
+    app.dependency_overrides[get_current_user] = lambda: fake_user
+    yield fake_user
+    app.dependency_overrides.pop(get_current_user, None)
 
 
 def test_health_check():
@@ -135,6 +148,7 @@ def test_create_storybook_normal_body_is_not_truncated():
 
 REVEAL_ROW = {
     "status": "awaiting_confirm",
+    "profile_id": FAKE_USER_ID,
     "reveal": {
         "characters": [{"char_id": "c0", "name": "Kiko", "image_path": "job-1/ref-c0-2.png", "chips": ["orange sock"]}],
         "taps_left": 2,
@@ -173,6 +187,7 @@ def test_confirm_rejects_an_attribute_offered_for_a_different_character_with_422
     fake_supabase = MagicMock()
     row = {
         "status": "awaiting_confirm",
+        "profile_id": FAKE_USER_ID,
         "reveal": {
             "characters": [
                 {"char_id": "c0", "name": "Kiko", "image_path": "p1", "chips": ["orange sock"]},
@@ -255,7 +270,7 @@ def test_confirm_second_identical_request_enqueues_nothing_and_returns_200():
 def test_confirm_against_a_complete_job_returns_200_and_enqueues_nothing():
     fake_supabase = MagicMock()
     fake_queue = MagicMock()
-    _select_returns(fake_supabase, [{"status": "complete", "reveal": {"characters": [], "taps_left": 3}}])
+    _select_returns(fake_supabase, [{"status": "complete", "profile_id": FAKE_USER_ID, "reveal": {"characters": [], "taps_left": 3}}])
     _cas_returns(fake_supabase, [])
     with patch("app.main.get_supabase_client", return_value=fake_supabase), \
          patch("app.main.get_queue", return_value=fake_queue):
@@ -279,3 +294,71 @@ def test_confirm_rolls_back_the_cas_and_returns_503_when_enqueue_raises():
     assert response.status_code == 503
     rollback_update = fake_supabase.table.return_value.update.call_args_list[-1][0][0]
     assert rollback_update == {"status": "awaiting_confirm"}
+
+
+# --- S2 auth-boundary tests (spec §8 tests 1–6) ---
+
+def test_create_storybook_no_token_returns_401():
+    app.dependency_overrides.pop(get_current_user, None)
+    response = client.post("/storybooks", json={"text": "A dog runs in a field."})
+    assert response.status_code == 401
+
+
+def test_create_storybook_bad_token_returns_401():
+    app.dependency_overrides.pop(get_current_user, None)
+    fake_supabase = MagicMock()
+    fake_supabase.auth.get_user.return_value = MagicMock(user=None)
+    with patch("app.main.get_supabase_client", return_value=fake_supabase):
+        response = client.post(
+            "/storybooks",
+            json={"text": "A dog runs in a field."},
+            headers={"Authorization": "Bearer bad-token"},
+        )
+    assert response.status_code == 401
+
+
+def test_create_storybook_teacher_token_returns_403():
+    fake_supabase = MagicMock()
+    fake_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [
+        {"classroom_id": None}
+    ]
+    with patch("app.main.get_supabase_client", return_value=fake_supabase):
+        response = client.post("/storybooks", json={"text": "A dog runs in a field."})
+    assert response.status_code == 403
+
+
+def test_confirm_no_token_returns_401():
+    app.dependency_overrides.pop(get_current_user, None)
+    response = client.post("/jobs/job-1/confirm", json={"action": "confirm"})
+    assert response.status_code == 401
+
+
+def test_confirm_wrong_owner_returns_403():
+    fake_supabase = MagicMock()
+    # profile_id in the job row does NOT match FAKE_USER_ID
+    fake_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [
+        {
+            "status": "awaiting_confirm",
+            "profile_id": "other-user-id",
+            "reveal": {"characters": [], "taps_left": 2},
+        }
+    ]
+    with patch("app.main.get_supabase_client", return_value=fake_supabase):
+        response = client.post("/jobs/job-1/confirm", json={"action": "confirm"})
+    assert response.status_code == 403
+
+
+def test_confirm_matching_owner_awaiting_confirm_returns_200():
+    fake_supabase = MagicMock()
+    fake_queue = MagicMock()
+    _select_returns(
+        fake_supabase,
+        [{"status": "awaiting_confirm", "profile_id": FAKE_USER_ID, "reveal": {"characters": [], "taps_left": 2}}],
+    )
+    _cas_returns(fake_supabase, [{"id": "job-1"}])
+    with patch("app.main.get_supabase_client", return_value=fake_supabase), patch(
+        "app.main.get_queue", return_value=fake_queue
+    ):
+        response = client.post("/jobs/job-1/confirm", json={"action": "confirm"})
+    assert response.status_code == 200
+    assert response.json() == {"status": "queued"}
