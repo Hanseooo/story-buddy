@@ -85,6 +85,24 @@ Confirmed 2026-08-05.
 - **S2-6 — `middleware.ts` (S4) uses `createServerClient` from `@supabase/ssr`.** Student session expiry → `/join`. Teacher/researcher expiry → `/login`. Mid-process expiry: the job continues server-side; the child re-logs in and returns.
 - **S2-7 — Session lifetime is Supabase defaults.** 1-hour access token, auto-refreshed. 60-day refresh token. No custom lifetime.
 
+### From S3 · Authorization surface (`docs/specs/auth-authorization-surface.md`)
+
+Confirmed 2026-08-06.
+
+- **S3-1 — The policy migration is `0008_authorization_surface.sql`.** S1 keeps `0007`. `0007` (RLS on, zero policies) and `0008` (the policies) ship in the same deploy or neither ships. Next free migration is `0009`.
+- **S3-2 — `0008` deletes all pre-auth `jobs` rows** (`DELETE FROM jobs`) before adding the `NOT NULL` ownership columns. Sentinel-owned rows have no owner; `0004` is the precedent.
+- **S3-3 — The `jobs` ALTER lands in `0008`**, transcribing S1 §4.2 verbatim: `profile_id` and `classroom_id` `NOT NULL … ON DELETE CASCADE`, `approved_at timestamptz` nullable.
+- **S3-4 — Both legacy anon policies are dropped and no anon policy replaces them.** After `0008` there is no anon read path to `jobs` or `storage.objects`. Any future anon policy needs the AGENTS.md §5 security gate.
+- **S3-5 — All policies are `to authenticated` and gate on `auth_role()`.** Denial is by absence of a permissive policy — no explicit `deny` anywhere.
+- **S3-6 — Storage is classroom-scoped by joining back to `jobs`, not by changing the path.** `split_part(name, '/', 1)::uuid` extracts `job_id`; the `{job_id}/{scene_id}.png` shape stays frozen (kid-flow 1, 13). The cast is guarded (`case when name like '%/%'`) because it *throws* rather than returning false on a non-UUID first segment — an unguarded policy errors instead of denying. S4 and every later spec inherit the join, not a path rewrite.
+- **S3-7 — Writes never go through RLS.** No INSERT policy on any table, no DELETE policy anywhere. `POST /storybooks`, classroom creation, and profile updates all run service_role behind FastAPI; deletion is cascade-only.
+- **S3-8 — The only RLS write path is the teacher's UPDATE on `jobs`,** gated on classroom ownership. RLS cannot restrict *which* column; `teacher-dashboard` is the sole caller and sets only `approved_at`.
+- **S3-9 — The LangGraph checkpoint tables are RLS-enabled with zero policies** — unreachable from any browser client. The worker's service_role bypass stays deliberate and stated (S2-5).
+- **S3-10 — Researcher read is approved-only and full-row.** No column hiding on `jobs`; `profile_id` is visible. A blinded view belongs to `annotation-surface`, not here.
+- **S3-11 — `auth_classroom_id()` is the classroom selector in every student policy,** load-bearing on S1-5 (one classroom for life). It is only valid while `jobs.classroom_id` cannot disagree with the author's `profiles.classroom_id`.
+- **S3-12 — Realtime needs no code change.** `useJob.ts` keeps its `postgres_changes` subscription; the student's own-jobs SELECT policy authorizes it and `createBrowserClient` carries the JWT into the handshake. The anon subscription path dies with `0008`.
+- **S3-13 — The Tier-A isolation suite (spec §6) is the evidence for ADR-017's "real, testable boundary."** Each test is written so dropping exactly one policy fails it. The suite is not optional and ships with `0008`.
+
 ### Pre-existing constraints, not from this docket
 
 Already frozen. Listed so no session re-decides them.
@@ -205,7 +223,7 @@ UUID get". Done is not "we chose JWTs".
 
 ---
 
-### S3 · Authorization surface — READY
+### S3 · Authorization surface — DONE (`docs/specs/auth-authorization-surface.md`)
 
 **Cluster:** the single migration that replaces both existing policy surfaces, and everything that must
 be true for it to be safe. The `jobs` policies per role and per verb; **four distinct read paths on one
@@ -240,7 +258,7 @@ that fails if the policy is dropped. A policy nobody can break on purpose is not
 
 ---
 
-### S4 · Routes, guards & account UX — BLOCKED (needs S2, S3)
+### S4 · Routes, guards & account UX — READY
 
 **Cluster:** every URL and every screen the identity layer adds or moves. The flat → `/s/[profileId]`
 migration, which kid-flow constraint 5 and `ROUTE_MAP.md:61-65` both describe as "a directory rename
