@@ -225,7 +225,7 @@ roadmap order. Source: MASTER_SPEC §7.
       the same schema decision**, now named: `jobs.parent_job_id`. **The flow is now built (S4, 2026-08-04)** —
       `/write` carries the client-side `sb.failChain` counter and the third-failure offer, so PRD §11.4 is
       satisfied in shipped code and this row buys only durability.)*
-- [ ] `auth-and-classroom` → **decomposed into four specs, all specced, none built** *(docket
+- [ ] `auth-and-classroom` → **decomposed into four specs; S1, S2 and S3's migration built, S4 not** *(docket
   `docs/specs/auth-and-classroom-docket.md`, DONE 2026-08-06. 42 binding constraints. The four ship
   as one unit: `0007` and `0008` deploy together or neither does (S3-1), and the route move is
   meaningless without them.)*
@@ -237,7 +237,8 @@ roadmap order. Source: MASTER_SPEC §7.
     `createBrowserClient`; `get_current_user` wired into `POST /storybooks` and `/confirm`.)*
   - [ ] `auth-authorization-surface` (S3)   *(**specced 2026-08-06** — migration `0008` replaces both
     legacy policy surfaces; Storage joins back to `jobs` rather than changing the path shape; 33
-    isolation tests. Next free migration is `0009`.)*
+    isolation tests. **Migration built 2026-08-06; the 33 isolation tests are not written**, though
+    S3-13 says they ship with `0008` and are not optional. Next free migration is `0009`.)*
   - [ ] `auth-routes-and-account-ux` (S4)   *(**specced 2026-08-06** —
     `docs/specs/auth-routes-and-account-ux.md`; flat → `/s/[profileId]`, path-shaped middleware guard
     that never reads the role, the three-step `/join` wizard, the bookshelf query. Teacher-initiated
@@ -376,13 +377,15 @@ revised 2026-07-25.)*
 **Phase 1 is complete. Phase 2 is in progress** — `moderation-stack`, `input-gate-hardening` and
 `kid-flow-ui` (S1–S4) are built.
 
-**Next action: build the four `auth-*` specs.** The docket `docs/specs/auth-and-classroom-docket.md`
-is **DONE throughout (2026-08-06)** — design is finished, nothing is built. It is still the remaining
-child-facing gap: `0001_jobs_table.sql:18-21` and `0004`'s `storage.objects` policy are the only two
-policy surfaces and both are effectively unrestricted (MASTER_SPEC §6). `0007` (RLS on, zero policies)
-and `0008` (the policies) **ship in the same deploy or neither ships** (S3-1), and S4's `/s/[profileId]`
-move is meaningless without them — so the four build as one unit, in order. Next free migration
-is `0009`.
+**Next action: S3's isolation suite, then S4.** The docket `docs/specs/auth-and-classroom-docket.md`
+is **DONE throughout (2026-08-06)** — design is finished. `0007` and `0008` are both applied, so the
+child-facing RLS gap MASTER_SPEC §6 flagged is **closed in the database**: the two legacy permissive
+surfaces are dropped and there is no anon read path (S3-4).
+
+⚠️ **What is not done:** S3-13 makes the 33-test Tier-A isolation suite non-optional and says it ships
+*with* `0008`. It has not been written, so ADR-017's "real, testable boundary" is enforced but
+unverified — the precise gap S3 existed to close. S4 (`middleware.ts`, `/join`, the `/s/[profileId]`
+move) is entirely unbuilt, so the kid routes are still flat. Next free migration is `0009`.
 
 Alternatives: `data-deletion` (ethics-gated, and owes the `awaiting_confirm` sweep the swept-pause status
 value S4's `asleep` screen is waiting for) or `export-pdf` (the second reader of `jobs.pages`, now that

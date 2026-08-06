@@ -169,10 +169,11 @@ taxonomy map in `run_job.py` — `child_text` only where `moderation_router` rai
 everything else and `null` → `machine`. (`0007` and `0008` are now claimed by the auth specs; next free
 is `0009`.)
 
-**Next action:** build the four `auth-*` specs, in order — the docket
-`docs/specs/auth-and-classroom-docket.md` is DONE (2026-08-06), so the design is finished and none of
-it is built. Still the remaining child-facing gap (both policy surfaces are still effectively
-unrestricted). `0007` and `0008` ship in the same deploy or neither ships (S3-1), so treat the four as
-one unit. Next free migration is `0009`. Alternatives per
+**Next action:** write S3's 33-test Tier-A isolation suite, then build S4. The docket
+`docs/specs/auth-and-classroom-docket.md` is DONE (2026-08-06) — design finished. `0007` and `0008` are
+both applied and the two legacy policy surfaces are gone, but S3-13 says the isolation suite ships
+*with* `0008` and it has not been written, so the classroom boundary is currently enforced and
+untested. S4 (`middleware.ts`, `/join`, the `/s/[profileId]` move) is entirely unbuilt. Next free
+migration is `0009`. Alternatives per
 `docs/product/DECISION_BACKLOG.md`: `data-deletion` (owes S4 the swept-pause status value) or `export-pdf`
 (second reader of `jobs.pages`).

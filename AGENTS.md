@@ -432,8 +432,9 @@ is not documentation of a good design; it is the blast radius, written down so t
   every other value, every unknown value and `null` → `machine`. (`0007` and `0008` are now claimed by
   the auth docket's specs — see below.)
   `contracts/` untouched by all five. Still exactly **two** policy surfaces.
-  **`auth-and-classroom` is specced as four specs and built as none (2026-08-05 → 2026-08-06)** — docket
-  `docs/specs/auth-and-classroom-docket.md` is DONE, 42 binding constraints.
+  **`auth-and-classroom` is specced as four specs (2026-08-05 → 2026-08-06); S1, S2 and S3's migration
+  are built, S4 is not** — docket `docs/specs/auth-and-classroom-docket.md` is DONE, 42 binding
+  constraints.
   **S1 `auth-identity-and-classroom-schema`:** students are real `auth.users` rows reached by
   `{nickname}@{code}.students.storybuddy.invalid`, so Supabase owns all password material; role is
   `profiles.role` read through `auth_role()`; migration `0007` creates `classrooms` + `profiles` with RLS
@@ -446,6 +447,12 @@ is not documentation of a good design; it is the blast radius, written down so t
   that never reads the role (S1 keeps it in `profiles`, `ROUTE_MAP.md:196` bans DB reads in middleware),
   the three-step `/join` wizard, and the bookshelf query — which filters `profile_id` explicitly, because
   S3 grants students two SELECT policies on `jobs` and RLS alone does not scope it.
-  **Phase 2 is in progress. Next: build those four, in order** — `0007` and `0008` ship in the same
-  deploy or neither ships. Next free migration is **`0009`**. Still exactly **two** policy surfaces
-  until they land.
+  **Built so far:** `0007` and `0008` both exist; `config.py`'s sentinels are retired and `run_job.py`
+  reads ownership from the row; `app/nickname.py` + `lib/nickname.ts` share S1 §5.1's fourteen vectors;
+  `supabaseClient.ts` is on `createBrowserClient`; `get_current_user` guards `POST /storybooks` and
+  `/confirm`. **The two legacy policy surfaces are gone** — `0008` dropped them.
+  ⚠️ **Not built, and S3-13 says it is not optional:** the 33-test Tier-A isolation suite that is meant
+  to ship *with* `0008`. Until it exists, ADR-017's "real, testable boundary" is again unbacked by a
+  single test — the exact gap S3 was written to close.
+  **Phase 2 is in progress. Next: S3's isolation suite, then build S4.** Next free migration is
+  **`0009`**.
