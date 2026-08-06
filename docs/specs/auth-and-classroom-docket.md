@@ -103,6 +103,20 @@ Confirmed 2026-08-06.
 - **S3-12 — Realtime needs no code change.** `useJob.ts` keeps its `postgres_changes` subscription; the student's own-jobs SELECT policy authorizes it and `createBrowserClient` carries the JWT into the handshake. The anon subscription path dies with `0008`.
 - **S3-13 — The Tier-A isolation suite (spec §6) is the evidence for ADR-017's "real, testable boundary."** Each test is written so dropping exactly one policy fails it. The suite is not optional and ships with `0008`.
 
+### From S4 · Routes, guards & account UX (`docs/specs/auth-routes-and-account-ux.md`)
+
+Confirmed 2026-08-06.
+
+- **S4-1 — The route guard is path-shaped and never reads the role.** `middleware.ts` compares the `/s/[profileId]` segment to the JWT `sub`; that is the whole student-tree check. Role-based authorization belongs to RLS alone. Forced by S1-2 (role lives in `profiles`, not the token) against `ROUTE_MAP.md:196` (no server-side data fetching in middleware). A later spec that needs the role in middleware must first settle the `sb-role` cookie or the `getClaims()` question — it may not add a `profiles` query.
+- **S4-2 — The route tree is frozen as `/`, `/login`, `/signup`, `/join`, `/join/[code]`, `/dashboard`, and `/s/[profileId]/{·, settings, write, process/[jobId], book/[jobId]}`.** **No Next.js route groups** — `(auth)` and `(immersive)` were both rejected. `teacher-dashboard` extends under `/classroom/…`; `classroom-sharing` extends under `/s/[profileId]/gallery`.
+- **S4-3 — `middleware.ts` uses `getUser()` via `createServerClient`, fails closed, and validates `?next=` as a relative path** (must start with `/`, not `//`). `getClaims()` with asymmetric JWT signing keys is the named upgrade path and is an infra decision under AGENTS.md §2/§7 — not a refactor.
+- **S4-4 — RLS does not scope a per-child list; the query must.** S3 §4.1 grants students *two* SELECT policies on `jobs` (own, and approved peer), so any "this child's own X" read filters explicitly — the bookshelf carries `.eq('profile_id', …)`. Binding in the other direction on `classroom-sharing`, whose gallery query wants the second policy and must exclude the first.
+- **S4-5 — `/dashboard` is a stated placeholder owned by `teacher-dashboard`,** which replaces it wholesale. It exists so signup is not a dead end and middleware has a redirect target.
+- **S4-6 — Teacher-initiated password reset belongs to `teacher-dashboard`, not this docket** (amendment 1). It needs the roster picker on the student-management screen. **Classrooms and student accounts are hand-provisioned by SQL or the Supabase dashboard until that row lands** — as S1 §6.2 already does for researchers.
+- **S4-7 — `StudentShell` owns the single `profiles` read** (`display_nickname`, `role`, `classroom_id`) and the log-out control. Later student routes consume it rather than re-querying. Log out is first-class because the deployment target is a shared classroom device.
+- **S4-8 — `classify` and `useJob.ts` are unchanged.** The bookshelf reuses `classify` per row and subscribes on **one** Realtime channel filtered `profile_id=eq.<pid>`; `useJob` stays the per-job hook. No second state model for job status may be added.
+- **S4-9 — `ROUTE_MAP.md` is input, not authority, and now diverges in four places** — no route groups, no `BottomTabBar` until the gallery exists, no `/write/style`, and §5's animation table unimplemented. A later session reconciles the routes it touches and no more.
+
 ### Pre-existing constraints, not from this docket
 
 Already frozen. Listed so no session re-decides them.
@@ -258,7 +272,7 @@ that fails if the policy is dropped. A policy nobody can break on purpose is not
 
 ---
 
-### S4 · Routes, guards & account UX — READY
+### S4 · Routes, guards & account UX — DONE (`docs/specs/auth-routes-and-account-ux.md`)
 
 **Cluster:** every URL and every screen the identity layer adds or moves. The flat → `/s/[profileId]`
 migration, which kid-flow constraint 5 and `ROUTE_MAP.md:61-65` both describe as "a directory rename
@@ -305,4 +319,12 @@ docket's work.
 
 ## Amendments
 
-*(none yet)*
+**1 — 2026-08-06 (from S4): teacher-initiated password reset moves out of S4 to `teacher-dashboard`.**
+S4's cluster named it as a screen. It needs a student picker, which is the roster list, which is most
+of `/classroom/[classroomId]/students` — a screen S4 explicitly excludes. Building it standalone
+would drag that screen in incoherently; building it in S4 would widen into `teacher-dashboard`'s
+cluster, which this docket's header forbids. It belongs beside the create screen.
+
+Consequence: S4 ships a complete login flow with nothing to create accounts for it. Classrooms and
+student accounts are hand-provisioned until `teacher-dashboard` lands (S4-6). The child's **own**
+password change (`/s/[profileId]/settings`) stays in S4 — it needs no roster.

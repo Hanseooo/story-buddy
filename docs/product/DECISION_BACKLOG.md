@@ -225,8 +225,26 @@ roadmap order. Source: MASTER_SPEC §7.
       the same schema decision**, now named: `jobs.parent_job_id`. **The flow is now built (S4, 2026-08-04)** —
       `/write` carries the client-side `sb.failChain` counter and the third-failure offer, so PRD §11.4 is
       satisfied in shipped code and this row buys only durability.)*
-- [ ] `auth-and-classroom`
-- [ ] `teacher-dashboard`
+- [ ] `auth-and-classroom` → **decomposed into four specs, all specced, none built** *(docket
+  `docs/specs/auth-and-classroom-docket.md`, DONE 2026-08-06. 42 binding constraints. The four ship
+  as one unit: `0007` and `0008` deploy together or neither does (S3-1), and the route move is
+  meaningless without them.)*
+  - [ ] `auth-identity-and-classroom-schema` (S1)   *(**specced 2026-08-05** — students are real
+    `auth.users` rows via `{nickname}@{code}.students.storybuddy.invalid`; role in `profiles.role`;
+    migration `0007` creates `classrooms` + `profiles` with RLS on and zero policies.)*
+  - [ ] `auth-session-model` (S2)   *(**specced 2026-08-05**, partly built — one mechanism for all
+    three roles, cookie via `@supabase/ssr`. `supabaseClient.ts` already migrated to
+    `createBrowserClient`; `get_current_user` wired into `POST /storybooks` and `/confirm`.)*
+  - [ ] `auth-authorization-surface` (S3)   *(**specced 2026-08-06** — migration `0008` replaces both
+    legacy policy surfaces; Storage joins back to `jobs` rather than changing the path shape; 33
+    isolation tests. Next free migration is `0009`.)*
+  - [ ] `auth-routes-and-account-ux` (S4)   *(**specced 2026-08-06** —
+    `docs/specs/auth-routes-and-account-ux.md`; flat → `/s/[profileId]`, path-shaped middleware guard
+    that never reads the role, the three-step `/join` wizard, the bookshelf query. Teacher-initiated
+    password reset moved out to `teacher-dashboard` by docket amendment 1.)*
+- [ ] `teacher-dashboard`   *(inherits from the auth docket: owns `/classroom/[classroomId]/students`,
+  the teacher-initiated password reset screen (amendment 1), and replaces S4's `/dashboard`
+  placeholder wholesale. Until it lands, classrooms and students are hand-provisioned by SQL.)*
 - [ ] `classroom-sharing`   *(display-only gallery — no `peer-reflection`/`story-map`, cut per ADR-021)*
 - [ ] `narration`   *(ADR-020; `providers.narrate()` not yet implemented. The book reader ships in S4 without a play button. TTS narration is `narration`'s deliverable.)*
 - [ ] `export-pdf`   *(D-2 decided → ADR-013: WeasyPrint)*
@@ -264,7 +282,8 @@ roadmap order. Source: MASTER_SPEC §7.
       where `moderation_router` raises for the input text; every other value, every unknown value and `null`
       map to `machine` → the `retry` screen, so a future value can never accidentally blame a child.
       `moderation_error`, a flagged canonical reference, an output-moderation failure and a provider error
-      all take the `machine` path. Consumed by S4's `FailureScreen`. Next free migration is **`0007`**.
+      all take the `machine` path. Consumed by S4's `FailureScreen`. (`0007` and `0008` are now claimed
+      by the auth specs; next free is **`0009`**.)
       `FailureReason` in `contracts/` is untouched — frozen at 7 by ADR-028, a *different*, scene-identity
       taxonomy; conflating them would corrupt Objective 4's F1 denominator.)*
 
@@ -357,11 +376,13 @@ revised 2026-07-25.)*
 **Phase 1 is complete. Phase 2 is in progress** — `moderation-stack`, `input-gate-hardening` and
 `kid-flow-ui` (S1–S4) are built.
 
-**Next session: `auth-and-classroom`.** It is the remaining child-facing gap, not a paperwork one:
-`0001_jobs_table.sql:18-21` and `0004`'s `storage.objects` policy are still the only two policy surfaces
-and both are effectively unrestricted (MASTER_SPEC §6). S1 constraint 4 explicitly hands it both — *"`auth-and-classroom` replaces both in one migration"* — and S1 constraint 5 keeps the kid routes flat
-(`/write`, `/process/[jobId]`, `/book/[jobId]`) until it lands, so `ROUTE_MAP.md` §1's `/s/[profileId]`
-tree is also waiting on it. Next free migration is `0007`.
+**Next action: build the four `auth-*` specs.** The docket `docs/specs/auth-and-classroom-docket.md`
+is **DONE throughout (2026-08-06)** — design is finished, nothing is built. It is still the remaining
+child-facing gap: `0001_jobs_table.sql:18-21` and `0004`'s `storage.objects` policy are the only two
+policy surfaces and both are effectively unrestricted (MASTER_SPEC §6). `0007` (RLS on, zero policies)
+and `0008` (the policies) **ship in the same deploy or neither ships** (S3-1), and S4's `/s/[profileId]`
+move is meaningless without them — so the four build as one unit, in order. Next free migration
+is `0009`.
 
 Alternatives: `data-deletion` (ethics-gated, and owes the `awaiting_confirm` sweep the swept-pause status
 value S4's `asleep` screen is waiting for) or `export-pdf` (the second reader of `jobs.pages`, now that

@@ -166,9 +166,13 @@ replaced the `filipino-pii-recognizers` stub and the `length-guard` row. `app/le
 
 `job-failure-reason` is **built** (2026-08-04): `supabase/migrations/0006_jobs_failure_reason.sql` plus the
 taxonomy map in `run_job.py` — `child_text` only where `moderation_router` raises for the input text,
-everything else and `null` → `machine`. Next free migration is `0007`.
+everything else and `null` → `machine`. (`0007` and `0008` are now claimed by the auth specs; next free
+is `0009`.)
 
-**Next action:** build `auth-and-classroom` — the remaining child-facing gap (both policy surfaces are
-still effectively unrestricted, and S1 constraint 4 hands it both in one migration). Alternatives per
+**Next action:** build the four `auth-*` specs, in order — the docket
+`docs/specs/auth-and-classroom-docket.md` is DONE (2026-08-06), so the design is finished and none of
+it is built. Still the remaining child-facing gap (both policy surfaces are still effectively
+unrestricted). `0007` and `0008` ship in the same deploy or neither ships (S3-1), so treat the four as
+one unit. Next free migration is `0009`. Alternatives per
 `docs/product/DECISION_BACKLOG.md`: `data-deletion` (owes S4 the swept-pause status value) or `export-pdf`
 (second reader of `jobs.pages`).

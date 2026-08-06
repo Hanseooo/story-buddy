@@ -429,7 +429,23 @@ is not documentation of a good design; it is the blast radius, written down so t
   `FailureScreen` kinds, and `useJob` seeding from a `SELECT` **and** subscribing. No orientation lock.
   **`job-failure-reason` is built (2026-08-04):** migration `0006` (nullable, no check constraint) + the
   taxonomy map in `run_job.py` — `child_text` only where `moderation_router` raises for the input text;
-  every other value, every unknown value and `null` → `machine`. Next free migration is **`0007`**.
+  every other value, every unknown value and `null` → `machine`. (`0007` and `0008` are now claimed by
+  the auth docket's specs — see below.)
   `contracts/` untouched by all five. Still exactly **two** policy surfaces.
-  **Phase 2 is in progress. Next: `auth-and-classroom`** (the classroom RLS gap; it replaces both policy
-  surfaces in one migration).
+  **`auth-and-classroom` is specced as four specs and built as none (2026-08-05 → 2026-08-06)** — docket
+  `docs/specs/auth-and-classroom-docket.md` is DONE, 42 binding constraints.
+  **S1 `auth-identity-and-classroom-schema`:** students are real `auth.users` rows reached by
+  `{nickname}@{code}.students.storybuddy.invalid`, so Supabase owns all password material; role is
+  `profiles.role` read through `auth_role()`; migration `0007` creates `classrooms` + `profiles` with RLS
+  on and **zero** policies. **S2 `auth-session-model`:** one mechanism for all three roles —
+  `signInWithPassword` → cookie via `@supabase/ssr`. Partly built: `supabaseClient.ts` is on
+  `createBrowserClient` and `get_current_user` guards `POST /storybooks` and `/confirm`.
+  **S3 `auth-authorization-surface`:** migration `0008` replaces **both** legacy policy surfaces; Storage
+  is classroom-scoped by joining back to `jobs`, not by changing the frozen path shape; 33 isolation
+  tests. **S4 `auth-routes-and-account-ux`:** flat → `/s/[profileId]`, a path-shaped `middleware.ts` guard
+  that never reads the role (S1 keeps it in `profiles`, `ROUTE_MAP.md:196` bans DB reads in middleware),
+  the three-step `/join` wizard, and the bookshelf query — which filters `profile_id` explicitly, because
+  S3 grants students two SELECT policies on `jobs` and RLS alone does not scope it.
+  **Phase 2 is in progress. Next: build those four, in order** — `0007` and `0008` ship in the same
+  deploy or neither ships. Next free migration is **`0009`**. Still exactly **two** policy surfaces
+  until they land.
