@@ -239,10 +239,13 @@ def fx(conn) -> RLSFixture:
     yield data
 
     # teardown — FK order: storage → jobs → classrooms → auth.users (cascades profiles)
+    # storage.protect_delete trigger blocks direct DELETE; bypass via replica role
+    conn.execute("SET session_replication_role = replica")
     conn.execute(
         "DELETE FROM storage.objects WHERE name = ANY(%s)",
         ([f"{ba1}/scene_1.png", f"{ba2}/scene_1.png", f"{bb1}/scene_1.png"],),
     )
+    conn.execute("SET session_replication_role = DEFAULT")
     conn.execute("DELETE FROM jobs WHERE id = ANY(%s)", ([ba1, ba2, bb1],))
     conn.execute("DELETE FROM classrooms WHERE id = ANY(%s)", ([cls_a, cls_b],))
     conn.execute(
@@ -250,3 +253,235 @@ def fx(conn) -> RLSFixture:
         ([ta, tb, s1, s2, s3, r],),
     )
     conn.commit()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# jobs SELECT — tests 1–11
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@_skip
+def test_01_s1_reads_own_approved_job(conn, fx):
+    """Spec §6 test 1: S1 reads BA1 (own, approved) → allowed."""
+    assert len(_select_jobs(conn, fx.s1, fx.ba1)) == 1
+
+
+@_skip
+def test_02_s1_unapproved_peer_job_denied(conn, fx):
+    """Spec §6 test 2: S1 reads BA2 (classmate, unapproved) as peer → denied."""
+    # BA2.approved_at is NULL → 'students read approved peer jobs' denies.
+    assert len(_select_jobs(conn, fx.s1, fx.ba2)) == 0
+
+
+@_skip
+def test_03_s1_ba2_as_own_denied(conn, fx):
+    """Spec §6 test 3: S1 reads BA2 as own → denied (BA2.profile_id = S2)."""
+    # 'students read own jobs' checks profile_id = auth.uid() → false for BA2.
+    assert len(_select_jobs(conn, fx.s1, fx.ba2)) == 0
+
+
+@_skip
+def test_04_s1_different_classroom_approved_denied(conn, fx):
+    """Spec §6 test 4: S1 reads BB1 (approved, classroom B) → denied."""
+    # BB1.classroom_id = cls_b ≠ auth_classroom_id() for S1.
+    assert len(_select_jobs(conn, fx.s1, fx.bb1)) == 0
+
+
+@_skip
+def test_05_s2_reads_approved_peer_job(conn, fx):
+    """Spec §6 test 5: S2 reads BA1 (classmate, approved) → allowed."""
+    assert len(_select_jobs(conn, fx.s2, fx.ba1)) == 1
+
+
+@_skip
+def test_06_ta_reads_all_classroom_a_jobs(conn, fx):
+    """Spec §6 test 6: TA reads BA1 and BA2 (all classroom A books) → allowed."""
+    assert len(_select_jobs(conn, fx.ta, fx.ba1)) == 1
+    assert len(_select_jobs(conn, fx.ta, fx.ba2)) == 1
+
+
+@_skip
+def test_07_ta_cannot_read_classroom_b_job(conn, fx):
+    """Spec §6 test 7: TA reads BB1 (classroom B) → denied."""
+    assert len(_select_jobs(conn, fx.ta, fx.bb1)) == 0
+
+
+@_skip
+def test_08_tb_cannot_read_classroom_a_job(conn, fx):
+    """Spec §6 test 8: TB reads BA1 (classroom A) → denied."""
+    assert len(_select_jobs(conn, fx.tb, fx.ba1)) == 0
+
+
+@_skip
+def test_09_researcher_reads_approved_job(conn, fx):
+    """Spec §6 test 9: R reads BA1 (approved) → allowed."""
+    assert len(_select_jobs(conn, fx.r, fx.ba1)) == 1
+
+
+@_skip
+def test_10_researcher_cannot_read_unapproved_job(conn, fx):
+    """Spec §6 test 10: R reads BA2 (unapproved) → denied."""
+    assert len(_select_jobs(conn, fx.r, fx.ba2)) == 0
+
+
+@_skip
+def test_11_anon_cannot_read_any_job(conn, fx):
+    """Spec §6 test 11: anon reads any job → denied."""
+    _as_anon(conn)
+    rows = conn.execute(
+        "SELECT id FROM jobs WHERE id = %s", (fx.ba1,)
+    ).fetchall()
+    assert len(rows) == 0
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# jobs UPDATE — tests 12–14
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@_skip
+def test_12_ta_can_approve_own_classroom_job(conn, fx):
+    """Spec §6 test 12: TA sets approved_at on BA2 (own classroom) → allowed."""
+    assert _update_job_approval(conn, fx.ta, fx.ba2) == 1
+
+
+@_skip
+def test_13_ta_cannot_approve_other_classroom_job(conn, fx):
+    """Spec §6 test 13: TA sets approved_at on BB1 (classroom B) → denied (rowcount=0)."""
+    assert _update_job_approval(conn, fx.ta, fx.bb1) == 0
+
+
+@_skip
+def test_14_student_cannot_approve_own_job(conn, fx):
+    """Spec §6 test 14: S1 attempts to set approved_at on BA1 → denied (no student UPDATE policy)."""
+    assert _update_job_approval(conn, fx.s1, fx.ba1) == 0
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# classrooms SELECT — tests 15–19
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@_skip
+def test_15_s1_reads_own_classroom(conn, fx):
+    """Spec §6 test 15: S1 reads classroom A → allowed."""
+    assert len(_select_classrooms(conn, fx.s1, fx.cls_a)) == 1
+
+
+@_skip
+def test_16_s1_cannot_read_other_classroom(conn, fx):
+    """Spec §6 test 16: S1 reads classroom B → denied."""
+    assert len(_select_classrooms(conn, fx.s1, fx.cls_b)) == 0
+
+
+@_skip
+def test_17_ta_reads_own_classroom(conn, fx):
+    """Spec §6 test 17: TA reads classroom A → allowed."""
+    assert len(_select_classrooms(conn, fx.ta, fx.cls_a)) == 1
+
+
+@_skip
+def test_18_ta_cannot_read_other_classroom(conn, fx):
+    """Spec §6 test 18: TA reads classroom B → denied."""
+    assert len(_select_classrooms(conn, fx.ta, fx.cls_b)) == 0
+
+
+@_skip
+def test_19_researcher_reads_both_classrooms(conn, fx):
+    """Spec §6 test 19: R reads both classrooms → allowed."""
+    assert len(_select_classrooms(conn, fx.r, fx.cls_a)) == 1
+    assert len(_select_classrooms(conn, fx.r, fx.cls_b)) == 1
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# profiles SELECT — tests 20–25
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@_skip
+def test_20_s1_reads_own_profile(conn, fx):
+    """Spec §6 test 20: S1 reads own profile → allowed."""
+    assert len(_select_profiles(conn, fx.s1, fx.s1)) == 1
+
+
+@_skip
+def test_21_s1_reads_classmate_profile(conn, fx):
+    """Spec §6 test 21: S1 reads S2's profile (same classroom) → allowed."""
+    assert len(_select_profiles(conn, fx.s1, fx.s2)) == 1
+
+
+@_skip
+def test_22_s1_cannot_read_teacher_profile(conn, fx):
+    """Spec §6 test 22: S1 reads TB's profile → denied (TB.classroom_id IS NULL)."""
+    # 'students read classroom profiles': classroom_id = auth_classroom_id()
+    # → NULL = <uuid> → false. Teacher is invisible to students.
+    assert len(_select_profiles(conn, fx.s1, fx.tb)) == 0
+
+
+@_skip
+def test_23_s1_cannot_read_other_classroom_student(conn, fx):
+    """Spec §6 test 23: S1 reads S3's profile (classroom B) → denied."""
+    assert len(_select_profiles(conn, fx.s1, fx.s3)) == 0
+
+
+@_skip
+def test_24_ta_reads_own_classroom_students(conn, fx):
+    """Spec §6 test 24: TA reads S1 and S2's profiles → allowed."""
+    assert len(_select_profiles(conn, fx.ta, fx.s1)) == 1
+    assert len(_select_profiles(conn, fx.ta, fx.s2)) == 1
+
+
+@_skip
+def test_25_ta_cannot_read_other_classroom_student(conn, fx):
+    """Spec §6 test 25: TA reads S3's profile (classroom B) → denied."""
+    assert len(_select_profiles(conn, fx.ta, fx.s3)) == 0
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Realtime — tests 26–27 (policy coverage, not WebSocket)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Realtime evaluates the subscriber's SELECT policy before broadcasting (spec §5).
+# Test 26 (S1 receives BA1 updates) is backed by test_01 — 'students read own jobs' covers it.
+# Test 27 (S1 receives no BA2 broadcasts) is backed by tests 02–03 — both student SELECT
+# policies deny BA2 to S1. A WebSocket integration test is out of scope for this suite.
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Storage isolation — tests 28–33
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@_skip
+def test_28_s1_reads_own_image(conn, fx):
+    """Spec §6 test 28: S1 reads {BA1}/scene_1.png (own book) → allowed."""
+    assert len(_select_storage(conn, fx.s1, fx.ba1)) == 1
+
+
+@_skip
+def test_29_s2_reads_approved_peer_image(conn, fx):
+    """Spec §6 test 29: S2 reads {BA1}/scene_1.png (approved peer book) → allowed."""
+    assert len(_select_storage(conn, fx.s2, fx.ba1)) == 1
+
+
+@_skip
+def test_30_s1_cannot_read_unapproved_peer_image(conn, fx):
+    """Spec §6 test 30: S1 reads {BA2}/scene_1.png (unapproved peer) → denied."""
+    assert len(_select_storage(conn, fx.s1, fx.ba2)) == 0
+
+
+@_skip
+def test_31_s1_cannot_read_other_classroom_image(conn, fx):
+    """Spec §6 test 31: S1 reads {BB1}/scene_1.png (classroom B) → denied."""
+    assert len(_select_storage(conn, fx.s1, fx.bb1)) == 0
+
+
+@_skip
+def test_32_ta_reads_own_classroom_image(conn, fx):
+    """Spec §6 test 32: TA reads {BA1}/scene_1.png → allowed."""
+    assert len(_select_storage(conn, fx.ta, fx.ba1)) == 1
+
+
+@_skip
+def test_33_ta_cannot_read_other_classroom_image(conn, fx):
+    """Spec §6 test 33: TA reads {BB1}/scene_1.png (classroom B) → denied."""
+    assert len(_select_storage(conn, fx.ta, fx.bb1)) == 0

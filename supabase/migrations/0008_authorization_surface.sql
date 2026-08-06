@@ -150,7 +150,7 @@ create policy "teachers read classroom images"
     and case when name like '%/%' then exists (
       select 1 from jobs j
       join classrooms c on c.id = j.classroom_id
-      where j.id = split_part(name, '/', 1)::uuid
+      where j.id = split_part(objects.name, '/', 1)::uuid
         and c.owner_id = auth.uid()
     ) else false end
   );
