@@ -1,19 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { createBrowserClient } from "@supabase/ssr";
+import { useRouter, useSearchParams } from "next/navigation";
+import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
 
 export default function Login() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const confirmed = searchParams.get("message") === "email-confirmed";
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,8 +27,10 @@ export default function Login() {
 
     if (signInError) {
       setError(signInError.message);
+      setLoading(false);
+    } else {
+      router.push("/dashboard");
     }
-    setLoading(false);
   };
 
   return (
@@ -40,6 +42,15 @@ export default function Login() {
         <p className="text-sm text-foreground/70 mb-6">
           Welcome back. Enter your account details to access your classroom.
         </p>
+
+        {confirmed && (
+          <div
+            role="status"
+            className="mb-4 p-3 rounded-xl bg-success/10 border border-success/20 text-success text-sm font-medium"
+          >
+            Your email is confirmed — log in.
+          </div>
+        )}
 
         {error && (
           <div

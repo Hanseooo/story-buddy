@@ -374,6 +374,16 @@ Nickname normalization needs no new vectors — S1 §5.1's fourteen are already 
 
 N/A. Nothing in this spec produces content whose quality is subjective.
 
+## 10.5 Implementation plans
+
+- **Backend (server infrastructure):** `docs/superpowers/plans/2026-08-06-auth-s4-backend.md`
+  Covers: `utils/supabase/{server,middleware}.ts`, `lib/safe-redirect.ts`, `middleware.ts`, §9 tests 1–5.
+  Must be complete before the frontend plan is executed.
+
+- **Frontend (routes, pages, UX):** not yet written.
+  Depends on: the backend plan above.
+  Covers: route tree moves, `StudentShell`, bookshelf, `/join` wizard, teacher surfaces, §9 tests 6–13.
+
 ## 11. Linked decisions & open questions
 
 **Depends on:** S1 (`profiles` shape, nickname normalization, the deletion trigger), S2 (cookie

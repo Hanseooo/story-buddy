@@ -1,13 +1,9 @@
 "use client";
 
-import { createBrowserClient } from "@supabase/ssr";
+// ponytail: S4 stated placeholder; teacher-dashboard is the successor (spec §6.3)
+import { supabase } from "@/lib/supabaseClient";
 
 export default function Dashboard() {
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-
   const handleSignOut = async () => {
     await supabase.auth.signOut();
   };
@@ -21,7 +17,7 @@ export default function Dashboard() {
               Dashboard
             </h1>
             <p className="text-sm text-foreground/70 mt-1">
-              Teacher & Classroom Management
+              Teacher &amp; Classroom Management
             </p>
           </div>
           <button
@@ -38,7 +34,8 @@ export default function Dashboard() {
               Classroom Overview
             </h2>
             <p className="text-foreground/70">
-              Classroom tools are not built yet.
+              Classroom tools are not built yet. Classroom setup and student
+              accounts will be available in a future update.
             </p>
           </div>
         </main>

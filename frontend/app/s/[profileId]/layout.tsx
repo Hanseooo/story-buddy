@@ -2,19 +2,15 @@ import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import Link from "next/link";
 
-interface StudentLayoutProps {
-  children: React.ReactNode;
-  params: Promise<{ profileId: string }> | { profileId: string };
-}
-
 export default async function StudentLayout({
   children,
   params,
-}: StudentLayoutProps) {
-  const resolvedParams = await params;
-  const profileId = resolvedParams.profileId;
-
-  const cookieStore = cookies();
+}: {
+  children: React.ReactNode;
+  params: Promise<{ profileId: string }>;
+}) {
+  const { profileId } = await params;
+  const cookieStore = await cookies();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -36,7 +32,7 @@ export default async function StudentLayout({
       <div className="font-kid min-h-screen bg-background text-foreground flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-surface border border-primary/20 rounded-2xl p-6 sm:p-8 text-center shadow-[0_10px_28px_rgba(49,85,217,0.12)]">
           <p className="text-lg font-bold text-foreground/80 mb-6">
-            Your class isn't set up anymore. Ask your teacher.
+            Your class isn&apos;t set up anymore. Ask your teacher.
           </p>
           <form action="/auth/signout" method="post">
             <button

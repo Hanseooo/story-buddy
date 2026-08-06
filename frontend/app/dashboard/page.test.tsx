@@ -2,14 +2,14 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import Dashboard from "./page";
 
-const mockSignOut = vi.fn();
+const mockSignOut = vi.hoisted(() => vi.fn());
 
-vi.mock("@supabase/ssr", () => ({
-  createBrowserClient: () => ({
+vi.mock("@/lib/supabaseClient", () => ({
+  supabase: {
     auth: {
       signOut: mockSignOut,
     },
-  }),
+  },
 }));
 
 describe("Dashboard Page", () => {

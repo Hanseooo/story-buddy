@@ -1,37 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { createBrowserClient } from "@supabase/ssr";
+import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
 
 export default function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const [submitted, setSubmitted] = useState(false);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setMessage("");
-    setError("");
-
-    const { error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-
-    if (signUpError) {
-      setError(signUpError.message);
-    } else {
-      setMessage("Check your email for confirmation link.");
-    }
+    await supabase.auth.signUp({ email, password });
+    // Always show "check your email" — never disclose whether account exists (spec §6.2)
+    setSubmitted(true);
     setLoading(false);
   };
 
@@ -45,21 +29,12 @@ export default function Signup() {
           Create an account to start writing stories and managing your classroom.
         </p>
 
-        {error && (
-          <div
-            role="alert"
-            className="mb-4 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium"
-          >
-            {error}
-          </div>
-        )}
-
-        {message && (
+        {submitted && (
           <div
             role="alert"
             className="mb-4 p-3 rounded-xl bg-success/10 border border-success/20 text-success text-sm font-medium"
           >
-            {message}
+            Check your email for confirmation link.
           </div>
         )}
 
