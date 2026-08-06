@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import Home from "./page";
 
 describe("Home", () => {
-  it("introduces StoryBuddy and links the primary action to the writing flow", () => {
+  it("introduces StoryBuddy and links CTAs to signup and join", () => {
     render(<Home />);
 
     expect(
@@ -12,10 +12,15 @@ describe("Home", () => {
         name: /big ideas\. bright pages\./i,
       })
     ).toBeDefined();
-    expect(screen.getByRole("link", { name: /make a book/i })).toHaveAttribute(
+
+    const signupLinks = screen.getAllByRole("link", { name: /make a book|start writing|start your story/i });
+    signupLinks.forEach((link) => expect(link).toHaveAttribute("href", "/signup"));
+
+    expect(screen.getByRole("link", { name: /i have a class code/i })).toHaveAttribute(
       "href",
-      "/write"
+      "/join"
     );
+
     expect(
       screen.getByRole("navigation", { name: /main navigation/i })
     ).toBeDefined();

@@ -26,7 +26,7 @@ export default function Home() {
               How it works
             </a>
             <Link
-              href="/write"
+              href="/signup"
               className="inline-flex min-h-11 items-center justify-center rounded-xl bg-secondary px-4 py-2 text-sm font-extrabold text-on-secondary shadow-[0_5px_0_var(--color-primary-deep)] transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_2px_0_var(--color-primary-deep)]"
             >
               Start writing
@@ -51,10 +51,16 @@ export default function Home() {
               </p>
               <div className="mt-8 flex flex-col items-stretch gap-4 sm:flex-row sm:items-center">
                 <Link
-                  href="/write"
+                  href="/signup"
                   className="inline-flex min-h-13 items-center justify-center rounded-xl bg-secondary px-6 py-3 font-extrabold text-on-secondary shadow-[0_7px_0_var(--color-primary-deep)] transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_3px_0_var(--color-primary-deep)]"
                 >
                   Make a book
+                </Link>
+                <Link
+                  href="/join"
+                  className="inline-flex min-h-13 items-center justify-center rounded-xl border-2 border-secondary px-6 py-3 font-extrabold text-secondary transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0.5"
+                >
+                  I have a class code
                 </Link>
                 <a
                   href="#how-it-works"
@@ -275,7 +281,7 @@ export default function Home() {
               </p>
             </div>
             <Link
-              href="/write"
+              href="/signup"
               className="inline-flex min-h-13 shrink-0 items-center justify-center rounded-xl bg-secondary px-6 py-3 font-extrabold text-on-secondary shadow-[0_7px_0_var(--color-primary-deep)] transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_3px_0_var(--color-primary-deep)]"
             >
               Start your story
