@@ -13,12 +13,6 @@ class Settings(BaseSettings):
     sentry_dsn_backend: str | None = None
     frontend_origin: str = "http://localhost:3000"
 
-    # Phase-1 dev provenance sentinels (ADR-023 amendment 2026-07-22b). The worker supplies
-    # story_id = job_id; these two stand in until `auth-and-classroom` lands. Swapping them for
-    # real selection is a value change at one call site — never a contract change.
-    dev_classroom_id: str = "dev-classroom"
-    dev_profile_id: str = "dev-profile"
-
     # Model swap is an env-var change; provider swap is providers.py (ADR-001, ADR-002).
     text_model: str = "qwen/qwen3-32b"
     vlm_judge_model: str = "google/gemma-3-27b-it"
