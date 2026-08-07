@@ -12,11 +12,14 @@ export function guardRequest(
     const profileId = pathname.split("/")[2];
     if (profileId !== userId) return `/s/${userId}`;
   }
-  if (pathname.startsWith("/dashboard") && !userId)
+  if (
+    (pathname.startsWith("/classroom") || pathname === "/settings") &&
+    !userId
+  )
     return `/login?next=${safe(pathname) ?? ""}`;
   if (userId && pathname.startsWith("/join")) return `/s/${userId}`;
   if (userId && (pathname === "/login" || pathname === "/signup"))
-    return "/dashboard";
+    return "/classroom";
   return null;
 }
 
@@ -38,7 +41,9 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     "/s/:path*",
-    "/dashboard/:path*",
+    "/classroom/:path*",
+    "/classroom",
+    "/settings",
     "/login",
     "/signup",
     "/join",

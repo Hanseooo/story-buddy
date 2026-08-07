@@ -55,10 +55,10 @@ export default async function StudentLayout({
             This part is for students
           </p>
           <Link
-            href="/dashboard"
+            href="/classroom"
             className="inline-flex min-h-11 items-center justify-center px-6 py-2.5 rounded-xl bg-primary font-extrabold text-on-primary shadow-[0_4px_0_var(--color-primary-deep)] transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0.5"
           >
-            Go to Dashboard
+            Go to Teacher Area
           </Link>
         </div>
       </div>
