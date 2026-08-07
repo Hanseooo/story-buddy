@@ -3,7 +3,7 @@ import uuid
 from typing import Literal
 
 import sentry_sdk
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 
@@ -16,6 +16,17 @@ if settings.sentry_dsn_backend:
     sentry_sdk.init(dsn=settings.sentry_dsn_backend, traces_sample_rate=0.1)
 
 _log = logging.getLogger(__name__)
+
+
+async def get_current_user(authorization: str | None = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(401, "missing token")
+    jwt = authorization.removeprefix("Bearer ")
+    result = get_supabase_client().auth.get_user(jwt)
+    if not result.user:
+        raise HTTPException(401, "invalid token")
+    return result.user
+
 
 app = FastAPI()
 
@@ -66,7 +77,9 @@ def health() -> dict:
 
 
 @app.post("/storybooks", response_model=CreateStorybookResponse)
-def create_storybook(payload: CreateStorybookRequest) -> CreateStorybookResponse:
+def create_storybook(
+    payload: CreateStorybookRequest, user=Depends(get_current_user)
+) -> CreateStorybookResponse:
     job_id = str(uuid.uuid4())
     before = word_count(payload.text)
     text, truncated = clamp_story(payload.text)
@@ -74,6 +87,12 @@ def create_storybook(payload: CreateStorybookRequest) -> CreateStorybookResponse
         # CC-5: log counts only, never the text (ADR-025 D5).
         _log.info("story truncated: %d words → %d words", before, word_count(text))
     supabase = get_supabase_client()
+    profile_rows = (
+        supabase.table("profiles").select("classroom_id").eq("id", user.id).execute().data
+    )
+    if not profile_rows or profile_rows[0]["classroom_id"] is None:
+        raise HTTPException(403, "only students can submit stories")
+    classroom_id = profile_rows[0]["classroom_id"]
     supabase.table("jobs").insert(
         {
             "id": job_id,
@@ -82,23 +101,34 @@ def create_storybook(payload: CreateStorybookRequest) -> CreateStorybookResponse
             "input_text": text,
             "truncated": truncated,
             "style_preset_id": payload.style_preset_id,
+            "profile_id": user.id,
+            "classroom_id": classroom_id,
         }
     ).execute()
-
     queue = get_queue()
     queue.enqueue("worker.run_job.run_storybook_job", job_id)
-
     return CreateStorybookResponse(job_id=job_id)
 
 
 @app.post("/jobs/{job_id}/confirm", response_model=ConfirmResponse)
-def confirm_job(job_id: str, payload: ConfirmRequest) -> ConfirmResponse:
+def confirm_job(
+    job_id: str, payload: ConfirmRequest, user=Depends(get_current_user)
+) -> ConfirmResponse:
     supabase = get_supabase_client()
 
-    rows = supabase.table("jobs").select("reveal, status").eq("id", job_id).execute().data
+    rows = (
+        supabase.table("jobs")
+        .select("reveal, status, profile_id")
+        .eq("id", job_id)
+        .execute()
+        .data
+    )
     if not rows:
         raise HTTPException(404, "job not found")
     row = rows[0]
+
+    if row["profile_id"] != user.id:
+        raise HTTPException(403, "forbidden")
 
     if payload.action == "try_again":
         characters = row["reveal"].get("characters", [])

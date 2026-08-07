@@ -166,9 +166,13 @@ replaced the `filipino-pii-recognizers` stub and the `length-guard` row. `app/le
 
 `job-failure-reason` is **built** (2026-08-04): `supabase/migrations/0006_jobs_failure_reason.sql` plus the
 taxonomy map in `run_job.py` — `child_text` only where `moderation_router` raises for the input text,
-everything else and `null` → `machine`. Next free migration is `0007`.
+everything else and `null` → `machine`. (`0007` and `0008` are now claimed by the auth specs; next free
+is `0009`.)
 
-**Next action:** build `auth-and-classroom` — the remaining child-facing gap (both policy surfaces are
-still effectively unrestricted, and S1 constraint 4 hands it both in one migration). Alternatives per
-`docs/product/DECISION_BACKLOG.md`: `data-deletion` (owes S4 the swept-pause status value) or `export-pdf`
+**`auth-and-classroom` is complete (2026-08-06).** The docket is DONE, `0007` and `0008` are applied,
+S3's 33-test Tier-A isolation suite (`backend/tests/test_rls_isolation.py`) is written, and S4
+(`middleware.ts`, `/join`, `/join/[code]`, `/s/[profileId]` bookshelf + settings) is fully built —
+144 frontend tests across 17 files. ADR-017's classroom boundary is enforced and verified. Next free
+migration is `0009`. **Next action per `docs/product/DECISION_BACKLOG.md`:** `data-deletion`
+(ethics-gated; owes the `awaiting_confirm` sweep and S4's `asleep` status value) or `export-pdf`
 (second reader of `jobs.pages`).

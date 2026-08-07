@@ -53,3 +53,13 @@ def test_min_story_words_is_five():
 
 def test_max_story_words_is_eight_hundred():
     assert MAX_STORY_WORDS == 800
+
+
+def test_settings_has_no_dev_classroom_id():
+    """spec §9 test 14: sentinel is retired."""
+    assert not hasattr(settings, "dev_classroom_id")
+
+
+def test_settings_has_no_dev_profile_id():
+    """spec §9 test 14: sentinel is retired."""
+    assert not hasattr(settings, "dev_profile_id")

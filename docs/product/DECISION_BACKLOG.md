@@ -225,8 +225,30 @@ roadmap order. Source: MASTER_SPEC §7.
       the same schema decision**, now named: `jobs.parent_job_id`. **The flow is now built (S4, 2026-08-04)** —
       `/write` carries the client-side `sb.failChain` counter and the third-failure offer, so PRD §11.4 is
       satisfied in shipped code and this row buys only durability.)*
-- [ ] `auth-and-classroom`
-- [ ] `teacher-dashboard`
+- [x] `auth-and-classroom` → **decomposed into four specs; all four built including S3's 33-test Tier-A isolation suite** *(docket
+  `docs/specs/auth-and-classroom-docket.md`, DONE 2026-08-06. 42 binding constraints. The four ship
+  as one unit: `0007` and `0008` deploy together or neither does (S3-1), and the route move is
+  meaningless without them.)*
+  - [x] `auth-identity-and-classroom-schema` (S1)   *(**built 2026-08-06** — students are real
+    `auth.users` rows via `{nickname}@{code}.students.storybuddy.invalid`; role in `profiles.role`;
+    migration `0007` creates `classrooms` + `profiles` with RLS on and zero policies.)*
+  - [x] `auth-session-model` (S2)   *(**built 2026-08-06** — one mechanism for all three roles,
+    cookie via `@supabase/ssr`. `supabaseClient.ts` migrated to `createBrowserClient`;
+    `get_current_user` wired into `POST /storybooks` and `/confirm`.)*
+  - [x] `auth-authorization-surface` (S3)   *(**built 2026-08-06** — migration `0008` replaces both
+    legacy policy surfaces; Storage joins back to `jobs` rather than changing the path shape; 33-test
+    Tier-A isolation suite (`backend/tests/test_rls_isolation.py`, 31 automated + 2 skip). Next free
+    migration is `0009`.)*
+  - [x] `auth-routes-and-account-ux` (S4)   *(**built 2026-08-06** — `docs/specs/auth-routes-and-account-ux.md`;
+    `middleware.ts` path-shaped guard (never reads role, validates `?next=`), `/join` + `/join/[code]`
+    three-step wizard (code → nickname → password), `/s/[profileId]` bookshelf with explicit
+    `.eq('profile_id')` guard (S4-4), student settings page (no current-password field). 144 tests across
+    17 test files. Review fixes: hard violations (async `cookies()`, canonical `supabaseClient`, params type),
+    wrong impls (redirect on login, always-check-email on signup), missing deliverables (all five pages).
+    Teacher-initiated password reset moved to `teacher-dashboard` by docket amendment 1.)*
+- [ ] `teacher-dashboard`   *(inherits from the auth docket: owns `/classroom/[classroomId]/students`,
+  the teacher-initiated password reset screen (amendment 1), and replaces S4's `/dashboard`
+  placeholder wholesale. Until it lands, classrooms and students are hand-provisioned by SQL.)*
 - [ ] `classroom-sharing`   *(display-only gallery — no `peer-reflection`/`story-map`, cut per ADR-021)*
 - [ ] `narration`   *(ADR-020; `providers.narrate()` not yet implemented. The book reader ships in S4 without a play button. TTS narration is `narration`'s deliverable.)*
 - [ ] `export-pdf`   *(D-2 decided → ADR-013: WeasyPrint)*
@@ -264,7 +286,8 @@ roadmap order. Source: MASTER_SPEC §7.
       where `moderation_router` raises for the input text; every other value, every unknown value and `null`
       map to `machine` → the `retry` screen, so a future value can never accidentally blame a child.
       `moderation_error`, a flagged canonical reference, an output-moderation failure and a provider error
-      all take the `machine` path. Consumed by S4's `FailureScreen`. Next free migration is **`0007`**.
+      all take the `machine` path. Consumed by S4's `FailureScreen`. (`0007` and `0008` are now claimed
+      by the auth specs; next free is **`0009`**.)
       `FailureReason` in `contracts/` is untouched — frozen at 7 by ADR-028, a *different*, scene-identity
       taxonomy; conflating them would corrupt Objective 4's F1 denominator.)*
 
@@ -349,6 +372,11 @@ revised 2026-07-25.)*
 > ⏸ **`self-refusal-fallback` spec written, then DEFERRED (2026-08-02).** See
 > `docs/specs/self-refusal-fallback.md` and the ⏸ deferral-watch table above.
 
+> ✅ **`auth-and-classroom` fully built (2026-08-06) — all four specs plus S3's 33-test isolation suite.**
+> S4: `middleware.ts` guard, `/join` + `/join/[code]`, `/s/[profileId]` bookshelf, student settings —
+> 144 tests across 17 test files. S3: `test_rls_isolation.py` (31 automated + 2 skip). ADR-017's
+> "real, testable boundary" is now enforced and verified.
+
 > ✅ **`kid-flow-ui` is built as four specs (2026-08-02 → 2026-08-04).** See
 > `docs/specs/kid-flow-ui-docket.md` (DONE) and S1–S4: `kid-flow-book-persistence.md`,
 > `kid-flow-pause-lifecycle.md`, `kid-flow-failure-semantics.md`, `kid-flow-reader-and-wait-states.md`.
@@ -357,15 +385,26 @@ revised 2026-07-25.)*
 **Phase 1 is complete. Phase 2 is in progress** — `moderation-stack`, `input-gate-hardening` and
 `kid-flow-ui` (S1–S4) are built.
 
-**Next session: `auth-and-classroom`.** It is the remaining child-facing gap, not a paperwork one:
-`0001_jobs_table.sql:18-21` and `0004`'s `storage.objects` policy are still the only two policy surfaces
-and both are effectively unrestricted (MASTER_SPEC §6). S1 constraint 4 explicitly hands it both — *"`auth-and-classroom` replaces both in one migration"* — and S1 constraint 5 keeps the kid routes flat
-(`/write`, `/process/[jobId]`, `/book/[jobId]`) until it lands, so `ROUTE_MAP.md` §1's `/s/[profileId]`
-tree is also waiting on it. Next free migration is `0007`.
+**`auth-and-classroom` is complete.** The docket `docs/specs/auth-and-classroom-docket.md` is DONE
+throughout (2026-08-06). `0007` and `0008` are applied, the child-facing RLS gap is closed, S4 is
+fully built (144 tests, 17 files), and S3's Tier-A isolation suite (`test_rls_isolation.py`, 31 + 2)
+is written — ADR-017's "real, testable boundary" is now verified. Next free migration is `0009`.
 
-Alternatives: `data-deletion` (ethics-gated, and owes the `awaiting_confirm` sweep the swept-pause status
-value S4's `asleep` screen is waiting for) or `export-pdf` (the second reader of `jobs.pages`, now that
-the shape exists).
+**Priority stack (consumer-facing e2e first, 2026-08-07):**
+
+1. **`teacher-dashboard`** — highest leverage: unblocks the ethics_and_safety.md §4 manual approval gate,
+   real classroom provisioning (no more SQL hand-wiring), and `classroom-sharing` in one shot. Until it
+   lands, no book is ever peer-visible. Inherits the teacher-initiated password reset from S4 (docket
+   amendment 1) and replaces the `/dashboard` placeholder.
+2. **`narration` + `export-pdf`** — both independent; can run in parallel sessions. Together they satisfy
+   the Tool A evaluation row ("assembled + narrated + exported"). Deferring narration narrows a reported
+   Objective row and drops an accessibility claim — defer only as a deliberate trade with the row narrowed
+   in the same change.
+3. **`classroom-sharing`** — hard-blocked on `teacher-dashboard` (needs the approval bit set before any
+   peer-visible book exists).
+4. **`data-deletion`** — non-deferrable (RA 10173 + ethics clearance), but doesn't unblock anything else.
+   Owns ADR-029's ⚠️: the `awaiting_confirm` sweep and the `asleep` status value S4 is waiting for.
+5. **`rate-limiting`** — must not silently slip past any public deployment.
 
 **No open decision blocks Phase 1 or Phase 2 entry, and the decision backlog has no open rows.** Tiers 1, 2, 2b,
 2c, and 3 are all resolved. D-I closed 2026-07-31 → ADR-029; it builds in Phase 2 behind the moderation gate

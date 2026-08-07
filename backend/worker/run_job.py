@@ -82,7 +82,7 @@ def _finish(supabase, job_id: str, result: dict) -> None:
 
 def run_storybook_job(job_id: str) -> None:
     supabase = get_supabase_client()
-    row = supabase.table("jobs").select("input_text, style_preset_id, truncated").eq("id", job_id).single().execute()
+    row = supabase.table("jobs").select("input_text, style_preset_id, truncated, classroom_id, profile_id").eq("id", job_id).single().execute()
     input_text = row.data["input_text"]
     preset_id = row.data.get("style_preset_id")
     truncated = row.data["truncated"]
@@ -90,14 +90,13 @@ def run_storybook_job(job_id: str) -> None:
 
     supabase.table("jobs").update({"status": "running"}).eq("id", job_id).execute()
 
-    # ADR-023 amendment 2026-07-22b: the worker is the supplier of durable provenance.
-    # story_id = job_id (one job = one story). classroom/profile are Phase-1 dev sentinels;
-    # `auth-and-classroom` swaps these two values here and changes nothing else.
+    # ADR-023 amendment 2026-07-22b: story_id = job_id (one job = one story).
+    # classroom_id/profile_id come from the job row (0008 adds these columns as NOT NULL).
     initial_state = StoryMemory(
         schema_version=CURRENT_SCHEMA_VERSION,
         story_id=job_id,
-        classroom_id=settings.dev_classroom_id,
-        profile_id=settings.dev_profile_id,
+        classroom_id=row.data["classroom_id"],
+        profile_id=row.data["profile_id"],
         input=Input(raw_text=input_text, word_count=word_count(input_text), truncated=truncated),
         style=Style(style_preset_id=chosen_id, prompt_fragment=STYLE_PRESETS[chosen_id]),
     )
