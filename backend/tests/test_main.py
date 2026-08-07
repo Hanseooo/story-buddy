@@ -362,3 +362,144 @@ def test_confirm_matching_owner_awaiting_confirm_returns_200():
         response = client.post("/jobs/job-1/confirm", json={"action": "confirm"})
     assert response.status_code == 200
     assert response.json() == {"status": "queued"}
+
+
+# ── Tests 10–15: teacher authorization dependencies (spec §6 tests 10–15) ──────
+# These import from app.auth; they will fail (ImportError) until auth.py exists.
+
+from app.auth import get_current_user as _auth_get_current_user, require_teacher, owned_classroom, teacher_router  # noqa: E402
+
+
+def _make_teacher_app():
+    """Mount one test route on teacher_router so we can hit it."""
+    from fastapi import Depends, FastAPI
+    from app.auth import teacher_router
+    ta = FastAPI()
+
+    @teacher_router.get("/classrooms/{classroom_id}/ping")
+    def ping(classroom=Depends(owned_classroom)):
+        return {"ok": True, "classroom_id": str(classroom["id"])}
+
+    ta.include_router(teacher_router, prefix="/teacher")
+    return ta
+
+
+def test_student_token_on_teacher_router_returns_403():
+    """spec §6 test 10."""
+    fake_supabase = MagicMock()
+    fake_user = MagicMock()
+    fake_user.id = "student-uid"
+    fake_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [
+        {"id": "student-uid", "role": "student"}
+    ]
+
+    ta = _make_teacher_app()
+    ta.dependency_overrides[_auth_get_current_user] = lambda: fake_user
+    tc = TestClient(ta)
+    with patch("app.auth.get_supabase_client", return_value=fake_supabase):
+        r = tc.get("/teacher/classrooms/some-id/ping")
+    assert r.status_code == 403
+
+
+def test_valid_token_no_profiles_row_returns_403():
+    """spec §6 test 11."""
+    fake_supabase = MagicMock()
+    fake_user = MagicMock()
+    fake_user.id = "ghost-uid"
+    fake_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = []
+
+    ta = _make_teacher_app()
+    ta.dependency_overrides[_auth_get_current_user] = lambda: fake_user
+    tc = TestClient(ta)
+    with patch("app.auth.get_supabase_client", return_value=fake_supabase):
+        r = tc.get("/teacher/classrooms/some-id/ping")
+    assert r.status_code == 403
+
+
+def test_no_authorization_header_returns_401():
+    """spec §6 test 12."""
+    ta = _make_teacher_app()
+    tc = TestClient(ta)
+    r = tc.get("/teacher/classrooms/some-id/ping")
+    assert r.status_code == 401
+
+
+def test_teacher_own_classroom_returns_row():
+    """spec §6 test 13."""
+    fake_supabase = MagicMock()
+    teacher_id = "teacher-uid"
+    classroom_id = "cls-123"
+    fake_user = MagicMock()
+    fake_user.id = teacher_id
+
+    def _select(table_name):
+        m = MagicMock()
+        if table_name == "profiles":
+            m.select.return_value.eq.return_value.execute.return_value.data = [
+                {"id": teacher_id, "role": "teacher"}
+            ]
+        elif table_name == "classrooms":
+            m.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
+                {"id": classroom_id, "owner_id": teacher_id, "code": "abc", "name": "My Class"}
+            ]
+        return m
+
+    fake_supabase.table.side_effect = _select
+    ta = _make_teacher_app()
+    ta.dependency_overrides[_auth_get_current_user] = lambda: fake_user
+    tc = TestClient(ta)
+    with patch("app.auth.get_supabase_client", return_value=fake_supabase):
+        r = tc.get(f"/teacher/classrooms/{classroom_id}/ping")
+    assert r.status_code == 200
+
+
+def test_teacher_another_teachers_classroom_returns_404():
+    """spec §6 test 14: ownership mismatch is 404, not 403."""
+    fake_supabase = MagicMock()
+    teacher_id = "teacher-uid"
+    fake_user = MagicMock()
+    fake_user.id = teacher_id
+
+    def _select(table_name):
+        m = MagicMock()
+        if table_name == "profiles":
+            m.select.return_value.eq.return_value.execute.return_value.data = [
+                {"id": teacher_id, "role": "teacher"}
+            ]
+        elif table_name == "classrooms":
+            m.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = []
+        return m
+
+    fake_supabase.table.side_effect = _select
+    ta = _make_teacher_app()
+    ta.dependency_overrides[_auth_get_current_user] = lambda: fake_user
+    tc = TestClient(ta)
+    with patch("app.auth.get_supabase_client", return_value=fake_supabase):
+        r = tc.get("/teacher/classrooms/other-cls/ping")
+    assert r.status_code == 404
+
+
+def test_teacher_nonexistent_classroom_returns_404():
+    """spec §6 test 15: nonexistent classroom is indistinguishable from test 14."""
+    fake_supabase = MagicMock()
+    teacher_id = "teacher-uid"
+    fake_user = MagicMock()
+    fake_user.id = teacher_id
+
+    def _select(table_name):
+        m = MagicMock()
+        if table_name == "profiles":
+            m.select.return_value.eq.return_value.execute.return_value.data = [
+                {"id": teacher_id, "role": "teacher"}
+            ]
+        elif table_name == "classrooms":
+            m.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = []
+        return m
+
+    fake_supabase.table.side_effect = _select
+    ta = _make_teacher_app()
+    ta.dependency_overrides[_auth_get_current_user] = lambda: fake_user
+    tc = TestClient(ta)
+    with patch("app.auth.get_supabase_client", return_value=fake_supabase):
+        r = tc.get("/teacher/classrooms/ghost-cls/ping")
+    assert r.status_code == 404
