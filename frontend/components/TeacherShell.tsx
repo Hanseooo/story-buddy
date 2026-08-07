@@ -3,13 +3,13 @@ import { createServerClient } from "@supabase/ssr";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import ClassroomSwitcher from "./ClassroomSwitcher";
+import ClassroomTabs from "./ClassroomTabs";
 
 type Props = {
-  classroomId?: string;
   children: React.ReactNode;
 };
 
-export default async function TeacherShell({ classroomId, children }: Props) {
+export default async function TeacherShell({ children }: Props) {
   const cookieStore = await cookies();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -47,29 +47,10 @@ export default async function TeacherShell({ classroomId, children }: Props) {
             <span className="font-display text-lg font-extrabold text-primary">
               StoryBuddy
             </span>
-            <ClassroomSwitcher classrooms={classList} currentId={classroomId} />
+            <ClassroomSwitcher classrooms={classList} />
           </div>
 
-          {classroomId && (
-            <nav
-              className="hidden sm:flex items-center gap-1"
-              aria-label="Classroom tabs"
-            >
-              <Link
-                href={`/classroom/${classroomId}`}
-                className="px-4 py-2 rounded-xl text-sm font-bold hover:bg-muted transition-colors"
-              >
-                Roster
-              </Link>
-              <span
-                className="px-4 py-2 rounded-xl text-sm font-bold text-foreground/40 cursor-not-allowed"
-                aria-disabled="true"
-                title="Available in a future update"
-              >
-                Books
-              </span>
-            </nav>
-          )}
+          <ClassroomTabs />
 
           <div className="flex items-center gap-2">
             <Link

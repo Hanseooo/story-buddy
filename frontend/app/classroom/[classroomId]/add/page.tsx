@@ -2,19 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { createBrowserClient } from "@supabase/ssr";
+import { supabase } from "@/lib/supabaseClient";
 import {
   computePreview,
   type Preset,
 } from "@/lib/classroom-preview";
 import { normalizeNickname } from "@/lib/nickname";
-
-type Credential = {
-  profile_id: string;
-  display_nickname: string;
-  nickname: string;
-  password: string;
-};
+import { type Credential } from "@/lib/types";
 
 type RejectedRow = {
   display_nickname: string;
@@ -45,11 +39,6 @@ export default function AddStudentsPage() {
   const [singleName, setSingleName] = useState("");
   const [singleSubmitting, setSingleSubmitting] = useState(false);
   const [copyDone, setCopyDone] = useState(false);
-
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
 
   // Fetch classroom + existing nicknames for collision check
   useEffect(() => {
@@ -84,9 +73,9 @@ export default function AddStudentsPage() {
   const getToken = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
     return session?.access_token;
-  }, [supabase]);
+  }, []);
 
-  async function postStudents(students: { display_nickname: string; nickname: string }[]) {
+  async function postStudents(students: { display_nickname: string }[]) {
     const tok = await getToken();
     const resp = await fetch(
       `${process.env.NEXT_PUBLIC_API_URL}/classrooms/${classroomId}/students`,
@@ -109,7 +98,6 @@ export default function AddStudentsPage() {
     try {
       const students = previewRows.map((row, i) => ({
         display_nickname: overrides[i] ?? row.displayNickname,
-        nickname: "",
       }));
       const body = await postStudents(students);
       setCreated(body.created);
@@ -126,7 +114,7 @@ export default function AddStudentsPage() {
     e.preventDefault();
     setSingleSubmitting(true);
     try {
-      const body = await postStudents([{ display_nickname: singleName.trim(), nickname: "" }]);
+      const body = await postStudents([{ display_nickname: singleName.trim() }]);
       setCreated(body.created);
       setRejected(body.rejected);
       setPhase("slips");

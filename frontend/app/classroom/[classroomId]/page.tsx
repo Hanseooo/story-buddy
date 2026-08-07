@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { createBrowserClient } from "@supabase/ssr";
+import { supabase } from "@/lib/supabaseClient";
+import { type Credential } from "@/lib/types";
 import ConfirmDialog from "@/components/ConfirmDialog";
 
 type Student = {
@@ -10,13 +11,6 @@ type Student = {
   nickname: string;
   display_nickname: string;
   removed_at: string | null;
-};
-
-type Credential = {
-  profile_id: string;
-  display_nickname: string;
-  nickname: string;
-  password: string;
 };
 
 export default function RosterPage() {
@@ -30,11 +24,6 @@ export default function RosterPage() {
   const [removing, setRemoving] = useState<Student | null>(null);
   const [slip, setSlip] = useState<Credential | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
 
   async function fetchRoster() {
     const [clsRes, studentsRes] = await Promise.all([

@@ -77,7 +77,6 @@ def delete_classroom(classroom=Depends(owned_classroom)):
 
 class _StudentIn(BaseModel):
     display_nickname: str
-    nickname: str  # client-sent; ignored — server re-derives from display_nickname
 
 
 class AddStudentsRequest(BaseModel):

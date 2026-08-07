@@ -1,14 +1,17 @@
 "use client";
 
+import { usePathname } from "next/navigation";
+
 type Classroom = { id: string; name: string };
 
 export default function ClassroomSwitcher({
   classrooms,
-  currentId,
 }: {
   classrooms: Classroom[];
-  currentId?: string;
 }) {
+  const pathname = usePathname();
+  const currentId = pathname.match(/^\/classroom\/([^/]+)/)?.[1];
+
   if (classrooms.length === 0) return null;
   return (
     <div className="relative">
