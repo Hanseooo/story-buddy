@@ -73,9 +73,9 @@ describe("Student Shell Layout", () => {
     render(jsx);
 
     expect(screen.getByText(/this part is for students/i)).toBeDefined();
-    expect(screen.getByRole("link", { name: /go to dashboard/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /go to teacher area/i })).toHaveAttribute(
       "href",
-      "/dashboard"
+      "/classroom"
     );
   });
 });
