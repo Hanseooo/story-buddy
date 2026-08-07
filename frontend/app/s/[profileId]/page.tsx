@@ -22,7 +22,7 @@ export default function BookshelfPage({
 
   useEffect(() => {
     params.then(({ profileId: pid }) => setProfileId(pid));
-  }, []);
+  }, [params]);
 
   useEffect(() => {
     if (!profileId) return;
@@ -65,7 +65,7 @@ export default function BookshelfPage({
         .map((j) => j.pages?.[0]?.image_path)
         .filter((p): p is string => Boolean(p));
 
-      let signedMap: Record<string, string> = {};
+      const signedMap: Record<string, string> = {};
       if (imagePaths.length > 0) {
         const { data: signed } = await supabase.storage
           .from("pages")
@@ -146,6 +146,7 @@ function BookCard({
       className="block rounded-2xl bg-surface border border-primary/15 overflow-hidden hover:shadow-md transition-shadow"
     >
       {card.coverUrl && card.bucket === "terminal-success" && (
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={card.coverUrl}
           alt=""

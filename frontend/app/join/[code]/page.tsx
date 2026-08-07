@@ -35,7 +35,7 @@ export default function JoinCodePage({
         setCode(c);
       }
     });
-  }, []);
+  }, [params]);
 
   // popstate: back from step 3 returns to step 2
   useEffect(() => {
