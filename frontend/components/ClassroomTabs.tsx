@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import PendingCount from "./PendingCount";
 
 export default function ClassroomTabs() {
   const pathname = usePathname();
@@ -16,13 +17,13 @@ export default function ClassroomTabs() {
       >
         Roster
       </Link>
-      <span
-        className="px-4 py-2 rounded-xl text-sm font-bold text-foreground/40 cursor-not-allowed"
-        aria-disabled="true"
-        title="Available in a future update"
+      <Link
+        href={`/classroom/${id}/books`}
+        className="px-4 py-2 rounded-xl text-sm font-bold hover:bg-muted transition-colors flex items-center"
       >
         Books
-      </span>
+        <PendingCount classroomId={id} />
+      </Link>
     </nav>
   );
 }
