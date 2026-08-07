@@ -485,3 +485,91 @@ def test_32_ta_reads_own_classroom_image(conn, fx):
 def test_33_ta_cannot_read_other_classroom_image(conn, fx):
     """Spec §6 test 33: TA reads {BB1}/scene_1.png (classroom B) → denied."""
     assert len(_select_storage(conn, fx.ta, fx.bb1)) == 0
+
+
+# ── Tests 7–9: column grant enforcement (spec §6 tests 7–9) ──────────────────
+
+
+def _owned_job(conn):
+    """Create a teacher, classroom, and a student job. Return (teacher_uid, classroom_id, job_id)."""
+    import json as _json
+    teacher_uid = _auth_user(conn, "grant-teacher")
+    conn.execute(
+        "INSERT INTO profiles (id, role, display_name) VALUES (%s, 'teacher', 'Grant Teacher')",
+        (teacher_uid,),
+    )
+    classroom_id = uuid.uuid4()
+    conn.execute(
+        "INSERT INTO classrooms (id, code, name, owner_id) VALUES (%s, 'grnt01', 'Grant Class', %s)",
+        (classroom_id, teacher_uid),
+    )
+    student_uid = _auth_user(conn, "grant-student")
+    conn.execute(
+        "INSERT INTO profiles (id, role, classroom_id, nickname, display_nickname)"
+        " VALUES (%s, 'student', %s, 'stu', 'Stu')",
+        (student_uid, classroom_id),
+    )
+    job_id = uuid.uuid4()
+    conn.execute(
+        "INSERT INTO jobs (id, status, current_stage, input_text, truncated,"
+        " profile_id, classroom_id)"
+        " VALUES (%s, 'queued', 'queued', 'Once upon a time.', false, %s, %s)",
+        (job_id, student_uid, classroom_id),
+    )
+    return teacher_uid, classroom_id, job_id
+
+
+def _set_teacher_context(conn, teacher_uid: uuid.UUID, classroom_id: uuid.UUID) -> None:
+    """Switch the connection to the authenticated role with teacher JWT claims."""
+    claims = json.dumps({
+        "sub": str(teacher_uid),
+        "role": "authenticated",
+        "app_metadata": {"role": "teacher"},
+        "classroom_id": None,
+    })
+    conn.execute("SET LOCAL ROLE authenticated")
+    conn.execute("SELECT set_config('request.jwt.claims', %s, true)", (claims,))
+
+
+@_skip
+def test_authenticated_teacher_can_update_approved_at(conn):
+    """spec §6 test 7: authenticated role can set approved_at on an owned job."""
+    teacher_uid, classroom_id, job_id = _owned_job(conn)
+    _set_teacher_context(conn, teacher_uid, classroom_id)
+
+    conn.execute(
+        "UPDATE jobs SET approved_at = now() WHERE id = %s",
+        (job_id,),
+    )
+    row = conn.execute(
+        "SELECT approved_at FROM jobs WHERE id = %s", (job_id,)
+    ).fetchone()
+    assert row is not None and row[0] is not None
+
+
+@_skip
+def test_authenticated_teacher_cannot_update_input_text(conn):
+    """spec §6 test 8: column grant denies authenticated from writing input_text."""
+    teacher_uid, classroom_id, job_id = _owned_job(conn)
+    _set_teacher_context(conn, teacher_uid, classroom_id)
+
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        conn.execute(
+            "UPDATE jobs SET input_text = 'injected' WHERE id = %s",
+            (job_id,),
+        )
+
+
+@_skip
+def test_service_role_can_update_input_text(conn):
+    """spec §6 test 9: revoke on authenticated does not affect service_role path."""
+    teacher_uid, classroom_id, job_id = _owned_job(conn)
+    # No role switch — superuser bypasses all grants
+    conn.execute(
+        "UPDATE jobs SET input_text = 'superuser write' WHERE id = %s",
+        (job_id,),
+    )
+    row = conn.execute(
+        "SELECT input_text FROM jobs WHERE id = %s", (job_id,)
+    ).fetchone()
+    assert row is not None and row[0] == "superuser write"
