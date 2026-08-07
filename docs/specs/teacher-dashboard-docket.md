@@ -97,8 +97,49 @@ not open.
   rolls back the rows that succeeded.
 - **S2-11 — `0010` is claimed and ADR-flagged** (adds `profiles.removed_at`).
 
-⚠️ **Note for S3:** the next free migration is now **`0011`** — S1 claims `0009`, S2 claims `0010`.
-That is the number S3 needs if Q11 makes "rejected" a real state.
+**From S3** (`docs/specs/teacher-review-and-approval.md`, DONE 2026-08-07):
+
+> **Lettered, not numbered, on purpose.** This file already lists auth-docket constraints **S3-4,
+> S3-7, S3-8** under *Pre-existing*, and S3's spec cites them. Numbering this session `S3-1…` would
+> collide head-on. (The collision already exists quietly: **`S1-5` means two different things** in
+> this file — "ownership checks are dependencies" from S1, and "one classroom for life" from the auth
+> docket. Read `S1-5` with its source block, never alone.)
+
+- **S3-A — Three review states, derived from two timestamps, closed by a CHECK.** `0011` adds
+  `jobs.rejected_at`; `approved_at`'s meaning is unchanged, so `0008`'s four consuming policies read
+  correctly without modification. No `review_status` enum. `jobs_review_exclusive` makes both-set
+  **unrepresentable**, not merely unwritten.
+- **S3-B — All six transitions exist; the decision is a value, not two buttons.** Un-approve and
+  back-to-pending are permitted. No teacher-reachable state is a dead end. This is what makes Undo
+  free, and Undo is why the screen has no confirmation dialog.
+- **S3-C — The review write is `POST /jobs/{id}/review` on `teacher_router`, behind `require_teacher`
+  + `owned_job`.** `owned_job` is new in `app/auth.py` on `owned_classroom`'s pattern (S1-5). The
+  server sets every timestamp — no client supplies one. Unauthorized and nonexistent are the same
+  `404`.
+- **S3-D — After `0011`, `authenticated` holds no UPDATE on `jobs`.** Writes never go through RLS
+  anywhere in the system. **Amends S1-7 and auth-docket S3-8**; makes auth-docket S3-7 exceptionless.
+  See *Amendments* 1.
+- **S3-E — Only `failure_reason = 'child_text'` names the child's writing — for the teacher as for
+  the child.** Every other value, every unknown value, and `null` render as *machine*. Kid-flow
+  §4.2's fail-safe default survives the audience change; no session widens it.
+- **S3-F — No moderation category, flagged span, or `jobs.error` reaches any screen,** teacher-facing
+  or child-facing.
+- **S3-G — The child is never shown a review state.** Pending, approved and rejected are
+  indistinguishable from inside the kid flow. **Binds `classroom-sharing`:** no rejection signal, no
+  absence badge, no "why isn't mine here" affordance without amending S3's spec.
+- **S3-H — No bulk decision and no auto-approve.** Per-book only. Widening it is ADR-017's Future
+  Work path behind an ethics re-review, not a session's call.
+- **S3-I — The books list filters `classroom_id` explicitly and deliberately does *not* filter
+  `removed_at`.** S2-2 governs lists of *students*; a removed child's book stays reviewable and
+  attributed (S2-1).
+- **S3-J — No Realtime on the list;** refetch on mount and `visibilitychange`. S4-8's single per-job
+  status model stands — no second job-status state model exists anywhere.
+- **S3-K — `/classroom/[classroomId]/books` is the only route S3 added** (S2-5 held). The reader is a
+  `<dialog>`, not a route. S2-8 held — native elements, no component library.
+- **S3-L — `0011` is claimed and ADR-flagged** (adds `rejected_at` + CHECK, revokes a grant, drops a
+  policy).
+
+⚠️ **The next free migration is now `0012`** — S1 claims `0009`, S2 `0010`, S3 `0011`.
 
 ### Pre-existing constraints, not from this docket
 
@@ -291,7 +332,9 @@ irreversible, which is a different design problem from the kid flow's.
 
 ---
 
-### S3 · Review & approval — READY
+### S3 · Review & approval — DONE
+
+**Spec:** `docs/specs/teacher-review-and-approval.md`
 
 **Cluster:** what states a book can be in from a teacher's side, and what a teacher is
 allowed to see. These constrain each other tightly: whether "rejected" is a real state
@@ -366,4 +409,33 @@ this docket's work to fix.
 
 ## Amendments
 
-*(None yet.)*
+**1 — 2026-08-07 (from S3): the RLS write path is removed, not narrowed.**
+S1-7 froze `authenticated`'s UPDATE on `jobs` at exactly one column (`approved_at`), and auth-docket
+S3-8 called that "the only RLS write path" in the system. S3 moved the review write to
+`POST /jobs/{id}/review` so the server owns the timestamps and CC-5 has somewhere to log the one gate
+`ethics_and_safety.md` §4 rests on. That leaves `0009:38`'s column grant with no caller and
+`0008:52`'s `teachers approve jobs` policy unable to fire.
+
+`0011` therefore **revokes the grant and drops the policy**. S1-7's count goes from one column to
+none; auth-docket S3-8 no longer describes anything; auth-docket S3-7 ("writes never go through RLS")
+becomes true with **no exceptions**. `0009` is not edited — S1 is DONE — `0011` revokes what it
+grants, and is harmless if `0009`'s ADR is never accepted.
+
+Recorded rather than left silent because an inert policy on the approval column is exactly what
+misleads whoever next audits the auth surface.
+
+---
+
+## Docket status: COMPLETE
+
+All three sessions are DONE. The four `Found & parked` items above stayed parked across all three, as
+intended, and are still not this docket's work.
+
+**Build order for the specs this docket produced** — each is gated on its ADR (`AGENTS.md` §2):
+
+1. `0009` (S1) → `0010` (S2) → `0011` (S3). Migration numbers are claimed in that order and `0011`
+   revokes a grant `0009` creates, so `0011` must not land first.
+2. S1's `require_teacher` / `owned_classroom` / `teacher_router` are already built
+   (`backend/app/auth.py`); S2 hangs the first routes on that router, S3 adds `owned_job` beside
+   `owned_classroom` and one more route.
+3. `TeacherShell` (S2) must exist before S3's tab and pending count have anywhere to live.
