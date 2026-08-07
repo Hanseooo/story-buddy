@@ -225,7 +225,7 @@ roadmap order. Source: MASTER_SPEC §7.
       the same schema decision**, now named: `jobs.parent_job_id`. **The flow is now built (S4, 2026-08-04)** —
       `/write` carries the client-side `sb.failChain` counter and the third-failure offer, so PRD §11.4 is
       satisfied in shipped code and this row buys only durability.)*
-- [ ] `auth-and-classroom` → **decomposed into four specs; S1, S2 and S3's migration built, S4 not** *(docket
+- [x] `auth-and-classroom` → **decomposed into four specs; all four built including S3's 33-test Tier-A isolation suite** *(docket
   `docs/specs/auth-and-classroom-docket.md`, DONE 2026-08-06. 42 binding constraints. The four ship
   as one unit: `0007` and `0008` deploy together or neither does (S3-1), and the route move is
   meaningless without them.)*
@@ -235,14 +235,17 @@ roadmap order. Source: MASTER_SPEC §7.
   - [ ] `auth-session-model` (S2)   *(**specced 2026-08-05**, partly built — one mechanism for all
     three roles, cookie via `@supabase/ssr`. `supabaseClient.ts` already migrated to
     `createBrowserClient`; `get_current_user` wired into `POST /storybooks` and `/confirm`.)*
-  - [ ] `auth-authorization-surface` (S3)   *(**specced 2026-08-06** — migration `0008` replaces both
-    legacy policy surfaces; Storage joins back to `jobs` rather than changing the path shape; 33
-    isolation tests. **Migration built 2026-08-06; the 33 isolation tests are not written**, though
-    S3-13 says they ship with `0008` and are not optional. Next free migration is `0009`.)*
-  - [ ] `auth-routes-and-account-ux` (S4)   *(**specced 2026-08-06** —
-    `docs/specs/auth-routes-and-account-ux.md`; flat → `/s/[profileId]`, path-shaped middleware guard
-    that never reads the role, the three-step `/join` wizard, the bookshelf query. Teacher-initiated
-    password reset moved out to `teacher-dashboard` by docket amendment 1.)*
+  - [x] `auth-authorization-surface` (S3)   *(**built 2026-08-06** — migration `0008` replaces both
+    legacy policy surfaces; Storage joins back to `jobs` rather than changing the path shape; 33-test
+    Tier-A isolation suite (`backend/tests/test_rls_isolation.py`, 31 automated + 2 skip). Next free
+    migration is `0009`.)*
+  - [x] `auth-routes-and-account-ux` (S4)   *(**built 2026-08-06** — `docs/specs/auth-routes-and-account-ux.md`;
+    `middleware.ts` path-shaped guard (never reads role, validates `?next=`), `/join` + `/join/[code]`
+    three-step wizard (code → nickname → password), `/s/[profileId]` bookshelf with explicit
+    `.eq('profile_id')` guard (S4-4), student settings page (no current-password field). 144 tests across
+    17 test files. Review fixes: hard violations (async `cookies()`, canonical `supabaseClient`, params type),
+    wrong impls (redirect on login, always-check-email on signup), missing deliverables (all five pages).
+    Teacher-initiated password reset moved to `teacher-dashboard` by docket amendment 1.)*
 - [ ] `teacher-dashboard`   *(inherits from the auth docket: owns `/classroom/[classroomId]/students`,
   the teacher-initiated password reset screen (amendment 1), and replaces S4's `/dashboard`
   placeholder wholesale. Until it lands, classrooms and students are hand-provisioned by SQL.)*
@@ -369,6 +372,11 @@ revised 2026-07-25.)*
 > ⏸ **`self-refusal-fallback` spec written, then DEFERRED (2026-08-02).** See
 > `docs/specs/self-refusal-fallback.md` and the ⏸ deferral-watch table above.
 
+> ✅ **`auth-and-classroom` fully built (2026-08-06) — all four specs plus S3's 33-test isolation suite.**
+> S4: `middleware.ts` guard, `/join` + `/join/[code]`, `/s/[profileId]` bookshelf, student settings —
+> 144 tests across 17 test files. S3: `test_rls_isolation.py` (31 automated + 2 skip). ADR-017's
+> "real, testable boundary" is now enforced and verified.
+
 > ✅ **`kid-flow-ui` is built as four specs (2026-08-02 → 2026-08-04).** See
 > `docs/specs/kid-flow-ui-docket.md` (DONE) and S1–S4: `kid-flow-book-persistence.md`,
 > `kid-flow-pause-lifecycle.md`, `kid-flow-failure-semantics.md`, `kid-flow-reader-and-wait-states.md`.
@@ -377,15 +385,13 @@ revised 2026-07-25.)*
 **Phase 1 is complete. Phase 2 is in progress** — `moderation-stack`, `input-gate-hardening` and
 `kid-flow-ui` (S1–S4) are built.
 
-**Next action: S3's isolation suite, then S4.** The docket `docs/specs/auth-and-classroom-docket.md`
-is **DONE throughout (2026-08-06)** — design is finished. `0007` and `0008` are both applied, so the
-child-facing RLS gap MASTER_SPEC §6 flagged is **closed in the database**: the two legacy permissive
-surfaces are dropped and there is no anon read path (S3-4).
+**`auth-and-classroom` is complete.** The docket `docs/specs/auth-and-classroom-docket.md` is DONE
+throughout (2026-08-06). `0007` and `0008` are applied, the child-facing RLS gap is closed, S4 is
+fully built (144 tests, 17 files), and S3's Tier-A isolation suite (`test_rls_isolation.py`, 31 + 2)
+is written — ADR-017's "real, testable boundary" is now verified. Next free migration is `0009`.
 
-⚠️ **What is not done:** S3-13 makes the 33-test Tier-A isolation suite non-optional and says it ships
-*with* `0008`. It has not been written, so ADR-017's "real, testable boundary" is enforced but
-unverified — the precise gap S3 existed to close. S4 (`middleware.ts`, `/join`, the `/s/[profileId]`
-move) is entirely unbuilt, so the kid routes are still flat. Next free migration is `0009`.
+**Next action:** `data-deletion` (ethics-gated; owes the `awaiting_confirm` sweep and the swept-pause
+status value S4's `asleep` screen is waiting for) or `export-pdf` (second reader of `jobs.pages`).
 
 Alternatives: `data-deletion` (ethics-gated, and owes the `awaiting_confirm` sweep the swept-pause status
 value S4's `asleep` screen is waiting for) or `export-pdf` (the second reader of `jobs.pages`, now that

@@ -169,11 +169,10 @@ taxonomy map in `run_job.py` — `child_text` only where `moderation_router` rai
 everything else and `null` → `machine`. (`0007` and `0008` are now claimed by the auth specs; next free
 is `0009`.)
 
-**Next action:** write S3's 33-test Tier-A isolation suite, then build S4. The docket
-`docs/specs/auth-and-classroom-docket.md` is DONE (2026-08-06) — design finished. `0007` and `0008` are
-both applied and the two legacy policy surfaces are gone, but S3-13 says the isolation suite ships
-*with* `0008` and it has not been written, so the classroom boundary is currently enforced and
-untested. S4 (`middleware.ts`, `/join`, the `/s/[profileId]` move) is entirely unbuilt. Next free
-migration is `0009`. Alternatives per
-`docs/product/DECISION_BACKLOG.md`: `data-deletion` (owes S4 the swept-pause status value) or `export-pdf`
+**`auth-and-classroom` is complete (2026-08-06).** The docket is DONE, `0007` and `0008` are applied,
+S3's 33-test Tier-A isolation suite (`backend/tests/test_rls_isolation.py`) is written, and S4
+(`middleware.ts`, `/join`, `/join/[code]`, `/s/[profileId]` bookshelf + settings) is fully built —
+144 frontend tests across 17 files. ADR-017's classroom boundary is enforced and verified. Next free
+migration is `0009`. **Next action per `docs/product/DECISION_BACKLOG.md`:** `data-deletion`
+(ethics-gated; owes the `awaiting_confirm` sweep and S4's `asleep` status value) or `export-pdf`
 (second reader of `jobs.pages`).
