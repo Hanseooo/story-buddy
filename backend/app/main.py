@@ -13,6 +13,7 @@ from app.db import get_supabase_client
 from app.queue import get_queue
 from app.auth import get_current_user, teacher_router
 import app.classrooms  # noqa: F401 — registers routes on teacher_router as side-effect
+import app.review  # noqa: F401 — registers routes on teacher_router as side-effect
 
 if settings.sentry_dsn_backend:
     sentry_sdk.init(dsn=settings.sentry_dsn_backend, traces_sample_rate=0.1)
