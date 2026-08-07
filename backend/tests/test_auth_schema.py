@@ -368,3 +368,52 @@ def test_app_metadata_researcher_hand_provisioning_works(conn):
     assert row is not None
     assert row[0] == "researcher"
     assert row[1] == "Dr. Reyes"
+
+
+# --- teacher provisioning: schema tests 11-12 (spec §9) ---
+
+@_skip
+def test_removed_at_is_nullable_and_does_not_break_role_shape(conn):
+    """Test 11: removed_at is nullable; profiles_role_shape check is unaffected."""
+    with conn.cursor() as cur:
+        classroom_id = str(uuid.uuid4())
+        cur.execute(
+            "INSERT INTO classrooms (id, owner_id, code, name) VALUES (%s, %s, %s, %s)",
+            (classroom_id, str(uuid.uuid4()), "TST111", "Test Class"),
+        )
+        profile_id = str(uuid.uuid4())
+        cur.execute(
+            """INSERT INTO profiles (id, role, classroom_id, nickname, display_nickname)
+               VALUES (%s, 'student', %s, 'testuser', 'Test User')""",
+            (profile_id, classroom_id),
+        )
+        cur.execute("SELECT removed_at FROM profiles WHERE id = %s", (profile_id,))
+        row = cur.fetchone()
+        assert row[0] is None, "removed_at should default to NULL"
+    conn.rollback()
+
+
+@_skip
+def test_removed_student_nickname_stays_reserved(conn):
+    """Test 12: a removed student's nickname stays reserved — re-adding the same name collides."""
+    with conn.cursor() as cur:
+        classroom_id = str(uuid.uuid4())
+        cur.execute(
+            "INSERT INTO classrooms (id, owner_id, code, name) VALUES (%s, %s, %s, %s)",
+            (classroom_id, str(uuid.uuid4()), "TST222", "Test Class 2"),
+        )
+        pid1 = str(uuid.uuid4())
+        cur.execute(
+            """INSERT INTO profiles (id, role, classroom_id, nickname, display_nickname, removed_at)
+               VALUES (%s, 'student', %s, 'maria', 'Maria', now())""",
+            (pid1, classroom_id),
+        )
+        pid2 = str(uuid.uuid4())
+        import psycopg.errors
+        with pytest.raises(psycopg.errors.UniqueViolation):
+            cur.execute(
+                """INSERT INTO profiles (id, role, classroom_id, nickname, display_nickname)
+                   VALUES (%s, 'student', %s, 'maria', 'Maria 2')""",
+                (pid2, classroom_id),
+            )
+    conn.rollback()

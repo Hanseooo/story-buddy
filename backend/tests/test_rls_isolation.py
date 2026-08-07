@@ -573,3 +573,67 @@ def test_service_role_can_update_input_text(conn):
         "SELECT input_text FROM jobs WHERE id = %s", (job_id,)
     ).fetchone()
     assert row is not None and row[0] == "superuser write"
+
+
+# --- teacher provisioning: RLS tests 13-14 (spec §9) ---
+
+@_skip
+def test_teacher_reads_removed_student_profile(conn):
+    """Test 13: a teacher still reads a removed student's profile row."""
+    with conn.cursor() as cur:
+        classroom_id = str(uuid.uuid4())
+        teacher_id = str(uuid.uuid4())
+        cur.execute(
+            "INSERT INTO classrooms (id, owner_id, code, name) VALUES (%s, %s, %s, %s)",
+            (classroom_id, teacher_id, "TST333", "Class"),
+        )
+        pid = str(uuid.uuid4())
+        cur.execute(
+            """INSERT INTO profiles (id, role, classroom_id, nickname, display_nickname, removed_at)
+               VALUES (%s, 'student', %s, 'removedkid', 'Removed Kid', now())""",
+            (pid, classroom_id),
+        )
+        cur.execute("SET LOCAL role TO authenticated")
+        cur.execute("SET LOCAL request.jwt.claims TO %s", (
+            json.dumps({"sub": teacher_id, "role": "authenticated"}),
+        ))
+        cur.execute("SELECT id FROM profiles WHERE id = %s", (pid,))
+        row = cur.fetchone()
+        assert row is not None, "teacher should still read removed student"
+    conn.rollback()
+
+
+@_skip
+def test_peer_reads_removed_classmate_profile_rls_does_not_filter(conn):
+    """Test 14: a peer reads a removed classmate's row — proves RLS does NOT filter it.
+    The query must filter removed_at is null; this test verifies the filter
+    responsibility lies with the caller, not with RLS.
+    """
+    with conn.cursor() as cur:
+        classroom_id = str(uuid.uuid4())
+        owner_id = str(uuid.uuid4())
+        cur.execute(
+            "INSERT INTO classrooms (id, owner_id, code, name) VALUES (%s, %s, %s, %s)",
+            (classroom_id, owner_id, "TST444", "Class"),
+        )
+        peer_id = str(uuid.uuid4())
+        removed_id = str(uuid.uuid4())
+        cur.execute(
+            """INSERT INTO profiles (id, role, classroom_id, nickname, display_nickname)
+               VALUES (%s, 'student', %s, 'peeruser', 'Peer')""",
+            (peer_id, classroom_id),
+        )
+        cur.execute(
+            """INSERT INTO profiles (id, role, classroom_id, nickname, display_nickname, removed_at)
+               VALUES (%s, 'student', %s, 'removeduser', 'Removed', now())""",
+            (removed_id, classroom_id),
+        )
+        cur.execute("SET LOCAL role TO authenticated")
+        cur.execute("SET LOCAL request.jwt.claims TO %s", (
+            json.dumps({"sub": peer_id, "role": "authenticated"}),
+        ))
+        # RLS allows the read — the row IS visible; only the query filter can hide it
+        cur.execute("SELECT id FROM profiles WHERE id = %s", (removed_id,))
+        row = cur.fetchone()
+        assert row is not None, "RLS does not filter removed students — the query must"
+    conn.rollback()
