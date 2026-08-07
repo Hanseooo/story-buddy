@@ -26,8 +26,8 @@ export default function ConfirmDialog({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    if (open) el.showModal();
-    else el.close();
+    if (open) el.showModal?.();
+    else el.close?.();
   }, [open]);
 
   useEffect(() => {
