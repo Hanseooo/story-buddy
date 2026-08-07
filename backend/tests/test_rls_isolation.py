@@ -492,7 +492,7 @@ def test_33_ta_cannot_read_other_classroom_image(conn, fx):
 
 def _owned_job(conn):
     """Create a teacher, classroom, and a student job. Return (teacher_uid, classroom_id, job_id)."""
-    import json as _json
+    import json as _json  # noqa: F401
     teacher_uid = _auth_user(conn, "grant-teacher")
     conn.execute(
         "INSERT INTO profiles (id, role, display_name) VALUES (%s, 'teacher', 'Grant Teacher')",
