@@ -7,14 +7,26 @@ import Link from "next/link";
 export default function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    await supabase.auth.signUp({ email, password });
-    // Always show "check your email" — never disclose whether account exists (spec §6.2)
+    setErrorMsg(null);
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { display_name: displayName } },
+    });
+    if (error) {
+      setErrorMsg(error.message);
+      setLoading(false);
+      return;
+    }
+    // Non-disclosure: existing-email returns no error but empty identities — show same success.
     setSubmitted(true);
     setLoading(false);
   };
@@ -38,7 +50,30 @@ export default function Signup() {
           </div>
         )}
 
+        {errorMsg && (
+          <div
+            role="alert"
+            className="mb-4 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium"
+          >
+            {errorMsg}
+          </div>
+        )}
+
         <form onSubmit={handleSignup} className="flex flex-col gap-4">
+          <div>
+            <label htmlFor="displayName" className="block text-sm font-semibold mb-1">
+              Your name
+            </label>
+            <input
+              id="displayName"
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              required
+              className="w-full min-h-11 px-3.5 py-2.5 rounded-xl border border-primary/20 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2"
+            />
+          </div>
+
           <div>
             <label htmlFor="email" className="block text-sm font-semibold mb-1">
               Email
