@@ -29,6 +29,28 @@ def owned_classroom(classroom_id: str = Path(...), teacher=Depends(require_teach
     return rows[0]
 
 
+def owned_job(job_id: str = Path(...), teacher=Depends(require_teacher)) -> dict:
+    rows = (
+        get_supabase_client().table("jobs")
+        .select("id, status, failure_reason, approved_at, rejected_at, classroom_id, profile_id")
+        .eq("id", job_id)
+        .execute().data
+    )
+    if not rows:
+        raise HTTPException(404, "not found")
+    job = rows[0]
+    cls_rows = (
+        get_supabase_client().table("classrooms")
+        .select("id")
+        .eq("id", job["classroom_id"])
+        .eq("owner_id", teacher["id"])
+        .execute().data
+    )
+    if not cls_rows:
+        raise HTTPException(404, "not found")
+    return job
+
+
 # ponytail: no routes — S2 and S3 own endpoint paths. The router check is structural
 # so a new endpoint inherits require_teacher by existing, not by remembering.
 teacher_router = APIRouter(dependencies=[Depends(require_teacher)])
