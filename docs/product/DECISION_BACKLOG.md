@@ -229,12 +229,12 @@ roadmap order. Source: MASTER_SPEC §7.
   `docs/specs/auth-and-classroom-docket.md`, DONE 2026-08-06. 42 binding constraints. The four ship
   as one unit: `0007` and `0008` deploy together or neither does (S3-1), and the route move is
   meaningless without them.)*
-  - [ ] `auth-identity-and-classroom-schema` (S1)   *(**specced 2026-08-05** — students are real
+  - [x] `auth-identity-and-classroom-schema` (S1)   *(**built 2026-08-06** — students are real
     `auth.users` rows via `{nickname}@{code}.students.storybuddy.invalid`; role in `profiles.role`;
     migration `0007` creates `classrooms` + `profiles` with RLS on and zero policies.)*
-  - [ ] `auth-session-model` (S2)   *(**specced 2026-08-05**, partly built — one mechanism for all
-    three roles, cookie via `@supabase/ssr`. `supabaseClient.ts` already migrated to
-    `createBrowserClient`; `get_current_user` wired into `POST /storybooks` and `/confirm`.)*
+  - [x] `auth-session-model` (S2)   *(**built 2026-08-06** — one mechanism for all three roles,
+    cookie via `@supabase/ssr`. `supabaseClient.ts` migrated to `createBrowserClient`;
+    `get_current_user` wired into `POST /storybooks` and `/confirm`.)*
   - [x] `auth-authorization-surface` (S3)   *(**built 2026-08-06** — migration `0008` replaces both
     legacy policy surfaces; Storage joins back to `jobs` rather than changing the path shape; 33-test
     Tier-A isolation suite (`backend/tests/test_rls_isolation.py`, 31 automated + 2 skip). Next free
@@ -390,12 +390,21 @@ throughout (2026-08-06). `0007` and `0008` are applied, the child-facing RLS gap
 fully built (144 tests, 17 files), and S3's Tier-A isolation suite (`test_rls_isolation.py`, 31 + 2)
 is written — ADR-017's "real, testable boundary" is now verified. Next free migration is `0009`.
 
-**Next action:** `data-deletion` (ethics-gated; owes the `awaiting_confirm` sweep and the swept-pause
-status value S4's `asleep` screen is waiting for) or `export-pdf` (second reader of `jobs.pages`).
+**Priority stack (consumer-facing e2e first, 2026-08-07):**
 
-Alternatives: `data-deletion` (ethics-gated, and owes the `awaiting_confirm` sweep the swept-pause status
-value S4's `asleep` screen is waiting for) or `export-pdf` (the second reader of `jobs.pages`, now that
-the shape exists).
+1. **`teacher-dashboard`** — highest leverage: unblocks the ethics_and_safety.md §4 manual approval gate,
+   real classroom provisioning (no more SQL hand-wiring), and `classroom-sharing` in one shot. Until it
+   lands, no book is ever peer-visible. Inherits the teacher-initiated password reset from S4 (docket
+   amendment 1) and replaces the `/dashboard` placeholder.
+2. **`narration` + `export-pdf`** — both independent; can run in parallel sessions. Together they satisfy
+   the Tool A evaluation row ("assembled + narrated + exported"). Deferring narration narrows a reported
+   Objective row and drops an accessibility claim — defer only as a deliberate trade with the row narrowed
+   in the same change.
+3. **`classroom-sharing`** — hard-blocked on `teacher-dashboard` (needs the approval bit set before any
+   peer-visible book exists).
+4. **`data-deletion`** — non-deferrable (RA 10173 + ethics clearance), but doesn't unblock anything else.
+   Owns ADR-029's ⚠️: the `awaiting_confirm` sweep and the `asleep` status value S4 is waiting for.
+5. **`rate-limiting`** — must not silently slip past any public deployment.
 
 **No open decision blocks Phase 1 or Phase 2 entry, and the decision backlog has no open rows.** Tiers 1, 2, 2b,
 2c, and 3 are all resolved. D-I closed 2026-07-31 → ADR-029; it builds in Phase 2 behind the moderation gate
