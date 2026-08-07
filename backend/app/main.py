@@ -3,7 +3,7 @@ import uuid
 from typing import Literal
 
 import sentry_sdk
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 
@@ -11,21 +11,12 @@ from app.config import MIN_STORY_WORDS, STYLE_PRESETS, settings
 from app.length import clamp_story, word_count
 from app.db import get_supabase_client
 from app.queue import get_queue
+from app.auth import get_current_user, teacher_router
 
 if settings.sentry_dsn_backend:
     sentry_sdk.init(dsn=settings.sentry_dsn_backend, traces_sample_rate=0.1)
 
 _log = logging.getLogger(__name__)
-
-
-async def get_current_user(authorization: str | None = Header(None)):
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(401, "missing token")
-    jwt = authorization.removeprefix("Bearer ")
-    result = get_supabase_client().auth.get_user(jwt)
-    if not result.user:
-        raise HTTPException(401, "invalid token")
-    return result.user
 
 
 app = FastAPI()
@@ -36,6 +27,8 @@ app.add_middleware(
     allow_methods=["POST", "GET"],
     allow_headers=["*"],
 )
+
+app.include_router(teacher_router)
 
 
 class CreateStorybookRequest(BaseModel):

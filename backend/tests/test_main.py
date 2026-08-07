@@ -308,7 +308,7 @@ def test_create_storybook_bad_token_returns_401():
     app.dependency_overrides.pop(get_current_user, None)
     fake_supabase = MagicMock()
     fake_supabase.auth.get_user.return_value = MagicMock(user=None)
-    with patch("app.main.get_supabase_client", return_value=fake_supabase):
+    with patch("app.auth.get_supabase_client", return_value=fake_supabase):
         response = client.post(
             "/storybooks",
             json={"text": "A dog runs in a field."},
