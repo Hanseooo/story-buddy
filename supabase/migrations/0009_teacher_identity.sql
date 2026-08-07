@@ -27,3 +27,12 @@ begin
           end);
   return new;
 end $$;
+
+-- ── 2. Narrow jobs UPDATE surface ────────────────────────────────────────────
+-- RLS cannot restrict which columns an UPDATE touches (0008:50).
+-- Column privileges are checked before policies; this makes S3-8 true in the
+-- database rather than by convention. service_role is unaffected — the revoke
+-- names authenticated only, and service_role bypasses both layers.
+
+revoke update on public.jobs from authenticated;
+grant  update (approved_at) on public.jobs to authenticated;
