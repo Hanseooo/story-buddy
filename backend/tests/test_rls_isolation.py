@@ -637,3 +637,55 @@ def test_peer_reads_removed_classmate_profile_rls_does_not_filter(conn):
         row = cur.fetchone()
         assert row is not None, "RLS does not filter removed students — the query must"
     conn.rollback()
+
+
+# ── 0011 migration tests ──────────────────────────────────────────────────────
+# Require migration 0011 to be applied. Skip automatically in CI.
+
+
+@_skip
+def test_0011_exclusive_constraint_rejects_both_timestamps_set(conn):
+    """jobs_review_exclusive must reject a row with both timestamps set."""
+    teacher_id = _auth_user(conn, "t-0011a")
+    _profile(conn, teacher_id, "teacher")
+    cls_id = _classroom(conn, teacher_id, "t11a", "Test 0011A")
+    student_id = _auth_user(conn, "s-0011a")
+    _profile(conn, student_id, "student", classroom_id=cls_id, nickname="s11a", display_nickname="S11a")
+    job_id = _job(conn, student_id, cls_id)
+
+    with pytest.raises(psycopg.errors.CheckViolation):
+        conn.execute(
+            "UPDATE jobs SET approved_at = now(), rejected_at = now() WHERE id = %s",
+            (job_id,),
+        )
+
+
+@_skip
+def test_0011_authenticated_cannot_update_approved_at(conn):
+    """After 0011, authenticated role must not be able to UPDATE approved_at."""
+    teacher_id = _auth_user(conn, "t-0011b")
+    _profile(conn, teacher_id, "teacher")
+    cls_id = _classroom(conn, teacher_id, "t11b", "Test 0011B")
+    student_id = _auth_user(conn, "s-0011b")
+    _profile(conn, student_id, "student", classroom_id=cls_id, nickname="s11b", display_nickname="S11b")
+    job_id = _job(conn, student_id, cls_id)
+
+    _set_teacher_context(conn, teacher_id, cls_id)
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        conn.execute(
+            "UPDATE jobs SET approved_at = now() WHERE id = %s", (job_id,)
+        )
+
+
+@_skip
+def test_0011_existing_select_policies_unchanged(conn):
+    """0008 SELECT policies still return correct rows for teacher after 0011."""
+    teacher_id = _auth_user(conn, "t-0011c")
+    _profile(conn, teacher_id, "teacher")
+    cls_id = _classroom(conn, teacher_id, "t11c", "Test 0011C")
+    student_id = _auth_user(conn, "s-0011c")
+    _profile(conn, student_id, "student", classroom_id=cls_id, nickname="s11c", display_nickname="S11c")
+    job_id = _job(conn, student_id, cls_id)
+
+    rows = _select_jobs(conn, teacher_id, job_id)
+    assert len(rows) == 1
