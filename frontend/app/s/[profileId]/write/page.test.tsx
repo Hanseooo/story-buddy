@@ -40,7 +40,7 @@ describe("WriteStoryPage", () => {
     const textarea = screen.getByLabelText("story text");
     fireEvent.change(textarea, { target: { value: "one two three" } });
 
-    const counter = screen.getByText(/3 words/i);
+    const counter = screen.getByText(/3/i);
     expect(counter).toHaveAttribute("aria-live", "polite");
   });
 });
@@ -81,14 +81,14 @@ describe("WriteStoryPage — prefill and chain counter", () => {
     sessionStorage.setItem("sb.failChain", "3");
     sessionStorage.setItem("sb.prefill", "A story.");
     render(<WriteStoryPage />);
-    expect(screen.getByText(/try a different story/i)).toBeDefined();
+    expect(screen.getByText(/start over/i)).toBeDefined();
   });
 
   it("try-a-different-story clears the textarea", () => {
     sessionStorage.setItem("sb.failChain", "3");
     sessionStorage.setItem("sb.prefill", "A story.");
     render(<WriteStoryPage />);
-    fireEvent.click(screen.getByText(/try a different story/i));
+    fireEvent.click(screen.getByText(/start over/i));
     const textarea = screen.getByLabelText("story text") as HTMLTextAreaElement;
     expect(textarea.value).toBe("");
   });

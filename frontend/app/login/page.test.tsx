@@ -83,7 +83,7 @@ describe("Teacher Auth Pages", () => {
     fireEvent.click(screen.getByRole("button", { name: /sign up/i }));
 
     await waitFor(() => {
-      expect(mockSignUp).toHaveBeenCalledWith({ email: "newteacher@school.org", password: "secret123" });
+      expect(mockSignUp).toHaveBeenCalledWith({ email: "newteacher@school.org", password: "secret123", options: expect.any(Object) });
       expect(screen.getByRole("alert")).toHaveTextContent(/check your email/i);
     });
   });

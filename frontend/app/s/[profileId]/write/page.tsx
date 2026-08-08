@@ -111,7 +111,7 @@ export default function WriteStoryPage() {
                   strokeLinecap="round" 
                 />
               </svg>
-              <span className="text-sm font-bold text-primary">{wordCount}</span>
+              <span className="text-sm font-bold text-primary" aria-live="polite">{wordCount}</span>
             </div>
             <div className="flex flex-col">
               <span className="text-sm font-extrabold text-foreground leading-none mb-1">

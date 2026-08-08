@@ -13,29 +13,23 @@ export default function Signup() {
   const [displayName, setDisplayName] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setErrorMsg(null);
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { display_name: displayName } },
     });
-    if (error) {
-      setErrorMsg(error.message);
-      setLoading(false);
-      return;
-    }
-    // Email confirmation OFF → Supabase returns a live session; go straight in.
-    // Email confirmation ON  → session is null; show the check-your-email prompt.
-    // Non-disclosure: existing-email returns no error but empty identities — both paths show same success.
-    if (data.session) {
+    if (!error && data?.session) {
+      // Email confirmation OFF → Supabase returns a live session; go straight in.
       router.push("/classroom");
       return;
     }
+    // Email confirmation ON → session is null; show check-your-email.
+    // Non-disclosure: existing-email returns an error — we must NOT reveal it.
+    // Always show the same success-looking prompt to prevent account enumeration.
     setSubmitted(true);
     setLoading(false);
   };
@@ -100,15 +94,6 @@ export default function Signup() {
             </div>
           )}
 
-          {errorMsg && (
-            <div
-              role="alert"
-              className="mb-6 p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm font-bold"
-            >
-              {errorMsg}
-            </div>
-          )}
-
           <form onSubmit={handleSignup} className="flex flex-col gap-5">
             <div>
               <label htmlFor="displayName" className="block text-sm font-bold mb-1.5 text-foreground">
@@ -119,7 +104,6 @@ export default function Signup() {
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                required
                 className="w-full min-h-[44px] px-4 py-3 rounded-xl border border-primary/20 bg-surface text-foreground placeholder-foreground/40 transition-colors focus:outline-none focus:border-primary focus-visible:outline-[3px] focus-visible:outline-secondary focus-visible:outline-offset-[3px]"
                 placeholder="Ms. Frizzle"
               />
