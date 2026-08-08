@@ -51,7 +51,7 @@ export default function AddStudentsPage() {
         new Set((studRes.data ?? []).map((s: { nickname: string }) => s.nickname))
       );
     });
-  }, [classroomId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [classroomId]);
 
   // Derive preview rows purely — no effect needed, computePreview is fast and pure
   const previewRows = useMemo(

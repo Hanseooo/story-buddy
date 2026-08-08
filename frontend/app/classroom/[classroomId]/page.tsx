@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { type Credential } from "@/lib/types";
@@ -44,8 +44,24 @@ export default function RosterPage() {
   }
 
   useEffect(() => {
-    fetchRoster();
-  }, [classroomId]); // eslint-disable-line react-hooks/exhaustive-deps
+    async function load() {
+      const [clsRes, studentsRes] = await Promise.all([
+        supabase
+          .from("classrooms")
+          .select("name, code")
+          .eq("id", classroomId)
+          .single(),
+        supabase
+          .from("profiles")
+          .select("id, nickname, display_nickname, removed_at")
+          .eq("classroom_id", classroomId)
+          .order("display_nickname"),
+      ]);
+      setClassroom(clsRes.data);
+      setStudents(studentsRes.data ?? []);
+    }
+    void load();
+  }, [classroomId]);
 
   async function callApi(path: string, method = "POST") {
     const {
@@ -305,7 +321,8 @@ function RowMenu({
   onReset: () => void;
   onRemove: () => void;
 }) {
-  const id = useRef(`menu-${Math.random().toString(36).slice(2)}`).current;
+  const rawId = useId();
+  const id = `menu-${rawId.replace(/:/g, "")}`;
   return (
     <div className="relative inline-block shrink-0">
       <motion.button

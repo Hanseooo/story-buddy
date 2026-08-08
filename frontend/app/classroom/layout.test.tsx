@@ -1,6 +1,5 @@
 import { render, screen } from "@testing-library/react";
 import { expect, it, vi, beforeEach, describe } from "vitest";
-import ClassroomLayout from "./layout";
 import TeacherShell from "@/components/TeacherShell";
 
 const mockSelect = vi.fn();

@@ -30,7 +30,7 @@ export default function ClassroomSettingsPage() {
           setNewName(data.name);
         }
       });
-  }, [classroomId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [classroomId]);
 
   async function getToken() {
     const {
