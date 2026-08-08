@@ -45,7 +45,7 @@ export default function ClassroomSettingsPage() {
     try {
       const tok = await getToken();
       await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/classrooms/${classroomId}`,
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/classrooms/${classroomId}`,
         {
           method: "PATCH",
           headers: {
@@ -65,7 +65,7 @@ export default function ClassroomSettingsPage() {
   async function handleDelete() {
     const tok = await getToken();
     await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/classrooms/${classroomId}`,
+      `${process.env.NEXT_PUBLIC_API_BASE_URL}/classrooms/${classroomId}`,
       {
         method: "DELETE",
         headers: { Authorization: `Bearer ${tok}` },

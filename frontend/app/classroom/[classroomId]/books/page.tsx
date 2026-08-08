@@ -107,7 +107,7 @@ export default function BooksPage() {
       data: { session },
     } = await supabase.auth.getSession();
     const resp = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/jobs/${jobId}/review`,
+      `${process.env.NEXT_PUBLIC_API_BASE_URL}/jobs/${jobId}/review`,
       {
         method: "POST",
         headers: {

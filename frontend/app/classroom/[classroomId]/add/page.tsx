@@ -78,7 +78,7 @@ export default function AddStudentsPage() {
   async function postStudents(students: { display_nickname: string }[]) {
     const tok = await getToken();
     const resp = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/classrooms/${classroomId}/students`,
+      `${process.env.NEXT_PUBLIC_API_BASE_URL}/classrooms/${classroomId}/students`,
       {
         method: "POST",
         headers: {
