@@ -1,7 +1,5 @@
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
-import { redirect } from "next/navigation";
 import Link from "next/link";
+import { getTeacherContext } from "@/utils/supabase/teacher";
 import ClassroomSwitcher from "./ClassroomSwitcher";
 import ClassroomTabs from "./ClassroomTabs";
 
@@ -10,34 +8,7 @@ type Props = {
 };
 
 export default async function TeacherShell({ children }: Props) {
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { get: (name) => cookieStore.get(name)?.value } }
-  );
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, role, display_name")
-    .eq("id", user.id)
-    .single();
-
-  if (!profile) redirect("/login");
-  if (profile.role !== "teacher") redirect(`/s/${profile.id}`);
-
-  const { data: classroomData } = await supabase
-    .from("classrooms")
-    .select("id, name, code")
-    .eq("owner_id", user.id)
-    .order("created_at");
-
-  const classList = classroomData ?? [];
+  const { profile, classrooms: classList } = await getTeacherContext();
 
   return (
     <div className="font-sans min-h-screen bg-background text-foreground flex flex-col">

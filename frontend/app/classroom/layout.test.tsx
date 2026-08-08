@@ -65,7 +65,9 @@ describe("ClassroomLayout / TeacherShell", () => {
     expect(thrown).toMatch(/REDIRECT:\/s\/student-1/);
   });
 
-  it("test 20b: redirects a profile-less user to /login", async () => {
+  // Was "redirects to /login" — that bounced off the middleware guard
+  // (middleware.ts:21) into an infinite 307 loop. Throwing cannot loop.
+  it("test 20b: throws for a profile-less user rather than redirecting to /login", async () => {
     mockSelect.mockReturnValue({
       eq: () => ({ single: () => Promise.resolve({ data: null }) }),
     });
@@ -76,7 +78,7 @@ describe("ClassroomLayout / TeacherShell", () => {
     } catch (e: unknown) {
       thrown = (e as Error).message;
     }
-    expect(thrown).toMatch(/REDIRECT:\/login/);
+    expect(thrown).toMatch(/no profiles row/);
   });
 
   it("test 21: renders shell for a valid teacher", async () => {
