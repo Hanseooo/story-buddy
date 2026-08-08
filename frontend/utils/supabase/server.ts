@@ -12,9 +12,21 @@ export async function createSupabaseServerClient() {
           return cookieStore.getAll();
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          );
+          // ponytail: Server Components cannot write cookies — next/headers
+          // throws ReadonlyRequestCookiesError unless the request phase is
+          // "action". Middleware owns token refresh and writes the rotated
+          // cookies onto its own response, so dropping them here is correct,
+          // not a swallowed bug. Letting this throw makes getUser() return no
+          // user mid-render, which used to bounce /classroom into an infinite
+          // 307 loop against the middleware guard.
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {
+            // Route Handlers and Server Actions reach the same code path and
+            // *can* write; only the read-only render phase lands here.
+          }
         },
       },
     }
