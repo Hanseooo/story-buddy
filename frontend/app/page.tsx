@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { motion } from "motion/react";
 
 export default function Home() {
   return (
@@ -38,7 +41,12 @@ export default function Home() {
       <main>
         <section className="grid lg:min-h-[calc(100dvh-72px)] lg:grid-cols-2">
           <div className="flex items-center bg-primary px-5 py-16 text-on-primary sm:px-8 sm:py-20 lg:px-12 xl:px-[max(3rem,calc((100vw-80rem)/2))] xl:pr-16">
-            <div className="max-w-2xl">
+            <motion.div 
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+              className="max-w-2xl"
+            >
               <p className="mb-5 font-display text-sm font-extrabold tracking-[0.12em] text-secondary uppercase">
                 Stories become keepsakes
               </p>
@@ -49,7 +57,12 @@ export default function Home() {
                 Write the adventure. StoryBuddy turns it into a picture book
                 with familiar characters from page to page.
               </p>
-              <div className="mt-8 flex flex-col items-stretch gap-4 sm:flex-row sm:items-center">
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, ease: "easeOut", delay: 0.2 }}
+                className="mt-8 flex flex-col items-stretch gap-4 sm:flex-row sm:items-center"
+              >
                 <Link
                   href="/signup"
                   className="inline-flex min-h-13 items-center justify-center rounded-xl bg-secondary px-6 py-3 font-extrabold text-on-secondary shadow-[0_7px_0_var(--color-primary-deep)] transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_3px_0_var(--color-primary-deep)]"
@@ -62,63 +75,78 @@ export default function Home() {
                 >
                   I have a class code
                 </Link>
-                <a
-                  href="#how-it-works"
-                  className="inline-flex min-h-11 items-center justify-center px-3 font-bold text-on-primary underline decoration-on-primary/40 underline-offset-8 transition-colors hover:decoration-on-primary sm:justify-start"
-                >
-                  See how it works
-                </a>
-              </div>
-            </div>
+              </motion.div>
+            </motion.div>
           </div>
 
           <div className="relative grid min-h-[420px] place-items-center overflow-hidden bg-background px-4 py-10 sm:min-h-[520px] sm:px-8 md:min-h-full lg:px-12">
-            <div
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.8, ease: "easeOut", delay: 0.1 }}
               aria-hidden="true"
               className="pointer-events-none absolute top-[8%] right-[7%] size-36 rounded-full bg-secondary/80 sm:size-52"
             />
-            <div
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8, rotate: -40 }}
+              animate={{ opacity: 1, scale: 1, rotate: -20 }}
+              transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
               aria-hidden="true"
-              className="pointer-events-none absolute bottom-[8%] left-[4%] h-40 w-24 rotate-[-20deg] rounded-[100%_0_100%_0] bg-[#A8C48E] sm:h-52 sm:w-32"
+              className="pointer-events-none absolute bottom-[8%] left-[4%] h-40 w-24 rounded-[100%_0_100%_0] bg-[#A8C48E] sm:h-52 sm:w-32"
             />
-            <div
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8, rotate: 40 }}
+              animate={{ opacity: 1, scale: 1, rotate: 24 }}
+              transition={{ duration: 0.8, ease: "easeOut", delay: 0.3 }}
               aria-hidden="true"
-              className="pointer-events-none absolute right-[2%] bottom-[4%] h-44 w-28 rotate-[24deg] rounded-[100%_0_100%_0] bg-coral/75 sm:h-60 sm:w-36"
+              className="pointer-events-none absolute right-[2%] bottom-[4%] h-44 w-28 rounded-[100%_0_100%_0] bg-coral/75 sm:h-60 sm:w-36"
             />
 
-            <div
-              aria-hidden="true"
-              className="relative z-10 aspect-[1.28/1] w-full max-w-[580px] rotate-[-3deg] drop-shadow-[0_28px_24px_rgba(24,32,74,0.2)]"
+            <motion.div
+              initial={{ opacity: 0, y: 50, rotate: 0 }}
+              animate={{ opacity: 1, y: 0, rotate: -3 }}
+              transition={{ duration: 0.7, ease: "easeOut", delay: 0.2 }}
+              className="relative z-10 aspect-[1.28/1] w-full max-w-[580px] drop-shadow-[0_28px_24px_rgba(24,32,74,0.2)]"
             >
-              <div className="absolute inset-y-0 left-0 w-[51%] overflow-hidden rounded-[20px_5px_9px_20px] border border-[#D8CEBB] bg-surface shadow-[inset_-12px_0_22px_rgba(24,32,74,0.08)]">
-                <div className="absolute inset-x-0 top-0 h-[58%] bg-[#DCE6F8]" />
-                <div className="absolute top-[15%] left-[15%] size-[18%] rounded-full bg-secondary" />
-                <div className="absolute right-[-22%] bottom-[-20%] h-[64%] w-[130%] rounded-[50%_50%_0_0] bg-[#739B7B]" />
-                <div className="absolute right-[-34%] bottom-[-24%] h-[49%] w-[122%] rounded-[50%_50%_0_0] bg-[#315F50]" />
-                <div className="absolute right-[15%] bottom-[18%] h-[24%] w-[20%] rounded-[44%] bg-coral">
-                  <span className="absolute -top-[23%] left-[2%] h-[38%] w-[44%] rotate-[-10deg] bg-coral [clip-path:polygon(50%_0,100%_100%,0_100%)]" />
-                  <span className="absolute -top-[23%] right-[2%] h-[38%] w-[44%] rotate-[10deg] bg-coral [clip-path:polygon(50%_0,100%_100%,0_100%)]" />
-                  <span className="absolute top-[35%] left-[25%] size-[9%] rounded-full bg-foreground" />
-                  <span className="absolute top-[35%] right-[25%] size-[9%] rounded-full bg-foreground" />
+              <motion.div
+                animate={{ y: [0, -10, 0] }}
+                transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+                className="w-full h-full"
+              >
+                <div className="absolute inset-y-0 left-0 w-[51%] overflow-hidden rounded-[20px_5px_9px_20px] border border-[#D8CEBB] bg-surface shadow-[inset_-12px_0_22px_rgba(24,32,74,0.08)]">
+                  <div className="absolute inset-x-0 top-0 h-[58%] bg-[#DCE6F8]" />
+                  <div className="absolute top-[15%] left-[15%] size-[18%] rounded-full bg-secondary" />
+                  <div className="absolute right-[-22%] bottom-[-20%] h-[64%] w-[130%] rounded-[50%_50%_0_0] bg-[#739B7B]" />
+                  <div className="absolute right-[-34%] bottom-[-24%] h-[49%] w-[122%] rounded-[50%_50%_0_0] bg-[#315F50]" />
+                  <div className="absolute right-[15%] bottom-[18%] h-[24%] w-[20%] rounded-[44%] bg-coral">
+                    <span className="absolute -top-[23%] left-[2%] h-[38%] w-[44%] rotate-[-10deg] bg-coral [clip-path:polygon(50%_0,100%_100%,0_100%)]" />
+                    <span className="absolute -top-[23%] right-[2%] h-[38%] w-[44%] rotate-[10deg] bg-coral [clip-path:polygon(50%_0,100%_100%,0_100%)]" />
+                    <span className="absolute top-[35%] left-[25%] size-[9%] rounded-full bg-foreground" />
+                    <span className="absolute top-[35%] right-[25%] size-[9%] rounded-full bg-foreground" />
+                  </div>
                 </div>
-              </div>
 
-              <div className="absolute inset-y-0 right-0 w-[51%] overflow-hidden rounded-[5px_20px_20px_9px] border border-[#D8CEBB] bg-surface px-[8%] py-[10%] shadow-[inset_12px_0_22px_rgba(24,32,74,0.08)]">
-                <div className="h-2.5 w-full rounded-full bg-[#DDD5C6]" />
-                <div className="mt-3 h-2.5 w-4/5 rounded-full bg-[#DDD5C6]" />
-                <div className="mt-3 h-2.5 w-[92%] rounded-full bg-[#DDD5C6]" />
-                <div className="mt-3 h-2.5 w-2/3 rounded-full bg-[#DDD5C6]" />
-                <p className="mt-[15%] font-display text-[clamp(0.85rem,2.2vw,1.55rem)] leading-[1.2] font-extrabold tracking-[-0.035em] text-primary">
-                  Maya found a tiny door beneath the old mango tree.
-                </p>
-                <div className="absolute right-[12%] bottom-[11%] size-[17%] rounded-full bg-secondary/70" />
-              </div>
-              <div className="absolute top-[3%] bottom-[3%] left-1/2 w-px -translate-x-1/2 bg-[#C8BCA8] shadow-[0_0_12px_rgba(24,32,74,0.18)]" />
-            </div>
+                <div className="absolute inset-y-0 right-0 w-[51%] overflow-hidden rounded-[5px_20px_20px_9px] border border-[#D8CEBB] bg-surface px-[8%] py-[10%] shadow-[inset_12px_0_22px_rgba(24,32,74,0.08)]">
+                  <div className="h-2.5 w-full rounded-full bg-[#DDD5C6]" />
+                  <div className="mt-3 h-2.5 w-4/5 rounded-full bg-[#DDD5C6]" />
+                  <div className="mt-3 h-2.5 w-[92%] rounded-full bg-[#DDD5C6]" />
+                  <div className="mt-3 h-2.5 w-2/3 rounded-full bg-[#DDD5C6]" />
+                  <p className="mt-[15%] font-display text-[clamp(0.85rem,2.2vw,1.55rem)] leading-[1.2] font-extrabold tracking-[-0.035em] text-primary">
+                    Maya found a tiny door beneath the old mango tree.
+                  </p>
+                  <div className="absolute right-[12%] bottom-[11%] size-[17%] rounded-full bg-secondary/70" />
+                </div>
+                <div className="absolute top-[3%] bottom-[3%] left-1/2 w-px -translate-x-1/2 bg-[#C8BCA8] shadow-[0_0_12px_rgba(24,32,74,0.18)]" />
+              </motion.div>
+            </motion.div>
           </div>
         </section>
 
-        <section
+        <motion.section
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.7, ease: "easeOut" }}
           id="how-it-works"
           className="scroll-mt-20 bg-background px-5 py-20 sm:px-8 sm:py-24 lg:px-12 lg:py-32"
         >
@@ -134,7 +162,10 @@ export default function Home() {
             </div>
 
             <div className="border-t border-primary/20">
-              <div className="grid gap-4 border-b border-primary/20 py-7 sm:grid-cols-[52px_1fr] sm:gap-6">
+              <motion.div 
+                whileHover={{ x: 8 }}
+                className="grid gap-4 border-b border-primary/20 py-7 sm:grid-cols-[52px_1fr] sm:gap-6 transition-transform"
+              >
                 <span className="font-display text-lg font-extrabold text-primary">
                   01
                 </span>
@@ -147,8 +178,11 @@ export default function Home() {
                     words.
                   </p>
                 </div>
-              </div>
-              <div className="grid gap-4 border-b border-primary/20 py-7 sm:grid-cols-[52px_1fr] sm:gap-6">
+              </motion.div>
+              <motion.div 
+                whileHover={{ x: 8 }}
+                className="grid gap-4 border-b border-primary/20 py-7 sm:grid-cols-[52px_1fr] sm:gap-6 transition-transform"
+              >
                 <span className="font-display text-lg font-extrabold text-primary">
                   02
                 </span>
@@ -161,8 +195,11 @@ export default function Home() {
                     a book.
                   </p>
                 </div>
-              </div>
-              <div className="grid gap-4 border-b border-primary/20 py-7 sm:grid-cols-[52px_1fr] sm:gap-6">
+              </motion.div>
+              <motion.div 
+                whileHover={{ x: 8 }}
+                className="grid gap-4 border-b border-primary/20 py-7 sm:grid-cols-[52px_1fr] sm:gap-6 transition-transform"
+              >
                 <span className="font-display text-lg font-extrabold text-primary">
                   03
                 </span>
@@ -175,17 +212,25 @@ export default function Home() {
                     own pace.
                   </p>
                 </div>
-              </div>
+              </motion.div>
             </div>
           </div>
-        </section>
+        </motion.section>
 
-        <section className="bg-[#E9EDFC] px-5 py-20 sm:px-8 sm:py-24 lg:px-12 lg:py-32">
+        <motion.section 
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.7, ease: "easeOut" }}
+          className="bg-[#E9EDFC] px-5 py-20 sm:px-8 sm:py-24 lg:px-12 lg:py-32"
+        >
           <div className="mx-auto grid max-w-7xl items-center gap-14 md:grid-cols-[1.05fr_0.95fr] lg:gap-24">
             <div className="relative min-h-[390px] sm:min-h-[480px]">
-              <div
+              <motion.div
+                whileHover={{ scale: 1.02, rotate: -4, zIndex: 20 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
                 aria-hidden="true"
-                className="absolute top-[2%] left-[3%] w-[66%] rotate-[-6deg] overflow-hidden rounded-2xl border border-primary/20 bg-surface shadow-[0_18px_40px_rgba(49,85,217,0.13)]"
+                className="absolute top-[2%] left-[3%] w-[66%] rotate-[-6deg] overflow-hidden rounded-2xl border border-primary/20 bg-surface shadow-[0_18px_40px_rgba(49,85,217,0.13)] cursor-default"
               >
                 <div className="aspect-[4/3] bg-[#BCD5C0] p-[9%]">
                   <div className="relative h-full overflow-hidden rounded-xl bg-[#DCE6F8]">
@@ -196,10 +241,12 @@ export default function Home() {
                 <p className="p-4 font-kid text-sm font-bold">
                   The same brave fox, ready for the next page.
                 </p>
-              </div>
-              <div
+              </motion.div>
+              <motion.div
+                whileHover={{ scale: 1.02, rotate: 3, zIndex: 20 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
                 aria-hidden="true"
-                className="absolute right-[2%] bottom-[1%] w-[61%] rotate-[5deg] overflow-hidden rounded-2xl border border-primary/20 bg-surface shadow-[0_18px_40px_rgba(49,85,217,0.16)]"
+                className="absolute right-[2%] bottom-[1%] w-[61%] rotate-[5deg] overflow-hidden rounded-2xl border border-primary/20 bg-surface shadow-[0_18px_40px_rgba(49,85,217,0.16)] cursor-default"
               >
                 <div className="aspect-[4/3] bg-secondary/70 p-[9%]">
                   <div className="relative h-full overflow-hidden rounded-xl bg-[#B9C8F4]">
@@ -210,7 +257,7 @@ export default function Home() {
                 <p className="p-4 font-kid text-sm font-bold">
                   New scene, familiar face, one continuous adventure.
                 </p>
-              </div>
+              </motion.div>
             </div>
 
             <div>
@@ -223,15 +270,19 @@ export default function Home() {
               </p>
               <a
                 href="#safe-by-design"
-                className="mt-7 inline-flex min-h-11 items-center font-extrabold text-primary underline decoration-primary/30 underline-offset-8 hover:decoration-primary"
+                className="mt-7 inline-flex min-h-11 items-center font-extrabold text-primary underline decoration-primary/30 underline-offset-8 hover:decoration-primary transition-colors"
               >
                 Built with care
               </a>
             </div>
           </div>
-        </section>
+        </motion.section>
 
-        <section
+        <motion.section
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.7, ease: "easeOut" }}
           id="safe-by-design"
           className="scroll-mt-20 bg-background px-5 py-20 sm:px-8 sm:py-24 lg:px-12 lg:py-32"
         >
@@ -268,10 +319,16 @@ export default function Home() {
               </div>
             </div>
           </div>
-        </section>
+        </motion.section>
 
         <section className="bg-primary px-5 py-20 text-on-primary sm:px-8 sm:py-24 lg:px-12">
-          <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-8 md:flex-row md:items-end">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true, margin: "-100px" }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+            className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-8 md:flex-row md:items-end"
+          >
             <div>
               <h2 className="max-w-[12ch] font-display text-4xl leading-[1.02] font-extrabold tracking-[-0.05em] sm:text-5xl">
                 A new story starts here.
@@ -286,7 +343,7 @@ export default function Home() {
             >
               Start your story
             </Link>
-          </div>
+          </motion.div>
         </section>
       </main>
 
