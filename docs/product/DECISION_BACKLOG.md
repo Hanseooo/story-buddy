@@ -246,9 +246,25 @@ roadmap order. Source: MASTER_SPEC §7.
     17 test files. Review fixes: hard violations (async `cookies()`, canonical `supabaseClient`, params type),
     wrong impls (redirect on login, always-check-email on signup), missing deliverables (all five pages).
     Teacher-initiated password reset moved to `teacher-dashboard` by docket amendment 1.)*
-- [ ] `teacher-dashboard`   *(inherits from the auth docket: owns `/classroom/[classroomId]/students`,
-  the teacher-initiated password reset screen (amendment 1), and replaces S4's `/dashboard`
-  placeholder wholesale. Until it lands, classrooms and students are hand-provisioned by SQL.)*
+- [x] `teacher-dashboard` → **decomposed into three sessions; all three built** *(docket
+  `docs/specs/teacher-dashboard-docket.md`, DONE 2026-08-07. **S1** privileged writes & teacher identity
+  → **S2** provisioning & the teacher shell → **S3** review & approval. Migrations `0009`–`0011` claimed;
+  next free is **`0012`**. Two decomposition gaps both closed: **teacher signup** fixed in S1 (trigger
+  coalesces absent `role` to `'teacher'`, `/signup` repaired); **"rejected" as a distinct state** landed
+  in S3 (`0011` adds `rejected_at` + `jobs_review_exclusive` CHECK, no `review_status` enum). S3 also
+  moved the review write to `POST /jobs/{id}/review`, making auth-docket S3-7 exceptionless with no
+  RLS write path anywhere in the system.)*
+  - [x] `teacher-privileged-writes-and-identity` (S1)   *(**built 2026-08-07** — `docs/specs/teacher-privileged-writes-and-identity.md`;
+    trigger coalesced to `'teacher'`, `require_teacher` + `owned_classroom` on `teacher_router` (service_role),
+    reads via RLS. Migration `0009` ADR-flagged.)*
+  - [x] `teacher-provisioning-and-shell` (S2)   *(**built 2026-08-07** — `docs/specs/teacher-provisioning-and-shell.md`;
+    classroom creation + code minting, bulk student creation (cap 60, idempotent), generated-once passwords,
+    `removed_at` + auth ban for removal, `TeacherShell` server component. Migration `0010` ADR-flagged.)*
+  - [x] `teacher-review-and-approval` (S3)   *(**built 2026-08-07** — `docs/specs/teacher-review-and-approval.md`;
+    three states from two timestamps (`approved_at`, `rejected_at`) + `jobs_review_exclusive` CHECK,
+    `POST /jobs/{id}/review` on `teacher_router`, six bidirectional transitions, undo without dialog.
+    Revokes `0009`'s column grant and drops `0008`'s approval policy — S3-7 now holds with zero exceptions.
+    Migration `0011` ADR-flagged.)*
 - [ ] `classroom-sharing`   *(display-only gallery — no `peer-reflection`/`story-map`, cut per ADR-021)*
 - [ ] `narration`   *(ADR-020; `providers.narrate()` not yet implemented. The book reader ships in S4 without a play button. TTS narration is `narration`'s deliverable.)*
 - [ ] `export-pdf`   *(D-2 decided → ADR-013: WeasyPrint)*
@@ -388,23 +404,28 @@ revised 2026-07-25.)*
 **`auth-and-classroom` is complete.** The docket `docs/specs/auth-and-classroom-docket.md` is DONE
 throughout (2026-08-06). `0007` and `0008` are applied, the child-facing RLS gap is closed, S4 is
 fully built (144 tests, 17 files), and S3's Tier-A isolation suite (`test_rls_isolation.py`, 31 + 2)
-is written — ADR-017's "real, testable boundary" is now verified. Next free migration is `0009`.
+is written — ADR-017's "real, testable boundary" is now verified.
 
-**Priority stack (consumer-facing e2e first, 2026-08-07):**
+**`teacher-dashboard` is complete.** The docket `docs/specs/teacher-dashboard-docket.md` is DONE
+throughout (2026-08-07). All three sessions done: S1 (`teacher-privileged-writes-and-identity.md`),
+S2 (`teacher-provisioning-and-shell.md`), S3 (`teacher-review-and-approval.md`). Migrations `0009`–`0011`
+claimed; **next free migration is `0012`**. RLS write path is fully revoked (S3-7 holds with no
+exceptions). The e2e teacher flow — signup → create classroom → provision students → review books — is
+now fully specified.
 
-1. **`teacher-dashboard`** — highest leverage: unblocks the ethics_and_safety.md §4 manual approval gate,
-   real classroom provisioning (no more SQL hand-wiring), and `classroom-sharing` in one shot. Until it
-   lands, no book is ever peer-visible. Inherits the teacher-initiated password reset from S4 (docket
-   amendment 1) and replaces the `/dashboard` placeholder.
-2. **`narration` + `export-pdf`** — both independent; can run in parallel sessions. Together they satisfy
+**Priority stack (e2e user flow first, 2026-08-07):**
+
+1. **`classroom-sharing`** — closes the full e2e loop: teacher creates classroom → student writes →
+   teacher approves → peers see the gallery. `teacher-dashboard` is now built; `approved_at` and
+   `rejected_at` are live. Display-only per ADR-021; no pipeline or worker involvement — the data layer
+   and Storage policies are already live from `0008`. Single brainstorming session scope.
+2. **`data-deletion`** — non-deferrable (RA 10173 + ethics clearance), but doesn't unblock anything else.
+   Owns ADR-029's ⚠️: the `awaiting_confirm` sweep and the `asleep` status value S4 is waiting for.
+3. **`narration` + `export-pdf`** — both independent; can run in parallel sessions. Together they satisfy
    the Tool A evaluation row ("assembled + narrated + exported"). Deferring narration narrows a reported
    Objective row and drops an accessibility claim — defer only as a deliberate trade with the row narrowed
    in the same change.
-3. **`classroom-sharing`** — hard-blocked on `teacher-dashboard` (needs the approval bit set before any
-   peer-visible book exists).
-4. **`data-deletion`** — non-deferrable (RA 10173 + ethics clearance), but doesn't unblock anything else.
-   Owns ADR-029's ⚠️: the `awaiting_confirm` sweep and the `asleep` status value S4 is waiting for.
-5. **`rate-limiting`** — must not silently slip past any public deployment.
+4. **`rate-limiting`** — must not silently slip past any public deployment.
 
 **No open decision blocks Phase 1 or Phase 2 entry, and the decision backlog has no open rows.** Tiers 1, 2, 2b,
 2c, and 3 are all resolved. D-I closed 2026-07-31 → ADR-029; it builds in Phase 2 behind the moderation gate
