@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
-import { motion } from "motion/react";
+import { motion } from "framer-motion";
 
 export default function Login() {
   const router = useRouter();

@@ -3,7 +3,7 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence } from "framer-motion";
 
 // S1-3 alphabet: a-z0-9 minus ambiguous chars 0, O, 1, I, l
 const EXCLUDED = new Set(["0", "o", "1", "i", "l"]);
