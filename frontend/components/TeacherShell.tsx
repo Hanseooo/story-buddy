@@ -17,9 +17,13 @@ export default async function TeacherShell({ children }: Props) {
       <header className="bg-surface border-b border-primary/15 px-4 sm:px-8 py-3 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
           <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
-            <span className="hidden sm:inline font-display text-lg font-extrabold text-primary shrink-0">
-              StoryBuddy
-            </span>
+            <Link href="/" className="hidden sm:flex items-center gap-2 shrink-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="" className="size-8 object-contain" />
+              <span className="font-display text-lg font-extrabold text-primary">
+                StoryBuddy
+              </span>
+            </Link>
             <ClassroomSwitcher classrooms={classList} />
           </div>
 
