@@ -168,6 +168,13 @@ export default function JoinPage() {
             Join Class
           </motion.button>
         </form>
+
+        <div className="mt-8 text-center text-sm font-bold text-foreground/70">
+          Teacher or parent?{" "}
+          <Link href="/login" className="text-primary hover:text-primary-deep underline decoration-primary/30 underline-offset-4 transition-colors">
+            Log in here
+          </Link>
+        </div>
       </motion.div>
     </main>
   );

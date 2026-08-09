@@ -18,8 +18,10 @@ export default async function TeacherShell({ children }: Props) {
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
           <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
             <Link href="/" className="hidden sm:flex items-center gap-2 shrink-0">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.png" alt="" className="size-8 object-contain" />
+              <div className="grid size-8 place-items-center rounded-[9px_9px_9px_3px] overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logo.png" alt="" className="h-full w-full object-contain scale-[1.35]" />
+              </div>
               <span className="font-display text-lg font-extrabold text-primary">
                 StoryBuddy
               </span>
