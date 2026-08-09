@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { createBrowserClient } from "@supabase/ssr";
+import Link from "next/link";
+import { ArrowLeft } from "@phosphor-icons/react";
 
 export default function TeacherSettingsPage() {
   const [profile, setProfile] = useState<{
@@ -97,6 +99,14 @@ export default function TeacherSettingsPage() {
 
   return (
     <div className="p-6 sm:p-8 max-w-xl mx-auto">
+      <Link
+        href="/classroom"
+        className="inline-flex items-center gap-2 text-sm font-bold text-foreground/60 hover:text-primary transition-colors mb-6"
+      >
+        <ArrowLeft weight="bold" className="w-4 h-4" />
+        Back to Teacher&apos;s Desk
+      </Link>
+
       <h1 className="font-display text-2xl font-extrabold text-foreground mb-8">
         Account settings
       </h1>

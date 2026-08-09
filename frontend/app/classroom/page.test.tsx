@@ -48,9 +48,6 @@ vi.mock("next/headers", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  redirect: vi.fn((url: string) => {
-    throw new Error(`REDIRECT:${url}`);
-  }),
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 
@@ -61,16 +58,10 @@ async function renderPage() {
 describe("/classroom picker", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("redirects server-side when the teacher has exactly one classroom", async () => {
+  it("renders the classroom card when the teacher has exactly one classroom instead of redirecting", async () => {
     classroomRows = [{ id: "c-1", name: "Grade 3 – Alon", code: "ABC123" }];
-
-    let thrown = "";
-    try {
-      await ClassroomPickerPage();
-    } catch (e: unknown) {
-      thrown = (e as Error).message;
-    }
-    expect(thrown).toBe("REDIRECT:/classroom/c-1");
+    await renderPage();
+    expect(screen.getByText("Grade 3 – Alon")).toBeDefined();
   });
 
   it("renders the empty state when the teacher has no classrooms", async () => {

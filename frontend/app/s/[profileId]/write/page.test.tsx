@@ -1,10 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import WriteStoryPage from "./page";
 
 const pushMock = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock }),
+}));
+
+vi.mock("@/lib/supabaseClient", () => ({
+  supabase: {
+    auth: {
+      getSession: async () => ({
+        data: { session: { access_token: "test-token" } },
+      }),
+    },
+  },
 }));
 
 describe("WriteStoryPage", () => {
@@ -30,7 +42,42 @@ describe("WriteStoryPage", () => {
       expect.stringContaining("/storybooks"),
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ text: "A dog runs in a field." }),
+        body: JSON.stringify({ text: "A dog runs in a field.", style_preset_id: "cel" }),
+      })
+    );
+  });
+
+  it("sends the selected style_preset_id (ADR-022), defaulting to cel", async () => {
+    render(<WriteStoryPage />);
+    fireEvent.change(screen.getByLabelText("story text"), {
+      target: { value: "A dog runs in a field." },
+    });
+    fireEvent.click(screen.getByLabelText("Comic"));
+    fireEvent.click(screen.getByText("Make my book"));
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalled());
+
+    const body = JSON.parse(
+      (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body
+    );
+    expect(body.style_preset_id).toBe("comic");
+  });
+
+  it("sends the session bearer token — POST /storybooks is auth-guarded", async () => {
+    render(<WriteStoryPage />);
+    fireEvent.change(screen.getByLabelText("story text"), {
+      target: { value: "A dog runs in a field." },
+    });
+    fireEvent.click(screen.getByText("Make my book"));
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalled());
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/storybooks"),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
       })
     );
   });
@@ -42,6 +89,17 @@ describe("WriteStoryPage", () => {
 
     const counter = screen.getByText(/3/i);
     expect(counter).toHaveAttribute("aria-live", "polite");
+  });
+});
+
+// Mirrors Avatar.test.tsx's manifest-integrity check: the picker is useless if the
+// sample art is missing or misnamed.
+describe("Style preset sample art", () => {
+  it("every ADR-022 preset has a sample image in public/style-presets/", () => {
+    const dir = path.resolve(__dirname, "..", "..", "..", "..", "public", "style-presets");
+    for (const id of ["cel", "comic", "gouache"]) {
+      expect(fs.existsSync(path.join(dir, `${id}.png`)), `missing file: ${id}.png`).toBe(true);
+    }
   });
 });
 

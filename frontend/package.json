@@ -14,12 +14,14 @@
     "@sentry/nextjs": "^10.64.0",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.110.1",
-    "motion": "^12.43.0",
+    "framer-motion": "^13.0.0",
     "next": "16.2.10",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
   "devDependencies": {
+    "@dicebear/collection": "^9.4.2",
+    "@dicebear/core": "^9.4.3",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

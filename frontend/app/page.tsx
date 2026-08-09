@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "motion/react";
+import { motion } from "framer-motion";
 
 export default function Home() {
   return (
@@ -15,9 +15,10 @@ export default function Home() {
             href="/"
             className="flex min-h-11 items-center gap-2 font-display text-xl font-extrabold tracking-[-0.04em]"
           >
-            <span className="grid size-9 place-items-center rounded-[11px_11px_11px_4px] bg-surface text-primary">
-              S
-            </span>
+            <div className="grid size-10 place-items-center rounded-[11px_11px_11px_4px] bg-surface shadow-sm">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="" className="size-8 object-contain" />
+            </div>
             StoryBuddy
           </Link>
 
@@ -47,6 +48,8 @@ export default function Home() {
               transition={{ duration: 0.6, ease: "easeOut" }}
               className="max-w-2xl"
             >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="StoryBuddy" className="mb-8 h-16 w-auto object-contain sm:h-20 drop-shadow-[0_12px_24px_rgba(24,32,74,0.25)]" />
               <p className="mb-5 font-display text-sm font-extrabold tracking-[0.12em] text-secondary uppercase">
                 Stories become keepsakes
               </p>

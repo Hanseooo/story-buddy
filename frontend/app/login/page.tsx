@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
-import { motion } from "motion/react";
+import { motion } from "framer-motion";
 
 export default function Login() {
   const router = useRouter();
@@ -58,8 +58,9 @@ export default function Login() {
           transition={{ duration: 0.6, ease: "easeOut" }}
           className="relative z-10 text-on-primary max-w-lg mx-auto lg:mx-0 w-full text-center lg:text-left"
         >
-          <div className="mb-6 lg:mb-8 w-12 h-12 mx-auto lg:mx-0 rounded-2xl bg-surface/10 border border-surface/20 backdrop-blur-sm flex items-center justify-center">
-             <span className="font-display font-extrabold text-2xl text-secondary">SB</span>
+          <div className="mb-6 lg:mb-8 w-14 h-14 mx-auto lg:mx-0 rounded-2xl bg-surface border border-primary/5 shadow-[0_12px_28px_rgba(24,32,74,0.15)] flex items-center justify-center">
+             {/* eslint-disable-next-line @next/next/no-img-element */}
+             <img src="/logo.png" alt="" className="size-11 object-contain" />
           </div>
           <h1 className="font-display text-4xl lg:text-5xl xl:text-6xl font-extrabold tracking-tight mb-4 leading-none">
             Welcome back to your <span className="text-secondary">classroom.</span>

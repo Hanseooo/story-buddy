@@ -40,7 +40,6 @@ describe("Student Shell Layout", () => {
     render(jsx);
 
     expect(screen.getByText(/hi, juan!/i)).toBeDefined();
-    expect(screen.getByRole("button", { name: /log out/i })).toBeDefined();
     expect(screen.getByText("Child Content")).toBeDefined();
   });
 

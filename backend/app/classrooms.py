@@ -108,6 +108,19 @@ def _create_one(supabase, classroom_id: str, code: str, student_in: _StudentIn) 
         )
         if not result.user:
             return {"rejected": True, "display_nickname": display, "reason": "creation failed"}
+        # GoTrue INSERTs auth.users before writing raw_app_meta_data, so the
+        # handle_new_user trigger fires with empty metadata and defaults role to
+        # 'teacher'. Upsert the correct profile row here; service_role bypasses RLS.
+        supabase.table("profiles").upsert(
+            {
+                "id": result.user.id,
+                "role": "student",
+                "classroom_id": classroom_id,
+                "nickname": nickname,
+                "display_nickname": display,
+                "display_name": None,
+            }
+        ).execute()
         return {
             "rejected": False,
             "profile_id": result.user.id,

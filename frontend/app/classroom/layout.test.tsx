@@ -34,6 +34,7 @@ vi.mock("next/navigation", () => ({
     throw new Error(`REDIRECT:${url}`);
   }),
   usePathname: vi.fn().mockReturnValue("/classroom"),
+  useRouter: vi.fn().mockReturnValue({ push: vi.fn() }),
 }));
 
 vi.mock("next/link", () => ({
