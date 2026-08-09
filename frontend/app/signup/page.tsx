@@ -10,6 +10,7 @@ export default function Signup() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -58,9 +59,9 @@ export default function Signup() {
           transition={{ duration: 0.6, ease: "easeOut" }}
           className="relative z-10 text-on-primary max-w-lg mx-auto lg:mx-0 w-full text-center lg:text-left"
         >
-          <div className="mb-6 lg:mb-8 w-14 h-14 mx-auto lg:mx-0 rounded-2xl bg-surface border border-primary/5 shadow-[0_12px_28px_rgba(24,32,74,0.15)] flex items-center justify-center">
+          <div className="mb-6 lg:mb-8 w-14 h-14 mx-auto lg:mx-0 rounded-2xl bg-surface border border-primary/5 shadow-[0_12px_28px_rgba(24,32,74,0.15)] flex items-center justify-center overflow-hidden">
              {/* eslint-disable-next-line @next/next/no-img-element */}
-             <img src="/logo.png" alt="" className="size-11 object-contain" />
+             <img src="/logo.png" alt="" className="h-full w-full object-contain scale-[1.35]" />
           </div>
           <h1 className="font-display text-4xl lg:text-5xl xl:text-6xl font-extrabold tracking-tight mb-4 leading-none">
             Start a new <span className="text-secondary">adventure.</span>
@@ -129,15 +130,25 @@ export default function Signup() {
               <label htmlFor="password" className="block text-sm font-bold mb-1.5 text-foreground">
                 Password
               </label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full min-h-[44px] px-4 py-3 rounded-xl border border-primary/20 bg-surface text-foreground transition-colors focus:outline-none focus:border-primary focus-visible:outline-[3px] focus-visible:outline-secondary focus-visible:outline-offset-[3px]"
-                placeholder="••••••••"
-              />
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="w-full min-h-[44px] px-4 py-3 rounded-xl border border-primary/20 bg-surface text-foreground transition-colors focus:outline-none focus:border-primary focus-visible:outline-[3px] focus-visible:outline-secondary focus-visible:outline-offset-[3px] pr-16"
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold text-primary min-h-11 px-2"
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </div>
+              <p className="text-xs text-foreground/60 mt-1.5 ml-1">Must be at least 6 characters</p>
             </div>
 
             <motion.button
@@ -150,11 +161,19 @@ export default function Signup() {
             </motion.button>
           </form>
 
-          <div className="mt-8 text-center text-sm font-bold text-foreground/70">
-            Already have an account?{" "}
-            <Link href="/login" className="text-primary hover:text-primary-deep underline decoration-primary/30 underline-offset-4 transition-colors">
-              Log in
-            </Link>
+          <div className="mt-8 flex flex-col gap-3 text-center text-sm font-bold text-foreground/70">
+            <div>
+              Already have an account?{" "}
+              <Link href="/login" className="text-primary hover:text-primary-deep underline decoration-primary/30 underline-offset-4 transition-colors">
+                Log in
+              </Link>
+            </div>
+            <div>
+              Student?{" "}
+              <Link href="/join" className="text-primary hover:text-primary-deep underline decoration-primary/30 underline-offset-4 transition-colors">
+                Join your class
+              </Link>
+            </div>
           </div>
         </motion.div>
       </div>
