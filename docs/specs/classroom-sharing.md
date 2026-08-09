@@ -46,11 +46,15 @@ same URL shape a child already uses for their own. `ROUTE_MAP.md:58` and `:338` 
 ```ts
 supabase
   .from("jobs")
-  .select("id, approved_at, pages, profile_id, profiles(display_nickname)")
+  .select("id, approved_at, pages, profile_id, profiles!inner(display_nickname)")
   .not("approved_at", "is", null)
+  .is("profiles.removed_at", null)
   .order("approved_at", { ascending: false })
-  .limit(60);
+  .limit(200);
 ```
+
+`profiles!inner` is required: PostgREST only applies a filter on an embedded resource when the
+embed is an inner join. With the default left join, `removed_at` filters nothing.
 
 - **The `approved_at` filter is not redundant with RLS.** `0008:24` `students read own jobs` grants
   the child *every* row they own, approved or not. Without the explicit filter, a child's own
@@ -63,8 +67,16 @@ supabase
   shelf, and the child sees their own work on it — the authentic-audience benefit ADR-021 names.
 - **Ordering is `approved_at desc`, not `created_at`.** A child's book appears at the top the
   moment the teacher approves it, which is the moment that matters.
-- **Cap 60, no pagination.** A classroom holds ≤60 students (`teacher-provisioning-and-shell.md`).
-  Pagination arrives when a real class overflows the cap; it is the same one-line change either way.
+- **Removed authors are filtered out.** `teacher-provisioning-and-shell.md:315` requires every
+  peer-facing list to filter `removed_at is null` in the query — RLS does not, since a removed
+  child keeps their `classroom_id` and `0008:93` still lets peers read the row. Their own books
+  stay on their own bookshelf; this filter governs the peer surface only. See §11 for why this
+  does not contradict `teacher-review-and-approval.md:189`.
+- **Cap 200, no pagination.** Sized in *books*, not students: a 60-student classroom
+  (`teacher-provisioning-and-shell.md`) at ~3 approved books each. Overflowing the cap would drop
+  a child's book off the class shelf with no affordance — the exact silent absence §4.5 avoids —
+  so the cap is set where that stops being plausible rather than where it starts. Pagination
+  arrives if a real class overflows it.
 
 ### 4.2 Signing
 
@@ -74,8 +86,9 @@ One batched call, cover image only:
 supabase.storage.from("storybook-images").createSignedUrls(paths, 3600);
 ```
 
-⚠️ **The bucket is `storybook-images`.** `frontend/app/s/[profileId]/page.tsx:76` signs from
-`"pages"`, which does not exist — see §9. Do not copy that line.
+The bucket is `storybook-images` — the same one `0001:28`, `providers.py:147`, the reader and the
+teacher review surface use. (The bookshelf signed from a nonexistent `"pages"` bucket; fixed in
+`c98b57c` before this row, so there is no longer a wrong line to copy.)
 
 Cover = `pages[0].image_path`. A row with an empty `pages` array cannot occur (approval requires
 `status='complete'`, which requires `pages`), but the card renders a neutral placeholder rather than
@@ -134,6 +147,9 @@ reader falls to `useJob`'s `not-found` bucket. No new state, no notification —
 icon **and** text, and forbids mixed patterns. So:
 
 - Fixed bottom, `md:hidden`, ≥44px targets, respects `env(safe-area-inset-bottom)`.
+- **The layout's `<main>` gets bottom padding below `md:`**, so no kid screen ends underneath the
+  bar. This covers the reader, write, process and settings screens in one place; §5's FAB lift is
+  separate because that element is itself `fixed` and padding cannot reach it.
 - The same three as links in the existing header at `md:` and up.
 - **Log out moves from the layout header into `/settings`**, so the header carries identity and
   desktop nav only — one job per surface, per the no-mixed-patterns rule. `/settings` becomes a real
@@ -149,14 +165,20 @@ the gallery."*
 
 `app/s/[profileId]/gallery/page.test.tsx`, Supabase client mocked:
 
-1. Renders one card per approved row, each labelled with its author's `display_nickname`.
-2. **A row with `approved_at: null` is excluded.** Unit tests do not exercise RLS, so this is the
-   only place the §4.1 explicit filter is proven. Its absence is S4-4's failure mode.
-3. Rows are ordered `approved_at` descending.
-4. The query requests `limit(60)`.
-5. A card links to `/s/{profileId}/book/{jobId}`.
-6. Signed URLs are requested from bucket `storybook-images`.
-7. `input_text` is not among the selected columns.
+Tests 2–5 assert against the **query builder**, not the returned rows. A mocked client returns
+whatever the test hands it, so "an unapproved row does not render" would pass vacuously against a
+page that never filtered. The filter is the thing under test; assert the call.
+
+1. Renders one card per returned row, each labelled with its author's `display_nickname`.
+2. **`.not` is called with `("approved_at", "is", null)`.** Unit tests do not exercise RLS, so this
+   is the only place the §4.1 filter is proven. `0008:24` grants a child *every* row they own —
+   without this call their unapproved and rejected books land in the gallery. S4-4's failure mode.
+3. **`.is` is called with `("profiles.removed_at", null)`, and the select embeds `profiles!inner`.**
+   Both halves: the inner join is what makes the filter do anything (§4.1).
+4. Rows are requested `approved_at` descending, `limit(200)`.
+5. `input_text` is not among the selected columns.
+6. A card links to `/s/{profileId}/book/{jobId}`.
+7. Signed URLs are requested from bucket `storybook-images`.
 8. With zero rows, the empty state renders and contains none of `approved`, `pending`, `waiting`,
    `rejected`, `teacher`.
 
@@ -175,7 +197,7 @@ measurement instrument"* — no evaluation leg depends on it.
 ## 8. Cross-cutting checklist (MASTER_SPEC §5)
 
 - [x] **CC-4 Security (RLS + signed URLs)** — reads ride `0008`'s peer policy; the query adds the
-  `approved_at` filter RLS cannot express for a per-child list (S4-4); covers are signed, 1h, from a
+  `approved_at` and `removed_at` filters RLS cannot express for a per-child list (S4-4); covers are signed, 1h, from a
   private bucket. No public surface, no link-based access (ADR-017).
 - [x] **CC-2 PII redaction** — satisfied by omission: `input_text` is never selected (§4.3). Page
   images and captions already passed `input_gate`, `output_mod` and Presidio.
@@ -202,13 +224,15 @@ measurement instrument"* — no evaluation leg depends on it.
 
 Out of this row's scope (AGENTS.md *Surgical Changes*), surfaced rather than silently carried:
 
-1. **`app/s/[profileId]/page.tsx:76` signs from bucket `"pages"`.** No such bucket —
-   `storybook-images` everywhere else (`0001:28`, `providers.py:147`, the reader, the process page,
-   teacher `/books`). Bookshelf covers fail to sign silently today; every card falls through to the
-   emoji placeholder.
+1. ~~`app/s/[profileId]/page.tsx:76` signs from bucket `"pages"`.~~ **Fixed in `c98b57c`**, ahead of
+   this row: a one-word typo causing every bookshelf cover to fail signing silently. Shipping the
+   gallery beside a broken shelf would have read as the gallery being wrong.
 2. **`app/s/[profileId]/page.tsx:7` imports `motion/react`**, contradicting
    `auth-routes-and-account-ux.md:97` ("kid-flow rejected `motion` under AGENTS.md §2; transitions
-   are CSS or absent"). Either the record or the code is wrong.
+   are CSS or absent"). Either the record or the code is wrong — deliberately **not** resolved here.
+   It is a decision, not a defect: removing `motion` regresses approved, shipped UI, and this row is
+   unblocked either way because §4.4 commits the gallery to no `motion` regardless of the outcome.
+   Backlog item: amend the record, or drop the dependency.
 3. **`AGENTS.md` says the next free migration is `0009`.** `0009`–`0012` all exist. Next free is
    **`0013`**.
 4. **The bookshelf is a client component fetching in `useEffect`**, against the AGENTS.md invariant
@@ -221,7 +245,16 @@ Out of this row's scope (AGENTS.md *Surgical Changes*), surfaced rather than sil
 - **ADR-017** — classroom-scoped, teacher-gated, manual approval only. No public or link-based access.
 - **ADR-013** — `caption = text_excerpt`, which is why captions are not titles (§4.3).
 - **auth S4-2** — route tree frozen; `classroom-sharing` extends under `/s/[profileId]/gallery`.
-- **auth S4-4** — RLS does not scope a per-child list; the query must (§4.1).
+- **auth S4-4** — RLS does not scope a per-child list; the query must (§4.1). It applies twice here:
+  `approved_at` and `removed_at`.
+- **`removed_at` on a peer surface — resolved by this row.** `teacher-provisioning-and-shell.md:315`
+  requires every peer-facing *list* to filter `removed_at is null`;
+  `teacher-review-and-approval.md:189` requires a removed child's *books* to survive removal for
+  review. The gallery sits on the seam — a list of books labelled with student nicknames. Decided:
+  **the provisioning rule wins on peer surfaces.** A child who left the class does not keep a
+  nickname on classmates' screens; their books stay intact, reviewable by the teacher, and visible
+  on their own bookshelf. Nothing in the teacher flow changes. A later row reopening this needs a
+  new decision, not a reinterpretation.
 - **`teacher-review-and-approval.md` §4.10** — no rejection signal, no absence badge, no
   "why isn't mine here" (§4.5). Binding.
 - **`narration`** — the gallery reader ships without a play button. TTS is that row's deliverable.
