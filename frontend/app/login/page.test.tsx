@@ -37,7 +37,7 @@ describe("Teacher Auth Pages", () => {
     expect(container.firstChild).toHaveClass("font-sans");
   });
 
-  it("redirects to /dashboard on successful login", async () => {
+  it("redirects to /classroom on successful login", async () => {
     mockSignIn.mockResolvedValueOnce({ error: null });
     render(<Login />);
 
@@ -46,7 +46,7 @@ describe("Teacher Auth Pages", () => {
     fireEvent.click(screen.getByRole("button", { name: /log in/i }));
 
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith("/dashboard");
+      expect(mockPush).toHaveBeenCalledWith("/classroom");
     });
   });
 
@@ -83,7 +83,7 @@ describe("Teacher Auth Pages", () => {
     fireEvent.click(screen.getByRole("button", { name: /sign up/i }));
 
     await waitFor(() => {
-      expect(mockSignUp).toHaveBeenCalledWith({ email: "newteacher@school.org", password: "secret123" });
+      expect(mockSignUp).toHaveBeenCalledWith({ email: "newteacher@school.org", password: "secret123", options: expect.any(Object) });
       expect(screen.getByRole("alert")).toHaveTextContent(/check your email/i);
     });
   });

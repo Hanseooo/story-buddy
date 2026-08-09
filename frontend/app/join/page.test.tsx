@@ -58,7 +58,7 @@ describe("Join page — step 1 (§9.9, §9.8 code step)", () => {
 
   it("§9.8 — submit button disabled until all 6 boxes filled", () => {
     render(<JoinPage />);
-    const submit = screen.getByRole("button", { name: /next/i });
+    const submit = screen.getByRole("button", { name: /join class/i });
     expect(submit).toBeDisabled();
   });
 
@@ -68,7 +68,7 @@ describe("Join page — step 1 (§9.9, §9.8 code step)", () => {
     ["a", "b", "c", "d", "e", "f"].forEach((c, i) => {
       fireEvent.change(inputs[i], { target: { value: c } });
     });
-    fireEvent.click(screen.getByRole("button", { name: /next/i }));
+    fireEvent.click(screen.getByRole("button", { name: /join class/i }));
     expect(mockPush).toHaveBeenCalledWith("/join/abcdef");
   });
 });

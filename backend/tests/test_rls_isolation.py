@@ -485,3 +485,207 @@ def test_32_ta_reads_own_classroom_image(conn, fx):
 def test_33_ta_cannot_read_other_classroom_image(conn, fx):
     """Spec §6 test 33: TA reads {BB1}/scene_1.png (classroom B) → denied."""
     assert len(_select_storage(conn, fx.ta, fx.bb1)) == 0
+
+
+# ── Tests 7–9: column grant enforcement (spec §6 tests 7–9) ──────────────────
+
+
+def _owned_job(conn):
+    """Create a teacher, classroom, and a student job. Return (teacher_uid, classroom_id, job_id)."""
+    import json as _json  # noqa: F401
+    teacher_uid = _auth_user(conn, "grant-teacher")
+    conn.execute(
+        "INSERT INTO profiles (id, role, display_name) VALUES (%s, 'teacher', 'Grant Teacher')",
+        (teacher_uid,),
+    )
+    classroom_id = uuid.uuid4()
+    conn.execute(
+        "INSERT INTO classrooms (id, code, name, owner_id) VALUES (%s, 'grnt01', 'Grant Class', %s)",
+        (classroom_id, teacher_uid),
+    )
+    student_uid = _auth_user(conn, "grant-student")
+    conn.execute(
+        "INSERT INTO profiles (id, role, classroom_id, nickname, display_nickname)"
+        " VALUES (%s, 'student', %s, 'stu', 'Stu')",
+        (student_uid, classroom_id),
+    )
+    job_id = uuid.uuid4()
+    conn.execute(
+        "INSERT INTO jobs (id, status, current_stage, input_text, truncated,"
+        " profile_id, classroom_id)"
+        " VALUES (%s, 'queued', 'queued', 'Once upon a time.', false, %s, %s)",
+        (job_id, student_uid, classroom_id),
+    )
+    return teacher_uid, classroom_id, job_id
+
+
+def _set_teacher_context(conn, teacher_uid: uuid.UUID, classroom_id: uuid.UUID) -> None:
+    """Switch the connection to the authenticated role with teacher JWT claims."""
+    claims = json.dumps({
+        "sub": str(teacher_uid),
+        "role": "authenticated",
+        "app_metadata": {"role": "teacher"},
+        "classroom_id": None,
+    })
+    conn.execute("SET LOCAL ROLE authenticated")
+    conn.execute("SELECT set_config('request.jwt.claims', %s, true)", (claims,))
+
+
+@_skip
+def test_authenticated_teacher_can_update_approved_at(conn):
+    """spec §6 test 7: authenticated role can set approved_at on an owned job."""
+    teacher_uid, classroom_id, job_id = _owned_job(conn)
+    _set_teacher_context(conn, teacher_uid, classroom_id)
+
+    conn.execute(
+        "UPDATE jobs SET approved_at = now() WHERE id = %s",
+        (job_id,),
+    )
+    row = conn.execute(
+        "SELECT approved_at FROM jobs WHERE id = %s", (job_id,)
+    ).fetchone()
+    assert row is not None and row[0] is not None
+
+
+@_skip
+def test_authenticated_teacher_cannot_update_input_text(conn):
+    """spec §6 test 8: column grant denies authenticated from writing input_text."""
+    teacher_uid, classroom_id, job_id = _owned_job(conn)
+    _set_teacher_context(conn, teacher_uid, classroom_id)
+
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        conn.execute(
+            "UPDATE jobs SET input_text = 'injected' WHERE id = %s",
+            (job_id,),
+        )
+
+
+@_skip
+def test_service_role_can_update_input_text(conn):
+    """spec §6 test 9: revoke on authenticated does not affect service_role path."""
+    teacher_uid, classroom_id, job_id = _owned_job(conn)
+    # No role switch — superuser bypasses all grants
+    conn.execute(
+        "UPDATE jobs SET input_text = 'superuser write' WHERE id = %s",
+        (job_id,),
+    )
+    row = conn.execute(
+        "SELECT input_text FROM jobs WHERE id = %s", (job_id,)
+    ).fetchone()
+    assert row is not None and row[0] == "superuser write"
+
+
+# --- teacher provisioning: RLS tests 13-14 (spec §9) ---
+
+@_skip
+def test_teacher_reads_removed_student_profile(conn):
+    """Test 13: a teacher still reads a removed student's profile row."""
+    with conn.cursor() as cur:
+        classroom_id = str(uuid.uuid4())
+        teacher_id = str(uuid.uuid4())
+        cur.execute(
+            "INSERT INTO classrooms (id, owner_id, code, name) VALUES (%s, %s, %s, %s)",
+            (classroom_id, teacher_id, "TST333", "Class"),
+        )
+        pid = str(uuid.uuid4())
+        cur.execute(
+            """INSERT INTO profiles (id, role, classroom_id, nickname, display_nickname, removed_at)
+               VALUES (%s, 'student', %s, 'removedkid', 'Removed Kid', now())""",
+            (pid, classroom_id),
+        )
+        cur.execute("SET LOCAL role TO authenticated")
+        cur.execute("SET LOCAL request.jwt.claims TO %s", (
+            json.dumps({"sub": teacher_id, "role": "authenticated"}),
+        ))
+        cur.execute("SELECT id FROM profiles WHERE id = %s", (pid,))
+        row = cur.fetchone()
+        assert row is not None, "teacher should still read removed student"
+    conn.rollback()
+
+
+@_skip
+def test_peer_reads_removed_classmate_profile_rls_does_not_filter(conn):
+    """Test 14: a peer reads a removed classmate's row — proves RLS does NOT filter it.
+    The query must filter removed_at is null; this test verifies the filter
+    responsibility lies with the caller, not with RLS.
+    """
+    with conn.cursor() as cur:
+        classroom_id = str(uuid.uuid4())
+        owner_id = str(uuid.uuid4())
+        cur.execute(
+            "INSERT INTO classrooms (id, owner_id, code, name) VALUES (%s, %s, %s, %s)",
+            (classroom_id, owner_id, "TST444", "Class"),
+        )
+        peer_id = str(uuid.uuid4())
+        removed_id = str(uuid.uuid4())
+        cur.execute(
+            """INSERT INTO profiles (id, role, classroom_id, nickname, display_nickname)
+               VALUES (%s, 'student', %s, 'peeruser', 'Peer')""",
+            (peer_id, classroom_id),
+        )
+        cur.execute(
+            """INSERT INTO profiles (id, role, classroom_id, nickname, display_nickname, removed_at)
+               VALUES (%s, 'student', %s, 'removeduser', 'Removed', now())""",
+            (removed_id, classroom_id),
+        )
+        cur.execute("SET LOCAL role TO authenticated")
+        cur.execute("SET LOCAL request.jwt.claims TO %s", (
+            json.dumps({"sub": peer_id, "role": "authenticated"}),
+        ))
+        # RLS allows the read — the row IS visible; only the query filter can hide it
+        cur.execute("SELECT id FROM profiles WHERE id = %s", (removed_id,))
+        row = cur.fetchone()
+        assert row is not None, "RLS does not filter removed students — the query must"
+    conn.rollback()
+
+
+# ── 0011 migration tests ──────────────────────────────────────────────────────
+# Require migration 0011 to be applied. Skip automatically in CI.
+
+
+@_skip
+def test_0011_exclusive_constraint_rejects_both_timestamps_set(conn):
+    """jobs_review_exclusive must reject a row with both timestamps set."""
+    teacher_id = _auth_user(conn, "t-0011a")
+    _profile(conn, teacher_id, "teacher")
+    cls_id = _classroom(conn, teacher_id, "t11a", "Test 0011A")
+    student_id = _auth_user(conn, "s-0011a")
+    _profile(conn, student_id, "student", classroom_id=cls_id, nickname="s11a", display_nickname="S11a")
+    job_id = _job(conn, student_id, cls_id)
+
+    with pytest.raises(psycopg.errors.CheckViolation):
+        conn.execute(
+            "UPDATE jobs SET approved_at = now(), rejected_at = now() WHERE id = %s",
+            (job_id,),
+        )
+
+
+@_skip
+def test_0011_authenticated_cannot_update_approved_at(conn):
+    """After 0011, authenticated role must not be able to UPDATE approved_at."""
+    teacher_id = _auth_user(conn, "t-0011b")
+    _profile(conn, teacher_id, "teacher")
+    cls_id = _classroom(conn, teacher_id, "t11b", "Test 0011B")
+    student_id = _auth_user(conn, "s-0011b")
+    _profile(conn, student_id, "student", classroom_id=cls_id, nickname="s11b", display_nickname="S11b")
+    job_id = _job(conn, student_id, cls_id)
+
+    _set_teacher_context(conn, teacher_id, cls_id)
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        conn.execute(
+            "UPDATE jobs SET approved_at = now() WHERE id = %s", (job_id,)
+        )
+
+
+@_skip
+def test_0011_existing_select_policies_unchanged(conn):
+    """0008 SELECT policies still return correct rows for teacher after 0011."""
+    teacher_id = _auth_user(conn, "t-0011c")
+    _profile(conn, teacher_id, "teacher")
+    cls_id = _classroom(conn, teacher_id, "t11c", "Test 0011C")
+    student_id = _auth_user(conn, "s-0011c")
+    _profile(conn, student_id, "student", classroom_id=cls_id, nickname="s11c", display_nickname="S11c")
+    job_id = _job(conn, student_id, cls_id)
+
+    rows = _select_jobs(conn, teacher_id, job_id)
+    assert len(rows) == 1

@@ -232,3 +232,188 @@ def test_delete_classroom_cascades_to_profiles_and_auth_users(conn):
     # Cleanup teacher
     conn.execute("DELETE FROM auth.users WHERE id = %s", (teacher_uid,))
     conn.commit()
+
+
+# ── Tests 1–6: 0009 trigger behavior ─────────────────────────────────────────
+
+@_skip
+def test_no_app_metadata_creates_teacher_profile(conn):
+    """spec §6 test 1: self-serve signup with no app_metadata → role = 'teacher'."""
+    uid = uuid.uuid4()
+    conn.execute(
+        "INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at,"
+        " raw_app_meta_data, raw_user_meta_data)"
+        " VALUES (%s, %s, 'x', now(), '{}'::jsonb,"
+        " '{\"display_name\": \"Test Teacher\"}'::jsonb)",
+        (uid, f"{uid}@trigger1-test.invalid"),
+    )
+    row = conn.execute(
+        "SELECT role FROM profiles WHERE id = %s", (uid,)
+    ).fetchone()
+    assert row is not None, "trigger did not create a profiles row"
+    assert row[0] == "teacher"
+
+
+@_skip
+def test_no_app_metadata_uses_user_metadata_display_name(conn):
+    """spec §6 test 2: user_metadata.display_name lands in profiles.display_name."""
+    uid = uuid.uuid4()
+    conn.execute(
+        "INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at,"
+        " raw_app_meta_data, raw_user_meta_data)"
+        " VALUES (%s, %s, 'x', now(), '{}'::jsonb,"
+        " '{\"display_name\": \"Ms. Santos\"}'::jsonb)",
+        (uid, f"{uid}@trigger2-test.invalid"),
+    )
+    row = conn.execute(
+        "SELECT display_name FROM profiles WHERE id = %s", (uid,)
+    ).fetchone()
+    assert row is not None
+    assert row[0] == "Ms. Santos"
+
+
+@_skip
+def test_no_metadata_at_all_uses_email_localpart_as_display_name(conn):
+    """spec §6 test 3: no metadata → display_name falls back to email localpart."""
+    uid = uuid.uuid4()
+    email = f"{uid}@trigger3-test.invalid"
+    conn.execute(
+        "INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at,"
+        " raw_app_meta_data, raw_user_meta_data)"
+        " VALUES (%s, %s, 'x', now(), '{}'::jsonb, '{}'::jsonb)",
+        (uid, email),
+    )
+    row = conn.execute(
+        "SELECT display_name FROM profiles WHERE id = %s", (uid,)
+    ).fetchone()
+    assert row is not None
+    assert row[0] == str(uid)  # localpart of {uid}@trigger3-test.invalid
+
+
+@_skip
+def test_app_metadata_student_has_null_display_name(conn):
+    """spec §6 test 4: student provisioned via app_metadata → display_name IS NULL."""
+    # First create a teacher and classroom to satisfy FK
+    teacher_uid = uuid.uuid4()
+    conn.execute("SET LOCAL session_replication_role = replica")
+    conn.execute(
+        "INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, raw_app_meta_data)"
+        " VALUES (%s, %s, 'x', now(), '{}'::jsonb)",
+        (teacher_uid, f"{teacher_uid}@teacher-t4.invalid"),
+    )
+    conn.execute(
+        "INSERT INTO profiles (id, role, display_name) VALUES (%s, 'teacher', 'T4 Owner')",
+        (teacher_uid,),
+    )
+    cid = uuid.uuid4()
+    conn.execute(
+        "INSERT INTO classrooms (id, code, name, owner_id) VALUES (%s, %s, %s, %s)",
+        (cid, "t4cls", "T4 Class", teacher_uid),
+    )
+    conn.execute("SET LOCAL session_replication_role = DEFAULT")
+
+    uid = uuid.uuid4()
+    import json as _json
+    meta = _json.dumps({
+        "role": "student",
+        "classroom_id": str(cid),
+        "nickname": "juan",
+        "display_nickname": "Juan",
+    })
+    conn.execute(
+        "INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, raw_app_meta_data)"
+        " VALUES (%s, %s, 'x', now(), %s::jsonb)",
+        (uid, f"{uid}@trigger4-test.invalid", meta),
+    )
+    row = conn.execute(
+        "SELECT role, display_name FROM profiles WHERE id = %s", (uid,)
+    ).fetchone()
+    assert row is not None
+    assert row[0] == "student"
+    assert row[1] is None
+
+
+@_skip
+def test_user_metadata_role_cannot_escalate_to_researcher(conn):
+    """spec §6 test 5: raw_user_meta_data.role='researcher' → profile is 'teacher'."""
+    uid = uuid.uuid4()
+    conn.execute(
+        "INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at,"
+        " raw_app_meta_data, raw_user_meta_data)"
+        " VALUES (%s, %s, 'x', now(), '{}'::jsonb,"
+        " '{\"role\": \"researcher\", \"display_name\": \"Evil\"}'::jsonb)",
+        (uid, f"{uid}@trigger5-test.invalid"),
+    )
+    row = conn.execute(
+        "SELECT role FROM profiles WHERE id = %s", (uid,)
+    ).fetchone()
+    assert row is not None
+    assert row[0] == "teacher", f"privilege escalation: got {row[0]!r}"
+
+
+@_skip
+def test_app_metadata_researcher_hand_provisioning_works(conn):
+    """spec §6 test 6: app_metadata.role='researcher' → researcher profile intact."""
+    uid = uuid.uuid4()
+    import json as _json
+    meta = _json.dumps({"role": "researcher", "display_name": "Dr. Reyes"})
+    conn.execute(
+        "INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, raw_app_meta_data)"
+        " VALUES (%s, %s, 'x', now(), %s::jsonb)",
+        (uid, f"{uid}@trigger6-test.invalid", meta),
+    )
+    row = conn.execute(
+        "SELECT role, display_name FROM profiles WHERE id = %s", (uid,)
+    ).fetchone()
+    assert row is not None
+    assert row[0] == "researcher"
+    assert row[1] == "Dr. Reyes"
+
+
+# --- teacher provisioning: schema tests 11-12 (spec §9) ---
+
+@_skip
+def test_removed_at_is_nullable_and_does_not_break_role_shape(conn):
+    """Test 11: removed_at is nullable; profiles_role_shape check is unaffected."""
+    with conn.cursor() as cur:
+        classroom_id = str(uuid.uuid4())
+        cur.execute(
+            "INSERT INTO classrooms (id, owner_id, code, name) VALUES (%s, %s, %s, %s)",
+            (classroom_id, str(uuid.uuid4()), "TST111", "Test Class"),
+        )
+        profile_id = str(uuid.uuid4())
+        cur.execute(
+            """INSERT INTO profiles (id, role, classroom_id, nickname, display_nickname)
+               VALUES (%s, 'student', %s, 'testuser', 'Test User')""",
+            (profile_id, classroom_id),
+        )
+        cur.execute("SELECT removed_at FROM profiles WHERE id = %s", (profile_id,))
+        row = cur.fetchone()
+        assert row[0] is None, "removed_at should default to NULL"
+    conn.rollback()
+
+
+@_skip
+def test_removed_student_nickname_stays_reserved(conn):
+    """Test 12: a removed student's nickname stays reserved — re-adding the same name collides."""
+    with conn.cursor() as cur:
+        classroom_id = str(uuid.uuid4())
+        cur.execute(
+            "INSERT INTO classrooms (id, owner_id, code, name) VALUES (%s, %s, %s, %s)",
+            (classroom_id, str(uuid.uuid4()), "TST222", "Test Class 2"),
+        )
+        pid1 = str(uuid.uuid4())
+        cur.execute(
+            """INSERT INTO profiles (id, role, classroom_id, nickname, display_nickname, removed_at)
+               VALUES (%s, 'student', %s, 'maria', 'Maria', now())""",
+            (pid1, classroom_id),
+        )
+        pid2 = str(uuid.uuid4())
+        import psycopg.errors
+        with pytest.raises(psycopg.errors.UniqueViolation):
+            cur.execute(
+                """INSERT INTO profiles (id, role, classroom_id, nickname, display_nickname)
+                   VALUES (%s, 'student', %s, 'maria', 'Maria 2')""",
+                (pid2, classroom_id),
+            )
+    conn.rollback()

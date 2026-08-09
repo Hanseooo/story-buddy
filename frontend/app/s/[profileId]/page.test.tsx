@@ -57,17 +57,20 @@ describe("Bookshelf — §9.11–12", () => {
     mockSelect.mockResolvedValueOnce({ data: [makeJob({ id: "own-job" })] });
     render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
     await waitFor(() => expect(screen.getByText("My story")).toBeDefined());
-    expect(screen.getAllByRole("link")).toHaveLength(1);
+    // Three links: desktop write CTA, the book card, and mobile write CTA
+    expect(screen.getAllByRole("link")).toHaveLength(3);
   });
 
   it("§9.12 — terminal-success card links to /book/[jobId]", async () => {
     mockSelect.mockResolvedValueOnce({ data: [makeJob({ id: "j1", status: "complete" })] });
     render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
     await waitFor(() => {
-      expect(screen.getByRole("link")).toHaveAttribute(
-        "href",
-        `/s/${PROFILE_ID}/book/j1`
+      // The book card link (not the write CTAs)
+      const cardLink = screen.getAllByRole("link").find(
+        (el) => el.getAttribute("href") === `/s/${PROFILE_ID}/book/j1`
       );
+      expect(cardLink).toBeDefined();
+      expect(cardLink).toHaveAttribute("href", `/s/${PROFILE_ID}/book/j1`);
     });
   });
 
@@ -77,10 +80,10 @@ describe("Bookshelf — §9.11–12", () => {
     });
     render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
     await waitFor(() => {
-      expect(screen.getByRole("link")).toHaveAttribute(
-        "href",
-        `/s/${PROFILE_ID}/process/j2`
+      const cardLink = screen.getAllByRole("link").find(
+        (el) => el.getAttribute("href") === `/s/${PROFILE_ID}/process/j2`
       );
+      expect(cardLink).toBeDefined();
       expect(screen.getByText("Still making it…")).toBeDefined();
     });
   });
@@ -91,10 +94,10 @@ describe("Bookshelf — §9.11–12", () => {
     });
     render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
     await waitFor(() => {
-      expect(screen.getByRole("link")).toHaveAttribute(
-        "href",
-        `/s/${PROFILE_ID}/process/j3`
+      const cardLink = screen.getAllByRole("link").find(
+        (el) => el.getAttribute("href") === `/s/${PROFILE_ID}/process/j3`
       );
+      expect(cardLink).toBeDefined();
       expect(screen.getByText("Come meet your cast!")).toBeDefined();
     });
   });
@@ -114,6 +117,6 @@ describe("Bookshelf — §9.11–12", () => {
   it("shows empty state when no jobs", async () => {
     mockSelect.mockResolvedValueOnce({ data: [] });
     render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
-    await waitFor(() => expect(screen.getByText(/no books yet/i)).toBeDefined());
+    await waitFor(() => expect(screen.getByText(/your shelf is empty/i)).toBeDefined());
   });
 });

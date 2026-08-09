@@ -16,14 +16,12 @@ describe("guardRequest — unauthenticated protected routes", () => {
     );
   });
 
-  it("unauthenticated /dashboard → /login?next=/dashboard", () => {
-    expect(guardRequest("/dashboard", null)).toBe("/login?next=/dashboard");
+  it("unauthenticated /classroom → /login?next=/classroom", () => {
+    expect(guardRequest("/classroom", null)).toBe("/login?next=/classroom");
   });
 
-  it("unauthenticated /dashboard/settings → /login?next=...", () => {
-    expect(guardRequest("/dashboard/settings", null)).toBe(
-      "/login?next=/dashboard/settings"
-    );
+  it("unauthenticated /settings → /login?next=/settings", () => {
+    expect(guardRequest("/settings", null)).toBe("/login?next=/settings");
   });
 });
 
@@ -48,12 +46,31 @@ describe("guardRequest — signed-in on a door", () => {
     expect(guardRequest("/join/abc123", UUID_A)).toBe(`/s/${UUID_A}`);
   });
 
-  it("authenticated on /login → /dashboard", () => {
-    expect(guardRequest("/login", UUID_A)).toBe("/dashboard");
+  it("authenticated on /login → /classroom", () => {
+    expect(guardRequest("/login", UUID_A)).toBe("/classroom");
   });
 
-  it("authenticated on /signup → /dashboard", () => {
-    expect(guardRequest("/signup", UUID_A)).toBe("/dashboard");
+  it("authenticated on /signup → /classroom", () => {
+    expect(guardRequest("/signup", UUID_A)).toBe("/classroom");
+  });
+});
+
+// §9 test 21 — /classroom + /settings guards
+describe("guardRequest — teacher routes", () => {
+  it("redirects logged-out user from /classroom to /login", () => {
+    expect(guardRequest("/classroom", null)).toBe("/login?next=/classroom");
+  });
+
+  it("redirects logged-out user from /settings to /login", () => {
+    expect(guardRequest("/settings", null)).toBe("/login?next=/settings");
+  });
+
+  it("redirects logged-in user away from /login to /classroom", () => {
+    expect(guardRequest("/login", UUID_A)).toBe("/classroom");
+  });
+
+  it("does not redirect logged-in user on /classroom", () => {
+    expect(guardRequest("/classroom", UUID_A)).toBeNull();
   });
 });
 

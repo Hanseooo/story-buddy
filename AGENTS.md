@@ -300,6 +300,30 @@ Two independent projects, no shared root tooling — run commands from the named
 - LangGraph nodes are deterministic; conditional edges exist only at moderation pass/fail and
   consistency pass/fail (ADR-003).
 - One pipeline module = one file in `backend/pipeline/`.
+- **A server layout that fetches data owns it.** Client pages under it receive that data as props —
+  they never refetch it in `useEffect`. Supabase is remote (~60 ms warm, ~200 ms on a cold
+  connection), so every duplicated `getUser()` or `select` is a visible stall, and a client refetch
+  also forces the RSC → HTML → hydrate → fetch waterfall. Share server-side reads through a
+  `cache()`-wrapped helper (`frontend/utils/supabase/teacher.ts`) so the layout and the page cost one
+  round trip, not two. Branch on server-fetched data with `redirect()` in a server component, never
+  with `router.replace()` in an effect — the latter is a second full navigation the user watches.
+  Note `auth.getUser()` is a network call to GoTrue, not a JWT decode (`frontend/middleware.ts:28`).
+- **Middleware is the only auth gate; a render that disagrees with it must throw, never redirect.**
+  `middleware.ts` bounces authenticated users off `/login`, so any server component that answers
+  "no user" with `redirect("/login")` creates an infinite 307 loop and a white screen. Server
+  Components also cannot write cookies — `cookies().set()` throws unless the request phase is
+  `"action"` — so a Supabase server client's `setAll` must be wrapped in try/catch
+  (`frontend/utils/supabase/server.ts`); letting it throw is what makes the two layers disagree in
+  the first place. Only middleware refreshes tokens.
+- **`supabase/migrations/` is not self-applying.** There is no `config.toml` and no CLI link — the
+  files are hand-run SQL, so the repo is a record of intent, not of what any database contains.
+  Before blaming app code for a missing row, confirm the schema is actually present in the project
+  `.env.local` points at. A trigger added in a migration also fires on INSERT only: applying it to a
+  project that already has `auth.users` rows leaves those accounts orphaned forever, which is what
+  `0012_backfill_orphaned_profiles.sql` exists to repair.
+- **Every async route segment ships a `loading.tsx`.** No Suspense boundary means the browser paints
+  nothing for the entire server render — a blank screen, not a slow one. Pair it with `error.tsx`
+  so a thrown invariant renders a message instead of a blank page.
 
 ## Critical Paths & Extra Review Triggers
 - Moderation stack and ordering (input → char-ref → output) — ADR-011
