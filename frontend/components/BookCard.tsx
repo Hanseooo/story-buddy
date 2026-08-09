@@ -39,8 +39,8 @@ export default function BookCard({ job, thumbnailUrl, onOpen }: Props) {
       </div>
 
       {/* Meta */}
-      <div className="px-4 py-3 flex items-center gap-2">
-        <Avatar avatarId={job.profiles?.avatar_id ?? null} displayNickname={name} size={28} />
+      <div className="px-4 py-3 flex items-center gap-3">
+        <Avatar avatarId={job.profiles?.avatar_id ?? null} displayNickname={name} size={32} />
         <div>
           <p className="font-bold text-foreground text-sm truncate">{name}</p>
           <p className="text-xs text-foreground/50 mt-0.5">{date}</p>

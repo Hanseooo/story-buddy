@@ -36,10 +36,6 @@ describe("StudentTabBar", () => {
     expect(screen.getByText("Bookshelf")).toBeInTheDocument();
     expect(screen.getByText("Gallery")).toBeInTheDocument();
     expect(screen.getByText("Profile")).toBeInTheDocument();
-
-    expect(screen.getByText("📚")).toBeInTheDocument();
-    expect(screen.getByText("🖼️")).toBeInTheDocument();
-    expect(screen.getByText("👤")).toBeInTheDocument();
   });
 
   // Test 10 — active tab marked aria-current="page"

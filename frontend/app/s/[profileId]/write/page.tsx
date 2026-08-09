@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { resetFailChain } from "@/components/FailureScreen";
-import { motion } from "motion/react";
+import { supabase } from "@/lib/supabaseClient";
+import { motion } from "framer-motion";
 
 const MIN_STORY_WORDS = 5;
 const MAX_STORY_WORDS = 800;
@@ -54,9 +55,15 @@ export default function WriteStoryPage() {
     setSubmitting(true);
     setPostError(false);
     try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/storybooks`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
         body: JSON.stringify({ text }),
       });
       if (!res.ok) {

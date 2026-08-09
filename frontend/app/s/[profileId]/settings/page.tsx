@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { AVATAR_IDS } from "@/lib/avatars";
 import { Avatar } from "@/components/Avatar";
+import { motion } from "framer-motion";
 
 export default function SettingsPage() {
   const { profileId } = useParams<{ profileId: string }>();
@@ -74,129 +75,172 @@ export default function SettingsPage() {
   };
 
   return (
-    <main className="font-kid p-6 max-w-md mx-auto">
-      {/* ── Avatar picker ─────────────────────────────────────────── */}
-      <h1 className="font-display text-2xl font-extrabold text-primary mb-4">
-        Your Avatar
+    <main className="font-kid p-6 max-w-3xl mx-auto pb-24">
+      <h1 className="font-display text-4xl font-extrabold text-foreground tracking-tight mb-8">
+        Settings
       </h1>
 
-      {avatarMessage && (
-        <div
-          role="status"
-          className="mb-4 p-3 rounded-xl bg-surface border border-primary/20 text-sm font-medium text-destructive"
-        >
-          {avatarMessage}
-        </div>
-      )}
+      <div className="space-y-6">
+        {/* ── Avatar picker Bento ─────────────────────────────────────────── */}
+        <div className="bg-surface border-2 border-primary/10 rounded-[28px] p-6 sm:p-10 shadow-[0_8px_24px_rgba(49,85,217,0.08)]">
+          <h2 className="font-display text-2xl font-extrabold text-primary mb-4">
+            Your Avatar
+          </h2>
 
-      <fieldset>
-        <legend className="sr-only">Choose your avatar</legend>
-        <div className="grid grid-cols-6 gap-2 mb-3">
-          {AVATAR_IDS.map((id, i) => (
-            <label key={id} className="cursor-pointer">
-              <input
-                type="radio"
-                name="avatar"
-                value={id}
-                checked={avatarId === id}
-                onChange={() => handleAvatarSelect(id)}
-                className="sr-only"
-                aria-label={`Avatar ${i + 1} of ${AVATAR_IDS.length}`}
-              />
-              <div
-                className={`rounded-full p-0.5 transition-all ${
-                  avatarId === id
-                    ? "ring-2 ring-offset-2 ring-primary"
-                    : "ring-0"
-                }`}
-              >
-                <Avatar avatarId={id} displayNickname="?" size={44} />
-              </div>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-
-      <button
-        type="button"
-        onClick={() => handleAvatarSelect(null)}
-        className="text-sm text-foreground/50 hover:text-primary transition-colors mb-8 underline underline-offset-2"
-      >
-        Use my letter instead
-      </button>
-
-      {/* ── Password form ─────────────────────────────────────────── */}
-      <h2 className="font-display text-xl font-extrabold text-primary mb-4 mt-2">
-        Change Password
-      </h2>
-
-      {message && (
-        <div
-          role="status"
-          className="mb-4 p-3 rounded-xl bg-surface border border-primary/20 text-sm font-medium"
-        >
-          {message}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <div>
-          <label htmlFor="new-password" className="block font-semibold mb-1">
-            New password
-          </label>
-          <div className="relative">
-            <input
-              id="new-password"
-              autoFocus
-              type={showPassword ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full min-h-11 px-3.5 py-2.5 rounded-xl border border-primary/20 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-secondary pr-16"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((v) => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold text-primary px-2"
+          {avatarMessage && (
+            <div
+              role="status"
+              className="mb-4 p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-sm font-bold text-destructive"
             >
-              {showPassword ? "Hide" : "Show"}
+              {avatarMessage}
+            </div>
+          )}
+
+          <fieldset>
+            <legend className="sr-only">Choose your avatar</legend>
+            <motion.div 
+              className="grid grid-cols-4 sm:grid-cols-6 gap-3 sm:gap-4 mb-6"
+              initial="hidden"
+              animate="show"
+              variants={{
+                hidden: { opacity: 0 },
+                show: {
+                  opacity: 1,
+                  transition: { staggerChildren: 0.03 }
+                }
+              }}
+            >
+              {AVATAR_IDS.map((id, i) => (
+                <motion.label 
+                  key={id} 
+                  className="cursor-pointer relative flex justify-center"
+                  variants={{
+                    hidden: { opacity: 0, scale: 0.8 },
+                    show: { opacity: 1, scale: 1 }
+                  }}
+                  whileHover={{ scale: 1.1, y: -2 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <input
+                    type="radio"
+                    name="avatar"
+                    value={id}
+                    checked={avatarId === id}
+                    onChange={() => handleAvatarSelect(id)}
+                    className="sr-only"
+                    aria-label={`Avatar ${i + 1} of ${AVATAR_IDS.length}`}
+                  />
+                  <div
+                    className={`rounded-full p-1.5 transition-all ${
+                      avatarId === id
+                        ? "bg-secondary/20 ring-4 ring-secondary ring-offset-2 ring-offset-surface shadow-[0_0_15px_rgba(255,168,0,0.5)]"
+                        : "hover:bg-primary/5"
+                    }`}
+                  >
+                    <Avatar avatarId={id} displayNickname="?" size={56} />
+                  </div>
+                </motion.label>
+              ))}
+            </motion.div>
+          </fieldset>
+
+          <button
+            type="button"
+            onClick={() => handleAvatarSelect(null)}
+            className="w-full sm:w-auto px-6 py-3 rounded-xl border-2 border-primary/10 text-sm font-bold text-foreground/70 hover:bg-primary/5 hover:text-primary hover:border-primary/30 transition-all active:scale-[0.98]"
+          >
+            Use my letter instead
+          </button>
+        </div>
+
+        {/* ── Password Bento ─────────────────────────────────────────── */}
+        <div className="bg-surface border-2 border-primary/10 rounded-[28px] p-6 sm:p-10 shadow-[0_8px_24px_rgba(49,85,217,0.08)]">
+          <h2 className="font-display text-2xl font-extrabold text-primary mb-4">
+            Change Password
+          </h2>
+
+          {message && (
+            <div
+              role="status"
+              className={`mb-6 p-4 rounded-xl border text-sm font-bold ${
+                message.includes("match") || message.includes("error")
+                  ? "bg-destructive/10 border-destructive/20 text-destructive"
+                  : "bg-success/10 border-success/20 text-success"
+              }`}
+            >
+              {message}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-4 items-end">
+            <div className="flex-1 w-full">
+              <label htmlFor="new-password" className="block text-sm font-bold text-foreground/80 mb-2">
+                New password
+              </label>
+              <div className="relative">
+                <input
+                  id="new-password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="w-full min-h-[48px] px-4 py-3 rounded-xl border-2 border-primary/10 bg-background text-foreground focus:outline-none focus:ring-[3px] focus:ring-secondary focus:border-transparent transition-all pr-16"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-sm font-bold text-primary px-3 py-1.5 rounded-lg hover:bg-primary/10 transition-colors"
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 w-full">
+              <label htmlFor="confirm-password" className="block text-sm font-bold text-foreground/80 mb-2">
+                Confirm password
+              </label>
+              <input
+                id="confirm-password"
+                type={showPassword ? "text" : "password"}
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                required
+                className="w-full min-h-[48px] px-4 py-3 rounded-xl border-2 border-primary/10 bg-background text-foreground focus:outline-none focus:ring-[3px] focus:ring-secondary focus:border-transparent transition-all"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full sm:w-auto min-h-[48px] px-8 rounded-xl bg-primary text-on-primary font-extrabold shadow-[0_6px_18px_rgba(49,85,217,0.1)] transition-all hover:-translate-y-[2px] hover:shadow-[0_10px_28px_rgba(49,85,217,0.12)] active:translate-y-0 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
+            >
+              {loading ? "Saving..." : "Save password"}
             </button>
+          </form>
+        </div>
+
+        {/* ── Logout Bento ────────────────────────────────────────────────── */}
+        <div className="bg-surface border-2 border-destructive/10 rounded-[28px] p-6 sm:p-10 shadow-[0_8px_24px_rgba(239,68,68,0.05)]">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="text-center sm:text-left">
+              <h2 className="font-display text-xl font-extrabold text-destructive">
+                Log Out
+              </h2>
+              <p className="text-sm font-medium text-foreground/60 mt-1">
+                See you next time!
+              </p>
+            </div>
+            <form action="/auth/signout" method="post" className="w-full sm:w-auto">
+              <button
+                type="submit"
+                className="w-full sm:w-auto min-h-[48px] px-8 rounded-xl bg-destructive/10 text-destructive font-extrabold hover:bg-destructive/20 hover:scale-105 active:scale-[0.98] transition-all"
+              >
+                Log out
+              </button>
+            </form>
           </div>
         </div>
-
-        <div>
-          <label htmlFor="confirm-password" className="block font-semibold mb-1">
-            Confirm password
-          </label>
-          <input
-            id="confirm-password"
-            type={showPassword ? "text" : "password"}
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            required
-            className="w-full min-h-11 px-3.5 py-2.5 rounded-xl border border-primary/20 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-secondary"
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full min-h-11 rounded-xl bg-primary text-on-primary font-extrabold shadow-[0_4px_0_var(--color-primary-deep)] disabled:opacity-50"
-        >
-          {loading ? "Saving..." : "Save password"}
-        </button>
-      </form>
-
-      {/* ── Logout ────────────────────────────────────────────────── */}
-      <div className="mt-8 border-t border-border pt-6">
-        <form action="/auth/signout" method="post">
-          <button
-            type="submit"
-            className="min-h-11 w-full rounded-xl border border-destructive/40 px-4 py-2 text-sm text-destructive hover:bg-destructive/5 transition-colors"
-          >
-            Log out
-          </button>
-        </form>
       </div>
     </main>
   );

@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import { classify, type JobRow, type JobBucket } from "@/lib/useJob";
-import { motion } from "motion/react";
+import { motion } from "framer-motion";
+import { MagicWand, Users, FileDashed, Books, PencilSimple } from "@phosphor-icons/react";
 
 type JobCard = {
   id: string;
@@ -110,9 +111,10 @@ export default function BookshelfPage({
         {cards.length > 0 && (
           <Link 
             href={`/s/${profileId}/write`} 
-            className="hidden sm:inline-flex min-h-[48px] px-6 rounded-xl bg-secondary text-on-secondary font-extrabold shadow-[0_4px_0_var(--color-primary-deep)] transition-transform hover:-translate-y-0.5 active:translate-y-1 active:shadow-none items-center"
+            className="group hidden sm:inline-flex min-h-[48px] px-6 rounded-xl bg-secondary text-on-secondary font-extrabold shadow-[0_6px_18px_rgba(49,85,217,0.1)] transition-all hover:-translate-y-[2px] hover:shadow-[0_10px_28px_rgba(49,85,217,0.12)] active:translate-y-0 active:scale-[0.98] active:shadow-[0_6px_18px_rgba(49,85,217,0.1)] items-center gap-2"
           >
-            + Write a new book
+            <PencilSimple weight="bold" className="w-5 h-5 group-hover:rotate-12 transition-transform" />
+            Write a new book
           </Link>
         )}
       </div>
@@ -124,9 +126,7 @@ export default function BookshelfPage({
           className="flex-1 flex flex-col items-center justify-center p-12 text-center bg-surface border-4 border-dashed border-primary/10 rounded-[32px] max-w-2xl mx-auto w-full my-auto"
         >
           <div className="w-24 h-24 bg-secondary/20 text-secondary rounded-full flex items-center justify-center mb-6">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
-            </svg>
+            <Books weight="fill" className="w-12 h-12" aria-hidden="true" />
           </div>
           <h2 className="font-display text-3xl font-extrabold text-primary mb-3">Your shelf is empty!</h2>
           <p className="text-foreground/70 text-lg mb-8 max-w-[30ch]">
@@ -134,8 +134,9 @@ export default function BookshelfPage({
           </p>
           <Link 
             href={`/s/${profileId}/write`} 
-            className="min-h-[56px] px-8 rounded-2xl bg-primary text-on-primary text-xl font-extrabold shadow-[0_4px_0_var(--color-primary-deep)] transition-transform hover:-translate-y-0.5 active:translate-y-1 active:shadow-none inline-flex items-center justify-center"
+            className="group min-h-[56px] px-8 rounded-2xl bg-primary text-on-primary text-xl font-extrabold shadow-[0_10px_28px_rgba(49,85,217,0.12)] transition-all hover:-translate-y-[2px] hover:shadow-[0_22px_60px_rgba(49,85,217,0.16)] active:translate-y-0 active:scale-[0.98] active:shadow-[0_10px_28px_rgba(49,85,217,0.12)] inline-flex items-center justify-center gap-3"
           >
+            <MagicWand weight="fill" className="w-6 h-6 group-hover:rotate-12 transition-transform" />
             Write my first book
           </Link>
         </motion.div>
@@ -143,19 +144,28 @@ export default function BookshelfPage({
 
       {cards.length > 0 && (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 sm:gap-8 lg:gap-10 pb-20">
+          <motion.div 
+            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 sm:gap-8 lg:gap-10 pb-20"
+            initial="hidden"
+            animate="show"
+            variants={{
+              hidden: { opacity: 0 },
+              show: { opacity: 1, transition: { staggerChildren: 0.1 } }
+            }}
+          >
             {cards.map((card, idx) => (
               <BookCard key={card.id} card={card} profileId={profileId} index={idx} />
             ))}
-          </div>
+          </motion.div>
           
           {/* Mobile floating action button */}
           <div className="sm:hidden fixed bottom-24 left-1/2 -translate-x-1/2 w-[calc(100%-48px)] z-20">
             <Link 
               href={`/s/${profileId}/write`} 
-              className="flex w-full min-h-[56px] px-6 rounded-2xl bg-secondary text-on-secondary font-extrabold shadow-[0_4px_0_var(--color-primary-deep)] transition-transform active:translate-y-1 active:shadow-none items-center justify-center text-lg"
+              className="group flex w-full min-h-[56px] px-6 rounded-2xl bg-secondary text-on-secondary font-extrabold shadow-[0_10px_28px_rgba(49,85,217,0.12)] transition-all hover:-translate-y-[2px] hover:shadow-[0_22px_60px_rgba(49,85,217,0.16)] active:translate-y-0 active:scale-[0.98] active:shadow-[0_10px_28px_rgba(49,85,217,0.12)] items-center justify-center text-lg gap-2"
             >
-              + Write a new book
+              <PencilSimple weight="bold" className="w-5 h-5 group-hover:rotate-12 transition-transform" />
+              Write a new book
             </Link>
           </div>
         </>
@@ -195,7 +205,11 @@ function BookCard({
 
   return (
     <motion.div
-      initial={{ rotate: defaultRotation, y: 0 }}
+      variants={{
+        hidden: { opacity: 0, y: 50, rotate: 0 },
+        show: { opacity: 1, y: 0, rotate: defaultRotation }
+      }}
+      initial="hidden"
       whileHover={{ y: -16, rotate: 0, scale: 1.05, zIndex: 10 }}
       whileFocus={{ y: -16, rotate: 0, scale: 1.05, zIndex: 10 }}
       transition={{ type: "spring", stiffness: 400, damping: 25 }}
@@ -217,17 +231,17 @@ function BookCard({
           <div className="w-full aspect-[4/5] flex flex-col items-center justify-center bg-background border-b-2 border-primary/5">
             {card.bucket === "in-flight" && (
               <div className="w-16 h-16 rounded-3xl bg-primary/10 flex items-center justify-center animate-stepper-pulse mb-3">
-                <span className="text-3xl" aria-hidden="true">✨</span>
+                <MagicWand weight="fill" className="w-8 h-8 text-primary" aria-hidden="true" />
               </div>
             )}
             {card.bucket === "paused" && (
               <div className="w-16 h-16 rounded-3xl bg-secondary/20 flex items-center justify-center animate-bounce mb-3">
-                <span className="text-3xl" aria-hidden="true">👀</span>
+                <Users weight="fill" className="w-8 h-8 text-secondary" aria-hidden="true" />
               </div>
             )}
             {(card.bucket === "terminal-failure" || card.bucket === "not-found") && (
               <div className="w-16 h-16 rounded-3xl bg-destructive/10 flex items-center justify-center mb-3">
-                <span className="text-3xl" aria-hidden="true">📝</span>
+                <FileDashed weight="fill" className="w-8 h-8 text-destructive" aria-hidden="true" />
               </div>
             )}
             {card.bucket === "terminal-success" && !card.coverUrl && (

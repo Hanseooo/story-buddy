@@ -2,8 +2,7 @@ import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import Link from "next/link";
 import { StudentTabBar } from "@/components/StudentTabBar";
-import { Book, ImageSquare, User } from "@phosphor-icons/react/dist/ssr";
-import { Avatar } from "@/components/Avatar";
+import { StudentHeader } from "@/components/StudentHeader";
 
 export default async function StudentLayout({
   children,
@@ -70,30 +69,7 @@ export default async function StudentLayout({
 
   return (
     <div className="font-kid min-h-screen bg-background text-foreground flex flex-col">
-      <header className="bg-surface border-b border-primary/15 px-5 py-3 sm:px-8">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Avatar avatarId={data.avatar_id} displayNickname={data.display_nickname} size={36} />
-            <span className="font-display text-xl font-extrabold text-primary">
-              Hi, {data.display_nickname}!
-            </span>
-          </div>
-          <nav className="hidden md:flex items-center gap-6 text-sm font-bold text-foreground/80">
-            <Link href={`/s/${profileId}`} className="flex items-center gap-2 hover:text-primary transition-colors">
-              <Book weight="fill" className="h-5 w-5" aria-hidden="true" />
-              Bookshelf
-            </Link>
-            <Link href={`/s/${profileId}/gallery`} className="flex items-center gap-2 hover:text-primary transition-colors">
-              <ImageSquare weight="fill" className="h-5 w-5" aria-hidden="true" />
-              Gallery
-            </Link>
-            <Link href={`/s/${profileId}/settings`} className="flex items-center gap-2 hover:text-primary transition-colors">
-              <User weight="fill" className="h-5 w-5" aria-hidden="true" />
-              Profile
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <StudentHeader profileId={profileId} avatarId={data.avatar_id} displayNickname={data.display_nickname} />
       <main className="flex-1 pb-20 md:pb-0">{children}</main>
       <StudentTabBar profileId={profileId} />
     </div>

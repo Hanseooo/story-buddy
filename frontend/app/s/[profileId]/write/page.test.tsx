@@ -7,6 +7,16 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock }),
 }));
 
+vi.mock("@/lib/supabaseClient", () => ({
+  supabase: {
+    auth: {
+      getSession: async () => ({
+        data: { session: { access_token: "test-token" } },
+      }),
+    },
+  },
+}));
+
 describe("WriteStoryPage", () => {
   beforeEach(() => {
     pushMock.mockClear();
@@ -31,6 +41,25 @@ describe("WriteStoryPage", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ text: "A dog runs in a field." }),
+      })
+    );
+  });
+
+  it("sends the session bearer token — POST /storybooks is auth-guarded", async () => {
+    render(<WriteStoryPage />);
+    fireEvent.change(screen.getByLabelText("story text"), {
+      target: { value: "A dog runs in a field." },
+    });
+    fireEvent.click(screen.getByText("Make my book"));
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalled());
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/storybooks"),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-token",
+        }),
       })
     );
   });

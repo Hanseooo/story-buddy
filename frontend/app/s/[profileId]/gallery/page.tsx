@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { Avatar } from "@/components/Avatar";
+import { StaggerGrid, StaggerItem } from "@/components/StaggerGrid";
 
 type Job = {
   id: string;
@@ -59,16 +60,16 @@ export default async function GalleryPage({
   }
 
   return (
-    <ul className="grid grid-cols-2 gap-4 p-6 sm:grid-cols-3 md:grid-cols-4">
+    <StaggerGrid className="grid grid-cols-2 gap-4 p-6 sm:grid-cols-3 md:grid-cols-4">
       {jobs.map((job) => {
         const coverPath = job.pages?.[0]?.image_path;
         const coverUrl = coverPath ? signedMap[coverPath] : undefined;
         const nickname = job.profiles?.display_nickname ?? "Unknown";
         return (
-          <li key={job.id}>
+          <StaggerItem key={job.id}>
             <Link
               href={`/s/${profileId}/book/${job.id}`}
-              className="block overflow-hidden rounded-2xl border border-primary/15 bg-surface shadow-[0_6px_18px_rgba(49,85,217,0.1)] transition-transform hover:-translate-y-[2px]"
+              className="block overflow-hidden rounded-2xl border border-primary/15 bg-surface shadow-[0_6px_18px_rgba(49,85,217,0.1)] outline-none h-full"
             >
               {coverUrl ? (
                 <img
@@ -79,16 +80,16 @@ export default async function GalleryPage({
               ) : (
                 <div className="aspect-[3/4] w-full border-b border-primary/15 bg-muted" />
               )}
-              <div className="p-3 flex items-center gap-2">
-                <Avatar avatarId={job.profiles?.avatar_id ?? null} displayNickname={nickname} size={28} />
+              <div className="p-3 flex items-center gap-3">
+                <Avatar avatarId={job.profiles?.avatar_id ?? null} displayNickname={nickname} size={32} />
                 <p className="font-kid truncate text-base font-bold text-foreground">
                   by {nickname}
                 </p>
               </div>
             </Link>
-          </li>
+          </StaggerItem>
         );
       })}
-    </ul>
+    </StaggerGrid>
   );
 }
