@@ -134,9 +134,8 @@ export default function BookshelfPage({
           </p>
           <Link 
             href={`/s/${profileId}/write`} 
-            className="group min-h-[56px] px-8 rounded-2xl bg-primary text-on-primary text-xl font-extrabold shadow-[0_10px_28px_rgba(49,85,217,0.12)] transition-all hover:-translate-y-[2px] hover:shadow-[0_22px_60px_rgba(49,85,217,0.16)] active:translate-y-0 active:scale-[0.98] active:shadow-[0_10px_28px_rgba(49,85,217,0.12)] inline-flex items-center justify-center gap-3"
+            className="min-h-[56px] px-8 rounded-2xl bg-primary text-on-primary text-xl font-extrabold shadow-[0_10px_28px_rgba(49,85,217,0.12)] transition-all hover:-translate-y-[2px] hover:shadow-[0_22px_60px_rgba(49,85,217,0.16)] active:translate-y-0 active:scale-[0.98] active:shadow-[0_10px_28px_rgba(49,85,217,0.12)] inline-flex items-center justify-center"
           >
-            <MagicWand weight="fill" className="w-6 h-6 group-hover:rotate-12 transition-transform" />
             Write my first book
           </Link>
         </motion.div>
