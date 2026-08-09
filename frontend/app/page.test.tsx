@@ -13,10 +13,10 @@ describe("Home", () => {
       })
     ).toBeDefined();
 
-    const signupLinks = screen.getAllByRole("link", { name: /make a book|start writing|start your story/i });
+    const signupLinks = screen.getAllByRole("link", { name: /sign up/i });
     signupLinks.forEach((link) => expect(link).toHaveAttribute("href", "/signup"));
 
-    expect(screen.getByRole("link", { name: /i have a class code/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /student\? enter class code/i })).toHaveAttribute(
       "href",
       "/join"
     );
