@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { type Credential } from "@/lib/types";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import { Avatar } from "@/components/Avatar";
 import { motion } from "motion/react";
 
 type Student = {
@@ -12,6 +13,7 @@ type Student = {
   nickname: string;
   display_nickname: string;
   removed_at: string | null;
+  avatar_id: string | null;
 };
 
 export default function RosterPage() {
@@ -35,7 +37,7 @@ export default function RosterPage() {
         .single(),
       supabase
         .from("profiles")
-        .select("id, nickname, display_nickname, removed_at")
+        .select("id, nickname, display_nickname, removed_at, avatar_id")
         .eq("classroom_id", classroomId)
         .order("display_nickname"),
     ]);
@@ -53,7 +55,7 @@ export default function RosterPage() {
           .single(),
         supabase
           .from("profiles")
-          .select("id, nickname, display_nickname, removed_at")
+          .select("id, nickname, display_nickname, removed_at, avatar_id")
           .eq("classroom_id", classroomId)
           .order("display_nickname"),
       ]);
@@ -209,9 +211,7 @@ export default function RosterPage() {
               className="bg-surface border-2 border-primary/5 rounded-2xl p-4 sm:px-6 flex items-center justify-between gap-4 hover:shadow-[0_8px_24px_rgba(49,85,217,0.08)] transition-all group"
             >
               <div className="flex items-center gap-4 sm:gap-6">
-                <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center text-primary font-display font-extrabold text-xl shrink-0 group-hover:bg-primary/20 transition-colors">
-                  {s.display_nickname.charAt(0).toUpperCase()}
-                </div>
+                <Avatar avatarId={s.avatar_id} displayNickname={s.display_nickname} size={48} />
                 <div>
                   <p className="font-bold text-foreground text-lg">{s.display_nickname}</p>
                   <div className="flex items-center mt-1">
@@ -321,53 +321,57 @@ function RowMenu({
   onReset: () => void;
   onRemove: () => void;
 }) {
-  const rawId = useId();
-  const id = `menu-${rawId.replace(/:/g, "")}`;
+  const [open, setOpen] = useState(false);
   return (
     <div className="relative inline-block shrink-0">
+      {/* ponytail: plain conditional render + backdrop. The popover API put this in the
+          top layer, where `position: absolute` resolves against the viewport, not the
+          button — `top: 100%` painted the menu below the fold. */}
       <motion.button
         whileTap={{ scale: 0.95 }}
-        // @ts-expect-error — popover API not yet in React types
-        popovertarget={id}
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="menu"
         className="w-12 h-12 flex items-center justify-center rounded-xl hover:bg-primary/5 transition-colors text-foreground/60 font-bold focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary"
         aria-label="Student actions"
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/><circle cx="5" cy="12" r="1.5"/></svg>
       </motion.button>
-      <div
-        id={id}
-        // @ts-expect-error — popover API not yet in React types
-        popover="auto"
-        className="absolute right-0 mt-2 bg-surface border-2 border-primary/10 rounded-2xl shadow-[0_10px_28px_rgba(49,85,217,0.12)] p-2 min-w-[160px] z-20 m-0"
-        style={{ inset: "unset", top: "100%", right: 0 }}
-      >
-        <button
-          onClick={() => {
-            onReset();
-            (
-              document.getElementById(id) as HTMLElement & {
-                hidePopover: () => void;
-              }
-            )?.hidePopover();
-          }}
-          className="w-full text-left px-4 py-3 text-sm rounded-xl hover:bg-muted transition-colors font-bold focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary"
-        >
-          Reset word
-        </button>
-        <button
-          onClick={() => {
-            onRemove();
-            (
-              document.getElementById(id) as HTMLElement & {
-                hidePopover: () => void;
-              }
-            )?.hidePopover();
-          }}
-          className="w-full text-left px-4 py-3 text-sm rounded-xl hover:bg-destructive/10 transition-colors font-bold text-destructive focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary"
-        >
-          Remove
-        </button>
-      </div>
+      {open && (
+        <>
+          <button
+            aria-hidden
+            tabIndex={-1}
+            onClick={() => setOpen(false)}
+            className="fixed inset-0 z-10 cursor-default"
+          />
+          <div
+            role="menu"
+            className="absolute right-0 top-full mt-2 bg-surface border-2 border-primary/10 rounded-2xl shadow-[0_10px_28px_rgba(49,85,217,0.12)] p-2 min-w-[160px] z-20"
+          >
+            <button
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onReset();
+              }}
+              className="w-full text-left px-4 py-3 text-sm rounded-xl hover:bg-muted transition-colors font-bold focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary"
+            >
+              Reset word
+            </button>
+            <button
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onRemove();
+              }}
+              className="w-full text-left px-4 py-3 text-sm rounded-xl hover:bg-destructive/10 transition-colors font-bold text-destructive focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary"
+            >
+              Remove
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

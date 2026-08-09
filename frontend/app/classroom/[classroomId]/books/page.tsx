@@ -41,11 +41,11 @@ export default function BooksPage() {
     const { data } = await supabase
       .from("jobs")
       .select(
-        "id, status, failure_reason, approved_at, rejected_at, created_at, input_text, pages, profile_id, profiles(display_nickname)"
+        "id, status, failure_reason, approved_at, rejected_at, created_at, input_text, pages, profile_id, profiles(display_nickname, avatar_id)"
       )
       .eq("classroom_id", classroomId)
       .order("created_at", { ascending: false });
-    setJobs((data as Job[]) ?? []);
+    setJobs((data as unknown as Job[]) ?? []);
   }, [classroomId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

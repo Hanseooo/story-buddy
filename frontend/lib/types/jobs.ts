@@ -14,7 +14,7 @@ export type Job = {
   input_text: string;
   pages: JobPage[] | null;
   profile_id: string;
-  profiles: { display_nickname: string };
+  profiles: { display_nickname: string; avatar_id: string | null } | null;
 };
 
 export type ReviewDecision = "approved" | "rejected" | "pending";

@@ -1,4 +1,5 @@
 import { Job, jobState } from "@/lib/types/jobs";
+import { Avatar } from "@/components/Avatar";
 
 type Props = {
   job: Job;
@@ -38,9 +39,12 @@ export default function BookCard({ job, thumbnailUrl, onOpen }: Props) {
       </div>
 
       {/* Meta */}
-      <div className="px-4 py-3">
-        <p className="font-bold text-foreground text-sm truncate">{name}</p>
-        <p className="text-xs text-foreground/50 mt-0.5">{date}</p>
+      <div className="px-4 py-3 flex items-center gap-2">
+        <Avatar avatarId={job.profiles?.avatar_id ?? null} displayNickname={name} size={28} />
+        <div>
+          <p className="font-bold text-foreground text-sm truncate">{name}</p>
+          <p className="text-xs text-foreground/50 mt-0.5">{date}</p>
+        </div>
       </div>
     </button>
   );

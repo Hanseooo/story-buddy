@@ -1,13 +1,14 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import Link from "next/link";
+import { Avatar } from "@/components/Avatar";
 
 type Job = {
   id: string;
   approved_at: string;
   pages: { scene_id: string; caption: string; image_path: string }[] | null;
   profile_id: string;
-  profiles: { display_nickname: string } | null;
+  profiles: { display_nickname: string; avatar_id: string | null } | null;
 };
 
 export default async function GalleryPage({
@@ -26,7 +27,7 @@ export default async function GalleryPage({
 
   const { data } = await supabase
     .from("jobs")
-    .select("id, approved_at, pages, profile_id, profiles!inner(display_nickname)")
+    .select("id, approved_at, pages, profile_id, profiles!inner(display_nickname, avatar_id)")
     .not("approved_at", "is", null)
     .is("profiles.removed_at", null)
     .order("approved_at", { ascending: false })
@@ -50,7 +51,7 @@ export default async function GalleryPage({
   if (jobs.length === 0) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center px-6">
-        <p className="text-center text-muted-foreground">
+        <p className="font-kid text-center text-xl text-foreground/70">
           Your class&apos;s books will show up here.
         </p>
       </div>
@@ -67,18 +68,23 @@ export default async function GalleryPage({
           <li key={job.id}>
             <Link
               href={`/s/${profileId}/book/${job.id}`}
-              className="block overflow-hidden rounded-xl"
+              className="block overflow-hidden rounded-2xl border border-primary/15 bg-surface shadow-[0_6px_18px_rgba(49,85,217,0.1)] transition-transform hover:-translate-y-[2px]"
             >
               {coverUrl ? (
                 <img
                   src={coverUrl}
                   alt={`Cover of book by ${nickname}`}
-                  className="aspect-[3/4] w-full object-cover"
+                  className="aspect-[3/4] w-full border-b border-primary/15 object-cover"
                 />
               ) : (
-                <div className="aspect-[3/4] w-full rounded-xl bg-muted/20" />
+                <div className="aspect-[3/4] w-full border-b border-primary/15 bg-muted" />
               )}
-              <p className="mt-2 text-sm font-semibold">by {nickname}</p>
+              <div className="p-3 flex items-center gap-2">
+                <Avatar avatarId={job.profiles?.avatar_id ?? null} displayNickname={nickname} size={28} />
+                <p className="font-kid truncate text-base font-bold text-foreground">
+                  by {nickname}
+                </p>
+              </div>
             </Link>
           </li>
         );

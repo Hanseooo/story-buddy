@@ -2,6 +2,8 @@ import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import Link from "next/link";
 import { StudentTabBar } from "@/components/StudentTabBar";
+import { Book, ImageSquare, User } from "@phosphor-icons/react/dist/ssr";
+import { Avatar } from "@/components/Avatar";
 
 export default async function StudentLayout({
   children,
@@ -24,7 +26,7 @@ export default async function StudentLayout({
 
   const { data } = await supabase
     .from("profiles")
-    .select("display_nickname, role, classroom_id")
+    .select("display_nickname, role, classroom_id, avatar_id")
     .eq("id", profileId)
     .single();
 
@@ -38,7 +40,7 @@ export default async function StudentLayout({
           <form action="/auth/signout" method="post">
             <button
               type="submit"
-              className="min-h-11 px-6 py-2.5 rounded-xl bg-primary font-extrabold text-on-primary shadow-[0_4px_0_var(--color-primary-deep)] transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0.5"
+              className="min-h-11 px-6 py-2.5 rounded-xl bg-primary font-extrabold text-on-primary shadow-[0_6px_18px_rgba(49,85,217,0.1)] transition-all hover:-translate-y-[2px] hover:shadow-[0_10px_28px_rgba(49,85,217,0.12)] active:translate-y-0 active:scale-[0.98] active:shadow-[0_6px_18px_rgba(49,85,217,0.1)]"
             >
               Log out
             </button>
@@ -57,7 +59,7 @@ export default async function StudentLayout({
           </p>
           <Link
             href="/classroom"
-            className="inline-flex min-h-11 items-center justify-center px-6 py-2.5 rounded-xl bg-primary font-extrabold text-on-primary shadow-[0_4px_0_var(--color-primary-deep)] transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0.5"
+            className="inline-flex min-h-11 items-center justify-center px-6 py-2.5 rounded-xl bg-primary font-extrabold text-on-primary shadow-[0_6px_18px_rgba(49,85,217,0.1)] transition-all hover:-translate-y-[2px] hover:shadow-[0_10px_28px_rgba(49,85,217,0.12)] active:translate-y-0 active:scale-[0.98] active:shadow-[0_6px_18px_rgba(49,85,217,0.1)]"
           >
             Go to Teacher Area
           </Link>
@@ -70,13 +72,25 @@ export default async function StudentLayout({
     <div className="font-kid min-h-screen bg-background text-foreground flex flex-col">
       <header className="bg-surface border-b border-primary/15 px-5 py-3 sm:px-8">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          <span className="font-display text-xl font-extrabold text-primary">
-            Hi, {data.display_nickname}!
-          </span>
-          <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
-            <Link href={`/s/${profileId}`}>📚 Bookshelf</Link>
-            <Link href={`/s/${profileId}/gallery`}>🖼️ Gallery</Link>
-            <Link href={`/s/${profileId}/settings`}>👤 Profile</Link>
+          <div className="flex items-center gap-3">
+            <Avatar avatarId={data.avatar_id} displayNickname={data.display_nickname} size={36} />
+            <span className="font-display text-xl font-extrabold text-primary">
+              Hi, {data.display_nickname}!
+            </span>
+          </div>
+          <nav className="hidden md:flex items-center gap-6 text-sm font-bold text-foreground/80">
+            <Link href={`/s/${profileId}`} className="flex items-center gap-2 hover:text-primary transition-colors">
+              <Book weight="fill" className="h-5 w-5" aria-hidden="true" />
+              Bookshelf
+            </Link>
+            <Link href={`/s/${profileId}/gallery`} className="flex items-center gap-2 hover:text-primary transition-colors">
+              <ImageSquare weight="fill" className="h-5 w-5" aria-hidden="true" />
+              Gallery
+            </Link>
+            <Link href={`/s/${profileId}/settings`} className="flex items-center gap-2 hover:text-primary transition-colors">
+              <User weight="fill" className="h-5 w-5" aria-hidden="true" />
+              Profile
+            </Link>
           </nav>
         </div>
       </header>

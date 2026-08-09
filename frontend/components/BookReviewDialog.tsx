@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { Job, ReviewDecision, jobState } from "@/lib/types/jobs";
 import { StateBadge } from "./BookCard";
+import { Avatar } from "@/components/Avatar";
 
 type Props = {
   job: Job | null;
@@ -54,15 +55,18 @@ export default function BookReviewDialog({
         <div className="bg-surface w-full max-w-3xl mx-4 sm:mx-auto rounded-2xl flex flex-col max-h-[95vh] shadow-[0_22px_60px_rgb(49_85_217/16%)] overflow-hidden">
           {/* Header */}
           <div className="px-6 py-4 border-b border-primary/10 flex items-center justify-between shrink-0">
-            <div>
-              <p className="font-bold text-foreground">{name}</p>
-              <p className="text-xs text-foreground/50">
-                {new Date(job.created_at).toLocaleDateString(undefined, {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                })}
-              </p>
+            <div className="flex items-center gap-3">
+              <Avatar avatarId={job?.profiles?.avatar_id ?? null} displayNickname={name} size={36} />
+              <div>
+                <p className="font-bold text-foreground">{name}</p>
+                <p className="text-xs text-foreground/50">
+                  {new Date(job.created_at).toLocaleDateString(undefined, {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </p>
+              </div>
             </div>
             <div className="flex items-center gap-3">
               <StateBadge state={state} />
