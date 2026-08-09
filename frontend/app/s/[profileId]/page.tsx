@@ -150,7 +150,7 @@ export default function BookshelfPage({
           </div>
           
           {/* Mobile floating action button */}
-          <div className="sm:hidden fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-48px)] z-20">
+          <div className="sm:hidden fixed bottom-24 left-1/2 -translate-x-1/2 w-[calc(100%-48px)] z-20">
             <Link 
               href={`/s/${profileId}/write`} 
               className="flex w-full min-h-[56px] px-6 rounded-2xl bg-secondary text-on-secondary font-extrabold shadow-[0_4px_0_var(--color-primary-deep)] transition-transform active:translate-y-1 active:shadow-none items-center justify-center text-lg"

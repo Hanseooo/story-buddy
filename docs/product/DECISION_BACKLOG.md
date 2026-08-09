@@ -265,7 +265,7 @@ roadmap order. Source: MASTER_SPEC §7.
     `POST /jobs/{id}/review` on `teacher_router`, six bidirectional transitions, undo without dialog.
     Revokes `0009`'s column grant and drops `0008`'s approval policy — S3-7 now holds with zero exceptions.
     Migration `0011` ADR-flagged.)*
-- [ ] `classroom-sharing`   *(display-only gallery — no `peer-reflection`/`story-map`, cut per ADR-021)*
+- [x] `classroom-sharing`   *(**built 2026-08-09** — gallery page + StudentTabBar; `/s/[profileId]/gallery` live; tab bar covers Bookshelf / Gallery / Profile; logout moved to settings)*
 - [ ] `narration`   *(ADR-020; `providers.narrate()` not yet implemented. The book reader ships in S4 without a play button. TTS narration is `narration`'s deliverable.)*
 - [ ] `export-pdf`   *(D-2 decided → ADR-013: WeasyPrint)*
 - [ ] `rate-limiting`

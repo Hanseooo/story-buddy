@@ -36,7 +36,6 @@ All routes are Next.js App Router filesystem routes under `frontend/app/`.
 | `/classroom/[classroomId]/students` | Student management | Client | Add/edit/remove student profiles |
 | `/classroom/[classroomId]/library` | Story library | Client | All stories in this classroom. Status badges (Needs Review / Approved) |
 | `/classroom/[classroomId]/library/[bookId]` | Story review | Client | Full-screen overlay — teacher reads & approves |
-| `/classroom/[classroomId]/gallery` | Classroom gallery (teacher view) | Client | Same gallery students see, but with moderation controls |
 | `/classroom/[classroomId]/settings` | Classroom settings | Client | Rename, danger zone (delete). No review-gate toggle — teacher approval is always manual (auto-approve deferred to Future Work, ADR-017) |
 | `/settings` | Teacher account settings | Client | Profile, password, account deletion |
 
@@ -54,8 +53,7 @@ by the child), just not the Supabase Auth session teachers use — session is es
 | `/s/[profileId]/write/style` | Style preset picker | Client | Part of the write wizard flow. 3 large tappable image cards |
 | `/s/[profileId]/process/[jobId]` | Processing view | Client | **Full-screen** — no nav. Staged progress via Supabase Realtime; inline character reveal |
 | `/s/[profileId]/book/[bookId]` | Storybook reader | Client | **Immersive full-screen**. Image + caption + narration. Next/prev |
-| `/s/[profileId]/gallery` | Classroom gallery | Client | Browse & read classmates' approved books. Display-only — no reflection surface |
-| `/s/[profileId]/gallery/[bookId]` | Peer book reader | Client | Same reader component, but for a classmate's book. Read-only |
+| `/s/[profileId]/gallery` | Classroom gallery | Server | Browse & read classmates' approved books. Display-only — no reflection surface |
 | `/s/[profileId]/settings` | Student account settings | Client | Change password. No email, no self-serve recovery — reset otherwise is teacher-initiated |
 
 > **Status note (2026-08-02, `kid-flow-book-persistence` S1):** the kid routes above stay flat
@@ -108,7 +106,6 @@ app/
 │       ├── settings/page.tsx           # /s/[profileId]/settings (password change)
 │       ├── gallery/
 │       │   ├── page.tsx                # /s/[profileId]/gallery
-│       │   └── [bookId]/page.tsx       # Peer reader (uses ImmersiveLayout) — read-only
 │       │
 │       ├── (immersive)/
 │       │   ├── layout.tsx              # ImmersiveLayout — NO nav chrome, full-screen
@@ -151,8 +148,8 @@ app/
 
 | Breakpoint | Nav component | Position | Items |
 |---|---|---|---|
-| Mobile (<768px) | `BottomTabBar` | Bottom fixed (56px) | 3 tabs: Home (📚), Gallery (🖼️), Profile (👤). Icons + text labels |
-| Desktop (≥768px) | `TopNavbar` | Top fixed (64px) | Logo left, nav links center (Home, Gallery), profile avatar + nickname right |
+| Mobile (<768px) | `StudentTabBar` ✅ built | Bottom fixed (56px) | 3 tabs: Bookshelf (📚), Gallery (🖼️), Profile (👤). Icons + text labels |
+| Desktop (≥768px) | Header nav links | Top fixed | Greeting left, nav links right: Bookshelf / Gallery / Profile |
 
 ### Immersive routes (inside `ImmersiveLayout`)
 
@@ -185,7 +182,6 @@ app/
 | `/classroom/[classroomId]/**` | Auth (teacher) | Classroom-scoped: teacher must own this classroom |
 | `/settings` | Auth (teacher) | — |
 | `/s/[profileId]/**` | Profile (student) | Profile session must be active (stored in sessionStorage or cookie). Profile must exist and belong to an active classroom |
-| `/s/[profileId]/gallery/[bookId]/**` | Profile (student) | `bookId` must be in the same classroom as `profileId` AND `teacher_approved = true` |
 | `/s/[profileId]/book/[bookId]/**` | Profile (student) | `bookId` must belong to `profileId` (own book) |
 
 ### Middleware strategy
@@ -248,7 +244,6 @@ Use `motion` (Framer Motion) for page transitions. Respect `prefers-reduced-moti
 | `/s/[pid]/process/[jobId]` | `/s/[pid]` | N/A (job continues) | **Yes** — "Your book is still being made!" | Job runs regardless; user can return later |
 | `/s/[pid]/book/[bookId]` | `/s/[pid]` | Yes (page position) | No | Returns to bookshelf |
 | `/s/[pid]/gallery` | `/s/[pid]` (via tab) | Yes | No | Lateral tab switch |
-| `/s/[pid]/gallery/[bookId]` | `/s/[pid]/gallery` | Yes | No | Read-only, display-only |
 | `/s/[pid]/settings` | `/s/[pid]` | No | Unsaved changes → confirm dialog | Password change |
 
 ---
@@ -335,7 +330,6 @@ Each route group also gets an `error.tsx`:
 /s/[profileId]                              Student bookshelf (student)
 /s/[profileId]/book/[bookId]                Storybook reader (student)
 /s/[profileId]/gallery                      Classroom gallery (student)
-/s/[profileId]/gallery/[bookId]             Peer book reader, read-only (student)
 /s/[profileId]/process/[jobId]              Processing view (student)
 /s/[profileId]/settings                     Password change (student)
 /s/[profileId]/write                        Story editor (student)

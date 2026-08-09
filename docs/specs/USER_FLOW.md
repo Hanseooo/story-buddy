@@ -31,7 +31,7 @@ This document outlines the step-by-step user flow, interaction patterns, and UX 
 
 ### Student Layout Pattern
 - **Mobile (< 768px):**
-  - **Navigation:** **Bottom Tab Bar** (Home, Bookshelf, Gallery). Limit to 3 items. Text labels must accompany icons.
+  - **Navigation:** **Bottom Tab Bar** (Bookshelf, Gallery, Profile). Limit to 3 items. Text labels must accompany icons.
   - **Modals vs. Sheets:** NEVER use center-screen modals on mobile. Use **Bottom Sheets** (swipeable) for selections (e.g., picking a Style Preset) and confirmations. They are highly touch-friendly.
   - **Full-Screen Wizards:** Story creation must hide the Bottom Tab Bar to become a distraction-free, full-screen step-by-step wizard.
 - **Desktop (≥ 768px):**

@@ -480,3 +480,4 @@ is not documentation of a good design; it is the blast radius, written down so t
   single test — the exact gap S3 was written to close.
   **Phase 2 is in progress. Next: S3's isolation suite, then build S4.** Next free migration is
   **`0009`**.
+- classroom-sharing (2026-08-09): gallery page + StudentTabBar built; `/s/[profileId]/gallery` live; tab bar covers Bookshelf / Gallery / Profile; logout moved to settings.
