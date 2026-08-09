@@ -73,7 +73,7 @@ export default function BookshelfPage({
       const signedMap: Record<string, string> = {};
       if (imagePaths.length > 0) {
         const { data: signed } = await supabase.storage
-          .from("pages")
+          .from("storybook-images")
           .createSignedUrls(imagePaths, 3600);
         signed?.forEach(({ path, signedUrl }) => {
           signedMap[path] = signedUrl;
