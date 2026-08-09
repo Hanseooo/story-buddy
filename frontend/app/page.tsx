@@ -124,7 +124,7 @@ export default function Home() {
                 transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
                 className="w-full h-full"
               >
-                <div className="absolute inset-y-0 left-0 w-[51%] overflow-hidden rounded-[20px_5px_9px_20px] border border-[#D8CEBB] bg-surface shadow-[inset_-12px_0_22px_rgba(24,32,74,0.08)]">
+                <div className="absolute inset-y-0 left-0 w-[51%] overflow-hidden rounded-[20px_5px_9px_20px] border border-[#D8CEBB] bg-surface shadow-[inset_-12px_0_22px_rgba(24,32,74,0.08)] [transform:translateZ(0)] [-webkit-mask-image:-webkit-radial-gradient(white,black)] [mask-image:radial-gradient(white,black)]">
                   <div className="absolute inset-x-0 top-0 h-[58%] bg-[#DCE6F8]" />
                   <div className="absolute top-[15%] left-[15%] size-[18%] rounded-full bg-secondary" />
                   <div className="absolute right-[-22%] bottom-[-20%] h-[64%] w-[130%] rounded-[50%_50%_0_0] bg-[#739B7B]" />
@@ -137,7 +137,7 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="absolute inset-y-0 right-0 w-[51%] overflow-hidden rounded-[5px_20px_20px_9px] border border-[#D8CEBB] bg-surface px-[8%] py-[10%] shadow-[inset_12px_0_22px_rgba(24,32,74,0.08)]">
+                <div className="absolute inset-y-0 right-0 w-[51%] overflow-hidden rounded-[5px_20px_20px_9px] border border-[#D8CEBB] bg-surface px-[8%] py-[10%] shadow-[inset_12px_0_22px_rgba(24,32,74,0.08)] [transform:translateZ(0)] [-webkit-mask-image:-webkit-radial-gradient(white,black)] [mask-image:radial-gradient(white,black)]">
                   <div className="h-2.5 w-full rounded-full bg-[#DDD5C6]" />
                   <div className="mt-3 h-2.5 w-4/5 rounded-full bg-[#DDD5C6]" />
                   <div className="mt-3 h-2.5 w-[92%] rounded-full bg-[#DDD5C6]" />
