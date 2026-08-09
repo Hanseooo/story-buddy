@@ -15,9 +15,9 @@ export default function Home() {
             href="/"
             className="flex min-h-11 items-center gap-2 font-display text-xl font-extrabold tracking-[-0.04em]"
           >
-            <div className="grid size-10 place-items-center rounded-[11px_11px_11px_4px] bg-surface shadow-sm">
+            <div className="grid size-10 place-items-center rounded-[11px_11px_11px_4px] bg-surface shadow-sm overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.png" alt="" className="size-8 object-contain" />
+              <img src="/logo.png" alt="" className="h-full w-full object-contain scale-[1.35]" />
             </div>
             StoryBuddy
           </Link>
@@ -25,15 +25,21 @@ export default function Home() {
           <div className="flex items-center gap-7">
             <a
               href="#how-it-works"
-              className="hidden min-h-11 items-center text-sm font-bold text-on-primary/85 transition-opacity hover:opacity-70 sm:flex"
+              className="hidden min-h-11 items-center text-sm font-bold text-on-primary/85 transition-opacity hover:opacity-70 md:flex"
             >
               How it works
             </a>
             <Link
+              href="/login"
+              className="hidden min-h-11 items-center text-sm font-bold text-on-primary/85 transition-opacity hover:opacity-70 sm:flex"
+            >
+              Log in
+            </Link>
+            <Link
               href="/signup"
               className="inline-flex min-h-11 items-center justify-center rounded-xl bg-secondary px-4 py-2 text-sm font-extrabold text-on-secondary shadow-[0_5px_0_var(--color-primary-deep)] transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_2px_0_var(--color-primary-deep)]"
             >
-              Start writing
+              Sign up
             </Link>
           </div>
         </nav>
@@ -48,8 +54,10 @@ export default function Home() {
               transition={{ duration: 0.6, ease: "easeOut" }}
               className="max-w-2xl"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.png" alt="StoryBuddy" className="mb-8 h-16 w-auto object-contain sm:h-20 drop-shadow-[0_12px_24px_rgba(24,32,74,0.25)]" />
+              <div className="mb-8 inline-grid size-14 place-items-center rounded-2xl bg-surface shadow-[0_12px_24px_rgba(24,32,74,0.15)] sm:size-16 overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logo.png" alt="StoryBuddy" className="h-full w-full object-contain scale-[1.35] sm:scale-[1.45]" />
+              </div>
               <p className="mb-5 font-display text-sm font-extrabold tracking-[0.12em] text-secondary uppercase">
                 Stories become keepsakes
               </p>
@@ -70,13 +78,13 @@ export default function Home() {
                   href="/signup"
                   className="inline-flex min-h-13 items-center justify-center rounded-xl bg-secondary px-6 py-3 font-extrabold text-on-secondary shadow-[0_7px_0_var(--color-primary-deep)] transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_3px_0_var(--color-primary-deep)]"
                 >
-                  Make a book
+                  Teacher / Parent Sign up
                 </Link>
                 <Link
                   href="/join"
                   className="inline-flex min-h-13 items-center justify-center rounded-xl border-2 border-secondary px-6 py-3 font-extrabold text-secondary transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0.5"
                 >
-                  I have a class code
+                  Student? Enter class code
                 </Link>
               </motion.div>
             </motion.div>
@@ -344,7 +352,7 @@ export default function Home() {
               href="/signup"
               className="inline-flex min-h-13 shrink-0 items-center justify-center rounded-xl bg-secondary px-6 py-3 font-extrabold text-on-secondary shadow-[0_7px_0_var(--color-primary-deep)] transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_3px_0_var(--color-primary-deep)]"
             >
-              Start your story
+              Teacher / Parent Sign up
             </Link>
           </motion.div>
         </section>

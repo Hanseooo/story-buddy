@@ -112,12 +112,24 @@ export default function JoinCodePage({
 
   if (step === 2) {
     return (
-      <main className="font-kid min-h-screen bg-background text-foreground flex items-center justify-center p-6">
-        <div className="max-w-md w-full">
+      <main className="font-kid min-h-screen bg-background text-foreground flex items-center justify-center p-6 relative overflow-hidden">
+        {/* Back Button */}
+        <div className="absolute top-6 left-6 sm:top-8 sm:left-8 z-50">
+          <Link href="/join" className="inline-flex items-center gap-2 text-foreground/50 hover:text-primary font-bold text-base transition-colors group focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary rounded-lg px-2 py-1 -ml-2">
+            <svg className="w-5 h-5 transition-transform group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+            Back
+          </Link>
+        </div>
+
+        <div className="max-w-md w-full relative z-10">
           <h1 className="font-display text-3xl font-extrabold text-primary mb-2">
             What&apos;s your nickname?
           </h1>
-          <p className="text-foreground/70 mb-6">The name your teacher gave you.</p>
+          <p className="text-foreground/70 mb-6">
+            The name your teacher gave you for class <strong className="uppercase text-foreground tracking-wide">{code}</strong>.
+            <span className="mx-2 text-foreground/30">•</span>
+            <Link href="/join" className="text-primary font-bold hover:underline">Change class</Link>
+          </p>
 
           {error && (
             <div role="alert" className="mb-4 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium">
@@ -157,12 +169,22 @@ export default function JoinCodePage({
   }
 
   return (
-    <main className="font-kid min-h-screen bg-background text-foreground flex items-center justify-center p-6">
-      <div className="max-w-md w-full">
+    <main className="font-kid min-h-screen bg-background text-foreground flex items-center justify-center p-6 relative overflow-hidden">
+      {/* Back Button */}
+      <div className="absolute top-6 left-6 sm:top-8 sm:left-8 z-50">
+        <button onClick={() => window.history.back()} className="inline-flex items-center gap-2 text-foreground/50 hover:text-primary font-bold text-base transition-colors group focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary rounded-lg px-2 py-1 -ml-2">
+          <svg className="w-5 h-5 transition-transform group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+          Back
+        </button>
+      </div>
+
+      <div className="max-w-md w-full relative z-10">
         <h1 className="font-display text-3xl font-extrabold text-primary mb-2">
           Create your password
         </h1>
-        <p className="text-foreground/70 mb-6">You&apos;ll use this every time you log in.</p>
+        <p className="text-foreground/70 mb-6">
+          You&apos;ll use this every time you log in to class <strong className="uppercase text-foreground tracking-wide">{code}</strong>.
+        </p>
 
         {error && (
           <div role="alert" className="mb-4 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium">
