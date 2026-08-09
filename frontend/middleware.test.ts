@@ -46,6 +46,10 @@ describe("guardRequest — signed-in on a door", () => {
     expect(guardRequest("/join/abc123", UUID_A)).toBe(`/s/${UUID_A}`);
   });
 
+  it("authenticated on / → /classroom", () => {
+    expect(guardRequest("/", UUID_A)).toBe("/classroom");
+  });
+
   it("authenticated on /login → /classroom", () => {
     expect(guardRequest("/login", UUID_A)).toBe("/classroom");
   });

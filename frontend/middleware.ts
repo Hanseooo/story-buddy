@@ -17,6 +17,7 @@ export function guardRequest(
     !userId
   )
     return `/login?next=${safe(pathname) ?? ""}`;
+  if (userId && pathname === "/") return "/classroom";
   if (userId && pathname.startsWith("/join")) return `/s/${userId}`;
   if (userId && (pathname === "/login" || pathname === "/signup"))
     return "/classroom";
@@ -40,6 +41,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    "/",
     "/s/:path*",
     "/classroom/:path*",
     "/classroom",

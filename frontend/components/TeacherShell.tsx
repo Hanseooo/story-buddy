@@ -17,7 +17,7 @@ export default async function TeacherShell({ children }: Props) {
       <header className="bg-surface border-b border-primary/15 px-4 sm:px-8 py-3 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
           <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
-            <Link href="/" className="hidden sm:flex items-center gap-2 shrink-0">
+            <Link href="/classroom" className="hidden sm:flex items-center gap-2 shrink-0">
               <div className="grid size-8 place-items-center rounded-[9px_9px_9px_3px] overflow-hidden">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src="/logo.png" alt="" className="h-full w-full object-contain scale-[1.35]" />
