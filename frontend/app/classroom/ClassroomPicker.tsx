@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { type Classroom } from "@/utils/supabase/teacher";
-import { motion } from "motion/react";
+import { motion } from "framer-motion";
+import { Buildings } from "@phosphor-icons/react";
 
 export default function ClassroomPicker({
   classrooms,
@@ -58,7 +59,7 @@ export default function ClassroomPicker({
           className="max-w-lg w-full bg-surface border-4 border-dashed border-primary/20 rounded-[32px] p-8 sm:p-12 text-center shadow-[0_10px_28px_rgba(49,85,217,0.08)]"
         >
           <div className="w-24 h-24 bg-primary/10 text-primary rounded-full flex items-center justify-center mx-auto mb-6">
-            <span className="text-5xl">🏫</span>
+            <Buildings weight="fill" className="w-12 h-12" aria-hidden="true" />
           </div>
           <h1 className="font-display text-3xl sm:text-4xl font-extrabold text-primary mb-3">
             Welcome to your desk!

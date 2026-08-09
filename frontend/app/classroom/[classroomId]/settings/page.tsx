@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import Link from "next/link";
+import { ArrowLeft } from "@phosphor-icons/react";
 
 export default function ClassroomSettingsPage() {
   const { classroomId } = useParams<{ classroomId: string }>();
@@ -88,6 +90,14 @@ export default function ClassroomSettingsPage() {
 
   return (
     <div className="p-6 sm:p-8 max-w-xl mx-auto">
+      <Link
+        href={`/classroom/${classroomId}`}
+        className="inline-flex items-center gap-2 text-sm font-bold text-foreground/60 hover:text-primary transition-colors mb-6"
+      >
+        <ArrowLeft weight="bold" className="w-4 h-4" />
+        Back to Roster
+      </Link>
+      
       <h1 className="font-display text-2xl font-extrabold text-foreground mb-8">
         Classroom settings
       </h1>

@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { type Credential } from "@/lib/types";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { Avatar } from "@/components/Avatar";
-import { motion } from "motion/react";
+import { motion } from "framer-motion";
 
 type Student = {
   id: string;

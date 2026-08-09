@@ -6,6 +6,7 @@ import { createBrowserClient } from "@supabase/ssr";
 import BookCard from "@/components/BookCard";
 import { StateBadge } from "@/components/BookCard";
 import BookReviewDialog from "@/components/BookReviewDialog";
+import { StaggerGrid, StaggerItem } from "@/components/StaggerGrid";
 import { Job, ReviewDecision, jobState } from "@/lib/types/jobs";
 
 type Tab = "pending" | "approved" | "rejected";
@@ -307,16 +308,17 @@ export default function BooksPage() {
       ) : (
         <>
           {/* Mobile: cards */}
-          <div className="sm:hidden grid grid-cols-1 gap-4">
+          <StaggerGrid className="sm:hidden grid grid-cols-1 gap-4">
             {visibleJobs.map((j) => (
-              <BookCard
-                key={j.id}
-                job={j}
-                thumbnailUrl={thumbnails[j.id] ?? null}
-                onOpen={() => openDialog(j.id)}
-              />
+              <StaggerItem key={j.id}>
+                <BookCard
+                  job={j}
+                  thumbnailUrl={thumbnails[j.id] ?? null}
+                  onOpen={() => openDialog(j.id)}
+                />
+              </StaggerItem>
             ))}
-          </div>
+          </StaggerGrid>
           {/* Desktop: table */}
           <div className="hidden sm:block overflow-x-auto rounded-2xl border border-primary/15 shadow-[0_6px_18px_rgb(49_85_217/10%)]">
             <table className="w-full text-sm">
