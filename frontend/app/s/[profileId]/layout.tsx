@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import Link from "next/link";
+import { StudentTabBar } from "@/components/StudentTabBar";
 
 export default async function StudentLayout({
   children,
@@ -72,17 +73,15 @@ export default async function StudentLayout({
           <span className="font-display text-xl font-extrabold text-primary">
             Hi, {data.display_nickname}!
           </span>
-          <form action="/auth/signout" method="post">
-            <button
-              type="submit"
-              className="min-h-11 px-4 py-2 rounded-xl border border-primary/20 font-bold text-sm text-foreground hover:bg-muted transition-colors"
-            >
-              Log out
-            </button>
-          </form>
+          <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
+            <Link href={`/s/${profileId}`}>📚 Bookshelf</Link>
+            <Link href={`/s/${profileId}/gallery`}>🖼️ Gallery</Link>
+            <Link href={`/s/${profileId}/settings`}>👤 Profile</Link>
+          </nav>
         </div>
       </header>
-      <main className="flex-1">{children}</main>
+      <main className="flex-1 pb-20 md:pb-0">{children}</main>
+      <StudentTabBar profileId={profileId} />
     </div>
   );
 }
