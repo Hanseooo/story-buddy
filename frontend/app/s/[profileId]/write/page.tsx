@@ -12,6 +12,14 @@ const MAX_STORY_WORDS = 800;
 const PREFILL_KEY = "sb.prefill";
 const CHAIN_KEY = "sb.failChain";
 
+// ADR-022's three presets. Keys mirror backend/app/config.py STYLE_PRESETS and the CHECK
+// constraint in supabase/migrations/0002_jobs_style_preset_id.sql — `cel` is the default.
+const STYLE_PRESETS = [
+  { id: "cel", label: "Cartoon" },
+  { id: "comic", label: "Comic" },
+  { id: "gouache", label: "Painted" },
+] as const;
+
 function countWords(text: string): number {
   const trimmed = text.trim();
   return trimmed === "" ? 0 : trimmed.split(/\s+/).length;
@@ -48,9 +56,12 @@ export default function WriteStoryPage() {
   const overCap = wordCount > MAX_STORY_WORDS;
   const progress = Math.min((wordCount / MIN_STORY_WORDS) * 100, 100);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (wordCount < MIN_STORY_WORDS) return;
+
+    // ponytail: the radios are uncontrolled — FormData reads the choice, no useState needed.
+    const stylePresetId = new FormData(e.currentTarget).get("style_preset_id");
 
     setSubmitting(true);
     setPostError(false);
@@ -64,7 +75,7 @@ export default function WriteStoryPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session?.access_token}`,
         },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, style_preset_id: stylePresetId }),
       });
       if (!res.ok) {
         setPostError(true);
@@ -93,12 +104,46 @@ export default function WriteStoryPage() {
         autoFocus
       />
 
+      {/* Style Picker — ADR-022, three sample cards (PRD §8 step 4) */}
+      <motion.fieldset
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.05, ease: "easeOut" }}
+        className="mt-4 shrink-0"
+      >
+        <legend className="text-sm font-extrabold text-foreground/60 mb-2">Pick a look</legend>
+        <div className="flex gap-3">
+          {STYLE_PRESETS.map(({ id, label }) => (
+            <label key={id} className="flex-1 cursor-pointer">
+              <input
+                type="radio"
+                name="style_preset_id"
+                value={id}
+                defaultChecked={id === "cel"}
+                className="sr-only peer"
+              />
+              <div className="relative rounded-2xl overflow-hidden bg-surface border border-primary/20 transition-all hover:-translate-y-0.5 hover:shadow-sm peer-checked:border-primary peer-checked:ring-1 peer-checked:ring-primary peer-checked:shadow-sm peer-focus-visible:ring-[3px] peer-focus-visible:ring-secondary peer-focus-visible:ring-offset-[3px] peer-focus-visible:ring-offset-background">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/style-presets/${id}.png`}
+                  alt=""
+                  className="w-full aspect-[4/3] object-cover"
+                />
+                <span className="block text-center text-sm font-extrabold text-foreground py-2">
+                  {label}
+                </span>
+              </div>
+            </label>
+          ))}
+        </div>
+      </motion.fieldset>
+
       {/* Floating Action Bar */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.1, ease: "easeOut" }}
-        className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-4 bg-surface p-4 rounded-3xl border border-primary/10 shadow-[0_22px_60px_rgba(49,85,217,0.12)] shrink-0"
+        className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-4 bg-surface p-4 rounded-3xl border border-primary/10 shadow-[0_22px_60px_rgba(49,85,217,0.16)] shrink-0"
       >
         <div className="flex items-center gap-4 w-full sm:w-auto">
           {/* Word Count Indicator */}
@@ -145,6 +190,7 @@ export default function WriteStoryPage() {
           <motion.button 
             type="submit" 
             disabled={submitting || wordCount < MIN_STORY_WORDS || overCap}
+            whileHover={{ y: (submitting || wordCount < MIN_STORY_WORDS || overCap) ? 0 : -2, boxShadow: (submitting || wordCount < MIN_STORY_WORDS || overCap) ? "" : "0 6px 0 var(--color-primary-deep)" }}
             whileTap={{ y: (submitting || wordCount < MIN_STORY_WORDS || overCap) ? 0 : 4, boxShadow: (submitting || wordCount < MIN_STORY_WORDS || overCap) ? "" : "0 0px 0 var(--color-primary-deep)" }}
             className="w-full sm:w-auto min-h-[64px] px-8 rounded-2xl bg-primary text-on-primary text-xl font-extrabold shadow-[0_4px_0_var(--color-primary-deep)] transition-colors disabled:opacity-50 disabled:bg-muted disabled:text-foreground/40 disabled:shadow-none disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary focus-visible:ring-offset-[3px] focus-visible:ring-offset-surface"
           >

@@ -413,19 +413,22 @@ claimed; **next free migration is `0012`**. RLS write path is fully revoked (S3-
 exceptions). The e2e teacher flow — signup → create classroom → provision students → review books — is
 now fully specified.
 
-**Priority stack (e2e user flow first, 2026-08-07):**
+> ✅ **`classroom-sharing` is built (2026-08-09).** Gallery page + `StudentTabBar`; `/s/[profileId]/gallery`
+> live; tab bar covers Bookshelf / Gallery / Profile; logout moved to settings. Display-only per ADR-021;
+> no pipeline or worker involvement. Closes the full e2e loop: teacher creates classroom → student writes →
+> teacher approves → peers see the gallery.
 
-1. **`classroom-sharing`** — closes the full e2e loop: teacher creates classroom → student writes →
-   teacher approves → peers see the gallery. `teacher-dashboard` is now built; `approved_at` and
-   `rejected_at` are live. Display-only per ADR-021; no pipeline or worker involvement — the data layer
-   and Storage policies are already live from `0008`. Single brainstorming session scope.
-2. **`data-deletion`** — non-deferrable (RA 10173 + ethics clearance), but doesn't unblock anything else.
+**Priority stack (e2e user flow first, updated 2026-08-09):**
+
+~~1. **`classroom-sharing`** — ✅ **built 2026-08-09**.~~
+
+1. **`data-deletion`** — non-deferrable (RA 10173 + ethics clearance), but doesn't unblock anything else.
    Owns ADR-029's ⚠️: the `awaiting_confirm` sweep and the `asleep` status value S4 is waiting for.
-3. **`narration` + `export-pdf`** — both independent; can run in parallel sessions. Together they satisfy
+2. **`narration` + `export-pdf`** — both independent; can run in parallel sessions. Together they satisfy
    the Tool A evaluation row ("assembled + narrated + exported"). Deferring narration narrows a reported
    Objective row and drops an accessibility claim — defer only as a deliberate trade with the row narrowed
    in the same change.
-4. **`rate-limiting`** — must not silently slip past any public deployment.
+3. **`rate-limiting`** — must not silently slip past any public deployment.
 
 **No open decision blocks Phase 1 or Phase 2 entry, and the decision backlog has no open rows.** Tiers 1, 2, 2b,
 2c, and 3 are all resolved. D-I closed 2026-07-31 → ADR-029; it builds in Phase 2 behind the moderation gate
