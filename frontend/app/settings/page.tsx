@@ -104,7 +104,7 @@ export default function TeacherSettingsPage() {
         className="inline-flex items-center gap-2 text-sm font-bold text-foreground/60 hover:text-primary transition-colors mb-6"
       >
         <ArrowLeft weight="bold" className="w-4 h-4" />
-        Back to Teacher's Desk
+        Back to Teacher&apos;s Desk
       </Link>
 
       <h1 className="font-display text-2xl font-extrabold text-foreground mb-8">

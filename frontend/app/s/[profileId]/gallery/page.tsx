@@ -72,6 +72,7 @@ export default async function GalleryPage({
               className="block overflow-hidden rounded-2xl border border-primary/15 bg-surface shadow-[0_6px_18px_rgba(49,85,217,0.1)] outline-none h-full"
             >
               {coverUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={coverUrl}
                   alt={`Cover of book by ${nickname}`}
