@@ -77,7 +77,7 @@ export default function BookshelfPage({
           .from("storybook-images")
           .createSignedUrls(imagePaths, 3600);
         signed?.forEach(({ path, signedUrl }) => {
-          signedMap[path] = signedUrl;
+          if (path && signedUrl) signedMap[path] = signedUrl;
         });
       }
 

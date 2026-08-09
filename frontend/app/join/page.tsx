@@ -76,7 +76,7 @@ export default function JoinPage() {
     animate: {
       y: [0, -15, 0],
       rotate: [0, 5, -5, 0],
-      transition: { duration: 6, repeat: Infinity, ease: "easeInOut" }
+      transition: { duration: 6, repeat: Infinity, ease: "easeInOut" as const }
     }
   };
 
@@ -93,8 +93,8 @@ export default function JoinPage() {
       {/* Playroom Desk Background Decor */}
       <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
         <motion.div {...floatingAnimation} className="absolute top-20 left-10 lg:left-32 w-16 h-16 rounded-full bg-secondary/30 blur-sm" />
-        <motion.div {...floatingAnimation} transition={{ duration: 7, delay: 1, repeat: Infinity, ease: "easeInOut" }} className="absolute bottom-32 right-10 lg:right-32 w-24 h-24 rounded-2xl bg-primary/10 rotate-12 blur-sm" />
-        <motion.div {...floatingAnimation} transition={{ duration: 5, delay: 2, repeat: Infinity, ease: "easeInOut" }} className="absolute top-1/3 right-1/4 w-12 h-12 rounded-full bg-coral/20 blur-sm" />
+        <motion.div {...floatingAnimation} transition={{ duration: 7, delay: 1, repeat: Infinity, ease: "easeInOut" as const }} className="absolute bottom-32 right-10 lg:right-32 w-24 h-24 rounded-2xl bg-primary/10 rotate-12 blur-sm" />
+        <motion.div {...floatingAnimation} transition={{ duration: 5, delay: 2, repeat: Infinity, ease: "easeInOut" as const }} className="absolute top-1/3 right-1/4 w-12 h-12 rounded-full bg-coral/20 blur-sm" />
       </div>
 
       <motion.div 

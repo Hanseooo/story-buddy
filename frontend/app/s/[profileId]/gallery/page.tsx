@@ -34,7 +34,7 @@ export default async function GalleryPage({
     .order("approved_at", { ascending: false })
     .limit(200);
 
-  const jobs: Job[] = data ?? [];
+  const jobs = (data as unknown as Job[]) ?? [];
 
   const paths = jobs.flatMap((j) =>
     j.pages?.[0]?.image_path ? [j.pages[0].image_path] : [],
@@ -45,7 +45,7 @@ export default async function GalleryPage({
       .from("storybook-images")
       .createSignedUrls(paths, 3600);
     for (const s of signed ?? []) {
-      if (s.signedUrl) signedMap[s.path] = s.signedUrl;
+      if (s.signedUrl && s.path) signedMap[s.path] = s.signedUrl;
     }
   }
 
