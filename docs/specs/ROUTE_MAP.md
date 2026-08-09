@@ -313,12 +313,22 @@ Each route group also gets an `error.tsx`:
 
 ---
 
+## 8b. Backend API Routes
+
+| Route | Auth | Notes |
+|---|---|---|
+| `GET /health` | None | Liveness check |
+| `POST /storybooks` | Student (`get_current_user`) | Enqueues a new story job |
+| `POST /jobs/{job_id}/confirm` | Student (`get_current_user`) | Confirms or retries a job at the reveal checkpoint |
+| `PATCH /me/avatar` | Student (`get_current_user`) | Body `{"avatar_id": "<id>" \| null}`. Guarded by `get_current_user`; writes only `auth.uid()`'s own row. 422 on invalid id. |
+
+---
+
 ## Appendix A: URL Quick Reference (alphabetical)
 
 ```
 /                                           Landing (SSR, public)
 /classroom/[classroomId]                    Classroom detail (teacher)
-/classroom/[classroomId]/gallery            Classroom gallery — teacher view (teacher)
 /classroom/[classroomId]/library            Story library (teacher)
 /classroom/[classroomId]/library/[bookId]   Story review (teacher)
 /classroom/[classroomId]/settings           Classroom settings (teacher)
