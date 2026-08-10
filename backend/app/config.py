@@ -1,3 +1,4 @@
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +13,14 @@ class Settings(BaseSettings):
     fal_key: str
     sentry_dsn_backend: str | None = None
     frontend_origin: str = "http://localhost:3000"
+
+    langfuse_secret_key: str | None = None
+    langfuse_public_key: str | None = None
+    langfuse_host: str = Field(
+        default="https://cloud.langfuse.com",
+        validation_alias=AliasChoices("langfuse_host", "langfuse_base_url", "LANGFUSE_HOST", "LANGFUSE_BASE_URL"),
+    )
+    langfuse_project_id: str = ""
 
     # Model swap is an env-var change; provider swap is providers.py (ADR-001, ADR-002).
     text_model: str = "qwen/qwen3-32b"

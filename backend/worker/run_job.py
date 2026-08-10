@@ -1,14 +1,28 @@
+from langfuse.langchain import CallbackHandler
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.types import Command
 
 from app.config import RECURSION_LIMIT, STYLE_PRESETS, settings
 from app.db import get_supabase_client
 from app.length import word_count
-from contracts.story_memory import CURRENT_SCHEMA_VERSION, Input, Style, StoryMemory
+from contracts.story_memory import CURRENT_SCHEMA_VERSION, Cost, Input, Style, StoryMemory
+from pipeline.compose import outcome
 from pipeline.graph import build_graph
 
 
 _SCENE_NODES = {"generate_scene", "consistency_check", "regenerate", "output_mod"}
+
+
+def _langfuse_handler(job_id: str) -> tuple[CallbackHandler, str]:
+    host = settings.langfuse_host.rstrip("/")
+    url = f"{host}/project/{settings.langfuse_project_id}/traces/{job_id}"
+    handler = CallbackHandler(
+        public_key=settings.langfuse_public_key,
+        secret_key=settings.langfuse_secret_key,
+        host=settings.langfuse_host,
+        trace_context={"trace_id": job_id},
+    )
+    return handler, url
 
 
 def _stage_string(node: str, latest: dict | None) -> str:
@@ -25,6 +39,7 @@ def _run_with_progress(supabase, job_id: str, app_graph, graph_input, config: di
     Returns a dict structurally identical to app_graph.invoke() — _finish is unchanged.
     """
     latest, interrupts, last_stage = None, [], None
+    has_interrupt = False
     for chunk in app_graph.stream(graph_input, config, stream_mode=["updates", "values"]):
         # 2-tuple (mode, payload) for top-level; 3-tuple (ns, mode, payload) for subgraph nodes
         if len(chunk) == 3:
@@ -36,6 +51,7 @@ def _run_with_progress(supabase, job_id: str, app_graph, graph_input, config: di
             latest = payload
         else:  # "updates"
             if "__interrupt__" in payload:
+                has_interrupt = True
                 interrupts.extend(payload["__interrupt__"])
             node_name = next((k for k in payload if k != "__interrupt__"), None)
             if node_name:
@@ -46,7 +62,7 @@ def _run_with_progress(supabase, job_id: str, app_graph, graph_input, config: di
                     ).eq("id", job_id).execute()
                     last_stage = stage
 
-    if interrupts:
+    if has_interrupt:
         return {**(latest or {}), "__interrupt__": interrupts}
     return latest or {}
 
@@ -71,12 +87,28 @@ def _finish(supabase, job_id: str, result: dict) -> None:
 
     # invoke() returns a dict; the values inside are model instances.
     # scenes[] insertion order IS page order (story_memory.py:129-131) — no page_index field.
+    cost = result.get("cost") or Cost()
+    scenes = result.get("scenes") or []
+    outcomes = [outcome(s) for s in scenes]
+
     pages = [
         {"scene_id": s.scene_id, "caption": s.caption, "image_path": s.final_image_ref}
-        for s in result["scenes"]
+        for s in scenes
     ]
     supabase.table("jobs").update(
-        {"status": "complete", "current_stage": "compose", "pages": pages}
+        {
+            "status": "complete",
+            "current_stage": "compose",
+            "pages": pages,
+            "image_count": cost.image_count,
+            "regen_count": cost.regen_count,
+            "ref_retry_count": cost.ref_retry_count,
+            "scenes_total": len(scenes),
+            "scenes_passed": outcomes.count("passed"),
+            "scenes_failed": outcomes.count("failing"),
+            "scenes_unchecked": outcomes.count("unchecked"),
+            "usd_estimate": round(cost.image_count * 0.025, 4),
+        }
     ).eq("id", job_id).execute()
 
 
@@ -89,6 +121,9 @@ def run_storybook_job(job_id: str) -> None:
     chosen_id = preset_id if preset_id is not None else "cel"
 
     supabase.table("jobs").update({"status": "running"}).eq("id", job_id).execute()
+
+    handler, trace_url = _langfuse_handler(job_id)
+    supabase.table("jobs").update({"langfuse_trace_url": trace_url}).eq("id", job_id).execute()
 
     # ADR-023 amendment 2026-07-22b: story_id = job_id (one job = one story).
     # classroom_id/profile_id come from the job row (0008 adds these columns as NOT NULL).
@@ -108,6 +143,7 @@ def run_storybook_job(job_id: str) -> None:
             _config = {
                 "configurable": {"thread_id": job_id},
                 "recursion_limit": RECURSION_LIMIT,
+                "callbacks": [handler],
             }
             result = _run_with_progress(supabase, job_id, app_graph, initial_state, _config)
         _finish(supabase, job_id, result)
@@ -128,6 +164,9 @@ def resume_storybook_job(job_id: str, payload: dict) -> None:
     supabase = get_supabase_client()
     supabase.table("jobs").update({"status": "running"}).eq("id", job_id).execute()
 
+    handler, trace_url = _langfuse_handler(job_id)
+    supabase.table("jobs").update({"langfuse_trace_url": trace_url}).eq("id", job_id).execute()
+
     try:
         with PostgresSaver.from_conn_string(settings.supabase_db_url) as checkpointer:
             checkpointer.setup()
@@ -135,6 +174,7 @@ def resume_storybook_job(job_id: str, payload: dict) -> None:
             _config = {
                 "configurable": {"thread_id": job_id},
                 "recursion_limit": RECURSION_LIMIT,
+                "callbacks": [handler],
             }
             result = _run_with_progress(
                 supabase, job_id, app_graph, Command(resume=payload), _config
@@ -147,3 +187,4 @@ def resume_storybook_job(job_id: str, payload: dict) -> None:
             {"status": "failed", "error": msg, "failure_reason": failure_reason}
         ).eq("id", job_id).execute()
         raise
+

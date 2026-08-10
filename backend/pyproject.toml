@@ -24,6 +24,8 @@ dependencies = [
     "transformers>=4.40",
     "torch>=2.0",
     "Pillow>=10.0",
+    "langfuse>=2.0",
+    "langchain>=0.3",
 ]
 
 [dependency-groups]
