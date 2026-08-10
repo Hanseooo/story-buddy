@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 
 export type FailureKind = "revise" | "retry" | "not-found" | "asleep";
 
@@ -37,6 +37,7 @@ export default function FailureScreen({
   countable = true,
 }: Props) {
   const router = useRouter();
+  const { profileId } = useParams() as { profileId: string };
   const [submitting, setSubmitting] = useState(false);
   const chainCount = getChainCount();
 
@@ -48,14 +49,14 @@ export default function FailureScreen({
       body: JSON.stringify({ text: inputText }),
     })
       .then(res => (res.ok ? res.json() : null))
-      .then(data => { if (data) router.push(`/process/${data.job_id}`); })
+      .then(data => { if (data) router.push(`/s/${profileId}/process/${data.job_id}`); })
       .finally(() => setSubmitting(false));
   }
 
   const tryDifferent = (
     <button
       className="rounded-2xl min-h-[44px] px-6 font-kid text-sm underline"
-      onClick={() => router.push("/write")}
+      onClick={() => router.push(`/s/${profileId}/write`)}
       disabled={submitting}
     >
       Want to try a different story instead?
@@ -72,7 +73,7 @@ export default function FailureScreen({
             const count = countable ? bumpChain() : chainCount;
             console.log("sb:action", { action: "revise", kind, chain_count: count });
             try { sessionStorage.setItem(PREFILL_KEY, inputText); } catch { /* unavailable */ }
-            router.push("/write");
+            router.push(`/s/${profileId}/write`);
           }}
           disabled={submitting}
         >
@@ -89,7 +90,7 @@ export default function FailureScreen({
         <p className="font-kid text-lg text-center">We can&apos;t find that story.</p>
         <button
           className="rounded-2xl neo-border neo-shadow min-h-[44px] px-6 font-kid"
-          onClick={() => router.push("/write")}
+          onClick={() => router.push(`/s/${profileId}/write`)}
         >
           Write a new story
         </button>

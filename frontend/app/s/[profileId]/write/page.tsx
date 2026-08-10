@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { resetFailChain } from "@/components/FailureScreen";
 import { supabase } from "@/lib/supabaseClient";
 import { motion } from "framer-motion";
@@ -31,6 +31,7 @@ export default function WriteStoryPage() {
   const [postError, setPostError] = useState(false);
   const [chainCount, setChainCount] = useState(0);
   const router = useRouter();
+  const { profileId } = useParams() as { profileId: string };
 
   useEffect(() => {
     let prefill: string | null = null;
@@ -82,7 +83,7 @@ export default function WriteStoryPage() {
         return;
       }
       const data = await res.json();
-      router.push(`/process/${data.job_id}`);
+      router.push(`/s/${profileId}/process/${data.job_id}`);
     } finally {
       setSubmitting(false);
     }
