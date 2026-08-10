@@ -24,8 +24,5 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Place the uv-created virtual environment at the front of the PATH
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Pre-download Qwen moderation model into the image cache
-RUN uv run python -c "from transformers import AutoTokenizer, AutoModelForCausalLM; AutoTokenizer.from_pretrained('Qwen/Qwen3-Guard-Gen-0.6B'); AutoModelForCausalLM.from_pretrained('Qwen/Qwen3-Guard-Gen-0.6B')"
-
 # Default to running the API (Northflank will override this for the worker)
 CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
