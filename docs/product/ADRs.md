@@ -428,9 +428,9 @@ both unbacked and unmeasured in the respondents' language is not a gate.
 data. Either signal flagging fails the content.** Independence is the property that matters; "open"
 and "proprietary" were never the axis — vendor diversity was, and it is achievable without a closed model.
 
-1. **Input text** — **`meta-llama/llama-guard-3-8b`** (Apache-2.0, **119 languages**), the **0.6B variant on the
+1. **Input text** — **`meta-llama/llama-guard-4-12b`** (Apache-2.0, **119 languages**), the **0.6B variant on the
    OpenRouter**, as primary, with **`openai/gpt-oss-safeguard-20b`** (Apache-2.0, open *weights* — not
-   the OpenAI API) via **OpenRouter** as the independent backstop. meta-llama/llama-guard-3-8b's multilingual coverage
+   the OpenAI API) via **OpenRouter** as the independent backstop. meta-llama/llama-guard-4-12b's multilingual coverage
    closes the Filipino/Taglish hole *by construction*; gpt-oss-safeguard's separate vendor, taxonomy, and
    training data provide the independence `omni-moderation` used to.
    **D-1 resolved (2026-07-21):** neither ADR-011b classifier is routable on OpenRouter (verified
@@ -539,7 +539,7 @@ LangSmith's zero-code LangGraph wiring is the faster and lower-ops path to Day-1
 > path is the same mechanism; Modal (ADR-019) is infrastructure; LangSmith and Sentry are services, not models.
 > Gemma is open-weight (though not OSI-licensed) and therefore survives this ADR's own definition.
 >
-> The moderation replacement is an unambiguous **upgrade**: meta-llama/llama-guard-3-8b covers 119 languages where Llama
+> The moderation replacement is an unambiguous **upgrade**: meta-llama/llama-guard-4-12b covers 119 languages where Llama
 > Guard's Filipino performance was unmeasured. The narration replacement is a deliberate trade, not a free
 > win: dropping ElevenLabs removed a *proprietary* dependency, but the expressive open successor (ADR-020,
 > revised) is served via a hosted vendor with a small metered cost — open weights, not zero cost. The Kokoro

@@ -135,7 +135,7 @@ Identical mechanism, no edit: the same `input_text` is resubmitted verbatim as a
 presses one button.
 
 **A retry re-runs the input gate.** It is a full pipeline run from `input_gate`, so a text that passed
-once is classified again. Two things follow. First, one extra meta-llama/llama-guard-3-8b call per retry, which is a
+once is classified again. Two things follow. First, one extra meta-llama/llama-guard-4-12b call per retry, which is a
 local 0.6B model and costs effectively nothing. Second — and this is the honest edge — **a text that
 passed on job 1 can be flagged on job 2**, because the backstop is nondeterministic. The child pressed
 *"try again"* and lands on the `revise` screen. That is correct, not a bug: the new row's

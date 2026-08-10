@@ -25,7 +25,7 @@ The strict, non-negotiable ordering of the moderation pipeline is as follows:
 
 ### Stage 1: Input Text Moderation
 Before any processing begins, the child's raw story is evaluated.
-* **Primary Classifier:** `meta-llama/llama-guard-3-8b` (Apache-2.0). Supporting 119 languages, it closes the Filipino/Taglish safety gap by construction.
+* **Primary Classifier:** `meta-llama/llama-guard-4-12b` (Apache-2.0). Supporting 119 languages, it closes the Filipino/Taglish safety gap by construction.
 * **Independent Backstop:** `gpt-oss-safeguard-20b` (Apache-2.0, open weights) via OpenRouter. It replaces proprietary backstops and provides vendor independence (Granite Guardian was the original pick but is not routable on OpenRouter — ADR-011c). 
 * *Action:* If flagged, the system returns a gentle, non-scary "let's try that again" message to the child. 
 

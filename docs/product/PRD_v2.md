@@ -69,7 +69,7 @@ The updated capstone manuscript is now authoritative for the study design (ADR-0
   `omni-moderation` → **`gpt-oss-safeguard-20b`** (Apache-2.0 open weights, via OpenRouter — Granite
   Guardian was the ADR-011b pick but is not routable there; ADR-011c), and ElevenLabs → an **open expressive TTS**
   (**Chatterbox**, MIT, hosted inference; Kokoro-82M CPU fallback — ADR-020, revised 2026-07-17).
-  **meta-llama/llama-guard-3-8b** (119 languages) replaces Llama Guard and closes the Taglish hole.
+  **meta-llama/llama-guard-4-12b** (119 languages) replaces Llama Guard and closes the Taglish hole.
 - **Two new safety findings**, neither previously in any ADR: Presidio leaks Filipino PII by default, and
   the text gate's Filipino/Taglish performance was never measured. Both are now Phase-0.5/Phase-2 work.
 - **The ethics submission splits in two**, because Tier 1 was silently blocked on Tier 2. ADR-008.
@@ -401,7 +401,7 @@ use only, not any evaluation leg.
 6. **Very short stories** → **fewer scenes allowed**; scene count tracks the story's distinct major plot points, target ≥3 where the arc supports it, never padded to reach it (never-invent overrides the floor). Described as a pipeline behaviour of Scene Segmentation, not a standalone evaluation objective (RESEARCH_PROTOCOL §4).
 7. **Whole-run timeout / stall** → **LangGraph checkpointing + resumability**: a stall at scene N resumes from N, never re-rolls scenes 1…N-1. Kid sees "taking a little longer…" then "we saved your progress — come back soon." ADR-005.
 8. **Image model/API** → **Qwen-Image-Edit (Apache-2.0) on fal.ai.** Open weight, hosted. ADR-001, ADR-015.
-9. **Moderation services** → text (**meta-llama/llama-guard-3-8b** on the OpenRouter + **`gpt-oss-safeguard-20b`** on OpenRouter, both Apache-2.0) + PII (Presidio + **Filipino recognizers**) + image (NSFW ViT + VLM safety rubric). **Two independent open classifiers per path.** §13, ADR-011.
+9. **Moderation services** → text (**meta-llama/llama-guard-4-12b** on the OpenRouter + **`gpt-oss-safeguard-20b`** on OpenRouter, both Apache-2.0) + PII (Presidio + **Filipino recognizers**) + image (NSFW ViT + VLM safety rubric). **Two independent open classifiers per path.** §13, ADR-011.
 10. **Fine-tuning** → **the consistency judge** (`Qwen2.5-VL-7B`, QLoRA), served on vLLM. Identity and style
     remain the *wrong* targets — ADR-016's reasoning is preserved and is precisely why the judge is right. **ADR-018, ADR-019.**
 11. **What "open source" means** → **open weight**, hosted inference, self-hosting available — and, as of
@@ -439,10 +439,10 @@ use only, not any evaluation leg.
 Four distinct concerns, four mechanisms. **Open classifier as the gate, free proprietary classifier as
 an independent backstop; either one flagging fails the content** (ADR-011).
 
-1. **Input text moderation** — **`meta-llama/llama-guard-3-8b`** (Apache-2.0, 119 languages, the 0.6B variant on the
+1. **Input text moderation** — **`meta-llama/llama-guard-4-12b`** (Apache-2.0, 119 languages, the 0.6B variant on the
    OpenRouter) + **`openai/gpt-oss-safeguard-20b`** (Apache-2.0 open *weights*, via OpenRouter, independent
    backstop) on the child's story before any processing. Gentle, non-scary failure copy.
-   meta-llama/llama-guard-3-8b's multilingual coverage closes the Filipino/Taglish hole *by construction*; gpt-oss-safeguard
+   meta-llama/llama-guard-4-12b's multilingual coverage closes the Filipino/Taglish hole *by construction*; gpt-oss-safeguard
    supplies the vendor independence the removed OpenAI backstop used to. **Both open.**
    *(Granite Guardian was the ADR-011b backstop; it is **not routable on OpenRouter** — verified 2026-07-13,
    D-1 resolved in ADR-011 revision c.)*
@@ -500,7 +500,7 @@ image generation:
 | Image generation (2,000 images) | $40–70 |
 | VLM judge (2,000 calls, two images each) | $5–15 |
 | Text LLM (~200 stories) | $2–10 |
-| Text moderation (meta-llama/llama-guard-3-8b on OpenRouter + `gpt-oss-safeguard-20b`, ADR-011c) | $1–5 |
+| Text moderation (meta-llama/llama-guard-4-12b on OpenRouter + `gpt-oss-safeguard-20b`, ADR-011c) | $1–5 |
 | Image moderation (CPU classifiers on the existing worker) | $0–10 |
 
 - **Develop against the cheapest provider; spend paid budget only on study runs.**

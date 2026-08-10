@@ -221,7 +221,7 @@ Product/architecture choices are in the ADRs; this is the working reference, **i
 | Model access layer | `backend/providers.py` — thin functions, one impl each. **The only file naming a *provider*** (model *ids* are env vars read in `app/config.py` — ADR-015: "swapping a model is an env var; swapping a provider is one file") | ADR-015 |
 | Data / auth / storage / realtime | Supabase (Postgres + Auth + Storage + Realtime + RLS). **Classroom-scoped** | ADR-006, ADR-017 |
 | Structured extraction | `json_schema` (strict) + `require_parameters` (OpenRouter only) + Pydantic | §12, §3, ADR-002 |
-| Moderation | **meta-llama/llama-guard-3-8b** (OpenRouter) **+ gpt-oss-safeguard-20b** (OpenRouter backstop) (text, both Apache-2.0) + Presidio **+ Filipino recognizers** (PII) + NSFW ViT & VLM rubric (image) | ADR-011 (D-1 resolved) |
+| Moderation | **meta-llama/llama-guard-4-12b** (OpenRouter) **+ gpt-oss-safeguard-20b** (OpenRouter backstop) (text, both Apache-2.0) + Presidio **+ Filipino recognizers** (PII) + NSFW ViT & VLM rubric (image) | ADR-011 (D-1 resolved) |
 | Narration | **Chatterbox** (MIT, expressive) via hosted inference, pre-rendered per page onto Storage; **Kokoro-82M** CPU fallback | ADR-020 (revised) |
 | Fine-tuning | **The consistency judge only.** Identity = reference conditioning; style = ADR-007 constant; safety = never | ADR-018 (supersedes ADR-016) |
 | Observability | **LangSmith** (tracing, ADR-014) + Sentry (errors) | ADR-014, §16 |
@@ -392,7 +392,7 @@ Phase-2.5 annotators. Design it once, in Phase 1, or invalidate every label coll
 **Resolved:**
 - ~~Story Memory field-level detail~~ → the `story-memory-contract` spec is **approved, shape frozen
   2026-07-22**. §3 above describes it; build consumers against the spec, not against this section.
-- ~~Moderation backstop routing (D-1)~~ → **ADR-011c:** primary `meta-llama/llama-guard-3-8b` on the OpenRouter,
+- ~~Moderation backstop routing (D-1)~~ → **ADR-011c:** primary `meta-llama/llama-guard-4-12b` on the OpenRouter,
   backstop routed to `gpt-oss-safeguard-20b` on OpenRouter (the ADR-011b pair is not routable). One
   backstop call per story; no new privacy surface (input already leaves to OpenRouter, ADR-002).
 - ~~ADR-013 PDF renderer (D-2)~~ → **WeasyPrint** — static paged-media template; lighter than Playwright's

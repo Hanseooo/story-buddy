@@ -85,7 +85,7 @@ A core academic requirement for StoryBuddy is the reliance on open-weight models
 
 ### Safety and Moderation
 Rather than relying on proprietary filters, StoryBuddy integrates robust open classifiers directly into the worker:
-- **Input text** is screened by `meta-llama/llama-guard-3-8b` (primary, OpenRouter) and `gpt-oss-safeguard-20b`
+- **Input text** is screened by `meta-llama/llama-guard-4-12b` (primary, OpenRouter) and `gpt-oss-safeguard-20b`
   (backstop, via OpenRouter) — two independent open-weight classifiers, both Apache-2.0. *(IBM Granite
   Guardian was the originally named backstop; it is not routable on OpenRouter — ADR-011, revised
   2026-07-21c.)*

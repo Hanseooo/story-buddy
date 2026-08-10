@@ -64,18 +64,18 @@ its own one-retry loop and its own fail edge. The `consistency_router` is a sepa
 
 ### 4a. `input_gate`
 
-1. Run `meta-llama/llama-guard-3-8b` (OpenRouter API on the worker) on `input.raw_text`.
+1. Run `meta-llama/llama-guard-4-12b` (OpenRouter API on the worker) on `input.raw_text`.
 2. Run `Presidio` (with custom Filipino recognizers — `input-gate-hardening` spec) on
    `input.raw_text` → `input.redacted_text`. Steps 1 and 2 are independent; run concurrently
    (both must complete before the edge fires).
-3. If meta-llama/llama-guard-3-8b flags: set `input.moderation = ModerationResult(passed=False, categories=[...])`.
+3. If meta-llama/llama-guard-4-12b flags: set `input.moderation = ModerationResult(passed=False, categories=[...])`.
    Router fires → job `failed`. No backstop call needed when the primary already flags.
-4. If meta-llama/llama-guard-3-8b passes: call `gpt-oss-safeguard-20b` via OpenRouter (one call per story,
+4. If meta-llama/llama-guard-4-12b passes: call `gpt-oss-safeguard-20b` via OpenRouter (one call per story,
    not per scene — cost is noise). If the backstop flags: same fail path.
 5. Both pass → `input.moderation = ModerationResult(passed=True)` → router continues to `analyze`.
 
 **Edge cases:**
-- meta-llama/llama-guard-3-8b OOM / load error: catch → route to backstop only; log the primary failure.
+- meta-llama/llama-guard-4-12b OOM / load error: catch → route to backstop only; log the primary failure.
   Never silently skip moderation entirely — the gate always requires at least one complete pass.
 - Backstop OpenRouter timeout / 4xx / 5xx: treat as a hard error per ADR-025 (not a soft skip).
   Fail the job with `failure_reason = "moderation_error"`.
@@ -215,5 +215,5 @@ and Taglish cases, both directions). Feed it to the real classifiers in an offli
   opt-in. Both are commented in place. **This spec owns fixing them** — decide the field shape
   (local weights path vs. model id, one field or two) when building `input_gate`.
 - **Open — worker RAM at Phase 2 entry:** Presidio+spaCy (~200 MB), qwen/qwen3-vl-32b-instruct (~350 MB),
-  meta-llama/llama-guard-3-8b (~1.2 GB) are all OpenRouter API. ROADMAP warns to check the Northflank plan
+  meta-llama/llama-guard-4-12b (~1.2 GB) are all OpenRouter API. ROADMAP warns to check the Northflank plan
   tier at the *start* of Phase 2, not the end. Budget these before writing the first line of code.
