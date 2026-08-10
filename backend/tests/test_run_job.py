@@ -1,3 +1,4 @@
+import pytest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -6,6 +7,12 @@ from langgraph.types import Command
 from app.config import RECURSION_LIMIT, STYLE_PRESETS
 from contracts.story_memory import CURRENT_SCHEMA_VERSION, Scene
 from worker.run_job import _run_with_progress, _stage_string, resume_storybook_job, run_storybook_job
+
+
+@pytest.fixture(autouse=True)
+def mock_langfuse_handler():
+    with patch("worker.run_job.CallbackHandler") as mock:
+        yield mock
 
 
 def _fake_supabase(style_preset_id: str | None = None, truncated: bool = False) -> MagicMock:
@@ -57,6 +64,37 @@ def test_run_storybook_job_updates_row_on_success():
     assert final_update["pages"] == [
         {"scene_id": "s0", "caption": "stub caption", "image_path": "job-1/scene-1.png"}
     ]
+    assert final_update["image_count"] == 0
+    assert final_update["regen_count"] == 0
+    assert final_update["ref_retry_count"] == 0
+    assert final_update["scenes_total"] == 1
+    assert final_update["scenes_passed"] == 0
+    assert final_update["scenes_failed"] == 0
+    assert final_update["scenes_unchecked"] == 1
+    assert final_update["usd_estimate"] == 0.0
+
+
+def test_run_storybook_job_writes_trace_url_before_streaming():
+    fake_supabase = _fake_supabase()
+    fake_cm = MagicMock()
+    fake_cm.__enter__.return_value = MagicMock()
+    fake_graph = _fake_graph()
+
+    with patch("worker.run_job.get_supabase_client", return_value=fake_supabase), \
+         patch("worker.run_job.PostgresSaver.from_conn_string", return_value=fake_cm), \
+         patch("worker.run_job.build_graph", return_value=fake_graph):
+        run_storybook_job("job-trace-1")
+
+    update_calls = fake_supabase.table.return_value.update.call_args_list
+    # The second update call should be writing langfuse_trace_url (first is running)
+    trace_update = update_calls[1][0][0]
+    assert "langfuse_trace_url" in trace_update
+    assert "job-trace-1" in trace_update["langfuse_trace_url"]
+
+    # Verify callbacks were passed to stream config
+    config = fake_graph.stream.call_args.args[1]
+    assert "callbacks" in config
+    assert len(config["callbacks"]) == 1
 
 
 def test_run_storybook_job_writes_pages_in_scene_order():

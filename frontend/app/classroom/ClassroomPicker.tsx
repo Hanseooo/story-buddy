@@ -202,6 +202,34 @@ export default function ClassroomPicker({
             </form>
           </motion.div>
         )}
+
+        {/* Research & Methodology Tile */}
+        <motion.button
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: (classrooms.length + 1) * 0.05 }}
+          onClick={() => router.push('/research')}
+          whileHover={{ y: -6, scale: 1.02, zIndex: 10 }}
+          className="text-left bg-gradient-to-br from-primary to-primary-deep text-on-primary rounded-[28px] p-6 shadow-[0_8px_24px_rgba(49,85,217,0.2)] hover:shadow-[0_22px_60px_rgba(49,85,217,0.3)] transition-all cursor-pointer focus:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary focus-visible:ring-offset-[3px] focus-visible:ring-offset-background flex flex-col justify-between group min-h-[200px]"
+        >
+          <div>
+            <div className="bg-surface/20 backdrop-blur-sm rounded-2xl mb-5 flex items-center justify-center text-on-primary w-12 h-12">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                 <path d="M9 3H15M10 9H14M4 21H20M5.1 21L10 12V3M18.9 21L14 12V3"></path>
+              </svg>
+            </div>
+            <p className="font-display font-extrabold text-2xl mb-2 leading-tight">
+              Capstone <br/>Research
+            </p>
+            <p className="text-on-primary/80 text-sm font-medium leading-relaxed max-w-[20ch]">
+              Explore the methodology and pipeline architecture.
+            </p>
+          </div>
+          <div className="mt-4 flex items-center justify-between font-bold opacity-80 group-hover:opacity-100 transition-opacity w-full">
+            <span className="text-sm">Read the paper</span>
+            <span className="text-xl leading-none">→</span>
+          </div>
+        </motion.button>
       </div>
     </div>
   );

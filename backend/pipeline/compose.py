@@ -11,7 +11,7 @@ from contracts.story_memory import Scene, StoryMemory
 log = logging.getLogger(__name__)
 
 
-def _outcome(scene: Scene) -> str:
+def outcome(scene: Scene) -> str:
     """How the page that shipped got there: passed / failing / unchecked.
 
     Matched by `image_ref`, not by position: ADR-010's best-of may ship attempt 1 or attempt 2,
@@ -39,7 +39,7 @@ def compose(state: StoryMemory) -> dict:
     if uncaptioned:
         raise ValueError(f"compose: scenes without a caption: {uncaptioned}")
 
-    outcomes = [_outcome(s) for s in state.scenes]
+    outcomes = [outcome(s) for s in state.scenes]
     # CC-5: the only per-book terminal record the run produces.
     log.info(
         "compose: pages=%d passed=%d failing=%d unchecked=%d image_count=%d regen_count=%d",

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Outfit, Inter, JetBrains_Mono, Nunito } from "next/font/google";
+import OfflineIndicator from "@/components/OfflineIndicator";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -38,6 +39,7 @@ export default function RootLayout({
       className={`${outfit.variable} ${inter.variable} ${jetbrainsMono.variable} ${nunito.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-sans text-foreground bg-background selection:bg-primary selection:text-on-primary">
+        <OfflineIndicator />
         {children}
       </body>
     </html>

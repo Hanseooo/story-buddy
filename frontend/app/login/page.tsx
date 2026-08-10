@@ -155,6 +155,13 @@ export default function Login() {
             </motion.button>
           </form>
 
+          <p className="mt-5 text-xs text-center text-foreground/60 leading-relaxed">
+            By logging in, you agree to our{" "}
+            <Link href="/terms" className="underline decoration-primary/30 hover:text-primary transition-colors">Terms of Service</Link>
+            {" "}and{" "}
+            <Link href="/privacy" className="underline decoration-primary/30 hover:text-primary transition-colors">Privacy Policy</Link>.
+          </p>
+
           <div className="mt-8 flex flex-col gap-3 text-center text-sm font-bold text-foreground/70">
             <div>
               Need an account?{" "}
