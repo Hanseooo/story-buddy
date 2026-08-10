@@ -18,8 +18,6 @@ def _langfuse_handler(job_id: str) -> tuple[CallbackHandler, str]:
     url = f"{host}/project/{settings.langfuse_project_id}/traces/{job_id}"
     handler = CallbackHandler(
         public_key=settings.langfuse_public_key,
-        secret_key=settings.langfuse_secret_key,
-        host=settings.langfuse_host,
         trace_context={"trace_id": job_id},
     )
     return handler, url
