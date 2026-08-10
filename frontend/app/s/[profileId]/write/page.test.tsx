@@ -7,6 +7,7 @@ import WriteStoryPage from "./page";
 const pushMock = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock }),
+  useParams: () => ({ profileId: "prof-123" }),
 }));
 
 vi.mock("@/lib/supabaseClient", () => ({
@@ -36,7 +37,7 @@ describe("WriteStoryPage", () => {
     });
     fireEvent.click(screen.getByText("Make my book"));
 
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/process/abc-123"));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/s/prof-123/process/abc-123"));
 
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/storybooks"),

@@ -6,6 +6,7 @@ import { act } from "react";
 const pushMock = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock }),
+  useParams: () => ({ profileId: "prof-123" }),
 }));
 
 beforeEach(() => {
@@ -29,7 +30,7 @@ describe("FailureScreen — kind=revise", () => {
     render(<FailureScreen kind="revise" inputText="A story about a dog." />);
     fireEvent.click(screen.getByRole("button", { name: /change my words/i }));
     expect(sessionStorage.getItem("sb.prefill")).toBe("A story about a dog.");
-    expect(pushMock).toHaveBeenCalledWith("/write");
+    expect(pushMock).toHaveBeenCalledWith("/s/prof-123/write");
   });
 
   it("revise increments sb.failChain counter", () => {
@@ -57,7 +58,7 @@ describe("FailureScreen — kind=retry", () => {
   it("retry POSTs inputText verbatim to /storybooks and navigates to new process page", async () => {
     render(<FailureScreen kind="retry" inputText="A dog runs." />);
     fireEvent.click(screen.getByRole("button", { name: /try again/i }));
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/process/new-job"));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/s/prof-123/process/new-job"));
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/storybooks"),
       expect.objectContaining({ body: JSON.stringify({ text: "A dog runs." }) })
@@ -100,7 +101,7 @@ describe("FailureScreen — kind=not-found", () => {
     sessionStorage.setItem("sb.failChain", "2");
     render(<FailureScreen kind="not-found" />);
     fireEvent.click(screen.getByRole("button", { name: /write a new story/i }));
-    expect(pushMock).toHaveBeenCalledWith("/write");
+    expect(pushMock).toHaveBeenCalledWith("/s/prof-123/write");
     expect(sessionStorage.getItem("sb.failChain")).toBe("2"); // unchanged
   });
 
@@ -122,7 +123,7 @@ describe("FailureScreen — kind=asleep", () => {
     sessionStorage.setItem("sb.failChain", "2");
     render(<FailureScreen kind="asleep" inputText="A story." />);
     fireEvent.click(screen.getByRole("button", { name: /make it again/i }));
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/process/new-job"));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/s/prof-123/process/new-job"));
     expect(sessionStorage.getItem("sb.failChain")).toBe("2"); // unchanged
   });
 });
