@@ -214,15 +214,7 @@ def redact_pii(text: str) -> str:
     ).text
 
 
-@lru_cache(maxsize=1)
-def _qwen3_guard():
-    import torch
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-    model_id = settings.moderation_primary_model
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
-    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float32)
-    model.eval()
-    return tokenizer, model
+# ADR-032: Local Qwen3Guard removed to prevent OOM.
 
 
 # Guard prompt template — verify against https://huggingface.co/Qwen/Qwen3-Guard-Gen-0.6B
@@ -235,14 +227,15 @@ _GUARD_SYSTEM = (
 
 
 def classify_text_primary(text: str) -> tuple[bool, list[str]]:
-    """Qwen3Guard-Gen 0.6B (CPU-resident). Returns (is_safe, categories)."""
-    import torch
-    tokenizer, model = _qwen3_guard()
-    messages = [{"role": "system", "content": _GUARD_SYSTEM}, {"role": "user", "content": text}]
-    input_ids = tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True)
-    with torch.no_grad():
-        output_ids = model.generate(input_ids, max_new_tokens=64, do_sample=False)
-    response = tokenizer.decode(output_ids[0][input_ids.shape[-1]:], skip_special_tokens=True).strip().lower()
+    """Primary text guard via OpenRouter (ADR-032). Returns (is_safe, categories)."""
+    client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=settings.openrouter_api_key)
+    completion = client.chat.completions.create(
+        model=settings.moderation_primary_model,
+        messages=[{"role": "system", "content": _GUARD_SYSTEM}, {"role": "user", "content": text}],
+        max_tokens=100,
+        extra_body={"provider": {"require_parameters": True}},
+    )
+    response = (completion.choices[0].message.content or "").strip().lower()
     return _parse_guard_response(response)
 
 
@@ -265,21 +258,18 @@ def classify_text_backstop(text: str) -> tuple[bool, list[str]]:
     return _parse_guard_response(response)
 
 
-def _falconsai():
-    from transformers import pipeline as hf_pipeline
-    return hf_pipeline("image-classification", model="Falconsai/nsfw_image_detection", device="cpu")
-
+# ADR-032: Local Falconsai ViT removed to prevent OOM.
 
 def classify_image_primary(image_url: str) -> bool:
-    """Falconsai/nsfw_image_detection ViT-base (CPU-resident). Returns True if safe."""
-    import io
-    from PIL import Image
-    response = httpx.get(image_url, timeout=30.0)
-    response.raise_for_status()
-    image = Image.open(io.BytesIO(response.content))
-    results = _falconsai()(image)
-    top = max(results, key=lambda r: r["score"])
-    return top["label"] == "normal"
+    """Primary NSFW image guard via API (ADR-032). Returns True if safe."""
+    prompt = (
+        "You are a content safety classifier for a children's education platform. "
+        "Analyze the provided image and determine if it contains any NSFW (Not Safe For Work) content, "
+        "such as nudity, sexual content, or explicit material. "
+        "Explain your reasoning, then classify it."
+    )
+    verdict = judge(prompt, [image_url], _ImageSafetyVerdict, model=settings.moderation_primary_image_model)
+    return verdict.is_safe
 
 
 class _ImageSafetyVerdict(BaseModel):

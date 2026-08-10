@@ -187,13 +187,10 @@ def test_redact_pii_returns_string():
 # --- classify_text_primary ---
 
 def test_classify_text_primary_returns_safe_tuple():
-    mock_tokenizer = MagicMock()
-    mock_tokenizer.apply_chat_template.return_value = MagicMock(shape=MagicMock(__getitem__=lambda s, i: 5))
-    mock_tokenizer.decode.return_value = "safe"
-    mock_model = MagicMock()
-    mock_model.generate.return_value = [[0] * 10]
-
-    with patch("providers._qwen3_guard", return_value=(mock_tokenizer, mock_model)):
+    with patch("providers.OpenAI") as mock_openai_cls:
+        mock_openai_cls.return_value.chat.completions.create.return_value.choices = [
+            MagicMock(message=MagicMock(content="safe"))
+        ]
         from providers import classify_text_primary
         safe, categories = classify_text_primary("A dog runs in a field.")
 
@@ -202,13 +199,10 @@ def test_classify_text_primary_returns_safe_tuple():
 
 
 def test_classify_text_primary_unsafe_response_is_not_safe():
-    mock_tokenizer = MagicMock()
-    mock_tokenizer.apply_chat_template.return_value = MagicMock(shape=MagicMock(__getitem__=lambda s, i: 5))
-    mock_tokenizer.decode.return_value = "unsafe\nS1: Violence"
-    mock_model = MagicMock()
-    mock_model.generate.return_value = [[0] * 10]
-
-    with patch("providers._qwen3_guard", return_value=(mock_tokenizer, mock_model)):
+    with patch("providers.OpenAI") as mock_openai_cls:
+        mock_openai_cls.return_value.chat.completions.create.return_value.choices = [
+            MagicMock(message=MagicMock(content="unsafe\nS1: Violence"))
+        ]
         from providers import classify_text_primary
         safe, categories = classify_text_primary("graphic violence")
 
@@ -245,22 +239,16 @@ def test_classify_text_backstop_parses_unsafe_with_categories():
 # --- classify_image_primary ---
 
 def test_classify_image_primary_returns_true_for_normal():
-    with patch("providers.httpx") as mock_httpx, \
-         patch("providers._falconsai") as mock_falconsai, \
-         patch("PIL.Image.open", return_value=MagicMock()):
-        mock_httpx.get.return_value.content = b"fake-image-bytes"
-        mock_falconsai.return_value.return_value = [{"label": "normal", "score": 0.99}, {"label": "nsfw", "score": 0.01}]
+    with patch("providers.judge") as mock_judge:
+        mock_judge.return_value = MagicMock(is_safe=True)
         from providers import classify_image_primary
         result = classify_image_primary("https://example.com/image.png")
     assert result is True
 
 
 def test_classify_image_primary_returns_false_for_nsfw():
-    with patch("providers.httpx") as mock_httpx, \
-         patch("providers._falconsai") as mock_falconsai, \
-         patch("PIL.Image.open", return_value=MagicMock()):
-        mock_httpx.get.return_value.content = b"fake-image-bytes"
-        mock_falconsai.return_value.return_value = [{"label": "nsfw", "score": 0.95}, {"label": "normal", "score": 0.05}]
+    with patch("providers.judge") as mock_judge:
+        mock_judge.return_value = MagicMock(is_safe=False)
         from providers import classify_image_primary
         result = classify_image_primary("https://example.com/bad.png")
     assert result is False

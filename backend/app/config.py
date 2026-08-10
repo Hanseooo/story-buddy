@@ -42,9 +42,11 @@ class Settings(BaseSettings):
     judge_base_url: str = "https://openrouter.ai/api/v1"
     judge_api_key: str | None = None  # falls back to openrouter_api_key
 
-    # ADR-011c: CPU-resident primary (HF hub id — downloaded at worker startup by transformers).
+    # ADR-032: Primary text guard on OpenRouter to prevent OOM.
     # Model swap is env-var change; provider swap is providers.py.
-    moderation_primary_model: str = "Qwen/Qwen3-Guard-Gen-0.6B"
+    moderation_primary_model: str = "meta-llama/llama-guard-3-8b"
+    # ADR-032: Primary image guard on OpenRouter to prevent OOM (replaces Falconsai local model).
+    moderation_primary_image_model: str = "qwen/qwen3-vl-32b-instruct"
     # ADR-011c: text backstop on OpenRouter.
     moderation_backstop_model: str = "openai/gpt-oss-safeguard-20b"
     # ADR-011c / spec §4b-c: Gemma for image safety rubric (violence, gore, dangerous content).

@@ -35,8 +35,8 @@ def test_image_budget_is_unchanged_by_the_reveal_prelude():
     assert IMAGE_BUDGET == MAX_SCENES * 2 + 9
 
 
-def test_moderation_primary_model_is_qwen3_guard_gen():
-    assert settings.moderation_primary_model == "Qwen/Qwen3-Guard-Gen-0.6B"
+def test_moderation_primary_model_is_llama_guard():
+    assert settings.moderation_primary_model == "meta-llama/llama-guard-3-8b"
 
 
 def test_moderation_backstop_model_is_gpt_oss_safeguard():
