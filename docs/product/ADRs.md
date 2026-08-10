@@ -177,7 +177,7 @@ fixes and abandoned for the one it causes.
 - **DeepSeek** — rejected: no vision model on OpenRouter, so it cannot serve the judge role.
 - **InternVL3, Pixtral, GLM-4.5V/4.6V, Llama 4 Maverick** — rejected: no structured-output support on OpenRouter as of 2026-07.
 - **Llama 4 Scout** — works, but Meta's Community License is not OSI-approved. Available if needed; prefer Apache-2.0.
-- **Self-hosted Gemma/Qwen** — rejected in ADR-015 (ops burden on a solo build; no GPU on Railway).
+- **Self-hosted Gemma/Qwen** — rejected in ADR-015 (ops burden on a solo build; no GPU on Northflank).
 - **Gemini** (the original decision) — precluded by ADR-015.
 
 ---
@@ -372,7 +372,7 @@ only.
 
 ## ADR-009 — Hosting: Vercel (frontend) + Railway (backend), Singapore region
 
-**Status:** Accepted
+**Status:** Superseded by ADR-031
 
 **Context:** Solo dev; a 3-service backend (web + worker + Redis); user base in the Philippines.
 
@@ -594,7 +594,7 @@ deployment (ADR-005, ADR-009) and is currently listed as Future Work (PRD §5.2)
 **Alternatives:**
 
 - **Self-host from day 1** — rejected: relocates rather than removes the GPU dependency (drivers, CUDA,
-  cold starts, autoscaling, hardware failure) onto a solo dev with a 1-month build. Railway offers no GPU
+  cold starts, autoscaling, hardware failure) onto a solo dev with a 1-month build. Northflank offers no GPU
   outside its Enterprise plan (ADR-009), so it would also mean a fourth deployment target.
 - **On-device / local inference** — rejected for v1: the available hardware is a consumer 8–16GB GPU
   (minutes per image at 1024px, quantized). Fine for prototyping and for demonstrating self-hostability;
@@ -2144,3 +2144,22 @@ not make good draws more likely.
 
 **Alternatives:**
 - **Stay with LangSmith** — rejected. It would force us to manually track token usage and maintain a pricing table in code to calculate costs, duplicating functionality that Langfuse provides natively.
+
+---
+
+## ADR-031 — Backend Hosting Migration: Railway to Northflank
+
+**Status:** Accepted · **supersedes ADR-009** (Railway, Phase 0)
+
+**Context:** The initial infrastructure design placed the backend (FastAPI, RQ Worker, Redis) on Railway. However, Northflank offers better deployment mechanics, specifically the ability to define a single Docker image and deploy multiple distinct services (API and Worker) from it using different command overrides, along with finer control over networking and resources.
+
+**Decision:** Migrate backend hosting from **Railway to Northflank**.
+
+**Consequences:**
+- The deployment process now utilizes a unified `ghcr.io/astral-sh/uv:python3.12-bookworm-slim` Docker image for both FastAPI web and RQ worker services.
+- Northflank configuration requires two services pointing to the same repository and Dockerfile, differentiating them by overriding the startup command (e.g. `python -m worker.run_worker` for the LangGraph worker).
+- Supabase region considerations (Singapore) still hold, though now relative to Northflank's region options.
+
+**Alternatives:**
+- **Stay on Railway** — rejected in favor of Northflank's Docker handling and service orchestration.
+- **Render, Fly.io, DigitalOcean App Platform** — previously evaluated in ADR-009 and rejected/deprioritized.

@@ -206,7 +206,7 @@ Static server render. Refresh to see new data. No Realtime subscription — this
 
 ## 6. Environment variables
 
-### Backend (worker / Railway)
+### Backend (worker / Northflank)
 
 | Variable | Purpose |
 |----------|---------|

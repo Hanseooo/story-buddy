@@ -215,5 +215,5 @@ and Taglish cases, both directions). Feed it to the real classifiers in an offli
   opt-in. Both are commented in place. **This spec owns fixing them** — decide the field shape
   (local weights path vs. model id, one field or two) when building `input_gate`.
 - **Open — worker RAM at Phase 2 entry:** Presidio+spaCy (~200 MB), Falconsai ViT (~350 MB),
-  Qwen3Guard-Gen 0.6B (~1.2 GB) are all CPU-resident. ROADMAP warns to check the Railway plan
+  Qwen3Guard-Gen 0.6B (~1.2 GB) are all CPU-resident. ROADMAP warns to check the Northflank plan
   tier at the *start* of Phase 2, not the end. Budget these before writing the first line of code.

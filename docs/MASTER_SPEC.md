@@ -89,7 +89,7 @@ Phase 2.5: the scale-to-zero Modal GPU container serving the fine-tuned judge (A
 and cutting it returns the judge to OpenRouter with an env-var change):
 
 ```
-[Next.js / Vercel]  --POST /storybooks-->  [FastAPI web / Railway]
+[Next.js / Vercel]  --POST /storybooks-->  [FastAPI web / Northflank]
         ^                                          |
         |                                    creates job row
    Supabase Realtime                               v
@@ -97,7 +97,7 @@ and cutting it returns the judge to OpenRouter with an env-var change):
         ^                                          ^
         |                                    checkpoint / status
         |                                          |
-        +----------- final images/PDF -----  [RQ worker / Railway] --runs--> LangGraph pipeline
+        +----------- final images/PDF -----  [RQ worker / Northflank] --runs--> LangGraph pipeline
                      (Supabase Storage)              ^
                                                   [Redis broker]
 ```
@@ -212,7 +212,7 @@ Product/architecture choices are in the ADRs; this is the working reference, **i
 | Layer | Choice | Notes / ADR |
 |---|---|---|
 | Frontend | Next.js (React) + Tailwind + ⚙️shadcn/ui (teacher) + hand-built cartoon-pop (kid) + ⚙️Motion + ⚙️Lottie | Vercel, SSR landing. §9,§12 |
-| Backend web | FastAPI | Railway (Singapore). ADR-009 |
+| Backend web | FastAPI | Northflank (Singapore). ADR-031 |
 | Worker / queue | RQ worker + Redis broker | Separate service. ADR-005 |
 | Pipeline engine | LangGraph (deterministic) + `langgraph-checkpoint-postgres` | ADR-003,005 |
 | LLM / VLM | `qwen/qwen3-32b` (nodes) + judge (`gemma-3-27b-it` → fine-tuned `Qwen2.5-VL-7B` in Phase 2.5) | ADR-002,004,015,018 |

@@ -190,7 +190,7 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
   `qwen/qwen3-32b` (text) + `google/gemma-3-27b-it` (VLM judge) via OpenRouter; Qwen-Image-Edit
   (image gen) via fal.ai. All vendor calls live in `backend/providers.py`.
   (evidence: `frontend/package.json`, `backend/pyproject.toml`)
-- Architecture: Frontend (Vercel) posts to FastAPI (Railway), which writes a job row and returns
+- Architecture: Frontend (Vercel) posts to FastAPI (Northflank), which writes a job row and returns
   immediately. A separate RQ worker runs the LangGraph pipeline, checkpointing to Postgres after
   each scene. Frontend watches the job row via Supabase Realtime.
   **Target shape** — `docs/MASTER_SPEC.md` §2 is canonical and finer-grained (it splits char-ref

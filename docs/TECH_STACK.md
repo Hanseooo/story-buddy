@@ -19,14 +19,14 @@ or an SDK call at a call site, stop and read §5 first.
 | Consistency judge (fine-tuned, replaces prompted if it ships) | `Qwen2.5-VL-7B-Instruct` + QLoRA adapter | Apache-2.0 | Modal (vLLM, scale-to-zero), reached via `settings.judge_base_url` | `settings.judge_base_url` / `settings.judge_api_key` | ADR-018, ADR-019 | Phase 2.5 |
 | Canonical character reference (text→image) | `fal-ai/qwen-image` | Apache-2.0 | fal.ai | `settings.fal_image_model` | ADR-001, ADR-007 | Phase 1 |
 | Scene generation (reference-conditioned edit) | `fal-ai/qwen-image-edit-2511` | Apache-2.0 | fal.ai | `settings.fal_image_edit_model` | ADR-001 | Phase 1 |
-| Input-text moderation (primary) | `Qwen3Guard-Gen` 0.6B | Apache-2.0 | Railway worker CPU | not yet in `config.py` — Phase-2 `moderation-stack` spec defines the shape | ADR-011 (revised 2026-07-21c) | Phase 2 |
+| Input-text moderation (primary) | `Qwen3Guard-Gen` 0.6B | Apache-2.0 | Northflank worker CPU | not yet in `config.py` — Phase-2 `moderation-stack` spec defines the shape | ADR-011 (revised 2026-07-21c) | Phase 2 |
 | Input-text moderation (backstop) | `openai/gpt-oss-safeguard-20b` | Apache-2.0 (open weights, not the OpenAI API) | OpenRouter | `settings.moderation_backstop_model` (currently `None` — see §8) | ADR-011 | Phase 2 |
 | Input-text moderation (config default, demoted) | `meta-llama/llama-guard-4-12b` | Meta Community License (not OSI) | OpenRouter | `settings.moderation_model` | ADR-011 | placeholder only — see §8 |
-| Output-image NSFW gate | `Falconsai/nsfw_image_detection` (ViT-base, 86M) | Apache-2.0 | Railway worker CPU | not yet in `config.py` | ADR-011 | Phase 2 |
+| Output-image NSFW gate | `Falconsai/nsfw_image_detection` (ViT-base, 86M) | Apache-2.0 | Northflank worker CPU | not yet in `config.py` | ADR-011 | Phase 2 |
 | Output-image safety rubric (violence/gore) | `google/gemma-3-27b-it` (separate call, separate concern from the judge) | Gemma license | OpenRouter | reuses `settings.vlm_judge_model`'s model id via a distinct prompt/call — **never the fine-tuned judge** | ADR-011, ADR-004 amendment (b) | Phase 2 |
 | Narration (primary) | `Chatterbox` (Resemble AI) | MIT | fal.ai | not yet in `config.py` | ADR-020 | Phase 2 |
-| Narration (CPU fallback) | `Kokoro-82M` | Apache-2.0 | Railway worker CPU | not yet in `config.py` | ADR-020 | Phase 2 |
-| PII redaction | Presidio + spaCy | MIT / MIT | Railway worker CPU | not yet in `config.py` | ADR-011 | Phase 2 |
+| Narration (CPU fallback) | `Kokoro-82M` | Apache-2.0 | Northflank worker CPU | not yet in `config.py` | ADR-020 | Phase 2 |
+| PII redaction | Presidio + spaCy | MIT / MIT | Northflank worker CPU | not yet in `config.py` | ADR-011 | Phase 2 |
 
 **Not a model, but a required call param:** every OpenRouter structured-output call must send
 `provider.require_parameters: true` in `extra_body` (`backend/providers.py:54`) — omitting it lets
@@ -40,7 +40,7 @@ self-hosted vLLM (the fine-tuned judge, post-Phase 2.5) rejects the field.
 | Service | For | Phase | Alternative considered |
 |---|---|---|---|
 | **Vercel** | Frontend hosting (Next.js SSR + static) | Phase 0 | Render, Fly.io (fine); DO App Platform (not preferred) — ADR-009 |
-| **Railway** (Singapore region) | Backend: FastAPI web + RQ worker + Redis, 3 services | Phase 0 | Render, Fly.io, DO droplet — ADR-009 |
+| **Northflank** (Singapore region) | Backend: FastAPI web + RQ worker + Redis, 3 services | Phase 0 | Render, Fly.io, DO droplet — ADR-031 |
 | **Supabase — Postgres** | App data + LangGraph checkpoints (`langgraph-checkpoint-postgres`) | Phase 0 | Roll-your-own Postgres — more ops, no gain — ADR-006 |
 | **Supabase — Auth** | Classroom-scoped accounts: teacher/BEED-student issuer, child/student rows | Phase 0 (built), Phase 2 (real RLS) | Firebase — less Postgres/RLS-native — ADR-006. **Clerk** — rejected ADR-027: its self-serve/email product is what ADR-017 forbids, and it splits the JWT issuer from the Postgres enforcing RLS |
 | **Supabase — Storage** | Generated images + audio via signed URLs; no public buckets. **PDFs are generated on demand, not stored** (ADR-027) | Phase 0 | **Cloudflare R2 / S3** — rejected ADR-027: compression removes the need, and neither can mint signed URLs client-side, so both force asset authz out of RLS into app code |
@@ -163,7 +163,7 @@ a `backend/providers.py` change. Never hardcode either at a call site.**
 **Worked example — model swap.** Escalating the image-edit model to OmniGen2 after a Probe-1 failure
 (assuming fal.ai routes it):
 ```
-# .env (or Railway env vars) — no code change
+# .env (or Northflank env vars) — no code change
 FAL_IMAGE_EDIT_MODEL=omnigen2/...actual-fal-endpoint-id
 ```
 `providers.edit_image()` reads `settings.fal_image_edit_model` — nothing in `pipeline/` or `providers.py`
@@ -264,7 +264,7 @@ Be honest — these are open, not silently resolved:
   uploads fal's bytes unmodified (now to `{story_id}/{scene_id}.png` — the `scene-1.png` collision was fixed
   by the `image-generator` spec, 2026-07-31). Both the path template and PNG upload change when ADR-027 is
   implemented. Until then the free-tier headroom in §7 is a plan, not a fact.
-- **Supabase project region is unconfirmed against Railway's Singapore pin** (ADR-009). Relevant to latency and
+- **Supabase project region is unconfirmed against Northflank's Singapore pin** (ADR-031). Relevant to latency and
   to the Philippine Data Privacy Act framing in `docs/capstone/ethics_and_safety.md`, and **not changeable after
   project creation** without a migration. Not decided by ADR-027 — it sits with ADR-006.
 - **ADR-015's "hosted inference counts as open-weight" reading is an unconfirmed operating assumption, not

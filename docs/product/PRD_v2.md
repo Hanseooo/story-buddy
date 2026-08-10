@@ -420,7 +420,7 @@ use only, not any evaluation leg.
 
 **Frontend:** Next.js (React) + Tailwind + shadcn/ui (teacher) + hand-built cartoon-pop components (kid) + Motion (micro-interactions) + Lottie (wait states). Deployed on Vercel.
 
-**Backend:** FastAPI (web) + **separate RQ worker** + **Redis** (broker), on Railway (Render/Fly.io equivalent; Singapore region). *A long pipeline cannot run in a request cycle — this is a 3-service deployment, not one.*
+**Backend:** FastAPI (web) + **separate RQ worker** + **Redis** (broker), on Northflank (Render/Fly.io equivalent; Singapore region). *A long pipeline cannot run in a request cycle — this is a 3-service deployment, not one.*
 
 **Pipeline engine:** **LangGraph as a deterministic state machine** (explicit nodes; conditional edges only at moderation pass/fail and consistency pass/fail). LangChain omitted unless a concrete need appears. Model APIs called directly through `backend/providers.py` — the only file that names a vendor (ADR-003, ADR-015).
 

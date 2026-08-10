@@ -27,7 +27,7 @@ The UI accommodates two distinct audiences through varied design languages: a vi
 
 The backend logic is strictly reserved for the heavy lifting of story generation.
 
-- **Web Service:** A lightweight FastAPI application running on Railway that accepts storybook generation requests and enqueues them.
+- **Web Service:** A lightweight FastAPI application running on Northflank that accepts storybook generation requests and enqueues them.
 - **RQ Worker & Redis Broker:** A separate worker service processes the generative LangGraph pipeline. Running this asynchronously isolates long-running model inference from web traffic.
 - **Checkpointing and Resumability:** The worker checkpoints pipeline state to Postgres after every completed scene. If a generation job stalls, fails, or is interrupted, it resumes from the exact scene it left off. This prevents wasteful re-generation of already-completed scenes, tightly controlling API costs.
 

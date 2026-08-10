@@ -48,7 +48,7 @@ pick next module from MASTER_SPEC §7 index
 
 ## The scaffolding exception (Phase 0)
 
-Phase 0 — scaffold frameworks/deps, provision Supabase/Railway/Vercel, walking skeleton — is
+Phase 0 — scaffold frameworks/deps, provision Supabase/Northflank/Vercel, walking skeleton — is
 **not a feature module**. There's nothing left to decide (ROADMAP Phase 0 + ADRs *are* its spec),
 so it **skips brainstorming** and goes straight to `writing-plans`:
 
