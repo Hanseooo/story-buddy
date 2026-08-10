@@ -214,6 +214,7 @@ def redact_pii(text: str) -> str:
     ).text
 
 
+@lru_cache(maxsize=1)
 def _qwen3_guard():
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
