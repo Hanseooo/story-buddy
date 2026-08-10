@@ -36,7 +36,7 @@ def test_image_budget_is_unchanged_by_the_reveal_prelude():
 
 
 def test_moderation_primary_model_is_llama_guard():
-    assert settings.moderation_primary_model == "meta-llama/llama-guard-3-8b"
+    assert settings.moderation_primary_model == "meta-llama/llama-guard-4-12b"
 
 
 def test_moderation_backstop_model_is_gpt_oss_safeguard():

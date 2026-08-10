@@ -44,7 +44,7 @@ class Settings(BaseSettings):
 
     # ADR-032: Primary text guard on OpenRouter to prevent OOM.
     # Model swap is env-var change; provider swap is providers.py.
-    moderation_primary_model: str = "meta-llama/llama-guard-3-8b"
+    moderation_primary_model: str = "meta-llama/llama-guard-4-12b"
     # ADR-032: Primary image guard on OpenRouter to prevent OOM (replaces Falconsai local model).
     moderation_primary_image_model: str = "qwen/qwen3-vl-32b-instruct"
     # ADR-011c: text backstop on OpenRouter.

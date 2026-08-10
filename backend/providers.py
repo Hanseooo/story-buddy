@@ -58,7 +58,7 @@ def _chat(base_url: str, api_key: str, model: str, content, schema: type[T]) -> 
     Self-hosted vLLM rejects the unknown field, so it is sent only to OpenRouter.
     """
     extra_body = {"provider": {"require_parameters": True}} if base_url == OPENROUTER_BASE_URL else {}
-    completion = OpenAI(base_url=base_url, api_key=api_key).chat.completions.parse(
+    completion = OpenAI(base_url=base_url, api_key=api_key, timeout=60.0).chat.completions.parse(
         model=model,
         messages=[{"role": "user", "content": content}],
         response_format=schema,
@@ -228,12 +228,11 @@ _GUARD_SYSTEM = (
 
 def classify_text_primary(text: str) -> tuple[bool, list[str]]:
     """Primary text guard via OpenRouter (ADR-032). Returns (is_safe, categories)."""
-    client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=settings.openrouter_api_key)
+    client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=settings.openrouter_api_key, timeout=30.0)
     completion = client.chat.completions.create(
         model=settings.moderation_primary_model,
         messages=[{"role": "system", "content": _GUARD_SYSTEM}, {"role": "user", "content": text}],
         max_tokens=100,
-        extra_body={"provider": {"require_parameters": True}},
     )
     response = (completion.choices[0].message.content or "").strip().lower()
     return _parse_guard_response(response)
@@ -247,12 +246,11 @@ def classify_text_backstop(text: str) -> tuple[bool, list[str]]:
         "If unsafe, list violated categories on the next line.\n\n"
         f"Text: {text}"
     )
-    client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=settings.openrouter_api_key)
+    client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=settings.openrouter_api_key, timeout=30.0)
     completion = client.chat.completions.create(
         model=settings.moderation_backstop_model,
         messages=[{"role": "user", "content": prompt}],
         max_tokens=100,
-        extra_body={"provider": {"require_parameters": True}},
     )
     response = (completion.choices[0].message.content or "").strip().lower()
     return _parse_guard_response(response)
