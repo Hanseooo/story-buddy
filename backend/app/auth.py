@@ -7,10 +7,13 @@ async def get_current_user(authorization: str | None = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "missing token")
     jwt = authorization.removeprefix("Bearer ")
-    result = get_supabase_client().auth.get_user(jwt)
-    if not result.user:
-        raise HTTPException(401, "invalid token")
-    return result.user
+    try:
+        result = get_supabase_client().auth.get_user(jwt)
+        if not result.user:
+            raise HTTPException(401, "invalid token")
+        return result.user
+    except Exception as e:
+        raise HTTPException(401, f"invalid token: {str(e)}")
 
 
 def require_teacher(user=Depends(get_current_user)) -> dict:
