@@ -59,7 +59,7 @@ export default function PipelineMap() {
          
          <FlowNode 
            title="Input Gate" 
-           desc="meta-llama/llama-guard-3-8b + Presidio PII Redaction." 
+           desc="meta-llama/llama-guard-4-12b + Presidio PII Redaction." 
            icon={<ShieldCheck weight="duotone" className="w-6 h-6" />}
            delay={0.1} 
          />

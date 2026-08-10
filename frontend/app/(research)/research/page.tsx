@@ -141,7 +141,7 @@ export default async function ResearchMethodologyPage() {
                 <p>When Grade 5–6 children author stories about their real lives, privacy cannot rely on black-box cloud defaults. StoryBuddy implements a localized, non-negotiable multi-stage safety stack.</p>
                 <ul className="list-disc pl-5 space-y-3 marker:text-primary">
                   <li><strong>Localized PII Redaction:</strong> We deploy custom Filipino recognizers via Presidio to intercept localized names and address structures before storage or export.</li>
-                  <li><strong>Dual Independent Classifiers:</strong> Chained safety gates run on both text (meta-llama/llama-guard-3-8b) and output images (qwen/qwen3-vl-32b-instruct + Gemma-3-27B rubric).</li>
+                  <li><strong>Dual Independent Classifiers:</strong> Chained safety gates run on both text (meta-llama/llama-guard-4-12b) and output images (qwen/qwen3-vl-32b-instruct + Gemma-3-27B rubric).</li>
                   <li><strong>Non-Punitive Failure States:</strong> System refusals present supportive, age-appropriate UI guidance so children are never penalized.</li>
                 </ul>
               </div>
