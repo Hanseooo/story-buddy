@@ -9,7 +9,7 @@ import { useJob } from "@/lib/useJob";
 import FailureScreen from "@/components/FailureScreen";
 import { supabase } from "@/lib/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
-import { BookOpen, Users, PaintBrush, MagicWand, Check, Sparkle } from "@phosphor-icons/react";
+import { BookOpen, Users, PaintBrush, MagicWand, Check } from "@phosphor-icons/react";
 
 const BUCKET = "storybook-images";
 // ponytail: 90s is chosen so the line arrives before a child gives up; will fire on slow image calls
@@ -152,9 +152,6 @@ export default function ProcessingPage({ params }: { params: Promise<{ jobId: st
           transition={{ duration: 0.5, ease: "easeOut" }}
           className="flex flex-col items-center gap-4 text-center mb-12"
         >
-          <div className="bg-[var(--color-primary)]/10 p-4 rounded-full text-[var(--color-primary)] mb-2">
-            <Sparkle size={48} weight="duotone" className="animate-spin-slow" />
-          </div>
           <h1 className="font-display text-4xl md:text-5xl text-foreground">Meet your characters!</h1>
           <p className="font-kid text-lg text-foreground/70 max-w-md">
             We found these friends in your story. Pick the one you want to use for your book!
@@ -189,9 +186,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ jobId: st
                   className="w-full aspect-square object-cover rounded-[16px] bg-[var(--color-muted)]"
                 />
               ) : (
-                <div className="w-full aspect-square rounded-[16px] bg-[var(--color-muted)] animate-pulse flex items-center justify-center">
-                   <Sparkle size={32} className="text-[var(--color-primary)]/30" />
-                </div>
+                <div className="w-full aspect-square rounded-[16px] bg-[var(--color-muted)] animate-pulse" />
               )}
               <p className="font-display text-2xl text-foreground mt-2">{c.name}</p>
               
@@ -296,16 +291,6 @@ export default function ProcessingPage({ params }: { params: Promise<{ jobId: st
                   className="w-14 h-14 md:w-16 md:h-16 rounded-full border-2 flex items-center justify-center shadow-sm relative transition-colors duration-300"
                 >
                   {isDone ? <Check size={28} weight="bold" /> : <Icon size={28} weight={isActive ? "fill" : "regular"} />}
-                  
-                  {isActive && (
-                    <motion.div 
-                      layoutId="active-sparkle"
-                      className="absolute -top-3 -right-3 text-[var(--color-secondary)]"
-                      transition={{ type: "spring", bounce: 0.5 }}
-                    >
-                      <Sparkle size={24} weight="fill" className="animate-spin-slow" />
-                    </motion.div>
-                  )}
                 </motion.div>
              </div>
            );
@@ -338,7 +323,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ jobId: st
               className="flex flex-col items-center gap-6 w-full px-4"
             >
                {(() => {
-                 const Icon = ICONS[currentStep as StepperStep] || Sparkle;
+                 const Icon = ICONS[currentStep as StepperStep] || MagicWand;
                  return <Icon size={72} className="text-[var(--color-primary)] opacity-90" weight="duotone" />;
                })()}
                <h2 className="font-display text-2xl md:text-4xl text-foreground text-center">
