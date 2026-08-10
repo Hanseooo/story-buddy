@@ -7,12 +7,23 @@ import { AVATAR_IDS } from "@/lib/avatars";
 import { Avatar } from "@/components/Avatar";
 import { motion } from "framer-motion";
 
+const CATEGORIES = [
+  { id: "all", label: "All" },
+  { id: "peeps", label: "Peeps" },
+  { id: "pixel", label: "Pixel" },
+  { id: "lorelei", label: "Lorelei" },
+  { id: "thumbs", label: "Thumbs" },
+] as const;
+
+type CategoryId = (typeof CATEGORIES)[number]["id"];
+
 export default function SettingsPage() {
   const { profileId } = useParams<{ profileId: string }>();
 
   // Avatar state
   const [avatarId, setAvatarId] = useState<string | null>(null);
   const [avatarMessage, setAvatarMessage] = useState("");
+  const [activeCategory, setActiveCategory] = useState<CategoryId>("all");
 
   // Password state
   const [password, setPassword] = useState("");
@@ -39,21 +50,26 @@ export default function SettingsPage() {
     setAvatarId(newId); // optimistic
     setAvatarMessage("");
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/me/avatar`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session?.access_token}`,
-      },
-      body: JSON.stringify({ avatar_id: newId }),
-    });
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/me/avatar`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ avatar_id: newId }),
+      });
 
-    if (!res.ok) {
-      setAvatarId(previous); // revert
+      if (!res.ok) {
+        setAvatarId(previous); // revert
+        setAvatarMessage("Couldn't save your avatar. Try again.");
+      }
+    } catch {
+      setAvatarId(previous); // revert on network exception
       setAvatarMessage("Couldn't save your avatar. Try again.");
     }
   }
@@ -73,6 +89,10 @@ export default function SettingsPage() {
     );
     setLoading(false);
   };
+
+  const visibleAvatars = AVATAR_IDS.filter((id) =>
+    activeCategory === "all" ? true : id.startsWith(`${activeCategory}-`)
+  );
 
   return (
     <main className="font-kid p-6 max-w-3xl mx-auto pb-24">
@@ -96,6 +116,37 @@ export default function SettingsPage() {
             </div>
           )}
 
+          {/* Active Avatar Hero Preview Header */}
+          <div className="flex items-center gap-4 p-4 rounded-2xl bg-primary/5 border border-primary/10 mb-6">
+            <Avatar avatarId={avatarId} displayNickname="?" size={64} />
+            <div>
+              <div className="text-xs font-bold uppercase tracking-wider text-primary/70 mb-0.5 font-display">
+                Current Choice
+              </div>
+              <div className="font-kid font-bold text-foreground text-lg">
+                {avatarId ? avatarId : "Letter Initial Circle"}
+              </div>
+            </div>
+          </div>
+
+          {/* Category Filter Tabs */}
+          <div className="flex flex-wrap gap-2 mb-6" role="tablist" aria-label="Avatar style categories">
+            {CATEGORIES.map((cat) => (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setActiveCategory(cat.id)}
+                className={`px-4 py-2 rounded-xl text-sm font-bold transition-all touch-manipulation cursor-pointer ${
+                  activeCategory === cat.id
+                    ? "bg-primary text-surface shadow-[0_4px_12px_rgba(49,85,217,0.2)]"
+                    : "bg-surface border border-primary/15 text-foreground/70 hover:bg-primary/5 hover:text-primary"
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+
           <fieldset>
             <legend className="sr-only">Choose your avatar</legend>
             <motion.div 
@@ -110,15 +161,16 @@ export default function SettingsPage() {
                 }
               }}
             >
-              {AVATAR_IDS.map((id, i) => (
+              {visibleAvatars.map((id, i) => (
                 <motion.label 
                   key={id} 
-                  className="cursor-pointer relative flex justify-center"
+                  onClick={() => handleAvatarSelect(id)}
+                  className="cursor-pointer relative flex justify-center touch-manipulation select-none"
                   variants={{
                     hidden: { opacity: 0, scale: 0.8 },
                     show: { opacity: 1, scale: 1 }
                   }}
-                  whileHover={{ scale: 1.1, y: -2 }}
+                  whileHover={{ scale: 1.08, y: -2 }}
                   whileTap={{ scale: 0.95 }}
                 >
                   <input
@@ -131,13 +183,20 @@ export default function SettingsPage() {
                     aria-label={`Avatar ${i + 1} of ${AVATAR_IDS.length}`}
                   />
                   <div
-                    className={`rounded-full p-1.5 transition-all ${
+                    className={`rounded-full p-1.5 transition-all relative ${
                       avatarId === id
-                        ? "bg-secondary/20 ring-4 ring-secondary ring-offset-2 ring-offset-surface shadow-[0_0_15px_rgba(255,168,0,0.5)]"
+                        ? "bg-secondary/20 ring-4 ring-secondary ring-offset-2 ring-offset-surface shadow-[0_0_15px_rgba(242,200,95,0.5)]"
                         : "hover:bg-primary/5"
                     }`}
                   >
                     <Avatar avatarId={id} displayNickname="?" size={56} />
+                    {avatarId === id && (
+                      <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-secondary text-foreground flex items-center justify-center border-2 border-surface shadow-sm">
+                        <svg className="w-3.5 h-3.5 stroke-foreground" fill="none" viewBox="0 0 24 24" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      </div>
+                    )}
                   </div>
                 </motion.label>
               ))}
@@ -147,11 +206,12 @@ export default function SettingsPage() {
           <button
             type="button"
             onClick={() => handleAvatarSelect(null)}
-            className="w-full sm:w-auto px-6 py-3 rounded-xl border-2 border-primary/10 text-sm font-bold text-foreground/70 hover:bg-primary/5 hover:text-primary hover:border-primary/30 transition-all active:scale-[0.98]"
+            className="w-full sm:w-auto px-6 py-3 rounded-xl border-2 border-primary/10 text-sm font-bold text-foreground/70 hover:bg-primary/5 hover:text-primary hover:border-primary/30 transition-all active:scale-[0.98] touch-manipulation cursor-pointer"
           >
             Use my letter instead
           </button>
         </div>
+
 
         {/* ── Password Bento ─────────────────────────────────────────── */}
         <div className="bg-surface border-2 border-primary/10 rounded-[28px] p-6 sm:p-10 shadow-[0_8px_24px_rgba(49,85,217,0.08)]">

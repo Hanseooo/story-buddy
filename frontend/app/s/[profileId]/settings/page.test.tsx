@@ -157,3 +157,53 @@ it("reverts selection and shows message on failed PATCH", async () => {
 
   vi.unstubAllGlobals();
 });
+
+it("renders avatar style category filter tabs (All, Peeps, Pixel, Lorelei, Thumbs)", async () => {
+  setupDefaultFrom("peeps-01");
+  render(<SettingsPage />);
+
+  await waitFor(() => {
+    expect(screen.getByRole("button", { name: /^all$/i })).toBeDefined();
+    expect(screen.getByRole("button", { name: /^peeps$/i })).toBeDefined();
+    expect(screen.getByRole("button", { name: /^pixel$/i })).toBeDefined();
+    expect(screen.getByRole("button", { name: /^lorelei$/i })).toBeDefined();
+    expect(screen.getByRole("button", { name: /^thumbs$/i })).toBeDefined();
+  });
+});
+
+it("filters visible avatar options when category tab is clicked", async () => {
+  setupDefaultFrom("peeps-01");
+  render(<SettingsPage />);
+
+  await waitFor(() => screen.getByRole("button", { name: /^pixel$/i }));
+  fireEvent.click(screen.getByRole("button", { name: /^pixel$/i }));
+
+  await waitFor(() => {
+    const visibleRadios = screen.getAllByRole("radio");
+    expect(visibleRadios.length).toBe(6); // 6 pixel avatars
+    expect(visibleRadios[0].getAttribute("value")).toContain("pixel-");
+  });
+});
+
+it("reverts selection and surfaces message when fetch throws a network exception", async () => {
+  mockGetSession.mockResolvedValue({ data: { session: { access_token: "tok" } } });
+  setupDefaultFrom("peeps-01");
+
+  const fetchMock = vi.fn().mockRejectedValue(new Error("Network disconnect"));
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<SettingsPage />);
+  await waitFor(() => screen.getAllByRole("radio"));
+
+  const secondRadio = screen.getAllByRole("radio")[1];
+  fireEvent.click(secondRadio);
+
+  await waitFor(() => {
+    const checked = screen.getByRole("radio", { checked: true });
+    expect(checked.getAttribute("value")).toBe("peeps-01");
+    expect(screen.getByRole("status")).toHaveTextContent(/couldn't save your avatar/i);
+  });
+
+  vi.unstubAllGlobals();
+});
+
