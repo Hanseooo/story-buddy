@@ -89,7 +89,7 @@ def test_run_storybook_job_writes_trace_url_before_streaming():
     # The second update call should be writing langfuse_trace_url (first is running)
     trace_update = update_calls[1][0][0]
     assert "langfuse_trace_url" in trace_update
-    assert "job-trace-1" in trace_update["langfuse_trace_url"]
+    assert "jobtrace1" in trace_update["langfuse_trace_url"]
 
     # Verify callbacks were passed to stream config
     config = fake_graph.stream.call_args.args[1]

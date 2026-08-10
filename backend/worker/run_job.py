@@ -15,10 +15,11 @@ _SCENE_NODES = {"generate_scene", "consistency_check", "regenerate", "output_mod
 
 def _langfuse_handler(job_id: str) -> tuple[CallbackHandler, str]:
     host = settings.langfuse_host.rstrip("/")
-    url = f"{host}/project/{settings.langfuse_project_id}/traces/{job_id}"
+    trace_id = job_id.replace("-", "")
+    url = f"{host}/project/{settings.langfuse_project_id}/traces/{trace_id}"
     handler = CallbackHandler(
         public_key=settings.langfuse_public_key,
-        trace_context={"trace_id": job_id},
+        trace_context={"trace_id": trace_id},
     )
     return handler, url
 
