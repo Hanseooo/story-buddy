@@ -428,13 +428,13 @@ both unbacked and unmeasured in the respondents' language is not a gate.
 data. Either signal flagging fails the content.** Independence is the property that matters; "open"
 and "proprietary" were never the axis — vendor diversity was, and it is achievable without a closed model.
 
-1. **Input text** — **`Qwen3Guard-Gen`** (Apache-2.0, **119 languages**), the **0.6B variant on the
-   worker's CPU**, as primary, with **`openai/gpt-oss-safeguard-20b`** (Apache-2.0, open *weights* — not
-   the OpenAI API) via **OpenRouter** as the independent backstop. Qwen3Guard's multilingual coverage
+1. **Input text** — **`meta-llama/llama-guard-3-8b`** (Apache-2.0, **119 languages**), the **0.6B variant on the
+   OpenRouter**, as primary, with **`openai/gpt-oss-safeguard-20b`** (Apache-2.0, open *weights* — not
+   the OpenAI API) via **OpenRouter** as the independent backstop. meta-llama/llama-guard-3-8b's multilingual coverage
    closes the Filipino/Taglish hole *by construction*; gpt-oss-safeguard's separate vendor, taxonomy, and
    training data provide the independence `omni-moderation` used to.
    **D-1 resolved (2026-07-21):** neither ADR-011b classifier is routable on OpenRouter (verified
-   2026-07-13). The primary was always CPU-resident, so only the backstop needed a home. Running Granite
+   2026-07-13). The primary was always OpenRouter API, so only the backstop needed a home. Running Granite
    Guardian *also* on the worker adds a 2B model to a 2–3 GB RAM budget (§9); routing to gpt-oss-safeguard
    keeps the worker lean and adds **no new privacy surface** — input already leaves to OpenRouter for
    analysis (ADR-002), and the backstop is **one call per story**, not per scene, so its cost is noise.
@@ -444,7 +444,7 @@ and "proprietary" were never the axis — vendor diversity was, and it is achiev
    *"Ako si Juan dela Cruz, taga Purok 3, Barangay San Isidro"* is the case this ADR calls expected, and
    the stock configuration leaks it. **Custom Filipino recognizers are a Phase-2 deliverable, not a polish item.**
 3. **Output images** — on **every** image, **including the canonical reference before the reveal**:
-   - **`Falconsai/nsfw_image_detection`** (ViT-base, 86M, Apache-2.0) — a specialist sexual-content gate, runs on the worker's CPU in milliseconds. No new service.
+   - **`qwen/qwen3-vl-32b-instruct`** (ViT-base, 86M, Apache-2.0) — a specialist sexual-content gate, runs on the OpenRouter in milliseconds. No new service.
    - **`google/gemma-3-27b-it`** with a safety rubric via OpenRouter — covers violence, gore, and dangerous content, which the NSFW ViT does **not**. Open-weight (Gemma license, not OSI). A separate call with a separate concern — **never the fine-tuned judge** (ADR-004 amendment b).
    - These two are **complementary, not independent** — they cover disjoint categories. True redundancy on the image path is **ShieldGemma 2 (4B)**, and ADR-019's GPU container makes it affordable for the first time (see Alternatives).
 4. **Model self-refusal fallback** — soften-and-retry, then a gentle reframe. Unchanged.
@@ -455,7 +455,7 @@ Ordering is unchanged and non-negotiable: input gate → char-ref moderation →
 
 **Consequences:**
 - No unmoderated generated image reaches a child; PII kept out of stored/exported content; scary-but-innocent stories don't dead-end.
-- The primary text classifier and the image NSFW ViT are CPU-resident on the worker; the text backstop is
+- The primary text classifier and the image NSFW ViT are OpenRouter API on the worker; the text backstop is
   a hosted OpenRouter call (one per story). No GPU, and no extra service to stand up for moderation.
 - ⚠️ **Both gates are unverified in Filipino and Taglish until the Phase 0.5 moderation probe runs.**
   A miss on a harmful case is a child-safety hole; a miss on a benign case dead-ends a child's dragon
@@ -539,7 +539,7 @@ LangSmith's zero-code LangGraph wiring is the faster and lower-ops path to Day-1
 > path is the same mechanism; Modal (ADR-019) is infrastructure; LangSmith and Sentry are services, not models.
 > Gemma is open-weight (though not OSI-licensed) and therefore survives this ADR's own definition.
 >
-> The moderation replacement is an unambiguous **upgrade**: Qwen3Guard covers 119 languages where Llama
+> The moderation replacement is an unambiguous **upgrade**: meta-llama/llama-guard-3-8b covers 119 languages where Llama
 > Guard's Filipino performance was unmeasured. The narration replacement is a deliberate trade, not a free
 > win: dropping ElevenLabs removed a *proprietary* dependency, but the expressive open successor (ADR-020,
 > revised) is served via a hosted vendor with a small metered cost — open weights, not zero cost. The Kokoro
@@ -1011,7 +1011,7 @@ decision. Kokoro is retained as the fallback, not deleted, so nothing about the 
 is lost. · **amends ADR-002's read-aloud consequence, ADR-009's worker-RAM budget, and PRD §15/§17**
 
 **Context:** The product needs read-aloud narration (CC-6, PRD §17). The original 2026-07-10 decision chose
-**Kokoro-82M** because it runs real-time on the worker's CPU at zero cost. That decision was correct on
+**Kokoro-82M** because it runs real-time on the OpenRouter at zero cost. That decision was correct on
 compliance and cost, but it **weighed ElevenLabs only on its word-timestamp feature** (correctly: Grade 5–6
 readers do not need word-highlighting) and on its proprietary licence — it **never weighed expressive prosody
 as a value at all.** Kokoro is flat and neutral by design; that flatness is the price of running on a CPU.
@@ -1697,7 +1697,7 @@ it, which is the strongest argument against treating the problem as a vendor cho
 
 1. **Scenes are stored as WebP (quality ≈82).** Preferred mechanism: request the encoding from fal via an
    `output_format` key in the args dict `providers._run_fal` already forwards (`providers.py:88-95`) — zero new
-   dependency, zero worker CPU. **Unverified whether fal exposes this**; if it does not, encode on the worker
+   dependency, zero OpenRouter. **Unverified whether fal exposes this**; if it does not, encode on the worker
    with **Pillow** (new backend dependency, accepted here rather than deferred to a build session).
 2. **Canonical character references stay PNG.** They are the conditioning input every scene depends on
    (ADR-007), ADR-004 caps them at 2 per book, and `providers.upload_reference` already sends PNG to fal. Saving
@@ -2163,3 +2163,22 @@ not make good draws more likely.
 **Alternatives:**
 - **Stay on Railway** — rejected in favor of Northflank's Docker handling and service orchestration.
 - **Render, Fly.io, DigitalOcean App Platform** — previously evaluated in ADR-009 and rejected/deprioritized.
+
+---
+
+## ADR-032 — Moderation Models: API calls instead of local models due to RAM constraints
+
+**Status:** Accepted
+
+**Context:** The Northflank worker container has a 512MB memory limit. The primary text classifier (`Qwen3-Guard-Gen-0.6B`) requires ~2.4GB of RAM in `float32`, and the NSFW image classifier (`Falconsai/nsfw_image_detection`) requires ~344MB. Loading these locally via HuggingFace `transformers` causes the worker to hit a massive Out-Of-Memory limit, swapping heavily and pegging the CPU, which triggers a 180s job timeout and worker kill. Increasing the container limit to 4GB+ is unnecessary overhead if the models can be accessed via APIs.
+
+**Decision:** Swap the local `Qwen3-Guard-Gen-0.6B` and `Falconsai` models for API calls (via OpenRouter or another suitable provider). Remove the local `transformers` loading step from `backend/providers.py` to keep the worker footprint lean. The exact OpenRouter models chosen for these roles will be determined in implementation.
+
+**Consequences:**
+- The worker stays within the 512MB RAM budget, preventing OOM kills and hanging jobs.
+- API latency is introduced for moderation, but avoids local loading and swapping overhead (which was infinite).
+- Keeps the architecture serverless-friendly and cheaper to host.
+
+**Alternatives:**
+- **Increase Northflank worker RAM to 4GB+** — rejected due to unnecessary ongoing hosting costs when APIs provide the same function for fractions of a cent per call.
+- **Quantize local models (int8/fp16)** — rejected; even quantized, the 0.6B guard pushes or exceeds the 512MB bound alongside LangGraph and Presidio.
