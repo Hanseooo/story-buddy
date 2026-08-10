@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
+import WorkflowShowcase from "@/components/WorkflowShowcase";
 
 export default function Home() {
+  const shouldReduceMotion = useReducedMotion();
   return (
     <div className="min-h-full w-full min-w-0 overflow-x-hidden bg-background text-foreground">
       <header className="bg-primary text-on-primary">
@@ -49,7 +51,7 @@ export default function Home() {
         <section className="grid lg:min-h-[calc(100dvh-72px)] lg:grid-cols-2">
           <div className="flex items-center bg-primary px-5 py-16 text-on-primary sm:px-8 sm:py-20 lg:px-12 xl:px-[max(3rem,calc((100vw-80rem)/2))] xl:pr-16">
             <motion.div 
-              initial={{ opacity: 0, y: 30 }}
+              initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, ease: "easeOut" }}
               className="max-w-2xl"
@@ -69,9 +71,9 @@ export default function Home() {
                 with familiar characters from page to page.
               </p>
               <motion.div 
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, ease: "easeOut", delay: 0.2 }}
+                transition={{ duration: 0.6, ease: "easeOut", delay: shouldReduceMotion ? 0 : 0.2 }}
                 className="mt-8 flex flex-col items-stretch gap-4 sm:flex-row sm:items-center"
               >
                 <Link
@@ -92,35 +94,35 @@ export default function Home() {
 
           <div className="relative grid min-h-[420px] place-items-center overflow-hidden bg-background px-4 py-10 sm:min-h-[520px] sm:px-8 md:min-h-full lg:px-12">
             <motion.div
-              initial={{ opacity: 0, scale: 0.8 }}
+              initial={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.8, ease: "easeOut", delay: 0.1 }}
+              transition={{ duration: 0.8, ease: "easeOut", delay: shouldReduceMotion ? 0 : 0.1 }}
               aria-hidden="true"
               className="pointer-events-none absolute top-[8%] right-[7%] size-36 rounded-full bg-secondary/80 sm:size-52"
             />
             <motion.div
-              initial={{ opacity: 0, scale: 0.8, rotate: -40 }}
-              animate={{ opacity: 1, scale: 1, rotate: -20 }}
-              transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
+              initial={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.8, rotate: shouldReduceMotion ? 0 : -40 }}
+              animate={{ opacity: 1, scale: 1, rotate: shouldReduceMotion ? 0 : -20 }}
+              transition={{ duration: 0.8, ease: "easeOut", delay: shouldReduceMotion ? 0 : 0.2 }}
               aria-hidden="true"
               className="pointer-events-none absolute bottom-[8%] left-[4%] h-40 w-24 rounded-[100%_0_100%_0] bg-[#A8C48E] sm:h-52 sm:w-32"
             />
             <motion.div
-              initial={{ opacity: 0, scale: 0.8, rotate: 40 }}
-              animate={{ opacity: 1, scale: 1, rotate: 24 }}
-              transition={{ duration: 0.8, ease: "easeOut", delay: 0.3 }}
+              initial={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.8, rotate: shouldReduceMotion ? 0 : 40 }}
+              animate={{ opacity: 1, scale: 1, rotate: shouldReduceMotion ? 0 : 24 }}
+              transition={{ duration: 0.8, ease: "easeOut", delay: shouldReduceMotion ? 0 : 0.3 }}
               aria-hidden="true"
               className="pointer-events-none absolute right-[2%] bottom-[4%] h-44 w-28 rounded-[100%_0_100%_0] bg-coral/75 sm:h-60 sm:w-36"
             />
 
             <motion.div
-              initial={{ opacity: 0, y: 50, rotate: 0 }}
-              animate={{ opacity: 1, y: 0, rotate: -3 }}
-              transition={{ duration: 0.7, ease: "easeOut", delay: 0.2 }}
+              initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 50, rotate: 0 }}
+              animate={{ opacity: 1, y: 0, rotate: shouldReduceMotion ? 0 : -3 }}
+              transition={{ duration: 0.7, ease: "easeOut", delay: shouldReduceMotion ? 0 : 0.2 }}
               className="relative z-10 aspect-[1.28/1] w-full max-w-[580px] drop-shadow-[0_28px_24px_rgba(24,32,74,0.2)]"
             >
               <motion.div
-                animate={{ y: [0, -10, 0] }}
+                animate={shouldReduceMotion ? { y: 0 } : { y: [0, -10, 0] }}
                 transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
                 className="w-full h-full"
               >
@@ -154,7 +156,7 @@ export default function Home() {
         </section>
 
         <motion.section
-          initial={{ opacity: 0, y: 40 }}
+          initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 40 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-100px" }}
           transition={{ duration: 0.7, ease: "easeOut" }}
@@ -174,7 +176,7 @@ export default function Home() {
 
             <div className="border-t border-primary/20">
               <motion.div 
-                whileHover={{ x: 8 }}
+                whileHover={shouldReduceMotion ? {} : { x: 8 }}
                 className="grid gap-4 border-b border-primary/20 py-7 sm:grid-cols-[52px_1fr] sm:gap-6 transition-transform"
               >
                 <span className="font-display text-lg font-extrabold text-primary">
@@ -191,7 +193,7 @@ export default function Home() {
                 </div>
               </motion.div>
               <motion.div 
-                whileHover={{ x: 8 }}
+                whileHover={shouldReduceMotion ? {} : { x: 8 }}
                 className="grid gap-4 border-b border-primary/20 py-7 sm:grid-cols-[52px_1fr] sm:gap-6 transition-transform"
               >
                 <span className="font-display text-lg font-extrabold text-primary">
@@ -208,7 +210,7 @@ export default function Home() {
                 </div>
               </motion.div>
               <motion.div 
-                whileHover={{ x: 8 }}
+                whileHover={shouldReduceMotion ? {} : { x: 8 }}
                 className="grid gap-4 border-b border-primary/20 py-7 sm:grid-cols-[52px_1fr] sm:gap-6 transition-transform"
               >
                 <span className="font-display text-lg font-extrabold text-primary">
@@ -229,7 +231,7 @@ export default function Home() {
         </motion.section>
 
         <motion.section 
-          initial={{ opacity: 0, y: 40 }}
+          initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 40 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-100px" }}
           transition={{ duration: 0.7, ease: "easeOut" }}
@@ -238,7 +240,7 @@ export default function Home() {
           <div className="mx-auto grid max-w-7xl items-center gap-14 md:grid-cols-[1.05fr_0.95fr] lg:gap-24">
             <div className="relative min-h-[390px] sm:min-h-[480px]">
               <motion.div
-                whileHover={{ scale: 1.02, rotate: -4, zIndex: 20 }}
+                whileHover={shouldReduceMotion ? {} : { scale: 1.02, rotate: -4, zIndex: 20 }}
                 transition={{ type: "spring", stiffness: 300, damping: 20 }}
                 aria-hidden="true"
                 className="absolute top-[2%] left-[3%] w-[66%] rotate-[-6deg] overflow-hidden rounded-2xl border border-primary/20 bg-surface shadow-[0_18px_40px_rgba(49,85,217,0.13)] cursor-default"
@@ -254,7 +256,7 @@ export default function Home() {
                 </p>
               </motion.div>
               <motion.div
-                whileHover={{ scale: 1.02, rotate: 3, zIndex: 20 }}
+                whileHover={shouldReduceMotion ? {} : { scale: 1.02, rotate: 3, zIndex: 20 }}
                 transition={{ type: "spring", stiffness: 300, damping: 20 }}
                 aria-hidden="true"
                 className="absolute right-[2%] bottom-[1%] w-[61%] rotate-[5deg] overflow-hidden rounded-2xl border border-primary/20 bg-surface shadow-[0_18px_40px_rgba(49,85,217,0.16)] cursor-default"
@@ -290,7 +292,7 @@ export default function Home() {
         </motion.section>
 
         <motion.section
-          initial={{ opacity: 0, y: 40 }}
+          initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 40 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-100px" }}
           transition={{ duration: 0.7, ease: "easeOut" }}
@@ -332,9 +334,74 @@ export default function Home() {
           </div>
         </motion.section>
 
+        <motion.section
+          initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.7, ease: "easeOut" }}
+          className="bg-[#E9EDFC] px-5 py-20 sm:px-8 sm:py-24 lg:px-12 lg:py-32"
+        >
+          <div className="mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-2 lg:gap-24">
+            <div className="order-2 lg:order-1 relative flex justify-center">
+              {/* iPhone wrapper */}
+              <div className="relative w-full max-w-[300px] aspect-[9/19.5] rounded-[48px] border-[10px] border-foreground bg-background shadow-[0_30px_60px_rgba(24,32,74,0.2)] overflow-hidden">
+                {/* Notch */}
+                <div className="absolute top-0 inset-x-0 h-6 flex justify-center z-50">
+                  <div className="w-28 h-5 bg-foreground rounded-b-2xl" />
+                </div>
+                {/* Screen Content */}
+                <div className="absolute inset-0 pt-6">
+                  <WorkflowShowcase isMobileForm={true} />
+                </div>
+              </div>
+              
+              <motion.div
+                initial={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.8, rotate: shouldReduceMotion ? 0 : -15 }}
+                whileInView={{ opacity: 1, scale: 1, rotate: shouldReduceMotion ? 0 : -5 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6, delay: shouldReduceMotion ? 0 : 0.3 }}
+                className="absolute -bottom-6 -left-4 sm:bottom-4 sm:left-4 z-20 rounded-2xl border border-primary/10 bg-surface px-4 py-3 shadow-[0_12px_24px_rgba(49,85,217,0.12)]"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-primary">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  </div>
+                  <p className="font-display text-sm font-bold text-primary">Pipeline complete</p>
+                </div>
+              </motion.div>
+            </div>
+
+            <div className="order-1 lg:order-2">
+              <p className="mb-4 font-display text-sm font-extrabold tracking-[0.12em] text-primary uppercase">
+                Capstone & Research
+              </p>
+              <h2 className="max-w-[15ch] font-display text-4xl leading-[1.02] font-extrabold tracking-[-0.05em] sm:text-5xl">
+                The science behind the magic.
+              </h2>
+              <p className="mt-6 max-w-xl text-lg leading-8 text-foreground/70">
+                StoryBuddy is built on a transparent, open-weight AI pipeline. From reason-then-score validation to strict safety guardrails, explore our pre-registered methodology and live performance metrics.
+              </p>
+              <div className="mt-8 flex flex-col gap-4 sm:flex-row">
+                <Link
+                  href="/research"
+                  className="inline-flex min-h-13 items-center justify-center rounded-xl bg-primary px-6 py-3 font-extrabold text-surface shadow-[0_5px_0_var(--color-primary-deep)] transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_2px_0_var(--color-primary-deep)]"
+                >
+                  Read Methodology
+                </Link>
+                <Link
+                  href="/research/metrics"
+                  className="inline-flex min-h-13 items-center justify-center rounded-xl border-2 border-primary/20 bg-surface/50 px-6 py-3 font-extrabold text-primary transition-all duration-150 hover:-translate-y-0.5 hover:bg-surface active:translate-y-0.5"
+                >
+                  View Live Metrics
+                </Link>
+              </div>
+            </div>
+          </div>
+        </motion.section>
+
         <section className="bg-primary px-5 py-20 text-on-primary sm:px-8 sm:py-24 lg:px-12">
           <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
+            initial={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.95 }}
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true, margin: "-100px" }}
             transition={{ duration: 0.5, ease: "easeOut" }}
@@ -359,8 +426,13 @@ export default function Home() {
       </main>
 
       <footer className="bg-foreground px-5 py-7 text-[#DCE2F6] sm:px-8 lg:px-12">
-        <div className="mx-auto flex max-w-7xl flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
-          <p className="font-bold text-surface">StoryBuddy</p>
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <p className="font-bold text-surface">StoryBuddy</p>
+            <span className="hidden sm:inline text-white/20">|</span>
+            <Link href="/terms" className="hover:text-surface transition-colors">Terms</Link>
+            <Link href="/privacy" className="hover:text-surface transition-colors">Privacy</Link>
+          </div>
           <p>Young words, thoughtfully illustrated.</p>
         </div>
       </footer>
