@@ -43,7 +43,7 @@ def test_create_storybook_inserts_job_and_enqueues():
     assert insert_call_args["input_text"] == "A dog runs in a field."
     assert insert_call_args["id"] == job_id
 
-    fake_queue.enqueue.assert_called_once_with("worker.run_job.run_storybook_job", job_id)
+    fake_queue.enqueue.assert_called_once_with("worker.run_job.run_storybook_job", job_id, job_timeout=900)
 
 
 # --- style-presets spec: API validation (tests 3–5) ---
@@ -235,7 +235,7 @@ def test_confirm_valid_try_again_enqueues_once_and_returns_queued():
     assert response.status_code == 200
     assert response.json() == {"status": "queued"}
     fake_queue.enqueue.assert_called_once_with(
-        "worker.run_job.resume_storybook_job", "job-1", {"action": "try_again", "char_id": "c0", "attribute": "orange sock"}
+        "worker.run_job.resume_storybook_job", "job-1", {"action": "try_again", "char_id": "c0", "attribute": "orange sock"}, job_timeout=900
     )
 
 
@@ -250,7 +250,7 @@ def test_confirm_valid_confirm_enqueues_once_and_returns_queued():
 
     assert response.status_code == 200
     assert response.json() == {"status": "queued"}
-    fake_queue.enqueue.assert_called_once_with("worker.run_job.resume_storybook_job", "job-1", {"action": "confirm", "char_id": None, "attribute": None})
+    fake_queue.enqueue.assert_called_once_with("worker.run_job.resume_storybook_job", "job-1", {"action": "confirm", "char_id": None, "attribute": None}, job_timeout=900)
 
 
 def test_confirm_second_identical_request_enqueues_nothing_and_returns_200():

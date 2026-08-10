@@ -107,7 +107,7 @@ def create_storybook(
         }
     ).execute()
     queue = get_queue()
-    queue.enqueue("worker.run_job.run_storybook_job", job_id)
+    queue.enqueue("worker.run_job.run_storybook_job", job_id, job_timeout=900)
     return CreateStorybookResponse(job_id=job_id)
 
 
@@ -151,7 +151,7 @@ def confirm_job(
 
     queue = get_queue()
     try:
-        queue.enqueue("worker.run_job.resume_storybook_job", job_id, payload.model_dump())
+        queue.enqueue("worker.run_job.resume_storybook_job", job_id, payload.model_dump(), job_timeout=900)
     except Exception:
         # The CAS already flipped status to 'queued'; a Redis outage here would strand the book
         # with no worker coming and no way to re-confirm. Roll it back — nothing else ran.
