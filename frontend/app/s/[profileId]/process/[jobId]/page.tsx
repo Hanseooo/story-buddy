@@ -43,6 +43,109 @@ function getStepLabel(step: StepperStep, stage: string | null): string {
   ][step - 1];
 }
 
+function KineticText({ text, className }: { text: string; className?: string }) {
+  const words = text.split(" ");
+  return (
+    <div className={className + " flex flex-wrap justify-center gap-[0.25em]"}>
+      <span className="sr-only">{text}</span>
+      <span aria-hidden="true" className="flex flex-wrap justify-center gap-[0.25em]">
+        {words.map((word, i) => (
+          <span key={i} className="flex">
+            {Array.from(word).map((letter, j) => (
+              <motion.span
+                key={j}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{
+                  type: "spring",
+                  bounce: 0.5,
+                  delay: (i * 5 + j) * 0.04,
+                }}
+                className="inline-block"
+              >
+                {letter}
+              </motion.span>
+            ))}
+          </span>
+        ))}
+      </span>
+    </div>
+  );
+}
+
+const ReadingVignette = () => (
+  <div className="flex flex-col gap-3 w-48 p-5 bg-[var(--color-surface)] border-2 border-[var(--color-muted)] rounded-[20px] shadow-sm relative overflow-hidden my-4">
+    <div className="w-full h-3 bg-[var(--color-muted)] rounded-full overflow-hidden relative">
+      <motion.div className="absolute top-0 left-0 bottom-0 w-full bg-[var(--color-primary)]/40" initial={{ x: "-100%" }} animate={{ x: "100%" }} transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }} />
+    </div>
+    <div className="w-5/6 h-3 bg-[var(--color-muted)] rounded-full overflow-hidden relative">
+      <motion.div className="absolute top-0 left-0 bottom-0 w-full bg-[var(--color-primary)]/40" initial={{ x: "-100%" }} animate={{ x: "100%" }} transition={{ repeat: Infinity, duration: 1.5, ease: "linear", delay: 0.3 }} />
+    </div>
+    <div className="w-4/6 h-3 bg-[var(--color-muted)] rounded-full overflow-hidden relative">
+      <motion.div className="absolute top-0 left-0 bottom-0 w-full bg-[var(--color-primary)]/40" initial={{ x: "-100%" }} animate={{ x: "100%" }} transition={{ repeat: Infinity, duration: 1.5, ease: "linear", delay: 0.6 }} />
+    </div>
+  </div>
+);
+
+const CharactersVignette = () => (
+  <div className="flex gap-4 items-end h-32 my-4">
+    {[0, 1, 2].map((i) => (
+      <motion.div
+        key={i}
+        className="w-12 h-16 bg-[var(--color-surface)] border-2 border-[var(--color-primary)] rounded-[16px] shadow-sm flex items-center justify-center"
+        animate={{ y: [0, -30, 0] }}
+        transition={{
+          repeat: Infinity,
+          duration: 2,
+          delay: i * 0.3,
+          ease: "easeInOut",
+        }}
+      >
+        <div className="w-6 h-6 rounded-full bg-[var(--color-primary)]/20" />
+      </motion.div>
+    ))}
+  </div>
+);
+
+const DrawingVignette = () => (
+  <div className="relative w-40 h-32 flex flex-col items-center justify-center my-4">
+    <motion.div
+      className="absolute top-0 z-10 text-[var(--color-primary)] origin-bottom"
+      animate={{ x: [-35, 35, -35], rotate: [-20, 20, -20] }}
+      transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
+    >
+      <PaintBrush size={48} weight="duotone" />
+    </motion.div>
+    <div className="w-32 h-20 mt-10 border-2 border-[var(--color-muted)] rounded-[16px] overflow-hidden bg-[var(--color-surface)] relative shadow-sm">
+      <motion.div
+        className="absolute inset-0 bg-[var(--color-secondary)]/30 origin-left"
+        animate={{ scaleX: [0, 1, 1] }}
+        transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
+      />
+    </div>
+  </div>
+);
+
+const StackingVignette = () => (
+  <div className="relative w-32 h-32 my-4 flex justify-center">
+    {[0, 1, 2, 3].map((i) => (
+      <motion.div
+        key={i}
+        className="absolute h-20 w-24 bg-[var(--color-surface)] border-2 border-[var(--color-primary)]/40 rounded-[12px] shadow-sm"
+        initial={{ y: -60, opacity: 0 }}
+        animate={{ y: i * 6, opacity: 1, rotate: (i % 2 === 0 ? -4 : 4) + (i*1.5) }}
+        transition={{
+          repeat: Infinity,
+          repeatType: "loop",
+          duration: 3,
+          delay: i * 0.5,
+        }}
+        style={{ zIndex: i, top: 20 }}
+      />
+    ))}
+  </div>
+);
+
 export default function ProcessingPage({ params }: { params: Promise<{ jobId: string }> }) {
   const { jobId } = use(params);
   const { bucket, row, refetch } = useJob(jobId);
@@ -152,7 +255,9 @@ export default function ProcessingPage({ params }: { params: Promise<{ jobId: st
           transition={{ duration: 0.5, ease: "easeOut" }}
           className="flex flex-col items-center gap-4 text-center mb-12"
         >
-          <h1 className="font-display text-4xl md:text-5xl text-foreground">Meet your characters!</h1>
+          <h1 className="font-display text-4xl md:text-5xl text-foreground tracking-tight text-center">
+            <KineticText text="Meet your characters!" />
+          </h1>
           <p className="font-kid text-lg text-foreground/70 max-w-md">
             We found these friends in your story. Pick the one you want to use for your book!
           </p>
@@ -253,16 +358,12 @@ export default function ProcessingPage({ params }: { params: Promise<{ jobId: st
          <div className="w-[600px] h-[600px] bg-[var(--color-secondary)]/20 rounded-full blur-[100px]" />
       </div>
 
-      <motion.h1 
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="font-display text-3xl md:text-5xl text-center text-foreground z-10 mb-16"
-      >
-        Making your book!
-      </motion.h1>
+      <h1 className="z-10 mb-16 h-20 flex items-center justify-center font-display text-5xl md:text-6xl text-foreground tracking-tighter">
+        <KineticText text="Making your book!" />
+      </h1>
 
       {/* The Journey Tracker */}
-      <div className="flex items-center justify-center gap-4 md:gap-8 w-full max-w-2xl z-10 mb-20 relative">
+      <div className="flex items-center justify-center gap-4 md:gap-8 w-full max-w-2xl z-10 mb-16 relative">
          {/* Connecting line behind */}
          <div className="absolute top-1/2 left-8 right-8 h-1 bg-[var(--color-muted)] -translate-y-1/2 z-0 hidden sm:block" />
          <motion.div 
@@ -297,8 +398,8 @@ export default function ProcessingPage({ params }: { params: Promise<{ jobId: st
          })}
       </div>
 
-      {/* Spotlight Theater Text */}
-      <div className="z-10 text-center min-h-[140px] flex flex-col items-center justify-center w-full">
+      {/* Spotlight Theater Vignettes & Text */}
+      <div className="z-10 text-center min-h-[220px] flex flex-col items-center justify-center w-full">
         <AnimatePresence mode="wait">
           {isRedrawing ? (
             <motion.div
@@ -308,10 +409,10 @@ export default function ProcessingPage({ params }: { params: Promise<{ jobId: st
               exit={{ opacity: 0, scale: 0.8, y: -10 }}
               className="flex flex-col items-center gap-6"
             >
-               <PaintBrush size={64} className="text-[var(--color-primary)] animate-bounce" weight="duotone" />
-               <p className="font-display text-3xl md:text-4xl text-foreground">
+               <DrawingVignette />
+               <h2 className="font-display text-3xl md:text-4xl text-foreground tracking-tight">
                  Drawing it again…
-               </p>
+               </h2>
             </motion.div>
           ) : (
             <motion.div
@@ -320,24 +421,31 @@ export default function ProcessingPage({ params }: { params: Promise<{ jobId: st
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.4, type: "spring", bounce: 0.3 }}
-              className="flex flex-col items-center gap-6 w-full px-4"
+              className="flex flex-col items-center gap-4 w-full px-4"
             >
-               {(() => {
-                 const Icon = ICONS[currentStep as StepperStep] || MagicWand;
-                 return <Icon size={72} className="text-[var(--color-primary)] opacity-90" weight="duotone" />;
-               })()}
-               <h2 className="font-display text-2xl md:text-4xl text-foreground text-center">
+               <div className="h-[140px] flex items-center justify-center">
+                 {currentStep === 1 && <ReadingVignette />}
+                 {currentStep === 2 && <CharactersVignette />}
+                 {currentStep === 3 && <DrawingVignette />}
+                 {currentStep === 4 && <StackingVignette />}
+               </div>
+               
+               <motion.h2 
+                 animate={{ scale: [0.98, 1, 0.98] }}
+                 transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
+                 className="font-display text-3xl md:text-4xl text-foreground text-center tracking-tight"
+               >
                  {currentStepRaw !== null 
                     ? getStepLabel(currentStep, row?.current_stage ?? null)
                     : "Warming up..."}
-               </h2>
+               </motion.h2>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
       {/* Stalling Text */}
-      <div className="z-10 mt-16 min-h-[60px] flex justify-center w-full">
+      <div className="z-10 mt-12 min-h-[60px] flex justify-center w-full">
           {stalling && !isRedrawing && (
             <motion.div
               initial={{ opacity: 0, y: 10, scale: 0.95 }}

@@ -157,8 +157,8 @@ concerns registry (MASTER_SPEC §5). If a spec doesn't exist, write it from
   columns exist to scope by. Closes in Phase 2 (CC-4). Treat any `jobs`-table or storage-policy work
   as touching this gap.
 - Failure and moderation screens get the **same** design care as success screens.
-  ✅ **Now built (2026-08-02):** `input_gate` (Qwen3Guard-Gen + Presidio + OpenRouter backstop),
-  `char_ref_mod` (Falconsai ViT + Gemma safety rubric), `output_mod` (same two-classifier check +
+  ✅ **Now built (2026-08-02):** `input_gate` (meta-llama/llama-guard-3-8b + Presidio + OpenRouter backstop),
+  `char_ref_mod` (qwen/qwen3-vl-32b-instruct + Gemma safety rubric), `output_mod` (same two-classifier check +
   soften-and-retry). `moderation_router` and `route_after_output_mod` enforce the ordering in
   `graph.py`. PII redaction via Presidio is live, with the Filipino recognizers from
   `input-gate-hardening` (`ph_recognizers.py`) wired into `providers._presidio` — stock Presidio no
@@ -204,11 +204,11 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
   [route_after_output_mod] → compose`.
   `moderation_router` (ADR-024 pure router) handles both post-`input_gate` and post-`char_ref_mod`
   edges; `route_after_output_mod` reads `moderation_status="failed"` and raises.
-  `char_ref_mod` runs Falconsai ViT + Gemma safety rubric on each canonical ref image.
+  `char_ref_mod` runs qwen/qwen3-vl-32b-instruct + Gemma safety rubric on each canonical ref image.
   `reveal` (ADR-029) is effect-free and holds one `interrupt()`; `route_reveal` loops `"try_again"`
   back to `char_bible` and enforces the 3-tap cap.
   `output_mod` runs the same two-classifier check on each output scene, with one soften-and-retry.
-  All provider calls (Qwen3Guard-Gen, Presidio, Falconsai, OpenRouter backstops) go through
+  All provider calls (meta-llama/llama-guard-3-8b, Presidio, qwen/qwen3-vl-32b-instruct, OpenRouter backstops) go through
   `backend/providers.py`; `get_signed_url` lives there too (Storage seam). `export` is not yet built.
 - Critical paths (extra review): moderation ordering (input text → char-ref → output image), PII
   redaction (Presidio) before any storage/caption/export, RLS + signed URLs on every table/asset,
@@ -427,8 +427,8 @@ is not documentation of a good design; it is the blast radius, written down so t
   that won, emits the one per-book summary log line. Returns `{}`. `contracts/` untouched.
   **Every Phase-1 feature spec is now built.**
   **`moderation-stack` is built (2026-08-02):** `pipeline/input_gate.py` (real implementation —
-  Qwen3Guard-Gen 0.6B CPU-resident + Presidio PII redaction concurrent, OpenRouter backstop);
-  `pipeline/char_ref_mod.py` (Falconsai ViT + Gemma safety rubric, two-classifier check per char ref);
+  meta-llama/llama-guard-3-8b OpenRouter API + Presidio PII redaction concurrent, OpenRouter backstop);
+  `pipeline/char_ref_mod.py` (qwen/qwen3-vl-32b-instruct + Gemma safety rubric, two-classifier check per char ref);
   `pipeline/output_mod.py` (same two-classifier check + soften-and-retry on each output scene).
   `moderation_router` and `route_after_output_mod` added to `graph.py`. `providers.py` gains
   `get_signed_url`, `_parse_guard_response`, and five moderation provider functions.

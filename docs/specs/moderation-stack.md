@@ -64,18 +64,18 @@ its own one-retry loop and its own fail edge. The `consistency_router` is a sepa
 
 ### 4a. `input_gate`
 
-1. Run `Qwen3Guard-Gen 0.6B` (CPU-resident on the worker) on `input.raw_text`.
+1. Run `meta-llama/llama-guard-3-8b` (OpenRouter API on the worker) on `input.raw_text`.
 2. Run `Presidio` (with custom Filipino recognizers — `input-gate-hardening` spec) on
    `input.raw_text` → `input.redacted_text`. Steps 1 and 2 are independent; run concurrently
    (both must complete before the edge fires).
-3. If Qwen3Guard-Gen flags: set `input.moderation = ModerationResult(passed=False, categories=[...])`.
+3. If meta-llama/llama-guard-3-8b flags: set `input.moderation = ModerationResult(passed=False, categories=[...])`.
    Router fires → job `failed`. No backstop call needed when the primary already flags.
-4. If Qwen3Guard-Gen passes: call `gpt-oss-safeguard-20b` via OpenRouter (one call per story,
+4. If meta-llama/llama-guard-3-8b passes: call `gpt-oss-safeguard-20b` via OpenRouter (one call per story,
    not per scene — cost is noise). If the backstop flags: same fail path.
 5. Both pass → `input.moderation = ModerationResult(passed=True)` → router continues to `analyze`.
 
 **Edge cases:**
-- Qwen3Guard-Gen OOM / load error: catch → route to backstop only; log the primary failure.
+- meta-llama/llama-guard-3-8b OOM / load error: catch → route to backstop only; log the primary failure.
   Never silently skip moderation entirely — the gate always requires at least one complete pass.
 - Backstop OpenRouter timeout / 4xx / 5xx: treat as a hard error per ADR-025 (not a soft skip).
   Fail the job with `failure_reason = "moderation_error"`.
@@ -88,7 +88,7 @@ its own one-retry loop and its own fail edge. The `consistency_router` is a sepa
 ### 4b. `char_ref_mod`
 
 1. Download each character's `canonical_ref_image` via a short-TTL signed URL.
-2. Run `Falconsai/nsfw_image_detection` (ViT-base 86M, CPU-resident) — specialist sexual-content gate.
+2. Run `qwen/qwen3-vl-32b-instruct` (ViT-base 86M, OpenRouter API) — specialist sexual-content gate.
 3. Run `gemma-3-27b-it` with the image safety rubric via OpenRouter — covers violence, gore,
    dangerous content. **Never the fine-tuned judge** (ADR-004 amendment b; the fine-tuned model
    never touches the safety path).
@@ -113,7 +113,7 @@ straight to a child.
 ### 4c. `output_mod`
 
 1. Load `scene.final_image_ref` from Storage (signed URL, short TTL).
-2. Same two-classifier check as `char_ref_mod` (Falconsai ViT + Gemma safety rubric).
+2. Same two-classifier check as `char_ref_mod` (qwen/qwen3-vl-32b-instruct + Gemma safety rubric).
 3. Pass → `scene.moderation_status = "passed"` → continue to `compose`.
 4. Fail → `scene.moderation_status = "flagged"` → invoke one soften-and-retry on the prompt
    (`self-refusal-fallback` spec strategy) → generate a new image → re-run moderation on it.
@@ -130,7 +130,7 @@ straight to a child.
   Each gate is a separate node; the graph topology makes out-of-order execution impossible.
 - [x] **CC-2 PII redaction** — `input_gate` writes `input.redacted_text` (always). All
   downstream nodes that write captions or export excerpts must read `redacted_text`, not `raw_text`.
-- [x] **CC-3 Cost control** — text backstop is 1 call/story. Image classifiers are CPU-resident.
+- [x] **CC-3 Cost control** — text backstop is 1 call/story. Image classifiers are OpenRouter API.
   Moderation cost is negligible but should be logged for the paper's cost accounting.
 - [x] **CC-4 Security** — all image checks fetch via short-TTL signed URL; no raw paths leave
   the worker. No moderation result is stored as a URL.
@@ -160,7 +160,7 @@ All classifier calls mocked (`backend/providers.py` seam):
   - `redacted_text` is always populated (mock Presidio returns a fixed redacted string);
     verify it is set even when moderation fails.
 - **`char_ref_mod`:**
-  - One character's Falconsai flags → router emits "fail".
+  - One character's qwen/qwen3-vl-32b-instruct flags → router emits "fail".
   - All characters pass both classifiers → router emits "pass".
   - Gemma error on char-ref → hard fail (no "proceed without one check" path).
 - **`output_mod`:**
@@ -183,7 +183,7 @@ and Taglish cases, both directions). Feed it to the real classifiers in an offli
 
 ## 8. Linked decisions & open questions
 
-- **ADR-011c** — the two-classifier design, CPU-resident primary, OpenRouter backstop, and
+- **ADR-011c** — the two-classifier design, OpenRouter API primary, OpenRouter backstop, and
   ordering constraint this spec implements.
 - **ADR-004 (amendment b)** — the fine-tuned judge never sits on the safety path.
 - **ADR-025** — hard-error policy: no partial book on moderation failure; `failure_reason` enum
@@ -209,11 +209,11 @@ and Taglish cases, both directions). Feed it to the real classifiers in an offli
 - **Open — backstop routing error policy:** this spec treats a backstop routing error as a hard
   job failure. Alternative: proceed on primary-only if the backstop is unreachable (not the same
   as a "pass" verdict from the backstop). Decide at build time with a new ADR amendment if needed.
-- **Open — `config.py` field shape for a CPU-resident primary:** `moderation_model` currently
+- **Open — `config.py` field shape for a OpenRouter API primary:** `moderation_model` currently
   holds `meta-llama/llama-guard-4-12b` (the ADR-011c-demoted fallback) because the real primary
   is not an OpenRouter id, and `moderation_backstop_model` is unset so the Phase-0.5 probe stays
   opt-in. Both are commented in place. **This spec owns fixing them** — decide the field shape
   (local weights path vs. model id, one field or two) when building `input_gate`.
-- **Open — worker RAM at Phase 2 entry:** Presidio+spaCy (~200 MB), Falconsai ViT (~350 MB),
-  Qwen3Guard-Gen 0.6B (~1.2 GB) are all CPU-resident. ROADMAP warns to check the Northflank plan
+- **Open — worker RAM at Phase 2 entry:** Presidio+spaCy (~200 MB), qwen/qwen3-vl-32b-instruct (~350 MB),
+  meta-llama/llama-guard-3-8b (~1.2 GB) are all OpenRouter API. ROADMAP warns to check the Northflank plan
   tier at the *start* of Phase 2, not the end. Budget these before writing the first line of code.

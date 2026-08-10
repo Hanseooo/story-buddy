@@ -686,7 +686,7 @@ probe scores the **union**: harmful must be caught by at least one model, benign
 hate (must flag) vs. mild peril, folklore horror, in-story death, and **fictional Filipino names**
 (must not flag — the R8 false-positive direction).
 
-⚠️ **Verified 2026-07-13 against the live OpenRouter catalog: neither Qwen3Guard-Gen nor Granite
+⚠️ **Verified 2026-07-13 against the live OpenRouter catalog: neither meta-llama/llama-guard-3-8b nor Granite
 Guardian is routable there** (only `meta-llama/llama-guard-4-12b` and `openai/gpt-oss-safeguard-20b`
 are). This is the pre-declared "routing error is also a finding" branch arriving early: ADR-011's
 pair must run on the worker, or the backstop needs an ADR amendment. `moderation_backstop_model`

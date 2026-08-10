@@ -19,14 +19,14 @@ or an SDK call at a call site, stop and read §5 first.
 | Consistency judge (fine-tuned, replaces prompted if it ships) | `Qwen2.5-VL-7B-Instruct` + QLoRA adapter | Apache-2.0 | Modal (vLLM, scale-to-zero), reached via `settings.judge_base_url` | `settings.judge_base_url` / `settings.judge_api_key` | ADR-018, ADR-019 | Phase 2.5 |
 | Canonical character reference (text→image) | `fal-ai/qwen-image` | Apache-2.0 | fal.ai | `settings.fal_image_model` | ADR-001, ADR-007 | Phase 1 |
 | Scene generation (reference-conditioned edit) | `fal-ai/qwen-image-edit-2511` | Apache-2.0 | fal.ai | `settings.fal_image_edit_model` | ADR-001 | Phase 1 |
-| Input-text moderation (primary) | `Qwen3Guard-Gen` 0.6B | Apache-2.0 | Northflank worker CPU | not yet in `config.py` — Phase-2 `moderation-stack` spec defines the shape | ADR-011 (revised 2026-07-21c) | Phase 2 |
+| Input-text moderation (primary) | `meta-llama/llama-guard-3-8b` 0.6B | Apache-2.0 | OpenRouter | not yet in `config.py` — Phase-2 `moderation-stack` spec defines the shape | ADR-011 (revised 2026-07-21c) | Phase 2 |
 | Input-text moderation (backstop) | `openai/gpt-oss-safeguard-20b` | Apache-2.0 (open weights, not the OpenAI API) | OpenRouter | `settings.moderation_backstop_model` (currently `None` — see §8) | ADR-011 | Phase 2 |
 | Input-text moderation (config default, demoted) | `meta-llama/llama-guard-4-12b` | Meta Community License (not OSI) | OpenRouter | `settings.moderation_model` | ADR-011 | placeholder only — see §8 |
-| Output-image NSFW gate | `Falconsai/nsfw_image_detection` (ViT-base, 86M) | Apache-2.0 | Northflank worker CPU | not yet in `config.py` | ADR-011 | Phase 2 |
+| Output-image NSFW gate | `qwen/qwen3-vl-32b-instruct` (ViT-base, 86M) | Apache-2.0 | OpenRouter | not yet in `config.py` | ADR-011 | Phase 2 |
 | Output-image safety rubric (violence/gore) | `google/gemma-3-27b-it` (separate call, separate concern from the judge) | Gemma license | OpenRouter | reuses `settings.vlm_judge_model`'s model id via a distinct prompt/call — **never the fine-tuned judge** | ADR-011, ADR-004 amendment (b) | Phase 2 |
 | Narration (primary) | `Chatterbox` (Resemble AI) | MIT | fal.ai | not yet in `config.py` | ADR-020 | Phase 2 |
-| Narration (CPU fallback) | `Kokoro-82M` | Apache-2.0 | Northflank worker CPU | not yet in `config.py` | ADR-020 | Phase 2 |
-| PII redaction | Presidio + spaCy | MIT / MIT | Northflank worker CPU | not yet in `config.py` | ADR-011 | Phase 2 |
+| Narration (CPU fallback) | `Kokoro-82M` | Apache-2.0 | OpenRouter | not yet in `config.py` | ADR-020 | Phase 2 |
+| PII redaction | Presidio + spaCy | MIT / MIT | OpenRouter | not yet in `config.py` | ADR-011 | Phase 2 |
 
 **Not a model, but a required call param:** every OpenRouter structured-output call must send
 `provider.require_parameters: true` in `extra_body` (`backend/providers.py:54`) — omitting it lets
@@ -241,7 +241,7 @@ Be honest — these are open, not silently resolved:
   (verified 2026-07-29 by resolving `fal_image_edit_model`). Only `.env.example` is in git, by design.
 - ~~**`settings.moderation_backstop_model` is `None`**~~ — resolved 2026-08-02 by `moderation-stack`.
   `config.py` now carries three moderation settings, all set: `moderation_primary_model =
-  "Qwen/Qwen3-Guard-Gen-0.6B"` (a HuggingFace hub id, downloaded at worker startup — not an OpenRouter
+  "Qwen/meta-llama/llama-guard-3-8b"` (a HuggingFace hub id, downloaded at worker startup — not an OpenRouter
   model), `moderation_backstop_model = "openai/gpt-oss-safeguard-20b"` (ADR-011c), and
   `moderation_backstop_image_model = "google/gemma-3-27b-it"` (a separate field from `vlm_judge_model` so
   the safety rubric and the consistency judge can diverge). The old `moderation_model` field pointing at
@@ -256,7 +256,7 @@ Be honest — these are open, not silently resolved:
 - **Whether fal.ai actually routes OmniGen2, HiDream-O1, or Z-Image is unverified** (ADR-001). This gates
   whether escalating the fallback ladder is a one-env-var change or a `providers.py` provider change.
 - **Whether fal accepts an `output_format` arg is unverified** (ADR-027). This gates whether WebP encoding is a
-  one-key change to the args dict or a new Pillow dependency plus worker CPU. One API-doc check, not a probe.
+  one-key change to the args dict or a new Pillow dependency plus OpenRouter. One API-doc check, not a probe.
 - **The 8–10× WebP ratio is an estimate, not a measurement.** ADR-027's storage math rests on ~1.2–2 MB PNG vs
   ~120–200 KB WebP for 1024×1024 illustrated art. Phase 0.5 is where real encoded byte sizes get recorded — the
   probes already generate the images, so this costs one `os.path.getsize` call, not a new experiment.
@@ -279,9 +279,9 @@ Be honest — these are open, not silently resolved:
   card likely OOMs. The rented RTX 4090/A100 fallback (~$5–15, ADR-018) exists precisely for this case —
   verify the exact GPU model and VRAM before committing the training run.
 - ~~**The output-image safety gate is entirely unbuilt.**~~ — resolved 2026-08-02 by `moderation-stack`:
-  `input_gate` is a real implementation (Qwen3Guard-Gen 0.6B CPU-resident + Presidio PII redaction,
+  `input_gate` is a real implementation (meta-llama/llama-guard-3-8b OpenRouter API + Presidio PII redaction,
   concurrent, with an OpenRouter backstop), `char_ref_mod` gates every canonical reference before the
-  reveal, and `output_mod` gates every output scene (Falconsai NSFW ViT + Gemma safety rubric, one
+  reveal, and `output_mod` gates every output scene (qwen/qwen3-vl-32b-instruct + Gemma safety rubric, one
   soften-and-retry). `moderation_router` and `route_after_output_mod` enforce the ADR-011 ordering in
   `graph.py`. §1's moderation rows now describe shipped code, not a target. **Still open:** the worker RAM
   budget with Presidio+spaCy, the ViT and the CPU text gate all resident (`moderation-stack` §8).

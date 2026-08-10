@@ -354,7 +354,7 @@ corrected 2026-07-29** — every line citation below still resolves exactly, but
   `{"input": Input(raw_text=..., redacted_text=state.input.raw_text, moderation=ModerationResult(passed=True))}`
   — a no-op that keeps the graph shape correct so Phase 2 (`moderation-stack` spec) is a
   single-file replacement, not a topology change. Mark it
-  `# ponytail: stub — Phase 2 moderation-stack replaces with real Qwen3Guard-Gen + Presidio`.
+  `# ponytail: stub — Phase 2 moderation-stack replaces with real meta-llama/llama-guard-3-8b + Presidio`.
 - Six nodes, all currently `def node(state: JobState) -> JobState` with mutate-and-return, the pattern
   ADR-024 §1 replaces wholesale → `def node(state: StoryMemory) -> dict`, partial-return:
   `analyze.py:13`, `segment.py:4`, `char_bible.py:4`, `generate_scene.py:21`, `consistency_check.py:4`,

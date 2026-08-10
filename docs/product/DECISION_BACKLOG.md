@@ -24,8 +24,8 @@ the items below use stable `D-*` ids instead, because the write order can shift.
 
 ## Tier 1 — resolved
 
-- ~~**D-1 · Moderation backstop routing**~~ → **ADR-011 (revised 2026-07-21c):** primary Qwen3Guard-Gen
-  on the worker CPU, backstop routed to `gpt-oss-safeguard-20b` on OpenRouter.
+- ~~**D-1 · Moderation backstop routing**~~ → **ADR-011 (revised 2026-07-21c):** primary meta-llama/llama-guard-3-8b
+  on the OpenRouter, backstop routed to `gpt-oss-safeguard-20b` on OpenRouter.
 - ~~**D-2 · PDF renderer**~~ → **ADR-013 (revised 2026-07-21):** WeasyPrint.
 - ~~**D-B · LangGraph node & edge conventions**~~ → **ADR-024 (2026-07-22):** partial-return node signature;
   sequential per-scene loop (position from `final_image_ref is None`, no cursor); upsert-by-`scene_id` reducer
@@ -158,8 +158,8 @@ roadmap order. Source: MASTER_SPEC §7.
 
 **Phase 2 (safety / classroom):**
 - [x] `moderation-stack`   *(D-1 decided → ADR-011c; spec: **built 2026-08-02** — `docs/specs/moderation-stack.md`;
-      `pipeline/input_gate.py` (real implementation — Qwen3Guard-Gen + Presidio concurrent, backstop fallback),
-      `pipeline/char_ref_mod.py` (Falconsai ViT + Gemma safety rubric per char ref),
+      `pipeline/input_gate.py` (real implementation — meta-llama/llama-guard-3-8b + Presidio concurrent, backstop fallback),
+      `pipeline/char_ref_mod.py` (qwen/qwen3-vl-32b-instruct + Gemma safety rubric per char ref),
       `pipeline/output_mod.py` (same two-classifier check + soften-and-retry). `moderation_router` and
       `route_after_output_mod` added to `graph.py` (ADR-024 pure-router pattern). `providers.py` gains
       `get_signed_url`, `_parse_guard_response`, `redact_pii`, `classify_text_primary/backstop`,

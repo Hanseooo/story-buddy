@@ -59,7 +59,7 @@ export default function PipelineMap() {
          
          <FlowNode 
            title="Input Gate" 
-           desc="Qwen3Guard-Gen + Presidio PII Redaction." 
+           desc="meta-llama/llama-guard-3-8b + Presidio PII Redaction." 
            icon={<ShieldCheck weight="duotone" className="w-6 h-6" />}
            delay={0.1} 
          />
@@ -83,7 +83,7 @@ export default function PipelineMap() {
 
          <FlowNode 
            title="Char Ref Mod" 
-           desc="Falconsai ViT safety check + Gemma rubric." 
+           desc="qwen/qwen3-vl-32b-instruct safety check + Gemma rubric." 
            icon={<Warning weight="duotone" className="w-6 h-6" />}
            delay={0.7} 
          />
