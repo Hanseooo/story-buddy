@@ -88,19 +88,45 @@ its own one-retry loop and its own fail edge. The `consistency_router` is a sepa
 ### 4b. `char_ref_mod`
 
 1. Download each character's `canonical_ref_image` via a short-TTL signed URL.
-2. Run `qwen/qwen3-vl-32b-instruct` (ViT-base 86M, OpenRouter API) — specialist sexual-content gate.
+2. Run `settings.moderation_primary_image_model` — `mistralai/mistral-small-3.2-24b-instruct` since
+   2026-08-11 (~~`qwen/qwen3-vl-32b-instruct`~~ before that; ADR-002 amendment), OpenRouter API — the
+   primary sexual-content gate.
 3. Run `gemma-3-27b-it` with the image safety rubric via OpenRouter — covers violence, gore,
    dangerous content. **Never the fine-tuned judge** (ADR-004 amendment b; the fine-tuned model
    never touches the safety path).
 4. Either classifier flagging → `ref_moderation_status = "flagged"` → router fails → job `failed`.
    Character-reference content should never be genuinely harmful; a flag here is almost certainly
-   the image model misbehaving, not a borderline creative case.
+   the image model misbehaving, not a borderline creative case. **A primary flag short-circuits
+   step 3** — a second opinion cannot change a flag, exactly as §4a step 3 already specifies for
+   `input_gate`.
 5. All characters pass → router continues to `generate_scene`.
 
 **Edge cases:**
 - Image download fails: one retry per ADR-025's transient-error policy, then hard fail.
-- Gemma OpenRouter error: hard fail (not a skip). The safety path has no "proceed without one
-  of the two checks" fallback.
+- **Primary image guard error: degrade to backstop-only; log the failure. Never skip moderation.**
+  ~~hard fail~~ — amended 2026-08-11, see below.
+- Gemma (backstop) OpenRouter error: hard fail (not a skip). The backstop has nothing behind it, so
+  an error there means the image is genuinely unchecked. This is the "proceed without one of the two
+  checks" fallback that does not exist.
+
+#### The two gates read ADR-025 the same way now (amended 2026-08-11)
+
+`input_gate` (§4a) and `char_ref_mod` cited the same ADR-025 and implemented **opposite** postures:
+on a *primary* classifier error `input_gate` degraded to backstop-only, while `char_ref_mod` raised
+`moderation_error` and failed the book.
+
+**The asymmetry was backwards on the risk.** `input_gate` screens **untrusted child-supplied text**;
+`char_ref_mod` screens an image *we* generated from text that already passed `input_gate`. The node
+downstream of the safer input has no business being the stricter of the two. Worse, it failed the
+job **after the reference draws were already paid for** (up to 6 per book, §4.13 of
+`character-bible`), and on the Northflank free tier an OpenRouter blip is routine rather than
+exceptional — ADR-032's whole reason for moving these classifiers off local models.
+
+`char_ref_mod` now mirrors §4a exactly: primary error → backstop-only; primary flag → short-circuit;
+backstop error → hard fail. **What degrades is the call count, never the gate** — the backstop always
+runs and can always flag, which is the invariant `test_primary_error_still_lets_the_backstop_flag`
+pins. The short-circuit also removes an unconditional second call per character: a 2-character book
+spent 4 classifier calls where 2 can decide it, pure waste on 0.2 vCPU / 512 MB.
 
 ⚠️ **A reveal retry re-moderates every character on the row, not only the redrawn one** — `char_ref_mod`
 iterates `state.characters` unconditionally and has no skip on `ref_moderation_status == "passed"`. The
@@ -113,7 +139,7 @@ straight to a child.
 ### 4c. `output_mod`
 
 1. Load `scene.final_image_ref` from Storage (signed URL, short TTL).
-2. Same two-classifier check as `char_ref_mod` (qwen/qwen3-vl-32b-instruct + Gemma safety rubric).
+2. Same two-classifier check as `char_ref_mod` (`moderation_primary_image_model` + Gemma safety rubric).
 3. Pass → `scene.moderation_status = "passed"` → continue to `compose`.
 4. Fail → `scene.moderation_status = "flagged"` → invoke one soften-and-retry on the prompt
    (`self-refusal-fallback` spec strategy) → generate a new image → re-run moderation on it.
@@ -159,10 +185,14 @@ All classifier calls mocked (`backend/providers.py` seam):
   - Backstop error → job failure (not a silent skip).
   - `redacted_text` is always populated (mock Presidio returns a fixed redacted string);
     verify it is set even when moderation fails.
-- **`char_ref_mod`:**
-  - One character's qwen/qwen3-vl-32b-instruct flags → router emits "fail".
+- **`char_ref_mod`:** (mirrors the `input_gate` list above since 2026-08-11 — §4b)
+  - One character's primary image guard (`moderation_primary_image_model`) flags → router emits "fail".
   - All characters pass both classifiers → router emits "pass".
-  - Gemma error on char-ref → hard fail (no "proceed without one check" path).
+  - Primary error → backstop-only path fires (primary's error is logged, not raised).
+  - Primary error **and** backstop flags → still `"flagged"`. The degraded path must not become a
+    bypass; this is the test that makes the one above safe to keep.
+  - Primary flags → backstop is **not called** (short-circuit).
+  - Gemma (backstop) error on char-ref → hard fail (no "proceed without one check" path).
 - **`output_mod`:**
   - First check fails → soften-and-retry is triggered (verify the retry call fires).
   - Retry passes → `moderation_status = "passed"`.

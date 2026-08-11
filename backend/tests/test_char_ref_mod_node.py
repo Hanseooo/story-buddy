@@ -89,8 +89,62 @@ def test_early_character_flagged_does_not_drop_later_characters():
 
 # --- backstop error ---
 
+def test_primary_classifier_error_degrades_to_backstop_only():
+    """Posture aligned with `input_gate` on 2026-08-11. Both nodes cite ADR-025 and used to read
+    it in opposite directions: `input_gate` degraded to backstop-only on a primary error, this
+    node failed the whole book.
+
+    The asymmetry was backwards on the risk. `input_gate` screens UNTRUSTED child-supplied text;
+    this node screens an image WE generated from text that already passed `input_gate`. The node
+    downstream of the safer input has no business being the stricter of the two — and on a free
+    tier where OpenRouter blips are routine it turned a transient into a dead book, after the
+    reference draws were already paid for.
+
+    Two checks remain the invariant: what degrades is the count, never the gate. The backstop
+    still runs and can still flag.
+    """
+    with patch("pipeline.char_ref_mod.get_signed_url", return_value="https://signed/c0.png"), \
+         patch("pipeline.char_ref_mod.classify_image_primary", side_effect=Exception("OpenRouter 503")), \
+         patch("pipeline.char_ref_mod.classify_image_backstop", return_value=True) as mock_backstop:
+        from pipeline.char_ref_mod import char_ref_mod
+        result = char_ref_mod(_state([_char("c0")]))
+
+    mock_backstop.assert_called_once()
+    assert result["characters"][0].ref_moderation_status == "passed"
+
+
+def test_primary_error_still_lets_the_backstop_flag():
+    """The degraded path must not become a bypass — a primary error plus an unsafe image is
+    still `flagged`. This is the test that makes the one above safe to keep."""
+    with patch("pipeline.char_ref_mod.get_signed_url", return_value="https://signed/c0.png"), \
+         patch("pipeline.char_ref_mod.classify_image_primary", side_effect=Exception("OpenRouter 503")), \
+         patch("pipeline.char_ref_mod.classify_image_backstop", return_value=False):
+        from pipeline.char_ref_mod import char_ref_mod
+        result = char_ref_mod(_state([_char("c0")]))
+
+    assert result["characters"][0].ref_moderation_status == "flagged"
+
+
+def test_primary_flag_short_circuits_the_backstop_call():
+    """`input_gate` spec §4a step 3: a primary flag needs no second opinion — the verdict cannot
+    change. This node called both unconditionally, so a 2-character book spent 4 classifier calls
+    where 2 could decide it. Pure waste on 0.2 vCPU / 512 MB.
+    """
+    with patch("pipeline.char_ref_mod.get_signed_url", return_value="https://signed/c0.png"), \
+         patch("pipeline.char_ref_mod.classify_image_primary", return_value=False), \
+         patch("pipeline.char_ref_mod.classify_image_backstop", return_value=True) as mock_backstop:
+        from pipeline.char_ref_mod import char_ref_mod
+        result = char_ref_mod(_state([_char("c0")]))
+
+    mock_backstop.assert_not_called()
+    assert result["characters"][0].ref_moderation_status == "flagged"
+
+
 def test_gemma_error_raises_moderation_error():
-    """Spec §4b edge case: classifier error → RuntimeError('moderation_error') — no proceed-without-one-check path."""
+    """Spec §4b edge case: a BACKSTOP error → RuntimeError('moderation_error'). Unchanged by the
+    2026-08-11 posture alignment: the backstop is the layer with no fallback behind it, so an
+    error there means the image is genuinely unchecked and there is no proceed-without-a-check
+    path. A PRIMARY error is different and is covered above."""
     with patch("pipeline.char_ref_mod.get_signed_url", return_value="https://signed/c0.png"), \
          patch("pipeline.char_ref_mod.classify_image_primary", return_value=True), \
          patch("pipeline.char_ref_mod.classify_image_backstop", side_effect=Exception("OpenRouter 503")):
