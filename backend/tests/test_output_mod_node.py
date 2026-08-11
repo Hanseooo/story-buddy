@@ -121,6 +121,72 @@ def test_route_after_output_mod_raises_when_scene_failed():
         route_after_output_mod(state)
 
 
+# --- classifier-error posture (spec §4c step 2: "same two-classifier check as char_ref_mod") ---
+
+def test_primary_classifier_error_degrades_to_backstop_only():
+    """The 2026-08-11 posture alignment (44489cb) reached `input_gate` and `char_ref_mod` and
+    stopped there, leaving this node the strictest gate in the pipeline while it screens the
+    LEAST risky thing: an image we generated, from text that passed `input_gate`, from a
+    reference that passed `char_ref_mod`. It is also the most expensive place to fail — prod job
+    f4d0fd74 died here on scene s5 with every one of the seven scenes already drawn and paid for.
+
+    Spec §4c step 2 already binds this node to `char_ref_mod`'s check; the code had simply stopped
+    matching. Mirrors `test_primary_classifier_error_degrades_to_backstop_only` in
+    `test_char_ref_mod_node.py`, deliberately, because these two must never drift again.
+    """
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"), \
+         patch("pipeline.output_mod.classify_image_primary", side_effect=Exception("OpenRouter 400")), \
+         patch("pipeline.output_mod.classify_image_backstop", return_value=True) as mock_backstop:
+        from pipeline.output_mod import output_mod
+        result = output_mod(_state([_scene("s0")]))
+
+    mock_backstop.assert_called_once()
+    assert result["scenes"][0].moderation_status == "passed"
+
+
+def test_primary_error_still_lets_the_backstop_flag():
+    """The degraded path must not become a bypass. Primary erroring on both the first check and
+    the softened retry, with the backstop flagging both, still ends `failed` — what degrades is
+    the call count, never the gate. This is the test that makes the one above safe to keep.
+    """
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"), \
+         patch("pipeline.output_mod.classify_image_primary", side_effect=Exception("OpenRouter 400")), \
+         patch("pipeline.output_mod.classify_image_backstop", return_value=False), \
+         patch("pipeline.output_mod.generate_and_store", return_value=("job-1/s0-2.png", True)):
+        from pipeline.output_mod import output_mod
+        result = output_mod(_state([_scene("s0")]))
+
+    assert result["scenes"][0].moderation_status == "failed"
+
+
+def test_primary_flag_short_circuits_the_backstop_call():
+    """Spec §4a step 3: a primary flag needs no second opinion. Worth more here than in
+    `char_ref_mod` — this node runs per SCENE, so a 7-scene book spent 14 classifier calls where
+    the flagged ones need 1 each, on 0.2 vCPU / 512 MB against a pool that is already 429ing.
+    """
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"), \
+         patch("pipeline.output_mod.classify_image_primary", return_value=False), \
+         patch("pipeline.output_mod.classify_image_backstop", return_value=True) as mock_backstop, \
+         patch("pipeline.output_mod.generate_and_store", return_value=("job-1/s0-2.png", True)):
+        from pipeline.output_mod import output_mod
+        output_mod(_state([_scene("s0")]))
+
+    # Two checks run (initial + softened retry); neither consults the backstop after a primary flag.
+    mock_backstop.assert_not_called()
+
+
+def test_backstop_error_still_raises_moderation_error():
+    """Unchanged by the posture alignment: the backstop is the layer with nothing behind it, so an
+    error there means the image is genuinely unchecked and there is no proceed-without-a-check
+    path. Only a PRIMARY error degrades."""
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"), \
+         patch("pipeline.output_mod.classify_image_primary", return_value=True), \
+         patch("pipeline.output_mod.classify_image_backstop", side_effect=Exception("OpenRouter 503")):
+        from pipeline.output_mod import output_mod
+        with pytest.raises(RuntimeError, match="moderation_error"):
+            output_mod(_state([_scene("s0")]))
+
+
 # --- scene with no final_image_ref ---
 
 def test_scene_with_no_final_image_ref_is_skipped():

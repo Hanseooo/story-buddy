@@ -146,9 +146,40 @@ straight to a child.
 5. Still flagged after retry → `scene.moderation_status = "failed"` → job `failed` with
    `failure_reason = "output_moderation_failed"`. No partial book (ADR-025).
 
-**Edge case:**
+**Edge cases:**
 - If `final_image_ref` is None (consistency loop produced nothing): the `regeneration-controller`
   owns this case; `output_mod` only runs on a resolved `final_image_ref`.
+- **Primary image guard error: degrade to backstop-only; log the failure. Never skip moderation.**
+- Backstop error: hard fail with `moderation_error`. Nothing sits behind the backstop, so an error
+  there means the image is genuinely unchecked.
+
+#### All three gates read ADR-025 the same way now (amended 2026-08-11, second pass)
+
+Step 2 above has always said *"same two-classifier check as `char_ref_mod`"*, but the alignment
+that produced §4b's amendment reached `input_gate` and `char_ref_mod` and **stopped there**.
+`output_mod._check_image` was left as `primary and backstop` inside one `try`, so **any** classifier
+exception raised `moderation_error` and failed the book.
+
+That left the strictest gate in the pipeline guarding the least risky thing. `output_mod` screens an
+image *we* drew, from text `input_gate` passed, from a canonical reference `char_ref_mod` passed —
+and it is the **last** gate, so it fails after every scene has been drawn, judged, possibly
+regenerated, and paid for. Prod job `f4d0fd74` (2026-08-11) died there on scene **s5** of 7, with
+s0–s4 already moderated clean, on an OpenRouter 400 from a text-only provider endpoint (ADR-002
+amendment, Instance 3). The provider pinning that landed with it makes that specific 400 unlikely;
+this posture is what stops the *next* transient from doing the same thing.
+
+The rule is now uniform across all three gates: **primary error → backstop-only; primary flag →
+short-circuit; backstop error → hard fail.** What degrades is the call count, never the gate.
+
+⚠️ The short-circuit is worth more here than in §4b: `output_mod` runs **per scene**, and a
+soften-and-retry doubles it, so a 7-scene book spent up to 28 classifier calls against a pool that
+is already returning 429s on 0.2 vCPU / 512 MB.
+
+⚠️ **The posture now lives in three nodes and is pinned by three near-identical test trios**
+(`test_input_gate_node.py`, `test_char_ref_mod_node.py`, `test_output_mod_node.py`). It drifted once
+already, silently, and the spec sentence binding them was not enough to prevent it. If a fourth
+classifier gate is ever added, extract the posture into one shared helper rather than writing it a
+fourth time.
 
 ## 5. Cross-cutting checklist
 
