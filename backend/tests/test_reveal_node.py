@@ -10,7 +10,9 @@ from contracts.story_memory import (
     ReferenceRetry,
     RefVerdict,
     StoryMemory,
+    Style,
 )
+from app.config import STYLE_PRESETS
 from pipeline.reveal import _project_reveal, reveal
 
 
@@ -30,7 +32,8 @@ def _char(
     )
 
 
-def _state(characters: list[Character], cost: Cost | None = None, reference_retry=None) -> StoryMemory:
+def _state(characters: list[Character], cost: Cost | None = None, reference_retry=None,
+           style: Style | None = None) -> StoryMemory:
     return StoryMemory(
         schema_version=CURRENT_SCHEMA_VERSION,
         story_id="job-1",
@@ -40,6 +43,7 @@ def _state(characters: list[Character], cost: Cost | None = None, reference_retr
         characters=characters,
         cost=cost or Cost(),
         reference_retry=reference_retry,
+        style=style or Style(),
     )
 
 
@@ -161,3 +165,31 @@ def test_reveal_never_touches_cost():
     with patch("pipeline.reveal.interrupt", return_value={"action": "confirm"}):
         result = reveal(state)
     assert "cost" not in result
+
+
+# --- ADR-035: chips never offer an attribute the active style forbids ---
+
+def test_project_reveal_never_offers_a_chip_for_a_style_forbidden_attribute():
+    """ADR-035 surface 5. A chip is a promise that tapping it buys a redraw which could plausibly
+    fix that attribute. Under `comic` ("no glow") a tap on "glowing" spends one of the three
+    ADR-029 taps and one paid draw on something the style guarantees will not change.
+
+    The permitted axes still populate the list, so invariant 4 (never empty) is unaffected.
+    """
+    star = _char(
+        "c1", "the star",
+        description=CharacterDescription(species="star", colours=["glowing", "yellow"]),
+    )
+    payload = _project_reveal(_state([star], style=Style(prompt_fragment=STYLE_PRESETS["comic"])))
+
+    assert payload["characters"][0]["chips"] == ["star", "yellow"]
+
+
+def test_project_reveal_still_offers_the_chip_when_the_active_style_permits_it():
+    """Per-preset, not a blanket ban — `cel` never forbids glow."""
+    star = _char(
+        "c1", "the star", description=CharacterDescription(species="star", colours=["glowing"]),
+    )
+    payload = _project_reveal(_state([star], style=Style(prompt_fragment=STYLE_PRESETS["cel"])))
+
+    assert "glowing" in payload["characters"][0]["chips"]

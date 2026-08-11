@@ -147,6 +147,14 @@ exactly what `interrupt()`'s payload is for.
 compared case-insensitively. `notes` is excluded — it is free prose, not an attribute, and not a thing
 a child can tap.
 
+**Attributes the active style forbids are excluded too (ADR-035).** The axes are passed through
+`prompt_optimizer.filtered_description` first, so under `comic` (`"no glow"`) a `colours` entry of
+`"glowing"` is never offered. A chip is a promise that tapping it buys a redraw which could plausibly
+fix that attribute; a forbidden one spends one of the three taps and one paid draw on something the
+style guarantees will not change. Filtering here is also what lets `char_bible._mint_targeted` trust
+`retry.attribute` — the tapped value can no longer be a term the fragment forbids. Per-preset, not a
+blanket ban: `cel` never says "no glow", so there the chip stands.
+
 **Two fallbacks, in order, because an empty chip list dead-ends the button.** The endpoint validates a
 tap against the offered chips (§4.9), so a character offering none can never be retried — and
 ADR-029's *"the button never dead-ends"* would be false at the top of the pause rather than at the cap.
@@ -160,7 +168,8 @@ ADR-029's *"the button never dead-ends"* would be false at the top of the pause 
    It reads `contradictions`, never `matches_description` — those two disagree in production, and a
    `reveal` that branched on the boolean would hand the child the full chip list for a reference the
    gate had just rejected, so the tap would target an attribute that was never the problem.
-2. **No axes at all** — `analyze` produced a bare name with no species, colours, features or clothing.
+2. **No axes at all** — `analyze` produced a bare name with no species, colours, features or clothing,
+   or ADR-035 filtered every one of them away.
    Fall back to **`[name]`**. The tap then restates the character's name, which is all
    `char_bible._describe` had to work with anyway, so the redraw is an honest blind re-roll. ADR-029's
    "targeted, not blind" premise assumes described attributes exist; where none do, blind is the only
@@ -412,6 +421,7 @@ this change.
 | **No characters in the story** | `reveal` returns `{}` without interrupting; the book runs straight through. No empty screen, no permanent pause (§4.1). |
 | **Five characters** | Two references exist (`char_bible` cap); the projection lists those two. The other three offer no tap. |
 | **A character with an empty description** | Chips fall back to `[name]`; the tap is a blind re-roll (§4.3). |
+| **Every axis is style-forbidden** (e.g. `colours == ["glowing"]` under `comic`) | ADR-035 filters them all, and the same `[name]` fallback applies — the child still gets a tap, just a blind one. |
 | **`ref_verdict is None`** (judge outage upstream) | Chips fall back to the full axis list; the child still has something to tap. |
 | **Reference passed the judge** (`contradictions == []`) | Same fallback. The pause happens regardless — the child's disagreement is the point. |
 | **`contradictions` non-empty but `matches_description=True`** | Treated as a **failed** reference — chips are the missing set (ADR-034). Matches what `char_bible`'s gate did with the same verdict. |
@@ -485,6 +495,8 @@ future migration (S1 §6.3).
   projection follows the gate's predicate, not the judge's boolean (ADR-034).
 - **`[name]`** when the description carries no axes at all (§4.3).
 - `notes` never appears as a chip.
+- An attribute the active style fragment forbids never appears as a chip; the same attribute under a
+  fragment that permits it does (ADR-035, per-preset).
 - A character with `canonical_ref_image is None` is **absent** from `characters`.
 - `taps_left == 3 - ref_retry_count`.
 

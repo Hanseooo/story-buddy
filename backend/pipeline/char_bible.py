@@ -21,6 +21,7 @@ import logging
 from app.config import settings
 from app.db import get_supabase_client
 from contracts.story_memory import CharacterDescription, RefVerdict, StoryMemory
+from pipeline.prompt_optimizer import filtered_description
 from providers import judge, text_to_image
 
 log = logging.getLogger(__name__)
@@ -203,6 +204,11 @@ def mint_reference(
     The loop is node-internal and adds no graph edge and no super-step (ADR-028 Decision 3),
     so ADR-003 and ADR-024 are unamended by it.
     """
+    # ADR-035 surfaces 1 and 2. Prod job b9506307 asked for `star; glowing; tiny` under a fragment
+    # ending "no glow": the draw could not satisfy it, and post-ADR-034 the judge can legitimately
+    # contradict it on all 3 draws, burning the budget on every job. Unlike the two one-directional
+    # divergences in `_describe`, this is filtered for BOTH prompts — the defect is asking at all.
+    description = filtered_description(description, style_fragment)
     prompt = reference_prompt(description, name, style_fragment)
     judge_prompt = JUDGE_PROMPT.format(subject=_describe(description, name, notes=False))
     candidates: list[tuple[bytes, RefVerdict]] = []
@@ -257,7 +263,12 @@ def _mint_targeted(state: StoryMemory) -> dict:
     retry = state.reference_retry
     character = next(c for c in state.characters if c.char_id == retry.char_id)
     style_fragment = state.style.prompt_fragment or settings.default_style_fragment
-    description = character.description.model_copy(update={"notes": retry.attribute})
+    # ADR-035, same two surfaces. `notes` is set AFTER filtering because the tapped attribute
+    # comes from `reveal._chips`, which is filtered at source — so it can never be a forbidden
+    # term — and `notes` is outside the filter's remit anyway (Decision 2).
+    description = filtered_description(character.description, style_fragment).model_copy(
+        update={"notes": retry.attribute}
+    )
     prompt = reference_prompt(description, character.name, style_fragment)
     if retry.attribute not in prompt:
         prompt = f"{prompt}\n\nBe sure to include: {retry.attribute}."

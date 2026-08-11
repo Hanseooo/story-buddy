@@ -2530,3 +2530,124 @@ Folded in rather than raised as ADR-035 because it is a defect *created by* Deci
 it, and it narrows what the judge measures without changing what acceptance means. `JUDGE_PROMPT_VERSION` stays at
 `3`: v3 never produced a persisted verdict, so bumping to 4 would segment an empty series. `reveal._chips` already
 drew this exact line, which is the precedent it follows.
+
+---
+
+## ADR-035 — The style fragment's own prohibitions filter the description: rendering properties are the style's jurisdiction, not the subject's
+
+**Status:** Accepted (2026-08-11) · **extends ADR-007** ("style rides the canonical reference") from the *image*
+to the *prompt text* · does not amend ADR-022, which keeps sole ownership of the fragments · does not amend
+ADR-013, which keeps `caption = text_excerpt` verbatim · transient projection only → **no schema change, no
+`schema_version` bump**
+
+**Context:** ADR-034 named this as the first of *"two upstream defects deliberately left open"* and declined to
+decide it there. With the gate now working it stops being a quality wart and becomes a recurring cost.
+
+Production job `b9506307` (2026-08-11, `comic` preset), character `c1`:
+
+```
+description.colours   = ["glowing"]
+style.prompt_fragment = "...flat spot colours, ben-day halftone dot shading, limited palette,
+                         no gradients, no glow"
+```
+
+`"glowing"` is a lighting property, not a hue. It reached `colours` because that is the closest axis `analyze`
+has, and **nothing anywhere reconciles an extracted attribute against the fragment the same prompt then applies.**
+The scene prompt `build_prompt` emits for `s1` asserts it twice and forbids it once:
+
+```
+Image 1 is Ana. Image 2 is the star. Use them only as references... draw each character exactly once.
+
+Ana - girl; ...
+the star - star; glowing; tiny; secondary character      <- _describe, from description.colours
+Ana found a tiny glowing star...                         <- text_excerpt, ADR-013 verbatim
+bold comic-book illustration, ... no gradients, no glow  <- the style fragment
+```
+
+**This is why issue #23's star did not close when the reference clause did.** `REFERENCE_CLAUSE` fixed the
+duplicated *girl* because Ana's reference looked like the prose and the clause only had to stop compositing. No
+clause can bind the noun *"tiny glowing star"* to an image that is visibly not one. The edit model resolves the
+contradiction per scene: reference wins (`s3`), prose wins and the reference is discarded (`s1` — a *different*
+star in Ana's hand), or **both entities get drawn** (`s4`, 7/7 draws).
+
+**What ADR-034 changed about the urgency.** Before the gate worked, an unsatisfiable attribute was invisible at
+the gate and only surfaced downstream. Now the judge can *legitimately* contradict `glowing` on all three draws,
+so this character exhausts its full draw budget on **every job** and ships the same best-of reference anyway. We
+converted a quality defect into a recurring spend. Confirmed on re-judging under `JUDGE_PROMPT_VERSION = 3`:
+`attributes_present` still reports `"glowing"` for a flat teal image, so the judge is not a backstop here either.
+
+**The finding that made a deterministic fix viable.** Every preset states its own prohibitions, in its own
+fragment text:
+
+| preset | prohibitions stated in the fragment |
+|---|---|
+| `cel` | no gradients, no glossy highlights, no airbrushing |
+| `comic` | no gradients, no glow |
+| `gouache` | no gradients, no glossy highlights |
+
+So the forbidden-rendering list does **not** have to be hand-maintained. This is the objection that killed the
+species word-list at `char_bible.py:74-77` — *"it needs a word list that is wrong the first time a child writes
+something not on it"* — and it does not apply here: this list is **closed by the fragment**, not by the space of
+things children write, and a new preset arrives carrying its own.
+
+### Decision
+
+1. **Prohibitions are derived from the active style fragment**, by reading its `no <term>` clauses. Not
+   hand-listed, so ADR-022 keeps sole ownership and a new preset needs no code change.
+2. **Filtering applies to the three list axes only** — `colours`, `body_features`, `clothing`. **Never
+   `species`** (`analyze.py:22-26` makes it required precisely so the judge always has something to check; an
+   empty description makes acceptance vacuous). **Never `notes`**, which is free prose and already excluded from
+   the judge (ADR-034 follow-on) and from chips.
+3. **Removal is word-level within an entry**, and an entry is dropped only if nothing survives. `"glowing eyes"`
+   becomes `"eyes"`, not nothing — dropping the whole entry would discard a real subject fact to remove a
+   rendering one.
+4. **The projection is transient.** `StoryMemory` keeps the child's words verbatim; only the rendered prompt and
+   chip text drop them. Nothing is destroyed, the filter is reversible if the style changes, and there is no
+   contract change. `build_prompt`'s invariant 2 (*never invents detail beyond `text_excerpt` and the populated
+   axes*) is untouched — filtering removes, it never invents.
+5. **It is applied at every surface that renders a description axis**, all five:
+
+   | surface | why it must be filtered |
+   |---|---|
+   | `char_bible.reference_prompt` (draw) | where the self-contradicting reference is born |
+   | `char_bible._describe(notes=False)` (judge) | otherwise the gate re-rolls on an unclearable contradiction — the 3-draw burn |
+   | `prompt_optimizer._describe` (scene) | `s1`'s assertion, the wrong-star case |
+   | `prompt_optimizer.correct_prompt` `values["colours"]` | today it answers `wrong_colour` with *"match the reference's exact colours: glowing"*, reinforcing the side that is not in the reference (issue #24) |
+   | `reveal._chips` | a child can tap **"glowing"** and spend an ADR-029 retry tap on a redraw that cannot succeed |
+
+   One pure helper in `prompt_optimizer` (already the home of the pure prompt-construction helpers, and it imports
+   only `app.config` and `contracts`, so `char_bible` and `reveal` importing it introduces no cycle).
+
+**When the child's words and the style collide, the style wins and the attribute is dropped from the prompt.**
+That is the load-bearing choice here, stated plainly. It follows ADR-007 — style rides the reference — and it is
+the only side that can win, because the fragment is what the generator actually obeys today. The child's word
+survives in `StoryMemory` and in their own story text; what it loses is the power to contradict the picture.
+
+### Consequences
+
+- The reference becomes *satisfiable*, which is the precondition for every other measurement. The rate ADR-028
+  put at *"roughly 42%"* was measured through a prompt that asked for and forbade the same thing; until this
+  lands, generator quality and prompt contradiction are not separable.
+- **Do not reach for ADR-001's `fal_image_model` seam before this.** Swapping the model first would measure the
+  wrong variable.
+- Per-preset behaviour is correct rather than uniform: `glowing` is dropped under `comic`, and **kept under
+  `cel`**, which never forbids it.
+
+**What this does not fix — three limits, stated rather than discovered later:**
+
+1. **The `text_excerpt` still says it.** ADR-013 freezes `caption = text_excerpt` verbatim and the excerpt reaches
+   the prompt unchanged, so `s1` still contains the word *"glowing"* once. The conflict drops from three
+   assertions to one, and — the part that matters — the *reference* stops contradicting it. This ADR does not
+   claim the prose conflict is gone.
+2. **It does not fix the anti-anthropomorphising guard** (ADR-034's defect 2): `ref-c1-1.png` also has legs and a
+   face, which is independent of this. **The star needs both fixes.** This one is landing alone deliberately, so
+   the next measurement has one variable in it.
+3. **Prefix matching is a heuristic** (`"glowing"`.startswith(`"glow"`)), and derivation only removes what a
+   fragment *states*. An attribute that is merely hard for a flat style but not explicitly forbidden still gets
+   through. Over-dropping fails soft (an attribute goes unasserted); the status quo fails hard (a prompt that
+   contradicts itself).
+
+**How we will know it worked.** Re-run the same story under `comic` and check three things: `c1`'s reference no
+longer carries an unsatisfiable attribute into the judge; the gate stops re-rolling `c1` to the 3-draw cap; and
+`s1`/`s3`/`s4` are inspected for the star. A residual star defect after this is attributable to the guard or the
+generator, which is exactly what landing it alone buys.

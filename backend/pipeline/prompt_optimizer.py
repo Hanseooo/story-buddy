@@ -13,6 +13,74 @@ from contracts.story_memory import Character, CharacterDescription, FailureReaso
 log = logging.getLogger(__name__)
 
 
+# ADR-035. Every preset states its own prohibitions in its own fragment text ("no gradients,
+# no glow"), so the forbidden set is DERIVED from the fragment rather than hand-listed: ADR-022
+# keeps sole ownership and a new preset arrives carrying its own. This is why the objection that
+# killed the species word-list (`char_bible.py:74-77` — "a word list that is wrong the first time
+# a child writes something not on it") does not apply here. That list is open-ended; this one is
+# closed by the fragment.
+_MIN_PREFIX = 4   # so short tokens cannot collide: "glove" must not match "glow"
+
+
+def style_prohibitions(style_fragment: str | None) -> set[str]:
+    """Pure. The words the active fragment forbids, read off its own `no <term>` clauses."""
+    fragment = style_fragment or settings.default_style_fragment
+    forbidden: set[str] = set()
+    for clause in fragment.split(","):
+        words = clause.strip().lower().split()
+        if words and words[0] == "no":
+            forbidden.update(words[1:])
+    return forbidden
+
+
+def _permitted(word: str, forbidden: set[str]) -> bool:
+    """Prefix match in BOTH directions — "glowing" against "glow", "gradient" against
+    "gradients" — floored at `_MIN_PREFIX` so the match cannot be incidental."""
+    stripped = word.strip().lower()
+    return not any(
+        min(len(stripped), len(term)) >= _MIN_PREFIX
+        and (stripped.startswith(term) or term.startswith(stripped))
+        for term in forbidden
+    )
+
+
+def _filter_axis(values: list[str], forbidden: set[str]) -> list[str]:
+    """Word-level (ADR-035 Decision 3): an entry survives with its permitted words and is
+    dropped only if nothing is left, so "glowing eyes" becomes "eyes" instead of taking a real
+    subject fact down with the rendering property."""
+    kept = []
+    for value in values:
+        words = [word for word in value.split() if _permitted(word, forbidden)]
+        if words:
+            kept.append(" ".join(words))
+    return kept
+
+
+def filtered_description(
+    description: CharacterDescription, style_fragment: str | None
+) -> CharacterDescription:
+    """Pure, transient (ADR-035 Decision 4) — `StoryMemory` keeps the child's words verbatim and
+    only the rendered prompt/chip text drops them, so nothing is destroyed and the filter is
+    reversible if the style changes.
+
+    The three LIST axes only (Decision 2). `species` is never filtered: `analyze.py:22-26` makes
+    it required precisely so an empty description can never make acceptance vacuous. `notes` is
+    never filtered either — free prose, already excluded from the judge (ADR-034) and from chips.
+
+    Removes, never invents, so `build_prompt`'s invariant 2 is untouched.
+    """
+    forbidden = style_prohibitions(style_fragment)
+    if not forbidden:
+        return description
+    return description.model_copy(
+        update={
+            "colours": _filter_axis(description.colours, forbidden),
+            "body_features": _filter_axis(description.body_features, forbidden),
+            "clothing": _filter_axis(description.clothing, forbidden),
+        }
+    )
+
+
 def _describe(description: CharacterDescription, name: str) -> str:
     """The populated CharacterDescription axes as one line — same phrasing char_bible's
     reference_prompt uses, so the canonical reference and every scene prompt describe the same
@@ -77,7 +145,10 @@ def build_prompt(
         if character is None:
             log.warning("build_prompt: char_id %s not found in characters, skipping", char_id)
             continue
-        descriptions.append(_describe(character.description, character.name))
+        # ADR-035 surface 3. Issue #23's `s1`: this line asserted "glowing" while `style` below
+        # forbade it and the reference obeyed `style`, so the edit model saw the scene's noun
+        # describing something Image 2 visibly was not, and drew a second one.
+        descriptions.append(_describe(filtered_description(character.description, style), character.name))
 
     # Omitted entirely on the text-to-image path (`generate_scene:55-57` sends no images), where
     # naming images that were never sent would be a lie the model has to reconcile.
@@ -137,13 +208,17 @@ def correct_prompt(
     Defaulted so the four-positional-arg signature stays call-compatible.
     """
     style = style_fragment or settings.default_style_fragment
+    # ADR-035 surface 4. Issue #24: `wrong_colour` used to answer with "match the reference's
+    # exact colours: glowing" — reinforcing, on the retry, the one attribute the style guaranteed
+    # the reference would not have. `species` is deliberately unfiltered (Decision 2).
+    descriptions = [filtered_description(character.description, style) for character in characters]
     values = {
-        "colours": _joined(colour for character in characters for colour in character.description.colours),
+        "colours": _joined(colour for description in descriptions for colour in description.colours),
         "species": _joined(character.description.species for character in characters),
         "body_features": _joined(
-            feature for character in characters for feature in character.description.body_features
+            feature for description in descriptions for feature in description.body_features
         ),
-        "clothing": _joined(item for character in characters for item in character.description.clothing),
+        "clothing": _joined(item for description in descriptions for item in description.clothing),
         "name": _joined(character.name for character in characters),
         "style_fragment": style,
     }

@@ -1,10 +1,13 @@
+from app.config import STYLE_PRESETS
 from contracts.story_memory import Character, CharacterDescription, FailureReason
 from pipeline.prompt_optimizer import (
     ANATOMY_CLAUSE,
     IDENTITY_CLAUSE,
     build_prompt,
     correct_prompt,
+    filtered_description,
     referenced_characters,
+    style_prohibitions,
 )
 
 FRAG = "flat cel-shaded cartoon, thick clean black outlines"
@@ -264,3 +267,95 @@ def test_correct_prompt_never_drops_the_base_prompt_under_either_boolean():
     for kwargs in ({"same_character": False}, {"anatomy_intact": False}):
         result = correct_prompt("the base prompt survives", [], [], "cel", **kwargs)
         assert "the base prompt survives" in result
+
+
+# --- ADR-035: the style fragment's own prohibitions filter the description ---
+
+COMIC = STYLE_PRESETS["comic"]    # "...no gradients, no glow"
+CEL = STYLE_PRESETS["cel"]        # "...no gradients, no glossy highlights, no airbrushing"
+
+
+def test_style_prohibitions_reads_the_no_clauses_out_of_the_fragment():
+    """ADR-035 Decision 1: derived, never hand-listed — ADR-022 keeps sole ownership."""
+    assert style_prohibitions(COMIC) == {"gradients", "glow"}
+    assert style_prohibitions(CEL) == {"gradients", "glossy", "highlights", "airbrushing"}
+
+
+def test_style_prohibitions_of_a_fragment_that_forbids_nothing_is_empty():
+    assert style_prohibitions("flat gouache storybook illustration") == set()
+
+
+def test_filtered_description_drops_a_colour_the_active_style_forbids():
+    """Prod job b9506307: analyze put "glowing" in colours under a preset ending "no glow"."""
+    filtered = filtered_description(
+        CharacterDescription(species="star", colours=["glowing", "yellow"]), COMIC
+    )
+    assert filtered.colours == ["yellow"]
+
+
+def test_filtered_description_keeps_an_attribute_the_fragment_never_forbids():
+    """ADR-035 consequence: per-preset, not uniform. `cel` never says "no glow"."""
+    filtered = filtered_description(CharacterDescription(species="star", colours=["glowing"]), CEL)
+    assert filtered.colours == ["glowing"]
+
+
+def test_filtered_description_removes_the_forbidden_word_and_keeps_the_rest_of_the_entry():
+    """ADR-035 Decision 3: word-level. Dropping the whole entry would discard a real subject
+    fact ("eyes") in order to remove a rendering one ("glowing")."""
+    filtered = filtered_description(
+        CharacterDescription(species="cat", body_features=["glowing eyes", "long tail"]), COMIC
+    )
+    assert filtered.body_features == ["eyes", "long tail"]
+
+
+def test_filtered_description_never_touches_species_or_notes():
+    """ADR-035 Decision 2: species is REQUIRED at the analyze boundary precisely so acceptance
+    is never vacuous; notes is free prose the judge already never sees."""
+    filtered = filtered_description(
+        CharacterDescription(species="a glowing star", colours=["glowing"], notes="glowing softly"),
+        COMIC,
+    )
+    assert filtered.species == "a glowing star"
+    assert filtered.notes == "glowing softly"
+    assert filtered.colours == []
+
+
+def test_filtered_description_matches_on_prefix_in_both_directions():
+    """"glowing" vs "glow" and "gradient" vs "gradients" — with a min length so short tokens
+    cannot collide ("glove" is not "glow")."""
+    filtered = filtered_description(
+        CharacterDescription(species="thing", colours=["gradient", "glove"]), COMIC
+    )
+    assert filtered.colours == ["glove"]
+
+
+def test_filtered_description_leaves_a_description_alone_when_the_style_forbids_nothing():
+    description = CharacterDescription(species="dog", colours=["orange"], clothing=["a red scarf"])
+    assert filtered_description(description, "flat gouache storybook") == description
+
+
+def test_build_prompt_drops_a_style_forbidden_attribute_from_the_description_line():
+    """ADR-035 surface 3 — issue #23's `s1`. The scene prompt asserted "glowing" against a
+    reference the same style clause guaranteed would not be glowing."""
+    star = _char("c1", "the star", species="star", colours=["glowing"])
+    prompt = build_prompt("Ana found a star.", ["c1"], [star], COMIC)
+    assert "the star - star" in prompt
+    assert "glowing" not in prompt
+
+
+def test_build_prompt_still_emits_the_text_excerpt_verbatim_when_it_names_a_forbidden_term():
+    """ADR-035 limit 1, pinned: ADR-013 is NOT amended. The excerpt is untouched — only the
+    description axes are filtered."""
+    star = _char("c1", "the star", species="star", colours=["glowing"])
+    prompt = build_prompt("Ana found a tiny glowing star.", ["c1"], [star], COMIC)
+    assert "Ana found a tiny glowing star." in prompt
+    assert "the star - star\n" in prompt or prompt.count("glowing") == 1
+
+
+def test_correct_prompt_does_not_reinforce_a_style_forbidden_colour():
+    """ADR-035 surface 4 — issue #24: `wrong_colour` answered with "match the reference's exact
+    colours: glowing", reinforcing the side that is not in the reference."""
+    star = _char("c1", "the star", species="star", colours=["glowing", "yellow"])
+    result = correct_prompt("draw a star", [FailureReason.wrong_colour], [star], COMIC)
+    assert "match the reference's exact colours: yellow" in result
+    assert "glowing" not in result

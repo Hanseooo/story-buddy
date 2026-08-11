@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, CharacterDescription, Cost, Input, RefVerdict, StoryMemory, Style
+from app.config import STYLE_PRESETS
 from pipeline.char_bible import best_draw, char_bible, mint_reference, reference_prompt
 
 FRAG = "flat cel-shaded cartoon, thick clean black outlines"
@@ -218,7 +219,7 @@ def test_reference_prompt_always_contains_the_style_fragment():
 
 # --- mint_reference (effect boundary) ---
 
-def _mint(judge_side_effect, images=None, description=None, name="the orange dog"):
+def _mint(judge_side_effect, images=None, description=None, name="the orange dog", style_fragment=FRAG):
     """Runs mint_reference with all three effects patched.
 
     Returns (result, text_to_image_mock, judge_mock, fake_supabase).
@@ -230,7 +231,7 @@ def _mint(judge_side_effect, images=None, description=None, name="the orange dog
         result = mint_reference(
             description or CharacterDescription(species="dog", colours=["orange"]),
             name,
-            FRAG,
+            style_fragment,
             "story-1",
             "c0",
         )
@@ -775,3 +776,39 @@ def test_char_bible_ignores_invariant_six_skip_when_reference_retry_targets_an_e
         char_bible(state)
 
     assert t2i.call_count == 1
+
+
+# --- ADR-035: the style fragment's prohibitions filter the description ---
+
+COMIC = STYLE_PRESETS["comic"]   # "...no gradients, no glow"
+
+
+def test_a_style_forbidden_attribute_reaches_neither_the_draw_prompt_nor_the_judge_prompt():
+    """ADR-035 surfaces 1 and 2, from prod job b9506307. `reference_prompt` used to ask for
+    `star; glowing; tiny` in the same payload whose style clause ended "no glow", so the draw
+    could not satisfy it and — post-ADR-034 — the judge could legitimately contradict it on all
+    three draws, burning the whole budget on every job for that character.
+
+    Unlike the two `notes`/filler divergences this is NOT one-directional: an unsatisfiable
+    attribute must reach neither prompt, because the defect is in asking for it at all.
+    """
+    star = CharacterDescription(species="star", colours=["glowing"], body_features=["tiny"])
+    _, t2i_mock, judge_mock, _ = _mint(
+        [_verdict(True)], description=star, name="the star", style_fragment=COMIC
+    )
+
+    assert "glowing" not in t2i_mock.call_args.args[0]
+    assert "glowing" not in judge_mock.call_args.args[0]
+    # Narrowed, not gutted: species and the permitted axes still describe the character.
+    assert "the star - star; tiny" in judge_mock.call_args.args[0]
+
+
+def test_an_attribute_the_active_fragment_never_forbids_still_reaches_both_prompts():
+    """ADR-035 is per-preset, not a blanket ban: `cel` never says "no glow"."""
+    star = CharacterDescription(species="star", colours=["glowing"])
+    _, t2i_mock, judge_mock, _ = _mint(
+        [_verdict(True)], description=star, name="the star", style_fragment=STYLE_PRESETS["cel"]
+    )
+
+    assert "glowing" in t2i_mock.call_args.args[0]
+    assert "glowing" in judge_mock.call_args.args[0]

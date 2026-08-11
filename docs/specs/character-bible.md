@@ -356,6 +356,33 @@ instructions to the generator. Covered by `test_the_non_humanoid_guard_never_rea
 change. Evaluating a new model against the old prompt would have charged the generator for a defect
 the prompt was requesting.
 
+#### The style fragment's prohibitions filter the description — BOTH prompts (ADR-035, 2026-08-11)
+
+`mint_reference` and `_mint_targeted` pass the description through
+`prompt_optimizer.filtered_description` before building either prompt.
+
+Prod job `b9506307` put `"glowing"` in `colours` (a lighting property, not a hue — the closest axis
+`analyze` has) while the `comic` fragment ended `"no gradients, no glow"`. `reference_prompt` then
+asked for and forbade the same thing in one payload. Style won: `ref-c1-1.png` is a flat teal star.
+
+Before ADR-034 this was invisible at the gate. **After ADR-034 it is a recurring spend** — the judge
+can *legitimately* contradict `glowing` on all three draws, so that character exhausts its whole draw
+budget on every job and ships the same best-of reference anyway. Confirmed on re-judging under v3:
+`attributes_present` still reported `"glowing"` for a flat teal image, so the judge is not a backstop.
+
+⚠️ **This is NOT one of the one-directional divergences above.** The filler and `notes` reach the draw
+prompt and not the judge, because the draw prompt may know more than the judge. A style-forbidden
+attribute reaches **neither** — the defect is asking for it at all. Do not add it back to one side
+"so the generator still tries": trying is exactly what produces the self-contradicting reference.
+
+Per-preset, not a blanket ban: `glowing` is dropped under `comic` and **kept under `cel`**, which
+never forbids it. Derivation only removes what a fragment *states*; an attribute that is merely hard
+for a flat style but not explicitly forbidden still gets through. Mechanism and limits live in
+`prompt-optimizer` §4.
+
+Covered by `test_a_style_forbidden_attribute_reaches_neither_the_draw_prompt_nor_the_judge_prompt`
+and `test_an_attribute_the_active_fragment_never_forbids_still_reaches_both_prompts`.
+
 ### `settings.default_style_fragment`
 
 One new config field, holding ADR-022's `cel` preset — *"the flagship default kids see first"*. This is
@@ -370,6 +397,7 @@ fragment to exist.
 |---|---|
 | **Zero characters** | Return `{}`. No refs, no cost change. Scenes generate unreferenced — `analyze`'s precedent; a book with drifting art beats no book (ADR-010). |
 | **One character** | One reference. The cap is a ceiling, not a quota. |
+| **Every visual axis is style-forbidden** (e.g. `colours == ["glowing"]`, nothing else, under `comic`) | ADR-035 filters them out, the description floors to `species`, and the thin-description filler above applies as normal. `species` is never filtered, so the judge always retains something to check and acceptance cannot go vacuous. |
 | **Three characters** | `c0` and `c1` get references; `c2` keeps `None` and its scenes generate unreferenced. Documented ceiling per ADR-004, not a bug. |
 | **Duplicate character** ("my sister" / "Ate") | Both reference slots burned by one real character; the genuine second character gets nothing. **Sharper than `story-analyzer` §4 documented it** — under a 3-character roster a duplicate cost one of three slots, under a 2-reference cap it costs both. Not guarded here: dedup is unowned (§8). |
 | **Species-only description** | **Draw anyway, never refuse.** A thin description is exactly when an anchor matters most — consistency across scenes comes from *having* a reference, not from the reference matching the child's mental image (ADR-010). ADR-028 targets *off-spec on a stated feature*; a thin description states none. This closes `story-analyzer` §8's richness handoff. ~~Ceiling: with one attribute `matches_description` is near-vacuously true, so the loop de facto collapses to 1 draw for that character.~~ **Falsified in production, amended 2026-08-11** — see below. Since that date the draw prompt also appends `THIN_DESCRIPTION_FILLER` when no visual axis is populated, so the generator gets a neutral floor rather than a role noun; the judge still sees only what the story stated. |

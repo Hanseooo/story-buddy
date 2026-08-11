@@ -8,17 +8,23 @@ on each confirm.
 """
 from langgraph.types import interrupt
 
+from app.config import settings
 from contracts.story_memory import Character, ReferenceRetry, StoryMemory
+from pipeline.prompt_optimizer import filtered_description
 
 MAX_RETRY_TAPS = 3
 
 
-def _chips(character: Character) -> list[str]:
+def _chips(character: Character, style_fragment: str | None) -> list[str]:
     """Described attributes minus what the judge already found (spec §4.3). `notes` is free
     prose, not an attribute, and is never offered as a chip. Never empty (two fallbacks below) —
     an empty chip list would dead-end the "try again" button (invariant 4)."""
     verdict = character.ref_verdict
-    description = character.description
+    # ADR-035 surface 5. A chip promises that tapping it buys a redraw that could plausibly fix
+    # the attribute. Under `comic` ("no glow") a tap on "glowing" spends one of three ADR-029 taps
+    # and one paid draw on something the style guarantees will not change. Filtering here is also
+    # what lets `char_bible._mint_targeted` trust `retry.attribute`.
+    description = filtered_description(character.description, style_fragment)
     axes = {
         "species": description.species,
         "colours": description.colours,
@@ -47,12 +53,13 @@ def _chips(character: Character) -> list[str]:
 def _project_reveal(state: StoryMemory) -> dict:
     """Pure — no effect, no mocks needed to test it. The worker writes this dict verbatim to
     `jobs.reveal` (spec §4.2)."""
+    style_fragment = state.style.prompt_fragment or settings.default_style_fragment
     characters = [
         {
             "char_id": c.char_id,
             "name": c.name,
             "image_path": c.canonical_ref_image,   # durable path, never a signed URL (ADR-006)
-            "chips": _chips(c),
+            "chips": _chips(c, style_fragment),
         }
         for c in state.characters
         if c.canonical_ref_image is not None

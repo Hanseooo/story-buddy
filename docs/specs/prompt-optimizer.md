@@ -58,13 +58,46 @@ def correct_prompt(prompt: str, failure_reasons: list[FailureReason], characters
 characters_present → characters join per §4's own prose and the §6 node-level test, which passes
 the full unfiltered roster; `correct_prompt` needs `style_fragment` to restate it for `wrong_style`.)
 
+### `style_prohibitions` / `filtered_description` (ADR-035)
+
+Two pure helpers, exported because `char_bible` and `reveal` share them.
+
+`style_prohibitions(style_fragment)` reads the words the active fragment forbids off its own
+`no <term>` clauses — `comic` yields `{gradients, glow}`, `cel` yields
+`{gradients, glossy, highlights, airbrushing}`. **Derived, never hand-listed**, so ADR-022 keeps sole
+ownership of the fragments and a new preset arrives carrying its own prohibitions. This is why the
+objection that killed the species word-list (`char_bible.py:74-77`) does not apply: that list is
+open-ended, this one is closed by the fragment.
+
+`filtered_description(description, style_fragment)` returns a transient copy with those words removed.
+
+- **Three list axes only** — `colours`, `body_features`, `clothing`. Never `species` (`analyze` makes
+  it required precisely so acceptance can never be vacuous), never `notes` (free prose, already
+  excluded from the judge and from chips).
+- **Word-level**: `"glowing eyes"` → `"eyes"`. An entry is dropped only if nothing survives, so a real
+  subject fact is never discarded to remove a rendering one.
+- **Prefix match in both directions**, floored at 4 characters — `"glowing"`/`"glow"` and
+  `"gradient"`/`"gradients"` match, `"glove"`/`"glow"` does not.
+- **Transient.** `StoryMemory` keeps the child's words verbatim; only the rendered text drops them.
+  No contract change, and the filter is reversible if the style changes.
+
+It **removes, never invents**, so invariant 2 below is untouched.
+
 ### `build_prompt`
 
 Renders, for each character in `characters` whose `char_id` is in `characters_present`, the same
 populated description axes `char_bible.reference_prompt` uses (`species`, `colours`, `body_features`,
-`clothing`, `notes`) — consistent phrasing across the canonical reference and every scene prompt. Then
-appends the verbatim `text_excerpt` and the style fragment. `style_fragment=None` falls back to
+`clothing`, `notes`) — consistent phrasing across the canonical reference and every scene prompt —
+**each passed through `filtered_description` first (ADR-035)**. Then appends the verbatim
+`text_excerpt` and the style fragment. `style_fragment=None` falls back to
 `settings.default_style_fragment`, the same fallback `char_bible` already uses.
+
+The filter is what stopped this function asserting an attribute the style clause in the same payload
+forbade. Prod job `b9506307` emitted `the star - star; glowing; tiny` above a fragment ending
+`no glow`, and the reference obeyed the fragment — so the scene's own noun described something
+Image 2 visibly was not, and the edit model drew a second star (issue #23's `s1`). **`text_excerpt`
+is not filtered**: ADR-013 freezes it verbatim, so a story that says "a tiny glowing star" still
+says so.
 
 ### `correct_prompt`
 
@@ -110,6 +143,7 @@ single named character requires the judge to attribute a reason to a `char_id`, 
 | **`style_fragment is None`** | Falls back to `settings.default_style_fragment`, matching `char_bible`. |
 | **Empty `failure_reasons`** | `correct_prompt` returns `prompt` unchanged when both booleans are `True`. With `same_character=False` it appends `IDENTITY_CLAUSE`; with `anatomy_intact=False` it appends `ANATOMY_CLAUSE`. |
 | **Multiple `failure_reasons` on one attempt** | All matching clauses appended, in enum-declaration order, no duplicates even if a reason repeats. |
+| **Every value on an axis is style-forbidden** (e.g. `colours == ["glowing"]` under `comic`) | ADR-035 filters it to empty, and the row below then applies — the clause appends with nothing rendered. Deliberate: restating the forbidden attribute is what made `wrong_colour` answer "match the reference's exact colours: glowing" (issue #24). |
 | **A description axis referenced by a clause is empty** (e.g. `wrong_colour` but `colours == []`) | The clause still appends with an empty list rendered — this function does not invent colours that `analyze`/`char_bible` never captured; a thin description stays thin, same posture as `char_bible` §4's "species-only description" case. |
 
 ## 5. Cross-cutting checklist (MASTER_SPEC §5)
@@ -133,6 +167,18 @@ no mocks"), node-level tests exercise `build_prompt` for real rather than patchi
   `style_fragment is None`.
 - Empty `characters_present` → prompt is `text_excerpt` + style fragment only, no character content.
 - A `char_id` absent from `characters` is skipped without raising.
+
+**`filtered_description` / `style_prohibitions` — no mocks (ADR-035):**
+- `style_prohibitions` reads the `no <term>` clauses off `comic` and `cel`; a fragment that forbids
+  nothing yields the empty set.
+- A style-forbidden colour is dropped; one the active fragment never forbids is kept (per-preset, not
+  a blanket ban).
+- Word-level removal keeps the rest of the entry (`"glowing eyes"` → `"eyes"`).
+- `species` and `notes` are never touched.
+- Prefix matching works in both directions and does not fire on `"glove"` vs `"glow"`.
+- `build_prompt` drops the forbidden attribute from the description line while emitting
+  `text_excerpt` verbatim even when the excerpt names that same term (ADR-013 is not amended).
+- `correct_prompt` fills `wrong_colour` from the filtered colours only.
 
 **`correct_prompt` — no mocks:**
 - Each of the 7 `FailureReason` values, given alone, produces its documented clause appended to the
