@@ -118,6 +118,51 @@ def test_judge_omits_openrouter_flag_when_self_hosted():
     assert parse.call_args.kwargs["extra_body"] == {}
 
 
+def test_vision_judge_pins_providers_because_openrouter_cannot_filter_by_modality():
+    """Prod job f4d0fd74 (2026-08-11) died at `output_mod` on scene s5 with a 400:
+    `Image content is not supported by this model.` from Venice. DeepInfra and Parasail had both
+    429'd on the shared pool, so OpenRouter fell through to Venice, whose fp8 deployment of
+    mistral-small-3.2 is text-only. A 400 is not retryable, so `MAX_RETRIES` cannot cover it.
+
+    `require_parameters` does NOT cover this: it selects providers that support the top-level
+    request *parameters* (`response_format`), not `messages` content types. Verified against
+    https://openrouter.ai/docs/features/provider-routing on 2026-08-11 — the `provider` object has
+    no input-modality filter at all, and `/models/.../endpoints` reports no per-endpoint
+    modalities either. An explicit allowlist is the only mechanism available.
+    """
+    with patch("providers.OpenAI") as mock_openai:
+        parse = mock_openai.return_value.chat.completions.parse
+        parse.return_value = _fake_completion(_Caption(caption="hi"))
+        providers.judge(
+            "is it safe", ["https://scene.png"], _Caption,
+            model="mistralai/mistral-small-3.2-24b-instruct",
+        )
+
+    assert parse.call_args.kwargs["extra_body"] == {
+        "provider": {"require_parameters": True, "only": ["deepinfra", "parasail"]}
+    }
+
+
+def test_only_models_that_need_pinning_are_pinned():
+    """The allowlist is per-model on purpose. gemma-3-27b-it serves the image backstop AND the
+    consistency judge across five providers, none of them Venice — pinning it would buy nothing
+    and make 429s likelier by shrinking its pool. And mistral-small-3.2 is also `text_model`,
+    where Venice is a perfectly good route: the pin belongs to the call that sends an image, not
+    to the model name.
+    """
+    with patch("providers.OpenAI") as mock_openai:
+        parse = mock_openai.return_value.chat.completions.parse
+        parse.return_value = _fake_completion(_Caption(caption="hi"))
+        providers.judge("compare", ["https://ref.png"], _Caption, model="google/gemma-3-27b-it")
+        gemma_body = parse.call_args.kwargs["extra_body"]
+
+        providers.structured_text("prompt", _Caption, model="mistralai/mistral-small-3.2-24b-instruct")
+        text_body = parse.call_args.kwargs["extra_body"]
+
+    assert gemma_body == {"provider": {"require_parameters": True}}
+    assert text_body == {"provider": {"require_parameters": True}}
+
+
 def test_edit_image_passes_references_and_seed_and_returns_bytes():
     """The endpoint is pinned, not read from the ambient default: this asserts Qwen's `image_urls`
     mapping, and without the pin a `FAL_IMAGE_EDIT_MODEL` line in a developer's `.env` fails it

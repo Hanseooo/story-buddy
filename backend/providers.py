@@ -30,6 +30,25 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 # constant is the pipeline's only tolerance for a transient upstream blip.
 MAX_RETRIES = 2
 
+# OpenRouter's `provider` object has NO input-modality filter — verified 2026-08-11 against
+# https://openrouter.ai/docs/features/provider-routing. `require_parameters` selects providers that
+# support the top-level request PARAMETERS (`response_format`), not `messages` content types, so a
+# text-only deployment of a vision-capable model passes that filter and then 400s on the image.
+# `/models/{id}/endpoints` reports no per-endpoint modalities either, so an explicit allowlist is
+# the only mechanism there is. Prod job f4d0fd74 (2026-08-11) died on scene s5 this way: DeepInfra
+# and Parasail both 429'd on the shared pool, OpenRouter fell through to Venice, and Venice's fp8
+# deployment answered "Image content is not supported by this model." A 400 is not retryable, so
+# MAX_RETRIES cannot cover it.
+#
+# Allowlist rather than an `ignore: ["venice"]` blocklist: this is the safety path, so a provider
+# added later should be excluded until someone checks it serves images. Keyed per model and read
+# only by `judge` — mistral-small-3.2 is also `text_model`, where Venice is a fine route, and
+# gemma-3-27b-it serves five providers (none of them Venice), so pinning it would shrink its pool
+# for nothing. Re-check with: curl .../api/v1/models/{id}/endpoints
+VISION_PROVIDERS: dict[str, list[str]] = {
+    "mistralai/mistral-small-3.2-24b-instruct": ["deepinfra", "parasail"],
+}
+
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -52,21 +71,31 @@ def judge(prompt: str, image_urls: list[str], schema: type[T], model: str | None
     """
     content = [{"type": "text", "text": prompt}]
     content += [{"type": "image_url", "image_url": {"url": url}} for url in image_urls]
+    resolved = model or settings.vlm_judge_model
     return _chat(
         settings.judge_base_url,
         settings.judge_api_key or settings.openrouter_api_key,
-        model or settings.vlm_judge_model,
+        resolved,
         content,
         schema,
+        # Only this function sends images, so only this function pins providers.
+        providers=VISION_PROVIDERS.get(resolved),
     )
 
 
-def _chat(base_url: str, api_key: str, model: str, content, schema: type[T]) -> T:
+def _chat(
+    base_url: str, api_key: str, model: str, content, schema: type[T],
+    providers: list[str] | None = None,
+) -> T:
     """`provider.require_parameters` is load-bearing: without it OpenRouter may route to a
     provider that lacks structured output and silently downgrade to loose JSON (ADR-002).
-    Self-hosted vLLM rejects the unknown field, so it is sent only to OpenRouter.
+    Self-hosted vLLM rejects the unknown field, so it is sent only to OpenRouter — which is also
+    why `providers` is dropped on that path: ADR-019's vLLM has no provider routing to constrain.
     """
-    extra_body = {"provider": {"require_parameters": True}} if base_url == OPENROUTER_BASE_URL else {}
+    prefs = {"require_parameters": True}
+    if providers:
+        prefs["only"] = providers
+    extra_body = {"provider": prefs} if base_url == OPENROUTER_BASE_URL else {}
     completion = OpenAI(base_url=base_url, api_key=api_key, timeout=60.0, max_retries=MAX_RETRIES).chat.completions.parse(
         model=model,
         messages=[{"role": "user", "content": content}],

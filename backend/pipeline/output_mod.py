@@ -8,8 +8,31 @@ log = logging.getLogger(__name__)
 
 
 def _check_image(image_url: str) -> bool:
-    """True if both classifiers pass."""
-    return classify_image_primary(image_url) and classify_image_backstop(image_url)
+    """True if the image is safe. Posture mirrors `char_ref_mod` (spec §4b, aligned with
+    `input_gate` on 2026-08-11): a PRIMARY classifier error degrades to backstop-only, a primary
+    flag short-circuits, and a BACKSTOP error propagates — the callers turn that into
+    `moderation_error`, which is still correct because the backstop has nothing behind it.
+
+    §4c step 2 always said "same two-classifier check as `char_ref_mod`", but 44489cb aligned
+    `input_gate` and `char_ref_mod` and missed this node, which left it hard-failing on ANY
+    classifier exception. That made it the strictest gate in the pipeline while screening the
+    least risky thing — an image we drew, from text `input_gate` passed, from a reference
+    `char_ref_mod` passed — at the point where every scene has already been paid for.
+
+    Prod job f4d0fd74 died exactly there: scene s5, OpenRouter 400 from Venice
+    ("Image content is not supported by this model"), five scenes already moderated clean.
+    """
+    try:
+        primary_safe = classify_image_primary(image_url)
+    except Exception as exc:
+        log.warning("output_mod: primary classifier failed (%s) — falling back to backstop", exc)
+        primary_safe = None  # None = primary errored, not "passed"
+
+    if primary_safe is False:
+        # A second opinion cannot change a flag (spec §4a step 3).
+        return False
+
+    return classify_image_backstop(image_url)
 
 
 def _soften_prompt(prompt: str) -> str:
