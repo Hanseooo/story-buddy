@@ -102,16 +102,38 @@ describe("Bookshelf — §9.11–12", () => {
     });
   });
 
-  it("§9.12 — terminal-failure card links to /write", async () => {
+  it("§9.12 — terminal-failure card links to /process/[jobId] (amended)", async () => {
     mockSelect.mockResolvedValueOnce({
       data: [makeJob({ id: "j4", status: "failed", pages: [] })],
     });
     render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
     await waitFor(() => {
-      expect(
-        screen.getByRole("link", { name: /this one didn't finish/i })
-      ).toHaveAttribute("href", `/s/${PROFILE_ID}/write`);
+      const cardLink = screen.getAllByRole("link").find(
+        (el) => el.getAttribute("href") === `/s/${PROFILE_ID}/process/j4`
+      );
+      expect(cardLink).toBeDefined();
     });
+  });
+
+  it("failed cards live in a collapsed 'Didn't finish' section, not the shelf grid", async () => {
+    mockSelect.mockResolvedValueOnce({
+      data: [
+        makeJob({ id: "ok1", status: "complete" }),
+        makeJob({ id: "bad1", status: "failed", pages: [] }),
+      ],
+    });
+    render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
+    await waitFor(() => {
+      expect(screen.getByText(/didn't finish \(1\)/i)).toBeDefined();
+    });
+    const failedLink = screen.getAllByRole("link").find(
+      (el) => el.getAttribute("href") === `/s/${PROFILE_ID}/process/bad1`
+    );
+    expect(failedLink?.closest("details")).not.toBeNull();
+    const okLink = screen.getAllByRole("link").find(
+      (el) => el.getAttribute("href") === `/s/${PROFILE_ID}/book/ok1`
+    );
+    expect(okLink?.closest("details")).toBeNull();
   });
 
   it("shows empty state when no jobs", async () => {

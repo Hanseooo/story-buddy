@@ -274,10 +274,25 @@ no child is stranded: closing the tab mid-generation still leaves a route back t
 | `terminal-success` | Cover image | `/s/[pid]/book/[jobId]` |
 | `in-flight` | "Still making it…" | `/s/[pid]/process/[jobId]` |
 | `paused` | "Come meet your cast!" | `/s/[pid]/process/[jobId]` |
-| `terminal-failure` | "This one didn't finish" | `/s/[pid]/write` (a new job — kid-flow S3) |
+| `terminal-failure` | "This one didn't finish" | ~~`/s/[pid]/write` (a new job — kid-flow S3)~~ `/s/[pid]/process/[jobId]` — **amended 2026-08-12**, see below |
 
 The accepted cost of showing all four: a failed job is permanent debris, because kid-flow S3 makes a
 terminal job immutable and recovery is always a new job.
+
+#### The failure card routes through `/process`, not `/write` (amended 2026-08-12)
+
+Recovery is still a new job — kid-flow S3 is unamended. What changed is *who builds it*. `/write`
+reached from the shelf is blank: the shelf sets no `sb.prefill`, so the child arrives with their
+story gone and has to retype it. `/process/[jobId]` renders `FailureScreen` for a terminal job
+(kid-flow-reader §4.4), and its `retry` action POSTs `row.input_text` verbatim — the same new job,
+one tap, text intact. The destination is a better door to the same room.
+
+The debris itself is now **collapsed, not deleted**: failed cards render inside a `<details>`
+titled *"Didn't finish (n)"* below the grid — the pattern already shipped on the teacher books page
+(`teacher-review-and-approval` §4.8). There is no delete control. Child-initiated deletion would
+need a student `DELETE` policy on `jobs` (S3 §4.1 grants none) and would destroy the research
+metrics on the row (`0013_jobs_research_metrics.sql`); that is an authorization-surface decision,
+queued as **D-J** in `DECISION_BACKLOG.md`, not settled here.
 
 - **Covers** are `pages[0].image_path`, signed at read time (kid-flow constraint), via **one batched
   `createSignedUrls`** call, not one per card.

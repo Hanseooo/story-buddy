@@ -102,6 +102,11 @@ export default function BookshelfPage({
 
   if (!profileId) return null;
 
+  // Failed jobs are permanent (terminal jobs are immutable — kid-flow S3), so they are
+  // tucked away instead of deleted; keeps the shelf tidy with no delete surface.
+  const shelfCards = cards.filter((c) => c.bucket !== "terminal-failure");
+  const failedCards = cards.filter((c) => c.bucket === "terminal-failure");
+
   return (
     <main className="font-kid p-6 sm:p-10 max-w-7xl mx-auto min-h-[calc(100vh-80px)] flex flex-col">
       <div className="flex items-center justify-between mb-8 sm:mb-12">
@@ -152,11 +157,25 @@ export default function BookshelfPage({
               show: { opacity: 1, transition: { staggerChildren: 0.1 } }
             }}
           >
-            {cards.map((card, idx) => (
+            {shelfCards.map((card, idx) => (
               <BookCard key={card.id} card={card} profileId={profileId} index={idx} />
             ))}
           </motion.div>
-          
+
+          {/* Didn't finish — collapsed, same pattern as the teacher books page */}
+          {failedCards.length > 0 && (
+            <details className="mb-24 sm:mb-10">
+              <summary className="cursor-pointer list-none flex items-center gap-2 font-extrabold text-foreground/50 hover:text-foreground/80 transition-colors min-h-[44px]">
+                <span aria-hidden="true">▸</span> Didn&apos;t finish ({failedCards.length})
+              </summary>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 sm:gap-8 lg:gap-10 mt-6">
+                {failedCards.map((card, idx) => (
+                  <BookCard key={card.id} card={card} profileId={profileId} index={idx} />
+                ))}
+              </div>
+            </details>
+          )}
+
           {/* Mobile floating action button */}
           <div className="sm:hidden fixed bottom-24 left-1/2 -translate-x-1/2 w-[calc(100%-48px)] z-20">
             <Link 
@@ -186,21 +205,22 @@ function BookCard({
     "terminal-success": `/s/${profileId}/book/${card.id}`,
     "in-flight": `/s/${profileId}/process/${card.id}`,
     paused: `/s/${profileId}/process/${card.id}`,
-    "terminal-failure": `/s/${profileId}/write`,
+    // Amended from /write (spec §7.2): /process renders FailureScreen, which reposts
+    // the child's own input_text on one tap instead of stranding them on a blank page.
+    "terminal-failure": `/s/${profileId}/process/${card.id}`,
     "not-found": `/s/${profileId}/write`,
-  };
-
-  const label: Record<JobBucket, string> = {
-    "terminal-success": card.title,
-    "in-flight": "Still making it…",
-    paused: "Come meet your cast!",
-    "terminal-failure": "This one didn't finish",
-    "not-found": card.title,
   };
 
   // Organic rotation: cycles to make them look like they were dropped on a shelf
   const rotations = [-3, 2, -1, 4, -2];
   const defaultRotation = rotations[index % rotations.length];
+
+  const coverBg = card.coverUrl && card.bucket === "terminal-success" 
+    ? "bg-background" 
+    : card.bucket === "paused" ? "bg-secondary/10"
+    : (card.bucket === "terminal-failure" || card.bucket === "not-found") ? "bg-destructive/5"
+    : card.bucket === "in-flight" ? "bg-primary/5"
+    : "bg-background";
 
   return (
     <motion.div
@@ -209,9 +229,15 @@ function BookCard({
         show: { opacity: 1, y: 0, rotate: defaultRotation }
       }}
       initial="hidden"
+      animate="show"
       whileHover={{ y: -16, rotate: 0, scale: 1.05, zIndex: 10 }}
       whileFocus={{ y: -16, rotate: 0, scale: 1.05, zIndex: 10 }}
-      transition={{ type: "spring", stiffness: 400, damping: 25 }}
+      transition={{ 
+        type: "spring", 
+        stiffness: 400, 
+        damping: 25, 
+        delay: index * 0.1 
+      }}
       className="relative"
     >
       <Link
@@ -219,42 +245,67 @@ function BookCard({
         className="block rounded-[20px] sm:rounded-[24px] bg-surface border-2 border-primary/10 overflow-hidden shadow-[0_10px_28px_rgba(49,85,217,0.12)] hover:shadow-[0_22px_60px_rgba(49,85,217,0.2)] transition-shadow outline-none focus-visible:ring-[3px] focus-visible:ring-secondary focus-visible:ring-offset-4 focus-visible:ring-offset-background"
       >
         {/* Cover Image or Status Graphic */}
-        {card.coverUrl && card.bucket === "terminal-success" ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={card.coverUrl}
-            alt=""
-            className="w-full aspect-[4/5] object-cover"
-          />
-        ) : (
-          <div className="w-full aspect-[4/5] flex flex-col items-center justify-center bg-background border-b-2 border-primary/5">
-            {card.bucket === "in-flight" && (
-              <div className="w-16 h-16 rounded-3xl bg-primary/10 flex items-center justify-center animate-stepper-pulse mb-3">
-                <MagicWand weight="fill" className="w-8 h-8 text-primary" aria-hidden="true" />
-              </div>
-            )}
-            {card.bucket === "paused" && (
-              <div className="w-16 h-16 rounded-3xl bg-secondary/20 flex items-center justify-center animate-bounce mb-3">
-                <Users weight="fill" className="w-8 h-8 text-secondary" aria-hidden="true" />
-              </div>
-            )}
-            {(card.bucket === "terminal-failure" || card.bucket === "not-found") && (
-              <div className="w-16 h-16 rounded-3xl bg-destructive/10 flex items-center justify-center mb-3">
-                <FileDashed weight="fill" className="w-8 h-8 text-destructive" aria-hidden="true" />
-              </div>
-            )}
-            {card.bucket === "terminal-success" && !card.coverUrl && (
-              <div className="w-16 h-16 rounded-3xl bg-primary/10 flex items-center justify-center mb-3">
-                <span className="text-3xl font-display font-extrabold text-primary">?</span>
-              </div>
-            )}
-          </div>
-        )}
+        <div className={`relative w-full aspect-[4/5] ${coverBg}`}>
+          {card.coverUrl && card.bucket === "terminal-success" ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={card.coverUrl}
+              alt=""
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center border-b-2 border-primary/5">
+              {card.bucket === "in-flight" && (
+                <div className="w-16 h-16 rounded-3xl bg-primary/10 flex items-center justify-center animate-stepper-pulse mb-3">
+                  <MagicWand weight="fill" className="w-8 h-8 text-primary" aria-hidden="true" />
+                </div>
+              )}
+              {card.bucket === "paused" && (
+                <div className="w-16 h-16 rounded-3xl bg-secondary/20 flex items-center justify-center animate-bounce mb-3">
+                  <Users weight="fill" className="w-8 h-8 text-secondary" aria-hidden="true" />
+                </div>
+              )}
+              {(card.bucket === "terminal-failure" || card.bucket === "not-found") && (
+                <div className="w-16 h-16 rounded-3xl bg-destructive/10 flex items-center justify-center mb-3">
+                  <FileDashed weight="fill" className="w-8 h-8 text-destructive" aria-hidden="true" />
+                </div>
+              )}
+              {card.bucket === "terminal-success" && !card.coverUrl && (
+                <div className="w-16 h-16 rounded-3xl bg-primary/10 flex items-center justify-center mb-3">
+                  <span className="text-3xl font-display font-extrabold text-primary">?</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Status Badge Overlays */}
+          {card.bucket === "in-flight" && (
+            <div className="absolute inset-0 flex items-end justify-center pb-4">
+              <span className="px-3 py-1.5 rounded-full bg-primary/90 text-on-primary text-xs font-extrabold backdrop-blur-sm shadow-sm">
+                Writing...
+              </span>
+            </div>
+          )}
+          {card.bucket === "paused" && (
+            <div className="absolute inset-0 flex items-end justify-center pb-4">
+              <span className="px-3 py-1.5 rounded-full bg-secondary text-on-secondary text-xs font-extrabold shadow-sm">
+                Needs characters
+              </span>
+            </div>
+          )}
+          {card.bucket === "terminal-failure" && (
+            <div className="absolute inset-0 flex items-end justify-center pb-4">
+              <span className="px-3 py-1.5 rounded-full bg-destructive text-on-destructive text-xs font-extrabold shadow-sm">
+                Didn't finish
+              </span>
+            </div>
+          )}
+        </div>
         
         {/* Spine/Title area */}
         <div className="p-4 sm:p-5 bg-surface relative z-10 border-t-2 border-primary/5">
           <p className="font-extrabold text-sm sm:text-base text-foreground line-clamp-2 leading-snug">
-            {label[card.bucket]}
+            {card.title || "Untitled"}
           </p>
         </div>
       </Link>

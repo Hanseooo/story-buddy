@@ -9,7 +9,7 @@ import { useJob } from "@/lib/useJob";
 import FailureScreen from "@/components/FailureScreen";
 import { supabase } from "@/lib/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
-import { BookOpen, Users, PaintBrush, MagicWand, Check } from "@phosphor-icons/react";
+import { BookOpen, Users, PaintBrush, MagicWand, Check, MagnifyingGlass } from "@phosphor-icons/react";
 
 const BUCKET = "storybook-images";
 // ponytail: 90s is chosen so the line arrives before a child gives up; will fire on slow image calls
@@ -74,53 +74,66 @@ function KineticText({ text, className }: { text: string; className?: string }) 
 }
 
 const ReadingVignette = () => (
-  <div className="flex flex-col gap-3 w-48 p-5 bg-[var(--color-surface)] border-2 border-[var(--color-muted)] rounded-[20px] shadow-sm relative overflow-hidden my-4">
-    <div className="w-full h-3 bg-[var(--color-muted)] rounded-full overflow-hidden relative">
-      <motion.div className="absolute top-0 left-0 bottom-0 w-full bg-[var(--color-primary)]/40" initial={{ x: "-100%" }} animate={{ x: "100%" }} transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }} />
+  <div className="relative flex flex-col justify-center items-center h-32 w-48 my-4">
+    <div className="w-full p-5 bg-[var(--color-surface)] border border-[var(--color-primary)]/20 rounded-[20px] shadow-[0_10px_28px_rgba(49,85,217,0.12)] flex flex-col gap-3 relative overflow-hidden">
+      <div className="w-full h-3 bg-[var(--color-muted)] rounded-full opacity-60" />
+      <div className="w-5/6 h-3 bg-[var(--color-muted)] rounded-full opacity-60" />
+      <div className="w-4/6 h-3 bg-[var(--color-muted)] rounded-full opacity-60" />
     </div>
-    <div className="w-5/6 h-3 bg-[var(--color-muted)] rounded-full overflow-hidden relative">
-      <motion.div className="absolute top-0 left-0 bottom-0 w-full bg-[var(--color-primary)]/40" initial={{ x: "-100%" }} animate={{ x: "100%" }} transition={{ repeat: Infinity, duration: 1.5, ease: "linear", delay: 0.3 }} />
-    </div>
-    <div className="w-4/6 h-3 bg-[var(--color-muted)] rounded-full overflow-hidden relative">
-      <motion.div className="absolute top-0 left-0 bottom-0 w-full bg-[var(--color-primary)]/40" initial={{ x: "-100%" }} animate={{ x: "100%" }} transition={{ repeat: Infinity, duration: 1.5, ease: "linear", delay: 0.6 }} />
-    </div>
+    <motion.div
+      className="absolute z-10 text-[var(--color-primary)] drop-shadow-md"
+      animate={{ x: [-40, 40, -40], y: [-10, 10, -10] }}
+      transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
+    >
+      <MagnifyingGlass size={48} weight="duotone" />
+    </motion.div>
   </div>
 );
 
 const CharactersVignette = () => (
-  <div className="flex gap-4 items-end h-32 my-4">
-    {[0, 1, 2].map((i) => (
+  <div className="relative w-48 h-32 my-4 flex items-center justify-center">
+    {[
+      { rotate: -15, x: -30, delay: 0 },
+      { rotate: 0, x: 0, delay: 0.15 },
+      { rotate: 15, x: 30, delay: 0.3 }
+    ].map((card, i) => (
       <motion.div
         key={i}
-        className="w-12 h-16 bg-[var(--color-surface)] border-2 border-[var(--color-primary)] rounded-[16px] shadow-sm flex items-center justify-center"
-        animate={{ y: [0, -30, 0] }}
-        transition={{
-          repeat: Infinity,
-          duration: 2,
-          delay: i * 0.3,
-          ease: "easeInOut",
+        className="absolute w-12 h-16 bg-[var(--color-surface)] border border-[var(--color-primary)]/20 rounded-[12px] shadow-[0_10px_28px_rgba(49,85,217,0.12)] flex items-center justify-center"
+        initial={{ y: 20, opacity: 0, rotate: 0, x: 0 }}
+        animate={{ y: 0, opacity: 1, rotate: card.rotate, x: card.x }}
+        transition={{ 
+          y: { type: "spring", bounce: 0.3, delay: card.delay },
+          opacity: { duration: 0.4, delay: card.delay },
+          rotate: { type: "spring", bounce: 0.3, delay: card.delay },
+          x: { type: "spring", bounce: 0.3, delay: card.delay }
         }}
+        style={{ zIndex: i }}
       >
-        <div className="w-6 h-6 rounded-full bg-[var(--color-primary)]/20" />
+        <motion.div 
+          className="w-6 h-6 rounded-full bg-[var(--color-primary)]/10"
+          animate={{ opacity: [0.3, 1, 0.3] }}
+          transition={{ repeat: Infinity, duration: 2, delay: card.delay, ease: "easeInOut" }}
+        />
       </motion.div>
     ))}
   </div>
 );
 
 const DrawingVignette = () => (
-  <div className="relative w-40 h-32 flex flex-col items-center justify-center my-4">
+  <div className="relative w-48 h-32 flex flex-col items-center justify-center my-4">
     <motion.div
-      className="absolute top-0 z-10 text-[var(--color-primary)] origin-bottom"
-      animate={{ x: [-35, 35, -35], rotate: [-20, 20, -20] }}
-      transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
+      className="absolute top-0 z-10 text-[var(--color-primary)] origin-bottom drop-shadow-md"
+      animate={{ x: [-40, 40, -40], rotate: [-15, 15, -15] }}
+      transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
     >
       <PaintBrush size={48} weight="duotone" />
     </motion.div>
-    <div className="w-32 h-20 mt-10 border-2 border-[var(--color-muted)] rounded-[16px] overflow-hidden bg-[var(--color-surface)] relative shadow-sm">
+    <div className="w-36 h-24 mt-8 border border-[var(--color-primary)]/20 rounded-[16px] overflow-hidden bg-[var(--color-surface)] shadow-[0_10px_28px_rgba(49,85,217,0.12)] relative">
       <motion.div
         className="absolute inset-0 bg-[var(--color-secondary)]/30 origin-left"
         animate={{ scaleX: [0, 1, 1] }}
-        transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
+        transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
       />
     </div>
   </div>
@@ -128,21 +141,32 @@ const DrawingVignette = () => (
 
 const StackingVignette = () => (
   <div className="relative w-32 h-32 my-4 flex justify-center">
-    {[0, 1, 2, 3].map((i) => (
-      <motion.div
-        key={i}
-        className="absolute h-20 w-24 bg-[var(--color-surface)] border-2 border-[var(--color-primary)]/40 rounded-[12px] shadow-sm"
-        initial={{ y: -60, opacity: 0 }}
-        animate={{ y: i * 6, opacity: 1, rotate: (i % 2 === 0 ? -4 : 4) + (i*1.5) }}
-        transition={{
-          repeat: Infinity,
-          repeatType: "loop",
-          duration: 3,
-          delay: i * 0.5,
-        }}
-        style={{ zIndex: i, top: 20 }}
-      />
-    ))}
+    {[0, 1, 2, 3].map((i) => {
+      const isCover = i === 3;
+      return (
+        <motion.div
+          key={i}
+          className={`absolute h-24 w-20 border border-[var(--color-primary)]/20 rounded-[8px] shadow-[0_6px_18px_rgba(49,85,217,0.10)] overflow-hidden ${isCover ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-surface)]'}`}
+          animate={{ 
+            y: [-40, i * 4, i * 4], 
+            opacity: [0, 1, 0],
+            rotate: [0, isCover ? 0 : (i % 2 === 0 ? -4 : 4), isCover ? 0 : (i % 2 === 0 ? -4 : 4)]
+          }}
+          transition={{
+            repeat: Infinity,
+            duration: 3,
+            times: [0, 0.4, 1],
+            delay: i * 0.3,
+            ease: "easeInOut"
+          }}
+          style={{ zIndex: i, top: 20 }}
+        >
+          {isCover && (
+             <div className="absolute left-1.5 top-0 bottom-0 w-1.5 bg-black/20" />
+          )}
+        </motion.div>
+      );
+    })}
   </div>
 );
 
@@ -262,10 +286,10 @@ export default function ProcessingPage({ params }: { params: Promise<{ jobId: st
           className="flex flex-col items-center gap-4 text-center mb-12"
         >
           <h1 className="font-display text-4xl md:text-5xl text-foreground tracking-tight text-center">
-            <KineticText text="Meet your characters!" />
+            <KineticText text="Meet your cast!" />
           </h1>
           <p className="font-kid text-lg text-foreground/70 max-w-md">
-            We found these friends in your story. Pick the one you want to use for your book!
+            Make sure they look right! Tap a word to fix it, or let's start drawing.
           </p>
         </motion.div>
 
@@ -313,16 +337,19 @@ export default function ProcessingPage({ params }: { params: Promise<{ jobId: st
                   </button>
                 ))}
               </div>
-              <button
-                disabled={confirming}
-                onClick={() => handleConfirm("confirm")}
-                className="w-full mt-4 rounded-[16px] bg-[var(--color-secondary)] text-[var(--foreground)] min-h-[48px] px-8 font-kid text-lg disabled:opacity-50 hover:brightness-105 active:scale-[0.98] transition-all font-bold"
-              >
-                Use this one!
-              </button>
             </motion.div>
           ))}
         </motion.div>
+
+        <div className="mt-12 w-full flex justify-center">
+          <button
+            disabled={confirming}
+            onClick={() => handleConfirm("confirm")}
+            className="rounded-[16px] bg-[var(--color-primary)] text-[var(--color-surface)] min-h-[56px] px-12 font-kid text-xl disabled:opacity-50 hover:brightness-105 active:scale-[0.98] transition-all font-bold shadow-[0_10px_28px_rgba(49,85,217,0.12)]"
+          >
+            They look great! Let's go!
+          </button>
+        </div>
         
         <div className="h-16 mt-8 flex items-center justify-center">
           <AnimatePresence>

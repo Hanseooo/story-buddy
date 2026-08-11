@@ -89,6 +89,21 @@ precede the reveal, so the node, migration and endpoint land together with it. `
 
 ---
 
+## Tier 2d — opened by the bookshelf failure-card pass (2026-08-12)
+
+- **D-J · Child-initiated job deletion.** The shelf shows every failed job forever
+  (`auth-routes-and-account-ux` §7.2 accepted this as "permanent debris"). It is now *collapsed*
+  behind a `Didn't finish (n)` `<details>`, which needs no decision — but an actual delete control
+  does, on three counts. **(1)** S3 §4.1 grants students `SELECT` on `jobs` and nothing else; a
+  delete needs either a new `DELETE` policy or a service-role `DELETE /jobs/{id}` — an
+  authorization-surface change. **(2)** `0013_jobs_research_metrics.sql` puts `usd_estimate`,
+  `scenes_*` and `langfuse_trace_url` on the row, so a hard delete destroys Objective-4 data;
+  soft-delete is a schema change with the same gate. **(3)** Deletion interacts with the teacher's
+  *Didn't finish* section (`teacher-review-and-approval` §4.8) — does a child's delete hide the row
+  from their teacher? Decide as one ADR, or close it as "collapsed is enough".
+
+---
+
 ## Tier 3 — convention formalizations (likely MASTER_SPEC edits, not ADRs)
 
 *(D-E · Testing-seam convention → MASTER_SPEC §6 "The node test seam", 2026-07-22: one module-level
