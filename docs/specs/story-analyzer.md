@@ -27,8 +27,9 @@ the redacted input text, so `char_bible` has a stable roster to draw canonical r
 1. `len(characters) <= 3`, prominence-ordered — index `0` is the protagonist.
 2. Ids are `c{i}` / `loc{i}` / `obj{i}`, zero-based, **minted node-side by list position** after
    parsing (`story-memory-contract` §2.1, D-G). The LLM schema carries no id field.
-3. `Character.name` is a short **descriptive label**, never a proper noun and never a redaction
-   placeholder — see §4.
+3. `Character.name` is **the name the story gives**, falling back to a short descriptive label when
+   the story names nobody. Never a redaction placeholder. ~~never a proper noun~~ — amended
+   2026-08-11, see §4.
 4. `timeline[].order` is **re-assigned by the node** from list index: zero-based and dense. It is
    not trusted from the model. A model that returns `1, 2, 5` or a duplicate `order` validates
    fine against Pydantic and would silently corrupt the only ordering `segment` receives.
@@ -118,18 +119,33 @@ is persisted is exactly the contract type, never the strict subclass.
 4. Mint ids by index, re-index `timeline[].order` by list position, build contract types
 5. Partial-return the four keys (ADR-024 — never mutate `state`)
 
-### Naming: the unnamed protagonist is the *expected* case
+### Naming: use the pseudonym; the descriptive label is the fallback
 
-`analyze` reads `redacted_text`, so Presidio has already replaced real names with placeholders
-(CC-2) — and the expected kid story is first-person ("I went to the beach with my sister"). The
-prompt therefore asks for a **short descriptive label**, not a proper noun: *"the narrator"*,
-*"the younger sister"*, *"the orange cat"*.
+**Amended 2026-08-11.** `analyze` reads `redacted_text`, so any name reaching the prompt is already
+a pseudonym — `providers.redact_pii` **pseudonymizes** persons rather than hard-redacting them,
+mapping every detected name onto `_PSEUDONYM_POOL` (`Ana`, `Ben`, `Cielo`, …). A story about "Jun"
+arrives here as a story about "Ana".
 
-This works identically on redacted and un-redacted text, and it is what `char_bible` needs anyway —
-the canonical reference is drawn from `CharacterDescription`, not from the name. The consequence,
-stated plainly: **the child's actual name never appears in their storybook.** That is correct under
-CC-2, not a defect, but it is a product-visible outcome and should not surprise anyone reading this
-later.
+~~The prompt therefore asks for a **short descriptive label**, not a proper noun.~~ That rule
+discarded the pseudonym, and **every protagonist the pipeline ever produced was called "the
+narrator"** — two mechanisms where the second negated the first. `redact_pii`'s own docstring gives
+the intent it was defeating: persons are pseudonymized *"so the story survives with a protagonist an
+illustrator can draw"*.
+
+The prompt now asks for **the name the story gives**, and falls back to a descriptive label
+(*"the narrator"*, *"the younger sister"*) only when the story names nobody — still the common case,
+because the expected kid story is first-person ("I went to the beach with my sister"). Redaction
+placeholders remain forbidden outright.
+
+**The consequence, stated plainly: the child's actual name still never appears in their storybook** —
+but CC-2 is now carried by `redact_pii` upstream alone, not by this prompt as a second layer.
+
+⚠️ **What was given up.** The old label rule also neutralised a **spaCy NER miss**: a name Presidio
+failed to detect was discarded here anyway. `en_core_web_sm` is not reliable on Filipino names and
+kinship terms ("Kuya Jun", "Ate Mimi"), and the respondents are Filipino children (ADR-017). That
+residue is **accepted, not overlooked** — the same measurement gap §7 already carries for Taglish
+extraction quality. If a real name is ever observed in a generated book, this decision is the first
+place to look, and reverting it is a one-line prompt change.
 
 ### Edge cases
 
@@ -151,12 +167,14 @@ later.
 
 ## 5. Cross-cutting checklist (MASTER_SPEC §5)
 
-- [x] **CC-2 PII redaction** — reads `redacted_text`; descriptive labels mean neither a real name
-  nor a `<PERSON_1>` placeholder reaches a prompt, a caption, or the exported book.
-  ⚠️ **Not satisfied end-to-end today.** `input_gate` is a pass-through stub that copies
-  `raw_text` into `redacted_text`, and Presidio is not a dependency anywhere in `backend/`. This
-  node is correct *by construction*; the redaction it depends on lands with `moderation-stack`
-  (Phase 2). Do not read the tick as "PII is redacted today".
+- [x] **CC-2 PII redaction** — reads `redacted_text`, and no `<PERSON_1>` placeholder reaches a
+  prompt, a caption, or the exported book.
+  ~~⚠️ **Not satisfied end-to-end today.** `input_gate` is a pass-through stub that copies
+  `raw_text` into `redacted_text`, and Presidio is not a dependency anywhere in `backend/`.~~
+  **Resolved 2026-08-11.** `input_gate` is no longer a stub: it calls `providers.redact_pii`
+  (Presidio + spaCy `en_core_web_sm` + `ph_recognizers`) on every job. The tick is now real.
+  ⚠️ **But this node stopped being a second layer on the same date** — see §4 *Naming*. It relies
+  entirely on upstream redaction, so CC-2 here is exactly as strong as Presidio's recall.
 - [x] **CC-3 Cost control** — the 3-character cap is the roster ceiling, but **not** the pre-scene
   image ceiling. ~~at most 9 reference draws (3 characters × ADR-028's 3-draw cap)~~ — corrected
   2026-07-30 by `character-bible` §8: ADR-004 caps canonical references at **2** per book, so the real
@@ -249,8 +267,9 @@ sufficient for every Phase-1 consumer. No contract change, no `schema_version` b
 - **CC-7 seed reproducibility for text extraction** — recorded in §5, not closed. Needs a seed
   parameter on `providers.structured_text`, which is a `providers.py` change and therefore its own
   decision.
-- ⚠️ **Filipino / Taglish extraction quality is unmeasured.** `qwen/qwen3-32b` has no published
-  Filipino entity-extraction performance, and the respondents are Filipino children (ADR-017). A
+- ⚠️ **Filipino / Taglish extraction quality is unmeasured.** `mistralai/mistral-small-3.2-24b-instruct`
+  (the `text_model` since 2026-08-11 — ADR-002 amendment; ~~`qwen/qwen3-32b`~~ before that) has no
+  published Filipino entity-extraction performance, and the respondents are Filipino children (ADR-017). A
   Taglish story may also yield descriptive labels in Filipino, which then flow into an
   English-prompted image model. This is the same measurement gap ADR-011 carries for the text
   moderation gate (Phase 0.5 probe 4, un-run). **Not a Phase-1 blocker; flag it before Phase 2
