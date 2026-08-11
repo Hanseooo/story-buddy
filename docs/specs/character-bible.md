@@ -314,9 +314,19 @@ for the same reason (*"free prose, not an attribute, and not a thing a child can
 generator keeps it — "secondary character" is useful framing for a drawing. Covered by
 `test_notes_reaches_the_draw_prompt_but_never_the_judge_prompt`.
 
+That divergence is exactly why `notes` had to enter ADR-035's remit (amendment 2026-08-12b). Being
+invisible to the judge makes a style-forbidden term in `notes` **worse** than the `species` carve-out,
+not equivalent to it: limit 4 accepts `species` on the grounds that the judge can at least see and
+contradict it, and that argument is specifically false here. `filtered_description` now drops a
+forbidden `notes` **whole** — one word, the whole string — because a sentence filtered word-by-word
+leaves a fragment. Dropping is safe precisely because the judge never saw it, so nothing here can make
+acceptance vacuous.
+
 This is safe for the ADR-029 targeted redraw, which overwrites `notes` with the tapped chip: chips
 are drawn from the **visual** axes, so the tapped attribute still reaches the judge through its own
-axis. The `notes` copy is emphasis for the generator, not the judge's only sight of it.
+axis. The `notes` copy is emphasis for the generator, not the judge's only sight of it. The overwrite
+lands **after** the filter, so `_kept_whole` never sees the tapped attribute and the unreachable
+re-injection branch below stays unreachable.
 
 **A third divergence should prompt someone to ask whether sharing `_describe` still pays.** Two is
 still cheaper than two prompts that can drift into describing different characters; a third is the

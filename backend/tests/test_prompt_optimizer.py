@@ -309,16 +309,34 @@ def test_filtered_description_removes_the_forbidden_word_and_keeps_the_rest_of_t
     assert filtered.body_features == ["eyes", "long tail"]
 
 
-def test_filtered_description_never_touches_species_or_notes():
-    """ADR-035 Decision 2: species is REQUIRED at the analyze boundary precisely so acceptance
-    is never vacuous; notes is free prose the judge already never sees."""
+def test_filtered_description_never_touches_species():
+    """ADR-035 Decision 2: species is REQUIRED at the analyze boundary precisely so acceptance is
+    never vacuous, so it survives here even when the style forbids a word inside it (limit 4)."""
     filtered = filtered_description(
-        CharacterDescription(species="a glowing star", colours=["glowing"], notes="glowing softly"),
-        COMIC,
+        CharacterDescription(species="a glowing star", colours=["glowing"]), COMIC
     )
     assert filtered.species == "a glowing star"
-    assert filtered.notes == "glowing softly"
     assert filtered.colours == []
+
+
+def test_filtered_description_drops_a_forbidden_notes_whole_rather_than_word_by_word():
+    """ADR-035 limit 6. `notes` is free prose, so `_filter_axis`'s word-level rule would leave
+    "softly in the dark" — a mangled fragment the generator still has to reconcile. Dropping it
+    whole is safe in a way it is not for the other axes: ADR-034 removed `notes` from the judge
+    prompt, so nothing here can make acceptance vacuous."""
+    filtered = filtered_description(
+        CharacterDescription(species="star", notes="glows softly in the dark"), COMIC
+    )
+    assert filtered.notes is None
+
+
+def test_filtered_description_keeps_a_notes_the_style_permits():
+    """The prod value. "secondary character" is framing the generator can use and no preset
+    forbids, so limit 6 must not cost it."""
+    filtered = filtered_description(
+        CharacterDescription(species="star", notes="secondary character"), COMIC
+    )
+    assert filtered.notes == "secondary character"
 
 
 def test_permitted_words_strips_only_the_forbidden_word_out_of_a_single_value():

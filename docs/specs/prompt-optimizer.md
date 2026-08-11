@@ -71,11 +71,15 @@ open-ended, this one is closed by the fragment.
 
 `filtered_description(description, style_fragment)` returns a transient copy with those words removed.
 
-- **Three list axes only** — `colours`, `body_features`, `clothing`. Never `species` (`analyze` makes
-  it required precisely so acceptance can never be vacuous), never `notes` (free prose, already
-  excluded from the judge and from chips).
-- **Word-level**: `"glowing eyes"` → `"eyes"`. An entry is dropped only if nothing survives, so a real
-  subject fact is never discarded to remove a rendering one.
+- **Three list axes word-level, plus `notes` all-or-nothing.** Never `species` (`analyze` makes it
+  required precisely so acceptance can never be vacuous — ADR-035 limit 4).
+- **Word-level** on the list axes: `"glowing eyes"` → `"eyes"`. An entry is dropped only if nothing
+  survives, so a real subject fact is never discarded to remove a rendering one.
+- **All-or-nothing on `notes`** (`_kept_whole`, ADR-035 amendment 2026-08-12b): one forbidden word
+  drops the whole string. `notes` is a sentence, not a noun phrase, so the word-level rule would leave
+  a mangled fragment; and since ADR-034 took `notes` out of the judge prompt, dropping it cannot make
+  acceptance vacuous. It reaches the draw prompt (`char_bible.py:275`) and the scene prompt
+  (`_describe`), which is why the carve-out had to go.
 - **Prefix match in both directions**, floored at 4 characters — `"glowing"`/`"glow"` and
   `"gradient"`/`"gradients"` match, `"glove"`/`"glow"` does not.
 - **Transient.** `StoryMemory` keeps the child's words verbatim; only the rendered text drops them.
@@ -186,7 +190,9 @@ no mocks"), node-level tests exercise `build_prompt` for real rather than patchi
 - A style-forbidden colour is dropped; one the active fragment never forbids is kept (per-preset, not
   a blanket ban).
 - Word-level removal keeps the rest of the entry (`"glowing eyes"` → `"eyes"`).
-- `species` and `notes` are never touched.
+- `species` is never touched, even when a forbidden word sits inside it.
+- A `notes` carrying a forbidden word is dropped whole, not word-by-word; a `notes` the style permits
+  (`"secondary character"`) survives untouched.
 - `permitted_words` strips the forbidden word out of a single value (`"glowing orb"` → `"orb"`),
   returns `""` when nothing survives, and passes `None` through.
 - Prefix matching works in both directions and does not fire on `"glove"` vs `"glow"`.

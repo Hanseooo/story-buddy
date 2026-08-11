@@ -56,6 +56,16 @@ def _filter_axis(values: list[str], forbidden: set[str]) -> list[str]:
     return kept
 
 
+def _kept_whole(value: str | None, forbidden: set[str]) -> str | None:
+    """All-or-nothing, for the free-prose `notes` axis (ADR-035 limit 6). `_filter_axis`'s
+    word-level rule suits short noun phrases; on a sentence it leaves a mangled fragment. Dropping
+    is safe here in a way it is not for the other axes — ADR-034 removed `notes` from the judge
+    prompt, so nothing dropped here can make acceptance vacuous."""
+    if value is None or all(_permitted(word, forbidden) for word in value.split()):
+        return value
+    return None
+
+
 def permitted_words(value: str | None, style_fragment: str | None) -> str | None:
     """Pure. `_filter_axis`'s rule over ONE string, for the scalar `species` axis.
 
@@ -78,9 +88,11 @@ def filtered_description(
     only the rendered prompt/chip text drops them, so nothing is destroyed and the filter is
     reversible if the style changes.
 
-    The three LIST axes only (Decision 2). `species` is never filtered: `analyze.py:22-26` makes
-    it required precisely so an empty description can never make acceptance vacuous. `notes` is
-    never filtered either — free prose, already excluded from the judge (ADR-034) and from chips.
+    The three LIST axes word-level, plus `notes` all-or-nothing (limit 6 — it reaches the draw and
+    scene prompts, and since ADR-034 the judge can no longer see it, so a forbidden term there is
+    asserted to the generator and invisible to the gate). `species` is the one axis left alone:
+    `analyze.py:22-26` makes it required precisely so an empty description can never make
+    acceptance vacuous (limit 4).
 
     Removes, never invents, so `build_prompt`'s invariant 2 is untouched.
     """
@@ -92,6 +104,7 @@ def filtered_description(
             "colours": _filter_axis(description.colours, forbidden),
             "body_features": _filter_axis(description.body_features, forbidden),
             "clothing": _filter_axis(description.clothing, forbidden),
+            "notes": _kept_whole(description.notes, forbidden),
         }
     )
 
@@ -117,10 +130,11 @@ def referenced_characters(
     """The present characters that HAVE a canonical reference, in the order `generate_scene`
     uploads them to fal.
 
-    ONE list feeds both the image roll below and `generate_scene`'s `ref_paths`, so
-    "Image 2 is X" cannot drift from `image_urls[1]`. The two used to derive the order
-    independently — `generate_scene` filtering on `canonical_ref_image` and `build_prompt` not
-    filtering at all — and agreed only because no scene had ever mixed the two kinds.
+    ONE list feeds the image roll below and every `ref_paths` the pipeline builds —
+    `generate_scene`, `regenerate` and `output_mod`, the last two because both carry a prompt
+    built here forward (`correct_prompt` appends, `_soften_prompt` prepends). So "Image 2 is X"
+    cannot drift from `image_urls[1]` on any of the three. They used to derive the order
+    independently and agreed only because no scene had ever mixed the two kinds.
     """
     by_id = {character.char_id: character for character in characters}
     return [

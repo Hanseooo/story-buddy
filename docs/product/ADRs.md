@@ -2598,6 +2598,8 @@ things children write, and a new preset arrives carrying its own.
    `species`** (`analyze.py:22-26` makes it required precisely so the judge always has something to check; an
    empty description makes acceptance vacuous). **Never `notes`**, which is free prose and already excluded from
    the judge (ADR-034 follow-on) and from chips.
+   > **Superseded in part by the second 2026-08-12 amendment below.** `notes` *is* filtered, all-or-nothing. The
+   > justification above named the two surfaces where `notes` does not appear and missed the two where it does.
 3. **Removal is word-level within an entry**, and an entry is dropped only if nothing survives. `"glowing eyes"`
    becomes `"eyes"`, not nothing — dropping the whole entry would discard a real subject fact to remove a
    rendering one.
@@ -2656,6 +2658,12 @@ survives in `StoryMemory` and in their own story text; what it loses is the powe
    `star; glowing; tiny` to `star, a friendly children's picture-book character`. That is the intended
    degradation (nothing drawable survived, so the neutral floor is right), but it was a *consequence* rather than
    a decision and it moves acceptance toward vacuous, which is the same pressure limit 4 names.
+6. **A style-forbidden `notes` is dropped whole, so its permitted words go with it.** Added by the second
+   2026-08-12 amendment. `"glows softly in the dark"` under `comic` contributes nothing rather than
+   `"softly in the dark"` — the word-level rule of Decision 3 is right for short noun phrases and wrong for a
+   sentence, which it leaves as a mangled fragment the generator still has to reconcile. Accepted because `notes`
+   is emphasis, not an axis the gate measures: ADR-034 removed it from the judge prompt, so dropping it cannot
+   make acceptance vacuous the way dropping a visual axis would.
 
 ### Amendment (2026-08-12) — species is filtered in **chip scope**
 
@@ -2694,3 +2702,41 @@ the filter had just removed. The test names the correct response (delete the bra
 longer carries an unsatisfiable attribute into the judge; the gate stops re-rolling `c1` to the 3-draw cap; and
 `s1`/`s3`/`s4` are inspected for the star. A residual star defect after this is attributable to the guard or the
 generator, which is exactly what landing it alone buys.
+
+### Amendment (2026-08-12b) — `notes` is filtered, all-or-nothing
+
+Raised in review of the branch carrying the amendment above. Decision 2 justified the `notes` carve-out as *"free
+prose and already excluded from the judge (ADR-034 follow-on) and from chips"* — and both clauses are true and
+both are beside the point. The judge and the chips are not where this ADR's defect lives. `notes` reaches the two
+surfaces that *are*:
+
+| surface | line |
+|---|---|
+| `char_bible.reference_prompt` → `_describe(notes=True)` — the draw prompt | `char_bible.py:275` |
+| `prompt_optimizer._describe` → `build_prompt` — the scene prompt | `prompt_optimizer.py:108` |
+
+**This is strictly worse than limit 4's `species` carve-out, not equivalent to it.** Limit 4's whole acceptance
+argument is *"the judge can at least see this one and contradict it"*. ADR-034 removed `notes` from the judge, so
+for `notes` that argument is specifically false: a forbidden term there is asserted to the generator and invisible
+to the gate. And `notes` is unconstrained model output — `EXTRACTION_PROMPT` never mentions the field, while strict
+`json_schema` forces every property into `required`, so the model fills it with prose of its own choosing. Prod's
+value was `"secondary character"`; `"glows softly in the dark"` is the same draw from the same distribution.
+
+Structurally the same shape as the leak the first amendment closed — a Decision 2 carve-out composing into a
+bypass — one axis over. **Unproven rather than observed:** no prod instance of a rendering word landing in `notes`.
+Fixed anyway, because the residue is unbounded (any prose) and the fix is three lines.
+
+**Resolution: `_kept_whole` in `prompt_optimizer`, wired into `filtered_description`.** If any word of `notes` is
+forbidden, the whole string is dropped; otherwise it survives untouched. Word-level (Decision 3's rule) is right
+for a short noun phrase and wrong for a sentence — see limit 6.
+
+**Two things this deliberately does not disturb.**
+
+- **`_mint_targeted` is unaffected.** It sets `notes` *after* the filter runs
+  (`filtered_description(...).model_copy(update={"notes": retry.attribute})`), so the tapped attribute overwrites
+  whatever `_kept_whole` did. The unreachable re-injection branch above stays unreachable and the trap does not
+  reanimate — that needs filtering `retry.attribute` itself, which the chip-scope amendment already made
+  unnecessary.
+- **The `comic` re-measurement stays single-variable.** This changes a prompt only when `notes` actually contains
+  a forbidden word. Prod's `"secondary character"` is forbidden by no preset, so on the measurement job the
+  rendered prompts are byte-identical to what they would have been without this amendment.

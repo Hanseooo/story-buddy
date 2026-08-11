@@ -263,9 +263,9 @@ def _mint_targeted(state: StoryMemory) -> dict:
     retry = state.reference_retry
     character = next(c for c in state.characters if c.char_id == retry.char_id)
     style_fragment = state.style.prompt_fragment or settings.default_style_fragment
-    # ADR-035, same two surfaces. `notes` is set AFTER filtering because the tapped attribute
-    # comes from `reveal._chips`, which is filtered at source — so it can never be a forbidden
-    # term — and `notes` is outside the filter's remit anyway (Decision 2).
+    # ADR-035, same two surfaces. `notes` is set AFTER filtering, so `_kept_whole` never sees the
+    # tapped attribute — it does not need to: the attribute comes from `reveal._chips`, which is
+    # filtered at source, so it can never be a forbidden term.
     #
     # That "filtered at source" claim is load-bearing and it was FALSE until the amendment:
     # `_chips` offered the species axis raw, so a species like "glowing orb" came back through
