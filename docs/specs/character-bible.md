@@ -168,6 +168,29 @@ The judge prompt shows the drawn image and the description it should depict, and
 **every** judge call; `RefVerdict` already declares the fields in that order and
 `providers._assert_field_order` enforces it on the wire.
 
+#### The question is contradiction, not difference (amended 2026-08-11)
+
+The prompt originally asked the judge to *"describe every difference you observe between the image and
+the description"*. **Prod job `4cb31620` falsified the "species-only" edge case above**: `c0` rendered
+to `the narrator - girl; the protagonist` and every one of the 3 draws came back
+`matches_description = False`. The judge's own `differences_observed` is the evidence — *"the
+description is incredibly brief… the image offers a lot of details **not present in the
+description**"* — followed by a list of hair and clothing.
+
+None of that contradicts *a girl who is the protagonist*. A text-to-image model cannot draw a girl
+with no hair and no clothes, so **unlisted details are unavoidable**, which means under the old
+wording a thin description could not pass at *any* draw count on *any* model. The predicted ceiling
+was backwards: instead of collapsing to 1 draw, the loop paid for all 3 and persisted a failing
+verdict.
+
+The prompt now states that details the description omits are **not** differences, and asks for ways
+the image *contradicts a stated attribute*. This restores ADR-028's actual target — off-spec on a
+stated feature — and leaves reason-then-score intact.
+
+⚠️ **Verdicts are not comparable across this change.** The ADR-028 hit rate measured before
+2026-08-11 measured the judge's tolerance for sparse descriptions, not the generator. Treat the
+persisted series as starting here, exactly as §7's ⚠️ warned it might have to.
+
 ### `settings.default_style_fragment`
 
 One new config field, holding ADR-022's `cel` preset — *"the flagship default kids see first"*. This is
@@ -184,7 +207,7 @@ fragment to exist.
 | **One character** | One reference. The cap is a ceiling, not a quota. |
 | **Three characters** | `c0` and `c1` get references; `c2` keeps `None` and its scenes generate unreferenced. Documented ceiling per ADR-004, not a bug. |
 | **Duplicate character** ("my sister" / "Ate") | Both reference slots burned by one real character; the genuine second character gets nothing. **Sharper than `story-analyzer` §4 documented it** — under a 3-character roster a duplicate cost one of three slots, under a 2-reference cap it costs both. Not guarded here: dedup is unowned (§8). |
-| **Species-only description** | **Draw anyway, never refuse.** A thin description is exactly when an anchor matters most — consistency across scenes comes from *having* a reference, not from the reference matching the child's mental image (ADR-010). Ceiling: with one attribute `matches_description` is near-vacuously true, so the loop de facto collapses to 1 draw for that character. ADR-028 targets *off-spec on a stated feature*; a thin description states none. This closes `story-analyzer` §8's richness handoff. |
+| **Species-only description** | **Draw anyway, never refuse.** A thin description is exactly when an anchor matters most — consistency across scenes comes from *having* a reference, not from the reference matching the child's mental image (ADR-010). ADR-028 targets *off-spec on a stated feature*; a thin description states none. This closes `story-analyzer` §8's richness handoff. ~~Ceiling: with one attribute `matches_description` is near-vacuously true, so the loop de facto collapses to 1 draw for that character.~~ **Falsified in production, amended 2026-08-11** — see below. |
 | **Fully empty description** | The contract permits it (`CharacterDescription` is all-Optional) even though `analyze`'s LLM boundary requires `species` — a resumed pre-`story-analyzer` checkpoint could carry one. The prompt floors to `Character.name`. |
 | **`style.prompt_fragment` is `None`** | Falls back to `settings.default_style_fragment`. Nothing writes `style` today; the fallback is the normal path in Phase 1, not an error path. |
 | **All 3 draws fail** | Best-of by `len(attributes_present)`, ties → earliest. The **failing verdict is persisted** — never a failed job, never a placeholder, the same policy ADR-010 sets for scenes (ADR-028). |

@@ -205,6 +205,31 @@ def test_mint_reference_shows_the_judge_a_data_uri_never_a_url():
     assert not path.startswith("http")
 
 
+def test_judge_prompt_scopes_the_question_to_contradiction_not_to_any_difference():
+    """Regression, prod job 4cb31620 (2026-08-11): c0's description rendered to
+    "the narrator - girl; the protagonist" and all 3 draws returned matches_description=False.
+    The judge's own reasoning was the proof — "the description is incredibly brief... the image
+    offers a lot of details *not* present in the description" — and it went on to list hair and
+    clothing. Neither contradicts "a girl who is the protagonist"; a text-to-image model cannot
+    draw a girl with no hair and no clothes, so unlisted details are unavoidable, and under the
+    old "describe every difference" wording a thin description could never pass at ANY draw
+    count. Spec §4 predicted the opposite failure (near-vacuously TRUE, loop collapses to 1
+    draw); production falsified it and charged 3 draws instead.
+
+    ADR-028 targets *off-spec on a stated feature*, so the question must be contradiction of a
+    stated attribute, never mere absence from the description.
+    """
+    _, _, judge_mock, _ = _mint([_verdict(True)])
+    prompt = judge_mock.call_args.args[0]
+
+    assert "CONTRADICTS" in prompt
+    assert "are NOT differences" in prompt
+    # ADR-004 reason-then-score survives the rewording: reason is still asked for first.
+    assert prompt.index("First describe") < prompt.index("Then say whether")
+    # The description still reaches the judge — _describe and the prompt must not drift apart.
+    assert "the orange dog - dog; orange" in prompt
+
+
 def test_mint_reference_reports_a_draw_count_equal_to_the_provider_calls():
     """Spec §6: the count the helper reports equals the number of text_to_image calls.
     Invariant 4 rides on this — the node cannot compute it, the loop is in here."""

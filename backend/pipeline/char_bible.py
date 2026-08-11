@@ -26,14 +26,25 @@ BUCKET = "storybook-images"
 # Reason-then-score (ADR-004) applies to EVERY judge call. `RefVerdict` already declares
 # `differences_observed` before `matches_description`, and `providers._assert_field_order`
 # enforces the ordering on the wire — this prompt only has to ask in the same order.
+#
+# The question is CONTRADICTION, not difference. Asking for "every difference" made a thin
+# description unpassable: prod job 4cb31620 (2026-08-11) rendered c0 as "the narrator - girl;
+# the protagonist", and the judge failed all 3 draws because the image showed hair and clothing
+# the description never mentioned. Absence is not a defect — a text-to-image model must draw
+# *some* hair, so unlisted details are unavoidable and would fail every draw at every draw
+# count. ADR-028 targets off-spec on a *stated* feature; spec §4's "species-only" row is
+# amended to match (it predicted near-vacuously TRUE and got the opposite).
 JUDGE_PROMPT = """\
 This image is meant to be a character reference drawn from the description below.
 
 Description: {subject}
 
-First describe every difference you observe between the image and the description. Then say \
-whether the image matches the description, and list which of the described attributes are \
-actually present in the image."""
+The description lists only what the story stated. The image will necessarily show details it \
+does not mention — hair, clothing, background — and those are NOT differences.
+
+First describe any way the image CONTRADICTS a stated attribute. Then say whether the image \
+matches the description, and list which of the described attributes are actually present in \
+the image."""
 
 REFERENCE_PROMPT = """\
 A single full-body character reference of one character, standing, facing forward, centred on a \
