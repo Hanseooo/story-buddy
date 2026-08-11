@@ -157,10 +157,30 @@ fixes and abandoned for the one it causes.
 ## ADR-002 — Text/orchestration + VLM judge: open-weight models via OpenRouter
 
 **Status:** Accepted · **revised 2026-07-10** — supersedes the original Gemini decision. Driver: ADR-015.
+· **amended 2026-08-11** — the text model changes, and the reason generalises: on OpenRouter the
+*provider*, not the model, decides structured-output fidelity. The aggregator decision stands.
 
 **Context:** Story analysis, segmentation, prompt-building, and the VLM-judge need a capable LLM/VLM with **reliable structured output**. The open-weight mandate (ADR-015) rules out Gemini. Serving open weights ourselves is rejected in ADR-015; we need an aggregator that fronts many open models behind one OpenAI-compatible API so a model swap is a config change.
 
-**Decision:** Use **OpenRouter**. Text pipeline nodes: **`qwen/qwen3-32b`**. VLM judge: **`google/gemma-3-27b-it`**. Fallbacks, pre-vetted for structured-output support: `openai/gpt-oss-20b` (text, Apache-2.0) and `qwen/qwen3-vl-32b-instruct` (judge).
+**Decision:** Use **OpenRouter**. Text pipeline nodes: ~~**`qwen/qwen3-32b`**~~ → **`mistralai/mistral-small-3.2-24b-instruct`** (amended 2026-08-11; the struck model is kept because it passed Probe 3 and that result is real — see the amendment). VLM judge: **`google/gemma-3-27b-it`**. Fallbacks, pre-vetted for structured-output support: `openai/gpt-oss-20b` (text, Apache-2.0) and `qwen/qwen3-vl-32b-instruct` (judge).
+
+**Amendment (2026-08-11) — a probe result is valid for the `(model, provider)` pair that served it, and for nothing else.**
+
+This ADR's own Consequences already said structured-output support is per `(model, provider)`, not per model, and prescribed `provider.require_parameters: true` as the mitigation. **The mitigation is weaker than the sentence implies, and two production failures on the same day proved it from opposite ends of the pipeline.** `require_parameters: true` selects providers that **accept** `response_format` — it does not select providers that **honour** it. Acceptance is a capability flag on a routing table; fidelity is a property of how that provider decodes.
+
+**Instance 1 — `text_model`, prod job `af068baf`.** OpenRouter routed `qwen/qwen3-32b` to **DeepInfra**, which spent **1093 of 1497** completion tokens on a reasoning block and then returned JSON that violated the strict schema (nested objects where `str` was declared). Root cause: **grammar-constrained decoding cannot be applied across a thinking block** — the constraint resumes after the model has already committed to a shape. Nothing was misconfigured; `require_parameters` was sent, as `providers._chat` sends it on every OpenRouter call. **Probe 3 passed this exact model on 2026-07-29** (`PHASE_05_RESULTS.md`), on whichever provider the router happened to pick that day.
+
+**Instance 2 — `moderation_primary_image_model`.** `qwen/qwen3-vl-32b-instruct`, served by **Alibaba Cloud**, emitted `is_safe` **before** `safety_reasoning`. `providers._assert_field_order` (`backend/providers.py:74`) rejects that under ADR-004's reason-then-score rule and raises, **hard-failing the job at `char_ref_mod`** — the child-facing safety gate, i.e. the worst node to learn this in. Schema-order violation is a *different* symptom from Instance 1's schema violation, but it is the same cause: the provider produced tokens the declared grammar should have made unproducible.
+
+**Both were fixed by the same move:** `mistralai/mistral-small-3.2-24b-instruct` on both settings (`backend/app/config.py:32` and `:60`). It is not a reasoning model, it is multimodal, and it returned schema-compliant, correctly-ordered structured output first try in the same run that the two above failed. The image guard stays a **different family** from the Gemma backstop, so ADR-011's two-classifier diversity survives the swap.
+
+**Operational consequences — state these plainly, they are the transferable part:**
+- **The guard is the model choice, not the flag.** `require_parameters: true` stays on (it still prevents the silent `json_schema` → `json_object` downgrade this ADR was originally written about), but it is a floor, not a contract. **Do not adopt a reasoning/thinking model for a strict-schema call**, and do not assume a multimodal model orders fields the way the schema declares them.
+- **A probe result carries its provider with it.** "Probe 3 PASS" means *that model, on the provider OpenRouter routed to on 2026-07-29*. OpenRouter re-routes silently. A passing probe therefore **does not predict production** and never did — the probe measures reachability of a call shape, not a durable property of a model ID. `PHASE_05_RESULTS.md` and `MASTER_SPEC.md` §8 carry a dated note saying so; the original results stand unedited.
+- **`_assert_field_order` earned its keep.** It converted a silent voiding of ADR-004's mitigation into a loud job failure, which is why Instance 2 was diagnosed in minutes rather than shipped. Do not soften it into a warning.
+- **The deterministic suite cannot catch this class** — every test mocks `providers.py`. `backend/tests/test_smoke_providers.py` (2026-08-11) is the check; run `uv run pytest -m "smoke and not smoke_image"` before any deploy that changes a model ID, a base URL, or a provider (AGENTS.md, *Testing bright line*).
+- **ADR-015 is satisfied, checked rather than assumed.** `mistralai/mistral-small-3.2-24b-instruct` ships **Apache-2.0** open weights, hosted-inference-only by choice — the same posture ADR-015 already rules compliant, and a cleaner licence than the Gemma-licensed judge this ADR also names. The open-weight mandate is unaffected; no ADR-015 amendment is needed.
+- ADR-011 §3 and ADR-032 still name `qwen/qwen3-vl-32b-instruct` as the primary image guard. **This amendment supersedes that model choice** on the ground above; ADR-011's *design* — two classifiers, different vendors, either flag fails — is untouched and is the reason the swap was safe to make.
 
 **Consequences:**
 - ⚠️ **OpenRouter's structured-output support is per `(model, provider)` pair, not per model.** A routed provider that lacks it silently downgrades `json_schema` to loose `json_object` mode. **Always send `provider.require_parameters: true`**, and re-query `GET /api/v1/models?supported_parameters=structured_outputs` before implementing — the list changes. Without this, the Pydantic boundary (CLAUDE.md §2) is the *only* thing standing between a malformed response and the pipeline.
@@ -2182,3 +2202,111 @@ not make good draws more likely.
 **Alternatives:**
 - **Increase Northflank worker RAM to 4GB+** — rejected due to unnecessary ongoing hosting costs when APIs provide the same function for fractions of a cent per call.
 - **Quantize local models (int8/fp16)** — rejected; even quantized, the 0.6B guard pushes or exceeds the 512MB bound alongside LangGraph and Presidio.
+
+---
+
+## ADR-033 — LangGraph checkpointing forces the direct Postgres connection (5432), not Supabase's transaction pooler (6543)
+
+**Status:** Accepted (2026-08-11) · **constrains ADR-005** (LangGraph checkpointing) and **ADR-006**
+(Supabase as the datastore). Neither decision changes; this records the port they are reachable on and why
+the cheaper one is unavailable.
+
+**Context:** Supabase exposes the same database on two ports through Supavisor. **6543 is transaction mode** —
+a connection is handed back to the pool at the end of every transaction, so thousands of clients share a
+small number of server connections. **5432 is the session-mode / direct connection** — the client holds one
+server connection for the life of the session. Transaction mode is the one a small container is supposed to
+want: it is what makes a 0.2 vCPU / 512 MB worker (the same Northflank free-tier budget ADR-032 was written
+against) cheap to scale.
+
+The RQ worker checkpoints the graph to that database. `backend/worker/run_job.py:152` (and `:183` for the
+resume entrypoint) opens the checkpointer as:
+
+```python
+with PostgresSaver.from_conn_string(settings.supabase_db_url) as checkpointer:
+```
+
+**The constraint, read out of the library rather than inferred.** `PostgresSaver.from_conn_string` is
+`from_conn_string(cls, conn_string, *, pipeline: bool = False)` and its whole body is:
+
+```python
+with Connection.connect(
+    conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
+) as conn:
+```
+
+(`langgraph/checkpoint/postgres/__init__.py:64-83`.) Two facts follow, and the second is the one that is
+easy to get backwards:
+
+1. **`prepare_threshold` is hardcoded and not on the signature.** The only knob `from_conn_string` exposes
+   is `pipeline`. There is no keyword, no env var, and no `**kwargs` passthrough — the value cannot be
+   changed by configuration.
+2. **`prepare_threshold=0` does not mean "no prepared statements". It means *prepare everything,
+   immediately*.** psycopg3's semantics: *"If it is set to 0, every query is prepared the first time it is
+   executed. If it is set to `None`, prepared statements are disabled on the connection"*
+   (`psycopg/_connection_base.py:391-403`; the branch is `psycopg/_preparing.py:63`, where only `None`
+   short-circuits to `Prepare.NO`). So the value LangGraph forces is the **most** aggressive setting
+   available, and the value pgbouncer/Supavisor transaction mode requires — `None` — is precisely the one
+   `from_conn_string` makes unreachable.
+
+Server-side prepared statements are per **server** connection. In transaction mode the client's next
+statement can land on a different server connection than the one that ran `PREPARE`, so the checkpointer's
+own writes fail — `prepared statement "_pg3_0" does not exist`, or `already exists` when a recycled
+connection is reused. This is not tunable from our side: it is a property of pooling transactions, and
+LangGraph opts into the incompatible setting on our behalf.
+
+**What was tried.** Pointing `SUPABASE_DB_URL` at 6543 and letting the checkpointer run. There is no
+configuration fix — see (1). The remaining escapes are all code changes: construct a `psycopg.Connection`
+ourselves with `prepare_threshold=None` and pass it to the `PostgresSaver(conn)` constructor (which *does*
+accept a connection or a pool), or switch to a `ConnectionPool` we configure. Both mean the worker owns
+connection lifecycle that the library currently owns, for a pooler we are not otherwise constrained to use.
+
+**Decision:** **Run the worker's checkpointer over the direct connection on port 5432.**
+`SUPABASE_DB_URL` names 5432; 6543 is not used by this service. Keep `PostgresSaver.from_conn_string` as
+written — the library's default is correct *for* a session-mode connection, and hand-rolling the connection
+to reach a pooler we do not need is a seam the worker should not own.
+
+**Consequences:**
+- **Connection count, which is the whole cost of this decision.** A direct connection is held for the entire
+  graph run, not per statement — the `with` block in `run_job.py` wraps `_run_with_progress`, so the
+  connection lives as long as the job (RQ `job_timeout=900`, `app/main.py:110` / `:154`). Direct connections
+  are a small fixed ceiling on a Supabase free/micro instance, where the pooler's are effectively unbounded.
+- **This is survivable only because the worker is single-process.** `worker/run_worker.py` runs one
+  `Worker`/`SimpleWorker` over one `storybook` queue with no concurrency setting, so **one job at a time →
+  at most one direct connection at a time**. The 0.2 vCPU / 512 MB budget that makes the container feel
+  cramped is also what keeps this decision safe.
+- ⚠️ **Therefore: scaling the worker horizontally is now a database decision, not just a hosting one.**
+  N worker replicas (or any move to a concurrent worker class) is N held direct connections against a fixed
+  ceiling, and the failure mode is `FATAL: too many connections` on job start — a job that fails before it
+  writes a checkpoint, so there is nothing to resume from. Check the instance's `max_connections` before
+  raising replicas, and revisit this ADR at that point rather than after the first outage.
+- **The API service is unaffected.** FastAPI talks to Supabase over PostgREST/HTTPS (`supabase-py`), not
+  psycopg; the direct connection is the worker's alone. Nothing else in the repo opens one except
+  `backend/tests/test_rls_isolation.py`, which points at a local Supabase.
+- **`checkpointer.setup()` still runs on every job** and creates `checkpoints`, `checkpoint_blobs`,
+  `checkpoint_writes` on first use (`supabase/migrations/0008_authorization_surface.sql:171` guards against
+  them; `auth-authorization-surface.md` §48). Unchanged by the port, noted so the two are not confused.
+
+**Alternatives:**
+- **Transaction pooler (6543) with a hand-built connection** — construct `psycopg.Connection.connect(...,
+  prepare_threshold=None)` and pass it to `PostgresSaver(conn)`. Rejected for now: it moves connection
+  lifecycle, autocommit and row-factory decisions out of the library and into `run_job.py` for a benefit
+  (pooled connections) the current single-worker shape does not need. **This is the first thing to reach for
+  when the previous consequence bites** — it is a contained change, not a redesign.
+- **Session pooler (5432 via the Supavisor host)** — behaves like the direct connection for our purposes
+  (one server connection per session), so it neither causes the problem nor solves the connection-count one.
+  Available as an IPv4 reachability workaround, not as a fix.
+- **`AsyncPostgresSaver`** — same hardcoded `prepare_threshold=0` in its own `from_conn_string`
+  (`postgres/aio.py`). Not an escape; the pipeline is synchronous anyway.
+- **Move checkpoints off Supabase** to a Postgres we configure — rejected: a second datastore for one
+  connection-string flag, against ADR-006, and the checkpoints are classroom-scoped data that belongs with
+  the rest of it.
+- **Drop Postgres checkpointing for an in-memory saver** — rejected outright. Checkpoint/resume is a
+  critical path (ADR-005); ADR-029's reveal `interrupt()` is not resumable without it.
+
+⚠️ **One honest qualification.** The mechanism above is verified in code — the hardcoded
+`prepare_threshold=0`, psycopg's semantics for `0` vs `None`, the single-worker shape, the 900 s timeout.
+**The port migration itself leaves no trace in this repo**: `SUPABASE_DB_URL` is blank in
+`backend/.env.example`, the value lives only in Northflank's environment, and `git log -S "6543"` /
+`-S "prepare_threshold"` return nothing outside `uv.lock` hashes and a deleted Phase-0 plan doc. This ADR
+is therefore the *only* record that 6543 was tried and abandoned. Do not delete it and re-derive it from a
+production incident.

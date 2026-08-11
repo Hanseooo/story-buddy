@@ -174,7 +174,8 @@ concerns registry (MASTER_SPEC §5). If a spec doesn't exist, write it from
   as touching this gap.
 - Failure and moderation screens get the **same** design care as success screens.
   ✅ **Now built (2026-08-02):** `input_gate` (meta-llama/llama-guard-4-12b + Presidio + OpenRouter backstop),
-  `char_ref_mod` (qwen/qwen3-vl-32b-instruct + Gemma safety rubric), `output_mod` (same two-classifier check +
+  `char_ref_mod` (~~qwen/qwen3-vl-32b-instruct~~ → mistralai/mistral-small-3.2-24b-instruct since 2026-08-11,
+  ADR-002 amendment, + Gemma safety rubric), `output_mod` (same two-classifier check +
   soften-and-retry). `moderation_router` and `route_after_output_mod` enforce the ordering in
   `graph.py`. PII redaction via Presidio is live, with the Filipino recognizers from
   `input-gate-hardening` (`ph_recognizers.py`) wired into `providers._presidio` — stock Presidio no
@@ -225,12 +226,17 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
   [route_after_output_mod] → compose`.
   `moderation_router` (ADR-024 pure router) handles both post-`input_gate` and post-`char_ref_mod`
   edges; `route_after_output_mod` reads `moderation_status="failed"` and raises.
-  `char_ref_mod` runs qwen/qwen3-vl-32b-instruct + Gemma safety rubric on each canonical ref image.
+  `char_ref_mod` runs `settings.moderation_primary_image_model` (mistralai/mistral-small-3.2-24b-instruct
+  since 2026-08-11 — replaced qwen/qwen3-vl-32b-instruct, which emitted its verdict before its reasoning on
+  Alibaba Cloud and hard-failed the job here; ADR-002 amendment) + Gemma safety rubric on each canonical
+  ref image.
   `reveal` (ADR-029) is effect-free and holds one `interrupt()`; `route_reveal` loops `"try_again"`
   back to `char_bible` and enforces the 3-tap cap.
   `output_mod` runs the same two-classifier check on each output scene, with one soften-and-retry.
-  All provider calls (meta-llama/llama-guard-4-12b, Presidio, qwen/qwen3-vl-32b-instruct, OpenRouter backstops) go through
+  All provider calls (meta-llama/llama-guard-4-12b, Presidio, mistralai/mistral-small-3.2-24b-instruct, OpenRouter backstops) go through
   `backend/providers.py`; `get_signed_url` lives there too (Storage seam). `export` is not yet built.
+  The worker's LangGraph checkpointer reaches Supabase Postgres on the **direct connection (5432)**, never
+  the 6543 transaction pooler — `PostgresSaver.from_conn_string` hardcodes `prepare_threshold=0` (ADR-033).
 - Critical paths (extra review): moderation ordering (input text → char-ref → output image), PII
   redaction (Presidio) before any storage/caption/export, RLS + signed URLs on every table/asset,
   job checkpoint/resume logic — see `docs/product/ADRs.md` and StoryBuddy Hard Rules above.
@@ -350,7 +356,8 @@ Two independent projects, no shared root tooling — run commands from the named
 - Moderation stack and ordering (input → char-ref → output) — ADR-011
 - PII redaction (Presidio) — ADR-011
 - RLS policies / signed URL generation — ADR-006
-- Job checkpoint/resume (LangGraph + Postgres) — ADR-005
+- Job checkpoint/resume (LangGraph + Postgres) — ADR-005, ADR-033 (direct connection on 5432, not the
+  6543 pooler; adding worker replicas is a database decision, not just a hosting one)
 - Anything touching `backend/contracts/` — it's the frozen inter-module contract; changing it
   changes every consumer
 - Any change that conflicts with a decision in `docs/product/ADRs.md` — stop, write a new ADR,

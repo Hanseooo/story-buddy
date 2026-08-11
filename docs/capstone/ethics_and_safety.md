@@ -34,7 +34,7 @@ Before any processing begins, the child's raw story is evaluated.
 
 ### Stage 3: Output Image Moderation
 Generated images are moderated **before** the child ever sees them. This includes the canonical character reference images generated prior to the storyboarding phase. 
-* **Sexual Content:** Handled by `qwen/qwen3-vl-32b-instruct` (an 86M ViT, Apache-2.0), running on the OpenRouter in milliseconds.
+* **Sexual Content:** Handled by `mistralai/mistral-small-3.2-24b-instruct` (Apache-2.0, multimodal), called via OpenRouter. It replaced `qwen/qwen3-vl-32b-instruct` on 2026-08-11: served by Alibaba Cloud that model emitted its verdict before its reasoning, which the ADR-004 field-order assertion rejects, hard-failing the job at the character-reference gate (ADR-002 amendment).
 * **Violence, Gore, and Dangerous Content:** Handled by `google/gemma-3-27b-it` using a structured safety rubric. *(Note: The fine-tuned consistency judge is deliberately excluded from safety checks, as safety is a gate with no fallback).*
 * *Action:* Unsafe images never reach the child.
 
