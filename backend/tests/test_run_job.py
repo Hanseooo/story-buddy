@@ -11,7 +11,7 @@ from worker.run_job import _run_with_progress, _stage_string, resume_storybook_j
 
 @pytest.fixture(autouse=True)
 def mock_langfuse_handler():
-    with patch("worker.run_job.CallbackHandler") as mock:
+    with patch("worker.run_job.CallbackHandler") as mock, patch("worker.run_job.Langfuse"):
         yield mock
 
 

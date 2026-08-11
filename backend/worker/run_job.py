@@ -1,3 +1,4 @@
+from langfuse import Langfuse
 from langfuse.langchain import CallbackHandler
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.types import Command
@@ -17,6 +18,18 @@ def _langfuse_handler(job_id: str) -> tuple[CallbackHandler, str]:
     host = settings.langfuse_host.rstrip("/")
     trace_id = job_id.replace("-", "")
     url = f"{host}/project/{settings.langfuse_project_id}/traces/{trace_id}"
+    # CallbackHandler only *looks up* a client in LangfuseResourceManager._instances
+    # (langfuse/_client/get_client.py:138-149) — it never constructs one. Without this line the
+    # registry is empty, so every run logged "No Langfuse client with public key ... has been
+    # initialized. Skipping tracing" and langfuse_trace_url pointed at a trace that never existed.
+    # Langfuse is a singleton per public key, so re-calling it per job is free. Missing keys warn
+    # and return a disabled client rather than raising (client.py:381-397), so tracing stays
+    # strictly best-effort — a story never fails because observability is misconfigured.
+    Langfuse(
+        public_key=settings.langfuse_public_key,
+        secret_key=settings.langfuse_secret_key,
+        base_url=host,
+    )
     handler = CallbackHandler(
         public_key=settings.langfuse_public_key,
         trace_context={"trace_id": trace_id},
