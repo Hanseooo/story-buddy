@@ -683,14 +683,58 @@ unprompted reasoning names line weight, shading and texture as the differences. 
 observation as the human skim — OmniGen2 renders in its own style rather than inheriting the
 reference's — arrived at independently, by the instrument, on its first real call. Two consequences:
 
-1. **Evidence for ADR-007's seam, and against the escalation.** Style riding on the reference is the
+1. ~~**Evidence for ADR-007's seam, and against the escalation.** Style riding on the reference is the
    assumption; the judge says it did not ride. This is a third, independent line of support for the
-   2026-07-29 decision to keep Qwen primary.
+   2026-07-29 decision to keep Qwen primary.~~ **Withdrawn 2026-08-11 — see the follow-up below.**
+   The instrument was not measuring what this line read it as measuring, so it cannot count as an
+   independent line of support. The human skim of that pair still stands on its own; ADR-007's seam
+   is unaffected, it simply has one fewer witness than recorded here.
 2. **`style_match` is uninstrumented as a gate and should stay that way for now.** One observation,
    on one cross-model pair chosen for convenience, is not a style-fidelity measurement. Re-run this
    probe on a Qwen-generated scene before reading anything into the field — expected PASS/`True`,
    and a `False` there would be the interesting result. Logged as an ADR-008 instrument question,
    **not** as a Probe-3 failure: the probe tested whether the judge can be *called*, and it can.
+
+### Probe 3 follow-up — the Qwen-generated re-run, 2026-08-11 (issue #24)
+
+**Run as pre-registered in item 2 above. The interesting result landed: `False`, and the cause was
+the instrument.**
+
+Prod job `b9506307` (style preset `comic`, 7 scenes) returned `style_match=False` on **7 of 7**
+scenes. Every image in it — references and pages — is Qwen: `fal-ai/qwen-image` for the refs,
+`fal-ai/qwen-image-edit-2511` for the pages. So this is exactly the pair item 2 asked for, and it
+came back the way item 2 called interesting.
+
+Two hypotheses were pre-stated in issue #24 and both were tested against the job's own stored
+images (`storybook-images/b9506307-…/`), 3 judge runs per cell, `google/gemma-3-27b-it` on Parasail:
+
+| | positive control<br>comic ref + comic page (`ref-c0-1` / `s6-1`) | negative control<br>**cel** ref from job `e94cc400` + the same comic page |
+|---|---|---|
+| Unscoped prompt (as shipped) | `True` **1 / 6** | `True` 0 / 3 |
+| Scoped prompt (now shipped) | `True` **3 / 3** | `True` 0 / 3 |
+
+- **"The style is not landing" is falsified.** Direct inspection of the refs and pages shows the
+  comic fragment landing on every one — halftone dots, heavy ink outline, flat spot colour, panel
+  border, on both sides of the comparison. The scoped prompt then reads `True` on those same bytes.
+- **"The judge is miscalibrated" is confirmed, and the mechanism is the question, not the model.**
+  `style_match` was **emitted** on the wire every run — never defaulted in (`required` in the strict
+  schema, and the raw JSON keys were checked). Asked unscoped, the judge answered about
+  hair-strand detail, freckle rendering and background: the reference is one character on a plain
+  neutral background and the page is a full illustration, so "do these match" is False by
+  construction and the field was constant. `JUDGE_PROMPT` now names background, composition, pose,
+  crop and expression as ignorable.
+- **The negative control is what keeps the fix honest.** A prompt that just said "yes" would have
+  scored 3/3 on the positive too. Reading `False` 0/3 on a genuinely different style family is the
+  evidence that the scoped field still discriminates.
+
+**Method note, same class as the one recorded above:** these numbers are valid for
+`(gemma-3-27b-it, Parasail)` on one job's images. Six runs on one pair is enough to overturn a
+constant, not enough to publish a rate. Objective 4's corpus is where a rate comes from.
+
+**Still open, and NOT fixed here:** `wrong_style` appears in `failure_reasons` on runs where the
+same call returns `style_match=True`, so the reason list and the boolean disagree — and it is the
+reason list, not the boolean, that drives `correct_prompt`'s clause. Judges also emitted the same
+enum value up to five times in one list (`consistency_check` dedupes, so it is currently harmless).
 
 ---
 
