@@ -224,10 +224,15 @@ All classifier calls mocked (`backend/providers.py` seam):
     bypass; this is the test that makes the one above safe to keep.
   - Primary flags → backstop is **not called** (short-circuit).
   - Gemma (backstop) error on char-ref → hard fail (no "proceed without one check" path).
-- **`output_mod`:**
+- **`output_mod`:** (mirrors the `input_gate` list above since 2026-08-11 — §4c)
   - First check fails → soften-and-retry is triggered (verify the retry call fires).
   - Retry passes → `moderation_status = "passed"`.
   - Retry also fails → `moderation_status = "failed"` → job failed.
+  - Primary error → backstop-only path fires (primary's error is logged, not raised).
+  - Primary error **and** backstop flags → still `"failed"`. The degraded path must not become a
+    bypass; this is the test that makes the one above safe to keep.
+  - Primary flags → backstop is **not called** (short-circuit), on the retry check as well as the first.
+  - Backstop error → hard fail with `moderation_error` (no "proceed without one check" path).
 - **All nodes:** images fetched via signed URL (mock the URL-minting call to return a fixture
   URL); verify no raw Storage path is passed directly to a classifier.
 
