@@ -2363,7 +2363,7 @@ production incident.
 
 ## ADR-034 — The reference gate scores itself: acceptance is derived from a contradiction list, not asked for as a boolean
 
-**Status:** Proposed (2026-08-11) · **amends ADR-028 Decision 3** — the acceptance *predicate* only; the in-node
+**Status:** Accepted (2026-08-11) · **amends ADR-028 Decision 3** — the acceptance *predicate* only; the in-node
 loop, the cap of 3 and the best-of fallback are unchanged · **strengthens ADR-004** (reason-then-score) rather
 than amending it · additive to `story-memory-contract` §2 → **no `schema_version` bump**
 
