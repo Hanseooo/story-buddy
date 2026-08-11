@@ -60,7 +60,57 @@ def test_reference_prompt_floors_to_the_character_name_on_an_empty_description()
     """Spec §4: CharacterDescription is all-Optional, so a fully empty one is contract-legal
     (a resumed pre-story-analyzer checkpoint could carry one). The prompt floors to the name."""
     prompt = reference_prompt(CharacterDescription(), "the orange dog", FRAG)
-    assert "Character: the orange dog\n" in prompt
+    assert "Character: the orange dog," in prompt
+
+
+# --- visually-thin descriptions (2026-08-11) ---
+
+def test_reference_prompt_enriches_a_description_with_no_visual_axis():
+    """`analyze`'s EXTRACTION_PROMPT says "leave them empty rather than inventing details", so
+    colours/body_features/clothing are routinely all empty — prod job 4cb31620 (2026-08-11) drew
+    c0 from "the narrator - girl; the protagonist". Every page of the book inherits that
+    reference, so the generator needs *something* to draw beyond a role noun.
+
+    Triggered on the visual axes, NOT on len(populated): c0 had two populated axes (species and
+    notes) and still specified nothing drawable. `species` and `notes` are identity, not
+    appearance.
+    """
+    prompt = reference_prompt(CharacterDescription(species="girl", notes="the protagonist"), "the narrator", FRAG)
+
+    assert "the narrator - girl; the protagonist" in prompt
+    assert "friendly children's picture-book character" in prompt
+
+
+@pytest.mark.parametrize("description", [
+    CharacterDescription(species="dog", colours=["orange"]),
+    CharacterDescription(species="dog", body_features=["three eyes"]),
+    CharacterDescription(species="dog", clothing=["a red scarf"]),
+])
+def test_reference_prompt_leaves_a_description_with_any_visual_axis_alone(description):
+    """One drawable attribute is enough. Enriching on top of it would dilute the story's own
+    detail, which is the thing the reference exists to preserve."""
+    assert "friendly children's picture-book character" not in reference_prompt(description, "the dog", FRAG)
+
+
+def test_enrichment_reaches_the_draw_prompt_but_never_the_judge_prompt():
+    """THE load-bearing property of this whole approach. `_describe` is deliberately shared so
+    the two prompts cannot drift into describing different characters; this is the one sanctioned
+    exception, and it is one-directional.
+
+    If the enrichment reached the judge it would become a *stated* attribute, and the judge
+    (which checks contradiction of stated attributes) would start failing draws over invented
+    detail — reintroducing the exact bug the 2026-08-11 rewording fixed, from the other end.
+    ADR-028 must keep measuring the generator against the STORY, never against our filler.
+    """
+    thin = CharacterDescription(species="girl", notes="the protagonist")
+    _, t2i_mock, judge_mock, _ = _mint([_verdict(True)], description=thin, name="the narrator")
+
+    draw_prompt = t2i_mock.call_args.args[0]
+    judge_prompt = judge_mock.call_args.args[0]
+
+    assert "friendly children's picture-book character" in draw_prompt
+    assert "friendly children's picture-book character" not in judge_prompt
+    assert "the narrator - girl; the protagonist" in judge_prompt
 
 
 def test_reference_prompt_always_contains_the_style_fragment():
@@ -71,7 +121,7 @@ def test_reference_prompt_always_contains_the_style_fragment():
 
 # --- mint_reference (effect boundary) ---
 
-def _mint(judge_side_effect, images=None):
+def _mint(judge_side_effect, images=None, description=None, name="the orange dog"):
     """Runs mint_reference with all three effects patched.
 
     Returns (result, text_to_image_mock, judge_mock, fake_supabase).
@@ -81,8 +131,8 @@ def _mint(judge_side_effect, images=None):
          patch("pipeline.char_bible.judge", side_effect=judge_side_effect) as judge_mock, \
          patch("pipeline.char_bible.get_supabase_client", return_value=fake_supabase):
         result = mint_reference(
-            CharacterDescription(species="dog", colours=["orange"]),
-            "the orange dog",
+            description or CharacterDescription(species="dog", colours=["orange"]),
+            name,
             FRAG,
             "story-1",
             "c0",
@@ -318,6 +368,30 @@ def test_char_bible_writes_the_path_and_verdict_onto_the_referenced_characters()
     assert result["characters"][0].ref_verdict.matches_description is True
 
 
+def test_char_bible_stamps_the_judge_prompt_version_next_to_the_verdict():
+    """`matches_description` is both a product gate and the capstone's ADR-028 hit rate, and the
+    prompt that produces it is under active development — it changed on 2026-08-11 (every
+    difference → contradiction only) and that silently invalidated every verdict measured before
+    it. Spec §7 warned this could happen; nothing recorded which prompt a verdict came from, so
+    the only honest response was to reset the series.
+
+    Stamping the version makes the next change segment the series instead of resetting it. It
+    lives on `Character`, NOT on `RefVerdict`: `RefVerdict` is handed to `providers.judge` as
+    `response_format`, so a field there becomes a required model output under strict json_schema
+    and the judge would be asked to invent its own prompt version.
+    """
+    from pipeline.char_bible import JUDGE_PROMPT_VERSION
+
+    state = _state([_char("c0", "the dog")])
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()):
+        result = char_bible(state)
+
+    assert result["characters"][0].ref_verdict_prompt_version == JUDGE_PROMPT_VERSION
+    # A bare int is only comparable if it moves when the prompt moves.
+    assert JUDGE_PROMPT_VERSION >= 2, "bump this when JUDGE_PROMPT changes meaning"
+
+
 def test_char_bible_persists_a_failing_verdict_rather_than_failing_the_job():
     """ADR-010/ADR-028: a failed acceptance loop is loud, never a failed job, never a placeholder."""
     failing = ("story-1/ref-c0-1.png", _verdict(False, ["dog"]), 3)
@@ -550,6 +624,22 @@ def test_char_bible_targeted_mode_uploads_to_a_new_path_and_clears_moderation_st
     assert c0.canonical_ref_image == "story-1/ref-c0-2.png"
     assert c0.ref_moderation_status is None
     assert _uploaded_path(fake_supabase) == "story-1/ref-c0-2.png"
+
+
+def test_char_bible_targeted_mode_also_stamps_the_judge_prompt_version():
+    """The targeted redraw judges with the same JUDGE_PROMPT, so its verdict is part of the same
+    series and must carry the same stamp — otherwise the ADR-029 retries are the unlabelled
+    subset that makes the ADR-028 series unsegmentable again."""
+    from pipeline.char_bible import JUDGE_PROMPT_VERSION
+
+    state = _targeted_state()
+    with patch("pipeline.char_bible.text_to_image", return_value=b"x"), \
+         patch("pipeline.char_bible.judge", return_value=_verdict(True)), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+        result = char_bible(state)
+
+    c0 = next(c for c in result["characters"] if c.char_id == "c0")
+    assert c0.ref_verdict_prompt_version == JUDGE_PROMPT_VERSION
 
 
 def test_char_bible_ignores_invariant_six_skip_when_reference_retry_targets_an_existing_ref():

@@ -34,6 +34,14 @@ BUCKET = "storybook-images"
 # *some* hair, so unlisted details are unavoidable and would fail every draw at every draw
 # count. ADR-028 targets off-spec on a *stated* feature; spec §4's "species-only" row is
 # amended to match (it predicted near-vacuously TRUE and got the opposite).
+#
+# BUMP THIS whenever the wording above changes what a FALSE verdict means. It is persisted as
+# `Character.ref_verdict_prompt_version`, and it is the only thing that makes the ADR-028 hit
+# rate comparable across prompt revisions — v1 measured the judge's tolerance for sparse
+# descriptions, v2 measures the generator. Unversioned, the 2026-08-11 change silently
+# invalidated every verdict before it and the series had to restart.
+JUDGE_PROMPT_VERSION = 2
+
 JUDGE_PROMPT = """\
 This image is meant to be a character reference drawn from the description below.
 
@@ -45,6 +53,16 @@ does not mention — hair, clothing, background — and those are NOT difference
 First describe any way the image CONTRADICTS a stated attribute. Then say whether the image \
 matches the description, and list which of the described attributes are actually present in \
 the image."""
+
+# `analyze`'s EXTRACTION_PROMPT deliberately says "leave them empty rather than inventing
+# details", so a character routinely arrives with nothing drawable — prod job 4cb31620
+# (2026-08-11) drew c0 from "the narrator - girl; the protagonist". Every page of the book
+# inherits that one reference, so the generator gets a neutral floor rather than a role noun.
+#
+# Deliberately vague: it must not assert anything the story could contradict. Keyed on the
+# VISUAL axes, not on how many fields are populated — species and notes are identity, not
+# appearance, and c0 had both while specifying nothing to draw.
+THIN_DESCRIPTION_FILLER = ", a friendly children's picture-book character"
 
 REFERENCE_PROMPT = """\
 A single full-body character reference of one character, standing, facing forward, centred on a \
@@ -71,8 +89,17 @@ def _describe(description: CharacterDescription, name: str) -> str:
 
 def reference_prompt(description: CharacterDescription, name: str, style_fragment: str) -> str:
     """Pure. ADR-022: the fragment names a medium and its physical artifacts — it never says
-    "beautiful", "8k" or "highly detailed"."""
-    return REFERENCE_PROMPT.format(subject=_describe(description, name), style_fragment=style_fragment)
+    "beautiful", "8k" or "highly detailed".
+
+    The enrichment below is the ONE sanctioned divergence from `_describe`'s shared output, and
+    it is one-directional: the draw prompt gets it, the judge prompt never does. If the judge saw
+    it, it would become a *stated* attribute and draws would start failing over our filler
+    instead of over the story — ADR-028 measures the generator against the STORY.
+    """
+    subject = _describe(description, name)
+    if not (description.colours or description.body_features or description.clothing):
+        subject += THIN_DESCRIPTION_FILLER
+    return REFERENCE_PROMPT.format(subject=subject, style_fragment=style_fragment)
 
 
 def best_draw(verdicts: list[RefVerdict]) -> int:
@@ -181,7 +208,12 @@ def _mint_targeted(state: StoryMemory) -> dict:
     path = _upload(image, state.story_id, character.char_id, n)
 
     characters = [
-        c.model_copy(update={"canonical_ref_image": path, "ref_verdict": verdict, "ref_moderation_status": None})
+        c.model_copy(update={
+            "canonical_ref_image": path,
+            "ref_verdict": verdict,
+            "ref_verdict_prompt_version": JUDGE_PROMPT_VERSION,
+            "ref_moderation_status": None,
+        })
         if c.char_id == character.char_id
         else c
         for c in state.characters
@@ -226,7 +258,13 @@ def char_bible(state: StoryMemory) -> dict:
     # Invariant 2: `characters` has NO reducer, so a partial return REPLACES the list —
     # returning only the modified entries would silently delete every other character.
     characters = [
-        c.model_copy(update={"canonical_ref_image": minted[c.char_id][0], "ref_verdict": minted[c.char_id][1]})
+        c.model_copy(update={
+            "canonical_ref_image": minted[c.char_id][0],
+            "ref_verdict": minted[c.char_id][1],
+            # Stamped even when the verdict is None (degraded judge): it records which prompt
+            # this reference was checked against, which is true whether or not a verdict came back.
+            "ref_verdict_prompt_version": JUDGE_PROMPT_VERSION,
+        })
         if c.char_id in minted
         else c
         for c in state.characters

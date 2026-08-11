@@ -51,6 +51,13 @@ class Character(BaseModel):
     canonical_ref_image: Optional[str] = None       # durable Storage PATH, never a signed URL
     ref_moderation_status: Optional[str] = None
     ref_verdict: Optional[RefVerdict] = None        # ADR-028: the reference is checked, not assumed
+    # Which `char_bible.JUDGE_PROMPT` produced `ref_verdict`. The ADR-028 hit rate is only
+    # comparable within one version — the 2026-08-11 rewording changed what a FALSE means, and
+    # nothing recorded the prompt, so the whole prior series had to be discarded. Lives HERE and
+    # not on `RefVerdict` because `RefVerdict` is passed to `providers.judge` as `response_format`:
+    # a field there is a required model output under strict json_schema, and the judge would be
+    # asked to state its own prompt version. Additive → no schema_version bump (§8).
+    ref_verdict_prompt_version: Optional[int] = None
 
 
 class ReferenceRetry(BaseModel):        # ADR-029 — set by `reveal`, consumed by `char_bible`

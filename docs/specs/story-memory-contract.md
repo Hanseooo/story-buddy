@@ -68,6 +68,7 @@ class Character(BaseModel):
     canonical_ref_image: Optional[str] = None       # durable Storage PATH, never a signed URL
     ref_moderation_status: Optional[str] = None
     ref_verdict: Optional[RefVerdict] = None        # ADR-028: the reference is checked, not assumed
+    ref_verdict_prompt_version: Optional[int] = None  # which char_bible.JUDGE_PROMPT produced it
 
 class Location(BaseModel):     # minimal; refined by `story-analyzer` (§8, additive)
     loc_id: str
@@ -318,6 +319,14 @@ N/A — the contract produces no generated content.
   a **node-internal loop, not a conditional edge** — ADR-003's branch points and ADR-024's routers are
   unchanged *by ADR-028*. (ADR-029 later added a third branch point for the reveal; that is a separate change
   and does not affect this loop.)
+- **Added 2026-08-11 (additive, no `schema_version` bump):** `Character.ref_verdict_prompt_version`. `char_bible`
+  stamps it with `JUDGE_PROMPT_VERSION` on every write of `ref_verdict`, in both first-pass and ADR-029 targeted
+  modes. It exists because `matches_description` is simultaneously a product gate and the capstone's ADR-028 hit
+  rate, and the prompt that produces it is under active development: the 2026-08-11 rewording ("every difference"
+  → contradiction only) changed what a FALSE *means*, and nothing recorded which prompt a verdict came from, so
+  the entire prior series had to be discarded rather than segmented. It lives on `Character` and **not** on
+  `RefVerdict` because `RefVerdict` is handed to `providers.judge` as `response_format` — a field there becomes a
+  required model output under strict `json_schema`, and the judge would be asked to state its own prompt version.
 - **Deferred:** `pdf_ref` / composed-book reference for the export leg (MASTER_SPEC §2). Nothing in Phase 1
   writes it; `export-pdf` (Phase 2) adds it additively.
 - **Removed 2026-07-22:** `Scene.consistency_check_status` — an untyped `Optional[str]` with no owner spec and
