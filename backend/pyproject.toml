@@ -42,6 +42,14 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+# Smoke tests hit real provider APIs and cost real money — opt in, never on by default.
+#   uv run pytest -m "smoke and not smoke_image"   # text/judge/moderation, six small-model pings
+#   uv run pytest -m smoke                         # the above plus one paid fal.ai draw
+addopts = "-m 'not smoke'"
+markers = [
+    "smoke: calls a real provider API. Verifies every model in app/config.py is reachable and honours the contract the pipeline needs. Run before any deploy that changes a model name or base URL.",
+    "smoke_image: a smoke test that additionally pays for one image generation.",
+]
 
 # `ruff check` only. `ruff format` is deliberately NOT adopted: its 88-column default rewraps
 # every file in the repo, so a one-line change arrives as a 200-line diff. Adopt it only via a

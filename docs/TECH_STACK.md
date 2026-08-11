@@ -14,7 +14,8 @@ or an SDK call at a call site, stop and read §5 first.
 
 | Role | Exact model ID | License | Where it runs | Config setting | ADR | Phase |
 |---|---|---|---|---|---|---|
-| Text pipeline (analyze/segment/prompts) | `qwen/qwen3-32b` | Apache-2.0 | OpenRouter | `settings.text_model` | ADR-002 | Phase 1 |
+| Text pipeline (analyze/segment/prompts) | `mistralai/mistral-small-3.2-24b-instruct` | Apache-2.0 | OpenRouter | `settings.text_model` | ADR-002 (amended 2026-08-11) | Phase 1 |
+| ~~Text pipeline~~ (superseded 2026-08-11) | ~~`qwen/qwen3-32b`~~ | Apache-2.0 | OpenRouter | — | ADR-002 | Passed Probe 3 (2026-07-29) and still failed in production: emitted prose under `response_format`, prod job `af068baf`. `require_parameters: true` selects providers that *accept* structured output, not ones that *honour* it. |
 | Consistency judge (prompted) | `google/gemma-3-27b-it` | Gemma license (not OSI) | OpenRouter | `settings.vlm_judge_model` | ADR-002, ADR-004 | Phase 1 |
 | Consistency judge (fine-tuned, replaces prompted if it ships) | `Qwen2.5-VL-7B-Instruct` + QLoRA adapter | Apache-2.0 | Modal (vLLM, scale-to-zero), reached via `settings.judge_base_url` | `settings.judge_base_url` / `settings.judge_api_key` | ADR-018, ADR-019 | Phase 2.5 |
 | Canonical character reference (text→image) | `fal-ai/qwen-image` | Apache-2.0 | fal.ai | `settings.fal_image_model` | ADR-001, ADR-007 | Phase 1 |
@@ -22,7 +23,8 @@ or an SDK call at a call site, stop and read §5 first.
 | Input-text moderation (primary) | `meta-llama/llama-guard-4-12b` 0.6B | Apache-2.0 | OpenRouter | not yet in `config.py` — Phase-2 `moderation-stack` spec defines the shape | ADR-011 (revised 2026-07-21c) | Phase 2 |
 | Input-text moderation (backstop) | `openai/gpt-oss-safeguard-20b` | Apache-2.0 (open weights, not the OpenAI API) | OpenRouter | `settings.moderation_backstop_model` (currently `None` — see §8) | ADR-011 | Phase 2 |
 | Input-text moderation (config default, demoted) | `meta-llama/llama-guard-4-12b` | Meta Community License (not OSI) | OpenRouter | `settings.moderation_model` | ADR-011 | placeholder only — see §8 |
-| Output-image NSFW gate | `qwen/qwen3-vl-32b-instruct` (ViT-base, 86M) | Apache-2.0 | OpenRouter | not yet in `config.py` | ADR-011 | Phase 2 |
+| Output-image NSFW gate (primary image guard) | `mistralai/mistral-small-3.2-24b-instruct` | Apache-2.0 | OpenRouter | `settings.moderation_primary_image_model` | ADR-011, ADR-032, ADR-002 (amended 2026-08-11) | Phase 2 |
+| ~~Output-image NSFW gate~~ (superseded 2026-08-11) | ~~`qwen/qwen3-vl-32b-instruct`~~ | Apache-2.0 | OpenRouter | — | ADR-011, ADR-032 | Served by Alibaba Cloud it emitted `is_safe` before `safety_reasoning`; `providers._assert_field_order` rejects that under ADR-004 reason-then-score and hard-failed the job at `char_ref_mod`. Same class as the `text_model` failure one row up — the *provider*, not the model, decides structured-output fidelity. |
 | Output-image safety rubric (violence/gore) | `google/gemma-3-27b-it` (separate call, separate concern from the judge) | Gemma license | OpenRouter | reuses `settings.vlm_judge_model`'s model id via a distinct prompt/call — **never the fine-tuned judge** | ADR-011, ADR-004 amendment (b) | Phase 2 |
 | Narration (primary) | `Chatterbox` (Resemble AI) | MIT | fal.ai | not yet in `config.py` | ADR-020 | Phase 2 |
 | Narration (CPU fallback) | `Kokoro-82M` | Apache-2.0 | OpenRouter | not yet in `config.py` | ADR-020 | Phase 2 |
@@ -41,7 +43,7 @@ self-hosted vLLM (the fine-tuned judge, post-Phase 2.5) rejects the field.
 |---|---|---|---|
 | **Vercel** | Frontend hosting (Next.js SSR + static) | Phase 0 | Render, Fly.io (fine); DO App Platform (not preferred) — ADR-009 |
 | **Northflank** (Singapore region) | Backend: FastAPI web + RQ worker + Redis, 3 services | Phase 0 | Render, Fly.io, DO droplet — ADR-031 |
-| **Supabase — Postgres** | App data + LangGraph checkpoints (`langgraph-checkpoint-postgres`) | Phase 0 | Roll-your-own Postgres — more ops, no gain — ADR-006 |
+| **Supabase — Postgres** | App data + LangGraph checkpoints (`langgraph-checkpoint-postgres`). ⚠️ **Reached on the direct connection, port 5432 — not the transaction pooler on 6543** (ADR-033) | Phase 0 | Roll-your-own Postgres — more ops, no gain — ADR-006 |
 | **Supabase — Auth** | Classroom-scoped accounts: teacher/BEED-student issuer, child/student rows | Phase 0 (built), Phase 2 (real RLS) | Firebase — less Postgres/RLS-native — ADR-006. **Clerk** — rejected ADR-027: its self-serve/email product is what ADR-017 forbids, and it splits the JWT issuer from the Postgres enforcing RLS |
 | **Supabase — Storage** | Generated images + audio via signed URLs; no public buckets. **PDFs are generated on demand, not stored** (ADR-027) | Phase 0 | **Cloudflare R2 / S3** — rejected ADR-027: compression removes the need, and neither can mint signed URLs client-side, so both force asset authz out of RLS into app code |
 | **Supabase — Realtime** | Frontend watches job-row progress | Phase 0 | Websockets — more work, same result — ADR-005 |
@@ -65,7 +67,7 @@ self-hosted vLLM (the fine-tuned judge, post-Phase 2.5) rejects the field.
 | `pydantic` | >=2.9 | Contract validation (Story Memory, structured LLM output) |
 | `pydantic-settings` | >=2.6 | `Settings` (env-overridable config) |
 | `langgraph` | >=0.2.45 | Deterministic pipeline state machine (ADR-003) |
-| `langgraph-checkpoint-postgres` | >=2.0.1 | Per-super-step checkpointing to Supabase Postgres (ADR-005, ADR-024) |
+| `langgraph-checkpoint-postgres` | >=2.0.1 | Per-super-step checkpointing to Supabase Postgres (ADR-005, ADR-024). `PostgresSaver.from_conn_string` hardcodes `prepare_threshold=0` — "prepare every query", not "no prepared statements" — which is why `SUPABASE_DB_URL` must name **5432**, not the 6543 pooler (ADR-033) |
 | `psycopg[binary]` | >=3.2 | Postgres driver |
 | `openai` | >=1.99 | OpenAI-compatible client — points at OpenRouter *or* vLLM/Modal (ADR-019); not an OpenAI-model dependency |
 | `fal-client` | >=0.7 | fal.ai SDK (images, narration) |

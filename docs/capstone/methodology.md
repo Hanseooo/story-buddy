@@ -146,7 +146,9 @@ A deterministic pipeline of **ten logical modules**, in order:
 > **Style Preset** and **Prompt Optimizer** are node *inputs* rather than standalone nodes — but the logical
 > decomposition maps one-to-one onto the deterministic pipeline. The architecture is unchanged.
 
-**Models.** Text analysis: `qwen/qwen3-32b`. Image generation: `Qwen-Image-Edit` (Apache-2.0). Consistency
+**Models.** Text analysis: `mistralai/mistral-small-3.2-24b-instruct` (Apache-2.0; `qwen/qwen3-32b` until
+2026-08-11, replaced after it returned schema-violating structured output in production — ADR-002
+amendment). Image generation: `Qwen-Image-Edit` (Apache-2.0). Consistency
 judge: prompted `gemma-3-27b-it`. Narration: `Chatterbox` (MIT), served via hosted inference, with
 `Kokoro-82M` retained as a CPU fallback (ADR-020, revised). All open-weight. No proprietary vendor model
 appears anywhere in the pipeline — a constraint that makes the system self-hostable and the equity claim a

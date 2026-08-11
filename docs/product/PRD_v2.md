@@ -82,7 +82,9 @@ An external requirement directs StoryBuddy to use **open-source models**. See **
 defines "open source" as **open weight** and records that hosted inference of open weights satisfies it.
 
 - **Image model:** Nano Banana → **Qwen-Image-Edit** (Apache-2.0), hosted on fal.ai. ADR-001 revised.
-- **Text + VLM judge:** Gemini → **`qwen/qwen3-32b`** and **`google/gemma-3-27b-it`** via OpenRouter. ADR-002 revised.
+- **Text + VLM judge:** Gemini → ~~**`qwen/qwen3-32b`**~~ **`mistralai/mistral-small-3.2-24b-instruct`**
+  (amended 2026-08-11 — the Qwen model passed Probe 3 and still failed in production; ADR-002 amendment)
+  and **`google/gemma-3-27b-it`** via OpenRouter. ADR-002 revised.
 - **Moderation:** open classifiers primary, free proprietary backstop. ADR-011 revised.
 - **No fine-tuning.** Identity via training-free reference conditioning; style already handled by
   ADR-007's constant. Scoped, costed, and deliberately deferred — **ADR-016**.
@@ -204,7 +206,7 @@ it is the long pole and cannot be compressed by coding faster (§10, §18, RESEA
 | Character reference origin | System auto-generates one canonical reference per character, reused via reference-conditioned generation | Stronger contribution; avoids moderating uploads; avoids style mismatch. ADR-001 |
 | **Model openness** | Open **weight**; hosted inference; self-hosting always available, never required | External mandate. Hosting is orthogonal to openness. **ADR-015** |
 | Image model | Qwen-Image-Edit 2509/2511 (Apache-2.0), hosted on fal.ai | Multi-reference conditioning, no training; ~$0.02–0.035/image. Non-human consistency **unverified — Phase 0.5 spike**. ADR-001 |
-| Text/orchestration model | `qwen/qwen3-32b` via OpenRouter | Open weight, strict structured output, cheap. **Set `provider.require_parameters: true`.** ADR-002 |
+| Text/orchestration model | `mistralai/mistral-small-3.2-24b-instruct` via OpenRouter (~~`qwen/qwen3-32b`~~ until 2026-08-11) | Open weight (Apache-2.0), strict structured output, cheap, **not a reasoning model**. **Set `provider.require_parameters: true`** — but it selects providers that *accept* `response_format`, not ones that *honour* it, so the real guard is the model choice. ADR-002 (amended 2026-08-11) |
 | Fine-tuning | **None in v1** | Identity needs no training (reference conditioning); style is already a constant (ADR-007). Costed and deferred with an explicit trigger. **ADR-016** |
 | Style in v1 | Single fixed style, authored once as a constant; carried by the character reference image | Removes a module; character ref carries identity *and* style; cleaner consistency eval. ADR-007 |
 | Consistency mechanism | VLM-as-judge control loop → one targeted, prompt-corrected regeneration → best-of fallback | Robust on stylized/non-human characters; interpretable; makes regeneration refinement not resampling. ADR-004, ADR-010 |
@@ -452,7 +454,9 @@ an independent backstop; either one flagging fails the content** (ADR-011).
    deliverable**, not a polish item (ADR-011).
 3. **Output image moderation** — on **every generated image, including the canonical character reference
    before the reveal (flow step 7)**. No generated image reaches a child unmoderated.
-   - `qwen/qwen3-vl-32b-instruct` (86M ViT, Apache-2.0, CPU, milliseconds) — sexual content.
+   - `mistralai/mistral-small-3.2-24b-instruct` (Apache-2.0, multimodal, via OpenRouter) — sexual content.
+     *(~~`qwen/qwen3-vl-32b-instruct`~~ until 2026-08-11 — it emitted its verdict before its reasoning on
+     Alibaba Cloud, which ADR-004's field-order assertion rejects; ADR-002 amendment.)*
    - `google/gemma-3-27b-it` with a safety rubric — violence, gore, dangerous content, which the
      NSFW classifier does **not** cover. **Never the fine-tuned judge** (ADR-004 amendment b) — consistency
      has a best-of fallback, safety has none.

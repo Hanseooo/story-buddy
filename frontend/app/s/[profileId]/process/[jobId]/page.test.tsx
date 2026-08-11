@@ -25,6 +25,7 @@ const mockCreateSignedUrls = vi.fn();
 vi.mock("@/lib/supabaseClient", () => ({
   supabase: {
     storage: { from: () => ({ createSignedUrls: (...a: unknown[]) => mockCreateSignedUrls(...a) }) },
+    auth: { getSession: async () => ({ data: { session: { access_token: "test-token" } } }) },
   },
 }));
 
@@ -209,6 +210,27 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
       expect.objectContaining({ body: JSON.stringify({ action: "confirm", char_id: null, attribute: null }) })
     ));
     await waitFor(() => expect(REFETCH).toHaveBeenCalled());
+  });
+
+  it("confirm sends the Bearer token", async () => {
+    // Regression, prod job 4cb31620 (2026-08-11): the reveal shipped without an Authorization
+    // header, so every "Use this one!" tap returned 401 {"detail":"missing token"} and the child
+    // was stranded on the pause screen with no way forward. /storybooks, /me/avatar, /classrooms
+    // and /jobs/{id}/review all attach the session token; this call was the only one that didn't.
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
+    await renderPage(makeParams("j1"));
+    await waitFor(() => expect(screen.getByRole("button", { name: /use this one/i })).toBeDefined());
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /use this one/i }));
+    });
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/jobs/j1/confirm"),
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: "Bearer test-token" }),
+      })
+    ));
   });
 
   it("while justConfirmed, in-flight shows Drawing it again… not the stepper", async () => {

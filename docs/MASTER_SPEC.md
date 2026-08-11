@@ -214,8 +214,8 @@ Product/architecture choices are in the ADRs; this is the working reference, **i
 | Frontend | Next.js (React) + Tailwind + ⚙️shadcn/ui (teacher) + hand-built cartoon-pop (kid) + ⚙️Motion + ⚙️Lottie | Vercel, SSR landing. §9,§12 |
 | Backend web | FastAPI | Northflank (Singapore). ADR-031 |
 | Worker / queue | RQ worker + Redis broker | Separate service. ADR-005 |
-| Pipeline engine | LangGraph (deterministic) + `langgraph-checkpoint-postgres` | ADR-003,005 |
-| LLM / VLM | `qwen/qwen3-32b` (nodes) + judge (`gemma-3-27b-it` → fine-tuned `Qwen2.5-VL-7B` in Phase 2.5) | ADR-002,004,015,018 |
+| Pipeline engine | LangGraph (deterministic) + `langgraph-checkpoint-postgres`. Checkpoints go over the **direct** Postgres connection (5432), not the 6543 transaction pooler | ADR-003,005,033 |
+| LLM / VLM | `mistralai/mistral-small-3.2-24b-instruct` (nodes; ~~`qwen/qwen3-32b`~~ until 2026-08-11) + judge (`gemma-3-27b-it` → fine-tuned `Qwen2.5-VL-7B` in Phase 2.5) | ADR-002 (amended 2026-08-11),004,015,018 |
 | Image model | Qwen-Image-Edit 2509/2511 (Apache-2.0), hosted on fal.ai | ADR-001,015 |
 | Judge serving | vLLM on a scale-to-zero GPU container (Modal). OpenAI-compatible — `JUDGE_BASE_URL` is the swap | ADR-019 |
 | Model access layer | `backend/providers.py` — thin functions, one impl each. **The only file naming a *provider*** (model *ids* are env vars read in `app/config.py` — ADR-015: "swapping a model is an env var; swapping a provider is one file") | ADR-015 |
@@ -368,6 +368,12 @@ Phase-2.5 annotators. Design it once, in Phase 1, or invalidate every label coll
 - ✅ **Structured output for the judge with *image* input** — support is per `(model, provider)` *and* per
   modality. Probe 3 **passed** both arms on 2026-07-29 (`qwen/qwen3-32b` text; `google/gemma-3-27b-it`
   with two images), including the ADR-004 raw field-order assertion. `consistency_check` is unblocked.
+  ⚠️ **Follow-up 2026-08-11 — the probe's text arm was falsified in production, and the *unknown* it
+  closed was narrower than it looked.** `qwen/qwen3-32b` returned schema-violating JSON in prod job
+  `af068baf` (OpenRouter routed it to DeepInfra, which spent 1093 of 1497 completion tokens reasoning).
+  The result above stands as written — it is what the instrument measured — but read it as
+  *"that model, on the provider OpenRouter routed to that day"*, not as a property of the model ID.
+  `text_model` is now `mistralai/mistral-small-3.2-24b-instruct`. See the ADR-002 amendment.
 - ⚠️ **Filipino / Taglish text-moderation performance** — never measured, and the proprietary backstop is
   gone. **Release gate for Phase 2.** Phase 0.5 probe 4 (ADR-011).
 

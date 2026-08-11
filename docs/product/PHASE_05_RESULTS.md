@@ -645,6 +645,29 @@ every OpenRouter call and `_assert_field_order` raises on out-of-order emission,
 pass on ADR-004 reason-then-score. A silent downgrade to loose JSON would have surfaced as
 `returned no parsable structured output`.
 
+🔴 **Follow-up 2026-08-11 — production falsified the text arm. The result above is left exactly as
+recorded; what is wrong is the inference that was drawn from it.** `qwen/qwen3-32b` failed the same
+property in prod job `af068baf`: OpenRouter routed it to **DeepInfra**, which spent **1093 of 1497**
+completion tokens on a reasoning block and returned JSON violating the strict schema (nested objects
+where `str` was declared) — grammar-constrained decoding cannot be applied across a thinking block.
+`text_model` moved to `mistralai/mistral-small-3.2-24b-instruct` the same day. Three things this
+probe should be read as saying, and one it should not:
+
+- ~~The text model supports strict structured output on OpenRouter.~~ **Too strong.** The probe
+  measured *this model on whichever provider the router picked on 2026-07-29*. OpenRouter re-routes
+  silently, and this ADR-002 property is per `(model, provider)` — as ADR-002's own Consequences
+  already said, one paragraph the probe design did not act on.
+- The `_assert_field_order` inference above **holds and is vindicated**: it is what caught the
+  companion failure on the image guard the same day (Alibaba Cloud emitted `is_safe` before
+  `safety_reasoning`, hard-failing `char_ref_mod`). Both are recorded in the ADR-002 amendment.
+- `provider.require_parameters: true` was sent on the failing call. It selects providers that
+  **accept** `response_format`, not providers that **honour** it — so this probe's "honored"
+  line is true about *acceptance* and cannot be stretched to *fidelity*.
+- **Method note for the remaining probes:** a probe result is only valid for the `(model, provider)`
+  pair that served it, and a single call cannot establish a durable property of a model ID. The
+  standing check is now `backend/tests/test_smoke_providers.py` — run before any deploy that changes
+  a model ID, a base URL, or a provider — not a one-off probe.
+
 **Decision:** proceed. Phase 1's `consistency_check` node can be written against this call shape.
 
 **Procedure change made before the run.** The probe uploaded both judge images via

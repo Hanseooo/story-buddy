@@ -47,6 +47,14 @@ copy for either guard (→ `kid-flow-ui`), and any change to moderation classifi
   database, never sent to a provider, and is not recoverable — deliberate (see §5, CC-4).
 - `redact_pii` is **total**: it returns a string for any input, and no detected entity's original
   value appears in its output.
+- **`input_gate` writes `input` with `model_copy`, never a fresh `Input(...)`.** `input` has no
+  reducer, so the node's partial return replaces the model outright and any field it does not
+  restate reverts to its pydantic default. **Violated in production until 2026-08-11** — all four
+  return paths built a fresh `Input`, so `word_count` was 0 and `truncated` was False for every
+  job the pipeline had ever run. Nothing downstream reads either field yet, which is exactly why
+  it survived: this spec activated the fields and the activation was silently undone one node
+  later. Guarded by `tests.state_invariants.assert_no_fields_dropped`, parametrized over all four
+  paths in `test_input_gate_node.py`.
 
 ## 3. Position in the system map
 

@@ -212,9 +212,15 @@ export default function ProcessingPage({ params }: { params: Promise<{ jobId: st
     setConfirming(true);
     setConfirmError(false);
     try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/jobs/${jobId}/confirm`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
         body: JSON.stringify({ action, char_id: char_id ?? null, attribute: attribute ?? null }),
       });
       if (!res.ok) {

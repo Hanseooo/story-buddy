@@ -159,14 +159,109 @@ Two module-level constants. Neither introduces a contract type; `RefVerdict` alr
 `backend/contracts/` because `StoryMemory` embeds it (D-F, ADR-023 amendment).
 
 `reference_prompt` renders the `CharacterDescription` axes (`species`, `colours`, `body_features`,
-`clothing`, `notes`) plus the style fragment, and asks for a single full-body character reference on a
-plain neutral background. Per ADR-022 the fragment **names a medium and its physical artifacts** — it
-never says "beautiful", "8k", or "highly detailed".
+`clothing`, `notes`) plus the style fragment, and asks for a single character reference **shown in
+full** on a plain neutral background. Per ADR-022 the fragment **names a medium and its physical
+artifacts** — it never says "beautiful", "8k", or "highly detailed".
 
 The judge prompt shows the drawn image and the description it should depict, and asks for
 `differences_observed` before `matches_description`. ADR-004's reason-then-score ordering applies to
 **every** judge call; `RefVerdict` already declares the fields in that order and
 `providers._assert_field_order` enforces it on the wire.
+
+#### The question is contradiction, not difference (amended 2026-08-11)
+
+The prompt originally asked the judge to *"describe every difference you observe between the image and
+the description"*. **Prod job `4cb31620` falsified the "species-only" edge case above**: `c0` rendered
+to `the narrator - girl; the protagonist` and every one of the 3 draws came back
+`matches_description = False`. The judge's own `differences_observed` is the evidence — *"the
+description is incredibly brief… the image offers a lot of details **not present in the
+description**"* — followed by a list of hair and clothing.
+
+None of that contradicts *a girl who is the protagonist*. A text-to-image model cannot draw a girl
+with no hair and no clothes, so **unlisted details are unavoidable**, which means under the old
+wording a thin description could not pass at *any* draw count on *any* model. The predicted ceiling
+was backwards: instead of collapsing to 1 draw, the loop paid for all 3 and persisted a failing
+verdict.
+
+The prompt now states that details the description omits are **not** differences, and asks for ways
+the image *contradicts a stated attribute*. This restores ADR-028's actual target — off-spec on a
+stated feature — and leaves reason-then-score intact.
+
+⚠️ **Verdicts are not comparable across this change.** The ADR-028 hit rate measured before
+2026-08-11 measured the judge's tolerance for sparse descriptions, not the generator. Treat the
+persisted series as starting here, exactly as §7's ⚠️ warned it might have to.
+
+#### `JUDGE_PROMPT_VERSION` — so the next change segments the series instead of resetting it
+
+The reset above was avoidable, and only avoidable once. `matches_description` is simultaneously a
+product gate (it drives re-rolls, which cost draws) and the capstone's measurement instrument, and
+the prompt behind it is under active development. Nothing recorded *which* prompt produced a given
+verdict, so a wording change that alters what FALSE means invalidates every prior verdict rather
+than partitioning them.
+
+`char_bible.JUDGE_PROMPT_VERSION` (now `2`; `1` is everything before 2026-08-11) is stamped onto
+`Character.ref_verdict_prompt_version` on every write of `ref_verdict`, in both the first-pass and
+the ADR-029 targeted-redraw paths — the targeted path judges with the same prompt, so leaving it
+unstamped would make the retries an unlabelled subset and defeat the point. **Bump it whenever the
+wording changes what a FALSE verdict means.**
+
+It is on `Character`, not on `RefVerdict`, because `RefVerdict` is passed to `providers.judge` as
+`response_format`: a field there becomes a required model output under strict `json_schema`, and
+the judge would be asked to state its own prompt version.
+
+#### Visually-thin descriptions get a neutral floor in the draw prompt only
+
+The judge fix made a thin description *passable*; it did not make the reference *good*. `analyze`'s
+`EXTRACTION_PROMPT` says "leave them empty rather than inventing details", so `colours`,
+`body_features` and `clothing` routinely arrive all-empty — `c0` above was drawn from a role noun,
+and every page of the book inherits that one reference.
+
+When no **visual** axis is populated, `reference_prompt` appends
+`char_bible.THIN_DESCRIPTION_FILLER` (*"a friendly children's picture-book character"*). Keyed on
+the visual axes rather than on how many fields are set: `c0` had two populated axes (`species`,
+`notes`) and still specified nothing drawable, because species and notes are identity, not
+appearance.
+
+⚠️ **The filler reaches the draw prompt and never the judge prompt.** This is the one sanctioned
+divergence from `_describe`'s shared output and it is strictly one-directional. If the judge saw
+the filler it would become a *stated* attribute, and draws would start failing over our invention —
+reintroducing the bug fixed above from the opposite end. ADR-028 measures the generator against the
+**story**, never against our filler. Covered by
+`test_enrichment_reaches_the_draw_prompt_but_never_the_judge_prompt`.
+
+Rejected alternative: letting `analyze` invent the missing detail. It produces richer references but
+writes fiction into the contract the judge measures against, and invents facts about a child's own
+story — the extraction prompt is built around not doing that.
+
+#### Non-humanoid subjects: the prompt stopped asking for a human body (amended 2026-08-11)
+
+`c1` of the same prod job `4cb31620` is the **true** negative alongside `c0`'s false one: *"the star"*
+was drawn as a smiling mascot with arms and legs, and the judge correctly failed it. §7 attributes the
+reference hit rate to the generator (`fal_image_model`, ADR-001's named seam) — **and half of this
+particular failure was authored here.**
+
+The prompt asked for *"a single **full-body** character reference of one character, **standing**,
+facing forward"*. That is a human anatomy instruction, sent for every character including the ones
+with no legs: a model told to draw a star *standing* must invent legs to comply. Two changes:
+
+1. ~~"full-body … standing"~~ → **"shown in full"**. Same framing — the reference needs the whole
+   character, not a portrait — without asserting an anatomy.
+2. An explicit guard: *"If the character is not a person, draw it as the kind of thing it actually is
+   — give it no human body and no human face unless the description above says so."*
+
+**The guard is unconditional, not species-aware.** Branching on species means a word list deciding
+that "star" and "jeepney" are non-humanoid while "girl" is not — wrong the first time a child writes
+something not on it, and there is no structural signal to key on the way the thin-description filler
+keys on the visual axes. The clause is a no-op for a person or an animal, which is what makes the
+branchless version the correct lazy one.
+
+⚠️ **Draw prompt only**, on the same one-directional rule as the filler above and for the same
+reason: the judge must keep measuring the generator against the **story**, never against our
+instructions to the generator. Covered by `test_the_non_humanoid_guard_never_reaches_the_judge_prompt`.
+
+**Consequence for §7's owed validation:** a `fal_image_model` swap must now be measured *after* this
+change. Evaluating a new model against the old prompt would have charged the generator for a defect
+the prompt was requesting.
 
 ### `settings.default_style_fragment`
 
@@ -184,7 +279,7 @@ fragment to exist.
 | **One character** | One reference. The cap is a ceiling, not a quota. |
 | **Three characters** | `c0` and `c1` get references; `c2` keeps `None` and its scenes generate unreferenced. Documented ceiling per ADR-004, not a bug. |
 | **Duplicate character** ("my sister" / "Ate") | Both reference slots burned by one real character; the genuine second character gets nothing. **Sharper than `story-analyzer` §4 documented it** — under a 3-character roster a duplicate cost one of three slots, under a 2-reference cap it costs both. Not guarded here: dedup is unowned (§8). |
-| **Species-only description** | **Draw anyway, never refuse.** A thin description is exactly when an anchor matters most — consistency across scenes comes from *having* a reference, not from the reference matching the child's mental image (ADR-010). Ceiling: with one attribute `matches_description` is near-vacuously true, so the loop de facto collapses to 1 draw for that character. ADR-028 targets *off-spec on a stated feature*; a thin description states none. This closes `story-analyzer` §8's richness handoff. |
+| **Species-only description** | **Draw anyway, never refuse.** A thin description is exactly when an anchor matters most — consistency across scenes comes from *having* a reference, not from the reference matching the child's mental image (ADR-010). ADR-028 targets *off-spec on a stated feature*; a thin description states none. This closes `story-analyzer` §8's richness handoff. ~~Ceiling: with one attribute `matches_description` is near-vacuously true, so the loop de facto collapses to 1 draw for that character.~~ **Falsified in production, amended 2026-08-11** — see below. Since that date the draw prompt also appends `THIN_DESCRIPTION_FILLER` when no visual axis is populated, so the generator gets a neutral floor rather than a role noun; the judge still sees only what the story stated. |
 | **Fully empty description** | The contract permits it (`CharacterDescription` is all-Optional) even though `analyze`'s LLM boundary requires `species` — a resumed pre-`story-analyzer` checkpoint could carry one. The prompt floors to `Character.name`. |
 | **`style.prompt_fragment` is `None`** | Falls back to `settings.default_style_fragment`. Nothing writes `style` today; the fallback is the normal path in Phase 1, not an error path. |
 | **All 3 draws fail** | Best-of by `len(attributes_present)`, ties → earliest. The **failing verdict is persisted** — never a failed job, never a placeholder, the same policy ADR-010 sets for scenes (ADR-028). |
@@ -304,6 +399,20 @@ measure it, at zero marginal cost.
 `anatomy_intact`. Whether `google/gemma-3-27b-it` reliably notices that a reference is off-spec is
 unknown. **Validate `matches_description` against the scorer's eye in Phase 1 before treating the
 persisted rate as a number**, or the measurement above measures the judge instead of the generator.
+
+✅ **This warning fired, 2026-08-11.** Prod job `4cb31620` returned FALSE on all 3 draws for `c0`
+purely because the description was sparse — the measurement was measuring the judge, exactly as
+warned. Two consequences for anyone reading the persisted series:
+
+1. **Filter on `ref_verdict_prompt_version`.** Verdicts stamped `1` (or unstamped, i.e. everything
+   before this date) answer a different question from those stamped `2`. Do not pool them.
+2. **The validation above is still owed** and is now the gate on quoting *any* hit rate. What
+   changed is only that a future prompt revision costs a partition instead of the whole series.
+
+Note that `c1` in the same job was a **true** negative — the generator drew a humanoid mascot for a
+character described as a star, which contradicts a stated attribute. One judge, one job, both a
+false and a true negative: further evidence that the instrument needs the human check above, in
+both directions.
 
 ## 8. Linked decisions & open questions
 

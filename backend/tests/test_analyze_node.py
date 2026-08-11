@@ -128,13 +128,39 @@ def test_extraction_prompt_carries_the_three_asks():
     rewording is fine, deleting an ask is not.
 
     - the <=3 character cap (belt-and-braces; the node is the real control)
-    - the short-descriptive-label rule, so no proper noun or `<PERSON_1>` reaches a prompt
+    - the descriptive-label FALLBACK for a character the story never names
     - the always-answerable `species` ask that keeps ADR-028's re-roll from collapsing
     """
     prompt = EXTRACTION_PROMPT.lower()
     assert "3" in prompt
     assert "descriptive label" in prompt
     assert "species" in prompt
+
+
+def test_extraction_prompt_prefers_the_name_the_story_gives():
+    """A named character keeps their name; the descriptive label is the fallback, not the rule.
+
+    Pseudonymization is the whole point of `providers.redact_pii` — it replaces "Jun" with a
+    pool name ("Ana") specifically "so the story survives with a protagonist an illustrator can
+    draw". This prompt then discarded that name and emitted "the narrator" for every protagonist
+    the pipeline has ever produced. Two mechanisms, and the second negated the first.
+
+    What reaches the book is a PSEUDONYM, never the child's real name: CC-2 is satisfied by
+    `redact_pii` upstream, not by this prompt refusing proper nouns. That refusal was a second
+    layer against a spaCy NER miss, and dropping it is the accepted cost (2026-08-11) of a book
+    that calls its protagonist by name.
+    """
+    assert "never a proper noun" not in EXTRACTION_PROMPT
+    assert "Use the name the story gives" in EXTRACTION_PROMPT
+
+
+def test_extraction_prompt_still_forbids_redaction_placeholders():
+    """The one token that must never reach a caption, whatever the naming rule is. A leaked
+    `<PERSON_1>` is the failure `redact_pii` pseudonymizes to avoid in the first place, and
+    prod job e94cc400 already proved placeholders reach captions when nothing forbids them.
+    """
+    assert "<PERSON_1>" in EXTRACTION_PROMPT
+    assert "never" in EXTRACTION_PROMPT.lower()
 
 
 def test_extract_entities_logs_the_extracted_counts(caplog):

@@ -54,20 +54,29 @@ class StoryAnalysis(BaseModel):
 
 log = logging.getLogger(__name__)
 
-# `analyze` reads redacted text, and the expected kid story is first-person ("I went to the
-# beach with my sister"), so the protagonist is usually unnamed by construction. Asking for a
-# short descriptive label rather than a proper noun works identically on redacted and
-# un-redacted text, and it is what `char_bible` needs anyway — the canonical reference is drawn
-# from `CharacterDescription`, not from the name. Consequence, stated plainly: the child's
-# actual name never appears in their storybook. That is correct under CC-2 (spec §4).
+# `analyze` reads REDACTED text, so any name reaching this prompt is already a pseudonym from
+# `providers._PSEUDONYM_POOL` — a story about "Jun" arrives as a story about "Ana". Using that
+# name is the entire point of pseudonymizing rather than hard-redacting ("so the story survives
+# with a protagonist an illustrator can draw"). Until 2026-08-11 this prompt forbade proper nouns
+# outright, so it discarded the pseudonym and every protagonist the pipeline ever produced was
+# called "the narrator" — two mechanisms, the second negating the first.
+#
+# Stated plainly: the child's real name still never appears in their storybook, because CC-2 is
+# `redact_pii`'s job upstream and not this prompt's. What was given up is a SECOND layer — the
+# old label rule also neutralised a spaCy NER miss, and `en_core_web_sm` is not reliable on
+# Filipino names ("Kuya Jun", "Ate Mimi"). That residue is accepted, not overlooked.
+#
+# The descriptive-label fallback stays for the common first-person case ("I went to the beach"),
+# where there is no name to use and `char_bible` still needs something to put in the prompt.
 EXTRACTION_PROMPT = """Extract the entities from this child's story.
 
 Characters: at most 3, most important first — the first one is the story's protagonist.
-Give each a short descriptive label, never a proper noun and never a redaction placeholder
-like <PERSON_1>: "the narrator", "the younger sister", "the orange cat". The story is usually
-first-person, and the narrator is usually a character. Every character needs a species — one
-plain word for what they are: "girl", "dog", "robot". Fill colours, body_features and clothing
-only from what the story actually says; leave them empty rather than inventing details.
+Use the name the story gives the character. If the story never names them, use a short
+descriptive label instead: "the narrator", "the younger sister", "the orange cat". Never emit a
+redaction placeholder like <PERSON_1>. The story is usually first-person, and the narrator is
+usually a character. Every character needs a species — one plain word for what they are:
+"girl", "dog", "robot". Fill colours, body_features and clothing only from what the story
+actually says; leave them empty rather than inventing details.
 
 Locations and objects: whatever the story mentions.
 
