@@ -380,8 +380,32 @@ never forbids it. Derivation only removes what a fragment *states*; an attribute
 for a flat style but not explicitly forbidden still gets through. Mechanism and limits live in
 `prompt-optimizer` §4.
 
-Covered by `test_a_style_forbidden_attribute_reaches_neither_the_draw_prompt_nor_the_judge_prompt`
-and `test_an_attribute_the_active_fragment_never_forbids_still_reaches_both_prompts`.
+**Two limits this deliberately keeps** (ADR-035 limits 4 and 5, recorded 2026-08-12):
+
+1. **A forbidden word inside `species` still reaches both prompts.** `filtered_description` never
+   touches that axis, so `species = "glowing orb"` under `comic` is described to the generator and to
+   the judge. Accepted, because `analyze` makes `species` required precisely so acceptance is never
+   vacuous — and the judge can at least see this one and contradict it. `reveal._chips` filters it in
+   **chip scope** through `permitted_words`, which is a different question: what the child is *offered*,
+   not what the prompts *say*.
+2. **Filtering can make a description thin.** `reference_prompt`'s test is
+   `if not (colours or body_features or clothing)`, and the filter can empty all three — prod's `c1`
+   goes from `star; glowing; tiny` to `star, a friendly children's picture-book character`. Intended
+   degradation (nothing drawable survived, so the neutral floor is right), but a consequence rather
+   than a decision.
+
+⚠️ **`_mint_targeted`'s `if retry.attribute not in prompt` branch is unreachable and must stay that
+way.** The line above writes the attribute into `notes`, and `_describe(notes=True)` always renders
+`notes`, so the attribute is a substring of the prompt by construction — it has never fired. It is
+kept, and pinned by a test, because it is a *trap*: it is dead only while `notes` and `retry.attribute`
+are both unfiltered, and the obvious-looking follow-on (filter the tapped attribute) would reanimate it
+into a clause that re-appends the exact term the filter had just removed. If the test fails, delete the
+branch; do not repair it.
+
+Covered by `test_a_style_forbidden_attribute_reaches_neither_the_draw_prompt_nor_the_judge_prompt`,
+`test_an_attribute_the_active_fragment_never_forbids_still_reaches_both_prompts`,
+`test_char_bible_still_describes_a_species_the_style_forbids` and
+`test_char_bible_targeted_mode_never_appends_the_re_injection_clause`.
 
 ### `settings.default_style_fragment`
 

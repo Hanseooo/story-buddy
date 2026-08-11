@@ -58,9 +58,9 @@ def correct_prompt(prompt: str, failure_reasons: list[FailureReason], characters
 characters_present → characters join per §4's own prose and the §6 node-level test, which passes
 the full unfiltered roster; `correct_prompt` needs `style_fragment` to restate it for `wrong_style`.)
 
-### `style_prohibitions` / `filtered_description` (ADR-035)
+### `style_prohibitions` / `filtered_description` / `permitted_words` (ADR-035)
 
-Two pure helpers, exported because `char_bible` and `reveal` share them.
+Three pure helpers, exported because `char_bible` and `reveal` share them.
 
 `style_prohibitions(style_fragment)` reads the words the active fragment forbids off its own
 `no <term>` clauses — `comic` yields `{gradients, glow}`, `cel` yields
@@ -82,6 +82,18 @@ open-ended, this one is closed by the fragment.
   No contract change, and the filter is reversible if the style changes.
 
 It **removes, never invents**, so invariant 2 below is untouched.
+
+`permitted_words(value, style_fragment)` applies the same word-level rule to ONE string, and exists
+for exactly one caller: `reveal._chips`, on the `species` axis (ADR-035 amendment, 2026-08-12).
+`None` passes through; a value with nothing left returns `""`, which `_chips` drops as falsy.
+
+**The distinction is describing versus offering, and it is the whole point of the split.**
+`filtered_description` governs what the prompts *say* and leaves `species` alone — that carve-out is
+what stops acceptance going vacuous. `permitted_words` governs what the child is *offered*, where a
+forbidden species is a button that cannot work. Without it the two "never filter" carve-outs
+(`species`, `notes`) composed into a bypass: a species chip became `char_bible._mint_targeted`'s
+`notes` and put `"glowing orb"` back into a draw prompt under `"no glow"` on a fresh job. Do not
+"simplify" this by folding `species` into `filtered_description`.
 
 ### `build_prompt`
 
@@ -168,13 +180,15 @@ no mocks"), node-level tests exercise `build_prompt` for real rather than patchi
 - Empty `characters_present` → prompt is `text_excerpt` + style fragment only, no character content.
 - A `char_id` absent from `characters` is skipped without raising.
 
-**`filtered_description` / `style_prohibitions` — no mocks (ADR-035):**
+**`filtered_description` / `style_prohibitions` / `permitted_words` — no mocks (ADR-035):**
 - `style_prohibitions` reads the `no <term>` clauses off `comic` and `cel`; a fragment that forbids
   nothing yields the empty set.
 - A style-forbidden colour is dropped; one the active fragment never forbids is kept (per-preset, not
   a blanket ban).
 - Word-level removal keeps the rest of the entry (`"glowing eyes"` → `"eyes"`).
 - `species` and `notes` are never touched.
+- `permitted_words` strips the forbidden word out of a single value (`"glowing orb"` → `"orb"`),
+  returns `""` when nothing survives, and passes `None` through.
 - Prefix matching works in both directions and does not fire on `"glove"` vs `"glow"`.
 - `build_prompt` drops the forbidden attribute from the description line while emitting
   `text_excerpt` verbatim even when the excerpt names that same term (ADR-013 is not amended).

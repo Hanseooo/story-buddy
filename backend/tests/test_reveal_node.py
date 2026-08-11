@@ -185,6 +185,35 @@ def test_project_reveal_never_offers_a_chip_for_a_style_forbidden_attribute():
     assert payload["characters"][0]["chips"] == ["star", "yellow"]
 
 
+def test_project_reveal_word_filters_a_forbidden_term_out_of_the_species_chip():
+    """ADR-035 amendment. Decision 2 keeps `species` unfiltered in the DESCRIPTION — it is what
+    stops acceptance going vacuous — but Decision 5 lists `_chips` as a filtered surface, and its
+    reason ("a tap that cannot succeed") applies to a forbidden species word just as much as to a
+    forbidden colour. The two cells conflicted, and the species chip was the live leak: the tapped
+    chip becomes `_mint_targeted`'s `notes`, which is unfiltered, so "glowing orb" came back into
+    the draw prompt under a fragment ending "no glow" on a FRESH job, not just an in-flight one.
+
+    Chip scope only. The reference prompt still says "glowing orb" (see the char_bible test) —
+    what is removed is the promise that tapping it can change anything.
+    """
+    orb = _char(
+        "c1", "the orb",
+        description=CharacterDescription(species="glowing orb", colours=["blue"]),
+    )
+    payload = _project_reveal(_state([orb], style=Style(prompt_fragment=STYLE_PRESETS["comic"])))
+
+    assert payload["characters"][0]["chips"] == ["orb", "blue"]
+
+
+def test_project_reveal_falls_back_to_the_name_when_the_style_forbids_every_axis():
+    """Invariant 4: an empty chip list dead-ends the "try again" button. The existing fallback
+    already covers this — pinned because filtering is now a way to reach it."""
+    star = _char("c1", "the star", description=CharacterDescription(species="glowing", colours=["glowing"]))
+    payload = _project_reveal(_state([star], style=Style(prompt_fragment=STYLE_PRESETS["comic"])))
+
+    assert payload["characters"][0]["chips"] == ["the star"]
+
+
 def test_project_reveal_still_offers_the_chip_when_the_active_style_permits_it():
     """Per-preset, not a blanket ban — `cel` never forbids glow."""
     star = _char(

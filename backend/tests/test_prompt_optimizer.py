@@ -6,6 +6,7 @@ from pipeline.prompt_optimizer import (
     build_prompt,
     correct_prompt,
     filtered_description,
+    permitted_words,
     referenced_characters,
     style_prohibitions,
 )
@@ -318,6 +319,24 @@ def test_filtered_description_never_touches_species_or_notes():
     assert filtered.species == "a glowing star"
     assert filtered.notes == "glowing softly"
     assert filtered.colours == []
+
+
+def test_permitted_words_strips_only_the_forbidden_word_out_of_a_single_value():
+    """ADR-035 amendment: the chip-scope helper. Same word-level rule as `_filter_axis`, over one
+    string rather than a list, because `species` is a scalar axis."""
+    assert permitted_words("glowing orb", COMIC) == "orb"
+    assert permitted_words("orange dog", COMIC) == "orange dog"
+
+
+def test_permitted_words_is_empty_when_nothing_survives():
+    """`reveal._chips` drops falsy axis values, so an all-forbidden species offers no chip and
+    the existing fallback (invariant 4) covers the empty list."""
+    assert permitted_words("glowing", COMIC) == ""
+
+
+def test_permitted_words_passes_none_through():
+    """`CharacterDescription.species` is Optional."""
+    assert permitted_words(None, COMIC) is None
 
 
 def test_filtered_description_matches_on_prefix_in_both_directions():

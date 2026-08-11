@@ -10,7 +10,7 @@ from langgraph.types import interrupt
 
 from app.config import settings
 from contracts.story_memory import Character, ReferenceRetry, StoryMemory
-from pipeline.prompt_optimizer import filtered_description
+from pipeline.prompt_optimizer import filtered_description, permitted_words
 
 MAX_RETRY_TAPS = 3
 
@@ -26,7 +26,11 @@ def _chips(character: Character, style_fragment: str | None) -> list[str]:
     # what lets `char_bible._mint_targeted` trust `retry.attribute`.
     description = filtered_description(character.description, style_fragment)
     axes = {
-        "species": description.species,
+        # `species` is the one axis `filtered_description` deliberately leaves alone (Decision 2),
+        # so it is filtered here instead — chip scope only. It was the live leak: a chip becomes
+        # `char_bible._mint_targeted`'s `notes`, which is unfiltered too, so a species like
+        # "glowing orb" walked straight back into a draw prompt under "no glow" on a fresh job.
+        "species": permitted_words(description.species, style_fragment),
         "colours": description.colours,
         "body_features": description.body_features,
         "clothing": description.clothing,

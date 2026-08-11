@@ -56,6 +56,21 @@ def _filter_axis(values: list[str], forbidden: set[str]) -> list[str]:
     return kept
 
 
+def permitted_words(value: str | None, style_fragment: str | None) -> str | None:
+    """Pure. `_filter_axis`'s rule over ONE string, for the scalar `species` axis.
+
+    Exists only for `reveal._chips` (ADR-035 amendment). Filtering species is CHIP SCOPE — a chip
+    promises that tapping it buys a redraw that could change something, and no redraw clears
+    "glowing" under a fragment ending "no glow". Decision 2 still holds everywhere the species is
+    *described*: `filtered_description` never touches it, so the draw and judge prompts keep it and
+    acceptance cannot go vacuous.
+    """
+    if value is None:
+        return None
+    forbidden = style_prohibitions(style_fragment)
+    return " ".join(word for word in value.split() if _permitted(word, forbidden))
+
+
 def filtered_description(
     description: CharacterDescription, style_fragment: str | None
 ) -> CharacterDescription:

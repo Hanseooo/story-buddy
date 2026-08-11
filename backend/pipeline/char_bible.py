@@ -266,6 +266,12 @@ def _mint_targeted(state: StoryMemory) -> dict:
     # ADR-035, same two surfaces. `notes` is set AFTER filtering because the tapped attribute
     # comes from `reveal._chips`, which is filtered at source — so it can never be a forbidden
     # term — and `notes` is outside the filter's remit anyway (Decision 2).
+    #
+    # That "filtered at source" claim is load-bearing and it was FALSE until the amendment:
+    # `_chips` offered the species axis raw, so a species like "glowing orb" came back through
+    # `notes` under "no glow". It holds now only because `_chips` filters species in chip scope.
+    # Anything that relaxes that puts a forbidden term into this prompt — see
+    # `test_char_bible_targeted_mode_never_appends_the_re_injection_clause` for the second half.
     description = filtered_description(character.description, style_fragment).model_copy(
         update={"notes": retry.attribute}
     )

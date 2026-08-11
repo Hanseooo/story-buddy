@@ -662,7 +662,8 @@ def test_char_bible_prefers_the_state_style_fragment_when_set():
 
 # --- targeted mode (ADR-029, spec §4.5-4.7) ---
 
-def _targeted_state(char_id: str = "c0", attribute: str = "orange sock", ref_retry_count: int = 0) -> StoryMemory:
+def _targeted_state(char_id: str = "c0", attribute: str = "orange sock", ref_retry_count: int = 0,
+                    style: Style | None = None) -> StoryMemory:
     from contracts.story_memory import ReferenceRetry
 
     c0 = _char("c0", "the dog", ref="story-1/ref-c0-1.png")
@@ -670,6 +671,7 @@ def _targeted_state(char_id: str = "c0", attribute: str = "orange sock", ref_ret
     c0.ref_moderation_status = "passed"
     return _state(
         [c0, _char("c1", "the cat", ref="story-1/ref-c1-1.png")],
+        style=style,
         cost=Cost(image_count=2, ref_retry_count=ref_retry_count),
     ).model_copy(update={"reference_retry": ReferenceRetry(char_id=char_id, attribute=attribute)})
 
@@ -694,6 +696,47 @@ def test_char_bible_targeted_mode_restates_the_tapped_attribute_in_the_prompt():
         char_bible(state)
 
     assert "orange sock" in t2i.call_args.args[0]
+
+
+def test_char_bible_targeted_mode_never_appends_the_re_injection_clause():
+    """`_mint_targeted`'s `if retry.attribute not in prompt` branch is UNREACHABLE, and has been
+    since the commit that introduced it: the line above writes the attribute into `notes`, and
+    `_describe(notes=True)` always renders `notes`, so the attribute is a substring of the prompt
+    by construction.
+
+    Pinned rather than deleted because the branch is a trap. It is dead only while `notes` and
+    `retry.attribute` are both unfiltered — anything that starts filtering either one reanimates
+    it, and it would then re-append the exact term the filter had just removed, rebuilding the
+    ADR-035 defect on the retry path. If this test ever fails, delete the branch; do not repair it.
+    """
+    for attribute in ("orange sock", "glowing"):
+        state = _targeted_state(attribute=attribute, style=Style(prompt_fragment=STYLE_PRESETS["comic"]))
+        with patch("pipeline.char_bible.text_to_image", return_value=b"x") as t2i, \
+             patch("pipeline.char_bible.judge", return_value=_verdict(True)), \
+             patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+            char_bible(state)
+
+        prompt = t2i.call_args.args[0]
+        assert attribute in prompt
+        assert "Be sure to include" not in prompt
+
+
+def test_char_bible_still_describes_a_species_the_style_forbids():
+    """The counterpart to the reveal test: filtering the species is CHIP SCOPE ONLY. ADR-035
+    Decision 2 stands where it was reasoned about — `analyze` makes species required so the judge
+    always has something to check, and stripping it here would make acceptance vacuous."""
+    orb = Character(
+        char_id="c0", name="the orb",
+        description=CharacterDescription(species="glowing orb", colours=["blue"]),
+    )
+    comic = STYLE_PRESETS["comic"]
+    with patch("pipeline.char_bible.text_to_image", return_value=b"x") as t2i, \
+         patch("pipeline.char_bible.judge", return_value=_verdict(True)) as judge_mock, \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+        char_bible(_state([orb], style=Style(prompt_fragment=comic)))
+
+    assert "glowing orb" in t2i.call_args.args[0]
+    assert "glowing orb" in judge_mock.call_args.args[0]
 
 
 def test_char_bible_targeted_mode_only_mutates_the_flagged_character():

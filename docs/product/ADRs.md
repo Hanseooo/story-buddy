@@ -2633,7 +2633,7 @@ survives in `StoryMemory` and in their own story text; what it loses is the powe
 - Per-preset behaviour is correct rather than uniform: `glowing` is dropped under `comic`, and **kept under
   `cel`**, which never forbids it.
 
-**What this does not fix — three limits, stated rather than discovered later:**
+**What this does not fix — five limits, stated rather than discovered later:**
 
 1. **The `text_excerpt` still says it.** ADR-013 freezes `caption = text_excerpt` verbatim and the excerpt reaches
    the prompt unchanged, so `s1` still contains the word *"glowing"* once. The conflict drops from three
@@ -2646,6 +2646,49 @@ survives in `StoryMemory` and in their own story text; what it loses is the powe
    fragment *states*. An attribute that is merely hard for a flat style but not explicitly forbidden still gets
    through. Over-dropping fails soft (an attribute goes unasserted); the status quo fails hard (a prompt that
    contradicts itself).
+4. **A style-forbidden word inside `species` still reaches both prompts.** Decision 2's carve-out is
+   unconditional, so `species = "glowing orb"` under `comic` is described to the generator *and* to the judge.
+   Accepted: `analyze.py:22-26` makes species required precisely so acceptance is never vacuous, and stripping it
+   would trade a describable contradiction for an undescribable character. The judge can at least *see* this one
+   and contradict it, which is the ordinary ADR-034 path.
+5. **Filtering can make a description "thin".** `reference_prompt`'s test is
+   `if not (colours or body_features or clothing)`, and the filter can empty all three — prod's `c1` goes from
+   `star; glowing; tiny` to `star, a friendly children's picture-book character`. That is the intended
+   degradation (nothing drawable survived, so the neutral floor is right), but it was a *consequence* rather than
+   a decision and it moves acceptance toward vacuous, which is the same pressure limit 4 names.
+
+### Amendment (2026-08-12) — species is filtered in **chip scope**
+
+Decisions 2 and 5 conflicted on one cell, found while auditing the retry path. Decision 2 says *never `species`*;
+Decision 5 lists `reveal._chips` as a filtered surface, and its stated reason — *"a child can tap **"glowing"** and
+spend an ADR-029 retry tap on a redraw that cannot succeed"* — applies to a forbidden word inside `species` exactly
+as it does to one inside `colours`. Decision 2 won that cell by default, and it was the wrong reading:
+
+```
+species="glowing orb", colours=["blue"], preset=comic
+
+chips offered:  ['glowing orb', 'blue']          <- the child is handed the unfixable term
+draw prompt:    the orb - glowing orb; blue; glowing orb
+style:          ... no gradients, no glow
+```
+
+A tapped chip becomes `char_bible._mint_targeted`'s `notes`, and `notes` is unfiltered by the same Decision 2. **Two
+carve-outs composed into a bypass**, reachable on a fresh post-fix job — not, as first suspected, only on an
+in-flight one holding pre-amendment chips. `main.confirm_job` validates the tap against the stored chips, so it
+waved it through: the validator's input was the thing that was wrong.
+
+**Resolution: `species` is word-filtered where it is OFFERED, never where it is DESCRIBED.** `permitted_words` in
+`prompt_optimizer`, called by `_chips` only. Decision 2 is unchanged everywhere it was actually reasoned about —
+`filtered_description` still never touches `species`, so the draw and judge prompts keep it (limit 4 above stands)
+and acceptance cannot go vacuous. What the child loses is a button that promised something no redraw could deliver.
+An all-forbidden species now offers no chip and falls through to the existing name fallback (invariant 4).
+
+**One thing deliberately not changed.** `_mint_targeted`'s `if retry.attribute not in prompt` re-injection branch
+is **unreachable**, and has been since the commit that introduced it — the line above writes the attribute into
+`notes`, and `_describe(notes=True)` always renders `notes`. It is pinned by a test rather than deleted because it
+is a trap, not merely dead: it is dead *only while `notes` and `retry.attribute` are both unfiltered*, and the
+obvious follow-on fix — filtering the tapped attribute — would reanimate it into a clause that re-appends the term
+the filter had just removed. The test names the correct response (delete the branch, do not repair it).
 
 **How we will know it worked.** Re-run the same story under `comic` and check three things: `c1`'s reference no
 longer carries an unsatisfiable attribute into the judge; the gate stops re-rolling `c1` to the 3-draw cap; and
