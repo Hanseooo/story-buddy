@@ -58,8 +58,9 @@ class CharacterDescription(BaseModel):
 # --- Reference acceptance verdict (ADR-028 Decision 3). Reason-then-score, like every judge call. ---
 class RefVerdict(BaseModel):
     differences_observed: str          # MUST be declared before matches_description (ADR-004)
-    matches_description: bool
-    attributes_present: list[str] = Field(default_factory=list)   # best-of key when all draws fail
+    contradictions: list[str] = Field(default_factory=list)       # ADR-034: THE GATE. empty = accepted
+    matches_description: bool                                     # recorded, NOT the gate (ADR-034)
+    attributes_present: list[str] = Field(default_factory=list)   # best-of tiebreak when all draws fail
 
 class Character(BaseModel):
     char_id: str
@@ -285,7 +286,8 @@ Models mocked (there are no model calls here — this is pure schema). Assertion
 - **`anatomy_intact` is declared last** (ADR-028): `list(VlmVerdict.model_fields)[-1] == "anatomy_intact"`, and
   the §245 `differences_observed`-before-`same_character` assertion still holds with it present.
 - **`RefVerdict` reason-then-score:** `model_json_schema()["properties"]` lists `differences_observed` before
-  `matches_description` (ADR-004 applies to every judge call, not only the two-image one).
+  `contradictions` before `matches_description` (ADR-004 applies to every judge call, not only the two-image
+  one; ADR-034 puts the gate between the reason and the score so the judge enumerates before it scores).
 - Assets: no field is asserted to be a URL — a plain path validates. *(Guards against signed-URL storage by
   convention; documented, not type-enforced.)*
 
@@ -327,6 +329,16 @@ N/A — the contract produces no generated content.
   the entire prior series had to be discarded rather than segmented. It lives on `Character` and **not** on
   `RefVerdict` because `RefVerdict` is handed to `providers.judge` as `response_format` — a field there becomes a
   required model output under strict `json_schema`, and the judge would be asked to state its own prompt version.
+- **Added 2026-08-11 (additive, no `schema_version` bump) → ADR-034:** `RefVerdict.contradictions`, declared
+  **between** `differences_observed` and `matches_description`. Reference acceptance is now derived —
+  `not verdict.contradictions` — in both `char_bible` (the gate) and `reveal` (the chip projection), which must
+  stay in lockstep. `matches_description` is **kept and demoted to an observation**: prod job `b9506307` set it
+  TRUE on a verdict whose own `differences_observed` read *"This is a contradiction"*, and ADR-004's ordering did
+  not prevent that — ordering makes the model reason before it scores, not score in line with its reasoning.
+  Retaining the boolean keeps that disagreement rate measurable, and removing it would be **breaking**
+  (`schema_version` bump, restart path, the `judge-finetune` §6.1 round-trip). Old checkpoints deserialize with
+  `contradictions == []`, i.e. every pre-ADR-034 verdict reads as accepted; `ref_verdict_prompt_version`
+  (2 vs 3) is what distinguishes them, which is exactly what it was added for.
 - **Deferred:** `pdf_ref` / composed-book reference for the export leg (MASTER_SPEC §2). Nothing in Phase 1
   writes it; `export-pdf` (Phase 2) adds it additively.
 - **Removed 2026-07-22:** `Scene.consistency_check_status` — an untyped `Optional[str]` with no owner spec and

@@ -5,9 +5,15 @@ Draws one canonical reference per principal character, judges it against the
 plus its verdict. ADR-028 falsified ADR-007's assumption that a reference is correct *because*
 it was generated from the description; this node is the gate that makes that failure visible.
 
-It does NOT fix the rate — at the measured draw quality 3 draws still ship an off-spec
-reference roughly 42% of the time, now with the verdict persisted instead of silently. The fix
-for the rate is swapping `fal_image_model` (ADR-001's named seam), not anything in this file.
+It does NOT fix the rate — 3 draws still ship an off-spec reference often, now with the verdict
+persisted instead of silently. The fix for the rate is swapping `fal_image_model` (ADR-001's
+named seam), not anything in this file.
+
+ADR-028's "roughly 42%" is deliberately not quoted here any more: it was measured against a gate
+that accepted whatever the judge's boolean said, and prod job b9506307 showed that boolean going
+TRUE on a verdict whose own prose read "This is a contradiction". Every draw the old gate passed
+is unmeasured, so 42% is a floor, not an estimate. ADR-034 re-derives acceptance from a list; the
+series restarts at JUDGE_PROMPT_VERSION 3.
 """
 import base64
 import logging
@@ -15,6 +21,7 @@ import logging
 from app.config import settings
 from app.db import get_supabase_client
 from contracts.story_memory import CharacterDescription, RefVerdict, StoryMemory
+from pipeline.prompt_optimizer import filtered_description
 from providers import judge, text_to_image
 
 log = logging.getLogger(__name__)
@@ -26,6 +33,13 @@ BUCKET = "storybook-images"
 # Reason-then-score (ADR-004) applies to EVERY judge call. `RefVerdict` already declares
 # `differences_observed` before `matches_description`, and `providers._assert_field_order`
 # enforces the ordering on the wire — this prompt only has to ask in the same order.
+#
+# v3 (ADR-034): the acceptance question is asked as a LIST, not as a boolean. v2 asked for prose
+# and then for a verdict, and prod job b9506307 answered "This is a contradiction" followed by
+# matches_description=true — ordering made the model reason first, it did not make the score
+# follow the reasoning. The prompt below therefore asks for one list entry per contradicted
+# attribute and the code derives acceptance from the list's length. The boolean is still asked
+# for, and still recorded, purely so the disagreement rate stays measurable.
 #
 # The question is CONTRADICTION, not difference. Asking for "every difference" made a thin
 # description unpassable: prod job 4cb31620 (2026-08-11) rendered c0 as "the narrator - girl;
@@ -40,7 +54,7 @@ BUCKET = "storybook-images"
 # rate comparable across prompt revisions — v1 measured the judge's tolerance for sparse
 # descriptions, v2 measures the generator. Unversioned, the 2026-08-11 change silently
 # invalidated every verdict before it and the series had to restart.
-JUDGE_PROMPT_VERSION = 2
+JUDGE_PROMPT_VERSION = 3
 
 JUDGE_PROMPT = """\
 This image is meant to be a character reference drawn from the description below.
@@ -50,9 +64,11 @@ Description: {subject}
 The description lists only what the story stated. The image will necessarily show details it \
 does not mention — hair, clothing, background — and those are NOT differences.
 
-First describe any way the image CONTRADICTS a stated attribute. Then say whether the image \
-matches the description, and list which of the described attributes are actually present in \
-the image."""
+First describe any way the image CONTRADICTS a stated attribute. Then list the contradictions: \
+one entry for each stated attribute the image contradicts, naming the attribute and what the \
+image shows instead. If the image contradicts nothing that was stated, leave that list empty. \
+Then say whether the image matches the description, and list which of the described attributes \
+are actually present in the image."""
 
 # `analyze`'s EXTRACTION_PROMPT deliberately says "leave them empty rather than inventing
 # details", so a character routinely arrives with nothing drawable — prod job 4cb31620
@@ -90,15 +106,31 @@ body and no human face unless the description above says so.
 Style: {style_fragment}"""
 
 
-def _describe(description: CharacterDescription, name: str) -> str:
+def _describe(description: CharacterDescription, name: str, notes: bool = True) -> str:
     """The `CharacterDescription` axes as one line. Shared by the draw prompt and the judge
-    prompt so they can never drift into describing different characters."""
+    prompt so they can never drift into describing different characters.
+
+    `notes=False` for the judge (ADR-034 follow-on). `notes` is free prose, not a visual
+    attribute, and post-ADR-034 the gate re-rolls on whatever the judge lists as contradicted —
+    re-judging prod job b9506307's `ref-c1-1.png` returned *"secondary character - The image does
+    not provide cues as to this character's role"* as a contradiction, which no redraw can ever
+    clear. The generator keeps it; the judge measures the VISUAL axes. Same line `reveal._chips`
+    already draws, for the same reason.
+
+    This is the SECOND sanctioned divergence between the two prompts, after
+    THIN_DESCRIPTION_FILLER, and it runs the same direction: the draw prompt may know more than
+    the judge, never less. A third one should make someone ask whether the sharing still pays.
+
+    Safe for the ADR-029 targeted redraw, which sets `notes` to the tapped chip: chips come from
+    the VISUAL axes (`reveal._chips`), so the tapped attribute already reaches the judge through
+    its own axis. The `notes` copy is emphasis for the generator, not the judge's only sight of it.
+    """
     axes = [
         description.species,
         ", ".join(description.colours),
         ", ".join(description.body_features),
         ", ".join(description.clothing),
-        description.notes,
+        description.notes if notes else None,
     ]
     populated = [axis for axis in axes if axis]
     return f"{name} - {'; '.join(populated)}" if populated else name
@@ -120,13 +152,23 @@ def reference_prompt(description: CharacterDescription, name: str, style_fragmen
 
 
 def best_draw(verdicts: list[RefVerdict]) -> int:
-    """Pure. Best-of when every draw failed: most attributes present, ties → earliest (ADR-010).
+    """Pure. Best-of when every draw failed: fewest contradictions, then most attributes present,
+    ties → earliest (ADR-010, ADR-034).
+
+    `attributes_present` was the sole key until ADR-034 and it is noisy — prod job b9506307 listed
+    "glowing" for a flat teal image and "secondary character", which is a `notes` value and not a
+    visual attribute at all. It is demoted to a tiebreak behind a count of actual defects rather
+    than dropped: between two draws that contradict the description equally, "showed more of what
+    was asked for" is still the better of the two signals available.
 
     `char_bible`'s own rule over `RefVerdict`. UNRELATED to `regeneration-controller`'s
     lexicographic scene rule over `VlmVerdict` — different schema, different question. Do not
     unify them.
     """
-    return max(range(len(verdicts)), key=lambda i: (len(verdicts[i].attributes_present), -i))
+    return max(
+        range(len(verdicts)),
+        key=lambda i: (-len(verdicts[i].contradictions), len(verdicts[i].attributes_present), -i),
+    )
 
 
 def _data_uri(image: bytes) -> str:
@@ -162,8 +204,13 @@ def mint_reference(
     The loop is node-internal and adds no graph edge and no super-step (ADR-028 Decision 3),
     so ADR-003 and ADR-024 are unamended by it.
     """
+    # ADR-035 surfaces 1 and 2. Prod job b9506307 asked for `star; glowing; tiny` under a fragment
+    # ending "no glow": the draw could not satisfy it, and post-ADR-034 the judge can legitimately
+    # contradict it on all 3 draws, burning the budget on every job. Unlike the two one-directional
+    # divergences in `_describe`, this is filtered for BOTH prompts — the defect is asking at all.
+    description = filtered_description(description, style_fragment)
     prompt = reference_prompt(description, name, style_fragment)
-    judge_prompt = JUDGE_PROMPT.format(subject=_describe(description, name))
+    judge_prompt = JUDGE_PROMPT.format(subject=_describe(description, name, notes=False))
     candidates: list[tuple[bytes, RefVerdict]] = []
     draws = 0
 
@@ -178,7 +225,7 @@ def mint_reference(
         except Exception:
             # DIFFERENT policy from text_to_image above, deliberately (§4). The artifact exists
             # and is paid for; only the CHECK failed. `None` stays honest and is distinguishable
-            # from a FAILED verdict (matches_description=False). Do not "fix" this asymmetry.
+            # from a FAILED verdict (a non-empty `contradictions`). Do not "fix" this asymmetry.
             log.warning(
                 "char_bible: %s judge failed on draw %d — accepting unchecked, ref_verdict=None",
                 char_id, draws, exc_info=True,
@@ -186,11 +233,14 @@ def mint_reference(
             return _upload(image, story_id, char_id, 1), None, draws
 
         # CC-5: a wrong character downstream traces back to a specific reference and draw.
+        # `matches` is logged beside the list it no longer controls: the two disagreeing is the
+        # ADR-034 failure, and this line is where it becomes visible in production.
         log.info(
-            "char_bible: %s draw %d/%d matches=%s attributes=%s",
-            char_id, draws, MAX_DRAWS, verdict.matches_description, verdict.attributes_present,
+            "char_bible: %s draw %d/%d contradictions=%s matches=%s attributes=%s",
+            char_id, draws, MAX_DRAWS,
+            verdict.contradictions, verdict.matches_description, verdict.attributes_present,
         )
-        if verdict.matches_description:
+        if not verdict.contradictions:
             log.info("char_bible: %s accepted draw %d", char_id, draws)
             return _upload(image, story_id, char_id, 1), verdict, draws
         candidates.append((image, verdict))
@@ -213,11 +263,22 @@ def _mint_targeted(state: StoryMemory) -> dict:
     retry = state.reference_retry
     character = next(c for c in state.characters if c.char_id == retry.char_id)
     style_fragment = state.style.prompt_fragment or settings.default_style_fragment
-    description = character.description.model_copy(update={"notes": retry.attribute})
+    # ADR-035, same two surfaces. `notes` is set AFTER filtering, so `_kept_whole` never sees the
+    # tapped attribute — it does not need to: the attribute comes from `reveal._chips`, which is
+    # filtered at source, so it can never be a forbidden term.
+    #
+    # That "filtered at source" claim is load-bearing and it was FALSE until the amendment:
+    # `_chips` offered the species axis raw, so a species like "glowing orb" came back through
+    # `notes` under "no glow". It holds now only because `_chips` filters species in chip scope.
+    # Anything that relaxes that puts a forbidden term into this prompt — see
+    # `test_char_bible_targeted_mode_never_appends_the_re_injection_clause` for the second half.
+    description = filtered_description(character.description, style_fragment).model_copy(
+        update={"notes": retry.attribute}
+    )
     prompt = reference_prompt(description, character.name, style_fragment)
     if retry.attribute not in prompt:
         prompt = f"{prompt}\n\nBe sure to include: {retry.attribute}."
-    judge_prompt = JUDGE_PROMPT.format(subject=_describe(description, character.name))
+    judge_prompt = JUDGE_PROMPT.format(subject=_describe(description, character.name, notes=False))
 
     image = text_to_image(prompt)
     verdict = judge(judge_prompt, [_data_uri(image)], RefVerdict)

@@ -2358,3 +2358,385 @@ to reach a pooler we do not need is a seam the worker should not own.
 `-S "prepare_threshold"` return nothing outside `uv.lock` hashes and a deleted Phase-0 plan doc. This ADR
 is therefore the *only* record that 6543 was tried and abandoned. Do not delete it and re-derive it from a
 production incident.
+
+---
+
+## ADR-034 — The reference gate scores itself: acceptance is derived from a contradiction list, not asked for as a boolean
+
+**Status:** Accepted (2026-08-11) · **amends ADR-028 Decision 3** — the acceptance *predicate* only; the in-node
+loop, the cap of 3 and the best-of fallback are unchanged · **strengthens ADR-004** (reason-then-score) rather
+than amending it · additive to `story-memory-contract` §2 → **no `schema_version` bump**
+
+**Context:** ADR-028 Decision 3 amended ADR-007 so the canonical reference is *checked, not assumed*, and
+`char_bible.py:6-7` states the node's purpose as *"the gate that makes that failure visible."* Production job
+`b9506307` (2026-08-11, `comic` preset) shows the gate passing a reference it had itself just described as
+contradictory.
+
+The verdict for `c1` — *"the star - star; glowing; tiny; secondary character"* — verbatim from the LangGraph
+checkpoint, which is the only place it survives (`jobs.reveal` carries the chips, not the verdict):
+
+```json
+"differences_observed": "The description states the star is 'tiny', but the image depicts the star
+   as a significant size relative to the image frame. This is a contradiction.",
+"matches_description": true,
+"attributes_present": ["star", "glowing", "secondary character"]
+```
+
+Three things are wrong here and they are **not the same failure**:
+
+1. **The prose declares a contradiction and the boolean says `true`.** ADR-004's ordering is enforced on the wire
+   by `providers._assert_field_order` and it *worked* — the reason was emitted first. Ordering makes the model
+   reason before it scores. It does not make the score follow the reasoning. That gap is what this ADR closes.
+2. **`attributes_present` contains `"glowing"` for an image that is not glowing, and cannot have been.** The
+   `comic` fragment ends `"no gradients, no glow"` while `analyze` had put `"glowing"` in `colours`, so
+   `reference_prompt` asked for a rendering property the same prompt's style clause forbade. `"secondary
+   character"` is listed too — a `notes` value, not a visual attribute. **`best_draw` ranks candidates by
+   `len(attributes_present)`**, so the best-of fallback sorts on this.
+3. **The 3-draw loop has never fired.** `cost.image_count` is 11 against 7 scenes with `regen_count` 2 — 9 scene
+   draws, therefore **2 reference draws for 2 characters**. Both accepted on the first draw. ADR-028 bought a
+   bounded re-roll and production has not used it once, because nothing has ever failed the gate.
+
+**What it cost downstream (issue #23).** The accepted reference is a flat teal star with legs and a face. Every
+scene prompt then re-asserts `glowing; tiny` against it, and the edit model resolves the conflict differently
+per scene — same template, same two references, three outcomes:
+
+| scene | text excerpt | result |
+|---|---|---|
+| s3 | *"Ana decided to help."* — no star noun | reference wins: one teal star, glow painted on |
+| s1 | *"found a tiny glowing star"* | description wins: one yellow legless star, reference discarded |
+| s4 | *"carried the star… held it toward the sky"* | **both drawn — 7/7 draws**, the reported defect |
+
+Duplication is not a distinct bug; it is one of three ways the model resolves two incompatible specifications for
+one entity. This was established by probe, not inference: naming the reference images fixed the *protagonist*
+duplication (0/10 draws) and moved the star not at all (7/7), and a clause explicitly forbidding a second star
+also moved it not at all (0/4). No prompt change in `generate_scene` can fix it, because the reference and the
+description genuinely disagree and the gate whose job was to catch that disagreement reported it and passed.
+
+**Decision:**
+
+### 1. `RefVerdict` gains `contradictions`, and acceptance is computed from it.
+
+```python
+class RefVerdict(BaseModel):
+    differences_observed: str                                 # ADR-004 free-text reason, still first
+    contradictions: list[str] = Field(default_factory=list)   # NEW — the structured reason
+    matches_description: bool                                 # the judge's own claim: recorded, NOT the gate
+    attributes_present: list[str] = Field(default_factory=list)
+```
+
+`char_bible` accepts on `not verdict.contradictions`; `reveal.py:36` uses the same predicate. The model is no
+longer *asked* whether the image matches — it is asked to **enumerate** the contradictions, and the boolean the
+pipeline acts on is derived from the length of that list. A judge cannot then write *"This is a contradiction"*
+and pass, because the sentence and the score are the same object.
+
+Inserted **between** `differences_observed` and `matches_description`, so ADR-004's ordering assertion and
+`test_story_memory.py:116` keep passing unchanged, and the emitted sequence becomes free-text reason → structured
+reason → claim → attributes. **A new field with a default is additive** (`story-memory-contract` §3), so no
+`schema_version` bump, no restart path, and old checkpoints deserialise with an empty list.
+
+### 2. `matches_description` stays, demoted from gate to instrument.
+
+It is kept for three reasons: removing it is a breaking change (`schema_version` bump, restart path, ~10 test
+files, `judge-finetune.md` §6.1's round-trip requirement); and keeping it beside the derived predicate makes the
+**reason–score inconsistency rate directly measurable**, which is a finding this project is positioned to report
+rather than a wart to hide. The field gets a comment saying it is an observation and must not be branched on.
+
+### 3. `best_draw` ranks on contradictions first.
+
+`(fewest contradictions, most attributes_present, earliest)` instead of `(most attributes_present, earliest)`.
+The current key is sorting on a list that demonstrably contains hallucinated entries; the new primary key is the
+same signal the gate now uses. Still lexicographic, still no scalar — ADR-028 Decision 2's posture, applied to
+the schema next door.
+
+### 4. `JUDGE_PROMPT_VERSION` → 3, and the prompt asks for the list.
+
+The v2 wording asks *"First describe any way the image CONTRADICTS a stated attribute. Then say whether the
+image matches…"* — v3 keeps the first sentence and replaces the second with an instruction to **list each
+contradiction separately, one entry per contradicted attribute, and leave the list empty if there are none.**
+Per the existing rule at `char_bible.py:38-42`, the bump is mandatory: what a failure *means* changes.
+
+**Consequences:**
+
+- ⚠️ **The typical-case cost moves toward the worst case.** ADR-028 priced the loop at *"worst case ≈ +$0.14 on a
+  $0.30–0.65 book; typical case ≈ $0, since a passing first draw costs one judge call."* The typical case was $0
+  because the gate passed everything. A gate that works will re-roll, and the ceiling ADR-028 already approved is
+  where books will now land more often. **The cap of 3 is not raised** — that is the containment.
+- ⚠️ **ADR-028's 42% figure is invalidated, for the second time.** It was computed against a gate that passes
+  self-declared contradictions, so it *understates* the off-spec rate. `ref_verdict_prompt_version` goes to 3 and
+  the series restarts — exactly the failure the v2 comment was written to prevent, now working as intended.
+- **This does not fix issue #23's star.** With the gate working, this reference is rejected and re-rolled into
+  ADR-028's known-bad generator rate. The fix for the *rate* remains the seam ADR-001 names: swap
+  `fal_image_model`. Do not read this ADR as closing #23.
+- **Two upstream defects are deliberately left open**, named here so they are not rediscovered as this ADR's
+  bugs:
+  1. **`analyze` puts rendering properties in `colours`** (`"glowing"`), which the style preset may forbid
+     outright. Nothing reconciles a story attribute against ADR-022's fragment, and with the gate fixed this
+     becomes a character that can never pass. That is the *next* decision, and it is a real one.
+  2. **The anthropomorphising guard at `char_bible.py:87-88` does not work** — `ref-c1-1.png` has legs and a
+     face, the exact failure the comment at `:69-71` says was caught before. v2's *"contradiction, not
+     difference"* framing means unlisted features are by construction invisible to the judge, so the guard has no
+     checker. Widening the judge here would re-break what v2 fixed; this needs the draw side, not the gate.
+- **Files edited by this decision:** `contracts/story_memory.py`, `pipeline/char_bible.py` (predicate, prompt,
+  version, `best_draw`), `pipeline/reveal.py:36`, `docs/specs/story-memory-contract.md` §2/§8,
+  `docs/specs/character-bible.md`, and the tests that construct `RefVerdict` positionally.
+
+**Alternatives:**
+
+- **Remove `matches_description` entirely** — rejected on cost, not on principle. It is the cleaner schema and
+  leaves nothing to misread, but it is a breaking change to a persisted, finetune-targeted type in exchange for
+  deleting a field that Decision 2 turns into a measurement. Revisit if a `schema_version` bump happens anyway.
+- **Keep the boolean as the gate and detect inconsistency by string-matching `differences_observed`** — rejected.
+  It works on this exact sample (*"This is a contradiction"*) and nowhere else, and it re-introduces the failure
+  v2 removed by treating any described difference as a defect.
+- **Reuse `VlmVerdict`** — rejected again, for ADR-028's original reasons, which are unchanged.
+- **Do nothing; swap `fal_image_model` instead** — rejected as an alternative, accepted as a complement. A better
+  generator raises the pass rate but a gate that cannot fail still cannot measure it, and the ADR-028 hit rate is
+  a capstone number. The measurement has to be trustworthy before the intervention is worth running.
+- **Fix `analyze` so descriptions never contradict the style** — rejected *as this ADR*. It is the deeper fix and
+  it is listed above as the next decision, but it is LLM-output shaping with no deterministic guarantee, and it
+  would leave the gate still unable to catch the cases it misses.
+
+⚠️ **One honest qualification.** The mechanism is verified — the verdict is quoted from the checkpoint, the draw
+arithmetic is closed, and the three downstream outcomes are from 21 draws across four probe arms. What is **not**
+measured is whether `google/gemma-3-27b-it` populates a *list* more faithfully than it sets a boolean. It emitted
+the right reasoning in prose here, which is the encouraging half; ADR-028 Decision 2's limit 2 applies verbatim to
+this field on arrival — **it is a slot, not a validated signal, until Phase 1 checks it against the scorer's
+eye.** The difference is that a wrong list is a wrong *answer*, where a boolean contradicting its own prose was a
+wrong *instrument*.
+
+---
+
+### Implementation note (2026-08-11) — measured on arrival, and one follow-on decision
+
+The qualification above was tested before this ADR shipped: `ref-c1-1.png` and `ref-c0-1.png` were re-judged under
+v3 with no redraw (2 judge calls, 0 image draws). Results are recorded in `character-bible` §"What v3 was measured
+to do, and what it was not". Against this ADR's own claims:
+
+- **Decisions 1–4 hold.** The list is populated, the mid-schema insert survives strict `json_schema` and
+  `_assert_field_order`, c1 returned two contradictions alongside `matches_description: true` and the gate
+  rejected, and the c0 control returned an empty list — no false positive.
+- ⚠️ **The gate is probabilistic.** One of two calls on c1 returned an empty list and would have accepted. This
+  ADR's *"a wrong list is a wrong answer"* framing stands, but the answer varies between calls on identical input.
+- ❌ **The two open upstream defects are confirmed, not merely suspected.** c1's `differences_observed` names *"the
+  star with legs and a face"* in prose and does not list it as a contradiction — defect 2 above, verbatim. And
+  `attributes_present` still reports `"glowing"` for a flat teal image — defect 1.
+
+**Follow-on carried into this ADR rather than a new one:** the judge prompt no longer receives `notes`
+(`_describe(..., notes=False)`; the draw prompt still does). v3 returned *"secondary character - The image does
+not provide cues as to this character's role"* as a **contradiction** — a `notes` value, unclearable by any
+redraw, which under Decision 1 would exhaust all 3 draws on every job for that character forever. Decision 1
+promoted `attributes_present`'s known noise into the gate, so the noise had to be excluded from the gate's input.
+Folded in rather than raised as ADR-035 because it is a defect *created by* Decision 1, discovered while verifying
+it, and it narrows what the judge measures without changing what acceptance means. `JUDGE_PROMPT_VERSION` stays at
+`3`: v3 never produced a persisted verdict, so bumping to 4 would segment an empty series. `reveal._chips` already
+drew this exact line, which is the precedent it follows.
+
+---
+
+## ADR-035 — The style fragment's own prohibitions filter the description: rendering properties are the style's jurisdiction, not the subject's
+
+**Status:** Accepted (2026-08-11) · **extends ADR-007** ("style rides the canonical reference") from the *image*
+to the *prompt text* · does not amend ADR-022, which keeps sole ownership of the fragments · does not amend
+ADR-013, which keeps `caption = text_excerpt` verbatim · transient projection only → **no schema change, no
+`schema_version` bump**
+
+**Context:** ADR-034 named this as the first of *"two upstream defects deliberately left open"* and declined to
+decide it there. With the gate now working it stops being a quality wart and becomes a recurring cost.
+
+Production job `b9506307` (2026-08-11, `comic` preset), character `c1`:
+
+```
+description.colours   = ["glowing"]
+style.prompt_fragment = "...flat spot colours, ben-day halftone dot shading, limited palette,
+                         no gradients, no glow"
+```
+
+`"glowing"` is a lighting property, not a hue. It reached `colours` because that is the closest axis `analyze`
+has, and **nothing anywhere reconciles an extracted attribute against the fragment the same prompt then applies.**
+The scene prompt `build_prompt` emits for `s1` asserts it twice and forbids it once:
+
+```
+Image 1 is Ana. Image 2 is the star. Use them only as references... draw each character exactly once.
+
+Ana - girl; ...
+the star - star; glowing; tiny; secondary character      <- _describe, from description.colours
+Ana found a tiny glowing star...                         <- text_excerpt, ADR-013 verbatim
+bold comic-book illustration, ... no gradients, no glow  <- the style fragment
+```
+
+**This is why issue #23's star did not close when the reference clause did.** `REFERENCE_CLAUSE` fixed the
+duplicated *girl* because Ana's reference looked like the prose and the clause only had to stop compositing. No
+clause can bind the noun *"tiny glowing star"* to an image that is visibly not one. The edit model resolves the
+contradiction per scene: reference wins (`s3`), prose wins and the reference is discarded (`s1` — a *different*
+star in Ana's hand), or **both entities get drawn** (`s4`, 7/7 draws).
+
+**What ADR-034 changed about the urgency.** Before the gate worked, an unsatisfiable attribute was invisible at
+the gate and only surfaced downstream. Now the judge can *legitimately* contradict `glowing` on all three draws,
+so this character exhausts its full draw budget on **every job** and ships the same best-of reference anyway. We
+converted a quality defect into a recurring spend. Confirmed on re-judging under `JUDGE_PROMPT_VERSION = 3`:
+`attributes_present` still reports `"glowing"` for a flat teal image, so the judge is not a backstop here either.
+
+**The finding that made a deterministic fix viable.** Every preset states its own prohibitions, in its own
+fragment text:
+
+| preset | prohibitions stated in the fragment |
+|---|---|
+| `cel` | no gradients, no glossy highlights, no airbrushing |
+| `comic` | no gradients, no glow |
+| `gouache` | no gradients, no glossy highlights |
+
+So the forbidden-rendering list does **not** have to be hand-maintained. This is the objection that killed the
+species word-list at `char_bible.py:74-77` — *"it needs a word list that is wrong the first time a child writes
+something not on it"* — and it does not apply here: this list is **closed by the fragment**, not by the space of
+things children write, and a new preset arrives carrying its own.
+
+### Decision
+
+1. **Prohibitions are derived from the active style fragment**, by reading its `no <term>` clauses. Not
+   hand-listed, so ADR-022 keeps sole ownership and a new preset needs no code change.
+2. **Filtering applies to the three list axes only** — `colours`, `body_features`, `clothing`. **Never
+   `species`** (`analyze.py:22-26` makes it required precisely so the judge always has something to check; an
+   empty description makes acceptance vacuous). **Never `notes`**, which is free prose and already excluded from
+   the judge (ADR-034 follow-on) and from chips.
+   > **Superseded in part by the second 2026-08-12 amendment below.** `notes` *is* filtered, all-or-nothing. The
+   > justification above named the two surfaces where `notes` does not appear and missed the two where it does.
+3. **Removal is word-level within an entry**, and an entry is dropped only if nothing survives. `"glowing eyes"`
+   becomes `"eyes"`, not nothing — dropping the whole entry would discard a real subject fact to remove a
+   rendering one.
+4. **The projection is transient.** `StoryMemory` keeps the child's words verbatim; only the rendered prompt and
+   chip text drop them. Nothing is destroyed, the filter is reversible if the style changes, and there is no
+   contract change. `build_prompt`'s invariant 2 (*never invents detail beyond `text_excerpt` and the populated
+   axes*) is untouched — filtering removes, it never invents.
+5. **It is applied at every surface that renders a description axis**, all five:
+
+   | surface | why it must be filtered |
+   |---|---|
+   | `char_bible.reference_prompt` (draw) | where the self-contradicting reference is born |
+   | `char_bible._describe(notes=False)` (judge) | otherwise the gate re-rolls on an unclearable contradiction — the 3-draw burn |
+   | `prompt_optimizer._describe` (scene) | `s1`'s assertion, the wrong-star case |
+   | `prompt_optimizer.correct_prompt` `values["colours"]` | today it answers `wrong_colour` with *"match the reference's exact colours: glowing"*, reinforcing the side that is not in the reference (issue #24) |
+   | `reveal._chips` | a child can tap **"glowing"** and spend an ADR-029 retry tap on a redraw that cannot succeed |
+
+   One pure helper in `prompt_optimizer` (already the home of the pure prompt-construction helpers, and it imports
+   only `app.config` and `contracts`, so `char_bible` and `reveal` importing it introduces no cycle).
+
+**When the child's words and the style collide, the style wins and the attribute is dropped from the prompt.**
+That is the load-bearing choice here, stated plainly. It follows ADR-007 — style rides the reference — and it is
+the only side that can win, because the fragment is what the generator actually obeys today. The child's word
+survives in `StoryMemory` and in their own story text; what it loses is the power to contradict the picture.
+
+### Consequences
+
+- The reference becomes *satisfiable*, which is the precondition for every other measurement. The rate ADR-028
+  put at *"roughly 42%"* was measured through a prompt that asked for and forbade the same thing; until this
+  lands, generator quality and prompt contradiction are not separable.
+- **Do not reach for ADR-001's `fal_image_model` seam before this.** Swapping the model first would measure the
+  wrong variable.
+- Per-preset behaviour is correct rather than uniform: `glowing` is dropped under `comic`, and **kept under
+  `cel`**, which never forbids it.
+
+**What this does not fix — five limits, stated rather than discovered later:**
+
+1. **The `text_excerpt` still says it.** ADR-013 freezes `caption = text_excerpt` verbatim and the excerpt reaches
+   the prompt unchanged, so `s1` still contains the word *"glowing"* once. The conflict drops from three
+   assertions to one, and — the part that matters — the *reference* stops contradicting it. This ADR does not
+   claim the prose conflict is gone.
+2. **It does not fix the anti-anthropomorphising guard** (ADR-034's defect 2): `ref-c1-1.png` also has legs and a
+   face, which is independent of this. **The star needs both fixes.** This one is landing alone deliberately, so
+   the next measurement has one variable in it.
+3. **Prefix matching is a heuristic** (`"glowing"`.startswith(`"glow"`)), and derivation only removes what a
+   fragment *states*. An attribute that is merely hard for a flat style but not explicitly forbidden still gets
+   through. Over-dropping fails soft (an attribute goes unasserted); the status quo fails hard (a prompt that
+   contradicts itself).
+4. **A style-forbidden word inside `species` still reaches both prompts.** Decision 2's carve-out is
+   unconditional, so `species = "glowing orb"` under `comic` is described to the generator *and* to the judge.
+   Accepted: `analyze.py:22-26` makes species required precisely so acceptance is never vacuous, and stripping it
+   would trade a describable contradiction for an undescribable character. The judge can at least *see* this one
+   and contradict it, which is the ordinary ADR-034 path.
+5. **Filtering can make a description "thin".** `reference_prompt`'s test is
+   `if not (colours or body_features or clothing)`, and the filter can empty all three — prod's `c1` goes from
+   `star; glowing; tiny` to `star, a friendly children's picture-book character`. That is the intended
+   degradation (nothing drawable survived, so the neutral floor is right), but it was a *consequence* rather than
+   a decision and it moves acceptance toward vacuous, which is the same pressure limit 4 names.
+6. **A style-forbidden `notes` is dropped whole, so its permitted words go with it.** Added by the second
+   2026-08-12 amendment. `"glows softly in the dark"` under `comic` contributes nothing rather than
+   `"softly in the dark"` — the word-level rule of Decision 3 is right for short noun phrases and wrong for a
+   sentence, which it leaves as a mangled fragment the generator still has to reconcile. Accepted because `notes`
+   is emphasis, not an axis the gate measures: ADR-034 removed it from the judge prompt, so dropping it cannot
+   make acceptance vacuous the way dropping a visual axis would.
+
+### Amendment (2026-08-12) — species is filtered in **chip scope**
+
+Decisions 2 and 5 conflicted on one cell, found while auditing the retry path. Decision 2 says *never `species`*;
+Decision 5 lists `reveal._chips` as a filtered surface, and its stated reason — *"a child can tap **"glowing"** and
+spend an ADR-029 retry tap on a redraw that cannot succeed"* — applies to a forbidden word inside `species` exactly
+as it does to one inside `colours`. Decision 2 won that cell by default, and it was the wrong reading:
+
+```
+species="glowing orb", colours=["blue"], preset=comic
+
+chips offered:  ['glowing orb', 'blue']          <- the child is handed the unfixable term
+draw prompt:    the orb - glowing orb; blue; glowing orb
+style:          ... no gradients, no glow
+```
+
+A tapped chip becomes `char_bible._mint_targeted`'s `notes`, and `notes` is unfiltered by the same Decision 2. **Two
+carve-outs composed into a bypass**, reachable on a fresh post-fix job — not, as first suspected, only on an
+in-flight one holding pre-amendment chips. `main.confirm_job` validates the tap against the stored chips, so it
+waved it through: the validator's input was the thing that was wrong.
+
+**Resolution: `species` is word-filtered where it is OFFERED, never where it is DESCRIBED.** `permitted_words` in
+`prompt_optimizer`, called by `_chips` only. Decision 2 is unchanged everywhere it was actually reasoned about —
+`filtered_description` still never touches `species`, so the draw and judge prompts keep it (limit 4 above stands)
+and acceptance cannot go vacuous. What the child loses is a button that promised something no redraw could deliver.
+An all-forbidden species now offers no chip and falls through to the existing name fallback (invariant 4).
+
+**One thing deliberately not changed.** `_mint_targeted`'s `if retry.attribute not in prompt` re-injection branch
+is **unreachable**, and has been since the commit that introduced it — the line above writes the attribute into
+`notes`, and `_describe(notes=True)` always renders `notes`. It is pinned by a test rather than deleted because it
+is a trap, not merely dead: it is dead *only while `notes` and `retry.attribute` are both unfiltered*, and the
+obvious follow-on fix — filtering the tapped attribute — would reanimate it into a clause that re-appends the term
+the filter had just removed. The test names the correct response (delete the branch, do not repair it).
+
+**How we will know it worked.** Re-run the same story under `comic` and check three things: `c1`'s reference no
+longer carries an unsatisfiable attribute into the judge; the gate stops re-rolling `c1` to the 3-draw cap; and
+`s1`/`s3`/`s4` are inspected for the star. A residual star defect after this is attributable to the guard or the
+generator, which is exactly what landing it alone buys.
+
+### Amendment (2026-08-12b) — `notes` is filtered, all-or-nothing
+
+Raised in review of the branch carrying the amendment above. Decision 2 justified the `notes` carve-out as *"free
+prose and already excluded from the judge (ADR-034 follow-on) and from chips"* — and both clauses are true and
+both are beside the point. The judge and the chips are not where this ADR's defect lives. `notes` reaches the two
+surfaces that *are*:
+
+| surface | line |
+|---|---|
+| `char_bible.reference_prompt` → `_describe(notes=True)` — the draw prompt | `char_bible.py:275` |
+| `prompt_optimizer._describe` → `build_prompt` — the scene prompt | `prompt_optimizer.py:108` |
+
+**This is strictly worse than limit 4's `species` carve-out, not equivalent to it.** Limit 4's whole acceptance
+argument is *"the judge can at least see this one and contradict it"*. ADR-034 removed `notes` from the judge, so
+for `notes` that argument is specifically false: a forbidden term there is asserted to the generator and invisible
+to the gate. And `notes` is unconstrained model output — `EXTRACTION_PROMPT` never mentions the field, while strict
+`json_schema` forces every property into `required`, so the model fills it with prose of its own choosing. Prod's
+value was `"secondary character"`; `"glows softly in the dark"` is the same draw from the same distribution.
+
+Structurally the same shape as the leak the first amendment closed — a Decision 2 carve-out composing into a
+bypass — one axis over. **Unproven rather than observed:** no prod instance of a rendering word landing in `notes`.
+Fixed anyway, because the residue is unbounded (any prose) and the fix is three lines.
+
+**Resolution: `_kept_whole` in `prompt_optimizer`, wired into `filtered_description`.** If any word of `notes` is
+forbidden, the whole string is dropped; otherwise it survives untouched. Word-level (Decision 3's rule) is right
+for a short noun phrase and wrong for a sentence — see limit 6.
+
+**Two things this deliberately does not disturb.**
+
+- **`_mint_targeted` is unaffected.** It sets `notes` *after* the filter runs
+  (`filtered_description(...).model_copy(update={"notes": retry.attribute})`), so the tapped attribute overwrites
+  whatever `_kept_whole` did. The unreachable re-injection branch above stays unreachable and the trap does not
+  reanimate — that needs filtering `retry.attribute` itself, which the chip-scope amendment already made
+  unnecessary.
+- **The `comic` re-measurement stays single-variable.** This changes a prompt only when `notes` actually contains
+  a forbidden word. Prod's `"secondary character"` is forbidden by no preset, so on the measurement job the
+  rendered prompts are byte-identical to what they would have been without this amendment.

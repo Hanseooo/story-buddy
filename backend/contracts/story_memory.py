@@ -40,8 +40,15 @@ class CharacterDescription(BaseModel):
 # --- Reference acceptance verdict (ADR-028 Decision 3). Reason-then-score, like every judge call. ---
 class RefVerdict(BaseModel):
     differences_observed: str          # MUST be declared before matches_description (ADR-004)
+    # ADR-034. The gate. Empty list = accepted; `char_bible` and `reveal` both branch on THIS.
+    # Declared between the reason and the score deliberately: ADR-004's ordering is enforced on
+    # the wire by `providers._assert_field_order`, so the judge must enumerate before it scores.
+    contradictions: list[str] = Field(default_factory=list)
+    # NOT the gate (ADR-034 Decision 2). Kept as an observation: the rate at which this disagrees
+    # with `contradictions` is the measurement that justified the ADR. Do not branch on it — prod
+    # job b9506307 set it TRUE on a verdict whose own prose said "This is a contradiction".
     matches_description: bool
-    attributes_present: list[str] = Field(default_factory=list)   # best-of key when all draws fail
+    attributes_present: list[str] = Field(default_factory=list)   # best-of tiebreak when all draws fail
 
 
 class Character(BaseModel):

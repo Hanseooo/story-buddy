@@ -188,7 +188,7 @@ def regenerate(state: StoryMemory) -> dict:
     if state.cost.image_count >= IMAGE_BUDGET:        # ADR-025 D4, before any spend
         raise RuntimeError(...)
 
-    ref_paths = [...]                                 # identical to generate_scene's loop, below
+    ref_paths = [...]                                 # referenced_characters(), the shared list
     v = last.vlm_verdict
     prompt = correct_prompt(
         last.prompt or scene.prompt,
@@ -212,10 +212,18 @@ def regenerate(state: StoryMemory) -> dict:
     }
 ```
 
-`ref_paths` is built by the identical loop `generate_scene` uses — each `char_id` in
+`ref_paths` comes from `prompt_optimizer.referenced_characters` — each `char_id` in
 `characters_present` that resolves to a `Character` carrying a `canonical_ref_image`, unresolvable ids
-skipped and logged. The retry is conditioned on the same references as the original, or it would be
-measuring a different thing.
+skipped. The retry is conditioned on the same references as the original, or it would be measuring a
+different thing.
+
+⚠️ **The same list, not a copy of the same rule.** `correct_prompt` only appends (invariant 3), so the
+corrected prompt still carries `build_prompt`'s numbered image roll — *"Image 2 is the star"* is
+asserted against the list this node passes to fal (issue #23). This node, `generate_scene` and
+`output_mod` each used to derive that order themselves, agreeing only because the three predicates
+happened to be identical; the next edit to the rule would have desynced them silently, producing a
+plausible wrong image rather than an exception. Pinned by
+`test_ref_paths_agree_with_the_image_roll_the_corrected_prompt_carries`.
 
 **No prompt to correct → raise.** Unreachable today (`generate_scene` always sets both `Attempt.prompt`
 and `Scene.prompt`), and the alternative — drawing from correction clauses with no base prompt — is a
@@ -337,6 +345,8 @@ units, corrected once ADR-029's `reveal` node actually landed.
 - `scenes[].regeneration_count` is unchanged (invariant 7).
 - `ref_paths` matches `generate_scene`'s for the same state; an unresolvable `char_id` is skipped
   without raising.
+- `ref_paths` agrees with the numbered image roll the corrected prompt carries, on a scene mixing a
+  referenced and an unreferenced character.
 - Raises on: no unfinalized scene, a scene with no attempts, `image_count >= IMAGE_BUDGET`, and no
   prompt on either the attempt or the scene. **Never returns `{}`** (invariant 1).
 - The prompt handed to the helper is not equal to `last.prompt` (invariant 5) for every reachable

@@ -4,7 +4,7 @@ from functools import lru_cache
 from app.config import IMAGE_BUDGET
 from app.db import get_supabase_client
 from contracts.story_memory import Attempt, StoryMemory
-from pipeline.prompt_optimizer import build_prompt
+from pipeline.prompt_optimizer import build_prompt, referenced_characters
 from providers import edit_image, text_to_image, upload_reference
 
 log = logging.getLogger(__name__)
@@ -78,14 +78,12 @@ def generate_scene(state: StoryMemory) -> dict:
         scene.text_excerpt, scene.characters_present, state.characters, state.style.prompt_fragment
     )
 
-    by_id = {c.char_id: c for c in state.characters}
-    ref_paths = []
-    for char_id in scene.characters_present:
-        c = by_id.get(char_id)
-        if c is None:
-            log.warning("generate_scene: char_id %r in characters_present but absent from state.characters, skipped", char_id)
-        elif c.canonical_ref_image:
-            ref_paths.append(c.canonical_ref_image)
+    # Same list `build_prompt` numbered the image roll off, so "Image 2 is X" always names
+    # ref_paths[1] (issue #23). build_prompt already logged any char_id missing from the roster.
+    ref_paths = [
+        c.canonical_ref_image
+        for c in referenced_characters(scene.characters_present, state.characters)
+    ]
 
     path, paid = generate_and_store(
         prompt, state.story_id, scene.scene_id, len(scene.attempts) + 1, ref_paths

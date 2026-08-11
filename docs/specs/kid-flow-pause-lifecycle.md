@@ -147,15 +147,38 @@ exactly what `interrupt()`'s payload is for.
 compared case-insensitively. `notes` is excluded — it is free prose, not an attribute, and not a thing
 a child can tap.
 
+**Attributes the active style forbids are excluded too (ADR-035).** The axes are passed through
+`prompt_optimizer.filtered_description` first, so under `comic` (`"no glow"`) a `colours` entry of
+`"glowing"` is never offered. A chip is a promise that tapping it buys a redraw which could plausibly
+fix that attribute; a forbidden one spends one of the three taps and one paid draw on something the
+style guarantees will not change. Filtering here is also what lets `char_bible._mint_targeted` trust
+`retry.attribute` — the tapped value can no longer be a term the fragment forbids. Per-preset, not a
+blanket ban: `cel` never says "no glow", so there the chip stands.
+
+**`species` is filtered here and only here** (ADR-035 amendment, 2026-08-12), through
+`prompt_optimizer.permitted_words` rather than `filtered_description`, which deliberately leaves that
+axis alone. Chip scope, not description scope: the prompts still say `"glowing orb"`, the child is
+offered `"orb"`. This was the one live leak in ADR-035 — a tapped chip becomes `_mint_targeted`'s
+`notes`, which is unfiltered by the same carve-out, so the forbidden term walked back into a draw
+prompt on a **fresh** job. `main.confirm_job` validates a tap against the stored chips (§4.9), so it
+could not catch this: the chips were the thing that was wrong. An all-forbidden species offers no chip
+and falls through to fallback 2 below.
+
 **Two fallbacks, in order, because an empty chip list dead-ends the button.** The endpoint validates a
 tap against the offered chips (§4.9), so a character offering none can never be retried — and
 ADR-029's *"the button never dead-ends"* would be false at the top of the pause rather than at the cap.
 
 1. **Nothing missing** — `ref_verdict is None` (a judge outage; `char_bible` accepts the draw unchecked
-   and records `None`) or `matches_description is True`. Fall back to the **full axis list**: a child
-   may disagree with a reference the judge passed, and that disagreement is the entire point of the
-   reveal (ADR-029 context).
-2. **No axes at all** — `analyze` produced a bare name with no species, colours, features or clothing.
+   and records `None`) or `ref_verdict.contradictions` is empty. Fall back to the **full axis list**: a
+   child may disagree with a reference the judge passed, and that disagreement is the entire point of
+   the reveal (ADR-029 context).
+
+   ⚠️ **This is `char_bible`'s acceptance predicate, and the two must stay in lockstep** (ADR-034).
+   It reads `contradictions`, never `matches_description` — those two disagree in production, and a
+   `reveal` that branched on the boolean would hand the child the full chip list for a reference the
+   gate had just rejected, so the tap would target an attribute that was never the problem.
+2. **No axes at all** — `analyze` produced a bare name with no species, colours, features or clothing,
+   or ADR-035 filtered every one of them away (including the species, post-amendment).
    Fall back to **`[name]`**. The tap then restates the character's name, which is all
    `char_bible._describe` had to work with anyway, so the redraw is an honest blind re-roll. ADR-029's
    "targeted, not blind" premise assumes described attributes exist; where none do, blind is the only
@@ -407,8 +430,11 @@ this change.
 | **No characters in the story** | `reveal` returns `{}` without interrupting; the book runs straight through. No empty screen, no permanent pause (§4.1). |
 | **Five characters** | Two references exist (`char_bible` cap); the projection lists those two. The other three offer no tap. |
 | **A character with an empty description** | Chips fall back to `[name]`; the tap is a blind re-roll (§4.3). |
+| **Every axis is style-forbidden** (e.g. `colours == ["glowing"]` under `comic`) | ADR-035 filters them all, and the same `[name]` fallback applies — the child still gets a tap, just a blind one. |
+| **A forbidden word inside `species`** (e.g. `species == "glowing orb"` under `comic`) | Word-filtered to `"orb"` for the chip only (ADR-035 amendment). The draw and judge prompts still say `"glowing orb"` — `filtered_description` never touches `species`, and that carve-out is what keeps acceptance from going vacuous. |
 | **`ref_verdict is None`** (judge outage upstream) | Chips fall back to the full axis list; the child still has something to tap. |
-| **Reference passed the judge** (`matches_description=True`) | Same fallback. The pause happens regardless — the child's disagreement is the point. |
+| **Reference passed the judge** (`contradictions == []`) | Same fallback. The pause happens regardless — the child's disagreement is the point. |
+| **`contradictions` non-empty but `matches_description=True`** | Treated as a **failed** reference — chips are the missing set (ADR-034). Matches what `char_bible`'s gate did with the same verdict. |
 | **A retried reference is flagged by `char_ref_mod`** | `moderation_router` raises `content_flagged`, job `failed`. The retry path is not exempt from the gate. |
 | **Process dies between `reveal` and `char_bible`** | Checkpoint resumes at `char_bible` with `reference_retry` set and `ref_retry_count` un-bumped; the tap is re-spent, not lost or double-counted. |
 | **Two different taps race** | First wins the CAS; the second gets `200` and its `char_id`/`attribute` are discarded. One resume per pause, always. |
@@ -474,9 +500,17 @@ future migration (S1 §6.3).
 
 **Projection (`_project_reveal`, pure — no mocks), same file:**
 - Chips are described-minus-`attributes_present`, case-insensitively.
-- **Full axis list** when `ref_verdict is None`, and when `matches_description is True`.
+- **Full axis list** when `ref_verdict is None`, and when `contradictions` is empty.
+- **Missing set** when `contradictions` is non-empty — the projection branches on that alone, so it
+  follows the gate's predicate rather than the judge's boolean (ADR-034). Prod job b9506307, where
+  `matches_description` was `True` on a verdict whose own prose named a contradiction, is one case
+  of that rule and not the rule itself.
 - **`[name]`** when the description carries no axes at all (§4.3).
 - `notes` never appears as a chip.
+- An attribute the active style fragment forbids never appears as a chip; the same attribute under a
+  fragment that permits it does (ADR-035, per-preset).
+- A forbidden word inside `species` is stripped from the chip (`"glowing orb"` → `"orb"`), and a
+  wholly-forbidden species falls through to `[name]` (ADR-035 amendment).
 - A character with `canonical_ref_image is None` is **absent** from `characters`.
 - `taps_left == 3 - ref_retry_count`.
 

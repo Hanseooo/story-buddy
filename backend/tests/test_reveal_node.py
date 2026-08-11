@@ -10,7 +10,9 @@ from contracts.story_memory import (
     ReferenceRetry,
     RefVerdict,
     StoryMemory,
+    Style,
 )
+from app.config import STYLE_PRESETS
 from pipeline.reveal import _project_reveal, reveal
 
 
@@ -30,7 +32,8 @@ def _char(
     )
 
 
-def _state(characters: list[Character], cost: Cost | None = None, reference_retry=None) -> StoryMemory:
+def _state(characters: list[Character], cost: Cost | None = None, reference_retry=None,
+           style: Style | None = None) -> StoryMemory:
     return StoryMemory(
         schema_version=CURRENT_SCHEMA_VERSION,
         story_id="job-1",
@@ -40,6 +43,7 @@ def _state(characters: list[Character], cost: Cost | None = None, reference_retr
         characters=characters,
         cost=cost or Cost(),
         reference_retry=reference_retry,
+        style=style or Style(),
     )
 
 
@@ -64,7 +68,12 @@ def test_project_reveal_taps_left_is_three_minus_ref_retry_count():
 
 def test_project_reveal_chips_are_described_minus_attributes_present_case_insensitive():
     description = CharacterDescription(species="dog", colours=["Orange"], body_features=["one floppy ear"])
-    verdict = RefVerdict(differences_observed="d", matches_description=False, attributes_present=["dog", "orange"])
+    verdict = RefVerdict(
+        differences_observed="d",
+        contradictions=["the ear is upright, the description says floppy"],
+        matches_description=False,
+        attributes_present=["dog", "orange"],
+    )
     state = _state([_char("c0", "Kiko", description=description, verdict=verdict)])
     chips = _project_reveal(state)["characters"][0]["chips"]
     assert chips == ["one floppy ear"]
@@ -77,12 +86,31 @@ def test_project_reveal_falls_back_to_full_axis_list_when_ref_verdict_is_none():
     assert chips == ["dog", "orange"]
 
 
-def test_project_reveal_falls_back_to_full_axis_list_when_matches_description_is_true():
+def test_project_reveal_falls_back_to_full_axis_list_when_there_are_no_contradictions():
     description = CharacterDescription(species="dog", colours=["orange"])
     verdict = RefVerdict(differences_observed="d", matches_description=True, attributes_present=["dog", "orange"])
     state = _state([_char("c0", "Kiko", description=description, verdict=verdict)])
     chips = _project_reveal(state)["characters"][0]["chips"]
     assert chips == ["dog", "orange"]
+
+
+def test_project_reveal_subtracts_when_contradictions_disagree_with_matches_description():
+    """ADR-034: this node reads the same predicate the gate does, never the boolean.
+
+    The prod job b9506307 shape — the judge names a contradiction and sets the boolean TRUE.
+    `char_bible` now re-rolls on that, so `reveal` must also treat it as a failed reference; if
+    it read the boolean it would offer the child the full chip list for a reference the gate
+    rejected, and the "try again" tap would target an attribute that was never the problem.
+    """
+    description = CharacterDescription(species="dog", colours=["orange"], body_features=["one floppy ear"])
+    verdict = RefVerdict(
+        differences_observed="the ear is upright. This is a contradiction.",
+        contradictions=["the ear is upright, the description says floppy"],
+        matches_description=True,
+        attributes_present=["dog", "orange"],
+    )
+    state = _state([_char("c0", "Kiko", description=description, verdict=verdict)])
+    assert _project_reveal(state)["characters"][0]["chips"] == ["one floppy ear"]
 
 
 def test_project_reveal_falls_back_to_name_when_description_has_no_axes():
@@ -137,3 +165,60 @@ def test_reveal_never_touches_cost():
     with patch("pipeline.reveal.interrupt", return_value={"action": "confirm"}):
         result = reveal(state)
     assert "cost" not in result
+
+
+# --- ADR-035: chips never offer an attribute the active style forbids ---
+
+def test_project_reveal_never_offers_a_chip_for_a_style_forbidden_attribute():
+    """ADR-035 surface 5. A chip is a promise that tapping it buys a redraw which could plausibly
+    fix that attribute. Under `comic` ("no glow") a tap on "glowing" spends one of the three
+    ADR-029 taps and one paid draw on something the style guarantees will not change.
+
+    The permitted axes still populate the list, so invariant 4 (never empty) is unaffected.
+    """
+    star = _char(
+        "c1", "the star",
+        description=CharacterDescription(species="star", colours=["glowing", "yellow"]),
+    )
+    payload = _project_reveal(_state([star], style=Style(prompt_fragment=STYLE_PRESETS["comic"])))
+
+    assert payload["characters"][0]["chips"] == ["star", "yellow"]
+
+
+def test_project_reveal_word_filters_a_forbidden_term_out_of_the_species_chip():
+    """ADR-035 amendment. Decision 2 keeps `species` unfiltered in the DESCRIPTION — it is what
+    stops acceptance going vacuous — but Decision 5 lists `_chips` as a filtered surface, and its
+    reason ("a tap that cannot succeed") applies to a forbidden species word just as much as to a
+    forbidden colour. The two cells conflicted, and the species chip was the live leak: the tapped
+    chip becomes `_mint_targeted`'s `notes`, which is unfiltered, so "glowing orb" came back into
+    the draw prompt under a fragment ending "no glow" on a FRESH job, not just an in-flight one.
+
+    Chip scope only. The reference prompt still says "glowing orb" (see the char_bible test) —
+    what is removed is the promise that tapping it can change anything.
+    """
+    orb = _char(
+        "c1", "the orb",
+        description=CharacterDescription(species="glowing orb", colours=["blue"]),
+    )
+    payload = _project_reveal(_state([orb], style=Style(prompt_fragment=STYLE_PRESETS["comic"])))
+
+    assert payload["characters"][0]["chips"] == ["orb", "blue"]
+
+
+def test_project_reveal_falls_back_to_the_name_when_the_style_forbids_every_axis():
+    """Invariant 4: an empty chip list dead-ends the "try again" button. The existing fallback
+    already covers this — pinned because filtering is now a way to reach it."""
+    star = _char("c1", "the star", description=CharacterDescription(species="glowing", colours=["glowing"]))
+    payload = _project_reveal(_state([star], style=Style(prompt_fragment=STYLE_PRESETS["comic"])))
+
+    assert payload["characters"][0]["chips"] == ["the star"]
+
+
+def test_project_reveal_still_offers_the_chip_when_the_active_style_permits_it():
+    """Per-preset, not a blanket ban — `cel` never forbids glow."""
+    star = _char(
+        "c1", "the star", description=CharacterDescription(species="star", colours=["glowing"]),
+    )
+    payload = _project_reveal(_state([star], style=Style(prompt_fragment=STYLE_PRESETS["cel"])))
+
+    assert "glowing" in payload["characters"][0]["chips"]

@@ -111,9 +111,16 @@ def test_anatomy_intact_is_declared_last():
 
 
 def test_ref_verdict_declares_reason_before_score():
-    """ADR-004 applies to every judge call, not only the two-image one."""
+    """ADR-004 applies to every judge call, not only the two-image one.
+
+    ADR-034 put the real gate — `contradictions` — BETWEEN the two, so the judge must enumerate
+    the defects before it scores. `providers._assert_field_order` enforces this on the wire; the
+    schema order it checks against is this one, so moving a field here silently moves the wire
+    contract with it.
+    """
     props = list(RefVerdict.model_json_schema()["properties"])
-    assert props.index("differences_observed") < props.index("matches_description")
+    assert props.index("differences_observed") < props.index("contradictions")
+    assert props.index("contradictions") < props.index("matches_description")
 
 
 def test_failure_reason_is_a_closed_set():

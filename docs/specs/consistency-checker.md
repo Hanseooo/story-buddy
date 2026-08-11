@@ -145,6 +145,17 @@ and `correct_prompt`'s `wrong_style` clause only re-appends the fragment the pro
 carries, so a retry spent on style is close to a pure resample. Consequence, stated rather than
 hidden: a genuinely off-style page can ship.
 
+⚠️ **The style question must name what to ignore** (issue #24, 2026-08-11). Asked unscoped —
+"whether the art style matches the reference" — the field read `False` on **7 of 7** scenes of prod
+job `b9506307`, because the two images being compared differ by construction: the reference is one
+character on a plain neutral background (`char_bible.REFERENCE_PROMPT`) and the page is a full
+illustration with scenery and a crop. The judge's own `differences_observed` answered about
+hair-strand detail, freckle rendering and background — never about drawing technique — so the field
+was measuring "are these two images rendered alike", which no scene page can satisfy, and a
+constant signal is also a useless third term in `_rank`. `JUDGE_PROMPT` now scopes it to linework,
+shading and colouring technique and names background, composition, pose, crop and expression as
+ignorable. Numbers and controls: `PHASE_05_RESULTS.md` Probe 3 follow-up.
+
 ### Edge cases
 
 | Case | Behavior |

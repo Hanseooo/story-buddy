@@ -20,15 +20,28 @@ BUCKET = "storybook-images"
 
 # Reason-then-score (ADR-004). The prompt asks in exactly the order the schema declares, and
 # `providers._assert_field_order` rejects a provider that answers out of order.
+#
+# The style question names what to ignore. Unscoped ("whether the art style matches the reference")
+# it read False on 100% of prod job b9506307's 7 scenes, because the two images it compares differ
+# by construction: `char_bible.REFERENCE_PROMPT` draws one character on a plain neutral background,
+# and a page is a full illustration with scenery and a crop. The judge's own
+# `differences_observed` answered about hair-strand detail, freckle rendering and background —
+# never about drawing technique — so the field measured "are these two images rendered alike",
+# which no scene page can satisfy. Re-judged on that job's own images (issue #24, 2026-08-11,
+# 3 runs per cell): unscoped read True 1/6 on a matching comic ref+page pair; scoped reads 3/3.
+# Both read 0/3 on a cel reference against the same comic page, so the signal still discriminates
+# a real style break — the point of scoping is that it now ONLY discriminates that.
 JUDGE_PROMPT = """\
 The FIRST image is the canonical character reference for {name}. The SECOND image is one page of \
 the same picture book, in which {name} should appear drawn to match that reference.
 
 First describe every difference you observe between {name} on the page and the reference. Then \
 say whether it is the same character; list which of the reference's attributes are actually \
-present on the page; whether the art style matches the reference; and whether the character's \
-anatomy is intact, meaning no merged, missing or duplicated body parts. Finally list the failure \
-reasons that apply, choosing only from the fixed set."""
+present on the page; whether the page is drawn in the same art style as the reference — the same \
+linework, shading and colouring technique — ignoring background, composition, pose, crop and \
+expression; and whether the character's anatomy is intact, meaning no merged, missing or \
+duplicated body parts. Finally list the failure reasons that apply, choosing only from the fixed \
+set."""
 
 
 class SceneVerdict(BaseModel):

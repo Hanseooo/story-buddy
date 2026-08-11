@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, CharacterDescription, Cost, Input, RefVerdict, StoryMemory, Style
+from app.config import STYLE_PRESETS
 from pipeline.char_bible import best_draw, char_bible, mint_reference, reference_prompt
 
 FRAG = "flat cel-shaded cartoon, thick clean black outlines"
@@ -10,17 +11,49 @@ DRAWS = [b"draw-1-bytes", b"draw-2-bytes", b"draw-3-bytes"]
 
 
 def _verdict(matches: bool, attributes: list[str] | None = None) -> RefVerdict:
+    """A SELF-CONSISTENT judge: the list and the boolean agree. Post-ADR-034 only the list is
+    read, so `matches` alone would no longer decide anything — the tests below say "a failing
+    draw" and must keep meaning it. The verdict where the two DISAGREE is the production bug,
+    and it is constructed explicitly in its own test rather than reachable from this helper."""
     return RefVerdict(
         differences_observed="the scarf is blue, not red",
+        contradictions=[] if matches else ["the scarf is blue, the description says red"],
         matches_description=matches,
         attributes_present=attributes or [],
     )
 
 
+def _contradicting(attributes: list[str], contradictions: list[str]) -> RefVerdict:
+    """A failing verdict whose two lists vary independently — the only way to see which one
+    `best_draw` actually ranks on."""
+    return RefVerdict(
+        differences_observed="the scarf is blue, not red",
+        contradictions=contradictions,
+        matches_description=False,
+        attributes_present=attributes,
+    )
+
+
 # --- best_draw (pure) ---
 
-def test_best_draw_ranks_on_attributes_present_length():
-    """Spec §4: best-of ranks on len(attributes_present) — lengths 1, 3, 2 → index 1."""
+def test_best_draw_ranks_on_contradiction_count_first():
+    """ADR-034: fewest contradictions wins even when it shows the FEWEST attributes.
+
+    Index 1 contradicts once and shows one attribute; index 0 contradicts three times and shows
+    three. Under the pre-ADR-034 key (attributes only) index 0 won — best-of shipped the draw
+    that got more things wrong because it also got more things listed.
+    """
+    verdicts = [
+        _contradicting(["a", "b", "c"], ["c1", "c2", "c3"]),
+        _contradicting(["a"], ["c1"]),
+        _contradicting(["a", "b"], ["c1", "c2"]),
+    ]
+    assert best_draw(verdicts) == 1
+
+
+def test_best_draw_breaks_equal_contradictions_on_attributes_present_length():
+    """Spec §4, demoted to a tiebreak by ADR-034: equal contradiction counts, attribute lengths
+    1, 3, 2 → index 1."""
     verdicts = [
         _verdict(False, ["a"]),
         _verdict(False, ["a", "b", "c"]),
@@ -110,7 +143,11 @@ def test_enrichment_reaches_the_draw_prompt_but_never_the_judge_prompt():
 
     assert "friendly children's picture-book character" in draw_prompt
     assert "friendly children's picture-book character" not in judge_prompt
-    assert "the narrator - girl; the protagonist" in judge_prompt
+    # `notes` is the OTHER one-directional divergence (ADR-034 follow-on), so the judge sees the
+    # visual axes only — here that floors the subject to the bare name.
+    assert "the narrator - girl; the protagonist" in draw_prompt
+    assert "the narrator - girl" in judge_prompt
+    assert "the protagonist" not in judge_prompt
 
 
 # --- non-humanoid subjects (2026-08-11) ---
@@ -140,6 +177,26 @@ def test_reference_prompt_guards_against_anthropomorphising_a_non_human_subject(
         assert "not a person" in prompt
 
 
+def test_notes_reaches_the_draw_prompt_but_never_the_judge_prompt():
+    """ADR-034 follow-on, measured 2026-08-11: `notes` is free prose, not a visual attribute, and
+    the gate now re-rolls on whatever the judge lists as contradicted.
+
+    Re-judging prod job b9506307's `ref-c1-1.png` under v3 returned
+    `"secondary character - The image does not provide cues as to this character's role."` as a
+    contradiction. No redraw can ever clear that, so the character would burn all 3 draws on every
+    job, forever. The generator still gets `notes` — "secondary character" is useful framing for a
+    drawing — but the judge measures VISUAL axes only, the same line `reveal._chips` already draws
+    ("free prose, not an attribute, and not a thing a child can tap").
+    """
+    described = CharacterDescription(species="star", body_features=["tiny"], notes="secondary character")
+    _, t2i_mock, judge_mock, _ = _mint([_verdict(True)], description=described, name="the star")
+
+    assert "secondary character" in t2i_mock.call_args.args[0]
+    assert "secondary character" not in judge_mock.call_args.args[0]
+    # The visual axes still reach the judge — this narrows the subject, it does not gut it.
+    assert "the star - star; tiny" in judge_mock.call_args.args[0]
+
+
 def test_the_non_humanoid_guard_never_reaches_the_judge_prompt():
     """Same one-directional rule the thin-description filler follows, for the same reason.
 
@@ -162,7 +219,7 @@ def test_reference_prompt_always_contains_the_style_fragment():
 
 # --- mint_reference (effect boundary) ---
 
-def _mint(judge_side_effect, images=None, description=None, name="the orange dog"):
+def _mint(judge_side_effect, images=None, description=None, name="the orange dog", style_fragment=FRAG):
     """Runs mint_reference with all three effects patched.
 
     Returns (result, text_to_image_mock, judge_mock, fake_supabase).
@@ -174,7 +231,7 @@ def _mint(judge_side_effect, images=None, description=None, name="the orange dog
         result = mint_reference(
             description or CharacterDescription(species="dog", colours=["orange"]),
             name,
-            FRAG,
+            style_fragment,
             "story-1",
             "c0",
         )
@@ -200,6 +257,32 @@ def test_mint_reference_accepts_a_passing_first_draw():
     assert draws == 1
     assert _uploaded_bytes(supabase) == b"draw-1-bytes"
     assert path == "story-1/ref-c0-1.png"
+
+
+def test_mint_reference_rejects_a_draw_whose_verdict_declares_a_contradiction():
+    """ADR-034: acceptance is derived from `contradictions`, never asked for as a boolean.
+
+    The verbatim shape from prod job b9506307 (2026-08-11), character c1 "the star": the judge
+    wrote "This is a contradiction" and set the boolean to TRUE. ADR-004's ordering worked — the
+    reason WAS emitted first — and the gate accepted it anyway, because ordering makes the model
+    reason before it scores, not score in line with its reasoning. Every scene then carried a
+    description its own reference contradicts (#23's star branch).
+    """
+    inconsistent = RefVerdict(
+        differences_observed=(
+            "The description states the star is 'tiny', but the image depicts the star as a "
+            "significant size relative to the image frame. This is a contradiction."
+        ),
+        contradictions=["the image draws the star large; the description states it is tiny"],
+        matches_description=True,
+        attributes_present=["star", "glowing"],
+    )
+    (_, verdict, draws), t2i, _, supabase = _mint([inconsistent, _verdict(True, ["star"])])
+
+    assert t2i.call_count == 2          # the boolean did NOT end the loop
+    assert draws == 2
+    assert verdict.contradictions == []
+    assert _uploaded_bytes(supabase) == b"draw-2-bytes"
 
 
 def test_mint_reference_rerolls_until_a_draw_passes():
@@ -579,7 +662,8 @@ def test_char_bible_prefers_the_state_style_fragment_when_set():
 
 # --- targeted mode (ADR-029, spec §4.5-4.7) ---
 
-def _targeted_state(char_id: str = "c0", attribute: str = "orange sock", ref_retry_count: int = 0) -> StoryMemory:
+def _targeted_state(char_id: str = "c0", attribute: str = "orange sock", ref_retry_count: int = 0,
+                    style: Style | None = None) -> StoryMemory:
     from contracts.story_memory import ReferenceRetry
 
     c0 = _char("c0", "the dog", ref="story-1/ref-c0-1.png")
@@ -587,6 +671,7 @@ def _targeted_state(char_id: str = "c0", attribute: str = "orange sock", ref_ret
     c0.ref_moderation_status = "passed"
     return _state(
         [c0, _char("c1", "the cat", ref="story-1/ref-c1-1.png")],
+        style=style,
         cost=Cost(image_count=2, ref_retry_count=ref_retry_count),
     ).model_copy(update={"reference_retry": ReferenceRetry(char_id=char_id, attribute=attribute)})
 
@@ -611,6 +696,47 @@ def test_char_bible_targeted_mode_restates_the_tapped_attribute_in_the_prompt():
         char_bible(state)
 
     assert "orange sock" in t2i.call_args.args[0]
+
+
+def test_char_bible_targeted_mode_never_appends_the_re_injection_clause():
+    """`_mint_targeted`'s `if retry.attribute not in prompt` branch is UNREACHABLE, and has been
+    since the commit that introduced it: the line above writes the attribute into `notes`, and
+    `_describe(notes=True)` always renders `notes`, so the attribute is a substring of the prompt
+    by construction.
+
+    Pinned rather than deleted because the branch is a trap. It is dead only while `notes` and
+    `retry.attribute` are both unfiltered — anything that starts filtering either one reanimates
+    it, and it would then re-append the exact term the filter had just removed, rebuilding the
+    ADR-035 defect on the retry path. If this test ever fails, delete the branch; do not repair it.
+    """
+    for attribute in ("orange sock", "glowing"):
+        state = _targeted_state(attribute=attribute, style=Style(prompt_fragment=STYLE_PRESETS["comic"]))
+        with patch("pipeline.char_bible.text_to_image", return_value=b"x") as t2i, \
+             patch("pipeline.char_bible.judge", return_value=_verdict(True)), \
+             patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+            char_bible(state)
+
+        prompt = t2i.call_args.args[0]
+        assert attribute in prompt
+        assert "Be sure to include" not in prompt
+
+
+def test_char_bible_still_describes_a_species_the_style_forbids():
+    """The counterpart to the reveal test: filtering the species is CHIP SCOPE ONLY. ADR-035
+    Decision 2 stands where it was reasoned about — `analyze` makes species required so the judge
+    always has something to check, and stripping it here would make acceptance vacuous."""
+    orb = Character(
+        char_id="c0", name="the orb",
+        description=CharacterDescription(species="glowing orb", colours=["blue"]),
+    )
+    comic = STYLE_PRESETS["comic"]
+    with patch("pipeline.char_bible.text_to_image", return_value=b"x") as t2i, \
+         patch("pipeline.char_bible.judge", return_value=_verdict(True)) as judge_mock, \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+        char_bible(_state([orb], style=Style(prompt_fragment=comic)))
+
+    assert "glowing orb" in t2i.call_args.args[0]
+    assert "glowing orb" in judge_mock.call_args.args[0]
 
 
 def test_char_bible_targeted_mode_only_mutates_the_flagged_character():
@@ -693,3 +819,39 @@ def test_char_bible_ignores_invariant_six_skip_when_reference_retry_targets_an_e
         char_bible(state)
 
     assert t2i.call_count == 1
+
+
+# --- ADR-035: the style fragment's prohibitions filter the description ---
+
+COMIC = STYLE_PRESETS["comic"]   # "...no gradients, no glow"
+
+
+def test_a_style_forbidden_attribute_reaches_neither_the_draw_prompt_nor_the_judge_prompt():
+    """ADR-035 surfaces 1 and 2, from prod job b9506307. `reference_prompt` used to ask for
+    `star; glowing; tiny` in the same payload whose style clause ended "no glow", so the draw
+    could not satisfy it and — post-ADR-034 — the judge could legitimately contradict it on all
+    three draws, burning the whole budget on every job for that character.
+
+    Unlike the two `notes`/filler divergences this is NOT one-directional: an unsatisfiable
+    attribute must reach neither prompt, because the defect is in asking for it at all.
+    """
+    star = CharacterDescription(species="star", colours=["glowing"], body_features=["tiny"])
+    _, t2i_mock, judge_mock, _ = _mint(
+        [_verdict(True)], description=star, name="the star", style_fragment=COMIC
+    )
+
+    assert "glowing" not in t2i_mock.call_args.args[0]
+    assert "glowing" not in judge_mock.call_args.args[0]
+    # Narrowed, not gutted: species and the permitted axes still describe the character.
+    assert "the star - star; tiny" in judge_mock.call_args.args[0]
+
+
+def test_an_attribute_the_active_fragment_never_forbids_still_reaches_both_prompts():
+    """ADR-035 is per-preset, not a blanket ban: `cel` never says "no glow"."""
+    star = CharacterDescription(species="star", colours=["glowing"])
+    _, t2i_mock, judge_mock, _ = _mint(
+        [_verdict(True)], description=star, name="the star", style_fragment=STYLE_PRESETS["cel"]
+    )
+
+    assert "glowing" in t2i_mock.call_args.args[0]
+    assert "glowing" in judge_mock.call_args.args[0]
