@@ -2503,3 +2503,30 @@ the right reasoning in prose here, which is the encouraging half; ADR-028 Decisi
 this field on arrival — **it is a slot, not a validated signal, until Phase 1 checks it against the scorer's
 eye.** The difference is that a wrong list is a wrong *answer*, where a boolean contradicting its own prose was a
 wrong *instrument*.
+
+---
+
+### Implementation note (2026-08-11) — measured on arrival, and one follow-on decision
+
+The qualification above was tested before this ADR shipped: `ref-c1-1.png` and `ref-c0-1.png` were re-judged under
+v3 with no redraw (2 judge calls, 0 image draws). Results are recorded in `character-bible` §"What v3 was measured
+to do, and what it was not". Against this ADR's own claims:
+
+- **Decisions 1–4 hold.** The list is populated, the mid-schema insert survives strict `json_schema` and
+  `_assert_field_order`, c1 returned two contradictions alongside `matches_description: true` and the gate
+  rejected, and the c0 control returned an empty list — no false positive.
+- ⚠️ **The gate is probabilistic.** One of two calls on c1 returned an empty list and would have accepted. This
+  ADR's *"a wrong list is a wrong answer"* framing stands, but the answer varies between calls on identical input.
+- ❌ **The two open upstream defects are confirmed, not merely suspected.** c1's `differences_observed` names *"the
+  star with legs and a face"* in prose and does not list it as a contradiction — defect 2 above, verbatim. And
+  `attributes_present` still reports `"glowing"` for a flat teal image — defect 1.
+
+**Follow-on carried into this ADR rather than a new one:** the judge prompt no longer receives `notes`
+(`_describe(..., notes=False)`; the draw prompt still does). v3 returned *"secondary character - The image does
+not provide cues as to this character's role"* as a **contradiction** — a `notes` value, unclearable by any
+redraw, which under Decision 1 would exhaust all 3 draws on every job for that character forever. Decision 1
+promoted `attributes_present`'s known noise into the gate, so the noise had to be excluded from the gate's input.
+Folded in rather than raised as ADR-035 because it is a defect *created by* Decision 1, discovered while verifying
+it, and it narrows what the judge measures without changing what acceptance means. `JUDGE_PROMPT_VERSION` stays at
+`3`: v3 never produced a persisted verdict, so bumping to 4 would segment an empty series. `reveal._chips` already
+drew this exact line, which is the precedent it follows.

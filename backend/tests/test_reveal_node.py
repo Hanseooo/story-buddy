@@ -64,7 +64,12 @@ def test_project_reveal_taps_left_is_three_minus_ref_retry_count():
 
 def test_project_reveal_chips_are_described_minus_attributes_present_case_insensitive():
     description = CharacterDescription(species="dog", colours=["Orange"], body_features=["one floppy ear"])
-    verdict = RefVerdict(differences_observed="d", matches_description=False, attributes_present=["dog", "orange"])
+    verdict = RefVerdict(
+        differences_observed="d",
+        contradictions=["the ear is upright, the description says floppy"],
+        matches_description=False,
+        attributes_present=["dog", "orange"],
+    )
     state = _state([_char("c0", "Kiko", description=description, verdict=verdict)])
     chips = _project_reveal(state)["characters"][0]["chips"]
     assert chips == ["one floppy ear"]
@@ -77,12 +82,31 @@ def test_project_reveal_falls_back_to_full_axis_list_when_ref_verdict_is_none():
     assert chips == ["dog", "orange"]
 
 
-def test_project_reveal_falls_back_to_full_axis_list_when_matches_description_is_true():
+def test_project_reveal_falls_back_to_full_axis_list_when_there_are_no_contradictions():
     description = CharacterDescription(species="dog", colours=["orange"])
     verdict = RefVerdict(differences_observed="d", matches_description=True, attributes_present=["dog", "orange"])
     state = _state([_char("c0", "Kiko", description=description, verdict=verdict)])
     chips = _project_reveal(state)["characters"][0]["chips"]
     assert chips == ["dog", "orange"]
+
+
+def test_project_reveal_subtracts_when_contradictions_disagree_with_matches_description():
+    """ADR-034: this node reads the same predicate the gate does, never the boolean.
+
+    The prod job b9506307 shape — the judge names a contradiction and sets the boolean TRUE.
+    `char_bible` now re-rolls on that, so `reveal` must also treat it as a failed reference; if
+    it read the boolean it would offer the child the full chip list for a reference the gate
+    rejected, and the "try again" tap would target an attribute that was never the problem.
+    """
+    description = CharacterDescription(species="dog", colours=["orange"], body_features=["one floppy ear"])
+    verdict = RefVerdict(
+        differences_observed="the ear is upright. This is a contradiction.",
+        contradictions=["the ear is upright, the description says floppy"],
+        matches_description=True,
+        attributes_present=["dog", "orange"],
+    )
+    state = _state([_char("c0", "Kiko", description=description, verdict=verdict)])
+    assert _project_reveal(state)["characters"][0]["chips"] == ["one floppy ear"]
 
 
 def test_project_reveal_falls_back_to_name_when_description_has_no_axes():

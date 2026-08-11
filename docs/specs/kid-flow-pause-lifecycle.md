@@ -152,9 +152,14 @@ tap against the offered chips (§4.9), so a character offering none can never be
 ADR-029's *"the button never dead-ends"* would be false at the top of the pause rather than at the cap.
 
 1. **Nothing missing** — `ref_verdict is None` (a judge outage; `char_bible` accepts the draw unchecked
-   and records `None`) or `matches_description is True`. Fall back to the **full axis list**: a child
-   may disagree with a reference the judge passed, and that disagreement is the entire point of the
-   reveal (ADR-029 context).
+   and records `None`) or `ref_verdict.contradictions` is empty. Fall back to the **full axis list**: a
+   child may disagree with a reference the judge passed, and that disagreement is the entire point of
+   the reveal (ADR-029 context).
+
+   ⚠️ **This is `char_bible`'s acceptance predicate, and the two must stay in lockstep** (ADR-034).
+   It reads `contradictions`, never `matches_description` — those two disagree in production, and a
+   `reveal` that branched on the boolean would hand the child the full chip list for a reference the
+   gate had just rejected, so the tap would target an attribute that was never the problem.
 2. **No axes at all** — `analyze` produced a bare name with no species, colours, features or clothing.
    Fall back to **`[name]`**. The tap then restates the character's name, which is all
    `char_bible._describe` had to work with anyway, so the redraw is an honest blind re-roll. ADR-029's
@@ -408,7 +413,8 @@ this change.
 | **Five characters** | Two references exist (`char_bible` cap); the projection lists those two. The other three offer no tap. |
 | **A character with an empty description** | Chips fall back to `[name]`; the tap is a blind re-roll (§4.3). |
 | **`ref_verdict is None`** (judge outage upstream) | Chips fall back to the full axis list; the child still has something to tap. |
-| **Reference passed the judge** (`matches_description=True`) | Same fallback. The pause happens regardless — the child's disagreement is the point. |
+| **Reference passed the judge** (`contradictions == []`) | Same fallback. The pause happens regardless — the child's disagreement is the point. |
+| **`contradictions` non-empty but `matches_description=True`** | Treated as a **failed** reference — chips are the missing set (ADR-034). Matches what `char_bible`'s gate did with the same verdict. |
 | **A retried reference is flagged by `char_ref_mod`** | `moderation_router` raises `content_flagged`, job `failed`. The retry path is not exempt from the gate. |
 | **Process dies between `reveal` and `char_bible`** | Checkpoint resumes at `char_bible` with `reference_retry` set and `ref_retry_count` un-bumped; the tap is re-spent, not lost or double-counted. |
 | **Two different taps race** | First wins the CAS; the second gets `200` and its `char_id`/`attribute` are discarded. One resume per pause, always. |
@@ -474,7 +480,9 @@ future migration (S1 §6.3).
 
 **Projection (`_project_reveal`, pure — no mocks), same file:**
 - Chips are described-minus-`attributes_present`, case-insensitively.
-- **Full axis list** when `ref_verdict is None`, and when `matches_description is True`.
+- **Full axis list** when `ref_verdict is None`, and when `contradictions` is empty.
+- **Missing set** when `contradictions` is non-empty *and* `matches_description is True` — the
+  projection follows the gate's predicate, not the judge's boolean (ADR-034).
 - **`[name]`** when the description carries no axes at all (§4.3).
 - `notes` never appears as a chip.
 - A character with `canonical_ref_image is None` is **absent** from `characters`.

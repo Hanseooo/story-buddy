@@ -118,7 +118,7 @@ for _ in range(MAX_DRAWS):              # 3
         verdict = judge([_data_uri(image)], RefVerdict)
     except Exception:                   # the artifact exists; the CHECK failed — see below
         return _upload(image), None, draws
-    if verdict.matches_description:
+    if not verdict.contradictions:      # ADR-034 — derived, never the judge's own boolean
         return _upload(image), verdict, draws
     candidates.append((image, verdict))
 
@@ -129,9 +129,22 @@ return _upload(image), verdict, draws   # a FAILING verdict, persisted — loud,
 **Cap of 3, not ADR-010's 1**, because the blast radius differs: a bad scene is one page, a bad
 reference is every page (ADR-028).
 
-**Best-of ranks on `len(attributes_present)`**, ties → earliest draw. This is `char_bible`'s own rule
-over `RefVerdict` and is **unrelated** to `regeneration-controller`'s lexicographic scene rule over
-`VlmVerdict` — different schema, different question. Do not unify them.
+**Acceptance is `not verdict.contradictions`** (ADR-034, amending ADR-028 Decision 3 — the predicate
+only; the in-node loop, the cap and the best-of fallback are unchanged). The judge is asked to
+enumerate one entry per contradicted attribute, and the code counts the list. `matches_description` is
+still requested and still persisted, but **nothing branches on it**: prod job `b9506307` set it TRUE on
+a verdict whose own `differences_observed` read *"This is a contradiction"*, shipping a flat teal star
+against a description reading `star; glowing; tiny`. `reveal` reads the same predicate — see
+`kid-flow-pause-lifecycle` §4.3; the two must stay in lockstep or a reference the gate rejected would
+still offer the child the full chip list.
+
+**Best-of ranks on fewest `contradictions`**, then `len(attributes_present)`, ties → earliest draw.
+`attributes_present` was the sole key until ADR-034 and it is measurably noisy — the same verdict
+listed `"glowing"` for a flat image and `"secondary character"`, which is a `notes` value and not a
+visual attribute at all. It is demoted rather than dropped: between two draws that contradict the
+description equally often, it is the better of the two remaining signals. This is `char_bible`'s own
+rule over `RefVerdict` and is **unrelated** to `regeneration-controller`'s lexicographic scene rule
+over `VlmVerdict` — different schema, different question. Do not unify them.
 
 ### Two `providers.py` calls, two failure policies — deliberate
 
@@ -144,7 +157,7 @@ Stated loudly so nobody "fixes" the inconsistency later:
 | `judge` | **Degrades** → accept the draw, `ref_verdict = None` | The artifact exists and is paid for. The *check* failed. An unchecked reference is precisely what ADR-007 shipped before ADR-028 amended it — it is not a placeholder and not a broken page, so ADR-010's "always something shippable" governs and ADR-025's "never a partial book" rationale does not bite. |
 
 `ref_verdict = None` stays honest and is distinguishable from a *failed* verdict
-(`matches_description = False`). The cost is real and recorded: for that book, ADR-028's stated
+(a non-empty `contradictions`). The cost is real and recorded: for that book, ADR-028's stated
 Phase-1 measurement — the reference generator's true hit rate — silently reverts to unmeasured.
 
 ### No seed, by necessity
@@ -164,9 +177,10 @@ full** on a plain neutral background. Per ADR-022 the fragment **names a medium 
 artifacts** — it never says "beautiful", "8k", or "highly detailed".
 
 The judge prompt shows the drawn image and the description it should depict, and asks for
-`differences_observed` before `matches_description`. ADR-004's reason-then-score ordering applies to
-**every** judge call; `RefVerdict` already declares the fields in that order and
-`providers._assert_field_order` enforces it on the wire.
+`differences_observed`, then `contradictions`, then `matches_description`. ADR-004's reason-then-score
+ordering applies to **every** judge call; `RefVerdict` declares the fields in that order and
+`providers._assert_field_order` enforces it on the wire. ADR-034 put the gate in the **middle**
+deliberately: the judge must enumerate the defects before it is allowed to score.
 
 #### The question is contradiction, not difference (amended 2026-08-11)
 
@@ -199,7 +213,8 @@ the prompt behind it is under active development. Nothing recorded *which* promp
 verdict, so a wording change that alters what FALSE means invalidates every prior verdict rather
 than partitioning them.
 
-`char_bible.JUDGE_PROMPT_VERSION` (now `2`; `1` is everything before 2026-08-11) is stamped onto
+`char_bible.JUDGE_PROMPT_VERSION` (now `3`; `2` asked for the verdict as a boolean, `1` is everything
+before 2026-08-11) is stamped onto
 `Character.ref_verdict_prompt_version` on every write of `ref_verdict`, in both the first-pass and
 the ADR-029 targeted-redraw paths — the targeted path judges with the same prompt, so leaving it
 unstamped would make the retries an unlabelled subset and defeat the point. **Bump it whenever the
@@ -208,6 +223,66 @@ wording changes what a FALSE verdict means.**
 It is on `Character`, not on `RefVerdict`, because `RefVerdict` is passed to `providers.judge` as
 `response_format`: a field there becomes a required model output under strict `json_schema`, and
 the judge would be asked to state its own prompt version.
+
+#### v3: the verdict is enumerated, not asserted (ADR-034, 2026-08-11)
+
+v2 asked for prose and then for a boolean, and that is not the same as asking the model to *check*.
+Prod job `b9506307` character `c1` — *"the star - star; glowing; tiny; secondary character"* — came
+back with:
+
+```json
+"differences_observed": "The description states the star is 'tiny', but the image depicts the star
+   as a significant size relative to the image frame. This is a contradiction.",
+"matches_description": true,
+"attributes_present": ["star", "glowing", "secondary character"]
+```
+
+ADR-004's ordering **worked** — the reason was emitted first, and `providers._assert_field_order`
+confirmed it on the wire. Ordering makes the model reason before it scores; it does not make the
+score follow the reasoning. The gate accepted a reference the judge had just declared contradictory,
+and every scene prompt then re-asserted `glowing; tiny` against a flat teal star. The edit model
+resolved that conflict a different way per scene — reference wins, description wins, or **both get
+drawn** — which is the duplicate-star symptom reported in issue #23.
+
+v3 asks for **one list entry per contradicted attribute** and the code derives acceptance from the
+list's length. The boolean survives as an observation so the disagreement rate stays measurable
+(ADR-034 Decision 2 — removing it would be breaking, and the rate is worth having).
+
+⚠️ **The loop had never fired before this.** Job `b9506307` shows `cost.image_count = 11` against 7
+scenes with `regen_count = 2` → 9 scene draws → **2 reference draws for 2 characters**, both accepted
+first try. ADR-028's *"typical case ≈ $0"* held because nothing had ever failed the gate, not because
+the references were good. Expect the typical case to move toward ADR-028's stated **+$0.14 worst
+case** now that the gate can reject. The cap of 3 is unchanged.
+
+⚠️ **Verdicts are not comparable across v2 → v3 either.** The v2 series measured a boolean the model
+set inconsistently with its own reasoning; treat the persisted series as restarting at version `3`.
+
+##### What v3 was measured to do, and what it was not (2026-08-11, n=2 on one reference)
+
+`ref-c1-1.png` and `ref-c0-1.png` were re-judged under v3 — no redraw, the existing artifacts. What
+the two calls establish:
+
+- ✅ **The mechanism works on the wire.** `contradictions` is populated, and
+  `providers._assert_field_order` passes with the field inserted mid-schema (relative order is what
+  it checks, so an insertion cannot break it). No deterministic test can reach this — they all mock
+  the provider.
+- ✅ **The gate now overrides the boolean on the real artifact.** c1 returned two contradictions
+  *alongside* `matches_description: true`, and the gate rejected. That is the production bug,
+  reproduced and neutralised.
+- ✅ **No false positive on the control.** c0 (Ana) returned `contradictions: []`. This matters more
+  than it looks now that a false positive costs real re-rolls.
+- ⚠️ **The judge is non-deterministic here.** Of two calls on c1, one returned an **empty** list and
+  would have accepted. The gate is probabilistic, not a guarantee; 3 draws give it three chances,
+  but this reference can still slip through. n=2 on one character — do not quote it as a rate.
+- ❌ **v3 still does not catch the defects that actually break the book.** c1's `differences_observed`
+  names *"the star with legs and a face"* — the anthropomorphising failure — in prose, and does not
+  list it as a contradiction, because the prompt says unlisted details are not contradictions and
+  the description never said "no legs". `attributes_present` still claims `"glowing"` for a flat teal
+  image. **ADR-034 fixed the reason–score inconsistency; it did not make the judge see more.**
+
+The two contradictions it *did* name were `tiny` (arguably unjudgeable in an isolated reference,
+where framing sets apparent size) and `secondary character` (a `notes` value — the finding that
+produced the `notes=False` divergence above).
 
 #### Visually-thin descriptions get a neutral floor in the draw prompt only
 
@@ -222,12 +297,30 @@ the visual axes rather than on how many fields are set: `c0` had two populated a
 `notes`) and still specified nothing drawable, because species and notes are identity, not
 appearance.
 
-⚠️ **The filler reaches the draw prompt and never the judge prompt.** This is the one sanctioned
-divergence from `_describe`'s shared output and it is strictly one-directional. If the judge saw
-the filler it would become a *stated* attribute, and draws would start failing over our invention —
-reintroducing the bug fixed above from the opposite end. ADR-028 measures the generator against the
-**story**, never against our filler. Covered by
-`test_enrichment_reaches_the_draw_prompt_but_never_the_judge_prompt`.
+⚠️ **The filler reaches the draw prompt and never the judge prompt.** This is one of **two**
+sanctioned divergences from `_describe`'s shared output, and both run the same direction: the draw
+prompt may know more than the judge, never less. If the judge saw the filler it would become a
+*stated* attribute, and draws would start failing over our invention — reintroducing the bug fixed
+above from the opposite end. ADR-028 measures the generator against the **story**, never against our
+filler. Covered by `test_enrichment_reaches_the_draw_prompt_but_never_the_judge_prompt`.
+
+⚠️ **`notes` reaches the draw prompt and never the judge prompt** — the second divergence,
+`_describe(..., notes=False)`, added with ADR-034 and for its sake. `notes` is free prose, not a
+visual attribute, and post-ADR-034 the gate re-rolls on whatever the judge lists as contradicted.
+Re-judging `b9506307`'s `ref-c1-1.png` under v3 returned *"secondary character - The image does not
+provide cues as to this character's role"* as a contradiction: **unclearable by any redraw**, so the
+character would exhaust all 3 draws on every job forever. `reveal._chips` already excludes `notes`
+for the same reason (*"free prose, not an attribute, and not a thing a child can tap"*). The
+generator keeps it — "secondary character" is useful framing for a drawing. Covered by
+`test_notes_reaches_the_draw_prompt_but_never_the_judge_prompt`.
+
+This is safe for the ADR-029 targeted redraw, which overwrites `notes` with the tapped chip: chips
+are drawn from the **visual** axes, so the tapped attribute still reaches the judge through its own
+axis. The `notes` copy is emphasis for the generator, not the judge's only sight of it.
+
+**A third divergence should prompt someone to ask whether sharing `_describe` still pays.** Two is
+still cheaper than two prompts that can drift into describing different characters; a third is the
+point where the flag list is the design.
 
 Rejected alternative: letting `analyze` invent the missing detail. It produces richer references but
 writes fiction into the contract the judge measures against, and invents facts about a child's own
@@ -282,8 +375,10 @@ fragment to exist.
 | **Species-only description** | **Draw anyway, never refuse.** A thin description is exactly when an anchor matters most — consistency across scenes comes from *having* a reference, not from the reference matching the child's mental image (ADR-010). ADR-028 targets *off-spec on a stated feature*; a thin description states none. This closes `story-analyzer` §8's richness handoff. ~~Ceiling: with one attribute `matches_description` is near-vacuously true, so the loop de facto collapses to 1 draw for that character.~~ **Falsified in production, amended 2026-08-11** — see below. Since that date the draw prompt also appends `THIN_DESCRIPTION_FILLER` when no visual axis is populated, so the generator gets a neutral floor rather than a role noun; the judge still sees only what the story stated. |
 | **Fully empty description** | The contract permits it (`CharacterDescription` is all-Optional) even though `analyze`'s LLM boundary requires `species` — a resumed pre-`story-analyzer` checkpoint could carry one. The prompt floors to `Character.name`. |
 | **`style.prompt_fragment` is `None`** | Falls back to `settings.default_style_fragment`. Nothing writes `style` today; the fallback is the normal path in Phase 1, not an error path. |
-| **All 3 draws fail** | Best-of by `len(attributes_present)`, ties → earliest. The **failing verdict is persisted** — never a failed job, never a placeholder, the same policy ADR-010 sets for scenes (ADR-028). |
+| **All 3 draws fail** | Best-of by fewest `contradictions`, then `len(attributes_present)`, ties → earliest (ADR-034). The **failing verdict is persisted** — never a failed job, never a placeholder, the same policy ADR-010 sets for scenes (ADR-028). |
 | **All `attributes_present` empty** | `best_draw` returns `0`. Deterministic, never arbitrary. |
+| **`contradictions` empty but `matches_description` FALSE** | **Accepted.** ADR-034: only the list gates. The judge naming no contradicted attribute *is* the pass, whatever it then asserts. |
+| **`contradictions` non-empty but `matches_description` TRUE** | **Rejected, re-rolled.** The prod `b9506307` shape, and the reason ADR-034 exists. |
 | **Judge hard failure** | Accept the current draw, `ref_verdict = None`, stop re-rolling. See the two-policies table above. |
 | **`text_to_image` hard failure** | Raises → job `failed` with an ADR-025 `failure_reason`. No character gets a reference; never a partial roster. No node-level retry — the OpenAI SDK / fal helper bounded retry is the entire policy (ADR-025 Decision 1). |
 | **Image-model self-refusal** | Surfaces as a provider error → same as above. Knowingly blunt: ADR-025 classes content-refusal as *not* a resilience concern and hands soften-and-retry to `self-refusal-fallback` (Phase 2). |
@@ -306,8 +401,10 @@ fragment to exist.
   unaffected) while adding up to 6 to `image_count`. The two preludes are different units. Neither
   bound is wrong; the claim that they are the same number is.
 - [x] **CC-5 Observability** — the helper logs, per character: draws made, each verdict's
-  `matches_description` and `attributes_present`, and which draw won. A wrong character downstream
-  traces back to a specific reference and a specific draw.
+  `contradictions`, `matches_description` and `attributes_present`, and which draw won. A wrong
+  character downstream traces back to a specific reference and a specific draw. The boolean is
+  logged beside the list it no longer controls **on purpose**: the two disagreeing is the ADR-034
+  failure, and this line is where it becomes visible in production.
 - [x] **CC-9 Failure states** — a missing reference is **not** a failure and must never fail the job.
   Only a `text_to_image` hard failure does, through the ADR-025 `failure_reason` enum.
 - [x] **CC-10 Checkpointing** — idempotent re-entry (invariant 6), one partial-return, no partial
@@ -338,6 +435,9 @@ definition.
 
 - **Pass on first draw:** one `text_to_image` call, one `judge` call, verdict returned unchanged
 - **Re-roll:** fail → fail → pass yields **3** draws, and the **third** image's bytes are uploaded
+- **Contradiction overrides the boolean (ADR-034):** a verdict with a non-empty `contradictions` and
+  `matches_description=True` — the prod `b9506307` shape — does **not** end the loop; the next draw is
+  taken and its bytes are uploaded
 - **Exhaustion best-of:** three failing verdicts with `attributes_present` of lengths `1, 3, 2` →
   the **second** draw's bytes are uploaded (guards the ranking key)
 - **Tie → earliest:** lengths `2, 2, 2` → the **first** draw's bytes are uploaded
@@ -373,8 +473,9 @@ definition.
 
 **Pure functions** — no mocks:
 
-- `best_draw` — ranking by `len(attributes_present)`; ties return the lowest index; all-empty returns
-  `0`
+- `best_draw` — fewest `contradictions` wins even when it shows the fewest attributes; equal
+  contradiction counts fall through to `len(attributes_present)`; ties return the lowest index;
+  all-empty returns `0`
 - `reference_prompt` — contains each populated description axis; falls back to `Character.name` on a
   fully empty description; always contains the style fragment
 
@@ -397,8 +498,13 @@ measure it, at zero marginal cost.
 
 ⚠️ **`RefVerdict` is a slot, not a validated signal** — the same caveat ADR-028 attaches to
 `anatomy_intact`. Whether `google/gemma-3-27b-it` reliably notices that a reference is off-spec is
-unknown. **Validate `matches_description` against the scorer's eye in Phase 1 before treating the
+unknown. **Validate `contradictions` against the scorer's eye in Phase 1 before treating the
 persisted rate as a number**, or the measurement above measures the judge instead of the generator.
+
+ADR-034 narrowed this caveat without closing it. What v3 fixes is measured: the judge *noticing* a
+defect no longer depends on it also scoring itself correctly. What is **not** measured is whether
+`gemma-3-27b-it` populates a list more faithfully than it sets a boolean — a judge that under-reports
+into `contradictions` fails open exactly like the boolean did, just less visibly.
 
 ✅ **This warning fired, 2026-08-11.** Prod job `4cb31620` returned FALSE on all 3 draws for `c0`
 purely because the description was sparse — the measurement was measuring the judge, exactly as

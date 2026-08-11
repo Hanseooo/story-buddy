@@ -33,7 +33,11 @@ def _chips(character: Character) -> list[str]:
     ]
     if not full_axis_list:
         return [character.name]
-    if verdict is None or verdict.matches_description:
+    # ADR-034: the same acceptance predicate `char_bible` gates on, for the same reason. This
+    # branch means "the reference passed" — if it read `matches_description` while the gate read
+    # `contradictions`, a reference accepted by one and rejected by the other would offer the
+    # child the wrong chips. Keep the two in lockstep.
+    if verdict is None or not verdict.contradictions:
         return full_axis_list
     present = {a.lower() for a in verdict.attributes_present}
     missing = [axis for axis in full_axis_list if axis.lower() not in present]
