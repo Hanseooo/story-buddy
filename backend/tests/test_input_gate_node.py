@@ -3,6 +3,7 @@ from unittest.mock import patch
 import pytest
 
 from contracts.story_memory import CURRENT_SCHEMA_VERSION, Input, StoryMemory
+from tests.state_invariants import assert_no_fields_dropped
 
 
 def _state(text: str = "A dog runs in a field.") -> StoryMemory:
@@ -12,6 +13,16 @@ def _state(text: str = "A dog runs in a field.") -> StoryMemory:
         classroom_id="dev-classroom",
         profile_id="dev-profile",
         input=Input(raw_text=text),
+    )
+
+
+def _populated_state(text: str = "A dog runs in a field.") -> StoryMemory:
+    """What `worker/run_job.py:147` actually hands the graph — `word_count` and `truncated`
+    are already set by the time `input_gate` runs. `_state` above omits them, which is why
+    every existing test in this file passed while production reported `word_count=0`."""
+    state = _state(text)
+    return state.model_copy(
+        update={"input": state.input.model_copy(update={"word_count": 79, "truncated": True})}
     )
 
 
@@ -107,6 +118,57 @@ def test_backstop_error_sets_moderation_error_in_categories():
 
     assert result["input"].moderation.passed is False
     assert "moderation_error" in result["input"].moderation.categories
+
+
+# --- state-write invariant (every return path) ---
+
+@pytest.mark.parametrize(
+    "primary, backstop, label",
+    [
+        ({"return_value": (True, [])},          {"return_value": (True, [])},          "both pass"),
+        ({"return_value": (False, ["S1"])},     {"return_value": (True, [])},          "primary flags"),
+        ({"return_value": (True, [])},          {"return_value": (False, ["S2"])},     "backstop flags"),
+        ({"return_value": (True, [])},          {"side_effect": Exception("500")},     "backstop errors"),
+    ],
+)
+def test_input_gate_carries_the_whole_input_model_through_every_return_path(primary, backstop, label):
+    """Regression, prod job 4cb31620 (2026-08-11): a 79-word story reported `word_count=0`.
+
+    `input` has no reducer, so `input_gate`'s return REPLACES the model. All four paths built a
+    fresh `Input(...)`, so `word_count: int = 0` and `truncated: bool = False` reasserted
+    themselves on every job that has ever run. Nothing downstream reads either field today,
+    which is exactly why it went unnoticed for the entire life of the pipeline.
+
+    `input_gate` was the only node of the thirteen that rebuilt a sub-model instead of using
+    `model_copy` — 23 `model_copy` calls elsewhere got it right. Parametrized over every path
+    because the bug was in all four, and a fix applied to three of them is the same bug.
+    """
+    with patch("pipeline.input_gate.classify_text_primary", **primary), \
+         patch("pipeline.input_gate.classify_text_backstop", **backstop), \
+         patch("pipeline.input_gate.redact_pii", return_value="[REDACTED]"):
+        from pipeline.input_gate import input_gate
+        state = _populated_state()
+        result = input_gate(state)
+
+    assert_no_fields_dropped(state, result)
+    assert result["input"].word_count == 79, label
+    assert result["input"].truncated is True, label
+    # The node's actual job still happens — the carry-forward must not shadow the write.
+    assert result["input"].redacted_text == "[REDACTED]", label
+    assert result["input"].moderation is not None, label
+
+
+def test_assert_no_fields_dropped_actually_catches_a_dropped_field():
+    """The guard is only worth having if it fails. Rebuilding `Input` from scratch is the
+    precise shape of the production bug, so that is what the guard is tested against."""
+    from contracts.story_memory import ModerationResult
+
+    state = _populated_state()
+    naive = {"input": Input(raw_text=state.input.raw_text, redacted_text="[REDACTED]",
+                            moderation=ModerationResult(passed=True))}
+
+    with pytest.raises(AssertionError, match="word_count"):
+        assert_no_fields_dropped(state, naive)
 
 
 # --- moderation_router ---
