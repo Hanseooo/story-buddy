@@ -14,7 +14,7 @@ import logging
 from app.config import IMAGE_BUDGET
 from contracts.story_memory import Attempt, StoryMemory
 from pipeline.generate_scene import generate_and_store
-from pipeline.prompt_optimizer import correct_prompt
+from pipeline.prompt_optimizer import correct_prompt, referenced_characters
 
 log = logging.getLogger(__name__)
 
@@ -42,16 +42,14 @@ def regenerate(state: StoryMemory) -> dict:
             f"image budget exceeded: {state.cost.image_count} >= {IMAGE_BUDGET} (ADR-025)"
         )
 
-    # Identical to generate_scene's loop — the retry is conditioned on the same references as the
-    # original, or it would be measuring a different thing. This node may not extend the roster.
-    by_id = {c.char_id: c for c in state.characters}
-    ref_paths = []
-    for char_id in scene.characters_present:
-        c = by_id.get(char_id)
-        if c is None:
-            log.warning("regenerate: char_id %r in characters_present but absent from state.characters, skipped", char_id)
-        elif c.canonical_ref_image:
-            ref_paths.append(c.canonical_ref_image)
+    # The retry is conditioned on the same references as the original, or it would be measuring a
+    # different thing. `correct_prompt` only appends (invariant 3), so the corrected prompt still
+    # carries build_prompt's numbered roll — "Image 2 is X" is asserted against THIS list, which is
+    # why it has to be the same list, not a copy of the same rule (issue #23).
+    ref_paths = [
+        c.canonical_ref_image
+        for c in referenced_characters(scene.characters_present, state.characters)
+    ]
 
     # Invariant 5: every reachable path appends at least one clause. The two booleans cover the
     # holes the frozen 7 leave — anatomy is outside FailureReason entirely (ADR-028), and a

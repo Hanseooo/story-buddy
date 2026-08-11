@@ -142,7 +142,11 @@ straight to a child.
 2. Same two-classifier check as `char_ref_mod` (`moderation_primary_image_model` + Gemma safety rubric).
 3. Pass → `scene.moderation_status = "passed"` → continue to `compose`.
 4. Fail → `scene.moderation_status = "flagged"` → invoke one soften-and-retry on the prompt
-   (`self-refusal-fallback` spec strategy) → generate a new image → re-run moderation on it.
+   (`self-refusal-fallback` spec strategy) → generate a new image → re-run moderation on it. The
+   retry's `ref_paths` comes from `prompt_optimizer.referenced_characters` — ⚠️ **the same list
+   `build_prompt` numbered the image roll off, not a copy of the rule.** `_soften_prompt` prepends, so
+   the softened prompt still asserts *"Image 2 is the star"* against whatever this node sends to fal
+   (issue #23).
 5. Still flagged after retry → `scene.moderation_status = "failed"` → job `failed` with
    `failure_reason = "output_moderation_failed"`. No partial book (ADR-025).
 
@@ -233,6 +237,8 @@ All classifier calls mocked (`backend/providers.py` seam):
     bypass; this is the test that makes the one above safe to keep.
   - Primary flags → backstop is **not called** (short-circuit), on the retry check as well as the first.
   - Backstop error → hard fail with `moderation_error` (no "proceed without one check" path).
+  - The retry's `ref_paths` agrees with the numbered image roll the softened prompt carries, on a
+    scene mixing a referenced and an unreferenced character (issue #23).
 - **All nodes:** images fetched via signed URL (mock the URL-minting call to return a fixture
   URL); verify no raw Storage path is passed directly to a classifier.
 

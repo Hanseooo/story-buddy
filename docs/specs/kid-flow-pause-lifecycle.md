@@ -501,8 +501,10 @@ future migration (S1 §6.3).
 **Projection (`_project_reveal`, pure — no mocks), same file:**
 - Chips are described-minus-`attributes_present`, case-insensitively.
 - **Full axis list** when `ref_verdict is None`, and when `contradictions` is empty.
-- **Missing set** when `contradictions` is non-empty *and* `matches_description is True` — the
-  projection follows the gate's predicate, not the judge's boolean (ADR-034).
+- **Missing set** when `contradictions` is non-empty — the projection branches on that alone, so it
+  follows the gate's predicate rather than the judge's boolean (ADR-034). Prod job b9506307, where
+  `matches_description` was `True` on a verdict whose own prose named a contradiction, is one case
+  of that rule and not the rule itself.
 - **`[name]`** when the description carries no axes at all (§4.3).
 - `notes` never appears as a chip.
 - An attribute the active style fragment forbids never appears as a chip; the same attribute under a

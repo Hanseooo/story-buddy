@@ -20,7 +20,7 @@ from contracts.story_memory import (
     Style,
     VlmVerdict,
 )
-from pipeline.prompt_optimizer import ANATOMY_CLAUSE, IDENTITY_CLAUSE
+from pipeline.prompt_optimizer import ANATOMY_CLAUSE, IDENTITY_CLAUSE, build_prompt
 from pipeline.regenerate import regenerate
 
 
@@ -190,6 +190,29 @@ def test_does_not_mutate_the_state_it_was_handed():
     _run(state)
 
     assert state.model_dump() == before
+
+
+# --- ref_paths (the shared list, not a copy of the rule) ---
+
+def test_ref_paths_agree_with_the_image_roll_the_corrected_prompt_carries():
+    """Issue #23's invariant on this node. `correct_prompt` only appends, so the retry still
+    asserts build_prompt's roll — "Image 2 is the star" against a list this node passes to fal.
+    A second copy of the selection rule would satisfy the ref_paths tests below and still let the
+    roll lie the first time the two rules diverge."""
+    characters = [
+        _char(),
+        _char("c1", "the cat", ref=None),
+        _char("c2", "the star", ref="job-1/ref-c2.png"),
+    ]
+    present = ["c0", "c1", "c2"]
+    prompt = build_prompt("The dog ran.", present, characters, "flat cel-shaded cartoon")
+    scene = _scene(attempts=[_failed_attempt(prompt=prompt)]).model_copy(
+        update={"characters_present": present, "prompt": prompt}
+    )
+    _, store = _run(_state([scene], characters=characters))
+
+    assert "Image 1 is the dog. Image 2 is the star." in store.call_args.args[0]
+    assert store.call_args.args[4] == ["job-1/ref-c0.png", "job-1/ref-c2.png"]
 
 
 # --- ref_paths (identical to generate_scene's loop) ---

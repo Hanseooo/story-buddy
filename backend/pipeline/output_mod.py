@@ -2,6 +2,7 @@ import logging
 
 from contracts.story_memory import Attempt, StoryMemory
 from pipeline.generate_scene import generate_and_store
+from pipeline.prompt_optimizer import referenced_characters
 from providers import classify_image_backstop, classify_image_primary, get_signed_url
 
 log = logging.getLogger(__name__)
@@ -67,11 +68,12 @@ def output_mod(state: StoryMemory) -> dict:
         log.info("output_mod: scene_id=%s flagged — softening and retrying", scene.scene_id)
         softened = _soften_prompt(scene.prompt or "")
 
-        by_id = {c.char_id: c for c in state.characters}
+        # `_soften_prompt` prepends, so the softened prompt still carries build_prompt's numbered
+        # roll — "Image 2 is X" is asserted against THIS list (issue #23). Same list, not a copy of
+        # the same rule.
         ref_paths = [
-            by_id[cid].canonical_ref_image
-            for cid in scene.characters_present
-            if cid in by_id and by_id[cid].canonical_ref_image
+            c.canonical_ref_image
+            for c in referenced_characters(scene.characters_present, state.characters)
         ]
 
         retry_n = len(scene.attempts) + 1

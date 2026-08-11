@@ -6,11 +6,13 @@ from contracts.story_memory import (
     CURRENT_SCHEMA_VERSION,
     Attempt,
     Character,
+    CharacterDescription,
     Input,
     ModerationResult,
     Scene,
     StoryMemory,
 )
+from pipeline.prompt_optimizer import build_prompt
 
 
 def _state(scenes: list[Scene], characters: list[Character] | None = None) -> StoryMemory:
@@ -88,6 +90,38 @@ def test_retry_uses_softened_prompt():
 
     assert calls[0] != original_prompt, "Retry must use a softened prompt, not the original"
     assert "child" in calls[0].lower() or "safe" in calls[0].lower(), "Softened prompt must add safety qualifier"
+
+
+def test_retry_ref_paths_agree_with_the_image_roll_the_softened_prompt_carries():
+    """Issue #23's invariant on this node. `_soften_prompt` prepends, so the retry still asserts
+    build_prompt's roll — "Image 2 is the star" against a list this node passes to fal. A second
+    copy of the selection rule would let the roll lie the first time the two rules diverge."""
+    def _char(char_id: str, name: str, ref: str | None) -> Character:
+        return Character(
+            char_id=char_id,
+            name=name,
+            description=CharacterDescription(species="dog"),
+            canonical_ref_image=ref,
+        )
+
+    characters = [
+        _char("c0", "the dog", "job-1/ref-c0.png"),
+        _char("c1", "the cat", None),
+        _char("c2", "the star", "job-1/ref-c2.png"),
+    ]
+    present = ["c0", "c1", "c2"]
+    prompt = build_prompt("A dog runs.", present, characters, "flat cel-shaded cartoon")
+    scene = _scene("s0", prompt=prompt).model_copy(update={"characters_present": present})
+
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"), \
+         patch("pipeline.output_mod.classify_image_primary", side_effect=iter([False, True])), \
+         patch("pipeline.output_mod.classify_image_backstop", return_value=True), \
+         patch("pipeline.output_mod.generate_and_store", return_value=("job-1/s0-2.png", True)) as mock_gen:
+        from pipeline.output_mod import output_mod
+        output_mod(_state([scene], characters=characters))
+
+    assert "Image 1 is the dog. Image 2 is the star." in mock_gen.call_args.args[0]
+    assert mock_gen.call_args.args[4] == ["job-1/ref-c0.png", "job-1/ref-c2.png"]
 
 
 # --- retry also fails ---
