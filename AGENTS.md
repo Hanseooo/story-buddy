@@ -126,6 +126,22 @@ Two kinds of tests. Never mix them (see `docs/MASTER_SPEC.md` §6).
 - **Eval harness** (offline, real models, story corpus): the only place fuzzy quality is
   measured. Never put it in CI. It doubles as research instrumentation (LangSmith/Langfuse).
 
+**Provider smoke tests** (`backend/tests/test_smoke_providers.py`, added 2026-08-11) sit between
+the two and belong to neither. They call real providers but assert only **reachability and
+contract** — never quality — because the deterministic suite mocks `providers.py` and therefore
+stays green for a deployment that cannot complete a single job. Three production outages in one
+week were all this class (`qwen/qwen3-32b` emitting prose, a retired `llama-guard-3-8b`, an image
+moderation model with no vision support). Deselected by default; opt in:
+
+```bash
+cd backend
+uv run pytest -m "smoke and not smoke_image"   # text/judge/moderation, six small-model pings
+uv run pytest -m smoke                         # the above plus one paid fal.ai draw
+```
+
+**Run these before any deploy that changes a model ID, a base URL, or a provider.** They skip
+cleanly when only placeholder credentials are present, and never run in CI.
+
 ### Feature spec is the unit of work
 
 Before writing code for a module, read its spec in `docs/specs/` **and** the cross-cutting
@@ -187,8 +203,13 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
   Vitest unit tests, Sentry. **Backend** — FastAPI + RQ worker + LangGraph (deterministic graph)
   on Python 3.12, uv-managed, pytest + ruff. **Data** — Supabase (Postgres + Auth + Storage +
   Realtime, RLS everywhere), Redis (RQ broker). **Models** — open-weight only (ADR-015):
-  `qwen/qwen3-32b` (text) + `google/gemma-3-27b-it` (VLM judge) via OpenRouter; Qwen-Image-Edit
+  `mistralai/mistral-small-3.2-24b-instruct` (text — replaced `qwen/qwen3-32b` on 2026-08-11,
+  which passed Probe 3 but emitted prose instead of structured output in production, prod job
+  `af068baf`) + `google/gemma-3-27b-it` (VLM judge) via OpenRouter; Qwen-Image-Edit
   (image gen) via fal.ai. All vendor calls live in `backend/providers.py`.
+  **`backend/app/config.py` is the only source of truth for model IDs** — docs drift, and a
+  wrong ID here is invisible to CI (every test mocks `providers.py`). Verify with
+  `uv run pytest -m smoke` before deploying a model change.
   (evidence: `frontend/package.json`, `backend/pyproject.toml`)
 - Architecture: Frontend (Vercel) posts to FastAPI (Northflank), which writes a job row and returns
   immediately. A separate RQ worker runs the LangGraph pipeline, checkpointing to Postgres after
