@@ -192,10 +192,27 @@ Structured identifiers are **not** pseudonymized — `PH_TIN`, `PH_SSS`, `PH_PHI
 `PH_ADDRESS` all hard-redact to `<ENTITY>` placeholders. A plausible-looking fake TIN is worse than
 an obvious hole.
 
+**Everything else is left alone (amended 2026-08-11).** As first written this section passed every
+Presidio result to the anonymizer, so spaCy's free-text NER categories — `ORGANIZATION`,
+`LOCATION`, `DATE_TIME`, `NRP` — hit the default operator and became placeholders too. That
+contradicts this section's own premise. Prod job `e94cc400` opened with the title *"The Lost Little
+Star"*; spaCy called it an `ORGANIZATION`, and `<ORGANIZATION> upon a time` was written into a book
+caption. The same run turned *"Manila"* into `<LOCATION>`.
+
+The set is therefore an **allowlist**, not a denylist: an entity type is redacted only if it is a
+person (pseudonymize) or a structured identifier (hard-redact). A Presidio upgrade that ships a new
+free-text recognizer must not silently start eating captions; a new *identifier* recognizer has to
+be added to `_IDENTIFIER_ENTITIES` explicitly, which is the safe direction to fail because an
+unlisted identifier is caught by §2's totality test.
+
+Generic `LOCATION` is narrative, not identity — the structured Philippine address form
+(`Barangay`/`Purok`/`Sitio`, §4b) is what `PH_ADDRESS` exists to catch, and it still hard-redacts.
+
 ```python
 def redact_pii(text: str) -> str:
     analyzer, anonymizer = _presidio()
-    results = analyzer.analyze(text=text, language="en")
+    detected = analyzer.analyze(text=text, language="en")
+    results = [r for r in detected if r.entity_type in _REDACTED_ENTITIES]
     person = OperatorConfig("custom", {"lambda": _pseudonymizer()})   # fresh mapping per call
     return anonymizer.anonymize(
         text=text, analyzer_results=results,
@@ -217,6 +234,8 @@ factory — caching the mapping would leak names between stories.
 | `"Maria"` and `"Maria Santos"` in one story | Different surface forms → different stand-ins. Knowingly blunt; coreference is out of scope. |
 | Zero person entities | Operator never fires; no mapping allocated. |
 | Same name in two different stories | Different calls, different mappings — no cross-story stability, and none is wanted. |
+| A place, org, date or nationality is detected | Not in `_REDACTED_ENTITIES` → passes through untouched. Logged under `ignored=` so a real identifier landing there is visible. |
+| Presidio ships a new recognizer | Free-text: ignored by default, prose is safe. Identifier: must be added to `_IDENTIFIER_ENTITIES`, and §2's totality test fails until it is. |
 
 ### 4d. API and frontend
 

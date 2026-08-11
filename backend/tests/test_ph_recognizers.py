@@ -83,3 +83,40 @@ def test_redact_pii_never_leaks_the_original_value():
     assert "Cruz" not in result
     assert "Purok 3" not in result
     _presidio.cache_clear()
+
+
+def test_redact_pii_leaves_narrative_entities_alone():
+    """Regression, prod job e94cc400 (2026-08-11): spaCy tagged the story title "The Lost Little
+    Star" as ORGANIZATION, the anonymizer's default operator hard-redacted it, and
+    "<ORGANIZATION> upon a time" reached a book caption a child would read.
+
+    §4c enumerates what hard-redacts — PH_TIN, PH_SSS, PH_PHILHEALTH, PH_MOBILE, PH_ADDRESS —
+    and its stated rationale is that redaction output *is* the narrative. ORGANIZATION,
+    LOCATION, DATE_TIME and NRP are spaCy's free-text NER guesses, not identifiers; on a
+    children's story they are mostly false positives that destroy the prose.
+    """
+    from providers import _presidio, redact_pii
+    _presidio.cache_clear()
+    text = (
+        "The Lost Little Star\n\nOnce upon a time, a little girl named Mia found a tiny "
+        "glowing star in her backyard in Manila."
+    )
+    result = redact_pii(text)
+    assert "<ORGANIZATION>" not in result
+    assert "<LOCATION>" not in result
+    assert "The Lost Little Star" in result
+    assert "Manila" in result
+    assert "Mia" not in result  # persons are still pseudonymized
+    _presidio.cache_clear()
+
+
+def test_redact_pii_still_hard_redacts_structured_identifiers():
+    """The other half of §4c: identifiers must become obvious holes, never plausible fakes."""
+    from providers import _presidio, redact_pii
+    _presidio.cache_clear()
+    result = redact_pii("Tawagan mo ako sa 0917 123 4567 o email sa mia@example.com.")
+    assert "0917" not in result
+    assert "mia@example.com" not in result
+    assert "<PH_MOBILE>" in result
+    assert "<EMAIL_ADDRESS>" in result
+    _presidio.cache_clear()

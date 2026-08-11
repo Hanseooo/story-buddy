@@ -23,7 +23,13 @@ class Settings(BaseSettings):
     langfuse_project_id: str = ""
 
     # Model swap is an env-var change; provider swap is providers.py (ADR-001, ADR-002).
-    text_model: str = "qwen/qwen3-32b"
+    # NOT a reasoning model. qwen/qwen3-32b was the default until 2026-08-11 and is proven broken
+    # here: OpenRouter routed it to DeepInfra, which spent 1093 of 1497 completion tokens on
+    # reasoning and returned JSON violating the strict schema (nested objects where `str` was
+    # declared), because grammar-constrained decoding cannot be applied across a thinking block.
+    # `provider.require_parameters` selects providers that ACCEPT response_format, not ones that
+    # honour it — so the guard is the model choice, not the flag. See prod job af068baf.
+    text_model: str = "mistralai/mistral-small-3.2-24b-instruct"
     vlm_judge_model: str = "google/gemma-3-27b-it"
     fal_image_model: str = "fal-ai/qwen-image"
     fal_image_edit_model: str = "fal-ai/qwen-image-edit-2511"
@@ -46,7 +52,12 @@ class Settings(BaseSettings):
     # Model swap is env-var change; provider swap is providers.py.
     moderation_primary_model: str = "meta-llama/llama-guard-4-12b"
     # ADR-032: Primary image guard on OpenRouter to prevent OOM (replaces Falconsai local model).
-    moderation_primary_image_model: str = "qwen/qwen3-vl-32b-instruct"
+    # qwen/qwen3-vl-32b-instruct was the default until 2026-08-11; served by Alibaba Cloud it
+    # emitted `is_safe` before `safety_reasoning`, which _assert_field_order rejects (ADR-004
+    # reason-then-score) and which hard-failed the job at char_ref_mod. Mistral Small 3.2 is
+    # multimodal and returned schema-compliant structured output first try in the same run.
+    # Still a different family from the Gemma backstop, so the two-layer check keeps its diversity.
+    moderation_primary_image_model: str = "mistralai/mistral-small-3.2-24b-instruct"
     # ADR-011c: text backstop on OpenRouter.
     moderation_backstop_model: str = "openai/gpt-oss-safeguard-20b"
     # ADR-011c / spec §4b-c: Gemma for image safety rubric (violence, gore, dangerous content).

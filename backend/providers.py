@@ -174,6 +174,27 @@ def _presidio():
 
 _PSEUDONYM_POOL = ["Ana", "Ben", "Cielo", "Dado", "Elena", "Fabio"]
 
+# Spec §4c enumerates exactly what redaction does: persons pseudonymize, structured identifiers
+# hard-redact. Everything else spaCy's NER guesses — ORGANIZATION, LOCATION, DATE_TIME, NRP — is
+# narrative, not identity. Handing those to the anonymizer's default operator punched holes in the
+# child's prose: prod job e94cc400 (2026-08-11) titled a story "The Lost Little Star", spaCy called
+# it an ORGANIZATION, and "<ORGANIZATION> upon a time" reached a book caption. That is the exact
+# outcome §4c forbids when it argues redaction output *is* the narrative.
+#
+# Allowlist, not denylist: a Presidio upgrade that ships a new free-text recognizer must not
+# silently start eating captions again. A new *identifier* recognizer has to be added here — the
+# safe direction to fail, since an unlisted identifier is caught by the §2 totality test.
+_PERSON_ENTITIES = {"PERSON", "PH_PERSON"}
+_IDENTIFIER_ENTITIES = {
+    # ph_recognizers.py (§4b)
+    "PH_MOBILE", "PH_ADDRESS", "PH_TIN", "PH_SSS", "PH_PHILHEALTH",
+    # Presidio's built-in pattern/checksum recognizers — all structured, none narrative
+    "CREDIT_CARD", "CRYPTO", "EMAIL_ADDRESS", "IBAN_CODE", "IP_ADDRESS", "MAC_ADDRESS",
+    "MEDICAL_LICENSE", "PHONE_NUMBER", "UK_NHS", "URL", "US_BANK_NUMBER",
+    "US_DRIVER_LICENSE", "US_ITIN", "US_PASSPORT", "US_SSN",
+}
+_REDACTED_ENTITIES = _PERSON_ENTITIES | _IDENTIFIER_ENTITIES
+
 
 def _pseudonymizer():
     """Fresh mapping per call — caching this would leak names between stories (spec §4c)."""
@@ -195,14 +216,19 @@ def redact_pii(text: str) -> str:
     from presidio_anonymizer.entities import OperatorConfig
 
     analyzer, anonymizer = _presidio()
-    results = analyzer.analyze(text=text, language="en")
-    # CC-5: log entity-type counts only — never the detected values (ADR-025 D5).
-    _log.info("pii_redaction entity_counts=%s", dict(Counter(r.entity_type for r in results)))
+    detected = analyzer.analyze(text=text, language="en")
+    results = [r for r in detected if r.entity_type in _REDACTED_ENTITIES]
+    # CC-5: log entity-type counts only — never the detected values (ADR-025 D5). `ignored` is
+    # the tuning knob for _REDACTED_ENTITIES: a real identifier showing up there is a bug.
+    _log.info(
+        "pii_redaction entity_counts=%s ignored=%s",
+        dict(Counter(r.entity_type for r in results)),
+        dict(Counter(r.entity_type for r in detected if r.entity_type not in _REDACTED_ENTITIES)),
+    )
 
     # Pre-populate the mapping in reading order: the anonymizer calls the lambda right-to-left
     # (to avoid offset shifts), so without this the last name in the text would get pool[0].
     assign = _pseudonymizer()
-    _PERSON_ENTITIES = {"PERSON", "PH_PERSON"}
     for r in sorted(results, key=lambda r: r.start):
         if r.entity_type in _PERSON_ENTITIES:
             assign(text[r.start : r.end])

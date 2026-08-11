@@ -30,7 +30,10 @@ def test_structured_text_requires_provider_parameters():
     kwargs = parse.call_args.kwargs
     assert kwargs["extra_body"] == {"provider": {"require_parameters": True}}
     assert kwargs["response_format"] is _Caption
-    assert kwargs["model"] == "qwen/qwen3-32b"
+    # The wiring is the assertion — `structured_text` defaults to settings.text_model. Pinning a
+    # literal here made the test fail for anyone with TEXT_MODEL set in .env, which is a property
+    # of the developer's environment, not of the code under test. test_config.py owns defaults.
+    assert kwargs["model"] == providers.settings.text_model
 
 
 def test_structured_text_raises_when_nothing_parsed():
