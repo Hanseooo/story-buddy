@@ -28,6 +28,38 @@ def _describe(description: CharacterDescription, name: str) -> str:
     return f"{name} - {'; '.join(populated)}" if populated else name
 
 
+def referenced_characters(
+    characters_present: list[str], characters: list[Character]
+) -> list[Character]:
+    """The present characters that HAVE a canonical reference, in the order `generate_scene`
+    uploads them to fal.
+
+    ONE list feeds both the image roll below and `generate_scene`'s `ref_paths`, so
+    "Image 2 is X" cannot drift from `image_urls[1]`. The two used to derive the order
+    independently — `generate_scene` filtering on `canonical_ref_image` and `build_prompt` not
+    filtering at all — and agreed only because no scene had ever mixed the two kinds.
+    """
+    by_id = {character.char_id: character for character in characters}
+    return [
+        character
+        for char_id in characters_present
+        if (character := by_id.get(char_id)) is not None and character.canonical_ref_image
+    ]
+
+
+# Issue #23: the payload was prose plus ANONYMOUS image_urls. Given two unaddressed references an
+# edit model composites them into the canvas as separate elements rather than conditioning identity
+# on them — prod job b9506307 duplicated a character on 6 of its 7 two-reference scenes and on
+# none of its one-reference scene. Naming each image and stating what it is FOR is the smallest
+# change that addresses both branches of #23's discriminator: the duplicated girl (compositing) and
+# the duplicated star (the prose says "a star" and one reference IS a star).
+REFERENCE_CLAUSE = (
+    "Use them only as references for what each character looks like. Draw one new illustration of "
+    "the scene described below — do not copy, inset, mirror or repeat the reference images inside it, "
+    "and draw each character exactly once."
+)
+
+
 def build_prompt(
     text_excerpt: str,
     characters_present: list[str],
@@ -47,7 +79,16 @@ def build_prompt(
             continue
         descriptions.append(_describe(character.description, character.name))
 
-    return "\n\n".join([*descriptions, text_excerpt, style])
+    # Omitted entirely on the text-to-image path (`generate_scene:55-57` sends no images), where
+    # naming images that were never sent would be a lie the model has to reconcile.
+    referenced = referenced_characters(characters_present, characters)
+    roll = [
+        " ".join(f"Image {n} is {character.name}." for n, character in enumerate(referenced, 1))
+        + " "
+        + REFERENCE_CLAUSE
+    ] if referenced else []
+
+    return "\n\n".join([*roll, *descriptions, text_excerpt, style])
 
 
 def _joined(values) -> str:

@@ -1,5 +1,11 @@
 from contracts.story_memory import Character, CharacterDescription, FailureReason
-from pipeline.prompt_optimizer import ANATOMY_CLAUSE, IDENTITY_CLAUSE, build_prompt, correct_prompt
+from pipeline.prompt_optimizer import (
+    ANATOMY_CLAUSE,
+    IDENTITY_CLAUSE,
+    build_prompt,
+    correct_prompt,
+    referenced_characters,
+)
 
 FRAG = "flat cel-shaded cartoon, thick clean black outlines"
 
@@ -52,6 +58,53 @@ def test_build_prompt_never_invents_detail_for_an_empty_description():
     bare = _char("c0", "the mystery creature")
     prompt = build_prompt("It appeared.", ["c0"], [bare], FRAG)
     assert "the mystery creature" in prompt
+
+
+def test_build_prompt_names_each_reference_image_by_index():
+    """Issue #23: the payload sent prose plus ANONYMOUS image_urls, so the edit model composited
+    both references into the canvas instead of using them as identity conditioning."""
+    ana = _char("c0", "Ana", species="girl")
+    ana.canonical_ref_image = "job-123/ref-c0-1.png"
+    star = _char("c1", "the star", species="star")
+    star.canonical_ref_image = "job-123/ref-c1-1.png"
+
+    prompt = build_prompt("She held it toward the sky.", ["c0", "c1"], [ana, star], FRAG)
+
+    assert "Image 1 is Ana." in prompt
+    assert "Image 2 is the star." in prompt
+
+
+def test_build_prompt_numbers_images_in_upload_order_not_roster_order():
+    """The drift this guards: generate_scene uploads ONLY characters with a canonical reference,
+    so a present character without one must not consume an image number."""
+    ana = _char("c0", "Ana", species="girl")                    # present, but no reference drawn
+    star = _char("c1", "the star", species="star")
+    star.canonical_ref_image = "job-123/ref-c1-1.png"
+
+    prompt = build_prompt("She held it toward the sky.", ["c0", "c1"], [ana, star], FRAG)
+
+    assert "Image 1 is the star." in prompt
+    assert "Image 2" not in prompt
+
+
+def test_build_prompt_omits_the_image_roll_when_no_character_has_a_reference():
+    """The text-to-image path (generate_scene:55-57) sends no images — naming them would lie."""
+    bare = _char("c0", "the mystery creature")
+    prompt = build_prompt("It appeared.", ["c0"], [bare], FRAG)
+
+    assert "Image 1" not in prompt
+
+
+def test_referenced_characters_is_the_order_generate_scene_uploads():
+    ana = _char("c0", "Ana")
+    star = _char("c1", "the star")
+    star.canonical_ref_image = "job-123/ref-c1-1.png"
+    bird = _char("c2", "the bird")
+    bird.canonical_ref_image = "job-123/ref-c2-1.png"
+
+    got = referenced_characters(["c2", "c0", "c1", "ghost-id"], [ana, star, bird])
+
+    assert [c.name for c in got] == ["the bird", "the star"]
 
 
 def test_correct_prompt_wrong_colour_appends_the_documented_clause():
