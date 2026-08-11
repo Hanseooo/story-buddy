@@ -177,6 +177,37 @@ def test_text_to_image_omits_seed_when_not_given():
     assert "seed" not in fal.subscribe.call_args.kwargs["arguments"]
 
 
+# --- transient-failure tolerance ---
+
+def test_every_llm_client_retries_transient_failures():
+    """Prod job beb4ebff (2026-08-11): `segment` died ~1s after `analyze` finished, on a 429 whose
+    own body said `retry_after_seconds: 29.8` and `limit_source: upstream_provider_shared_pool`.
+    Nothing waited. There is no `RetryPolicy` on any node in `pipeline/graph.py` either, so a
+    single transient upstream blip on any of ~30 calls kills a book after its upstream work is
+    already paid for.
+
+    Retries were disabled in 23b3dca to stop the SDK sleeping on a large `Retry-After`, but the SDK
+    cannot do that: `_base_client.py:781` honours the header only when `0 < retry_after <= 60` and
+    otherwise falls through to backoff capped at `MAX_RETRY_DELAY = 8.0`. Worst case is two 60s
+    waits, inside the 900s job timeout from ca2479c.
+
+    Asserted for every construction site, not just `_chat`: the moderation clients are separate
+    `OpenAI(...)` calls and drifted independently once already.
+    """
+    for call in (
+        lambda: providers.structured_text("prompt", _Caption),
+        lambda: providers.classify_text_primary("A dog runs."),
+        lambda: providers.classify_text_backstop("A dog runs."),
+    ):
+        with patch("providers.OpenAI") as mock_openai:
+            completions = mock_openai.return_value.chat.completions
+            completions.parse.return_value = _fake_completion(_Caption(caption="hi"))
+            completions.create.return_value.choices = [MagicMock(message=MagicMock(content="safe"))]
+            call()
+
+        assert mock_openai.call_args.kwargs["max_retries"] > 0
+
+
 # --- redact_pii ---
 
 def test_redact_pii_returns_string():
