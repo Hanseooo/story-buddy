@@ -1533,7 +1533,45 @@ for loop position — rejected (reintroduces mutable status into the contract, A
 ## ADR-025 — Provider resilience & failure-mode policy (D-C)
 
 **Status:** Accepted (2026-07-22) · resolves **D-C** · gives ADR-024's loop invariant its failure exit ·
-defines the backend pattern for CC-3 and CC-9
+defines the backend pattern for CC-3 and CC-9 · amended 2026-08-11
+
+**Amendment (2026-08-11) — Decision 1 was silently reverted in code for three weeks.**
+
+Commit `23b3dca` set `max_retries=0` on all three `OpenAI(...)` clients in `providers.py`, on the stated
+premise that "if OpenRouter sends a `Retry-After: 600`, the worker will silently sleep for 10 minutes".
+That premise is false against the pinned SDK: `openai/_base_client.py:781` honours the header **only** when
+`0 < retry_after <= 60`, and otherwise falls through to exponential backoff capped at
+`MAX_RETRY_DELAY = 8.0` (`openai/_constants.py:14`). A 600-second header is ignored. The SDK cannot produce
+the sleep the commit was written to prevent — the hang being chased then was almost certainly the Postgres
+pooler constraint later recorded as ADR-033.
+
+What `0` did produce was the removal of the pipeline's **only** retry, since no node carries a LangGraph
+`RetryPolicy` either. Prod job `beb4ebff` (2026-08-11) died on it: `segment` raised
+`openai.RateLimitError` ~1 second after `analyze` succeeded, on a 429 whose own body carried
+`retry_after_seconds: 29.8` and `limit_source: upstream_provider_shared_pool` — OpenRouter had already
+tried DeepInfra and Venice and found the free shared pool saturated on both. A single ~30s wait would very
+likely have cleared it. Instead the book died after `input_gate`, `redact_pii` and `analyze` were paid for,
+and the child was shown "the machine got stuck".
+
+Restored to `MAX_RETRIES = 2`, named as a module constant in `providers.py` carrying this history, and
+pinned by `test_every_llm_client_retries_transient_failures` — which asserts **every** construction site,
+because the two moderation clients are separate `OpenAI(...)` calls and drifted independently once already.
+
+Two things this amendment does **not** claim to fix:
+
+- **Worst-case latency is now real.** `_chat` has a 60s timeout, so a call whose every attempt times out can
+  burn ~180s of timeout plus ≤120s of backoff before raising. That fits inside the 900s RQ job timeout
+  (`ca2479c`) for one call, not for several in the same book. Untested against the free tier under sustained
+  saturation; if books start dying on the RQ timeout instead of on a 429, this is the first suspect.
+- **Retrying does not leave the shared pool.** `limit_source: upstream_provider_shared_pool` with
+  `is_byok: false` is a property of running on free routing, and `provider.require_parameters: true`
+  (ADR-002) narrows the eligible provider set further, which makes saturation *more* likely, not less.
+  Retries buy tolerance for a blip; they do not buy capacity. The cause is removed by credits or a BYOK
+  provider key, which is a spending decision and deliberately not made here.
+
+Decision 5's enum (`{moderation_input, provider_error, system_error}`) also remains unbuilt — `run_job.py`
+maps every non-`content_flagged` exception to `machine`, so a "we're busy, try again" 429 is presented to
+the child identically to a genuine defect. Known drift, deliberately not fixed in the same change.
 
 **Context:** The provider *layer* exists (ADR-015, `providers.py`) but its resilience did not. `providers.py`
 had no retry/backoff/rate-limit handling and one hardcoded `httpx` timeout (`60.0`); CC-3 (cost

@@ -21,6 +21,15 @@ _log = logging.getLogger(__name__)
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
+# 23b3dca set this to 0 to stop the SDK sleeping on a large `Retry-After`. The SDK cannot do that:
+# it honours the header only when `0 < retry_after <= 60` (`openai/_base_client.py:781`) and
+# otherwise falls through to backoff capped at `MAX_RETRY_DELAY = 8.0`. What zero actually bought
+# was a dead book on every transient upstream 429 — routine on OpenRouter's free shared pool, and
+# what killed prod job beb4ebff on 2026-08-11: `segment` raised ~1s after `analyze` succeeded, on a
+# 429 whose own body asked for a 30s wait. No node carries a LangGraph `RetryPolicy`, so this
+# constant is the pipeline's only tolerance for a transient upstream blip.
+MAX_RETRIES = 2
+
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -58,7 +67,7 @@ def _chat(base_url: str, api_key: str, model: str, content, schema: type[T]) -> 
     Self-hosted vLLM rejects the unknown field, so it is sent only to OpenRouter.
     """
     extra_body = {"provider": {"require_parameters": True}} if base_url == OPENROUTER_BASE_URL else {}
-    completion = OpenAI(base_url=base_url, api_key=api_key, timeout=60.0, max_retries=0).chat.completions.parse(
+    completion = OpenAI(base_url=base_url, api_key=api_key, timeout=60.0, max_retries=MAX_RETRIES).chat.completions.parse(
         model=model,
         messages=[{"role": "user", "content": content}],
         response_format=schema,
@@ -254,7 +263,7 @@ _GUARD_SYSTEM = (
 
 def classify_text_primary(text: str) -> tuple[bool, list[str]]:
     """Primary text guard via OpenRouter (ADR-032). Returns (is_safe, categories)."""
-    client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=settings.openrouter_api_key, timeout=30.0, max_retries=0)
+    client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=settings.openrouter_api_key, timeout=30.0, max_retries=MAX_RETRIES)
     completion = client.chat.completions.create(
         model=settings.moderation_primary_model,
         messages=[{"role": "system", "content": _GUARD_SYSTEM}, {"role": "user", "content": text}],
@@ -272,7 +281,7 @@ def classify_text_backstop(text: str) -> tuple[bool, list[str]]:
         "If unsafe, list violated categories on the next line.\n\n"
         f"Text: {text}"
     )
-    client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=settings.openrouter_api_key, timeout=30.0, max_retries=0)
+    client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=settings.openrouter_api_key, timeout=30.0, max_retries=MAX_RETRIES)
     completion = client.chat.completions.create(
         model=settings.moderation_backstop_model,
         messages=[{"role": "user", "content": prompt}],
