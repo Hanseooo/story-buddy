@@ -113,6 +113,47 @@ def test_enrichment_reaches_the_draw_prompt_but_never_the_judge_prompt():
     assert "the narrator - girl; the protagonist" in judge_prompt
 
 
+# --- non-humanoid subjects (2026-08-11) ---
+
+def test_reference_prompt_does_not_order_a_humanoid_pose():
+    """"standing, facing forward" is a HUMAN pose instruction, and this prompt sent it for every
+    character including the ones with no legs. Prod job 4cb31620 (2026-08-11) drew c1 — "the
+    star" — as a smiling mascot with arms and legs, and the judge correctly failed it.
+
+    The pose ask is the half of that failure we authored: a text-to-image model told to draw a
+    star "standing" has to invent legs to comply. "shown in full" asks for the same framing (the
+    thing the reference actually needs) without asserting an anatomy.
+    """
+    assert "standing" not in reference_prompt(CharacterDescription(species="star"), "the star", FRAG)
+
+
+def test_reference_prompt_guards_against_anthropomorphising_a_non_human_subject():
+    """The direct counter to c1, and it deliberately does NOT branch on species.
+
+    Classifying "star", "cloud", "jeepney", "kalabaw" as non-humanoid needs a word list that is
+    wrong the first time a child writes something not on it — and unlike the thin-description
+    filler there is no cheap structural signal to key on. An unconditional clause is a no-op for
+    a girl or a dog, which is what makes the branchless version the correct lazy one.
+    """
+    for species in ["star", "girl", "dog"]:
+        prompt = reference_prompt(CharacterDescription(species=species), f"the {species}", FRAG)
+        assert "not a person" in prompt
+
+
+def test_the_non_humanoid_guard_never_reaches_the_judge_prompt():
+    """Same one-directional rule the thin-description filler follows, for the same reason.
+
+    Structural today — the clause lives in REFERENCE_PROMPT and the judge is built from
+    JUDGE_PROMPT — but asserted anyway, because "obviously separate" is exactly what the shared
+    `_describe` helper was before it started leaking.
+    """
+    _, t2i_mock, judge_mock, _ = _mint(
+        [_verdict(True)], description=CharacterDescription(species="star"), name="the star"
+    )
+    assert "not a person" in t2i_mock.call_args.args[0]
+    assert "not a person" not in judge_mock.call_args.args[0]
+
+
 def test_reference_prompt_always_contains_the_style_fragment():
     """ADR-022: style rides the reference, so the fragment is never optional in this prompt."""
     assert FRAG in reference_prompt(CharacterDescription(), "the orange dog", FRAG)

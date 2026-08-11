@@ -159,9 +159,9 @@ Two module-level constants. Neither introduces a contract type; `RefVerdict` alr
 `backend/contracts/` because `StoryMemory` embeds it (D-F, ADR-023 amendment).
 
 `reference_prompt` renders the `CharacterDescription` axes (`species`, `colours`, `body_features`,
-`clothing`, `notes`) plus the style fragment, and asks for a single full-body character reference on a
-plain neutral background. Per ADR-022 the fragment **names a medium and its physical artifacts** — it
-never says "beautiful", "8k", or "highly detailed".
+`clothing`, `notes`) plus the style fragment, and asks for a single character reference **shown in
+full** on a plain neutral background. Per ADR-022 the fragment **names a medium and its physical
+artifacts** — it never says "beautiful", "8k", or "highly detailed".
 
 The judge prompt shows the drawn image and the description it should depict, and asks for
 `differences_observed` before `matches_description`. ADR-004's reason-then-score ordering applies to
@@ -232,6 +232,36 @@ reintroducing the bug fixed above from the opposite end. ADR-028 measures the ge
 Rejected alternative: letting `analyze` invent the missing detail. It produces richer references but
 writes fiction into the contract the judge measures against, and invents facts about a child's own
 story — the extraction prompt is built around not doing that.
+
+#### Non-humanoid subjects: the prompt stopped asking for a human body (amended 2026-08-11)
+
+`c1` of the same prod job `4cb31620` is the **true** negative alongside `c0`'s false one: *"the star"*
+was drawn as a smiling mascot with arms and legs, and the judge correctly failed it. §7 attributes the
+reference hit rate to the generator (`fal_image_model`, ADR-001's named seam) — **and half of this
+particular failure was authored here.**
+
+The prompt asked for *"a single **full-body** character reference of one character, **standing**,
+facing forward"*. That is a human anatomy instruction, sent for every character including the ones
+with no legs: a model told to draw a star *standing* must invent legs to comply. Two changes:
+
+1. ~~"full-body … standing"~~ → **"shown in full"**. Same framing — the reference needs the whole
+   character, not a portrait — without asserting an anatomy.
+2. An explicit guard: *"If the character is not a person, draw it as the kind of thing it actually is
+   — give it no human body and no human face unless the description above says so."*
+
+**The guard is unconditional, not species-aware.** Branching on species means a word list deciding
+that "star" and "jeepney" are non-humanoid while "girl" is not — wrong the first time a child writes
+something not on it, and there is no structural signal to key on the way the thin-description filler
+keys on the visual axes. The clause is a no-op for a person or an animal, which is what makes the
+branchless version the correct lazy one.
+
+⚠️ **Draw prompt only**, on the same one-directional rule as the filler above and for the same
+reason: the judge must keep measuring the generator against the **story**, never against our
+instructions to the generator. Covered by `test_the_non_humanoid_guard_never_reaches_the_judge_prompt`.
+
+**Consequence for §7's owed validation:** a `fal_image_model` swap must now be measured *after* this
+change. Evaluating a new model against the old prompt would have charged the generator for a defect
+the prompt was requesting.
 
 ### `settings.default_style_fragment`
 

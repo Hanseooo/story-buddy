@@ -64,11 +64,28 @@ the image."""
 # appearance, and c0 had both while specifying nothing to draw.
 THIN_DESCRIPTION_FILLER = ", a friendly children's picture-book character"
 
+# Two clauses here exist to stop the generator anthropomorphising a non-human subject. Prod job
+# 4cb31620 (2026-08-11) drew c1 — "the star" — as a smiling mascot with arms and legs; the judge
+# caught it, so it is a TRUE negative and not a judging bug.
+#
+# 1. The pose ask used to read "full-body ... standing". That is a human anatomy instruction, and
+#    a model told to draw a star standing has to invent legs to comply — we authored half of that
+#    failure. "shown in full" asks for the same framing without asserting a body.
+# 2. The explicit guard below. Deliberately UNCONDITIONAL rather than branching on species:
+#    deciding that "star" and "jeepney" are non-humanoid while "girl" is not needs a word list
+#    that is wrong the first time a child writes something not on it, and the clause is a no-op
+#    for a person anyway. Unlike THIN_DESCRIPTION_FILLER there is no structural signal to key on.
+#
+# Draw-prompt only, like the filler — the judge must keep measuring the generator against the
+# STORY, not against our instructions to the generator.
 REFERENCE_PROMPT = """\
-A single full-body character reference of one character, standing, facing forward, centred on a \
+A single character reference of one character, shown in full, facing forward, centred on a \
 plain neutral background. No other characters, no scenery, no text, no border.
 
 Character: {subject}
+
+If the character is not a person, draw it as the kind of thing it actually is — give it no human \
+body and no human face unless the description above says so.
 
 Style: {style_fragment}"""
 
