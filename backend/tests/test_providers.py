@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from presidio_analyzer import RecognizerResult
 from presidio_anonymizer import AnonymizerEngine
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 import providers
 
@@ -30,7 +30,11 @@ def test_structured_text_requires_provider_parameters():
         providers.structured_text("prompt", _Caption)
 
     kwargs = parse.call_args.kwargs
-    assert kwargs["extra_body"] == {"provider": {"require_parameters": True}}
+    # Subset, not equality: this call passes no model, so it resolves through settings.text_model
+    # and picks up whatever TEXT_PROVIDERS holds for it — which is a property of the developer's
+    # environment, exactly like the model literal the comment below warns about. The pin has its
+    # own tests; the flag is what this one is for.
+    assert kwargs["extra_body"]["provider"]["require_parameters"] is True
     assert kwargs["response_format"] is _Caption
     # The wiring is the assertion — `structured_text` defaults to settings.text_model. Pinning a
     # literal here made the test fail for anyone with TEXT_MODEL set in .env, which is a property
@@ -145,12 +149,42 @@ def test_vision_judge_pins_providers_because_openrouter_cannot_filter_by_modalit
     }
 
 
+def test_text_calls_route_around_the_provider_that_ignored_the_schema():
+    """Prod row 558afb6d (2026-08-12), the fourth instance of ADR-002's class and the first where
+    the model choice is not the culprit.
+
+    `analyze` asked for `StoryAnalysis` and got a 200 back in 363ms carrying
+    `{'species': 'location', ...}` in four fields declared `str | None` — the character
+    sub-schema's shape copied into its location/object siblings. `species` exists nowhere in that
+    schema except `ExtractedDescription`, and a grammar-constrained decoder cannot emit those
+    tokens at all, so the answer was not constrained. OpenRouter's activity log names the route:
+    `mistralai/mistral-small-3.2-24b-instruct` served by **Parasail**
+    (`gen-1786523891-ZW5XHaXPUfbTXdd0cIF3`).
+
+    `TEXT_MODEL` was the intended default and `require_parameters` was sent, as it is on every
+    OpenRouter call. Neither is a defence: acceptance is a routing-table flag, fidelity is a
+    property of how the provider decodes.
+    """
+    with patch("providers.OpenAI") as mock_openai:
+        parse = mock_openai.return_value.chat.completions.parse
+        parse.return_value = _fake_completion(_Caption(caption="hi"))
+        providers.structured_text("prompt", _Caption, model="mistralai/mistral-small-3.2-24b-instruct")
+
+    only = parse.call_args.kwargs["extra_body"]["provider"]["only"]
+    assert "parasail" not in only
+
+
 def test_only_models_that_need_pinning_are_pinned():
     """The allowlist is per-model on purpose. gemma-3-27b-it serves the image backstop AND the
     consistency judge across five providers, none of them Venice — pinning it would buy nothing
-    and make 429s likelier by shrinking its pool. And mistral-small-3.2 is also `text_model`,
-    where Venice is a perfectly good route: the pin belongs to the call that sends an image, not
-    to the model name.
+    and make 429s likelier by shrinking its pool.
+
+    ~~And mistral-small-3.2 is also `text_model`, where Venice is a perfectly good route: the pin
+    belongs to the call that sends an image, not to the model name.~~ **Amended 2026-08-12.** The
+    principle held; the conclusion that only the image call needed a pin did not. Both call sites
+    now pin the same model, and to *different* lists — Parasail can serve an image and cannot honour
+    a strict schema, Venice is the exact reverse. That asymmetry is the per-call-site rule with
+    teeth, so it is asserted rather than described.
     """
     with patch("providers.OpenAI") as mock_openai:
         parse = mock_openai.return_value.chat.completions.parse
@@ -158,11 +192,16 @@ def test_only_models_that_need_pinning_are_pinned():
         providers.judge("compare", ["https://ref.png"], _Caption, model="google/gemma-3-27b-it")
         gemma_body = parse.call_args.kwargs["extra_body"]
 
+        providers.judge("compare", ["https://ref.png"], _Caption,
+                        model="mistralai/mistral-small-3.2-24b-instruct")
+        vision_only = parse.call_args.kwargs["extra_body"]["provider"]["only"]
+
         providers.structured_text("prompt", _Caption, model="mistralai/mistral-small-3.2-24b-instruct")
-        text_body = parse.call_args.kwargs["extra_body"]
+        text_only = parse.call_args.kwargs["extra_body"]["provider"]["only"]
 
     assert gemma_body == {"provider": {"require_parameters": True}}
-    assert text_body == {"provider": {"require_parameters": True}}
+    assert vision_only != text_only
+    assert "parasail" in vision_only and "parasail" not in text_only
 
 
 def test_edit_image_passes_references_and_seed_and_returns_bytes():
@@ -253,6 +292,109 @@ def test_every_llm_client_retries_transient_failures():
             call()
 
         assert mock_openai.call_args.kwargs["max_retries"] > 0
+
+
+# --- schema-violation tolerance ---
+#
+# `MAX_RETRIES` above cannot cover this class at all: it is the SDK's transport-level retry, keyed
+# on HTTP status. A provider that ignores the grammar answers **200**, and the failure happens
+# client-side while parsing a response the SDK considers a success.
+
+
+def _schema_violation() -> ValidationError:
+    """What `completions.parse` raises when the body does not match the schema.
+
+    Shaped like prod row 558afb6d: an object where a `str` was declared.
+    """
+    try:
+        _Caption.model_validate({"caption": {"species": "location", "colours": []}})
+    except ValidationError as exc:
+        return exc
+    raise AssertionError("the schema accepted an object where it declares a str")
+
+
+def test_a_schema_violating_answer_is_re_asked_once():
+    """The pin removes the one provider known to do this; this removes the whole class.
+
+    Both are needed. The pin is per `(model, provider)` and every list in this module is an
+    incomplete measurement — nobody has established that the providers left on it decode any more
+    faithfully than the one taken off. And the pin cannot protect the judge, which keeps Parasail
+    allowlisted because it can serve an image (`VISION_PROVIDERS`).
+    """
+    with patch("providers.OpenAI") as mock_openai:
+        parse = mock_openai.return_value.chat.completions.parse
+        parse.side_effect = [_schema_violation(), _fake_completion(_Caption(caption="hi"))]
+        result = providers.structured_text("prompt", _Caption)
+
+    assert result.caption == "hi"
+    assert parse.call_count == 2
+
+
+def test_an_answer_with_its_fields_out_of_order_is_re_asked_too():
+    """ADR-002 Instance 2 is the same cause wearing a different symptom: the provider emitted
+    tokens the declared grammar should have made unproducible. It hard-failed a book at
+    `char_ref_mod` — the child-facing safety gate.
+
+    `_assert_field_order` stays a raise, not a warning (ADR-002 says so explicitly). Re-asking
+    before that raise reaches the pipeline does not soften it; the second violation still kills
+    the job, as the test below asserts.
+    """
+    ordered = '{"differences_observed": "none", "same_character": true}'
+    backwards = '{"same_character": true, "differences_observed": "none"}'
+    verdict = _Verdict(differences_observed="none", same_character=True)
+    with patch("providers.OpenAI") as mock_openai:
+        parse = mock_openai.return_value.chat.completions.parse
+        parse.side_effect = [
+            _fake_completion(verdict, content=backwards),
+            _fake_completion(verdict, content=ordered),
+        ]
+        result = providers.judge("compare", ["https://ref.png"], _Verdict)
+
+    assert result.same_character is True
+    assert parse.call_count == 2
+
+
+def test_two_violations_in_a_row_still_fail_the_job():
+    """One re-ask, not a loop. A provider that cannot honour the schema will not learn to on the
+    fourth attempt, and every attempt is billed."""
+    with patch("providers.OpenAI") as mock_openai:
+        parse = mock_openai.return_value.chat.completions.parse
+        parse.side_effect = [_schema_violation(), _schema_violation()]
+        with pytest.raises(ValidationError):
+            providers.structured_text("prompt", _Caption)
+
+    assert parse.call_count == 2
+
+
+def test_an_answer_that_validates_costs_exactly_one_call():
+    """The spend guard. Every call here is billed, and `analyze`/`segment`/`char_bible` alone put
+    ~30 of them behind one book."""
+    with patch("providers.OpenAI") as mock_openai:
+        parse = mock_openai.return_value.chat.completions.parse
+        parse.return_value = _fake_completion(_Caption(caption="hi"))
+        providers.structured_text("prompt", _Caption)
+
+    assert parse.call_count == 1
+
+
+def test_a_stalled_call_is_not_re_asked():
+    """`_bounded` already spent CALL_TIMEOUT_SECONDS finding out. Re-asking would double the worst
+    case against the 900s job deadline to buy a second wait on a provider that is not answering —
+    and a stall is not evidence of a schema the provider cannot honour, which is what this retry
+    is for.
+    """
+    release = threading.Event()
+    with patch("providers.OpenAI") as mock_openai, \
+         patch.object(providers, "CALL_TIMEOUT_SECONDS", 0.2):
+        parse = MagicMock(side_effect=_blocking_parse(release))
+        mock_openai.return_value.chat.completions.parse = parse
+        try:
+            with pytest.raises(TimeoutError):
+                providers.structured_text("prompt", _Caption)
+        finally:
+            release.set()
+
+    assert parse.call_count == 1
 
 
 # --- wall-clock bound ---

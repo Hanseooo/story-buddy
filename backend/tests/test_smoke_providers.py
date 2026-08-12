@@ -68,6 +68,54 @@ def test_text_model_honours_structured_output():
     assert result.colour.strip(), f"{settings.text_model} returned an empty structured field"
 
 
+class _Described(BaseModel):
+    species: str
+    colours: list[str]
+
+
+class _Named(BaseModel):
+    name: str
+    description: str | None = None
+
+
+class _NestedShape(BaseModel):
+    """The shape `_Colour` above cannot test for.
+
+    Prod row `558afb6d` (2026-08-12): Parasail served `mistralai/mistral-small-3.2-24b-instruct`
+    a 200 in 363ms whose `locations[].description` and `objects[].description` held
+    `{'species': …, 'colours': …}` — the character sub-schema's shape copied into its siblings.
+    A single flat `str` field cannot express that failure, so the smoke check passed models that
+    could not do the job. The minimum reproduction is **one nested object next to a sibling whose
+    same-named field is a plain string**; that adjacency is the thing an unconstrained decoder
+    gets wrong.
+    """
+    characters: list[_Described]
+    locations: list[_Named]
+
+
+def test_text_model_keeps_sibling_fields_from_bleeding_into_each_other():
+    """`require_parameters` cannot cover this and the model ID does not predict it — it is a
+    property of the `(model, provider)` pair that serves the call (ADR-002 Instance 4).
+
+    `providers._chat` re-asks once, so a red here means the schema was violated **twice running**
+    — a route that cannot honour a nested schema at all, not a one-off bad roll.
+    """
+    from providers import structured_text
+
+    result = structured_text(
+        "A girl named Ana finds a glowing star in her backyard, then carries it up a hill. "
+        "Extract the characters and the locations.",
+        _NestedShape,
+    )
+
+    assert result.characters, f"{settings.text_model} returned no characters"
+    for location in result.locations:
+        assert isinstance(location.description, (str, type(None))), (
+            f"{settings.text_model} put {type(location.description).__name__} in a field declared "
+            "str — the provider is not honouring the schema (ADR-002 Instance 4)"
+        )
+
+
 class _SmokeVerdict(BaseModel):
     """Mirrors the reason-then-score shape of `RefVerdict`/`VlmVerdict` (ADR-004) so the wire
     ordering `providers._assert_field_order` enforces is exercised, not just structured output."""

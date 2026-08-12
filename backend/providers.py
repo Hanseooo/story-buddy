@@ -50,6 +50,26 @@ VISION_PROVIDERS: dict[str, list[str]] = {
     "mistralai/mistral-small-3.2-24b-instruct": ["deepinfra", "parasail"],
 }
 
+# The same mechanism for the OTHER axis `require_parameters` does not cover: whether the provider
+# HONOURS the schema it agreed to accept. Prod row 558afb6d (2026-08-12) is the case — Parasail
+# answered `analyze` with a 200 in 363ms carrying `{'species': 'location', ...}` in four fields
+# declared `str | None`, the character sub-schema's shape copied into its location/object siblings.
+# `species` appears nowhere in `StoryAnalysis` except `ExtractedDescription`, and constrained
+# decoding cannot emit those tokens at all, so that answer was never grammar-constrained.
+#
+# Deliberately NOT the same list as VISION_PROVIDERS above, for the same model. Parasail serves an
+# image and cannot honour a strict schema; Venice is the exact reverse (ADR-002 Instance 3). Keyed
+# per call site, which is the rule ADR-002 already states — this is the first case where the two
+# lists actually diverge, so the rule is now load-bearing rather than decorative.
+#
+# ponytail: two providers, not one. Dropping to `["deepinfra"]` would be the cautious read, but the
+# shared free pool 429s often enough to have killed prod job beb4ebff, and MAX_RETRIES is the only
+# tolerance there is. Venice is unmeasured for fidelity rather than known-good — the re-ask in
+# `_chat` is what covers that, and it is why this list does not have to be right first time.
+TEXT_PROVIDERS: dict[str, list[str]] = {
+    "mistralai/mistral-small-3.2-24b-instruct": ["deepinfra", "venice"],
+}
+
 # The only bound on a call's TOTAL duration. Prod job d83721d9 (2026-08-11) proved `timeout=60.0`
 # is not one: a judge request blocked 14m05s and never raised. httpx expands a scalar timeout to
 # connect/read/write/pool, and each is PER-OPERATION — the read value bounds the gap between chunks,
@@ -101,12 +121,16 @@ def _bounded(model: str, call):
 
 def structured_text(prompt: str, schema: type[T], model: str | None = None) -> T:
     """Strict `json_schema` structured output, validated into `schema`."""
+    resolved = model or settings.text_model
     return _chat(
         OPENROUTER_BASE_URL,
         settings.openrouter_api_key,
-        model or settings.text_model,
+        resolved,
         prompt,
         schema,
+        # Only this function sends a strict schema without an image, so only this function reads
+        # the fidelity allowlist — `judge` has its own, and they disagree on purpose.
+        providers=TEXT_PROVIDERS.get(resolved),
     )
 
 
@@ -144,6 +168,25 @@ def _chat(
         prefs["only"] = providers
     extra_body = {"provider": prefs} if base_url == OPENROUTER_BASE_URL else {}
     client = OpenAI(base_url=base_url, api_key=api_key, timeout=60.0, max_retries=MAX_RETRIES)
+    try:
+        return _one_answer(client, model, content, schema, extra_body)
+    except ValueError as exc:
+        # Every way a provider can break its own grammar arrives here as a `ValueError`: pydantic's
+        # `ValidationError` subclasses it, and the two raises in `_one_answer` are ValueErrors
+        # already. `MAX_RETRIES` cannot cover any of them — it is keyed on HTTP status, and a
+        # provider that ignores the schema answers 200.
+        #
+        # One re-ask, not a loop: a provider that cannot honour the schema will not learn to on the
+        # fourth attempt, and every attempt is billed. A stall is deliberately NOT retried —
+        # `_bounded` raises `TimeoutError`, which is an `OSError` and does not land here, so the
+        # worst case against the 900s job deadline stays one `CALL_TIMEOUT_SECONDS`, not two.
+        _log.warning("%s broke its own response schema; re-asking once. %s", model, exc)
+        return _one_answer(client, model, content, schema, extra_body)
+
+
+def _one_answer(client: OpenAI, model: str, content, schema: type[T], extra_body: dict) -> T:
+    """One request, validated. Raises `ValueError` (or a `ValidationError`, which is one) whenever
+    the provider returns something the declared grammar should have made unproducible."""
     completion = _bounded(
         model,
         lambda: client.chat.completions.parse(

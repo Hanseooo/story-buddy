@@ -14,7 +14,7 @@ or an SDK call at a call site, stop and read §5 first.
 
 | Role | Exact model ID | License | Where it runs | Config setting | ADR | Phase |
 |---|---|---|---|---|---|---|
-| Text pipeline (analyze/segment/prompts) | `mistralai/mistral-small-3.2-24b-instruct` | Apache-2.0 | OpenRouter | `settings.text_model` | ADR-002 (amended 2026-08-11) | Phase 1 |
+| Text pipeline (analyze/segment/prompts) | `mistralai/mistral-small-3.2-24b-instruct` | Apache-2.0 | OpenRouter | `settings.text_model` | ADR-002 (amended 2026-08-11, 2026-08-12) | Phase 1 — model unchanged by the 08-12 amendment; it failed strict-schema fidelity on **Parasail** (row `558afb6d`), so `providers.TEXT_PROVIDERS` pins the route and `_chat` re-asks once. |
 | ~~Text pipeline~~ (superseded 2026-08-11) | ~~`qwen/qwen3-32b`~~ | Apache-2.0 | OpenRouter | — | ADR-002 | Passed Probe 3 (2026-07-29) and still failed in production: emitted prose under `response_format`, prod job `af068baf`. `require_parameters: true` selects providers that *accept* structured output, not ones that *honour* it. |
 | Consistency judge (prompted) | `google/gemma-3-27b-it` | Gemma license (not OSI) | OpenRouter | `settings.vlm_judge_model` | ADR-002, ADR-004 | Phase 1 |
 | Consistency judge (fine-tuned, replaces prompted if it ships) | `Qwen2.5-VL-7B-Instruct` + QLoRA adapter | Apache-2.0 | Modal (vLLM, scale-to-zero), reached via `settings.judge_base_url` | `settings.judge_base_url` / `settings.judge_api_key` | ADR-018, ADR-019 | Phase 2.5 |
