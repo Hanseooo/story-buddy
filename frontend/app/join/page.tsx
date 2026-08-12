@@ -21,6 +21,14 @@ export default function JoinPage() {
       refs.current[idx - 1]?.focus();
       return;
     }
+    if (e.key === "ArrowLeft" && idx > 0) {
+      refs.current[idx - 1]?.focus();
+      return;
+    }
+    if (e.key === "ArrowRight" && idx < BOX_COUNT - 1) {
+      refs.current[idx + 1]?.focus();
+      return;
+    }
     if (key.length === 1 && EXCLUDED.has(key)) {
       e.preventDefault();
       setHint(true);
@@ -31,23 +39,48 @@ export default function JoinPage() {
 
   const handleChange = (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value.toLowerCase();
-    const char = raw[raw.length - 1] ?? "";
-    if (!char) {
+    if (!raw) {
       const next = [...boxes];
       next[idx] = "";
       setBoxes(next);
       return;
     }
-    if (EXCLUDED.has(char)) {
+
+    const cleanChars: string[] = [];
+    let hasExcluded = false;
+
+    for (const char of raw) {
+      if (EXCLUDED.has(char)) {
+        hasExcluded = true;
+      } else {
+        cleanChars.push(char);
+      }
+    }
+
+    if (hasExcluded) {
       setHint(true);
+    } else {
+      setHint(false);
+    }
+
+    if (cleanChars.length === 0) {
       e.target.value = boxes[idx];
       return;
     }
+
     const next = [...boxes];
-    next[idx] = char;
+    let currentIdx = idx;
+    for (const c of cleanChars) {
+      if (currentIdx < BOX_COUNT) {
+        next[currentIdx] = c;
+        currentIdx++;
+      }
+    }
+
     setBoxes(next);
-    setHint(false);
-    if (idx < BOX_COUNT - 1) refs.current[idx + 1]?.focus();
+
+    const nextFocusIdx = Math.min(currentIdx, BOX_COUNT - 1);
+    refs.current[nextFocusIdx]?.focus();
   };
 
   const handlePaste = (e: React.ClipboardEvent) => {
@@ -130,12 +163,16 @@ export default function JoinPage() {
                 ref={(el) => { refs.current[idx] = el; }}
                 type="text"
                 inputMode="text"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                autoComplete="one-time-code"
                 maxLength={1}
                 value={val}
                 autoFocus={idx === 0}
                 aria-label={`Code character ${idx + 1}`}
-                whileFocus={{ y: -4, boxShadow: "0 10px 28px rgba(49,85,217,0.12)" }}
-                className="w-12 h-14 sm:w-14 sm:h-16 text-center text-2xl sm:text-3xl font-extrabold text-primary border-2 border-primary/20 rounded-[16px] bg-background focus:border-primary focus:outline-none transition-colors uppercase caret-primary"
+                whileFocus={{ scale: 1.04, boxShadow: "0 10px 28px rgba(49,85,217,0.12)" }}
+                className="w-12 h-14 sm:w-14 sm:h-16 text-center text-2xl sm:text-3xl font-extrabold text-primary border-2 border-primary/20 rounded-[16px] bg-background focus:border-primary focus:outline-none transition-all uppercase caret-primary leading-none p-0 flex items-center justify-center"
                 onKeyDown={(e) => handleKeyDown(idx, e)}
                 onChange={(e) => handleChange(idx, e)}
               />
