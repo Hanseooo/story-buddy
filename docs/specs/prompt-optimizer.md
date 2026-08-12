@@ -26,8 +26,9 @@ into emphasis clauses.
 - **Invariants:**
   1. `build_prompt` always includes the style fragment (ADR-007: style rides the reference; the
      fragment is belt-and-suspenders on top of that).
-  2. `build_prompt` never fabricates content beyond `text_excerpt` and the present characters'
-     populated description axes — it does not invent detail `analyze`/`char_bible` didn't produce.
+  2. `build_prompt` never fabricates content beyond `text_excerpt`, the present characters'
+     populated description axes, **and the scene's location** (`Location.name`, plus
+     `Location.description` when populated — widened by `scene-setting-and-subject-binding.md` §2).
   3. `correct_prompt` never drops content from the prior prompt — it only appends emphasis clauses.
 
 ## 3. Position in the system map
@@ -50,7 +51,7 @@ input_gate ──► analyze ──► segment ──► char_bible ──► ge
 ## 4. Behavior & edge cases
 
 ```python
-def build_prompt(text_excerpt: str, characters_present: list[str], characters: list[Character], style_fragment: str | None) -> str
+def build_prompt(text_excerpt: str, characters_present: list[str], characters: list[Character], style_fragment: str | None, location: Location | None = None) -> str
 def correct_prompt(prompt: str, failure_reasons: list[FailureReason], characters: list[Character], style_fragment: str | None, same_character: bool = True, anatomy_intact: bool = True) -> str
 ```
 
@@ -115,13 +116,35 @@ Image 2 visibly was not, and the edit model drew a second star (issue #23's `s1`
 is not filtered**: ADR-013 freezes it verbatim, so a story that says "a tiny glowing star" still
 says so.
 
-### The image roll and `REFERENCE_CLAUSE` (issues #23, #32)
+### The image roll, guard clauses and `Setting:` line (issues #23, #32, scene-setting-and-subject-binding.md)
 
 When at least one present character has a `canonical_ref_image`, `build_prompt` prefixes the prompt
-with a roll naming each image in `referenced_characters` order (`"Image 1 is Ana. Image 2 is the
-star."`) followed by `REFERENCE_CLAUSE`. `generate_scene`, `regenerate` and `output_mod` all build
-`ref_paths` from that same helper, so `"Image 2 is X"` cannot drift from `image_urls[1]`.
-Omitted entirely on the text-to-image path — naming images that were never sent is a lie.
+with a roll naming each image in `referenced_characters` order and **folding that character's
+description into the same sentence** — `"Image 1 is Ana - girl; red; jeans. Image 2 is the star -
+tiny."` — followed by `REFERENCE_CLAUSE`. The fold is the D2 fix
+(`scene-setting-and-subject-binding.md` §4.2): the reference image and its attributes are one
+sentence rather than two blocks the model has to associate. A referenced character does **not** also
+get a separate description line; a present character with no reference still does, below the roll.
+
+Two further clauses sit **outside** `REFERENCE_CLAUSE`, because the roll and its clause are omitted
+entirely on the text-to-image path and both guards must apply there too:
+
+- `SUBJECT_COUNT_CLAUSE` — `"This illustration contains exactly N characters: Ana and the star."`
+  A whole-canvas count, computed **after** the missing-`char_id` filter, singular at `N == 1`.
+- `NON_HUMAN_CLAUSE` — wording from `char_bible.REFERENCE_PROMPT`, emitted unconditionally for the
+  reason `char_bible` gives: branching on species needs a word list that is wrong the first time a
+  child writes something not on it, and the clause is a no-op for a person.
+
+Both are omitted when no present character survives the filter — all three blocks would reference
+nothing.
+
+A `Setting: <name> - <description>` line follows the guards and precedes `text_excerpt`, so on a
+conflict the excerpt is the later and more specific assertion. `location=None` emits no line at all.
+`filtered_location` is ADR-035 **surface 5**: the description is word-filtered against the style
+fragment's own prohibitions; the **name** never is.
+
+`referenced_characters` deduplicates `characters_present` order-preservingly, so a checkpoint
+written before `segment`'s own dedup cannot send one reference image as two subjects on resume.
 
 `REFERENCE_CLAUSE` closes **two** duplication mechanisms that look identical in the output:
 

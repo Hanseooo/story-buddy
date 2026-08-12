@@ -74,8 +74,17 @@ def generate_scene(state: StoryMemory) -> dict:
             f"image budget exceeded: {state.cost.image_count} >= {IMAGE_BUDGET} (ADR-025)"
         )
 
+    # §4.1: `segment` wrote the id; this is the one place it is resolved back to the object.
+    # A `location_id` absent from the roster resolves to None and the page simply gets no
+    # `Setting:` line — the same posture as every other roster lookup in this pipeline.
+    location = next((loc for loc in state.locations if loc.loc_id == scene.location_id), None)
+
     prompt = build_prompt(
-        scene.text_excerpt, scene.characters_present, state.characters, state.style.prompt_fragment
+        scene.text_excerpt,
+        scene.characters_present,
+        state.characters,
+        state.style.prompt_fragment,
+        location,
     )
 
     # Same list `build_prompt` numbered the image roll off, so "Image 2 is X" always names

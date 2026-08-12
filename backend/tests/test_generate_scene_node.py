@@ -8,6 +8,7 @@ from contracts.story_memory import (
     CharacterDescription,
     Cost,
     Input,
+    Location,
     RefVerdict,
     Scene,
     Style,
@@ -228,7 +229,7 @@ def test_generate_scene_calls_build_prompt_with_the_scenes_roster_and_style():
          patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0-1.png", True)):
         generate_scene(state)
 
-    build.assert_called_once_with("The dog ran.", ["c0"], [dog], "flat gouache storybook")
+    build.assert_called_once_with("The dog ran.", ["c0"], [dog], "flat gouache storybook", None)
 
 
 def test_generate_scene_uses_scene_id_in_storage_path():
@@ -366,3 +367,43 @@ def test_generate_scene_passes_attempt_n_of_one_for_a_scene_with_no_attempts():
         generate_scene(state)
 
     assert mock_store.call_args.args[3] == 1
+
+
+def test_generate_scene_resolves_the_scenes_location_and_passes_it_to_build_prompt():
+    """§4.1: `segment` writes `location_id`; this node is the only place it is resolved back to
+    the `Location` object `build_prompt` needs."""
+    beach = Location(loc_id="loc0", name="the beach", description="golden sand")
+    hill = Location(loc_id="loc1", name="the hill", description="tall grass")
+    state = _state([Scene(scene_id="s0", text_excerpt="She ran.", location_id="loc1")])
+    state = state.model_copy(update={"locations": [beach, hill]})
+
+    with patch("pipeline.generate_scene.build_prompt", return_value="built") as build, \
+         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0-1.png", True)):
+        generate_scene(state)
+
+    assert build.call_args.args[4] == hill
+
+
+def test_generate_scene_passes_none_when_the_scene_has_no_location():
+    state = _state([Scene(scene_id="s0", text_excerpt="She ran.")])
+
+    with patch("pipeline.generate_scene.build_prompt", return_value="built") as build, \
+         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0-1.png", True)):
+        generate_scene(state)
+
+    assert build.call_args.args[4] is None
+
+
+def test_generate_scene_passes_none_for_a_location_id_absent_from_the_roster():
+    """Same posture as every other roster lookup in this pipeline: this node may not extend the
+    roster, and it does not raise. The page ships with no `Setting:` line."""
+    beach = Location(loc_id="loc0", name="the beach")
+    state = _state([Scene(scene_id="s0", text_excerpt="She ran.", location_id="ghost-loc")])
+    state = state.model_copy(update={"locations": [beach]})
+
+    with patch("pipeline.generate_scene.build_prompt", return_value="built") as build, \
+         patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0-1.png", True)):
+        generate_scene(state)
+
+    assert build.call_args.args[4] is None
+
