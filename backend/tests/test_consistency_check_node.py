@@ -19,7 +19,7 @@ from contracts.story_memory import (
     StoryMemory,
     VlmVerdict,
 )
-from pipeline.consistency_check import SceneVerdict, consistency_check, judge_attempt
+from pipeline.consistency_check import SceneVerdict, _rank, consistency_check, judge_attempt
 from pipeline.graph import route_after_check, route_next_scene
 
 
@@ -479,7 +479,14 @@ def test_node_returns_only_scenes_and_never_touches_cost_or_state():
 
 # --- ADR-010 best-of and the three-term finalize rule (regeneration-controller §4) ---
 
-def _attempt(image_ref: str, *, same: bool | None = None, anatomy: bool = True, style: bool = True) -> Attempt:
+def _attempt(
+    image_ref: str,
+    *,
+    same: bool | None = None,
+    anatomy: bool = True,
+    style: bool = True,
+    unique: bool = True,
+) -> Attempt:
     """An already-judged attempt. same=None means UNCHECKED (vlm_verdict is None)."""
     if same is None:
         return Attempt(image_ref=image_ref, prompt="p", passed=False)
@@ -487,10 +494,82 @@ def _attempt(image_ref: str, *, same: bool | None = None, anatomy: bool = True, 
         image_ref=image_ref,
         prompt="p",
         vlm_verdict=VlmVerdict(
-            differences_observed="d", same_character=same, style_match=style, anatomy_intact=anatomy
+            differences_observed="d",
+            same_character=same,
+            style_match=style,
+            anatomy_intact=anatomy,
+            subjects_unique=unique,
         ),
         passed=same and anatomy,
     )
+
+
+def test_rank_prefers_the_unique_attempt_when_the_higher_keys_tie():
+    """§6 test 20 / §4.4: the free improvement. When a retry fires for some OTHER reason, best-of
+    now prefers the non-duplicated attempt at no extra draw."""
+    scene = _two_attempt_scene(
+        _attempt("job-1/s0-1.png", same=False, anatomy=True, unique=False, style=True),
+        _attempt("job-1/s0-2.png", same=False, anatomy=True, unique=True, style=True),
+    )
+
+    result = _run(
+        _state([scene], [_char("c0", "the dog")]),
+        [_verdict(False, anatomy=True, unique=True, style=True)],
+    )
+
+    assert result["scenes"][0].final_image_ref == "job-1/s0-2.png"
+
+
+def test_rank_puts_uniqueness_above_style_match():
+    """The declared order is (same_character, anatomy_intact, subjects_unique, style_match), so a
+    unique-but-off-style attempt beats a duplicated-but-on-style one."""
+    scene = _two_attempt_scene(
+        _attempt("job-1/s0-1.png", same=False, anatomy=True, unique=True, style=False),
+        _attempt("job-1/s0-2.png", same=False, anatomy=True, unique=False, style=True),
+    )
+
+    result = _run(
+        _state([scene], [_char("c0", "the dog")]),
+        [_verdict(False, anatomy=True, unique=False, style=True)],
+    )
+
+    assert result["scenes"][0].final_image_ref == "job-1/s0-1.png"
+
+
+def test_rank_puts_uniqueness_below_anatomy():
+    """Anatomy GATES and uniqueness does not, so anatomy must outrank it."""
+    scene = _two_attempt_scene(
+        _attempt("job-1/s0-1.png", same=False, anatomy=True, unique=False),
+        _attempt("job-1/s0-2.png", same=False, anatomy=False, unique=True),
+    )
+
+    result = _run(
+        _state([scene], [_char("c0", "the dog")]),
+        [_verdict(False, anatomy=False, unique=True)],
+    )
+
+    assert result["scenes"][0].final_image_ref == "job-1/s0-1.png"
+
+
+def test_the_unchecked_rank_tuple_widened_to_five_zeros():
+    """§6 test 21: unchecked must still sort below EVERY checked attempt, and a four-tuple
+    compared against a five-tuple would raise or mis-order."""
+    assert _rank(Attempt(image_ref="job-1/s0-1.png", prompt="p", passed=False)) == (0, 0, 0, 0, 0)
+
+
+def test_the_checked_rank_tuple_is_five_terms_in_the_declared_order():
+    ranked = _rank(_attempt("job-1/s0-1.png", same=True, anatomy=False, unique=True, style=False))
+    assert ranked == (1, True, False, True, False)
+
+
+def test_the_worst_possible_checked_attempt_still_outranks_an_unchecked_one():
+    """§6 test 21, the behavioural half. Promoting an unjudged image over a judged one would let
+    a judge outage silently decide the page (invariant 4)."""
+    worst = _attempt("job-1/s0-1.png", same=False, anatomy=False, unique=False, style=False)
+    unchecked = _attempt("job-1/s0-2.png", same=None)
+
+    assert _rank(worst) > _rank(unchecked)
+
 
 
 def _two_attempt_scene(first: Attempt, second: Attempt) -> Scene:

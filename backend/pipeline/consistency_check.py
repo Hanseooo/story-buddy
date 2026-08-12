@@ -104,15 +104,23 @@ def judge_attempt(image_path: str, subjects: list[tuple[str, str]]) -> list[Scen
         return []
 
 
-def _rank(a: Attempt) -> tuple[int, int, int, int]:
+def _rank(a: Attempt) -> tuple[int, int, int, int, int]:
     """ADR-028's lexicographic best-of signal, with unchecked sorting below every checked attempt.
 
     A pass scores (1, 1, 1, …) and beats anything that gated, so `max` needs no special case for
-    it. Unchecked scores (0, 0, 0, 0): promoting an unjudged image over a judged one would let a
+    it. Unchecked scores all zeros: promoting an unjudged image over a judged one would let a
     judge outage silently decide the page, contradicting invariant 4 (unchecked is never a pass).
+
+    `subjects_unique` sits between anatomy and style (§4.4): it does not GATE, but when a retry
+    fires for some other reason best-of now prefers the non-duplicated attempt at no extra draw.
+    Same record-and-rank-without-gating shape `style_match` already has below it.
     """
     v = a.vlm_verdict
-    return (0, 0, 0, 0) if v is None else (1, v.same_character, v.anatomy_intact, v.style_match)
+    return (
+        (0, 0, 0, 0, 0) if v is None
+        else (1, v.same_character, v.anatomy_intact, v.subjects_unique, v.style_match)
+    )
+
 
 
 def consistency_check(state: StoryMemory) -> dict:
