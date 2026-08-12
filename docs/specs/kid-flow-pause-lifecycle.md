@@ -401,7 +401,8 @@ raises `GraphRecursionError` — on precisely the path this spec exists to build
 ```python
 # app/config.py
 SUPER_STEP_PRELUDE = 15               # ADR-029 reveal: 6 linear + 3 retry cycles × 3
-RECURSION_LIMIT = MAX_SCENES * 4 + SUPER_STEP_PRELUDE
+RECURSION_LIMIT = MAX_SCENES * 5 + SUPER_STEP_PRELUDE   # ×4 → ×5 on 2026-08-13: per-scene
+                                                        # output_mod (ADR-024 amendment)
 IMAGE_BUDGET = MAX_SCENES * 2 + 9     # unchanged — 9 IMAGES, a different unit
 ```
 
@@ -486,8 +487,10 @@ future migration (S1 §6.3).
 **Router (`route_reveal`, pure — no mocks), extending `test_graph_stub.py`:**
 - `reference_retry` set, `ref_retry_count < 3` → `"try_again"`.
 - `reference_retry` set, `ref_retry_count == 3` → `"confirm"` — the trust boundary, pinned.
-- `reference_retry is None` → `"confirm"`, and the destination is `route_next_scene`'s answer
-  (`generate_scene` with unfinalized scenes, `output_mod` without).
+- `reference_retry is None` → `"confirm"`, and the destination is `route_next_scene`'s answer:
+  `output_mod` if any scene is drawn but unscreened, else `generate_scene` if any scene is
+  undrawn, else `compose`. (Three answers, not two, since `output_mod` moved inside the loop on
+  2026-08-13 — `moderation-stack` §4c. `route_reveal`'s edge map gained `"compose"` with it.)
 - `moderation_router` with scenes present → `"reveal"`; with scenes empty → `"analyze"`; the
   raise-on-flag paths are unchanged.
 
@@ -542,7 +545,7 @@ future migration (S1 §6.3).
 - **A raising `enqueue` → `503` and `status` is back to `awaiting_confirm`** (§4.9).
 
 **Config, extending `test_config.py`:**
-- `RECURSION_LIMIT == MAX_SCENES * 4 + 15`; `IMAGE_BUDGET` unchanged at `MAX_SCENES * 2 + 9`.
+- `RECURSION_LIMIT == MAX_SCENES * 5 + 15`; `IMAGE_BUDGET` unchanged at `MAX_SCENES * 2 + 9`.
 
 **Graph:**
 - A run that taps once reaches `compose` having visited `char_ref_mod` twice (the re-moderation path).

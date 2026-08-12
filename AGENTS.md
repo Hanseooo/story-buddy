@@ -222,8 +222,14 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
   **Built today** (`backend/pipeline/graph.py`):
   `input_gate → [moderation_router] → analyze → segment → char_bible → char_ref_mod →
   [moderation_router] → reveal → [route_reveal] → generate_scene → consistency_check →
-  [route_after_check] → regenerate → consistency_check → … → output_mod →
-  [route_after_output_mod] → compose`.
+  [route_after_check] → regenerate → consistency_check → output_mod →
+  [route_after_output_mod] → … → compose`.
+  ⚠️ **`output_mod` is INSIDE the scene loop** (2026-08-13): each scene is screened the moment it
+  finalizes, and `route_after_output_mod` hands back to `route_next_scene` rather than going
+  straight to `compose`. It used to run once over the finished book, which meant the gate could
+  only ever fire after every image was drawn and paid for — prod job 4f7698d5 (2026-08-12) died on
+  s2 of 8 and took 11 fal images with it. ADR-025's no-partial-book rule is unchanged; only the
+  bill is. This is what `RECURSION_LIMIT`'s `MAX_SCENES * 5` counts.
   `moderation_router` (ADR-024 pure router) handles both post-`input_gate` and post-`char_ref_mod`
   edges; `route_after_output_mod` reads `moderation_status="failed"` and raises.
   `char_ref_mod` runs `settings.moderation_primary_image_model` (mistralai/mistral-small-3.2-24b-instruct
@@ -232,7 +238,9 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
   ref image.
   `reveal` (ADR-029) is effect-free and holds one `interrupt()`; `route_reveal` loops `"try_again"`
   back to `char_bible` and enforces the 3-tap cap.
-  `output_mod` runs the same two-classifier check on each output scene, with one soften-and-retry.
+  `output_mod` runs the same two-classifier check on each output scene, with one soften-and-retry,
+  and logs **which** classifier flagged and whether the other was consulted (CC-5) — a flag that
+  kills a book used to leave no account of who killed it.
   All provider calls (meta-llama/llama-guard-4-12b, Presidio, mistralai/mistral-small-3.2-24b-instruct, OpenRouter backstops) go through
   `backend/providers.py`; `get_signed_url` lives there too (Storage seam). `export` is not yet built.
   The worker's LangGraph checkpointer reaches Supabase Postgres on the **direct connection (5432)**, never
@@ -311,7 +319,9 @@ Two independent projects, no shared root tooling — run commands from the named
   protection is not configured, so the check reports but does not block merge.
 - Deterministic tests mock every `providers.py` call. Never assert on generated content quality;
   that belongs to the offline eval harness, never CI.
-- Intentional skips / known flaky: none documented yet.
+- Intentional skips: `tests/test_rls_isolation.py` (needs `SUPABASE_DB_URL` → a local Supabase) and
+  `tests/test_smoke_providers.py` (needs real provider credentials). Both skip clean in CI by design.
+  Known flaky: none documented yet.
 
 ## Project-Specific Invariants
 - Story Memory (`backend/contracts/`) is the only channel between pipeline modules — no ad-hoc
@@ -503,9 +513,13 @@ is not documentation of a good design; it is the blast radius, written down so t
   reads ownership from the row; `app/nickname.py` + `lib/nickname.ts` share S1 §5.1's fourteen vectors;
   `supabaseClient.ts` is on `createBrowserClient`; `get_current_user` guards `POST /storybooks` and
   `/confirm`. **The two legacy policy surfaces are gone** — `0008` dropped them.
-  ⚠️ **Not built, and S3-13 says it is not optional:** the 33-test Tier-A isolation suite that is meant
-  to ship *with* `0008`. Until it exists, ADR-017's "real, testable boundary" is again unbacked by a
-  single test — the exact gap S3 was written to close.
+  **The Tier-A isolation suite (S3-13) is built:** `backend/tests/test_rls_isolation.py`, 39 test
+  functions covering spec tests 1–25 (jobs, classrooms, profiles) and 28–33 (storage). Realtime
+  tests 26–27 need a WebSocket client and are deliberately out of scope for pytest.
+  ⚠️ **It does not run in CI.** Every case is `skipif`-gated on `SUPABASE_DB_URL`, which CI does not
+  set, so ADR-017's "real, testable boundary" is backed by tests that only a human runs:
+  `SUPABASE_DB_URL=postgresql://postgres:postgres@localhost:54322/postgres uv run pytest
+  tests/test_rls_isolation.py` against a local Supabase with `0007` + `0008` applied.
   **`scene-setting-and-subject-binding` is built (2026-08-13):** one artifact class across five nodes.
   `contracts/` gains **two** additive fields — `Scene.location_id` and `VlmVerdict.subjects_unique`
   (both defaulted, no `schema_version` bump); `subjects_unique` is declared last so ADR-004's order

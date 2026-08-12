@@ -113,10 +113,14 @@ MIN_STORY_WORDS = 5     # a book needs at least one scene's worth of text
 MAX_STORY_WORDS = 800   # ADR-012 range 500-800, top of range, tunable
 IMAGE_BUDGET = MAX_SCENES * 2 + 9   # 15 scenes × 2 + 9-image prelude (ADR-029)
 # Spec `docs/specs/regeneration-controller.md` §4: LangGraph's graph-level backstop.
-# ADR-024's formula — max_scenes × 4 + fixed_prelude. The ×4 is the deepest a single scene
-# can go: generate_scene → consistency_check → regenerate → consistency_check.
+# ADR-024's formula — max_scenes × 5 + fixed_prelude. The ×5 is the deepest a single scene
+# can go: generate_scene → consistency_check → regenerate → consistency_check → output_mod.
+# Was ×4 until 2026-08-13, when moderation moved from one pass over the finished book to one call
+# per finalized scene (spec §4c granularity). That adds exactly one super-step per scene, so the
+# multiplier has to move with it or a 15-scene book where every scene regenerates dies on
+# recursion_limit instead of on anything real.
 # ADR-029 reveal: 6 linear steps (input_gate·analyze·segment·char_bible·char_ref_mod·reveal)
 # + 3 retry cycles of 3 super-steps each (char_bible·char_ref_mod·reveal) = 15. This prelude is
 # a DIFFERENT unit from IMAGE_BUDGET's — they were only ever coincidentally equal at 9 (spec §4.13).
 SUPER_STEP_PRELUDE = 15
-RECURSION_LIMIT = MAX_SCENES * 4 + SUPER_STEP_PRELUDE
+RECURSION_LIMIT = MAX_SCENES * 5 + SUPER_STEP_PRELUDE

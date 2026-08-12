@@ -41,6 +41,9 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
-      - run: uv sync
+      # --frozen matches backend/Dockerfile. Bare `uv sync` re-resolves and rewrites uv.lock in
+      # the runner's checkout, exits 0, and nobody sees it — so a drifted lockfile passes here and
+      # fails the Northflank build with "Commit could not be built". Same flag, same verdict.
+      - run: uv sync --frozen
       - run: uv run ruff check .
       - run: uv run pytest

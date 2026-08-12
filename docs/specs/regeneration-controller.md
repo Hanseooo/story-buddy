@@ -273,11 +273,12 @@ never persisted. Gating `regen_count` on `paid` would count it as zero.
 today's graph costs 5 non-loop nodes plus 2 per scene: a **13-scene book already dies with
 `GraphRecursionError`**, before any of this. ADR-024 calls setting it explicitly "required, not
 optional"; `consistency-checker` §8 marked it **unowned**. This change takes the loop from 2 deep to 4
-— the exact ×4 ADR-024's formula assumes — so leaving it would be shipping a bug this spec doubled.
+— the ×4 ADR-024's formula assumed when this spec landed — so leaving it would be shipping a bug this
+spec doubled.
 
 ```python
 # app/config.py, beside IMAGE_BUDGET
-RECURSION_LIMIT = MAX_SCENES * 4 + SUPER_STEP_PRELUDE    # ADR-024: max_scenes × 4 + fixed_prelude
+RECURSION_LIMIT = MAX_SCENES * 5 + SUPER_STEP_PRELUDE    # ADR-024: max_scenes × 5 + fixed_prelude
 ```
 
 Passed as `config={"configurable": {"thread_id": job_id}, "recursion_limit": RECURSION_LIMIT}`. The
@@ -285,6 +286,10 @@ prelude term is now `SUPER_STEP_PRELUDE = 15` (`kid-flow-pause-lifecycle.md` §4
 section originally shared with `IMAGE_BUDGET`. That sharing was only ever coincidental: `SUPER_STEP_PRELUDE`
 counts super-steps (graph visits), `IMAGE_BUDGET`'s prelude counts images (provider calls) — different
 units, corrected once ADR-029's `reveal` node actually landed.
+
+The multiplier is now **5**, not this spec's 4: `output_mod` moved to once-per-scene on 2026-08-13, adding
+a fifth super-step behind the finalizing `consistency_check`. ADR-024's amendment of that date carries the
+reasoning (prod job `4f7698d5`); nothing in this spec's own loop changed.
 
 ### Edge cases
 

@@ -35,19 +35,34 @@ def moderation_router(state: StoryMemory) -> str:
 
 
 def route_after_output_mod(state: StoryMemory) -> str:
-    """Pure ADR-024 router: reads moderation_status written by output_mod (spec §3)."""
+    """Pure ADR-024 router: reads moderation_status written by output_mod (spec §3).
+
+    Hands back to `route_next_scene` rather than going straight to compose: moderation now runs
+    per finalized scene, so "what next" is the same question that router answers everywhere else.
+    """
     if any(s.moderation_status == "failed" for s in state.scenes):
         raise RuntimeError("output_moderation_failed")
-    return "compose"
+    return route_next_scene(state)
 
 
 def route_next_scene(state: StoryMemory) -> str:
     """Pure label-returning router (ADR-024 Decision 4) — the graph's scene-loop router.
 
-    Used by route_after_check. Destination changed from "compose" to "output_mod" — compose is
-    now reached only after output moderation passes.
+    **Moderation runs inside the loop** (spec §4c granularity, resolved 2026-08-13): a scene is
+    screened as soon as it is finalized, before the next one is drawn. ADR-025's no-partial-book
+    rule is untouched — a flag still fails the whole job. What changes is the bill.
+
+    Screening at the END meant the gate could only ever fire after every scene had been drawn,
+    judged, possibly regenerated, and PAID FOR. Prod job 4f7698d5 (2026-08-12) died on s2 of 8 and
+    took 11 fal images down with it; f4d0fd74 (2026-08-11) died on s5 of 7. Both would have stopped
+    two images in from here. Spec §8 listed this granularity as "Confirm before build" and it was
+    built unconfirmed; confirmed now, in favour of the cheaper failure.
     """
-    return "generate_scene" if any(s.final_image_ref is None for s in state.scenes) else "output_mod"
+    if any(s.final_image_ref is not None and s.moderation_status is None for s in state.scenes):
+        return "output_mod"
+    if any(s.final_image_ref is None for s in state.scenes):
+        return "generate_scene"
+    return "compose"
 
 
 def route_reveal(state: StoryMemory) -> str:
@@ -96,7 +111,12 @@ def build_graph(checkpointer=None):
     graph.add_edge("char_bible", "char_ref_mod")                    # char_ref_mod writes status, never raises on flag
     graph.add_conditional_edges("char_ref_mod", moderation_router)  # raises on flag; routes to "reveal"
     graph.add_conditional_edges(
-        "reveal", route_reveal, {"try_again": "char_bible", "generate_scene": "generate_scene", "output_mod": "output_mod"}
+        "reveal", route_reveal,
+        # "compose" is reachable here only on a resume into a book that is already fully drawn AND
+        # moderated — rare, but route_next_scene can return it now, and an unmapped label is a
+        # graph-build error rather than a routing bug anyone would see in a log.
+        {"try_again": "char_bible", "generate_scene": "generate_scene", "output_mod": "output_mod",
+         "compose": "compose"},
     )
     graph.add_edge("generate_scene", "consistency_check")
     graph.add_conditional_edges("consistency_check", route_after_check)

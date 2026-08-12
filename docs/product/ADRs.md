@@ -1452,7 +1452,18 @@ This closes `story-memory-contract` §9; the `job_state.py` port is now unblocke
 ## ADR-024 — LangGraph node & edge conventions (partial-return, sequential per-scene loop, pure routers)
 
 **Status:** Accepted (2026-07-22) · resolves **D-B** (DECISION_BACKLOG) · **amends ADR-003** (deterministic
-state machine) and **ADR-023** (state = `StoryMemory`)
+state machine) and **ADR-023** (state = `StoryMemory`) · amended 2026-08-13
+
+**Amendment (2026-08-13) — the per-scene loop is five super-steps deep, not four.**
+
+`output_mod` ran once over the finished book, after every scene was drawn. It now runs **once per scene**,
+immediately after that scene is finalized, so the deepest path a single scene can take is
+`generate_scene → consistency_check → regenerate → consistency_check → output_mod` — five, not four.
+Prod job `4f7698d5` (2026-08-12) is the reason it moved: a flag on scene `s2` failed an 8-scene book
+*after* all 11 paid images had been drawn, where a per-scene gate would have stopped it at ~2. Decision 3's
+formula becomes **`≈ max_scenes × 5 + fixed_prelude`**. `fixed_prelude` (`SUPER_STEP_PRELUDE = 15`,
+`kid-flow-pause-lifecycle` §4.13) and `IMAGE_BUDGET` are **unchanged**: this buys graph headroom for a gate
+that already ran, not additional images — and the whole point of the move is to spend *fewer*.
 
 **Context:** ADR-003 froze the pipeline as a deterministic LangGraph state machine; ADR-023 froze the runtime
 state as the single `StoryMemory` Pydantic model but explicitly deferred *how nodes write to it*. Today the
@@ -1507,7 +1518,7 @@ provider resilience or the failure-screen policy (**D-C**) or the field-order en
      allowed retry. The loop terminates because each pass reduces the count of `final_image_ref is None` scenes
      by one.
    - **`recursion_limit` is set explicitly**, derived from the scene cap (a function of ADR-012's word cap):
-     `≈ max_scenes × 4 + fixed_prelude`. A normal book exceeds LangGraph's default of 25 super-steps, so this is
+     `≈ max_scenes × 5 + fixed_prelude` (×4 as first written; see the 2026-08-13 amendment). A normal book exceeds LangGraph's default of 25 super-steps, so this is
      required, not optional. It also **backstops the invariant**: a scene that never finalizes (e.g. a hard
      provider failure) trips `GraphRecursionError` instead of looping forever. The failure *policy* that
      prevents that (retry / off-ramp / failure screen) is **D-C**, not this ADR.

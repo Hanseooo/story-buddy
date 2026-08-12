@@ -425,6 +425,7 @@ def classify_image_primary(image_url: str) -> bool:
         "Explain your reasoning, then classify it."
     )
     verdict = judge(prompt, [image_url], _ImageSafetyVerdict, model=settings.moderation_primary_image_model)
+    _log.info("classify_image_primary: is_safe=%s reasoning=%.300s", verdict.is_safe, verdict.safety_reasoning)
     return verdict.is_safe
 
 
@@ -436,10 +437,33 @@ class _ImageSafetyVerdict(BaseModel):
 
 def classify_image_backstop(image_url: str) -> bool:
     """gemma-3-27b-it via OpenRouter — violence, gore, dangerous content check."""
+    # "frightening imagery" flagged the genre. Prod job 4f7698d5 (2026-08-12) lost an 8-scene book
+    # at the last gate on s2 — a girl walking up to the "big, scary house" that IS the story, whose
+    # text `input_gate` had already passed. `_soften_prompt` cannot rescue that: prepending
+    # "child-safe, gentle" does not remove the scary house, so the retry flagged too and 11 paid
+    # images went in the bin. The primary is NSFW-only (see above), so this rubric was the only one
+    # that could have fired.
+    #
+    # The hard categories are untouched. What is qualified is the one clause that made ordinary
+    # narrative tension indistinguishable from harm.
+    # ⚠️ UNMEASURED. Spec §7 names `tests/fixtures/moderation_cases.py` as the guard for exactly
+    # this, but that set is a Post-Phase-2 item and does not exist yet, and the one probe that does
+    # (`spikes/phase_05.py moderation`) is TEXT-only — it cannot exercise an image rubric at all.
+    # So this loosening rests on reasoning, not measurement. Build the image arm before Phase 2.
     prompt = (
         "You are reviewing an image for a children's educational storybook platform (ages 5–12). "
         "Assess whether the image is safe for children. "
-        "Flag: violence, gore, sexual content, frightening imagery, dangerous activities."
+        "Flag: violence, gore, sexual content, dangerous activities a child might imitate, and "
+        "imagery likely to genuinely distress a young child. "
+        "Do NOT flag ordinary storybook atmosphere: a spooky house, a dark forest, a worried or "
+        "startled character, mild suspense. Children's stories are built out of these, and the "
+        "story text this image illustrates has already passed a separate safety gate."
     )
     verdict = judge(prompt, [image_url], _ImageSafetyVerdict, model=settings.moderation_backstop_image_model)
+    # ADR-004 makes the model reason before it scores; both callers then discarded the reasoning and
+    # kept the bool, so a flag that killed a book left no account of what the classifier saw. Logged
+    # here rather than returned: `char_ref_mod` and `output_mod` both call these, and widening the
+    # return type would rewrite two nodes and three test files to carry a string neither branches on.
+    # ponytail: truncated, not structured — a `ModerationResult` field if it ever needs querying.
+    _log.info("classify_image_backstop: is_safe=%s reasoning=%.300s", verdict.is_safe, verdict.safety_reasoning)
     return verdict.is_safe

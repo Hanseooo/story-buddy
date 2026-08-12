@@ -163,6 +163,11 @@ def test_two_scene_run_loops_once_per_scene_and_reaches_compose(monkeypatch):
     Two scenes must produce two generate_scene/consistency_check pairs, both finalized, exactly
     two attempts total, and a run that terminates at compose rather than spinning to
     recursion_limit.
+
+    Since 2026-08-13 this is also where the moderation granularity is visible: `output_mod` appears
+    once per scene, right after that scene finalizes, instead of once at the end. That ordering IS
+    the fix for prod job 4f7698d5 — the gate can now fail on the first bad image rather than after
+    every image in the book has been paid for.
     """
     _mock_call_points(monkeypatch)
     monkeypatch.setattr(
@@ -189,9 +194,9 @@ def test_two_scene_run_loops_once_per_scene_and_reaches_compose(monkeypatch):
     assert ran == [
         "input_gate", "analyze", "segment", "char_bible",
         "char_ref_mod", "reveal",
-        "generate_scene", "consistency_check",
-        "generate_scene", "consistency_check",
-        "output_mod", "compose",
+        "generate_scene", "consistency_check", "output_mod",
+        "generate_scene", "consistency_check", "output_mod",
+        "compose",
     ]
     assert [s.final_image_ref for s in result["scenes"]] == ["stub/s0-1.png", "stub/s1-1.png"]
     assert sum(len(s.attempts) for s in result["scenes"]) == 2
@@ -247,9 +252,9 @@ def test_a_failing_scene_retries_once_then_passes_and_the_run_reaches_compose(mo
     assert ran == [
         "input_gate", "analyze", "segment", "char_bible",
         "char_ref_mod", "reveal",
-        "generate_scene", "consistency_check", "regenerate", "consistency_check",
-        "generate_scene", "consistency_check",
-        "output_mod", "compose",
+        "generate_scene", "consistency_check", "regenerate", "consistency_check", "output_mod",
+        "generate_scene", "consistency_check", "output_mod",
+        "compose",
     ]
     assert sum(len(s.attempts) for s in result["scenes"]) == 3
     assert all(s.final_image_ref is not None for s in result["scenes"])
