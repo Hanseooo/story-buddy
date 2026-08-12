@@ -6,6 +6,7 @@ Deterministic tests mock these functions; nothing here runs in CI (MASTER_SPEC �
 import json
 import logging
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from typing import TypeVar
 
@@ -49,7 +50,53 @@ VISION_PROVIDERS: dict[str, list[str]] = {
     "mistralai/mistral-small-3.2-24b-instruct": ["deepinfra", "parasail"],
 }
 
+# The only bound on a call's TOTAL duration. Prod job d83721d9 (2026-08-11) proved `timeout=60.0`
+# is not one: a judge request blocked 14m05s and never raised. httpx expands a scalar timeout to
+# connect/read/write/pool, and each is PER-OPERATION — the read value bounds the gap between chunks,
+# not the request — so a provider that trickles, or a write that stalls mid-upload on ~4 MB of
+# base64, can outlive it indefinitely. httpx exposes no total-duration option, so the clock has to
+# live outside the call. That stall ended only when RQ's 900s SIGALRM landed at 18:35:50 and the
+# SDK's `except Exception` swallowed it as retryable (18:35:52), spending two more paid fal images
+# past the deadline before the horse was killed.
+#
+# 120s against observed judge latencies of 1.2-1.8s (OpenRouter, same run) leaves ~60x of headroom,
+# and still covers MAX_RETRIES' worst case: the SDK caps backoff at MAX_RETRY_DELAY = 8.0.
+# ponytail: one number for text and vision alike. Split it per call site only if a real judge
+# latency ever lands near it — right now nothing is within two orders of magnitude.
+CALL_TIMEOUT_SECONDS = 120.0
+
 T = TypeVar("T", bound=BaseModel)
+
+
+def _bounded(model: str, call):
+    """Run `call` on a worker thread and give up on it after `CALL_TIMEOUT_SECONDS`.
+
+    Wraps the whole SDK call, so the bound covers `MAX_RETRIES`' attempts together rather than
+    resetting per attempt.
+
+    `TimeoutError` is deliberately an ordinary `Exception`: `consistency_check.judge_attempt`
+    catches that and returns `[]`, which means *unchecked*, so a stalled judge costs one verdict
+    and the book still ships (ADR-025). A `BaseException` would sail past that handler and kill the
+    whole book to save one page.
+
+    ponytail: the abandoned thread is never reclaimed — it holds a socket until the process exits,
+    and the pool is not reused as `shutdown(wait=False)` leaves it. That is the price of bounding
+    something httpx will not. Move to an async client if stalls ever become frequent enough for the
+    leak to matter; at one stall per book it does not.
+    """
+    pool = ThreadPoolExecutor(max_workers=1)
+    try:
+        # NOT `with ThreadPoolExecutor(...)`: its `__exit__` calls `shutdown(wait=True)`, which
+        # joins the very thread this is abandoning and re-hangs the worker on the way out.
+        return pool.submit(call).result(timeout=CALL_TIMEOUT_SECONDS)
+    except TimeoutError as exc:
+        # `Future.result` raises a bare, messageless TimeoutError, and `run_job`'s handler writes
+        # `str(exc)` into the row's `error` — the only account of the failure anyone gets later.
+        raise TimeoutError(
+            f"{model} did not answer within {CALL_TIMEOUT_SECONDS:.0f}s (call abandoned)"
+        ) from exc
+    finally:
+        pool.shutdown(wait=False)
 
 
 def structured_text(prompt: str, schema: type[T], model: str | None = None) -> T:
@@ -96,11 +143,15 @@ def _chat(
     if providers:
         prefs["only"] = providers
     extra_body = {"provider": prefs} if base_url == OPENROUTER_BASE_URL else {}
-    completion = OpenAI(base_url=base_url, api_key=api_key, timeout=60.0, max_retries=MAX_RETRIES).chat.completions.parse(
-        model=model,
-        messages=[{"role": "user", "content": content}],
-        response_format=schema,
-        extra_body=extra_body,
+    client = OpenAI(base_url=base_url, api_key=api_key, timeout=60.0, max_retries=MAX_RETRIES)
+    completion = _bounded(
+        model,
+        lambda: client.chat.completions.parse(
+            model=model,
+            messages=[{"role": "user", "content": content}],
+            response_format=schema,
+            extra_body=extra_body,
+        ),
     )
     message = completion.choices[0].message
     if message.parsed is None:

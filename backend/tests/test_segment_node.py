@@ -2,8 +2,16 @@ from pipeline.segment import split_sentences
 
 from unittest.mock import patch
 
+from app.config import MIN_SCENE_WORDS, MIN_SCENES
 from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, Input, StoryMemory
-from pipeline.segment import ExtractedScene, SceneSegmentation, repair, segment, segment_scenes
+from pipeline.segment import (
+    ExtractedScene,
+    SceneSegmentation,
+    merge_thin,
+    repair,
+    segment,
+    segment_scenes,
+)
 
 
 def test_split_sentences_on_period():
@@ -140,6 +148,57 @@ def test_repair_merges_18_ranges_to_15_with_union_of_characters():
     assert any("alice" in c and "bob" in c for c in merged_pairs)
 
 
+# --- thin-scene floor (#31) ---
+
+def _units(*counts: int) -> list[str]:
+    """One unit per count, each exactly `count` words long."""
+    return [" ".join(["word"] * c) for c in counts]
+
+
+def _words(scene: ExtractedScene, units: list[str]) -> int:
+    return sum(len(units[i].split()) for i in range(scene.start, scene.end + 1))
+
+
+def test_merge_thin_folds_away_a_scene_too_thin_to_draw():
+    """#31: prod job d83721d9 drew a page from `"Ana decided to help."` — 4 words, no subject
+    appearance, no setting, no action — and the image model invented one."""
+    units = _units(4, 17, 15, 4, 16, 12)     # the prod story, title line first
+    result = merge_thin([_r(i, i) for i in range(6)], units)
+    assert all(_words(s, units) >= MIN_SCENE_WORDS for s in result)
+
+
+def test_merge_thin_stops_before_the_book_runs_out_of_pages():
+    """A story of nothing but short sentences is what a 6-year-old writes. It still gets pages."""
+    units = _units(*([3] * 10))
+    assert len(merge_thin([_r(i, i) for i in range(10)], units)) == MIN_SCENES
+
+
+def test_merge_thin_leaves_a_one_page_story_alone():
+    """Below the floor with no neighbour to merge into: return it, do not spin."""
+    assert len(merge_thin([_r(0, 0)], _units(5))) == 1
+
+
+def test_merge_thin_keeps_every_sentence_on_exactly_one_page():
+    units = _units(4, 2, 30, 3, 20, 1, 9)
+    covered: list[int] = []
+    for s in merge_thin([_r(i, i) for i in range(7)], units):
+        covered.extend(range(s.start, s.end + 1))
+    assert covered == list(range(7))
+
+
+def test_merge_thin_carries_both_pages_characters():
+    units = _units(2, 3, 20, 20)
+    result = merge_thin(
+        [_r(0, 0, ["alice"]), _r(1, 1, ["bob"]), _r(2, 2), _r(3, 3)], units
+    )
+    assert set(result[0].characters_present) == {"alice", "bob"}
+
+
+def test_merge_thin_leaves_a_book_of_full_pages_untouched():
+    scenes = [_r(i, i) for i in range(4)]
+    assert merge_thin(scenes, _units(20, 20, 20, 20)) == scenes
+
+
 # --- Node helpers ---
 
 def _state(
@@ -199,6 +258,27 @@ def test_segment_caption_equals_text_excerpt():
         result = segment(_state(characters=[_char("c0", "the dog")]))
     for s in result["scenes"]:
         assert s.caption == s.text_excerpt
+
+
+def test_segment_does_not_mint_a_page_it_cannot_draw():
+    """#31 regression, prod job d83721d9: the node applies the floor, not just `repair`.
+
+    The two excerpts asserted absent are the two pages that shipped — the title line and the
+    four-word fragment — each drawn by a model with nothing to go on.
+    """
+    raw = (
+        "The Lost Little Star\n"
+        "Once upon a time, a little girl named Ana found a tiny glowing star in her backyard. "
+        "The star had fallen from the night sky and could not find its way home. "
+        "Ana decided to help. "
+        "She carried the star to the highest hill in the village and held it up high. "
+        "The star floated back into the sky and twinkled brightly, thanking Ana."
+    )
+    seg = SceneSegmentation(scenes=[_r(i, i) for i in range(6)])
+    with patch("pipeline.segment.segment_scenes", return_value=seg):
+        excerpts = [s.text_excerpt for s in segment(_state(raw=raw))["scenes"]]
+    assert "Ana decided to help." not in excerpts
+    assert "The Lost Little Star" not in excerpts
 
 
 def test_segment_maps_roster_names_to_char_ids():

@@ -18,6 +18,20 @@ def test_cel_preset_equals_default_style_fragment():
     assert STYLE_PRESETS["cel"] == settings.default_style_fragment
 
 
+def test_no_preset_lets_the_image_model_letter_the_page():
+    """Prod job d83721d9's s2 (2026-08-11) came back with a speech balloon whose text was the
+    smeared pseudo-lettering image models produce, because the child's book is not a comic script
+    and there is no dialogue for it to letter.
+
+    `comic` invites it hardest — "bold comic-book illustration" carries panels and balloons with
+    the genre — but nothing stopped `cel` or `gouache` either, so the prohibition is stated on all
+    three rather than patched onto the one that was caught.
+    """
+    for name, fragment in STYLE_PRESETS.items():
+        assert "no speech bubbles" in fragment, f"{name} may draw speech bubbles"
+        assert "no lettering" in fragment, f"{name} may letter the page"
+
+
 def test_recursion_limit_derives_from_max_scenes_and_the_super_step_prelude():
     """ADR-024's ×4 formula, corrected prelude: 6 linear steps + 3 retry cycles of 3
     (char_bible, char_ref_mod, reveal) = 15 (spec §4.13)."""

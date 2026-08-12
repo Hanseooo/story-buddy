@@ -1,3 +1,5 @@
+import threading
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -251,6 +253,80 @@ def test_every_llm_client_retries_transient_failures():
             call()
 
         assert mock_openai.call_args.kwargs["max_retries"] > 0
+
+
+# --- wall-clock bound ---
+
+def _blocking_parse(release: threading.Event):
+    """A `.parse` that hangs the way prod job d83721d9's did — no bytes, no error, no end."""
+    def parse(**kwargs):
+        release.wait()
+        return _fake_completion(_Caption(caption="hi"))
+    return parse
+
+
+def test_a_hung_call_is_abandoned_at_the_wall_clock():
+    """Prod job d83721d9 (2026-08-11): one `/chat/completions` blocked 14m05s under `timeout=60.0`.
+
+    Timeline from the OpenRouter generation IDs, which are unix seconds:
+      18:20:50  job dequeued, RQ deadline = +900s
+      18:21:46  consistency_check s1 opens (Langfuse latency: 14m19s; s0 was 9.42s)
+      18:35:50  RQ's SIGALRM — exactly the 900s mark
+      18:35:52  "Retrying request to /chat/completions in 0.449936 seconds"
+      18:35:53  gen-1786473353, the FIRST OpenRouter generation of the whole gap
+
+    The call did not time out, it was interrupted: 845s elapsed and nothing fired. httpx expands
+    scalar `timeout=60.0` to connect/read/write/pool=60 and every one of those is PER-OPERATION —
+    a read timeout bounds the gap between chunks, not the request. httpx has no total-duration
+    option, so bounding it needs a clock outside the call.
+    """
+    release = threading.Event()
+    with patch("providers.OpenAI") as mock_openai, \
+         patch.object(providers, "CALL_TIMEOUT_SECONDS", 0.2):
+        mock_openai.return_value.chat.completions.parse = _blocking_parse(release)
+        started = time.monotonic()
+        try:
+            with pytest.raises(TimeoutError):
+                providers.structured_text("prompt", _Caption)
+            elapsed = time.monotonic() - started
+        finally:
+            release.set()
+
+    # The bound is the point. A `with ThreadPoolExecutor(...)` block would pass the `raises` above
+    # and then join the hung thread on `__exit__`, reproducing the exact hang this test forbids.
+    assert elapsed < 5, f"call was not abandoned: returned after {elapsed:.1f}s"
+
+
+def test_the_timeout_is_catchable_by_the_pipelines_own_handlers():
+    """Load-bearing: `consistency_check.judge_attempt` catches `Exception` and returns [], which
+    means *unchecked* — the page still finalizes and the book still ships (ADR-025). A bound that
+    raised `BaseException` would sail past that handler and kill the book instead of one verdict."""
+    assert issubclass(TimeoutError, Exception)
+
+
+def test_the_timeout_says_which_model_hung():
+    """`run_job`'s `except` writes `str(exc)` into the row's `error`, and that string is all anyone
+    gets after the fact. A bare `TimeoutError()` from `Future.result` carries no message at all."""
+    release = threading.Event()
+    with patch("providers.OpenAI") as mock_openai, \
+         patch.object(providers, "CALL_TIMEOUT_SECONDS", 0.2):
+        mock_openai.return_value.chat.completions.parse = _blocking_parse(release)
+        try:
+            with pytest.raises(TimeoutError, match="gemma-hangs-a-lot"):
+                providers.structured_text("prompt", _Caption, model="gemma-hangs-a-lot")
+        finally:
+            release.set()
+
+
+def test_a_call_that_answers_is_untouched_by_the_bound():
+    """The wrapper must be transparent — same parsed object, same kwargs reaching the SDK."""
+    with patch("providers.OpenAI") as mock_openai:
+        parse = mock_openai.return_value.chat.completions.parse
+        parse.return_value = _fake_completion(_Caption(caption="hi"))
+        result = providers.structured_text("prompt", _Caption)
+
+    assert result.caption == "hi"
+    assert parse.call_args.kwargs["response_format"] is _Caption
 
 
 # --- redact_pii ---

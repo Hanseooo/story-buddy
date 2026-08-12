@@ -289,7 +289,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ jobId: st
             <KineticText text="Meet your cast!" />
           </h1>
           <p className="font-kid text-lg text-foreground/70 max-w-md">
-            Make sure they look right! Tap a word to fix it, or let's start drawing.
+            Make sure they look right! Tap a word to fix it, or let&apos;s start drawing.
           </p>
         </motion.div>
 
@@ -347,7 +347,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ jobId: st
             onClick={() => handleConfirm("confirm")}
             className="rounded-[16px] bg-[var(--color-primary)] text-[var(--color-surface)] min-h-[56px] px-12 font-kid text-xl disabled:opacity-50 hover:brightness-105 active:scale-[0.98] transition-all font-bold shadow-[0_10px_28px_rgba(49,85,217,0.12)]"
           >
-            They look great! Let's go!
+            They look great! Let&apos;s go!
           </button>
         </div>
         

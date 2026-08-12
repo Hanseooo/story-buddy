@@ -40,7 +40,8 @@ class Settings(BaseSettings):
     # wholly owned by the `style-presets` spec; `char_bible` only needs *a* fragment to exist.
     default_style_fragment: str = (
         "flat cel-shaded cartoon, thick clean black outlines of even weight, bright solid colour fills, "
-        "two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing"
+        "two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing, "
+        "no speech bubbles, no captions, no lettering"
     )
 
     # The judge moves to a self-hosted vLLM server after Phase 2.5 (ADR-019). vLLM speaks the
@@ -69,15 +70,44 @@ settings = Settings()
 
 # ponytail: module-level dict — style presets are not env-driven; BaseSettings adds nothing here.
 # Keys mirror the CHECK constraint in supabase/migrations/0002_jobs_style_preset_id.sql.
+#
+# Every fragment ends "no speech bubbles, no captions, no lettering". Prod job d83721d9's s2
+# (2026-08-11) drew a speech balloon full of smeared pseudo-lettering: a child's story carries no
+# dialogue to letter, so anything the model writes is invented and malformed. `comic` invites it
+# hardest — "bold comic-book illustration" brings panels and balloons with the genre — but the
+# other two could letter a page just as easily, so all three state it.
+#
+# ponytail: ADR-035 derives the description filter from these same `no <term>` clauses, so "bubbles"
+# now also drops out of a child's character description — a story about a fish blowing bubbles
+# loses that word from its draw prompt. Cheaper than the alternative (a second, hand-listed set of
+# prohibitions that the model never sees) and it fails safe. If a preset ever needs a forbidden
+# word back in descriptions, give `style_prohibitions` an exempt set rather than softening this.
 STYLE_PRESETS: dict[str, str] = {
     "cel": settings.default_style_fragment,
-    "comic": "bold comic-book illustration, heavy ink outlines of varied weight, flat spot colours, ben-day halftone dot shading, limited palette, no gradients, no glow",
-    "gouache": "flat gouache storybook illustration, thick confident ink outlines, matte paper grain, limited warm palette, flat colour fills, no gradients, no glossy highlights",
+    "comic": "bold comic-book illustration, heavy ink outlines of varied weight, flat spot colours, ben-day halftone dot shading, limited palette, no gradients, no glow, no speech bubbles, no captions, no lettering",
+    "gouache": "flat gouache storybook illustration, thick confident ink outlines, matte paper grain, limited warm palette, flat colour fills, no gradients, no glossy highlights, no speech bubbles, no captions, no lettering",
 }
 
 # Spec `docs/specs/image-generator.md` §4: ADR-025 D4 domain-level breaker.
 # IMAGE_BUDGET derives from MAX_SCENES so both share one source of truth.
 MAX_SCENES = 15
+# Issue #31. MAX_SCENES was a ceiling with no floor, so `segment` shipped a page whose entire
+# excerpt was `"Ana decided to help."` and another that was the story's title line. `build_prompt`
+# passes the excerpt through verbatim (invariant 2, correct), so the image model filled the vacuum.
+#
+# 12 is the top of the safe band, not a midpoint. On the prod story the sentence lengths are
+# bimodal — 4, 4 against 12, 15, 16, 17 — so every floor from 5 to 12 collapses the same two pages
+# and no others. 13 would start eating that 12-word closing sentence, which was never the problem.
+# Raise only against a story where a genuinely thin page survived; the mean sentence there was
+# 11 words, and a floor above the mean stops being an outlier guard and becomes the pagination
+# policy.
+MIN_SCENE_WORDS = 12
+# The guard that makes the floor safe to raise. A story of nothing but short sentences — which is
+# what a 6-year-old writes — would otherwise merge down to a one-page book. Below this the floor
+# is simply not enforced: pages matter more to the child than words per page.
+# ponytail: a constant, not `len(timeline)`. The timeline is the story's real beat count and would
+# be the better answer, but it is an LLM product that is sometimes empty, and this is the backstop.
+MIN_SCENES = 3
 # Spec `docs/specs/input-gate-hardening.md` §4a: the API-boundary length guard.
 MIN_STORY_WORDS = 5     # a book needs at least one scene's worth of text
 MAX_STORY_WORDS = 800   # ADR-012 range 500-800, top of range, tunable

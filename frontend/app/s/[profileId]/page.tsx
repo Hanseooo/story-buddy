@@ -296,7 +296,7 @@ function BookCard({
           {card.bucket === "terminal-failure" && (
             <div className="absolute inset-0 flex items-end justify-center pb-4">
               <span className="px-3 py-1.5 rounded-full bg-destructive text-on-destructive text-xs font-extrabold shadow-sm">
-                Didn't finish
+                Didn&apos;t finish
               </span>
             </div>
           )}

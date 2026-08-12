@@ -164,7 +164,7 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
   it("paused: shows Use this one! button regardless of taps_left", async () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
     await renderPage(makeParams("j1"));
-    await waitFor(() => expect(screen.getByRole("button", { name: /use this one/i })).toBeDefined());
+    await waitFor(() => expect(screen.getByRole("button", { name: /they look great|use this one/i })).toBeDefined());
   });
 
   it("paused: chips not rendered when taps_left == 0", async () => {
@@ -174,7 +174,7 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     };
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: zeroTaps }));
     await renderPage(makeParams("j1"));
-    await waitFor(() => expect(screen.getByRole("button", { name: /use this one/i })).toBeDefined());
+    await waitFor(() => expect(screen.getByRole("button", { name: /they look great|use this one/i })).toBeDefined());
     expect(screen.queryByText("orange sock")).toBeNull();
   });
 
@@ -199,10 +199,10 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
   it("Use this one! POSTs confirm action and calls refetch", async () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
     await renderPage(makeParams("j1"));
-    await waitFor(() => expect(screen.getByRole("button", { name: /use this one/i })).toBeDefined());
+    await waitFor(() => expect(screen.getByRole("button", { name: /they look great|use this one/i })).toBeDefined());
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /use this one/i }));
+      fireEvent.click(screen.getByRole("button", { name: /they look great|use this one/i }));
     });
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
@@ -219,10 +219,10 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     // and /jobs/{id}/review all attach the session token; this call was the only one that didn't.
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
     await renderPage(makeParams("j1"));
-    await waitFor(() => expect(screen.getByRole("button", { name: /use this one/i })).toBeDefined());
+    await waitFor(() => expect(screen.getByRole("button", { name: /they look great|use this one/i })).toBeDefined());
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /use this one/i }));
+      fireEvent.click(screen.getByRole("button", { name: /they look great|use this one/i }));
     });
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
@@ -243,9 +243,9 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
     const view = await renderPage(paramsPromise);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: /use this one/i })).toBeDefined());
+    await waitFor(() => expect(screen.getByRole("button", { name: /they look great|use this one/i })).toBeDefined());
 
-    act(() => { fireEvent.click(screen.getByRole("button", { name: /use this one/i })); });
+    act(() => { fireEvent.click(screen.getByRole("button", { name: /they look great|use this one/i })); });
 
     // Now simulate bucket flipping to in-flight (status → queued → running)
     mockUseJob.mockReturnValue(jobState({ bucket: "in-flight", row: { ...RUNNING_ROW, status: "running" } }));
@@ -263,10 +263,10 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 }) as unknown as typeof fetch;
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
     await renderPage(makeParams("j1"));
-    await waitFor(() => expect(screen.getByRole("button", { name: /use this one/i })).toBeDefined());
+    await waitFor(() => expect(screen.getByRole("button", { name: /they look great|use this one/i })).toBeDefined());
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /use this one/i }));
+      fireEvent.click(screen.getByRole("button", { name: /they look great|use this one/i }));
     });
 
     await waitFor(() => expect(REFETCH).toHaveBeenCalled());
@@ -278,7 +278,7 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
     await renderPage(makeParams("j1"));
 
-    await waitFor(() => expect(screen.getByRole("button", { name: /use this one/i })).toBeDefined());
+    await waitFor(() => expect(screen.getByRole("button", { name: /they look great|use this one/i })).toBeDefined());
     expect(screen.getByText(/Kiko/)).toBeDefined();
     expect(screen.queryByTestId("failure-screen")).toBeNull();
   });

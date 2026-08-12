@@ -99,6 +99,63 @@ def test_build_prompt_omits_the_image_roll_when_no_character_has_a_reference():
     assert "Image 1" not in prompt
 
 
+def test_build_prompt_binds_a_named_character_in_the_scene_text_to_its_reference():
+    """Issue #32: `REFERENCE_CLAUSE` governed the IMAGES only, so "found a tiny glowing star"
+    summoned a second star independently of anything the prompt said about Image 2."""
+    star = _char("c1", "the star", species="star")
+    star.canonical_ref_image = "job-123/ref-c1-1.png"
+
+    prompt = build_prompt("Ana found a tiny glowing star.", ["c1"], [star], FRAG)
+
+    assert "not to a second thing of the same name" in prompt
+
+
+def test_build_prompt_omits_the_binding_clause_when_no_reference_was_sent():
+    """The text-to-image path (generate_scene:55-57) sends no images, so there is nothing to
+    bind the name TO — same reason the image roll is omitted."""
+    star = _char("c1", "the star", species="star")
+
+    prompt = build_prompt("Ana found a tiny glowing star.", ["c1"], [star], FRAG)
+
+    assert "not to a second thing of the same name" not in prompt
+
+
+def test_build_prompt_drops_a_species_that_only_repeats_the_name():
+    """Issue #32: "the star - star" is a definition, not a description — a second bare assertion
+    of the noun the excerpt is already summoning."""
+    star = _char("c1", "the star", species="star")
+
+    prompt = build_prompt("Ana found a star.", ["c1"], [star], FRAG)
+
+    assert prompt.split("\n\n")[0] == "the star"
+
+
+def test_build_prompt_keeps_the_other_axes_when_the_species_repeats_the_name():
+    star = _char("c1", "the star", species="star", body_features=["tiny"])
+
+    prompt = build_prompt("Ana found a star.", ["c1"], [star], FRAG)
+
+    assert prompt.split("\n\n")[0] == "the star - tiny"
+
+
+def test_build_prompt_keeps_a_species_the_name_does_not_carry():
+    ana = _char("c0", "Ana", species="girl")
+
+    prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
+
+    assert prompt.split("\n\n")[0] == "Ana - girl"
+
+
+def test_build_prompt_keeps_a_multi_word_species_the_name_only_partly_carries():
+    """Token match, not substring: "the retriever" does not carry "golden retriever", so the
+    species survives. The degenerate case this drops is exact, not approximate."""
+    dog = _char("c0", "the retriever", species="golden retriever")
+
+    prompt = build_prompt("It barked.", ["c0"], [dog], FRAG)
+
+    assert prompt.split("\n\n")[0] == "the retriever - golden retriever"
+
+
 def test_referenced_characters_is_the_order_generate_scene_uploads():
     ana = _char("c0", "Ana")
     star = _char("c1", "the star")
@@ -272,14 +329,18 @@ def test_correct_prompt_never_drops_the_base_prompt_under_either_boolean():
 
 # --- ADR-035: the style fragment's own prohibitions filter the description ---
 
-COMIC = STYLE_PRESETS["comic"]    # "...no gradients, no glow"
-CEL = STYLE_PRESETS["cel"]        # "...no gradients, no glossy highlights, no airbrushing"
+COMIC = STYLE_PRESETS["comic"]    # "...no gradients, no glow, + the lettering ban"
+CEL = STYLE_PRESETS["cel"]        # "...no glossy highlights, no airbrushing, + the lettering ban"
+
+# Shared by all three presets since 2026-08-12 (d83721d9's lettered speech balloon). Named once so
+# a preset's OWN prohibitions stay readable in the assertions below.
+LETTERING = {"speech", "bubbles", "captions", "lettering"}
 
 
 def test_style_prohibitions_reads_the_no_clauses_out_of_the_fragment():
     """ADR-035 Decision 1: derived, never hand-listed — ADR-022 keeps sole ownership."""
-    assert style_prohibitions(COMIC) == {"gradients", "glow"}
-    assert style_prohibitions(CEL) == {"gradients", "glossy", "highlights", "airbrushing"}
+    assert style_prohibitions(COMIC) == {"gradients", "glow"} | LETTERING
+    assert style_prohibitions(CEL) == {"gradients", "glossy", "highlights", "airbrushing"} | LETTERING
 
 
 def test_style_prohibitions_of_a_fragment_that_forbids_nothing_is_empty():
@@ -376,7 +437,9 @@ def test_build_prompt_drops_a_style_forbidden_attribute_from_the_description_lin
     reference the same style clause guaranteed would not be glowing."""
     star = _char("c1", "the star", species="star", colours=["glowing"])
     prompt = build_prompt("Ana found a star.", ["c1"], [star], COMIC)
-    assert "the star - star" in prompt
+    # The description line survives with the forbidden colour gone; its species is suppressed
+    # separately, as a repeat of the name (issue #32).
+    assert prompt.split("\n\n")[0] == "the star"
     assert "glowing" not in prompt
 
 
@@ -386,7 +449,7 @@ def test_build_prompt_still_emits_the_text_excerpt_verbatim_when_it_names_a_forb
     star = _char("c1", "the star", species="star", colours=["glowing"])
     prompt = build_prompt("Ana found a tiny glowing star.", ["c1"], [star], COMIC)
     assert "Ana found a tiny glowing star." in prompt
-    assert "the star - star\n" in prompt or prompt.count("glowing") == 1
+    assert prompt.count("glowing") == 1
 
 
 def test_correct_prompt_does_not_reinforce_a_style_forbidden_colour():

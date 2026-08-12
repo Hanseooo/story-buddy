@@ -84,7 +84,7 @@ describe("Bookshelf — §9.11–12", () => {
         (el) => el.getAttribute("href") === `/s/${PROFILE_ID}/process/j2`
       );
       expect(cardLink).toBeDefined();
-      expect(screen.getByText("Still making it…")).toBeDefined();
+      expect(screen.getByText("Writing...")).toBeDefined();
     });
   });
 
@@ -98,7 +98,7 @@ describe("Bookshelf — §9.11–12", () => {
         (el) => el.getAttribute("href") === `/s/${PROFILE_ID}/process/j3`
       );
       expect(cardLink).toBeDefined();
-      expect(screen.getByText("Come meet your cast!")).toBeDefined();
+      expect(screen.getByText("Needs characters")).toBeDefined();
     });
   });
 

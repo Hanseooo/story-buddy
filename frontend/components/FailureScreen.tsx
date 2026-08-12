@@ -79,38 +79,6 @@ function FailureCard({
   );
 }
 
-export default function FailureScreen({
-  kind,
-  inputText = "",
-  countable = true,
-}: Props) {
-  const router = useRouter();
-  const { profileId } = useParams() as { profileId: string };
-  const [submitting, setSubmitting] = useState(false);
-  const chainCount = getChainCount();
-
-  function submitRetry() {
-    setSubmitting(true);
-    fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/storybooks`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: inputText }),
-    })
-      .then(res => (res.ok ? res.json() : null))
-      .then(data => { if (data) router.push(`/s/${profileId}/process/${data.job_id}`); })
-      .finally(() => setSubmitting(false));
-  }
-
-  const tryDifferent = chainCount >= 3 ? (
-    <button
-      className="mt-2 font-kid text-base text-primary underline hover:text-primary-deep transition-colors"
-      onClick={() => router.push(`/s/${profileId}/write`)}
-      disabled={submitting}
-    >
-      Want to try a different story instead?
-    </button>
-  ) : null;
-
 const ReviseVignette = () => (
   <div className="relative w-32 h-32 flex items-center justify-center mb-4">
     <div className="absolute w-24 h-28 bg-[var(--color-surface)] border border-[var(--color-primary)]/20 rounded-[12px] shadow-[0_10px_28px_rgba(49,85,217,0.12)] p-3 flex flex-col gap-3">
@@ -194,6 +162,38 @@ const RetryVignette = () => (
     </motion.div>
   </div>
 );
+
+export default function FailureScreen({
+  kind,
+  inputText = "",
+  countable = true,
+}: Props) {
+  const router = useRouter();
+  const { profileId } = useParams() as { profileId: string };
+  const [submitting, setSubmitting] = useState(false);
+  const chainCount = getChainCount();
+
+  function submitRetry() {
+    setSubmitting(true);
+    fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/storybooks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: inputText }),
+    })
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => { if (data) router.push(`/s/${profileId}/process/${data.job_id}`); })
+      .finally(() => setSubmitting(false));
+  }
+
+  const tryDifferent = chainCount >= 3 ? (
+    <button
+      className="mt-2 font-kid text-base text-primary underline hover:text-primary-deep transition-colors"
+      onClick={() => router.push(`/s/${profileId}/write`)}
+      disabled={submitting}
+    >
+      Want to try a different story instead?
+    </button>
+  ) : null;
 
   if (kind === "revise") {
     return (
