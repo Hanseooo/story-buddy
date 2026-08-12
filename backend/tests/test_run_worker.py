@@ -9,8 +9,15 @@ import logging
 from unittest.mock import MagicMock, patch
 
 from rq import Worker
+from rq.timeouts import JobTimeoutException, UnixSignalDeathPenalty
 
-from worker.run_worker import _ReportingWorker, _report_failed, main
+from worker.run_worker import (
+    HardJobTimeout,
+    _HardDeathPenalty,
+    _ReportingWorker,
+    _report_failed,
+    main,
+)
 
 KILLED = "Work-horse terminated unexpectedly; waitpid returned None; "
 
@@ -74,6 +81,46 @@ def test_handle_job_failure_still_runs_rqs_own_bookkeeping():
 
     super_call.assert_called_once()
     report.assert_called_once_with(job, KILLED)
+
+
+def _fire(penalty) -> BaseException:
+    """What SIGALRM does: `handle_death_penalty` is the signal handler RQ installs."""
+    try:
+        penalty.handle_death_penalty(14, None)  # signum, frame
+    except BaseException as exc:  # noqa: BLE001 — the exception under test IS a BaseException
+        return exc
+    raise AssertionError("the death penalty did not raise")
+
+
+def test_rqs_default_deadline_is_swallowed_by_an_ordinary_except_exception():
+    """The bug, stated as a test (issue #33).
+
+    `pipeline/consistency_check.py:87` and `char_bible.py:225` catch `Exception` and deliberately
+    CONTINUE — that ADR-025 asymmetry is correct and must not change. `generate_scene.py:48` does
+    the same and then falls through to a PAID image call. Any of them eats an ordinary deadline.
+    """
+    assert isinstance(_fire(UnixSignalDeathPenalty(900, JobTimeoutException)), Exception)
+
+
+def test_the_hard_deadline_sails_past_that_same_handler():
+    caught_as_exception = False
+    try:
+        raise _fire(_HardDeathPenalty(900, JobTimeoutException, job_id="rq-1"))
+    except Exception:  # every swallow site in the pipeline, and openai/_base_client.py:1059
+        caught_as_exception = True
+    except HardJobTimeout:
+        pass
+    assert not caught_as_exception
+
+
+def test_it_overrides_the_exception_rq_passes_positionally():
+    """`rq/worker/base.py:1548` calls `death_penalty_class(timeout, JobTimeoutException, job_id=...)`.
+    Ignoring that second argument is the whole mechanism — honouring it restores the bug."""
+    assert isinstance(_fire(_HardDeathPenalty(900, JobTimeoutException, job_id="rq-1")), HardJobTimeout)
+
+
+def test_the_forking_worker_installs_the_hard_deadline():
+    assert _ReportingWorker.death_penalty_class is _HardDeathPenalty
 
 
 def test_main_installs_the_reporting_worker_off_win32():
