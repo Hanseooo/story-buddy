@@ -44,6 +44,13 @@ async function renderPage(paramsPromise: Promise<{ jobId: string }>) {
   return res!;
 }
 
+async function renderAndSwitchToPages(paramsPromise: Promise<{ jobId: string }>) {
+  const res = await renderPage(paramsPromise);
+  await waitFor(() => expect(screen.getByLabelText("Pages View")).toBeDefined());
+  fireEvent.click(screen.getByLabelText("Pages View"));
+  return res;
+}
+
 const REFETCH = vi.fn();
 
 function jobState(overrides: Partial<ReturnType<typeof mockUseJob>>) {
@@ -106,7 +113,7 @@ describe("BookPage — reader (terminal-success)", () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
     mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
 
-    await renderPage(makeParams("j1"));
+    await renderAndSwitchToPages(makeParams("j1"));
 
     await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
     expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/0.png");
@@ -118,7 +125,7 @@ describe("BookPage — reader (terminal-success)", () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
     mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
 
-    await renderPage(makeParams("j1"));
+    await renderAndSwitchToPages(makeParams("j1"));
 
     await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
     expect(screen.getByRole("img")).toHaveAttribute("alt", "The dog ran.");
@@ -130,7 +137,7 @@ describe("BookPage — reader (terminal-success)", () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
     mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
 
-    await renderPage(makeParams("j1"));
+    await renderAndSwitchToPages(makeParams("j1"));
 
     await waitFor(() => expect(screen.getByLabelText("Page 1 of 2")).toBeDefined());
   });
@@ -139,7 +146,7 @@ describe("BookPage — reader (terminal-success)", () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
     mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
 
-    await renderPage(makeParams("j1"));
+    await renderAndSwitchToPages(makeParams("j1"));
 
     await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
     fireEvent.click(screen.getByTestId("nav-next"));
@@ -152,7 +159,7 @@ describe("BookPage — reader (terminal-success)", () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
     mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
 
-    await renderPage(makeParams("j1"));
+    await renderAndSwitchToPages(makeParams("j1"));
 
     await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
     fireEvent.click(screen.getByTestId("nav-next"));
@@ -172,7 +179,7 @@ describe("BookPage — reader (terminal-success)", () => {
       data: [SIGNED[0]], error: null,
     });
 
-    await renderPage(makeParams("j1"));
+    await renderAndSwitchToPages(makeParams("j1"));
 
     await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
     expect(screen.queryByTestId("nav-next")).toBeNull();
@@ -183,7 +190,7 @@ describe("BookPage — reader (terminal-success)", () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
     mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
 
-    await renderPage(makeParams("j1"));
+    await renderAndSwitchToPages(makeParams("j1"));
 
     await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
     expect(resetFailChain).toHaveBeenCalledTimes(1);
@@ -195,7 +202,7 @@ describe("BookPage — reader (terminal-success)", () => {
       .mockResolvedValueOnce({ data: null, error: new Error("network") })
       .mockResolvedValueOnce({ data: SIGNED, error: null });
 
-    await renderPage(makeParams("j1"));
+    await renderAndSwitchToPages(makeParams("j1"));
 
     await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
     expect(mockCreateSignedUrls).toHaveBeenCalledTimes(2);
