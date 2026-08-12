@@ -84,7 +84,9 @@ exactly the drift AGENTS.md's *Definition of Done* grep exists to prevent.
 2. **Breaker first.** `state.cost.image_count >= IMAGE_BUDGET` → raise. Pure arithmetic, evaluated
    before any spend, so a runaway cannot buy one more image on its way out.
 3. `build_prompt(scene.text_excerpt, scene.characters_present, state.characters,
-   state.style.prompt_fragment)` — unchanged from `prompt-optimizer`.
+   state.style.prompt_fragment, location)` — where `location` is `state.locations` looked up by
+   `scene.location_id`, or `None` when the scene has no location or the id is absent from the
+   roster (`scene-setting-and-subject-binding.md` §4.1).
 4. Collect `canonical_ref_image` for each `char_id` in `characters_present` that resolves to a
    `Character` carrying one.
 5. Helper: if `{story_id}/{scene_id}-{attempt_n}.png` already exists in Storage → return it with `paid=False`.
@@ -99,6 +101,7 @@ exactly the drift AGENTS.md's *Definition of Done* grep exists to prevent.
 |---|---|
 | **`characters_present` empty, or no present character has a reference** | `text_to_image` with the same prompt, logged. `segment` can legitimately produce unreferenced scenes, and the style fragment is still in the prompt (ADR-007's belt-and-suspenders half). |
 | **`char_id` present but absent from `state.characters`** | Skipped, logged. Same posture as `build_prompt` and `segment` — this node may not extend the roster. |
+| **`location_id` present but absent from `state.locations`** | Resolves to `None`, no `Setting:` line. Same posture as `build_prompt` and `segment` — this node may not extend the roster. |
 | **Reference exists but `ref_verdict.matches_description is False`** | **Used anyway.** ADR-028 deliberately ships the best-of reference and persists the failing verdict. Filtering it here would silently drop the scene to text-to-image and discard the art style with it (ADR-001's "no error, no warning" failure mode). |
 | **Storage asset already exists (resume)** | Reused; no fal call, no `image_count` bump. The `Attempt` is still appended — a re-executed super-step must still produce its state write. |
 | **fal hard failure after ADR-025 retries** | Propagates out of the node → `run_job.py`'s top-level `except` → job `failed`. No placeholder (ADR-010, ADR-025 D2). |

@@ -18,6 +18,15 @@ log = logging.getLogger(__name__)
 
 BUCKET = "storybook-images"
 
+# ponytail: a module constant plus the existing log line, NOT a persisted `Attempt` field —
+# that would be a third contract change for a problem logs already make traceable. Bump it on
+# every wording change; the ADR-028-style hit rate is only comparable within one version, and the
+# 2026-08-11 rewording already cost this project a whole discarded series. Upgrade path: if a
+# measurement series ever has to be reconstructed from checkpoints rather than logs, promote this
+# to an `Attempt` field the way `Character.ref_verdict_prompt_version` was promoted.
+# 1 = pre-2026-08-13; 2 = adds the uniqueness question (scene-setting-and-subject-binding §4.4).
+JUDGE_PROMPT_VERSION = 2
+
 # Reason-then-score (ADR-004). The prompt asks in exactly the order the schema declares, and
 # `providers._assert_field_order` rejects a provider that answers out of order.
 #
@@ -39,9 +48,10 @@ First describe every difference you observe between {name} on the page and the r
 say whether it is the same character; list which of the reference's attributes are actually \
 present on the page; whether the page is drawn in the same art style as the reference — the same \
 linework, shading and colouring technique — ignoring background, composition, pose, crop and \
-expression; and whether the character's anatomy is intact, meaning no merged, missing or \
-duplicated body parts. Finally list the failure reasons that apply, choosing only from the fixed \
-set."""
+expression; whether the character's anatomy is intact, meaning no merged, missing or \
+duplicated body parts; and whether {name} is drawn exactly once — count only {name} itself, not \
+other things of the same kind that the scene simply contains. Finally list the failure reasons \
+that apply, choosing only from the fixed set."""
 
 
 class SceneVerdict(BaseModel):
@@ -56,6 +66,7 @@ class SceneVerdict(BaseModel):
     attributes_present: list[str] = Field(default_factory=list)
     style_match: bool = False
     anatomy_intact: bool = True
+    subjects_unique: bool = True                 # §4.4 — asked after anatomy, before the reasons
     failure_reasons: list[FailureReason] = Field(default_factory=list)   # LAST — the closed 7
 
 
@@ -92,15 +103,22 @@ def judge_attempt(image_path: str, subjects: list[tuple[str, str]]) -> list[Scen
         return []
 
 
-def _rank(a: Attempt) -> tuple[int, int, int, int]:
+def _rank(a: Attempt) -> tuple[int, int, int, int, int]:
     """ADR-028's lexicographic best-of signal, with unchecked sorting below every checked attempt.
 
     A pass scores (1, 1, 1, …) and beats anything that gated, so `max` needs no special case for
-    it. Unchecked scores (0, 0, 0, 0): promoting an unjudged image over a judged one would let a
+    it. Unchecked scores all zeros: promoting an unjudged image over a judged one would let a
     judge outage silently decide the page, contradicting invariant 4 (unchecked is never a pass).
+
+    `subjects_unique` sits between anatomy and style (§4.4): it does not GATE, but when a retry
+    fires for some other reason best-of now prefers the non-duplicated attempt at no extra draw.
+    Same record-and-rank-without-gating shape `style_match` already has below it.
     """
     v = a.vlm_verdict
-    return (0, 0, 0, 0) if v is None else (1, v.same_character, v.anatomy_intact, v.style_match)
+    return (
+        (0, 0, 0, 0, 0) if v is None
+        else (1, v.same_character, v.anatomy_intact, v.subjects_unique, v.style_match)
+    )
 
 
 def consistency_check(state: StoryMemory) -> dict:
@@ -153,7 +171,9 @@ def consistency_check(state: StoryMemory) -> dict:
             attributes_present=list(dict.fromkeys(a for v in verdicts for a in v.attributes_present)),
             style_match=all(v.style_match for v in verdicts),
             anatomy_intact=all(v.anatomy_intact for v in verdicts),
+            subjects_unique=all(v.subjects_unique for v in verdicts),
         )
+
 
     # The pass rule: the two failures a child notices — wrong character, or three arms. style_match
     # is recorded and available to regeneration-controller's ranking but does NOT gate (ADR-007).
@@ -188,12 +208,15 @@ def consistency_check(state: StoryMemory) -> dict:
     # ran at all — without it an off-character page gives no way to distinguish the two.
     log.info(
         "consistency_check: scene_id=%s attempt=%d/%d subjects=%d %s same_character=%s "
-        "anatomy_intact=%s style_match=%s failure_reasons=%s passed=%s best_of=%s",
+        "anatomy_intact=%s style_match=%s subjects_unique=%s failure_reasons=%s passed=%s "
+        "best_of=%s judge_prompt_version=%d",
         scene.scene_id, len(updated), 2, len(subjects), "checked" if verdict else "unchecked",
         verdict and verdict.same_character, verdict and verdict.anatomy_intact,
-        verdict and verdict.style_match, [r.value for r in reasons], passed,
-        None if best is None else best + 1,
+        verdict and verdict.style_match, verdict and verdict.subjects_unique,
+        [r.value for r in reasons], passed,
+        None if best is None else best + 1, JUDGE_PROMPT_VERSION,
     )
+
 
     return {
         "scenes": [

@@ -1,11 +1,13 @@
 from app.config import STYLE_PRESETS
-from contracts.story_memory import Character, CharacterDescription, FailureReason
+from contracts.story_memory import Character, CharacterDescription, FailureReason, Location
 from pipeline.prompt_optimizer import (
     ANATOMY_CLAUSE,
     IDENTITY_CLAUSE,
+    NON_HUMAN_CLAUSE,
     build_prompt,
     correct_prompt,
     filtered_description,
+    filtered_location,
     permitted_words,
     referenced_characters,
     style_prohibitions,
@@ -66,7 +68,8 @@ def test_build_prompt_never_invents_detail_for_an_empty_description():
 
 def test_build_prompt_names_each_reference_image_by_index():
     """Issue #23: the payload sent prose plus ANONYMOUS image_urls, so the edit model composited
-    both references into the canvas instead of using them as identity conditioning."""
+    both references into the canvas instead of using them as identity conditioning. Since
+    scene-setting-and-subject-binding §4.2 each name carries its own attributes (the roll fold)."""
     ana = _char("c0", "Ana", species="girl")
     ana.canonical_ref_image = "job-123/ref-c0-1.png"
     star = _char("c1", "the star", species="star")
@@ -74,8 +77,8 @@ def test_build_prompt_names_each_reference_image_by_index():
 
     prompt = build_prompt("She held it toward the sky.", ["c0", "c1"], [ana, star], FRAG)
 
-    assert "Image 1 is Ana." in prompt
-    assert "Image 2 is the star." in prompt
+    assert "Image 1 is Ana - girl." in prompt
+    assert "Image 2 is the star." in prompt      # species repeats the name → dropped (issue #32)
 
 
 def test_build_prompt_numbers_images_in_upload_order_not_roster_order():
@@ -459,3 +462,331 @@ def test_correct_prompt_does_not_reinforce_a_style_forbidden_colour():
     result = correct_prompt("draw a star", [FailureReason.wrong_colour], [star], COMIC)
     assert "match the reference's exact colours: yellow" in result
     assert "glowing" not in result
+
+
+# --- ADR-035 surface 5: location descriptions (§6 test 15) ---
+
+def test_filtered_location_drops_a_forbidden_word_from_the_description():
+    """Same word-level rule as `_filter_axis`: the forbidden rendering property goes, the real
+    subject fact stays."""
+    filtered = filtered_location(
+        Location(loc_id="loc0", name="the cave", description="glowing cave"), COMIC
+    )
+    assert filtered.description == "cave"
+
+
+def test_filtered_location_never_touches_the_name():
+    """The name is what the child called the place, and it is the whole `Setting:` line when the
+    description is null. Filtering it could empty the line entirely."""
+    filtered = filtered_location(
+        Location(loc_id="loc0", name="the glowing cave", description="glowing cave"), COMIC
+    )
+    assert filtered.name == "the glowing cave"
+
+
+def test_filtered_location_drops_a_description_with_nothing_left():
+    filtered = filtered_location(
+        Location(loc_id="loc0", name="the cave", description="glowing"), COMIC
+    )
+    assert filtered.description is None
+
+
+def test_filtered_location_leaves_a_permitted_description_alone():
+    location = Location(loc_id="loc0", name="the beach", description="golden sand, palm trees")
+    assert filtered_location(location, COMIC) == location
+
+
+def test_filtered_location_passes_none_through():
+    assert filtered_location(None, COMIC) is None
+
+
+def test_filtered_location_handles_a_null_description():
+    location = Location(loc_id="loc0", name="the beach")
+    assert filtered_location(location, COMIC) == location
+
+
+# --- §4.2 D2: the roll fold (§6 tests 8-11) ---
+
+def test_the_roll_folds_the_description_into_the_image_sentence():
+    """§6 test 8. Today the roll and the attribute line are two unbound blocks; folded, each
+    reference image and its attributes are one sentence."""
+    ana = _char("c0", "Ana", species="girl", colours=["red"], clothing=["jeans"])
+    ana.canonical_ref_image = "job-123/ref-c0-1.png"
+
+    prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
+
+    assert "Image 1 is Ana - girl; red; jeans." in prompt
+
+
+def test_the_roll_of_a_character_with_no_populated_axes_is_byte_identical_to_before():
+    """§6 test 9. `_describe` floors to the bare name, so `"Image 1 is Ana."` is unchanged."""
+    ana = _char("c0", "Ana")
+    ana.canonical_ref_image = "job-123/ref-c0-1.png"
+
+    prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
+
+    assert "Image 1 is Ana." in prompt
+
+
+def test_a_present_character_with_no_reference_keeps_a_plain_line_below_the_roll():
+    """§6 test 10. It has no image number to fold into, so it keeps the description line it has
+    always had — and the line must appear AFTER the roll, not before it."""
+    ana = _char("c0", "Ana", species="girl")                 # no canonical reference
+    star = _char("c1", "the star", body_features=["tiny"])
+    star.canonical_ref_image = "job-123/ref-c1-1.png"
+
+    prompt = build_prompt("Ana held the star.", ["c0", "c1"], [ana, star], FRAG)
+
+    assert "Image 1 is the star - tiny." in prompt
+    assert prompt.index("Image 1 is") < prompt.index("Ana - girl")
+
+
+def test_a_referenced_character_is_described_once_and_only_in_the_roll():
+    """The fold REPLACES the separate attribute line — emitting both would restore the two
+    unbound blocks this change exists to remove, at double the tokens."""
+    ana = _char("c0", "Ana", species="girl")
+    ana.canonical_ref_image = "job-123/ref-c0-1.png"
+
+    prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
+
+    assert prompt.count("Ana - girl") == 1
+
+
+def test_the_roll_order_still_matches_referenced_characters_order():
+    """§6 test 11 / invariant 4. `generate_scene`, `regenerate` and `output_mod` all index
+    `ref_paths` against this roll, so a reorder here silently lies on three nodes."""
+    ana = _char("c0", "Ana", species="girl")
+    ana.canonical_ref_image = "job-123/ref-c0-1.png"
+    star = _char("c1", "the star", body_features=["tiny"])
+    star.canonical_ref_image = "job-123/ref-c1-1.png"
+    characters = [ana, star]
+
+    prompt = build_prompt("She held it up.", ["c1", "c0"], characters, FRAG)
+    order = [c.name for c in referenced_characters(["c1", "c0"], characters)]
+
+    assert order == ["the star", "Ana"]
+    assert prompt.index("Image 1 is the star") < prompt.index("Image 2 is Ana")
+
+
+def test_the_reference_clause_still_follows_the_roll():
+    """The clause is the antecedent-supplier for the generic "one of these characters" binding;
+    the fold must not detach it from the roll."""
+    ana = _char("c0", "Ana", species="girl")
+    ana.canonical_ref_image = "job-123/ref-c0-1.png"
+
+    prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
+
+    assert "Image 1 is Ana - girl. Use them only as references" in prompt
+
+
+# --- §4.2 D2: the two guard clauses (§6 tests 12-14) ---
+
+def _referenced(char_id: str, name: str, **kwargs) -> Character:
+    character = _char(char_id, name, **kwargs)
+    character.canonical_ref_image = f"job-123/ref-{char_id}-1.png"
+    return character
+
+
+def test_the_subject_count_clause_names_every_present_character():
+    ana = _referenced("c0", "Ana", species="girl")
+    star = _referenced("c1", "the star", body_features=["tiny"])
+
+    prompt = build_prompt("She held it up.", ["c0", "c1"], [ana, star], FRAG)
+
+    assert "This illustration contains exactly 2 characters: Ana and the star." in prompt
+
+
+def test_both_guard_clauses_appear_on_the_reference_path():
+    """§6 test 12, first half."""
+    ana = _referenced("c0", "Ana", species="girl")
+
+    prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
+
+    assert "This illustration contains exactly 1 character: Ana." in prompt
+    assert NON_HUMAN_CLAUSE in prompt
+
+
+def test_both_guard_clauses_appear_on_the_text_to_image_path():
+    """§6 test 12, second half — the load-bearing half. The roll and REFERENCE_CLAUSE are omitted
+    when no character has a reference, so a guard placed INSIDE the clause would be silently inert
+    on every reference-less scene."""
+    ana = _char("c0", "Ana", species="girl")               # no canonical reference
+
+    prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
+
+    assert "Image 1" not in prompt
+    assert "This illustration contains exactly 1 character: Ana." in prompt
+    assert NON_HUMAN_CLAUSE in prompt
+
+
+def test_the_count_reads_one_character_singular():
+    """§6 test 13, second half: no `1 characters`."""
+    ana = _referenced("c0", "Ana", species="girl")
+
+    prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
+
+    assert "1 characters" not in prompt
+
+
+def test_the_count_is_computed_after_the_missing_char_id_filter():
+    """§6 test 13, first half. A char_id absent from `characters` is already warned + skipped, so
+    counting before the filter asserts a number the prompt does not name."""
+    ana = _referenced("c0", "Ana", species="girl")
+
+    prompt = build_prompt("Ana waved.", ["c0", "ghost-id"], [ana], FRAG)
+
+    assert "This illustration contains exactly 1 character: Ana." in prompt
+    assert "ghost-id" not in prompt
+
+
+def test_a_present_character_without_a_reference_is_still_counted():
+    """§4.2 edge case: it keeps a plain description line and still occupies a subject slot."""
+    ana = _char("c0", "Ana", species="girl")               # no reference
+    star = _referenced("c1", "the star", body_features=["tiny"])
+
+    prompt = build_prompt("Ana held the star.", ["c0", "c1"], [ana, star], FRAG)
+
+    assert "This illustration contains exactly 2 characters: Ana and the star." in prompt
+
+
+def test_the_count_names_three_characters_with_a_serial_comma_free_join():
+    ana = _referenced("c0", "Ana", species="girl")
+    star = _referenced("c1", "the star", body_features=["tiny"])
+    bird = _referenced("c2", "the bird", species="bird")
+
+    prompt = build_prompt("They met.", ["c0", "c1", "c2"], [ana, star, bird], FRAG)
+
+    assert "exactly 3 characters: Ana, the star and the bird." in prompt
+
+
+def test_no_clause_at_all_when_characters_present_is_empty():
+    """§6 test 14 / §4.2 edge case: no roll, no count clause, no non-human clause — all three
+    would reference nothing."""
+    prompt = build_prompt("The waves crashed.", [], [], FRAG)
+
+    assert "Image 1" not in prompt
+    assert "This illustration contains exactly" not in prompt
+    assert NON_HUMAN_CLAUSE not in prompt
+    assert prompt == "\n\n".join(["The waves crashed.", FRAG])
+
+
+def test_no_clause_at_all_when_every_char_id_is_missing_from_the_roster():
+    """The filter can empty the list even when `characters_present` was not empty."""
+    prompt = build_prompt("The waves crashed.", ["ghost-id"], [], FRAG)
+
+    assert "This illustration contains exactly" not in prompt
+    assert NON_HUMAN_CLAUSE not in prompt
+
+
+def test_the_guard_clauses_sit_after_the_descriptions_and_before_the_excerpt():
+    ana = _char("c0", "Ana", species="girl")
+
+    prompt = build_prompt("Ana waved at the sea.", ["c0"], [ana], FRAG)
+
+    assert prompt.index("Ana - girl") < prompt.index("This illustration contains")
+    assert prompt.index(NON_HUMAN_CLAUSE) < prompt.index("Ana waved at the sea.")
+
+
+# --- §4.1 D1: the Setting line (§6 tests 15-16) ---
+
+def test_build_prompt_emits_a_setting_line_from_the_location():
+    location = Location(loc_id="loc0", name="the beach", description="golden sand, palm trees")
+
+    prompt = build_prompt("She ran.", [], [], FRAG, location)
+
+    assert "Setting: the beach - golden sand, palm trees" in prompt
+
+
+def test_build_prompt_emits_a_name_only_setting_line_when_the_description_is_null():
+    """§4.1: `ExtractedLocation.description` stays optional, and name-only is still better than
+    today's nothing."""
+    prompt = build_prompt("She ran.", [], [], FRAG, Location(loc_id="loc0", name="the beach"))
+
+    assert "Setting: the beach" in prompt
+    assert "Setting: the beach -" not in prompt
+
+
+def test_build_prompt_emits_no_setting_line_without_a_location():
+    """§6 test 16 — the default, and the whole behaviour for a story that names no place."""
+    prompt = build_prompt("She ran.", [], [], FRAG)
+
+    assert "Setting:" not in prompt
+
+
+def test_the_setting_line_is_style_filtered_but_keeps_its_name():
+    """§6 test 15 through `build_prompt`, not just the helper."""
+    location = Location(loc_id="loc0", name="the glowing cave", description="glowing cave")
+
+    prompt = build_prompt("She went in.", [], [], COMIC, location)
+
+    assert "Setting: the glowing cave - cave" in prompt
+
+
+def test_the_setting_line_precedes_the_text_excerpt():
+    """§4.1 edge case: on a conflict ("that night" vs a sunny description) the excerpt must be the
+    LATER and more specific assertion. Reduced, not eliminated (§4.5.3)."""
+    location = Location(loc_id="loc0", name="the beach", description="golden sand")
+
+    prompt = build_prompt("That night it was dark.", [], [], FRAG, location)
+
+    assert prompt.index("Setting: the beach") < prompt.index("That night it was dark.")
+
+
+def test_the_setting_line_follows_the_guard_clauses():
+    ana = _char("c0", "Ana", species="girl")
+    location = Location(loc_id="loc0", name="the beach", description="golden sand")
+
+    prompt = build_prompt("Ana ran.", ["c0"], [ana], FRAG, location)
+
+    assert prompt.index(NON_HUMAN_CLAUSE) < prompt.index("Setting: the beach")
+
+
+def test_the_style_fragment_is_still_last_with_a_location_present():
+    """Invariant 1, pinned against the new block."""
+    location = Location(loc_id="loc0", name="the beach", description="golden sand")
+
+    prompt = build_prompt("She ran.", [], [], FRAG, location)
+
+    assert prompt.endswith(FRAG)
+
+
+# --- §4.3 D3(a): the defensive half (§6 test 17) ---
+
+def test_referenced_characters_deduplicates_a_repeated_char_id():
+    """§6 test 17. `segment` no longer emits one, but a checkpoint written before that change
+    still can — and `_fal_ref_url`'s cache would return the SAME fal URL twice, so the roll would
+    say "Image 1 is the star. Image 2 is the star." over a single image."""
+    star = _char("c1", "the star")
+    star.canonical_ref_image = "job-123/ref-c1-1.png"
+
+    assert [c.char_id for c in referenced_characters(["c1", "c1"], [star])] == ["c1"]
+
+
+def test_referenced_characters_keeps_the_relative_order_of_the_survivors():
+    """Invariant 4: `dict.fromkeys` preserves first-seen order, so removing a duplicate cannot
+    reorder the survivors that "Image N is X" is indexed against on three nodes."""
+    ana = _char("c0", "Ana")
+    ana.canonical_ref_image = "job-123/ref-c0-1.png"
+    star = _char("c1", "the star")
+    star.canonical_ref_image = "job-123/ref-c1-1.png"
+
+    got = referenced_characters(["c1", "c0", "c1"], [ana, star])
+
+    assert [c.name for c in got] == ["the star", "Ana"]
+
+
+def test_the_roll_numbers_a_repeated_char_id_only_once():
+    """The end-to-end shape of the bug: one image, one number, one subject."""
+    star = _char("c1", "the star", body_features=["tiny"])
+    star.canonical_ref_image = "job-123/ref-c1-1.png"
+
+    prompt = build_prompt("It shone.", ["c1", "c1"], [star], FRAG)
+
+    assert "Image 1 is the star - tiny." in prompt
+    assert "Image 2" not in prompt
+    assert "This illustration contains exactly 1 character: the star." in prompt
+
+
+
+
+

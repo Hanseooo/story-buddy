@@ -8,7 +8,7 @@ caller stores the return value.
 import logging
 
 from app.config import settings
-from contracts.story_memory import Character, CharacterDescription, FailureReason
+from contracts.story_memory import Character, CharacterDescription, FailureReason, Location
 
 log = logging.getLogger(__name__)
 
@@ -109,6 +109,24 @@ def filtered_description(
     )
 
 
+def filtered_location(location: Location | None, style_fragment: str | None) -> Location | None:
+    """Pure, transient — ADR-035 surface 5. A location description reaches the draw prompt the way
+    a character description does, so `"glowing cave"` under a fragment ending `no glow` puts the
+    prompt at war with itself. Word-level, like the list axes.
+
+    The NAME is deliberately never filtered: it is what the child called the place, and when the
+    description is null it is the entire `Setting:` line. Removes, never invents, so invariant 2
+    is untouched.
+    """
+    if location is None or location.description is None:
+        return location
+    forbidden = style_prohibitions(style_fragment)
+    if not forbidden:
+        return location
+    kept = _filter_axis([location.description], forbidden)
+    return location.model_copy(update={"description": kept[0] if kept else None})
+
+
 def _describe(description: CharacterDescription, name: str) -> str:
     """The populated CharacterDescription axes as one line — same phrasing char_bible's
     reference_prompt uses, so the canonical reference and every scene prompt describe the same
@@ -153,7 +171,11 @@ def referenced_characters(
     by_id = {character.char_id: character for character in characters}
     return [
         character
-        for char_id in characters_present
+        # §4.3 D3(a), defensive half. `segment` no longer emits a duplicate, but a checkpoint
+        # written before that change can, and `_fal_ref_url`'s cache would hand fal the same URL
+        # twice. `dict.fromkeys` is order-preserving, so the survivors keep their relative order
+        # and "Image N is X" still names `ref_paths[N-1]` on all three consumers (invariant 4).
+        for char_id in dict.fromkeys(characters_present)
         if (character := by_id.get(char_id)) is not None and character.canonical_ref_image
     ]
 
@@ -184,39 +206,110 @@ REFERENCE_CLAUSE = (
     "referring to that character itself, not to a second thing of the same name."
 )
 
+# §4.2. BOTH clauses below sit OUTSIDE REFERENCE_CLAUSE deliberately: the roll and its clause are
+# omitted entirely on the text-to-image path (`generate_scene:55-57` sends no images), and both
+# guards must apply there too. Inside, they would be silently inert on every ref-less scene.
+
+# A WHOLE-CANVAS count, structurally different from REFERENCE_CLAUSE's per-character "draw each
+# character exactly once": that one constrains each subject, this one constrains the canvas. D3(b)
+# residual duplication is compositing, and a canvas-level assertion is the only shape that can
+# contradict it.
+SUBJECT_COUNT_CLAUSE = "This illustration contains exactly {n} character{plural}: {names}."
+
+# Wording from `char_bible.REFERENCE_PROMPT` (prod job 4cb31620 drew "the star" as a smiling mascot
+# with arms and legs), scoped to the scene path and closed with "unless described above".
+# UNCONDITIONAL, for the reason char_bible gives: branching on species needs a word list that is
+# wrong the first time a child writes something not on it, and this is a no-op for a person.
+NON_HUMAN_CLAUSE = (
+    "If a character is not a person, draw it as the kind of thing it actually is — give it no "
+    "human body and no human face unless described above."
+)
+
+
+def _names(names: list[str]) -> str:
+    """"Ana" / "Ana and the star" / "Ana, the star and the bird"."""
+    if len(names) < 2:
+        return "".join(names)
+    return f"{', '.join(names[:-1])} and {names[-1]}"
+
 
 def build_prompt(
     text_excerpt: str,
     characters_present: list[str],
     characters: list[Character],
     style_fragment: str | None,
+    location: Location | None = None,
 ) -> str:
     """Pure. Always includes the style fragment (invariant 1); never invents detail beyond
-    `text_excerpt` and the present characters' populated description axes (invariant 2)."""
+    `text_excerpt`, the present characters' populated description axes, and the scene's location
+    (invariant 2, widened by `scene-setting-and-subject-binding.md` §2).
+
+    `location` is defaulted so the four-positional-arg call stays compatible; the one production
+    caller (`generate_scene.py:77`) always passes it.
+    """
     style = style_fragment or settings.default_style_fragment
     by_id = {character.char_id: character for character in characters}
 
-    descriptions = []
-    for char_id in characters_present:
+    # `dict.fromkeys` mirrors segment's dedup (§4.3) so a checkpoint written before that change
+    # cannot reproduce a doubled subject on resume. Order-preserving — invariant 4.
+    present: list[Character] = []
+    for char_id in dict.fromkeys(characters_present):
         character = by_id.get(char_id)
         if character is None:
             log.warning("build_prompt: char_id %s not found in characters, skipping", char_id)
             continue
-        # ADR-035 surface 3. Issue #23's `s1`: this line asserted "glowing" while `style` below
-        # forbade it and the reference obeyed `style`, so the edit model saw the scene's noun
-        # describing something Image 2 visibly was not, and drew a second one.
-        descriptions.append(_describe(filtered_description(character.description, style), character.name))
+        present.append(character)
 
     # Omitted entirely on the text-to-image path (`generate_scene:55-57` sends no images), where
     # naming images that were never sent would be a lie the model has to reconcile.
     referenced = referenced_characters(characters_present, characters)
+    referenced_ids = {character.char_id for character in referenced}
+
+    # §4.2 THE ROLL FOLD — the whole D2 fix. The image and its attributes are ONE sentence, so the
+    # model has nothing left to associate. Net token reduction: the separate attribute line for a
+    # referenced character is not emitted below. A character with no populated axes yields
+    # "Image 1 is Ana." — byte-identical to before the fold.
     roll = [
-        " ".join(f"Image {n} is {character.name}." for n, character in enumerate(referenced, 1))
+        " ".join(
+            f"Image {n} is "
+            f"{_describe(filtered_description(character.description, style), character.name)}."
+            for n, character in enumerate(referenced, 1)
+        )
         + " "
         + REFERENCE_CLAUSE
     ] if referenced else []
 
-    return "\n\n".join([*roll, *descriptions, text_excerpt, style])
+    # ADR-035 surface 3. Issue #23's `s1`: this line asserted "glowing" while `style` below
+    # forbade it and the reference obeyed `style`, so the edit model saw the scene's noun
+    # describing something Image 2 visibly was not, and drew a second one.
+    descriptions = [
+        _describe(filtered_description(character.description, style), character.name)
+        for character in present
+        if character.char_id not in referenced_ids
+    ]
+
+    # Emitted only when there is a subject to count — all three clauses would otherwise reference
+    # nothing. The count is computed from `present`, i.e. AFTER the missing-char_id filter above,
+    # or it asserts a number the prompt does not name.
+    guards = ["\n".join([
+        SUBJECT_COUNT_CLAUSE.format(
+            n=len(present),
+            plural="" if len(present) == 1 else "s",
+            names=_names([character.name for character in present]),
+        ),
+        NON_HUMAN_CLAUSE,
+    ])] if present else []
+
+    # Emitted BEFORE the excerpt on purpose: when a location description and the excerpt conflict
+    # ("that night" against a sunny description), the excerpt is then the later and more specific
+    # assertion. Reduced, not eliminated (§4.5.3).
+    place = filtered_location(location, style)
+    setting = [
+        f"Setting: {place.name} - {place.description}" if place.description
+        else f"Setting: {place.name}"
+    ] if place else []
+
+    return "\n\n".join([*roll, *descriptions, *guards, *setting, text_excerpt, style])
 
 
 def _joined(values) -> str:

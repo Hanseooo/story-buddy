@@ -118,8 +118,15 @@ class VlmVerdict(BaseModel):
     anatomy_intact: bool = True        # ADR-028: merged, missing or duplicated body parts. Declared
                                        # LAST so the ADR-004 ordering above is untouched. Additive →
                                        # no schema_version bump. Best-of (ADR-010) ranks
-                                       # lexicographically: same_character → anatomy_intact → style_match.
+                                       # lexicographically: same_character → anatomy_intact →
+                                       # subjects_unique → style_match.
                                        # ponytail: bool, not a score — widen only if a measured tie forces it.
+    subjects_unique: bool = True       # scene-setting-and-subject-binding §4.4: each character
+                                       # drawn exactly once. Declared LAST so ADR-004's order above
+                                       # is untouched. Additive → no schema_version bump. Recorded
+                                       # and RANKED (ADR-010) but does NOT gate — `passed` stays
+                                       # `same_character and anatomy_intact`. Gating is blocked on a
+                                       # measured duplicate rate and issue #26 (spec §8.1).
 
 
 class Attempt(BaseModel):
@@ -136,6 +143,7 @@ class Scene(BaseModel):
     text_excerpt: str
     caption: Optional[str] = None
     characters_present: list[str] = Field(default_factory=list)  # char_ids
+    location_id: Optional[str] = None                            # set by `segment`, consumed by `build_prompt`
     prompt: Optional[str] = None
     attempts: list[Attempt] = Field(default_factory=list)        # no reducer — appended by the owning node (ADR-024, §8)
     final_image_ref: Optional[str] = None                        # best-of (ADR-010); durable path

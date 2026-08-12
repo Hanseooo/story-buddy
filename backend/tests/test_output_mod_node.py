@@ -120,7 +120,8 @@ def test_retry_ref_paths_agree_with_the_image_roll_the_softened_prompt_carries()
         from pipeline.output_mod import output_mod
         output_mod(_state([scene], characters=characters))
 
-    assert "Image 1 is the dog. Image 2 is the star." in mock_gen.call_args.args[0]
+    assert "Image 1 is the dog." in mock_gen.call_args.args[0]
+    assert "Image 2 is the star - dog." in mock_gen.call_args.args[0]
     assert mock_gen.call_args.args[4] == ["job-1/ref-c0.png", "job-1/ref-c2.png"]
 
 

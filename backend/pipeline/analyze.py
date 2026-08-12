@@ -78,7 +78,7 @@ usually a character. Every character needs a species — one plain word for what
 "girl", "dog", "robot". Fill colours, body_features and clothing only from what the story
 actually says; leave them empty rather than inventing details.
 
-Locations and objects: whatever the story mentions.
+Locations and objects: whatever the story mentions. Describe each location by what is permanently there — not the weather, the time of day, or what happens there.
 
 Timeline: the story's events in the order they happen, one short summary each.
 

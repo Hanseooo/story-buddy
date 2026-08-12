@@ -1,9 +1,8 @@
-from pipeline.segment import split_sentences
-
+import logging
 from unittest.mock import patch
 
 from app.config import MIN_SCENE_WORDS, MIN_SCENES
-from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, Input, StoryMemory
+from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, Input, Location, StoryMemory
 from pipeline.segment import (
     ExtractedScene,
     SceneSegmentation,
@@ -11,7 +10,9 @@ from pipeline.segment import (
     repair,
     segment,
     segment_scenes,
+    split_sentences,
 )
+
 
 
 def test_split_sentences_on_period():
@@ -55,7 +56,7 @@ def test_segment_scenes_passes_numbered_units_and_schema_to_provider():
     units = ["The dog ran.", "He found a ball."]
     stub = SceneSegmentation(scenes=[ExtractedScene(start=0, end=1, characters_present=[])])
     with patch("pipeline.segment.structured_text", return_value=stub) as mock_provider:
-        segment_scenes(units, [], [])
+        segment_scenes(units, [], [], [])
     prompt, schema = mock_provider.call_args.args
     assert "0: The dog ran." in prompt
     assert "1: He found a ball." in prompt
@@ -66,14 +67,20 @@ def test_segment_scenes_returns_parsed_wrapper_unchanged():
     units = ["A story."]
     stub = SceneSegmentation(scenes=[ExtractedScene(start=0, end=0, characters_present=[])])
     with patch("pipeline.segment.structured_text", return_value=stub):
-        result = segment_scenes(units, [], [])
+        result = segment_scenes(units, [], [], [])
     assert result is stub
+
 
 
 # --- repair pure tests ---
 
-def _r(start: int, end: int, chars: list[str] | None = None) -> ExtractedScene:
-    return ExtractedScene(start=start, end=end, characters_present=chars or [])
+def _r(
+    start: int, end: int, chars: list[str] | None = None, location: str | None = None
+) -> ExtractedScene:
+    return ExtractedScene(
+        start=start, end=end, characters_present=chars or [], location_name=location
+    )
+
 
 
 def test_repair_sorts_out_of_order_ranges():
@@ -199,6 +206,83 @@ def test_merge_thin_leaves_a_book_of_full_pages_untouched():
     assert merge_thin(scenes, _units(20, 20, 20, 20)) == scenes
 
 
+# --- §6 test 4: location_name survives all EIGHT ExtractedScene construction sites ---
+# One assertion per site. A missed site silently drops the field on exactly the messy stories
+# that need repair most, and no pre-existing test would catch it.
+
+def test_location_name_survives_the_clamp_site():
+    assert repair([_r(-5, 100, location="the beach")], 5)[0].location_name == "the beach"
+
+
+def test_location_name_survives_the_de_overlap_site():
+    result = repair([_r(0, 3, location="the beach"), _r(2, 4, location="the hill")], 5)
+    assert result[1].start == 4                      # this one WAS reconstructed by de-overlap
+    assert result[1].location_name == "the hill"
+
+
+def test_the_floor_site_constructs_with_no_location_name():
+    """The whole-story floor invents a range; it must not invent a location either. Carry-forward
+    supplies `locations[0]` at the node."""
+    assert repair([_r(9, 3, location="the beach")], 5)[0].location_name is None
+
+
+def test_location_name_survives_the_leading_gap_fill_site():
+    assert repair([_r(2, 4, location="the beach")], 5)[0].location_name == "the beach"
+
+
+def test_location_name_survives_the_interior_gap_fill_site():
+    result = repair([_r(0, 1, location="the beach"), _r(3, 4, location="the hill")], 5)
+    assert result[0].end == 2                        # the interior gap closed onto scene 0
+    assert result[0].location_name == "the beach"
+
+
+def test_location_name_survives_the_trailing_gap_fill_site():
+    result = repair([_r(0, 2, location="the beach")], 5)
+    assert result[0].end == 4                        # the trailing gap closed onto scene 0
+    assert result[0].location_name == "the beach"
+
+
+def test_location_name_survives_the_max_scenes_merge_site():
+    """16 single-unit scenes → exactly one merge, and ties go to the earliest pair, so scenes
+    0 and 1 fuse."""
+    scenes = [_r(i, i) for i in range(16)]
+    scenes[1] = _r(1, 1, location="the hill")
+
+    result = repair(scenes, 16)
+
+    assert len(result) == 15
+    assert result[0].location_name == "the hill"     # `a.location_name or b.location_name`
+
+
+def test_location_name_survives_the_merge_thin_site():
+    units = _units(2, 3, 20, 20)
+    result = merge_thin(
+        [_r(0, 0, location="the beach"), _r(1, 1, location="the hill"), _r(2, 2), _r(3, 3)], units
+    )
+    assert result[0].location_name == "the beach"
+
+
+# --- §6 test 5: the merge rule itself ---
+
+def test_a_merge_takes_the_first_scenes_location_when_both_have_one():
+    """`a.location_name or b.location_name` — the earlier scene wins, which is the same
+    earlier-scene-wins policy de-overlap already uses."""
+    scenes = [_r(i, i) for i in range(16)]
+    scenes[0] = _r(0, 0, location="the beach")
+    scenes[1] = _r(1, 1, location="the hill")
+
+    assert repair(scenes, 16)[0].location_name == "the beach"
+
+
+def test_merge_thin_takes_the_first_scenes_location_when_both_have_one():
+    units = _units(2, 3, 20, 20)
+    result = merge_thin(
+        [_r(0, 0, location="the beach"), _r(1, 1, location="the hill"), _r(2, 2), _r(3, 3)], units
+    )
+    assert result[0].location_name == "the beach"
+
+
+
 # --- Node helpers ---
 
 def _state(
@@ -206,6 +290,7 @@ def _state(
     redacted: str | None = None,
     characters: list | None = None,
     timeline: list | None = None,
+    locations: list | None = None,
 ) -> StoryMemory:
     return StoryMemory(
         schema_version=CURRENT_SCHEMA_VERSION,
@@ -215,7 +300,9 @@ def _state(
         input=Input(raw_text=raw, redacted_text=redacted),
         characters=characters or [],
         timeline=timeline or [],
+        locations=locations or [],
     )
+
 
 
 def _char(char_id: str, name: str) -> Character:
@@ -360,3 +447,140 @@ def test_caption_for_and_scene_caption_not_in_analyze_module():
     import pipeline.analyze as analyze_module
     assert not hasattr(analyze_module, "caption_for")
     assert not hasattr(analyze_module, "SceneCaption")
+
+
+_LOCS = [
+    Location(loc_id="loc0", name="the beach", description="golden sand"),
+    Location(loc_id="loc1", name="the hill", description="tall grass"),
+]
+
+
+def _seg(*locations: str | None) -> SceneSegmentation:
+    """One single-unit scene per argument, each carrying that `location_name`."""
+    return SceneSegmentation(scenes=[
+        ExtractedScene(start=i, end=i, characters_present=[], location_name=name)
+        for i, name in enumerate(locations)
+    ])
+
+
+# --- §6 test 1: name → loc_id, unknown name dropped with a warning ---
+
+def test_segment_maps_a_location_name_to_its_loc_id():
+    with patch("pipeline.segment.segment_scenes", return_value=_seg("the beach", "the hill")):
+        result = segment(_state(locations=_LOCS))
+
+    assert [s.location_id for s in result["scenes"]] == ["loc0", "loc1"]
+
+
+def test_segment_warns_and_drops_a_location_name_not_in_the_roster(caplog):
+    """Same posture as the character path: this node may not extend the roster, and it does not
+    raise. Carry-forward then fills the hole."""
+    with caplog.at_level(logging.WARNING), \
+         patch("pipeline.segment.segment_scenes", return_value=_seg("the beach", "Atlantis")):
+        result = segment(_state(locations=_LOCS))
+
+    assert "Atlantis" in caplog.text
+    assert result["scenes"][1].location_id == "loc0"
+
+
+# --- §6 test 2: carry-forward ---
+
+def test_segment_carries_the_previous_scenes_location_forward_over_a_null():
+    with patch("pipeline.segment.segment_scenes", return_value=_seg("the hill", None, None)):
+        result = segment(_state(raw="One. Two. Three.", locations=_LOCS))
+
+    assert [s.location_id for s in result["scenes"]] == ["loc1", "loc1", "loc1"]
+
+
+def test_segment_does_not_carry_a_location_backwards():
+    """Carry-forward only. A leading null takes `locations[0]`, not the location named later."""
+    with patch("pipeline.segment.segment_scenes", return_value=_seg(None, "the hill")):
+        result = segment(_state(locations=_LOCS))
+
+    assert [s.location_id for s in result["scenes"]] == ["loc0", "loc1"]
+
+
+# --- §6 test 3: the s0 floor, and the no-locations case ---
+
+def test_segment_gives_a_null_first_scene_the_first_location():
+    with patch("pipeline.segment.segment_scenes", return_value=_seg(None, None)):
+        result = segment(_state(locations=_LOCS))
+
+    assert [s.location_id for s in result["scenes"]] == ["loc0", "loc0"]
+
+
+def test_segment_leaves_every_location_id_none_when_the_story_names_no_location():
+    """Edge case: identical to today — no `Setting:` line will be emitted downstream."""
+    with patch("pipeline.segment.segment_scenes", return_value=_seg(None, None)):
+        result = segment(_state(locations=[]))
+
+    assert [s.location_id for s in result["scenes"]] == [None, None]
+
+
+# --- the roster reaches the prompt ---
+
+def test_segment_scenes_puts_the_location_roster_in_the_prompt():
+    units = ["The dog ran.", "He found a ball."]
+    stub = SceneSegmentation(scenes=[ExtractedScene(start=0, end=1, characters_present=[])])
+    with patch("pipeline.segment.structured_text", return_value=stub) as mock_provider:
+        segment_scenes(units, [], [], _LOCS)
+
+    prompt = mock_provider.call_args.args[0]
+    assert "the beach" in prompt
+    assert "the hill" in prompt
+
+
+def test_segment_scenes_says_none_when_the_story_has_no_locations():
+    stub = SceneSegmentation(scenes=[ExtractedScene(start=0, end=0, characters_present=[])])
+    with patch("pipeline.segment.structured_text", return_value=stub) as mock_provider:
+        segment_scenes(["A story."], [], [], [])
+
+    assert "Locations in the story: (none)" in mock_provider.call_args.args[0]
+
+
+def test_segment_passes_the_state_locations_to_segment_scenes():
+    stub = SceneSegmentation(scenes=[ExtractedScene(start=0, end=1, characters_present=[])])
+    with patch("pipeline.segment.segment_scenes", return_value=stub) as mock_seg:
+        segment(_state(locations=_LOCS))
+
+    assert mock_seg.call_args.args[3] == _LOCS
+
+
+# --- §6 tests 6 & 7 / spec §4.3 D3(a): one char_id per character, per scene ---
+
+def test_segment_maps_a_repeated_name_to_one_char_id():
+    """Path 1: the model returns the same name twice. Sending one reference image as two
+    subjects is how a character gets drawn twice, often once smaller."""
+    seg = SceneSegmentation(scenes=[
+        ExtractedScene(start=0, end=1, characters_present=["the dog", "the dog"]),
+    ])
+    with patch("pipeline.segment.segment_scenes", return_value=seg):
+        result = segment(_state(characters=[_char("c0", "the dog")]))
+
+    assert result["scenes"][0].characters_present == ["c0"]
+
+
+def test_segment_maps_two_roster_characters_sharing_a_name_to_one_char_id():
+    """Path 2: `analyze` takes `characters[:3]` and never checks for a name collision, so one
+    mention used to `.extend` BOTH ids and send two references for one named character."""
+    seg = SceneSegmentation(scenes=[
+        ExtractedScene(start=0, end=1, characters_present=["the dog"]),
+    ])
+    with patch("pipeline.segment.segment_scenes", return_value=seg):
+        result = segment(_state(characters=[_char("c0", "the dog"), _char("c1", "the dog")]))
+
+    assert result["scenes"][0].characters_present == ["c0"]
+
+
+def test_segment_dedup_preserves_first_seen_order_of_the_survivors():
+    """Invariant 4: removing a duplicate must not reorder the survivors — the roll index in
+    `build_prompt` is asserted against `ref_paths` on three separate nodes."""
+    seg = SceneSegmentation(scenes=[
+        ExtractedScene(start=0, end=1, characters_present=["the cat", "the dog", "the cat"]),
+    ])
+    with patch("pipeline.segment.segment_scenes", return_value=seg):
+        result = segment(_state(characters=[_char("c0", "the dog"), _char("c1", "the cat")]))
+
+    assert result["scenes"][0].characters_present == ["c1", "c0"]
+
+

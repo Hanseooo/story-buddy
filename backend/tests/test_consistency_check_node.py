@@ -19,7 +19,7 @@ from contracts.story_memory import (
     StoryMemory,
     VlmVerdict,
 )
-from pipeline.consistency_check import SceneVerdict, consistency_check, judge_attempt
+from pipeline.consistency_check import SceneVerdict, _rank, consistency_check, judge_attempt
 from pipeline.graph import route_after_check, route_next_scene
 
 
@@ -33,6 +33,7 @@ def _verdict(
     *,
     anatomy: bool = True,
     style: bool = True,
+    unique: bool = True,
     attributes: list[str] | None = None,
     reasons: list[FailureReason] | None = None,
     differences: str = "none",
@@ -43,8 +44,10 @@ def _verdict(
         attributes_present=attributes or [],
         style_match=style,
         anatomy_intact=anatomy,
+        subjects_unique=unique,
         failure_reasons=reasons or [],
     )
+
 
 
 def _supabase_returning_path_bytes() -> MagicMock:
@@ -135,8 +138,107 @@ def test_scene_verdict_declares_differences_first_and_failure_reasons_last():
         "attributes_present",
         "style_match",
         "anatomy_intact",
+        "subjects_unique",
         "failure_reasons",
     ]
+
+
+# --- §4.4 D3(b): uniqueness, measured not gated ---
+
+def test_scene_verdict_declares_subjects_unique_between_anatomy_and_the_reasons():
+    """ADR-004: the wire order must match the schema, and `providers._assert_field_order` rejects
+    a provider that answers out of order. The prompt asks in exactly this order."""
+    names = list(SceneVerdict.model_fields)
+    assert names.index("anatomy_intact") < names.index("subjects_unique") < names.index("failure_reasons")
+
+
+def test_the_judge_prompt_asks_the_uniqueness_question_after_anatomy_and_before_the_reasons():
+    from pipeline.consistency_check import JUDGE_PROMPT
+
+    assert JUDGE_PROMPT.index("anatomy is intact") < JUDGE_PROMPT.index("drawn exactly once")
+    assert JUDGE_PROMPT.index("drawn exactly once") < JUDGE_PROMPT.index("failure reasons")
+
+
+def test_the_uniqueness_question_scopes_to_the_character_not_the_noun():
+    """§4.4: `REFERENCE_CLAUSE` already draws this distinction — "the stars" in "she looked up at
+    the stars" names no character and stays drawable. A question phrased "is there more than one
+    star" fails a legitimate night sky."""
+    from pipeline.consistency_check import JUDGE_PROMPT
+
+    question = JUDGE_PROMPT.format(name="the star")
+    assert "the star is drawn exactly once" in question
+    assert "not other things of the same kind" in question
+
+
+def test_scene_verdict_subjects_unique_defaults_to_true():
+    """A provider that omits the field must not read as a duplicate — same default as the
+    contract field, for the same CC-10 reason."""
+    verdict = SceneVerdict(differences_observed="d", same_character=True)
+    assert verdict.subjects_unique is True
+
+
+def test_the_judge_prompt_carries_a_version_constant():
+    """§8.2: the prompt is unversioned, and that omission already cost one discarded measurement
+    series. A module constant plus the existing log line — not a third contract change."""
+    from pipeline.consistency_check import JUDGE_PROMPT_VERSION
+
+    assert JUDGE_PROMPT_VERSION == 2
+
+
+def test_one_duplicated_subject_folds_the_whole_verdict_to_not_unique():
+    """§6 test 18: worst-wins, like every other folded boolean."""
+    state = _state(
+        [_scene_with_attempt(characters_present=["c0", "c1"])],
+        [_char("c0", "the dog", "job-1/ref-c0.png"), _char("c1", "the cat", "job-1/ref-c1.png")],
+    )
+
+    result = _run(state, [_verdict(True, unique=True), _verdict(True, unique=False)])
+
+    assert result["scenes"][0].attempts[-1].vlm_verdict.subjects_unique is False
+
+
+def test_all_unique_verdicts_fold_to_unique():
+    state = _state([_scene_with_attempt(characters_present=["c0"])], [_char("c0", "the dog")])
+
+    result = _run(state, [_verdict(True, unique=True)])
+
+    assert result["scenes"][0].attempts[-1].vlm_verdict.subjects_unique is True
+
+
+def test_a_duplicated_subject_alone_does_not_flip_passed():
+    """§6 test 19 / §4.4: `passed` is unchanged — `same_character and anatomy_intact`. Gating
+    means more regenerations, and issue #26 is open and already critical: prod job f4d0fd74 burned
+    500s of a 900s timeout on a 7-scene book. Cost is not the constraint; latency is."""
+    state = _state([_scene_with_attempt(characters_present=["c0"])], [_char("c0", "the dog")])
+
+    result = _run(state, [_verdict(True, anatomy=True, unique=False)])
+
+    attempt = result["scenes"][0].attempts[-1]
+    assert attempt.vlm_verdict.subjects_unique is False
+    assert attempt.passed is True
+    assert result["scenes"][0].final_image_ref == "job-1/s0-1.png"    # and it finalized
+
+
+def test_a_duplicated_subject_alone_does_not_buy_a_regeneration():
+    """The consequence of not gating, pinned separately: `route_after_check` must still send this
+    scene onward, not back to `regenerate`."""
+    state = _state([_scene_with_attempt(characters_present=["c0"])], [_char("c0", "the dog")])
+
+    result = _run(state, [_verdict(True, unique=False)])
+    merged = _state([result["scenes"][0]], [_char("c0", "the dog")])
+
+    assert route_after_check(merged) != "regenerate"
+
+
+def test_an_unchecked_attempt_writes_no_verdict_and_therefore_no_uniqueness_signal():
+    """A judge or Storage outage means *unchecked*, not *unique* — the verdict stays None."""
+    state = _state([_scene_with_attempt(characters_present=[])])
+
+    result = _run(state, [])
+
+    assert result["scenes"][0].attempts[-1].vlm_verdict is None
+
+
 
 
 # --- consistency_check node (judge_attempt patched — the node seam) ---
@@ -377,7 +479,14 @@ def test_node_returns_only_scenes_and_never_touches_cost_or_state():
 
 # --- ADR-010 best-of and the three-term finalize rule (regeneration-controller §4) ---
 
-def _attempt(image_ref: str, *, same: bool | None = None, anatomy: bool = True, style: bool = True) -> Attempt:
+def _attempt(
+    image_ref: str,
+    *,
+    same: bool | None = None,
+    anatomy: bool = True,
+    style: bool = True,
+    unique: bool = True,
+) -> Attempt:
     """An already-judged attempt. same=None means UNCHECKED (vlm_verdict is None)."""
     if same is None:
         return Attempt(image_ref=image_ref, prompt="p", passed=False)
@@ -385,10 +494,82 @@ def _attempt(image_ref: str, *, same: bool | None = None, anatomy: bool = True, 
         image_ref=image_ref,
         prompt="p",
         vlm_verdict=VlmVerdict(
-            differences_observed="d", same_character=same, style_match=style, anatomy_intact=anatomy
+            differences_observed="d",
+            same_character=same,
+            style_match=style,
+            anatomy_intact=anatomy,
+            subjects_unique=unique,
         ),
         passed=same and anatomy,
     )
+
+
+def test_rank_prefers_the_unique_attempt_when_the_higher_keys_tie():
+    """§6 test 20 / §4.4: the free improvement. When a retry fires for some OTHER reason, best-of
+    now prefers the non-duplicated attempt at no extra draw."""
+    scene = _two_attempt_scene(
+        _attempt("job-1/s0-1.png", same=False, anatomy=True, unique=False, style=True),
+        _attempt("job-1/s0-2.png", same=False, anatomy=True, unique=True, style=True),
+    )
+
+    result = _run(
+        _state([scene], [_char("c0", "the dog")]),
+        [_verdict(False, anatomy=True, unique=True, style=True)],
+    )
+
+    assert result["scenes"][0].final_image_ref == "job-1/s0-2.png"
+
+
+def test_rank_puts_uniqueness_above_style_match():
+    """The declared order is (same_character, anatomy_intact, subjects_unique, style_match), so a
+    unique-but-off-style attempt beats a duplicated-but-on-style one."""
+    scene = _two_attempt_scene(
+        _attempt("job-1/s0-1.png", same=False, anatomy=True, unique=True, style=False),
+        _attempt("job-1/s0-2.png", same=False, anatomy=True, unique=False, style=True),
+    )
+
+    result = _run(
+        _state([scene], [_char("c0", "the dog")]),
+        [_verdict(False, anatomy=True, unique=False, style=True)],
+    )
+
+    assert result["scenes"][0].final_image_ref == "job-1/s0-1.png"
+
+
+def test_rank_puts_uniqueness_below_anatomy():
+    """Anatomy GATES and uniqueness does not, so anatomy must outrank it."""
+    scene = _two_attempt_scene(
+        _attempt("job-1/s0-1.png", same=False, anatomy=True, unique=False),
+        _attempt("job-1/s0-2.png", same=False, anatomy=False, unique=True),
+    )
+
+    result = _run(
+        _state([scene], [_char("c0", "the dog")]),
+        [_verdict(False, anatomy=False, unique=True)],
+    )
+
+    assert result["scenes"][0].final_image_ref == "job-1/s0-1.png"
+
+
+def test_the_unchecked_rank_tuple_widened_to_five_zeros():
+    """§6 test 21: unchecked must still sort below EVERY checked attempt, and a four-tuple
+    compared against a five-tuple would raise or mis-order."""
+    assert _rank(Attempt(image_ref="job-1/s0-1.png", prompt="p", passed=False)) == (0, 0, 0, 0, 0)
+
+
+def test_the_checked_rank_tuple_is_five_terms_in_the_declared_order():
+    ranked = _rank(_attempt("job-1/s0-1.png", same=True, anatomy=False, unique=True, style=False))
+    assert ranked == (1, True, False, True, False)
+
+
+def test_the_worst_possible_checked_attempt_still_outranks_an_unchecked_one():
+    """§6 test 21, the behavioural half. Promoting an unjudged image over a judged one would let
+    a judge outage silently decide the page (invariant 4)."""
+    worst = _attempt("job-1/s0-1.png", same=False, anatomy=False, unique=False, style=False)
+    unchecked = _attempt("job-1/s0-2.png", same=None)
+
+    assert _rank(worst) > _rank(unchecked)
+
 
 
 def _two_attempt_scene(first: Attempt, second: Attempt) -> Scene:
@@ -574,3 +755,19 @@ def test_route_after_check_skips_finalized_scenes_when_selecting():
         _scene_with_attempt("s1", "job-1/s1-1.png"),
     ])
     assert route_after_check(state) == "regenerate"
+
+
+def test_the_per_scene_log_line_carries_uniqueness_and_the_prompt_version(caplog):
+    """CC-5: a duplicated page in the finished book traces to a scene, an attempt, the verdict
+    that let it through, AND the prompt version that produced the verdict."""
+    import logging
+
+    from pipeline.consistency_check import JUDGE_PROMPT_VERSION
+
+    state = _state([_scene_with_attempt(characters_present=["c0"])], [_char("c0", "the dog")])
+    with caplog.at_level(logging.INFO):
+        _run(state, [_verdict(True, unique=False)])
+
+    assert "subjects_unique=False" in caplog.text
+    assert f"judge_prompt_version={JUDGE_PROMPT_VERSION}" in caplog.text
+

@@ -506,6 +506,22 @@ is not documentation of a good design; it is the blast radius, written down so t
   ⚠️ **Not built, and S3-13 says it is not optional:** the 33-test Tier-A isolation suite that is meant
   to ship *with* `0008`. Until it exists, ADR-017's "real, testable boundary" is again unbacked by a
   single test — the exact gap S3 was written to close.
+  **`scene-setting-and-subject-binding` is built (2026-08-13):** one artifact class across five nodes.
+  `contracts/` gains **two** additive fields — `Scene.location_id` and `VlmVerdict.subjects_unique`
+  (both defaulted, no `schema_version` bump); `subjects_unique` is declared last so ADR-004's order
+  holds, and best-of now ranks `same_character → anatomy_intact → subjects_unique → style_match`.
+  `segment.py` maps `location_name` → `loc_id` with carry-forward through all eight `ExtractedScene`
+  constructions, and deduplicates `characters_present`. `prompt_optimizer.py` folds each reference's
+  attributes into its roll sentence, adds `SUBJECT_COUNT_CLAUSE` + `NON_HUMAN_CLAUSE` **outside**
+  `REFERENCE_CLAUSE` (so both reach the text-to-image path), emits the `Setting:` line, and adds
+  `filtered_location` — **ADR-035 surface 5**. `consistency_check.py` asks the judge a uniqueness
+  question, folds it worst-wins and ranks on it, but **does not gate**: `passed` is byte-identical.
+  `graph.py` untouched — no new edge. `JUDGE_PROMPT_VERSION = 2` is a module constant, not an
+  `Attempt` field.
+  ⚠️ **No job has been run against this code.** D1/D2 are unmeasured *and* un-eyeballed, the §4.3
+  duplicate-`char_id` fix is a mechanism fixed on principle rather than a confirmed diagnosis, and
+  the first `subjects_unique` data point does not exist yet — so §8.1's gating decision stays
+  blocked. Deterministic evidence only.
   **Phase 2 is in progress. Next: S3's isolation suite, then build S4.** Next free migration is
   **`0009`**.
 - classroom-sharing (2026-08-09): gallery page + StudentTabBar built; `/s/[profileId]/gallery` live; tab bar covers Bookshelf / Gallery / Profile; logout moved to settings.
