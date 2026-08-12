@@ -21,6 +21,7 @@ class ExtractedScene(BaseModel):
     start: int                        # inclusive index into the numbered units
     end: int                          # inclusive
     characters_present: list[str]     # Character.name values — node maps to char_ids
+    location_name: str | None = None  # Location.name value — node maps to a loc_id, null → inherit
 
 
 class SceneSegmentation(BaseModel):
@@ -73,7 +74,10 @@ def repair(scenes: list[ExtractedScene], n: int) -> list[ExtractedScene]:
         start = max(0, min(s.start, n - 1))
         end = max(0, min(s.end, n - 1))
         if start <= end:
-            clamped.append(ExtractedScene(start=start, end=end, characters_present=s.characters_present))
+            clamped.append(ExtractedScene(
+                start=start, end=end,
+                characters_present=s.characters_present, location_name=s.location_name,
+            ))
     if len(clamped) != len(scenes):
         log.info("segment/repair: clamp dropped %d of %d ranges", len(scenes) - len(clamped), len(scenes))
 
@@ -86,7 +90,10 @@ def repair(scenes: list[ExtractedScene], n: int) -> list[ExtractedScene]:
     for s in clamped:
         new_start = max(s.start, prev_end + 1)
         if new_start <= s.end:
-            deoverlapped.append(ExtractedScene(start=new_start, end=s.end, characters_present=s.characters_present))
+            deoverlapped.append(ExtractedScene(
+                start=new_start, end=s.end,
+                characters_present=s.characters_present, location_name=s.location_name,
+            ))
             prev_end = s.end
     if len(deoverlapped) != len(clamped):
         log.info("segment/repair: de-overlap dropped %d ranges", len(clamped) - len(deoverlapped))
@@ -100,17 +107,26 @@ def repair(scenes: list[ExtractedScene], n: int) -> list[ExtractedScene]:
     gaps_closed = 0
     first = deoverlapped[0]
     if first.start > 0:
-        deoverlapped[0] = ExtractedScene(start=0, end=first.end, characters_present=first.characters_present)
+        deoverlapped[0] = ExtractedScene(
+            start=0, end=first.end,
+            characters_present=first.characters_present, location_name=first.location_name,
+        )
         gaps_closed += 1
     for i in range(len(deoverlapped) - 1):
         curr = deoverlapped[i]
         nxt = deoverlapped[i + 1]
         if curr.end + 1 < nxt.start:
-            deoverlapped[i] = ExtractedScene(start=curr.start, end=nxt.start - 1, characters_present=curr.characters_present)
+            deoverlapped[i] = ExtractedScene(
+                start=curr.start, end=nxt.start - 1,
+                characters_present=curr.characters_present, location_name=curr.location_name,
+            )
             gaps_closed += 1
     last = deoverlapped[-1]
     if last.end < n - 1:
-        deoverlapped[-1] = ExtractedScene(start=last.start, end=n - 1, characters_present=last.characters_present)
+        deoverlapped[-1] = ExtractedScene(
+            start=last.start, end=n - 1,
+            characters_present=last.characters_present, location_name=last.location_name,
+        )
         gaps_closed += 1
     if gaps_closed:
         log.info("segment/repair: gap-fill closed %d gap(s)", gaps_closed)
@@ -130,7 +146,11 @@ def repair(scenes: list[ExtractedScene], n: int) -> list[ExtractedScene]:
         merged_chars = list(dict.fromkeys(a.characters_present + b.characters_present))
         deoverlapped = (
             deoverlapped[:best_idx]
-            + [ExtractedScene(start=a.start, end=b.end, characters_present=merged_chars)]
+            + [ExtractedScene(
+                start=a.start, end=b.end,
+                characters_present=merged_chars,
+                location_name=a.location_name or b.location_name,
+            )]
             + deoverlapped[best_idx + 2:]
         )
 
@@ -171,8 +191,10 @@ def merge_thin(scenes: list[ExtractedScene], units: list[str]) -> list[Extracted
             start=a.start,
             end=b.end,
             characters_present=list(dict.fromkeys(a.characters_present + b.characters_present)),
+            location_name=a.location_name or b.location_name,
         )]
     return merged
+
 
 
 def segment(state: StoryMemory) -> dict:

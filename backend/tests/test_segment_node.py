@@ -72,8 +72,13 @@ def test_segment_scenes_returns_parsed_wrapper_unchanged():
 
 # --- repair pure tests ---
 
-def _r(start: int, end: int, chars: list[str] | None = None) -> ExtractedScene:
-    return ExtractedScene(start=start, end=end, characters_present=chars or [])
+def _r(
+    start: int, end: int, chars: list[str] | None = None, location: str | None = None
+) -> ExtractedScene:
+    return ExtractedScene(
+        start=start, end=end, characters_present=chars or [], location_name=location
+    )
+
 
 
 def test_repair_sorts_out_of_order_ranges():
@@ -197,6 +202,83 @@ def test_merge_thin_carries_both_pages_characters():
 def test_merge_thin_leaves_a_book_of_full_pages_untouched():
     scenes = [_r(i, i) for i in range(4)]
     assert merge_thin(scenes, _units(20, 20, 20, 20)) == scenes
+
+
+# --- §6 test 4: location_name survives all EIGHT ExtractedScene construction sites ---
+# One assertion per site. A missed site silently drops the field on exactly the messy stories
+# that need repair most, and no pre-existing test would catch it.
+
+def test_location_name_survives_the_clamp_site():
+    assert repair([_r(-5, 100, location="the beach")], 5)[0].location_name == "the beach"
+
+
+def test_location_name_survives_the_de_overlap_site():
+    result = repair([_r(0, 3, location="the beach"), _r(2, 4, location="the hill")], 5)
+    assert result[1].start == 4                      # this one WAS reconstructed by de-overlap
+    assert result[1].location_name == "the hill"
+
+
+def test_the_floor_site_constructs_with_no_location_name():
+    """The whole-story floor invents a range; it must not invent a location either. Carry-forward
+    supplies `locations[0]` at the node."""
+    assert repair([_r(9, 3, location="the beach")], 5)[0].location_name is None
+
+
+def test_location_name_survives_the_leading_gap_fill_site():
+    assert repair([_r(2, 4, location="the beach")], 5)[0].location_name == "the beach"
+
+
+def test_location_name_survives_the_interior_gap_fill_site():
+    result = repair([_r(0, 1, location="the beach"), _r(3, 4, location="the hill")], 5)
+    assert result[0].end == 2                        # the interior gap closed onto scene 0
+    assert result[0].location_name == "the beach"
+
+
+def test_location_name_survives_the_trailing_gap_fill_site():
+    result = repair([_r(0, 2, location="the beach")], 5)
+    assert result[0].end == 4                        # the trailing gap closed onto scene 0
+    assert result[0].location_name == "the beach"
+
+
+def test_location_name_survives_the_max_scenes_merge_site():
+    """16 single-unit scenes → exactly one merge, and ties go to the earliest pair, so scenes
+    0 and 1 fuse."""
+    scenes = [_r(i, i) for i in range(16)]
+    scenes[1] = _r(1, 1, location="the hill")
+
+    result = repair(scenes, 16)
+
+    assert len(result) == 15
+    assert result[0].location_name == "the hill"     # `a.location_name or b.location_name`
+
+
+def test_location_name_survives_the_merge_thin_site():
+    units = _units(2, 3, 20, 20)
+    result = merge_thin(
+        [_r(0, 0, location="the beach"), _r(1, 1, location="the hill"), _r(2, 2), _r(3, 3)], units
+    )
+    assert result[0].location_name == "the beach"
+
+
+# --- §6 test 5: the merge rule itself ---
+
+def test_a_merge_takes_the_first_scenes_location_when_both_have_one():
+    """`a.location_name or b.location_name` — the earlier scene wins, which is the same
+    earlier-scene-wins policy de-overlap already uses."""
+    scenes = [_r(i, i) for i in range(16)]
+    scenes[0] = _r(0, 0, location="the beach")
+    scenes[1] = _r(1, 1, location="the hill")
+
+    assert repair(scenes, 16)[0].location_name == "the beach"
+
+
+def test_merge_thin_takes_the_first_scenes_location_when_both_have_one():
+    units = _units(2, 3, 20, 20)
+    result = merge_thin(
+        [_r(0, 0, location="the beach"), _r(1, 1, location="the hill"), _r(2, 2), _r(3, 3)], units
+    )
+    assert result[0].location_name == "the beach"
+
 
 
 # --- Node helpers ---
