@@ -235,9 +235,15 @@ def build_prompt(
     characters_present: list[str],
     characters: list[Character],
     style_fragment: str | None,
+    location: Location | None = None,
 ) -> str:
     """Pure. Always includes the style fragment (invariant 1); never invents detail beyond
-    `text_excerpt` and the present characters' populated description axes (invariant 2)."""
+    `text_excerpt`, the present characters' populated description axes, and the scene's location
+    (invariant 2, widened by `scene-setting-and-subject-binding.md` §2).
+
+    `location` is defaulted so the four-positional-arg call stays compatible; the one production
+    caller (`generate_scene.py:77`) always passes it.
+    """
     style = style_fragment or settings.default_style_fragment
     by_id = {character.char_id: character for character in characters}
 
@@ -291,7 +297,16 @@ def build_prompt(
         NON_HUMAN_CLAUSE,
     ])] if present else []
 
-    return "\n\n".join([*roll, *descriptions, *guards, text_excerpt, style])
+    # Emitted BEFORE the excerpt on purpose: when a location description and the excerpt conflict
+    # ("that night" against a sunny description), the excerpt is then the later and more specific
+    # assertion. Reduced, not eliminated (§4.5.3).
+    place = filtered_location(location, style)
+    setting = [
+        f"Setting: {place.name} - {place.description}" if place.description
+        else f"Setting: {place.name}"
+    ] if place else []
+
+    return "\n\n".join([*roll, *descriptions, *guards, *setting, text_excerpt, style])
 
 
 def _joined(values) -> str:

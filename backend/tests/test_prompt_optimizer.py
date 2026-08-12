@@ -687,4 +687,68 @@ def test_the_guard_clauses_sit_after_the_descriptions_and_before_the_excerpt():
     assert prompt.index(NON_HUMAN_CLAUSE) < prompt.index("Ana waved at the sea.")
 
 
+# --- §4.1 D1: the Setting line (§6 tests 15-16) ---
+
+def test_build_prompt_emits_a_setting_line_from_the_location():
+    location = Location(loc_id="loc0", name="the beach", description="golden sand, palm trees")
+
+    prompt = build_prompt("She ran.", [], [], FRAG, location)
+
+    assert "Setting: the beach - golden sand, palm trees" in prompt
+
+
+def test_build_prompt_emits_a_name_only_setting_line_when_the_description_is_null():
+    """§4.1: `ExtractedLocation.description` stays optional, and name-only is still better than
+    today's nothing."""
+    prompt = build_prompt("She ran.", [], [], FRAG, Location(loc_id="loc0", name="the beach"))
+
+    assert "Setting: the beach" in prompt
+    assert "Setting: the beach -" not in prompt
+
+
+def test_build_prompt_emits_no_setting_line_without_a_location():
+    """§6 test 16 — the default, and the whole behaviour for a story that names no place."""
+    prompt = build_prompt("She ran.", [], [], FRAG)
+
+    assert "Setting:" not in prompt
+
+
+def test_the_setting_line_is_style_filtered_but_keeps_its_name():
+    """§6 test 15 through `build_prompt`, not just the helper."""
+    location = Location(loc_id="loc0", name="the glowing cave", description="glowing cave")
+
+    prompt = build_prompt("She went in.", [], [], COMIC, location)
+
+    assert "Setting: the glowing cave - cave" in prompt
+
+
+def test_the_setting_line_precedes_the_text_excerpt():
+    """§4.1 edge case: on a conflict ("that night" vs a sunny description) the excerpt must be the
+    LATER and more specific assertion. Reduced, not eliminated (§4.5.3)."""
+    location = Location(loc_id="loc0", name="the beach", description="golden sand")
+
+    prompt = build_prompt("That night it was dark.", [], [], FRAG, location)
+
+    assert prompt.index("Setting: the beach") < prompt.index("That night it was dark.")
+
+
+def test_the_setting_line_follows_the_guard_clauses():
+    ana = _char("c0", "Ana", species="girl")
+    location = Location(loc_id="loc0", name="the beach", description="golden sand")
+
+    prompt = build_prompt("Ana ran.", ["c0"], [ana], FRAG, location)
+
+    assert prompt.index(NON_HUMAN_CLAUSE) < prompt.index("Setting: the beach")
+
+
+def test_the_style_fragment_is_still_last_with_a_location_present():
+    """Invariant 1, pinned against the new block."""
+    location = Location(loc_id="loc0", name="the beach", description="golden sand")
+
+    prompt = build_prompt("She ran.", [], [], FRAG, location)
+
+    assert prompt.endswith(FRAG)
+
+
+
 
