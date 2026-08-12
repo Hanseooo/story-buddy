@@ -27,6 +27,7 @@ export default function RosterPage() {
   const [removing, setRemoving] = useState<Student | null>(null);
   const [slip, setSlip] = useState<Credential | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   async function fetchRoster() {
     const [clsRes, studentsRes] = await Promise.all([
@@ -208,7 +209,10 @@ export default function RosterPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
               whileHover={{ y: -2 }}
-              className="bg-surface border-2 border-primary/5 rounded-2xl p-4 sm:px-6 flex items-center justify-between gap-4 hover:shadow-[0_8px_24px_rgba(49,85,217,0.08)] transition-all group"
+              style={{ zIndex: openMenuId === s.id ? 30 : active.length - i }}
+              className={`bg-surface border-2 border-primary/5 rounded-2xl p-4 sm:px-6 flex items-center justify-between gap-4 hover:shadow-[0_8px_24px_rgba(49,85,217,0.08)] transition-all group relative ${
+                openMenuId === s.id ? "z-30" : ""
+              }`}
             >
               <div className="flex items-center gap-4 sm:gap-6">
                 <Avatar avatarId={s.avatar_id} displayNickname={s.display_nickname} size={48} />
@@ -219,7 +223,13 @@ export default function RosterPage() {
                   </div>
                 </div>
               </div>
-              <RowMenu onReset={() => handleReset(s)} onRemove={() => setRemoving(s)} />
+              <RowMenu
+                open={openMenuId === s.id}
+                onToggle={() => setOpenMenuId((cur) => (cur === s.id ? null : s.id))}
+                onClose={() => setOpenMenuId(null)}
+                onReset={() => handleReset(s)}
+                onRemove={() => setRemoving(s)}
+              />
             </motion.div>
           ))}
         </div>
@@ -315,21 +325,26 @@ export default function RosterPage() {
 }
 
 function RowMenu({
+  open,
+  onToggle,
+  onClose,
   onReset,
   onRemove,
 }: {
+  open: boolean;
+  onToggle: () => void;
+  onClose: () => void;
   onReset: () => void;
   onRemove: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   return (
-    <div className="relative inline-block shrink-0">
+    <div className={`relative inline-block shrink-0 ${open ? "z-30" : ""}`}>
       {/* ponytail: plain conditional render + backdrop. The popover API put this in the
           top layer, where `position: absolute` resolves against the viewport, not the
           button — `top: 100%` painted the menu below the fold. */}
       <motion.button
         whileTap={{ scale: 0.95 }}
-        onClick={() => setOpen((v) => !v)}
+        onClick={onToggle}
         aria-expanded={open}
         aria-haspopup="menu"
         className="w-12 h-12 flex items-center justify-center rounded-xl hover:bg-primary/5 transition-colors text-foreground/60 font-bold focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary"
@@ -342,7 +357,7 @@ function RowMenu({
           <button
             aria-hidden
             tabIndex={-1}
-            onClick={() => setOpen(false)}
+            onClick={onClose}
             className="fixed inset-0 z-10 cursor-default"
           />
           <div
@@ -352,7 +367,7 @@ function RowMenu({
             <button
               role="menuitem"
               onClick={() => {
-                setOpen(false);
+                onClose();
                 onReset();
               }}
               className="w-full text-left px-4 py-3 text-sm rounded-xl hover:bg-muted transition-colors font-bold focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary"
@@ -362,7 +377,7 @@ function RowMenu({
             <button
               role="menuitem"
               onClick={() => {
-                setOpen(false);
+                onClose();
                 onRemove();
               }}
               className="w-full text-left px-4 py-3 text-sm rounded-xl hover:bg-destructive/10 transition-colors font-bold text-destructive focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary"
