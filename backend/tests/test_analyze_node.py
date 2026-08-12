@@ -285,3 +285,25 @@ def test_analyze_logs_the_minted_ids(caplog):
 
     assert "c0" in caplog.text
     assert "c1" in caplog.text
+
+
+def test_extraction_prompt_asks_for_permanent_location_detail():
+    """§4.1 D1: a location description that names weather or time of day contradicts the
+    excerpt of every OTHER page set in the same place, because one description repeats onto
+    all of them."""
+    from pipeline.analyze import EXTRACTION_PROMPT
+
+    assert (
+        "Describe each location by what is permanently there — not the weather, the time of "
+        "day, or what happens there." in EXTRACTION_PROMPT
+    )
+
+
+def test_extracted_location_description_stays_optional():
+    """§4.1: required would force invention, contradicting the same prompt's rule for character
+    axes ("leave them empty rather than inventing details"). Null degrades the setting line to
+    name-only, which is still better than today's nothing."""
+    from pipeline.analyze import ExtractedLocation
+
+    assert ExtractedLocation(name="the beach").description is None
+

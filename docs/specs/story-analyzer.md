@@ -110,6 +110,13 @@ Two things this deliberately does **not** do:
 The node maps `CharacterDescription(**extracted.description.model_dump())` at the mint step, so what
 is persisted is exactly the contract type, never the strict subclass.
 
+`EXTRACTION_PROMPT` asks for locations to be described by **what is permanently there** — not the
+weather, the time of day, or what happens there (`scene-setting-and-subject-binding.md` §4.1).
+`ExtractedLocation.description` stays `str | None`: requiring it would force invention, which
+contradicts the same prompt's rule for character axes. A null description degrades the downstream
+`Setting:` line to name-only.
+
+
 ### Happy path
 
 1. `text = state.input.redacted_text or state.input.raw_text`
