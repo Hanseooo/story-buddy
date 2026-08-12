@@ -8,18 +8,19 @@ WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 
-# The lockfile's one non-PyPI fetch is the 12 MB en_core_web_sm wheel, served by github.com
-# releases (see pyproject.toml). GitHub refused the HTTP/2 stream on 2026-08-12 and failed the
-# worker build; the API service built fine off the same commit, so it was a blip, not a block.
-# uv's default 3 retries all burned inside 6s. Widen the window — the cache mount is per-service,
-# so every cold build is exposed again.
-# ponytail: retries, not a vendored wheel — vendor it if a real outage ever costs a deploy.
+# Kept for the PyPI fetches, which have never been the problem. The one that was — the
+# en_core_web_sm wheel from github.com releases — is now vendored (pyproject.toml), so no build
+# depends on that CDN any more. Raising this 3 -> 10 did not save the 2026-08-12 20:51 build:
+# it failed "after 10 retries" having spent 814s inside them.
 ENV UV_HTTP_RETRIES=10
 
-# Install dependencies using the lockfile (cache effectively)
+# Install dependencies using the lockfile (cache effectively).
+# `vendor` is mounted because the lockfile now resolves en_core_web_sm from a path inside it;
+# without this the layer fails on a missing file rather than a refused stream.
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    --mount=type=bind,source=vendor,target=vendor \
     uv sync --frozen --no-install-project --no-dev
 
 # Add the rest of the project source code
