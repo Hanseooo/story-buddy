@@ -105,9 +105,11 @@ def test_vlm_verdict_declares_reason_before_score():
     assert props.index("differences_observed") < props.index("same_character")
 
 
-def test_anatomy_intact_is_declared_last():
-    """ADR-028: appended at the end so the ADR-004 ordering above is untouched."""
-    assert list(VlmVerdict.model_fields)[-1] == "anatomy_intact"
+def test_anatomy_intact_is_declared_after_style_match():
+    """ADR-028: appended after style_match so the ADR-004 ordering above is untouched."""
+    fields = list(VlmVerdict.model_fields)
+    assert fields.index("anatomy_intact") > fields.index("style_match")
+
 
 
 def test_ref_verdict_declares_reason_before_score():
@@ -152,3 +154,59 @@ def test_reference_retry_round_trips_on_story_memory():
 def test_reference_retry_requires_char_id_and_attribute():
     with pytest.raises(ValidationError):
         ReferenceRetry()
+
+
+# --- scene-setting-and-subject-binding §2: two additive fields, no schema_version bump ---
+
+def test_scene_location_id_defaults_to_none():
+    """Set by `segment`, consumed by `build_prompt`. A story that names no location leaves it
+    None on every scene, which is byte-identical to today's behaviour."""
+    assert Scene(scene_id="s0", text_excerpt="x").location_id is None
+
+
+def test_vlm_verdict_subjects_unique_defaults_to_true():
+    """CC-10: a scene judged BEFORE this change reads as non-duplicated. Same shape
+    `anatomy_intact` had at its own introduction."""
+    assert VlmVerdict(differences_observed="d", same_character=True).subjects_unique is True
+
+
+def test_vlm_verdict_declares_subjects_unique_last():
+    """ADR-004's reason-then-score order is enforced on the wire by
+    `providers._assert_field_order`. The new field is appended; nothing above it moves."""
+    assert list(VlmVerdict.model_fields) == [
+        "differences_observed",
+        "same_character",
+        "attributes_present",
+        "style_match",
+        "anatomy_intact",
+        "subjects_unique",
+    ]
+
+
+def test_a_checkpoint_blob_written_before_this_change_still_deserializes():
+    """§6 test 22 / CC-10: both fields are additive with defaults, so a checkpoint that predates
+    them resumes with the documented values rather than raising."""
+    blob = _minimal().model_dump()
+    blob["scenes"] = [
+        {
+            "scene_id": "s0",
+            "text_excerpt": "x",
+            "attempts": [
+                {
+                    "image_ref": "job-1/s0-1.png",
+                    "vlm_verdict": {"differences_observed": "d", "same_character": True},
+                }
+            ],
+        }
+    ]
+
+    restored = StoryMemory.model_validate(blob)
+
+    assert restored.scenes[0].location_id is None
+    assert restored.scenes[0].attempts[0].vlm_verdict.subjects_unique is True
+
+
+def test_the_two_additive_fields_do_not_bump_the_schema_version():
+    """§2: `story-memory-contract.md` §8 permits additive defaulted fields without a bump."""
+    assert CURRENT_SCHEMA_VERSION == 1
+

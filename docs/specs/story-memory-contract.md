@@ -113,6 +113,9 @@ class VlmVerdict(BaseModel):
                                        # no schema_version bump. Best-of (ADR-010) ranks
                                        # lexicographically: same_character → anatomy_intact → style_match.
                                        # ponytail: bool, not a score — widen only if a measured tie forces it.
+    subjects_unique: bool = True       # scene-setting-and-subject-binding §4.4: each character
+                                       # drawn exactly once. Declared LAST so ADR-004's order above
+                                       # is untouched. Additive → no schema_version bump.
 
 class Attempt(BaseModel):
     image_ref: str                     # durable Storage PATH
@@ -127,6 +130,8 @@ class Scene(BaseModel):
     text_excerpt: str
     caption: Optional[str] = None
     characters_present: list[str] = Field(default_factory=list)  # char_ids
+    location_id: Optional[str] = None                            # set by segment, consumed by build_prompt
+
     prompt: Optional[str] = None
     attempts: list[Attempt] = Field(default_factory=list)        # no reducer — appended by the owning node (ADR-024, §8)
     final_image_ref: Optional[str] = None                        # best-of (ADR-010); durable path
@@ -283,7 +288,7 @@ Models mocked (there are no model calls here — this is pure schema). Assertion
   spec's job: `providers._assert_field_order` (`backend/providers.py:68-85`) checks parsed key order on every
   structured call, with a regression test at `tests/test_providers.py:83`.
 - `Attempt(failure_reasons=["not_a_real_reason"])` raises `ValidationError` (closed taxonomy).
-- **`anatomy_intact` is declared last** (ADR-028): `list(VlmVerdict.model_fields)[-1] == "anatomy_intact"`, and
+- **`subjects_unique` is declared last** (scene-setting-and-subject-binding.md §2): `list(VlmVerdict.model_fields)[-1] == "subjects_unique"`, and
   the §245 `differences_observed`-before-`same_character` assertion still holds with it present.
 - **`RefVerdict` reason-then-score:** `model_json_schema()["properties"]` lists `differences_observed` before
   `contradictions` before `matches_description` (ADR-004 applies to every judge call, not only the two-image
