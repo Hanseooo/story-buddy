@@ -25,11 +25,22 @@ def _langfuse_handler(job_id: str) -> tuple[CallbackHandler, str]:
     # Langfuse is a singleton per public key, so re-calling it per job is free. Missing keys warn
     # and return a disabled client rather than raising (client.py:381-397), so tracing stays
     # strictly best-effort — a story never fails because observability is misconfigured.
-    Langfuse(
+    client = Langfuse(
         public_key=settings.langfuse_public_key,
         secret_key=settings.langfuse_secret_key,
         base_url=host,
     )
+    # /research/metrics is an unauthenticated page, so its "View trace" link has to open without a
+    # Langfuse login. Publishing the trace is the only way to do that — the LangChain
+    # CallbackHandler has no `langfuse_public` metadata key, so we attach a throwaway span to the
+    # same trace_id purely to carry the flag (span.py:276-294; publishing any span publishes the
+    # whole trace). One-way door: a published trace cannot be unpublished via the SDK, and anyone
+    # with the URL sees every prompt and model output in it.
+    # ponytail: publish-everything; snapshot chosen metrics onto the job row instead if a trace
+    # ever carries something we would not hand a stranger.
+    client.start_observation(
+        trace_context={"trace_id": trace_id}, name="public-link"
+    ).set_trace_as_public().end()
     handler = CallbackHandler(
         public_key=settings.langfuse_public_key,
         trace_context={"trace_id": trace_id},

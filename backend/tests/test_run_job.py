@@ -97,6 +97,24 @@ def test_run_storybook_job_writes_trace_url_before_streaming():
     assert len(config["callbacks"]) == 1
 
 
+def test_trace_is_published_for_unauthenticated_viewers():
+    """/research/metrics is public; an unpublished trace sends anyone who clicks through to a login."""
+    fake_supabase = _fake_supabase()
+    fake_cm = MagicMock()
+    fake_cm.__enter__.return_value = MagicMock()
+    fake_graph = _fake_graph()
+
+    with patch("worker.run_job.get_supabase_client", return_value=fake_supabase), \
+         patch("worker.run_job.PostgresSaver.from_conn_string", return_value=fake_cm), \
+         patch("worker.run_job.build_graph", return_value=fake_graph), \
+         patch("worker.run_job.Langfuse") as mock_client:
+        run_storybook_job("job-trace-1")
+
+    start = mock_client.return_value.start_observation
+    assert start.call_args.kwargs["trace_context"] == {"trace_id": "jobtrace1"}
+    start.return_value.set_trace_as_public.assert_called_once()
+
+
 def test_run_storybook_job_writes_pages_in_scene_order():
     """spec §7: pages has one entry per scene, in result["scenes"] order — not sorted, not reversed."""
     fake_supabase = _fake_supabase()
