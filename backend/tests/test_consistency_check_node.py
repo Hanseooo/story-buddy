@@ -755,3 +755,19 @@ def test_route_after_check_skips_finalized_scenes_when_selecting():
         _scene_with_attempt("s1", "job-1/s1-1.png"),
     ])
     assert route_after_check(state) == "regenerate"
+
+
+def test_the_per_scene_log_line_carries_uniqueness_and_the_prompt_version(caplog):
+    """CC-5: a duplicated page in the finished book traces to a scene, an attempt, the verdict
+    that let it through, AND the prompt version that produced the verdict."""
+    import logging
+
+    from pipeline.consistency_check import JUDGE_PROMPT_VERSION
+
+    state = _state([_scene_with_attempt(characters_present=["c0"])], [_char("c0", "the dog")])
+    with caplog.at_level(logging.INFO):
+        _run(state, [_verdict(True, unique=False)])
+
+    assert "subjects_unique=False" in caplog.text
+    assert f"judge_prompt_version={JUDGE_PROMPT_VERSION}" in caplog.text
+

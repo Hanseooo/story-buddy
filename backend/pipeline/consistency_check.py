@@ -210,12 +210,15 @@ def consistency_check(state: StoryMemory) -> dict:
     # ran at all — without it an off-character page gives no way to distinguish the two.
     log.info(
         "consistency_check: scene_id=%s attempt=%d/%d subjects=%d %s same_character=%s "
-        "anatomy_intact=%s style_match=%s failure_reasons=%s passed=%s best_of=%s",
+        "anatomy_intact=%s style_match=%s subjects_unique=%s failure_reasons=%s passed=%s "
+        "best_of=%s judge_prompt_version=%d",
         scene.scene_id, len(updated), 2, len(subjects), "checked" if verdict else "unchecked",
         verdict and verdict.same_character, verdict and verdict.anatomy_intact,
-        verdict and verdict.style_match, [r.value for r in reasons], passed,
-        None if best is None else best + 1,
+        verdict and verdict.style_match, verdict and verdict.subjects_unique,
+        [r.value for r in reasons], passed,
+        None if best is None else best + 1, JUDGE_PROMPT_VERSION,
     )
+
 
     return {
         "scenes": [

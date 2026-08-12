@@ -179,6 +179,28 @@ This gap is **closed by `ANATOMY_CLAUSE`** in `regeneration-controller` §4: `co
 accepts `anatomy_intact: bool = True` and appends a fixed anatomy clause when `False`. No 8th enum
 value was invented; `FailureReason` stays frozen at 7.
 
+### Uniqueness — measured, not gated (`scene-setting-and-subject-binding.md` §4.4)
+
+`JUDGE_PROMPT` asks, after the anatomy question and before the failure reasons, whether the named
+character is drawn **exactly once**. The wording scopes to the **character**, not the noun — "the
+stars" in "she looked up at the stars" names no character and stays drawable — and its position in
+the prompt matches `subjects_unique`'s position in `SceneVerdict`, because
+`providers._assert_field_order` rejects a provider that answers out of order.
+
+- Folded worst-wins: `subjects_unique = all(v.subjects_unique for v in verdicts)`.
+- Ranked: `_rank` is `(1, same_character, anatomy_intact, subjects_unique, style_match)`; the
+  unchecked tuple is `(0, 0, 0, 0, 0)`.
+- **Not gated.** `passed` remains `same_character and anatomy_intact`. Gating means more
+  regenerations and issue #26 is open and already critical — cost is not the constraint, latency
+  is. Precedent for record-and-rank-without-gating is `style_match`, in this same file. Gating is a
+  follow-up decision, blocked on a measured duplicate rate and on #26 being closed.
+- CC-5: the per-scene log line carries `subjects_unique` and `judge_prompt_version`.
+
+`JUDGE_PROMPT_VERSION` is a module constant, bumped on every wording change. It is deliberately
+**not** a persisted `Attempt` field — that would be a third contract change for a problem logs
+already make traceable. The underlying gap (this prompt is unversioned in a way `char_bible`'s is
+not) deserves its own issue.
+
 ## 5. Cross-cutting checklist (MASTER_SPEC §5)
 
 - [x] **CC-5 Observability** — one line per scene: `scene_id`, subject count, `checked|unchecked`,
@@ -228,6 +250,11 @@ value was invented; `FailureReason` stays frozen at 7.
 - `{}` when every scene is finalized, and when the selected scene has no attempts.
 - A `char_id` absent from `state.characters` is skipped without raising.
 - A `Character` whose `ref_verdict.matches_description is False` still contributes a subject.
+- `subjects_unique=False` on any per-character verdict folds to `False`.
+- `subjects_unique=False` alone does **not** flip `passed`.
+- `_rank` prefers a unique attempt over a duplicated one when the higher keys tie.
+- Unchecked ranks below every checked attempt with the widened 5-tuple.
+
 
 **Router (`route_next_scene`, pure — no mocks):**
 - Unfinalized scene remains → `"generate_scene"`.
