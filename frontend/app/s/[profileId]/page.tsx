@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import { classify, type JobRow, type JobBucket } from "@/lib/useJob";
+import { signPaths } from "@/lib/signedUrls";
 import { motion } from "framer-motion";
 import { MagicWand, Users, FileDashed, Books, PencilSimple } from "@phosphor-icons/react";
 
@@ -71,15 +72,8 @@ export default function BookshelfPage({
         .map((j) => j.pages?.[0]?.image_path)
         .filter((p): p is string => Boolean(p));
 
-      const signedMap: Record<string, string> = {};
-      if (imagePaths.length > 0) {
-        const { data: signed } = await supabase.storage
-          .from("storybook-images")
-          .createSignedUrls(imagePaths, 3600);
-        signed?.forEach(({ path, signedUrl }) => {
-          if (path && signedUrl) signedMap[path] = signedUrl;
-        });
-      }
+      const signedMap = imagePaths.length > 0 ? await signPaths(imagePaths) : {};
+      if (cancelled) return;
 
       setCards(
         (jobs as JobRow[]).map((j) => ({
@@ -251,6 +245,8 @@ function BookCard({
             <img
               src={card.coverUrl}
               alt=""
+              loading="lazy"
+              decoding="async"
               className="w-full h-full object-cover"
             />
           ) : (

@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { createBrowserClient } from "@supabase/ssr";
+import { supabase } from "@/lib/supabaseClient";
 import BookCard from "@/components/BookCard";
 import { StateBadge } from "@/components/BookCard";
 import BookReviewDialog from "@/components/BookReviewDialog";
 import { StaggerGrid, StaggerItem } from "@/components/StaggerGrid";
 import { Job, ReviewDecision, jobState } from "@/lib/types/jobs";
+import { signPaths } from "@/lib/signedUrls";
 
 type Tab = "pending" | "approved" | "rejected";
 
@@ -18,14 +19,9 @@ type Toast = {
 };
 
 const TOAST_MS = 5000;
-const BUCKET = "storybook-images";
 
 export default function BooksPage() {
   const { classroomId } = useParams<{ classroomId: string }>();
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co",
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key"
-  );
 
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
@@ -47,7 +43,7 @@ export default function BooksPage() {
       .eq("classroom_id", classroomId)
       .order("created_at", { ascending: false });
     setJobs((data as unknown as Job[]) ?? []);
-  }, [classroomId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [classroomId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -66,18 +62,14 @@ export default function BooksPage() {
     const unsigned = jobs.filter((j) => j.pages?.[0] && !thumbnails[j.id]);
     if (!unsigned.length) return;
 
-    Promise.all(
-      unsigned.map(async (j) => {
-        const path = j.pages![0].image_path;
-        const { data } = await supabase.storage
-          .from(BUCKET)
-          .createSignedUrl(path, 3600);
-        return { id: j.id, url: data?.signedUrl ?? null };
-      })
-    ).then((results) => {
+    // One batch request, not one per thumbnail.
+    signPaths(unsigned.map((j) => j.pages![0].image_path)).then((signed) => {
       setThumbnails((prev) => {
         const next = { ...prev };
-        for (const r of results) if (r.url) next[r.id] = r.url;
+        for (const j of unsigned) {
+          const url = signed[j.pages![0].image_path];
+          if (url) next[j.id] = url;
+        }
         return next;
       });
     });
@@ -90,15 +82,13 @@ export default function BooksPage() {
     setDialogPageUrls([]);
     const job = jobs?.find((j) => j.id === jobId);
     if (!job?.pages?.length) return;
-    const signed = await Promise.all(
-      job.pages.map(async (p) => {
-        const { data } = await supabase.storage
-          .from(BUCKET)
-          .createSignedUrl(p.image_path, 3600);
-        return data?.signedUrl ?? "";
-      })
-    );
-    setDialogPageUrls(signed);
+    const signed = await signPaths(job.pages.map((p) => p.image_path));
+    setDialogPageUrls(job.pages.map((p) => signed[p.image_path] ?? ""));
+
+    // Deciding auto-advances to the next pending book, so warm its URLs now —
+    // otherwise every Approve costs the teacher a signing round trip they watch.
+    const next = pendingJobs.find((j) => j.id !== jobId);
+    if (next?.pages?.length) void signPaths(next.pages.map((p) => p.image_path));
   }
 
   // ── Decision ─────────────────────────────────────────────────────────────
@@ -447,7 +437,7 @@ function BookTableRow({
           <div className="w-10 h-10 rounded-xl bg-muted overflow-hidden shrink-0">
             {thumbnailUrl && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={thumbnailUrl} alt="" aria-hidden="true" className="w-full h-full object-cover" />
+              <img src={thumbnailUrl} alt="" aria-hidden="true" loading="lazy" decoding="async" className="w-full h-full object-cover" />
             )}
           </div>
           <span className="font-bold">{name}</span>

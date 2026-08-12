@@ -63,6 +63,7 @@ const COMPLETE_ROW = {
 const SIGNED = PAGES.map((p, i) => ({ signedUrl: `https://cdn/${i}.png`, error: null }));
 
 beforeEach(() => {
+  sessionStorage.clear(); // signPaths caches signed URLs across renders
   pushMock.mockClear();
   mockUseJob.mockReset();
   mockCreateSignedUrls.mockReset();
@@ -142,7 +143,9 @@ describe("BookPage — reader (terminal-success)", () => {
 
     await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
     fireEvent.click(screen.getByTestId("nav-next"));
-    expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/1.png");
+    await waitFor(() => {
+      expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/1.png");
+    });
   });
 
   it("left tap zone goes back a page", async () => {
@@ -153,8 +156,13 @@ describe("BookPage — reader (terminal-success)", () => {
 
     await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
     fireEvent.click(screen.getByTestId("nav-next"));
+    await waitFor(() => {
+      expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/1.png");
+    });
     fireEvent.click(screen.getByTestId("nav-prev"));
-    expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/0.png");
+    await waitFor(() => {
+      expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/0.png");
+    });
   });
 
   it("one-page book: no nav zones rendered", async () => {

@@ -97,6 +97,11 @@ export default function BookReviewDialog({
                   <img
                     src={pageUrls[i]}
                     alt={page.caption}
+                    // A 15-page book is ~20 MB of full-res PNG. This is a scroll
+                    // container, so lazy means the teacher pays for the pages they
+                    // actually scroll to, not the whole book on open.
+                    loading={i === 0 ? "eager" : "lazy"}
+                    decoding="async"
                     className="w-full aspect-[3/2] object-cover"
                   />
                 ) : (

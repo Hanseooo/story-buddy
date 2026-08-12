@@ -90,7 +90,7 @@ export default function WriteStoryPage() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="h-[calc(100vh-76px)] sm:h-[calc(100vh-85px)] min-h-[500px] flex flex-col p-4 sm:p-8 lg:p-12 max-w-6xl mx-auto w-full relative">
+    <form onSubmit={handleSubmit} className="min-h-[calc(100dvh-76px)] sm:min-h-[calc(100dvh-85px)] flex flex-col py-4 sm:py-6 lg:py-8 px-4 sm:px-8 max-w-5xl mx-auto w-full relative">
       
       {/* The Magic Canvas Textarea */}
       <motion.textarea
@@ -101,7 +101,7 @@ export default function WriteStoryPage() {
         onChange={(e) => setText(e.target.value)}
         placeholder="Once upon a time..."
         aria-label="story text"
-        className="flex-1 w-full bg-transparent resize-none text-3xl sm:text-4xl lg:text-5xl leading-tight sm:leading-tight lg:leading-tight font-extrabold text-foreground placeholder-foreground/20 focus:outline-none caret-primary"
+        className="flex-1 w-full bg-transparent resize-none font-kid font-bold text-2xl sm:text-3xl lg:text-4xl leading-relaxed text-foreground placeholder-foreground/35 focus:outline-none caret-primary min-h-[200px] sm:min-h-[240px]"
         autoFocus
       />
 
@@ -110,9 +110,9 @@ export default function WriteStoryPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.05, ease: "easeOut" }}
-        className="mt-4 shrink-0"
+        className="mt-3 shrink-0 max-w-2xl"
       >
-        <legend className="text-sm font-extrabold text-foreground/60 mb-2">Pick a look</legend>
+        <legend className="text-xs font-display font-extrabold tracking-wider uppercase text-foreground/60 mb-2">Pick a look</legend>
         <div className="flex gap-3">
           {STYLE_PRESETS.map(({ id, label }) => (
             <label key={id} className="flex-1 cursor-pointer">
@@ -123,14 +123,14 @@ export default function WriteStoryPage() {
                 defaultChecked={id === "cel"}
                 className="sr-only peer"
               />
-              <div className="relative rounded-2xl overflow-hidden bg-surface border border-primary/20 transition-all hover:-translate-y-0.5 hover:shadow-sm peer-checked:border-primary peer-checked:ring-1 peer-checked:ring-primary peer-checked:shadow-sm peer-focus-visible:ring-[3px] peer-focus-visible:ring-secondary peer-focus-visible:ring-offset-[3px] peer-focus-visible:ring-offset-background">
+              <div className="relative rounded-2xl overflow-hidden bg-surface border border-primary/20 transition-all hover:-translate-y-0.5 hover:shadow-sm peer-checked:border-primary peer-checked:ring-2 peer-checked:ring-primary peer-checked:shadow-sm peer-focus-visible:ring-[3px] peer-focus-visible:ring-secondary peer-focus-visible:ring-offset-[3px] peer-focus-visible:ring-offset-background">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={`/style-presets/${id}.png`}
                   alt=""
                   className="w-full aspect-[4/3] object-cover"
                 />
-                <span className="block text-center text-sm font-extrabold text-foreground py-2">
+                <span className="block text-center text-xs sm:text-sm font-extrabold text-foreground py-1.5 sm:py-2">
                   {label}
                 </span>
               </div>
@@ -144,7 +144,7 @@ export default function WriteStoryPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.1, ease: "easeOut" }}
-        className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-4 bg-surface p-4 rounded-3xl border border-primary/10 shadow-[0_22px_60px_rgba(49,85,217,0.16)] shrink-0"
+        className="mt-3 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 bg-surface p-3 sm:p-4 rounded-3xl border border-primary/10 shadow-[0_22px_60px_rgba(49,85,217,0.16)] shrink-0"
       >
         <div className="flex items-center gap-4 w-full sm:w-auto">
           {/* Word Count Indicator */}

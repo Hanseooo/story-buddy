@@ -76,7 +76,8 @@ export default async function GalleryPage({
                 <img
                   src={coverUrl}
                   alt={`Cover of book by ${nickname}`}
-                  className="aspect-[3/4] w-full border-b border-primary/15 object-cover"
+                  loading="lazy"
+                  className="aspect-[3/4] w-full border-b border-primary/15 bg-muted object-cover"
                 />
               ) : (
                 <div className="aspect-[3/4] w-full border-b border-primary/15 bg-muted" />

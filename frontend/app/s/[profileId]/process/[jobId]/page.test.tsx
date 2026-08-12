@@ -3,8 +3,9 @@ import { render, screen, waitFor, act, fireEvent } from "@testing-library/react"
 import ProcessingPage from "./page";
 
 const pushMock = vi.fn();
+const replaceMock = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: pushMock }),
+  useRouter: () => ({ push: pushMock, replace: replaceMock }),
 }));
 
 // Mock useJob at the module level — much simpler than wiring Supabase
@@ -29,16 +30,21 @@ vi.mock("@/lib/supabaseClient", () => ({
   },
 }));
 
+const PROFILE_ID = "p1";
+
 function makeParams(jobId = "j1") {
-  const p = Promise.resolve({ jobId });
-  (p as unknown as { status: string; value: { jobId: string } }).status = "fulfilled";
-  (p as unknown as { status: string; value: { jobId: string } }).value = { jobId };
+  const value = { profileId: PROFILE_ID, jobId };
+  const p = Promise.resolve(value);
+  (p as unknown as { status: string; value: typeof value }).status = "fulfilled";
+  (p as unknown as { status: string; value: typeof value }).value = value;
   return p;
 }
 
 // Mock fetch for confirm actions
 beforeEach(() => {
+  sessionStorage.clear(); // signPaths caches signed URLs across renders
   pushMock.mockClear();
+  replaceMock.mockClear();
   mockUseJob.mockReset();
   mockCreateSignedUrls.mockReset();
   mockCreateSignedUrls.mockResolvedValue({ data: null, error: null });
@@ -56,7 +62,7 @@ function jobState(overrides: Partial<ReturnType<typeof mockUseJob>>) {
   };
 }
 
-async function renderPage(paramsPromise: Promise<{ jobId: string }>) {
+async function renderPage(paramsPromise: Promise<{ profileId: string; jobId: string }>) {
   let res: ReturnType<typeof render>;
   await act(async () => {
     res = render(<ProcessingPage params={paramsPromise} />);
@@ -128,7 +134,9 @@ describe("ProcessingPage — bucket routing", () => {
   it("terminal-success pushes to /book", async () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
     await renderPage(makeParams("j1"));
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/book/j1"));
+    await waitFor(() =>
+      expect(replaceMock).toHaveBeenCalledWith(`/s/${PROFILE_ID}/book/j1`)
+    );
   });
 
   it("terminal-failure with machine reason renders retry FailureScreen", async () => {

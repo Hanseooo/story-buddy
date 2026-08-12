@@ -8,10 +8,10 @@ import { useRouter } from "next/navigation";
 import { useJob } from "@/lib/useJob";
 import FailureScreen from "@/components/FailureScreen";
 import { supabase } from "@/lib/supabaseClient";
+import { signPaths } from "@/lib/signedUrls";
 import { motion, AnimatePresence } from "framer-motion";
 import { BookOpen, Users, PaintBrush, MagicWand, Check, MagnifyingGlass } from "@phosphor-icons/react";
 
-const BUCKET = "storybook-images";
 // ponytail: 90s is chosen so the line arrives before a child gives up; will fire on slow image calls
 const STALL_MS = 90_000;
 
@@ -99,7 +99,7 @@ const CharactersVignette = () => (
     ].map((card, i) => (
       <motion.div
         key={i}
-        className="absolute w-12 h-16 bg-[var(--color-surface)] border border-[var(--color-primary)]/20 rounded-[12px] shadow-[0_10px_28px_rgba(49,85,217,0.12)] flex items-center justify-center"
+        className="absolute w-12 h-16"
         initial={{ y: 20, opacity: 0, rotate: 0, x: 0 }}
         animate={{ y: 0, opacity: 1, rotate: card.rotate, x: card.x }}
         transition={{ 
@@ -110,11 +110,17 @@ const CharactersVignette = () => (
         }}
         style={{ zIndex: i }}
       >
-        <motion.div 
-          className="w-6 h-6 rounded-full bg-[var(--color-primary)]/10"
-          animate={{ opacity: [0.3, 1, 0.3] }}
-          transition={{ repeat: Infinity, duration: 2, delay: card.delay, ease: "easeInOut" }}
-        />
+        <motion.div
+          className="w-full h-full bg-[var(--color-surface)] border border-[var(--color-primary)]/20 rounded-[12px] shadow-[0_10px_28px_rgba(49,85,217,0.12)] flex items-center justify-center"
+          animate={{ y: [-4, 4, -4], rotate: [-2, 2, -2] }}
+          transition={{ repeat: Infinity, duration: 3, delay: i * 0.5, ease: "easeInOut" }}
+        >
+          <motion.div 
+            className="w-6 h-6 rounded-full bg-[var(--color-primary)]/10"
+            animate={{ scale: [0.85, 1.15, 0.85], opacity: [0.4, 1, 0.4] }}
+            transition={{ repeat: Infinity, duration: 2, delay: card.delay, ease: "easeInOut" }}
+          />
+        </motion.div>
       </motion.div>
     ))}
   </div>
@@ -170,8 +176,8 @@ const StackingVignette = () => (
   </div>
 );
 
-export default function ProcessingPage({ params }: { params: Promise<{ jobId: string }> }) {
-  const { jobId } = use(params);
+export default function ProcessingPage({ params }: { params: Promise<{ profileId: string; jobId: string }> }) {
+  const { profileId, jobId } = use(params);
   const { bucket, row, refetch } = useJob(jobId);
   const router = useRouter();
 
@@ -199,13 +205,15 @@ export default function ProcessingPage({ params }: { params: Promise<{ jobId: st
     const characters = row.reveal.characters;
     const paths = characters.map(c => c.image_path);
     function sign(attempt: number) {
-      supabase.storage.from(BUCKET).createSignedUrls(paths, 3600).then(({ data }) => {
-        if (!data && attempt < 2) { sign(attempt + 1); return; }
-        if (!data) return; // render without images (spec §4.2)
+      signPaths(paths).then((signed) => {
         const map: Record<string, string> = {};
-        characters.forEach((c, i) => {
-          if (data[i]?.signedUrl) map[c.char_id] = data[i].signedUrl as string;
+        characters.forEach((c) => {
+          if (signed[c.image_path]) map[c.char_id] = signed[c.image_path];
         });
+        if (Object.keys(map).length === 0) {
+          if (attempt < 2) sign(attempt + 1);
+          return; // render without images (spec §4.2)
+        }
         setSignedCharUrls(map);
       });
     }
@@ -216,7 +224,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ jobId: st
   useEffect(() => {
     if (bucket === "terminal-success") {
       justConfirmed.current = false;
-      router.push(`/book/${jobId}`);
+      router.replace(`/s/${profileId}/book/${jobId}`);
     }
     if (bucket === "terminal-failure" || bucket === "not-found") {
       justConfirmed.current = false;
@@ -225,7 +233,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ jobId: st
       justConfirmed.current = false;
     }
     prevBucket.current = bucket;
-  }, [bucket, jobId, router]);
+  }, [bucket, profileId, jobId, router]);
 
   async function handleConfirm(
     action: "confirm" | "try_again",

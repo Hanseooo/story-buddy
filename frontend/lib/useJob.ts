@@ -48,7 +48,11 @@ export function useJob(jobId: string): {
   const liveArrived = useRef(false);
 
   async function loadRow(force = false) {
-    const { data } = await supabase.from("jobs").select("*").eq("id", jobId).single();
+    const { data } = await supabase
+      .from("jobs")
+      .select("id, status, current_stage, failure_reason, input_text, pages, reveal")
+      .eq("id", jobId)
+      .single();
     if (force || !liveArrived.current) {
       liveArrived.current = true;
       setRow(data as JobRow | null);
