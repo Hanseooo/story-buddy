@@ -33,6 +33,7 @@ def _verdict(
     *,
     anatomy: bool = True,
     style: bool = True,
+    unique: bool = True,
     attributes: list[str] | None = None,
     reasons: list[FailureReason] | None = None,
     differences: str = "none",
@@ -43,8 +44,10 @@ def _verdict(
         attributes_present=attributes or [],
         style_match=style,
         anatomy_intact=anatomy,
+        subjects_unique=unique,
         failure_reasons=reasons or [],
     )
+
 
 
 def _supabase_returning_path_bytes() -> MagicMock:
@@ -180,6 +183,61 @@ def test_the_judge_prompt_carries_a_version_constant():
     from pipeline.consistency_check import JUDGE_PROMPT_VERSION
 
     assert JUDGE_PROMPT_VERSION == 2
+
+
+def test_one_duplicated_subject_folds_the_whole_verdict_to_not_unique():
+    """§6 test 18: worst-wins, like every other folded boolean."""
+    state = _state(
+        [_scene_with_attempt(characters_present=["c0", "c1"])],
+        [_char("c0", "the dog", "job-1/ref-c0.png"), _char("c1", "the cat", "job-1/ref-c1.png")],
+    )
+
+    result = _run(state, [_verdict(True, unique=True), _verdict(True, unique=False)])
+
+    assert result["scenes"][0].attempts[-1].vlm_verdict.subjects_unique is False
+
+
+def test_all_unique_verdicts_fold_to_unique():
+    state = _state([_scene_with_attempt(characters_present=["c0"])], [_char("c0", "the dog")])
+
+    result = _run(state, [_verdict(True, unique=True)])
+
+    assert result["scenes"][0].attempts[-1].vlm_verdict.subjects_unique is True
+
+
+def test_a_duplicated_subject_alone_does_not_flip_passed():
+    """§6 test 19 / §4.4: `passed` is unchanged — `same_character and anatomy_intact`. Gating
+    means more regenerations, and issue #26 is open and already critical: prod job f4d0fd74 burned
+    500s of a 900s timeout on a 7-scene book. Cost is not the constraint; latency is."""
+    state = _state([_scene_with_attempt(characters_present=["c0"])], [_char("c0", "the dog")])
+
+    result = _run(state, [_verdict(True, anatomy=True, unique=False)])
+
+    attempt = result["scenes"][0].attempts[-1]
+    assert attempt.vlm_verdict.subjects_unique is False
+    assert attempt.passed is True
+    assert result["scenes"][0].final_image_ref == "job-1/s0-1.png"    # and it finalized
+
+
+def test_a_duplicated_subject_alone_does_not_buy_a_regeneration():
+    """The consequence of not gating, pinned separately: `route_after_check` must still send this
+    scene onward, not back to `regenerate`."""
+    state = _state([_scene_with_attempt(characters_present=["c0"])], [_char("c0", "the dog")])
+
+    result = _run(state, [_verdict(True, unique=False)])
+    merged = _state([result["scenes"][0]], [_char("c0", "the dog")])
+
+    assert route_after_check(merged) != "regenerate"
+
+
+def test_an_unchecked_attempt_writes_no_verdict_and_therefore_no_uniqueness_signal():
+    """A judge or Storage outage means *unchecked*, not *unique* — the verdict stays None."""
+    state = _state([_scene_with_attempt(characters_present=[])])
+
+    result = _run(state, [])
+
+    assert result["scenes"][0].attempts[-1].vlm_verdict is None
+
 
 
 

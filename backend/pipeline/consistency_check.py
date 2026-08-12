@@ -165,7 +165,9 @@ def consistency_check(state: StoryMemory) -> dict:
             attributes_present=list(dict.fromkeys(a for v in verdicts for a in v.attributes_present)),
             style_match=all(v.style_match for v in verdicts),
             anatomy_intact=all(v.anatomy_intact for v in verdicts),
+            subjects_unique=all(v.subjects_unique for v in verdicts),
         )
+
 
     # The pass rule: the two failures a child notices — wrong character, or three arms. style_match
     # is recorded and available to regeneration-controller's ranking but does NOT gate (ADR-007).
