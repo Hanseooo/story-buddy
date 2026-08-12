@@ -9,6 +9,7 @@ const BASE: JobRow = {
   current_stage: null,
   failure_reason: null,
   input_text: "x",
+  style_preset_id: null,
   pages: [],
   reveal: null,
 };
@@ -77,7 +78,7 @@ beforeEach(() => {
 
 const RUNNING: JobRow = {
   id: "j1", status: "running", current_stage: "analyze",
-  failure_reason: null, input_text: "x", pages: [], reveal: null,
+  failure_reason: null, input_text: "x", style_preset_id: null, pages: [], reveal: null,
 };
 const COMPLETE: JobRow = {
   ...RUNNING, status: "complete",

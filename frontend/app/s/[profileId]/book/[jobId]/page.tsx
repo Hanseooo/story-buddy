@@ -169,7 +169,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
   if (bucket === "terminal-failure") {
     // Signing failure while book was complete: machine screen, counter NOT bumped
     if (signFailed) {
-      return <FailureScreen kind="retry" inputText={row?.input_text} countable={false} />;
+      return <FailureScreen kind="retry" inputText={row?.input_text} stylePresetId={row?.style_preset_id} countable={false} />;
     }
     const kind =
       row?.failure_reason === "child_text"
@@ -177,7 +177,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
         : row?.status === SWEPT_STATUS
         ? "asleep"
         : "retry";
-    return <FailureScreen kind={kind} inputText={row?.input_text} />;
+    return <FailureScreen kind={kind} inputText={row?.input_text} stylePresetId={row?.style_preset_id} />;
   }
 
   if (bucket === "in-flight" || bucket === "paused") {
@@ -186,7 +186,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
 
   // terminal-success — wait for signing
   if (signFailed) {
-    return <FailureScreen kind="retry" inputText={row?.input_text} countable={false} />;
+    return <FailureScreen kind="retry" inputText={row?.input_text} stylePresetId={row?.style_preset_id} countable={false} />;
   }
 
   if (!signedPages) {

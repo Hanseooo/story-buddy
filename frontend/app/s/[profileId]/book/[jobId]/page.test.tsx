@@ -64,7 +64,7 @@ const PAGES = [
 
 const COMPLETE_ROW = {
   id: "j1", status: "complete", current_stage: "compose",
-  failure_reason: null, input_text: "x", pages: PAGES, reveal: null,
+  failure_reason: null, input_text: "x", style_preset_id: null, pages: PAGES, reveal: null,
 };
 
 const SIGNED = PAGES.map((p, i) => ({ signedUrl: `https://cdn/${i}.png`, error: null }));
@@ -83,7 +83,7 @@ describe("BookPage — bucket routing (spec invariant 1)", () => {
       bucket: "terminal-failure",
       row: {
         id: "j1", status: "failed", current_stage: null, failure_reason: "machine",
-        input_text: "x", pages: [], reveal: null,
+        input_text: "x", style_preset_id: null, pages: [], reveal: null,
       },
     }));
     await renderPage(makeParams("j1"));
@@ -94,7 +94,7 @@ describe("BookPage — bucket routing (spec invariant 1)", () => {
   it("queued row renders the wait state (four-bucket rule, spec §4.7)", async () => {
     mockUseJob.mockReturnValue(jobState({
       bucket: "in-flight",
-      row: { id: "j1", status: "queued", current_stage: null, failure_reason: null, input_text: "x", pages: [], reveal: null },
+      row: { id: "j1", status: "queued", current_stage: null, failure_reason: null, input_text: "x", style_preset_id: null, pages: [], reveal: null },
     }));
     await renderPage(makeParams("j1"));
     // Should NOT show the reader — shows a loading/wait state

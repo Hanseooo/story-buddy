@@ -16,6 +16,7 @@ export type JobRow = {
   current_stage: string | null;
   failure_reason: string | null;
   input_text: string;
+  style_preset_id: string | null;
   pages: Array<{ scene_id: string; caption: string; image_path: string }>;
   reveal: {
     characters: Array<{
@@ -50,7 +51,7 @@ export function useJob(jobId: string): {
   async function loadRow(force = false) {
     const { data } = await supabase
       .from("jobs")
-      .select("id, status, current_stage, failure_reason, input_text, pages, reveal")
+      .select("id, status, current_stage, failure_reason, input_text, style_preset_id, pages, reveal")
       .eq("id", jobId)
       .single();
     if (force || !liveArrived.current) {

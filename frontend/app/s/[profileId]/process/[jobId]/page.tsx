@@ -280,7 +280,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
         : row?.status === SWEPT_STATUS
         ? "asleep"
         : "retry";
-    return <FailureScreen kind={kind} inputText={row?.input_text} />;
+    return <FailureScreen kind={kind} inputText={row?.input_text} stylePresetId={row?.style_preset_id} />;
   }
 
   if (bucket === "paused" && row?.reveal) {

@@ -3,7 +3,8 @@
 import { useState, ReactNode } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Wrench, Gear, MagnifyingGlass, PencilSimple, BookOpen } from "@phosphor-icons/react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { supabase } from "@/lib/supabaseClient";
 
 export type FailureKind = "revise" | "retry" | "not-found" | "asleep";
 
@@ -30,6 +31,7 @@ export function resetFailChain() {
 type Props = {
   kind: FailureKind;
   inputText?: string;
+  stylePresetId?: string | null;
   countable?: boolean;
 };
 
@@ -40,7 +42,8 @@ function FailureCard({
   buttonLabel,
   onAction,
   submitting,
-  secondaryAction
+  secondaryAction,
+  error
 }: {
   icon: ReactNode;
   title: string;
@@ -49,6 +52,7 @@ function FailureCard({
   onAction: () => void;
   submitting: boolean;
   secondaryAction?: ReactNode;
+  error?: boolean;
 }) {
   return (
     <div className="min-h-[100dvh] w-full bg-[var(--background)] flex flex-col items-center justify-center px-6 py-12 text-center overflow-x-hidden selection:bg-[var(--color-primary)] selection:text-[var(--color-surface)]">
@@ -91,6 +95,22 @@ function FailureCard({
             {buttonLabel}
           </button>
           {secondaryAction}
+        </div>
+
+        <div className="mt-6 min-h-[56px] flex items-start justify-center w-full max-w-sm">
+          <AnimatePresence>
+            {error && (
+              <motion.p
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                role="alert"
+                className="font-kid text-base text-[var(--color-destructive)] bg-[var(--color-destructive)]/10 px-5 py-3 rounded-xl leading-snug"
+              >
+                That didn&apos;t work either. You can try once more, or write something new.
+              </motion.p>
+            )}
+          </AnimatePresence>
         </div>
       </motion.div>
     </div>
@@ -184,24 +204,53 @@ const RetryVignette = () => (
 export default function FailureScreen({
   kind,
   inputText = "",
+  stylePresetId = null,
   countable = true,
 }: Props) {
   const router = useRouter();
   const { profileId } = useParams() as { profileId: string };
   const [submitting, setSubmitting] = useState(false);
+  const [retryFailed, setRetryFailed] = useState(false);
   const chainCount = getChainCount();
 
-  function submitRetry() {
+  async function submitRetry() {
     setSubmitting(true);
-    fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/storybooks`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: inputText }),
-    })
-      .then(res => (res.ok ? res.json() : null))
-      .then(data => { if (data) router.push(`/s/${profileId}/process/${data.job_id}`); })
-      .finally(() => setSubmitting(false));
+    setRetryFailed(false);
+    try {
+      // /storybooks is auth-gated; without this header every retry was a silent 401.
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/storybooks`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        // The redo is a brand-new job, so the style has to be re-sent or the backend falls back
+        // to "cel" (main.py:167) and the child's book comes back in a style they never picked.
+        body: JSON.stringify({ text: inputText, style_preset_id: stylePresetId }),
+      });
+      if (!res.ok) {
+        setRetryFailed(true);
+        return;
+      }
+      const data = await res.json();
+      router.push(`/s/${profileId}/process/${data.job_id}`);
+    } catch {
+      setRetryFailed(true);
+    } finally {
+      setSubmitting(false);
+    }
   }
+
+  const writeSomethingNew = (
+    <button
+      className="w-full rounded-2xl min-h-[56px] px-8 py-4 font-kid font-extrabold text-lg border-2 border-[var(--color-primary)]/25 text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5 active:scale-[0.98] transition-all duration-150 disabled:opacity-50 focus-visible:outline-[var(--color-secondary)] focus-visible:outline-3 focus-visible:outline-offset-3"
+      onClick={() => router.push(`/s/${profileId}/write`)}
+      disabled={submitting}
+    >
+      Write something new
+    </button>
+  );
 
   const tryDifferent = chainCount >= 3 ? (
     <button
@@ -253,24 +302,30 @@ export default function FailureScreen({
         buttonLabel="Make it again"
         submitting={submitting}
         onAction={submitRetry}
+        secondaryAction={writeSomethingNew}
+        error={retryFailed}
       />
     );
   }
 
-  // kind === "retry"
+  // kind === "retry" — a machine failure is never the child's fault, so both ways out are offered
+  // side by side from the first failure. Deliberately NOT auto-retried: a redo is a whole new job
+  // at a 900s timeout with fresh paid images (main.py:110), and the commonest "machine" reason in
+  // this pipeline is that timeout itself (run_worker.py:30) — the case most likely to repeat.
   return (
     <FailureCard
       icon={<RetryVignette />}
       title="Oops! The machine got stuck."
-      subtext="That wasn't your fault."
-      buttonLabel="Try again"
+      subtext="That wasn't your fault. Want to make the same story again?"
+      buttonLabel={submitting ? "Starting…" : "Make this story again"}
       submitting={submitting}
       onAction={() => {
         const count = countable ? bumpChain() : chainCount;
         console.log("sb:action", { action: "retry", kind, chain_count: count });
         submitRetry();
       }}
-      secondaryAction={tryDifferent}
+      secondaryAction={writeSomethingNew}
+      error={retryFailed}
     />
   );
 }

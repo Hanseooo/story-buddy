@@ -72,19 +72,19 @@ async function renderPage(paramsPromise: Promise<{ profileId: string; jobId: str
 
 const RUNNING_ROW = {
   id: "j1", status: "running", current_stage: "analyze",
-  failure_reason: null, input_text: "A story.", pages: [], reveal: null,
+  failure_reason: null, input_text: "A story.", style_preset_id: null, pages: [], reveal: null,
 };
 
 const FAILED_MACHINE_ROW = {
   id: "j1", status: "failed", current_stage: "generate_scene",
-  failure_reason: "machine", input_text: "A story.", pages: [], reveal: null,
+  failure_reason: "machine", input_text: "A story.", style_preset_id: null, pages: [], reveal: null,
 };
 
 const FAILED_CHILD_ROW = { ...FAILED_MACHINE_ROW, failure_reason: "child_text" };
 
 const PAUSED_ROW = {
   id: "j1", status: "awaiting_confirm", current_stage: "reveal",
-  failure_reason: null, input_text: "A story.", pages: [],
+  failure_reason: null, input_text: "A story.", style_preset_id: null, pages: [],
   reveal: {
     characters: [
       { char_id: "c0", name: "Kiko", image_path: "j1/ref-c0.png", chips: ["orange sock"] },
@@ -95,7 +95,7 @@ const PAUSED_ROW = {
 
 const COMPLETE_ROW = {
   id: "j1", status: "complete", current_stage: "compose",
-  failure_reason: null, input_text: "A story.",
+  failure_reason: null, input_text: "A story.", style_preset_id: null,
   pages: [{ scene_id: "s0", caption: "c", image_path: "p" }],
   reveal: null,
 };
