@@ -1,9 +1,8 @@
-from pipeline.segment import split_sentences
-
+import logging
 from unittest.mock import patch
 
 from app.config import MIN_SCENE_WORDS, MIN_SCENES
-from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, Input, StoryMemory
+from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, Input, Location, StoryMemory
 from pipeline.segment import (
     ExtractedScene,
     SceneSegmentation,
@@ -11,7 +10,9 @@ from pipeline.segment import (
     repair,
     segment,
     segment_scenes,
+    split_sentences,
 )
+
 
 
 def test_split_sentences_on_period():
@@ -55,7 +56,7 @@ def test_segment_scenes_passes_numbered_units_and_schema_to_provider():
     units = ["The dog ran.", "He found a ball."]
     stub = SceneSegmentation(scenes=[ExtractedScene(start=0, end=1, characters_present=[])])
     with patch("pipeline.segment.structured_text", return_value=stub) as mock_provider:
-        segment_scenes(units, [], [])
+        segment_scenes(units, [], [], [])
     prompt, schema = mock_provider.call_args.args
     assert "0: The dog ran." in prompt
     assert "1: He found a ball." in prompt
@@ -66,8 +67,9 @@ def test_segment_scenes_returns_parsed_wrapper_unchanged():
     units = ["A story."]
     stub = SceneSegmentation(scenes=[ExtractedScene(start=0, end=0, characters_present=[])])
     with patch("pipeline.segment.structured_text", return_value=stub):
-        result = segment_scenes(units, [], [])
+        result = segment_scenes(units, [], [], [])
     assert result is stub
+
 
 
 # --- repair pure tests ---
@@ -288,6 +290,7 @@ def _state(
     redacted: str | None = None,
     characters: list | None = None,
     timeline: list | None = None,
+    locations: list | None = None,
 ) -> StoryMemory:
     return StoryMemory(
         schema_version=CURRENT_SCHEMA_VERSION,
@@ -297,7 +300,9 @@ def _state(
         input=Input(raw_text=raw, redacted_text=redacted),
         characters=characters or [],
         timeline=timeline or [],
+        locations=locations or [],
     )
+
 
 
 def _char(char_id: str, name: str) -> Character:
@@ -442,3 +447,101 @@ def test_caption_for_and_scene_caption_not_in_analyze_module():
     import pipeline.analyze as analyze_module
     assert not hasattr(analyze_module, "caption_for")
     assert not hasattr(analyze_module, "SceneCaption")
+
+
+_LOCS = [
+    Location(loc_id="loc0", name="the beach", description="golden sand"),
+    Location(loc_id="loc1", name="the hill", description="tall grass"),
+]
+
+
+def _seg(*locations: str | None) -> SceneSegmentation:
+    """One single-unit scene per argument, each carrying that `location_name`."""
+    return SceneSegmentation(scenes=[
+        ExtractedScene(start=i, end=i, characters_present=[], location_name=name)
+        for i, name in enumerate(locations)
+    ])
+
+
+# --- §6 test 1: name → loc_id, unknown name dropped with a warning ---
+
+def test_segment_maps_a_location_name_to_its_loc_id():
+    with patch("pipeline.segment.segment_scenes", return_value=_seg("the beach", "the hill")):
+        result = segment(_state(locations=_LOCS))
+
+    assert [s.location_id for s in result["scenes"]] == ["loc0", "loc1"]
+
+
+def test_segment_warns_and_drops_a_location_name_not_in_the_roster(caplog):
+    """Same posture as the character path: this node may not extend the roster, and it does not
+    raise. Carry-forward then fills the hole."""
+    with caplog.at_level(logging.WARNING), \
+         patch("pipeline.segment.segment_scenes", return_value=_seg("the beach", "Atlantis")):
+        result = segment(_state(locations=_LOCS))
+
+    assert "Atlantis" in caplog.text
+    assert result["scenes"][1].location_id == "loc0"
+
+
+# --- §6 test 2: carry-forward ---
+
+def test_segment_carries_the_previous_scenes_location_forward_over_a_null():
+    with patch("pipeline.segment.segment_scenes", return_value=_seg("the hill", None, None)):
+        result = segment(_state(raw="One. Two. Three.", locations=_LOCS))
+
+    assert [s.location_id for s in result["scenes"]] == ["loc1", "loc1", "loc1"]
+
+
+def test_segment_does_not_carry_a_location_backwards():
+    """Carry-forward only. A leading null takes `locations[0]`, not the location named later."""
+    with patch("pipeline.segment.segment_scenes", return_value=_seg(None, "the hill")):
+        result = segment(_state(locations=_LOCS))
+
+    assert [s.location_id for s in result["scenes"]] == ["loc0", "loc1"]
+
+
+# --- §6 test 3: the s0 floor, and the no-locations case ---
+
+def test_segment_gives_a_null_first_scene_the_first_location():
+    with patch("pipeline.segment.segment_scenes", return_value=_seg(None, None)):
+        result = segment(_state(locations=_LOCS))
+
+    assert [s.location_id for s in result["scenes"]] == ["loc0", "loc0"]
+
+
+def test_segment_leaves_every_location_id_none_when_the_story_names_no_location():
+    """Edge case: identical to today — no `Setting:` line will be emitted downstream."""
+    with patch("pipeline.segment.segment_scenes", return_value=_seg(None, None)):
+        result = segment(_state(locations=[]))
+
+    assert [s.location_id for s in result["scenes"]] == [None, None]
+
+
+# --- the roster reaches the prompt ---
+
+def test_segment_scenes_puts_the_location_roster_in_the_prompt():
+    units = ["The dog ran.", "He found a ball."]
+    stub = SceneSegmentation(scenes=[ExtractedScene(start=0, end=1, characters_present=[])])
+    with patch("pipeline.segment.structured_text", return_value=stub) as mock_provider:
+        segment_scenes(units, [], [], _LOCS)
+
+    prompt = mock_provider.call_args.args[0]
+    assert "the beach" in prompt
+    assert "the hill" in prompt
+
+
+def test_segment_scenes_says_none_when_the_story_has_no_locations():
+    stub = SceneSegmentation(scenes=[ExtractedScene(start=0, end=0, characters_present=[])])
+    with patch("pipeline.segment.structured_text", return_value=stub) as mock_provider:
+        segment_scenes(["A story."], [], [], [])
+
+    assert "Locations in the story: (none)" in mock_provider.call_args.args[0]
+
+
+def test_segment_passes_the_state_locations_to_segment_scenes():
+    stub = SceneSegmentation(scenes=[ExtractedScene(start=0, end=1, characters_present=[])])
+    with patch("pipeline.segment.segment_scenes", return_value=stub) as mock_seg:
+        segment(_state(locations=_LOCS))
+
+    assert mock_seg.call_args.args[3] == _LOCS
+

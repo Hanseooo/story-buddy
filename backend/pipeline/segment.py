@@ -4,7 +4,7 @@ import re
 from pydantic import BaseModel
 
 from app.config import MAX_SCENES, MIN_SCENE_WORDS, MIN_SCENES
-from contracts.story_memory import Character, Scene, StoryMemory, TimelineEvent
+from contracts.story_memory import Character, Location, Scene, StoryMemory, TimelineEvent
 from providers import structured_text
 
 log = logging.getLogger(__name__)
@@ -37,6 +37,8 @@ Numbered story sentences:
 
 Characters in the story: {roster}
 
+Locations in the story: {locations}
+
 Story plot points:
 {plot}
 
@@ -45,6 +47,8 @@ Rules:
 - Each scene captures a distinct moment or plot point.
 - start and end are inclusive sentence indices.
 - characters_present lists character names exactly as given above.
+- location_name is where the scene happens, named exactly as given above. Leave it null if the \
+story does not say.
 - Together the scenes must cover every sentence."""
 
 
@@ -52,16 +56,19 @@ def segment_scenes(
     units: list[str],
     characters: list[Character],
     timeline: list[TimelineEvent],
+    locations: list[Location],
 ) -> SceneSegmentation:
     numbered = "\n".join(f"{i}: {u}" for i, u in enumerate(units))
     roster = ", ".join(c.name for c in characters) if characters else "(none)"
+    places = ", ".join(loc.name for loc in locations) if locations else "(none)"
     plot = "\n".join(f"{e.order}. {e.summary}" for e in timeline) if timeline else "(none)"
     result = structured_text(
-        SEGMENTATION_PROMPT.format(numbered=numbered, roster=roster, plot=plot),
+        SEGMENTATION_PROMPT.format(numbered=numbered, roster=roster, locations=places, plot=plot),
         SceneSegmentation,
     )
     log.info("segment: %d units → %d raw scenes", len(units), len(result.scenes))
     return result
+
 
 
 def repair(scenes: list[ExtractedScene], n: int) -> list[ExtractedScene]:
@@ -203,7 +210,7 @@ def segment(state: StoryMemory) -> dict:
     if not units:
         return {"scenes": []}
 
-    raw = segment_scenes(units, state.characters, state.timeline)
+    raw = segment_scenes(units, state.characters, state.timeline, state.locations)
     repaired = merge_thin(repair(raw.scenes, len(units)), units)
     if len(repaired) != len(raw.scenes):
         log.info("segment: repair changed scene count %d → %d", len(raw.scenes), len(repaired))
@@ -211,6 +218,11 @@ def segment(state: StoryMemory) -> dict:
     name_to_ids: dict[str, list[str]] = {}
     for c in state.characters:
         name_to_ids.setdefault(c.name, []).append(c.char_id)
+
+    name_to_loc = {loc.name: loc.loc_id for loc in state.locations}
+    # Carry-forward seed (§4.1): s0 with no location takes locations[0], so a story that names a
+    # place once still gets one setting for the whole book rather than none.
+    prev_loc: str | None = state.locations[0].loc_id if state.locations else None
 
     scenes = []
     for i, r in enumerate(repaired):
@@ -221,7 +233,22 @@ def segment(state: StoryMemory) -> dict:
                 char_ids.extend(name_to_ids[name])
             else:
                 log.warning("segment: name %r not in roster, dropped", name)
-        scenes.append(Scene(scene_id=f"s{i}", text_excerpt=excerpt, caption=excerpt, characters_present=char_ids))
+
+        loc_id = name_to_loc.get(r.location_name) if r.location_name else None
+        if r.location_name and loc_id is None:
+            log.warning("segment: location %r not in roster, dropped", r.location_name)
+        if loc_id is None:
+            loc_id = prev_loc          # carry-forward, over the FINAL scene list in order
+        prev_loc = loc_id
+
+        scenes.append(Scene(
+            scene_id=f"s{i}",
+            text_excerpt=excerpt,
+            caption=excerpt,
+            characters_present=char_ids,
+            location_id=loc_id,
+        ))
 
     log.info("segment: minted %s", [s.scene_id for s in scenes])
     return {"scenes": scenes}
+
