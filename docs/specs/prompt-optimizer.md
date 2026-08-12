@@ -115,6 +115,39 @@ Image 2 visibly was not, and the edit model drew a second star (issue #23's `s1`
 is not filtered**: ADR-013 freezes it verbatim, so a story that says "a tiny glowing star" still
 says so.
 
+### The image roll and `REFERENCE_CLAUSE` (issues #23, #32)
+
+When at least one present character has a `canonical_ref_image`, `build_prompt` prefixes the prompt
+with a roll naming each image in `referenced_characters` order (`"Image 1 is Ana. Image 2 is the
+star."`) followed by `REFERENCE_CLAUSE`. `generate_scene`, `regenerate` and `output_mod` all build
+`ref_paths` from that same helper, so `"Image 2 is X"` cannot drift from `image_urls[1]`.
+Omitted entirely on the text-to-image path — naming images that were never sent is a lie.
+
+`REFERENCE_CLAUSE` closes **two** duplication mechanisms that look identical in the output:
+
+- **Compositing (#23):** given unaddressed references an edit model inlays them into the canvas.
+  Answered by *"do not copy, inset, mirror or repeat the reference images inside it, and draw each
+  character exactly once."*
+- **Semantic (#32):** the scene's own prose summons the thing regardless of what the prompt says
+  about the images — prod job `d83721d9`'s `s1` sent `"Image 2 is the star"` and `"found a tiny
+  glowing star"` and got both, with `same_character=True` and `anatomy_intact=True`, so the #23
+  branch was not involved. Answered by *"When the text below names one of these characters, it is
+  referring to that character itself, not to a second thing of the same name."*
+
+The #32 sentence is **generic on purpose** — "one of these characters", never rendered per-name.
+References are sent for every `characters_present` character, including ones the excerpt never
+names (#23's *"Ana decided to help."* sent two), and asserting an absent character is itself how a
+floating extra appears. Leaning on the roll for the antecedent means the sentence can never
+introduce a name the roll did not already assert. It also binds the **name**, not the noun class,
+so a genuinely separate instance ("she looked up at the stars") stays drawable.
+
+`_describe` additionally drops a `species` that is an exact token of the `name`, so `"the star -
+star"` renders as `"the star"` — a definition carries no information and is a second bare assertion
+of the same noun. This does **not** breach ADR-035's `species` carve-out: what filtering species
+could make vacuous is the *reference* gate, whose subject line is built by `char_bible`'s own
+`_describe`. `consistency_check.JUDGE_PROMPT` interpolates `{name}` only, and `correct_prompt`'s
+`wrong_species` clause reads `description.species` straight off the contract.
+
 ### `correct_prompt`
 
 Two module-level constants close the holes where reason clauses alone append nothing (making the retry a pure resample, which ADR-010 rejects):
@@ -157,6 +190,10 @@ single named character requires the judge to attribute a reason to a `char_id`, 
 | **Empty `characters_present`** | `build_prompt` returns a character-free prompt: `text_excerpt` + style fragment only. Valid — `char_bible`'s and `segment`'s precedent is scenes may be unreferenced. |
 | **`char_id` in `characters_present` not found in `state.characters`** | Skipped, logged. Same posture as `segment`'s "name not in roster" case — this function may not extend the roster. |
 | **`style_fragment is None`** | Falls back to `settings.default_style_fragment`, matching `char_bible`. |
+| **No present character has a canonical reference** | Image roll *and* the #32 binding sentence are both omitted — the text-to-image path sends no images to bind a name to. The semantic duplicate is therefore unaddressed on that path; with no reference, "twice" is barely defined. |
+| **A character's name is a common noun the excerpt also uses** (`"the star"` in *"found a tiny glowing star"*) | The binding sentence ties the name to the reference and `_describe` suppresses the redundant species. `text_excerpt` is untouched either way — ADR-013 freezes it verbatim, so rewriting the prose to disambiguate is not available. |
+| **`species` is an exact token of `name`** (`"the star"` / `"star"`) | Dropped from the description line, which floors to `"the star"` (or `"the star - tiny"` if another axis is populated). Exact token match, so `"the retriever"` / `"golden retriever"` keeps its species — the degenerate case this removes is identity, not resemblance. |
+| **Two characters share a name** | `segment` maps one name to a list of `char_id`s, so the roll can read `"Image 1 is the star. Image 2 is the star."` and the binding sentence is correspondingly ambiguous. Pre-existing and not worsened here; no observed occurrence. |
 | **Empty `failure_reasons`** | `correct_prompt` returns `prompt` unchanged when both booleans are `True`. With `same_character=False` it appends `IDENTITY_CLAUSE`; with `anatomy_intact=False` it appends `ANATOMY_CLAUSE`. |
 | **Multiple `failure_reasons` on one attempt** | All matching clauses appended, in enum-declaration order, no duplicates even if a reason repeats. |
 | **Every value on an axis is style-forbidden** (e.g. `colours == ["glowing"]` under `comic`) | ADR-035 filters it to empty, and the row below then applies — the clause appends with nothing rendered. Deliberate: restating the forbidden attribute is what made `wrong_colour` answer "match the reference's exact colours: glowing" (issue #24). |
@@ -183,6 +220,13 @@ no mocks"), node-level tests exercise `build_prompt` for real rather than patchi
   `style_fragment is None`.
 - Empty `characters_present` → prompt is `text_excerpt` + style fragment only, no character content.
 - A `char_id` absent from `characters` is skipped without raising.
+
+**The image roll — no mocks (issues #23, #32):**
+- Each reference image is named by index, numbered in upload order, so a present character without a
+  reference does not consume an image number; the roll is omitted when nothing is referenced.
+- The #32 binding sentence is present when a reference was sent and absent when none was.
+- A `species` that is an exact token of the `name` is dropped from the description line; the other
+  axes survive; a multi-word species the name only partly carries is kept.
 
 **`filtered_description` / `style_prohibitions` / `permitted_words` — no mocks (ADR-035):**
 - `style_prohibitions` reads the `no <term>` clauses off `comic` and `cel`; a fragment that forbids

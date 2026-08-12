@@ -112,9 +112,23 @@ def filtered_description(
 def _describe(description: CharacterDescription, name: str) -> str:
     """The populated CharacterDescription axes as one line — same phrasing char_bible's
     reference_prompt uses, so the canonical reference and every scene prompt describe the same
-    character consistently."""
+    character consistently.
+
+    Issue #32: a species the name already carries renders as `"the star - star"` — a definition,
+    not a description, and a SECOND bare assertion of the noun the excerpt is independently
+    summoning. Exact token match, so a name that only partly carries the species
+    (`"the retriever"` / `"golden retriever"`) keeps it.
+
+    Judge-safe, and this is why it does not touch ADR-035's `species` carve-out: what filtering
+    species could make vacuous is the REFERENCE gate, and that prompt is built by char_bible's own
+    `_describe` (`char_bible.py:109`). `consistency_check.JUDGE_PROMPT` interpolates `{name}` only,
+    and `correct_prompt`'s `wrong_species` clause reads `description.species` off the contract.
+    """
+    species = description.species
+    if species and species.lower() in name.lower().split():
+        species = None
     axes = [
-        description.species,
+        species,
         ", ".join(description.colours),
         ", ".join(description.body_features),
         ", ".join(description.clothing),
@@ -150,10 +164,24 @@ def referenced_characters(
 # none of its one-reference scene. Naming each image and stating what it is FOR is the smallest
 # change that addresses both branches of #23's discriminator: the duplicated girl (compositing) and
 # the duplicated star (the prose says "a star" and one reference IS a star).
+
+# Issue #32: the sentences above govern the IMAGES, and a scene's own prose summons the thing
+# independently of them. Prod job d83721d9's `s1` sent "Image 2 is the star" AND "found a tiny
+# glowing star", and got both — the compositing branch #23 closed was not involved
+# (same_character=True, anatomy_intact=True). The sentence below is the only one that binds the
+# two mentions together.
+#
+# Deliberately GENERIC — "one of these characters", not "Ana or the star". The roll immediately
+# above supplies the antecedent, so this can never assert a name the roll did not already assert:
+# refs are sent for every `characters_present` character, including ones the excerpt never names
+# ("Ana decided to help." sent two), and naming an absent character is how #23's floating extra
+# appeared. It also binds the NAME, not the noun: "the stars" in "she looked up at the stars"
+# names no character and stays drawable.
 REFERENCE_CLAUSE = (
     "Use them only as references for what each character looks like. Draw one new illustration of "
     "the scene described below — do not copy, inset, mirror or repeat the reference images inside it, "
-    "and draw each character exactly once."
+    "and draw each character exactly once. When the text below names one of these characters, it is "
+    "referring to that character itself, not to a second thing of the same name."
 )
 
 

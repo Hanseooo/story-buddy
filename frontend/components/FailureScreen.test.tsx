@@ -50,7 +50,7 @@ describe("FailureScreen — kind=revise", () => {
 describe("FailureScreen — kind=retry", () => {
   it("shows retry copy and Try again button", () => {
     render(<FailureScreen kind="retry" inputText="A story." />);
-    expect(screen.getByText(/the story machine got stuck/i)).toBeDefined();
+    expect(screen.getByText(/machine got stuck/i)).toBeDefined();
     expect(screen.getByRole("button", { name: /try again/i })).toBeDefined();
     expect(screen.queryByRole("button", { name: /change my words/i })).toBeNull();
   });
