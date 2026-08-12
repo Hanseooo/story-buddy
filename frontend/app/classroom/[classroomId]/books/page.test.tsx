@@ -12,6 +12,7 @@ function makeJob(overrides: Partial<Job> = {}): Job {
     rejected_at: null,
     created_at: new Date().toISOString(),
     input_text: "A story",
+    style_preset_id: null,
     pages: [{ scene_id: "s1", caption: "Page 1", image_path: "job-1/s1.png" }],
     profile_id: "profile-1",
     profiles: { display_nickname: "Alex" },

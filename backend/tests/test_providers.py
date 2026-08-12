@@ -222,6 +222,7 @@ def test_edit_image_passes_references_and_seed_and_returns_bytes():
     assert endpoint == "fal-ai/qwen-image-edit-2511"
     assert fal.subscribe.call_args.kwargs["arguments"] == {
         "output_format": "png",
+        "negative_prompt": providers.NEGATIVE_PROMPT,
         "prompt": "a fox",
         "image_urls": ["https://ref/1.png"],
         "seed": 7,
@@ -260,7 +261,11 @@ def test_text_to_image_omits_seed_when_not_given():
          patch("providers.httpx.get", return_value=MagicMock(content=b"png")):
         providers.text_to_image("a fox")
 
-    assert "seed" not in fal.subscribe.call_args.kwargs["arguments"]
+    arguments = fal.subscribe.call_args.kwargs["arguments"]
+    assert "seed" not in arguments
+    # The canonical reference suppresses lettering too — it is drawn on the t2i path, and a
+    # reference with text in it teaches every scene the same habit.
+    assert arguments["negative_prompt"] == providers.NEGATIVE_PROMPT
 
 
 # --- transient-failure tolerance ---
@@ -588,8 +593,12 @@ def test_redact_pii_pseudonymizes_repeated_name_consistently():
         from providers import redact_pii
         result = redact_pii(text)
 
-    assert result.count("Ana") == 2
-    assert "Ben" in result
+    # No English pronoun anywhere, so both land in the neutral pool.
+    from providers import _PSEUDONYM_POOLS
+    maria, juan = result.split()[1], result.split()[-1].rstrip(".")
+    assert result.count(maria) == 2
+    assert maria != juan
+    assert {maria, juan} <= set(_PSEUDONYM_POOLS["neutral"])
     assert "Maria" not in result
     assert "Juan" not in result
 
@@ -606,10 +615,12 @@ def test_redact_pii_different_names_get_different_stand_ins():
         from providers import redact_pii
         result = redact_pii(text)
 
+    from providers import _PSEUDONYM_POOLS
     assert "Pedro" not in result
     assert "Rosario" not in result
-    assert "Ana" in result
-    assert "Ben" in result
+    pedro_stand_in, rosario_stand_in = result.split()[1], result.split()[4]
+    assert pedro_stand_in != rosario_stand_in
+    assert {pedro_stand_in, rosario_stand_in} <= set(_PSEUDONYM_POOLS["neutral"])
 
 
 def test_redact_pii_two_calls_do_not_share_a_mapping():
@@ -621,9 +632,12 @@ def test_redact_pii_two_calls_do_not_share_a_mapping():
         first_result = redact_pii(text)
         second_result = redact_pii(text)
 
-    # Same input, fresh mapping each call — both independently land on the pool's first entry.
+    # Same input, fresh mapping each call — the shuffle is seeded from the text, so both calls
+    # independently reach the same stand-in without any state surviving between them.
+    from providers import _PSEUDONYM_POOLS
     assert first_result == second_result
-    assert "Ana" in first_result
+    assert "Marcos" not in first_result
+    assert first_result.split()[1] in _PSEUDONYM_POOLS["neutral"]
 
 
 def test_redact_pii_hard_redacts_structured_identifiers_not_pseudonyms():
@@ -643,6 +657,147 @@ def test_redact_pii_returns_text_unchanged_when_no_entities():
         from providers import redact_pii
         result = redact_pii("Walang laman dito.")
     assert result == "Walang laman dito."
+
+
+# --- pseudonym selection: gender, exhaustion, and NER false positives ---
+#
+# Every case below was reproduced against real Presidio + en_core_web_sm on the donated sample
+# stories (2026-08-13) before being written as a test. `_fake_presidio` pins the analyzer output
+# so the assertions test *our* selection logic, not spaCy's weather.
+
+
+def _person(text, *names, entity="PERSON"):
+    """RecognizerResults for the first occurrence of each name, in the order given."""
+    return [
+        RecognizerResult(entity_type=entity, start=text.index(n), end=text.index(n) + len(n), score=0.85)
+        for n in names
+    ]
+
+
+def _redact(text, results):
+    with patch("providers._presidio", return_value=_fake_presidio(results)):
+        from providers import redact_pii
+        return redact_pii(text)
+
+
+def _pool(gender):
+    from providers import _PSEUDONYM_POOLS
+    return set(_PSEUDONYM_POOLS[gender])
+
+
+def test_redact_pii_matches_feminine_pronoun():
+    text = "A girl named Mia went for a walk. She saw a big house."
+    result = _redact(text, _person(text, "Mia"))
+    assert result.split()[3] in _pool("feminine")
+
+
+def test_redact_pii_matches_masculine_pronoun():
+    text = "Jack was feeling sad. He wanted some grape juice."
+    result = _redact(text, _person(text, "Jack"))
+    assert result.split()[0] in _pool("masculine")
+
+
+def test_redact_pii_falls_back_to_neutral_when_only_plural_pronouns():
+    """`they/them/their` is not gender evidence — the antecedent may be several characters
+    (prod sample "Joe and Grace ... They were always playing together")."""
+    text = "Joe and Grace were best friends. They were always playing together."
+    result = _redact(text, _person(text, "Joe", "Grace"))
+    joe, grace = result.split()[0], result.split()[2]
+    assert {joe, grace} <= _pool("neutral")
+    assert joe != grace
+
+
+def test_redact_pii_falls_back_to_neutral_on_conflicting_pronouns():
+    text = "Alexis was there. He waved. Alexis smiled and she laughed."
+    result = _redact(text, _person(text, "Alexis"))
+    assert result.split()[0] in _pool("neutral")
+
+
+def test_redact_pii_replaces_every_occurrence_of_a_detected_name():
+    """spaCy tagged "Grace" PERSON at one span and ORGANIZATION at another in prod sample
+    "Joe and Grace", so half the mentions survived and the book gained a third character."""
+    text = "Grace held the nails. Later Grace agreed. Grace smiled."
+    result = _redact(text, _person(text, "Grace"))  # only the FIRST span is detected
+    assert "Grace" not in result
+    assert result.count(result.split()[0]) == 3
+
+
+def test_redact_pii_never_reuses_a_name_the_story_already_uses():
+    text = "Maria waved at Alex."
+    result = _redact(text, _person(text, "Maria", "Alex"))
+    maria, alex = result.split()[0], result.split()[3].rstrip(".")
+    assert "Alex" not in result  # the real character's name is not handed to anyone else
+    assert maria != alex
+    assert {maria, alex} <= _pool("neutral")
+
+
+def test_redact_pii_gives_every_character_a_distinct_name_past_pool_size():
+    """`pool[len(mapping) % len(pool)]` merged the 7th character into the 1st — prod-plausible
+    for a class-sized cast, and it silently rewrites who did what."""
+    names = [f"Name{i:02d}" for i in range(20)]
+    text = " ".join(f"{n} was there." for n in names)
+    result = _redact(text, _person(text, *names))
+    for n in names:
+        assert n not in result
+    # One pseudonym per character, no merges.
+    assert len(set(result.replace(" was there.", "").split())) == 20
+
+
+def test_redact_pii_skips_person_spans_after_a_determiner():
+    """spaCy tagged "bush" PERSON at 0.85 in prod sample "Max the Dog", turning "behind a bush"
+    into "behind a Cielo". A first name is never preceded by an article."""
+    text = "He heard a cry from behind a bush."
+    assert _redact(text, _person(text, "bush")) == text
+
+
+def test_redact_pii_varies_the_stand_in_across_stories():
+    """The pool is shuffled per story, so the first girl in every book is not always Ana."""
+    seen = set()
+    for i in range(12):
+        text = f"Story number {i}. Mia went for a walk. She saw a house."
+        seen.add(_redact(text, _person(text, "Mia")).split("Story number")[1].split()[1])
+    assert len(seen) > 1
+
+
+def test_redact_pii_is_stable_for_the_same_story():
+    """Retry safety: a resumed or re-queued job must not rename characters out from under images
+    already in storage (`run_job.py:219` resumes a durable checkpoint; `graph.py:127` falls back
+    to an in-memory one that does not survive the process)."""
+    text = "Mia went for a walk. She saw a house."
+    assert _redact(text, _person(text, "Mia")) == _redact(text, _person(text, "Mia"))
+
+
+def test_redact_pii_seed_survives_process_hash_randomization():
+    """Golden value. `hash()` on a str is salted by PYTHONHASHSEED, so seeding with it would vary
+    per worker process and still pass every other test in this file. Pinning one output catches
+    that substitution. Update deliberately if the pools change."""
+    text = "Mia went for a walk. She saw a house."
+    assert _redact(text, _person(text, "Mia")) == "Lucy went for a walk. She saw a house."
+
+
+def test_redact_pii_never_puts_prefix_colliding_names_in_one_story():
+    """`Alex` and `Alexis` are both in the neutral pool. Ordered selection never produced the
+    pair; a shuffle can, and character binding matches characters by name."""
+    for i in range(60):
+        text = f"Tale {i}. Ana and Ben and Cielo were friends. They played."
+        result = _redact(text, _person(text, "Ana", "Ben", "Cielo"))
+        assigned = [w.strip(".") for w in result.split() if w.strip(".") not in text.split()]
+        for a in assigned:
+            others = [o.casefold() for o in assigned if o != a]
+            assert not any(a.casefold().startswith(o) or o.startswith(a.casefold()) for o in others), result
+
+
+def test_redact_pii_avoids_stand_ins_similar_to_a_real_character():
+    """A story about Analyn must not get a character called Ana."""
+    text = "Analyn waved. She smiled."
+    assert "Ana " not in _redact(text, _person(text, "Analyn"))
+
+
+def test_determiner_guard_does_not_apply_to_identifiers():
+    text = "Ang TIN ko ay the 123-456-789."
+    tin = text.index("123-456-789")
+    result = _redact(text, [RecognizerResult(entity_type="PH_TIN", start=tin, end=tin + 11, score=0.6)])
+    assert "<PH_TIN>" in result
 
 
 def test_presidio_is_cached_across_calls():

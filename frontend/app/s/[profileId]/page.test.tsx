@@ -40,6 +40,7 @@ const makeJob = (overrides: Partial<{
   current_stage: null,
   failure_reason: null,
   input_text: "My story",
+  style_preset_id: null,
   pages: [{ scene_id: "s1", caption: "cap", image_path: "pages/img.jpg" }],
   reveal: null,
   profile_id: PROFILE_ID,

@@ -7,7 +7,9 @@ import { motion, AnimatePresence, useScroll, useMotionValueEvent } from "framer-
 import { useJob } from "@/lib/useJob";
 import FailureScreen, { resetFailChain } from "@/components/FailureScreen";
 import { signPaths } from "@/lib/signedUrls";
-import { CaretLeft, CaretRight, BookOpen, Rows } from "@phosphor-icons/react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { CaretLeft, CaretRight, BookOpen, Rows, ArrowLeft } from "@phosphor-icons/react";
 
 function ScrollImage({ src, alt, onClick }: { src: string; alt: string; onClick?: () => void }) {
   const [isLoaded, setIsLoaded] = useState(false);
@@ -21,6 +23,8 @@ function ScrollImage({ src, alt, onClick }: { src: string; alt: string; onClick?
          animate={{ opacity: isLoaded ? 1 : 0 }}
          transition={{ duration: 0.6, ease: "easeOut" }}
          onLoad={() => setIsLoaded(true)}
+         loading="lazy"
+         decoding="async"
          className={`w-full h-auto object-contain rounded-xl max-h-[50vh] md:max-h-none relative z-10 ${onClick ? 'cursor-zoom-in' : ''}`}
          onClick={onClick}
       />
@@ -99,6 +103,8 @@ type SignedPage = { scene_id: string; caption: string; signedUrl: string };
 
 export default function BookPage({ params }: { params: Promise<{ jobId: string }> }) {
   const { jobId } = use(params);
+  const routeParams = useParams<{ profileId: string }>();
+  const profileId = routeParams?.profileId;
   const { bucket, row } = useJob(jobId);
   const [pageIndex, setPageIndex] = useState(0);
   const [signedPages, setSignedPages] = useState<SignedPage[] | null>(null);
@@ -106,7 +112,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
   const [loaded, setLoaded] = useState<Record<number, boolean>>({});
   const [direction, setDirection] = useState(0);
   const [hasInteracted, setHasInteracted] = useState(false);
-  const [viewMode, setViewMode] = useState<"pages" | "scroll">("scroll");
+  const [viewMode, setViewMode] = useState<"pages" | "scroll">("pages");
   const [navHidden, setNavHidden] = useState(false);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
 
@@ -169,7 +175,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
   if (bucket === "terminal-failure") {
     // Signing failure while book was complete: machine screen, counter NOT bumped
     if (signFailed) {
-      return <FailureScreen kind="retry" inputText={row?.input_text} countable={false} />;
+      return <FailureScreen kind="retry" inputText={row?.input_text} stylePresetId={row?.style_preset_id} countable={false} />;
     }
     const kind =
       row?.failure_reason === "child_text"
@@ -177,7 +183,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
         : row?.status === SWEPT_STATUS
         ? "asleep"
         : "retry";
-    return <FailureScreen kind={kind} inputText={row?.input_text} />;
+    return <FailureScreen kind={kind} inputText={row?.input_text} stylePresetId={row?.style_preset_id} />;
   }
 
   if (bucket === "in-flight" || bucket === "paused") {
@@ -186,7 +192,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
 
   // terminal-success — wait for signing
   if (signFailed) {
-    return <FailureScreen kind="retry" inputText={row?.input_text} countable={false} />;
+    return <FailureScreen kind="retry" inputText={row?.input_text} stylePresetId={row?.style_preset_id} countable={false} />;
   }
 
   if (!signedPages) {
@@ -229,49 +235,81 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
         )}
       </AnimatePresence>
 
-      {/* View Toggle */}
+      {/* Unified Reader Toolbar (Back Button + View Toggle) */}
       <AnimatePresence>
-        {(!navHidden || viewMode === "pages") && (
-          <motion.div 
+        {!navHidden && (
+          <motion.div
             initial={{ y: -100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -100, opacity: 0 }}
             transition={{ type: "spring", bounce: 0, duration: 0.4 }}
-            className="absolute top-6 left-1/2 -translate-x-1/2 z-50 flex items-center bg-[var(--color-surface)]/90 backdrop-blur-md p-1.5 rounded-full neo-shadow border border-[var(--color-muted)]"
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1.5 bg-[var(--color-surface)]/90 backdrop-blur-md p-1.5 rounded-full neo-shadow border border-[var(--color-muted)]"
           >
-            <button
-              onClick={() => setViewMode("scroll")}
-              className={`relative flex items-center justify-center p-2.5 md:p-3 rounded-full transition-colors ${
-                viewMode === "scroll" ? "text-white" : "text-[var(--foreground)] hover:bg-[var(--color-muted)]/20"
-              }`}
-              aria-label="Scroll View"
+            <Link
+              href={profileId ? `/s/${profileId}` : "/"}
+              aria-label="Back to bookshelf"
+              className="flex h-10 md:h-11 items-center gap-1.5 px-3 md:px-4 rounded-full text-[var(--foreground)] hover:text-[var(--color-primary)] hover:bg-[var(--color-muted)]/20 transition-all font-kid font-bold text-sm shrink-0"
             >
-              {viewMode === "scroll" && (
-                <motion.div
-                  layoutId="view-toggle"
-                  className="absolute inset-0 bg-[var(--color-primary)] rounded-full -z-10"
-                  transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                />
-              )}
-              <Rows size={20} weight={viewMode === "scroll" ? "bold" : "regular"} />
-            </button>
-            <button
-              onClick={() => setViewMode("pages")}
-              className={`relative flex items-center justify-center p-2.5 md:p-3 rounded-full transition-colors ${
-                viewMode === "pages" ? "text-white" : "text-[var(--foreground)] hover:bg-[var(--color-muted)]/20"
-              }`}
-              aria-label="Pages View"
-            >
-              {viewMode === "pages" && (
-                <motion.div
-                  layoutId="view-toggle"
-                  className="absolute inset-0 bg-[var(--color-primary)] rounded-full -z-10"
-                  transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                />
-              )}
-              <BookOpen size={20} weight={viewMode === "pages" ? "bold" : "regular"} />
-            </button>
+              <ArrowLeft size={20} weight="bold" />
+              <span className="hidden sm:inline">Bookshelf</span>
+            </Link>
+
+            <div className="w-[1px] h-5 bg-[var(--color-muted)] mx-0.5" />
+
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setViewMode("pages")}
+                className={`relative flex items-center justify-center p-2.5 rounded-full transition-colors ${
+                  viewMode === "pages" ? "text-white" : "text-[var(--foreground)] hover:bg-[var(--color-muted)]/20"
+                }`}
+                aria-label="Pages View"
+              >
+                {viewMode === "pages" && (
+                  <motion.div
+                    layoutId="view-toggle"
+                    className="absolute inset-0 bg-[var(--color-primary)] rounded-full -z-10"
+                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                  />
+                )}
+                <BookOpen size={20} weight={viewMode === "pages" ? "bold" : "regular"} />
+              </button>
+              <button
+                onClick={() => setViewMode("scroll")}
+                className={`relative flex items-center justify-center p-2.5 rounded-full transition-colors ${
+                  viewMode === "scroll" ? "text-white" : "text-[var(--foreground)] hover:bg-[var(--color-muted)]/20"
+                }`}
+                aria-label="Scroll View"
+              >
+                {viewMode === "scroll" && (
+                  <motion.div
+                    layoutId="view-toggle"
+                    className="absolute inset-0 bg-[var(--color-primary)] rounded-full -z-10"
+                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                  />
+                )}
+                <Rows size={20} weight={viewMode === "scroll" ? "bold" : "regular"} />
+              </button>
+            </div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Presidio pseudonymizes every detected person name, so a child who wrote "Mia" reads a
+          book about "Ana" and has no way to know why. Nothing persists WHETHER a swap happened —
+          `redact_pii` only logs entity counts — hence "may", which is true either way and costs
+          no contract, schema or migration change. Rendered once outside the viewMode branch so
+          both reading modes get it. See docs/capstone/ethics_and_safety.md §1. */}
+      <AnimatePresence>
+        {!navHidden && (
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 z-40 px-3 text-center font-kid text-xs text-[var(--foreground)]/50 pointer-events-none"
+          >
+            We may change some names to keep you safe.
+          </motion.p>
         )}
       </AnimatePresence>
 
