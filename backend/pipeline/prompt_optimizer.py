@@ -172,7 +172,11 @@ def referenced_characters(
     by_id = {character.char_id: character for character in characters}
     return [
         character
-        for char_id in characters_present
+        # §4.3 D3(a), defensive half. `segment` no longer emits a duplicate, but a checkpoint
+        # written before that change can, and `_fal_ref_url`'s cache would hand fal the same URL
+        # twice. `dict.fromkeys` is order-preserving, so the survivors keep their relative order
+        # and "Image N is X" still names `ref_paths[N-1]` on all three consumers (invariant 4).
+        for char_id in dict.fromkeys(characters_present)
         if (character := by_id.get(char_id)) is not None and character.canonical_ref_image
     ]
 

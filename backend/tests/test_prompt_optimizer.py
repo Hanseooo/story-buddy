@@ -750,5 +750,43 @@ def test_the_style_fragment_is_still_last_with_a_location_present():
     assert prompt.endswith(FRAG)
 
 
+# --- §4.3 D3(a): the defensive half (§6 test 17) ---
+
+def test_referenced_characters_deduplicates_a_repeated_char_id():
+    """§6 test 17. `segment` no longer emits one, but a checkpoint written before that change
+    still can — and `_fal_ref_url`'s cache would return the SAME fal URL twice, so the roll would
+    say "Image 1 is the star. Image 2 is the star." over a single image."""
+    star = _char("c1", "the star")
+    star.canonical_ref_image = "job-123/ref-c1-1.png"
+
+    assert [c.char_id for c in referenced_characters(["c1", "c1"], [star])] == ["c1"]
+
+
+def test_referenced_characters_keeps_the_relative_order_of_the_survivors():
+    """Invariant 4: `dict.fromkeys` preserves first-seen order, so removing a duplicate cannot
+    reorder the survivors that "Image N is X" is indexed against on three nodes."""
+    ana = _char("c0", "Ana")
+    ana.canonical_ref_image = "job-123/ref-c0-1.png"
+    star = _char("c1", "the star")
+    star.canonical_ref_image = "job-123/ref-c1-1.png"
+
+    got = referenced_characters(["c1", "c0", "c1"], [ana, star])
+
+    assert [c.name for c in got] == ["the star", "Ana"]
+
+
+def test_the_roll_numbers_a_repeated_char_id_only_once():
+    """The end-to-end shape of the bug: one image, one number, one subject."""
+    star = _char("c1", "the star", body_features=["tiny"])
+    star.canonical_ref_image = "job-123/ref-c1-1.png"
+
+    prompt = build_prompt("It shone.", ["c1", "c1"], [star], FRAG)
+
+    assert "Image 1 is the star - tiny." in prompt
+    assert "Image 2" not in prompt
+    assert "This illustration contains exactly 1 character: the star." in prompt
+
+
+
 
 
