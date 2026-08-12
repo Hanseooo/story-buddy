@@ -311,7 +311,9 @@ Two independent projects, no shared root tooling — run commands from the named
   protection is not configured, so the check reports but does not block merge.
 - Deterministic tests mock every `providers.py` call. Never assert on generated content quality;
   that belongs to the offline eval harness, never CI.
-- Intentional skips / known flaky: none documented yet.
+- Intentional skips: `tests/test_rls_isolation.py` (needs `SUPABASE_DB_URL` → a local Supabase) and
+  `tests/test_smoke_providers.py` (needs real provider credentials). Both skip clean in CI by design.
+  Known flaky: none documented yet.
 
 ## Project-Specific Invariants
 - Story Memory (`backend/contracts/`) is the only channel between pipeline modules — no ad-hoc
@@ -503,9 +505,13 @@ is not documentation of a good design; it is the blast radius, written down so t
   reads ownership from the row; `app/nickname.py` + `lib/nickname.ts` share S1 §5.1's fourteen vectors;
   `supabaseClient.ts` is on `createBrowserClient`; `get_current_user` guards `POST /storybooks` and
   `/confirm`. **The two legacy policy surfaces are gone** — `0008` dropped them.
-  ⚠️ **Not built, and S3-13 says it is not optional:** the 33-test Tier-A isolation suite that is meant
-  to ship *with* `0008`. Until it exists, ADR-017's "real, testable boundary" is again unbacked by a
-  single test — the exact gap S3 was written to close.
+  **The Tier-A isolation suite (S3-13) is built:** `backend/tests/test_rls_isolation.py`, 39 test
+  functions covering spec tests 1–25 (jobs, classrooms, profiles) and 28–33 (storage). Realtime
+  tests 26–27 need a WebSocket client and are deliberately out of scope for pytest.
+  ⚠️ **It does not run in CI.** Every case is `skipif`-gated on `SUPABASE_DB_URL`, which CI does not
+  set, so ADR-017's "real, testable boundary" is backed by tests that only a human runs:
+  `SUPABASE_DB_URL=postgresql://postgres:postgres@localhost:54322/postgres uv run pytest
+  tests/test_rls_isolation.py` against a local Supabase with `0007` + `0008` applied.
   **`scene-setting-and-subject-binding` is built (2026-08-13):** one artifact class across five nodes.
   `contracts/` gains **two** additive fields — `Scene.location_id` and `VlmVerdict.subjects_unique`
   (both defaulted, no `schema_version` bump); `subjects_unique` is declared last so ADR-004's order

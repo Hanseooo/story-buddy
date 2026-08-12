@@ -1,0 +1,9 @@
+# The Dockerfile's `ADD . /app` takes everything. Northflank builds from a git clone, so
+# .gitignore already spares it — this is for `docker build backend/` on a dev machine, where
+# .env is real and .venv is a Windows venv with unusable absolute paths.
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
