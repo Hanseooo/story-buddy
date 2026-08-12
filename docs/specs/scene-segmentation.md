@@ -183,6 +183,27 @@ state that never-invent overrides the floor. A three-sentence story gets a short
 | **Resume mid-job** | LangGraph checkpoints after every node, so a resumed job reuses the persisted scenes and never re-mints `scene_id`s (`story-memory-contract` §2.1). |
 | **Prompt injection in the story text** | `input_gate` moderates **first** — CC-1's ordering is the mitigation, a graph edge, not something this node re-implements. Strict `json_schema` further constrains the shape of what comes back, and because the node only reads *integers* from the response, a hostile response cannot inject text into the book. |
 
+### Setting (`scene-setting-and-subject-binding.md` §4.1)
+
+`SEGMENTATION_PROMPT` carries a location roster and `ExtractedScene.location_name`, mapped to
+`scenes[].location_id` by the same pattern as the character path (unknown name → warn + treated as
+null). Carry-forward runs last, over the final scene list in order: a null inherits the previous
+scene's `location_id`; a null `s0` takes `locations[0].loc_id` if the story named any, else `None`.
+A story that names no location leaves every `location_id` as `None` — identical to before.
+
+`location_name` propagates through **all eight** `ExtractedScene(...)` constructions (seven in
+`repair`, one in `merge_thin`); on a merge, `a.location_name or b.location_name`. The whole-story
+floor deliberately constructs with no location, and carry-forward supplies `locations[0]`.
+
+### Invariant: no duplicate `char_id` (`scene-setting-and-subject-binding.md` §4.3)
+
+`characters_present` contains no repeated `char_id`. Two paths produced one: the model naming a
+character twice, and `analyze` minting two characters with the same name. The name → id map is
+first-seen-wins and the id list is deduplicated with `dict.fromkeys`, which preserves first-seen
+order — so removing a duplicate cannot reorder the survivors that `build_prompt`'s image roll and
+`generate_scene`'s `ref_paths` are both indexed against.
+
+
 ## 5. Cross-cutting checklist (MASTER_SPEC §5)
 
 - [x] **CC-2 PII redaction** — reads `redacted_text`.

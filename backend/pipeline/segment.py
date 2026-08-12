@@ -215,9 +215,12 @@ def segment(state: StoryMemory) -> dict:
     if len(repaired) != len(raw.scenes):
         log.info("segment: repair changed scene count %d → %d", len(raw.scenes), len(repaired))
 
-    name_to_ids: dict[str, list[str]] = {}
+    # §4.3 path 2: `analyze` never checks for a name collision, so a list-valued map sent ONE
+    # named character's mention out as TWO references. First-seen wins — the roster is already in
+    # prominence order, so the first id is the more important character.
+    name_to_id: dict[str, str] = {}
     for c in state.characters:
-        name_to_ids.setdefault(c.name, []).append(c.char_id)
+        name_to_id.setdefault(c.name, c.char_id)
 
     name_to_loc = {loc.name: loc.loc_id for loc in state.locations}
     # Carry-forward seed (§4.1): s0 with no location takes locations[0], so a story that names a
@@ -229,8 +232,8 @@ def segment(state: StoryMemory) -> dict:
         excerpt = " ".join(units[r.start : r.end + 1])
         char_ids: list[str] = []
         for name in r.characters_present:
-            if name in name_to_ids:
-                char_ids.extend(name_to_ids[name])
+            if name in name_to_id:
+                char_ids.append(name_to_id[name])
             else:
                 log.warning("segment: name %r not in roster, dropped", name)
 
@@ -245,9 +248,12 @@ def segment(state: StoryMemory) -> dict:
             scene_id=f"s{i}",
             text_excerpt=excerpt,
             caption=excerpt,
-            characters_present=char_ids,
+            # §4.3 path 1. `dict.fromkeys` preserves first-seen order, so removing a duplicate
+            # cannot reorder the survivors (invariant 4).
+            characters_present=list(dict.fromkeys(char_ids)),
             location_id=loc_id,
         ))
+
 
     log.info("segment: minted %s", [s.scene_id for s in scenes])
     return {"scenes": scenes}

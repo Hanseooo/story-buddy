@@ -545,3 +545,42 @@ def test_segment_passes_the_state_locations_to_segment_scenes():
 
     assert mock_seg.call_args.args[3] == _LOCS
 
+
+# --- §6 tests 6 & 7 / spec §4.3 D3(a): one char_id per character, per scene ---
+
+def test_segment_maps_a_repeated_name_to_one_char_id():
+    """Path 1: the model returns the same name twice. Sending one reference image as two
+    subjects is how a character gets drawn twice, often once smaller."""
+    seg = SceneSegmentation(scenes=[
+        ExtractedScene(start=0, end=1, characters_present=["the dog", "the dog"]),
+    ])
+    with patch("pipeline.segment.segment_scenes", return_value=seg):
+        result = segment(_state(characters=[_char("c0", "the dog")]))
+
+    assert result["scenes"][0].characters_present == ["c0"]
+
+
+def test_segment_maps_two_roster_characters_sharing_a_name_to_one_char_id():
+    """Path 2: `analyze` takes `characters[:3]` and never checks for a name collision, so one
+    mention used to `.extend` BOTH ids and send two references for one named character."""
+    seg = SceneSegmentation(scenes=[
+        ExtractedScene(start=0, end=1, characters_present=["the dog"]),
+    ])
+    with patch("pipeline.segment.segment_scenes", return_value=seg):
+        result = segment(_state(characters=[_char("c0", "the dog"), _char("c1", "the dog")]))
+
+    assert result["scenes"][0].characters_present == ["c0"]
+
+
+def test_segment_dedup_preserves_first_seen_order_of_the_survivors():
+    """Invariant 4: removing a duplicate must not reorder the survivors — the roll index in
+    `build_prompt` is asserted against `ref_paths` on three separate nodes."""
+    seg = SceneSegmentation(scenes=[
+        ExtractedScene(start=0, end=1, characters_present=["the cat", "the dog", "the cat"]),
+    ])
+    with patch("pipeline.segment.segment_scenes", return_value=seg):
+        result = segment(_state(characters=[_char("c0", "the dog"), _char("c1", "the cat")]))
+
+    assert result["scenes"][0].characters_present == ["c1", "c0"]
+
+
