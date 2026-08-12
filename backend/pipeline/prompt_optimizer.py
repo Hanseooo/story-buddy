@@ -8,7 +8,7 @@ caller stores the return value.
 import logging
 
 from app.config import settings
-from contracts.story_memory import Character, CharacterDescription, FailureReason
+from contracts.story_memory import Character, CharacterDescription, FailureReason, Location
 
 log = logging.getLogger(__name__)
 
@@ -107,6 +107,25 @@ def filtered_description(
             "notes": _kept_whole(description.notes, forbidden),
         }
     )
+
+
+def filtered_location(location: Location | None, style_fragment: str | None) -> Location | None:
+    """Pure, transient — ADR-035 surface 5. A location description reaches the draw prompt the way
+    a character description does, so `"glowing cave"` under a fragment ending `no glow` puts the
+    prompt at war with itself. Word-level, like the list axes.
+
+    The NAME is deliberately never filtered: it is what the child called the place, and when the
+    description is null it is the entire `Setting:` line. Removes, never invents, so invariant 2
+    is untouched.
+    """
+    if location is None or location.description is None:
+        return location
+    forbidden = style_prohibitions(style_fragment)
+    if not forbidden:
+        return location
+    kept = _filter_axis([location.description], forbidden)
+    return location.model_copy(update={"description": kept[0] if kept else None})
+
 
 
 def _describe(description: CharacterDescription, name: str) -> str:

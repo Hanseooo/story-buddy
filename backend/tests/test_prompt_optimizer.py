@@ -1,11 +1,12 @@
 from app.config import STYLE_PRESETS
-from contracts.story_memory import Character, CharacterDescription, FailureReason
+from contracts.story_memory import Character, CharacterDescription, FailureReason, Location
 from pipeline.prompt_optimizer import (
     ANATOMY_CLAUSE,
     IDENTITY_CLAUSE,
     build_prompt,
     correct_prompt,
     filtered_description,
+    filtered_location,
     permitted_words,
     referenced_characters,
     style_prohibitions,
@@ -459,3 +460,45 @@ def test_correct_prompt_does_not_reinforce_a_style_forbidden_colour():
     result = correct_prompt("draw a star", [FailureReason.wrong_colour], [star], COMIC)
     assert "match the reference's exact colours: yellow" in result
     assert "glowing" not in result
+
+
+# --- ADR-035 surface 5: location descriptions (§6 test 15) ---
+
+def test_filtered_location_drops_a_forbidden_word_from_the_description():
+    """Same word-level rule as `_filter_axis`: the forbidden rendering property goes, the real
+    subject fact stays."""
+    filtered = filtered_location(
+        Location(loc_id="loc0", name="the cave", description="glowing cave"), COMIC
+    )
+    assert filtered.description == "cave"
+
+
+def test_filtered_location_never_touches_the_name():
+    """The name is what the child called the place, and it is the whole `Setting:` line when the
+    description is null. Filtering it could empty the line entirely."""
+    filtered = filtered_location(
+        Location(loc_id="loc0", name="the glowing cave", description="glowing cave"), COMIC
+    )
+    assert filtered.name == "the glowing cave"
+
+
+def test_filtered_location_drops_a_description_with_nothing_left():
+    filtered = filtered_location(
+        Location(loc_id="loc0", name="the cave", description="glowing"), COMIC
+    )
+    assert filtered.description is None
+
+
+def test_filtered_location_leaves_a_permitted_description_alone():
+    location = Location(loc_id="loc0", name="the beach", description="golden sand, palm trees")
+    assert filtered_location(location, COMIC) == location
+
+
+def test_filtered_location_passes_none_through():
+    assert filtered_location(None, COMIC) is None
+
+
+def test_filtered_location_handles_a_null_description():
+    location = Location(loc_id="loc0", name="the beach")
+    assert filtered_location(location, COMIC) == location
+
