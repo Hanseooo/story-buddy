@@ -3,8 +3,11 @@
 Text + VLM judge go through OpenRouter (OpenAI-compatible). Images go through fal.ai.
 Deterministic tests mock these functions; nothing here runs in CI (MASTER_SPEC §6).
 """
+import hashlib
 import json
 import logging
+import random
+import re
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
@@ -262,10 +265,31 @@ def _fal() -> fal_client.SyncClient:
     return fal_client.SyncClient(key=settings.fal_key)
 
 
+# Every style preset already ends "no speech bubbles, no captions, no lettering"
+# (`app/config.py:85`, commit 416ea33), and prod still shipped a gouache page of smeared
+# pseudo-lettering on 2026-08-13. Qwen-Image renders text *by design*, so a `no <term>` clause
+# in the tail of the positive prompt competes with the thing the model is best at. The negative
+# prompt is the channel that was never used: `_run_fal` sent `output_format` and nothing else,
+# so every scene and every canonical reference this project has drawn had an empty one.
+#
+# Verified against both endpoints' openapi (2026-08-13): `fal-ai/qwen-image` and
+# `fal-ai/qwen-image-edit-2511` each declare `negative_prompt: str`. Unlike REFERENCE_FIELD this
+# needs no loud guard — an endpoint without the field drops it silently and lands back on the
+# behaviour above, which degrades rather than breaks.
+NEGATIVE_PROMPT = (
+    "text, letters, words, writing, signage, labels, captions, subtitles, "
+    "watermark, signature, speech bubbles, speech balloons, comic panels"
+)
+
+
 def _run_fal(endpoint: str, arguments: dict, seed: int | None) -> bytes:
     if seed is not None:
         arguments = {**arguments, "seed": seed}
-    result = _fal().subscribe(endpoint, arguments={"output_format": "png", **arguments})
+    # Defaults first so `arguments` can override either one; no caller does today.
+    result = _fal().subscribe(
+        endpoint,
+        arguments={"output_format": "png", "negative_prompt": NEGATIVE_PROMPT, **arguments},
+    )
     response = httpx.get(result["images"][0]["url"], timeout=60.0)
     response.raise_for_status()
     return response.content
@@ -304,7 +328,49 @@ def _presidio():
     return analyzer, AnonymizerEngine()
 
 
-_PSEUDONYM_POOL = ["Ana", "Ben", "Cielo", "Dado", "Elena", "Fabio"]
+# Bucketed because assignment used to be positional: the Nth name detected got pool[N], so a boy
+# became "Ana" and the caption kept saying "he". The redacted text is what every downstream stage
+# reads — cast list, canonical character reference, scene prompts — so a pronoun that contradicts
+# the name is a consistency defect, not a cosmetic one.
+_PSEUDONYM_POOLS = {
+    "feminine": ["Ana", "Maya", "Elena", "Lily", "Sophie", "Chloe", "Lucy", "Nora"],
+    "masculine": ["Ben", "Daniel", "Leo", "Miguel", "Andres", "Nico", "Teo", "Jack"],
+    "neutral": ["Jordan", "Alex", "Casey", "Taylor", "Ariel", "Jamie", "Alexis", "Riley"],
+}
+
+_MASCULINE_PRONOUNS = {"he", "him", "his", "himself"}
+_FEMININE_PRONOUNS = {"she", "her", "hers", "herself"}
+# Deliberately NOT evidence: `they/them/their` takes a plural antecedent ("Joe and Grace ... They
+# were always playing together"), and `it/its` never discriminates. Both stop the scan instead of
+# voting, so a window never runs past one character's pronouns into the next character's.
+_STOP_PRONOUNS = {"they", "them", "their", "theirs", "themselves", "it", "its", "itself"}
+_WORD_RE = re.compile(r"[A-Za-z']+")
+_PRONOUN_WINDOW = 12  # tokens after a mention; wider starts crossing into the next sentence's subject
+
+
+def _infer_gender(text: str, name: str) -> str:
+    """Nearest pronoun after each mention of `name`, gendered vote wins, ties go neutral.
+
+    Measured on the donated sample stories (2026-08-13): 4 right, 0 wrong, 3 abstentions. It
+    fails by abstaining to the neutral pool, which is the direction that cannot misgender a child's
+    character. Full coreference would need a model `en_core_web_sm` does not ship.
+    """
+    words = [w.casefold() for w in _WORD_RE.findall(text)]
+    target = _WORD_RE.findall(name.casefold())
+    votes = set()
+    for i in range(len(words) - len(target) + 1):
+        if words[i : i + len(target)] != target:
+            continue
+        for word in words[i + len(target) : i + len(target) + _PRONOUN_WINDOW]:
+            if word in _STOP_PRONOUNS:
+                break
+            if word in _MASCULINE_PRONOUNS:
+                votes.add("masculine")
+                break
+            if word in _FEMININE_PRONOUNS:
+                votes.add("feminine")
+                break
+    return votes.pop() if len(votes) == 1 else "neutral"
 
 # Spec §4c enumerates exactly what redaction does: persons pseudonymize, structured identifiers
 # hard-redact. Everything else spaCy's NER guesses — ORGANIZATION, LOCATION, DATE_TIME, NRP — is
@@ -328,17 +394,92 @@ _IDENTIFIER_ENTITIES = {
 _REDACTED_ENTITIES = _PERSON_ENTITIES | _IDENTIFIER_ENTITIES
 
 
-def _pseudonymizer():
-    """Fresh mapping per call — caching this would leak names between stories (spec §4c)."""
+_DETERMINERS = {"a", "an", "the"}
+
+
+def _after_determiner(text: str, start: int) -> bool:
+    """A first name is never preceded by an article. spaCy tagged "bush" PERSON at 0.85 in
+    "coming from behind a bush" (prod sample, 2026-08-13) and the caption shipped a character
+    called Cielo. Chosen over a title-case test, which dropped this same false positive but also
+    dropped genuinely lowercase names ("juan and sam") — a privacy regression this one avoids."""
+    before = text[:start].rstrip()
+    return bool(before) and before.split()[-1].casefold().strip("\"'“”‘’(") in _DETERMINERS
+
+
+def _missed_mentions(text: str, names: list[str], existing: list) -> list:
+    """Spans for mentions the NER missed. spaCy tagged "Grace" PERSON once and ORGANIZATION
+    twice in the same story, so only a third of her mentions were replaced and the book ended up
+    with Ana, Ben *and* Grace — one child's character split into two. Once a string is a person
+    anywhere in the text it is a person everywhere in it.
+
+    Case-sensitive on purpose: matching "Grace" against the noun "grace" would put a stand-in
+    name in the middle of the child's prose."""
+    from presidio_analyzer import RecognizerResult
+
+    spans = [(r.start, r.end) for r in existing]
+    extra = []
+    for name in dict.fromkeys(names):
+        for match in re.finditer(rf"\b{re.escape(name)}\b", text):
+            if any(match.start() < end and start < match.end() for start, end in spans):
+                continue
+            if _after_determiner(text, match.start()):
+                continue
+            extra.append(RecognizerResult("PERSON", match.start(), match.end(), 0.85))
+            spans.append((match.start(), match.end()))
+    return extra
+
+
+def _story_rng(text: str) -> random.Random:
+    """Seeded from the story, never from the clock: the same text must always redact to the same
+    names. `run_job.py:219` resumes a durable checkpoint so `input_gate` does not normally re-run,
+    but `graph.py:127` falls back to an in-memory checkpointer that dies with the process — one
+    re-queued job and a clock-seeded shuffle would rename every character while the images already
+    in storage keep the old ones.
+
+    `hashlib`, not `hash()`: Python salts `str.__hash__` with PYTHONHASHSEED, so `hash()` varies
+    per worker process and would reintroduce that hazard while passing every test on one machine.
+    """
+    return random.Random(int.from_bytes(hashlib.sha256(text.encode("utf-8")).digest()[:8], "big"))
+
+
+def _too_similar(candidate: str, blocked: set[str]) -> bool:
+    """Prefix containment in either direction — `Alex` must not appear in a book that already has
+    an `Alexis`, and a story about `Analyn` must not gain a character called `Ana`. Ordered
+    selection could never produce those pairs; a shuffle can. Character binding matches by name,
+    so a near-duplicate is a pipeline problem before it is a readability one.
+
+    ponytail: prefix only. `Ana`/`Anna` slips through — edit distance would catch it and costs a
+    dependency or a scratch implementation for a pair that has not appeared in a donated story.
+    """
+    c = candidate.casefold()
+    return any(c.startswith(b) or b.startswith(c) for b in blocked)
+
+
+def _pseudonymizer(text: str, names: list[str]):
+    """Fresh mapping per call — caching this would leak names between stories (spec §4c).
+
+    `names` is every detected person, in reading order. Building the whole mapping up front is
+    what lets a name's pseudonym depend on the *text* (its pronouns, its hash) rather than on the
+    order the anonymizer happens to call back in.
+    """
+    rng = _story_rng(text)
+    pools = {gender: rng.sample(pool, len(pool)) for gender, pool in _PSEUDONYM_POOLS.items()}
+    taken = {n.casefold() for n in names}  # a stand-in must not collide with a real character
     mapping: dict[str, str] = {}
-
-    def assign(value: str) -> str:
-        key = value.casefold()
-        if key not in mapping:
-            mapping[key] = _PSEUDONYM_POOL[len(mapping) % len(_PSEUDONYM_POOL)]
-        return mapping[key]
-
-    return assign
+    for name in names:
+        key = name.casefold()
+        if key in mapping:
+            continue
+        blocked = taken | {p.casefold() for p in mapping.values()}
+        candidates = pools[_infer_gender(text, name)] + pools["neutral"]
+        # Exhaustion must not wrap: `pool[n % len(pool)]` merged the 7th character into the 1st,
+        # silently rewriting who did what. Suffixing is ugly and unmistakably unique — the right
+        # trade for a cast this size. ponytail: 16 names is the ceiling before suffixes appear.
+        mapping[key] = next(
+            (p for p in candidates if not _too_similar(p, blocked)),
+            f"{pools['neutral'][0]}{len(mapping) + 1}",
+        )
+    return lambda value: mapping.get(value.casefold(), value)
 
 
 def redact_pii(text: str) -> str:
@@ -349,7 +490,11 @@ def redact_pii(text: str) -> str:
 
     analyzer, anonymizer = _presidio()
     detected = analyzer.analyze(text=text, language="en")
-    results = [r for r in detected if r.entity_type in _REDACTED_ENTITIES]
+    results = [
+        r for r in detected
+        if r.entity_type in _REDACTED_ENTITIES
+        and not (r.entity_type in _PERSON_ENTITIES and _after_determiner(text, r.start))
+    ]
     # CC-5: log entity-type counts only — never the detected values (ADR-025 D5). `ignored` is
     # the tuning knob for _REDACTED_ENTITIES: a real identifier showing up there is a bug.
     _log.info(
@@ -358,12 +503,12 @@ def redact_pii(text: str) -> str:
         dict(Counter(r.entity_type for r in detected if r.entity_type not in _REDACTED_ENTITIES)),
     )
 
-    # Pre-populate the mapping in reading order: the anonymizer calls the lambda right-to-left
-    # (to avoid offset shifts), so without this the last name in the text would get pool[0].
-    assign = _pseudonymizer()
-    for r in sorted(results, key=lambda r: r.start):
-        if r.entity_type in _PERSON_ENTITIES:
-            assign(text[r.start : r.end])
+    # Reading order matters twice over: the anonymizer calls the operator right-to-left (to avoid
+    # offset shifts), and the pool is handed out first-come-first-served.
+    ordered = sorted(results, key=lambda r: r.start)
+    names = [text[r.start : r.end] for r in ordered if r.entity_type in _PERSON_ENTITIES]
+    results += _missed_mentions(text, names, ordered)
+    assign = _pseudonymizer(text, names)
 
     person = OperatorConfig("custom", {"lambda": assign})
     return anonymizer.anonymize(

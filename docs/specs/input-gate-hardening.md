@@ -188,8 +188,30 @@ stable stand-in for the duration of the call.
 
 ```python
 redact_pii("Si Maria ay pumunta sa bukid. Tinawag ni Maria si Juan.")
-       →  "Si Ana ay pumunta sa bukid. Tinawag ni Ana si Ben."
+       →  "Si Ariel ay pumunta sa bukid. Tinawag ni Ariel si Alex."
 ```
+
+**Amended 2026-08-13 — pool is bucketed by inferred gender.** Assignment used to be positional
+(`pool[n % len(pool)]`), which gave a boy a girl's stand-in while the surrounding pronouns kept
+saying *he*. Since `redacted_text` is what the analyzer, the character reference, and every scene
+prompt read, a name that contradicts its pronouns is a consistency defect and not a cosmetic one.
+`_infer_gender` now votes on the nearest pronoun after each mention (`they/them/it` are not
+evidence — plural or non-discriminating antecedents), and the mapping draws from a feminine,
+masculine, or neutral pool. The example above has no English pronoun, so both names land neutral.
+Measured on the donated sample stories: 4 correct, 0 misgendered, 3 abstentions to neutral. It
+fails by abstaining, which is the only direction that cannot rename a child's girl into a boy.
+
+**Amended 2026-08-13 — the pool is shuffled per story, seeded from the story.** Ordered selection
+made the first girl in every book Ana. `_story_rng` seeds a `random.Random` with a SHA-256 of the
+text, so names vary between stories while the *same* text always redacts identically. That
+stability is the point, not a side effect: `input_gate` does not normally re-run (a resume enters
+at the interrupt point, `run_job.py:228`), but `build_graph` falls back to an in-memory
+checkpointer (`graph.py:127`), and a clock-seeded shuffle would rename every character on a
+re-queued job while the images already in storage kept the old names. It also keeps the test suite
+deterministic. **`hashlib`, not `hash()`** — `str.__hash__` is salted by `PYTHONHASHSEED`, so
+`hash()` would vary per worker process and still pass every test on a single machine;
+`test_redact_pii_seed_survives_process_hash_randomization` pins one output against that
+substitution.
 
 The real name never reaches storage, export, or any provider; the story survives with a protagonist
 an illustrator can actually draw. It also **inverts the cost of a marker false positive** — an
@@ -238,7 +260,12 @@ factory — caching the mapping would leak names between stories.
 
 | Edge case | Behavior |
 |---|---|
-| More distinct names than the pool holds | Pool wraps by modulo; two characters may share a stand-in. Acceptable at a 3-character roster cap (`story-analyzer`). |
+| More distinct names than the pool holds | **Amended 2026-08-13.** Was: pool wraps by modulo, two characters may share a stand-in. It shipped, and `"Robert watched Michael"` became `"Ana watched Ana"` — a silent rewrite of who did what, which the 3-character roster cap does not bound because the cap is applied *after* redaction. Now: first unused name from the gendered pool, then the neutral pool, then a numbered suffix. Never merges. |
+| A stand-in collides with a real name in the same story | Excluded, by prefix containment in either direction — so a story about *Analyn* also cannot gain an *Ana*. |
+| Two stand-ins are confusingly similar | Excluded by the same rule. `Alex` and `Alexis` are both in the neutral pool; ordered selection could never pick both, a shuffle can, and character binding matches by name. `Ana`/`Anna` still slips through — edit distance would catch it, and is not worth a dependency for a pair no donated story has produced. |
+| Same story submitted twice | Identical names. The shuffle is seeded from the text. |
+| One name detected at some mentions but not others | All occurrences replaced. spaCy tagged `"Grace"` `PERSON` once and `ORGANIZATION` twice in one donated story, so two thirds of her mentions survived and the book gained a third character. Case-sensitive, so the noun *grace* is untouched. |
+| NER tags a common noun as a person | Dropped when preceded by `a`/`an`/`the`. spaCy scored `"bush"` `PERSON` at 0.85 in `"from behind a bush"`. Chosen over a title-case test, which caught the same false positive but also dropped genuinely lowercase names (`"juan and sam"`) — a privacy regression this avoids. |
 | `"Maria"` and `"Maria Santos"` in one story | Different surface forms → different stand-ins. Knowingly blunt; coreference is out of scope. |
 | Zero person entities | Operator never fires; no mapping allocated. |
 | Same name in two different stories | Different calls, different mappings — no cross-story stability, and none is wanted. |
