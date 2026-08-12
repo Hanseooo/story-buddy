@@ -104,15 +104,26 @@ def test_trace_is_published_for_unauthenticated_viewers():
     fake_cm.__enter__.return_value = MagicMock()
     fake_graph = _fake_graph()
 
+    events = []
+    streamed = fake_graph.stream.return_value
+    fake_graph.stream.side_effect = lambda *a, **kw: (events.append("stream"), streamed)[1]
+
     with patch("worker.run_job.get_supabase_client", return_value=fake_supabase), \
          patch("worker.run_job.PostgresSaver.from_conn_string", return_value=fake_cm), \
          patch("worker.run_job.build_graph", return_value=fake_graph), \
          patch("worker.run_job.Langfuse") as mock_client:
+        obs = MagicMock()
+        mock_client.return_value.start_observation.side_effect = (
+            lambda *a, **kw: events.append("publish") or obs
+        )
         run_storybook_job("job-trace-1")
 
     start = mock_client.return_value.start_observation
     assert start.call_args.kwargs["trace_context"] == {"trace_id": "jobtrace1"}
-    start.return_value.set_trace_as_public.assert_called_once()
+    obs.set_trace_as_public.assert_called_once()
+    # Langfuse rebuilds the trace row from whichever root span ingested last, so publishing before
+    # the graph runs is silently undone by the pipeline's own root span.
+    assert events == ["stream", "publish"]
 
 
 def test_run_storybook_job_writes_pages_in_scene_order():

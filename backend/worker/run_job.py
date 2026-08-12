@@ -25,27 +25,50 @@ def _langfuse_handler(job_id: str) -> tuple[CallbackHandler, str]:
     # Langfuse is a singleton per public key, so re-calling it per job is free. Missing keys warn
     # and return a disabled client rather than raising (client.py:381-397), so tracing stays
     # strictly best-effort — a story never fails because observability is misconfigured.
-    client = Langfuse(
+    Langfuse(
         public_key=settings.langfuse_public_key,
         secret_key=settings.langfuse_secret_key,
         base_url=host,
     )
-    # /research/metrics is an unauthenticated page, so its "View trace" link has to open without a
-    # Langfuse login. Publishing the trace is the only way to do that — the LangChain
-    # CallbackHandler has no `langfuse_public` metadata key, so we attach a throwaway span to the
-    # same trace_id purely to carry the flag (span.py:276-294; publishing any span publishes the
-    # whole trace). One-way door: a published trace cannot be unpublished via the SDK, and anyone
-    # with the URL sees every prompt and model output in it.
-    # ponytail: publish-everything; snapshot chosen metrics onto the job row instead if a trace
-    # ever carries something we would not hand a stranger.
-    client.start_observation(
-        trace_context={"trace_id": trace_id}, name="public-link"
-    ).set_trace_as_public().end()
     handler = CallbackHandler(
         public_key=settings.langfuse_public_key,
         trace_context={"trace_id": trace_id},
     )
     return handler, url
+
+
+def _publish_trace(job_id: str) -> None:
+    """Make the job's trace readable without a Langfuse login.
+
+    /research/metrics is an unauthenticated page, so its "View trace" link has to open for a
+    logged-out visitor. The LangChain CallbackHandler has no `langfuse_public` metadata key, so we
+    attach a throwaway span carrying the flag (span.py:276-294; publishing any span publishes the
+    whole trace).
+
+    Must run *after* the graph, never before: Langfuse rebuilds the trace row from whichever root
+    span ingested last, so a publish that lands ahead of the pipeline's own root span is silently
+    reset to public=False. Verified against the live project — publish-first gave public=False,
+    publish-last gave public=True.
+
+    One-way door: a published trace cannot be unpublished via the SDK, and anyone with the URL sees
+    every prompt and model output in it.
+    ponytail: publish-everything; snapshot chosen metrics onto the job row instead if a trace ever
+    carries something we would not hand a stranger.
+    """
+    try:
+        client = Langfuse(
+            public_key=settings.langfuse_public_key,
+            secret_key=settings.langfuse_secret_key,
+            base_url=settings.langfuse_host.rstrip("/"),
+        )
+        client.flush()  # land the pipeline's spans first so ours is the last root span
+        client.start_observation(
+            trace_context={"trace_id": job_id.replace("-", "")}, name="public-link"
+        ).set_trace_as_public().end()
+        client.flush()
+    except Exception:
+        # Tracing is strictly best-effort — a finished story never fails on observability.
+        pass
 
 
 def _stage_string(node: str, latest: dict | None) -> str:
@@ -177,6 +200,8 @@ def run_storybook_job(job_id: str) -> None:
             {"status": "failed", "error": msg, "failure_reason": failure_reason}
         ).eq("id", job_id).execute()
         raise
+    finally:
+        _publish_trace(job_id)
 
 
 def resume_storybook_job(job_id: str, payload: dict) -> None:
@@ -210,4 +235,6 @@ def resume_storybook_job(job_id: str, payload: dict) -> None:
             {"status": "failed", "error": msg, "failure_reason": failure_reason}
         ).eq("id", job_id).execute()
         raise
+    finally:
+        _publish_trace(job_id)
 
