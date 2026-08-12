@@ -70,7 +70,6 @@ class SceneVerdict(BaseModel):
     failure_reasons: list[FailureReason] = Field(default_factory=list)   # LAST — the closed 7
 
 
-
 def _data_uri(image: bytes) -> str:
     # ponytail: inline base64, same as `char_bible._data_uri`. The judge is shown base64,
     # never a signed URL (CC-4). What is PERSISTED is the path.
@@ -120,7 +119,6 @@ def _rank(a: Attempt) -> tuple[int, int, int, int, int]:
         (0, 0, 0, 0, 0) if v is None
         else (1, v.same_character, v.anatomy_intact, v.subjects_unique, v.style_match)
     )
-
 
 
 def consistency_check(state: StoryMemory) -> dict:

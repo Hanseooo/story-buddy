@@ -127,7 +127,6 @@ def filtered_location(location: Location | None, style_fragment: str | None) -> 
     return location.model_copy(update={"description": kept[0] if kept else None})
 
 
-
 def _describe(description: CharacterDescription, name: str) -> str:
     """The populated CharacterDescription axes as one line — same phrasing char_bible's
     reference_prompt uses, so the canonical reference and every scene prompt describe the same

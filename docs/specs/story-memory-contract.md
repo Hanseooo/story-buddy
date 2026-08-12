@@ -111,7 +111,8 @@ class VlmVerdict(BaseModel):
     anatomy_intact: bool = True        # ADR-028: merged, missing or duplicated body parts. Declared
                                        # LAST so the ADR-004 ordering above is untouched. Additive →
                                        # no schema_version bump. Best-of (ADR-010) ranks
-                                       # lexicographically: same_character → anatomy_intact → style_match.
+                                       # lexicographically: same_character → anatomy_intact →
+                                       # subjects_unique → style_match.
                                        # ponytail: bool, not a score — widen only if a measured tie forces it.
     subjects_unique: bool = True       # scene-setting-and-subject-binding §4.4: each character
                                        # drawn exactly once. Declared LAST so ADR-004's order above

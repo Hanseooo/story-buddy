@@ -1,6 +1,6 @@
 # Feature Spec — scene setting & subject binding
 
-**Status:** draft · **Phase:** 2 · **Owner nodes:** `backend/pipeline/analyze.py`,
+**Status:** built · a2714f8–1f39ba0 · **Phase:** 2 · **Owner nodes:** `backend/pipeline/analyze.py`,
 `segment.py`, `prompt_optimizer.py`, `generate_scene.py`, `consistency_check.py`
 **Derived from:** MASTER_SPEC §2 · **Rationale:** ADR-035 (surface 5), ADR-023 §8 (additive),
 ADR-010, ADR-004, issues #23, #32
@@ -143,8 +143,10 @@ Setting: the beach - golden sand, palm trees, blue water
   an addition — it is the only change here that reduces prompt dilution rather than adding to it.
 - `_describe` is unchanged; the roll is `f"Image {n} is {_describe(...)}."`. A character with no
   populated axes yields `"Image 1 is Ana."` — byte-identical to today.
-- **`NON_HUMAN_CLAUSE`** — wording copied verbatim from `char_bible.REFERENCE_PROMPT` plus
-  "unless described above". Emitted **unconditionally**, for the same reason `char_bible` made it
+- **`NON_HUMAN_CLAUSE`** — wording adapted from `char_bible.REFERENCE_PROMPT`, with the tail
+  replaced by "unless described above" and the article widened `the` → `a`: `char_bible` prompts
+  one character at a time, so "*the* character" has a referent there and none here, where the
+  scene prompt names several. Emitted **unconditionally**, for the same reason `char_bible` made it
   unconditional: branching on species needs a word list that is wrong the first time a child
   writes something not on it, and the clause is a no-op for a person.
 - **`SUBJECT_COUNT_CLAUSE`** — `"This illustration contains exactly N characters: Ana and the
@@ -181,7 +183,12 @@ at a different scale is the expected output.
 
 **Fix:** deduplicate in `segment` (`dict.fromkeys`, order-preserving), and defensively in
 `referenced_characters` so a checkpoint written before this change cannot reproduce it on resume.
-Two lines, fully deterministic, testable with no model.
+Fully deterministic, testable with no model.
+
+`build_prompt` deduplicates on the same key when it builds `present`. This is a **third** site, not
+a redundant one: `present` is derived from `characters_present` directly rather than from
+`referenced_characters`, and it is what `SUBJECT_COUNT_CLAUSE` counts. Without it, a pre-change
+checkpoint would assert *"exactly 2 characters: the star and the star."*
 
 > This is a **hypothesis with a mechanism**, not a confirmed diagnosis of any specific book. It is
 > worth fixing regardless — sending one image as two subjects is wrong on its own terms — but the
@@ -245,7 +252,8 @@ Gating is a **follow-up decision**, made once the measured rate exists and #26 i
 
 | File | Change |
 |---|---|
-| `backend/contracts/story_memory.py` | +2 additive fields |
+| `backend/contracts/story_memory.py` | +2 additive fields; ADR-010 rank comment widened |
+| `docs/specs/story-memory-contract.md` | mirrors both, same rank comment |
 | `backend/pipeline/analyze.py` | +1 prompt sentence |
 | `backend/pipeline/segment.py` | +1 boundary field, roster, mapping, carry-forward, dedup, **8 constructor sites** |
 | `backend/pipeline/prompt_optimizer.py` | roll fold, 2 new clauses, `filtered_location`, `build_prompt` signature |
@@ -370,28 +378,43 @@ cd backend && uv run ruff check . && uv run pytest
 cd frontend && pnpm lint && pnpm test      # expected untouched; run to prove it
 ```
 
+Run 2026-08-13: `ruff check` → **All checks passed**; `pytest` → **643 passed, 55 skipped,
+6 deselected**. `pnpm lint` → clean; `pnpm test` → **34 files, 238 passed** (frontend untouched,
+as expected).
+
 **Must be true:**
 
-- [ ] All 22 assertions in §6 exist and pass. Test 4 has one assertion **per constructor site** —
-      a single combined test does not satisfy it.
-- [ ] Every test was seen **failing first** (AGENTS.md §4, TDD scope: this has branches and loops).
-- [ ] The five specs in §4.6 are updated **in the same change**. `prompt-optimizer.md`'s
+- [x] All 22 assertions in §6 exist and pass. Test 4 has one assertion **per constructor site** —
+      a single combined test does not satisfy it. *Eight separate per-site tests exist at
+      `backend/tests/test_segment_node.py:213-277`.*
+- [x] Every test was seen **failing first** (AGENTS.md §4, TDD scope: this has branches and loops).
+      *Claimed by the implementing commits, and not independently re-verifiable after the fact —
+      the red state leaves no artifact.*
+- [x] The five specs in §4.6 are updated **in the same change**. `prompt-optimizer.md`'s
       invariant 2 explicitly names the location.
-- [ ] `grep -rn` sweep for anything asserting the old prompt shape or `build_prompt`'s arity.
-- [ ] No new graph edge; `git diff backend/pipeline/graph.py` is empty.
-- [ ] `passed`'s definition in `consistency_check.py` is byte-identical to before.
-- [ ] `referenced_characters` returns its survivors in the same **relative order** as before, and
+- [x] `grep -rn` sweep for anything asserting the old prompt shape or `build_prompt`'s arity.
+      *`build_prompt` still has exactly one production caller (`generate_scene.py:82`); the
+      `location` parameter defaults to `None`, so the pre-existing 4-argument test call sites in
+      `test_output_mod_node.py` and `test_regenerate_node.py` stay valid.*
+- [x] No new graph edge; `git diff main...HEAD -- backend/pipeline/graph.py` is **empty**.
+- [x] `passed`'s definition in `consistency_check.py` is byte-identical to before
+      (`main:161` == `HEAD:181`).
+- [x] `referenced_characters` returns its survivors in the same **relative order** as before, and
       `build_prompt`'s roll index still matches `generate_scene`'s `ref_paths` index (invariant 4).
 - [ ] One real job run end to end, with the Langfuse trace read, confirming: a `Setting:` line
-      present on every page of a multi-location story, and the roll folded.
+      present on every page of a multi-location story, and the roll folded. **NOT DONE.** The spec
+      is marked built on the deterministic evidence above; this item is carried as outstanding, not
+      satisfied. See the reporting block below.
 
 **Must be reported, not silently omitted:**
 
-- Whether the §4.3 duplicate-`char_id` hypothesis was **confirmed** against a real trace, or
-  remains a mechanism that was fixed on principle. Do not report it as the cause of any observed
-  book without the trace.
-- The `subjects_unique` values from that run — the first duplicate-rate data point.
-- That D1 and D2 improvements are **eyeballed on one job, not measured** (§7).
+- The §4.3 duplicate-`char_id` hypothesis remains **a mechanism that was fixed on principle**. It
+  was **not** confirmed against a real trace, and must not be reported as the cause of any observed
+  book.
+- **No `subjects_unique` data point exists yet.** The first duplicate-rate measurement arrives with
+  the first real run; the §8.1 gating decision stays blocked until then.
+- D1 and D2 improvements are **neither measured nor eyeballed** — no job has been run against this
+  code. §7's limitation stands undiminished.
 
 **Explicitly NOT in scope, and not to be added mid-implementation:**
 

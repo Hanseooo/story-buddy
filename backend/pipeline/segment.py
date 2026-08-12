@@ -70,7 +70,6 @@ def segment_scenes(
     return result
 
 
-
 def repair(scenes: list[ExtractedScene], n: int) -> list[ExtractedScene]:
     if n == 0:
         return []
@@ -201,7 +200,6 @@ def merge_thin(scenes: list[ExtractedScene], units: list[str]) -> list[Extracted
             location_name=a.location_name or b.location_name,
         )]
     return merged
-
 
 
 def segment(state: StoryMemory) -> dict:
