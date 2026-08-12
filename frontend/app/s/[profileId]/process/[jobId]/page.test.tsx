@@ -241,7 +241,7 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     ));
   });
 
-  it("while justConfirmed, in-flight shows Drawing it again… not the stepper", async () => {
+  it("while the stage has not moved off the reveal, in-flight shows Drawing it again… not the stepper", async () => {
     let fetchResolve!: () => void;
     global.fetch = vi.fn().mockReturnValue(
       new Promise<Response>(r => { fetchResolve = () => r({ ok: true, status: 200 } as Response); })
@@ -255,14 +255,49 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
 
     act(() => { fireEvent.click(screen.getByRole("button", { name: /they look great|use this one/i })); });
 
-    // Now simulate bucket flipping to in-flight (status → queued → running)
-    mockUseJob.mockReturnValue(jobState({ bucket: "in-flight", row: { ...RUNNING_ROW, status: "running" } }));
+    // Status flips to running before the graph advances — stage is still the reveal it paused on.
+    mockUseJob.mockReturnValue(jobState({
+      bucket: "in-flight",
+      row: { ...PAUSED_ROW, status: "running", reveal: null },
+    }));
     await act(async () => {
       view.rerender(<ProcessingPage params={paramsPromise} />);
     });
 
     // Should show the redraw placeholder, not the stepper
     expect(screen.getByText(/drawing it again/i)).toBeDefined();
+
+    fetchResolve();
+  });
+
+  it("the redraw bridge lifts as soon as the stage moves — live progress is not hidden behind it", async () => {
+    // Regression: `justConfirmed` was a ref cleared only on terminal states and on
+    // in-flight→paused, never on confirm→in-flight. So after "They look great!" the page was
+    // pinned to "Drawing it again…" for the whole run: every `generate_scene:n/8` UPDATE arrived
+    // and re-rendered behind the placeholder, and the child saw the real progress only by
+    // reloading, which reset the ref.
+    let fetchResolve!: () => void;
+    global.fetch = vi.fn().mockReturnValue(
+      new Promise<Response>(r => { fetchResolve = () => r({ ok: true, status: 200 } as Response); })
+    ) as unknown as typeof fetch;
+
+    const paramsPromise = makeParams("j1");
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
+    const view = await renderPage(paramsPromise);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /they look great|use this one/i })).toBeDefined());
+    act(() => { fireEvent.click(screen.getByRole("button", { name: /they look great|use this one/i })); });
+
+    mockUseJob.mockReturnValue(jobState({
+      bucket: "in-flight",
+      row: { ...RUNNING_ROW, current_stage: "generate_scene:5/8" },
+    }));
+    await act(async () => {
+      view.rerender(<ProcessingPage params={paramsPromise} />);
+    });
+
+    expect(screen.getByText(/drawing picture 5 of 8/i)).toBeDefined();
+    expect(screen.queryByText(/drawing it again/i)).toBeNull();
 
     fetchResolve();
   });

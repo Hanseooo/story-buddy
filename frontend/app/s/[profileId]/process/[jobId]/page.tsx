@@ -1,9 +1,8 @@
 "use client";
 
-/* eslint-disable react-hooks/refs */
 /* eslint-disable @next/next/no-img-element */
 
-import { use, useEffect, useRef, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useJob } from "@/lib/useJob";
 import FailureScreen from "@/components/FailureScreen";
@@ -181,9 +180,11 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   const { bucket, row, refetch } = useJob(jobId);
   const router = useRouter();
 
-  // Prevent the stepper from flashing during a redraw (spec §4.2)
-  const justConfirmed = useRef(false);
-  const prevBucket = useRef(bucket);
+  // Prevent the stepper from flashing during a redraw (spec §4.2). Holds the stage the job was
+  // paused on when we confirmed; the bridge lifts the moment the backend reports a different one.
+  // It must be state, not a ref: a ref cannot re-render the thing that reads it, so the bridge
+  // would only ever lift on some *other* render.
+  const [bridgeStage, setBridgeStage] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState(false);
 
@@ -220,19 +221,15 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
     sign(1);
   }, [bucket, row?.reveal]);
 
-  // Push to /book on terminal-success & manage justConfirmed lifecycle
+  // Push to /book on terminal-success. The bridge needs no teardown here: `isRedrawing` is read
+  // only on the in-flight branch and only while the stage still matches, so a stale value cannot
+  // show through. Clearing it from this effect would in fact break it — `useRouter()` hands back
+  // a new object every render, so this effect re-runs on every render and would wipe the bridge
+  // one render after the tap.
   useEffect(() => {
     if (bucket === "terminal-success") {
-      justConfirmed.current = false;
       router.replace(`/s/${profileId}/book/${jobId}`);
     }
-    if (bucket === "terminal-failure" || bucket === "not-found") {
-      justConfirmed.current = false;
-    }
-    if (bucket === "paused" && prevBucket.current === "in-flight") {
-      justConfirmed.current = false;
-    }
-    prevBucket.current = bucket;
   }, [bucket, profileId, jobId, router]);
 
   async function handleConfirm(
@@ -240,7 +237,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
     char_id?: string,
     attribute?: string
   ) {
-    justConfirmed.current = true;
+    setBridgeStage(row?.current_stage ?? null);
     setConfirming(true);
     setConfirmError(false);
     try {
@@ -256,11 +253,11 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
         body: JSON.stringify({ action, char_id: char_id ?? null, attribute: attribute ?? null }),
       });
       if (!res.ok) {
-        justConfirmed.current = false;
+        setBridgeStage(null);
         setConfirmError(true);
       }
     } catch {
-      justConfirmed.current = false;
+      setBridgeStage(null);
       setConfirmError(true);
     } finally {
       setConfirming(false);
@@ -382,7 +379,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   const currentStepRaw = getStep(row?.current_stage ?? null);
   const currentStep = currentStepRaw ?? 1;
   const STEPS: StepperStep[] = [1, 2, 3, 4];
-  const isRedrawing = justConfirmed.current;
+  const isRedrawing = bridgeStage !== null && (row?.current_stage ?? null) === bridgeStage;
 
   const ICONS = {
     1: BookOpen,
