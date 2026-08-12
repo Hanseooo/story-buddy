@@ -3,7 +3,7 @@ import sys
 
 from redis import Redis
 from rq import Queue, SimpleWorker, Worker
-from rq.timeouts import UnixSignalDeathPenalty
+from rq.timeouts import JobTimeoutException, UnixSignalDeathPenalty
 
 from app.config import settings
 from app.db import get_supabase_client
@@ -39,11 +39,20 @@ class HardJobTimeout(BaseException):
 
 class _HardDeathPenalty(UnixSignalDeathPenalty):
     """`rq/worker/base.py:1548` calls `death_penalty_class(timeout, JobTimeoutException, job_id=...)`
-    — it hardcodes the exception positionally. Dropping that argument is the whole mechanism.
+    — it hardcodes the exception positionally. Overriding *that* argument is the whole mechanism.
+
+    Only that one. RQ arms this same class for a second, unrelated purpose:
+    `monitor_work_horse` (`rq/worker/worker_classes.py:87`) wakes the PARENT every
+    `job_monitoring_interval` (30s) with `HorseMonitorTimeoutException` and catches only that on
+    line 90. Prod job 4e1de7c3 (2026-08-12) is the case: substituting there too raised a
+    `BaseException` nothing in the supervisor loop catches, so the worker quit 30 seconds into
+    the job — every job — while the horse was still drawing.
     """
 
-    def __init__(self, timeout, exception=None, **kwargs):
-        super().__init__(timeout, HardJobTimeout, **kwargs)
+    def __init__(self, timeout, exception=JobTimeoutException, **kwargs):
+        if exception is JobTimeoutException:
+            exception = HardJobTimeout
+        super().__init__(timeout, exception, **kwargs)
 
 
 def _report_failed(job, exc_string: str) -> None:

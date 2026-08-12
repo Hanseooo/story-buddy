@@ -9,7 +9,11 @@ import logging
 from unittest.mock import MagicMock, patch
 
 from rq import Worker
-from rq.timeouts import JobTimeoutException, UnixSignalDeathPenalty
+from rq.timeouts import (
+    HorseMonitorTimeoutException,
+    JobTimeoutException,
+    UnixSignalDeathPenalty,
+)
 
 from worker.run_worker import (
     HardJobTimeout,
@@ -117,6 +121,18 @@ def test_it_overrides_the_exception_rq_passes_positionally():
     """`rq/worker/base.py:1548` calls `death_penalty_class(timeout, JobTimeoutException, job_id=...)`.
     Ignoring that second argument is the whole mechanism — honouring it restores the bug."""
     assert isinstance(_fire(_HardDeathPenalty(900, JobTimeoutException, job_id="rq-1")), HardJobTimeout)
+
+
+def test_it_leaves_the_horse_monitor_timeout_alone():
+    """The other caller (prod job 4e1de7c3, 2026-08-12).
+
+    `monitor_work_horse` (`rq/worker/worker_classes.py:87`) arms this same class in the PARENT
+    every `job_monitoring_interval` (30s) with `HorseMonitorTimeoutException`, and its `except`
+    on line 90 catches only that. Substituting there made every job longer than 30 seconds kill
+    the worker — "found an unhandled exception, quitting..." — while the horse was still drawing.
+    """
+    fired = _fire(_HardDeathPenalty(30, HorseMonitorTimeoutException))
+    assert isinstance(fired, HorseMonitorTimeoutException)
 
 
 def test_the_forking_worker_installs_the_hard_deadline():
