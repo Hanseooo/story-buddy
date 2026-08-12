@@ -3,7 +3,7 @@ import re
 
 from pydantic import BaseModel
 
-from app.config import MAX_SCENES
+from app.config import MAX_SCENES, MIN_SCENE_WORDS, MIN_SCENES
 from contracts.story_memory import Character, Scene, StoryMemory, TimelineEvent
 from providers import structured_text
 
@@ -137,6 +137,44 @@ def repair(scenes: list[ExtractedScene], n: int) -> list[ExtractedScene]:
     return deoverlapped
 
 
+def merge_thin(scenes: list[ExtractedScene], units: list[str]) -> list[ExtractedScene]:
+    """Fold pages too thin to draw into a neighbour (issue #31).
+
+    Runs after `repair`, so it inherits total coverage and the MAX_SCENES cap and can only ever
+    reduce the count further. Deliberately deterministic and not a prompt rule: SEGMENTATION_PROMPT
+    already carries the timeline as plot points and already says "each scene captures a distinct
+    moment or plot point", and prod job d83721d9 got 6 scenes out of 3 plot points anyway.
+
+    ponytail: word count is a proxy for "is there a picture in this sentence". It catches fragments
+    that cannot name a subject, a setting and an action, and misses a wordy sentence that depicts
+    nothing. The real test needs another LLM call, which is the thing this avoids.
+    """
+    def words(scene: ExtractedScene) -> int:
+        return sum(len(units[i].split()) for i in range(scene.start, scene.end + 1))
+
+    merged = list(scenes)
+    while len(merged) > MIN_SCENES:
+        thin = next((i for i, s in enumerate(merged) if words(s) < MIN_SCENE_WORDS), None)
+        if thin is None:
+            break
+        # Index of the LEFT half of the pair to fuse. Interior thin scenes go to the smaller
+        # neighbour — the same policy the MAX_SCENES merge below already uses — so pages stay even;
+        # at either end there is only one direction to go.
+        if thin == len(merged) - 1:
+            left = thin - 1
+        elif thin > 0 and words(merged[thin - 1]) < words(merged[thin + 1]):
+            left = thin - 1
+        else:
+            left = thin
+        a, b = merged[left], merged[left + 1]
+        merged[left : left + 2] = [ExtractedScene(
+            start=a.start,
+            end=b.end,
+            characters_present=list(dict.fromkeys(a.characters_present + b.characters_present)),
+        )]
+    return merged
+
+
 def segment(state: StoryMemory) -> dict:
     text = state.input.redacted_text or state.input.raw_text
     units = split_sentences(text)
@@ -144,7 +182,7 @@ def segment(state: StoryMemory) -> dict:
         return {"scenes": []}
 
     raw = segment_scenes(units, state.characters, state.timeline)
-    repaired = repair(raw.scenes, len(units))
+    repaired = merge_thin(repair(raw.scenes, len(units)), units)
     if len(repaired) != len(raw.scenes):
         log.info("segment: repair changed scene count %d → %d", len(raw.scenes), len(repaired))
 
