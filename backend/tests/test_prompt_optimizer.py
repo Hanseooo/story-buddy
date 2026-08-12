@@ -3,6 +3,7 @@ from contracts.story_memory import Character, CharacterDescription, FailureReaso
 from pipeline.prompt_optimizer import (
     ANATOMY_CLAUSE,
     IDENTITY_CLAUSE,
+    NON_HUMAN_CLAUSE,
     build_prompt,
     correct_prompt,
     filtered_description,
@@ -576,5 +577,114 @@ def test_the_reference_clause_still_follows_the_roll():
     prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
 
     assert "Image 1 is Ana - girl. Use them only as references" in prompt
+
+
+# --- §4.2 D2: the two guard clauses (§6 tests 12-14) ---
+
+def _referenced(char_id: str, name: str, **kwargs) -> Character:
+    character = _char(char_id, name, **kwargs)
+    character.canonical_ref_image = f"job-123/ref-{char_id}-1.png"
+    return character
+
+
+def test_the_subject_count_clause_names_every_present_character():
+    ana = _referenced("c0", "Ana", species="girl")
+    star = _referenced("c1", "the star", body_features=["tiny"])
+
+    prompt = build_prompt("She held it up.", ["c0", "c1"], [ana, star], FRAG)
+
+    assert "This illustration contains exactly 2 characters: Ana and the star." in prompt
+
+
+def test_both_guard_clauses_appear_on_the_reference_path():
+    """§6 test 12, first half."""
+    ana = _referenced("c0", "Ana", species="girl")
+
+    prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
+
+    assert "This illustration contains exactly 1 character: Ana." in prompt
+    assert NON_HUMAN_CLAUSE in prompt
+
+
+def test_both_guard_clauses_appear_on_the_text_to_image_path():
+    """§6 test 12, second half — the load-bearing half. The roll and REFERENCE_CLAUSE are omitted
+    when no character has a reference, so a guard placed INSIDE the clause would be silently inert
+    on every reference-less scene."""
+    ana = _char("c0", "Ana", species="girl")               # no canonical reference
+
+    prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
+
+    assert "Image 1" not in prompt
+    assert "This illustration contains exactly 1 character: Ana." in prompt
+    assert NON_HUMAN_CLAUSE in prompt
+
+
+def test_the_count_reads_one_character_singular():
+    """§6 test 13, second half: no `1 characters`."""
+    ana = _referenced("c0", "Ana", species="girl")
+
+    prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
+
+    assert "1 characters" not in prompt
+
+
+def test_the_count_is_computed_after_the_missing_char_id_filter():
+    """§6 test 13, first half. A char_id absent from `characters` is already warned + skipped, so
+    counting before the filter asserts a number the prompt does not name."""
+    ana = _referenced("c0", "Ana", species="girl")
+
+    prompt = build_prompt("Ana waved.", ["c0", "ghost-id"], [ana], FRAG)
+
+    assert "This illustration contains exactly 1 character: Ana." in prompt
+    assert "ghost-id" not in prompt
+
+
+def test_a_present_character_without_a_reference_is_still_counted():
+    """§4.2 edge case: it keeps a plain description line and still occupies a subject slot."""
+    ana = _char("c0", "Ana", species="girl")               # no reference
+    star = _referenced("c1", "the star", body_features=["tiny"])
+
+    prompt = build_prompt("Ana held the star.", ["c0", "c1"], [ana, star], FRAG)
+
+    assert "This illustration contains exactly 2 characters: Ana and the star." in prompt
+
+
+def test_the_count_names_three_characters_with_a_serial_comma_free_join():
+    ana = _referenced("c0", "Ana", species="girl")
+    star = _referenced("c1", "the star", body_features=["tiny"])
+    bird = _referenced("c2", "the bird", species="bird")
+
+    prompt = build_prompt("They met.", ["c0", "c1", "c2"], [ana, star, bird], FRAG)
+
+    assert "exactly 3 characters: Ana, the star and the bird." in prompt
+
+
+def test_no_clause_at_all_when_characters_present_is_empty():
+    """§6 test 14 / §4.2 edge case: no roll, no count clause, no non-human clause — all three
+    would reference nothing."""
+    prompt = build_prompt("The waves crashed.", [], [], FRAG)
+
+    assert "Image 1" not in prompt
+    assert "This illustration contains exactly" not in prompt
+    assert NON_HUMAN_CLAUSE not in prompt
+    assert prompt == "\n\n".join(["The waves crashed.", FRAG])
+
+
+def test_no_clause_at_all_when_every_char_id_is_missing_from_the_roster():
+    """The filter can empty the list even when `characters_present` was not empty."""
+    prompt = build_prompt("The waves crashed.", ["ghost-id"], [], FRAG)
+
+    assert "This illustration contains exactly" not in prompt
+    assert NON_HUMAN_CLAUSE not in prompt
+
+
+def test_the_guard_clauses_sit_after_the_descriptions_and_before_the_excerpt():
+    ana = _char("c0", "Ana", species="girl")
+
+    prompt = build_prompt("Ana waved at the sea.", ["c0"], [ana], FRAG)
+
+    assert prompt.index("Ana - girl") < prompt.index("This illustration contains")
+    assert prompt.index(NON_HUMAN_CLAUSE) < prompt.index("Ana waved at the sea.")
+
 
 

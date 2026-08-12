@@ -203,6 +203,32 @@ REFERENCE_CLAUSE = (
     "referring to that character itself, not to a second thing of the same name."
 )
 
+# §4.2. BOTH clauses below sit OUTSIDE REFERENCE_CLAUSE deliberately: the roll and its clause are
+# omitted entirely on the text-to-image path (`generate_scene:55-57` sends no images), and both
+# guards must apply there too. Inside, they would be silently inert on every ref-less scene.
+
+# A WHOLE-CANVAS count, structurally different from REFERENCE_CLAUSE's per-character "draw each
+# character exactly once": that one constrains each subject, this one constrains the canvas. D3(b)
+# residual duplication is compositing, and a canvas-level assertion is the only shape that can
+# contradict it.
+SUBJECT_COUNT_CLAUSE = "This illustration contains exactly {n} character{plural}: {names}."
+
+# Wording from `char_bible.REFERENCE_PROMPT` (prod job 4cb31620 drew "the star" as a smiling mascot
+# with arms and legs), scoped to the scene path and closed with "unless described above".
+# UNCONDITIONAL, for the reason char_bible gives: branching on species needs a word list that is
+# wrong the first time a child writes something not on it, and this is a no-op for a person.
+NON_HUMAN_CLAUSE = (
+    "If a character is not a person, draw it as the kind of thing it actually is — give it no "
+    "human body and no human face unless described above."
+)
+
+
+def _names(names: list[str]) -> str:
+    """"Ana" / "Ana and the star" / "Ana, the star and the bird"."""
+    if len(names) < 2:
+        return "".join(names)
+    return f"{', '.join(names[:-1])} and {names[-1]}"
+
 
 def build_prompt(
     text_excerpt: str,
@@ -253,7 +279,19 @@ def build_prompt(
         if character.char_id not in referenced_ids
     ]
 
-    return "\n\n".join([*roll, *descriptions, text_excerpt, style])
+    # Emitted only when there is a subject to count — all three clauses would otherwise reference
+    # nothing. The count is computed from `present`, i.e. AFTER the missing-char_id filter above,
+    # or it asserts a number the prompt does not name.
+    guards = ["\n".join([
+        SUBJECT_COUNT_CLAUSE.format(
+            n=len(present),
+            plural="" if len(present) == 1 else "s",
+            names=_names([character.name for character in present]),
+        ),
+        NON_HUMAN_CLAUSE,
+    ])] if present else []
+
+    return "\n\n".join([*roll, *descriptions, *guards, text_excerpt, style])
 
 
 def _joined(values) -> str:
