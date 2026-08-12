@@ -51,30 +51,48 @@ function FailureCard({
   secondaryAction?: ReactNode;
 }) {
   return (
-    <div className="w-full max-w-lg mx-auto bg-surface rounded-[24px] p-8 md:p-12 flex flex-col items-center gap-6 shadow-[0_10px_28px_rgba(49,85,217,0.12)] text-center my-8">
-      <div className="text-primary opacity-80 mb-2">
-        {icon}
-      </div>
-      <div className="flex flex-col gap-2">
-        <h2 className="font-display text-3xl md:text-4xl text-foreground tracking-tight leading-[1.1] max-w-[320px] mx-auto">
-          {title}
-        </h2>
-        {subtext && (
-          <p className="font-kid text-lg text-foreground/80 max-w-[320px] mx-auto">
-            {subtext}
-          </p>
-        )}
-      </div>
-      <div className="flex flex-col items-center w-full gap-4 mt-2">
-        <button
-          className="bg-primary text-surface rounded-2xl min-h-[44px] px-8 py-3 font-kid text-lg hover:-translate-y-[1px] transition-transform duration-150 disabled:opacity-50 disabled:hover:translate-y-0 disabled:cursor-not-allowed"
-          onClick={onAction}
-          disabled={submitting}
-        >
-          {buttonLabel}
-        </button>
-        {secondaryAction}
-      </div>
+    <div className="min-h-[100dvh] w-full bg-[var(--background)] flex flex-col items-center justify-center px-6 py-12 text-center overflow-x-hidden selection:bg-[var(--color-primary)] selection:text-[var(--color-surface)]">
+      <motion.div 
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        className="w-full max-w-2xl mx-auto flex flex-col items-center"
+      >
+        {/* Visual Stage */}
+        <div className="relative mb-8 md:mb-12 flex items-center justify-center w-full max-w-[280px]">
+          {/* Soft magical glow */}
+          <div className="absolute inset-0 bg-[var(--color-primary)]/10 rounded-full blur-2xl md:blur-3xl" aria-hidden="true" />
+          <div className="absolute inset-4 bg-[var(--color-secondary)]/15 rounded-full blur-xl md:blur-2xl" aria-hidden="true" />
+          
+          <div className="relative z-10 scale-110 md:scale-125">
+            {icon}
+          </div>
+        </div>
+
+        {/* Copy */}
+        <div className="flex flex-col gap-4">
+          <h2 className="font-display text-4xl md:text-5xl font-extrabold text-[var(--foreground)] tracking-tight leading-tight">
+            {title}
+          </h2>
+          {subtext && (
+            <p className="font-kid text-xl md:text-2xl text-[var(--foreground)]/80 max-w-[40ch] mx-auto leading-relaxed">
+              {subtext}
+            </p>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="flex flex-col items-center w-full max-w-sm gap-5 mt-10 md:mt-12">
+          <button
+            className="w-full bg-[var(--color-primary)] text-[var(--color-surface)] rounded-2xl min-h-[56px] px-8 py-4 font-kid font-extrabold text-lg shadow-sm hover:bg-[var(--color-primary-deep)] active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed focus-visible:outline-[var(--color-secondary)] focus-visible:outline-3 focus-visible:outline-offset-3"
+            onClick={onAction}
+            disabled={submitting}
+          >
+            {buttonLabel}
+          </button>
+          {secondaryAction}
+        </div>
+      </motion.div>
     </div>
   );
 }
@@ -187,7 +205,7 @@ export default function FailureScreen({
 
   const tryDifferent = chainCount >= 3 ? (
     <button
-      className="mt-2 font-kid text-base text-primary underline hover:text-primary-deep transition-colors"
+      className="mt-2 font-kid text-lg text-[var(--color-primary)] underline hover:text-[var(--color-primary-deep)] transition-colors focus-visible:outline-[var(--color-secondary)] rounded-md"
       onClick={() => router.push(`/s/${profileId}/write`)}
       disabled={submitting}
     >

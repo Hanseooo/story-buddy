@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { computeAggregates, JobRow } from "@/utils/metrics";
+import { computeAggregates, failureLabel, formatJob, JobRow } from "@/utils/metrics";
 import { ArrowRight, CheckCircle, XCircle, Clock, ArrowLeft, Info } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 
@@ -15,9 +15,8 @@ export default async function ResearchPage() {
     .from("jobs")
     .select(`
       id, status, created_at, style_preset_id,
-      failure_reason,
-      image_count, regen_count, ref_retry_count,
-      scenes_total, scenes_passed, scenes_failed, scenes_unchecked,
+      failure_reason, regen_count,
+      scenes_total, scenes_passed,
       usd_estimate, langfuse_trace_url
     `)
     .order("created_at", { ascending: false });
@@ -69,7 +68,8 @@ export default async function ResearchPage() {
                 How are these calculated?
               </summary>
               <div className="mt-4 p-4 sm:p-5 rounded-2xl bg-surface neo-border neo-shadow-sm text-sm text-foreground/80 space-y-3 max-w-3xl leading-relaxed">
-                <p><strong className="text-foreground">Pass Rate:</strong> Percentage of jobs marked as <span className="text-success font-bold">complete</span> versus <span className="text-destructive font-bold">failed</span>. Moderation blocks or unrecoverable pipeline errors count as failed.</p>
+                <p><strong className="text-foreground">Job Pass Rate:</strong> Percentage of <em>concluded</em> jobs marked <span className="text-success font-bold">complete</span> versus <span className="text-destructive font-bold">failed</span>. Moderation blocks or unrecoverable pipeline errors count as failed. Runs still in progress are excluded from both sides.</p>
+                <p><strong className="text-foreground">Scene Pass Rate:</strong> Percentage of individual scenes that cleared the consistency judge, across every job that got far enough to be judged. A job that fails before generating a scene records nothing here, so this measures judge yield — not pipeline reliability.</p>
                 <p><strong className="text-foreground">Est. Total Cost:</strong> Sum of estimated USD costs for all jobs based on OpenRouter (LLM) and Fal.ai (Image) usage. Varies by model preset.</p>
                 <p><strong className="text-foreground">Scenes:</strong> Represented as <code className="px-1.5 py-0.5 rounded-md bg-muted/50 font-mono text-xs font-bold text-primary">Passed / Total</code>. E.g., <code>4/6</code> means 4 scenes passed the consistency judge before the job concluded or failed.</p>
                 <p><strong className="text-foreground">Regens:</strong> The total number of times the Gemma consistency judge rejected an image and forced a regeneration loop.</p>
@@ -85,9 +85,23 @@ export default async function ResearchPage() {
             <div className="text-4xl font-display font-extrabold text-foreground">{stats.totalRuns}</div>
           </div>
           <div className="rounded-3xl neo-border bg-surface p-5 sm:p-6 neo-shadow-sm flex flex-col justify-between gap-4">
-            <div className="text-xs font-semibold uppercase tracking-widest text-foreground/50">Pass Rate</div>
-            <div className="text-4xl font-display font-extrabold text-primary">
-              {(stats.passRate * 100).toFixed(1)}%
+            <div className="text-xs font-semibold uppercase tracking-widest text-foreground/50">Job Pass Rate</div>
+            <div className="flex flex-col gap-1">
+              <div className="text-4xl font-display font-extrabold text-primary">
+                {(stats.jobPassRate * 100).toFixed(1)}%
+              </div>
+              <div className="text-xs font-medium text-foreground/40">
+                {stats.complete}/{stats.complete + stats.failed} concluded
+              </div>
+            </div>
+          </div>
+          <div className="rounded-3xl neo-border bg-surface p-5 sm:p-6 neo-shadow-sm flex flex-col justify-between gap-4">
+            <div className="text-xs font-semibold uppercase tracking-widest text-foreground/50">Scene Pass Rate</div>
+            <div className="flex flex-col gap-1">
+              <div className="text-4xl font-display font-extrabold text-foreground">
+                {(stats.scenePassRate * 100).toFixed(1)}%
+              </div>
+              <div className="text-xs font-medium text-foreground/40">judge yield</div>
             </div>
           </div>
           <div className="rounded-3xl neo-border bg-surface p-5 sm:p-6 neo-shadow-sm flex flex-col justify-between gap-4">
@@ -97,19 +111,26 @@ export default async function ResearchPage() {
               <div className="text-xs font-medium text-foreground/40">USD</div>
             </div>
           </div>
-          
-          <div className="grid grid-rows-2 gap-3 sm:gap-4">
-            <div className="rounded-2xl neo-border bg-surface p-4 neo-shadow-sm flex items-center justify-between">
-              <div className="text-xs font-semibold uppercase tracking-widest text-foreground/50">Complete</div>
-              <div className="text-xl font-display font-bold text-success flex items-center gap-2">
-                {stats.complete} <CheckCircle weight="fill" className="w-5 h-5" />
-              </div>
+        </div>
+
+        {/* Status breakdown — these three sum to Total Runs */}
+        <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-3">
+          <div className="rounded-2xl neo-border bg-surface p-4 neo-shadow-sm flex items-center justify-between">
+            <div className="text-xs font-semibold uppercase tracking-widest text-foreground/50">Complete</div>
+            <div className="text-xl font-display font-bold text-success flex items-center gap-2">
+              {stats.complete} <CheckCircle weight="fill" className="w-5 h-5" />
             </div>
-            <div className="rounded-2xl neo-border bg-surface p-4 neo-shadow-sm flex items-center justify-between">
-              <div className="text-xs font-semibold uppercase tracking-widest text-foreground/50">Failed</div>
-              <div className="text-xl font-display font-bold text-destructive flex items-center gap-2">
-                {stats.failed} <XCircle weight="fill" className="w-5 h-5" />
-              </div>
+          </div>
+          <div className="rounded-2xl neo-border bg-surface p-4 neo-shadow-sm flex items-center justify-between">
+            <div className="text-xs font-semibold uppercase tracking-widest text-foreground/50">Failed</div>
+            <div className="text-xl font-display font-bold text-destructive flex items-center gap-2">
+              {stats.failed} <XCircle weight="fill" className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="rounded-2xl neo-border bg-surface p-4 neo-shadow-sm flex items-center justify-between">
+            <div className="text-xs font-semibold uppercase tracking-widest text-foreground/50">In Progress</div>
+            <div className="text-xl font-display font-bold text-foreground/70 flex items-center gap-2">
+              {stats.inProgress} <Clock weight="fill" className="w-5 h-5" />
             </div>
           </div>
         </div>
@@ -143,23 +164,7 @@ export default async function ResearchPage() {
                     </tr>
                   ) : (
                     jobs.map((job) => {
-                      const shortId = job.id ? job.id.slice(0, 8) : "—";
-                      const formattedDate = job.created_at
-                        ? new Date(job.created_at).toLocaleString(undefined, {
-                            month: "short",
-                            day: "numeric",
-                            hour: "numeric",
-                            minute: "2-digit",
-                          })
-                        : "—";
-                      const scenesDisplay =
-                        job.scenes_total != null
-                          ? `${job.scenes_passed ?? 0}/${job.scenes_total}`
-                          : "—";
-                      const costDisplay =
-                        job.usd_estimate != null
-                          ? `$${Number(job.usd_estimate).toFixed(4)}`
-                          : "—";
+                      const { shortId, formattedDate, scenesDisplay, costDisplay } = formatJob(job);
 
                       return (
                         <tr key={job.id} className="hover:bg-muted/10 transition-colors">
@@ -180,7 +185,7 @@ export default async function ResearchPage() {
                             </span>
                             {job.status === "failed" && job.failure_reason && (
                               <div className="mt-1 max-w-xs truncate text-[11px] text-destructive/80 font-medium" title={job.failure_reason}>
-                                {job.failure_reason}
+                                {failureLabel(job.failure_reason)}
                               </div>
                             )}
                           </td>
@@ -231,23 +236,7 @@ export default async function ResearchPage() {
               </div>
             ) : (
               jobs.map((job) => {
-                const shortId = job.id ? job.id.slice(0, 8) : "—";
-                const formattedDate = job.created_at
-                  ? new Date(job.created_at).toLocaleString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })
-                  : "—";
-                const scenesDisplay =
-                  job.scenes_total != null
-                    ? `${job.scenes_passed ?? 0}/${job.scenes_total}`
-                    : "—";
-                const costDisplay =
-                  job.usd_estimate != null
-                    ? `$${Number(job.usd_estimate).toFixed(4)}`
-                    : "—";
+                const { shortId, formattedDate, scenesDisplay, costDisplay } = formatJob(job);
 
                 return (
                   <div key={job.id} className="rounded-2xl neo-border bg-surface p-5 neo-shadow-sm flex flex-col gap-4">
@@ -278,7 +267,7 @@ export default async function ResearchPage() {
                     {/* Failure Reason if failed */}
                     {job.status === "failed" && job.failure_reason && (
                       <div className="rounded-lg bg-destructive/10 p-3 text-xs text-destructive/90 font-medium">
-                        {job.failure_reason}
+                        {failureLabel(job.failure_reason)}
                       </div>
                     )}
 
