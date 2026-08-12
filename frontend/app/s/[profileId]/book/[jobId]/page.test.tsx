@@ -5,6 +5,7 @@ import BookPage from "./page";
 const pushMock = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock }),
+  useParams: () => ({ profileId: "p1", jobId: "j1" }),
 }));
 
 const mockUseJob = vi.fn();
@@ -119,6 +120,53 @@ describe("BookPage — reader (terminal-success)", () => {
     expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/0.png");
     expect(mockCreateSignedUrls).toHaveBeenCalledTimes(1);
     expect(mockCreateSignedUrls).toHaveBeenCalledWith(["j1/s0-1.png", "j1/s1-1.png"], 3600);
+  });
+
+  it("defaults to pages view mode automatically", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
+    mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
+
+    await renderPage(makeParams("j1"));
+
+    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
+    expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/0.png");
+  });
+
+  it("renders back button linking to student bookshelf", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
+    mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
+
+    await renderPage(makeParams("j1"));
+
+    await waitFor(() => expect(screen.getByLabelText("Back to bookshelf")).toBeDefined());
+    const backBtn = screen.getByLabelText("Back to bookshelf");
+    expect(backBtn.getAttribute("href")).toBe("/s/p1");
+  });
+
+  it("renders Pages view button before Scroll view button in toggle pill", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
+    mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
+
+    await renderPage(makeParams("j1"));
+
+    await waitFor(() => expect(screen.getByLabelText("Pages View")).toBeDefined());
+    const buttons = screen.getAllByRole("button").filter(b => 
+      b.getAttribute("aria-label") === "Pages View" || b.getAttribute("aria-label") === "Scroll View"
+    );
+    expect(buttons[0].getAttribute("aria-label")).toBe("Pages View");
+    expect(buttons[1].getAttribute("aria-label")).toBe("Scroll View");
+  });
+
+  it("discloses the name swap in both reading modes (ethics_and_safety.md §1)", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
+    mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
+
+    // Default mode is pages; a child who never touches the toggle must still see it.
+    await renderPage(makeParams("j1"));
+    await waitFor(() => expect(screen.getByText(/change some names to keep you safe/i)).toBeDefined());
+
+    fireEvent.click(screen.getByLabelText("Scroll View"));
+    expect(screen.getByText(/change some names to keep you safe/i)).toBeDefined();
   });
 
   it("image alt = caption; visible caption is aria-hidden (spec §4.3 double-read fix)", async () => {
