@@ -33,16 +33,22 @@ def test_no_preset_lets_the_image_model_letter_the_page():
 
 
 def test_recursion_limit_derives_from_max_scenes_and_the_super_step_prelude():
-    """ADR-024's ×4 formula, corrected prelude: 6 linear steps + 3 retry cycles of 3
-    (char_bible, char_ref_mod, reveal) = 15 (spec §4.13)."""
+    """ADR-024's formula, corrected prelude: 6 linear steps + 3 retry cycles of 3
+    (char_bible, char_ref_mod, reveal) = 15 (spec §4.13).
+
+    ×4 → ×5 on 2026-08-13: `output_mod` moved inside the scene loop, so the deepest a single scene
+    can go is now generate_scene → consistency_check → regenerate → consistency_check → output_mod.
+    Left at ×4, a 15-scene book where every scene regenerates would die on recursion_limit rather
+    than on anything real.
+    """
     assert SUPER_STEP_PRELUDE == 15
-    assert RECURSION_LIMIT == MAX_SCENES * 4 + SUPER_STEP_PRELUDE
+    assert RECURSION_LIMIT == MAX_SCENES * 5 + SUPER_STEP_PRELUDE
 
 
 def test_recursion_limit_and_image_budget_no_longer_share_a_prelude_term():
     """Spec §4.13: the two backstops are different units and were only ever coincidentally
     equal at 9. Raising one in sympathy with the other would weaken a cost guard."""
-    assert RECURSION_LIMIT - MAX_SCENES * 4 != IMAGE_BUDGET - MAX_SCENES * 2
+    assert RECURSION_LIMIT - MAX_SCENES * 5 != IMAGE_BUDGET - MAX_SCENES * 2
 
 
 def test_image_budget_is_unchanged_by_the_reveal_prelude():

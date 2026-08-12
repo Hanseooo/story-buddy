@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import patch
 
 import pytest
@@ -139,6 +140,29 @@ def test_retry_also_fails_sets_moderation_status_failed():
     assert result["scenes"][0].moderation_status == "failed"
 
 
+def test_a_failed_scene_does_not_point_at_the_flagged_image():
+    """`final_image_ref` means "this is the image the book uses". On the failure branch this node
+    set it to the retry image that had JUST been flagged — the one picture we know must never be
+    shown. `consistency_check:227` already writes `None` when there is no winner; this is the same
+    situation and now gets the same answer.
+
+    Unreachable today only because ADR-025 kills the whole job, so nothing reads the field
+    afterwards. That is a guarantee held by a different module, which is not where this invariant
+    should live. The path is not lost — the flagged attempt is still in `attempts` with
+    `passed=False`, which is where a rejected image belongs.
+    """
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"), \
+         patch("pipeline.output_mod.classify_image_primary", return_value=False), \
+         patch("pipeline.output_mod.classify_image_backstop", return_value=True), \
+         patch("pipeline.output_mod.generate_and_store", return_value=("job-1/s0-2.png", True)):
+        from pipeline.output_mod import output_mod
+        scene = output_mod(_state([_scene("s0")]))["scenes"][0]
+
+    assert scene.moderation_status == "failed"
+    assert scene.final_image_ref is None
+    assert scene.attempts[-1] == Attempt(image_ref="job-1/s0-2.png", prompt=scene.attempts[-1].prompt, passed=False)
+
+
 def test_route_after_output_mod_raises_when_scene_failed():
     """route_after_output_mod raises RuntimeError('output_moderation_failed') on failed scene."""
     from pipeline.graph import route_after_output_mod
@@ -220,6 +244,35 @@ def test_backstop_error_still_raises_moderation_error():
         from pipeline.output_mod import output_mod
         with pytest.raises(RuntimeError, match="moderation_error"):
             output_mod(_state([_scene("s0")]))
+
+
+# --- which classifier flagged (CC-5) ---
+
+@pytest.mark.parametrize("primary_mock, expected", [
+    ({"return_value": False}, "flagged by primary"),
+    ({"return_value": True}, "flagged by backstop (primary said safe)"),
+    ({"side_effect": Exception("429 engine_overloaded")}, "flagged by backstop (primary errored)"),
+])
+def test_flag_log_names_the_classifier_and_whether_the_other_was_consulted(primary_mock, expected, caplog):
+    """CC-5: "log classifier name, verdict, and latency per call" — this node logged neither name
+    nor verdict, so a flag that killed a book was indistinguishable from any other flag.
+
+    The third case is the one that cost a book. Prod job 4f7698d5 (2026-08-12) lost all 8 scenes to
+    s2 while `mistralai/mistral-small-3.2-24b-instruct` was 429ing on OpenRouter's shared free pool,
+    and the log could not say whether two classifiers had agreed or the backstop had decided alone —
+    which is the difference between a real flag and a degraded gate.
+    """
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"), \
+         patch("pipeline.output_mod.classify_image_primary", **primary_mock), \
+         patch("pipeline.output_mod.classify_image_backstop", return_value=False), \
+         patch("pipeline.output_mod.generate_and_store", return_value=("job-1/s0-2.png", True)), \
+         caplog.at_level(logging.INFO, logger="pipeline.output_mod"):
+        from pipeline.output_mod import output_mod
+        result = output_mod(_state([_scene("s0")]))
+
+    assert result["scenes"][0].moderation_status == "failed"
+    assert expected in caplog.text
+    assert f"still {expected} after retry" in caplog.text
 
 
 # --- scene with no final_image_ref ---

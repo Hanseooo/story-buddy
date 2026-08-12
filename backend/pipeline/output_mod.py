@@ -8,8 +8,10 @@ from providers import classify_image_backstop, classify_image_primary, get_signe
 log = logging.getLogger(__name__)
 
 
-def _check_image(image_url: str) -> bool:
-    """True if the image is safe. Posture mirrors `char_ref_mod` (spec §4b, aligned with
+def _check_image(image_url: str) -> str | None:
+    """`None` if the image is safe, else a log label naming the classifier that flagged it.
+
+    Posture mirrors `char_ref_mod` (spec §4b, aligned with
     `input_gate` on 2026-08-11): a PRIMARY classifier error degrades to backstop-only, a primary
     flag short-circuits, and a BACKSTOP error propagates — the callers turn that into
     `moderation_error`, which is still correct because the backstop has nothing behind it.
@@ -31,9 +33,20 @@ def _check_image(image_url: str) -> bool:
 
     if primary_safe is False:
         # A second opinion cannot change a flag (spec §4a step 3).
-        return False
+        return "primary"
 
-    return classify_image_backstop(image_url)
+    if classify_image_backstop(image_url):
+        return None
+
+    # WHICH classifier flagged, and whether the other was even consulted, is the whole diagnosis
+    # when a book dies here (CC-5: "log classifier name, verdict, and latency per call" — this node
+    # logged neither name nor verdict). `char_ref_mod:57` already logs both; only this node, which
+    # hides the posture behind this helper, threw the answer away.
+    #
+    # Prod job 4f7698d5 (2026-08-12) is the case: s2 flagged twice while the primary image model
+    # was 429ing on OpenRouter's shared free pool, and nothing in the log could say whether that was
+    # two classifiers agreeing or gemma-3-27b deciding alone.
+    return "backstop (primary said safe)" if primary_safe else "backstop (primary errored)"
 
 
 def _soften_prompt(prompt: str) -> str:
@@ -46,6 +59,13 @@ def _soften_prompt(prompt: str) -> str:
 def output_mod(state: StoryMemory) -> dict:
     updated_scenes = []
     for scene in state.scenes:
+        if scene.moderation_status == "passed":
+            # Screened on an earlier turn of the loop. This node now runs once per finalized scene
+            # rather than once over the finished book (see `route_next_scene`), so without this it
+            # would re-pay for a classifier call per already-cleared scene, per scene, per book.
+            updated_scenes.append(scene)
+            continue
+
         if scene.final_image_ref is None:
             # Regeneration controller owns unresolved refs (spec §4c edge case).
             updated_scenes.append(scene)
@@ -54,18 +74,21 @@ def output_mod(state: StoryMemory) -> dict:
         signed_url = get_signed_url(scene.final_image_ref)
 
         try:
-            passed = _check_image(signed_url)
+            flagged_by = _check_image(signed_url)
         except Exception as exc:
             log.error("output_mod: scene_id=%s classifier error (%s)", scene.scene_id, exc)
             raise RuntimeError("moderation_error") from exc
 
-        if passed:
+        if flagged_by is None:
             log.info("output_mod: scene_id=%s passed", scene.scene_id)
             updated_scenes.append(scene.model_copy(update={"moderation_status": "passed"}))
             continue
 
         # One soften-and-retry (spec §4c step 4).
-        log.info("output_mod: scene_id=%s flagged — softening and retrying", scene.scene_id)
+        log.info(
+            "output_mod: scene_id=%s flagged by %s — softening and retrying",
+            scene.scene_id, flagged_by,
+        )
         softened = _soften_prompt(scene.prompt or "")
 
         # `_soften_prompt` prepends, so the softened prompt still carries build_prompt's numbered
@@ -81,12 +104,12 @@ def output_mod(state: StoryMemory) -> dict:
         retry_url = get_signed_url(retry_path)
 
         try:
-            retry_passed = _check_image(retry_url)
+            retry_flagged_by = _check_image(retry_url)
         except Exception as exc:
             log.error("output_mod: scene_id=%s retry classifier error (%s)", scene.scene_id, exc)
             raise RuntimeError("moderation_error") from exc
 
-        if retry_passed:
+        if retry_flagged_by is None:
             log.info("output_mod: scene_id=%s retry passed", scene.scene_id)
             updated_scenes.append(scene.model_copy(update={
                 "final_image_ref": retry_path,
@@ -94,9 +117,16 @@ def output_mod(state: StoryMemory) -> dict:
                 "attempts": [*scene.attempts, Attempt(image_ref=retry_path, prompt=softened, passed=True)],
             }))
         else:
-            log.error("output_mod: scene_id=%s still flagged after retry — route_after_output_mod will fail job", scene.scene_id)
+            log.error(
+                "output_mod: scene_id=%s still flagged by %s after retry — "
+                "route_after_output_mod will fail job",
+                scene.scene_id, retry_flagged_by,
+            )
             updated_scenes.append(scene.model_copy(update={
-                "final_image_ref": retry_path,
+                # NOT retry_path: `final_image_ref` is the image the book uses, and this one was
+                # just flagged. `consistency_check` writes None when no attempt wins; same here.
+                # The path is not lost — the flagged attempt is recorded below with passed=False.
+                "final_image_ref": None,
                 "moderation_status": "failed",
                 "attempts": [*scene.attempts, Attempt(image_ref=retry_path, prompt=softened, passed=False)],
             }))

@@ -222,8 +222,14 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
   **Built today** (`backend/pipeline/graph.py`):
   `input_gate → [moderation_router] → analyze → segment → char_bible → char_ref_mod →
   [moderation_router] → reveal → [route_reveal] → generate_scene → consistency_check →
-  [route_after_check] → regenerate → consistency_check → … → output_mod →
-  [route_after_output_mod] → compose`.
+  [route_after_check] → regenerate → consistency_check → output_mod →
+  [route_after_output_mod] → … → compose`.
+  ⚠️ **`output_mod` is INSIDE the scene loop** (2026-08-13): each scene is screened the moment it
+  finalizes, and `route_after_output_mod` hands back to `route_next_scene` rather than going
+  straight to `compose`. It used to run once over the finished book, which meant the gate could
+  only ever fire after every image was drawn and paid for — prod job 4f7698d5 (2026-08-12) died on
+  s2 of 8 and took 11 fal images with it. ADR-025's no-partial-book rule is unchanged; only the
+  bill is. This is what `RECURSION_LIMIT`'s `MAX_SCENES * 5` counts.
   `moderation_router` (ADR-024 pure router) handles both post-`input_gate` and post-`char_ref_mod`
   edges; `route_after_output_mod` reads `moderation_status="failed"` and raises.
   `char_ref_mod` runs `settings.moderation_primary_image_model` (mistralai/mistral-small-3.2-24b-instruct
@@ -232,7 +238,9 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
   ref image.
   `reveal` (ADR-029) is effect-free and holds one `interrupt()`; `route_reveal` loops `"try_again"`
   back to `char_bible` and enforces the 3-tap cap.
-  `output_mod` runs the same two-classifier check on each output scene, with one soften-and-retry.
+  `output_mod` runs the same two-classifier check on each output scene, with one soften-and-retry,
+  and logs **which** classifier flagged and whether the other was consulted (CC-5) — a flag that
+  kills a book used to leave no account of who killed it.
   All provider calls (meta-llama/llama-guard-4-12b, Presidio, mistralai/mistral-small-3.2-24b-instruct, OpenRouter backstops) go through
   `backend/providers.py`; `get_signed_url` lives there too (Storage seam). `export` is not yet built.
   The worker's LangGraph checkpointer reaches Supabase Postgres on the **direct connection (5432)**, never

@@ -706,9 +706,22 @@ def test_the_returned_attempt_list_replaces_rather_than_appends():
 
 # --- route_next_scene (pure — no mocks) ---
 
-def test_router_sends_an_unfinalized_scene_back_to_generate_scene():
+def test_router_moderates_a_just_finalized_scene_before_drawing_the_next():
+    """Spec §4c granularity (resolved 2026-08-13): the gate runs INSIDE the loop, so a book that
+    is going to fail moderation fails two images in rather than eleven. s0 is drawn and unscreened
+    while s1 is not drawn at all — screening s0 comes first."""
     state = _state([
         Scene(scene_id="s0", text_excerpt="0", final_image_ref="job-1/s0-1.png"),
+        Scene(scene_id="s1", text_excerpt="1"),
+    ])
+    assert route_next_scene(state) == "output_mod"
+
+
+def test_router_sends_an_unfinalized_scene_back_to_generate_scene_once_the_drawn_one_is_screened():
+    """The other half of the pair above: nothing is owed to output_mod, so the loop continues.
+    Without the `moderation_status is None` term this returns "output_mod" forever."""
+    state = _state([
+        Scene(scene_id="s0", text_excerpt="0", final_image_ref="job-1/s0-1.png", moderation_status="passed"),
         Scene(scene_id="s1", text_excerpt="1"),
     ])
     assert route_next_scene(state) == "generate_scene"
@@ -719,9 +732,20 @@ def test_router_sends_a_fully_finalized_book_to_output_mod():
     assert route_next_scene(state) == "output_mod"
 
 
-def test_router_sends_an_empty_scene_list_to_output_mod():
-    """ADR-024: segment produced no scenes. The loop head must not enter a loop with no work."""
-    assert route_next_scene(_state([])) == "output_mod"
+def test_router_sends_a_fully_screened_book_to_compose():
+    state = _state([
+        Scene(scene_id="s0", text_excerpt="0", final_image_ref="job-1/s0-1.png", moderation_status="passed"),
+    ])
+    assert route_next_scene(state) == "compose"
+
+
+def test_router_sends_an_empty_scene_list_to_compose():
+    """ADR-024: segment produced no scenes. The loop head must not enter a loop with no work.
+
+    Destination moved from "output_mod" to "compose" when moderation moved into the loop: there is
+    nothing for output_mod to screen, and compose raises "no scenes" either way — one hop earlier.
+    """
+    assert route_next_scene(_state([])) == "compose"
 
 
 # --- route_after_check (pure — no mocks) ---
@@ -744,8 +768,8 @@ def test_route_after_check_sends_a_fully_finalized_book_to_output_mod():
     assert route_after_check(state) == "output_mod"
 
 
-def test_route_after_check_sends_an_empty_scene_list_to_output_mod():
-    assert route_after_check(_state([])) == "output_mod"
+def test_route_after_check_sends_an_empty_scene_list_to_compose():
+    assert route_after_check(_state([])) == "compose"
 
 
 def test_route_after_check_skips_finalized_scenes_when_selecting():

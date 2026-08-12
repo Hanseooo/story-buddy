@@ -34,8 +34,12 @@ output image.
 
 ### 2c. `output_mod`
 - **Reads:** `scenes[].final_image_ref` (durable Storage path for the scene being checked)
-- **Writes:** `scenes[].moderation_status` (`"passed"` | `"flagged"`)
+- **Writes:** `scenes[].moderation_status` (`"passed"` | `"failed"`)
 - **Invariant:** no scene with `moderation_status != "passed"` is passed to `compose`.
+- ⚠️ The written values are `"passed"` / `"failed"`, **not** `"flagged"` — this line and §4c step 4
+  said `"flagged"` and no code ever wrote it. A first-check flag is a transient state inside one
+  node call (it triggers the soften-and-retry and is resolved before the node returns), so it never
+  reaches the contract. `char_ref_mod` is the one that really does persist `"flagged"` (§2b).
 
 ## 3. Position in the system map
 
@@ -46,14 +50,21 @@ input_gate ──(pass)──► analyze → ... → char_bible → char_ref_mod
     │                                                     │
  job fails                                            job fails
 
+        ┌──────────────────── more scenes to draw ─────────────────────┐
+        │                                                             │
 generate_scene → consistency_check → [regenerate] → output_mod ──(pass)──► compose
-                                                         │
+                                                         │           (book complete)
                                                       (fail)
                                                          │
                                                [one soften-and-retry]
                                                          │
                                                (still fail) → job fails
 ```
+
+`output_mod` sits **inside** the scene loop (2026-08-13, §4c): one scene is screened as soon as it
+finalizes, before the next is drawn. `route_after_output_mod` therefore returns to
+`route_next_scene` rather than to `compose` directly, and `compose` is reached only when every
+scene is both drawn and screened.
 
 The `moderation_router` (a pure router per ADR-024) reads `input.moderation.passed` after
 `input_gate` and `characters[].ref_moderation_status` after `char_ref_mod`. `output_mod` owns
@@ -149,6 +160,18 @@ straight to a child.
    (issue #23).
 5. Still flagged after retry → `scene.moderation_status = "failed"` → job `failed` with
    `failure_reason = "output_moderation_failed"`. No partial book (ADR-025).
+
+⚠️ **Step 0, added 2026-08-13: this node runs once per finalized scene, not once per book.** It
+skips any scene already `"passed"`, and `route_next_scene` sends a freshly-finalized, unscreened
+scene here before `generate_scene` draws the next one. Granularity resolved — see §8.
+
+⚠️ **CC-5, added 2026-08-13: the flag log names the classifier.** `_check_image` returns a label
+(`"primary"` / `"backstop (primary said safe)"` / `"backstop (primary errored)"`) instead of a
+bare bool, and `providers.classify_image_{primary,backstop}` log `is_safe` plus the truncated
+`safety_reasoning` that ADR-004's reason-before-score ordering already makes the model produce and
+that both callers previously discarded. The third label is the one that matters: it distinguishes
+two classifiers agreeing from the backstop deciding alone while the primary 429s on OpenRouter's
+shared free pool, which is the difference between a real flag and a degraded gate.
 
 **Edge cases:**
 - If `final_image_ref` is None (consistency loop produced nothing): the `regeneration-controller`
@@ -253,6 +276,29 @@ not be marked optional.
 and Taglish cases, both directions). Feed it to the real classifiers in an offline nightly run
 (not CI). Extend the set as production finds edge cases the probe missed.
 
+⚠️ **Owed run (2026-08-13): the backstop image rubric was narrowed and has not been re-measured.**
+It read *"Flag: violence, gore, sexual content, frightening imagery, dangerous activities"* — and
+"frightening imagery" is the genre. Prod job 4f7698d5 lost an 8-scene book on s2, a girl walking up
+to the *"big, scary house"* that IS the story, from text `input_gate` had already passed;
+`_soften_prompt` cannot rescue that, because prepending "child-safe, gentle" does not remove the
+scary house, so the retry flagged too. The primary image rubric is NSFW-only and has no category
+that a scary house could trip, which is what identifies the backstop as the classifier that fired.
+The hard categories are unchanged; the frightening clause is now qualified ("likely to genuinely
+distress a young child") and paired with an explicit do-not-flag list for ordinary storybook
+atmosphere. **A loosened safety rubric is exactly what this fixture set exists to catch — run it
+against the real classifiers before this is trusted, and add a mild-peril case in both directions.**
+
+There is nothing to run it with yet, and that is the finding. `moderation_cases.py` is the
+Post-Phase-2 item above and has not been built; `spikes/phase_05.py moderation` exists but is
+text-only, so no probe in this repo can exercise an image rubric in either direction. The narrowed
+rubric therefore ships on reasoning alone. **Blocking on Phase 2 entry:** an image arm — a handful
+of rendered scenes with expected verdicts (spooky house, dark forest, startled child on the
+must-not-flag side; genuine gore and injury on the must-flag side), fed to
+`classify_image_primary` and `classify_image_backstop`. Until then the pre-Phase-2 gate in this
+section is only half satisfied: it clears the text path and says nothing about the image path.
+(`spikes/phase_05.py:434` also still reads `settings.moderation_model`, renamed to
+`moderation_primary_model`, so the text arm does not currently run either — separate fix.)
+
 ## 8. Linked decisions & open questions
 
 - **ADR-011c** — the two-classifier design, OpenRouter API primary, OpenRouter backstop, and
@@ -275,9 +321,15 @@ and Taglish cases, both directions). Feed it to the real classifiers in an offli
   `POST /storybooks`, before the job is queued; this spec's assumption that `input_gate` always sees
   final text is satisfied literally.
 - **`kid-flow-ui` spec** — owns the kid-appropriate teacher-facing failure message.
-- **Open — output moderation failure granularity:** this spec chooses "fail the whole job" on a
-  flagged scene (consistent with ADR-025's no-partial-book rule). An alternative — silently drop
-  the scene and compose the rest — contradicts ADR-025. Confirm before build.
+- **Resolved 2026-08-13 — output moderation failure granularity.** This spec chose "fail the whole
+  job" on a flagged scene (consistent with ADR-025's no-partial-book rule), noted "confirm before
+  build", and was built unconfirmed. **Confirmed, with a correction: the verdict stays, the timing
+  moves.** Failing the book is still right — a partial book still contradicts ADR-025 and the
+  alternative was never taken. What was wrong was screening at the *end*, which meant the gate
+  could only ever fire once every scene had been drawn, judged, possibly regenerated, and paid for.
+  Prod job 4f7698d5 (2026-08-12) died on s2 of 8 and took 11 fal images down with it; f4d0fd74
+  (2026-08-11) died on s5 of 7. Both stop two images in under §4c step 0. The safety posture is
+  untouched — only the bill for enforcing it.
 - **Open — backstop routing error policy:** this spec treats a backstop routing error as a hard
   job failure. Alternative: proceed on primary-only if the backstop is unreachable (not the same
   as a "pass" verdict from the backstop). Decide at build time with a new ADR amendment if needed.
