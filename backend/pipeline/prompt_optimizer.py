@@ -215,25 +215,43 @@ def build_prompt(
     style = style_fragment or settings.default_style_fragment
     by_id = {character.char_id: character for character in characters}
 
-    descriptions = []
-    for char_id in characters_present:
+    # `dict.fromkeys` mirrors segment's dedup (§4.3) so a checkpoint written before that change
+    # cannot reproduce a doubled subject on resume. Order-preserving — invariant 4.
+    present: list[Character] = []
+    for char_id in dict.fromkeys(characters_present):
         character = by_id.get(char_id)
         if character is None:
             log.warning("build_prompt: char_id %s not found in characters, skipping", char_id)
             continue
-        # ADR-035 surface 3. Issue #23's `s1`: this line asserted "glowing" while `style` below
-        # forbade it and the reference obeyed `style`, so the edit model saw the scene's noun
-        # describing something Image 2 visibly was not, and drew a second one.
-        descriptions.append(_describe(filtered_description(character.description, style), character.name))
+        present.append(character)
 
     # Omitted entirely on the text-to-image path (`generate_scene:55-57` sends no images), where
     # naming images that were never sent would be a lie the model has to reconcile.
     referenced = referenced_characters(characters_present, characters)
+    referenced_ids = {character.char_id for character in referenced}
+
+    # §4.2 THE ROLL FOLD — the whole D2 fix. The image and its attributes are ONE sentence, so the
+    # model has nothing left to associate. Net token reduction: the separate attribute line for a
+    # referenced character is not emitted below. A character with no populated axes yields
+    # "Image 1 is Ana." — byte-identical to before the fold.
     roll = [
-        " ".join(f"Image {n} is {character.name}." for n, character in enumerate(referenced, 1))
+        " ".join(
+            f"Image {n} is "
+            f"{_describe(filtered_description(character.description, style), character.name)}."
+            for n, character in enumerate(referenced, 1)
+        )
         + " "
         + REFERENCE_CLAUSE
     ] if referenced else []
+
+    # ADR-035 surface 3. Issue #23's `s1`: this line asserted "glowing" while `style` below
+    # forbade it and the reference obeyed `style`, so the edit model saw the scene's noun
+    # describing something Image 2 visibly was not, and drew a second one.
+    descriptions = [
+        _describe(filtered_description(character.description, style), character.name)
+        for character in present
+        if character.char_id not in referenced_ids
+    ]
 
     return "\n\n".join([*roll, *descriptions, text_excerpt, style])
 

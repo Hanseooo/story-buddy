@@ -67,7 +67,8 @@ def test_build_prompt_never_invents_detail_for_an_empty_description():
 
 def test_build_prompt_names_each_reference_image_by_index():
     """Issue #23: the payload sent prose plus ANONYMOUS image_urls, so the edit model composited
-    both references into the canvas instead of using them as identity conditioning."""
+    both references into the canvas instead of using them as identity conditioning. Since
+    scene-setting-and-subject-binding §4.2 each name carries its own attributes (the roll fold)."""
     ana = _char("c0", "Ana", species="girl")
     ana.canonical_ref_image = "job-123/ref-c0-1.png"
     star = _char("c1", "the star", species="star")
@@ -75,8 +76,8 @@ def test_build_prompt_names_each_reference_image_by_index():
 
     prompt = build_prompt("She held it toward the sky.", ["c0", "c1"], [ana, star], FRAG)
 
-    assert "Image 1 is Ana." in prompt
-    assert "Image 2 is the star." in prompt
+    assert "Image 1 is Ana - girl." in prompt
+    assert "Image 2 is the star." in prompt      # species repeats the name → dropped (issue #32)
 
 
 def test_build_prompt_numbers_images_in_upload_order_not_roster_order():
@@ -501,4 +502,79 @@ def test_filtered_location_passes_none_through():
 def test_filtered_location_handles_a_null_description():
     location = Location(loc_id="loc0", name="the beach")
     assert filtered_location(location, COMIC) == location
+
+
+# --- §4.2 D2: the roll fold (§6 tests 8-11) ---
+
+def test_the_roll_folds_the_description_into_the_image_sentence():
+    """§6 test 8. Today the roll and the attribute line are two unbound blocks; folded, each
+    reference image and its attributes are one sentence."""
+    ana = _char("c0", "Ana", species="girl", colours=["red"], clothing=["jeans"])
+    ana.canonical_ref_image = "job-123/ref-c0-1.png"
+
+    prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
+
+    assert "Image 1 is Ana - girl; red; jeans." in prompt
+
+
+def test_the_roll_of_a_character_with_no_populated_axes_is_byte_identical_to_before():
+    """§6 test 9. `_describe` floors to the bare name, so `"Image 1 is Ana."` is unchanged."""
+    ana = _char("c0", "Ana")
+    ana.canonical_ref_image = "job-123/ref-c0-1.png"
+
+    prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
+
+    assert "Image 1 is Ana." in prompt
+
+
+def test_a_present_character_with_no_reference_keeps_a_plain_line_below_the_roll():
+    """§6 test 10. It has no image number to fold into, so it keeps the description line it has
+    always had — and the line must appear AFTER the roll, not before it."""
+    ana = _char("c0", "Ana", species="girl")                 # no canonical reference
+    star = _char("c1", "the star", body_features=["tiny"])
+    star.canonical_ref_image = "job-123/ref-c1-1.png"
+
+    prompt = build_prompt("Ana held the star.", ["c0", "c1"], [ana, star], FRAG)
+
+    assert "Image 1 is the star - tiny." in prompt
+    assert prompt.index("Image 1 is") < prompt.index("Ana - girl")
+
+
+def test_a_referenced_character_is_described_once_and_only_in_the_roll():
+    """The fold REPLACES the separate attribute line — emitting both would restore the two
+    unbound blocks this change exists to remove, at double the tokens."""
+    ana = _char("c0", "Ana", species="girl")
+    ana.canonical_ref_image = "job-123/ref-c0-1.png"
+
+    prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
+
+    assert prompt.count("Ana - girl") == 1
+
+
+def test_the_roll_order_still_matches_referenced_characters_order():
+    """§6 test 11 / invariant 4. `generate_scene`, `regenerate` and `output_mod` all index
+    `ref_paths` against this roll, so a reorder here silently lies on three nodes."""
+    ana = _char("c0", "Ana", species="girl")
+    ana.canonical_ref_image = "job-123/ref-c0-1.png"
+    star = _char("c1", "the star", body_features=["tiny"])
+    star.canonical_ref_image = "job-123/ref-c1-1.png"
+    characters = [ana, star]
+
+    prompt = build_prompt("She held it up.", ["c1", "c0"], characters, FRAG)
+    order = [c.name for c in referenced_characters(["c1", "c0"], characters)]
+
+    assert order == ["the star", "Ana"]
+    assert prompt.index("Image 1 is the star") < prompt.index("Image 2 is Ana")
+
+
+def test_the_reference_clause_still_follows_the_roll():
+    """The clause is the antecedent-supplier for the generic "one of these characters" binding;
+    the fold must not detach it from the roll."""
+    ana = _char("c0", "Ana", species="girl")
+    ana.canonical_ref_image = "job-123/ref-c0-1.png"
+
+    prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
+
+    assert "Image 1 is Ana - girl. Use them only as references" in prompt
+
 

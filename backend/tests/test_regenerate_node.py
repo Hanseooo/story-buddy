@@ -211,7 +211,8 @@ def test_ref_paths_agree_with_the_image_roll_the_corrected_prompt_carries():
     )
     _, store = _run(_state([scene], characters=characters))
 
-    assert "Image 1 is the dog. Image 2 is the star." in store.call_args.args[0]
+    assert "Image 1 is the dog - orange." in store.call_args.args[0]
+    assert "Image 2 is the star - dog; orange." in store.call_args.args[0]
     assert store.call_args.args[4] == ["job-1/ref-c0.png", "job-1/ref-c2.png"]
 
 
