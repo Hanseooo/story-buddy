@@ -272,14 +272,18 @@ def test_correct_prompt_never_drops_the_base_prompt_under_either_boolean():
 
 # --- ADR-035: the style fragment's own prohibitions filter the description ---
 
-COMIC = STYLE_PRESETS["comic"]    # "...no gradients, no glow"
-CEL = STYLE_PRESETS["cel"]        # "...no gradients, no glossy highlights, no airbrushing"
+COMIC = STYLE_PRESETS["comic"]    # "...no gradients, no glow, + the lettering ban"
+CEL = STYLE_PRESETS["cel"]        # "...no glossy highlights, no airbrushing, + the lettering ban"
+
+# Shared by all three presets since 2026-08-12 (d83721d9's lettered speech balloon). Named once so
+# a preset's OWN prohibitions stay readable in the assertions below.
+LETTERING = {"speech", "bubbles", "captions", "lettering"}
 
 
 def test_style_prohibitions_reads_the_no_clauses_out_of_the_fragment():
     """ADR-035 Decision 1: derived, never hand-listed — ADR-022 keeps sole ownership."""
-    assert style_prohibitions(COMIC) == {"gradients", "glow"}
-    assert style_prohibitions(CEL) == {"gradients", "glossy", "highlights", "airbrushing"}
+    assert style_prohibitions(COMIC) == {"gradients", "glow"} | LETTERING
+    assert style_prohibitions(CEL) == {"gradients", "glossy", "highlights", "airbrushing"} | LETTERING
 
 
 def test_style_prohibitions_of_a_fragment_that_forbids_nothing_is_empty():
