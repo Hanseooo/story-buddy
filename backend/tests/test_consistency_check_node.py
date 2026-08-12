@@ -135,8 +135,52 @@ def test_scene_verdict_declares_differences_first_and_failure_reasons_last():
         "attributes_present",
         "style_match",
         "anatomy_intact",
+        "subjects_unique",
         "failure_reasons",
     ]
+
+
+# --- §4.4 D3(b): uniqueness, measured not gated ---
+
+def test_scene_verdict_declares_subjects_unique_between_anatomy_and_the_reasons():
+    """ADR-004: the wire order must match the schema, and `providers._assert_field_order` rejects
+    a provider that answers out of order. The prompt asks in exactly this order."""
+    names = list(SceneVerdict.model_fields)
+    assert names.index("anatomy_intact") < names.index("subjects_unique") < names.index("failure_reasons")
+
+
+def test_the_judge_prompt_asks_the_uniqueness_question_after_anatomy_and_before_the_reasons():
+    from pipeline.consistency_check import JUDGE_PROMPT
+
+    assert JUDGE_PROMPT.index("anatomy is intact") < JUDGE_PROMPT.index("drawn exactly once")
+    assert JUDGE_PROMPT.index("drawn exactly once") < JUDGE_PROMPT.index("failure reasons")
+
+
+def test_the_uniqueness_question_scopes_to_the_character_not_the_noun():
+    """§4.4: `REFERENCE_CLAUSE` already draws this distinction — "the stars" in "she looked up at
+    the stars" names no character and stays drawable. A question phrased "is there more than one
+    star" fails a legitimate night sky."""
+    from pipeline.consistency_check import JUDGE_PROMPT
+
+    question = JUDGE_PROMPT.format(name="the star")
+    assert "the star is drawn exactly once" in question
+    assert "not other things of the same kind" in question
+
+
+def test_scene_verdict_subjects_unique_defaults_to_true():
+    """A provider that omits the field must not read as a duplicate — same default as the
+    contract field, for the same CC-10 reason."""
+    verdict = SceneVerdict(differences_observed="d", same_character=True)
+    assert verdict.subjects_unique is True
+
+
+def test_the_judge_prompt_carries_a_version_constant():
+    """§8.2: the prompt is unversioned, and that omission already cost one discarded measurement
+    series. A module constant plus the existing log line — not a third contract change."""
+    from pipeline.consistency_check import JUDGE_PROMPT_VERSION
+
+    assert JUDGE_PROMPT_VERSION == 2
+
 
 
 # --- consistency_check node (judge_attempt patched — the node seam) ---
