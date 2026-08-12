@@ -132,7 +132,7 @@ describe("BookPage — reader (terminal-success)", () => {
 
     await renderPage(makeParams("j1"));
 
-    await waitFor(() => expect(screen.getByText(/1\s*\/\s*2/)).toBeDefined());
+    await waitFor(() => expect(screen.getByLabelText("Page 1 of 2")).toBeDefined());
   });
 
   it("right tap zone advances to next page", async () => {
