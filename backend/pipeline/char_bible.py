@@ -250,11 +250,16 @@ def mint_reference(
     style_fragment: str,
     story_id: str,
     char_id: str,
+    n: int = 1,
 ) -> tuple[str, RefVerdict | None, int]:
     """The node's ONE effect boundary (MASTER_SPEC §6): draw, judge, re-roll, upload.
 
     Returns `(storage_path, verdict, draws_made)`. The draw count is reported rather than
     inferred because the loop lives in here and the node needs it for CC-3 (invariant 4).
+
+    `n` is the uniqueness suffix on the single monotonic per-book sequence both minting paths
+    share (spec §4.4) — NOT a per-character draw count. It defaults to 1 for the initial mint;
+    a moderation redraw passes a higher one so the flagged image survives as evidence.
 
     The loop is node-internal and adds no graph edge and no super-step (ADR-028 Decision 3),
     so ADR-003 and ADR-024 are unamended by it.
@@ -285,7 +290,7 @@ def mint_reference(
                 "char_bible: %s judge failed on draw %d — accepting unchecked, ref_verdict=None",
                 char_id, draws, exc_info=True,
             )
-            return _upload(image, story_id, char_id, 1), None, draws
+            return _upload(image, story_id, char_id, n), None, draws
 
         # CC-5: a wrong character downstream traces back to a specific reference and draw.
         # `matches` is logged beside the list it no longer controls: the two disagreeing is the
@@ -300,7 +305,7 @@ def mint_reference(
         # contradiction is the wrong character, text is the right character in a marked room.
         if not verdict.contradictions and verdict.text_free:
             log.info("char_bible: %s accepted draw %d", char_id, draws)
-            return _upload(image, story_id, char_id, 1), verdict, draws
+            return _upload(image, story_id, char_id, n), verdict, draws
         candidates.append((image, verdict))
 
     winner = best_draw([v for _, v in candidates])
@@ -309,7 +314,7 @@ def mint_reference(
         char_id, draws, winner + 1,
     )
     image, verdict = candidates[winner]
-    return _upload(image, story_id, char_id, 1), verdict, draws
+    return _upload(image, story_id, char_id, n), verdict, draws
 
 
 def _mint_targeted(state: StoryMemory) -> dict:
@@ -340,7 +345,9 @@ def _mint_targeted(state: StoryMemory) -> dict:
 
     image = text_to_image(prompt, negative_extra=REFERENCE_NEGATIVE)
     verdict = judge(judge_prompt, [_data_uri(image)], RefVerdict)
-    n = state.cost.ref_retry_count + 2  # post-bump: rc is incremented below; +2 = +1(initial) +1(this tap)
+    # PRE-bump on BOTH counters — rc is incremented below, mrc is not touched by this path.
+    # +2 = +1(initial mint) +1(this tap). Spec §4.4.
+    n = state.cost.ref_retry_count + state.cost.ref_mod_retry_count + 2
     path = _upload(image, state.story_id, character.char_id, n)
 
     characters = [

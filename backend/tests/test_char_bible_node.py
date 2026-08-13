@@ -1057,3 +1057,48 @@ def test_an_attribute_the_active_fragment_never_forbids_still_reaches_both_promp
 
     assert "glowing" in t2i_mock.call_args.args[0]
     assert "glowing" in judge_mock.call_args.args[0]
+
+
+def test_mint_reference_uploads_to_the_suffix_it_is_given():
+    """Spec §4.4. Both minting paths join ONE monotonic per-book sequence; the flagged image at
+    suffix 1 is preserved as evidence (`providers.py:625` marks the backstop rubric UNMEASURED),
+    so a redraw must not land back on suffix 1 and upsert over it."""
+    fake_supabase = MagicMock()
+    with patch("pipeline.char_bible.text_to_image", side_effect=list(DRAWS)), \
+         patch("pipeline.char_bible.judge", side_effect=[_verdict(True)]), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=fake_supabase):
+        path, _, _ = mint_reference(
+            CharacterDescription(species="dog"), "the dog", FRAG, "story-1", "c0", n=2,
+        )
+
+    assert path == "story-1/ref-c0-2.png"
+    assert _uploaded_path(fake_supabase) == "story-1/ref-c0-2.png"
+
+
+def test_mint_reference_defaults_to_suffix_one():
+    """The default keeps every pre-existing caller and fixture on the path they already assert."""
+    (path, _, _), _, _, supabase = _mint([_verdict(True)])
+
+    assert path == "story-1/ref-c0-1.png"
+    assert _uploaded_path(supabase) == "story-1/ref-c0-1.png"
+
+
+def test_mint_targeted_after_a_moderation_redraw_picks_a_suffix_that_collides_with_nothing():
+    """§6 test 15 / §4.4. rc=0, mrc=1 (both PRE-bump here) → 0 + 1 + 2 = 3. Suffix 1 is the
+    flagged original and suffix 2 is the moderation redraw; a tap must land clear of both."""
+    from contracts.story_memory import Cost, ReferenceRetry
+
+    state = _state(
+        [_char("c0", "the dog", ref="story-1/ref-c0-2.png")],
+        cost=Cost(ref_retry_count=0, ref_mod_retry_count=1),
+    )
+    state.reference_retry = ReferenceRetry(char_id="c0", attribute="a red hat")
+
+    fake_supabase = MagicMock()
+    with patch("pipeline.char_bible.text_to_image", return_value=b"img"), \
+         patch("pipeline.char_bible.judge", return_value=_verdict(True, ["dog"])), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=fake_supabase):
+        result = char_bible(state)
+
+    assert result["characters"][0].canonical_ref_image == "story-1/ref-c0-3.png"
+
