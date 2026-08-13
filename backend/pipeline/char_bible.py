@@ -54,7 +54,9 @@ BUCKET = "storybook-images"
 # rate comparable across prompt revisions — v1 measured the judge's tolerance for sparse
 # descriptions, v2 measures the generator. Unversioned, the 2026-08-11 change silently
 # invalidated every verdict before it and the series had to restart.
-JUDGE_PROMPT_VERSION = 3
+# 4 (lettering-suppression §4.1): adds the text question. v3 verdicts carry no `text_free` signal
+# at all — they default True — so the lettering rate is only measurable from v4 forward.
+JUDGE_PROMPT_VERSION = 4
 
 JUDGE_PROMPT = """\
 This image is meant to be a character reference drawn from the description below.
@@ -67,8 +69,9 @@ does not mention — hair, clothing, background — and those are NOT difference
 First describe any way the image CONTRADICTS a stated attribute. Then list the contradictions: \
 one entry for each stated attribute the image contradicts, naming the attribute and what the \
 image shows instead. If the image contradicts nothing that was stated, leave that list empty. \
-Then say whether the image matches the description, and list which of the described attributes \
-are actually present in the image."""
+Then say whether the image matches the description, list which of the described attributes \
+are actually present in the image, and finally say whether the picture is free of any text — any \
+letters, numbers or writing anywhere in it, including on signs, doors, books and clothing."""
 
 # `analyze`'s EXTRACTION_PROMPT deliberately says "leave them empty rather than inventing
 # details", so a character routinely arrives with nothing drawable — prod job 4cb31620
@@ -204,13 +207,22 @@ def best_draw(verdicts: list[RefVerdict]) -> int:
     than dropped: between two draws that contradict the description equally, "showed more of what
     was asked for" is still the better of the two signals available.
 
+    `text_free` (lettering-suppression §4.2) sits BEHIND contradictions and AHEAD of
+    attributes_present: a draw that contradicts the child's own description is worse than one
+    with a sign in it, and `attributes_present` is documented noise (ADR-034).
+
     `char_bible`'s own rule over `RefVerdict`. UNRELATED to `regeneration-controller`'s
     lexicographic scene rule over `VlmVerdict` — different schema, different question. Do not
     unify them.
     """
     return max(
         range(len(verdicts)),
-        key=lambda i: (-len(verdicts[i].contradictions), len(verdicts[i].attributes_present), -i),
+        key=lambda i: (
+            -len(verdicts[i].contradictions),
+            verdicts[i].text_free,
+            len(verdicts[i].attributes_present),
+            -i,
+        ),
     )
 
 
@@ -279,11 +291,14 @@ def mint_reference(
         # `matches` is logged beside the list it no longer controls: the two disagreeing is the
         # ADR-034 failure, and this line is where it becomes visible in production.
         log.info(
-            "char_bible: %s draw %d/%d contradictions=%s matches=%s attributes=%s",
+            "char_bible: %s draw %d/%d contradictions=%s matches=%s attributes=%s text_free=%s",
             char_id, draws, MAX_DRAWS,
             verdict.contradictions, verdict.matches_description, verdict.attributes_present,
+            verdict.text_free,
         )
-        if not verdict.contradictions:
+        # lettering-suppression §4.2. ANDed with the ADR-034 list, never folded into it: a
+        # contradiction is the wrong character, text is the right character in a marked room.
+        if not verdict.contradictions and verdict.text_free:
             log.info("char_bible: %s accepted draw %d", char_id, draws)
             return _upload(image, story_id, char_id, 1), verdict, draws
         candidates.append((image, verdict))

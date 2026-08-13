@@ -34,6 +34,7 @@ def _verdict(
     anatomy: bool = True,
     style: bool = True,
     unique: bool = True,
+    text_free: bool = True,
     attributes: list[str] | None = None,
     reasons: list[FailureReason] | None = None,
     differences: str = "none",
@@ -45,6 +46,7 @@ def _verdict(
         style_match=style,
         anatomy_intact=anatomy,
         subjects_unique=unique,
+        text_free=text_free,
         failure_reasons=reasons or [],
     )
 
@@ -139,6 +141,7 @@ def test_scene_verdict_declares_differences_first_and_failure_reasons_last():
         "style_match",
         "anatomy_intact",
         "subjects_unique",
+        "text_free",
         "failure_reasons",
     ]
 
@@ -177,12 +180,20 @@ def test_scene_verdict_subjects_unique_defaults_to_true():
     assert verdict.subjects_unique is True
 
 
-def test_the_judge_prompt_carries_a_version_constant():
-    """§8.2: the prompt is unversioned, and that omission already cost one discarded measurement
-    series. A module constant plus the existing log line — not a third contract change."""
-    from pipeline.consistency_check import JUDGE_PROMPT_VERSION
+def test_the_scene_judge_asks_about_text_in_schema_order_and_the_version_is_bumped():
+    """§6 test 14. `providers._assert_field_order` rejects a provider that answers out of schema
+    order, so the prompt asks in `SceneVerdict`'s declaration order: uniqueness, then text, then
+    the failure reasons. Naming doors and clothing is safe here — this string goes to the VLM
+    JUDGE and never to the image model (§4.1).
+    """
+    from pipeline.consistency_check import JUDGE_PROMPT, JUDGE_PROMPT_VERSION
 
-    assert JUDGE_PROMPT_VERSION == 2
+    assert JUDGE_PROMPT_VERSION == 3
+
+    prompt = JUDGE_PROMPT.format(name="the dog")
+    assert "free of any text" in prompt
+    assert prompt.index("drawn exactly once") < prompt.index("free of any text")
+    assert prompt.index("free of any text") < prompt.index("failure reasons")
 
 
 def test_one_duplicated_subject_folds_the_whole_verdict_to_not_unique():
@@ -237,6 +248,57 @@ def test_an_unchecked_attempt_writes_no_verdict_and_therefore_no_uniqueness_sign
     result = _run(state, [])
 
     assert result["scenes"][0].attempts[-1].vlm_verdict is None
+
+
+def test_a_lettered_verdict_from_any_character_folds_the_page_to_not_text_free():
+    """§6 test 9 / §4.3: worst-wins, like every other boolean in this fold. Two subjects, one
+    judge call each; one comes back lettered and the page is lettered."""
+    scene = _scene_with_attempt(characters_present=["c0", "c1"])
+    state = _state([scene], [_char("c0", "the dog"), _char("c1", "the star")])
+
+    result = _run(state, [_verdict(True, text_free=True), _verdict(True, text_free=False)])
+
+    assert result["scenes"][0].attempts[-1].vlm_verdict.text_free is False
+
+
+def test_lettering_alone_flips_passed_to_false():
+    """§6 test 10 / §4.3 — the gate. Everything else on this verdict is clean: same character,
+    anatomy intact, unique subjects, matching style. Only the door has a word on it.
+
+    This is deliberately UNLIKE subjects_unique (which records and ranks but does not gate):
+    that decision was blocked on an unmeasured duplicate rate, whereas at least 3 of the 6
+    burrow-door draws in the 2026-08-13 probe came back lettered, and a word on a page in a book
+    for a six-year-old is not a judgement call (CC-6).
+    """
+    scene = _scene_with_attempt(characters_present=["c0"])
+    state = _state([scene], [_char("c0", "the dog")])
+
+    result = _run(state, [_verdict(True, anatomy=True, unique=True, style=True, text_free=False)])
+
+    attempt = result["scenes"][0].attempts[-1]
+    assert attempt.vlm_verdict.same_character is True
+    assert attempt.vlm_verdict.anatomy_intact is True
+    assert attempt.passed is False
+
+
+def test_a_lettered_page_is_not_finalized_and_buys_the_one_retry():
+    """§4.3 + ADR-010: a real verdict saying *fail* buys the retry, and only the first time.
+    An unfinalized scene is what routes control to `regenerate`."""
+    scene = _scene_with_attempt(characters_present=["c0"])
+    state = _state([scene], [_char("c0", "the dog")])
+
+    result = _run(state, [_verdict(True, text_free=False)])
+
+    assert result["scenes"][0].final_image_ref is None
+
+
+def test_text_free_is_declared_after_subjects_unique_and_before_the_failure_reasons():
+    """ADR-004: `providers._assert_field_order` enforces schema order on the wire, and
+    `failure_reasons` must stay LAST — it is what `correct_prompt` iterates."""
+    fields = list(SceneVerdict.model_fields)
+    assert fields[-1] == "failure_reasons"
+    assert fields.index("subjects_unique") < fields.index("text_free") < fields.index("failure_reasons")
+
 
 
 
@@ -486,6 +548,7 @@ def _attempt(
     anatomy: bool = True,
     style: bool = True,
     unique: bool = True,
+    text: bool = True,
 ) -> Attempt:
     """An already-judged attempt. same=None means UNCHECKED (vlm_verdict is None)."""
     if same is None:
@@ -499,8 +562,9 @@ def _attempt(
             style_match=style,
             anatomy_intact=anatomy,
             subjects_unique=unique,
+            text_free=text,
         ),
-        passed=same and anatomy,
+        passed=same and anatomy and text,
     )
 
 
@@ -551,15 +615,46 @@ def test_rank_puts_uniqueness_below_anatomy():
     assert result["scenes"][0].final_image_ref == "job-1/s0-1.png"
 
 
-def test_the_unchecked_rank_tuple_widened_to_five_zeros():
-    """§6 test 21: unchecked must still sort below EVERY checked attempt, and a four-tuple
-    compared against a five-tuple would raise or mis-order."""
-    assert _rank(Attempt(image_ref="job-1/s0-1.png", prompt="p", passed=False)) == (0, 0, 0, 0, 0)
+def test_rank_sorts_a_lettered_attempt_below_a_clean_one_and_above_an_anatomy_failure():
+    """§6 test 11 / §4.3 ordering rationale: text_free sits AFTER anatomy_intact, because a
+    merged limb is a worse picture than a lettered door."""
+    clean = _attempt("job-1/s0-1.png", same=True, anatomy=True, text=True)
+    lettered = _attempt("job-1/s0-2.png", same=True, anatomy=True, text=False)
+    broken = _attempt("job-1/s0-3.png", same=True, anatomy=False, text=True)
+
+    assert _rank(clean) > _rank(lettered) > _rank(broken)
 
 
-def test_the_checked_rank_tuple_is_five_terms_in_the_declared_order():
-    ranked = _rank(_attempt("job-1/s0-1.png", same=True, anatomy=False, unique=True, style=False))
-    assert ranked == (1, True, False, True, False)
+def test_rank_prefers_a_text_free_attempt_over_a_unique_subject_one():
+    """§6 test 12 / §4.3: text_free sits AHEAD of subjects_unique and style_match, because those
+    two deliberately do not gate and this one does."""
+    text_free_but_duplicated = _attempt(
+        "job-1/s0-1.png", same=True, anatomy=True, text=True, unique=False, style=False
+    )
+    lettered_but_unique = _attempt(
+        "job-1/s0-2.png", same=True, anatomy=True, text=False, unique=True, style=True
+    )
+
+    assert _rank(text_free_but_duplicated) > _rank(lettered_but_unique)
+
+
+def test_the_unchecked_rank_tuple_widened_to_six_zeros():
+    """§6 test 13: unchecked still sorts below EVERY checked attempt (invariant 4). The tuple
+    widened, so the zeros have to widen with it or the comparison raises on length."""
+    unchecked = Attempt(image_ref="job-1/s0-1.png", prompt="p", passed=False)
+    assert _rank(unchecked) == (0, 0, 0, 0, 0, 0)
+
+    worst_checked = _attempt(
+        "job-1/s0-2.png", same=False, anatomy=False, text=False, unique=False, style=False
+    )
+    assert _rank(worst_checked) > _rank(unchecked)
+
+
+def test_the_checked_rank_tuple_is_six_terms_in_the_declared_order():
+    ranked = _rank(
+        _attempt("job-1/s0-1.png", same=True, anatomy=False, text=True, unique=False, style=True)
+    )
+    assert ranked == (1, True, False, True, False, True)
 
 
 def test_the_worst_possible_checked_attempt_still_outranks_an_unchecked_one():

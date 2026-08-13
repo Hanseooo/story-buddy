@@ -118,7 +118,7 @@ for _ in range(MAX_DRAWS):              # 3
         verdict = judge([_data_uri(image)], RefVerdict)
     except Exception:                   # the artifact exists; the CHECK failed — see below
         return _upload(image), None, draws
-    if not verdict.contradictions:      # ADR-034 — derived, never the judge's own boolean
+    if not verdict.contradictions and verdict.text_free:  # ADR-034 + lettering-suppression §4.2
         return _upload(image), verdict, draws
     candidates.append((image, verdict))
 
@@ -129,22 +129,25 @@ return _upload(image), verdict, draws   # a FAILING verdict, persisted — loud,
 **Cap of 3, not ADR-010's 1**, because the blast radius differs: a bad scene is one page, a bad
 reference is every page (ADR-028).
 
-**Acceptance is `not verdict.contradictions`** (ADR-034, amending ADR-028 Decision 3 — the predicate
-only; the in-node loop, the cap and the best-of fallback are unchanged). The judge is asked to
-enumerate one entry per contradicted attribute, and the code counts the list. `matches_description` is
-still requested and still persisted, but **nothing branches on it**: prod job `b9506307` set it TRUE on
-a verdict whose own `differences_observed` read *"This is a contradiction"*, shipping a flat teal star
-against a description reading `star; glowing; tiny`. `reveal` reads the same predicate — see
+**Acceptance is `not verdict.contradictions and verdict.text_free`** (ADR-034 + lettering-suppression §4.2,
+amending ADR-028 Decision 3 — the predicate only; the in-node loop, the cap and the best-of fallback are
+unchanged). A judge *failure* (exception) is still accept-unchecked (ADR-025's asymmetry is unchanged).
+The judge is asked to enumerate one entry per contradicted attribute and whether the image is free of text.
+`matches_description` is still requested and still persisted, but **nothing branches on it**: prod job
+`b9506307` set it TRUE on a verdict whose own `differences_observed` read *"This is a contradiction"*, shipping
+a flat teal star against a description reading `star; glowing; tiny`. `reveal` reads the same predicate — see
 `kid-flow-pause-lifecycle` §4.3; the two must stay in lockstep or a reference the gate rejected would
 still offer the child the full chip list.
 
-**Best-of ranks on fewest `contradictions`**, then `len(attributes_present)`, ties → earliest draw.
-`attributes_present` was the sole key until ADR-034 and it is measurably noisy — the same verdict
-listed `"glowing"` for a flat image and `"secondary character"`, which is a `notes` value and not a
-visual attribute at all. It is demoted rather than dropped: between two draws that contradict the
-description equally often, it is the better of the two remaining signals. This is `char_bible`'s own
-rule over `RefVerdict` and is **unrelated** to `regeneration-controller`'s lexicographic scene rule
-over `VlmVerdict` — different schema, different question. Do not unify them.
+**Best-of ranks on fewest `contradictions`**, then `text_free`, then `len(attributes_present)`, ties → earliest draw
+(`(-len(contradictions), text_free, len(attributes_present), -i)`).
+`text_free` sits behind contradictions (a wrong character is worse than a marked room) and ahead of
+`attributes_present` (documented noise, ADR-034). `attributes_present` was the sole key until ADR-034 and it is
+measurably noisy — the same verdict listed `"glowing"` for a flat image and `"secondary character"`, which is a `notes`
+value and not a visual attribute at all. It is demoted rather than dropped: between two draws that contradict the
+description equally often and have the same lettering status, it is the better of the remaining signals. This is
+`char_bible`'s own rule over `RefVerdict` and is **unrelated** to `regeneration-controller`'s lexicographic scene
+rule over `VlmVerdict` — different schema, different question. Do not unify them.
 
 ### Two `providers.py` calls, two failure policies — deliberate
 
@@ -213,8 +216,8 @@ the prompt behind it is under active development. Nothing recorded *which* promp
 verdict, so a wording change that alters what FALSE means invalidates every prior verdict rather
 than partitioning them.
 
-`char_bible.JUDGE_PROMPT_VERSION` (now `3`; `2` asked for the verdict as a boolean, `1` is everything
-before 2026-08-11) is stamped onto
+`char_bible.JUDGE_PROMPT_VERSION` (now `4`; `3` added enumerated contradictions, `2` asked for the verdict as a boolean, `1` is everything
+before 2026-08-11; `4` adds the text question for lettering suppression) is stamped onto
 `Character.ref_verdict_prompt_version` on every write of `ref_verdict`, in both the first-pass and
 the ADR-029 targeted-redraw paths — the targeted path judges with the same prompt, so leaving it
 unstamped would make the retries an unlabelled subset and defeat the point. **Bump it whenever the
@@ -536,7 +539,7 @@ definition.
 **Pure functions** — no mocks:
 
 - `best_draw` — fewest `contradictions` wins even when it shows the fewest attributes; equal
-  contradiction counts fall through to `len(attributes_present)`; ties return the lowest index;
+  contradiction counts fall through to `text_free`, then `len(attributes_present)`; ties return the lowest index;
   all-empty returns `0`
 - `reference_prompt` — contains each populated description axis; falls back to `Character.name` on a
   fully empty description; always contains the style fragment

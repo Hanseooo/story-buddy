@@ -2608,7 +2608,7 @@ fragment text:
 |---|---|
 | `cel` | no gradients, no glossy highlights, no airbrushing |
 | `comic` | no gradients, no glow |
-| `gouache` | no gradients, no glossy highlights |
+| `gouache` | no outlines, no gradients, no glossy highlights |
 
 So the forbidden-rendering list does **not** have to be hand-maintained. This is the objection that killed the
 species word-list at `char_bible.py:74-77` — *"it needs a word list that is wrong the first time a child writes

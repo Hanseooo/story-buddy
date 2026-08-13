@@ -35,6 +35,18 @@ def _contradicting(attributes: list[str], contradictions: list[str]) -> RefVerdi
     )
 
 
+def _lettered(contradictions: list[str], attributes: list[str] | None = None) -> RefVerdict:
+    """A draw whose only new defect is text on the canvas. `contradictions` varies independently
+    so the KEY ORDER is what the tests below observe, not a coincidence of two aligned axes."""
+    return RefVerdict(
+        differences_observed="a word is lettered across the burrow door",
+        contradictions=contradictions,
+        matches_description=not contradictions,
+        attributes_present=attributes or [],
+        text_free=False,
+    )
+
+
 # --- best_draw (pure) ---
 
 def test_best_draw_ranks_on_contradiction_count_first():
@@ -48,6 +60,28 @@ def test_best_draw_ranks_on_contradiction_count_first():
         _contradicting(["a", "b", "c"], ["c1", "c2", "c3"]),
         _contradicting(["a"], ["c1"]),
         _contradicting(["a", "b"], ["c1", "c2"]),
+    ]
+    assert best_draw(verdicts) == 1
+
+
+def test_best_draw_prefers_the_text_free_draw_when_contradiction_counts_tie():
+    """lettering-suppression §4.2: text_free sits behind contradictions and AHEAD of
+    attributes_present. Index 1 letters and shows three attributes; index 0 is clean and shows
+    one. attributes_present is documented as noisy (ADR-034), so the clean draw must win."""
+    verdicts = [
+        _contradicting(["a"], ["c1"]),
+        _lettered(["c1"], ["a", "b", "c"]),
+    ]
+    assert best_draw(verdicts) == 0
+
+
+def test_best_draw_still_prefers_fewer_contradictions_over_text_free():
+    """§6 test 7 — the key order is load-bearing. A draw that contradicts the child's own
+    description is worse than one with a sign in it: the first is the wrong character, the second
+    is the right character in a marked room."""
+    verdicts = [
+        _contradicting(["a", "b"], ["c1", "c2"]),   # clean of text, contradicts twice
+        _lettered(["c1"], ["a", "b"]),              # letters, contradicts once
     ]
     assert best_draw(verdicts) == 1
 
@@ -345,6 +379,29 @@ def test_mint_reference_accepts_a_passing_first_draw():
     assert judge_mock.call_count == 1
     assert verdict is passing
     assert draws == 1
+
+
+def test_mint_reference_rejects_a_lettered_draw_and_redraws():
+    """§6 test 4 / §4.2. The reference is the higher-value catch: char_bible mints ONE canonical
+    image per character and every page inherits it, so a lettered reference letters the book.
+    No contradictions at all here — text alone must be enough to burn a draw."""
+    (_, verdict, draws), t2i, _, supabase = _mint([_lettered([]), _verdict(True, ["dog"])])
+
+    assert t2i.call_count == 2
+    assert draws == 2
+    assert verdict.text_free is True
+    assert _uploaded_bytes(supabase) == b"draw-2-bytes"
+
+
+def test_mint_reference_accepts_a_clean_text_free_first_draw_on_the_spot():
+    """§6 test 5: the unchanged path, asserted so the new gate cannot silently swallow it.
+    `_verdict` defaults text_free to True, which is the same default a v3 checkpoint carries."""
+    passing = _verdict(True, ["dog"])
+    (path, verdict, draws), t2i, judge_mock, supabase = _mint([passing])
+
+    assert (t2i.call_count, judge_mock.call_count, draws) == (1, 1, 1)
+    assert verdict is passing
+    assert draws == 1
     assert _uploaded_bytes(supabase) == b"draw-1-bytes"
     assert path == "story-1/ref-c0-1.png"
 
@@ -492,6 +549,27 @@ def test_judge_prompt_scopes_the_question_to_contradiction_not_to_any_difference
     assert prompt.index("First describe") < prompt.index("Then say whether")
     # The description still reaches the judge — _describe and the prompt must not drift apart.
     assert "the orange dog, dog, orange" in prompt
+
+
+def test_the_judge_is_asked_about_text_last_and_the_version_is_bumped():
+    """§6 test 8. ADR-004: `providers._assert_field_order` rejects a provider that answers out of
+    schema order, so the prompt must ask in schema order — `RefVerdict.text_free` is declared
+    LAST, so the question comes after the attributes question.
+
+    Naming signs and doors here is safe and is the point: this prompt goes to the VLM JUDGE,
+    never to the image model. The rule that naming summons applies to the generator's prompt;
+    the judge has to be told what to look at, and the door is exactly where it landed.
+
+    The version bump is asserted in the same test because it is the same edit: an unversioned
+    reword silently invalidates every verdict before it, which already cost one series (v3).
+    """
+    from pipeline.char_bible import JUDGE_PROMPT, JUDGE_PROMPT_VERSION
+
+    assert JUDGE_PROMPT_VERSION == 4
+
+    prompt = JUDGE_PROMPT.format(subject="the orange dog, dog, orange")
+    assert "free of any text" in prompt
+    assert prompt.index("attributes are actually present") < prompt.index("free of any text")
 
 
 def test_mint_reference_reports_a_draw_count_equal_to_the_provider_calls():

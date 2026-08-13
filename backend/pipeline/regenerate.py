@@ -51,13 +51,14 @@ def regenerate(state: StoryMemory) -> dict:
         for c in referenced_characters(scene.characters_present, state.characters)
     ]
 
-    # Invariant 5: every reachable path appends at least one clause. The two booleans cover the
-    # holes the frozen 7 leave — anatomy is outside FailureReason entirely (ADR-028), and a
-    # same_character failure can arrive with no reason named. A prompt identical to the previous
-    # attempt's would be resampling, which ADR-010 rejects.
+    # Invariant 5: every reachable path appends at least one clause. The three booleans cover the
+    # holes the frozen 7 leave — anatomy and lettering are outside FailureReason entirely (ADR-028),
+    # and a same_character failure can arrive with no reason named. A prompt identical to the
+    # previous attempt's would be resampling, which ADR-010 rejects.
     v = last.vlm_verdict
     identity_clause = not (v.same_character if v else True) and not last.failure_reasons
     anatomy_clause = not (v.anatomy_intact if v else True)
+    text_clause = not (v.text_free if v else True)
     prompt = correct_prompt(
         last.prompt or scene.prompt,
         last.failure_reasons,
@@ -65,6 +66,7 @@ def regenerate(state: StoryMemory) -> dict:
         state.style.prompt_fragment,
         same_character=v.same_character if v else True,
         anatomy_intact=v.anatomy_intact if v else True,
+        text_free=v.text_free if v else True,
     )
 
     attempt_n = len(scene.attempts) + 1
@@ -76,10 +78,11 @@ def regenerate(state: StoryMemory) -> dict:
     # correction that fired from one that silently appended nothing.
     log.info(
         "regenerate: scene_id=%s attempt_n=%d failure_reasons=%s same_character=%s "
-        "anatomy_intact=%s identity_clause=%s anatomy_clause=%s paid=%s prompt_len=%d",
+        "anatomy_intact=%s text_free=%s identity_clause=%s anatomy_clause=%s text_clause=%s "
+        "paid=%s prompt_len=%d",
         scene.scene_id, attempt_n, [r.value for r in last.failure_reasons],
-        v and v.same_character, v and v.anatomy_intact,
-        identity_clause, anatomy_clause, paid, len(prompt),
+        v and v.same_character, v and v.anatomy_intact, v and v.text_free,
+        identity_clause, anatomy_clause, text_clause, paid, len(prompt),
     )
 
     return {

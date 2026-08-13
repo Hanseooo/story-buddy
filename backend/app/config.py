@@ -41,8 +41,8 @@ class Settings(BaseSettings):
     # "of even weight" dropped 2026-08-13. It is a constraint on the STROKE, and the way a model
     # satisfies it is to stop tapering — so a small feature gets the same stroke width as a torso
     # and fills in solid. Prod cel run: a character's ear came back with its outline doubled and
-    # offset, and thin elements smooshed. `gouache` says only "thick confident ink outlines" and
-    # draws cleanly, so the weight of the line was never the problem; pinning its uniformity was.
+    # offset, and thin elements smooshed. `comic` asks for outlines "of varied weight" and draws
+    # them cleanly, so the weight of the line was never the problem; pinning its uniformity was.
     default_style_fragment: str = (
         "flat cel-shaded cartoon, thick clean black outlines, bright solid colour fills, "
         "two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing"
@@ -91,10 +91,21 @@ settings = Settings()
 # note here previously called out as a regretted side effect (the fish that loses its bubbles), so
 # it reads as a second small win rather than a hole. A description that says "speech bubble" now
 # reaches the prompt; NEGATIVE_PROMPT is the thing standing between it and the canvas.
+#
+# `gouache` asked for "thick confident ink outlines" from 2026-07-21 until 2026-08-13, and the model
+# treated it as optional: the seed-21 picker sample has no keyline anywhere, while a prod gouache run
+# came back fully outlined. Both are the same fragment on the same model. That ambiguity is not a
+# per-page coin flip, which would merely look inconsistent — `char_bible` mints the canonical
+# reference from this fragment and every page inherits it, so the flip happens ONCE and decides all
+# twelve pages. The style picker cannot promise a child what it does not control.
+#
+# Stating the absence resolves it, and it is also the only axis the three presets genuinely differ
+# on: strip outline treatment and `gouache` is `cel` with paper grain. `flat colour fills` stays —
+# it was in the fragment that produced the sample this was written to reproduce.
 STYLE_PRESETS: dict[str, str] = {
     "cel": settings.default_style_fragment,
     "comic": "bold comic-book illustration, heavy ink outlines of varied weight, flat spot colours, ben-day halftone dot shading, limited palette, no gradients, no glow",
-    "gouache": "flat gouache storybook illustration, thick confident ink outlines, matte paper grain, limited warm palette, flat colour fills, no gradients, no glossy highlights",
+    "gouache": "flat gouache storybook illustration, no outlines, shapes formed by brushed colour, matte paper grain, limited warm palette, flat colour fills, no gradients, no glossy highlights",
 }
 
 # Spec `docs/specs/image-generator.md` §4: ADR-025 D4 domain-level breaker.

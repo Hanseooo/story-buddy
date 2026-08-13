@@ -123,20 +123,18 @@ per-scene. `docs/specs/image-generator.md` is corrected in the same change (§8)
 
 ### The correction is total
 
-`passed = same_character and anatomy_intact`, so a scene reaches `regenerate` only when one of those
-two is false. Each has a hole where `correct_prompt` would otherwise append **nothing**, making the
-retry a pure resample:
-
 | Failure | Hole | Fix |
 |---|---|---|
 | `anatomy_intact is False` | ADR-028 froze anatomy **out** of `FailureReason`, so no clause exists | `anatomy_intact` param → fixed anatomy clause |
 | `same_character is False`, `failure_reasons == []` | The judge named the failure but no reason for it | `same_character` param → generic identity clause, **only when `failure_reasons` is empty** |
+| `text_free is False` | Lettering is a rendering property outside `FailureReason` | `text_free` param → fixed `TEXT_CLAUSE` asserting blank surfaces |
 
 ```python
 def correct_prompt(
     prompt, failure_reasons, characters, style_fragment,
     same_character: bool = True,      # NEW
     anatomy_intact: bool = True,      # NEW
+    text_free: bool = True,           # NEW — lettering-suppression §4.4
 ) -> str:
     ...
     clauses = [FAILURE_CLAUSES[r].format(**values) for r in FailureReason if r in present]
@@ -144,31 +142,29 @@ def correct_prompt(
         clauses.append(IDENTITY_CLAUSE)
     if not anatomy_intact:
         clauses.append(ANATOMY_CLAUSE)
+    if not text_free:
+        clauses.append(TEXT_CLAUSE)
     return "\n".join([prompt, *clauses]) if clauses else prompt
 ```
 
-The two clauses are fixed strings — no `.format`, since neither has a per-character value to fill
+The three clauses are fixed strings — no `.format`, since none has a per-character value to fill
 (the judge named no reason, or the failure is a rendering property rather than an attribute):
 
 ```python
 IDENTITY_CLAUSE = "the characters must match the reference images exactly"
 ANATOMY_CLAUSE  = "anatomy must be correct: no merged, missing or duplicated body parts"
+TEXT_CLAUSE     = "every surface in the picture is blank and unmarked"
 ```
 
 The anatomy wording deliberately mirrors `consistency_check.JUDGE_PROMPT`'s phrasing, so the
-correction restates the thing the judge was asked about.
+correction restates the thing the judge was asked about. `TEXT_CLAUSE` asserts blank surfaces without
+ever naming lettering, words, or text — preventing the positive prompt from summoning lettering.
 
-Both are driven by a **boolean**, never an 8th enum value: `FailureReason` stays frozen at 7, so the
+The three are driven by **booleans**, never an 8th enum value: `FailureReason` stays frozen at 7, so the
 closed set Objective 4's F1 is computed over is untouched (ADR-028). The identity clause is guarded
-on empty `failure_reasons` so it never duplicates `different_face`. Together the two params make
+on empty `failure_reasons` so it never duplicates `different_face`. Together the three params make
 invariant 5 total. Defaults keep the existing signature call-compatible; `docs/specs/prompt-optimizer.md`
 is updated in the same change.
-
-**One asymmetry, recorded so it isn't rediscovered as a bug.** `correct_prompt`'s `wrong_style` clause
-re-appends the same `style.prompt_fragment` the prompt already carries, which `consistency-checker`
-noted makes a style-only retry near-resample. It never fires alone: `style_match` does not gate, so a
-style-only failure never reaches this node. The clause only ever appears alongside a real identity or
-anatomy failure.
 
 ### The node
 
@@ -197,9 +193,10 @@ def regenerate(state: StoryMemory) -> dict:
         state.style.prompt_fragment,
         same_character=v.same_character if v else True,
         anatomy_intact=v.anatomy_intact if v else True,
+        text_free=v.text_free if v else True,
     )
     path, paid = generate_and_store(
-        prompt, state.story_id, scene.scene_id, len(scene.attempts) + 1, ref_paths
+        prompt, state.story_id, state.scene_id, len(scene.attempts) + 1, ref_paths
     )
     return {
         "scenes": [scene.model_copy(update={

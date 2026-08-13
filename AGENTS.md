@@ -530,12 +530,30 @@ is not documentation of a good design; it is the blast radius, written down so t
   `REFERENCE_CLAUSE` (so both reach the text-to-image path), emits the `Setting:` line, and adds
   `filtered_location` — **ADR-035 surface 5**. `consistency_check.py` asks the judge a uniqueness
   question, folds it worst-wins and ranks on it, but **does not gate**: `passed` is byte-identical.
-  `graph.py` untouched — no new edge. `JUDGE_PROMPT_VERSION = 2` is a module constant, not an
-  `Attempt` field.
+  `graph.py` untouched — no new edge. `JUDGE_PROMPT_VERSION` is a module constant, not an
+  `Attempt` field (it was 2 here; `lettering-suppression` has since taken it to 3).
   ⚠️ **No job has been run against this code.** D1/D2 are unmeasured *and* un-eyeballed, the §4.3
   duplicate-`char_id` fix is a mechanism fixed on principle rather than a confirmed diagnosis, and
   the first `subjects_unique` data point does not exist yet — so §8.1's gating decision stays
   blocked. Deterministic evidence only.
+  **`lettering-suppression` is built (2026-08-13):** Qwen-Image renders text by design and nothing
+  in the pipeline could see it; three attempts to fix it by prompt wording failed, so this adds the
+  missing DETECTION channel instead of a fourth prohibition. `contracts/` gains **two** additive
+  fields — `RefVerdict.text_free` and `VlmVerdict.text_free` (both defaulted `True`, both declared
+  LAST, no `schema_version` bump). Both judge prompts gain one question asked in schema order, and
+  both version constants bump: `char_bible.JUDGE_PROMPT_VERSION` 3→**4**,
+  `consistency_check.JUDGE_PROMPT_VERSION` 2→**3**. Unlike `subjects_unique`, this one **gates**:
+  reference acceptance is `not contradictions and text_free`, scene `passed` is
+  `same_character and anatomy_intact and text_free`, and best-of ranks
+  `same_character → anatomy_intact → text_free → subjects_unique → style_match`.
+  `prompt_optimizer.TEXT_CLAUSE` ("every surface in the picture is blank and unmarked") is appended
+  by `correct_prompt` on a `text_free=False` keyword — a boolean, **not** an 8th `FailureReason`
+  (ADR-028, still frozen at 7) — and deliberately names none of `NEGATIVE_PROMPT`'s terms.
+  `graph.py`, `providers.py` (`NEGATIVE_PROMPT`) and `STYLE_PRESETS` untouched, so the change's
+  effect stays attributable.
+  ⚠️ **No job has been run against this code.** The lettering rate is unmeasured and the judge's
+  false-positive rate on texture (wood grain, halftone dots) is unknown; spec §4.6.2 names the
+  fallback in advance — demote `text_free` to rank-only, the shape `subjects_unique` already sits in.
   **Phase 2 is in progress. Next: S3's isolation suite, then build S4.** Next free migration is
   **`0009`**.
 - classroom-sharing (2026-08-09): gallery page + StudentTabBar built; `/s/[profileId]/gallery` live; tab bar covers Bookshelf / Gallery / Profile; logout moved to settings.

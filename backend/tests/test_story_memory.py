@@ -180,6 +180,7 @@ def test_vlm_verdict_declares_subjects_unique_last():
         "style_match",
         "anatomy_intact",
         "subjects_unique",
+        "text_free",
     ]
 
 
@@ -209,4 +210,32 @@ def test_a_checkpoint_blob_written_before_this_change_still_deserializes():
 def test_the_two_additive_fields_do_not_bump_the_schema_version():
     """§2: `story-memory-contract.md` §8 permits additive defaulted fields without a bump."""
     assert CURRENT_SCHEMA_VERSION == 1
+
+
+def test_ref_verdict_defaults_text_free_to_true():
+    """lettering-suppression §2 invariant 2: unchecked reads as clean, never as a failure."""
+    verdict = RefVerdict(differences_observed="none", matches_description=True)
+    assert verdict.text_free is True
+
+
+def test_vlm_verdict_defaults_text_free_to_true():
+    verdict = VlmVerdict(differences_observed="none", same_character=True)
+    assert verdict.text_free is True
+
+
+def test_text_free_is_the_last_declared_field_on_both_verdicts():
+    """ADR-004: the judge answers in schema-declaration order and
+    `providers._assert_field_order` rejects anything else. Declaring the new field LAST is what
+    keeps every question before it in the order it has always been asked."""
+    assert list(RefVerdict.model_fields)[-1] == "text_free"
+    assert list(VlmVerdict.model_fields)[-1] == "text_free"
+
+
+def test_a_checkpoint_written_before_text_free_deserializes_as_clean():
+    """CC-10: additive with a True default, so a pre-change blob resumes and is never re-judged."""
+    old_ref = {"differences_observed": "none", "matches_description": True}
+    old_vlm = {"differences_observed": "none", "same_character": True}
+    assert RefVerdict(**old_ref).text_free is True
+    assert VlmVerdict(**old_vlm).text_free is True
+
 

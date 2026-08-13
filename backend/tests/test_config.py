@@ -10,6 +10,7 @@ from app.config import (
     SUPER_STEP_PRELUDE,
     settings,
 )
+from pipeline.prompt_optimizer import style_prohibitions
 from providers import NEGATIVE_PROMPT
 
 
@@ -40,6 +41,35 @@ def test_no_preset_utters_a_term_the_negative_prompt_suppresses():
         for term in terms:
             assert not re.search(rf"\b{re.escape(term)}\b", fragment, re.I), \
                 f"{name} names {term!r}, which its own negative prompt is trying to subtract"
+
+
+def test_outline_treatment_is_what_separates_the_three_presets():
+    """`gouache` asked for "thick confident ink outlines" until 2026-08-13 and the model overrode
+    it — the seed-21 picker sample has no keyline anywhere, which is the look the preset is for.
+    Left as a clause the model may or may not honour, that coin is flipped ONCE: `char_bible` mints
+    the reference from this fragment and every page inherits it, so a whole book comes back outlined
+    or not outlined on the same seed. A prod gouache run landed outlined; the sample did not.
+
+    Stating the absence makes the outcome the specification instead of luck, and it is also the only
+    axis on which the three presets genuinely differ — strip it and `gouache` is `cel` with grain.
+    """
+    assert "outlines" in style_prohibitions(STYLE_PRESETS["gouache"])
+    assert "outlines" not in style_prohibitions(STYLE_PRESETS["cel"])
+    assert "outlines" not in style_prohibitions(STYLE_PRESETS["comic"])
+
+
+def test_no_preset_asks_for_a_thing_its_own_no_clause_forbids():
+    """The self-contradiction case of the test above it. `gouache` shipped one for three weeks in
+    the other direction, and a fragment that both names and negates a term hands the model the
+    choice — which is the failure mode this whole file keeps re-learning."""
+    for name, fragment in STYLE_PRESETS.items():
+        asked = ", ".join(
+            clause for clause in fragment.split(",")
+            if clause.strip().lower().split()[:1] != ["no"]
+        )
+        for term in style_prohibitions(fragment):
+            assert not re.search(rf"\b{re.escape(term)}\b", asked, re.I), \
+                f"{name} asks for {term!r} and forbids it in the same fragment"
 
 
 def test_recursion_limit_derives_from_max_scenes_and_the_super_step_prelude():

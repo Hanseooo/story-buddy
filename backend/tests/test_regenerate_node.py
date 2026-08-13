@@ -20,7 +20,7 @@ from contracts.story_memory import (
     Style,
     VlmVerdict,
 )
-from pipeline.prompt_optimizer import ANATOMY_CLAUSE, IDENTITY_CLAUSE, build_prompt
+from pipeline.prompt_optimizer import ANATOMY_CLAUSE, IDENTITY_CLAUSE, TEXT_CLAUSE, build_prompt
 from pipeline.regenerate import regenerate
 
 
@@ -33,12 +33,13 @@ def _char(char_id: str = "c0", name: str = "the dog", ref: str | None = "job-1/r
     )
 
 
-def _verdict(*, same: bool = False, anatomy: bool = True, style: bool = True) -> VlmVerdict:
+def _verdict(*, same: bool = False, anatomy: bool = True, style: bool = True, text: bool = True) -> VlmVerdict:
     return VlmVerdict(
         differences_observed="the face is wrong",
         same_character=same,
         style_match=style,
         anatomy_intact=anatomy,
+        text_free=text,
     )
 
 
@@ -309,6 +310,51 @@ def test_treats_a_missing_verdict_as_no_boolean_correction():
     sent = store.call_args.args[0]
     assert IDENTITY_CLAUSE not in sent
     assert ANATOMY_CLAUSE not in sent
+
+
+def test_a_lettered_verdict_reaches_correct_prompt_as_the_text_free_keyword():
+    """§6 test 18 / §4.4. Mirrors anatomy_intact exactly: a boolean, not an 8th FailureReason
+    (ADR-028). `regenerate` passes no seed, so the retry also resamples for free — the clause is
+    what makes it a CORRECTION rather than the pure re-roll ADR-010 rejects."""
+    state = _state([_scene([_failed_attempt(verdict=_verdict(same=True, text=False))])])
+
+    with patch("pipeline.regenerate.correct_prompt", return_value="corrected") as corrected:
+        with patch("pipeline.regenerate.generate_and_store", return_value=("job-1/s0-2.png", True)):
+            regenerate(state)
+
+    assert corrected.call_args.kwargs["text_free"] is False
+
+
+def test_the_text_clause_is_appended_to_the_retry_prompt():
+    """End to end through the real `correct_prompt`: the prompt the retry actually draws from
+    carries the clause, and still carries everything the first attempt had (invariant 3)."""
+    state = _state([_scene([_failed_attempt(verdict=_verdict(same=True, text=False))])])
+
+    with patch("pipeline.regenerate.generate_and_store", return_value=("job-1/s0-2.png", True)) as gas:
+        regenerate(state)
+
+    prompt = gas.call_args.args[0]
+    assert TEXT_CLAUSE in prompt
+    assert prompt.startswith("the original prompt")
+
+
+def test_the_log_line_reports_whether_the_text_clause_fired(caplog):
+    """§6 test 19 / CC-5: a correction that fired must be distinguishable from one that silently
+    appended nothing (invariant 5)."""
+    import logging
+
+    def _log(verdict) -> str:
+        caplog.clear()
+        state = _state([_scene([_failed_attempt(verdict=verdict)])])
+        with caplog.at_level(logging.INFO, logger="pipeline.regenerate"):
+            with patch("pipeline.regenerate.generate_and_store", return_value=("job-1/s0-2.png", True)):
+                regenerate(state)
+        return caplog.text
+
+    # Both directions: asserting only the True case would pass against a hardcoded literal, which
+    # is exactly the silent-append confusion the line exists to remove.
+    assert "text_clause=True" in _log(_verdict(same=True, text=False))
+    assert "text_clause=False" in _log(_verdict(same=False, text=True))
 
 
 # --- the guards that raise (invariant 1, ADR-025 D4) ---
