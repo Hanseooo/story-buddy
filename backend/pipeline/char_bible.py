@@ -400,6 +400,10 @@ def char_bible(state: StoryMemory) -> dict:
             # Stamped even when the verdict is None (degraded judge): it records which prompt
             # this reference was checked against, which is true whether or not a verdict came back.
             "ref_verdict_prompt_version": JUDGE_PROMPT_VERSION,
+            # A status describes the image that was in `canonical_ref_image` when it was written.
+            # This path now overwrites that image on a moderation redraw, so the status has to go
+            # with it (`moderation-stack.md` §4b) — `_mint_targeted` has always done the same.
+            "ref_moderation_status": None,
         })
         if c.char_id in minted
         else c

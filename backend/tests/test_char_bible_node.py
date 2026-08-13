@@ -623,6 +623,28 @@ def _minted(path: str = "story-1/ref.png", draws: int = 1):
     return (path, _verdict(True, ["dog"]), draws)
 
 
+def test_char_bible_resets_ref_moderation_status_on_a_re_mint():
+    """Spec §4.3 change 1. A moderation redraw arrives with the character still reading
+    "flagged" (char_ref_mod cleared the image, not the status). Without this reset the router
+    either raises on a brand-new image or spins on the same flag forever.
+
+    It is also the precondition for char_ref_mod's skip-if-passed guard:
+    `moderation-stack.md:144-148` — a status describes the image that was in
+    `canonical_ref_image` when it was written, so overwriting the image without clearing the
+    status would route an UNMODERATED image straight to a child.
+    """
+    flagged = _char("c0", "the dog")
+    flagged = flagged.model_copy(update={"ref_moderation_status": "flagged"})
+    state = _state([flagged])
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()):
+        result = char_bible(state)
+
+    assert result["characters"][0].ref_moderation_status is None
+    assert result["characters"][0].canonical_ref_image == "story-1/ref.png"
+
+
+
 def test_char_bible_references_at_most_two_characters():
     """Invariant 1 (ADR-004: max 2 canonical refs, v1): a 3-character roster calls the helper
     exactly twice, for c0 and c1."""
