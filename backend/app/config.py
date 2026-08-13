@@ -38,10 +38,14 @@ class Settings(BaseSettings):
     # backend/spikes/phase_05.py. This is ADR-007 as originally written (one fixed style). The
     # three-preset `style_presets` dict, `style_preset_id` resolution and the picker UI stay
     # wholly owned by the `style-presets` spec; `char_bible` only needs *a* fragment to exist.
+    # "of even weight" dropped 2026-08-13. It is a constraint on the STROKE, and the way a model
+    # satisfies it is to stop tapering — so a small feature gets the same stroke width as a torso
+    # and fills in solid. Prod cel run: a character's ear came back with its outline doubled and
+    # offset, and thin elements smooshed. `gouache` says only "thick confident ink outlines" and
+    # draws cleanly, so the weight of the line was never the problem; pinning its uniformity was.
     default_style_fragment: str = (
-        "flat cel-shaded cartoon, thick clean black outlines of even weight, bright solid colour fills, "
-        "two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing, "
-        "no speech bubbles, no captions, no lettering"
+        "flat cel-shaded cartoon, thick clean black outlines, bright solid colour fills, "
+        "two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing"
     )
 
     # The judge moves to a self-hosted vLLM server after Phase 2.5 (ADR-019). vLLM speaks the
@@ -71,21 +75,26 @@ settings = Settings()
 # ponytail: module-level dict — style presets are not env-driven; BaseSettings adds nothing here.
 # Keys mirror the CHECK constraint in supabase/migrations/0002_jobs_style_preset_id.sql.
 #
-# Every fragment ends "no speech bubbles, no captions, no lettering". Prod job d83721d9's s2
-# (2026-08-11) drew a speech balloon full of smeared pseudo-lettering: a child's story carries no
-# dialogue to letter, so anything the model writes is invented and malformed. `comic` invites it
-# hardest — "bold comic-book illustration" brings panels and balloons with the genre — but the
-# other two could letter a page just as easily, so all three state it.
+# Every fragment used to end "no speech bubbles, no captions, no lettering", stated on all three
+# after prod job d83721d9's s2 (2026-08-11) drew a speech balloon full of smeared pseudo-lettering.
+# It did not work: a gouache page lettered again on 2026-08-13, and a cel run drew chat bubbles
+# after that. Naming the thing is what summons it — `providers.NEGATIVE_PROMPT`'s comment, and the
+# same finding that made `char_bible` stop calling its own output a "reference".
 #
-# ponytail: ADR-035 derives the description filter from these same `no <term>` clauses, so "bubbles"
-# now also drops out of a child's character description — a story about a fish blowing bubbles
-# loses that word from its draw prompt. Cheaper than the alternative (a second, hand-listed set of
-# prohibitions that the model never sees) and it fails safe. If a preset ever needs a forbidden
-# word back in descriptions, give `style_prohibitions` an exempt set rather than softening this.
+# The ban is not weaker, it moved: NEGATIVE_PROMPT carries all three terms plus "comic panels" on
+# the channel that subtracts, and applies to every image this project draws rather than to the
+# fragments only. `test_config` now asserts the inverse — no fragment may NAME a suppressed term.
+#
+# ponytail: ADR-035 still derives the description filter from the surviving `no <term>` clauses, so
+# ADR-022 keeps sole ownership and a new preset arrives carrying its own. What the strip costs is
+# that "bubbles"/"captions"/"lettering" no longer drop out of a child's own description — which the
+# note here previously called out as a regretted side effect (the fish that loses its bubbles), so
+# it reads as a second small win rather than a hole. A description that says "speech bubble" now
+# reaches the prompt; NEGATIVE_PROMPT is the thing standing between it and the canvas.
 STYLE_PRESETS: dict[str, str] = {
     "cel": settings.default_style_fragment,
-    "comic": "bold comic-book illustration, heavy ink outlines of varied weight, flat spot colours, ben-day halftone dot shading, limited palette, no gradients, no glow, no speech bubbles, no captions, no lettering",
-    "gouache": "flat gouache storybook illustration, thick confident ink outlines, matte paper grain, limited warm palette, flat colour fills, no gradients, no glossy highlights, no speech bubbles, no captions, no lettering",
+    "comic": "bold comic-book illustration, heavy ink outlines of varied weight, flat spot colours, ben-day halftone dot shading, limited palette, no gradients, no glow",
+    "gouache": "flat gouache storybook illustration, thick confident ink outlines, matte paper grain, limited warm palette, flat colour fills, no gradients, no glossy highlights",
 }
 
 # Spec `docs/specs/image-generator.md` §4: ADR-025 D4 domain-level breaker.

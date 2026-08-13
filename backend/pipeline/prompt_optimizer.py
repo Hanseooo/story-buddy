@@ -152,8 +152,12 @@ def _describe(description: CharacterDescription, name: str) -> str:
         ", ".join(description.clothing),
         description.notes,
     ]
+    # Plain commas — commit bef9982's finding, ported here because this copy renders far more
+    # images than char_bible's does. `"{name} - {a}; {b}"` after a proper noun is a caption shape,
+    # and Qwen-Image draws captions: the reference draw returned "Hoe - Star:" lettered on the
+    # canvas, and a prod cel page returned the name "Casey" above the character. Commas describe.
     populated = [axis for axis in axes if axis]
-    return f"{name} - {'; '.join(populated)}" if populated else name
+    return ", ".join([name, *populated])
 
 
 def referenced_characters(

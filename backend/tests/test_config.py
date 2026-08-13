@@ -1,3 +1,5 @@
+import re
+
 from app.config import (
     IMAGE_BUDGET,
     MAX_SCENES,
@@ -8,6 +10,7 @@ from app.config import (
     SUPER_STEP_PRELUDE,
     settings,
 )
+from providers import NEGATIVE_PROMPT
 
 
 def test_style_presets_has_exactly_three_keys():
@@ -18,18 +21,25 @@ def test_cel_preset_equals_default_style_fragment():
     assert STYLE_PRESETS["cel"] == settings.default_style_fragment
 
 
-def test_no_preset_lets_the_image_model_letter_the_page():
-    """Prod job d83721d9's s2 (2026-08-11) came back with a speech balloon whose text was the
-    smeared pseudo-lettering image models produce, because the child's book is not a comic script
-    and there is no dialogue for it to letter.
+def test_no_preset_utters_a_term_the_negative_prompt_suppresses():
+    """The inverse of the assertion that stood here until 2026-08-13, which required every fragment
+    to END "no speech bubbles, no captions, no lettering". It was stated on all three after prod
+    job d83721d9's s2 lettered a speech balloon — and prod kept lettering them, because a `no
+    <term>` clause in a positive prompt competes with what Qwen-Image is best at and loses
+    (`providers.NEGATIVE_PROMPT`'s comment). A cel run on 2026-08-13 still came back with chat
+    bubbles.
 
-    `comic` invites it hardest — "bold comic-book illustration" carries panels and balloons with
-    the genre — but nothing stopped `cel` or `gouache` either, so the prohibition is stated on all
-    three rather than patched onto the one that was caught.
+    The ban did not weaken; it moved to the channel that subtracts. What is forbidden here is
+    NAMING those things at all, which is the only thing that ever put them on the canvas.
+
+    Same invariant as `test_char_bible_node`'s positive/negative test, and it exists for the same
+    reason: that bug came back twice while being fixed.
     """
+    terms = [term.strip() for term in NEGATIVE_PROMPT.split(",")]
     for name, fragment in STYLE_PRESETS.items():
-        assert "no speech bubbles" in fragment, f"{name} may draw speech bubbles"
-        assert "no lettering" in fragment, f"{name} may letter the page"
+        for term in terms:
+            assert not re.search(rf"\b{re.escape(term)}\b", fragment, re.I), \
+                f"{name} names {term!r}, which its own negative prompt is trying to subtract"
 
 
 def test_recursion_limit_derives_from_max_scenes_and_the_super_step_prelude():

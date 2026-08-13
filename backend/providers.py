@@ -272,12 +272,17 @@ def _fal() -> fal_client.SyncClient:
     return fal_client.SyncClient(key=settings.fal_key)
 
 
-# Every style preset already ends "no speech bubbles, no captions, no lettering"
+# Every style preset used to end "no speech bubbles, no captions, no lettering"
 # (`app/config.py:85`, commit 416ea33), and prod still shipped a gouache page of smeared
-# pseudo-lettering on 2026-08-13. Qwen-Image renders text *by design*, so a `no <term>` clause
-# in the tail of the positive prompt competes with the thing the model is best at. The negative
-# prompt is the channel that was never used: `_run_fal` sent `output_format` and nothing else,
-# so every scene and every canonical reference this project has drawn had an empty one.
+# pseudo-lettering on 2026-08-13, then a cel page with chat bubbles. Qwen-Image renders text *by
+# design*, so a `no <term>` clause in the tail of the positive prompt competes with the thing the
+# model is best at. The negative prompt is the channel that was never used: `_run_fal` sent
+# `output_format` and nothing else, so every scene and every canonical reference this project has
+# drawn had an empty one.
+#
+# Those tails are now GONE from the fragments (`app/config.py:74`) rather than merely duplicated
+# here — while they stood, this list was subtracting terms the positive prompt kept re-asserting
+# three clauses later. This is the sole statement of the ban.
 #
 # Verified against both endpoints' openapi (2026-08-13): `fal-ai/qwen-image` and
 # `fal-ai/qwen-image-edit-2511` each declare `negative_prompt: str`. Unlike REFERENCE_FIELD this

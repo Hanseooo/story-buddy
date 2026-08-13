@@ -77,7 +77,7 @@ def test_build_prompt_names_each_reference_image_by_index():
 
     prompt = build_prompt("She held it toward the sky.", ["c0", "c1"], [ana, star], FRAG)
 
-    assert "Image 1 is Ana - girl." in prompt
+    assert "Image 1 is Ana, girl." in prompt
     assert "Image 2 is the star." in prompt      # species repeats the name → dropped (issue #32)
 
 
@@ -138,7 +138,7 @@ def test_build_prompt_keeps_the_other_axes_when_the_species_repeats_the_name():
 
     prompt = build_prompt("Ana found a star.", ["c1"], [star], FRAG)
 
-    assert prompt.split("\n\n")[0] == "the star - tiny"
+    assert prompt.split("\n\n")[0] == "the star, tiny"
 
 
 def test_build_prompt_keeps_a_species_the_name_does_not_carry():
@@ -146,7 +146,7 @@ def test_build_prompt_keeps_a_species_the_name_does_not_carry():
 
     prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
 
-    assert prompt.split("\n\n")[0] == "Ana - girl"
+    assert prompt.split("\n\n")[0] == "Ana, girl"
 
 
 def test_build_prompt_keeps_a_multi_word_species_the_name_only_partly_carries():
@@ -156,7 +156,24 @@ def test_build_prompt_keeps_a_multi_word_species_the_name_only_partly_carries():
 
     prompt = build_prompt("It barked.", ["c0"], [dog], FRAG)
 
-    assert prompt.split("\n\n")[0] == "the retriever - golden retriever"
+    assert prompt.split("\n\n")[0] == "the retriever, golden retriever"
+
+
+def test_a_scene_describes_its_characters_the_way_the_reference_prompt_does():
+    """The docstring on `_describe` promises the scene prompt phrases a character the way
+    `char_bible` does. Commit bef9982 moved char_bible to commas and left this copy on
+    `"{name} - {a}; {b}"`, so the promise was false for an hour.
+
+    It matters beyond tidiness: that label shape is what a prod cel page rendered as the word
+    "Casey" lettered above the character, the same way the reference draw returned "Hoe - Star:".
+    A dash and a semicolon after a proper noun read as a caption; commas read as description.
+    """
+    ana = _char("c0", "Ana", species="girl", colours=["red"], clothing=["jeans"])
+
+    line = build_prompt("Ana waved.", ["c0"], [ana], FRAG).split("\n\n")[0]
+
+    assert line == "Ana, girl, red, jeans"
+    assert " - " not in line and ";" not in line
 
 
 def test_referenced_characters_is_the_order_generate_scene_uploads():
@@ -332,18 +349,19 @@ def test_correct_prompt_never_drops_the_base_prompt_under_either_boolean():
 
 # --- ADR-035: the style fragment's own prohibitions filter the description ---
 
-COMIC = STYLE_PRESETS["comic"]    # "...no gradients, no glow, + the lettering ban"
-CEL = STYLE_PRESETS["cel"]        # "...no glossy highlights, no airbrushing, + the lettering ban"
-
-# Shared by all three presets since 2026-08-12 (d83721d9's lettered speech balloon). Named once so
-# a preset's OWN prohibitions stay readable in the assertions below.
-LETTERING = {"speech", "bubbles", "captions", "lettering"}
+COMIC = STYLE_PRESETS["comic"]    # "...no gradients, no glow"
+CEL = STYLE_PRESETS["cel"]        # "...no glossy highlights, no airbrushing"
 
 
 def test_style_prohibitions_reads_the_no_clauses_out_of_the_fragment():
-    """ADR-035 Decision 1: derived, never hand-listed — ADR-022 keeps sole ownership."""
-    assert style_prohibitions(COMIC) == {"gradients", "glow"} | LETTERING
-    assert style_prohibitions(CEL) == {"gradients", "glossy", "highlights", "airbrushing"} | LETTERING
+    """ADR-035 Decision 1: derived, never hand-listed — ADR-022 keeps sole ownership.
+
+    The shared lettering set that used to be OR'd into both of these left the fragments on
+    2026-08-13 for `providers.NEGATIVE_PROMPT` (`app/config.py:74`), so what survives is each
+    preset's own RENDERING prohibitions. Derivation is unchanged; its input shrank.
+    """
+    assert style_prohibitions(COMIC) == {"gradients", "glow"}
+    assert style_prohibitions(CEL) == {"gradients", "glossy", "highlights", "airbrushing"}
 
 
 def test_style_prohibitions_of_a_fragment_that_forbids_nothing_is_empty():
@@ -515,7 +533,7 @@ def test_the_roll_folds_the_description_into_the_image_sentence():
 
     prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
 
-    assert "Image 1 is Ana - girl; red; jeans." in prompt
+    assert "Image 1 is Ana, girl, red, jeans." in prompt
 
 
 def test_the_roll_of_a_character_with_no_populated_axes_is_byte_identical_to_before():
@@ -537,8 +555,8 @@ def test_a_present_character_with_no_reference_keeps_a_plain_line_below_the_roll
 
     prompt = build_prompt("Ana held the star.", ["c0", "c1"], [ana, star], FRAG)
 
-    assert "Image 1 is the star - tiny." in prompt
-    assert prompt.index("Image 1 is") < prompt.index("Ana - girl")
+    assert "Image 1 is the star, tiny." in prompt
+    assert prompt.index("Image 1 is") < prompt.index("Ana, girl")
 
 
 def test_a_referenced_character_is_described_once_and_only_in_the_roll():
@@ -549,7 +567,7 @@ def test_a_referenced_character_is_described_once_and_only_in_the_roll():
 
     prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
 
-    assert prompt.count("Ana - girl") == 1
+    assert prompt.count("Ana, girl") == 1
 
 
 def test_the_roll_order_still_matches_referenced_characters_order():
@@ -576,7 +594,7 @@ def test_the_reference_clause_still_follows_the_roll():
 
     prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
 
-    assert "Image 1 is Ana - girl. Use them only as references" in prompt
+    assert "Image 1 is Ana, girl. Use them only as references" in prompt
 
 
 # --- §4.2 D2: the two guard clauses (§6 tests 12-14) ---
@@ -683,7 +701,7 @@ def test_the_guard_clauses_sit_after_the_descriptions_and_before_the_excerpt():
 
     prompt = build_prompt("Ana waved at the sea.", ["c0"], [ana], FRAG)
 
-    assert prompt.index("Ana - girl") < prompt.index("This illustration contains")
+    assert prompt.index("Ana, girl") < prompt.index("This illustration contains")
     assert prompt.index(NON_HUMAN_CLAUSE) < prompt.index("Ana waved at the sea.")
 
 
@@ -782,7 +800,7 @@ def test_the_roll_numbers_a_repeated_char_id_only_once():
 
     prompt = build_prompt("It shone.", ["c1", "c1"], [star], FRAG)
 
-    assert "Image 1 is the star - tiny." in prompt
+    assert "Image 1 is the star, tiny." in prompt
     assert "Image 2" not in prompt
     assert "This illustration contains exactly 1 character: the star." in prompt
 
