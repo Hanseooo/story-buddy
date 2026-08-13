@@ -52,7 +52,7 @@ input_gate ──► analyze ──► segment ──► char_bible ──► ge
 
 ```python
 def build_prompt(text_excerpt: str, characters_present: list[str], characters: list[Character], style_fragment: str | None, location: Location | None = None) -> str
-def correct_prompt(prompt: str, failure_reasons: list[FailureReason], characters: list[Character], style_fragment: str | None, same_character: bool = True, anatomy_intact: bool = True) -> str
+def correct_prompt(prompt: str, failure_reasons: list[FailureReason], characters: list[Character], style_fragment: str | None, same_character: bool = True, anatomy_intact: bool = True, text_free: bool = True) -> str
 ```
 
 (Corrected during implementation: `build_prompt` needs `characters_present` to do its own
@@ -173,12 +173,13 @@ could make vacuous is the *reference* gate, whose subject line is built by `char
 
 ### `correct_prompt`
 
-Two module-level constants close the holes where reason clauses alone append nothing (making the retry a pure resample, which ADR-010 rejects):
+Three module-level constants close the holes where reason clauses alone append nothing (making the retry a pure resample, which ADR-010 rejects):
 
 - `IDENTITY_CLAUSE = "the characters must match the reference images exactly"` — fires when `same_character=False` and `failure_reasons` is empty (i.e. the judge named the failure but gave no reason; anatomy is outside the frozen 7 so it has no FailureReason entry).
 - `ANATOMY_CLAUSE = "anatomy must be correct: no merged, missing or duplicated body parts"` — fires when `anatomy_intact=False` (ADR-028 froze anatomy out of `FailureReason`; this is the only correction available).
+- `TEXT_CLAUSE = "every surface in the picture is blank and unmarked"` — fires when `text_free=False` (lettering-suppression §4.4: asserts blankness without naming text, letters, words or writing, which are what summoned text in prior attempts).
 
-Both params default to `True` so the four-positional-arg signature stays call-compatible.
+All three boolean params default to `True` so the four-positional-arg signature stays call-compatible.
 
 A fixed, module-level dict maps each of the 7 `FailureReason` values (`backend/contracts/story_memory.py`)
 to an emphasis-clause template:

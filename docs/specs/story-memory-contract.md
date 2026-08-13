@@ -61,6 +61,7 @@ class RefVerdict(BaseModel):
     contradictions: list[str] = Field(default_factory=list)       # ADR-034: THE GATE. empty = accepted
     matches_description: bool                                     # recorded, NOT the gate (ADR-034)
     attributes_present: list[str] = Field(default_factory=list)   # best-of tiebreak when all draws fail
+    text_free: bool = True                                        # lettering-suppression §2 — declared LAST
 
 class Character(BaseModel):
     char_id: str
@@ -112,11 +113,12 @@ class VlmVerdict(BaseModel):
                                        # LAST so the ADR-004 ordering above is untouched. Additive →
                                        # no schema_version bump. Best-of (ADR-010) ranks
                                        # lexicographically: same_character → anatomy_intact →
-                                       # subjects_unique → style_match.
+                                       # text_free → subjects_unique → style_match.
                                        # ponytail: bool, not a score — widen only if a measured tie forces it.
     subjects_unique: bool = True       # scene-setting-and-subject-binding §4.4: each character
                                        # drawn exactly once. Declared LAST so ADR-004's order above
                                        # is untouched. Additive → no schema_version bump.
+    text_free: bool = True             # lettering-suppression §2: visible text anywhere. Declared LAST.
 
 class Attempt(BaseModel):
     image_ref: str                     # durable Storage PATH
@@ -345,6 +347,10 @@ N/A — the contract produces no generated content.
   (`schema_version` bump, restart path, the `judge-finetune` §6.1 round-trip). Old checkpoints deserialize with
   `contradictions == []`, i.e. every pre-ADR-034 verdict reads as accepted; `ref_verdict_prompt_version`
   (2 vs 3) is what distinguishes them, which is exactly what it was added for.
+- **Added 2026-08-13 (additive, no `schema_version` bump) → lettering-suppression:** `RefVerdict.text_free` and
+  `VlmVerdict.text_free`, declared LAST on both models so ADR-004's wire order is untouched. Defaulted `True` so
+  unchecked reads clean and pre-change checkpoints resume without re-judging. Rank order widens to
+  `same_character → anatomy_intact → text_free → subjects_unique → style_match`.
 - **Deferred:** `pdf_ref` / composed-book reference for the export leg (MASTER_SPEC §2). Nothing in Phase 1
   writes it; `export-pdf` (Phase 2) adds it additively.
 - **Removed 2026-07-22:** `Scene.consistency_check_status` — an untyped `Optional[str]` with no owner spec and
