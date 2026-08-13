@@ -47,6 +47,7 @@ Rules:
 - Each scene captures a distinct moment or plot point.
 - start and end are inclusive sentence indices.
 - characters_present lists character names exactly as given above.
+- List a character even when the sentences refer to them only as he, she, it or they.
 - location_name is where the scene happens, named exactly as given above. Leave it null if the \
 story does not say.
 - Together the scenes must cover every sentence."""
@@ -212,6 +213,11 @@ def merge_thin(scenes: list[ExtractedScene], units: list[str]) -> list[Extracted
 # Leading article stripped so a roster "the dragon" recovers from "a huge red dragon"; word
 # boundaries so "the star" does not recover from "stars", which names no character
 # (`prompt_optimizer.REFERENCE_CLAUSE` carves out the same case).
+#
+# TWO LAYERS, and the other one is SEGMENTATION_PROMPT's pronoun rule. The regex cannot recover a
+# beat that says only "he roared" — there is no name in the text to match — so the prompt asks the
+# model for those and this catches what the model still drops. Free (no extra call) and they fail
+# in opposite directions: the prompt is unreliable, the regex is blind to pronouns.
 _ARTICLE = re.compile(r"^(the|a|an)\s+", re.IGNORECASE)
 
 

@@ -175,7 +175,7 @@ could make vacuous is the *reference* gate, whose subject line is built by `char
 
 Three module-level constants close the holes where reason clauses alone append nothing (making the retry a pure resample, which ADR-010 rejects):
 
-- `IDENTITY_CLAUSE = "the characters must match the reference images exactly"` — fires when `same_character=False` and `failure_reasons` is empty (i.e. the judge named the failure but gave no reason; anatomy is outside the frozen 7 so it has no FailureReason entry).
+- `IDENTITY_CLAUSE = "the characters must match the reference images exactly"` — fires when `same_character=False` and `failure_reasons` is empty (i.e. the judge named the failure but gave no reason; anatomy is outside the frozen 7 so it has no FailureReason entry). It fires a **second** way, as a floor: see *Unfillable clauses* below.
 - `ANATOMY_CLAUSE = "anatomy must be correct: no merged, missing or duplicated body parts"` — fires when `anatomy_intact=False` (ADR-028 froze anatomy out of `FailureReason`; this is the only correction available).
 - `TEXT_CLAUSE = "every surface in the picture is blank and unmarked"` — fires when `text_free=False` (lettering-suppression §4.4: asserts blankness without naming text, letters, words or writing, which are what summoned text in prior attempts).
 
@@ -207,6 +207,23 @@ this ceiling doesn't touch them. `character_absent` fills `{name}` from every ch
 single named character requires the judge to attribute a reason to a `char_id`, which is
 `consistency-checker`'s contract decision, not this spec's.
 
+**Unfillable clauses.** A clause whose every `{placeholder}` interpolates to an empty string is
+**dropped**, and if that leaves the correction empty, `IDENTITY_CLAUSE` floors it. `_fillable` reads
+the placeholders off the template with `string.Formatter().parse`, so the check needs no second
+reason→axis dict and a new clause cannot forget to register one; `different_face` parses to no
+placeholders and is therefore always fillable.
+
+Why the floor rather than the hollow clause the earlier revision emitted: the judge compares the
+image to the **reference**, so it can legitimately return `wrong_colour` for a character whose
+`CharacterDescription` records no colours — a thin `analyze` extraction, or ADR-035 filtering the
+axis to nothing. `"match the reference's exact colours: "` corrects nothing, and once
+`consistency-checker`'s `GATING_REASONS` made `wrong_colour` able to fail a page **on its own**, that
+was a whole retry spent on the resample ADR-010 rejects. `IDENTITY_CLAUSE` points the retry at the
+reference images, which are already in the payload and do carry the colour. The floor is guarded on
+a non-empty `failure_reasons`, so the no-op call still returns `prompt` byte-identical, and it is
+evaluated **last**, so a page with anything specific left to say never also gets the generic clause.
+Every drop is logged (CC-5) — a thin description that keeps costing redraws should be visible.
+
 ### Edge cases
 
 | Case | Behavior |
@@ -217,11 +234,11 @@ single named character requires the judge to attribute a reason to a `char_id`, 
 | **No present character has a canonical reference** | Image roll *and* the #32 binding sentence are both omitted — the text-to-image path sends no images to bind a name to. The semantic duplicate is therefore unaddressed on that path; with no reference, "twice" is barely defined. |
 | **A character's name is a common noun the excerpt also uses** (`"the star"` in *"found a tiny glowing star"*) | The binding sentence ties the name to the reference and `_describe` suppresses the redundant species. `text_excerpt` is untouched either way — ADR-013 freezes it verbatim, so rewriting the prose to disambiguate is not available. |
 | **`species` is an exact token of `name`** (`"the star"` / `"star"`) | Dropped from the description line, which floors to `"the star"` (or `"the star - tiny"` if another axis is populated). Exact token match, so `"the retriever"` / `"golden retriever"` keeps its species — the degenerate case this removes is identity, not resemblance. |
-| **Two characters share a name** | `segment` maps one name to a list of `char_id`s, so the roll can read `"Image 1 is the star. Image 2 is the star."` and the binding sentence is correspondingly ambiguous. Pre-existing and not worsened here; no observed occurrence. |
+| **Two characters share a name** | No longer reaches here: `segment`'s `name_to_id` has been `setdefault` first-seen-wins since `scene-setting-and-subject-binding` §4.3, so one mention maps to ONE `char_id` and the roll cannot read `"Image 1 is the star. Image 2 is the star."` This row described the pre-§4.3 list-valued map until 2026-08-13. `referenced_characters` keeps a `dict.fromkeys` pass anyway, for checkpoints written before that change. |
 | **Empty `failure_reasons`** | `correct_prompt` returns `prompt` unchanged when both booleans are `True`. With `same_character=False` it appends `IDENTITY_CLAUSE`; with `anatomy_intact=False` it appends `ANATOMY_CLAUSE`. |
 | **Multiple `failure_reasons` on one attempt** | All matching clauses appended, in enum-declaration order, no duplicates even if a reason repeats. |
-| **Every value on an axis is style-forbidden** (e.g. `colours == ["glowing"]` under `comic`) | ADR-035 filters it to empty, and the row below then applies — the clause appends with nothing rendered. Deliberate: restating the forbidden attribute is what made `wrong_colour` answer "match the reference's exact colours: glowing" (issue #24). |
-| **A description axis referenced by a clause is empty** (e.g. `wrong_colour` but `colours == []`) | The clause still appends with an empty list rendered — this function does not invent colours that `analyze`/`char_bible` never captured; a thin description stays thin, same posture as `char_bible` §4's "species-only description" case. |
+| **Every value on an axis is style-forbidden** (e.g. `colours == ["glowing"]` under `comic`) | ADR-035 filters it to empty, and the row below then applies. Restating the forbidden attribute is still refused — that is what made `wrong_colour` answer "match the reference's exact colours: glowing" (issue #24). |
+| **A description axis referenced by a clause is empty** (e.g. `wrong_colour` but `colours == []`) | The clause is **dropped**, and `IDENTITY_CLAUSE` floors the correction if nothing else survives. Still no invention — a thin description stays thin, same posture as `char_bible` §4's "species-only description" case — but a hollow clause is not a correction either, and since `GATING_REASONS` this can be a page's only reason. See *Unfillable clauses* above. Said "the clause still appends with an empty list rendered" until 2026-08-13. |
 
 ## 5. Cross-cutting checklist (MASTER_SPEC §5)
 
@@ -277,6 +294,11 @@ no mocks"), node-level tests exercise `build_prompt` for real rather than patchi
   both characters' colours, guarding the attribution-ceiling behavior in §4.
 - Empty `failure_reasons` → returns `prompt` unchanged (identity).
 - The original `prompt` content is never truncated or altered — only appended to.
+- **Unfillable clauses:** an empty axis drops its clause and floors on `IDENTITY_CLAUSE`; an empty
+  axis **beside a filled one** drops its clause and does **not** floor; a style-emptied axis
+  (ADR-035, `colours == ["glowing"]` under `comic`) behaves identically to a natively empty one; the
+  drop is logged. The order test uses a real character, since an empty roster would now drop both
+  its clauses and leave the assertion vacuous.
 
 **Node-level (`generate_scene`):**
 - `generate_scene` calls `build_prompt` with `(scene.text_excerpt, state.characters,

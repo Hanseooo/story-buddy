@@ -286,6 +286,26 @@ def test_the_identity_clause_is_suppressed_when_the_judge_gave_a_reason():
     assert IDENTITY_CLAUSE not in store.call_args.args[0]
 
 
+def test_invariant_5_survives_a_gating_reason_whose_axis_is_empty():
+    """The path fix B opened. `wrong_colour` gates `passed` now, so it can be the ONLY reason on a
+    page — and the judge compares against the reference image, so it can flag a colour `analyze`
+    never recorded. `correct_prompt` then drops the hollow clause, and without its floor this
+    retry would send a byte-identical prompt: the resample ADR-010 rejects, paid for."""
+    colourless = Character(
+        char_id="c0",
+        name="the dog",
+        description=CharacterDescription(species="dog", colours=[]),
+        canonical_ref_image="job-1/ref-c0.png",
+    )
+    scene = _scene([_failed_attempt(verdict=_verdict(same=True), reasons=[FailureReason.wrong_colour])])
+    _, store = _run(_state([scene], characters=[colourless]))
+
+    sent = store.call_args.args[0]
+    assert sent != "the original prompt"
+    assert "match the reference's exact colours" not in sent
+    assert IDENTITY_CLAUSE in sent
+
+
 def test_the_new_attempt_records_the_corrected_prompt_not_the_original():
     """CC-5: per-attempt provenance is the whole reason Attempt.prompt exists."""
     scene = _scene([_failed_attempt(reasons=[FailureReason.different_face])])

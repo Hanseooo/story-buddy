@@ -177,6 +177,7 @@ state that never-invent overrides the floor. A three-sentence story gets a short
 | **Duplicate names in the roster** (`analyze`'s documented dedup ceiling) | **First seen wins** — `name_to_id` is built with `setdefault`, so one mention maps to ONE `char_id` and the roster's prominence order picks which. Changed by `scene-setting-and-subject-binding` §4.3 path 2; this row said "every matching `char_id`" until 2026-08-13. §4.6's recovery reads the same map for the same reason. |
 | **Empty roster** (`analyze` found zero characters) | Every scene gets `characters_present: []`. Valid — `generate_scene` runs unreferenced, per ADR-010's "always a shippable page". |
 | **Model omits a character the excerpt names** | Recovered by word-boundary name match and appended (§4.6). Prod job `483056e0`'s `s1`/`s2` drew `refs=0` and shipped unchecked because of this. |
+| **Model omits a character the excerpt names only by pronoun** (`"He roared."`) | **Not recoverable by the backstop** — there is no name in the text to match. `SEGMENTATION_PROMPT` asks the model for these directly (§4.6); if it still omits, the page draws unreferenced and unchecked. Cast carry-forward was considered and rejected: it would also draw a character into a genuine scenery page. |
 | **Empty `timeline[]`** | Valid. The prompt loses its plot-point context and the model segments from the text alone. |
 | **Input was truncated** (ADR-012) | Segments the kept portion only. Correct — the book illustrates what was kept. |
 | **Provider hard failure** | Raises. Job → `failed` with an ADR-025 `failure_reason`; never a partial `scenes[]`. No node-level retry — the `openai` SDK's bounded retry is the entire policy (ADR-025 Decision 1). |
@@ -243,6 +244,21 @@ passing (`"he dreamed of a dragon"`) gets a reference it did not need, costing a
 match is not NER and is not trying to be — upgrade path, if the retry rate bites, is to ask the
 judge rather than a regex.
 
+**Pronoun-only beats need the other layer.** A regex needs a name in the text, so `"He roared."`
+recovers nothing — the beat has no name to match, and the residual is exactly the compounding
+failure above. `SEGMENTATION_PROMPT` therefore carries a rule of its own:
+
+> `- List a character even when the sentences refer to them only as he, she, it or they.`
+
+Free — no extra call, no new field — and the two layers fail in opposite directions: the prompt rule
+is unreliable (the model already ignored `characters_present` once, which is why the backstop
+exists), and the backstop is blind to pronouns. Neither covers the case alone, which is why
+`test_the_prompt_asks_for_pronoun_only_beats_which_the_regex_cannot_reach` asserts both halves in
+one test. **Deliberately not built:** a cast carry-forward, mirroring §4.1's location seed — an
+empty cast after recovery is either a pronoun beat *or* a genuine scenery page, and inheriting the
+previous page's cast draws a character into the scenery one. Revisit if the logs show pronoun beats
+still landing at `refs=0`.
+
 ## 5. Cross-cutting checklist (MASTER_SPEC §5)
 
 - [x] **CC-2 PII redaction** — reads `redacted_text`.
@@ -305,6 +321,8 @@ definition.
   ids are **appended after** the model's own (invariant 4); a name the model already gave is not
   duplicated; `"the star"` is **not** recovered from `"stars"` (word boundary); matching is
   case-insensitive
+- **§4.6 pronoun layer:** the prompt carries the pronoun rule **and** `"He roared."` recovers
+  nothing — asserted together, because either half alone would leave the gap invisible
 - **CC-2 source:** prefers `redacted_text`; falls back to `raw_text` when it is `None`
 - **Empty text:** returns `{"scenes": []}` and `segment_scenes` is **never called**
 - **Partial-return (ADR-024):** the result keys are exactly `{"scenes"}`; `state` is unmutated

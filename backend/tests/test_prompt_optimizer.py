@@ -1,3 +1,5 @@
+import logging
+
 from app.config import STYLE_PRESETS
 from contracts.story_memory import Character, CharacterDescription, FailureReason, Location
 from pipeline.prompt_optimizer import (
@@ -237,8 +239,11 @@ def test_correct_prompt_character_absent_appends_the_documented_clause():
 
 
 def test_correct_prompt_multiple_reasons_all_appear_in_enum_declaration_order():
+    # A real character, not `[]`: both these clauses interpolate an axis, and an empty roster now
+    # drops them as unfillable, which would make this order assertion vacuous.
+    dog = _char("c0", "the dog", colours=["orange"])
     result = correct_prompt(
-        "base prompt", [FailureReason.character_absent, FailureReason.wrong_colour], [], FRAG
+        "base prompt", [FailureReason.character_absent, FailureReason.wrong_colour], [dog], FRAG
     )
     colour_clause = "match the reference's exact colours:"
     absent_clause = "is clearly visible in the scene"
@@ -270,11 +275,57 @@ def test_correct_prompt_never_alters_the_original_prompt_content():
     assert result.startswith("base prompt")
 
 
-def test_correct_prompt_an_empty_axis_still_appends_an_empty_clause():
-    """Spec §4 edge case: does not invent colours analyze/char_bible never captured."""
+def test_correct_prompt_an_empty_axis_drops_its_clause_and_floors_on_identity():
+    """Spec §4 edge case, revised. Still does not invent colours analyze/char_bible never captured
+    — but "match the reference's exact colours: " corrects nothing, and once `wrong_colour` became
+    a GATING_REASON it could be the SOLE reason on a page, making the retry the resample ADR-010
+    rejects. The judge compares against the reference IMAGE, so it can flag a colour the contract
+    never recorded; IDENTITY_CLAUSE points the retry at the images, which do know it."""
     dog = _char("c0", "the dog", colours=[])
     result = correct_prompt("base prompt", [FailureReason.wrong_colour], [dog], FRAG)
-    assert "match the reference's exact colours: " in result
+
+    assert "match the reference's exact colours" not in result
+    assert IDENTITY_CLAUSE in result
+
+
+def test_correct_prompt_an_empty_axis_beside_a_filled_one_does_not_floor():
+    """The floor is for a correction that came out EMPTY, not for every dropped clause. A page
+    that still has something specific to say must not be handed the generic clause as well."""
+    dog = _char("c0", "the dog", colours=[], body_features=["three eyes"])
+    result = correct_prompt(
+        "base prompt", [FailureReason.wrong_colour, FailureReason.wrong_body_feature], [dog], FRAG
+    )
+
+    assert "match these body features exactly: three eyes" in result
+    assert "match the reference's exact colours" not in result
+    assert IDENTITY_CLAUSE not in result
+
+
+def test_correct_prompt_logs_the_clause_it_dropped(caplog):
+    """CC-5. The whole point of the drop is that it happens silently in prod otherwise — this line
+    is how a thin `analyze` description gets noticed instead of quietly costing a redraw."""
+    dog = _char("c0", "the dog", colours=[])
+    with caplog.at_level(logging.INFO):
+        correct_prompt("base prompt", [FailureReason.wrong_colour], [dog], FRAG)
+
+    assert "wrong_colour" in caplog.text
+
+
+def test_correct_prompt_the_floor_never_fires_when_nothing_failed():
+    """`failure_reasons` guards it: the no-op call must still return the prompt byte-identical."""
+    assert correct_prompt("base prompt", [], [], FRAG) == "base prompt"
+
+
+def test_correct_prompt_a_style_forbidden_axis_drops_rather_than_rendering_hollow():
+    """ADR-035 leaves `colours == ["glowing"]` empty under `comic`. Same shape as a natively empty
+    axis and the same answer — restating the forbidden attribute is issue #24, and rendering the
+    clause with nothing left is the resample this now avoids."""
+    star = _char("c0", "the star", colours=["glowing"])
+    result = correct_prompt("base prompt", [FailureReason.wrong_colour], [star], COMIC)
+
+    assert "glowing" not in result
+    assert "match the reference's exact colours" not in result
+    assert IDENTITY_CLAUSE in result
 
 
 # --- regeneration-controller §4: the two booleans that make the correction total ---

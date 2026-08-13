@@ -6,6 +6,7 @@ clauses appended to the prior prompt (ADR-010). Neither writes to `StoryMemory` 
 caller stores the return value.
 """
 import logging
+from string import Formatter
 
 from app.config import settings
 from contracts.story_memory import Character, CharacterDescription, FailureReason, Location
@@ -320,6 +321,18 @@ def _joined(values) -> str:
     return ", ".join(value for value in values if value)
 
 
+def _fillable(template: str, values: dict[str, str]) -> bool:
+    """Whether every `{placeholder}` this clause interpolates has something to say.
+
+    A clause whose only axis is empty renders as `"match the reference's exact colours: "` — a
+    dangling instruction that corrects nothing, which makes the retry the resample ADR-010 rejects.
+    Reads the placeholders off the template itself rather than a second reason→key dict, so adding
+    a clause cannot forget to register its axis. `different_face` parses to no placeholders and is
+    therefore always fillable, which is right — it needs no contract value.
+    """
+    return all(values[key] for _, key, _, _ in Formatter().parse(template) if key)
+
+
 # ADR-004: the 7-value FailureReason set, frozen permanently per ADR-028.
 FAILURE_CLAUSES: dict[FailureReason, str] = {
     FailureReason.wrong_colour: "match the reference's exact colours: {colours}",
@@ -362,7 +375,9 @@ def correct_prompt(
 
     Attribution ceiling (spec §4): `VlmVerdict`/`Attempt.failure_reasons` carry no per-character
     breakdown, so axis-based clauses fill from EVERY character in `characters`, joining multiple
-    values — over-specifying rather than guessing wrong.
+    values — over-specifying rather than guessing wrong. A clause whose axes are ALL empty across
+    ALL of them is dropped rather than rendered hollow (`_fillable`), and if that empties the whole
+    correction, `IDENTITY_CLAUSE` floors it.
 
     `same_character` / `anatomy_intact` / `text_free` close the three holes where the reason clauses
     alone append NOTHING, which would make the retry a pure resample (ADR-010 rejects resampling).
@@ -384,7 +399,18 @@ def correct_prompt(
         "style_fragment": style,
     }
     present = set(failure_reasons)
-    clauses = [FAILURE_CLAUSES[reason].format(**values) for reason in FailureReason if reason in present]
+    clauses: list[str] = []
+    dropped: list[str] = []
+    for reason in FailureReason:
+        if reason not in present:
+            continue
+        template = FAILURE_CLAUSES[reason]
+        if _fillable(template, values):
+            clauses.append(template.format(**values))
+        else:
+            dropped.append(reason.value)
+    if dropped:
+        log.info("correct_prompt: dropped unfillable clause(s) %s — nothing on that axis", dropped)
     # Guarded on EMPTY failure_reasons so it never duplicates different_face's clause.
     if not same_character and not failure_reasons:
         clauses.append(IDENTITY_CLAUSE)
@@ -392,4 +418,12 @@ def correct_prompt(
         clauses.append(ANATOMY_CLAUSE)
     if not text_free:
         clauses.append(TEXT_CLAUSE)
+    # LAST, so it fires only when the whole correction would otherwise be empty. The judge named
+    # reasons and not one of them could be filled — which is normal, because the judge compares the
+    # image to the REFERENCE and the reference carries attributes `analyze` never wrote down.
+    # `IDENTITY_CLAUSE` is the right floor for exactly that: it points at the images, which are in
+    # the payload and do know the colour. Requires a non-empty `failure_reasons`, so the no-op call
+    # (nothing failed) still returns `prompt` untouched.
+    if failure_reasons and not clauses:
+        clauses.append(IDENTITY_CLAUSE)
     return "\n".join([prompt, *clauses]) if clauses else prompt

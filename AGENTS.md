@@ -607,8 +607,19 @@ is not documentation of a good design; it is the blast radius, written down so t
   `build_prompt`'s `Setting:` line, no location reference image exists, and the judge is never asked
   about place. That is a queued architectural decision, not a gap these three fixes narrow.
   **Drift fixed in passing:** `scene-segmentation.md`'s edge-case table still said a duplicate
-  roster name maps to *every* matching `char_id`; `segment`'s `name_to_id` has been `setdefault`
-  first-seen-wins since `scene-setting-and-subject-binding` §4.3. The row now says so.
+  roster name maps to *every* matching `char_id`, and `prompt-optimizer.md`'s said the roll could
+  read `"Image 1 is the star. Image 2 is the star."` Both described the pre-§4.3 list-valued map;
+  `segment`'s `name_to_id` has been `setdefault` first-seen-wins since
+  `scene-setting-and-subject-binding` §4.3. Both rows now say so.
+  **Two residuals closed (2026-08-13, follow-up):** (1) `correct_prompt` **drops** a clause whose
+  every placeholder is empty and floors on `IDENTITY_CLAUSE` if that empties the correction —
+  reachable as a page's SOLE correction only since (B) made `wrong_colour` gating, and the judge
+  compares against the reference image so it can flag a colour `analyze` never recorded.
+  `regenerate` invariant 5 now rests on that floor rather than on `failure_reasons` being non-empty.
+  (2) `SEGMENTATION_PROMPT` gained a pronoun rule, the layer §4.6's regex structurally cannot
+  reach — free, and the two fail in opposite directions. **Cast carry-forward was considered and
+  rejected**: an empty cast after recovery is a pronoun beat *or* a scenery page, and inheriting
+  draws a character into the scenery one. Revisit on `refs=0` in the logs.
   **Phase 2 is in progress. Next: S3's isolation suite, then build S4.** Next free migration is
   **`0009`**.
 - classroom-sharing (2026-08-09): gallery page + StudentTabBar built; `/s/[profileId]/gallery` live; tab bar covers Bookshelf / Gallery / Profile; logout moved to settings.

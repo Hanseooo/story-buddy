@@ -55,6 +55,10 @@ def regenerate(state: StoryMemory) -> dict:
     # holes the frozen 7 leave — anatomy and lettering are outside FailureReason entirely (ADR-028),
     # and a same_character failure can arrive with no reason named. A prompt identical to the
     # previous attempt's would be resampling, which ADR-010 rejects.
+    #
+    # A reason that IS named no longer proves the invariant on its own: `correct_prompt` drops a
+    # clause whose axis is empty, so the guarantee now comes from its floor rather than from the
+    # reason list being non-empty. Same invariant, enforced one level down.
     v = last.vlm_verdict
     identity_clause = not (v.same_character if v else True) and not last.failure_reasons
     anatomy_clause = not (v.anatomy_intact if v else True)
@@ -76,6 +80,11 @@ def regenerate(state: StoryMemory) -> dict:
 
     # CC-5: one line per regeneration. Without the clause flags there is no way to tell a
     # correction that fired from one that silently appended nothing.
+    #
+    # `identity_clause` reports THIS node's condition — the judge failed identity and named no
+    # reason. `correct_prompt` has a second route to the same clause (every named reason turned out
+    # unfillable) which this flag deliberately does not try to predict; it logs that route itself,
+    # on the line immediately above this one.
     log.info(
         "regenerate: scene_id=%s attempt_n=%d failure_reasons=%s same_character=%s "
         "anatomy_intact=%s text_free=%s identity_clause=%s anatomy_clause=%s text_clause=%s "

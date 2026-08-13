@@ -166,6 +166,14 @@ on empty `failure_reasons` so it never duplicates `different_face`. Together the
 invariant 5 total. Defaults keep the existing signature call-compatible; `docs/specs/prompt-optimizer.md`
 is updated in the same change.
 
+A **named reason no longer proves invariant 5 by itself.** `correct_prompt` drops a clause whose axis
+is empty (prompt-optimizer §4, *Unfillable clauses*), so a `wrong_colour`-only failure against a
+character with no recorded colours would otherwise append nothing at all — reachable since
+`consistency-checker`'s `GATING_REASONS` let that reason fail a page alone. `IDENTITY_CLAUSE` floors
+it there. Same invariant, now enforced inside `correct_prompt` rather than by the reason list being
+non-empty. The node's `identity_clause` log flag still reports only **this node's** condition
+(identity failed, no reason named); the floor logs itself from `correct_prompt`.
+
 ### The node
 
 Its own file per AGENTS.md ("one module = one concern, one file per pipeline node"), importing
@@ -352,7 +360,9 @@ reasoning (prod job `4f7698d5`); nothing in this spec's own loop changed.
 - Raises on: no unfinalized scene, a scene with no attempts, `image_count >= IMAGE_BUDGET`, and no
   prompt on either the attempt or the scene. **Never returns `{}`** (invariant 1).
 - The prompt handed to the helper is not equal to `last.prompt` (invariant 5) for every reachable
-  verdict: reasons-only, anatomy-only, and `same_character is False` with empty reasons.
+  verdict: reasons-only, anatomy-only, `same_character is False` with empty reasons, and a
+  **gating reason whose axis is empty** (`wrong_colour` against a character with no recorded
+  colours) — the one path where a named reason contributes no clause.
 
 **Helper (`correct_prompt`, pure — no mocks), extending `test_prompt_optimizer.py`:**
 - `anatomy_intact=False` appends the anatomy clause; `True` appends nothing.
@@ -360,6 +370,10 @@ reasoning (prod job `4f7698d5`); nothing in this spec's own loop changed.
 - `same_character=False` **with** `failure_reasons` appends the reason clauses and **not** the
   identity clause (no duplication with `different_face`).
 - Defaults reproduce the current output byte-for-byte — the existing assertions stay green unedited.
+- An empty axis drops its clause and floors on the identity clause; an empty axis **beside a filled
+  one** drops its clause and does **not** floor; a style-emptied axis (ADR-035) behaves identically
+  to a natively empty one; the drop is logged; and the no-op call (`failure_reasons == []`, all
+  booleans `True`) still returns `prompt` byte-identical.
 - Invariant 3 holds throughout: `prompt` is never dropped.
 
 **Best-of and finalization (`consistency_check`, helper patched), extending `test_consistency_check_node.py`:**

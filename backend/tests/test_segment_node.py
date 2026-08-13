@@ -642,6 +642,24 @@ def test_segment_recovery_matches_on_a_word_boundary_not_a_substring():
     assert result["scenes"][0].characters_present == []
 
 
+def test_the_prompt_asks_for_pronoun_only_beats_which_the_regex_cannot_reach():
+    """The other half of §4.6. `_mentions` needs a NAME in the excerpt, so "He roared." recovers
+    nothing (asserted below) — the prompt rule is the only thing that can catch that beat, and it
+    costs no extra call. Asserting both together is the point: neither layer covers it alone."""
+    units = ["The dragon woke.", "He roared."]
+    stub = SceneSegmentation(scenes=[ExtractedScene(start=0, end=1, characters_present=[])])
+    with patch("pipeline.segment.structured_text", return_value=stub) as mock_provider:
+        segment_scenes(units, [_char("c0", "the dragon")], [], [])
+
+    assert "he, she, it or they" in mock_provider.call_args.args[0]
+
+    seg = SceneSegmentation(scenes=[ExtractedScene(start=1, end=1, characters_present=[])])
+    with patch("pipeline.segment.segment_scenes", return_value=seg):
+        result = segment(_state(raw="He roared.", characters=[_char("c0", "the dragon")]))
+
+    assert result["scenes"][0].characters_present == []
+
+
 def test_segment_recovery_is_case_insensitive():
     seg = SceneSegmentation(scenes=[
         ExtractedScene(start=0, end=1, characters_present=[]),
