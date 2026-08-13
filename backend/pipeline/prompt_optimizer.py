@@ -340,6 +340,12 @@ IDENTITY_CLAUSE = "the characters must match the reference images exactly"
 # Mirrors consistency_check.JUDGE_PROMPT's phrasing, so the correction restates the thing the
 # judge was actually asked about.
 ANATOMY_CLAUSE = "anatomy must be correct: no merged, missing or duplicated body parts"
+# lettering-suppression §4.4. The wording is the whole trick: it asserts blankness and never says
+# text, letters, words, writing, signage, captions or lettering. Those words are what put lettering
+# on the canvas the last three times (spec §1), and this clause fires precisely on images that
+# already have some. Unlike ANATOMY_CLAUSE it does NOT mirror the judge's phrasing — the judge is
+# told exactly what to look for (§4.1), the generator is never told what to avoid.
+TEXT_CLAUSE = "every surface in the picture is blank and unmarked"
 
 
 def correct_prompt(
@@ -349,6 +355,7 @@ def correct_prompt(
     style_fragment: str | None,
     same_character: bool = True,
     anatomy_intact: bool = True,
+    text_free: bool = True,
 ) -> str:
     """Pure. Never drops content from `prompt` (invariant 3) — only appends emphasis clauses, one
     per `FailureReason` present in `failure_reasons`, in enum-declaration order, no duplicates.
@@ -357,8 +364,8 @@ def correct_prompt(
     breakdown, so axis-based clauses fill from EVERY character in `characters`, joining multiple
     values — over-specifying rather than guessing wrong.
 
-    `same_character` / `anatomy_intact` close the two holes where the reason clauses alone
-    append NOTHING, which would make the retry a pure resample (ADR-010 rejects resampling).
+    `same_character` / `anatomy_intact` / `text_free` close the three holes where the reason clauses
+    alone append NOTHING, which would make the retry a pure resample (ADR-010 rejects resampling).
     Defaulted so the four-positional-arg signature stays call-compatible.
     """
     style = style_fragment or settings.default_style_fragment
@@ -383,4 +390,6 @@ def correct_prompt(
         clauses.append(IDENTITY_CLAUSE)
     if not anatomy_intact:
         clauses.append(ANATOMY_CLAUSE)
+    if not text_free:
+        clauses.append(TEXT_CLAUSE)
     return "\n".join([prompt, *clauses]) if clauses else prompt

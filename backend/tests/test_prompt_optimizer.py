@@ -4,6 +4,7 @@ from pipeline.prompt_optimizer import (
     ANATOMY_CLAUSE,
     IDENTITY_CLAUSE,
     NON_HUMAN_CLAUSE,
+    TEXT_CLAUSE,
     build_prompt,
     correct_prompt,
     filtered_description,
@@ -803,6 +804,53 @@ def test_the_roll_numbers_a_repeated_char_id_only_once():
     assert "Image 1 is the star, tiny." in prompt
     assert "Image 2" not in prompt
     assert "This illustration contains exactly 1 character: the star." in prompt
+
+
+def test_correct_prompt_appends_the_text_clause_when_text_free_is_false():
+    """lettering-suppression §4.4: the clause fires off a BOOLEAN, mirroring anatomy_intact.
+    FailureReason stays frozen at 7 (ADR-028) — there is no 8th value to hang this on."""
+    dog = _char("c0", "the dog", species="dog")
+    corrected = correct_prompt("base prompt", [], [dog], FRAG, text_free=False)
+
+    assert TEXT_CLAUSE in corrected
+    assert corrected.startswith("base prompt")     # invariant 3: never drops content
+
+
+def test_correct_prompt_omits_the_text_clause_when_text_free_is_true():
+    dog = _char("c0", "the dog", species="dog")
+    assert TEXT_CLAUSE not in correct_prompt("base prompt", [], [dog], FRAG, text_free=True)
+    assert TEXT_CLAUSE not in correct_prompt("base prompt", [], [dog], FRAG)
+
+
+def test_the_text_clause_appends_alongside_the_anatomy_clause_without_disturbing_it():
+    """§6 test 16: both booleans can fail on the same attempt. Neither duplicates nor reorders
+    the other, and the anatomy clause keeps its position ahead of the new one."""
+    dog = _char("c0", "the dog", species="dog")
+    corrected = correct_prompt(
+        "base prompt", [], [dog], FRAG, anatomy_intact=False, text_free=False
+    )
+
+    assert corrected.count(ANATOMY_CLAUSE) == 1
+    assert corrected.count(TEXT_CLAUSE) == 1
+    assert corrected.index(ANATOMY_CLAUSE) < corrected.index(TEXT_CLAUSE)
+
+
+def test_the_text_clause_never_utters_a_word_the_negative_prompt_suppresses():
+    """§6 test 17, the whole trick. Three prompt-wording attempts have already failed because
+    naming a thing summons it: the fragments said "no lettering" and a page lettered; the
+    reference prompt said "reference" and the word was drawn on the canvas. This clause fires
+    precisely on images that ALREADY have text — the worst possible moment to name it — so it
+    asserts blankness instead. Same invariant test_config.py already applies to STYLE_PRESETS.
+    """
+    import re
+
+    from providers import NEGATIVE_PROMPT
+
+    for term in (term.strip() for term in NEGATIVE_PROMPT.split(",")):
+        assert not re.search(rf"\b{re.escape(term)}\b", TEXT_CLAUSE, re.I), \
+            f"TEXT_CLAUSE names {term!r}, which is what put lettering on the canvas the last three times"
+    assert "lettering" not in TEXT_CLAUSE.lower()
+
 
 
 
