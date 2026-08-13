@@ -193,6 +193,8 @@ class Cost(BaseModel):                 # CC-3
     regen_count: int = 0
     usd_estimate: float = 0.0
     ref_retry_count: int = 0            # ADR-029 — the 3-tap budget, per book
+    ref_mod_retry_count: int = 0        # moderation redraw cycles, per BOOK not per character
+
 
 
 class Eval(BaseModel):                 # CC-7

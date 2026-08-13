@@ -239,3 +239,14 @@ def test_a_checkpoint_written_before_text_free_deserializes_as_clean():
     assert VlmVerdict(**old_vlm).text_free is True
 
 
+def test_cost_declares_ref_mod_retry_count_last_and_defaults_to_zero():
+    """ADR-023 §8 additive extension point: a new Cost field is declared LAST and default-safe,
+    so an old checkpoint deserialises without a schema_version bump (spec §2, §4.6)."""
+    from contracts.story_memory import Cost
+
+    assert list(Cost.model_fields)[-1] == "ref_mod_retry_count"
+    assert Cost().ref_mod_retry_count == 0
+    assert Cost.model_validate({"image_count": 4}).ref_mod_retry_count == 0
+
+
+
