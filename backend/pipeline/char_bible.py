@@ -54,7 +54,9 @@ BUCKET = "storybook-images"
 # rate comparable across prompt revisions — v1 measured the judge's tolerance for sparse
 # descriptions, v2 measures the generator. Unversioned, the 2026-08-11 change silently
 # invalidated every verdict before it and the series had to restart.
-JUDGE_PROMPT_VERSION = 3
+# 4 (lettering-suppression §4.1): adds the text question. v3 verdicts carry no `text_free` signal
+# at all — they default True — so the lettering rate is only measurable from v4 forward.
+JUDGE_PROMPT_VERSION = 4
 
 JUDGE_PROMPT = """\
 This image is meant to be a character reference drawn from the description below.
@@ -67,8 +69,9 @@ does not mention — hair, clothing, background — and those are NOT difference
 First describe any way the image CONTRADICTS a stated attribute. Then list the contradictions: \
 one entry for each stated attribute the image contradicts, naming the attribute and what the \
 image shows instead. If the image contradicts nothing that was stated, leave that list empty. \
-Then say whether the image matches the description, and list which of the described attributes \
-are actually present in the image."""
+Then say whether the image matches the description, list which of the described attributes \
+are actually present in the image, and finally say whether the picture is free of any text — any \
+letters, numbers or writing anywhere in it, including on signs, doors, books and clothing."""
 
 # `analyze`'s EXTRACTION_PROMPT deliberately says "leave them empty rather than inventing
 # details", so a character routinely arrives with nothing drawable — prod job 4cb31620

@@ -528,6 +528,27 @@ def test_judge_prompt_scopes_the_question_to_contradiction_not_to_any_difference
     assert "the orange dog, dog, orange" in prompt
 
 
+def test_the_judge_is_asked_about_text_last_and_the_version_is_bumped():
+    """§6 test 8. ADR-004: `providers._assert_field_order` rejects a provider that answers out of
+    schema order, so the prompt must ask in schema order — `RefVerdict.text_free` is declared
+    LAST, so the question comes after the attributes question.
+
+    Naming signs and doors here is safe and is the point: this prompt goes to the VLM JUDGE,
+    never to the image model. The rule that naming summons applies to the generator's prompt;
+    the judge has to be told what to look at, and the door is exactly where it landed.
+
+    The version bump is asserted in the same test because it is the same edit: an unversioned
+    reword silently invalidates every verdict before it, which already cost one series (v3).
+    """
+    from pipeline.char_bible import JUDGE_PROMPT, JUDGE_PROMPT_VERSION
+
+    assert JUDGE_PROMPT_VERSION == 4
+
+    prompt = JUDGE_PROMPT.format(subject="the orange dog, dog, orange")
+    assert "free of any text" in prompt
+    assert prompt.index("attributes are actually present") < prompt.index("free of any text")
+
+
 def test_mint_reference_reports_a_draw_count_equal_to_the_provider_calls():
     """Spec §6: the count the helper reports equals the number of text_to_image calls.
     Invariant 4 rides on this — the node cannot compute it, the loop is in here."""
