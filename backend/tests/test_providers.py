@@ -268,6 +268,26 @@ def test_text_to_image_omits_seed_when_not_given():
     assert arguments["negative_prompt"] == providers.NEGATIVE_PROMPT
 
 
+def test_text_to_image_appends_negative_extra_without_dropping_the_shared_terms():
+    """`text_to_image` has two callers that want opposite backgrounds: `char_bible`'s canonical
+    reference must have none, and `generate_scene`'s no-reference fallback (`generate_scene.py:57`)
+    is a whole scene. So scenery suppression cannot live in NEGATIVE_PROMPT — it is passed per
+    call, and APPENDED, because the lettering terms apply to both.
+
+    Asserting the join rather than just containment: a missing separator silently welds two terms
+    into a third one that means nothing ("comic panelsbackground").
+    """
+    fal = MagicMock()
+    fal.subscribe.return_value = {"images": [{"url": "https://fal.example/x.png"}], "seed": 1}
+
+    with patch("providers._fal", return_value=fal), \
+         patch("providers.httpx.get", return_value=MagicMock(content=b"png")):
+        providers.text_to_image("a fox", negative_extra="background, furniture")
+
+    negative = fal.subscribe.call_args.kwargs["arguments"]["negative_prompt"]
+    assert negative == f"{providers.NEGATIVE_PROMPT}, background, furniture"
+
+
 # --- transient-failure tolerance ---
 
 def test_every_llm_client_retries_transient_failures():

@@ -94,11 +94,49 @@ THIN_DESCRIPTION_FILLER = ", a friendly children's picture-book character"
 #
 # Draw-prompt only, like the filler — the judge must keep measuring the generator against the
 # STORY, not against our instructions to the generator.
-REFERENCE_PROMPT = """\
-A single character reference of one character, shown in full, facing forward, centred on a \
-plain neutral background. No other characters, no scenery, no text, no border.
+# Everything a reference must NOT accrete, on the channel that actually subtracts (`providers.
+# NEGATIVE_PROMPT`'s comment: a `no <term>` clause in the positive prompt competes with what
+# Qwen-Image is best at and loses). The old prompt tail said "No other characters, no scenery, no
+# text, no border" and the 2026-08-13 draws came back with a wall/floor horizon and a cast shadow
+# behind both non-human subjects anyway — a half-drawn room, which is how furniture from the
+# child's own story ends up standing behind a character who is supposed to be on nothing.
+#
+# Passed per call rather than folded into NEGATIVE_PROMPT: `text_to_image` is also
+# `generate_scene`'s no-reference fallback (`generate_scene.py:57`), and a scene needs the exact
+# scenery this suppresses. Terms are generic — "furniture", not "bed" — because the noun is
+# whatever the child wrote.
+# The framing terms are here for the same reason as the scenery ones. "shown in full" and then
+# "drawn in full with nothing cropped" were BOTH measured being ignored for human subjects on
+# 2026-08-13 — a "girl" came back cropped at the chest, then at the waist, while the monster and
+# the robot came back whole. Portrait bias is strong enough on a human that only the negative
+# channel moves it, and a reference cropped at the waist cannot anchor `clothing` — one of the
+# four judged axes — for any scene that inherits it.
+REFERENCE_NEGATIVE = (
+    "background scenery, room, interior, furniture, floor, wall, horizon line, ground, landscape, "
+    "cast shadow, second character, other characters, crowd, "
+    "close-up, bust shot, head and shoulders, waist-up, cropped at the waist, cropped limbs, "
+    "letterbox, black bars, "
+    "model sheet, turnaround, multiple views, colour swatches, name plate, border, frame"
+)
 
-Character: {subject}
+# The opening clause describes the PICTURE and never names the document. It used to read "A single
+# character reference of one character", and on 2026-08-13 a draw for "the monster - monster;
+# purple; tiny, lost" returned the word **"Reference;"** lettered across the top in the style's own
+# font. NEGATIVE_PROMPT already listed "text, letters, words, labels, captions" and did not stop it:
+# a negative prompt subtracts a tendency, it cannot outvote a word sitting in the positive prompt.
+# "character reference" also carries the model-sheet prior — in training data that phrase means a
+# sheet WITH a name plate — so we were asking for the artifact whose defining feature is the label
+# we then asked not to have.
+#
+# The framing clause replaces "shown in full", measured being ignored in the same batch (a "girl"
+# came back as a head-and-shoulders crop). "full shot" is a framing term, not an anatomy one — the
+# note below on "standing" applies to any phrasing that implies a body, so "head to toe" is out.
+# REFERENCE_NEGATIVE carries the other half; the positive clause alone did not hold on a human.
+REFERENCE_PROMPT = """\
+One character alone, a full shot showing the whole of it, facing forward, centred against a flat \
+empty background of one single colour.
+
+The character is {subject}.
 
 If the character is not a person, draw it as the kind of thing it actually is — give it no human \
 body and no human face unless the description above says so.
@@ -132,8 +170,13 @@ def _describe(description: CharacterDescription, name: str, notes: bool = True) 
         ", ".join(description.clothing),
         description.notes if notes else None,
     ]
+    # Plain commas, no " - " and no ";". Those two separators made the line read as a caption, and
+    # Qwen-Image drew it: a 2026-08-13 draw of `the star - star; tiny` came back with **"Hoe -
+    # Star:"** lettered across the top — a mangled render of this very string, dash and all. It is
+    # the same defect as the old prompt's "Reference;", one layer in, and it is the "name above the
+    # character" a reader sees. Commas describe; dashes and colons label.
     populated = [axis for axis in axes if axis]
-    return f"{name} - {'; '.join(populated)}" if populated else name
+    return ", ".join([name, *populated])
 
 
 def reference_prompt(description: CharacterDescription, name: str, style_fragment: str) -> str:
@@ -218,7 +261,7 @@ def mint_reference(
         # No seed: a fixed one makes every draw identical and the re-roll a no-op (§4).
         # A hard failure raises → job `failed` with an ADR-025 `failure_reason`. No artifact
         # exists, so there is nothing to ship and no node-level retry.
-        image = text_to_image(prompt)
+        image = text_to_image(prompt, negative_extra=REFERENCE_NEGATIVE)
         draws += 1
         try:
             verdict = judge(judge_prompt, [_data_uri(image)], RefVerdict)
@@ -280,7 +323,7 @@ def _mint_targeted(state: StoryMemory) -> dict:
         prompt = f"{prompt}\n\nBe sure to include: {retry.attribute}."
     judge_prompt = JUDGE_PROMPT.format(subject=_describe(description, character.name, notes=False))
 
-    image = text_to_image(prompt)
+    image = text_to_image(prompt, negative_extra=REFERENCE_NEGATIVE)
     verdict = judge(judge_prompt, [_data_uri(image)], RefVerdict)
     n = state.cost.ref_retry_count + 2  # post-bump: rc is incremented below; +2 = +1(initial) +1(this tap)
     path = _upload(image, state.story_id, character.char_id, n)

@@ -226,9 +226,16 @@ def _assert_field_order(raw: str, schema: type[BaseModel], model: str) -> None:
         )
 
 
-def text_to_image(prompt: str, seed: int | None = None) -> bytes:
-    """Standalone image — used for the canonical character reference (ADR-001)."""
-    return _run_fal(settings.fal_image_model, {"prompt": prompt}, seed)
+def text_to_image(prompt: str, seed: int | None = None, negative_extra: str = "") -> bytes:
+    """Standalone image — the canonical character reference (ADR-001), and `generate_scene`'s
+    no-reference fallback.
+
+    `negative_extra` exists because those two callers want opposite backgrounds: a reference must
+    have none and a scene is nothing but. It is APPENDED to `NEGATIVE_PROMPT`, never a
+    replacement — the lettering terms apply to every image this project draws.
+    """
+    negative = f"{NEGATIVE_PROMPT}, {negative_extra}" if negative_extra else NEGATIVE_PROMPT
+    return _run_fal(settings.fal_image_model, {"prompt": prompt, "negative_prompt": negative}, seed)
 
 
 # fal endpoints disagree on what the reference-image field is called, and fal **silently ignores

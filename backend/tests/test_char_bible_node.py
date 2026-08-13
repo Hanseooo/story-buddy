@@ -1,10 +1,11 @@
+import re
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, CharacterDescription, Cost, Input, RefVerdict, StoryMemory, Style
 from app.config import STYLE_PRESETS
-from pipeline.char_bible import best_draw, char_bible, mint_reference, reference_prompt
+from pipeline.char_bible import REFERENCE_NEGATIVE, best_draw, char_bible, mint_reference, reference_prompt
 
 FRAG = "flat cel-shaded cartoon, thick clean black outlines"
 DRAWS = [b"draw-1-bytes", b"draw-2-bytes", b"draw-3-bytes"]
@@ -93,7 +94,7 @@ def test_reference_prompt_floors_to_the_character_name_on_an_empty_description()
     """Spec §4: CharacterDescription is all-Optional, so a fully empty one is contract-legal
     (a resumed pre-story-analyzer checkpoint could carry one). The prompt floors to the name."""
     prompt = reference_prompt(CharacterDescription(), "the orange dog", FRAG)
-    assert "Character: the orange dog," in prompt
+    assert "The character is the orange dog," in prompt
 
 
 # --- visually-thin descriptions (2026-08-11) ---
@@ -101,7 +102,7 @@ def test_reference_prompt_floors_to_the_character_name_on_an_empty_description()
 def test_reference_prompt_enriches_a_description_with_no_visual_axis():
     """`analyze`'s EXTRACTION_PROMPT says "leave them empty rather than inventing details", so
     colours/body_features/clothing are routinely all empty — prod job 4cb31620 (2026-08-11) drew
-    c0 from "the narrator - girl; the protagonist". Every page of the book inherits that
+    c0 from "the narrator, girl, the protagonist". Every page of the book inherits that
     reference, so the generator needs *something* to draw beyond a role noun.
 
     Triggered on the visual axes, NOT on len(populated): c0 had two populated axes (species and
@@ -110,7 +111,7 @@ def test_reference_prompt_enriches_a_description_with_no_visual_axis():
     """
     prompt = reference_prompt(CharacterDescription(species="girl", notes="the protagonist"), "the narrator", FRAG)
 
-    assert "the narrator - girl; the protagonist" in prompt
+    assert "the narrator, girl, the protagonist" in prompt
     assert "friendly children's picture-book character" in prompt
 
 
@@ -145,8 +146,8 @@ def test_enrichment_reaches_the_draw_prompt_but_never_the_judge_prompt():
     assert "friendly children's picture-book character" not in judge_prompt
     # `notes` is the OTHER one-directional divergence (ADR-034 follow-on), so the judge sees the
     # visual axes only — here that floors the subject to the bare name.
-    assert "the narrator - girl; the protagonist" in draw_prompt
-    assert "the narrator - girl" in judge_prompt
+    assert "the narrator, girl, the protagonist" in draw_prompt
+    assert "the narrator, girl" in judge_prompt
     assert "the protagonist" not in judge_prompt
 
 
@@ -194,7 +195,96 @@ def test_notes_reaches_the_draw_prompt_but_never_the_judge_prompt():
     assert "secondary character" in t2i_mock.call_args.args[0]
     assert "secondary character" not in judge_mock.call_args.args[0]
     # The visual axes still reach the judge — this narrows the subject, it does not gut it.
-    assert "the star - star; tiny" in judge_mock.call_args.args[0]
+    assert "the star, star, tiny" in judge_mock.call_args.args[0]
+
+
+# --- lettering and scenery (2026-08-13) ---
+
+def test_the_positive_prompt_never_utters_a_word_the_negative_prompt_suppresses():
+    """The general form of the "Reference;" bug, and the reason it is a test rather than a note:
+    it recurred DURING the fix. A draft of the clause above read "the whole of it inside the
+    frame", and the very next draw of a rabbit came back sitting inside a drawn border — with
+    "frame" already sitting in REFERENCE_NEGATIVE, two lines away.
+
+    Qwen-Image renders what the positive prompt says. A term in both channels is not belt and
+    braces, it is a contradiction the positive side wins, so the negative list doubles as a list of
+    words this prompt may not use. Word-boundary matched, or "ground" would fire on "background".
+    """
+    prompt = reference_prompt(CharacterDescription(species="dog", colours=["orange"]), "the dog", FRAG)
+    said = [
+        term for term in REFERENCE_NEGATIVE.split(", ")
+        if re.search(rf"\b{re.escape(term)}\b", prompt, re.IGNORECASE)
+    ]
+    assert said == []
+
+
+def test_reference_prompt_never_names_the_artifact_it_is_asking_for():
+    """Measured 2026-08-13: the draw for "the monster - monster; purple; tiny, lost" came back
+    with the word **"Reference;"** lettered across the top in the style's own font.
+
+    Nothing hallucinated it. `REFERENCE_PROMPT` opened "A single character reference of one
+    character", and Qwen-Image renders text *by design* — hand it a noun that names a kind of
+    document and it draws the document, title and all. `providers.NEGATIVE_PROMPT` already lists
+    "text, letters, words, labels, captions" and did not stop it, because a negative prompt
+    subtracts a tendency and cannot outvote a word sitting in the positive prompt.
+
+    "character reference" also carries the model-sheet prior: in training data that phrase means
+    a sheet with a name plate, a turnaround and colour swatches. We were asking for the artifact
+    whose defining feature is the label we then asked not to have.
+
+    So the prompt describes the PICTURE and never names the document. Asserted case-insensitively
+    on the whole prompt, subject included — a child's character can be called anything, but our
+    own framing must never contribute the word.
+    """
+    prompt = reference_prompt(CharacterDescription(species="monster", colours=["purple"]), "the monster", FRAG)
+    assert "reference" not in prompt.lower()
+
+
+def test_reference_prompt_states_its_background_positively_instead_of_negating():
+    """The same 2026-08-13 draws put a wall/floor horizon and a cast shadow behind the monster and
+    behind Bolt, under a prompt whose tail read "No other characters, no scenery, no text, no
+    border". `providers.py`'s NEGATIVE_PROMPT comment already recorded this lesson for the style
+    presets: a `no <term>` clause in a positive prompt competes with the thing the model is best
+    at, and loses. It was still being written here.
+
+    A room half-drawn behind a character reference is how a bed ends up behind a girl whose story
+    happens at bedtime — and every scene inherits this image, so it is a per-book defect, not a
+    per-page one. The prohibitions move to REFERENCE_NEGATIVE, which rides the channel that works.
+    """
+    prompt = reference_prompt(CharacterDescription(species="dog"), "the dog", FRAG)
+    assert "no scenery" not in prompt
+    assert "No other characters" not in prompt
+    # The clause that ISN'T a background prohibition stays — it guards anatomy, not the backdrop,
+    # and there is no negative-prompt phrasing for "no human body *unless* the story said so".
+    assert "not a person" in prompt
+
+
+def test_reference_prompt_asks_for_a_full_shot_without_asserting_an_anatomy():
+    """Two framing phrasings were measured being ignored for human subjects on 2026-08-13 —
+    "shown in full" cropped a girl at the chest, "drawn in full with nothing cropped" cropped her
+    at the waist — while the monster and the robot came back whole both times. `clothing` is one of
+    the four judged axes and every scene inherits this image, so a waist-up reference silently
+    drops the story's own detail from the whole book.
+
+    The escalation is a framing term plus the matching REFERENCE_NEGATIVE entries, NOT "full body"
+    or "head to toe": the 2026-08-11 lesson that killed "standing" applies to any phrasing that
+    hands a star a pair of legs to comply with.
+    """
+    prompt = reference_prompt(CharacterDescription(species="star"), "the star", FRAG)
+    assert "full shot" in prompt
+    for anatomical in ["full body", "full-body", "head to toe", "standing"]:
+        assert anatomical not in prompt.lower()
+    assert "cropped limbs" in REFERENCE_NEGATIVE
+
+
+def test_the_reference_draw_suppresses_scenery_through_the_negative_prompt():
+    """The positive prompt says what the picture IS; REFERENCE_NEGATIVE says what a reference must
+    never accrete. It is passed per call rather than added to `providers.NEGATIVE_PROMPT` because
+    `text_to_image` is also `generate_scene`'s no-reference fallback (`generate_scene.py:57`), and
+    a scene needs the scenery this suppresses.
+    """
+    _, t2i_mock, _, _ = _mint([_verdict(True)])
+    assert t2i_mock.call_args.kwargs["negative_extra"] == REFERENCE_NEGATIVE
 
 
 def test_the_non_humanoid_guard_never_reaches_the_judge_prompt():
@@ -381,7 +471,7 @@ def test_mint_reference_shows_the_judge_a_data_uri_never_a_url():
 
 def test_judge_prompt_scopes_the_question_to_contradiction_not_to_any_difference():
     """Regression, prod job 4cb31620 (2026-08-11): c0's description rendered to
-    "the narrator - girl; the protagonist" and all 3 draws returned matches_description=False.
+    "the narrator, girl, the protagonist" and all 3 draws returned matches_description=False.
     The judge's own reasoning was the proof — "the description is incredibly brief... the image
     offers a lot of details *not* present in the description" — and it went on to list hair and
     clothing. Neither contradicts "a girl who is the protagonist"; a text-to-image model cannot
@@ -401,7 +491,7 @@ def test_judge_prompt_scopes_the_question_to_contradiction_not_to_any_difference
     # ADR-004 reason-then-score survives the rewording: reason is still asked for first.
     assert prompt.index("First describe") < prompt.index("Then say whether")
     # The description still reaches the judge — _describe and the prompt must not drift apart.
-    assert "the orange dog - dog; orange" in prompt
+    assert "the orange dog, dog, orange" in prompt
 
 
 def test_mint_reference_reports_a_draw_count_equal_to_the_provider_calls():
@@ -698,6 +788,18 @@ def test_char_bible_targeted_mode_restates_the_tapped_attribute_in_the_prompt():
     assert "orange sock" in t2i.call_args.args[0]
 
 
+def test_char_bible_targeted_mode_suppresses_scenery_like_the_first_draw():
+    """A targeted redraw replaces the canonical reference outright, so a room drawn behind THIS
+    draw reaches every page exactly the same way. Two call sites, one policy."""
+    state = _targeted_state()
+    with patch("pipeline.char_bible.text_to_image", return_value=b"x") as t2i, \
+         patch("pipeline.char_bible.judge", return_value=_verdict(True)), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+        char_bible(state)
+
+    assert t2i.call_args.kwargs["negative_extra"] == REFERENCE_NEGATIVE
+
+
 def test_char_bible_targeted_mode_never_appends_the_re_injection_clause():
     """`_mint_targeted`'s `if retry.attribute not in prompt` branch is UNREACHABLE, and has been
     since the commit that introduced it: the line above writes the attribute into `notes`, and
@@ -843,7 +945,7 @@ def test_a_style_forbidden_attribute_reaches_neither_the_draw_prompt_nor_the_jud
     assert "glowing" not in t2i_mock.call_args.args[0]
     assert "glowing" not in judge_mock.call_args.args[0]
     # Narrowed, not gutted: species and the permitted axes still describe the character.
-    assert "the star - star; tiny" in judge_mock.call_args.args[0]
+    assert "the star, star, tiny" in judge_mock.call_args.args[0]
 
 
 def test_an_attribute_the_active_fragment_never_forbids_still_reaches_both_prompts():
