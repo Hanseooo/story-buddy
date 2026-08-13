@@ -389,11 +389,20 @@ def char_bible(state: StoryMemory) -> dict:
     # path. The three-preset dict and `style_preset_id` resolution belong to `style-presets`.
     style_fragment = state.style.prompt_fragment or settings.default_style_fragment
 
+    # CC-3 accounting, computed BEFORE the loop because §4.4's suffix is derived from it. A
+    # post-loop bump would hand mint_reference n=1 on a redraw and upsert over the flagged image.
+    # Once per CYCLE, not once per character: char_ref_mod screens the whole roster in one node
+    # run, so a book where both c0 and c1 flag spends one redraw, not two (spec §2).
+    was_flagged = any(c.ref_moderation_status == "flagged" for c in selected)
+    mrc = state.cost.ref_mod_retry_count + (1 if was_flagged else 0)
+    n = state.cost.ref_retry_count + mrc + 1
+
     minted: dict[str, tuple[str, RefVerdict | None]] = {}
     draws_made = 0
     for character in selected:
         path, verdict, draws = mint_reference(
-            character.description, character.name, style_fragment, state.story_id, character.char_id
+            character.description, character.name, style_fragment, state.story_id,
+            character.char_id, n=n,
         )
         minted[character.char_id] = (path, verdict)
         draws_made += draws
@@ -417,9 +426,13 @@ def char_bible(state: StoryMemory) -> dict:
         for c in state.characters
     ]
     # Invariant 4: `cost` has no reducer either — copy and bump, never rebuild from zero.
-    # CC-3: this node's prelude bound is 6 (2 references x 3 draws). `image-generator` owns the
-    # scene-image half of `image_count`; the breaker cannot trip until it writes its share.
-    cost = state.cost.model_copy(update={"image_count": state.cost.image_count + draws_made})
+    # CC-3: this node's prelude bound is 6 (2 references x 3 draws), doubled to 12 by one
+    # moderation redraw cycle. `image-generator` owns the scene-image half of `image_count`.
+    cost = state.cost.model_copy(update={
+        "image_count": state.cost.image_count + draws_made,
+        "ref_mod_retry_count": mrc,
+    })
 
-    log.info("char_bible: minted %s in %d draws", sorted(minted), draws_made)
+    log.info("char_bible: minted %s in %d draws, n=%d, ref_mod_retry_count=%d",
+             sorted(minted), draws_made, n, mrc)
     return {"characters": characters, "cost": cost}

@@ -1102,3 +1102,72 @@ def test_mint_targeted_after_a_moderation_redraw_picks_a_suffix_that_collides_wi
 
     assert result["characters"][0].canonical_ref_image == "story-1/ref-c0-3.png"
 
+
+def test_ref_mod_retry_count_bumps_by_exactly_one_when_two_characters_arrive_flagged():
+    """§6 test 12 / §2. The counter is per BOOK — it measures loop iterations, not characters.
+    One cycle re-mints both, so a book where c0 and c1 both flag spends 1, not 2."""
+    from contracts.story_memory import Cost
+
+    flagged = [
+        _char("c0", "the dog").model_copy(update={"ref_moderation_status": "flagged"}),
+        _char("c1", "the cat").model_copy(update={"ref_moderation_status": "flagged"}),
+    ]
+    state = _state(flagged, cost=Cost(ref_mod_retry_count=0))
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()) as mint:
+        result = char_bible(state)
+
+    assert mint.call_count == 2
+    assert result["cost"].ref_mod_retry_count == 1
+
+
+def test_ref_mod_retry_count_does_not_bump_on_a_first_unflagged_mint():
+    """§6 test 13. The ordinary path must not spend budget it never used."""
+    state = _state([_char("c0", "the dog"), _char("c1", "the cat")])
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()):
+        result = char_bible(state)
+
+    assert result["cost"].ref_mod_retry_count == 0
+
+
+def test_the_re_mint_uploads_to_suffix_two_and_leaves_the_flagged_image_alone():
+    """§6 test 14 / §4.4. The bump happens BEFORE the loop so `n` reads the post-bump counter:
+    rc=0, mrc=1 → 0 + 1 + 1 = 2. A pre-bump read would give 1 and upsert over the evidence."""
+    from contracts.story_memory import Cost
+
+    flagged = _char("c0", "the dog").model_copy(update={"ref_moderation_status": "flagged"})
+    state = _state([flagged], cost=Cost(ref_mod_retry_count=0))
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()) as mint:
+        char_bible(state)
+
+    assert mint.call_args.kwargs["n"] == 2
+
+
+def test_the_initial_mint_asks_for_suffix_one():
+    """The other half of the arithmetic: rc=0, mrc=0 (no flag, no bump) → 0 + 0 + 1 = 1."""
+    state = _state([_char("c0", "the dog")])
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()) as mint:
+        char_bible(state)
+
+    assert mint.call_args.kwargs["n"] == 1
+
+
+def test_a_flag_on_one_character_bumps_the_counter_even_when_another_is_a_fresh_mint():
+    """§4.6 row 3, on the cost side. c0 arrives flagged-and-cleared, c1 never had a reference.
+    Both are in `selected`, one cycle is spent, and both land on the same suffix — which is safe
+    because char_id is in the path."""
+    from contracts.story_memory import Cost
+
+    flagged = _char("c0", "the dog").model_copy(update={"ref_moderation_status": "flagged"})
+    state = _state([flagged, _char("c1", "the cat")], cost=Cost(ref_mod_retry_count=0))
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()) as mint:
+        result = char_bible(state)
+
+    assert result["cost"].ref_mod_retry_count == 1
+    assert {call.kwargs["n"] for call in mint.call_args_list} == {2}
+
+

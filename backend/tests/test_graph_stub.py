@@ -70,8 +70,8 @@ def _mock_call_points(monkeypatch):
     )
     monkeypatch.setattr(
         "pipeline.char_bible.mint_reference",
-        lambda description, name, style_fragment, story_id, char_id: (
-            f"{story_id}/ref-{char_id}.png",
+        lambda description, name, style_fragment, story_id, char_id, n=1: (
+            f"{story_id}/ref-{char_id}-{n}.png",
             RefVerdict(differences_observed="none", matches_description=True, attributes_present=["dog"]),
             2,
         ),
@@ -151,7 +151,7 @@ def test_char_bible_references_survive_the_graph(monkeypatch):
     )
 
     character, = result["characters"]
-    assert character.canonical_ref_image == "test-job-4/ref-c0.png"
+    assert character.canonical_ref_image == "test-job-4/ref-c0-1.png"
     assert character.ref_verdict.matches_description is True
     assert character.ref_moderation_status == "passed"   # char_ref_mod sets this
     assert result["cost"].image_count == 3           # 2 from mint_reference + 1 from generate_scene
