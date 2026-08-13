@@ -538,6 +538,49 @@ def test_classify_text_backstop_parses_unsafe_with_categories():
     assert "violence" in categories
 
 
+def test_classify_text_backstop_raises_when_it_returns_no_verdict():
+    """A classifier that did not answer is a broken classifier, not a guilty child.
+
+    `gpt-oss-safeguard-20b` is a REASONING model: its thinking is billed against `max_tokens`,
+    so an overrun returns `finish_reason='length'` and an EMPTY content string. Measured
+    2026-08-13 over the same 7-story sample, completion_tokens landed at 47/48/51/57/60/71/76/
+    87/94/97/100(cut)/101/145 — against a budget of 100. Roughly a third of runs were cut off,
+    nondeterministically, on stories the model called `safe` when it was allowed to finish.
+
+    `"".startswith("safe")` is False, so every one of those became `passed=False` →
+    `content_flagged` → `failure_reason='child_text'` → "Hmm... let's change a few words."
+    A token budget was being shown to a six-year-old as a verdict on their story.
+
+    Raising routes it where `kid-flow-failure-semantics.md` §4.1 already puts a dead classifier:
+    `moderation_error` → machine failure → `retry`. Still fail-closed — no unmoderated text gets
+    through, the job still fails — only the blame and the offered action change.
+    """
+    with patch("providers.OpenAI") as mock_openai_cls:
+        mock_openai_cls.return_value.chat.completions.create.return_value.choices = [
+            MagicMock(message=MagicMock(content=""), finish_reason="length")
+        ]
+        from providers import classify_text_backstop
+        with pytest.raises(RuntimeError, match="no verdict"):
+            classify_text_backstop("Lucy found a tiny purple monster under her bed.")
+
+
+def test_text_guards_leave_room_for_reasoning_tokens():
+    """The regression guard for the budget itself. 145 completion tokens was the observed high
+    on a 150-word story; the cap is 800 words (ADR-012), so 100 was never enough headroom.
+    """
+    for call in (
+        lambda: providers.classify_text_primary("A dog runs."),
+        lambda: providers.classify_text_backstop("A dog runs."),
+    ):
+        with patch("providers.OpenAI") as mock_openai:
+            completions = mock_openai.return_value.chat.completions
+            completions.create.return_value.choices = [
+                MagicMock(message=MagicMock(content="safe"), finish_reason="stop")
+            ]
+            call()
+            assert completions.create.call_args.kwargs["max_tokens"] >= 512
+
+
 # --- classify_image_primary ---
 
 def test_classify_image_primary_returns_true_for_normal():

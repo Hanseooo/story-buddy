@@ -309,6 +309,16 @@ def get_signed_url(path: str) -> str:
 
 
 def _parse_guard_response(response: str) -> tuple[bool, list[str]]:
+    """A classifier that did not answer is a broken classifier, not a guilty child.
+
+    `""` used to fall through `startswith("safe")` as `unsafe`, so a truncated or empty
+    completion became `content_flagged` → `failure_reason='child_text'` → "let's change a few
+    words." Raising instead routes it where `kid-flow-failure-semantics.md` §4.1 already puts a
+    dead classifier: primary → backstop-only, backstop → `moderation_error` → machine → `retry`.
+    Still fail-closed; only the blame moves off the child.
+    """
+    if not response.startswith(("safe", "unsafe")):
+        raise RuntimeError(f"guard returned no verdict: {response[:80]!r}")
     safe = response.startswith("safe")
     categories = [c.strip() for c in response.split("\n", 1)[1].split(",") if c.strip()] if not safe and "\n" in response else []
     return safe, categories
@@ -520,6 +530,15 @@ def redact_pii(text: str) -> str:
 # ADR-032: Local Qwen3Guard removed to prevent OOM.
 
 
+# `gpt-oss-safeguard-20b` is a REASONING model — its thinking is billed against `max_tokens`, and
+# the verdict is the last thing it emits. At 100 it ran out mid-thought on roughly a third of runs
+# (measured 2026-08-13: completion_tokens 47…145 on the same 7 stories, nondeterministic per call),
+# returning empty content that `_parse_guard_response` read as "unsafe". Sized off the observed 145
+# on a 150-word story against ADR-012's 800-word cap. Output tokens are billed as used, so the
+# headroom is free on the runs that don't need it — one call per story either way.
+_GUARD_MAX_TOKENS = 1024
+
+
 # Guard prompt template — verify against https://huggingface.co/Qwen/Qwen3-Guard-Gen-0.6B
 # before deploying. The model outputs "safe" or "unsafe\n<categories>" in its response.
 _GUARD_SYSTEM = (
@@ -535,7 +554,7 @@ def classify_text_primary(text: str) -> tuple[bool, list[str]]:
     completion = client.chat.completions.create(
         model=settings.moderation_primary_model,
         messages=[{"role": "system", "content": _GUARD_SYSTEM}, {"role": "user", "content": text}],
-        max_tokens=100,
+        max_tokens=_GUARD_MAX_TOKENS,
     )
     response = (completion.choices[0].message.content or "").strip().lower()
     return _parse_guard_response(response)
@@ -553,7 +572,7 @@ def classify_text_backstop(text: str) -> tuple[bool, list[str]]:
     completion = client.chat.completions.create(
         model=settings.moderation_backstop_model,
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=100,
+        max_tokens=_GUARD_MAX_TOKENS,
     )
     response = (completion.choices[0].message.content or "").strip().lower()
     return _parse_guard_response(response)
