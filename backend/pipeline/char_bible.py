@@ -204,13 +204,22 @@ def best_draw(verdicts: list[RefVerdict]) -> int:
     than dropped: between two draws that contradict the description equally, "showed more of what
     was asked for" is still the better of the two signals available.
 
+    `text_free` (lettering-suppression §4.2) sits BEHIND contradictions and AHEAD of
+    attributes_present: a draw that contradicts the child's own description is worse than one
+    with a sign in it, and `attributes_present` is documented noise (ADR-034).
+
     `char_bible`'s own rule over `RefVerdict`. UNRELATED to `regeneration-controller`'s
     lexicographic scene rule over `VlmVerdict` — different schema, different question. Do not
     unify them.
     """
     return max(
         range(len(verdicts)),
-        key=lambda i: (-len(verdicts[i].contradictions), len(verdicts[i].attributes_present), -i),
+        key=lambda i: (
+            -len(verdicts[i].contradictions),
+            verdicts[i].text_free,
+            len(verdicts[i].attributes_present),
+            -i,
+        ),
     )
 
 
