@@ -223,6 +223,8 @@ clause is what makes it a **correction** rather than the pure re-roll ADR-010 re
    same bootstrap `subjects_unique` is on.
 4. **Neither `NEGATIVE_PROMPT` nor any style fragment changes.** Deliberate. The prompt lever has
    lost three times, and leaving it fixed is what makes this change's effect attributable.
+   **Overtaken by events, 2026-08-13:** `NEGATIVE_PROMPT` held, the `gouache` fragment did not —
+   see §9. The `cel` and `comic` arms are still clean reads; `gouache`'s is confounded.
 5. **Latency.** A gate that fires buys a redraw (~40s, issue #26 open). §4.3 argues the trade is
    worth it; if #26 forces a retreat, risk 2's fallback is the lever.
 
@@ -363,8 +365,16 @@ cd backend && uv run ruff check . && uv run pytest
 - [x] Every test was seen failing first.
 - [x] The four specs in §4.7 plus `story-memory-contract.md` are updated in the same change.
 - [x] `git diff -- backend/pipeline/graph.py` is empty (no new edge).
-- [x] `providers.NEGATIVE_PROMPT` and `app/config.py`'s `STYLE_PRESETS` are byte-identical to
-      before (§4.6.4 — attributability).
+- [ ] ~~`providers.NEGATIVE_PROMPT` and `app/config.py`'s `STYLE_PRESETS` are byte-identical to
+      before (§4.6.4 — attributability).~~ **BROKEN, deliberately, 2026-08-13.**
+      `NEGATIVE_PROMPT` is byte-identical. `STYLE_PRESETS` is **not**: the `gouache` fragment
+      changed `thick confident ink outlines` → `no outlines, shapes formed by brushed colour` in
+      the same branch. That is unrelated work (the model was treating the outline clause as
+      optional and `char_bible` flips that coin once for a whole book), but it lands here, so
+      **§4.6.4's attributability argument no longer holds**: a lettering-rate change measured on
+      the first job after this branch cannot be attributed to the detection channel alone,
+      because the gouache arm's prompt also moved. Read the first `text_free` numbers per style
+      preset, and treat `gouache`'s as confounded.
 - [x] `grep -rn` sweep for tests asserting the old `_rank` arity, the old `passed` expression, the
       old `best_draw` key, or either judge prompt's exact text.
 
