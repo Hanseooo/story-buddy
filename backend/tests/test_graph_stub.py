@@ -45,6 +45,11 @@ STUB_ANALYSIS = StoryAnalysis.model_validate(
 )
 
 
+# What one char_bible pass bills to `cost.image_count` under the stubs below: STUB_ANALYSIS has
+# one character, and the mint_reference stub reports 2 draws for it.
+_MOCK_DRAWS_PER_PASS = 2
+
+
 def _mock_call_points(monkeypatch):
     # One patch point per node (MASTER_SPEC §6 rule 1)
     monkeypatch.setattr("pipeline.analyze.extract_entities", lambda text: STUB_ANALYSIS)
@@ -549,15 +554,26 @@ def test_a_flagged_reference_is_redrawn_once_and_the_book_reaches_reveal(monkeyp
     monkeypatch.setattr("pipeline.graph.char_ref_mod", flag_once)
 
     graph = build_graph()
+    config = {"configurable": {"thread_id": "t-flag"}}
     visited = []
-    for chunk in graph.stream(_initial_state("job-1"), {"configurable": {"thread_id": "t-flag"}},
-                              stream_mode="updates"):
+    minted = []
+    for chunk in graph.stream(_initial_state("job-1"), config, stream_mode="updates"):
         visited.extend(chunk.keys())
+        if "char_bible" in chunk:
+            minted.append(chunk["char_bible"]["cost"])
 
     assert visited.count("char_bible") == 2
     assert visited.count("char_ref_mod") == 2
     assert "reveal" in visited
     assert visited.index("reveal") > visited.index("char_ref_mod")
+
+    # "...with `image_count` reflecting BOTH mints" (§6 test 16). Read off char_bible's own
+    # updates rather than the final state, which also carries the scene image `reveal` lets
+    # through. The redraw is a full mint_reference call, not a discount: its draws are billed
+    # like the original's. If the second reading equals the first, char_bible dropped `cost` on
+    # the redraw pass and CC-3 is counting one book's spend as half of it.
+    assert [c.image_count for c in minted] == [_MOCK_DRAWS_PER_PASS, 2 * _MOCK_DRAWS_PER_PASS]
+    assert [c.ref_mod_retry_count for c in minted] == [0, 1]
 
 
 def test_a_second_flag_ends_the_book_and_the_graph_does_not_loop_a_third_time(monkeypatch):

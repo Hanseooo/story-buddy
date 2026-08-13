@@ -196,7 +196,6 @@ class Cost(BaseModel):                 # CC-3
     ref_mod_retry_count: int = 0        # moderation redraw cycles, per BOOK not per character
 
 
-
 class Eval(BaseModel):                 # CC-7
     seed: Optional[int] = None
 

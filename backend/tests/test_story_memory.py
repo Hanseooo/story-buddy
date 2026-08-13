@@ -111,7 +111,6 @@ def test_anatomy_intact_is_declared_after_style_match():
     assert fields.index("anatomy_intact") > fields.index("style_match")
 
 
-
 def test_ref_verdict_declares_reason_before_score():
     """ADR-004 applies to every judge call, not only the two-image one.
 
@@ -247,6 +246,3 @@ def test_cost_declares_ref_mod_retry_count_last_and_defaults_to_zero():
     assert list(Cost.model_fields)[-1] == "ref_mod_retry_count"
     assert Cost().ref_mod_retry_count == 0
     assert Cost.model_validate({"image_count": 4}).ref_mod_retry_count == 0
-
-
-

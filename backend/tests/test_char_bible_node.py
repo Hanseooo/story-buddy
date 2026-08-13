@@ -644,7 +644,6 @@ def test_char_bible_resets_ref_moderation_status_on_a_re_mint():
     assert result["characters"][0].canonical_ref_image == "story-1/ref.png"
 
 
-
 def test_char_bible_references_at_most_two_characters():
     """Invariant 1 (ADR-004: max 2 canonical refs, v1): a 3-character roster calls the helper
     exactly twice, for c0 and c1."""
@@ -1073,6 +1072,10 @@ def test_mint_reference_uploads_to_the_suffix_it_is_given():
 
     assert path == "story-1/ref-c0-2.png"
     assert _uploaded_path(fake_supabase) == "story-1/ref-c0-2.png"
+    # §6 test 14's second clause, on the only path that can actually reach Storage: suffix 1 is
+    # neither overwritten (the upload above names 2) nor deleted. `_upload` sends upsert=true, so
+    # path uniqueness is the ONLY thing protecting the evidence — and nothing may remove it.
+    fake_supabase.storage.from_.return_value.remove.assert_not_called()
 
 
 def test_mint_reference_defaults_to_suffix_one():
@@ -1169,5 +1172,3 @@ def test_a_flag_on_one_character_bumps_the_counter_even_when_another_is_a_fresh_
 
     assert result["cost"].ref_mod_retry_count == 1
     assert {call.kwargs["n"] for call in mint.call_args_list} == {2}
-
-

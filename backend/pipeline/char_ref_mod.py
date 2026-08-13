@@ -83,4 +83,3 @@ def char_ref_mod(state: StoryMemory) -> dict:
         updated.append(char.model_copy(update={"ref_moderation_status": "passed"}))
 
     return {"characters": updated}
-
