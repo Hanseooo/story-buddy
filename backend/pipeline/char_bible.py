@@ -291,11 +291,14 @@ def mint_reference(
         # `matches` is logged beside the list it no longer controls: the two disagreeing is the
         # ADR-034 failure, and this line is where it becomes visible in production.
         log.info(
-            "char_bible: %s draw %d/%d contradictions=%s matches=%s attributes=%s",
+            "char_bible: %s draw %d/%d contradictions=%s matches=%s attributes=%s text_free=%s",
             char_id, draws, MAX_DRAWS,
             verdict.contradictions, verdict.matches_description, verdict.attributes_present,
+            verdict.text_free,
         )
-        if not verdict.contradictions:
+        # lettering-suppression §4.2. ANDed with the ADR-034 list, never folded into it: a
+        # contradiction is the wrong character, text is the right character in a marked room.
+        if not verdict.contradictions and verdict.text_free:
             log.info("char_bible: %s accepted draw %d", char_id, draws)
             return _upload(image, story_id, char_id, 1), verdict, draws
         candidates.append((image, verdict))

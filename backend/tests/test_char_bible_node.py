@@ -379,6 +379,31 @@ def test_mint_reference_accepts_a_passing_first_draw():
     assert judge_mock.call_count == 1
     assert verdict is passing
     assert draws == 1
+    assert path == "story-1/ref-c0-1.png"
+    assert _uploaded_bytes(supabase) == b"draw-1-bytes"
+
+
+def test_mint_reference_rejects_a_lettered_draw_and_redraws():
+    """§6 test 4 / §4.2. The reference is the higher-value catch: char_bible mints ONE canonical
+    image per character and every page inherits it, so a lettered reference letters the book.
+    No contradictions at all here — text alone must be enough to burn a draw."""
+    (_, verdict, draws), t2i, _, supabase = _mint([_lettered([]), _verdict(True, ["dog"])])
+
+    assert t2i.call_count == 2
+    assert draws == 2
+    assert verdict.text_free is True
+    assert _uploaded_bytes(supabase) == b"draw-2-bytes"
+
+
+def test_mint_reference_accepts_a_clean_text_free_first_draw_on_the_spot():
+    """§6 test 5: the unchanged path, asserted so the new gate cannot silently swallow it.
+    `_verdict` defaults text_free to True, which is the same default a v3 checkpoint carries."""
+    passing = _verdict(True, ["dog"])
+    (path, verdict, draws), t2i, judge_mock, supabase = _mint([passing])
+
+    assert (t2i.call_count, judge_mock.call_count, draws) == (1, 1, 1)
+    assert verdict is passing
+    assert draws == 1
     assert _uploaded_bytes(supabase) == b"draw-1-bytes"
     assert path == "story-1/ref-c0-1.png"
 
