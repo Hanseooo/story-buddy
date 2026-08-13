@@ -86,6 +86,8 @@ class SceneVerdict(BaseModel):
     attributes_present: list[str] = []
     style_match: bool = False
     anatomy_intact: bool = True
+    subjects_unique: bool = True                 # §4.4 — asked after anatomy, before text
+    text_free: bool = True                       # lettering-suppression §4.1 — asked after uniqueness, BEFORE failure_reasons
     failure_reasons: list[FailureReason] = []    # LAST — the closed 7 (ADR-028)
 ```
 
@@ -122,11 +124,11 @@ nodes at once, not a hotfix here.
    `canonical_ref_image`, as `(name, canonical_ref_image)`.
 4. `judge_attempt(attempt.image_ref, subjects)`.
 5. **Fold, worst-wins** (`[]` → skip to 6 with `vlm_verdict=None`):
-   - `same_character`, `anatomy_intact`, `style_match` → `all(...)`
+   - `same_character`, `anatomy_intact`, `style_match`, `subjects_unique`, `text_free` → `all(...)`
    - `attributes_present`, `failure_reasons` → union, deduped; `failure_reasons` emitted in
      `FailureReason` **declaration order**, which is the order `correct_prompt` iterates
    - `differences_observed` → `"\n".join(f"{name}: {v.differences_observed}")`
-6. `passed = same_character and anatomy_intact` (`False` when unchecked).
+6. `passed = same_character and anatomy_intact and text_free` (`False` when unchecked).
 7. Partial-return the scene with the last attempt updated and
    `final_image_ref = attempt.image_ref`.
 
@@ -138,12 +140,16 @@ book whose reference happened to be off-spec — punishing the scenes for the re
 
 ### The pass rule
 
-`same_character and anatomy_intact`. These are the two failures a child notices: it is the wrong
-character, or it has three arms. `style_match` is recorded, folded, and available to
-`regeneration-controller`'s ranking, but does **not** gate — ADR-007 puts style on the reference,
-and `correct_prompt`'s `wrong_style` clause only re-appends the fragment the prompt already
-carries, so a retry spent on style is close to a pure resample. Consequence, stated rather than
-hidden: a genuinely off-style page can ship.
+`same_character and anatomy_intact and text_free`. These are the three failures a child notices: wrong
+character, three arms, or a word on the page they cannot read and the app never speaks (CC-6).
+`style_match` and `subjects_unique` are recorded, folded, and available to `regeneration-controller`'s
+ranking, but do **not** gate (ADR-007, §4.4).
+
+**Why gate on `text_free` here when `subjects_unique` did not (§4.3):** the duplicate rate was unmeasured,
+whereas lettering on door/page draws is known non-zero, the artifact is unambiguous, and latency cost is
+bounded by ADR-010's existing one-retry cap. **Fallback note (`lettering-suppression.md` §4.6.2):** if the
+false-positive rate on texture is bad, demote `text_free` to rank-only — the shape `subjects_unique` already
+sits in.
 
 ⚠️ **The style question must name what to ignore** (issue #24, 2026-08-11). Asked unscoped —
 "whether the art style matches the reference" — the field read `False` on **7 of 7** scenes of prod
@@ -165,7 +171,7 @@ ignorable. Numbers and controls: `PHASE_05_RESULTS.md` Probe 3 follow-up.
 | **A `judge` call raises after ADR-025 retries** | Unchecked, finalized, `WARNING` with `exc_info`. `char_bible`'s deliberate asymmetry: the artifact exists and is paid for, only the *check* failed. Never a job failure. |
 | **Storage download of the scene or a reference raises** | Same as above. Failing a job over a check would violate ADR-010's shippable-page rule for a reason unrelated to the page. |
 | **The attempt fails the gate** | Left unfinalized (`final_image_ref` stays `None`). `route_after_check` routes to `regenerate`, which draws once with a corrected prompt. `consistency_check` then runs again and finalizes by best-of (see below). |
-| **Two attempts already exist** | Finalized by best-of: `max(reversed(updated), key=_rank)` where `_rank` is ADR-028's lexicographic signal (`same_character` → `anatomy_intact` → `style_match`, unchecked sorts last). Iterating in reverse ensures a genuine tie goes to attempt 2 (the corrected prompt is the better prior — ADR-010 calls it refinement, not resampling). |
+| **Two attempts already exist** | Finalized by best-of: `max(reversed(updated), key=_rank)` where `_rank` is ADR-028's lexicographic signal (`same_character` → `anatomy_intact` → `text_free` → `subjects_unique` → `style_match`, unchecked sorts last). Iterating in reverse ensures a genuine tie goes to attempt 2 (the corrected prompt is the better prior — ADR-010 calls it refinement, not resampling). |
 | **A reference with a failing `ref_verdict`** | Judged against normally (above). |
 
 ### The anatomy correction gap — closed
@@ -181,22 +187,22 @@ value was invented; `FailureReason` stays frozen at 7.
 
 ### Uniqueness — measured, not gated (`scene-setting-and-subject-binding.md` §4.4)
 
-`JUDGE_PROMPT` asks, after the anatomy question and before the failure reasons, whether the named
-character is drawn **exactly once**. The wording scopes to the **character**, not the noun — "the
+`JUDGE_PROMPT` asks, after the anatomy question and before the text question and failure reasons,
+whether the named character is drawn **exactly once**. The wording scopes to the **character**, not the noun — "the
 stars" in "she looked up at the stars" names no character and stays drawable — and its position in
 the prompt matches `subjects_unique`'s position in `SceneVerdict`, because
 `providers._assert_field_order` rejects a provider that answers out of order.
 
 - Folded worst-wins: `subjects_unique = all(v.subjects_unique for v in verdicts)`.
-- Ranked: `_rank` is `(1, same_character, anatomy_intact, subjects_unique, style_match)`; the
-  unchecked tuple is `(0, 0, 0, 0, 0)`.
-- **Not gated.** `passed` remains `same_character and anatomy_intact`. Gating means more
+- Ranked: `_rank` is `(1, same_character, anatomy_intact, text_free, subjects_unique, style_match)`; the
+  unchecked tuple is `(0, 0, 0, 0, 0, 0)`.
+- **Not gated.** `passed` remains `same_character and anatomy_intact and text_free`. Gating `subjects_unique` means more
   regenerations and issue #26 is open and already critical — cost is not the constraint, latency
   is. Precedent for record-and-rank-without-gating is `style_match`, in this same file. Gating is a
   follow-up decision, blocked on a measured duplicate rate and on #26 being closed.
-- CC-5: the per-scene log line carries `subjects_unique` and `judge_prompt_version`.
+- CC-5: the per-scene log line carries `subjects_unique`, `text_free`, and `judge_prompt_version` (now version 3).
 
-`JUDGE_PROMPT_VERSION` is a module constant, bumped on every wording change. It is deliberately
+`JUDGE_PROMPT_VERSION` is a module constant (set to **3** after adding the text question), bumped on every wording change. It is deliberately
 **not** a persisted `Attempt` field — that would be a third contract change for a problem logs
 already make traceable. The underlying gap (this prompt is unversioned in a way `char_bible`'s is
 not) deserves its own issue.

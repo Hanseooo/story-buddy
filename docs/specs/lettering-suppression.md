@@ -359,21 +359,19 @@ cd backend && uv run ruff check . && uv run pytest
 
 **Must be true:**
 
-- [ ] All 19 assertions in §6 exist and pass.
-- [ ] Every test was seen failing first.
-- [ ] The four specs in §4.7 plus `story-memory-contract.md` are updated in the same change.
-- [ ] `git diff -- backend/pipeline/graph.py` is empty (no new edge).
-- [ ] `providers.NEGATIVE_PROMPT` and `app/config.py`'s `STYLE_PRESETS` are byte-identical to
+- [x] All 19 assertions in §6 exist and pass.
+- [x] Every test was seen failing first.
+- [x] The four specs in §4.7 plus `story-memory-contract.md` are updated in the same change.
+- [x] `git diff -- backend/pipeline/graph.py` is empty (no new edge).
+- [x] `providers.NEGATIVE_PROMPT` and `app/config.py`'s `STYLE_PRESETS` are byte-identical to
       before (§4.6.4 — attributability).
-- [ ] `grep -rn` sweep for tests asserting the old `_rank` arity, the old `passed` expression, the
+- [x] `grep -rn` sweep for tests asserting the old `_rank` arity, the old `passed` expression, the
       old `best_draw` key, or either judge prompt's exact text.
 
 **Must be reported, not silently omitted:**
 
-- Whether a real job has run against this code, and what the observed `text_free` rate was. Until
-  then this spec's effect on shipped books is **unmeasured**, exactly like the probe that motivated
-  it.
-- Any false-positive seen during that run, even one.
+- **Observed `text_free` rate on a real job:** No production or staging job has run against this code yet (CI deterministic tests only). Until a real job runs, this change's effect on shipped books is **unmeasured**, exactly like the probe that motivated it.
+- **False-positives seen:** None recorded yet (awaiting first live job execution).
 
 **Explicitly NOT in scope, and not to be added mid-implementation:**
 
