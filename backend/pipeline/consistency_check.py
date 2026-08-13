@@ -105,21 +105,25 @@ def judge_attempt(image_path: str, subjects: list[tuple[str, str]]) -> list[Scen
         return []
 
 
-def _rank(a: Attempt) -> tuple[int, int, int, int, int]:
+def _rank(a: Attempt) -> tuple[int, int, int, int, int, int]:
     """ADR-028's lexicographic best-of signal, with unchecked sorting below every checked attempt.
 
     A pass scores (1, 1, 1, …) and beats anything that gated, so `max` needs no special case for
     it. Unchecked scores all zeros: promoting an unjudged image over a judged one would let a
     judge outage silently decide the page, contradicting invariant 4 (unchecked is never a pass).
 
-    `subjects_unique` sits between anatomy and style (§4.4): it does not GATE, but when a retry
+    `text_free` (lettering-suppression §4.3) sits between anatomy and uniqueness: after
+    `anatomy_intact` because a merged limb is a worse picture than a lettered door, and ahead of
+    `subjects_unique` and `style_match` because those two deliberately do not gate and it does.
+
+    `subjects_unique` sits between text and style (§4.4): it does not GATE, but when a retry
     fires for some other reason best-of now prefers the non-duplicated attempt at no extra draw.
     Same record-and-rank-without-gating shape `style_match` already has below it.
     """
     v = a.vlm_verdict
     return (
-        (0, 0, 0, 0, 0) if v is None
-        else (1, v.same_character, v.anatomy_intact, v.subjects_unique, v.style_match)
+        (0, 0, 0, 0, 0, 0) if v is None
+        else (1, v.same_character, v.anatomy_intact, v.text_free, v.subjects_unique, v.style_match)
     )
 
 
@@ -217,11 +221,12 @@ def consistency_check(state: StoryMemory) -> dict:
     # ran at all — without it an off-character page gives no way to distinguish the two.
     log.info(
         "consistency_check: scene_id=%s attempt=%d/%d subjects=%d %s same_character=%s "
-        "anatomy_intact=%s style_match=%s subjects_unique=%s failure_reasons=%s passed=%s "
+        "anatomy_intact=%s text_free=%s style_match=%s subjects_unique=%s failure_reasons=%s passed=%s "
         "best_of=%s judge_prompt_version=%d",
         scene.scene_id, len(updated), 2, len(subjects), "checked" if verdict else "unchecked",
         verdict and verdict.same_character, verdict and verdict.anatomy_intact,
-        verdict and verdict.style_match, verdict and verdict.subjects_unique,
+        verdict and verdict.text_free, verdict and verdict.style_match,
+        verdict and verdict.subjects_unique,
         [r.value for r in reasons], passed,
         None if best is None else best + 1, JUDGE_PROMPT_VERSION,
     )

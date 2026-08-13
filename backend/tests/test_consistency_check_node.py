@@ -607,15 +607,46 @@ def test_rank_puts_uniqueness_below_anatomy():
     assert result["scenes"][0].final_image_ref == "job-1/s0-1.png"
 
 
-def test_the_unchecked_rank_tuple_widened_to_five_zeros():
-    """§6 test 21: unchecked must still sort below EVERY checked attempt, and a four-tuple
-    compared against a five-tuple would raise or mis-order."""
-    assert _rank(Attempt(image_ref="job-1/s0-1.png", prompt="p", passed=False)) == (0, 0, 0, 0, 0)
+def test_rank_sorts_a_lettered_attempt_below_a_clean_one_and_above_an_anatomy_failure():
+    """§6 test 11 / §4.3 ordering rationale: text_free sits AFTER anatomy_intact, because a
+    merged limb is a worse picture than a lettered door."""
+    clean = _attempt("job-1/s0-1.png", same=True, anatomy=True, text=True)
+    lettered = _attempt("job-1/s0-2.png", same=True, anatomy=True, text=False)
+    broken = _attempt("job-1/s0-3.png", same=True, anatomy=False, text=True)
+
+    assert _rank(clean) > _rank(lettered) > _rank(broken)
 
 
-def test_the_checked_rank_tuple_is_five_terms_in_the_declared_order():
-    ranked = _rank(_attempt("job-1/s0-1.png", same=True, anatomy=False, unique=True, style=False))
-    assert ranked == (1, True, False, True, False)
+def test_rank_prefers_a_text_free_attempt_over_a_unique_subject_one():
+    """§6 test 12 / §4.3: text_free sits AHEAD of subjects_unique and style_match, because those
+    two deliberately do not gate and this one does."""
+    text_free_but_duplicated = _attempt(
+        "job-1/s0-1.png", same=True, anatomy=True, text=True, unique=False, style=False
+    )
+    lettered_but_unique = _attempt(
+        "job-1/s0-2.png", same=True, anatomy=True, text=False, unique=True, style=True
+    )
+
+    assert _rank(text_free_but_duplicated) > _rank(lettered_but_unique)
+
+
+def test_the_unchecked_rank_tuple_widened_to_six_zeros():
+    """§6 test 13: unchecked still sorts below EVERY checked attempt (invariant 4). The tuple
+    widened, so the zeros have to widen with it or the comparison raises on length."""
+    unchecked = Attempt(image_ref="job-1/s0-1.png", prompt="p", passed=False)
+    assert _rank(unchecked) == (0, 0, 0, 0, 0, 0)
+
+    worst_checked = _attempt(
+        "job-1/s0-2.png", same=False, anatomy=False, text=False, unique=False, style=False
+    )
+    assert _rank(worst_checked) > _rank(unchecked)
+
+
+def test_the_checked_rank_tuple_is_six_terms_in_the_declared_order():
+    ranked = _rank(
+        _attempt("job-1/s0-1.png", same=True, anatomy=False, text=True, unique=False, style=True)
+    )
+    assert ranked == (1, True, False, True, False, True)
 
 
 def test_the_worst_possible_checked_attempt_still_outranks_an_unchecked_one():
