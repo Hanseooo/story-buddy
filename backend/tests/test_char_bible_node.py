@@ -311,6 +311,26 @@ def test_reference_prompt_asks_for_a_full_shot_without_asserting_an_anatomy():
     assert "cropped limbs" in REFERENCE_NEGATIVE
 
 
+def test_reference_prompt_asks_for_an_angled_view_not_a_head_on_one():
+    """Head-on is the worst view of a snouted or long-bodied subject: foreshortening hides the
+    snout, neck, tail and wing profile, so the reference anchors least of the character it matters
+    most for. Prod job 483056e0's dragon came back front-facing and all 9 pages inherited it.
+
+    Unconditional, like the non-human clause and for the same reason — a "has a snout" test is the
+    species word list `test_reference_prompt_guards_against_anthropomorphising_a_non_human_subject`
+    already rejects, and it would be wrong on "the star" first, which has no face to turn.
+
+    "three-quarter view" is deliberately not the phrasing: REFERENCE_NEGATIVE spends four terms
+    suppressing the model-sheet prior that phrase carries. The overshoot — a turn that runs all the
+    way to a back view — is subtracted on the negative channel instead, which is where framing moves.
+    """
+    for species in ["dragon", "girl", "star"]:
+        prompt = reference_prompt(CharacterDescription(species=species), f"the {species}", FRAG)
+        assert "slight angle" in prompt
+        assert "facing forward" not in prompt
+    assert "back view" in REFERENCE_NEGATIVE
+
+
 def test_the_reference_draw_suppresses_scenery_through_the_negative_prompt():
     """The positive prompt says what the picture IS; REFERENCE_NEGATIVE says what a reference must
     never accrete. It is passed per call rather than added to `providers.NEGATIVE_PROMPT` because

@@ -369,6 +369,74 @@ instructions to the generator. Covered by `test_the_non_humanoid_guard_never_rea
 change. Evaluating a new model against the old prompt would have charged the generator for a defect
 the prompt was requesting.
 
+#### Framing: what the reference prompt asks for, and on which channel (2026-08-13)
+
+⚠️ **This section was owed and missing.** The 2026-08-13 framing and `REFERENCE_NEGATIVE` work
+shipped in code and tests only; nothing in `docs/` recorded it until the angled-view change below
+needed a place to live. Written now, back-dated, so the sequence of measured phrasings survives.
+
+`REFERENCE_NEGATIVE` is passed per call rather than folded into `providers.NEGATIVE_PROMPT`, because
+`text_to_image` is also `generate_scene`'s no-reference fallback and a **scene** needs the exact
+scenery a reference must not have. Its terms are generic — "furniture", not "bed" — because the noun
+is whatever the child wrote.
+
+**The division of labour.** The positive prompt states what the picture *is*; the negative subtracts
+what it must not accrete. These are not interchangeable, and the file's history is a list of proofs:
+
+- A `no <term>` clause in the positive prompt **loses** — it competes with what Qwen-Image is best at.
+  The old tail *"No other characters, no scenery, no text, no border"* still produced a wall/floor
+  horizon and a cast shadow. The prohibitions moved to the negative.
+- A term in **both** channels is a contradiction the positive side wins, so the negative list doubles
+  as a list of words the positive prompt may not use. This recurred *during* the fix: a draft reading
+  "the whole of it inside the frame" drew a rabbit inside a border, with `frame` already in the
+  negative two lines away. Pinned by
+  `test_the_positive_prompt_never_utters_a_word_the_negative_prompt_suppresses`.
+- Portrait bias on a **human** is strong enough that only the negative moves it. "shown in full"
+  cropped a girl at the chest; "drawn in full with nothing cropped" cropped her at the waist; the
+  monster and the robot came back whole both times. `clothing` is one of the four judged axes, so a
+  waist-up reference silently drops the story's own detail from every page that inherits it. The
+  answer was the framing term **plus** the matching negative entries — never "full body" or "head to
+  toe", which fall to the 2026-08-11 anatomy lesson above.
+
+**Measured phrasings, in order:** ~~"full-body … standing"~~ → ~~"shown in full"~~ →
+~~"drawn in full with nothing cropped"~~ → **"a full shot showing the whole of it"**.
+
+##### The view is angled, not head-on (2026-08-13, follow-up)
+
+~~"facing forward"~~ → **"seen from a slight angle rather than straight on"**.
+
+Head-on is the *worst* view of a snouted or long-bodied subject. Foreshortening hides the snout, the
+neck line, the tail and the wing profile — the entire identifying silhouette — so the reference
+anchored least of the character it matters most for. Prod job `483056e0`'s dragon came back
+front-facing and all nine pages inherited it. The second harm is pose: the reference-conditioned
+scene model partly copies the reference's framing, so a head-on reference biases every page toward
+head-on, which is the consistency claim rather than the aesthetic one.
+
+**Unconditional, not species-aware** — the same reasoning as the non-human guard above. A "has a
+snout" test is the species word list that section rejects, and it is wrong on *"the star"* first,
+which has no face to turn. Dropping the word "facing" is itself part of the fix: for a subject with
+no face, "facing forward" was plausibly contributing to the mascot.
+
+⚠️ **Not "three-quarter view"**, though that is the standard name for this view. The phrase carries
+the model-sheet prior that `REFERENCE_NEGATIVE` spends four terms suppressing. The overshoot — a turn
+that runs all the way to a back view, which anchors nothing — is subtracted as `back view, seen from
+behind` on the channel that actually moves framing.
+
+**No `JUDGE_PROMPT_VERSION` bump.** That version records the *judge's* wording; this changes only the
+draw prompt. The ADR-028 hit-rate series is still perturbed (different generator input), so a
+`fal_image_model` evaluation must be measured after this change, as with the 2026-08-11 one.
+
+⚠️ **The risk this introduces, and the only way it makes the hit rate worse:** a turn can **occlude a
+stated attribute** — "a scar on its left cheek", or a symmetric feature like "both wings blue".
+`JUDGE_PROMPT` absolves details the description never mentioned; it does not absolve a mentioned
+attribute the view hides, so `contradictions` may tick up on side-specific features. Pre-registered
+fallback: if the logs show contradictions naming side-specific or symmetric attributes, weaken the
+turn rather than reverting to head-on. **Unmeasured — no job has run against this.**
+
+`_mint_targeted` shares `REFERENCE_PROMPT`, so an ADR-029 tapped attribute can be the occluded one.
+Deliberately not special-cased: the tap is a re-roll, and the draw is unseeded, so the next one lands
+at a different angle anyway.
+
 #### The style fragment's prohibitions filter the description — BOTH prompts (ADR-035, 2026-08-11)
 
 `mint_reference` and `_mint_targeted` pass the description through
@@ -543,6 +611,13 @@ definition.
   all-empty returns `0`
 - `reference_prompt` — contains each populated description axis; falls back to `Character.name` on a
   fully empty description; always contains the style fragment
+- `reference_prompt` **framing** (§4, the section that was owed) — asks for a `full shot` and never
+  `full body` / `head to toe` / `standing`; never names the artifact (`"reference"` absent
+  case-insensitively); states the background positively rather than as `no scenery`; and utters **no**
+  term that `REFERENCE_NEGATIVE` suppresses, word-boundary matched over the whole prompt
+- `reference_prompt` **angle** — `slight angle` present and `facing forward` absent for `dragon`,
+  `girl` **and** `star` (the assertion that the clause is unconditional), with `back view` in
+  `REFERENCE_NEGATIVE` carrying the overshoot half
 
 **Graph** — patch the single helper and assert the references survive
 `input_gate → analyze → segment → char_bible` (one patch point per node, MASTER_SPEC §6 rule 1).

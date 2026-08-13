@@ -620,6 +620,20 @@ is not documentation of a good design; it is the blast radius, written down so t
   reach — free, and the two fail in opposite directions. **Cast carry-forward was considered and
   rejected**: an empty cast after recovery is a pronoun beat *or* a scenery page, and inheriting
   draws a character into the scenery one. Revisit on `refs=0` in the logs.
+  **The canonical reference is drawn at an angle, not head-on (2026-08-13, follow-up):**
+  `REFERENCE_PROMPT`'s ~~"facing forward"~~ → **"seen from a slight angle rather than straight on"**,
+  with `back view, seen from behind` added to `REFERENCE_NEGATIVE` for the overshoot. Head-on
+  foreshortens away the snout, neck, tail and wing profile of a snouted or long-bodied subject, so
+  the reference anchored least of the character it matters most for — job `483056e0`'s dragon came
+  back front-facing and all 9 pages inherited it, pose included. **Unconditional**, on the same
+  reasoning as the non-human clause: a "has a snout" test is the species word list that clause
+  rejects and it is wrong on "the star" first. Not "three-quarter view" — model-sheet vocabulary the
+  negative already suppresses. No `JUDGE_PROMPT_VERSION` bump (draw prompt only). ⚠️ The new risk is
+  **occlusion of a stated attribute** ("a scar on its left cheek"), which `JUDGE_PROMPT` does not
+  absolve the way it absolves unmentioned detail; fallback is to weaken the turn, not revert.
+  Unmeasured. **Drift fixed in passing:** the whole 2026-08-13 framing and `REFERENCE_NEGATIVE`
+  design existed only in code comments and tests — `character-bible.md` §4 now carries it, including
+  the positive/negative division of labour and the ordered list of measured phrasings.
   **Phase 2 is in progress. Next: S3's isolation suite, then build S4.** Next free migration is
   **`0009`**.
 - classroom-sharing (2026-08-09): gallery page + StudentTabBar built; `/s/[profileId]/gallery` live; tab bar covers Bookshelf / Gallery / Profile; logout moved to settings.

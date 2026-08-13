@@ -118,6 +118,7 @@ REFERENCE_NEGATIVE = (
     "background scenery, room, interior, furniture, floor, wall, horizon line, ground, landscape, "
     "cast shadow, second character, other characters, crowd, "
     "close-up, bust shot, head and shoulders, waist-up, cropped at the waist, cropped limbs, "
+    "back view, seen from behind, "
     "letterbox, black bars, "
     "model sheet, turnaround, multiple views, colour swatches, name plate, border, frame"
 )
@@ -135,9 +136,24 @@ REFERENCE_NEGATIVE = (
 # came back as a head-and-shoulders crop). "full shot" is a framing term, not an anatomy one — the
 # note below on "standing" applies to any phrasing that implies a body, so "head to toe" is out.
 # REFERENCE_NEGATIVE carries the other half; the positive clause alone did not hold on a human.
+#
+# "facing forward" became "seen from a slight angle rather than straight on" (2026-08-13). Head-on
+# is the WORST view of a snouted or long-bodied subject: foreshortening hides the snout, the neck,
+# the tail and the wing profile — the whole identifying silhouette — so the reference anchored least
+# of the character it matters most for. Prod job 483056e0's dragon came back head-on and every page
+# inherited it. The turn is a framing term, not an anatomy one, so the 2026-08-11 "standing" lesson
+# is respected; and dropping the word "facing" is what makes it a no-op for a subject with no face
+# at all, where "facing forward" was arguably part of what induced the mascot.
+#
+# UNCONDITIONAL, on the same reasoning as the non-human clause below. A "has a snout" test is the
+# species word list that comment already rejects, and it would be wrong on "the star" first.
+#
+# NOT "three-quarter view": that is model-sheet vocabulary, and REFERENCE_NEGATIVE spends four terms
+# suppressing the model-sheet prior. The negative carries the overshoot half — a slight turn that
+# runs to a back view anchors nothing — on the channel that moves framing.
 REFERENCE_PROMPT = """\
-One character alone, a full shot showing the whole of it, facing forward, centred against a flat \
-empty background of one single colour.
+One character alone, a full shot showing the whole of it, seen from a slight angle rather than \
+straight on, centred against a flat empty background of one single colour.
 
 The character is {subject}.
 
