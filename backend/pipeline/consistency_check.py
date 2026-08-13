@@ -24,8 +24,10 @@ BUCKET = "storybook-images"
 # 2026-08-11 rewording already cost this project a whole discarded series. Upgrade path: if a
 # measurement series ever has to be reconstructed from checkpoints rather than logs, promote this
 # to an `Attempt` field the way `Character.ref_verdict_prompt_version` was promoted.
-# 1 = pre-2026-08-13; 2 = adds the uniqueness question (scene-setting-and-subject-binding §4.4).
-JUDGE_PROMPT_VERSION = 2
+# 1 = pre-2026-08-13; 2 = adds the uniqueness question (scene-setting-and-subject-binding §4.4);
+# 3 = adds the text question (lettering-suppression §4.1) — v2 and earlier carry no lettering
+# signal at all, so the rate series starts at v3.
+JUDGE_PROMPT_VERSION = 3
 
 # Reason-then-score (ADR-004). The prompt asks in exactly the order the schema declares, and
 # `providers._assert_field_order` rejects a provider that answers out of order.
@@ -50,8 +52,9 @@ present on the page; whether the page is drawn in the same art style as the refe
 linework, shading and colouring technique — ignoring background, composition, pose, crop and \
 expression; whether the character's anatomy is intact, meaning no merged, missing or \
 duplicated body parts; and whether {name} is drawn exactly once — count only {name} itself, not \
-other things of the same kind that the scene simply contains. Finally list the failure reasons \
-that apply, choosing only from the fixed set."""
+other things of the same kind that the scene simply contains; and whether the picture is free of \
+any text — any letters, numbers or writing anywhere in it, including on signs, doors, books and \
+clothing. Finally list the failure reasons that apply, choosing only from the fixed set."""
 
 
 class SceneVerdict(BaseModel):

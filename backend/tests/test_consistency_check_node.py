@@ -180,12 +180,20 @@ def test_scene_verdict_subjects_unique_defaults_to_true():
     assert verdict.subjects_unique is True
 
 
-def test_the_judge_prompt_carries_a_version_constant():
-    """§8.2: the prompt is unversioned, and that omission already cost one discarded measurement
-    series. A module constant plus the existing log line — not a third contract change."""
-    from pipeline.consistency_check import JUDGE_PROMPT_VERSION
+def test_the_scene_judge_asks_about_text_in_schema_order_and_the_version_is_bumped():
+    """§6 test 14. `providers._assert_field_order` rejects a provider that answers out of schema
+    order, so the prompt asks in `SceneVerdict`'s declaration order: uniqueness, then text, then
+    the failure reasons. Naming doors and clothing is safe here — this string goes to the VLM
+    JUDGE and never to the image model (§4.1).
+    """
+    from pipeline.consistency_check import JUDGE_PROMPT, JUDGE_PROMPT_VERSION
 
-    assert JUDGE_PROMPT_VERSION == 2
+    assert JUDGE_PROMPT_VERSION == 3
+
+    prompt = JUDGE_PROMPT.format(name="the dog")
+    assert "free of any text" in prompt
+    assert prompt.index("drawn exactly once") < prompt.index("free of any text")
+    assert prompt.index("free of any text") < prompt.index("failure reasons")
 
 
 def test_one_duplicated_subject_folds_the_whole_verdict_to_not_unique():
