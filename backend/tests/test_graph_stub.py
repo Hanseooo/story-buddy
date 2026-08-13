@@ -498,7 +498,7 @@ def test_a_run_that_taps_once_visits_char_ref_mod_twice(monkeypatch):
         # ponytail: targeted-path stub for graph routing test — real implementation is Task 4
         if state.reference_retry is not None:
             return {
-                "characters": state.characters,
+                "characters": [c.model_copy(update={"ref_moderation_status": None}) for c in state.characters],
                 "cost": state.cost.model_copy(update={
                     "image_count": state.cost.image_count + 1,
                     "ref_retry_count": state.cost.ref_retry_count + 1,
@@ -522,3 +522,67 @@ def test_a_run_that_taps_once_visits_char_ref_mod_twice(monkeypatch):
     ]
     assert ran.count("char_ref_mod") == 2
     assert ran.count("reveal") == 2
+
+
+def test_a_flagged_reference_is_redrawn_once_and_the_book_reaches_reveal(monkeypatch):
+    """§6 test 16. The whole point of the spec, at graph level: flag → redraw → pass → reveal.
+
+    A router-level test cannot substitute for this one. `graph.py:112` registers
+    moderation_router with NO path_map, and LangGraph does not validate labels at build time —
+    a label that is not a node name is logged as an unknown channel and the graph simply ENDS.
+    Only a compiled run proves "char_bible" actually routes.
+    """
+    _mock_call_points(monkeypatch)
+    calls = {"screened": 0}
+
+    def flag_once(state):
+        calls["screened"] += 1
+        status = "flagged" if calls["screened"] == 1 else "passed"
+        return {"characters": [
+            c.model_copy(update={
+                "ref_moderation_status": status,
+                "canonical_ref_image": None if status == "flagged" else c.canonical_ref_image,
+            })
+            for c in state.characters
+        ]}
+
+    monkeypatch.setattr("pipeline.graph.char_ref_mod", flag_once)
+
+    graph = build_graph()
+    visited = []
+    final = None
+    for chunk in graph.stream(_initial_state("job-1"), {"configurable": {"thread_id": "t-flag"}},
+                              stream_mode="updates"):
+        visited.extend(chunk.keys())
+        final = chunk
+
+    assert visited.count("char_bible") == 2
+    assert visited.count("char_ref_mod") == 2
+    assert "reveal" in visited
+    assert visited.index("reveal") > visited.index("char_ref_mod")
+
+
+def test_a_second_flag_ends_the_book_and_the_graph_does_not_loop_a_third_time(monkeypatch):
+    """§6 test 17. MAX_MOD_REDRAWS = 1 is a real cap, not a suggestion. If this hangs or the
+    counts climb past 2, the counter is not being persisted across the loop — check that
+    char_bible returns `cost` on the redraw pass."""
+    import pytest
+    _mock_call_points(monkeypatch)
+    calls = {"screened": 0}
+
+    def always_flag(state):
+        calls["screened"] += 1
+        return {"characters": [
+            c.model_copy(update={"ref_moderation_status": "flagged", "canonical_ref_image": None})
+            for c in state.characters
+        ]}
+
+    monkeypatch.setattr("pipeline.graph.char_ref_mod", always_flag)
+
+    graph = build_graph()
+    with pytest.raises(RuntimeError) as exc_info:
+        list(graph.stream(_initial_state("job-2"), {"configurable": {"thread_id": "t-flag2"}},
+                          stream_mode="updates"))
+
+    assert str(exc_info.value) == "ref_flagged"
+    assert calls["screened"] == 2      # initial screen + one redraw screen, never a third
