@@ -105,11 +105,12 @@ its own one-retry loop and its own fail edge. The `consistency_router` is a sepa
 3. Run `gemma-3-27b-it` with the image safety rubric via OpenRouter — covers violence, gore,
    dangerous content. **Never the fine-tuned judge** (ADR-004 amendment b; the fine-tuned model
    never touches the safety path).
-4. Either classifier flagging → `ref_moderation_status = "flagged"` → router fails → job `failed`.
-   Character-reference content should never be genuinely harmful; a flag here is almost certainly
-   the image model misbehaving, not a borderline creative case. **A primary flag short-circuits
-   step 3** — a second opinion cannot change a flag, exactly as §4a step 3 already specifies for
-   `input_gate`.
+4. Either classifier flagging → `ref_moderation_status = "flagged"` and `canonical_ref_image`
+   cleared → router redraws once, then fails (`reference-moderation-retry.md` §4.2;
+   `MAX_MOD_REDRAWS = 1`). Character-reference content should never be genuinely harmful; a flag
+   here is almost certainly the image model misbehaving, not a borderline creative case — which
+   is exactly what a redraw is for. **A primary flag short-circuits step 3** — a second opinion
+   cannot change a flag, exactly as §4a step 3 already specifies for `input_gate`.
 5. All characters pass → router continues to `generate_scene`.
 
 **Edge cases:**
@@ -139,13 +140,15 @@ runs and can always flag, which is the invariant `test_primary_error_still_lets_
 pins. The short-circuit also removes an unconditional second call per character: a 2-character book
 spent 4 classifier calls where 2 can decide it, pure waste on 0.2 vCPU / 512 MB.
 
-⚠️ **A reveal retry re-moderates every character on the row, not only the redrawn one** — `char_ref_mod`
-iterates `state.characters` unconditionally and has no skip on `ref_moderation_status == "passed"`. The
-obvious optimisation — skip a character already marked `"passed"` — is a **CC-1 safety hole** unless
-`char_bible`'s targeted mode also clears `ref_moderation_status` on the character it overwrote (it does:
-`kid-flow-pause-lifecycle.md` §4.7). A status describes the image that was in `canonical_ref_image` when
-it was written; overwriting the image without clearing the status would route an unmoderated image
-straight to a child.
+⚠️ **A reveal retry re-moderates only the characters whose reference actually changed** — since
+`reference-moderation-retry.md` §4.1, `char_ref_mod` skips a character already marked `"passed"`.
+That optimisation is a **CC-1 safety hole** unless every path that overwrites `canonical_ref_image`
+also clears `ref_moderation_status`, and both now do: `char_bible`'s targeted mode
+(`kid-flow-pause-lifecycle.md` §4.7) and its untargeted mint
+(`reference-moderation-retry.md` §4.3). A status describes the image that was in
+`canonical_ref_image` when it was written; overwriting the image without clearing the status would
+route an unmoderated image straight to a child. **Anything that adds a third write path to
+`canonical_ref_image` must clear the status too, or delete the skip.**
 
 ### 4c. `output_mod`
 

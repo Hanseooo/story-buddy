@@ -131,7 +131,11 @@ MIN_SCENES = 3
 # Spec `docs/specs/input-gate-hardening.md` §4a: the API-boundary length guard.
 MIN_STORY_WORDS = 5     # a book needs at least one scene's worth of text
 MAX_STORY_WORDS = 800   # ADR-012 range 500-800, top of range, tunable
-IMAGE_BUDGET = MAX_SCENES * 2 + 9   # 15 scenes × 2 + 9-image prelude (ADR-029)
+# 15-image prelude: 6 (2 refs × 3 draws) + 3 (ADR-029 taps) + 6 (one moderation redraw cycle,
+# which re-mints every flagged ref at 3 draws each — `reference-moderation-retry.md` §4.5).
+# Was 9 until 2026-08-13. `char_bible` carries NO breaker of its own and deliberately so: the
+# prelude is bounded by MAX_MOD_REDRAWS and MAX_RETRY_TAPS, structurally, not by cost.
+IMAGE_BUDGET = MAX_SCENES * 2 + 15   # 15 scenes × 2 + 15-image prelude
 # Spec `docs/specs/regeneration-controller.md` §4: LangGraph's graph-level backstop.
 # ADR-024's formula — max_scenes × 5 + fixed_prelude. The ×5 is the deepest a single scene
 # can go: generate_scene → consistency_check → regenerate → consistency_check → output_mod.
@@ -140,7 +144,10 @@ IMAGE_BUDGET = MAX_SCENES * 2 + 9   # 15 scenes × 2 + 9-image prelude (ADR-029)
 # multiplier has to move with it or a 15-scene book where every scene regenerates dies on
 # recursion_limit instead of on anything real.
 # ADR-029 reveal: 6 linear steps (input_gate·analyze·segment·char_bible·char_ref_mod·reveal)
-# + 3 retry cycles of 3 super-steps each (char_bible·char_ref_mod·reveal) = 15. This prelude is
-# a DIFFERENT unit from IMAGE_BUDGET's — they were only ever coincidentally equal at 9 (spec §4.13).
-SUPER_STEP_PRELUDE = 15
+# + 3 retry cycles of 3 super-steps each (char_bible·char_ref_mod·reveal) = 15,
+# + 2 for `reference-moderation-retry`'s one extra char_bible·char_ref_mod pair = 17.
+# This prelude is a DIFFERENT unit from IMAGE_BUDGET's — they were only ever coincidentally
+# equal at 9 (spec §4.13), and they are not equal now either. Do not raise one because the
+# other moved.
+SUPER_STEP_PRELUDE = 17
 RECURSION_LIMIT = MAX_SCENES * 5 + SUPER_STEP_PRELUDE

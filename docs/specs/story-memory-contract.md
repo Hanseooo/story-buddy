@@ -166,6 +166,7 @@ class Cost(BaseModel):                 # CC-3
     regen_count: int = 0
     usd_estimate: float = 0.0
     ref_retry_count: int = 0           # ADR-029 — the child's 3-tap reveal budget, per book
+    ref_mod_retry_count: int = 0       # moderation redraw cycles, per BOOK not per character
 
 class Eval(BaseModel):                 # CC-7
     seed: Optional[int] = None
@@ -237,6 +238,13 @@ node's own spec declares its contract slice against the fields above.
 `kid-flow-pause-lifecycle.md` §2) are exactly this kind of change: `reference_retry` defaults to `None`,
 `ref_retry_count` defaults to `0`, and neither bumped `CURRENT_SCHEMA_VERSION`.
 
+**`Cost.ref_mod_retry_count`** (added by `reference-moderation-retry.md` §2, 2026-08-13) is the same
+pattern again: declared **last** in `Cost`, defaults to `0`, no `CURRENT_SCHEMA_VERSION` bump. It counts
+`char_bible → char_ref_mod → char_bible` redraw cycles **per book, not per character** — `char_ref_mod`
+screens the whole roster in one node run, so a book where both c0 and c1 flag spends one cycle, not two.
+An old checkpoint resumes with a fresh budget of 0, which is harmless: the flag is re-derived from the
+same image.
+
 - One version covers the whole contract, **including `FailureReason`** — an enum change is a contract change.
 
 ## 4. Failure-reason taxonomy (frozen — ADR-023 Decision 4)
@@ -260,8 +268,9 @@ edit. Read ADR-028 before proposing an eighth value.
 - [x] **CC-2 PII redaction** — `Input.redacted_text` is the field downstream nodes consume; the contract makes
   the redacted text the persisted/consumed one.
 - [x] **CC-3 Cost control** — `Cost` block carries the running per-book counters the circuit-breaker reads.
-  `ref_retry_count` (ADR-029) is the one counter that is a *budget* rather than a metric: `route_reveal` caps
-  the child's reveal taps at 3, and the breaker bound is `max_scenes × 2 + 9`.
+  `ref_retry_count` (ADR-029) and `ref_mod_retry_count` (`reference-moderation-retry.md`) are the two counters
+  that are *budgets* rather than metrics: `route_reveal` caps the child's reveal taps at 3, `moderation_router`
+  caps moderation redraws at 1, and the breaker bound is `max_scenes × 2 + 15`.
 - [x] **CC-4 Security** — all asset fields (`canonical_ref_image`, `image_ref`, `final_image_ref`, `audio_ref`)
   store durable Storage **paths**, never signed URLs; URLs are minted on read.
 - [x] **CC-7 Reproducibility** — `Eval.seed` is carried and drives job restarts on version mismatch.

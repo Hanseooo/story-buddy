@@ -173,9 +173,11 @@ def test_assert_no_fields_dropped_actually_catches_a_dropped_field():
 
 # --- moderation_router ---
 
-def _moderation_router_state(passed: bool, categories: list[str] | None = None, flagged_char: bool = False):
+def _moderation_router_state(passed: bool, categories: list[str] | None = None,
+                             flagged_char: bool = False, mod_retries: int = 0):
     from contracts.story_memory import (
-        CURRENT_SCHEMA_VERSION, Character, CharacterDescription, Input, ModerationResult, StoryMemory
+        CURRENT_SCHEMA_VERSION, Character, CharacterDescription, Cost, Input, ModerationResult,
+        StoryMemory
     )
     chars = []
     if flagged_char:
@@ -195,6 +197,7 @@ def _moderation_router_state(passed: bool, categories: list[str] | None = None, 
             moderation=ModerationResult(passed=passed, categories=categories or []),
         ),
         characters=chars,
+        cost=Cost(ref_mod_retry_count=mod_retries),
     )
 
 
@@ -222,8 +225,11 @@ def test_moderation_router_raises_moderation_error_when_category_set():
 
 
 def test_moderation_router_raises_ref_flagged_when_char_flagged():
-    """moderation_router raises RuntimeError('ref_flagged') when a char has ref_moderation_status='flagged'."""
+    """A flag is terminal ONLY once the redraw budget is spent (spec §4.2). Before
+    reference-moderation-retry this raised on the first flag; the budget is what changed, not
+    the failure."""
     from pipeline.graph import moderation_router
-    state = _moderation_router_state(passed=True, flagged_char=True)
+    from pipeline.char_ref_mod import MAX_MOD_REDRAWS
+    state = _moderation_router_state(passed=True, flagged_char=True, mod_retries=MAX_MOD_REDRAWS)
     with pytest.raises(RuntimeError, match="ref_flagged"):
         moderation_router(state)

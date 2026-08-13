@@ -62,7 +62,7 @@ One module-level helper per node (MASTER_SPEC §6 "The node test seam"). The fal
 lives **inside** it, not beside it — same shape as `char_bible.mint_reference`.
 
 ```python
-IMAGE_BUDGET = MAX_SCENES * 2 + 9    # ADR-025 D4; prelude 9 per ADR-029
+IMAGE_BUDGET = MAX_SCENES * 2 + 15   # ADR-025 D4; prelude 9 → 15 (reference-moderation-retry §4.5)
 
 @lru_cache(maxsize=8)                # keyed on the path, which already contains story_id + char_id
 def _fal_ref_url(ref_path: str) -> str: ...        # Storage download → providers.upload_reference

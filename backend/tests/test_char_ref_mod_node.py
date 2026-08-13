@@ -175,3 +175,94 @@ def test_signed_url_failure_retries_once_then_raises():
         from pipeline.char_ref_mod import char_ref_mod
         with pytest.raises(RuntimeError, match="char_ref_mod"):
             char_ref_mod(_state([_char("c0")]))
+
+
+# --- spec reference-moderation-retry §4.1 ---
+
+def test_a_backstop_flag_clears_the_canonical_ref_image():
+    """§6 test 1. Clearing is the mechanism: char_bible.py:377 re-mints exactly the characters
+    whose canonical_ref_image is None. The status stays "flagged" so the router can read it."""
+    with patch("pipeline.char_ref_mod.get_signed_url", return_value="https://signed/c0.png"), \
+         patch("pipeline.char_ref_mod.classify_image_primary", return_value=True), \
+         patch("pipeline.char_ref_mod.classify_image_backstop", return_value=False):
+        from pipeline.char_ref_mod import char_ref_mod
+        result = char_ref_mod(_state([_char("c0")]))
+
+    char = result["characters"][0]
+    assert char.canonical_ref_image is None
+    assert char.ref_moderation_status == "flagged"
+
+
+def test_a_primary_flag_clears_the_ref_without_consulting_the_backstop():
+    """§6 test 2. The short-circuit at char_ref_mod.py:42-46 is unchanged; the retry is
+    downstream of BOTH classifiers, so the clearing has to happen on this branch too."""
+    with patch("pipeline.char_ref_mod.get_signed_url", return_value="https://signed/c0.png"), \
+         patch("pipeline.char_ref_mod.classify_image_primary", return_value=False), \
+         patch("pipeline.char_ref_mod.classify_image_backstop") as backstop:
+        from pipeline.char_ref_mod import char_ref_mod
+        result = char_ref_mod(_state([_char("c0")]))
+
+    assert result["characters"][0].canonical_ref_image is None
+    assert result["characters"][0].ref_moderation_status == "flagged"
+    backstop.assert_not_called()
+
+
+def test_a_character_that_already_passed_is_returned_untouched_and_costs_nothing():
+    """§6 test 3. The second pass must not re-bill two classifier calls to re-derive an answer
+    nothing invalidated. Safe ONLY because both mint paths clear the status when they overwrite
+    the image (`moderation-stack.md:144-148`) — see the char_bible reset."""
+    passed = _char("c0").model_copy(update={"ref_moderation_status": "passed"})
+    with patch("pipeline.char_ref_mod.get_signed_url") as signer, \
+         patch("pipeline.char_ref_mod.classify_image_primary") as primary, \
+         patch("pipeline.char_ref_mod.classify_image_backstop") as backstop:
+        from pipeline.char_ref_mod import char_ref_mod
+        result = char_ref_mod(_state([passed]))
+
+    assert result["characters"][0] == passed        # byte-identical
+    signer.assert_not_called()
+    primary.assert_not_called()
+    backstop.assert_not_called()
+
+
+def test_only_the_flagged_character_is_cleared_and_the_passed_one_is_not_rescreened():
+    """§6 test 3 + §4.6 row 3, on one mixed roster: c0 flags, c1 already passed. Exactly one
+    character is screened, and exactly one is cleared."""
+    c0 = _char("c0")
+    c1 = _char("c1").model_copy(update={"ref_moderation_status": "passed"})
+    with patch("pipeline.char_ref_mod.get_signed_url", return_value="https://signed/c0.png"), \
+         patch("pipeline.char_ref_mod.classify_image_primary", return_value=True), \
+         patch("pipeline.char_ref_mod.classify_image_backstop", return_value=False) as backstop:
+        from pipeline.char_ref_mod import char_ref_mod
+        result = char_ref_mod(_state([c0, c1]))
+
+    assert backstop.call_count == 1
+    assert result["characters"][0].canonical_ref_image is None
+    assert result["characters"][1] == c1
+
+
+def test_a_species_only_character_with_no_reference_is_still_marked_passed():
+    """§6 test 4 / §4.6 row 1: the char_ref_mod.py:12-14 path is UNCHANGED. It must not be
+    swallowed by the new already-passed guard, and it must never enter the loop."""
+    with patch("pipeline.char_ref_mod.get_signed_url") as signer, \
+         patch("pipeline.char_ref_mod.classify_image_primary") as primary:
+        from pipeline.char_ref_mod import char_ref_mod
+        result = char_ref_mod(_state([_char("c0", ref_path=None)]))
+
+    assert result["characters"][0].ref_moderation_status == "passed"
+    signer.assert_not_called()
+    primary.assert_not_called()
+
+
+def test_char_ref_mod_bumps_no_counter_and_returns_no_cost():
+    """§6 test 5 / §4.1: the node reports, the router decides, char_bible does the accounting.
+    A partial return carrying `cost` here would double-count against char_bible's bump."""
+    with patch("pipeline.char_ref_mod.get_signed_url", return_value="https://signed/c0.png"), \
+         patch("pipeline.char_ref_mod.classify_image_primary", return_value=True), \
+         patch("pipeline.char_ref_mod.classify_image_backstop", return_value=False):
+        from pipeline.char_ref_mod import char_ref_mod
+        state = _state([_char("c0")])
+        result = char_ref_mod(state)
+
+    assert set(result) == {"characters"}
+    assert state.cost.ref_mod_retry_count == 0
+

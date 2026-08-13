@@ -250,11 +250,16 @@ def mint_reference(
     style_fragment: str,
     story_id: str,
     char_id: str,
+    n: int = 1,
 ) -> tuple[str, RefVerdict | None, int]:
     """The node's ONE effect boundary (MASTER_SPEC §6): draw, judge, re-roll, upload.
 
     Returns `(storage_path, verdict, draws_made)`. The draw count is reported rather than
     inferred because the loop lives in here and the node needs it for CC-3 (invariant 4).
+
+    `n` is the uniqueness suffix on the single monotonic per-book sequence both minting paths
+    share (spec §4.4) — NOT a per-character draw count. It defaults to 1 for the initial mint;
+    a moderation redraw passes a higher one so the flagged image survives as evidence.
 
     The loop is node-internal and adds no graph edge and no super-step (ADR-028 Decision 3),
     so ADR-003 and ADR-024 are unamended by it.
@@ -285,7 +290,7 @@ def mint_reference(
                 "char_bible: %s judge failed on draw %d — accepting unchecked, ref_verdict=None",
                 char_id, draws, exc_info=True,
             )
-            return _upload(image, story_id, char_id, 1), None, draws
+            return _upload(image, story_id, char_id, n), None, draws
 
         # CC-5: a wrong character downstream traces back to a specific reference and draw.
         # `matches` is logged beside the list it no longer controls: the two disagreeing is the
@@ -300,7 +305,7 @@ def mint_reference(
         # contradiction is the wrong character, text is the right character in a marked room.
         if not verdict.contradictions and verdict.text_free:
             log.info("char_bible: %s accepted draw %d", char_id, draws)
-            return _upload(image, story_id, char_id, 1), verdict, draws
+            return _upload(image, story_id, char_id, n), verdict, draws
         candidates.append((image, verdict))
 
     winner = best_draw([v for _, v in candidates])
@@ -309,7 +314,7 @@ def mint_reference(
         char_id, draws, winner + 1,
     )
     image, verdict = candidates[winner]
-    return _upload(image, story_id, char_id, 1), verdict, draws
+    return _upload(image, story_id, char_id, n), verdict, draws
 
 
 def _mint_targeted(state: StoryMemory) -> dict:
@@ -340,7 +345,9 @@ def _mint_targeted(state: StoryMemory) -> dict:
 
     image = text_to_image(prompt, negative_extra=REFERENCE_NEGATIVE)
     verdict = judge(judge_prompt, [_data_uri(image)], RefVerdict)
-    n = state.cost.ref_retry_count + 2  # post-bump: rc is incremented below; +2 = +1(initial) +1(this tap)
+    # PRE-bump on BOTH counters — rc is incremented below, mrc is not touched by this path.
+    # +2 = +1(initial mint) +1(this tap). Spec §4.4.
+    n = state.cost.ref_retry_count + state.cost.ref_mod_retry_count + 2
     path = _upload(image, state.story_id, character.char_id, n)
 
     characters = [
@@ -382,11 +389,20 @@ def char_bible(state: StoryMemory) -> dict:
     # path. The three-preset dict and `style_preset_id` resolution belong to `style-presets`.
     style_fragment = state.style.prompt_fragment or settings.default_style_fragment
 
+    # CC-3 accounting, computed BEFORE the loop because §4.4's suffix is derived from it. A
+    # post-loop bump would hand mint_reference n=1 on a redraw and upsert over the flagged image.
+    # Once per CYCLE, not once per character: char_ref_mod screens the whole roster in one node
+    # run, so a book where both c0 and c1 flag spends one redraw, not two (spec §2).
+    was_flagged = any(c.ref_moderation_status == "flagged" for c in selected)
+    mrc = state.cost.ref_mod_retry_count + (1 if was_flagged else 0)
+    n = state.cost.ref_retry_count + mrc + 1
+
     minted: dict[str, tuple[str, RefVerdict | None]] = {}
     draws_made = 0
     for character in selected:
         path, verdict, draws = mint_reference(
-            character.description, character.name, style_fragment, state.story_id, character.char_id
+            character.description, character.name, style_fragment, state.story_id,
+            character.char_id, n=n,
         )
         minted[character.char_id] = (path, verdict)
         draws_made += draws
@@ -400,15 +416,23 @@ def char_bible(state: StoryMemory) -> dict:
             # Stamped even when the verdict is None (degraded judge): it records which prompt
             # this reference was checked against, which is true whether or not a verdict came back.
             "ref_verdict_prompt_version": JUDGE_PROMPT_VERSION,
+            # A status describes the image that was in `canonical_ref_image` when it was written.
+            # This path now overwrites that image on a moderation redraw, so the status has to go
+            # with it (`moderation-stack.md` §4b) — `_mint_targeted` has always done the same.
+            "ref_moderation_status": None,
         })
         if c.char_id in minted
         else c
         for c in state.characters
     ]
     # Invariant 4: `cost` has no reducer either — copy and bump, never rebuild from zero.
-    # CC-3: this node's prelude bound is 6 (2 references x 3 draws). `image-generator` owns the
-    # scene-image half of `image_count`; the breaker cannot trip until it writes its share.
-    cost = state.cost.model_copy(update={"image_count": state.cost.image_count + draws_made})
+    # CC-3: this node's prelude bound is 6 (2 references x 3 draws), doubled to 12 by one
+    # moderation redraw cycle. `image-generator` owns the scene-image half of `image_count`.
+    cost = state.cost.model_copy(update={
+        "image_count": state.cost.image_count + draws_made,
+        "ref_mod_retry_count": mrc,
+    })
 
-    log.info("char_bible: minted %s in %d draws", sorted(minted), draws_made)
+    log.info("char_bible: minted %s in %d draws, n=%d, ref_mod_retry_count=%d",
+             sorted(minted), draws_made, n, mrc)
     return {"characters": characters, "cost": cost}

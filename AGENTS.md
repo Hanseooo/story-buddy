@@ -232,6 +232,11 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
   bill is. This is what `RECURSION_LIMIT`'s `MAX_SCENES * 5` counts.
   `moderation_router` (ADR-024 pure router) handles both post-`input_gate` and post-`char_ref_mod`
   edges; `route_after_output_mod` reads `moderation_status="failed"` and raises.
+  ⚠️ **The post-`char_ref_mod` edge can also route BACK to `char_bible`** (2026-08-13,
+  `reference-moderation-retry`): a flagged reference buys one redraw before the terminal
+  `ref_flagged`, closing a `char_bible → char_ref_mod → char_bible` loop that runs at most twice.
+  This is the second cap-bounded loop back into `char_bible`, alongside `route_reveal`'s
+  `"try_again"`, and it is the +2 in `SUPER_STEP_PRELUDE`.
   `char_ref_mod` runs `settings.moderation_primary_image_model` (mistralai/mistral-small-3.2-24b-instruct
   since 2026-08-11 — replaced qwen/qwen3-vl-32b-instruct, which emitted its verdict before its reasoning on
   Alibaba Cloud and hard-failed the job here; ADR-002 amendment) + Gemma safety rubric on each canonical
@@ -442,7 +447,8 @@ is not documentation of a good design; it is the blast radius, written down so t
   **`image-generator` is built (2026-07-31):** `generate_scene` is reference-conditioned —
   `edit_image` when `canonical_ref_image` is present for a character, `text_to_image` otherwise.
   Fixes `scene-1.png` Storage-path collision (now `{story_id}/{scene_id}.png`). ADR-025 D4 breaker
-  live at `IMAGE_BUDGET = 39`. CC-10 Storage-exists skip (idempotent resume). `final_image_ref`
+  live at `IMAGE_BUDGET = 45` (was 39; the prelude went 9 → 15 with `reference-moderation-retry`).
+  CC-10 Storage-exists skip (idempotent resume). `final_image_ref`
   ownership transferred to `consistency_check`. `MAX_SCENES` and `IMAGE_BUDGET` in `app/config.py`.
   **`consistency-checker` is built (2026-07-31):** `pipeline/consistency_check.py` judges each scene
   image against the canonical reference each present character was drawn from — one `providers.judge`
@@ -483,7 +489,8 @@ is not documentation of a good design; it is the blast radius, written down so t
   terminal status; `compose` stays pure. **S2 `kid-flow-pause-lifecycle`:** ADR-029's reveal ships —
   `pipeline/reveal.py`, migration `0005` (`awaiting_confirm` + `jobs.reveal`), `POST /jobs/{id}/confirm`
   as the only exit from a pause (404 → 422 → CAS; duplicate/late/swept → 200 with current status), 3-tap
-  cap in `route_reveal`, `SUPER_STEP_PRELUDE = 15`. **S3 `kid-flow-failure-semantics`:** three verbs only
+  cap in `route_reveal`, `SUPER_STEP_PRELUDE = 15` (now 17 — see `reference-moderation-retry`).
+  **S3 `kid-flow-failure-semantics`:** three verbs only
   — `redraw` / `revise` / `retry`; a terminal job is immutable (recovery is always a new job); four render
   buckets on every URL-reachable surface; the child never sees a moderation category or `jobs.error`.
   **S4 `kid-flow-reader-and-wait-states`:** the multi-page reader over `jobs.pages` (sign at read time),
@@ -554,6 +561,28 @@ is not documentation of a good design; it is the blast radius, written down so t
   ⚠️ **No job has been run against this code.** The lettering rate is unmeasured and the judge's
   false-positive rate on texture (wood grain, halftone dots) is unknown; spec §4.6.2 names the
   fallback in advance — demote `text_free` to rank-only, the shape `subjects_unique` already sits in.
+  **`reference-moderation-retry` is built (2026-08-13):** a flagged character reference used to end
+  the book outright — every other way a reference can be wrong buys 3 draws, a moderation flag bought
+  0. Prod job `4feff195` died that way on a false positive (the backstop read a red half-vest as
+  blood; a 6-draw probe reproduced the prompt and drew clean every time). Now it buys exactly one
+  redraw. `char_ref_mod` **clears `canonical_ref_image`** on a flag — that clear is the entire
+  mechanism, because `char_bible`'s existing filter re-mints precisely the cleared characters — and
+  gains a skip for characters already `"passed"` so a second pass does not re-bill both classifiers.
+  `moderation_router` gains one branch returning `"char_bible"` while
+  `cost.ref_mod_retry_count < MAX_MOD_REDRAWS` (**= 1**, in `char_ref_mod.py`, imported by
+  `graph.py`, mirroring `reveal.MAX_RETRY_TAPS`); past the cap it raises `ref_flagged` exactly as
+  before. `contracts/` gains **one** additive field, `Cost.ref_mod_retry_count`, declared LAST and
+  defaulted `0` (no `schema_version` bump), counted **per book, not per character** — both refs
+  flagging spends one cycle. `mint_reference` gains an `n` suffix parameter so both minting paths
+  share one monotonic per-book sequence (`rc + mrc + 1` post-bump; `_mint_targeted` keeps `+2`
+  pre-bump), which is what preserves the flagged PNG as evidence for the still-missing
+  `tests/fixtures/moderation_cases.py`. **Neither classifier loses its veto and neither rubric moves
+  — what changed is the price of a flag, not the threshold for one.** Both budget constants were
+  resized *with* their arithmetic: `IMAGE_BUDGET` prelude 9→**15**, `SUPER_STEP_PRELUDE` 15→**17**
+  (this supersedes `kid-flow-pause-lifecycle` §4.13's "IMAGE_BUDGET unchanged" — see its banner).
+  ⚠️ **No job has been run against this code**, and the backstop's image rubric is still
+  **UNMEASURED**. Known gap, named in spec §4.6: a flag landing on a *tapped* redraw falls back to an
+  untargeted mint and silently loses the child's tapped attribute.
   **Phase 2 is in progress. Next: S3's isolation suite, then build S4.** Next free migration is
   **`0009`**.
 - classroom-sharing (2026-08-09): gallery page + StudentTabBar built; `/s/[profileId]/gallery` live; tab bar covers Bookshelf / Gallery / Profile; logout moved to settings.

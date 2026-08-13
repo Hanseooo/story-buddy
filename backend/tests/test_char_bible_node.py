@@ -623,6 +623,27 @@ def _minted(path: str = "story-1/ref.png", draws: int = 1):
     return (path, _verdict(True, ["dog"]), draws)
 
 
+def test_char_bible_resets_ref_moderation_status_on_a_re_mint():
+    """Spec §4.3 change 1. A moderation redraw arrives with the character still reading
+    "flagged" (char_ref_mod cleared the image, not the status). Without this reset the router
+    either raises on a brand-new image or spins on the same flag forever.
+
+    It is also the precondition for char_ref_mod's skip-if-passed guard:
+    `moderation-stack.md:144-148` — a status describes the image that was in
+    `canonical_ref_image` when it was written, so overwriting the image without clearing the
+    status would route an UNMODERATED image straight to a child.
+    """
+    flagged = _char("c0", "the dog")
+    flagged = flagged.model_copy(update={"ref_moderation_status": "flagged"})
+    state = _state([flagged])
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()):
+        result = char_bible(state)
+
+    assert result["characters"][0].ref_moderation_status is None
+    assert result["characters"][0].canonical_ref_image == "story-1/ref.png"
+
+
 def test_char_bible_references_at_most_two_characters():
     """Invariant 1 (ADR-004: max 2 canonical refs, v1): a 3-character roster calls the helper
     exactly twice, for c0 and c1."""
@@ -1035,3 +1056,119 @@ def test_an_attribute_the_active_fragment_never_forbids_still_reaches_both_promp
 
     assert "glowing" in t2i_mock.call_args.args[0]
     assert "glowing" in judge_mock.call_args.args[0]
+
+
+def test_mint_reference_uploads_to_the_suffix_it_is_given():
+    """Spec §4.4. Both minting paths join ONE monotonic per-book sequence; the flagged image at
+    suffix 1 is preserved as evidence (`providers.py:625` marks the backstop rubric UNMEASURED),
+    so a redraw must not land back on suffix 1 and upsert over it."""
+    fake_supabase = MagicMock()
+    with patch("pipeline.char_bible.text_to_image", side_effect=list(DRAWS)), \
+         patch("pipeline.char_bible.judge", side_effect=[_verdict(True)]), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=fake_supabase):
+        path, _, _ = mint_reference(
+            CharacterDescription(species="dog"), "the dog", FRAG, "story-1", "c0", n=2,
+        )
+
+    assert path == "story-1/ref-c0-2.png"
+    assert _uploaded_path(fake_supabase) == "story-1/ref-c0-2.png"
+    # §6 test 14's second clause, on the only path that can actually reach Storage: suffix 1 is
+    # neither overwritten (the upload above names 2) nor deleted. `_upload` sends upsert=true, so
+    # path uniqueness is the ONLY thing protecting the evidence — and nothing may remove it.
+    fake_supabase.storage.from_.return_value.remove.assert_not_called()
+
+
+def test_mint_reference_defaults_to_suffix_one():
+    """The default keeps every pre-existing caller and fixture on the path they already assert."""
+    (path, _, _), _, _, supabase = _mint([_verdict(True)])
+
+    assert path == "story-1/ref-c0-1.png"
+    assert _uploaded_path(supabase) == "story-1/ref-c0-1.png"
+
+
+def test_mint_targeted_after_a_moderation_redraw_picks_a_suffix_that_collides_with_nothing():
+    """§6 test 15 / §4.4. rc=0, mrc=1 (both PRE-bump here) → 0 + 1 + 2 = 3. Suffix 1 is the
+    flagged original and suffix 2 is the moderation redraw; a tap must land clear of both."""
+    from contracts.story_memory import Cost, ReferenceRetry
+
+    state = _state(
+        [_char("c0", "the dog", ref="story-1/ref-c0-2.png")],
+        cost=Cost(ref_retry_count=0, ref_mod_retry_count=1),
+    )
+    state.reference_retry = ReferenceRetry(char_id="c0", attribute="a red hat")
+
+    fake_supabase = MagicMock()
+    with patch("pipeline.char_bible.text_to_image", return_value=b"img"), \
+         patch("pipeline.char_bible.judge", return_value=_verdict(True, ["dog"])), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=fake_supabase):
+        result = char_bible(state)
+
+    assert result["characters"][0].canonical_ref_image == "story-1/ref-c0-3.png"
+
+
+def test_ref_mod_retry_count_bumps_by_exactly_one_when_two_characters_arrive_flagged():
+    """§6 test 12 / §2. The counter is per BOOK — it measures loop iterations, not characters.
+    One cycle re-mints both, so a book where c0 and c1 both flag spends 1, not 2."""
+    from contracts.story_memory import Cost
+
+    flagged = [
+        _char("c0", "the dog").model_copy(update={"ref_moderation_status": "flagged"}),
+        _char("c1", "the cat").model_copy(update={"ref_moderation_status": "flagged"}),
+    ]
+    state = _state(flagged, cost=Cost(ref_mod_retry_count=0))
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()) as mint:
+        result = char_bible(state)
+
+    assert mint.call_count == 2
+    assert result["cost"].ref_mod_retry_count == 1
+
+
+def test_ref_mod_retry_count_does_not_bump_on_a_first_unflagged_mint():
+    """§6 test 13. The ordinary path must not spend budget it never used."""
+    state = _state([_char("c0", "the dog"), _char("c1", "the cat")])
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()):
+        result = char_bible(state)
+
+    assert result["cost"].ref_mod_retry_count == 0
+
+
+def test_the_re_mint_uploads_to_suffix_two_and_leaves_the_flagged_image_alone():
+    """§6 test 14 / §4.4. The bump happens BEFORE the loop so `n` reads the post-bump counter:
+    rc=0, mrc=1 → 0 + 1 + 1 = 2. A pre-bump read would give 1 and upsert over the evidence."""
+    from contracts.story_memory import Cost
+
+    flagged = _char("c0", "the dog").model_copy(update={"ref_moderation_status": "flagged"})
+    state = _state([flagged], cost=Cost(ref_mod_retry_count=0))
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()) as mint:
+        char_bible(state)
+
+    assert mint.call_args.kwargs["n"] == 2
+
+
+def test_the_initial_mint_asks_for_suffix_one():
+    """The other half of the arithmetic: rc=0, mrc=0 (no flag, no bump) → 0 + 0 + 1 = 1."""
+    state = _state([_char("c0", "the dog")])
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()) as mint:
+        char_bible(state)
+
+    assert mint.call_args.kwargs["n"] == 1
+
+
+def test_a_flag_on_one_character_bumps_the_counter_even_when_another_is_a_fresh_mint():
+    """§4.6 row 3, on the cost side. c0 arrives flagged-and-cleared, c1 never had a reference.
+    Both are in `selected`, one cycle is spent, and both land on the same suffix — which is safe
+    because char_id is in the path."""
+    from contracts.story_memory import Cost
+
+    flagged = _char("c0", "the dog").model_copy(update={"ref_moderation_status": "flagged"})
+    state = _state([flagged, _char("c1", "the cat")], cost=Cost(ref_mod_retry_count=0))
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()) as mint:
+        result = char_bible(state)
+
+    assert result["cost"].ref_mod_retry_count == 1
+    assert {call.kwargs["n"] for call in mint.call_args_list} == {2}

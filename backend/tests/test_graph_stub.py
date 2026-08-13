@@ -45,6 +45,11 @@ STUB_ANALYSIS = StoryAnalysis.model_validate(
 )
 
 
+# What one char_bible pass bills to `cost.image_count` under the stubs below: STUB_ANALYSIS has
+# one character, and the mint_reference stub reports 2 draws for it.
+_MOCK_DRAWS_PER_PASS = 2
+
+
 def _mock_call_points(monkeypatch):
     # One patch point per node (MASTER_SPEC §6 rule 1)
     monkeypatch.setattr("pipeline.analyze.extract_entities", lambda text: STUB_ANALYSIS)
@@ -70,8 +75,8 @@ def _mock_call_points(monkeypatch):
     )
     monkeypatch.setattr(
         "pipeline.char_bible.mint_reference",
-        lambda description, name, style_fragment, story_id, char_id: (
-            f"{story_id}/ref-{char_id}.png",
+        lambda description, name, style_fragment, story_id, char_id, n=1: (
+            f"{story_id}/ref-{char_id}-{n}.png",
             RefVerdict(differences_observed="none", matches_description=True, attributes_present=["dog"]),
             2,
         ),
@@ -151,7 +156,7 @@ def test_char_bible_references_survive_the_graph(monkeypatch):
     )
 
     character, = result["characters"]
-    assert character.canonical_ref_image == "test-job-4/ref-c0.png"
+    assert character.canonical_ref_image == "test-job-4/ref-c0-1.png"
     assert character.ref_verdict.matches_description is True
     assert character.ref_moderation_status == "passed"   # char_ref_mod sets this
     assert result["cost"].image_count == 3           # 2 from mint_reference + 1 from generate_scene
@@ -384,8 +389,9 @@ def test_moderation_router_raises_ref_flagged_not_content_flagged_for_flagged_ch
     """Pins the rename: a flagged canonical reference is machine error, not the child's text (spec §4.2)."""
     import pytest
     from pipeline.graph import moderation_router
+    from pipeline.char_ref_mod import MAX_MOD_REDRAWS
     from contracts.story_memory import (
-        CURRENT_SCHEMA_VERSION, Character, Input, ModerationResult, StoryMemory,
+        CURRENT_SCHEMA_VERSION, Character, Cost, Input, ModerationResult, StoryMemory,
     )
 
     state = StoryMemory(
@@ -394,6 +400,7 @@ def test_moderation_router_raises_ref_flagged_not_content_flagged_for_flagged_ch
         classroom_id="dev-classroom",
         profile_id="dev-profile",
         input=Input(raw_text="x", redacted_text="x", moderation=ModerationResult(passed=True)),
+        cost=Cost(ref_mod_retry_count=MAX_MOD_REDRAWS),
     )
     state.characters = [
         Character(char_id="c0", name="the dog", ref_moderation_status="flagged")
@@ -401,6 +408,82 @@ def test_moderation_router_raises_ref_flagged_not_content_flagged_for_flagged_ch
     with pytest.raises(RuntimeError) as exc_info:
         moderation_router(state)
     assert str(exc_info.value) == "ref_flagged"
+
+
+def _flagged_router_state(mod_retries: int, scenes: bool = True, input_passed: bool = True):
+    from contracts.story_memory import (
+        CURRENT_SCHEMA_VERSION, Character, Cost, Input, ModerationResult, Scene, StoryMemory,
+    )
+    state = StoryMemory(
+        schema_version=CURRENT_SCHEMA_VERSION,
+        story_id="job-1",
+        classroom_id="dev-classroom",
+        profile_id="dev-profile",
+        input=Input(raw_text="x", redacted_text="x",
+                    moderation=ModerationResult(passed=input_passed,
+                                                categories=[] if input_passed else ["S1"])),
+        characters=[Character(char_id="c0", name="the dog", ref_moderation_status="flagged")],
+        cost=Cost(ref_mod_retry_count=mod_retries),
+    )
+    if scenes:
+        state.scenes = [Scene(scene_id="s0", text_excerpt="x")]
+    return state
+
+
+def test_moderation_router_routes_a_flag_back_to_char_bible_while_budget_remains():
+    """§6 test 6 / §4.2. The whole change: a flag with budget left costs one redraw, not the book.
+    The label is a real node name, which is what makes the missing path_map at graph.py:112 fine."""
+    from pipeline.graph import moderation_router
+
+    assert moderation_router(_flagged_router_state(mod_retries=0)) == "char_bible"
+
+
+def test_moderation_router_raises_once_the_redraw_budget_is_spent():
+    """§6 test 7. MAX_MOD_REDRAWS = 1, so the second flag is terminal — two independent draws
+    flagging is evidence, not a coin flip (spec §8 q4)."""
+    import pytest
+    from pipeline.char_ref_mod import MAX_MOD_REDRAWS
+    from pipeline.graph import moderation_router
+
+    with pytest.raises(RuntimeError) as exc_info:
+        moderation_router(_flagged_router_state(mod_retries=MAX_MOD_REDRAWS))
+    assert str(exc_info.value) == "ref_flagged"
+
+
+def test_an_input_text_flag_still_wins_over_a_reference_flag():
+    """§6 test 10 / CC-1 ordering. The new branch sits AFTER the input.moderation block, so a
+    book whose text failed dies as content_flagged — the child's own text, not a machine
+    error — even with a flagged character and budget to spare."""
+    import pytest
+    from pipeline.graph import moderation_router
+
+    with pytest.raises(RuntimeError) as exc_info:
+        moderation_router(_flagged_router_state(mod_retries=0, input_passed=False))
+    assert str(exc_info.value) == "content_flagged"
+
+
+def test_moderation_router_still_returns_reveal_when_every_character_passed():
+    """§6 test 8: the unchanged happy path, re-pinned because the new branch sits above it."""
+    from contracts.story_memory import Character, Input, ModerationResult, Scene
+    from pipeline.graph import moderation_router
+
+    state = _initial_state("job-1")
+    state.input = Input(raw_text="x", redacted_text="x", moderation=ModerationResult(passed=True))
+    state.characters = [Character(char_id="c0", name="the dog", ref_moderation_status="passed")]
+    state.scenes = [Scene(scene_id="s0", text_excerpt="x")]
+    assert moderation_router(state) == "reveal"
+
+
+def test_moderation_router_still_returns_analyze_on_the_shared_input_gate_edge():
+    """§6 test 9. One function serves both edges; after input_gate there are no characters, so
+    the new branch must be unreachable from there."""
+    from contracts.story_memory import Input, ModerationResult
+    from pipeline.graph import moderation_router
+
+    state = _initial_state("job-1")
+    state.input = Input(raw_text="x", redacted_text="x", moderation=ModerationResult(passed=True))
+    assert state.characters == []
+    assert moderation_router(state) == "analyze"
 
 
 def test_a_run_that_taps_once_visits_char_ref_mod_twice(monkeypatch):
@@ -420,7 +503,7 @@ def test_a_run_that_taps_once_visits_char_ref_mod_twice(monkeypatch):
         # ponytail: targeted-path stub for graph routing test — real implementation is Task 4
         if state.reference_retry is not None:
             return {
-                "characters": state.characters,
+                "characters": [c.model_copy(update={"ref_moderation_status": None}) for c in state.characters],
                 "cost": state.cost.model_copy(update={
                     "image_count": state.cost.image_count + 1,
                     "ref_retry_count": state.cost.ref_retry_count + 1,
@@ -444,3 +527,76 @@ def test_a_run_that_taps_once_visits_char_ref_mod_twice(monkeypatch):
     ]
     assert ran.count("char_ref_mod") == 2
     assert ran.count("reveal") == 2
+
+
+def test_a_flagged_reference_is_redrawn_once_and_the_book_reaches_reveal(monkeypatch):
+    """§6 test 16. The whole point of the spec, at graph level: flag → redraw → pass → reveal.
+
+    A router-level test cannot substitute for this one. `graph.py:112` registers
+    moderation_router with NO path_map, and LangGraph does not validate labels at build time —
+    a label that is not a node name is logged as an unknown channel and the graph simply ENDS.
+    Only a compiled run proves "char_bible" actually routes.
+    """
+    _mock_call_points(monkeypatch)
+    calls = {"screened": 0}
+
+    def flag_once(state):
+        calls["screened"] += 1
+        status = "flagged" if calls["screened"] == 1 else "passed"
+        return {"characters": [
+            c.model_copy(update={
+                "ref_moderation_status": status,
+                "canonical_ref_image": None if status == "flagged" else c.canonical_ref_image,
+            })
+            for c in state.characters
+        ]}
+
+    monkeypatch.setattr("pipeline.graph.char_ref_mod", flag_once)
+
+    graph = build_graph()
+    config = {"configurable": {"thread_id": "t-flag"}}
+    visited = []
+    minted = []
+    for chunk in graph.stream(_initial_state("job-1"), config, stream_mode="updates"):
+        visited.extend(chunk.keys())
+        if "char_bible" in chunk:
+            minted.append(chunk["char_bible"]["cost"])
+
+    assert visited.count("char_bible") == 2
+    assert visited.count("char_ref_mod") == 2
+    assert "reveal" in visited
+    assert visited.index("reveal") > visited.index("char_ref_mod")
+
+    # "...with `image_count` reflecting BOTH mints" (§6 test 16). Read off char_bible's own
+    # updates rather than the final state, which also carries the scene image `reveal` lets
+    # through. The redraw is a full mint_reference call, not a discount: its draws are billed
+    # like the original's. If the second reading equals the first, char_bible dropped `cost` on
+    # the redraw pass and CC-3 is counting one book's spend as half of it.
+    assert [c.image_count for c in minted] == [_MOCK_DRAWS_PER_PASS, 2 * _MOCK_DRAWS_PER_PASS]
+    assert [c.ref_mod_retry_count for c in minted] == [0, 1]
+
+
+def test_a_second_flag_ends_the_book_and_the_graph_does_not_loop_a_third_time(monkeypatch):
+    """§6 test 17. MAX_MOD_REDRAWS = 1 is a real cap, not a suggestion. If this hangs or the
+    counts climb past 2, the counter is not being persisted across the loop — check that
+    char_bible returns `cost` on the redraw pass."""
+    import pytest
+    _mock_call_points(monkeypatch)
+    calls = {"screened": 0}
+
+    def always_flag(state):
+        calls["screened"] += 1
+        return {"characters": [
+            c.model_copy(update={"ref_moderation_status": "flagged", "canonical_ref_image": None})
+            for c in state.characters
+        ]}
+
+    monkeypatch.setattr("pipeline.graph.char_ref_mod", always_flag)
+
+    graph = build_graph()
+    with pytest.raises(RuntimeError) as exc_info:
+        list(graph.stream(_initial_state("job-2"), {"configurable": {"thread_id": "t-flag2"}},
+                          stream_mode="updates"))
+
+    assert str(exc_info.value) == "ref_flagged"
+    assert calls["screened"] == 2      # initial screen + one redraw screen, never a third

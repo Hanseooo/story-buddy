@@ -2,7 +2,7 @@ from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
 from contracts.story_memory import StoryMemory
-from pipeline.char_ref_mod import char_ref_mod
+from pipeline.char_ref_mod import MAX_MOD_REDRAWS, char_ref_mod
 from pipeline.input_gate import input_gate
 from pipeline.analyze import analyze
 from pipeline.segment import segment
@@ -21,6 +21,9 @@ def moderation_router(state: StoryMemory) -> str:
     Called after input_gate (routes to analyze or raises) and after char_ref_mod (routes to the
     scene loop or raises). One function covers both: after input_gate state.scenes is empty;
     after char_ref_mod scenes exist.
+
+    The char_ref_mod edge can also route BACK to char_bible for one moderation redraw
+    (`reference-moderation-retry.md` §4.2), capped by MAX_MOD_REDRAWS.
     """
     mod = state.input.moderation
     if mod is not None and not mod.passed:
@@ -28,6 +31,8 @@ def moderation_router(state: StoryMemory) -> str:
             raise RuntimeError("moderation_error")
         raise RuntimeError("content_flagged")
     if any(c.ref_moderation_status == "flagged" for c in state.characters):
+        if state.cost.ref_mod_retry_count < MAX_MOD_REDRAWS:
+            return "char_bible"
         raise RuntimeError("ref_flagged")
     if state.scenes:
         return "reveal"

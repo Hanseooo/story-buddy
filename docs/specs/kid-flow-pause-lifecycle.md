@@ -211,7 +211,8 @@ would let the pipeline show the child the same picture back — the worst availa
 *"try again."*
 
 **The ADR-025 D4 breaker is not checked here, and that is deliberate.** `IMAGE_BUDGET`'s prelude of 9
-is sized as 2 references × 3 draws + 3 taps × 1 draw, and the 3-tap router cap is what bounds this
+(**15 since 2026-08-13** — see §4.13's superseded banner) is sized as 2 references × 3 draws + 3 taps
+× 1 draw, and the 3-tap router cap is what bounds this
 path. A breaker check would guard a ceiling the cap already makes unreachable. Named so it is not
 rediscovered as a missing guard.
 
@@ -406,6 +407,15 @@ RECURSION_LIMIT = MAX_SCENES * 5 + SUPER_STEP_PRELUDE   # ×4 → ×5 on 2026-08
 IMAGE_BUDGET = MAX_SCENES * 2 + 9     # unchanged — 9 IMAGES, a different unit
 ```
 
+> **⚠️ SUPERSEDED on 2026-08-13 by `reference-moderation-retry.md` §4.5 — both numbers moved.**
+> `SUPER_STEP_PRELUDE` is now **17** (+2 for one extra `char_bible·char_ref_mod` pair) and
+> `IMAGE_BUDGET`'s prelude is now **15** (9 + 6 for one moderation redraw cycle re-minting both
+> references at 3 draws each). **The reasoning below still holds and is the reason they are 17 and
+> 15 rather than one shared number:** they remain different units, they were only ever
+> coincidentally equal at 9, and they are not equal now either. What changed is that the moderation
+> redraw spends real images — the 6 are drawn, not phantom — so raising `IMAGE_BUDGET` here is not
+> the sympathy-raise this section rejects. Do not move one because the other moved.
+
 **The two constants stop sharing a number, and that is ADR-029's own position:** the super-step prelude
 "remains a different unit from CC-3's image prelude, exactly as `character-bible` §5 warns." They were
 only ever coincidentally equal at 9. Raising `IMAGE_BUDGET` in sympathy would buy 6 phantom draws of
@@ -546,6 +556,7 @@ future migration (S1 §6.3).
 
 **Config, extending `test_config.py`:**
 - `RECURSION_LIMIT == MAX_SCENES * 5 + 15`; `IMAGE_BUDGET` unchanged at `MAX_SCENES * 2 + 9`.
+  *(True as shipped; both numbers moved to 17 and 15 on 2026-08-13 — see §4.13's banner.)*
 
 **Graph:**
 - A run that taps once reaches `compose` having visited `char_ref_mod` twice (the re-moderation path).
@@ -676,6 +687,7 @@ time) · S1 (`docs/specs/kid-flow-book-persistence.md`) constraints 1–8.
 7. `run_job.py` has one `_finish` shared by both entrypoints, and `resume_storybook_job` never builds
    a `StoryMemory`.
 8. `SUPER_STEP_PRELUDE = 15` and `RECURSION_LIMIT` uses it; `IMAGE_BUDGET` is unchanged.
+   *(True as shipped; both moved on 2026-08-13 — see §4.13's banner.)*
 9. Every §7 assertion exists and passes.
 10. Backend verify is green and its output is **shown, not claimed**:
     `uv run ruff check . && uv run pytest` from `backend/`.
@@ -687,5 +699,11 @@ can offer zero chips; the cap is enforced only in the endpoint or only in the UI
 a `char_id` or `attribute` not offered on that row for that character; a rejected payload or a failed
 enqueue consumes the pause; a duplicate confirm enqueues a second resume or returns an error; a redraw
 reuses a Storage path; `resume_storybook_job` can construct an initial state; `pages` gains a second
-writer; a pause write touches `pages`; `IMAGE_BUDGET` is raised to 15; or `char_ref_mod` gains a
+writer; a pause write touches `pages`; ~~`IMAGE_BUDGET` is raised to 15~~; or `char_ref_mod` gains a
 `"passed"` skip without §4.7's clear.
+
+> **Amended 2026-08-13 (`reference-moderation-retry.md`).** The `IMAGE_BUDGET` clause is retired:
+> the prelude *is* now 15, deliberately, because a moderation redraw draws 6 real images this spec
+> had no reason to anticipate. The `char_ref_mod` clause **stands and is satisfied** — the skip
+> shipped, and it is safe precisely because both minting paths clear `ref_moderation_status` when
+> they overwrite the image, which is §4.7's condition.
