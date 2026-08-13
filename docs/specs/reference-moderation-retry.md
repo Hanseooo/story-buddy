@@ -1,6 +1,6 @@
 # Feature Spec — reference-moderation-retry
 
-**Status:** draft · **Phase:** 2 · **Owner nodes:** `backend/pipeline/char_ref_mod.py`,
+**Status:** built · **Phase:** 2 · **Owner nodes:** `backend/pipeline/char_ref_mod.py`,
 `backend/pipeline/char_bible.py`, `backend/pipeline/graph.py`, `backend/app/config.py`
 **Derived from:** MASTER_SPEC §2 (system map) · **Rationale:** ADR-011c, ADR-024, ADR-025, ADR-029
 
@@ -402,13 +402,13 @@ cd backend && uv run ruff check . && uv run pytest
 
 **Must be true:**
 
-- [ ] Every test in §6 exists, and each failed before its implementation existed.
-- [ ] `git grep -n "ref-.*-1\|_upload(" backend/` run before implementing, confirming nothing
+- [x] Every test in §6 exists, and each failed before its implementation existed.
+- [x] `git grep -n "ref-.*-1\|_upload(" backend/` run before implementing, confirming nothing
       reconstructs the suffix-1 path by convention (§4.7, open question 3).
-- [ ] The `path_map` assumption in §3 verified against a built graph, not assumed.
-- [ ] `IMAGE_BUDGET` and `SUPER_STEP_PRELUDE` updated **with their comments**, arithmetic shown.
-- [ ] `moderation-stack.md` §4b step 4 amended.
-- [ ] Full suite green, and the count reported.
+- [x] The `path_map` assumption in §3 verified against a built graph, not assumed.
+- [x] `IMAGE_BUDGET` and `SUPER_STEP_PRELUDE` updated **with their comments**, arithmetic shown.
+- [x] `moderation-stack.md` §4b step 4 amended.
+- [x] Full suite green, and the count reported.
 
 **Must be reported, not silently accepted:**
 

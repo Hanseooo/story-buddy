@@ -550,11 +550,9 @@ def test_a_flagged_reference_is_redrawn_once_and_the_book_reaches_reveal(monkeyp
 
     graph = build_graph()
     visited = []
-    final = None
     for chunk in graph.stream(_initial_state("job-1"), {"configurable": {"thread_id": "t-flag"}},
                               stream_mode="updates"):
         visited.extend(chunk.keys())
-        final = chunk
 
     assert visited.count("char_bible") == 2
     assert visited.count("char_ref_mod") == 2
