@@ -67,6 +67,8 @@ class SceneVerdict(BaseModel):
     style_match: bool = False
     anatomy_intact: bool = True
     subjects_unique: bool = True                 # §4.4 — asked after anatomy, before the reasons
+    text_free: bool = True                       # lettering-suppression §4.1 — asked LAST of the
+                                                 # booleans, still before the reasons
     failure_reasons: list[FailureReason] = Field(default_factory=list)   # LAST — the closed 7
 
 
@@ -172,13 +174,20 @@ def consistency_check(state: StoryMemory) -> dict:
             style_match=all(v.style_match for v in verdicts),
             anatomy_intact=all(v.anatomy_intact for v in verdicts),
             subjects_unique=all(v.subjects_unique for v in verdicts),
+            text_free=all(v.text_free for v in verdicts),
         )
 
 
-    # The pass rule: the two failures a child notices — wrong character, or three arms. style_match
-    # is recorded and available to regeneration-controller's ranking but does NOT gate (ADR-007).
+    # The pass rule: the three failures a child notices — wrong character, three arms, or a word
+    # on the page they cannot read and the app never speaks (CC-6). style_match and
+    # subjects_unique are recorded and ranked but do NOT gate (ADR-007, §4.4).
     # Invariant 4: unchecked is never a pass.
-    passed = verdict is not None and verdict.same_character and verdict.anatomy_intact
+    passed = (
+        verdict is not None
+        and verdict.same_character
+        and verdict.anatomy_intact
+        and verdict.text_free
+    )
 
     updated = [
         *scene.attempts[:-1],

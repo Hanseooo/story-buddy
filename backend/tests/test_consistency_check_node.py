@@ -34,6 +34,7 @@ def _verdict(
     anatomy: bool = True,
     style: bool = True,
     unique: bool = True,
+    text_free: bool = True,
     attributes: list[str] | None = None,
     reasons: list[FailureReason] | None = None,
     differences: str = "none",
@@ -45,6 +46,7 @@ def _verdict(
         style_match=style,
         anatomy_intact=anatomy,
         subjects_unique=unique,
+        text_free=text_free,
         failure_reasons=reasons or [],
     )
 
@@ -139,6 +141,7 @@ def test_scene_verdict_declares_differences_first_and_failure_reasons_last():
         "style_match",
         "anatomy_intact",
         "subjects_unique",
+        "text_free",
         "failure_reasons",
     ]
 
@@ -237,6 +240,57 @@ def test_an_unchecked_attempt_writes_no_verdict_and_therefore_no_uniqueness_sign
     result = _run(state, [])
 
     assert result["scenes"][0].attempts[-1].vlm_verdict is None
+
+
+def test_a_lettered_verdict_from_any_character_folds_the_page_to_not_text_free():
+    """§6 test 9 / §4.3: worst-wins, like every other boolean in this fold. Two subjects, one
+    judge call each; one comes back lettered and the page is lettered."""
+    scene = _scene_with_attempt(characters_present=["c0", "c1"])
+    state = _state([scene], [_char("c0", "the dog"), _char("c1", "the star")])
+
+    result = _run(state, [_verdict(True, text_free=True), _verdict(True, text_free=False)])
+
+    assert result["scenes"][0].attempts[-1].vlm_verdict.text_free is False
+
+
+def test_lettering_alone_flips_passed_to_false():
+    """§6 test 10 / §4.3 — the gate. Everything else on this verdict is clean: same character,
+    anatomy intact, unique subjects, matching style. Only the door has a word on it.
+
+    This is deliberately UNLIKE subjects_unique (which records and ranks but does not gate):
+    that decision was blocked on an unmeasured duplicate rate, whereas at least 3 of the 6
+    burrow-door draws in the 2026-08-13 probe came back lettered, and a word on a page in a book
+    for a six-year-old is not a judgement call (CC-6).
+    """
+    scene = _scene_with_attempt(characters_present=["c0"])
+    state = _state([scene], [_char("c0", "the dog")])
+
+    result = _run(state, [_verdict(True, anatomy=True, unique=True, style=True, text_free=False)])
+
+    attempt = result["scenes"][0].attempts[-1]
+    assert attempt.vlm_verdict.same_character is True
+    assert attempt.vlm_verdict.anatomy_intact is True
+    assert attempt.passed is False
+
+
+def test_a_lettered_page_is_not_finalized_and_buys_the_one_retry():
+    """§4.3 + ADR-010: a real verdict saying *fail* buys the retry, and only the first time.
+    An unfinalized scene is what routes control to `regenerate`."""
+    scene = _scene_with_attempt(characters_present=["c0"])
+    state = _state([scene], [_char("c0", "the dog")])
+
+    result = _run(state, [_verdict(True, text_free=False)])
+
+    assert result["scenes"][0].final_image_ref is None
+
+
+def test_text_free_is_declared_after_subjects_unique_and_before_the_failure_reasons():
+    """ADR-004: `providers._assert_field_order` enforces schema order on the wire, and
+    `failure_reasons` must stay LAST — it is what `correct_prompt` iterates."""
+    fields = list(SceneVerdict.model_fields)
+    assert fields[-1] == "failure_reasons"
+    assert fields.index("subjects_unique") < fields.index("text_free") < fields.index("failure_reasons")
+
 
 
 
@@ -486,6 +540,7 @@ def _attempt(
     anatomy: bool = True,
     style: bool = True,
     unique: bool = True,
+    text: bool = True,
 ) -> Attempt:
     """An already-judged attempt. same=None means UNCHECKED (vlm_verdict is None)."""
     if same is None:
@@ -499,8 +554,9 @@ def _attempt(
             style_match=style,
             anatomy_intact=anatomy,
             subjects_unique=unique,
+            text_free=text,
         ),
-        passed=same and anatomy,
+        passed=same and anatomy and text,
     )
 
 
