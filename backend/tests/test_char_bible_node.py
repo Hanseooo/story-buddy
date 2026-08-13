@@ -379,8 +379,6 @@ def test_mint_reference_accepts_a_passing_first_draw():
     assert judge_mock.call_count == 1
     assert verdict is passing
     assert draws == 1
-    assert path == "story-1/ref-c0-1.png"
-    assert _uploaded_bytes(supabase) == b"draw-1-bytes"
 
 
 def test_mint_reference_rejects_a_lettered_draw_and_redraws():

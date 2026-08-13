@@ -343,13 +343,18 @@ def test_the_log_line_reports_whether_the_text_clause_fired(caplog):
     appended nothing (invariant 5)."""
     import logging
 
-    state = _state([_scene([_failed_attempt(verdict=_verdict(same=True, text=False))])])
+    def _log(verdict) -> str:
+        caplog.clear()
+        state = _state([_scene([_failed_attempt(verdict=verdict)])])
+        with caplog.at_level(logging.INFO, logger="pipeline.regenerate"):
+            with patch("pipeline.regenerate.generate_and_store", return_value=("job-1/s0-2.png", True)):
+                regenerate(state)
+        return caplog.text
 
-    with caplog.at_level(logging.INFO, logger="pipeline.regenerate"):
-        with patch("pipeline.regenerate.generate_and_store", return_value=("job-1/s0-2.png", True)):
-            regenerate(state)
-
-    assert "text_clause=True" in caplog.text
+    # Both directions: asserting only the True case would pass against a hardcoded literal, which
+    # is exactly the silent-append confusion the line exists to remove.
+    assert "text_clause=True" in _log(_verdict(same=True, text=False))
+    assert "text_clause=False" in _log(_verdict(same=False, text=True))
 
 
 # --- the guards that raise (invariant 1, ADR-025 D4) ---
