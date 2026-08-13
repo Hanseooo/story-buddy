@@ -49,6 +49,12 @@ class RefVerdict(BaseModel):
     # job b9506307 set it TRUE on a verdict whose own prose said "This is a contradiction".
     matches_description: bool
     attributes_present: list[str] = Field(default_factory=list)   # best-of tiebreak when all draws fail
+    # lettering-suppression §2. Qwen-Image renders text by design and NEGATIVE_PROMPT does not stop
+    # it — a 2026-08-13 draw came back with "Reference;" lettered across the top. This is the
+    # missing DETECTION channel, not a fourth prohibition. Declared LAST so ADR-004's order above
+    # is untouched; additive → no schema_version bump. True = no lettering seen, so an old
+    # checkpoint and a degraded judge both read clean rather than failing (invariant 2).
+    text_free: bool = True
 
 
 class Character(BaseModel):
@@ -119,7 +125,7 @@ class VlmVerdict(BaseModel):
                                        # LAST so the ADR-004 ordering above is untouched. Additive →
                                        # no schema_version bump. Best-of (ADR-010) ranks
                                        # lexicographically: same_character → anatomy_intact →
-                                       # subjects_unique → style_match.
+                                       # text_free → subjects_unique → style_match.
                                        # ponytail: bool, not a score — widen only if a measured tie forces it.
     subjects_unique: bool = True       # scene-setting-and-subject-binding §4.4: each character
                                        # drawn exactly once. Declared LAST so ADR-004's order above
@@ -127,6 +133,14 @@ class VlmVerdict(BaseModel):
                                        # and RANKED (ADR-010) but does NOT gate — `passed` stays
                                        # `same_character and anatomy_intact`. Gating is blocked on a
                                        # measured duplicate rate and issue #26 (spec §8.1).
+    text_free: bool = True             # lettering-suppression §2: any visible text — letters,
+                                       # numbers, writing — anywhere on the page. Declared LAST so
+                                       # ADR-004's order above is untouched. Additive → no
+                                       # schema_version bump. Unlike `subjects_unique` this one
+                                       # GATES (§4.3): the rate is known non-zero and the artifact
+                                       # is unambiguous. Best-of (ADR-010) ranks lexicographically:
+                                       # same_character → anatomy_intact → text_free →
+                                       # subjects_unique → style_match.
 
 
 class Attempt(BaseModel):
