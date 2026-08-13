@@ -384,8 +384,9 @@ def test_moderation_router_raises_ref_flagged_not_content_flagged_for_flagged_ch
     """Pins the rename: a flagged canonical reference is machine error, not the child's text (spec §4.2)."""
     import pytest
     from pipeline.graph import moderation_router
+    from pipeline.char_ref_mod import MAX_MOD_REDRAWS
     from contracts.story_memory import (
-        CURRENT_SCHEMA_VERSION, Character, Input, ModerationResult, StoryMemory,
+        CURRENT_SCHEMA_VERSION, Character, Cost, Input, ModerationResult, StoryMemory,
     )
 
     state = StoryMemory(
@@ -394,6 +395,7 @@ def test_moderation_router_raises_ref_flagged_not_content_flagged_for_flagged_ch
         classroom_id="dev-classroom",
         profile_id="dev-profile",
         input=Input(raw_text="x", redacted_text="x", moderation=ModerationResult(passed=True)),
+        cost=Cost(ref_mod_retry_count=MAX_MOD_REDRAWS),
     )
     state.characters = [
         Character(char_id="c0", name="the dog", ref_moderation_status="flagged")
@@ -401,6 +403,82 @@ def test_moderation_router_raises_ref_flagged_not_content_flagged_for_flagged_ch
     with pytest.raises(RuntimeError) as exc_info:
         moderation_router(state)
     assert str(exc_info.value) == "ref_flagged"
+
+
+def _flagged_router_state(mod_retries: int, scenes: bool = True, input_passed: bool = True):
+    from contracts.story_memory import (
+        CURRENT_SCHEMA_VERSION, Character, Cost, Input, ModerationResult, Scene, StoryMemory,
+    )
+    state = StoryMemory(
+        schema_version=CURRENT_SCHEMA_VERSION,
+        story_id="job-1",
+        classroom_id="dev-classroom",
+        profile_id="dev-profile",
+        input=Input(raw_text="x", redacted_text="x",
+                    moderation=ModerationResult(passed=input_passed,
+                                                categories=[] if input_passed else ["S1"])),
+        characters=[Character(char_id="c0", name="the dog", ref_moderation_status="flagged")],
+        cost=Cost(ref_mod_retry_count=mod_retries),
+    )
+    if scenes:
+        state.scenes = [Scene(scene_id="s0", text_excerpt="x")]
+    return state
+
+
+def test_moderation_router_routes_a_flag_back_to_char_bible_while_budget_remains():
+    """§6 test 6 / §4.2. The whole change: a flag with budget left costs one redraw, not the book.
+    The label is a real node name, which is what makes the missing path_map at graph.py:112 fine."""
+    from pipeline.graph import moderation_router
+
+    assert moderation_router(_flagged_router_state(mod_retries=0)) == "char_bible"
+
+
+def test_moderation_router_raises_once_the_redraw_budget_is_spent():
+    """§6 test 7. MAX_MOD_REDRAWS = 1, so the second flag is terminal — two independent draws
+    flagging is evidence, not a coin flip (spec §8 q4)."""
+    import pytest
+    from pipeline.char_ref_mod import MAX_MOD_REDRAWS
+    from pipeline.graph import moderation_router
+
+    with pytest.raises(RuntimeError) as exc_info:
+        moderation_router(_flagged_router_state(mod_retries=MAX_MOD_REDRAWS))
+    assert str(exc_info.value) == "ref_flagged"
+
+
+def test_an_input_text_flag_still_wins_over_a_reference_flag():
+    """§6 test 10 / CC-1 ordering. The new branch sits AFTER the input.moderation block, so a
+    book whose text failed dies as content_flagged — the child's own text, not a machine
+    error — even with a flagged character and budget to spare."""
+    import pytest
+    from pipeline.graph import moderation_router
+
+    with pytest.raises(RuntimeError) as exc_info:
+        moderation_router(_flagged_router_state(mod_retries=0, input_passed=False))
+    assert str(exc_info.value) == "content_flagged"
+
+
+def test_moderation_router_still_returns_reveal_when_every_character_passed():
+    """§6 test 8: the unchanged happy path, re-pinned because the new branch sits above it."""
+    from contracts.story_memory import Character, Input, ModerationResult, Scene
+    from pipeline.graph import moderation_router
+
+    state = _initial_state("job-1")
+    state.input = Input(raw_text="x", redacted_text="x", moderation=ModerationResult(passed=True))
+    state.characters = [Character(char_id="c0", name="the dog", ref_moderation_status="passed")]
+    state.scenes = [Scene(scene_id="s0", text_excerpt="x")]
+    assert moderation_router(state) == "reveal"
+
+
+def test_moderation_router_still_returns_analyze_on_the_shared_input_gate_edge():
+    """§6 test 9. One function serves both edges; after input_gate there are no characters, so
+    the new branch must be unreachable from there."""
+    from contracts.story_memory import Input, ModerationResult
+    from pipeline.graph import moderation_router
+
+    state = _initial_state("job-1")
+    state.input = Input(raw_text="x", redacted_text="x", moderation=ModerationResult(passed=True))
+    assert state.characters == []
+    assert moderation_router(state) == "analyze"
 
 
 def test_a_run_that_taps_once_visits_char_ref_mod_twice(monkeypatch):
