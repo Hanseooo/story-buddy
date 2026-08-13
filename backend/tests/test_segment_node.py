@@ -584,3 +584,70 @@ def test_segment_dedup_preserves_first_seen_order_of_the_survivors():
     assert result["scenes"][0].characters_present == ["c1", "c0"]
 
 
+
+
+# --- §4.6 name-recovery backstop (prod job 483056e0: s1/s2 drew with refs=0) ---
+
+def test_segment_recovers_a_roster_name_the_model_omitted():
+    """The model returned no characters for a beat whose text names one. Prod job 483056e0 lost
+    the dragon on s1 and s2, so both pages drew unreferenced AND unchecked."""
+    seg = SceneSegmentation(scenes=[
+        ExtractedScene(start=0, end=0, characters_present=[]),
+        ExtractedScene(start=1, end=1, characters_present=[]),
+    ])
+    raw = "A huge red dragon made a nest. He found a ball."
+    with patch("pipeline.segment.segment_scenes", return_value=seg):
+        result = segment(_state(raw=raw, characters=[_char("c0", "the dragon")]))
+
+    assert result["scenes"][0].characters_present == ["c0"]
+    assert result["scenes"][1].characters_present == []
+
+
+def test_segment_recovery_appends_after_the_model_s_own_names():
+    """Invariant 4: recovery may not reorder what the model named — the roll index in
+    `build_prompt` is asserted against `ref_paths` on three separate nodes."""
+    seg = SceneSegmentation(scenes=[
+        ExtractedScene(start=0, end=1, characters_present=["the cat"]),
+    ])
+    raw = "The dog ran with the cat. They found a ball."
+    with patch("pipeline.segment.segment_scenes", return_value=seg):
+        result = segment(_state(
+            raw=raw, characters=[_char("c0", "the dog"), _char("c1", "the cat")]
+        ))
+
+    assert result["scenes"][0].characters_present == ["c1", "c0"]
+
+
+def test_segment_recovery_never_duplicates_a_name_the_model_already_gave():
+    seg = SceneSegmentation(scenes=[
+        ExtractedScene(start=0, end=1, characters_present=["the dog"]),
+    ])
+    raw = "The dog ran. The dog found a ball."
+    with patch("pipeline.segment.segment_scenes", return_value=seg):
+        result = segment(_state(raw=raw, characters=[_char("c0", "the dog")]))
+
+    assert result["scenes"][0].characters_present == ["c0"]
+
+
+def test_segment_recovery_matches_on_a_word_boundary_not_a_substring():
+    """"the star" must not be recovered from "stars" — the plural names no character
+    (`prompt_optimizer.REFERENCE_CLAUSE`'s own carve-out)."""
+    seg = SceneSegmentation(scenes=[
+        ExtractedScene(start=0, end=1, characters_present=[]),
+    ])
+    raw = "She looked up at the stars. They were bright."
+    with patch("pipeline.segment.segment_scenes", return_value=seg):
+        result = segment(_state(raw=raw, characters=[_char("c0", "the star")]))
+
+    assert result["scenes"][0].characters_present == []
+
+
+def test_segment_recovery_is_case_insensitive():
+    seg = SceneSegmentation(scenes=[
+        ExtractedScene(start=0, end=1, characters_present=[]),
+    ])
+    raw = "Dragon roared loudly. The village woke."
+    with patch("pipeline.segment.segment_scenes", return_value=seg):
+        result = segment(_state(raw=raw, characters=[_char("c0", "dragon")]))
+
+    assert result["scenes"][0].characters_present == ["c0"]

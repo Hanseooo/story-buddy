@@ -4,6 +4,7 @@ Two seams (MASTER_SPEC §6): `judge_attempt` with `providers.judge` + Supabase m
 node with `judge_attempt` patched. The router is pure and needs no mocks at all.
 """
 import base64
+import logging
 from unittest.mock import MagicMock, patch
 
 from contracts.story_memory import (
@@ -19,7 +20,13 @@ from contracts.story_memory import (
     StoryMemory,
     VlmVerdict,
 )
-from pipeline.consistency_check import SceneVerdict, _rank, consistency_check, judge_attempt
+from pipeline.consistency_check import (
+    GATING_REASONS,
+    SceneVerdict,
+    _rank,
+    consistency_check,
+    judge_attempt,
+)
 from pipeline.graph import route_after_check, route_next_scene
 
 
@@ -549,10 +556,12 @@ def _attempt(
     style: bool = True,
     unique: bool = True,
     text: bool = True,
+    reasons: list[FailureReason] | None = None,
 ) -> Attempt:
     """An already-judged attempt. same=None means UNCHECKED (vlm_verdict is None)."""
     if same is None:
         return Attempt(image_ref=image_ref, prompt="p", passed=False)
+    reasons = reasons or []
     return Attempt(
         image_ref=image_ref,
         prompt="p",
@@ -564,7 +573,8 @@ def _attempt(
             subjects_unique=unique,
             text_free=text,
         ),
-        passed=same and anatomy and text,
+        failure_reasons=reasons,
+        passed=same and anatomy and text and not (GATING_REASONS & set(reasons)),
     )
 
 
@@ -638,11 +648,11 @@ def test_rank_prefers_a_text_free_attempt_over_a_unique_subject_one():
     assert _rank(text_free_but_duplicated) > _rank(lettered_but_unique)
 
 
-def test_the_unchecked_rank_tuple_widened_to_six_zeros():
+def test_the_unchecked_rank_tuple_widened_to_seven_zeros():
     """§6 test 13: unchecked still sorts below EVERY checked attempt (invariant 4). The tuple
     widened, so the zeros have to widen with it or the comparison raises on length."""
     unchecked = Attempt(image_ref="job-1/s0-1.png", prompt="p", passed=False)
-    assert _rank(unchecked) == (0, 0, 0, 0, 0, 0)
+    assert _rank(unchecked) == (0, 0, 0, 0, 0, 0, 0)
 
     worst_checked = _attempt(
         "job-1/s0-2.png", same=False, anatomy=False, text=False, unique=False, style=False
@@ -650,11 +660,14 @@ def test_the_unchecked_rank_tuple_widened_to_six_zeros():
     assert _rank(worst_checked) > _rank(unchecked)
 
 
-def test_the_checked_rank_tuple_is_six_terms_in_the_declared_order():
+def test_the_checked_rank_tuple_is_seven_terms_in_the_declared_order():
     ranked = _rank(
-        _attempt("job-1/s0-1.png", same=True, anatomy=False, text=True, unique=False, style=True)
+        _attempt(
+            "job-1/s0-1.png", same=True, anatomy=False, text=True, unique=False, style=True,
+            reasons=[FailureReason.wrong_colour],
+        )
     )
-    assert ranked == (1, True, False, True, False, True)
+    assert ranked == (1, True, False, True, False, False, True)
 
 
 def test_the_worst_possible_checked_attempt_still_outranks_an_unchecked_one():
@@ -890,3 +903,114 @@ def test_the_per_scene_log_line_carries_uniqueness_and_the_prompt_version(caplog
     assert "subjects_unique=False" in caplog.text
     assert f"judge_prompt_version={JUDGE_PROMPT_VERSION}" in caplog.text
 
+
+
+# --- The identity-attribute gate (prod job 483056e0: s3 and s4 shipped off-colour) ---
+
+def test_wrong_colour_alone_fails_the_gate():
+    """Prod job 483056e0 s3 passed with `['wrong_colour', 'wrong_clothing']` and s4 with four
+    reasons: the judge caught the dragon's colour and the gate shrugged. A red dragon that comes
+    back green is still `same_character=True`."""
+    state = _state([_scene_with_attempt(characters_present=["c0"])], [_char("c0", "the dragon")])
+    result = _run(state, [_verdict(True, reasons=[FailureReason.wrong_colour])])
+
+    assert result["scenes"][0].attempts[-1].passed is False
+    assert result["scenes"][0].final_image_ref is None      # unfinalized → buys the one retry
+
+
+def test_wrong_body_feature_alone_fails_the_gate():
+    state = _state([_scene_with_attempt(characters_present=["c0"])], [_char("c0", "the dragon")])
+    result = _run(state, [_verdict(True, reasons=[FailureReason.wrong_body_feature])])
+
+    assert result["scenes"][0].attempts[-1].passed is False
+
+
+def test_wrong_clothing_alone_still_passes():
+    """Deliberately NOT gated: a red sash reading differently under gouache lighting is a
+    plausible false positive, and the cost of a false gate is a paid redraw."""
+    state = _state([_scene_with_attempt(characters_present=["c0"])], [_char("c0", "the dog")])
+    result = _run(state, [_verdict(True, reasons=[FailureReason.wrong_clothing])])
+
+    assert result["scenes"][0].attempts[-1].passed is True
+
+
+def test_wrong_style_alone_still_passes():
+    """`style_match` stays record-and-rank (ADR-007) and so does its reason."""
+    state = _state([_scene_with_attempt(characters_present=["c0"])], [_char("c0", "the dog")])
+    result = _run(state, [_verdict(True, style=False, reasons=[FailureReason.wrong_style])])
+
+    assert result["scenes"][0].attempts[-1].passed is True
+
+
+def test_a_gating_reason_from_either_subject_fails_the_whole_scene():
+    """Worst-wins: the fold unions failure_reasons, so one bad subject gates the page."""
+    state = _state(
+        [_scene_with_attempt(characters_present=["c0", "c1"])],
+        [_char("c0", "the dog", "job-1/ref-c0.png"), _char("c1", "the dragon", "job-1/ref-c1.png")],
+    )
+    result = _run(state, [
+        _verdict(True),
+        _verdict(True, reasons=[FailureReason.wrong_colour]),
+    ])
+
+    assert result["scenes"][0].attempts[-1].passed is False
+
+
+def test_a_second_attempt_that_still_fails_the_attribute_gate_is_finalized_anyway():
+    """ADR-010 caps the retry at one. The gate buys a correction, never an unbounded loop."""
+    scene = _two_attempt_scene(
+        _attempt("job-1/s0-1.png", same=True, reasons=[FailureReason.wrong_colour]),
+        _attempt("job-1/s0-2.png", same=True, reasons=[FailureReason.wrong_colour]),
+    )
+    result = _run(_state([scene], [_char("c0", "the dragon")]), [
+        _verdict(True, reasons=[FailureReason.wrong_colour]),
+    ])
+
+    assert result["scenes"][0].final_image_ref is not None
+
+
+def test_rank_prefers_the_on_colour_attempt_when_the_higher_keys_tie():
+    """The corrected redraw is only worth paying for if best-of can see the correction."""
+    on_colour = _attempt("job-1/s0-2.png", same=True)
+    off_colour = _attempt("job-1/s0-1.png", same=True, reasons=[FailureReason.wrong_colour])
+
+    assert _rank(on_colour) > _rank(off_colour)
+
+
+def test_rank_puts_the_attribute_gate_below_text_and_above_uniqueness():
+    """Gating axes outrank the two record-only ones; within the gating axes a lettered page is
+    worse than an off-colour one."""
+    lettered = _attempt("job-1/s0-1.png", same=True, text=False)
+    off_colour = _attempt("job-1/s0-2.png", same=True, reasons=[FailureReason.wrong_colour])
+    duplicated = _attempt("job-1/s0-3.png", same=True, unique=False)
+
+    assert _rank(duplicated) > _rank(off_colour) > _rank(lettered)
+
+
+# --- C: an unchecked page names WHY it was unchecked (CC-5) ---
+
+def test_the_log_distinguishes_no_subjects_from_a_judge_outage(caplog):
+    """Both finalize, and they used to log the same word. A page nothing could judge and a page
+    the judge failed on need different responses: the first is a segmentation or ADR-004 cap
+    problem, the second is an outage. Asserting ONE token would not prove they differ, so both
+    branches are exercised here — `judge_attempt` returns `[]` for either reason (see its
+    docstring), and `subjects` is the only thing that tells them apart."""
+    no_subjects = _state([_scene_with_attempt(characters_present=[])], [])
+    with caplog.at_level(logging.INFO):
+        _run(no_subjects, [])
+
+    assert "unchecked=no_subjects" in caplog.text
+    assert "unchecked=judge_failed" not in caplog.text
+
+    caplog.clear()
+    # A real subject with a real canonical reference — so `subjects` is non-empty — and the helper
+    # still returns nothing, which is exactly the Storage/judge outage shape.
+    outage = _state(
+        [_scene_with_attempt(characters_present=["c0"])],
+        [_char("c0", "the dragon", "job-1/ref-c0.png")],
+    )
+    with caplog.at_level(logging.INFO):
+        _run(outage, [])
+
+    assert "unchecked=judge_failed" in caplog.text
+    assert "unchecked=no_subjects" not in caplog.text

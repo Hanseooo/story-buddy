@@ -75,6 +75,25 @@ class SceneVerdict(BaseModel):
     failure_reasons: list[FailureReason] = Field(default_factory=list)   # LAST — the closed 7
 
 
+# The two identity-bearing attribute reasons. Both GATE (2026-08-13); the other five do not.
+#
+# Prod job 483056e0 shipped `s3` with `['wrong_colour', 'wrong_clothing']` and `s4` with
+# `['wrong_colour', 'wrong_body_feature', 'wrong_clothing', 'wrong_style']`, both `passed=True`:
+# the judge had already found the dragon off-model and the gate had no term for it, because a
+# green dragon is still `same_character=True`. Colour and body features are what a child uses to
+# recognise a non-human character across pages — the dragon has no face to fail `different_face`
+# on and no clothes to fail `wrong_clothing` on.
+#
+# `wrong_clothing` and `wrong_style` are deliberately EXCLUDED. Both have a live false-positive
+# story: a sash reading differently under gouache lighting, and `style_match` reading False by
+# construction (issue #24), and the cost of a false gate is a paid redraw. `wrong_species` and
+# `different_face` need no entry — `same_character` already covers both.
+#
+# Not a contract change: `FailureReason` stays frozen at 7 (ADR-028). This is a subset of the
+# existing closed set, read at the gate.
+GATING_REASONS = frozenset({FailureReason.wrong_colour, FailureReason.wrong_body_feature})
+
+
 def _data_uri(image: bytes) -> str:
     # ponytail: inline base64, same as `char_bible._data_uri`. The judge is shown base64,
     # never a signed URL (CC-4). What is PERSISTED is the path.
@@ -108,7 +127,7 @@ def judge_attempt(image_path: str, subjects: list[tuple[str, str]]) -> list[Scen
         return []
 
 
-def _rank(a: Attempt) -> tuple[int, int, int, int, int, int]:
+def _rank(a: Attempt) -> tuple[int, int, int, int, int, int, int]:
     """ADR-028's lexicographic best-of signal, with unchecked sorting below every checked attempt.
 
     A pass scores (1, 1, 1, …) and beats anything that gated, so `max` needs no special case for
@@ -122,11 +141,21 @@ def _rank(a: Attempt) -> tuple[int, int, int, int, int, int]:
     `subjects_unique` sits between text and style (§4.4): it does not GATE, but when a retry
     fires for some other reason best-of now prefers the non-duplicated attempt at no extra draw.
     Same record-and-rank-without-gating shape `style_match` already has below it.
+
+    `attributes_ok` (`GATING_REASONS`) sits between text and uniqueness — last of the gating axes,
+    ahead of the two record-only ones. Read off `Attempt.failure_reasons`, not `vlm_verdict`, which
+    carries no reason list. Without this term the corrected redraw the gate now buys is invisible
+    to best-of: two attempts identical on every boolean would tie, and the tie rule would keep
+    attempt 2 whether or not it actually fixed the colour.
     """
     v = a.vlm_verdict
     return (
-        (0, 0, 0, 0, 0, 0) if v is None
-        else (1, v.same_character, v.anatomy_intact, v.text_free, v.subjects_unique, v.style_match)
+        (0, 0, 0, 0, 0, 0, 0) if v is None
+        else (
+            1, v.same_character, v.anatomy_intact, v.text_free,
+            not (GATING_REASONS & set(a.failure_reasons)),
+            v.subjects_unique, v.style_match,
+        )
     )
 
 
@@ -185,15 +214,17 @@ def consistency_check(state: StoryMemory) -> dict:
         )
 
 
-    # The pass rule: the three failures a child notices — wrong character, three arms, or a word
-    # on the page they cannot read and the app never speaks (CC-6). style_match and
-    # subjects_unique are recorded and ranked but do NOT gate (ADR-007, §4.4).
+    # The pass rule: the four failures a child notices — wrong character, three arms, a word on
+    # the page they cannot read and the app never speaks (CC-6), or a character whose colour and
+    # build changed between pages (`GATING_REASONS`). style_match and subjects_unique are recorded
+    # and ranked but do NOT gate (ADR-007, §4.4).
     # Invariant 4: unchecked is never a pass.
     passed = (
         verdict is not None
         and verdict.same_character
         and verdict.anatomy_intact
         and verdict.text_free
+        and not (GATING_REASONS & set(reasons))
     )
 
     updated = [
@@ -226,7 +257,12 @@ def consistency_check(state: StoryMemory) -> dict:
         "consistency_check: scene_id=%s attempt=%d/%d subjects=%d %s same_character=%s "
         "anatomy_intact=%s text_free=%s style_match=%s subjects_unique=%s failure_reasons=%s passed=%s "
         "best_of=%s judge_prompt_version=%d",
-        scene.scene_id, len(updated), 2, len(subjects), "checked" if verdict else "unchecked",
+        scene.scene_id, len(updated), 2, len(subjects),
+        # CC-5. Both finalize and both used to log the same word, so the two were indistinguishable
+        # in prod — and they call for opposite responses. `no_subjects` is a segmentation miss or
+        # ADR-004's ≤2 reference cap and is fixable upstream; `judge_failed` is an outage and is
+        # not. Prod job 483056e0's s1/s2 were the first kind and read as the second.
+        "checked" if verdict else ("unchecked=no_subjects" if not subjects else "unchecked=judge_failed"),
         verdict and verdict.same_character, verdict and verdict.anatomy_intact,
         verdict and verdict.text_free, verdict and verdict.style_match,
         verdict and verdict.subjects_unique,

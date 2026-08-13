@@ -202,6 +202,32 @@ def merge_thin(scenes: list[ExtractedScene], units: list[str]) -> list[Extracted
     return merged
 
 
+# §4.6. The model is the only thing deciding `characters_present`, and when it returns `[]` for a
+# beat whose text plainly names a character the consequences compound: `generate_scene` finds no
+# reference and falls through to `text_to_image` (`generate_scene.py:55-57`), and then
+# `consistency_check` finds no subject and files the page *unchecked*. The page most likely to be
+# off-model is the one page nothing measured. Prod job 483056e0 lost the dragon on s1 and s2 —
+# `refs=0 prompt_len=552` against 930-1050 everywhere else — and both shipped unjudged.
+#
+# Leading article stripped so a roster "the dragon" recovers from "a huge red dragon"; word
+# boundaries so "the star" does not recover from "stars", which names no character
+# (`prompt_optimizer.REFERENCE_CLAUSE` carves out the same case).
+_ARTICLE = re.compile(r"^(the|a|an)\s+", re.IGNORECASE)
+
+
+def _mentions(excerpt: str, name: str) -> bool:
+    """Pure. Whether `excerpt` names this roster character.
+
+    ponytail: a word-boundary match on the name, not NER. The failure mode is over-recovery — a
+    character named in passing ("he dreamed of a dragon") gets a reference it did not need, which
+    costs one `character_absent` retry at worst. Under-recovery costs an unreferenced AND unchecked
+    page, which is strictly worse and is what this exists to stop. Upgrade path if the retry rate
+    bites: ask the judge, not a regex.
+    """
+    stem = _ARTICLE.sub("", name).strip()
+    return bool(stem) and re.search(rf"\b{re.escape(stem)}\b", excerpt, re.IGNORECASE) is not None
+
+
 def segment(state: StoryMemory) -> dict:
     text = state.input.redacted_text or state.input.raw_text
     units = split_sentences(text)
@@ -234,6 +260,21 @@ def segment(state: StoryMemory) -> dict:
                 char_ids.append(name_to_id[name])
             else:
                 log.warning("segment: name %r not in roster, dropped", name)
+
+        # §4.6. APPENDED, never inserted: invariant 4 requires that what the model named keeps its
+        # relative order, because `build_prompt`'s "Image N is X" is asserted against `ref_paths`
+        # on three separate nodes. Roster order among the recovered, which is prominence order.
+        # Recovery goes through `name_to_id`, never `state.characters`: two roster entries can
+        # share a name (§4.3 path 2), and iterating the roster would re-append the loser that
+        # first-seen-wins just excluded — sending two references for one named character.
+        recovered = [
+            char_id
+            for name, char_id in name_to_id.items()
+            if char_id not in char_ids and _mentions(excerpt, name)
+        ]
+        if recovered:
+            log.info("segment: s%d recovered %s from the excerpt", i, recovered)
+        char_ids.extend(recovered)
 
         loc_id = name_to_loc.get(r.location_name) if r.location_name else None
         if r.location_name and loc_id is None:

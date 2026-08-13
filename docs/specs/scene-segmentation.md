@@ -174,8 +174,9 @@ state that never-invent overrides the floor. A three-sentence story gets a short
 | **Out-of-bounds indices** | Clamped. A model that hallucinates index 900 on a 12-sentence story gets index 11. |
 | **Unpunctuated run-on story** | One unit → one scene. Documented ceiling. |
 | **`characters_present` name not in the roster** | Dropped and logged. This node may not extend the roster — `analyze` owns it, and inventing a `char_id` here would produce a character with no canonical reference. |
-| **Duplicate names in the roster** (`analyze`'s documented dedup ceiling) | Maps to **every** matching `char_id`. Over-conditioning is safer than dropping, and ADR-001's 1–3 reference cap bounds the consequence downstream. |
+| **Duplicate names in the roster** (`analyze`'s documented dedup ceiling) | **First seen wins** — `name_to_id` is built with `setdefault`, so one mention maps to ONE `char_id` and the roster's prominence order picks which. Changed by `scene-setting-and-subject-binding` §4.3 path 2; this row said "every matching `char_id`" until 2026-08-13. §4.6's recovery reads the same map for the same reason. |
 | **Empty roster** (`analyze` found zero characters) | Every scene gets `characters_present: []`. Valid — `generate_scene` runs unreferenced, per ADR-010's "always a shippable page". |
+| **Model omits a character the excerpt names** | Recovered by word-boundary name match and appended (§4.6). Prod job `483056e0`'s `s1`/`s2` drew `refs=0` and shipped unchecked because of this. |
 | **Empty `timeline[]`** | Valid. The prompt loses its plot-point context and the model segments from the text alone. |
 | **Input was truncated** (ADR-012) | Segments the kept portion only. Correct — the book illustrates what was kept. |
 | **Provider hard failure** | Raises. Job → `failed` with an ADR-025 `failure_reason`; never a partial `scenes[]`. No node-level retry — the `openai` SDK's bounded retry is the entire policy (ADR-025 Decision 1). |
@@ -203,6 +204,44 @@ first-seen-wins and the id list is deduplicated with `dict.fromkeys`, which pres
 order — so removing a duplicate cannot reorder the survivors that `build_prompt`'s image roll and
 `generate_scene`'s `ref_paths` are both indexed against.
 
+
+### Name recovery — the omitted-character backstop (§4.6, 2026-08-13)
+
+The model is the only thing deciding `characters_present`, and when it returns `[]` for a beat
+whose text plainly names a roster character, the consequences **compound**:
+
+1. `generate_scene` finds no reference and falls through to `text_to_image`
+   (`generate_scene.py:55-57`) — an unanchored draw of a character that has a canonical reference
+   sitting unused in Storage.
+2. `consistency_check` then finds no subject and files the page **unchecked** — which finalizes
+   (`consistency_check.py:211`).
+
+So the page most likely to be off-model is the one page nothing measured. Prod job `483056e0`
+(2026-08-13) lost the dragon on `s1` and `s2` — `refs=0 prompt_len=552` against 930–1050 on every
+other page — and both shipped unjudged. The child's complaint was that the dragon looked different
+on those pages.
+
+**The rule.** After the roster-name mapping, every roster name that the excerpt *mentions* and that
+is not already in `char_ids` is **appended**:
+
+- Matched on the name with a leading article stripped (`the|a|an`), so a roster `"the dragon"`
+  recovers from `"a huge red dragon"`.
+- Word boundaries, case-insensitive — so `"the star"` does **not** recover from `"stars"`, which
+  names no character. `prompt_optimizer.REFERENCE_CLAUSE` carves out the same case for the same
+  reason.
+- **Appended, never inserted.** Invariant 4 requires that what the model named keeps its relative
+  order, because `build_prompt`'s "Image N is X" is asserted against `ref_paths` on three separate
+  nodes. Recovered ids follow in roster order, which is prominence order.
+- **Through `name_to_id`, not `state.characters`.** Two roster entries can share a name (§4.3
+  path 2); iterating the roster directly would re-append the loser that first-seen-wins had just
+  excluded, sending two references for one named character. This was caught by
+  `test_segment_maps_two_roster_characters_sharing_a_name_to_one_char_id` during the build.
+
+**The failure mode is over-recovery, and that is the intended asymmetry.** A character named in
+passing (`"he dreamed of a dragon"`) gets a reference it did not need, costing at worst one
+`character_absent` retry. Under-recovery costs an unreferenced *and* unchecked page. A word-boundary
+match is not NER and is not trying to be — upgrade path, if the retry rate bites, is to ask the
+judge rather than a regex.
 
 ## 5. Cross-cutting checklist (MASTER_SPEC §5)
 
@@ -262,6 +301,10 @@ definition.
 - **ADR-013:** `caption == text_excerpt` for every scene
 - **`characters_present`:** roster names map to `char_id`s; a name absent from the roster is dropped
 - **Empty roster:** every scene gets `[]` and the node does not raise
+- **§4.6 name recovery:** a roster name the model omitted is recovered from the excerpt; recovered
+  ids are **appended after** the model's own (invariant 4); a name the model already gave is not
+  duplicated; `"the star"` is **not** recovered from `"stars"` (word boundary); matching is
+  case-insensitive
 - **CC-2 source:** prefers `redacted_text`; falls back to `raw_text` when it is `None`
 - **Empty text:** returns `{"scenes": []}` and `segment_scenes` is **never called**
 - **Partial-return (ADR-024):** the result keys are exactly `{"scenes"}`; `state` is unmutated

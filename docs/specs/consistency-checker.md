@@ -128,7 +128,8 @@ nodes at once, not a hotfix here.
    - `attributes_present`, `failure_reasons` → union, deduped; `failure_reasons` emitted in
      `FailureReason` **declaration order**, which is the order `correct_prompt` iterates
    - `differences_observed` → `"\n".join(f"{name}: {v.differences_observed}")`
-6. `passed = same_character and anatomy_intact and text_free` (`False` when unchecked).
+6. `passed = same_character and anatomy_intact and text_free and not (GATING_REASONS & reasons)`
+   (`False` when unchecked).
 7. Partial-return the scene with the last attempt updated and
    `final_image_ref = attempt.image_ref`.
 
@@ -140,10 +141,44 @@ book whose reference happened to be off-spec — punishing the scenes for the re
 
 ### The pass rule
 
-`same_character and anatomy_intact and text_free`. These are the three failures a child notices: wrong
-character, three arms, or a word on the page they cannot read and the app never speaks (CC-6).
+`same_character and anatomy_intact and text_free and not (GATING_REASONS & failure_reasons)`. These
+are the four failures a child notices: wrong character, three arms, a word on the page they cannot
+read and the app never speaks (CC-6), or a character whose colour and build changed between pages.
 `style_match` and `subjects_unique` are recorded, folded, and available to `regeneration-controller`'s
 ranking, but do **not** gate (ADR-007, §4.4).
+
+#### `GATING_REASONS` — the identity-attribute gate (2026-08-13)
+
+```python
+GATING_REASONS = frozenset({FailureReason.wrong_colour, FailureReason.wrong_body_feature})
+```
+
+Prod job `483056e0` shipped `s3` with `['wrong_colour', 'wrong_clothing']` and `s4` with
+`['wrong_colour', 'wrong_body_feature', 'wrong_clothing', 'wrong_style']`, **both `passed=True`**.
+The judge had already found the dragon off-model and the gate had no term for it, because a green
+dragon is still `same_character=True`. The one retry ADR-010 pays for was never spent on the
+failure the judge had in hand.
+
+Colour and body features are what a child uses to recognise a **non-human** character across pages.
+The dragon has no face to fail `different_face` on and no clothes to fail `wrong_clothing` on, so
+before this change the entire seven-value `FailureReason` set was inert for it.
+
+**Excluded, deliberately.** `wrong_clothing` and `wrong_style` both have a live false-positive
+story — a sash reading differently under gouache lighting, and `style_match` reading `False` by
+construction (issue #24, below) — and the cost of a false gate is a paid redraw.
+`wrong_species` and `different_face` need no entry: `same_character` already covers both.
+
+**Not a contract change.** `FailureReason` stays frozen at 7 (ADR-028). This is a *subset of the
+existing closed set*, read at the gate, so the F1 measurement Objective 4 computes over that set is
+untouched.
+
+**Bounded.** The gate buys the same single retry ADR-010 already caps at one — `finalize` is
+`passed or verdict is None or len(attempts) >= 2`. Worst case per book is one extra draw per scene,
+already inside `IMAGE_BUDGET` (45; prod job `483056e0` spent 13 on 9 pages).
+
+**Fallback, pre-registered:** if the redraw rate on these two reasons proves unacceptable, demote
+them to rank-only — the shape `subjects_unique` and `style_match` already sit in. The `_rank` term
+stays either way.
 
 **Why gate on `text_free` here when `subjects_unique` did not (§4.3):** the duplicate rate was unmeasured,
 whereas lettering on door/page draws is known non-zero, the artifact is unambiguous, and latency cost is
@@ -166,12 +201,12 @@ ignorable. Numbers and controls: `PHASE_05_RESULTS.md` Probe 3 follow-up.
 
 | Case | Behavior |
 |---|---|
-| **No `characters_present`, or none carry a reference** | `judge_attempt` returns `[]` → unchecked, finalized, logged. This is exactly `generate_scene`'s `text_to_image` branch; there is no reference to judge identity against. |
+| **No `characters_present`, or none carry a reference** | `judge_attempt` returns `[]` → unchecked, finalized, logged as `unchecked=no_subjects`. This is exactly `generate_scene`'s `text_to_image` branch; there is no reference to judge identity against, so a retry here would be the uncorrected resample ADR-010 rejects. The *upstream* fix is `scene-segmentation` §4.6 name recovery; the residual case is ADR-004's ≤2 reference cap leaving a third character unreferenced. |
 | **`char_id` present but absent from `state.characters`** | Skipped, logged. Same posture as `generate_scene` and `build_prompt` — this node may not extend the roster. |
 | **A `judge` call raises after ADR-025 retries** | Unchecked, finalized, `WARNING` with `exc_info`. `char_bible`'s deliberate asymmetry: the artifact exists and is paid for, only the *check* failed. Never a job failure. |
 | **Storage download of the scene or a reference raises** | Same as above. Failing a job over a check would violate ADR-010's shippable-page rule for a reason unrelated to the page. |
 | **The attempt fails the gate** | Left unfinalized (`final_image_ref` stays `None`). `route_after_check` routes to `regenerate`, which draws once with a corrected prompt. `consistency_check` then runs again and finalizes by best-of (see below). |
-| **Two attempts already exist** | Finalized by best-of: `max(reversed(updated), key=_rank)` where `_rank` is ADR-028's lexicographic signal (`same_character` → `anatomy_intact` → `text_free` → `subjects_unique` → `style_match`, unchecked sorts last). Iterating in reverse ensures a genuine tie goes to attempt 2 (the corrected prompt is the better prior — ADR-010 calls it refinement, not resampling). |
+| **Two attempts already exist** | Finalized by best-of: `max(reversed(updated), key=_rank)` where `_rank` is ADR-028's lexicographic signal (`same_character` → `anatomy_intact` → `text_free` → `attributes_ok` → `subjects_unique` → `style_match`, unchecked sorts last). Iterating in reverse ensures a genuine tie goes to attempt 2 (the corrected prompt is the better prior — ADR-010 calls it refinement, not resampling). |
 | **A reference with a failing `ref_verdict`** | Judged against normally (above). |
 
 ### The anatomy correction gap — closed
@@ -194,9 +229,14 @@ the prompt matches `subjects_unique`'s position in `SceneVerdict`, because
 `providers._assert_field_order` rejects a provider that answers out of order.
 
 - Folded worst-wins: `subjects_unique = all(v.subjects_unique for v in verdicts)`.
-- Ranked: `_rank` is `(1, same_character, anatomy_intact, text_free, subjects_unique, style_match)`; the
-  unchecked tuple is `(0, 0, 0, 0, 0, 0)`.
-- **Not gated.** `passed` remains `same_character and anatomy_intact and text_free`. Gating `subjects_unique` means more
+- Ranked: `_rank` is
+  `(1, same_character, anatomy_intact, text_free, attributes_ok, subjects_unique, style_match)`;
+  the unchecked tuple is `(0, 0, 0, 0, 0, 0, 0)`. `attributes_ok` is
+  `not (GATING_REASONS & failure_reasons)` — read off `Attempt.failure_reasons`, since `vlm_verdict`
+  carries no reason list. It sits **last of the gating axes and ahead of the two record-only ones**.
+  Without it the corrected redraw the gate now buys would be invisible to best-of: two attempts
+  identical on every boolean tie, and the tie rule keeps attempt 2 whether or not it fixed the colour.
+- **Not gated.** `passed` does not read `subjects_unique`. Gating it means more
   regenerations and issue #26 is open and already critical — cost is not the constraint, latency
   is. Precedent for record-and-rank-without-gating is `style_match`, in this same file. Gating is a
   follow-up decision, blocked on a measured duplicate rate and on #26 being closed.
@@ -209,7 +249,8 @@ not) deserves its own issue.
 
 ## 5. Cross-cutting checklist (MASTER_SPEC §5)
 
-- [x] **CC-5 Observability** — one line per scene: `scene_id`, subject count, `checked|unchecked`,
+- [x] **CC-5 Observability** — one line per scene: `scene_id`, subject count,
+      `checked` | `unchecked=no_subjects` | `unchecked=judge_failed`,
       `same_character`, `anatomy_intact`, `style_match`, `failure_reasons`, `passed`. A wrong
       character in the finished book traces to a specific scene, a specific attempt, and the
       verdict that let it through.
@@ -246,8 +287,17 @@ not) deserves its own issue.
 - Two subjects, one failing → folded booleans are `False`; `attributes_present` and
   `failure_reasons` are unioned and deduped; `differences_observed` contains both names.
 - `failure_reasons` is emitted in `FailureReason` declaration order regardless of subject order.
-- `passed` is `True` only when `same_character and anatomy_intact`; a `style_match is False`
-  verdict still passes.
+- `passed` is `True` only when `same_character and anatomy_intact and text_free` and no
+  `GATING_REASONS` reason is present; a `style_match is False` verdict still passes.
+- **Gate (2026-08-13):** `wrong_colour` alone fails and leaves the scene unfinalized (so it buys
+  the retry); `wrong_body_feature` alone fails; `wrong_clothing` alone passes; `wrong_style` alone
+  passes; a gating reason contributed by **either** subject fails the whole scene; a second attempt
+  that still carries one is finalized anyway (ADR-010's cap).
+- **Rank (2026-08-13):** an on-colour attempt outranks an off-colour one when every boolean ties;
+  `attributes_ok` sits below `text_free` and above `subjects_unique`.
+- **CC-5:** a zero-subject page logs `unchecked=no_subjects` and an outage logs
+  `unchecked=judge_failed`. **Both** branches are asserted in one test, each also asserting the
+  other token is absent — one token alone would pass even if the two had not been separated.
 - `[]` from the helper → `vlm_verdict is None`, `failure_reasons == []`, `passed is False`, and
   `final_image_ref` **is still set** (the `verdict is None` term of the three-term finalize rule).
 - Only `attempts[-1]` is mutated; a pre-existing earlier attempt is returned byte-identical.
@@ -312,9 +362,10 @@ still ships its reference).
   once (§4).
 - **Judge latency is now on the critical path per scene**, ≤2 calls × 15 scenes. Unmeasured. It
   cannot fail the job (every path finalizes), so this is a latency risk, not a correctness one.
-- **The pass rule is a judgement, not a measurement.** `same_character and anatomy_intact` is
-  argued from ADR-007 and `correct_prompt`'s mechanics, not from data — no eval has compared gate
-  rules. Revisit if the Objective 4 corpus shows `style_match` failures correlate with expert
+- **The pass rule is a judgement, not a measurement.** Every term of it — including the
+  2026-08-13 `GATING_REASONS` addition — is argued from ADR-007, `correct_prompt`'s mechanics and
+  one prod job's logs, not from data. No eval has compared gate rules, and the redraw rate the new
+  term will cost is **unmeasured**. Revisit if the Objective 4 corpus shows `style_match` failures correlate with expert
   rejection (Objective 3).
 
 ## 9. Definition of done

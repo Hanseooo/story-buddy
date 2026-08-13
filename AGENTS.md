@@ -583,6 +583,32 @@ is not documentation of a good design; it is the blast radius, written down so t
   ⚠️ **No job has been run against this code**, and the backstop's image rubric is still
   **UNMEASURED**. Known gap, named in spec §4.6: a flag landing on a *tapped* redraw falls back to an
   untargeted mint and silently loses the child's tapped attribute.
+  **Consistency hardening from prod job `483056e0` (2026-08-13):** three fixes across two nodes, no
+  `contracts/` change, no new spec — the existing two specs were amended.
+  **(A) `segment` name recovery** (`scene-segmentation.md` §4.6): a roster name the model omitted
+  from `characters_present` is recovered from the excerpt by word-boundary match and **appended**
+  (article stripped, case-insensitive, routed through `name_to_id` so §4.3 path 2's first-seen-wins
+  survives). Job `483056e0` lost the dragon on `s1`/`s2` — `refs=0`, so both drew via
+  `text_to_image` **and** then filed unchecked. Those two failures compound and this closes both at
+  the source.
+  **(B) `GATING_REASONS`** (`consistency-checker.md`): `passed` gains
+  `and not (GATING_REASONS & failure_reasons)` where the set is `{wrong_colour, wrong_body_feature}`.
+  Job `483056e0` shipped `s3` and `s4` `passed=True` carrying those exact reasons — a green dragon
+  is still `same_character=True`, so the seven-value set was inert for the one character with no
+  face and no clothes. `wrong_clothing`/`wrong_style` stay non-gating (live false-positive stories).
+  `FailureReason` stays frozen at 7 — this reads a **subset** at the gate, so Objective 4's F1 set is
+  untouched. `_rank` widens to seven terms, `attributes_ok` last among the gating axes.
+  **(C) CC-5:** an unchecked page now logs `unchecked=no_subjects` vs `unchecked=judge_failed`.
+  They finalize identically and called for opposite responses, and in prod the first read as the
+  second.
+  ⚠️ **No job has been run against this code.** The redraw rate (B) and the over-recovery rate (A)
+  are both unmeasured; each spec names its pre-registered fallback (demote to rank-only; ask the
+  judge instead of a regex). **The setting is untouched** — a location reaches the canvas only as
+  `build_prompt`'s `Setting:` line, no location reference image exists, and the judge is never asked
+  about place. That is a queued architectural decision, not a gap these three fixes narrow.
+  **Drift fixed in passing:** `scene-segmentation.md`'s edge-case table still said a duplicate
+  roster name maps to *every* matching `char_id`; `segment`'s `name_to_id` has been `setdefault`
+  first-seen-wins since `scene-setting-and-subject-binding` §4.3. The row now says so.
   **Phase 2 is in progress. Next: S3's isolation suite, then build S4.** Next free migration is
   **`0009`**.
 - classroom-sharing (2026-08-09): gallery page + StudentTabBar built; `/s/[profileId]/gallery` live; tab bar covers Bookshelf / Gallery / Profile; logout moved to settings.
