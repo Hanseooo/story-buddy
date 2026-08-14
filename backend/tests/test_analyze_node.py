@@ -441,6 +441,44 @@ def test_analyze_rejects_an_owner_outside_the_persisted_roster():
             analyze(_state())
 
 
+def test_analyze_keeps_an_object_whose_owner_was_capped_out_of_the_roster(caplog):
+    """§4.2 errors on an UNKNOWN owner. A 4th extracted character is known — the 3-character cap
+    dropped them — so the prop loses its holder relation, not the whole job."""
+    analysis = _analysis(
+        characters=[_character(name) for name in ("Ana", "Bea", "Cy", "Dov")],
+        objects=[
+            {
+                "name": "wooden sword",
+                "description": "a short wooden sword with a red cord grip",
+                "owner_name": "Dov",
+            }
+        ],
+    )
+    with patch("pipeline.analyze.extract_entities", return_value=analysis):
+        with caplog.at_level(logging.WARNING):
+            result = analyze(_state())
+
+    assert [c.char_id for c in result["characters"]] == ["c0", "c1", "c2"]
+    assert result["objects"][0].owner_char_id is None
+    assert result["objects"][0].description == "a short wooden sword with a red cord grip"
+    assert "capped out of the roster" in caplog.text
+
+
+def test_narrative_notes_do_not_satisfy_the_discriminator_floor():
+    """§6 test 4: `notes` is narrative metadata and never counts as a visual discriminator."""
+    with pytest.raises(ValidationError):
+        ExtractedDescription.model_validate(
+            {
+                "species": "wizard",
+                "is_humanoid": True,
+                "colours": [],
+                "body_features": [],
+                "clothing": [],
+                "notes": "dark, imposing, and feared throughout the valley",
+            }
+        )
+
+
 def test_extraction_prompt_distinguishes_actors_from_props_and_requests_owners():
     prompt = EXTRACTION_PROMPT.lower()
     assert "agency" in prompt

@@ -143,13 +143,25 @@ def analyze(state: StoryMemory) -> dict:
     for character in characters:
         name_to_char_id.setdefault(character.name, character.char_id)
 
+    # §4.2 makes an UNKNOWN owner a boundary error. A owner the model did extract but that the
+    # 3-character cap dropped is not unknown — it is known and uncapped, and raising on it would
+    # turn a routine over-extraction (the cap exists precisely because the prompt is not
+    # enforceable) into a dead job before any image is drawn.
+    extracted_names = {extracted.name for extracted in analysis.characters}
+
     objects = []
     for i, extracted in enumerate(analysis.objects):
         owner_char_id = None
         if extracted.owner_name is not None:
             owner_char_id = name_to_char_id.get(extracted.owner_name)
             if owner_char_id is None:
-                raise ValueError(f"analyze: unknown owner {extracted.owner_name!r}")
+                if extracted.owner_name not in extracted_names:
+                    raise ValueError(f"analyze: unknown owner {extracted.owner_name!r}")
+                log.warning(
+                    "analyze: owner %r capped out of the roster; object %r kept unowned",
+                    extracted.owner_name,
+                    extracted.name,
+                )
         objects.append(
             StoryObject(
                 obj_id=f"obj{i}",
