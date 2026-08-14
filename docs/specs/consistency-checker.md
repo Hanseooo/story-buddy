@@ -239,8 +239,8 @@ the prompt matches `subjects_unique`'s position in `SceneVerdict`, because
 
 - Folded worst-wins: `subjects_unique = all(v.subjects_unique for v in verdicts)`.
 - Ranked: `_rank` is
-  `(1, same_character, anatomy_intact, text_free, attributes_ok, subjects_unique, style_match)`;
-  the unchecked tuple is `(0, 0, 0, 0, 0, 0, 0)`. `attributes_ok` is
+  `(1, composition_clean, fewer_contradictions, same_character, anatomy_intact, text_free, attributes_ok, subjects_unique, style_match)`;
+  the unchecked tuple is `(0, 0, 0, 0, 0, 0, 0, 0, 0)`. `attributes_ok` is
   `not (GATING_REASONS & failure_reasons)` — read off `Attempt.failure_reasons`, since `vlm_verdict`
   carries no reason list. It sits **last of the gating axes and ahead of the two record-only ones**.
   Without it the corrected redraw the gate now buys would be invisible to best-of: two attempts
@@ -249,9 +249,9 @@ the prompt matches `subjects_unique`'s position in `SceneVerdict`, because
   regenerations and issue #26 is open and already critical — cost is not the constraint, latency
   is. Precedent for record-and-rank-without-gating is `style_match`, in this same file. Gating is a
   follow-up decision, blocked on a measured duplicate rate and on #26 being closed.
-- CC-5: the per-scene log line carries `subjects_unique`, `text_free`, and `judge_prompt_version` (now version 3).
+- CC-5: the per-scene log line carries `subjects_unique`, `text_free`, and `judge_prompt_version` (now version 4).
 
-`JUDGE_PROMPT_VERSION` is a module constant (set to **3** after adding the text question), bumped on every wording change. It is deliberately
+`JUDGE_PROMPT_VERSION` is a module constant (set to **4** after adding viewpoint tolerance), bumped on every wording change. It is deliberately
 **not** a persisted `Attempt` field — that would be a third contract change for a problem logs
 already make traceable. The underlying gap (this prompt is unversioned in a way `char_bible`'s is
 not) deserves its own issue.

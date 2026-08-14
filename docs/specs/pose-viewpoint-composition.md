@@ -1,6 +1,6 @@
 # Feature Spec — pose, viewpoint, and scene composition
 
-**Status:** draft — design approved; written-spec review pending · **Phase:** 2  
+**Status:** built · **Phase:** 2  
 **Owners:** `backend/pipeline/prompt_optimizer.py`, `backend/pipeline/consistency_check.py`,
 `backend/pipeline/regenerate.py`  
 **Derived from:** `pipeline-consistency-docket.md` S3 · `visual-continuity.md` §4  

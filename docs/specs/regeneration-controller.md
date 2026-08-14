@@ -238,10 +238,22 @@ guaranteed-garbage paid image. An ADR-025 hard failure is the honest outcome.
 ### Best-of, in `consistency_check`
 
 ```python
-def _rank(a: Attempt) -> tuple[int, int, int, int]:
-    """ADR-028's lexicographic signal, with unchecked sorting below every checked attempt."""
-    v = a.vlm_verdict
-    return (0, 0, 0, 0) if v is None else (1, v.same_character, v.anatomy_intact, v.style_match)
+def _rank(a: Attempt) -> tuple[int, bool, int, bool, bool, bool, bool, bool, bool]:
+    """Lexicographic signal with composition-first best-of, and unchecked sorting below every checked attempt."""
+    verdict = a.vlm_verdict
+    contradictions = a.scene_contradictions
+    checked = verdict is not None or contradictions is not None
+    return (
+        checked,
+        contradictions == [],
+        -len(contradictions or []),
+        True if verdict is None else verdict.same_character,
+        True if verdict is None else verdict.anatomy_intact,
+        True if verdict is None else verdict.text_free,
+        not (GATING_REASONS & set(a.failure_reasons)),
+        True if verdict is None else verdict.subjects_unique,
+        True if verdict is None else verdict.style_match,
+    )
 
 # `updated` replaces the last element, it does not append — len(updated) == len(scene.attempts).
 updated   = [*scene.attempts[:-1], attempt.model_copy(update={...the existing fold's writes...})]

@@ -266,6 +266,15 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
   - Day-to-day "what tool, what size" → `docs/WORKFLOW.md`
   - Building/changing a pipeline module → its spec in `docs/specs/<module>.md` (from
     `docs/specs/TEMPLATE.md`); write one before implementing if it doesn't exist
+  - **This is a capstone study, not only a product.** What the research claims and how it is
+    measured → `docs/capstone/` (`research_direction_and_goals.md` for the objectives,
+    `methodology.md` for how they're measured). These are the submitted artifact.
+  - Anything touching the VLM judge → `docs/specs/judge-finetune.md` (Objective 4: fine-tune a
+    consistency judge) **and** `docs/product/PREREGISTRATION_OBJ4.md` (frozen 2026-08-14).
+    ⚠️ `settings.vlm_judge_model` is a **pre-registered baseline** — prompted `gemma-3-27b-it` is
+    §7.3's product gate. Swapping it to fix a bad verdict is a moved goalpost by the
+    pre-registration's own definition. The judge is a control signal, never an outcome measure
+    (ADR-004).
   - Frontend-specific framework notes → `frontend/AGENTS.md` (Next.js version-delta notes,
     auto-generated — not a project doc)
   - DB schema work → `supabase/migrations/`

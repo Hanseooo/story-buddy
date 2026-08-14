@@ -124,11 +124,12 @@ could make vacuous is the *reference* gate, whose subject line is built by `char
 
 ### `correct_prompt`
 
-Three module-level constants close the holes where reason clauses alone append nothing (making the retry a pure resample, which ADR-010 rejects):
+Four module-level constants close the holes where reason clauses alone append nothing (making the retry a pure resample, which ADR-010 rejects):
 
 - `IDENTITY_CLAUSE = "the characters must match the reference images exactly"` — fires when `same_character=False` and `failure_reasons` is empty (i.e. the judge named the failure but gave no reason; anatomy is outside the frozen 7 so it has no FailureReason entry). It fires a **second** way, as a floor: see *Unfillable clauses* below.
 - `ANATOMY_CLAUSE = "anatomy must be correct: no merged, missing or duplicated body parts"` — fires when `anatomy_intact=False` (ADR-028 froze anatomy out of `FailureReason`; this is the only correction available).
 - `TEXT_CLAUSE = "every surface in the picture is blank and unmarked"` — fires when `text_free=False` (lettering-suppression §4.4: asserts blankness without naming text, letters, words or writing, which are what summoned text in prior attempts).
+- `COMPOSITION_CLAUSE = "Preserve the Visual direction exactly: do not change the requested action, movement direction, pose, crop, expression, or viewing angle."` — fires on every corrected retry (appended last when clauses exist) to preserve requested composition.
 
 All three boolean params default to `True` so the four-positional-arg signature stays call-compatible.
 

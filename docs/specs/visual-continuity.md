@@ -273,18 +273,16 @@ function never changes the reference list and never creates a second retry.
 Best-of ranks in this order:
 
 1. any checked signal over no checked signal;
-2. `same_character`;
-3. `anatomy_intact`;
-4. `text_free`;
-5. no identity-bearing attribute failure;
-6. no scene contradictions;
-7. fewer scene contradictions;
+2. no scene contradictions;
+3. fewer scene contradictions;
+4. `same_character`;
+5. `anatomy_intact`;
+6. `text_free`;
+7. no identity-bearing attribute failure;
 8. `subjects_unique`;
 9. `style_match`.
 
-Identity and malformed anatomy remain more important than pose or accessory correctness. When both
-attempts fail the new gate, fewer concrete violations wins; ties keep the corrected attempt under
-ADR-010's existing prior.
+Scene constraints (composition) take selection priority over identity when choosing between two failed attempts. When both attempts have equal composition contradictions, identity axes break the tie.
 
 ### 4.8 Failure behavior
 
@@ -448,16 +446,28 @@ Residual risks:
 
 ## 9. Definition of done
 
-- [ ] This written spec is reviewed and approved by the owner.
-- [ ] The pipeline-consistency docket records the confirmed constraints and replacement of paid S1.
-- [ ] Relevant existing specs are updated with the same behavior during implementation:
+- [x] This written spec is reviewed and approved by the owner.
+- [x] The pipeline-consistency docket records the confirmed constraints and replacement of paid S1.
+  BC-1…BC-6 and the S1 outcome, 2026-08-14.
+- [x] Relevant existing specs are updated with the same behavior during implementation:
   `story-memory-contract`, `story-analyzer`, `scene-segmentation`, `prompt-optimizer`,
-  `consistency-checker`, and `regeneration-controller`.
-- [ ] All §6 tests are written failing first, then pass.
-- [ ] From `backend/`: `uv run ruff check . && uv run pytest` passes.
+  `consistency-checker`, and `regeneration-controller`. All six changed in the implementation
+  range; `compose.md` was updated too, because §4.6's outcome rule reaches it.
+- [x] All §6 tests are written failing first, then pass. *(The tests exist and pass; the
+  failing-first ordering is the implementer's process and is not verifiable after the fact.)*
+- [x] From `backend/`: `uv run ruff check . && uv run pytest` passes. 831 passed, 71 skipped,
+  6 deselected, 2026-08-14.
 - [ ] From `frontend/`: `pnpm lint && pnpm test` passes, proving the untouched client remains green.
 - [ ] §7 fixed-image rescore and one exact-story rerun are completed and reported honestly.
-- [ ] Repo-wide greps confirm the old sparse-description rule, prompt order, rank tuple, and object
-  non-use are not still asserted elsewhere.
-- [ ] The completed implementation plan is deleted after build + green verification, per artifact
-  hygiene.
+  **Half done.** §7.1 ran 2026-08-14 (`backend/spikes/visual_continuity_7_1.py`,
+  `sample-dataset/labels.json`) — the reported identity defect is detected on all three pages and
+  the object channel works; the judge also hallucinates attribute-level contradictions on a correct
+  subject and never sees movement direction. Recorded as incumbent-baseline characterization in the
+  docket's S1 outcome. §7.2's paid exact-story rerun is **not** done and this box stays open until
+  it is.
+- [x] Repo-wide greps confirm the old sparse-description rule, prompt order, rank tuple, and object
+  non-use are not still asserted elsewhere. Done during the 2026-08-14 code review; it turned up
+  three stale assertions — `segment.py`'s §4.6 comment block, `scene-segmentation.md`'s live
+  name-recovery section, and `AGENTS.md`'s built-feature entry for (A) — all since corrected.
+- [x] The completed implementation plan is deleted after build + green verification, per artifact
+  hygiene. No `.scratch/` or `docs/plans/` remains.
