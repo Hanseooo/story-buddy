@@ -7,7 +7,7 @@ node name, in order, INCLUDING nodes that return {}. That is the replacement for
 """
 from contracts.story_memory import CURRENT_SCHEMA_VERSION, FailureReason, Input, RefVerdict, StoryMemory
 from pipeline.analyze import StoryAnalysis
-from pipeline.consistency_check import SceneVerdict
+from pipeline.consistency_check import SceneConstraintVerdict, SceneVerdict
 from pipeline.graph import build_graph
 from pipeline.segment import ExtractedScene, SceneSegmentation
 
@@ -81,7 +81,10 @@ def _mock_call_points(monkeypatch):
     )
     monkeypatch.setattr(
         "pipeline.consistency_check.judge_attempt",
-        lambda image_path, subjects: [],   # unchecked — every path still finalizes
+        lambda image_path, subjects, prompt="": (
+            [],
+            SceneConstraintVerdict(differences_observed="none", contradictions=[]),
+        ),   # unchecked identity + clean composition
     )
     monkeypatch.setattr(
         "pipeline.char_bible.mint_reference",
@@ -232,8 +235,8 @@ def _two_scenes(monkeypatch):
     monkeypatch.setattr(
         "pipeline.segment.segment_scenes",
         lambda units, chars, timeline, locs=None, objs=None: SceneSegmentation(scenes=[
-            ExtractedScene(start=0, end=0, characters_present=[], visual_direction="Scene 0."),
-            ExtractedScene(start=1, end=len(units) - 1, characters_present=[], visual_direction="Scene 1."),
+            ExtractedScene(start=0, end=0, characters_present=["the orange dog"], visual_direction="Scene 0."),
+            ExtractedScene(start=1, end=len(units) - 1, characters_present=["the orange dog"], visual_direction="Scene 1."),
         ]),
     )
 
@@ -247,7 +250,10 @@ def test_a_failing_scene_retries_once_then_passes_and_the_run_reaches_compose(mo
     # counter would carry across both runs and the second would never see a failure.
     monkeypatch.setattr(
         "pipeline.consistency_check.judge_attempt",
-        lambda image_path, subjects: [_judge_returning(same=not image_path.endswith("s0-1.png"))],
+        lambda image_path, subjects, prompt="": (
+            [_judge_returning(same=not image_path.endswith("s0-1.png"))],
+            SceneConstraintVerdict(differences_observed="none", contradictions=[]),
+        ),
     )
     app_graph = build_graph()
 
@@ -284,7 +290,10 @@ def test_a_book_whose_every_judge_call_fails_still_reaches_compose(monkeypatch):
     _two_scenes(monkeypatch)
     monkeypatch.setattr(
         "pipeline.consistency_check.judge_attempt",
-        lambda image_path, subjects: [_judge_returning(same=False)],
+        lambda image_path, subjects, prompt="": (
+            [_judge_returning(same=False)],
+            SceneConstraintVerdict(differences_observed="none", contradictions=[]),
+        ),
     )
     app_graph = build_graph()
 

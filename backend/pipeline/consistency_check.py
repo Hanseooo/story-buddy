@@ -10,6 +10,7 @@ import logging
 
 from pydantic import BaseModel, Field
 
+from app.config import settings
 from app.db import get_supabase_client
 from contracts.story_memory import Attempt, FailureReason, StoryMemory, VlmVerdict
 from providers import judge
@@ -75,6 +76,27 @@ class SceneVerdict(BaseModel):
     failure_reasons: list[FailureReason] = Field(default_factory=list)   # LAST — the closed 7
 
 
+SCENE_CONSTRAINT_PROMPT_VERSION = 1
+
+SCENE_CONSTRAINT_PROMPT = """\
+The image is one page of a children's picture book. Check it only against the exact scene \
+constraints below.
+
+{constraints}
+
+First describe every observed difference from those constraints. Then list each contradiction \
+separately. Every contradiction must name the subject and the violated requirement. Check that \
+every expected visible character appears exactly once, no unrequested character appears, every \
+text-only character matches its frozen profile, each visible object matches its frozen appearance \
+and current holder, and the action, movement direction and viewpoint match Visual direction. \
+Leave contradictions empty only when every check is clean."""
+
+
+class SceneConstraintVerdict(BaseModel):
+    differences_observed: str
+    contradictions: list[str] = Field(default_factory=list)
+
+
 # The two identity-bearing attribute reasons. Both GATE (2026-08-13); the other five do not.
 #
 # Prod job 483056e0 shipped `s3` with `['wrong_colour', 'wrong_clothing']` and `s4` with
@@ -100,62 +122,83 @@ def _data_uri(image: bytes) -> str:
     return "data:image/png;base64," + base64.b64encode(image).decode()
 
 
-def judge_attempt(image_path: str, subjects: list[tuple[str, str]]) -> list[SceneVerdict]:
+def judge_attempt(
+    image_path: str,
+    subjects: list[tuple[str, str]],
+    constraint_prompt: str,
+) -> tuple[list[SceneVerdict] | None, SceneConstraintVerdict | None]:
     """The node's ONE effect boundary (MASTER_SPEC §6). Storage downloads live INSIDE it.
 
-    `(character name, reference path)` → one `SceneVerdict` each, in subject order.
-
-    Returns `[]` for empty subjects AND for any judge/Storage failure — both mean *unchecked*,
-    and the node treats them identically, so distinguishing them here would buy nothing.
+    `(character name, reference path)` → identity verdicts.
+    `constraint_prompt` → composition verdict.
     """
-    if not subjects:
-        return []
-
     try:
         storage = get_supabase_client().storage.from_(BUCKET)
         scene_uri = _data_uri(storage.download(image_path))
-        return [
-            # One call per character against its OWN reference (ADR-004, invariant 5).
-            judge(JUDGE_PROMPT.format(name=name), [_data_uri(storage.download(ref)), scene_uri], SceneVerdict)
-            for name, ref in subjects
-        ]
     except Exception:
-        # ADR-025: the CHECK failed, not the artifact. char_bible's deliberate asymmetry.
         log.warning(
-            "consistency_check: judge/Storage failed for %s — attempt stays unchecked", image_path, exc_info=True
+            "consistency_check: scene Storage failed for %s; both checks unavailable",
+            image_path,
+            exc_info=True,
         )
-        return []
+        return None, None
+
+    identity: list[SceneVerdict] | None = []
+    if subjects:
+        try:
+            identity = [
+                judge(
+                    JUDGE_PROMPT.format(name=name),
+                    [_data_uri(storage.download(ref)), scene_uri],
+                    SceneVerdict,
+                )
+                for name, ref in subjects
+            ]
+        except Exception:
+            log.warning(
+                "consistency_check: identity judge/Storage failed for %s",
+                image_path,
+                exc_info=True,
+            )
+            identity = None
+
+    try:
+        composition = judge(
+            SCENE_CONSTRAINT_PROMPT.format(constraints=constraint_prompt),
+            [scene_uri],
+            SceneConstraintVerdict,
+        )
+    except Exception:
+        log.warning(
+            "consistency_check: scene-constraint judge failed for %s",
+            image_path,
+            exc_info=True,
+        )
+        composition = None
+
+    return identity, composition
 
 
-def _rank(a: Attempt) -> tuple[int, int, int, int, int, int, int]:
+def _rank(a: Attempt) -> tuple[int, int, int, int, int, int, int, int, int]:
     """ADR-028's lexicographic best-of signal, with unchecked sorting below every checked attempt.
 
     A pass scores (1, 1, 1, …) and beats anything that gated, so `max` needs no special case for
     it. Unchecked scores all zeros: promoting an unjudged image over a judged one would let a
     judge outage silently decide the page, contradicting invariant 4 (unchecked is never a pass).
-
-    `text_free` (lettering-suppression §4.3) sits between anatomy and uniqueness: after
-    `anatomy_intact` because a merged limb is a worse picture than a lettered door, and ahead of
-    `subjects_unique` and `style_match` because those two deliberately do not gate and it does.
-
-    `subjects_unique` sits between text and style (§4.4): it does not GATE, but when a retry
-    fires for some other reason best-of now prefers the non-duplicated attempt at no extra draw.
-    Same record-and-rank-without-gating shape `style_match` already has below it.
-
-    `attributes_ok` (`GATING_REASONS`) sits between text and uniqueness — last of the gating axes,
-    ahead of the two record-only ones. Read off `Attempt.failure_reasons`, not `vlm_verdict`, which
-    carries no reason list. Without this term the corrected redraw the gate now buys is invisible
-    to best-of: two attempts identical on every boolean would tie, and the tie rule would keep
-    attempt 2 whether or not it actually fixed the colour.
     """
-    v = a.vlm_verdict
+    verdict = a.vlm_verdict
+    contradictions = a.scene_contradictions
+    checked = verdict is not None or contradictions is not None
     return (
-        (0, 0, 0, 0, 0, 0, 0) if v is None
-        else (
-            1, v.same_character, v.anatomy_intact, v.text_free,
-            not (GATING_REASONS & set(a.failure_reasons)),
-            v.subjects_unique, v.style_match,
-        )
+        checked,
+        True if verdict is None else verdict.same_character,
+        True if verdict is None else verdict.anatomy_intact,
+        True if verdict is None else verdict.text_free,
+        not (GATING_REASONS & set(a.failure_reasons)),
+        contradictions == [],
+        -len(contradictions or []),
+        True if verdict is None else verdict.subjects_unique,
+        True if verdict is None else verdict.style_match,
     )
 
 
@@ -192,85 +235,99 @@ def consistency_check(state: StoryMemory) -> dict:
             # this scene was drawn from and still the thing consistency is measured against.
             subjects.append((character.name, character.canonical_ref_image))
 
-    verdicts = judge_attempt(attempt.image_ref, subjects)
+    identity_verdicts, composition = judge_attempt(
+        attempt.image_ref, subjects, attempt.prompt or scene.prompt or ""
+    )
 
     verdict: VlmVerdict | None = None
     reasons: list[FailureReason] = []
-    if verdicts:
+    if identity_verdicts:
         # Worst-wins fold (spec §4). Booleans conjoin; lists union, deduped, order preserved.
-        seen = {reason for v in verdicts for reason in v.failure_reasons}
+        seen = {reason for v in identity_verdicts for reason in v.failure_reasons}
         reasons = [reason for reason in FailureReason if reason in seen]   # declaration order —
         # the order correct_prompt iterates, so any other order silently reorders its clauses.
         verdict = VlmVerdict(
             differences_observed="\n".join(
-                f"{name}: {v.differences_observed}" for (name, _), v in zip(subjects, verdicts)
+                f"{name}: {v.differences_observed}" for (name, _), v in zip(subjects, identity_verdicts)
             ),
-            same_character=all(v.same_character for v in verdicts),
-            attributes_present=list(dict.fromkeys(a for v in verdicts for a in v.attributes_present)),
-            style_match=all(v.style_match for v in verdicts),
-            anatomy_intact=all(v.anatomy_intact for v in verdicts),
-            subjects_unique=all(v.subjects_unique for v in verdicts),
-            text_free=all(v.text_free for v in verdicts),
+            same_character=all(v.same_character for v in identity_verdicts),
+            attributes_present=list(dict.fromkeys(a for v in identity_verdicts for a in v.attributes_present)),
+            style_match=all(v.style_match for v in identity_verdicts),
+            anatomy_intact=all(v.anatomy_intact for v in identity_verdicts),
+            subjects_unique=all(v.subjects_unique for v in identity_verdicts),
+            text_free=all(v.text_free for v in identity_verdicts),
         )
 
-
-    # The pass rule: the four failures a child notices — wrong character, three arms, a word on
-    # the page they cannot read and the app never speaks (CC-6), or a character whose colour and
-    # build changed between pages (`GATING_REASONS`). style_match and subjects_unique are recorded
-    # and ranked but do NOT gate (ADR-007, §4.4).
-    # Invariant 4: unchecked is never a pass.
-    passed = (
+    identity_applicable = bool(subjects)
+    identity_available = not identity_applicable or identity_verdicts is not None
+    identity_clean = not identity_applicable or (
         verdict is not None
         and verdict.same_character
         and verdict.anatomy_intact
         and verdict.text_free
         and not (GATING_REASONS & set(reasons))
     )
+    scene_contradictions = None if composition is None else composition.contradictions
+    composition_clean = scene_contradictions == []
+
+    passed = identity_available and identity_clean and composition_clean
+    concrete_failure = (
+        (identity_applicable and verdict is not None and not identity_clean)
+        or bool(scene_contradictions)
+    )
+    finalize = passed or not concrete_failure or len(scene.attempts) >= 2
 
     updated = [
         *scene.attempts[:-1],
         attempt.model_copy(
-            update={"vlm_verdict": verdict, "failure_reasons": reasons, "passed": passed}
+            update={
+                "vlm_verdict": verdict,
+                "failure_reasons": reasons,
+                "scene_contradictions": scene_contradictions,
+                "passed": passed,
+            }
         ),
     ]
 
-    # A pass finalizes; so does an UNCHECKED attempt — a judge or Storage outage must not buy a
-    # second paid draw with no signal to correct on (that redraw would be the uncorrected
-    # resample ADR-010 rejects; ADR-025: the CHECK failed, not the artifact). Only a real verdict
-    # saying *fail* buys the one retry, and only the first time — ADR-010 caps it at one, and the
-    # budget is len(attempts), derived, because ADR-024 rejected stored cursors.
-    finalize = passed or verdict is None or len(scene.attempts) >= 2
-
-    # ADR-028's best-of. Ranked over `updated`, not scene.attempts — the attempt judged THIS pass
-    # must carry its own verdict into the comparison. Iterating in REVERSE is load-bearing: max
-    # returns the FIRST maximal element, so ranking forward would keep attempt 1 on a tie, and the
-    # rule is tie → attempt 2 (the corrected prompt is the better prior; ADR-010 calls attempt 2
-    # refinement, not resampling). Indices rather than the Attempts themselves so CC-5 below can
-    # log WHICH attempt won — `updated.index(winner)` compares by value and would report attempt 1
-    # on exactly the tie this line exists to break.
     best = max(reversed(range(len(updated))), key=lambda i: _rank(updated[i])) if finalize else None
 
-    # CC-5: a wrong character in the finished book traces to a scene, an attempt, and the verdict
-    # that let it through. `best_of` is what tells a reader whether a retry ran and lost or never
-    # ran at all — without it an off-character page gives no way to distinguish the two.
-    log.info(
-        "consistency_check: scene_id=%s attempt=%d/%d subjects=%d %s same_character=%s "
-        "anatomy_intact=%s text_free=%s style_match=%s subjects_unique=%s failure_reasons=%s passed=%s "
-        "best_of=%s judge_prompt_version=%d visual_direction=%r",
-        scene.scene_id, len(updated), 2, len(subjects),
-        # CC-5. Both finalize and both used to log the same word, so the two were indistinguishable
-        # in prod — and they call for opposite responses. `no_subjects` is a segmentation miss or
-        # ADR-004's ≤2 reference cap and is fixable upstream; `judge_failed` is an outage and is
-        # not. Prod job 483056e0's s1/s2 were the first kind and read as the second.
-        "checked" if verdict else ("unchecked=no_subjects" if not subjects else "unchecked=judge_failed"),
-        verdict and verdict.same_character, verdict and verdict.anatomy_intact,
-        verdict and verdict.text_free, verdict and verdict.style_match,
-        verdict and verdict.subjects_unique,
-        [r.value for r in reasons], passed,
-        None if best is None else best + 1, JUDGE_PROMPT_VERSION,
-        scene.visual_direction,
+    ref_prompt_versions = sorted(
+        {
+            character.ref_verdict_prompt_version
+            for character in state.characters
+            if character.ref_verdict_prompt_version is not None
+        }
     )
-
+    log.info(
+        "consistency_check: scene_id=%s attempt=%d/2 roster_ids=%s visible_cast=%s "
+        "visible_objects=%s visual_direction=%r identity_available=%s "
+        "scene_constraint_available=%s same_character=%s anatomy_intact=%s text_free=%s "
+        "subjects_unique=%s style_match=%s failure_reasons=%s scene_contradictions=%s "
+        "passed=%s finalize=%s best_of=%s ref_prompt_versions=%s "
+        "identity_prompt_version=%d scene_constraint_prompt_version=%d judge_model=%s",
+        scene.scene_id,
+        len(updated),
+        [character.char_id for character in state.characters],
+        scene.characters_present,
+        scene.objects_present,
+        scene.visual_direction,
+        identity_available,
+        composition is not None,
+        verdict and verdict.same_character,
+        verdict and verdict.anatomy_intact,
+        verdict and verdict.text_free,
+        verdict and verdict.subjects_unique,
+        verdict and verdict.style_match,
+        [reason.value for reason in reasons],
+        scene_contradictions,
+        passed,
+        finalize,
+        None if best is None else best + 1,
+        ref_prompt_versions,
+        JUDGE_PROMPT_VERSION,
+        SCENE_CONSTRAINT_PROMPT_VERSION,
+        settings.vlm_judge_model,
+    )
 
     return {
         "scenes": [
