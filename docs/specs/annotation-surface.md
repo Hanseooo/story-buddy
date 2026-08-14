@@ -1,6 +1,8 @@
 # Feature Spec — Annotation Surface
 
-**Status:** draft · **Phase:** 2.5 · **Owner node:** `frontend/app/(research)/` (route group, not a pipeline node) + `annotations` table (Supabase)
+**Status:** draft · **partially built 2026-08-14** — migration `0014_annotations.sql` + its Tier-A suite
+are in; **both routes are blocked on D-K** (and `adjudicate/`'s policy on D-L), see §2.1 · **Phase:** 2.5 ·
+**Owner node:** `frontend/app/(research)/` (route group, not a pipeline node) + `annotations` table (Supabase)
 **Derived from:** MASTER_SPEC §2 (system map), §7 (spec index) · **Rationale:** ADR-026 (decision), ADR-017 (auth/roles), ADR-004 (non-circularity), ADR-008 (Objective 4)
 
 > Read ADR-026 first. This spec is the *how*; the ADR is the *why* and it is where the binding decisions
@@ -31,15 +33,27 @@ a new table, not the pipeline's contract.
 
 ### 2.1 The `annotations` table
 
+> **⚠️ Amended 2026-08-14 — this shape gained two columns, and `build_dataset.py` is now the
+> authority.** The DDL below is what migration `0014_annotations.sql` ships. The two additions are
+> `anatomy_intact` and `text_free`: `VlmVerdict` declares them, **both gate `Attempt.passed`** in
+> `pipeline/consistency_check.py`, and a judge trained to emit `true` for them unconditionally would
+> break the control loop while scoring well (`judge-finetune.md` §5.2, amended the same day).
+> `subjects_unique` and `style_match` are **not** annotated — non-gating, so a human label on them buys
+> nothing the loop acts on. `judge-finetune.md` §4's *"extend before annotation begins, never during"*
+> makes this the last free moment; the taxonomy itself is untouched and stays frozen at 7 (ADR-028).
+
 ```sql
 create table annotations (
   pair_id         text not null,
-  annotator_id    uuid not null references auth.users(id),
+  annotator_id    uuid not null references auth.users(id) on delete cascade,
   same_character  boolean not null,          -- true = Same Character. Maps to manuscript label 0.
                                              -- false = Different Character = manuscript label 1 = POSITIVE class.
+  anatomy_intact  boolean not null default true,   -- GATES passed(); human-annotated (§2.1 amendment)
+  text_free       boolean not null default true,   -- GATES passed(); human-annotated (§2.1 amendment)
   failure_reasons text[] not null default '{}',
   created_at      timestamptz not null default now(),
-  primary key (pair_id, annotator_id)
+  primary key (pair_id, annotator_id),
+  constraint annotations_failure_reasons_closed check (failure_reasons <@ array[/* the 7 */]::text[])
 );
 ```
 
@@ -56,10 +70,26 @@ create table annotations (
   or an app-level Pydantic model, not free text. Extending it after annotation starts invalidates every label
   already collected (§4 below).
 - **RLS:** an annotator role can `select`/`insert` only rows where `annotator_id = auth.uid()`. This is what
-  makes "independent labelling" a database policy instead of a promise — CC-4. The `researcher` role with the
-  adjudicator flag can `select` all rows (needed for `adjudicate/`, §4).
+  makes "independent labelling" a database policy instead of a promise — CC-4. Annotators are `researcher`
+  profiles; `0007`'s role check has no separate `annotator` value and `profiles.role` is the only role source
+  (ADR-017). There is deliberately **no `update` and no `delete` policy** — §4's forward-only rule makes a
+  submitted row final, so the client resolves a double-submit with `on conflict do nothing` (first write wins)
+  rather than a true upsert, which would need an `update` grant and would hand an annotator a self-revision
+  path.
+  ⚠️ **The adjudicator's read-all policy is NOT written.** "The `researcher` role with the adjudicator flag"
+  has no schema representation — `profiles` carries no such column — and adding one is a schema decision.
+  Logged as **D-L** in `docs/product/DECISION_BACKLOG.md`; `0014` grants read-all to no one, and the §6 test
+  for it is skipped naming that row.
 - `pair_id` is opaque — minted by `build_dataset.py`'s pairing step, never a filename or a `char_id`. Blinding
   depends on this (§4).
+  ⚠️ **Where the pairs themselves live is UNDECIDED (2026-08-14).** This spec never says how `annotate/`
+  gets from a `pair_id` to two Storage paths. `annotations` stores only the label; `pairs_from_memory`
+  derives pairs from a `StoryMemory` that exists only inside the LangGraph checkpoint blob (default-deny
+  RLS) and is unreachable from a browser; `jobs.pages` carries neither the canonical reference nor
+  per-attempt images; `build_corpus.py` writes no `jobs` row at all, so `0008`'s researcher storage policy
+  (`approved_at is not null`) does not reach corpus images. Logged as **D-K** in
+  `docs/product/DECISION_BACKLOG.md`. **Both routes in §4 are blocked on it** — it decides the fetch query,
+  the props, the RLS/storage grants and the blinding boundary all at once.
 
 ---
 
@@ -121,8 +151,10 @@ query is the entire resume mechanism: closing the tab and returning later re-der
 - Annotator reloads mid-pair before submitting — no partial row exists; they see the same pair again (no
   data loss, no duplicate).
 - Two annotators are assigned the same pair concurrently by design (that is the point — independent labels);
-  the composite primary key (`pair_id`, `annotator_id`) makes a double-submit by the *same* annotator an
-  upsert, not a duplicate row.
+  the composite primary key (`pair_id`, `annotator_id`) makes a double-submit by the *same* annotator a
+  conflict, not a duplicate row. Resolved `on conflict do nothing` — **first write wins**, not a true
+  upsert: an upsert would overwrite the submitted label, which is the self-revision this section's
+  forward-only rule forbids, and it would need an RLS `update` grant `0014` deliberately withholds.
 - Annotator has no pairs left — a plain "you're done" state, not an error.
 
 ---
@@ -159,6 +191,15 @@ Models mocked (there are no model calls here). Assertions:
 - The pair-fetch query for `annotate/` never returns a pair the current annotator already has a row for.
 - No component under `frontend/app/(research)/` renders a filename, story title, character name, or model
   prediction alongside a pair awaiting a label (blinding, asserted at the component-test level).
+
+**Built 2026-08-14 — `backend/tests/test_annotations_rls.py`, 16 cases.** Covers own-rows isolation
+(read, cross-annotator read, insert-as-someone-else, non-researcher), the no-`update` finality rule, the
+closed taxonomy in all three directions (rejects an outsider, accepts all 7, accepts empty), the two
+gating booleans' defaults and their `false` storage, the composite key (first-write-wins and
+two-annotators-one-pair), and the disagreement query including the one-label-so-far false positive.
+⚠️ **`skipif`-gated on `SUPABASE_DB_URL` and therefore not run in CI** — the same contract as
+`test_rls_isolation.py`. The adjudicator read-all case is **skipped** pending **D-L**; the pair-fetch and
+blinding cases are **not written** — they belong to routes blocked on **D-K**.
 
 ---
 

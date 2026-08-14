@@ -13,6 +13,13 @@ frontend/.env.local
 # one `git show` away from every rater. After `tally`, `git add -f` the two CSVs deliberately.
 backend/spikes/out/
 
+# Judge fine-tune dataset (docs/specs/judge-finetune.md §5.3): images + manifest.jsonl.
+# Hundreds of paid fal.ai PNGs derived from children's stories — Stage-1 consented research data,
+# not repo content, and it must never reach a remote. The corpus that produces them IS checked in
+# (backend/finetune/corpus_synthetic.json) and the manifest is regenerable from the `annotations`
+# table; the images are neither.
+data/judge/
+
 # General
 .DS_Store
 *.log

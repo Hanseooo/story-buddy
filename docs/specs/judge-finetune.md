@@ -172,6 +172,7 @@ One JSONL manifest and a folder of PNGs. One line = one training example:
 ```json
 {"char_id": "quill_007",
  "split": "train",
+ "provenance": "synthetic",
  "pair_type": "pipeline",
  "images": ["ref/quill_007.png", "scene/quill_007_s03_a1.png"],
  "differences_observed": "Two eyes rather than three; the scarf is unstriped.",
@@ -179,7 +180,27 @@ One JSONL manifest and a folder of PNGs. One line = one training example:
  "failure_reasons": ["wrong_body_feature", "wrong_clothing"]}
 ```
 
+> **⚠️ Amended 2026-08-14 — the record above predates three contract fields, and two of them gate.**
+> `VlmVerdict` now declares, in order: `differences_observed, same_character, attributes_present,
+> style_match, anatomy_intact, subjects_unique, text_free`. §6.1 requires the training target to be
+> byte-identical to the production serialization, so the gap is not cosmetic.
+> - **`anatomy_intact` and `text_free` are human-annotated** — both gate `passed` in
+>   `consistency_check.py` (ADR-028; `lettering-suppression` §2). A judge trained to emit `True`
+>   unconditionally for either would break the control loop while scoring well.
+> - **`subjects_unique`, `style_match` and `attributes_present` take schema defaults** — non-gating.
+>   Promote one to annotated only by amending this spec *before* annotation begins (§4's rule).
+>
+> This adds two checkboxes to `annotation-surface.md`'s instrument and two columns to the `annotations`
+> table. §4's "extend before annotation begins, never during" makes this the last moment it is free.
+> Pre-registered in `docs/product/PREREGISTRATION_OBJ4.md` §4.
+> **The two COLUMNS shipped 2026-08-14** (`supabase/migrations/0014_annotations.sql`, `not null default
+> true`, matching the `VlmVerdict` / `ManifestRecord` defaults). **The two CHECKBOXES have not** — the
+> `annotate/` route is blocked on D-K/D-L (`DECISION_BACKLOG.md` Tier 2e). No label has been collected, so
+> the "before annotation begins" condition still holds.
+
 - `char_id` — the only field §3.2 splits on. Never enters the training text.
+- `provenance` — `synthetic` or `donated`. Guarded: no `test` record may be `synthetic` (§5.4). Never
+  enters the training text.
 - `pair_type` — `pipeline` (human-labelled) or `constructed` (negative built by pairing across characters).
 - `images` — reference first, scene second. Always exactly two. Order is load-bearing.
 - The last three fields are what the model learns to emit, **in that order** (§2).
@@ -203,13 +224,15 @@ training-target/production-schema round-trip already requires. If a model wrote 
 
 ```
 backend/finetune/
-  manifest.py          # Pydantic record above + the split-disjointness guard (CI-tested)
-  build_dataset.py     # pipeline output + the `annotations` table -> manifest.jsonl
-  to_llamafactory.py   # manifest.jsonl -> sharegpt JSON + dataset_info.json
-  train_qlora.yaml     # the training config (§6.3)
-  evaluate.py          # the four baselines (§7)
-data/judge/            # gitignored — images + manifest.jsonl live here
-  ref/    scene/    manifest.jsonl
+  corpus_synthetic.json  # the 30 synthetic train/val stories — CHECKED IN, static, hashable (§5.4)
+  build_corpus.py        # corpus_synthetic.json -> paid fal draws -> data/judge/. Spend-capped.
+  manifest.py            # Pydantic record above + the guards (CI-tested) + `local_image_path`
+  build_dataset.py       # pipeline output + the `annotations` table -> manifest.jsonl
+  to_llamafactory.py     # manifest.jsonl -> sharegpt JSON + dataset_info.json
+  train_qlora.yaml       # the training config (§6.3)
+  evaluate.py            # the four baselines (§7)
+data/judge/              # gitignored — images + manifest.jsonl live here
+  ref/    scene/    manifest.jsonl    build_state.json
 ```
 
 > **⚠️ Superseded (2026-07-28, ADR-026): `labels/` no longer exists.** This spec originally kept raw
@@ -221,24 +244,43 @@ data/judge/            # gitignored — images + manifest.jsonl live here
 > `true` for *same*, so the manuscript's positive class is `label = not same_character` — converted once, in
 > `build_dataset.py`, and nowhere else.
 
+**One naming rule, in one place — `manifest.local_image_path`.** `build_corpus` writes each image to
+`data/judge/{kind}/{storage_path with / → _}`; the manifest's `images` must carry **that** on-disk name, not
+the Storage path, because LLaMA-Factory resolves `images` against the filesystem and **reports nothing useful
+when a path is wrong — it trains on what it managed to load.** Both sides import the rule; neither
+re-implements it. (Built 2026-08-14 by two agents that disagreed on exactly this and produced a manifest
+pointing at files that did not exist. The shared function and its test are what closed it.)
+
 The manifest is the source of truth. The LLaMA-Factory JSON is a **build artifact** — regenerate it, never
 edit it. That is why `char_id` and `split` live in the manifest and not in the training file: they are
 bookkeeping, and if they leaked into the prompt the model could read the answer off them.
 
 ### 5.4 How the examples get made
 
-> **⚠️ Open reconciliation item — the numbers in §5.4–§5.5 predate the updated manuscript.** They assume
-> **~50 donated stories**. The manuscript now fixes the picture-book corpus at **15 collected → 10 primary +
-> 5 backup** (`docs/capstone/methodology.md` §4.1). Ten primary stories yield far fewer distinct characters
-> than the ~50-character split in §5.5 assumes, and the "60–70 stories" recruitment target below no longer
-> matches the manuscript. **This needs an adviser decision:** either the judge dataset draws more scene images
-> per character (more pairs — but the *character* count, the binding unit for Objective-4 power, still tracks
-> the corpus), or the judge's image-pair collection is scoped beyond the ten picture-book stories, or the
-> split sizes shrink and Objective-4 power is reported honestly against the achieved held-out character count.
-> The figures below are retained as **illustrative planning targets** under the ~50-story assumption until that
-> decision is made.
+> **✅ Reconciled 2026-08-14 — this was never an adviser decision; it was drift.** §5.4–§5.5 were written
+> against **~50 donated stories**. The corpus is **15 collected → 10 primary + 5 backup**
+> (`RESEARCH_PROTOCOL.md` §8, `docs/capstone/methodology.md` §4.1), and RESEARCH_PROTOCOL §8 **already
+> answers the question this banner used to ask**: *"researcher-written stories appear only as
+> judge-training-split augmentation, never as evaluation stimuli."*
+>
+> **The resolution, therefore, is the one the protocol already specifies:**
+> - **Train + validation characters come from a synthetic corpus** authored for this purpose
+>   (`backend/finetune/corpus_synthetic.json`), written deliberately as Grade 5–6 child writing and weighted
+>   toward non-human characters — the contribution slice (§7.4 item 2) and the least-powered one.
+> - **The held-out test split is drawn exclusively from the donated stories.** External validity lives
+>   entirely in the test split, which is exactly where Objective 4 reads.
+> - `manifest.py` carries `provenance: Literal["synthetic", "donated"]` and its guard **refuses** a
+>   `test`-split record with `provenance == "synthetic"`. This is enforced in CI, not by convention.
+>
+> **What a panel will ask, and the pre-registered answer:** *does a judge trained on synthetic stories
+> generalize to children's?* The held-out set **is** that test, and it is read once. See
+> `docs/product/PREREGISTRATION_OBJ4.md` §2.
+>
+> ⚠️ **RESEARCH_PROTOCOL §8 bans the old numbers outright** — *"Do not use the old '~50 (60–70) donated
+> stories' numbers anywhere."* The worked example below is retained **only** as the arithmetic showing how
+> pair counts scale with characters. Its story count is dead; do not cite it.
 
-The worked example below assumes ~50 donated stories. One corpus, two uses.
+The worked example below is retained for its **arithmetic**, not its corpus size. One corpus, two uses.
 
 > **These are upper-bound planning numbers.** They assume a near-maximum ~15 scenes per story; under-length
 > corpus items yield fewer, so real image, pair, and cost totals run lower. The split in §5.5 is sized to the
@@ -271,12 +313,21 @@ Total ≈ **1,200 examples for ~$29 and one weekend.**
 The endpoints in §7 are claims about *differences between judges*, so **the test set must be big enough to
 resolve those differences.** That requirement, not the training set, sets the split (ADR-018 amendment a).
 
-| Split | Characters | Pairs | Contents |
-|---|---|---|---|
-| Train | 33 | ~495 pipeline + ~450 constructed = **~945** | balanced; drift induced deliberately |
-| Validation | 5 | ~75 | pipeline only, natural distribution. **All iteration happens here** |
-| Held-out test | **12, stratified human / non-human** | ~240+ (oversampled) | pipeline only, natural distribution, 2 annotators + adjudication, IRR reported |
-| Transfer test | — | as published | **DreamBench++**, never trained on |
+| Split | Characters | Provenance | Pairs | Contents |
+|---|---|---|---|---|
+| Train | 33 | **synthetic** | ~495 pipeline + ~450 constructed = **~945** | balanced; drift induced deliberately |
+| Validation | 5 | **synthetic** | ~75 | pipeline only, natural distribution. **All iteration happens here** |
+| Held-out test | **12, stratified human / non-human** | **donated — enforced** | ~240+ (oversampled) | pipeline only, natural distribution, 2 annotators + adjudication, IRR reported |
+| Transfer test | — | DreamBench++ | as published | **DreamBench++**, never trained on |
+
+The provenance column is not documentation — `manifest.py`'s guard raises on a `test` record marked
+`synthetic`, and CI tests it. A synthetic story leaking into the held-out split would void Objective 4
+silently, which is the same failure class as §3.2's character leakage and gets the same treatment.
+
+⚠️ **The held-out character count is bounded by what the donation actually yields.** Twelve is the target;
+at ≤2 canonical references per story (ADR-004), 15 donated stories yield roughly 15–20 characters, so 12 is
+reachable but not guaranteed. Objective 4's power is reported against the **achieved** count, and that count
+is not knowable before collection closes.
 
 Three consequences worth internalizing:
 
@@ -290,11 +341,11 @@ Three consequences worth internalizing:
 - **Induce drift deliberately** — weaker reference conditioning, higher temperature — to harvest natural
   negatives. **Training split only.** The test set must keep the deployment distribution (§3.3).
 
-**More distinct characters is the cheapest statistical power available** — it is a recruitment/scoping
-decision rather than a modelling one, and it is unfixable by Phase 2.5. But the manuscript fixes the
-picture-book corpus at 10 primary + 5 backup, so the character count for the judge's split is now bounded by
-that corpus unless the judge's image-pair collection is scoped separately — the open reconciliation item at
-the top of §5.4. RESEARCH_PROTOCOL §8.
+**More distinct characters is the cheapest statistical power available** — and since 2026-08-14 the train and
+validation halves of that power are a *writing* task rather than a recruitment one: adding characters to
+`corpus_synthetic.json` costs a few sentences and ~$0.40 of fal draws. **The held-out split's character count
+is still unfixable by Phase 2.5** and still tracks the donation (RESEARCH_PROTOCOL §8), which is why the test
+split is the one to oversample scenes for and the one whose achieved count gets reported honestly.
 
 ### 5.6 Why DreamBench++ is a *test* set and not a *training* set
 
