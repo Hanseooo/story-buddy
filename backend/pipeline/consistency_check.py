@@ -28,7 +28,7 @@ BUCKET = "storybook-images"
 # 1 = pre-2026-08-13; 2 = adds the uniqueness question (scene-setting-and-subject-binding §4.4);
 # 3 = adds the text question (lettering-suppression §4.1) — v2 and earlier carry no lettering
 # signal at all, so the rate series starts at v3.
-JUDGE_PROMPT_VERSION = 3
+JUDGE_PROMPT_VERSION = 4
 
 # Reason-then-score (ADR-004). The prompt asks in exactly the order the schema declares, and
 # `providers._assert_field_order` rejects a provider that answers out of order.
@@ -45,7 +45,13 @@ JUDGE_PROMPT_VERSION = 3
 # a real style break — the point of scoping is that it now ONLY discriminates that.
 JUDGE_PROMPT = """\
 The FIRST image is the canonical character reference for {name}. The SECOND image is one page of \
-the same picture book, in which {name} should appear drawn to match that reference.
+the same picture book, in which {name} should appear drawn to match that reference. Rear, profile, \
+foreshortened, and partially occluded views can depict the same character; pose, crop, expression, \
+and viewing angle are not identity differences by themselves. Compare using visible evidence only: \
+a feature naturally hidden by the requested viewpoint is not a missing body part, visible \
+contradiction, or reason to emit wrong_body_feature, different_face, or character_absent. A visible \
+substitution, visible attribute contradiction, or genuinely malformed, merged, missing, or \
+duplicated anatomy still fails normally.
 
 First describe every difference you observe between {name} on the page and the reference. Then \
 say whether it is the same character; list which of the reference's attributes are actually \
@@ -76,13 +82,26 @@ class SceneVerdict(BaseModel):
     failure_reasons: list[FailureReason] = Field(default_factory=list)   # LAST — the closed 7
 
 
-SCENE_CONSTRAINT_PROMPT_VERSION = 1
+# 2 (visual-continuity §7.1 rescore, 2026-08-14): adds the unstated-detail clause. v1 shipped
+# without the one `char_bible.JUDGE_PROMPT` has had since v1 of its own series, and the rescore
+# measured the predictable result — on three sample pages a correctly-drawn Ana still collected
+# "her top appears to be a dress", "the necklace is patterned beads", "the sword has a vertical
+# grain", "the tower has a window", "the forest is more of a teal colour". Every one of those is a
+# detail the constraints never stated, and `concrete_failure` below reads `bool(scene_contradictions)`
+# — so each one buys a paid redraw of a page that was fine. v1 contradiction counts are not
+# comparable: they measure the judge's appetite for unstated detail, not the generator.
+SCENE_CONSTRAINT_PROMPT_VERSION = 2
 
 SCENE_CONSTRAINT_PROMPT = """\
 The image is one page of a children's picture book. Check it only against the exact scene \
 constraints below.
 
 {constraints}
+
+The constraints state only what the story fixed. The page will necessarily show detail they do \
+not mention — scenery, lighting, texture, ornament, how a thing is drawn — and that is NOT a \
+contradiction. A contradiction is a stated requirement the page violates, never a detail the \
+constraints are simply silent about.
 
 First describe every observed difference from those constraints. Then list each contradiction \
 separately. Every contradiction must name the subject and the violated requirement. Check that \
@@ -179,7 +198,7 @@ def judge_attempt(
     return identity, composition
 
 
-def _rank(a: Attempt) -> tuple[int, int, int, int, int, int, int, int, int]:
+def _rank(a: Attempt) -> tuple[int, bool, int, bool, bool, bool, bool, bool, bool]:
     """ADR-028's lexicographic best-of signal, in visual-continuity §4.7's declared order.
 
     A pass scores (1, 1, 1, …) and beats anything that gated, so `max` needs no special case for
@@ -192,7 +211,7 @@ def _rank(a: Attempt) -> tuple[int, int, int, int, int, int, int, int, int]:
     That is deliberate but not free: it lets an attempt whose IDENTITY check was unavailable
     outrank one the identity judge said was the wrong character. The alternative — scoring an
     unmeasured axis `False` — is worse, because it would rank a page nobody faulted below a page
-    with a known, minor fault. Terms 6-7 are the §4.7 composition terms: no contradictions first,
+    with a known, minor fault. Terms 2-3 are the composition terms: no contradictions first,
     then fewer of them.
 
     Ordering rationale for the identity axes (unchanged): `text_free` sits after `anatomy_intact`
@@ -206,12 +225,12 @@ def _rank(a: Attempt) -> tuple[int, int, int, int, int, int, int, int, int]:
     checked = verdict is not None or contradictions is not None
     return (
         checked,
+        contradictions == [],
+        -len(contradictions or []),
         True if verdict is None else verdict.same_character,
         True if verdict is None else verdict.anatomy_intact,
         True if verdict is None else verdict.text_free,
         not (GATING_REASONS & set(a.failure_reasons)),
-        contradictions == [],
-        -len(contradictions or []),
         True if verdict is None else verdict.subjects_unique,
         True if verdict is None else verdict.style_match,
     )

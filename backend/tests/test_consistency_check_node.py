@@ -155,7 +155,23 @@ def test_scene_constraint_verdict_is_reason_then_structured_contradictions():
         "differences_observed",
         "contradictions",
     ]
-    assert SCENE_CONSTRAINT_PROMPT_VERSION == 1
+    assert SCENE_CONSTRAINT_PROMPT_VERSION == 2
+
+
+def test_scene_constraint_prompt_excludes_unstated_detail():
+    """visual-continuity §7.1. `concrete_failure` reads `bool(scene_contradictions)`, so a
+    contradiction over a detail the constraints never stated buys a paid redraw of a good page.
+    The rescore measured exactly that; this is the same clause `char_bible.JUDGE_PROMPT` carries.
+
+    The version bump rides in the sibling test above because it is the same edit: an unversioned
+    reword makes v1's contradiction counts silently incomparable to v2's."""
+    from pipeline.consistency_check import SCENE_CONSTRAINT_PROMPT
+
+    prompt = SCENE_CONSTRAINT_PROMPT.format(constraints="Ana: a girl; barefoot.")
+    assert "is NOT a contradiction" in prompt
+    # Stated before the questions are asked, never after — the exclusion has to be in force while
+    # the model is still reading the page, not offered as an afterthought.
+    assert prompt.index("is NOT a contradiction") < prompt.index("First describe")
 
 
 def test_judge_attempt_runs_composition_once_with_no_identity_subjects():
@@ -247,6 +263,49 @@ def test_scene_verdict_subjects_unique_defaults_to_true():
     assert verdict.subjects_unique is True
 
 
+def test_judge_prompt_version():
+    from pipeline.consistency_check import JUDGE_PROMPT_VERSION
+    assert JUDGE_PROMPT_VERSION == 4
+
+
+def test_rank_prioritizes_composition():
+    from pipeline.consistency_check import _rank
+    from contracts.story_memory import Attempt, VlmVerdict
+
+    def make_attempt(same_character=True, contradictions=None, checked=True):
+        vlm = VlmVerdict(
+            same_character=same_character, anatomy_intact=True, text_free=True,
+            subjects_unique=True, style_match=True, differences_observed=""
+        ) if checked else None
+        return Attempt(
+            image_ref="dummy.png", passed=False, vlm_verdict=vlm,
+            scene_contradictions=contradictions, failure_reasons=[]
+        )
+
+    a_comp_clean = make_attempt(same_character=False, contradictions=[])
+    a_comp_fail = make_attempt(same_character=True, contradictions=["Pose"])
+    a_two_contra = make_attempt(same_character=True, contradictions=["1", "2"])
+    a_comp_fail_id_fail = make_attempt(same_character=False, contradictions=["Pose"])
+    a_unchecked = make_attempt(checked=False, contradictions=None)
+    a_comp_unavail = make_attempt(same_character=True, contradictions=None)
+
+    # Composition clean > composition failed
+    assert _rank(a_comp_clean) > _rank(a_comp_fail)
+
+    # Fewer scene contradictions wins
+    assert _rank(a_comp_fail) > _rank(a_two_contra)
+
+    # Identity breaks tie for equal contradictions
+    assert _rank(a_comp_fail) > _rank(a_comp_fail_id_fail)
+
+    # Fully unchecked is lowest
+    assert _rank(a_comp_fail_id_fail) > _rank(a_unchecked)
+
+    # Clean > Unavailable > Bad
+    assert _rank(a_comp_clean) > _rank(a_comp_unavail)
+    assert _rank(a_comp_unavail) > _rank(a_comp_fail)
+
+
 def test_the_scene_judge_asks_about_text_in_schema_order_and_the_version_is_bumped():
     """§6 test 14. `providers._assert_field_order` rejects a provider that answers out of schema
     order, so the prompt asks in `SceneVerdict`'s declaration order: uniqueness, then text, then
@@ -255,7 +314,7 @@ def test_the_scene_judge_asks_about_text_in_schema_order_and_the_version_is_bump
     """
     from pipeline.consistency_check import JUDGE_PROMPT, JUDGE_PROMPT_VERSION
 
-    assert JUDGE_PROMPT_VERSION == 3
+    assert JUDGE_PROMPT_VERSION == 4
 
     prompt = JUDGE_PROMPT.format(name="the dog")
     assert "free of any text" in prompt
@@ -812,7 +871,7 @@ def test_the_unchecked_rank_tuple_widened_to_nine_zeros():
     """§6 test 13: unchecked still sorts below EVERY checked attempt (invariant 4). The tuple
     widened to 9 terms."""
     unchecked = Attempt(image_ref="job-1/s0-1.png", prompt="p", passed=False)
-    assert _rank(unchecked) == (False, True, True, True, True, False, 0, True, True)
+    assert _rank(unchecked) == (False, False, 0, True, True, True, True, True, True)
 
     worst_checked = _attempt(
         "job-1/s0-2.png", same=False, anatomy=False, text=False, unique=False, style=False
@@ -827,7 +886,7 @@ def test_the_checked_rank_tuple_is_nine_terms_in_the_declared_order():
             reasons=[FailureReason.wrong_colour],
         )
     )
-    assert ranked == (True, True, False, True, False, True, 0, False, True)
+    assert ranked == (True, True, 0, True, False, True, False, False, True)
 
 
 def test_the_worst_possible_checked_attempt_still_outranks_an_unchecked_one():
@@ -1059,7 +1118,7 @@ def test_the_per_scene_log_line_carries_uniqueness_and_the_prompt_version(caplog
         _run(state, [_verdict(True, unique=False)])
 
     assert "subjects_unique=False" in caplog.text
-    assert "identity_prompt_version=3" in caplog.text
+    assert "identity_prompt_version=4" in caplog.text
 
 
 # --- The identity-attribute gate (prod job 483056e0: s3 and s4 shipped off-colour) ---
