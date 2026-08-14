@@ -102,9 +102,35 @@ settings = Settings()
 # Stating the absence resolves it, and it is also the only axis the three presets genuinely differ
 # on: strip outline treatment and `gouache` is `cel` with paper grain. `flat colour fills` stays —
 # it was in the fragment that produced the sample this was written to reproduce.
+#
+# `comic`'s halftone was SCOPED to the backgrounds and shadows on 2026-08-14 — it was unscoped from
+# 2026-07-21, and `frontend/public/style-presets/comic.png` shows where it went: screened over the
+# character's own body and tail. That surface is the identity-bearing one, and two gates landed on
+# 2026-08-13 that both read it. `wrong_colour` became GATING (`GATING_REASONS`), and a halftone
+# screen tints by dot density — the same fill reads as a different colour at reference scale and at
+# page scale, and in that sample the thin limbs came back solid black on a green character while one
+# arm stayed outlined green. `text_free` also became gating, and `lettering-suppression.md:216`
+# names ben-day halftone dots as the expected judge false positive. `comic` was the only preset
+# feeding either.
+#
+# The halftone is NOT removed, and that is deliberate: ADR-022 makes `comic` the gating primary
+# substrate *because* it is "textured enough (halftone) that the no-reference baseline can't fake the
+# separation gate" (ADRs.md:1234, pre-registered at PHASE_05_RESULTS.md:512). Deleting the clause
+# would make that gate lenient retroactively. Scoping it away from the subject keeps the texture in
+# the picture while restoring ADR-022's own resolution — identity in the line, character in the fill.
+#
+# The outline clause is UNTOUCHED. "of varied weight" is the obvious suspect for the collapsed limbs
+# and it is the one thing here that must not be pinned: `cel` lost "of even weight" the day before
+# (see `default_style_fragment` above) precisely because pinning uniformity is what smooshes thin
+# elements. Same defect, and the fix for it went the other way. If flat-colour scoping does not clear
+# the black limbs, the next lever is the ink weight adjective, not its uniformity.
+# ⚠️ UNMEASURED. No job has run against this fragment, and `comic.png` — the sample card a child
+# picks from — was drawn with the unscoped fragment and now overstates the texture. Regenerating it
+# is a paid fal draw and is NOT done here; until it is, the picker promises more screen than the
+# pipeline delivers, which is the failure mode the `gouache` note above calls out.
 STYLE_PRESETS: dict[str, str] = {
     "cel": settings.default_style_fragment,
-    "comic": "bold comic-book illustration, heavy ink outlines of varied weight, flat spot colours, ben-day halftone dot shading, limited palette, no gradients, no glow",
+    "comic": "bold comic-book illustration, heavy ink outlines of varied weight, flat spot colours, ben-day halftone dot shading in the backgrounds and shadows, the character itself in flat unscreened colour, limited palette, no gradients, no glow",
     "gouache": "flat gouache storybook illustration, no outlines, shapes formed by brushed colour, matte paper grain, limited warm palette, flat colour fills, no gradients, no glossy highlights",
 }
 

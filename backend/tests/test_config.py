@@ -58,6 +58,37 @@ def test_outline_treatment_is_what_separates_the_three_presets():
     assert "outlines" not in style_prohibitions(STYLE_PRESETS["comic"])
 
 
+def test_no_preset_screens_texture_over_the_character_itself():
+    """`comic` carried an unscoped "ben-day halftone dot shading" from 2026-07-21 until 2026-08-14,
+    and `frontend/public/style-presets/comic.png` shows the screen landing on the character's own
+    body and tail — with the thin limbs collapsed to solid black on a green character while one arm
+    stayed outlined green.
+
+    Two gates landed on 2026-08-13 that both read that surface: `wrong_colour` is in
+    `GATING_REASONS`, and a halftone tints by dot density, so one fill reads as two colours across
+    reference scale and page scale; `text_free` gates too, and `lettering-suppression.md:216` names
+    halftone dots as the expected judge false positive.
+
+    The clause is scoped, never deleted — ADR-022 makes `comic` the gating primary substrate
+    *because* the halftone is what the no-reference baseline cannot fake (ADRs.md:1234). This asserts
+    the scoping, which is the whole of the fix: a texture word may appear, but never without a
+    clause putting the character in flat colour.
+
+    `gouache`'s "matte paper grain" is deliberately NOT covered. Grain is a property of the paper the
+    whole image sits on; a halftone is a screen applied over chosen forms, and the fragment is what
+    chooses. Only the second one can be scoped, so only the second one is asserted. (`gouache` holds
+    Quill worst of the three at 40% — PHASE_05_RESULTS.md:534 — and if grain turns out to be why,
+    that is its own change with its own before/after, not a widening of this one.)
+    """
+    comic = STYLE_PRESETS["comic"]
+    assert "halftone" in comic, "the halftone is scoped, never deleted — ADR-022 gates on it"
+    _, _, rest = comic.partition("halftone")
+    assert re.search(r"\bbackgrounds?\b|\bshadows?\b", rest.split(",")[0], re.I), \
+        "comic's halftone is unscoped again — it must name what it screens"
+    assert re.search(r"\bcharacter\b[^,]*\bflat\b", comic, re.I), \
+        "comic screens texture but never puts the character itself in flat colour"
+
+
 def test_no_preset_asks_for_a_thing_its_own_no_clause_forbids():
     """The self-contradiction case of the test above it. `gouache` shipped one for three weeks in
     the other direction, and a fragment that both names and negates a term hands the model the
