@@ -37,7 +37,8 @@ class ExtractedLocation(BaseModel):
 
 class ExtractedObject(BaseModel):
     name: str
-    description: str | None = None
+    description: str
+    owner_name: str | None = None
 
 
 class StoryAnalysis(BaseModel):
@@ -47,6 +48,14 @@ class StoryAnalysis(BaseModel):
     locations: list[ExtractedLocation]
     objects: list[ExtractedObject]
     timeline: list[TimelineEvent]          # already id-less in contracts/
+
+    @model_validator(mode="after")
+    def entity_rosters_do_not_overlap(self) -> "StoryAnalysis":
+        character_names = {character.name.casefold() for character in self.characters}
+        overlap = character_names & {obj.name.casefold() for obj in self.objects}
+        if overlap:
+            raise ValueError(f"entity appears as both character and object: {sorted(overlap)}")
+        return self
 
 
 log = logging.getLogger(__name__)
@@ -77,7 +86,7 @@ Species is the physical kind, never a job title or role: a human wizard is physi
 Copy every visual fact the story states without alteration. Fill only missing visual axes once with neutral, child-safe, non-stereotyped details that distinguish this character from the rest of the roster.
 Return at least three stable visual discriminators across at least two of colours, body_features, and clothing. Set is_humanoid accurately; every humanoid needs a non-empty clothing description.
 
-Locations and objects: whatever the story mentions. Describe each location by what is permanently there — not the weather, the time of day, or what happens there.
+Locations and objects: whatever the story mentions. Describe each location by what is permanently there — not the weather, the time of day, or what happens there. For each object, provide a stable physical description and set owner_name to the character's name if owned by a character, or null if unowned.
 
 Timeline: the story's events in the order they happen, one short summary each.
 
@@ -130,10 +139,25 @@ def analyze(state: StoryMemory) -> dict:
         Location(loc_id=f"loc{i}", name=extracted.name, description=extracted.description)
         for i, extracted in enumerate(analysis.locations)
     ]
-    objects = [
-        StoryObject(obj_id=f"obj{i}", name=extracted.name, description=extracted.description)
-        for i, extracted in enumerate(analysis.objects)
-    ]
+    name_to_char_id: dict[str, str] = {}
+    for character in characters:
+        name_to_char_id.setdefault(character.name, character.char_id)
+
+    objects = []
+    for i, extracted in enumerate(analysis.objects):
+        owner_char_id = None
+        if extracted.owner_name is not None:
+            owner_char_id = name_to_char_id.get(extracted.owner_name)
+            if owner_char_id is None:
+                raise ValueError(f"analyze: unknown owner {extracted.owner_name!r}")
+        objects.append(
+            StoryObject(
+                obj_id=f"obj{i}",
+                name=extracted.name,
+                description=extracted.description,
+                owner_char_id=owner_char_id,
+            )
+        )
     # `order` is re-assigned from list position, never trusted from the model: a returned
     # `1, 2, 5` or a duplicate validates fine against Pydantic and would silently corrupt the
     # only ordering `segment` receives.

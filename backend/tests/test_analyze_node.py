@@ -270,7 +270,7 @@ def test_analyze_mints_ids_by_list_position():
     analysis = _analysis(
         characters=[_character("the narrator"), _character("the younger sister")],
         locations=[{"name": "the beach"}, {"name": "the car"}],
-        objects=[{"name": "a red bucket"}],
+        objects=[{"name": "a red bucket", "description": "a small red plastic bucket"}],
     )
     with patch("pipeline.analyze.extract_entities", return_value=analysis):
         result = analyze(_state())
@@ -386,4 +386,67 @@ def test_extracted_location_description_stays_optional():
     from pipeline.analyze import ExtractedLocation
 
     assert ExtractedLocation(name="the beach").description is None
+
+
+def test_extracted_object_requires_a_stable_physical_description():
+    with pytest.raises(ValidationError):
+        ExtractedObject.model_validate({"name": "wooden sword", "owner_name": "Ana"})
+
+
+def test_story_analysis_rejects_an_entity_in_both_rosters():
+    with pytest.raises(ValidationError, match="both character and object"):
+        _analysis(
+            characters=[_character("talking kettle", species="kettle")],
+            objects=[
+                {
+                    "name": "talking kettle",
+                    "description": "a copper kettle with a black handle",
+                    "owner_name": None,
+                }
+            ],
+        )
+
+
+def test_analyze_maps_owner_name_to_the_capped_character_id():
+    analysis = _analysis(
+        characters=[_character("Ana")],
+        objects=[
+            {
+                "name": "wooden sword",
+                "description": "a short wooden sword with a red cord grip",
+                "owner_name": "Ana",
+            }
+        ],
+    )
+    with patch("pipeline.analyze.extract_entities", return_value=analysis):
+        obj = analyze(_state())["objects"][0]
+
+    assert obj.owner_char_id == "c0"
+    assert obj.description == "a short wooden sword with a red cord grip"
+
+
+def test_analyze_rejects_an_owner_outside_the_persisted_roster():
+    analysis = _analysis(
+        characters=[_character("Ana")],
+        objects=[
+            {
+                "name": "wooden sword",
+                "description": "a short wooden sword with a red cord grip",
+                "owner_name": "Maya",
+            }
+        ],
+    )
+    with patch("pipeline.analyze.extract_entities", return_value=analysis):
+        with pytest.raises(ValueError, match="unknown owner.*Maya"):
+            analyze(_state())
+
+
+def test_extraction_prompt_distinguishes_actors_from_props_and_requests_owners():
+    prompt = EXTRACTION_PROMPT.lower()
+    assert "agency" in prompt
+    assert "inert prop" in prompt
+    assert "personified object" in prompt
+    assert "owner_name" in prompt
+    assert "physical description" in prompt
+
 

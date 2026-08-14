@@ -28,13 +28,13 @@ the redacted input text, so `char_bible` has a stable roster to draw canonical r
 2. Ids are `c{i}` / `loc{i}` / `obj{i}`, zero-based, **minted node-side by list position** after
    parsing (`story-memory-contract` §2.1, D-G). The LLM schema carries no id field.
 3. `Character.name` is **the name the story gives**, falling back to a short descriptive label when
-   the story names nobody. Never a redaction placeholder. ~~never a proper noun~~ — amended
-   2026-08-11, see §4.
+   the story names nobody. Never a redaction placeholder.
 4. `timeline[].order` is **re-assigned by the node** from list index: zero-based and dense. It is
    not trusted from the model. A model that returns `1, 2, 5` or a duplicate `order` validates
    fine against Pydantic and would silently corrupt the only ordering `segment` receives.
-5. Every emitted `Character` has a non-empty `description.species` — enforced at the LLM boundary,
-   not in the contract. See §4.
+5. Every emitted `Character` has a complete visual profile: at least three discriminators across at least two of `colours`, `body_features`, and `clothing`. Humanoids carry a required `clothing` description. Enforced by transient `is_humanoid` validator at the LLM boundary; `is_humanoid` is not persisted in the contract.
+6. `characters[]` and `objects[]` are mutually exclusive by agency: actors perform actions and decide; inert items belong in `objects[]`. An entity appearing in both rosters fails boundary validation.
+7. Every `ExtractedObject` requires a stable physical `description`. `owner_name` is mapped to `owner_char_id` after character capping; an unknown owner fails boundary validation.
 
 ## 3. Position in the system map
 
@@ -60,11 +60,18 @@ forbids an id at the LLM boundary. The boundary therefore uses id-less mirrors i
 
 ```python
 class ExtractedDescription(CharacterDescription):
-    """Boundary-strict subclass. The contract's `CharacterDescription` is all-Optional by
-    design (ADR-023: mostly-optional container); real per-field validation belongs at the
-    LLM boundary (ADR-002). Subclassed rather than mirrored so the axes stay in one place.
-    """
-    species: str                        # required HERE, Optional in the contract — see below
+    """Boundary-strict subclass. Enforces complete visual canon at the extraction boundary."""
+    species: str
+    is_humanoid: bool
+
+    @model_validator(mode="after")
+    def complete_visual_profile(self) -> "ExtractedDescription":
+        axes = (self.colours, self.body_features, self.clothing)
+        if sum(len(axis) for axis in axes) < 3 or sum(bool(axis) for axis in axes) < 2:
+            raise ValueError("character needs at least three visual discriminators across two axes")
+        if self.is_humanoid and not self.clothing:
+            raise ValueError("humanoid character needs a clothing description")
+        return self
 
 class ExtractedCharacter(BaseModel):
     name: str
@@ -76,83 +83,33 @@ class ExtractedLocation(BaseModel):
 
 class ExtractedObject(BaseModel):
     name: str
-    description: str | None = None
+    description: str
+    owner_name: str | None = None
 
 class StoryAnalysis(BaseModel):         # the transient wrapper; never persisted
     characters: list[ExtractedCharacter]   # prominence order, protagonist first
     locations: list[ExtractedLocation]
     objects: list[ExtractedObject]
     timeline: list[TimelineEvent]          # already id-less in contracts/
+
+    @model_validator(mode="after")
+    def entity_rosters_do_not_overlap(self) -> "StoryAnalysis":
+        character_names = {character.name.casefold() for character in self.characters}
+        overlap = character_names & {obj.name.casefold() for obj in self.objects}
+        if overlap:
+            raise ValueError(f"entity appears as both character and object: {sorted(overlap)}")
+        return self
 ```
 
 `CharacterDescription` is subclassed rather than mirrored: it has no id, and its axes
 (`species`, `colours`, `body_features`, `clothing`) are deliberately aligned to the `FailureReason`
 taxonomy the judge scores against. Re-deriving them here would create a second source of truth.
 
-**Why `species` is required at the boundary.** ADR-028's reference-acceptance loop judges each draw
-against `CharacterDescription`. An entirely empty description makes `matches_description` vacuously
-true, so the 3-draw re-roll silently collapses to 1 draw and ADR-028's mitigation quietly stops
-working. Requiring one always-answerable string ("girl", "dog", "robot") guarantees the judge always
-has something to check against.
+`is_humanoid` is a node-local transient flag used only to enforce required clothing on humanoid figures. It is stripped via `exclude={"is_humanoid"}` when converting to `CharacterDescription` so it does not leak into the persisted contract.
 
-Two things this deliberately does **not** do:
+The prompt requires filling missing visual axes with neutral, child-safe, non-stereotyped details that distinguish the character across the roster.
 
-- **It does not touch the contract.** `CharacterDescription.species` stays `Optional` in
-  `backend/contracts/`. Making it required there would be a contract change — an ADR session, never
-  settled inline while building a module (AGENTS.md) — and it would break
-  `Character.description`'s `default_factory`.
-- **It does not require a visual attribute** (one of `colours` / `body_features` / `clothing`).
-  Strict `json_schema` cannot express "at least one of three lists is non-empty", so the constraint
-  would have to be a Pydantic validator firing *after* a successful, paid call — which under ADR-025
-  is a hard failure that fails the child's whole job because they never said what their dog was
-  wearing. Wrong trade. Whether a description is *rich enough* remains `character-bible`'s call.
-
-The node maps `CharacterDescription(**extracted.description.model_dump())` at the mint step, so what
-is persisted is exactly the contract type, never the strict subclass.
-
-`EXTRACTION_PROMPT` asks for locations to be described by **what is permanently there** — not the
-weather, the time of day, or what happens there (`scene-setting-and-subject-binding.md` §4.1).
-`ExtractedLocation.description` stays `str | None`: requiring it would force invention, which
-contradicts the same prompt's rule for character axes. A null description degrades the downstream
-`Setting:` line to name-only.
-
-
-### Happy path
-
-1. `text = state.input.redacted_text or state.input.raw_text`
-2. `extract_entities(text)` — one `providers.structured_text` call, strict `json_schema` →
-   `StoryAnalysis` (ADR-002)
-3. Truncate `characters` to the first 3
-4. Mint ids by index, re-index `timeline[].order` by list position, build contract types
-5. Partial-return the four keys (ADR-024 — never mutate `state`)
-
-### Naming: use the pseudonym; the descriptive label is the fallback
-
-**Amended 2026-08-11.** `analyze` reads `redacted_text`, so any name reaching the prompt is already
-a pseudonym — `providers.redact_pii` **pseudonymizes** persons rather than hard-redacting them,
-mapping every detected name onto `_PSEUDONYM_POOL` (`Ana`, `Ben`, `Cielo`, …). A story about "Jun"
-arrives here as a story about "Ana".
-
-~~The prompt therefore asks for a **short descriptive label**, not a proper noun.~~ That rule
-discarded the pseudonym, and **every protagonist the pipeline ever produced was called "the
-narrator"** — two mechanisms where the second negated the first. `redact_pii`'s own docstring gives
-the intent it was defeating: persons are pseudonymized *"so the story survives with a protagonist an
-illustrator can draw"*.
-
-The prompt now asks for **the name the story gives**, and falls back to a descriptive label
-(*"the narrator"*, *"the younger sister"*) only when the story names nobody — still the common case,
-because the expected kid story is first-person ("I went to the beach with my sister"). Redaction
-placeholders remain forbidden outright.
-
-**The consequence, stated plainly: the child's actual name still never appears in their storybook** —
-but CC-2 is now carried by `redact_pii` upstream alone, not by this prompt as a second layer.
-
-⚠️ **What was given up.** The old label rule also neutralised a **spaCy NER miss**: a name Presidio
-failed to detect was discarded here anyway. `en_core_web_sm` is not reliable on Filipino names and
-kinship terms ("Kuya Jun", "Ate Mimi"), and the respondents are Filipino children (ADR-017). That
-residue is **accepted, not overlooked** — the same measurement gap §7 already carries for Taglish
-extraction quality. If a real name is ever observed in a generated book, this decision is the first
-place to look, and reverting it is a one-line prompt change.
+Objects require a stable physical description and an optional `owner_name`. Initial ownership is mapped after the three-character cap: `owner_name` maps to `owner_char_id`. If an `owner_name` cannot be resolved against the capped character roster, node execution raises `ValueError`.
 
 ### Edge cases
 
@@ -162,8 +119,9 @@ place to look, and reverting it is a one-line prompt change.
 | **More than 3 characters** | Node truncates to the first 3. The prompt also asks for ≤3, so the truncation is belt-and-braces; the node is the control, because the prompt is not enforceable. |
 | **Same character named twice** ("my sister", "Ate") | **Documented ceiling, not guarded.** Two `char_id`s, two reference images, two of the three budget slots. Consistent with `story-memory-contract` §2.1 — entities are minted once and never merged or re-indexed within a run. A dedup pass would be a new node, and nothing in Phase 1 justifies one. |
 | **Unbounded `locations[]` / `objects[]`** | **Deliberately uncapped.** Neither costs an image, so neither is a CC-3 lever; the only cost is checkpoint size, which is bounded in practice by a ≤800-word story (ADR-012). Cap them only if a measured checkpoint problem appears — not preemptively. |
-| **Character vs object ambiguity** ("my teddy bear") | Whichever collection the model picks stands; there is no reconciliation. Landing in `objects[]` means no reference image and no consistency guarantee for that entity. Ceiling, not a bug. |
-| **Character with an empty description** | **Cannot happen for `species`** — it is required at the LLM boundary (see above), so `matches_description` always has at least one attribute to judge against and ADR-028's re-roll never silently collapses. A character with a species but no `colours` / `body_features` / `clothing` is still valid and still emitted; whether that is *rich enough* to draw from is `character-bible`'s call, not this node's. |
+| **Character vs object ambiguity** ("my teddy bear") | Guided by agency in the extraction prompt (actors decide/act; inert items are objects). `StoryAnalysis` model_validator explicitly rejects any entity listed in both rosters with `ValueError`. |
+| **Character with sparse or incomplete description** | **Cannot happen** — `complete_visual_profile` requires at least 3 discriminators across 2 axes (and clothing if humanoid) at the LLM boundary, raising `ValidationError` if incomplete. |
+| **Unknown object owner** | **Fails boundary** — mapping `owner_name` to `owner_char_id` raises `ValueError` if `owner_name` is not in the capped character roster. |
 | **Empty `timeline[]`** | Valid. `segment` falls back to text order. |
 | **Very short input** ("I like dogs") | Valid. Extraction yields whatever it yields; a minimum-length gate is `length-guard`'s job (Phase 2), not this node's. |
 | **Input was truncated** (ADR-012) | No special handling. `analyze` sees the kept portion, which is correct — the book illustrates what was kept, and ADR-012 forbids summarizing the tail back in. |
@@ -263,11 +221,7 @@ sufficient for every Phase-1 consumer. No contract change, no `schema_version` b
 - **`Scene.characters_present`** → **`scene-segmentation`**. Nothing mints it today, and `analyze`
   cannot: it runs before scenes exist. `segment` creates scenes and already reads the analysis, so
   the mapping belongs there. The join key is `Character.name`. **Landed 2026-07-29**: `segment` maps `Character.name → char_id` using the join key named here.
-- **Description *richness*** → **`character-bible`**. Narrowed, not handed off whole: the silent
-  half of this gap is closed here by requiring `species` at the boundary (§4), so ADR-028's re-roll
-  can no longer collapse without anyone noticing. What remains is a judgement call — is
-  species-only enough to draw a canonical reference from, or should that character be refused? —
-  and it belongs to the node that does the drawing.
+- **Description *richness*** → **`character-bible`**. Closed at `analyze`: complete visual canon (at least 3 discriminators across 2 axes) is required at the LLM boundary (§4), so ADR-028's re-roll can no longer receive sparse descriptions. `char_bible` receives complete descriptions for canonical reference generation.
 - **Character dedup** → **unowned**, documented ceiling (§4).
 
 **Open:**
