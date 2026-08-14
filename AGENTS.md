@@ -591,6 +591,13 @@ is not documentation of a good design; it is the blast radius, written down so t
   survives). Job `483056e0` lost the dragon on `s1`/`s2` — `refs=0`, so both drew via
   `text_to_image` **and** then filed unchecked. Those two failures compound and this closes both at
   the source.
+  ⚠️ **(A) was REVERSED on 2026-08-14 by `visual-continuity` §4.3** — the unconditional recovery is
+  gone, because a name in an excerpt does not prove the character should be *visible*, and
+  over-recovery was drawing merely-mentioned characters onto the page. `characters_present` is now
+  the sole cast authority; the regex survives as `_names_character`, rejecting a `visual_direction`
+  that names a character outside the cast. The unchecked-page half of the original failure is now
+  covered instead by §4.6's scene-constraint judge, which runs on every attempt including
+  reference-free ones. See `scene-segmentation.md` → "Name recovery — removed".
   **(B) `GATING_REASONS`** (`consistency-checker.md`): `passed` gains
   `and not (GATING_REASONS & failure_reasons)` where the set is `{wrong_colour, wrong_body_feature}`.
   Job `483056e0` shipped `s3` and `s4` `passed=True` carrying those exact reasons — a green dragon
@@ -617,9 +624,10 @@ is not documentation of a good design; it is the blast radius, written down so t
   compares against the reference image so it can flag a colour `analyze` never recorded.
   `regenerate` invariant 5 now rests on that floor rather than on `failure_reasons` being non-empty.
   (2) `SEGMENTATION_PROMPT` gained a pronoun rule, the layer §4.6's regex structurally cannot
-  reach — free, and the two fail in opposite directions. **Cast carry-forward was considered and
-  rejected**: an empty cast after recovery is a pronoun beat *or* a scenery page, and inheriting
-  draws a character into the scenery one. Revisit on `refs=0` in the logs.
+  reach — free, and the two fail in opposite directions. Since (A)'s reversal the pronoun rule is
+  the only text-side layer, and it now also carries §4.3's visible-only qualifier. **Cast
+  carry-forward was considered and rejected**: an empty cast is a pronoun beat *or* a scenery page,
+  and inheriting draws a character into the scenery one. Revisit on `refs=0` in the logs.
   **The canonical reference is drawn at an angle, not head-on (2026-08-13, follow-up):**
   `REFERENCE_PROMPT`'s ~~"facing forward"~~ → **"seen from a slight angle rather than straight on"**,
   with `back view, seen from behind` added to `REFERENCE_NEGATIVE` for the overshoot. Head-on

@@ -145,7 +145,10 @@ kid prose (ADR-012), and a wrong boundary costs a slightly-off page break, not a
 4. **Close gaps** — an uncovered run attaches to the preceding scene (extend its `end`); a leading
    run extends the first scene's `start` to `0`; a trailing run extends the last scene's `end` to
    `n-1`.
-5. **No empty floor** — if nothing survived, raise `ValueError("segment: no usable scene with visual direction")`.
+5. **No empty floor** — if nothing survived clamp + de-overlap, raise
+   `ValueError("segment: no usable scene range survived clamp and de-overlap")`. The former
+   whole-story floor cannot be rebuilt: it minted a scene with no `visual_direction`, which
+   `generate_scene` would now have to draw blind.
 6. **Merge to ≤15** — while there are more than 15, merge the adjacent pair with the smallest
    combined unit count using `_merge_extracted(a, b)` (union characters/objects, concatenate events and visual directions).
 
@@ -153,6 +156,11 @@ kid prose (ADR-012), and a wrong boundary costs a slightly-off page break, not a
 
 - **Visible Cast Authority:** `characters_present` is the single authoritative visible cast. Regex recovery is removed. If `characters_present` contains an unknown character name, or if `visual_direction` names a roster character not in `characters_present`, `segment` raises `ValueError`.
 - **Object Lifecycle Pass:** `holder_by_obj` is seeded with `owner_char_id`, but `active_objects` starts empty. An object activates upon explicit appearance in `objects_present` or an `acquire` event. In each beat, active objects whose current holder is visible in `characters_present` are included in `objects_present` and formatted into `visual_direction` (`"<object> is held by <holder>."`). Transfers apply `release` then `acquire` in narrative order. An unknown object name or holder raises `ValueError`.
+
+### Edge cases
+
+| Case | Behavior |
+|---|---|
 | **Empty `timeline[]`** | Valid. The prompt loses its plot-point context and the model segments from the text alone. |
 | **Input was truncated** (ADR-012) | Segments the kept portion only. Correct — the book illustrates what was kept. |
 | **Provider hard failure** | Raises. Job → `failed` with an ADR-025 `failure_reason`; never a partial `scenes[]`. No node-level retry — the `openai` SDK's bounded retry is the entire policy (ADR-025 Decision 1). |
@@ -168,9 +176,11 @@ null). Carry-forward runs last, over the final scene list in order: a null inher
 scene's `location_id`; a null `s0` takes `locations[0].loc_id` if the story named any, else `None`.
 A story that names no location leaves every `location_id` as `None` — identical to before.
 
-`location_name` propagates through **all eight** `ExtractedScene(...)` constructions (seven in
-`repair`, one in `merge_thin`); on a merge, `a.location_name or b.location_name`. The whole-story
-floor deliberately constructs with no location, and carry-forward supplies `locations[0]`.
+Every repair and merge path now rebuilds scenes with `model_copy(update=...)` rather than a fresh
+`ExtractedScene(...)`, so `location_name` — and `visual-continuity`'s `objects_present`,
+`object_events` and `visual_direction` — propagate by construction instead of by being restated at
+eight call sites. `_merge_extracted` is the one place that combines them: `a.location_name or
+b.location_name`, union the object lists, concatenate the events and the directions.
 
 ### Invariant: no duplicate `char_id` (`scene-setting-and-subject-binding.md` §4.3)
 
@@ -181,58 +191,34 @@ order — so removing a duplicate cannot reorder the survivors that `build_promp
 `generate_scene`'s `ref_paths` are both indexed against.
 
 
-### Name recovery — the omitted-character backstop (§4.6, 2026-08-13)
+### Name recovery — removed by `visual-continuity` §4.3 (2026-08-14)
 
-The model is the only thing deciding `characters_present`, and when it returns `[]` for a beat
-whose text plainly names a roster character, the consequences **compound**:
+**This backstop no longer exists.** From 2026-08-13 to 2026-08-14, every roster name the excerpt
+mentioned and that the model had omitted from `characters_present` was appended to `char_ids` by a
+word-boundary regex. `visual-continuity` §4.3 deleted it: *"a name appearing in an excerpt does not
+prove that the character should be visible. The structured `characters_present` decision is the
+authority."* The motivating job drew characters the story only *mentioned*, which is precisely what
+over-recovery buys.
 
-1. `generate_scene` finds no reference and falls through to `text_to_image`
-   (`generate_scene.py:55-57`) — an unanchored draw of a character that has a canonical reference
-   sitting unused in Storage.
-2. `consistency_check` then finds no subject and files the page **unchecked** — which finalizes
-   (`consistency_check.py:211`).
+The regex itself survives as `_names_character`, doing the opposite job: a `visual_direction` that
+names a roster character **outside** the visible cast raises `ValueError` before any fal image is
+purchased. Recovery appended; this rejects.
 
-So the page most likely to be off-model is the one page nothing measured. Prod job `483056e0`
-(2026-08-13) lost the dragon on `s1` and `s2` — `refs=0 prompt_len=552` against 930–1050 on every
-other page — and both shipped unjudged. The child's complaint was that the dragon looked different
-on those pages.
+**What the removal gives back to the model, and the residual risk.** The compounding failure the
+backstop was built for is real and is not fixed by deleting it: an omitted character means
+`generate_scene` finds no reference and falls through to `text_to_image`, and `consistency_check`
+then finds no subject on the identity leg. What changed is that the page is no longer *unchecked* —
+`visual-continuity` §4.6's scene-constraint judge runs on every attempt including reference-free
+ones, so an omitted or unrequested character is now caught by a judge that can read the picture
+rather than by a regex that can only read the text.
 
-**The rule.** After the roster-name mapping, every roster name that the excerpt *mentions* and that
-is not already in `char_ids` is **appended**:
+`SEGMENTATION_PROMPT` keeps its pronoun rule, now the only text-side layer:
 
-- Matched on the name with a leading article stripped (`the|a|an`), so a roster `"the dragon"`
-  recovers from `"a huge red dragon"`.
-- Word boundaries, case-insensitive — so `"the star"` does **not** recover from `"stars"`, which
-  names no character. `prompt_optimizer.REFERENCE_CLAUSE` carves out the same case for the same
-  reason.
-- **Appended, never inserted.** Invariant 4 requires that what the model named keeps its relative
-  order, because `build_prompt`'s "Image N is X" is asserted against `ref_paths` on three separate
-  nodes. Recovered ids follow in roster order, which is prominence order.
-- **Through `name_to_id`, not `state.characters`.** Two roster entries can share a name (§4.3
-  path 2); iterating the roster directly would re-append the loser that first-seen-wins had just
-  excluded, sending two references for one named character. This was caught by
-  `test_segment_maps_two_roster_characters_sharing_a_name_to_one_char_id` during the build.
+> `- List a character in characters_present only when they are intended to be visible in this scene frame. List them even when the sentences refer to them only as he, she, it or they.`
 
-**The failure mode is over-recovery, and that is the intended asymmetry.** A character named in
-passing (`"he dreamed of a dragon"`) gets a reference it did not need, costing at worst one
-`character_absent` retry. Under-recovery costs an unreferenced *and* unchecked page. A word-boundary
-match is not NER and is not trying to be — upgrade path, if the retry rate bites, is to ask the
-judge rather than a regex.
-
-**Pronoun-only beats need the other layer.** A regex needs a name in the text, so `"He roared."`
-recovers nothing — the beat has no name to match, and the residual is exactly the compounding
-failure above. `SEGMENTATION_PROMPT` therefore carries a rule of its own:
-
-> `- List a character even when the sentences refer to them only as he, she, it or they.`
-
-Free — no extra call, no new field — and the two layers fail in opposite directions: the prompt rule
-is unreliable (the model already ignored `characters_present` once, which is why the backstop
-exists), and the backstop is blind to pronouns. Neither covers the case alone, which is why
-`test_the_prompt_asks_for_pronoun_only_beats_which_the_regex_cannot_reach` asserts both halves in
-one test. **Deliberately not built:** a cast carry-forward, mirroring §4.1's location seed — an
-empty cast after recovery is either a pronoun beat *or* a genuine scenery page, and inheriting the
-previous page's cast draws a character into the scenery one. Revisit if the logs show pronoun beats
-still landing at `refs=0`.
+**Deliberately not built:** a cast carry-forward mirroring §4.1's location seed — an empty cast is
+either a pronoun beat *or* a genuine scenery page, and inheriting the previous page's cast draws a
+character into the scenery one. Revisit if the logs show beats still landing at `refs=0`.
 
 ## 5. Cross-cutting checklist (MASTER_SPEC §5)
 
@@ -290,14 +276,16 @@ definition.
 - **Verbatim:** each `text_excerpt` is the join of exactly its own units, and concatenating all
   excerpts in order reproduces the source units in order
 - **ADR-013:** `caption == text_excerpt` for every scene
-- **`characters_present`:** roster names map to `char_id`s; a name absent from the roster is dropped
+- **`characters_present`:** roster names map to `char_id`s; a name absent from the roster **raises**
+  (`visual-continuity` §4.8 — fail before any image draw)
 - **Empty roster:** every scene gets `[]` and the node does not raise
-- **§4.6 name recovery:** a roster name the model omitted is recovered from the excerpt; recovered
-  ids are **appended after** the model's own (invariant 4); a name the model already gave is not
-  duplicated; `"the star"` is **not** recovered from `"stars"` (word boundary); matching is
-  case-insensitive
-- **§4.6 pronoun layer:** the prompt carries the pronoun rule **and** `"He roared."` recovers
-  nothing — asserted together, because either half alone would leave the gap invisible
+- **Visible cast authority:** a merely mentioned off-screen character is absent from
+  `characters_present`; no regex re-adds it
+- **Direction cast check:** a `visual_direction` naming a roster character outside the visible cast
+  raises; `"the star"` does **not** match `"stars"` (word boundary); matching is case-insensitive
+- **Pronoun layer:** the prompt carries the pronoun rule, which is now the only text-side defence
+  against an omitted character — a direction saying only `"He flees."` names no one and correctly
+  does not trip the cast check
 - **CC-2 source:** prefers `redacted_text`; falls back to `raw_text` when it is `None`
 - **Empty text:** returns `{"scenes": []}` and `segment_scenes` is **never called**
 - **Partial-return (ADR-024):** the result keys are exactly `{"scenes"}`; `state` is unmutated

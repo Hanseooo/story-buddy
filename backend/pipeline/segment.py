@@ -140,7 +140,11 @@ def repair(scenes: list[ExtractedScene], n: int) -> list[ExtractedScene]:
         log.info("segment/repair: de-overlap dropped %d ranges", len(clamped) - len(deoverlapped))
 
     if not deoverlapped:
-        raise ValueError("segment: no usable scene with visual direction")
+        # Reached only when clamp + de-overlap emptied every range — a malformed index set, not a
+        # missing visual direction (`ExtractedScene` already requires a non-blank one). The old
+        # whole-story floor cannot be rebuilt here: it minted a scene with no direction, which
+        # `generate_scene` would now have to draw blind.
+        raise ValueError("segment: no usable scene range survived clamp and de-overlap")
 
     # Close gaps (leading, interior, trailing)
     gaps_closed = 0
@@ -216,21 +220,19 @@ def merge_thin(scenes: list[ExtractedScene], units: list[str]) -> list[Extracted
     return merged
 
 
-# §4.6. The model is the only thing deciding `characters_present`, and when it returns `[]` for a
-# beat whose text plainly names a character the consequences compound: `generate_scene` finds no
-# reference and falls through to `text_to_image` (`generate_scene.py:55-57`), and then
-# `consistency_check` finds no subject and files the page *unchecked*. The page most likely to be
-# off-model is the one page nothing measured. Prod job 483056e0 lost the dragon on s1 and s2 —
-# `refs=0 prompt_len=552` against 930-1050 everywhere else — and both shipped unjudged.
+# visual-continuity §4.3 REVERSED this regex's job. It used to be the omitted-character backstop,
+# recovering a roster name from the excerpt and appending it to `characters_present`; that
+# unconditional recovery is now removed, because a name appearing in an excerpt does not prove the
+# character should be VISIBLE (the motivating job drew characters who were only mentioned). The
+# structured `characters_present` decision is the sole authority on the visible cast.
 #
-# Leading article stripped so a roster "the dragon" recovers from "a huge red dragon"; word
-# boundaries so "the star" does not recover from "stars", which names no character
-# (`prompt_optimizer.REFERENCE_CLAUSE` carves out the same case).
+# What the match is used for now is the opposite check: `visual_direction` must not name a roster
+# character outside that cast, which fails the job before any fal image is purchased (§4.8).
 #
-# TWO LAYERS, and the other one is SEGMENTATION_PROMPT's pronoun rule. The regex cannot recover a
-# beat that says only "he roared" — there is no name in the text to match — so the prompt asks the
-# model for those and this catches what the model still drops. Free (no extra call) and they fail
-# in opposite directions: the prompt is unreliable, the regex is blind to pronouns.
+# Leading article stripped so a roster "the dragon" matches "a huge red dragon"; word boundaries so
+# "the star" does not match "stars", which names no character (`prompt_optimizer.REFERENCE_CLAUSE`
+# carves out the same case). Blind to pronouns, which is acceptable here: a direction that says only
+# "he flees" names no one outside the cast and correctly does not trip the check.
 _ARTICLE = re.compile(r"^(the|a|an)\s+", re.IGNORECASE)
 
 

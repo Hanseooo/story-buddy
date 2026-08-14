@@ -180,11 +180,26 @@ def judge_attempt(
 
 
 def _rank(a: Attempt) -> tuple[int, int, int, int, int, int, int, int, int]:
-    """ADR-028's lexicographic best-of signal, with unchecked sorting below every checked attempt.
+    """ADR-028's lexicographic best-of signal, in visual-continuity §4.7's declared order.
 
     A pass scores (1, 1, 1, …) and beats anything that gated, so `max` needs no special case for
-    it. Unchecked scores all zeros: promoting an unjudged image over a judged one would let a
-    judge outage silently decide the page, contradicting invariant 4 (unchecked is never a pass).
+    it. Term 1 is §4.7's "any checked signal over no checked signal": a FULLY unchecked attempt —
+    neither judge available — scores all zeros and sorts below every checked one, because
+    promoting an unjudged image over a judged one would let a judge outage silently decide the
+    page (invariant 4: unchecked is never a pass).
+
+    An attempt checked by only ONE judge scores `True` on the axes the other judge never measured.
+    That is deliberate but not free: it lets an attempt whose IDENTITY check was unavailable
+    outrank one the identity judge said was the wrong character. The alternative — scoring an
+    unmeasured axis `False` — is worse, because it would rank a page nobody faulted below a page
+    with a known, minor fault. Terms 6-7 are the §4.7 composition terms: no contradictions first,
+    then fewer of them.
+
+    Ordering rationale for the identity axes (unchanged): `text_free` sits after `anatomy_intact`
+    because a merged limb is a worse picture than a lettered door, and ahead of `subjects_unique`
+    and `style_match` because those two deliberately do not gate and it does. The `GATING_REASONS`
+    term reads off `Attempt.failure_reasons`, not `vlm_verdict`, which carries no reason list;
+    without it the corrected redraw the attribute gate buys would be invisible to best-of.
     """
     verdict = a.vlm_verdict
     contradictions = a.scene_contradictions
