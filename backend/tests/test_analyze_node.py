@@ -30,11 +30,44 @@ def test_extracted_description_requires_species():
         ExtractedDescription.model_validate({"colours": ["red"]})
 
 
-def test_extracted_description_requires_no_visual_attribute():
-    """Guards against someone later 'tightening' this into a Pydantic validator that fires
-    AFTER a successful, paid call — under ADR-025 that fails the child's whole job because
-    they never said what their dog was wearing. Spec §4."""
-    assert ExtractedDescription(species="dog").species == "dog"
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {
+            "species": "dog",
+            "is_humanoid": False,
+            "colours": ["brown"],
+            "body_features": ["floppy ears"],
+        },
+        {
+            "species": "dog",
+            "is_humanoid": False,
+            "colours": ["brown", "cream", "black"],
+        },
+        {
+            "species": "human",
+            "is_humanoid": True,
+            "colours": ["brown"],
+            "body_features": ["round face", "short hair"],
+            "clothing": [],
+        },
+    ],
+)
+def test_extracted_description_rejects_incomplete_visual_canon(payload):
+    with pytest.raises(ValidationError):
+        ExtractedDescription.model_validate(payload)
+
+
+def test_extracted_description_accepts_three_discriminators_across_two_axes():
+    description = ExtractedDescription.model_validate(
+        {
+            "species": "dog",
+            "is_humanoid": False,
+            "colours": ["brown", "cream"],
+            "body_features": ["floppy ears"],
+        }
+    )
+    assert description.species == "dog"
 
 
 def test_extracted_description_inherits_every_contract_axis():
@@ -65,9 +98,20 @@ def test_no_extraction_model_declares_an_id(model, id_field):
 def test_story_analysis_accepts_the_four_collections():
     analysis = StoryAnalysis.model_validate(
         {
-            "characters": [{"name": "the narrator", "description": {"species": "girl"}}],
+            "characters": [
+                {
+                    "name": "the narrator",
+                    "description": {
+                        "species": "girl",
+                        "is_humanoid": True,
+                        "colours": ["warm brown skin"],
+                        "body_features": ["round face"],
+                        "clothing": ["yellow shirt"],
+                    },
+                }
+            ],
             "locations": [{"name": "the beach"}],
-            "objects": [{"name": "a red bucket"}],
+            "objects": [{"name": "a red bucket", "description": "a small red plastic bucket"}],
             "timeline": [{"order": 0, "summary": "They go to the beach."}],
         }
     )
@@ -80,9 +124,9 @@ def _analysis(**overrides) -> StoryAnalysis:
     """A minimal valid StoryAnalysis; override any collection per test."""
     return StoryAnalysis.model_validate(
         {
-            "characters": [{"name": "the narrator", "description": {"species": "girl"}}],
+            "characters": [_character("the narrator")],
             "locations": [{"name": "the beach"}],
-            "objects": [{"name": "a red bucket"}],
+            "objects": [{"name": "a red bucket", "description": "a small red plastic bucket"}],
             "timeline": [{"order": 0, "summary": "They go to the beach."}],
             **overrides,
         }
@@ -183,7 +227,43 @@ def _state(raw_text="A dog runs in a field.", redacted_text="A dog runs in a fie
 
 
 def _character(name: str, species: str = "girl") -> dict:
-    return {"name": name, "description": {"species": species}}
+    return {
+        "name": name,
+        "description": {
+            "species": species,
+            "is_humanoid": True,
+            "colours": ["warm brown skin"],
+            "body_features": ["round face"],
+            "clothing": ["yellow shirt"],
+        },
+    }
+
+
+def test_analyze_persists_story_stated_details_without_the_transient_humanoid_flag():
+    analysis = _analysis(
+        characters=[
+            {
+                "name": "Ana",
+                "description": {
+                    "species": "human",
+                    "is_humanoid": True,
+                    "colours": ["blue eyes"],
+                    "body_features": ["round face"],
+                    "clothing": ["red cape"],
+                },
+            }
+        ]
+    )
+    with patch("pipeline.analyze.extract_entities", return_value=analysis):
+        description = analyze(_state())["characters"][0].description
+
+    assert description.model_dump() == {
+        "species": "human",
+        "colours": ["blue eyes"],
+        "body_features": ["round face"],
+        "clothing": ["red cape"],
+        "notes": None,
+    }
 
 
 def test_analyze_mints_ids_by_list_position():

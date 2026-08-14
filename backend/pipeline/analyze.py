@@ -1,6 +1,6 @@
 import logging
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from contracts.story_memory import Character, CharacterDescription, Location, StoryMemory, StoryObject, TimelineEvent
 from providers import structured_text
@@ -12,20 +12,17 @@ from providers import structured_text
 
 
 class ExtractedDescription(CharacterDescription):
-    """Boundary-strict subclass. The contract's `CharacterDescription` is all-Optional by
-    design (ADR-023: mostly-optional container); real per-field validation belongs at the
-    LLM boundary (ADR-002). Subclassed rather than mirrored so the axes — deliberately
-    aligned to the `FailureReason` taxonomy the judge scores against — stay in one place.
-
-    `species` is required HERE and Optional in the contract. ADR-028's reference-acceptance
-    loop judges each draw against `CharacterDescription`; an entirely empty description makes
-    `matches_description` vacuously true, so the 3-draw re-roll silently collapses to 1 draw.
-    One always-answerable string guarantees the judge has something to check against.
-    No visual attribute is required — strict `json_schema` cannot express "at least one of
-    three lists is non-empty", so that constraint would have to fire after a paid call.
-    """
-
     species: str
+    is_humanoid: bool
+
+    @model_validator(mode="after")
+    def complete_visual_profile(self) -> "ExtractedDescription":
+        axes = (self.colours, self.body_features, self.clothing)
+        if sum(len(axis) for axis in axes) < 3 or sum(bool(axis) for axis in axes) < 2:
+            raise ValueError("character needs at least three visual discriminators across two axes")
+        if self.is_humanoid and not self.clothing:
+            raise ValueError("humanoid character needs a clothing description")
+        return self
 
 
 class ExtractedCharacter(BaseModel):
@@ -74,9 +71,11 @@ Characters: at most 3, most important first — the first one is the story's pro
 Use the name the story gives the character. If the story never names them, use a short
 descriptive label instead: "the narrator", "the younger sister", "the orange cat". Never emit a
 redaction placeholder like <PERSON_1>. The story is usually first-person, and the narrator is
-usually a character. Every character needs a species — one plain word for what they are:
-"girl", "dog", "robot". Fill colours, body_features and clothing only from what the story
-actually says; leave them empty rather than inventing details.
+usually a character.
+Classify by agency: a character speaks, decides, moves intentionally, or performs an action. An inert prop belongs only in objects. A personified object belongs only in characters, never both.
+Species is the physical kind, never a job title or role: a human wizard is physically human.
+Copy every visual fact the story states without alteration. Fill only missing visual axes once with neutral, child-safe, non-stereotyped details that distinguish this character from the rest of the roster.
+Return at least three stable visual discriminators across at least two of colours, body_features, and clothing. Set is_humanoid accurately; every humanoid needs a non-empty clothing description.
 
 Locations and objects: whatever the story mentions. Describe each location by what is permanently there — not the weather, the time of day, or what happens there.
 
@@ -121,7 +120,7 @@ def analyze(state: StoryMemory) -> dict:
             char_id=f"c{i}",
             name=extracted.name,
             # the strict subclass is a boundary concern; what is persisted is the contract type
-            description=CharacterDescription(**extracted.description.model_dump()),
+            description=CharacterDescription(**extracted.description.model_dump(exclude={"is_humanoid"})),
         )
         for i, extracted in enumerate(analysis.characters[:3])
     ]
