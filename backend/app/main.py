@@ -24,6 +24,18 @@ _log = logging.getLogger(__name__)
 
 app = FastAPI()
 
+# RQ's hard deadline, armed by `run_worker._HardDeathPenalty` and shared by BOTH entrypoints — a
+# resume re-enters the graph at `reveal`, which sits ahead of every scene node, so it must draw the
+# whole book inside one window exactly like a fresh run does.
+#
+# Raised from 900s after prod job 37b21dc2 (2026-08-13) died 11s into scene 7's second attempt —
+# one judge call short of `_finish`. Its neighbours completed at 4 and 7 regens, so 900s was not
+# wrong, just thin: a retry-heavy 7-scene book crosses it and a calm one does not.
+#
+# ponytail: more clock, not a smarter budget. If 1800s also proves thin the answer is capping total
+# regens, not another bump — the deadline cannot tell a slow book from a runaway one.
+JOB_TIMEOUT_SECONDS = 1800
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.frontend_origin],
@@ -107,7 +119,7 @@ def create_storybook(
         }
     ).execute()
     queue = get_queue()
-    queue.enqueue("worker.run_job.run_storybook_job", job_id, job_timeout=900)
+    queue.enqueue("worker.run_job.run_storybook_job", job_id, job_timeout=JOB_TIMEOUT_SECONDS)
     return CreateStorybookResponse(job_id=job_id)
 
 
@@ -151,7 +163,7 @@ def confirm_job(
 
     queue = get_queue()
     try:
-        queue.enqueue("worker.run_job.resume_storybook_job", job_id, payload.model_dump(), job_timeout=900)
+        queue.enqueue("worker.run_job.resume_storybook_job", job_id, payload.model_dump(), job_timeout=JOB_TIMEOUT_SECONDS)
     except Exception:
         # The CAS already flipped status to 'queued'; a Redis outage here would strand the book
         # with no worker coming and no way to re-confirm. Roll it back — nothing else ran.

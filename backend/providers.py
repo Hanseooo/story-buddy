@@ -182,7 +182,8 @@ def _chat(
         # One re-ask, not a loop: a provider that cannot honour the schema will not learn to on the
         # fourth attempt, and every attempt is billed. A stall is deliberately NOT retried —
         # `_bounded` raises `TimeoutError`, which is an `OSError` and does not land here, so the
-        # worst case against the 900s job deadline stays one `CALL_TIMEOUT_SECONDS`, not two.
+        # worst case against the job deadline (`main.JOB_TIMEOUT_SECONDS`) stays one
+        # `CALL_TIMEOUT_SECONDS`, not two.
         _log.warning("%s broke its own response schema; re-asking once. %s", model, exc)
         return _one_answer(client, model, content, schema, extra_body)
 
