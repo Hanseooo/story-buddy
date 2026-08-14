@@ -88,6 +88,7 @@ class StoryObject(BaseModel):  # minimal; refined by `story-analyzer` (§8, addi
     obj_id: str
     name: str
     description: Optional[str] = None
+    owner_char_id: Optional[str] = None
 
 
 class TimelineEvent(BaseModel):  # minimal; refined by `story-analyzer` (§8, additive)
@@ -150,6 +151,7 @@ class Attempt(BaseModel):
     vlm_verdict: Optional[VlmVerdict] = None
     failure_reasons: list[FailureReason] = Field(default_factory=list)  # closed set; extras rejected
     passed: bool = False
+    scene_contradictions: Optional[list[str]] = None
 
 
 class Scene(BaseModel):
@@ -163,6 +165,8 @@ class Scene(BaseModel):
     final_image_ref: Optional[str] = None                        # best-of (ADR-010); durable path
     regeneration_count: int = 0
     moderation_status: Optional[str] = None
+    objects_present: list[str] = Field(default_factory=list)
+    visual_direction: Optional[str] = None
 
 
 # --- LangGraph reducer (ADR-024): upsert-by-scene_id, replace-matching, keep-others ---
