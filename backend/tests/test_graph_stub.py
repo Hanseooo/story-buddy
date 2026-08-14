@@ -37,7 +37,17 @@ def _initial_state(story_id: str) -> StoryMemory:
 
 STUB_ANALYSIS = StoryAnalysis.model_validate(
     {
-        "characters": [{"name": "the orange dog", "description": {"species": "dog"}}],
+        "characters": [
+            {
+                "name": "the orange dog",
+                "description": {
+                    "species": "dog",
+                    "is_humanoid": False,
+                    "colours": ["orange fur", "white paws"],
+                    "body_features": ["floppy ears"],
+                },
+            }
+        ],
         "locations": [{"name": "a field"}],
         "objects": [],
         "timeline": [{"order": 0, "summary": "A dog runs."}],
