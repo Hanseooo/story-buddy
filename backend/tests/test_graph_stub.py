@@ -65,8 +65,8 @@ def _mock_call_points(monkeypatch):
     monkeypatch.setattr("pipeline.analyze.extract_entities", lambda text: STUB_ANALYSIS)
     monkeypatch.setattr(
         "pipeline.segment.segment_scenes",
-        lambda units, chars, timeline, locs=None: SceneSegmentation(scenes=[
-            ExtractedScene(start=0, end=len(units) - 1, characters_present=[])
+        lambda units, chars, timeline, locs=None, objs=None: SceneSegmentation(scenes=[
+            ExtractedScene(start=0, end=len(units) - 1, characters_present=[], visual_direction="A scene.")
         ]),
     )
     monkeypatch.setattr(
@@ -187,9 +187,9 @@ def test_two_scene_run_loops_once_per_scene_and_reaches_compose(monkeypatch):
     _mock_call_points(monkeypatch)
     monkeypatch.setattr(
         "pipeline.segment.segment_scenes",
-        lambda units, chars, timeline, locs=None: SceneSegmentation(scenes=[
-            ExtractedScene(start=0, end=0, characters_present=[]),
-            ExtractedScene(start=1, end=len(units) - 1, characters_present=[]),
+        lambda units, chars, timeline, locs=None, objs=None: SceneSegmentation(scenes=[
+            ExtractedScene(start=0, end=0, characters_present=[], visual_direction="Scene 0."),
+            ExtractedScene(start=1, end=len(units) - 1, characters_present=[], visual_direction="Scene 1."),
         ]),
     )
     app_graph = build_graph()
@@ -231,9 +231,9 @@ def _judge_returning(*, same: bool, anatomy: bool = True) -> SceneVerdict:
 def _two_scenes(monkeypatch):
     monkeypatch.setattr(
         "pipeline.segment.segment_scenes",
-        lambda units, chars, timeline, locs=None: SceneSegmentation(scenes=[
-            ExtractedScene(start=0, end=0, characters_present=[]),
-            ExtractedScene(start=1, end=len(units) - 1, characters_present=[]),
+        lambda units, chars, timeline, locs=None, objs=None: SceneSegmentation(scenes=[
+            ExtractedScene(start=0, end=0, characters_present=[], visual_direction="Scene 0."),
+            ExtractedScene(start=1, end=len(units) - 1, characters_present=[], visual_direction="Scene 1."),
         ]),
     )
 

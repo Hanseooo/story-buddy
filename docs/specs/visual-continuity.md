@@ -1,6 +1,6 @@
 # Feature Spec — visual continuity
 
-**Status:** draft — design approved, written review pending · **Phase:** 2 · **Owner nodes:**
+**Status:** approved · **Phase:** 2 · **Owner nodes:**
 `backend/pipeline/analyze.py`, `segment.py`, `char_bible.py`, `prompt_optimizer.py`,
 `consistency_check.py`, `regenerate.py`
 **Derived from:** MASTER_SPEC §§2–6 · **Rationale:** observed job
