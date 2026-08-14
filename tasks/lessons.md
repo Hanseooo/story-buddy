@@ -30,3 +30,12 @@
 - **Rule**: A probe must exercise the exact call shape production uses — same modality, same message
   parts, same schema. If writing the probe reveals the production function doesn't exist yet, that is
   the finding. Ask "what would this probe let me believe that is false?"
+
+### 2026-08-14 Do not turn a product-quality goal into a research harness
+- **What happened**: The user wanted to improve observed pipeline consistency, but the initial S1
+  discussion centered on corpus size, statistical strength, and paid baseline runs.
+- **Root cause**: I followed the docket's measurement posture before confirming whether its level of
+  evidence matched the user's immediate goal.
+- **Rule**: For quality work, first ask whether the user needs a research claim or targeted product
+  improvement. Concrete observed failures can drive a repro-based design without a paid corpus run;
+  record the weaker attribution honestly instead of imposing unused rigor.

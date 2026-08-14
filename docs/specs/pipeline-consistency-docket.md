@@ -90,9 +90,12 @@ Decided in earlier sessions. Later sessions treat these as given, not open.
 ## Sessions
 
 Statuses: DONE (spec linked **and** constraints confirmed) · PARTIAL (stopped early,
-resumable) · READY · BLOCKED (needs Sn)
+resumable) · READY · BLOCKED (needs Sn) · WAIVED (owner explicitly removed the session's
+deliverable; never treat it as measured)
 
-### S1 · Verification contract — READY
+### S1 · Verification contract — PARTIAL (paid baseline waived; replacement spec awaiting review)
+
+**Replacement spec:** `docs/specs/visual-continuity.md`
 
 **Cluster:** what "the pipeline got more consistent" means as a number; what corpus it is measured
 over; what the current value of that number is; how a later change is attributed to itself rather
@@ -324,6 +327,13 @@ docket's work.
   user's request after the cut was approved; setting and economics shifted to S4 and S5. The
   approved 4-session cut had no home for it — it concerns characters that *do* have a reference,
   so it is not S2, and it is not place or money.
+- 2026-08-14 (from the S1 session): the owner explicitly waived S1's paid corpus baseline. The
+  immediate goal is targeted product improvement from observed failures, not a population-level
+  consistency claim. The replacement `visual-continuity` design combines the observed portions of
+  S2 (frozen text canon for every rostered character), S3 (visible cast, action and viewpoint), and
+  a newly observed recurring-object continuity gap. It adds no node, model swap, reference view, or
+  retry. S1 remains PARTIAL until the written replacement spec is reviewed and its constraints are
+  confirmed; it must then become WAIVED, never DONE, because no baseline was taken.
 
 ---
 
