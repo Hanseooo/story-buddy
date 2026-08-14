@@ -4,6 +4,7 @@ from app.config import STYLE_PRESETS
 from contracts.story_memory import Character, CharacterDescription, FailureReason, Location, StoryObject
 from pipeline.prompt_optimizer import (
     ANATOMY_CLAUSE,
+    COMPOSITION_CLAUSE,
     IDENTITY_CLAUSE,
     NON_HUMAN_CLAUSE,
     TEXT_CLAUSE,
@@ -488,7 +489,7 @@ def test_correct_prompt_defaults_reproduce_the_previous_behaviour_exactly():
     added by the new params. Every pre-existing assertion in this file depends on it."""
     assert correct_prompt("draw a dog", [], [], "cel") == "draw a dog"
     assert correct_prompt("draw a dog", [FailureReason.different_face], [], "cel") == (
-        "draw a dog\nmatch the reference character's face exactly"
+        f"draw a dog\nmatch the reference character's face exactly\n{COMPOSITION_CLAUSE}"
     )
 
 
@@ -1033,6 +1034,20 @@ def test_correct_prompt_appends_every_scene_contradiction_after_existing_correct
     ]
     positions = [result.index(marker) for marker in markers]
     assert positions == sorted(positions)
+
+
+def test_correct_prompt_appends_composition_clause():
+    from pipeline.prompt_optimizer import COMPOSITION_CLAUSE, correct_prompt
+
+    # When no corrections, it shouldn't append
+    base = "Draw Ana."
+    assert correct_prompt(base, [], [], "") == base
+
+    # When corrected, it should append the composition clause last
+    corrected = correct_prompt(base, [], [], "", same_character=False)
+    assert corrected.endswith(COMPOSITION_CLAUSE)
+    assert COMPOSITION_CLAUSE in corrected
+
 
 
 

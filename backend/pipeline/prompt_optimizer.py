@@ -378,6 +378,10 @@ ANATOMY_CLAUSE = "anatomy must be correct: no merged, missing or duplicated body
 # already have some. Unlike ANATOMY_CLAUSE it does NOT mirror the judge's phrasing — the judge is
 # told exactly what to look for (§4.1), the generator is never told what to avoid.
 TEXT_CLAUSE = "every surface in the picture is blank and unmarked"
+COMPOSITION_CLAUSE = (
+    "Preserve the Visual direction exactly: do not change the requested action, "
+    "movement direction, pose, crop, expression, or viewing angle."
+)
 
 
 def correct_prompt(
@@ -450,4 +454,6 @@ def correct_prompt(
         f"Correct this scene contradiction: {contradiction}"
         for contradiction in scene_contradictions or []
     )
+    if clauses:
+        clauses.append(COMPOSITION_CLAUSE)
     return "\n".join([prompt, *clauses]) if clauses else prompt
