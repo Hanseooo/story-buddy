@@ -93,30 +93,42 @@ change — ADR-013 already decided it.
 ### The LLM boundary schema (D-F: transient wrapper, so it lives beside its node)
 
 ```python
+class ExtractedObjectEvent(BaseModel):
+    object_name: str
+    action: Literal["acquire", "release"]
+    holder_name: str
+
 class ExtractedScene(BaseModel):
     start: int                      # inclusive index into the numbered units
     end: int                        # inclusive
     characters_present: list[str]   # Character.name values — the node maps them to char_ids
+    location_name: str | None = None  # Location.name value — node maps to a loc_id, null → inherit
+    objects_present: list[str] = Field(default_factory=list)
+    object_events: list[ExtractedObjectEvent] = Field(default_factory=list)
+    visual_direction: str           # Required non-blank direction string
 
 class SceneSegmentation(BaseModel):
     scenes: list[ExtractedScene]
 ```
 
-No id field, per D-G. `characters_present` crosses the boundary as **names**, which is the join key
-`story-analyzer` §8 named when it handed this field over; the node maps names to `char_id`s.
+No id field, per D-G. `characters_present` represents intended-visible cast only. All five planning fields (`characters_present`, `location_name`, `objects_present`, `object_events`, `visual_direction`) are preserved through `repair` and `merge_thin`.
 
 ### Happy path
 
 1. `text = state.input.redacted_text or state.input.raw_text`
 2. `units = split_sentences(text)` — pure. If `units` is empty, return `{"scenes": []}` **without
    calling the provider**; there is nothing to pay for.
-3. `segment_scenes(units, state.characters, state.timeline)` — one `providers.structured_text` call,
-   strict `json_schema` → `SceneSegmentation` (ADR-002). The prompt gets the numbered units, the
-   roster names, and `timeline[]` as the plot-point context, and asks for at most 15 scenes that
-   track the story's distinct major plot points.
-4. `repair(...)` — clamp, sort, de-overlap, close gaps, floor, merge to ≤15 (below)
-5. Mint `s{i}`, join units into `text_excerpt`, copy it into `caption`, map names → `char_id`s
-6. Partial-return `{"scenes": [...]}` (ADR-024 — never mutate `state`)
+3. `segment_scenes(units, state.characters, state.timeline, state.locations, state.objects)` — one `providers.structured_text` call,
+   strict `json_schema` → `SceneSegmentation` (ADR-002). The prompt gets the numbered units, roster names,
+   location names, object roster, and `timeline[]` as context.
+4. `repair(...)` — clamp, sort, de-overlap, close gaps, raise if empty, merge to ≤15. `_merge_extracted` combines payload fields deterministically.
+5. Single-pass visible cast validation and object lifecycle resolution:
+   - `characters_present` is strict visible cast authority; unknown character raises `ValueError`.
+   - `visual_direction` naming a roster character outside `characters_present` raises `ValueError`.
+   - Object lifecycle pass tracks active objects and holders, formatting holder relationships into `visual_direction`.
+   - Unknown object or holder raises `ValueError`; unknown location logs warning and carries forward.
+6. Mint `s{i}`, join units into `text_excerpt`, copy it into `caption`, map names → `char_id`s.
+7. Partial-return `{"scenes": [...]}` (ADR-024 — never mutate `state`).
 
 ### Sentence splitting
 
@@ -124,60 +136,23 @@ No id field, per D-G. `characters_present` crosses the boundary as **names**, wh
 Stdlib only — no new dependency, so no AGENTS.md §2 decision gate. This is adequate for ≤800-word
 kid prose (ADR-012), and a wrong boundary costs a slightly-off page break, not a broken book.
 
-**Documented ceiling:** abbreviations, ellipsis-heavy prose, and Filipino/Taglish punctuation habits
-are unmeasured. This is the same measurement gap `story-analyzer` §8 already carries, not a new one.
-A run-on story with no terminal punctuation yields one unit and therefore one scene; a word-chunk
-fallback for that case was considered and **not** taken, because it adds a second code path and a
-threshold constant to defend for an input that `length-guard` (Phase 2) is better placed to catch.
-
 ### `repair(scenes, n)` — deterministic, total, pure
 
-1. **Clamp** each range into `[0, n-1]`; drop any where `start > end` afterwards.
+1. **Clamp** each range into `[0, n-1]`; drop any where `start > end` afterwards (via `model_copy`).
 2. **Sort** by `start`.
 3. **De-overlap** — walking in order, force `start = max(start, prev_end + 1)`; drop the range if
    that empties it. Overlaps resolve in favour of the earlier scene.
 4. **Close gaps** — an uncovered run attaches to the preceding scene (extend its `end`); a leading
    run extends the first scene's `start` to `0`; a trailing run extends the last scene's `end` to
-   `n-1`. After this step every unit is in exactly one scene.
-5. **Floor** — if nothing survived, emit one range `(0, n-1)`. The whole-story fallback is the floor
-   of the repair, not a separate code path.
+   `n-1`.
+5. **No empty floor** — if nothing survived, raise `ValueError("segment: no usable scene with visual direction")`.
 6. **Merge to ≤15** — while there are more than 15, merge the adjacent pair with the smallest
-   combined unit count (ties → earliest), unioning their `characters_present`.
+   combined unit count using `_merge_extracted(a, b)` (union characters/objects, concatenate events and visual directions).
 
-**Step order is load-bearing.** Merging runs last so the cap applies to an already-dense tiling and
-can never reintroduce a gap.
+### Visible Cast Authority & Object Lifecycle Pass
 
-**Why repair rather than fail.** ADR-025 reserves hard failure for *provider* failures; a
-well-formed response the node dislikes is not one. ADR-010's "always a shippable page" points the
-same way: a child should not lose their whole book to an off-by-one index.
-
-### The 15-scene cap
-
-The prompt asks for ≤15 and the **node is the control** — the same belt-and-braces pattern as
-`analyze`'s 3-character cap, because a prompt is not enforceable. The cap is enforced by *merging*,
-not truncating: ADR-012 confines content-losing truncation to the input gate, and a second one here
-would silently delete the tail of the child's story from a book that ADR-012 promised would contain
-their actual words.
-
-There is **no floor.** Methodology §2 (module 3) and PRD §11.6 target ≥3 scenes *where the arc supports it* and
-state that never-invent overrides the floor. A three-sentence story gets a short book.
-
-### Edge cases
-
-| Case | Behavior |
-|---|---|
-| **Empty / whitespace-only text** | Zero units → `{"scenes": []}`, **no LLM call**. A minimum-length gate is `length-guard`'s job (Phase 2), not this node's. |
-| **One sentence** | One scene, `s0`. No floor is enforced — see above. |
-| **Model returns zero scenes** | Repair step 5 → one whole-story scene. Never an empty book from a non-empty story. |
-| **Model returns more than 15** | Merged down to 15. No child sentence is dropped. |
-| **Out-of-order / overlapping / gapped ranges** | Repaired (steps 1–4). Logged, per CC-5, so an odd page break is traceable. |
-| **Out-of-bounds indices** | Clamped. A model that hallucinates index 900 on a 12-sentence story gets index 11. |
-| **Unpunctuated run-on story** | One unit → one scene. Documented ceiling. |
-| **`characters_present` name not in the roster** | Dropped and logged. This node may not extend the roster — `analyze` owns it, and inventing a `char_id` here would produce a character with no canonical reference. |
-| **Duplicate names in the roster** (`analyze`'s documented dedup ceiling) | **First seen wins** — `name_to_id` is built with `setdefault`, so one mention maps to ONE `char_id` and the roster's prominence order picks which. Changed by `scene-setting-and-subject-binding` §4.3 path 2; this row said "every matching `char_id`" until 2026-08-13. §4.6's recovery reads the same map for the same reason. |
-| **Empty roster** (`analyze` found zero characters) | Every scene gets `characters_present: []`. Valid — `generate_scene` runs unreferenced, per ADR-010's "always a shippable page". |
-| **Model omits a character the excerpt names** | Recovered by word-boundary name match and appended (§4.6). Prod job `483056e0`'s `s1`/`s2` drew `refs=0` and shipped unchecked because of this. |
-| **Model omits a character the excerpt names only by pronoun** (`"He roared."`) | **Not recoverable by the backstop** — there is no name in the text to match. `SEGMENTATION_PROMPT` asks the model for these directly (§4.6); if it still omits, the page draws unreferenced and unchecked. Cast carry-forward was considered and rejected: it would also draw a character into a genuine scenery page. |
+- **Visible Cast Authority:** `characters_present` is the single authoritative visible cast. Regex recovery is removed. If `characters_present` contains an unknown character name, or if `visual_direction` names a roster character not in `characters_present`, `segment` raises `ValueError`.
+- **Object Lifecycle Pass:** `holder_by_obj` is seeded with `owner_char_id`, but `active_objects` starts empty. An object activates upon explicit appearance in `objects_present` or an `acquire` event. In each beat, active objects whose current holder is visible in `characters_present` are included in `objects_present` and formatted into `visual_direction` (`"<object> is held by <holder>."`). Transfers apply `release` then `acquire` in narrative order. An unknown object name or holder raises `ValueError`.
 | **Empty `timeline[]`** | Valid. The prompt loses its plot-point context and the model segments from the text alone. |
 | **Input was truncated** (ADR-012) | Segments the kept portion only. Correct — the book illustrates what was kept. |
 | **Provider hard failure** | Raises. Job → `failed` with an ADR-025 `failure_reason`; never a partial `scenes[]`. No node-level retry — the `openai` SDK's bounded retry is the entire policy (ADR-025 Decision 1). |

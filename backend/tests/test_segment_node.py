@@ -5,7 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.config import MIN_SCENE_WORDS, MIN_SCENES
-from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, Input, Location, StoryMemory, StoryObject
+from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, Input, Location, Scene, StoryMemory, StoryObject
 from pipeline.segment import (
     ExtractedObjectEvent,
     ExtractedScene,
@@ -362,6 +362,7 @@ def _state(
     characters: list | None = None,
     timeline: list | None = None,
     locations: list | None = None,
+    objects: list | None = None,
 ) -> StoryMemory:
     return StoryMemory(
         schema_version=CURRENT_SCHEMA_VERSION,
@@ -372,6 +373,7 @@ def _state(
         characters=characters or [],
         timeline=timeline or [],
         locations=locations or [],
+        objects=objects or [],
     )
 
 
@@ -451,15 +453,161 @@ def test_segment_maps_roster_names_to_char_ids():
     assert result["scenes"][1].characters_present == ["c1"]
 
 
-def test_segment_drops_names_not_in_roster():
-    """Invariant 6: a name absent from state.characters is silently dropped."""
-    seg = SceneSegmentation(scenes=[
-        _r(0, 0, chars=["the dog", "unknown character"]),
-        _r(1, 1, chars=[]),
-    ])
-    with patch("pipeline.segment.segment_scenes", return_value=seg):
-        result = segment(_state(characters=[_char("c0", "the dog")]))
-    assert result["scenes"][0].characters_present == ["c0"]
+def test_segment_does_not_add_a_merely_mentioned_offscreen_character():
+    raw = SceneSegmentation(
+        scenes=[
+            ExtractedScene(
+                start=0,
+                end=0,
+                characters_present=["Ana"],
+                visual_direction="Ana looks sadly out the window in profile.",
+            )
+        ]
+    )
+    state = _state(
+        raw="Ana remembered the Shadow Wizard.",
+        characters=[Character(char_id="c0", name="Ana"), Character(char_id="c1", name="Shadow Wizard")],
+    )
+    with patch("pipeline.segment.segment_scenes", return_value=raw):
+        scene = segment(state)["scenes"][0]
+
+    assert scene.characters_present == ["c0"]
+
+
+def test_segment_rejects_an_unknown_visible_character():
+    raw = SceneSegmentation(
+        scenes=[
+            ExtractedScene(
+                start=0,
+                end=0,
+                characters_present=["Ghost"],
+                visual_direction="Ghost crosses the room in a wide view.",
+            )
+        ]
+    )
+    with patch("pipeline.segment.segment_scenes", return_value=raw):
+        with pytest.raises(ValueError, match="unknown character.*Ghost"):
+            segment(_state(raw="Someone crossed the room."))
+
+
+def test_segment_rejects_direction_naming_a_roster_character_outside_the_cast():
+    raw = SceneSegmentation(
+        scenes=[
+            ExtractedScene(
+                start=0,
+                end=0,
+                characters_present=["Ana"],
+                visual_direction="Ana watches the Shadow Wizard flee away from her.",
+            )
+        ]
+    )
+    state = _state(
+        raw="Ana watched him flee.",
+        characters=[Character(char_id="c0", name="Ana"), Character(char_id="c1", name="Shadow Wizard")],
+    )
+    with patch("pipeline.segment.segment_scenes", return_value=raw):
+        with pytest.raises(ValueError, match="outside visible cast"):
+            segment(state)
+
+
+SWORD = StoryObject(
+    obj_id="obj0",
+    name="wooden sword",
+    description="a short wooden sword with a red cord grip",
+    owner_char_id="c0",
+)
+
+
+def _event(action: str, holder: str) -> ExtractedObjectEvent:
+    return ExtractedObjectEvent(object_name="wooden sword", action=action, holder_name=holder)
+
+
+def _segment_objects(raw: SceneSegmentation) -> list[Scene]:
+    state = _state(
+        raw="One. Two. Three.",
+        characters=[_char("c0", "Ana"), _char("c1", "Maya")],
+        objects=[SWORD],
+    )
+    with patch("pipeline.segment.segment_scenes", return_value=raw):
+        return segment(state)["scenes"]
+
+
+def test_acquire_activates_and_carries_an_owned_object_with_a_visible_holder():
+    raw = SceneSegmentation(
+        scenes=[
+            _r(0, 0, chars=["Ana"], object_events=[_event("acquire", "Ana")], visual_direction="Ana picks up the sword."),
+            _r(1, 1, chars=["Ana"], visual_direction="Ana walks right in a wide view."),
+        ]
+    )
+    scenes = _segment_objects(raw)
+    assert [scene.objects_present for scene in scenes] == [["obj0"], ["obj0"]]
+    assert "wooden sword is held by Ana" in scenes[1].visual_direction
+
+
+def test_an_offscreen_owner_hides_but_does_not_deactivate_the_object():
+    raw = SceneSegmentation(
+        scenes=[
+            _r(0, 0, chars=["Ana"], object_events=[_event("acquire", "Ana")], visual_direction="Ana picks up the sword."),
+            _r(1, 1, chars=["Maya"], visual_direction="Maya waits alone."),
+            _r(2, 2, chars=["Ana"], visual_direction="Ana returns from the left."),
+        ]
+    )
+    scenes = _segment_objects(raw)
+    assert [scene.objects_present for scene in scenes] == [["obj0"], [], ["obj0"]]
+
+
+def test_release_shows_the_object_in_that_beat_then_stops_carrying_it():
+    raw = SceneSegmentation(
+        scenes=[
+            _r(0, 0, chars=["Ana"], object_events=[_event("acquire", "Ana")], visual_direction="Ana picks up the sword."),
+            _r(1, 1, chars=["Ana"], object_events=[_event("release", "Ana")], visual_direction="Ana releases the sword."),
+            _r(2, 2, chars=["Ana"], visual_direction="Ana walks away."),
+        ]
+    )
+    scenes = _segment_objects(raw)
+    assert [scene.objects_present for scene in scenes] == [["obj0"], ["obj0"], []]
+
+
+def test_release_then_acquire_transfers_and_carries_with_the_recipient():
+    raw = SceneSegmentation(
+        scenes=[
+            _r(0, 0, chars=["Ana"], object_events=[_event("acquire", "Ana")], visual_direction="Ana picks up the sword."),
+            _r(
+                1,
+                1,
+                chars=["Ana", "Maya"],
+                object_events=[_event("release", "Ana"), _event("acquire", "Maya")],
+                visual_direction="Ana passes the sword rightward to Maya.",
+            ),
+            _r(2, 2, chars=["Maya"], visual_direction="Maya walks right."),
+        ]
+    )
+    scenes = _segment_objects(raw)
+    assert scenes[2].objects_present == ["obj0"]
+    assert "wooden sword is held by Maya" in scenes[2].visual_direction
+
+
+def test_unowned_object_explicitly_visible_in_scene_1_and_absent_in_scene_2():
+    unowned_sword = StoryObject(
+        obj_id="obj1",
+        name="magic key",
+        description="a golden key",
+        owner_char_id=None,
+    )
+    raw = SceneSegmentation(
+        scenes=[
+            _r(0, 0, chars=["Ana"], objects_present=["magic key"], visual_direction="Ana finds a key."),
+            _r(1, 1, chars=["Ana"], visual_direction="Ana walks away."),
+        ]
+    )
+    state = _state(
+        raw="One. Two.",
+        characters=[_char("c0", "Ana")],
+        objects=[unowned_sword],
+    )
+    with patch("pipeline.segment.segment_scenes", return_value=raw):
+        scenes = segment(state)["scenes"]
+    assert [scene.objects_present for scene in scenes] == [["obj1"], []]
 
 
 def test_segment_empty_roster_gives_empty_characters_present_no_raise():
@@ -657,86 +805,10 @@ def test_segment_dedup_preserves_first_seen_order_of_the_survivors():
 
 
 
-# --- §4.6 name-recovery backstop (prod job 483056e0: s1/s2 drew with refs=0) ---
-
-def test_segment_recovers_a_roster_name_the_model_omitted():
-    """The model returned no characters for a beat whose text names one. Prod job 483056e0 lost
-    the dragon on s1 and s2, so both pages drew unreferenced AND unchecked."""
-    seg = SceneSegmentation(scenes=[
-        _r(0, 0, chars=[]),
-        _r(1, 1, chars=[]),
-    ])
-    raw = "A huge red dragon made a nest. He found a ball."
-    with patch("pipeline.segment.segment_scenes", return_value=seg):
-        result = segment(_state(raw=raw, characters=[_char("c0", "the dragon")]))
-
-    assert result["scenes"][0].characters_present == ["c0"]
-    assert result["scenes"][1].characters_present == []
-
-
-def test_segment_recovery_appends_after_the_model_s_own_names():
-    """Invariant 4: recovery may not reorder what the model named — the roll index in
-    `build_prompt` is asserted against `ref_paths` on three separate nodes."""
-    seg = SceneSegmentation(scenes=[
-        _r(0, 1, chars=["the cat"]),
-    ])
-    raw = "The dog ran with the cat. They found a ball."
-    with patch("pipeline.segment.segment_scenes", return_value=seg):
-        result = segment(_state(
-            raw=raw, characters=[_char("c0", "the dog"), _char("c1", "the cat")]
-        ))
-
-    assert result["scenes"][0].characters_present == ["c1", "c0"]
-
-
-def test_segment_recovery_never_duplicates_a_name_the_model_already_gave():
-    seg = SceneSegmentation(scenes=[
-        _r(0, 1, chars=["the dog"]),
-    ])
-    raw = "The dog ran. The dog found a ball."
-    with patch("pipeline.segment.segment_scenes", return_value=seg):
-        result = segment(_state(raw=raw, characters=[_char("c0", "the dog")]))
-
-    assert result["scenes"][0].characters_present == ["c0"]
-
-
-def test_segment_recovery_matches_on_a_word_boundary_not_a_substring():
-    """"the star" must not be recovered from "stars" — the plural names no character
-    (`prompt_optimizer.REFERENCE_CLAUSE`'s own carve-out)."""
-    seg = SceneSegmentation(scenes=[
-        _r(0, 1, chars=[]),
-    ])
-    raw = "She looked up at the stars. They were bright."
-    with patch("pipeline.segment.segment_scenes", return_value=seg):
-        result = segment(_state(raw=raw, characters=[_char("c0", "the star")]))
-
-    assert result["scenes"][0].characters_present == []
-
-
-def test_the_prompt_asks_for_pronoun_only_beats_which_the_regex_cannot_reach():
-    """The other half of §4.6. `_mentions` needs a NAME in the excerpt, so "He roared." recovers
-    nothing (asserted below) — the prompt rule is the only thing that can catch that beat, and it
-    costs no extra call. Asserting both together is the point: neither layer covers it alone."""
+def test_the_prompt_asks_for_pronoun_only_beats():
     units = ["The dragon woke.", "He roared."]
     stub = SceneSegmentation(scenes=[_r(0, 1, chars=[])])
     with patch("pipeline.segment.structured_text", return_value=stub) as mock_provider:
         segment_scenes(units, [_char("c0", "the dragon")], [], [], [])
 
     assert "he, she, it or they" in mock_provider.call_args.args[0]
-
-    seg = SceneSegmentation(scenes=[_r(1, 1, chars=[])])
-    with patch("pipeline.segment.segment_scenes", return_value=seg):
-        result = segment(_state(raw="He roared.", characters=[_char("c0", "the dragon")]))
-
-    assert result["scenes"][0].characters_present == []
-
-
-def test_segment_recovery_is_case_insensitive():
-    seg = SceneSegmentation(scenes=[
-        _r(0, 1, chars=[]),
-    ])
-    raw = "Dragon roared loudly. The village woke."
-    with patch("pipeline.segment.segment_scenes", return_value=seg):
-        result = segment(_state(raw=raw, characters=[_char("c0", "dragon")]))
-
-    assert result["scenes"][0].characters_present == ["c0"]

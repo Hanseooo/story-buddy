@@ -68,7 +68,7 @@ Rules:
 - Each scene captures a distinct moment or plot point.
 - start and end are inclusive sentence indices.
 - characters_present lists character names exactly as given above.
-- List a character in characters_present only when they are intended to be visible in this scene frame.
+- List a character in characters_present only when they are intended to be visible in this scene frame. List them even when the sentences refer to them only as he, she, it or they.
 - location_name is where the scene happens, named exactly as given above. Leave it null if the \
 story does not say.
 - objects_present lists object names exactly as given above.
@@ -234,17 +234,11 @@ def merge_thin(scenes: list[ExtractedScene], units: list[str]) -> list[Extracted
 _ARTICLE = re.compile(r"^(the|a|an)\s+", re.IGNORECASE)
 
 
-def _mentions(excerpt: str, name: str) -> bool:
-    """Pure. Whether `excerpt` names this roster character.
-
-    ponytail: a word-boundary match on the name, not NER. The failure mode is over-recovery — a
-    character named in passing ("he dreamed of a dragon") gets a reference it did not need, which
-    costs one `character_absent` retry at worst. Under-recovery costs an unreferenced AND unchecked
-    page, which is strictly worse and is what this exists to stop. Upgrade path if the retry rate
-    bites: ask the judge, not a regex.
-    """
+def _names_character(text: str, name: str) -> bool:
     stem = _ARTICLE.sub("", name).strip()
-    return bool(stem) and re.search(rf"\b{re.escape(stem)}\b", excerpt, re.IGNORECASE) is not None
+    return bool(stem) and re.search(
+        rf"\b{re.escape(stem)}\b", text, re.IGNORECASE
+    ) is not None
 
 
 def segment(state: StoryMemory) -> dict:
@@ -270,30 +264,71 @@ def segment(state: StoryMemory) -> dict:
     # place once still gets one setting for the whole book rather than none.
     prev_loc: str | None = state.locations[0].loc_id if state.locations else None
 
+    object_by_name = {obj.name: obj for obj in state.objects}
+    object_by_id = {obj.obj_id: obj for obj in state.objects}
+    character_by_id = {character.char_id: character for character in state.characters}
+    holder_by_obj = {obj.obj_id: obj.owner_char_id for obj in state.objects}
+    active_objects: list[str] = []
+
     scenes = []
     for i, r in enumerate(repaired):
         excerpt = " ".join(units[r.start : r.end + 1])
         char_ids: list[str] = []
         for name in r.characters_present:
-            if name in name_to_id:
-                char_ids.append(name_to_id[name])
-            else:
-                log.warning("segment: name %r not in roster, dropped", name)
+            char_id = name_to_id.get(name)
+            if char_id is None:
+                raise ValueError(f"segment: unknown character {name!r}")
+            char_ids.append(char_id)
+        char_ids = list(dict.fromkeys(char_ids))
 
-        # §4.6. APPENDED, never inserted: invariant 4 requires that what the model named keeps its
-        # relative order, because `build_prompt`'s "Image N is X" is asserted against `ref_paths`
-        # on three separate nodes. Roster order among the recovered, which is prominence order.
-        # Recovery goes through `name_to_id`, never `state.characters`: two roster entries can
-        # share a name (§4.3 path 2), and iterating the roster would re-append the loser that
-        # first-seen-wins just excluded — sending two references for one named character.
-        recovered = [
-            char_id
+        outside_cast = [
+            name
             for name, char_id in name_to_id.items()
-            if char_id not in char_ids and _mentions(excerpt, name)
+            if char_id not in char_ids and _names_character(r.visual_direction, name)
         ]
-        if recovered:
-            log.info("segment: s%d recovered %s from the excerpt", i, recovered)
-        char_ids.extend(recovered)
+        if outside_cast:
+            raise ValueError(f"segment: visual_direction names character outside visible cast: {outside_cast}")
+
+        visible_objects: list[str] = []
+        for name in r.objects_present:
+            obj = object_by_name.get(name)
+            if obj is None:
+                raise ValueError(f"segment: unknown object {name!r}")
+            if obj.obj_id not in active_objects:
+                active_objects.append(obj.obj_id)
+            visible_objects.append(obj.obj_id)
+
+        visible_objects.extend(
+            obj_id
+            for obj_id in active_objects
+            if holder_by_obj.get(obj_id) in char_ids
+        )
+
+        for event in r.object_events:
+            obj = object_by_name.get(event.object_name)
+            holder_id = name_to_id.get(event.holder_name)
+            if obj is None:
+                raise ValueError(f"segment: unknown object {event.object_name!r}")
+            if holder_id is None:
+                raise ValueError(f"segment: unknown holder {event.holder_name!r}")
+            if obj.obj_id not in active_objects:
+                active_objects.append(obj.obj_id)
+            if event.action == "acquire":
+                holder_by_obj[obj.obj_id] = holder_id
+                if holder_id in char_ids:
+                    visible_objects.append(obj.obj_id)
+            else:
+                visible_objects.append(obj.obj_id)
+                if holder_by_obj.get(obj.obj_id) == holder_id:
+                    holder_by_obj[obj.obj_id] = None
+
+        visible_objects = list(dict.fromkeys(visible_objects))
+        relations = [
+            f"{object_by_id[obj_id].name} is held by {character_by_id[holder_id].name}."
+            for obj_id in visible_objects
+            if (holder_id := holder_by_obj.get(obj_id)) is not None
+        ]
+        visual_direction = " ".join([r.visual_direction, *relations])
 
         loc_id = name_to_loc.get(r.location_name) if r.location_name else None
         if r.location_name and loc_id is None:
@@ -306,12 +341,18 @@ def segment(state: StoryMemory) -> dict:
             scene_id=f"s{i}",
             text_excerpt=excerpt,
             caption=excerpt,
-            # §4.3 path 1. `dict.fromkeys` preserves first-seen order, so removing a duplicate
-            # cannot reorder the survivors (invariant 4).
-            characters_present=list(dict.fromkeys(char_ids)),
+            characters_present=char_ids,
             location_id=loc_id,
+            objects_present=visible_objects,
+            visual_direction=visual_direction,
         ))
-
+        log.info(
+            "segment: s%d chars=%s objs=%s direction=%r",
+            i,
+            char_ids,
+            visible_objects,
+            visual_direction,
+        )
 
     log.info("segment: minted %s", [s.scene_id for s in scenes])
     return {"scenes": scenes}
