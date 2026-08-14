@@ -477,3 +477,22 @@ def test_regenerate_rejects_scene_with_empty_visual_direction():
     with patch("pipeline.regenerate.generate_and_store"):
         with pytest.raises(ValueError, match="has no visual_direction"):
             regenerate(state)
+
+
+def test_regenerate_passes_stored_scene_contradictions_and_preserves_refs():
+    attempt = _failed_attempt(
+        reasons=[FailureReason.wrong_colour],
+    ).model_copy(
+        update={"scene_contradictions": ["The wooden sword is missing."]}
+    )
+    state = _state([_scene(attempts=[attempt])])
+    with patch("pipeline.regenerate.correct_prompt", return_value="corrected") as correct, patch(
+        "pipeline.regenerate.generate_and_store",
+        return_value=("story/s0-2.png", True),
+    ) as store:
+        regenerate(state)
+
+    assert correct.call_args.kwargs["scene_contradictions"] == [
+        "The wooden sword is missing."
+    ]
+    assert store.call_args.args[4] == ["job-1/ref-c0.png"]

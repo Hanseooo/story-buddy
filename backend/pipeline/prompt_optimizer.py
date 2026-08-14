@@ -388,6 +388,7 @@ def correct_prompt(
     same_character: bool = True,
     anatomy_intact: bool = True,
     text_free: bool = True,
+    scene_contradictions: list[str] | None = None,
 ) -> str:
     """Pure. Never drops content from `prompt` (invariant 3) — only appends emphasis clauses, one
     per `FailureReason` present in `failure_reasons`, in enum-declaration order, no duplicates.
@@ -398,9 +399,9 @@ def correct_prompt(
     ALL of them is dropped rather than rendered hollow (`_fillable`), and if that empties the whole
     correction, `IDENTITY_CLAUSE` floors it.
 
-    `same_character` / `anatomy_intact` / `text_free` close the three holes where the reason clauses
-    alone append NOTHING, which would make the retry a pure resample (ADR-010 rejects resampling).
-    Defaulted so the four-positional-arg signature stays call-compatible.
+    `same_character` / `anatomy_intact` / `text_free` / `scene_contradictions` close the holes where
+    the reason clauses alone append NOTHING, which would make the retry a pure resample (ADR-010
+    rejects resampling). Defaulted so the four-positional-arg signature stays call-compatible.
     """
     style = style_fragment or settings.default_style_fragment
     # ADR-035 surface 4. Issue #24: `wrong_colour` used to answer with "match the reference's
@@ -445,4 +446,8 @@ def correct_prompt(
     # (nothing failed) still returns `prompt` untouched.
     if failure_reasons and not clauses:
         clauses.append(IDENTITY_CLAUSE)
+    clauses.extend(
+        f"Correct this scene contradiction: {contradiction}"
+        for contradiction in scene_contradictions or []
+    )
     return "\n".join([prompt, *clauses]) if clauses else prompt

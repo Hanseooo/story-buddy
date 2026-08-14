@@ -75,6 +75,7 @@ def regenerate(state: StoryMemory) -> dict:
         same_character=v.same_character if v else True,
         anatomy_intact=v.anatomy_intact if v else True,
         text_free=v.text_free if v else True,
+        scene_contradictions=last.scene_contradictions,
     )
 
     attempt_n = len(scene.attempts) + 1
@@ -90,10 +91,10 @@ def regenerate(state: StoryMemory) -> dict:
     # unfillable) which this flag deliberately does not try to predict; it logs that route itself,
     # on the line immediately above this one.
     log.info(
-        "regenerate: scene_id=%s attempt_n=%d failure_reasons=%s same_character=%s "
+        "regenerate: scene_id=%s attempt_n=%d failure_reasons=%s scene_contradictions=%s same_character=%s "
         "anatomy_intact=%s text_free=%s identity_clause=%s anatomy_clause=%s text_clause=%s "
         "paid=%s prompt_len=%d",
-        scene.scene_id, attempt_n, [r.value for r in last.failure_reasons],
+        scene.scene_id, attempt_n, [r.value for r in last.failure_reasons], last.scene_contradictions,
         v and v.same_character, v and v.anatomy_intact, v and v.text_free,
         identity_clause, anatomy_clause, text_clause, paid, len(prompt),
     )

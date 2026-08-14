@@ -1003,6 +1003,38 @@ def test_the_text_clause_never_utters_a_word_the_negative_prompt_suppresses():
     assert "lettering" not in TEXT_CLAUSE.lower()
 
 
+def test_correct_prompt_appends_every_scene_contradiction_after_existing_corrections():
+    base = "Draw Ana running."
+    ana = _char(
+        "c0",
+        "Ana",
+        species="human",
+        colours=["brown eyes"],
+        body_features=["round face"],
+        clothing=["yellow shirt"],
+    )
+    result = correct_prompt(
+        base,
+        [FailureReason.wrong_colour],
+        [ana],
+        "flat cel illustration",
+        anatomy_intact=False,
+        scene_contradictions=[
+            "Ana faces left instead of right.",
+            "The wooden sword is missing.",
+        ],
+    )
+
+    markers = [
+        "match the reference's exact colours",
+        ANATOMY_CLAUSE,
+        "Correct this scene contradiction: Ana faces left instead of right.",
+        "Correct this scene contradiction: The wooden sword is missing.",
+    ]
+    positions = [result.index(marker) for marker in markers]
+    assert positions == sorted(positions)
+
+
 
 
 
