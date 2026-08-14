@@ -1,9 +1,13 @@
 import logging
 from unittest.mock import patch
 
+import pytest
+from pydantic import ValidationError
+
 from app.config import MIN_SCENE_WORDS, MIN_SCENES
-from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, Input, Location, StoryMemory
+from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, Input, Location, StoryMemory, StoryObject
 from pipeline.segment import (
+    ExtractedObjectEvent,
     ExtractedScene,
     SceneSegmentation,
     merge_thin,
@@ -54,9 +58,9 @@ def test_extracted_scene_has_no_id_field():
 
 def test_segment_scenes_passes_numbered_units_and_schema_to_provider():
     units = ["The dog ran.", "He found a ball."]
-    stub = SceneSegmentation(scenes=[ExtractedScene(start=0, end=1, characters_present=[])])
+    stub = SceneSegmentation(scenes=[ExtractedScene(start=0, end=1, characters_present=[], visual_direction="A dog runs.")])
     with patch("pipeline.segment.structured_text", return_value=stub) as mock_provider:
-        segment_scenes(units, [], [], [])
+        segment_scenes(units, [], [], [], [])
     prompt, schema = mock_provider.call_args.args
     assert "0: The dog ran." in prompt
     assert "1: He found a ball." in prompt
@@ -65,20 +69,26 @@ def test_segment_scenes_passes_numbered_units_and_schema_to_provider():
 
 def test_segment_scenes_returns_parsed_wrapper_unchanged():
     units = ["A story."]
-    stub = SceneSegmentation(scenes=[ExtractedScene(start=0, end=0, characters_present=[])])
+    stub = SceneSegmentation(scenes=[ExtractedScene(start=0, end=0, characters_present=[], visual_direction="A dog runs.")])
     with patch("pipeline.segment.structured_text", return_value=stub):
-        result = segment_scenes(units, [], [], [])
+        result = segment_scenes(units, [], [], [], [])
     assert result is stub
 
 
 
 # --- repair pure tests ---
 
-def _r(
-    start: int, end: int, chars: list[str] | None = None, location: str | None = None
-) -> ExtractedScene:
+def _r(start: int, end: int, chars=None, location=None, **overrides) -> ExtractedScene:
     return ExtractedScene(
-        start=start, end=end, characters_present=chars or [], location_name=location
+        start=start,
+        end=end,
+        characters_present=chars or [],
+        location_name=location,
+        visual_direction=overrides.pop(
+            "visual_direction",
+            "The visible subject performs the described action in a wide view.",
+        ),
+        **overrides,
     )
 
 
@@ -117,7 +127,7 @@ def test_repair_total_coverage():
     random.seed(42)
     for n in [1, 5, 10, 20]:
         scenes = [_r(random.randint(0, n - 1), random.randint(0, n - 1))
-                  for _ in range(random.randint(0, 10))]
+                  for _ in range(max(1, random.randint(0, 10)))]
         result = repair(scenes, n)
         covered: set[int] = set()
         for s in result:
@@ -127,11 +137,76 @@ def test_repair_total_coverage():
         assert covered == set(range(n)), f"missing indices in n={n}: {set(range(n)) - covered}"
 
 
-def test_repair_empty_input_yields_whole_story_floor():
-    result = repair([], 5)
-    assert len(result) == 1
-    assert result[0].start == 0
-    assert result[0].end == 4
+def test_extracted_scene_requires_nonblank_visual_direction():
+    with pytest.raises(ValidationError):
+        ExtractedScene(start=0, end=0, characters_present=[], visual_direction="   ")
+
+
+def test_segment_scenes_passes_the_object_roster_and_new_schema_to_provider():
+    units = ["Ana lifts the sword."]
+    characters = [Character(char_id="c0", name="Ana")]
+    objects = [
+        StoryObject(
+            obj_id="obj0",
+            name="wooden sword",
+            description="a short wooden sword with a red cord grip",
+            owner_char_id="c0",
+        )
+    ]
+    result = SceneSegmentation(
+        scenes=[
+            ExtractedScene(
+                start=0,
+                end=0,
+                characters_present=["Ana"],
+                objects_present=["wooden sword"],
+                object_events=[
+                    ExtractedObjectEvent(
+                        object_name="wooden sword", action="acquire", holder_name="Ana"
+                    )
+                ],
+                visual_direction="Ana faces right and lifts the sword in a medium view.",
+            )
+        ]
+    )
+    with patch("pipeline.segment.structured_text", return_value=result) as provider:
+        segment_scenes(units, characters, [], [], objects)
+
+    prompt, schema = provider.call_args.args
+    assert "wooden sword" in prompt
+    assert "object_events" in prompt
+    assert "visual_direction" in prompt
+    assert schema is SceneSegmentation
+
+
+@pytest.mark.parametrize("transform", ["repair", "merge_thin"])
+def test_scene_transform_preserves_object_events_and_direction(transform):
+    first = _r(
+        0,
+        0,
+        chars=["Ana"],
+        objects_present=["wooden sword"],
+        object_events=[
+            ExtractedObjectEvent(
+                object_name="wooden sword", action="acquire", holder_name="Ana"
+            )
+        ],
+        visual_direction="Ana acquires the sword facing right.",
+    )
+    if transform == "repair":
+        result = repair([first], 2)[0]
+    else:
+        second = _r(1, 1, visual_direction="Ana runs right in a wide view.")
+        result = merge_thin([first, second], ["Short.", "Also short."])[0]
+
+    assert result.objects_present == ["wooden sword"]
+    assert result.object_events[0].action == "acquire"
+    assert "Ana acquires" in result.visual_direction
+
+
+def test_repair_rejects_an_empty_model_scene_list_instead_of_inventing_direction():
+    with pytest.raises(ValueError, match="no usable scene"):
+        repair([], 2)
 
 
 def test_repair_clamps_out_of_bounds_indices():
@@ -220,10 +295,6 @@ def test_location_name_survives_the_de_overlap_site():
     assert result[1].location_name == "the hill"
 
 
-def test_the_floor_site_constructs_with_no_location_name():
-    """The whole-story floor invents a range; it must not invent a location either. Carry-forward
-    supplies `locations[0]` at the node."""
-    assert repair([_r(9, 3, location="the beach")], 5)[0].location_name is None
 
 
 def test_location_name_survives_the_leading_gap_fill_site():
@@ -310,8 +381,8 @@ def _char(char_id: str, name: str) -> Character:
 
 
 _STUB_SEG = SceneSegmentation(scenes=[
-    ExtractedScene(start=0, end=0, characters_present=["the dog"]),
-    ExtractedScene(start=1, end=1, characters_present=[]),
+    _r(0, 0, chars=["the dog"]),
+    _r(1, 1, chars=[]),
 ])
 
 
@@ -327,8 +398,8 @@ def test_segment_mints_zero_based_scene_ids():
 def test_segment_text_excerpt_is_verbatim_join_of_source_units():
     """Invariant 3: text_excerpt is sliced from source units, never model prose."""
     seg = SceneSegmentation(scenes=[
-        ExtractedScene(start=0, end=0, characters_present=[]),
-        ExtractedScene(start=1, end=1, characters_present=[]),
+        _r(0, 0, chars=[]),
+        _r(1, 1, chars=[]),
     ])
     with patch("pipeline.segment.segment_scenes", return_value=seg):
         result = segment(_state(raw="The dog ran. He found a ball."))
@@ -371,8 +442,8 @@ def test_segment_does_not_mint_a_page_it_cannot_draw():
 def test_segment_maps_roster_names_to_char_ids():
     """Invariant 6: characters_present contains only char_ids from state.characters."""
     seg = SceneSegmentation(scenes=[
-        ExtractedScene(start=0, end=0, characters_present=["the dog"]),
-        ExtractedScene(start=1, end=1, characters_present=["the cat"]),
+        _r(0, 0, chars=["the dog"]),
+        _r(1, 1, chars=["the cat"]),
     ])
     with patch("pipeline.segment.segment_scenes", return_value=seg):
         result = segment(_state(characters=[_char("c0", "the dog"), _char("c1", "the cat")]))
@@ -383,8 +454,8 @@ def test_segment_maps_roster_names_to_char_ids():
 def test_segment_drops_names_not_in_roster():
     """Invariant 6: a name absent from state.characters is silently dropped."""
     seg = SceneSegmentation(scenes=[
-        ExtractedScene(start=0, end=0, characters_present=["the dog", "unknown character"]),
-        ExtractedScene(start=1, end=1, characters_present=[]),
+        _r(0, 0, chars=["the dog", "unknown character"]),
+        _r(1, 1, chars=[]),
     ])
     with patch("pipeline.segment.segment_scenes", return_value=seg):
         result = segment(_state(characters=[_char("c0", "the dog")]))
@@ -394,8 +465,8 @@ def test_segment_drops_names_not_in_roster():
 def test_segment_empty_roster_gives_empty_characters_present_no_raise():
     """Edge case: roster is empty → every scene gets [] and the node does not raise."""
     seg = SceneSegmentation(scenes=[
-        ExtractedScene(start=0, end=0, characters_present=[]),
-        ExtractedScene(start=1, end=1, characters_present=[]),
+        _r(0, 0, chars=[]),
+        _r(1, 1, chars=[]),
     ])
     with patch("pipeline.segment.segment_scenes", return_value=seg):
         result = segment(_state())  # characters=[]
@@ -405,7 +476,7 @@ def test_segment_empty_roster_gives_empty_characters_present_no_raise():
 
 def test_segment_prefers_redacted_text():
     """CC-2: segment_scenes receives units from redacted_text, not raw_text."""
-    seg = SceneSegmentation(scenes=[ExtractedScene(start=0, end=1, characters_present=[])])
+    seg = SceneSegmentation(scenes=[_r(0, 1, chars=[])])
     with patch("pipeline.segment.segment_scenes", return_value=seg) as mock_seg:
         segment(_state(raw="raw version. Still raw.", redacted="redacted version. Still redacted."))
     units_arg = mock_seg.call_args.args[0]
@@ -414,7 +485,7 @@ def test_segment_prefers_redacted_text():
 
 def test_segment_falls_back_to_raw_text_when_redacted_is_none():
     """CC-2 fallback: uses raw_text when redacted_text is None."""
-    seg = SceneSegmentation(scenes=[ExtractedScene(start=0, end=1, characters_present=[])])
+    seg = SceneSegmentation(scenes=[_r(0, 1, chars=[])])
     with patch("pipeline.segment.segment_scenes", return_value=seg) as mock_seg:
         segment(_state(raw="raw version. Still raw.", redacted=None))
     units_arg = mock_seg.call_args.args[0]
@@ -433,7 +504,7 @@ def test_segment_partial_returns_exactly_scenes_key_and_does_not_mutate_state():
     """ADR-024: partial-return; state is unmutated."""
     state = _state()
     before = state.model_dump()
-    seg = SceneSegmentation(scenes=[ExtractedScene(start=0, end=1, characters_present=[])])
+    seg = SceneSegmentation(scenes=[_r(0, 1, chars=[])])
     with patch("pipeline.segment.segment_scenes", return_value=seg):
         result = segment(state)
     assert set(result.keys()) == {"scenes"}
@@ -458,7 +529,7 @@ _LOCS = [
 def _seg(*locations: str | None) -> SceneSegmentation:
     """One single-unit scene per argument, each carrying that `location_name`."""
     return SceneSegmentation(scenes=[
-        ExtractedScene(start=i, end=i, characters_present=[], location_name=name)
+        _r(i, i, chars=[], location=name)
         for i, name in enumerate(locations)
     ])
 
@@ -521,9 +592,9 @@ def test_segment_leaves_every_location_id_none_when_the_story_names_no_location(
 
 def test_segment_scenes_puts_the_location_roster_in_the_prompt():
     units = ["The dog ran.", "He found a ball."]
-    stub = SceneSegmentation(scenes=[ExtractedScene(start=0, end=1, characters_present=[])])
+    stub = SceneSegmentation(scenes=[_r(0, 1, chars=[])])
     with patch("pipeline.segment.structured_text", return_value=stub) as mock_provider:
-        segment_scenes(units, [], [], _LOCS)
+        segment_scenes(units, [], [], _LOCS, [])
 
     prompt = mock_provider.call_args.args[0]
     assert "the beach" in prompt
@@ -531,15 +602,15 @@ def test_segment_scenes_puts_the_location_roster_in_the_prompt():
 
 
 def test_segment_scenes_says_none_when_the_story_has_no_locations():
-    stub = SceneSegmentation(scenes=[ExtractedScene(start=0, end=0, characters_present=[])])
+    stub = SceneSegmentation(scenes=[_r(0, 0, chars=[])])
     with patch("pipeline.segment.structured_text", return_value=stub) as mock_provider:
-        segment_scenes(["A story."], [], [], [])
+        segment_scenes(["A story."], [], [], [], [])
 
     assert "Locations in the story: (none)" in mock_provider.call_args.args[0]
 
 
 def test_segment_passes_the_state_locations_to_segment_scenes():
-    stub = SceneSegmentation(scenes=[ExtractedScene(start=0, end=1, characters_present=[])])
+    stub = SceneSegmentation(scenes=[_r(0, 1, chars=[])])
     with patch("pipeline.segment.segment_scenes", return_value=stub) as mock_seg:
         segment(_state(locations=_LOCS))
 
@@ -552,7 +623,7 @@ def test_segment_maps_a_repeated_name_to_one_char_id():
     """Path 1: the model returns the same name twice. Sending one reference image as two
     subjects is how a character gets drawn twice, often once smaller."""
     seg = SceneSegmentation(scenes=[
-        ExtractedScene(start=0, end=1, characters_present=["the dog", "the dog"]),
+        _r(0, 1, chars=["the dog", "the dog"]),
     ])
     with patch("pipeline.segment.segment_scenes", return_value=seg):
         result = segment(_state(characters=[_char("c0", "the dog")]))
@@ -564,7 +635,7 @@ def test_segment_maps_two_roster_characters_sharing_a_name_to_one_char_id():
     """Path 2: `analyze` takes `characters[:3]` and never checks for a name collision, so one
     mention used to `.extend` BOTH ids and send two references for one named character."""
     seg = SceneSegmentation(scenes=[
-        ExtractedScene(start=0, end=1, characters_present=["the dog"]),
+        _r(0, 1, chars=["the dog"]),
     ])
     with patch("pipeline.segment.segment_scenes", return_value=seg):
         result = segment(_state(characters=[_char("c0", "the dog"), _char("c1", "the dog")]))
@@ -576,7 +647,7 @@ def test_segment_dedup_preserves_first_seen_order_of_the_survivors():
     """Invariant 4: removing a duplicate must not reorder the survivors — the roll index in
     `build_prompt` is asserted against `ref_paths` on three separate nodes."""
     seg = SceneSegmentation(scenes=[
-        ExtractedScene(start=0, end=1, characters_present=["the cat", "the dog", "the cat"]),
+        _r(0, 1, chars=["the cat", "the dog", "the cat"]),
     ])
     with patch("pipeline.segment.segment_scenes", return_value=seg):
         result = segment(_state(characters=[_char("c0", "the dog"), _char("c1", "the cat")]))
@@ -592,8 +663,8 @@ def test_segment_recovers_a_roster_name_the_model_omitted():
     """The model returned no characters for a beat whose text names one. Prod job 483056e0 lost
     the dragon on s1 and s2, so both pages drew unreferenced AND unchecked."""
     seg = SceneSegmentation(scenes=[
-        ExtractedScene(start=0, end=0, characters_present=[]),
-        ExtractedScene(start=1, end=1, characters_present=[]),
+        _r(0, 0, chars=[]),
+        _r(1, 1, chars=[]),
     ])
     raw = "A huge red dragon made a nest. He found a ball."
     with patch("pipeline.segment.segment_scenes", return_value=seg):
@@ -607,7 +678,7 @@ def test_segment_recovery_appends_after_the_model_s_own_names():
     """Invariant 4: recovery may not reorder what the model named — the roll index in
     `build_prompt` is asserted against `ref_paths` on three separate nodes."""
     seg = SceneSegmentation(scenes=[
-        ExtractedScene(start=0, end=1, characters_present=["the cat"]),
+        _r(0, 1, chars=["the cat"]),
     ])
     raw = "The dog ran with the cat. They found a ball."
     with patch("pipeline.segment.segment_scenes", return_value=seg):
@@ -620,7 +691,7 @@ def test_segment_recovery_appends_after_the_model_s_own_names():
 
 def test_segment_recovery_never_duplicates_a_name_the_model_already_gave():
     seg = SceneSegmentation(scenes=[
-        ExtractedScene(start=0, end=1, characters_present=["the dog"]),
+        _r(0, 1, chars=["the dog"]),
     ])
     raw = "The dog ran. The dog found a ball."
     with patch("pipeline.segment.segment_scenes", return_value=seg):
@@ -633,7 +704,7 @@ def test_segment_recovery_matches_on_a_word_boundary_not_a_substring():
     """"the star" must not be recovered from "stars" — the plural names no character
     (`prompt_optimizer.REFERENCE_CLAUSE`'s own carve-out)."""
     seg = SceneSegmentation(scenes=[
-        ExtractedScene(start=0, end=1, characters_present=[]),
+        _r(0, 1, chars=[]),
     ])
     raw = "She looked up at the stars. They were bright."
     with patch("pipeline.segment.segment_scenes", return_value=seg):
@@ -647,13 +718,13 @@ def test_the_prompt_asks_for_pronoun_only_beats_which_the_regex_cannot_reach():
     nothing (asserted below) — the prompt rule is the only thing that can catch that beat, and it
     costs no extra call. Asserting both together is the point: neither layer covers it alone."""
     units = ["The dragon woke.", "He roared."]
-    stub = SceneSegmentation(scenes=[ExtractedScene(start=0, end=1, characters_present=[])])
+    stub = SceneSegmentation(scenes=[_r(0, 1, chars=[])])
     with patch("pipeline.segment.structured_text", return_value=stub) as mock_provider:
-        segment_scenes(units, [_char("c0", "the dragon")], [], [])
+        segment_scenes(units, [_char("c0", "the dragon")], [], [], [])
 
     assert "he, she, it or they" in mock_provider.call_args.args[0]
 
-    seg = SceneSegmentation(scenes=[ExtractedScene(start=1, end=1, characters_present=[])])
+    seg = SceneSegmentation(scenes=[_r(1, 1, chars=[])])
     with patch("pipeline.segment.segment_scenes", return_value=seg):
         result = segment(_state(raw="He roared.", characters=[_char("c0", "the dragon")]))
 
@@ -662,7 +733,7 @@ def test_the_prompt_asks_for_pronoun_only_beats_which_the_regex_cannot_reach():
 
 def test_segment_recovery_is_case_insensitive():
     seg = SceneSegmentation(scenes=[
-        ExtractedScene(start=0, end=1, characters_present=[]),
+        _r(0, 1, chars=[]),
     ])
     raw = "Dragon roared loudly. The village woke."
     with patch("pipeline.segment.segment_scenes", return_value=seg):

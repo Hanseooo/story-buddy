@@ -1,10 +1,12 @@
 import logging
 import re
 
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field, field_validator
 
 from app.config import MAX_SCENES, MIN_SCENE_WORDS, MIN_SCENES
-from contracts.story_memory import Character, Location, Scene, StoryMemory, TimelineEvent
+from contracts.story_memory import Character, Location, Scene, StoryMemory, StoryObject, TimelineEvent
 from providers import structured_text
 
 log = logging.getLogger(__name__)
@@ -17,11 +19,28 @@ def split_sentences(text: str) -> list[str]:
 
 # --- LLM boundary (D-F: transient wrapper, lives beside its node) ---
 
+class ExtractedObjectEvent(BaseModel):
+    object_name: str
+    action: Literal["acquire", "release"]
+    holder_name: str
+
+
 class ExtractedScene(BaseModel):
     start: int                        # inclusive index into the numbered units
     end: int                          # inclusive
     characters_present: list[str]     # Character.name values — node maps to char_ids
     location_name: str | None = None  # Location.name value — node maps to a loc_id, null → inherit
+    objects_present: list[str] = Field(default_factory=list)
+    object_events: list[ExtractedObjectEvent] = Field(default_factory=list)
+    visual_direction: str
+
+    @field_validator("visual_direction")
+    @classmethod
+    def direction_is_not_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("visual_direction must not be blank")
+        return value
 
 
 class SceneSegmentation(BaseModel):
@@ -39,6 +58,8 @@ Characters in the story: {roster}
 
 Locations in the story: {locations}
 
+Objects in the story: {objects}
+
 Story plot points:
 {plot}
 
@@ -47,9 +68,12 @@ Rules:
 - Each scene captures a distinct moment or plot point.
 - start and end are inclusive sentence indices.
 - characters_present lists character names exactly as given above.
-- List a character even when the sentences refer to them only as he, she, it or they.
+- List a character in characters_present only when they are intended to be visible in this scene frame.
 - location_name is where the scene happens, named exactly as given above. Leave it null if the \
 story does not say.
+- objects_present lists object names exactly as given above.
+- object_events lists ordered acquire or release events for objects in the scene.
+- visual_direction is a short literal visual direction containing subject, action, target or movement direction when applicable, and viewpoint.
 - Together the scenes must cover every sentence."""
 
 
@@ -58,17 +82,33 @@ def segment_scenes(
     characters: list[Character],
     timeline: list[TimelineEvent],
     locations: list[Location],
+    objects: list[StoryObject],
 ) -> SceneSegmentation:
     numbered = "\n".join(f"{i}: {u}" for i, u in enumerate(units))
     roster = ", ".join(c.name for c in characters) if characters else "(none)"
     places = ", ".join(loc.name for loc in locations) if locations else "(none)"
+    things = ", ".join(obj.name for obj in objects) if objects else "(none)"
     plot = "\n".join(f"{e.order}. {e.summary}" for e in timeline) if timeline else "(none)"
     result = structured_text(
-        SEGMENTATION_PROMPT.format(numbered=numbered, roster=roster, locations=places, plot=plot),
+        SEGMENTATION_PROMPT.format(
+            numbered=numbered, roster=roster, locations=places, objects=things, plot=plot
+        ),
         SceneSegmentation,
     )
     log.info("segment: %d units → %d raw scenes", len(units), len(result.scenes))
     return result
+
+
+def _merge_extracted(a: ExtractedScene, b: ExtractedScene) -> ExtractedScene:
+    return ExtractedScene(
+        start=a.start,
+        end=b.end,
+        characters_present=list(dict.fromkeys(a.characters_present + b.characters_present)),
+        location_name=a.location_name or b.location_name,
+        objects_present=list(dict.fromkeys(a.objects_present + b.objects_present)),
+        object_events=[*a.object_events, *b.object_events],
+        visual_direction=" ".join([a.visual_direction, b.visual_direction]),
+    )
 
 
 def repair(scenes: list[ExtractedScene], n: int) -> list[ExtractedScene]:
@@ -81,10 +121,7 @@ def repair(scenes: list[ExtractedScene], n: int) -> list[ExtractedScene]:
         start = max(0, min(s.start, n - 1))
         end = max(0, min(s.end, n - 1))
         if start <= end:
-            clamped.append(ExtractedScene(
-                start=start, end=end,
-                characters_present=s.characters_present, location_name=s.location_name,
-            ))
+            clamped.append(s.model_copy(update={"start": start, "end": end}))
     if len(clamped) != len(scenes):
         log.info("segment/repair: clamp dropped %d of %d ranges", len(scenes) - len(clamped), len(scenes))
 
@@ -97,43 +134,29 @@ def repair(scenes: list[ExtractedScene], n: int) -> list[ExtractedScene]:
     for s in clamped:
         new_start = max(s.start, prev_end + 1)
         if new_start <= s.end:
-            deoverlapped.append(ExtractedScene(
-                start=new_start, end=s.end,
-                characters_present=s.characters_present, location_name=s.location_name,
-            ))
+            deoverlapped.append(s.model_copy(update={"start": new_start, "end": s.end}))
             prev_end = s.end
     if len(deoverlapped) != len(clamped):
         log.info("segment/repair: de-overlap dropped %d ranges", len(clamped) - len(deoverlapped))
 
-    # Floor: if nothing survived clamp + de-overlap, emit one whole-story range
     if not deoverlapped:
-        log.info("segment/repair: floor fired — emitting whole-story range")
-        return [ExtractedScene(start=0, end=n - 1, characters_present=[])]
+        raise ValueError("segment: no usable scene with visual direction")
 
     # Close gaps (leading, interior, trailing)
     gaps_closed = 0
     first = deoverlapped[0]
     if first.start > 0:
-        deoverlapped[0] = ExtractedScene(
-            start=0, end=first.end,
-            characters_present=first.characters_present, location_name=first.location_name,
-        )
+        deoverlapped[0] = first.model_copy(update={"start": 0, "end": first.end})
         gaps_closed += 1
     for i in range(len(deoverlapped) - 1):
         curr = deoverlapped[i]
         nxt = deoverlapped[i + 1]
         if curr.end + 1 < nxt.start:
-            deoverlapped[i] = ExtractedScene(
-                start=curr.start, end=nxt.start - 1,
-                characters_present=curr.characters_present, location_name=curr.location_name,
-            )
+            deoverlapped[i] = curr.model_copy(update={"start": curr.start, "end": nxt.start - 1})
             gaps_closed += 1
     last = deoverlapped[-1]
     if last.end < n - 1:
-        deoverlapped[-1] = ExtractedScene(
-            start=last.start, end=n - 1,
-            characters_present=last.characters_present, location_name=last.location_name,
-        )
+        deoverlapped[-1] = last.model_copy(update={"start": last.start, "end": n - 1})
         gaps_closed += 1
     if gaps_closed:
         log.info("segment/repair: gap-fill closed %d gap(s)", gaps_closed)
@@ -150,14 +173,9 @@ def repair(scenes: list[ExtractedScene], n: int) -> list[ExtractedScene]:
                 best_size = size
                 best_idx = i
         a, b = deoverlapped[best_idx], deoverlapped[best_idx + 1]
-        merged_chars = list(dict.fromkeys(a.characters_present + b.characters_present))
         deoverlapped = (
             deoverlapped[:best_idx]
-            + [ExtractedScene(
-                start=a.start, end=b.end,
-                characters_present=merged_chars,
-                location_name=a.location_name or b.location_name,
-            )]
+            + [_merge_extracted(a, b)]
             + deoverlapped[best_idx + 2:]
         )
 
@@ -194,12 +212,7 @@ def merge_thin(scenes: list[ExtractedScene], units: list[str]) -> list[Extracted
         else:
             left = thin
         a, b = merged[left], merged[left + 1]
-        merged[left : left + 2] = [ExtractedScene(
-            start=a.start,
-            end=b.end,
-            characters_present=list(dict.fromkeys(a.characters_present + b.characters_present)),
-            location_name=a.location_name or b.location_name,
-        )]
+        merged[left : left + 2] = [_merge_extracted(a, b)]
     return merged
 
 
@@ -240,7 +253,7 @@ def segment(state: StoryMemory) -> dict:
     if not units:
         return {"scenes": []}
 
-    raw = segment_scenes(units, state.characters, state.timeline, state.locations)
+    raw = segment_scenes(units, state.characters, state.timeline, state.locations, state.objects)
     repaired = merge_thin(repair(raw.scenes, len(units)), units)
     if len(repaired) != len(raw.scenes):
         log.info("segment: repair changed scene count %d → %d", len(raw.scenes), len(repaired))
