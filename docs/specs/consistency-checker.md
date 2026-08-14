@@ -89,6 +89,10 @@ class SceneVerdict(BaseModel):
     subjects_unique: bool = True                 # §4.4 — asked after anatomy, before text
     text_free: bool = True                       # lettering-suppression §4.1 — asked after uniqueness, BEFORE failure_reasons
     failure_reasons: list[FailureReason] = []    # LAST — the closed 7 (ADR-028)
+
+class SceneConstraintVerdict(BaseModel):
+    differences_observed: str
+    contradictions: list[str] = []
 ```
 
 Field order mirrors `VlmVerdict` exactly, then appends. `providers._assert_field_order` enforces
@@ -101,11 +105,16 @@ One module-level helper per node (MASTER_SPEC §6 "The node test seam"). The Sto
 **inside** it, same shape as `char_bible.mint_reference` and `generate_scene.generate_and_store`.
 
 ```python
-def judge_attempt(image_path: str, subjects: list[tuple[str, str]]) -> list[SceneVerdict]:
-    """(character name, reference path) → one SceneVerdict each, in subject order.
+def judge_attempt(
+    image_path: str,
+    subjects: list[tuple[str, str]],
+    constraint_prompt: str = "",
+) -> tuple[list[SceneVerdict] | None, SceneConstraintVerdict | None]:
+    """(character name, reference path) → (identity verdicts | None, scene constraint verdict | None).
 
-    Returns [] for empty subjects AND for any judge/Storage failure — both mean *unchecked*,
-    and the node treats them identically, so distinguishing them here would buy nothing.
+    Returns (None, constraint_verdict) if identity judge fails or subjects is empty.
+    Returns (identity_verdicts, None) if scene constraint judge fails.
+    Returns (None, None) if Storage download fails.
     """
 ```
 
@@ -122,16 +131,16 @@ nodes at once, not a hotfix here.
    (`generate_scene` either appended one or raised), so this is a guard, not a path.
 3. Build subjects: each `char_id` in `characters_present` that resolves to a `Character` carrying a
    `canonical_ref_image`, as `(name, canonical_ref_image)`.
-4. `judge_attempt(attempt.image_ref, subjects)`.
-5. **Fold, worst-wins** (`[]` → skip to 6 with `vlm_verdict=None`):
+4. `judge_attempt(attempt.image_ref, subjects, constraint_prompt)`.
+5. **Fold identity verdicts, worst-wins** (`None` or empty subjects → `vlm_verdict=None`):
    - `same_character`, `anatomy_intact`, `style_match`, `subjects_unique`, `text_free` → `all(...)`
    - `attributes_present`, `failure_reasons` → union, deduped; `failure_reasons` emitted in
      `FailureReason` **declaration order**, which is the order `correct_prompt` iterates
    - `differences_observed` → `"\n".join(f"{name}: {v.differences_observed}")`
-6. `passed = same_character and anatomy_intact and text_free and not (GATING_REASONS & reasons)`
-   (`False` when unchecked).
-7. Partial-return the scene with the last attempt updated and
-   `final_image_ref = attempt.image_ref`.
+6. `passed = identity_available and identity_clean and composition_clean`
+   (where no-reference scenes evaluate `identity_available=True` and `identity_clean=True`).
+7. Partial-return the scene with the last attempt updated and `scene_contradictions` persisted.
+   `final_image_ref = best.image_ref` if `passed or not concrete_failure or len(attempts) >= 2`.
 
 **The judge scores against the reference, not the description.** A `Character` whose
 `ref_verdict.matches_description is False` is judged against anyway. ADR-028 deliberately ships the
