@@ -1014,3 +1014,26 @@ def test_the_log_distinguishes_no_subjects_from_a_judge_outage(caplog):
 
     assert "unchecked=judge_failed" in caplog.text
     assert "unchecked=no_subjects" not in caplog.text
+
+
+def test_consistency_check_logs_visual_direction(caplog):
+    scene = Scene(
+        scene_id="s0",
+        text_excerpt="Ana ran.",
+        characters_present=["c0"],
+        visual_direction="Ana runs toward the trees.",
+        attempts=[Attempt(image_ref="job-1/s0-1.png", prompt="p", passed=False)],
+    )
+    state = StoryMemory(
+        schema_version=CURRENT_SCHEMA_VERSION,
+        story_id="job-123",
+        classroom_id="dev-classroom",
+        profile_id="dev-profile",
+        input=Input(raw_text="x", redacted_text="x"),
+        scenes=[scene],
+    )
+    with caplog.at_level(logging.INFO, logger="pipeline.consistency_check"), \
+         patch("pipeline.consistency_check.judge_attempt", return_value=[]):
+        consistency_check(state)
+
+    assert "visual_direction='Ana runs toward the trees.'" in caplog.text

@@ -256,7 +256,7 @@ def consistency_check(state: StoryMemory) -> dict:
     log.info(
         "consistency_check: scene_id=%s attempt=%d/%d subjects=%d %s same_character=%s "
         "anatomy_intact=%s text_free=%s style_match=%s subjects_unique=%s failure_reasons=%s passed=%s "
-        "best_of=%s judge_prompt_version=%d",
+        "best_of=%s judge_prompt_version=%d visual_direction=%r",
         scene.scene_id, len(updated), 2, len(subjects),
         # CC-5. Both finalize and both used to log the same word, so the two were indistinguishable
         # in prod — and they call for opposite responses. `no_subjects` is a segmentation miss or
@@ -268,6 +268,7 @@ def consistency_check(state: StoryMemory) -> dict:
         verdict and verdict.subjects_unique,
         [r.value for r in reasons], passed,
         None if best is None else best + 1, JUDGE_PROMPT_VERSION,
+        scene.visual_direction,
     )
 
 

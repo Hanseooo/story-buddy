@@ -44,6 +44,7 @@ pipeline loop, and the only place ADR-010 exists in code.
      was actually paid for. The asymmetry is deliberate — see §4.
   7. `scenes[].regeneration_count` is **deliberately not written**. It equals `len(attempts) - 1`,
      and a stored copy of a derived fact is a second source of truth that a resume can desynchronise.
+  8. `regenerate` validates that `scene.visual_direction` is non-empty before generating or correcting prompts.
 
 ## 3. Position in the system map
 

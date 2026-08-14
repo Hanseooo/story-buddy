@@ -30,8 +30,12 @@ def regenerate(state: StoryMemory) -> dict:
             "have routed here (ADR-010, invariant 1)"
         )
 
+    if not scene.visual_direction:
+        raise ValueError(f"regenerate: scene {scene.scene_id} has no visual_direction")
+
     last = scene.attempts[-1]
-    if last.prompt is None and scene.prompt is None:
+    base_prompt = last.prompt or scene.prompt
+    if base_prompt is None:
         # Unreachable today: generate_scene always sets both. Drawing from correction clauses
         # with no base prompt is a guaranteed-garbage PAID image, so ADR-025 hard-fails instead.
         raise RuntimeError(f"regenerate: scene {scene.scene_id} has no prompt to correct (ADR-025)")
@@ -64,7 +68,7 @@ def regenerate(state: StoryMemory) -> dict:
     anatomy_clause = not (v.anatomy_intact if v else True)
     text_clause = not (v.text_free if v else True)
     prompt = correct_prompt(
-        last.prompt or scene.prompt,
+        base_prompt,
         last.failure_reasons,
         state.characters,
         state.style.prompt_fragment,

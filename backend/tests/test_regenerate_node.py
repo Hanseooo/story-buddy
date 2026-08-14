@@ -17,6 +17,7 @@ from contracts.story_memory import (
     Input,
     Scene,
     StoryMemory,
+    StoryObject,
     Style,
     VlmVerdict,
 )
@@ -77,6 +78,7 @@ def _state(
 
 
 def _scene(attempts: list[Attempt] | None = None, **kwargs) -> Scene:
+    kwargs.setdefault("visual_direction", "The dog runs.")
     return Scene(
         scene_id="s0",
         text_excerpt="The dog ran.",
@@ -419,3 +421,59 @@ def test_raises_when_neither_the_attempt_nor_the_scene_carries_a_prompt():
         regenerate(state)
 
     store.assert_not_called()
+
+
+def test_regenerate_preserves_visual_direction_and_objects_in_rebuilt_prompt():
+    ana = Character(char_id="c0", name="Ana", description=CharacterDescription(species="girl"))
+    sword = StoryObject(obj_id="obj0", name="wooden sword", description="a wooden sword")
+    prompt = build_prompt(
+        "Ana ran.",
+        ["c0"],
+        [ana],
+        None,
+        None,
+        ["obj0"],
+        [sword],
+        "Ana runs right holding the wooden sword.",
+    )
+    scene = Scene(
+        scene_id="s0",
+        text_excerpt="Ana ran.",
+        characters_present=["c0"],
+        objects_present=["obj0"],
+        visual_direction="Ana runs right holding the wooden sword.",
+        prompt=prompt,
+        attempts=[Attempt(image_ref="job-1/s0-1.png", prompt=prompt, failure_reasons=[FailureReason.wrong_colour], passed=False)],
+    )
+    state = StoryMemory(
+        schema_version=CURRENT_SCHEMA_VERSION,
+        story_id="job-1",
+        classroom_id="dev-classroom",
+        profile_id="dev-profile",
+        input=Input(raw_text="x", redacted_text="x"),
+        characters=[ana],
+        objects=[sword],
+        style=Style(),
+        scenes=[scene],
+    )
+    with patch("pipeline.regenerate.correct_prompt", return_value="corrected prompt") as mock_correct, \
+         patch("pipeline.regenerate.generate_and_store", return_value=("job-1/s0-2.png", True)):
+        regenerate(state)
+
+    mock_correct.assert_called_once()
+    assert "Visible objects:\nwooden sword, a wooden sword" in mock_correct.call_args.args[0]
+    assert "Visual direction: Ana runs right holding the wooden sword." in mock_correct.call_args.args[0]
+
+
+def test_regenerate_rejects_scene_with_empty_visual_direction():
+    scene = Scene(
+        scene_id="s0",
+        text_excerpt="Ana ran.",
+        characters_present=["c0"],
+        visual_direction="",
+        attempts=[_failed_attempt()],
+    )
+    state = _state([scene])
+    with patch("pipeline.regenerate.generate_and_store"):
+        with pytest.raises(ValueError, match="has no visual_direction"):
+            regenerate(state)

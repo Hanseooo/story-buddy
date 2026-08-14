@@ -251,7 +251,7 @@ not) deserves its own issue.
 
 - [x] **CC-5 Observability** — one line per scene: `scene_id`, subject count,
       `checked` | `unchecked=no_subjects` | `unchecked=judge_failed`,
-      `same_character`, `anatomy_intact`, `style_match`, `failure_reasons`, `passed`. A wrong
+      `same_character`, `anatomy_intact`, `style_match`, `failure_reasons`, `passed`, `visual_direction`. A wrong
       character in the finished book traces to a specific scene, a specific attempt, and the
       verdict that let it through.
 - [x] **CC-10 Checkpointing / resumability** — no effects beyond state, so a re-executed super-step
