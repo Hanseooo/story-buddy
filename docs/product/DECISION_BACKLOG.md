@@ -104,6 +104,40 @@ precede the reveal, so the node, migration and endpoint land together with it. `
 
 ---
 
+## Tier 2e — opened by `annotation-surface` (2026-08-14)
+
+Both rows were hit while building `annotation-surface.md`. Migration `0014_annotations.sql` and its
+Tier-A suite are **built** — they depend on neither. The two frontend routes are **blocked on D-K**;
+`adjudicate/`'s RLS policy is additionally blocked on D-L.
+
+- **D-K · Where the pair queue lives.** `annotate/` must fetch "the next unlabelled pair" and render
+  two images, so something must map `pair_id → (ref Storage path, scene Storage path)`. **Nothing
+  does.** `annotations` stores only the label; `build_dataset.pairs_from_memory` derives pairs from a
+  `StoryMemory`, which exists only inside the LangGraph Postgres checkpoint blob (default-deny RLS,
+  `0008` §8) and is not readable by a browser; `jobs.pages` carries `{scene_id, caption, image_path}`
+  with no canonical reference, no `char_id` and no per-attempt images. `build_corpus.py` writes no
+  `jobs` row at all, so `0008`'s researcher policies (`approved_at is not null`) do not reach corpus
+  images either. `annotation-surface.md` §2.1 says only that `pair_id` is *"minted by
+  `build_dataset.py`'s pairing step"* and never says where the pairs are persisted for the UI to read.
+  **Sketch of the options, not a decision:** (1) a new `annotation_pairs` table seeded by a backend
+  script that reuses `pairs_from_memory` + `mint_pair_id`, with its own RLS grant for researchers, and
+  a matching storage policy for corpus images; (2) `annotate/` fetches pairs from a FastAPI endpoint
+  backed by `service_role`, keeping the pairing logic in one place and adding no table but moving the
+  blinding guarantee out of RLS; (3) a checked-in `pairs.jsonl` build artifact served by the route,
+  which needs no schema but re-introduces the resident-training-data problem §3 rejects. Whichever
+  wins also decides whether `pair_id` stays opaque to the *server* or only to the annotator.
+- **D-L · How an adjudicator is identified.** §2.1 grants read-all to *"the `researcher` role with the
+  adjudicator flag"*. There is no adjudicator flag: `0007`'s `profiles.role` check is
+  `('teacher','student','researcher')` and `profiles_role_shape` forbids extra shape per role. Options:
+  a `profiles.is_adjudicator boolean` column (a schema change, and the first per-person capability flag
+  in the system); a fourth role value (breaks `profiles_role_shape`'s two-branch structure and every
+  `auth_role()` consumer); or `adjudicate/` reading through `service_role` server-side, the pattern
+  `(research)/research/metrics/page.tsx` already uses — no schema change, but the adjudicator's
+  read-all stops being an RLS fact and becomes an app fact. `0014` therefore writes **no** read-all
+  policy, and `test_adjudicator_reads_all_rows` is skipped naming this row.
+
+---
+
 ## Tier 3 — convention formalizations (likely MASTER_SPEC edits, not ADRs)
 
 *(D-E · Testing-seam convention → MASTER_SPEC §6 "The node test seam", 2026-07-22: one module-level
@@ -353,8 +387,12 @@ for a session until that condition is real. Rows are listed above as normal; thi
 
 **Phase 2.5 (fine-tune):**
 - [x] `judge-finetune`  ✅ written
-- [x] `annotation-surface`  ✅ written *(ADR-026 — the `(research)/annotate/` + `adjudicate/` routes and the
-  `annotations` table; supersedes `judge-finetune` §5's `labels/*.csv`)*
+- [x] `annotation-surface`  ✅ written · **table built 2026-08-14, routes blocked** *(ADR-026 — the
+  `(research)/annotate/` + `adjudicate/` routes and the `annotations` table; supersedes `judge-finetune`
+  §5's `labels/*.csv`. `0014_annotations.sql` + `backend/tests/test_annotations_rls.py` (16 skipif-gated
+  cases) are in, including the closed-taxonomy CHECK and the two GATING columns §5.2's amendment added.
+  **Both routes are blocked on D-K + D-L above** — a pair queue and an adjudicator identity, neither of
+  which the spec answers.)*
 
 **Phase 3 (eval):**
 - [ ] `metrics-export`
@@ -445,6 +483,7 @@ now fully specified.
    in the same change.
 3. **`rate-limiting`** — must not silently slip past any public deployment.
 
-**No open decision blocks Phase 1 or Phase 2 entry, and the decision backlog has no open rows.** Tiers 1, 2, 2b,
-2c, and 3 are all resolved. D-I closed 2026-07-31 → ADR-029; it builds in Phase 2 behind the moderation gate
-(now live).
+**No open decision blocks Phase 1 or Phase 2 entry.** Tiers 1, 2, 2b, 2c, and 3 are all resolved. D-I closed
+2026-07-31 → ADR-029; it builds in Phase 2 behind the moderation gate (now live). **Open rows: D-J** (Tier 2d,
+non-blocking) and **D-K + D-L** (Tier 2e, 2026-08-14 — these two *do* block, jointly, the two
+`annotation-surface` frontend routes and therefore the Phase 2.5 labelling weekend).

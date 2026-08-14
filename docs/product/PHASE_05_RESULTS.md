@@ -533,6 +533,27 @@ record it rather than explaining it away.
 | `comic` | *void* → **75%** | 95% → **100%** | Run 1 identity void (off-spec reference). Run 2 valid but **eye-layout confounded** — see below. |
 | `gouache` | 40% → **40%** | 100% → **100%** | Reference unchanged; items cached, re-scored only. Holds Quill worst. |
 
+> **Note added 2026-08-14 — the `comic` fragment has narrowed since these numbers, and nothing above
+> is retracted.** The halftone is now **scoped to the backgrounds and shadows**, with the character
+> itself in flat unscreened colour (`app/config.py` `STYLE_PRESETS`). The separation-gate rationale in
+> the banner above **stands unchanged** — the halftone is still in the picture, which is what the
+> no-reference OFF baseline cannot fake; what changed is that it is no longer screened over the
+> identity-bearing surface. The prediction at "`comic` adds ben-day halftone, so it should read as the
+> most deliberately *drawn*" is therefore now a claim about a slightly less textured image than the one
+> scored here.
+>
+> **Why, and it was not this table.** Two gates landed 2026-08-13, after this scoring: `wrong_colour`
+> entered `GATING_REASONS`, and a halftone tints by dot density, so one fill reads as two colours
+> across reference scale and page scale; `text_free` began gating, and `lettering-suppression.md:216`
+> pre-names ben-day halftone dots as the expected judge false positive. Direct inspection of the
+> picker sample `frontend/public/style-presets/comic.png` shows the screen on the character's body and
+> tail with thin limbs collapsed to solid black. **This table says the opposite of the change's
+> premise** — `comic` scored the *best* identity of the three here (75% vs `cel` 60%, `gouache` 40%) —
+> and that disagreement is recorded rather than resolved. It is one rater on one character, comic's
+> cell is flagged eye-layout-confounded below, and `gouache` has since gained `no outlines`. **Any
+> re-score of the secondary arm must state which fragment generation it ran**, because the three are no
+> longer the strings scored above; `backend/spikes/phase_05.py:47` preserves the ones that were.
+
 Run 2, 2026-07-29. Run 1 was scored under the drifted instrument (Probe 1 Notes, Defect 2); Run 2
 re-scored all 50 items against the reference PNGs as written. `cel` and `gouache` identity are
 unchanged across the two scorings — the instrument fix moved neither, which is mild evidence the

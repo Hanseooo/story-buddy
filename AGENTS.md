@@ -634,6 +634,59 @@ is not documentation of a good design; it is the blast radius, written down so t
   Unmeasured. **Drift fixed in passing:** the whole 2026-08-13 framing and `REFERENCE_NEGATIVE`
   design existed only in code comments and tests — `character-bible.md` §4 now carries it, including
   the positive/negative division of labour and the ordered list of measured phrasings.
-  **Phase 2 is in progress. Next: S3's isolation suite, then build S4.** Next free migration is
-  **`0009`**.
+  **`comic`'s halftone is scoped to backgrounds and shadows (2026-08-14):** one clause in
+  `STYLE_PRESETS`, no migration, no ADR, no contract change. The picker sample
+  `frontend/public/style-presets/comic.png` is the evidence — the screen lands on the character's own
+  body and tail, with thin limbs collapsed to solid black on a green character while one arm stayed
+  outlined green. Two gates that landed 2026-08-13 both read that surface: `wrong_colour` is in
+  `GATING_REASONS` and a halftone tints by dot density (one fill, two colours across reference and
+  page scale), and `text_free` gates while `lettering-suppression.md:216` names halftone dots as the
+  expected judge false positive. `comic` was the only preset feeding either.
+  **The halftone is scoped, NOT removed** — ADR-022 makes `comic` the *gating primary* substrate
+  because it is "textured enough (halftone) that the no-reference baseline can't fake the separation
+  gate" (`ADRs.md:1234`, pre-registered `PHASE_05_RESULTS.md:512`), so deleting it would make that
+  gate lenient retroactively. **The outline clause is untouched on purpose:** "of varied weight" is
+  the obvious suspect for the black limbs and is the one thing that must not be pinned — `cel` lost
+  "of even weight" the day before because pinning uniformity is what smooshes thin elements.
+  ⚠️ **No job has been run against this fragment**, and it contradicts a recorded result: Probe 1's
+  secondary arm scored `comic` identity **75%** — the *best* of the three, against `cel` 60% and
+  `gouache` 40% (`PHASE_05_RESULTS.md:532-534`) — so the case for this change rests on the two new
+  gates and on direct inspection of the sample, not on that table. **`comic.png` is now stale** (drawn
+  with the unscoped fragment, overstates the texture); regenerating it is a paid fal draw and is NOT
+  done. `backend/spikes/phase_05.py:47` keeps the old fragment deliberately — it is the record of
+  what Probe 1 ran.
+  **`judge-finetune`'s PRODUCER half is built (2026-08-14) — the fine-tune itself is NOT run.**
+  `backend/finetune/`: `corpus_synthetic.json` (30 static stories, 39 characters, 69% non-human — checked
+  in, so the train corpus is hashable for CC-7), `build_corpus.py` (drives the **existing** graph, spend-capped,
+  resumable via `data/judge/build_state.json`), `manifest.py`, `build_dataset.py`, `to_llamafactory.py`,
+  `train_qlora.yaml`, `evaluate.py`. `contracts/` untouched; no migration written.
+  **§5.4's "open reconciliation item" was drift, not a decision** — `RESEARCH_PROTOCOL.md` §8 already said
+  *"researcher-written stories appear only as judge-training-split augmentation, never as evaluation
+  stimuli."* Train+val are synthetic, **test is donated-only and `manifest.py`'s guard enforces it**.
+  §5.2's record gained `provenance` and the two GATING booleans `anatomy_intact`/`text_free` — the spec
+  predated them and a judge trained to emit `True` unconditionally would break the loop while scoring well.
+  **That adds two checkboxes and two columns the `annotations` table does not have**, and §4 makes this the
+  last free moment to add them. Pre-registration: `docs/product/PREREGISTRATION_OBJ4.md` (2026-08-14).
+  ⚠️ **Nothing has been run.** No fal draw, no training run, no `llamafactory-cli` invocation;
+  `train_qlora.yaml` ships `model_revision: PIN_THE_EXACT_COMMIT_HASH` as a deliberate tripwire, so CC-7 is
+  unmet until a human fills it. `evaluate.py` omits McNemar's exact test (needs scipy) — the char-clustered
+  bootstrap CI is implemented. Deterministic evidence only.
+  **`annotation-surface`'s TABLE is built (2026-08-14) — neither route is.** `0014_annotations.sql` ships the
+  `annotations` table `build_dataset.py` already reads, with the closed-taxonomy CHECK, the two GATING columns
+  `anatomy_intact`/`text_free` (`judge-finetune.md` §5.2 amendment — the last free moment to add them per §4),
+  and two RLS policies scoping select+insert to `annotator_id = auth.uid()` for `researcher` profiles. **No
+  `update`/`delete` policy** — §4's forward-only rule makes a submitted row final, so a double-submit is
+  `on conflict do nothing`, not an upsert. `backend/tests/test_annotations_rls.py` is 16 `skipif`-gated cases.
+  `contracts/` untouched — `FailureReason` stays frozen at 7 and the `label = not same_character` inversion
+  stays in `build_dataset.build_records` alone.
+  ⚠️ **`annotate/` and `adjudicate/` are BLOCKED, not skipped** — two schema questions the spec does not
+  answer, logged as **D-K** (nothing maps `pair_id` → the two Storage paths; the pairs live only in the
+  LangGraph checkpoint blob) and **D-L** (§2.1's "adjudicator flag" has no column) in `DECISION_BACKLOG.md`
+  Tier 2e. ⚠️ **The RLS suite has not been run against any database** — `SUPABASE_DB_URL` is set but
+  unreachable from the build host, so all 16 skipped.
+  **Phase 2 is in progress. Next: D-K + D-L, then the two routes.** Next free migration is
+  **`0015`** — ⚠️ `0014` is the highest on disk and **`0009` is used twice**
+  (`0009_avatar_id.sql`, `0009_teacher_identity.sql`). That collision is **left alone deliberately**: both
+  were hand-run under those names and this directory records what a human executed, so renaming them would
+  trade a visible collision for an invisible lie (rationale in `0014`'s header). Do not add a third.
 - classroom-sharing (2026-08-09): gallery page + StudentTabBar built; `/s/[profileId]/gallery` live; tab bar covers Bookshelf / Gallery / Profile; logout moved to settings.
