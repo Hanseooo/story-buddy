@@ -9,7 +9,7 @@ import logging
 from string import Formatter
 
 from app.config import settings
-from contracts.story_memory import Character, CharacterDescription, FailureReason, Location
+from contracts.story_memory import Character, CharacterDescription, FailureReason, Location, StoryObject
 
 log = logging.getLogger(__name__)
 
@@ -128,6 +128,18 @@ def filtered_location(location: Location | None, style_fragment: str | None) -> 
     return location.model_copy(update={"description": kept[0] if kept else None})
 
 
+def filtered_object(
+    obj: StoryObject, style_fragment: str | None
+) -> StoryObject:
+    if obj.description is None:
+        return obj
+    forbidden = style_prohibitions(style_fragment)
+    if not forbidden:
+        return obj
+    kept = _filter_axis([obj.description], forbidden)
+    return obj.model_copy(update={"description": kept[0] if kept else None})
+
+
 def _describe(description: CharacterDescription, name: str) -> str:
     """The populated CharacterDescription axes as one line — same phrasing char_bible's
     reference_prompt uses, so the canonical reference and every scene prompt describe the same
@@ -185,30 +197,13 @@ def referenced_characters(
     ]
 
 
-# Issue #23: the payload was prose plus ANONYMOUS image_urls. Given two unaddressed references an
-# edit model composites them into the canvas as separate elements rather than conditioning identity
-# on them — prod job b9506307 duplicated a character on 6 of its 7 two-reference scenes and on
-# none of its one-reference scene. Naming each image and stating what it is FOR is the smallest
-# change that addresses both branches of #23's discriminator: the duplicated girl (compositing) and
-# the duplicated star (the prose says "a star" and one reference IS a star).
-
-# Issue #32: the sentences above govern the IMAGES, and a scene's own prose summons the thing
-# independently of them. Prod job d83721d9's `s1` sent "Image 2 is the star" AND "found a tiny
-# glowing star", and got both — the compositing branch #23 closed was not involved
-# (same_character=True, anatomy_intact=True). The sentence below is the only one that binds the
-# two mentions together.
-#
-# Deliberately GENERIC — "one of these characters", not "Ana or the star". The roll immediately
-# above supplies the antecedent, so this can never assert a name the roll did not already assert:
-# refs are sent for every `characters_present` character, including ones the excerpt never names
-# ("Ana decided to help." sent two), and naming an absent character is how #23's floating extra
-# appeared. It also binds the NAME, not the noun: "the stars" in "she looked up at the stars"
-# names no character and stays drawable.
 REFERENCE_CLAUSE = (
     "Use them only as references for what each character looks like. Draw one new illustration of "
     "the scene described below — do not copy, inset, mirror or repeat the reference images inside it, "
     "and draw each character exactly once. When the text below names one of these characters, it is "
-    "referring to that character itself, not to a second thing of the same name."
+    "referring to that character itself, not to a second thing of the same name. "
+    "The reference images define appearance, not pose, crop, expression or viewing angle; "
+    "the Visual direction controls those scene properties."
 )
 
 # §4.2. BOTH clauses below sit OUTSIDE REFERENCE_CLAUSE deliberately: the roll and its clause are
@@ -244,6 +239,9 @@ def build_prompt(
     characters: list[Character],
     style_fragment: str | None,
     location: Location | None = None,
+    objects_present: list[str] | None = None,
+    objects: list[StoryObject] | None = None,
+    visual_direction: str | None = None,
 ) -> str:
     """Pure. Always includes the style fragment (invariant 1); never invents detail beyond
     `text_excerpt`, the present characters' populated description axes, and the scene's location
@@ -305,6 +303,25 @@ def build_prompt(
         NON_HUMAN_CLAUSE,
     ])] if present else []
 
+    by_object_id = {obj.obj_id: obj for obj in objects or []}
+    visible_objects: list[StoryObject] = []
+    for obj_id in dict.fromkeys(objects_present or []):
+        obj = by_object_id.get(obj_id)
+        if obj is None:
+            log.warning("build_prompt: obj_id %s not found in objects, skipping", obj_id)
+            continue
+        visible_objects.append(filtered_object(obj, style))
+
+    object_block = [
+        "Visible objects:\n"
+        + "\n".join(
+            f"{obj.name}, {obj.description}" if obj.description else obj.name
+            for obj in visible_objects
+        )
+    ] if visible_objects else []
+
+    direction = [f"Visual direction: {visual_direction}"] if visual_direction else []
+
     # Emitted BEFORE the excerpt on purpose: when a location description and the excerpt conflict
     # ("that night" against a sunny description), the excerpt is then the later and more specific
     # assertion. Reduced, not eliminated (§4.5.3).
@@ -314,7 +331,9 @@ def build_prompt(
         else f"Setting: {place.name}"
     ] if place else []
 
-    return "\n\n".join([*roll, *descriptions, *guards, *setting, text_excerpt, style])
+    return "\n\n".join(
+        [*roll, *descriptions, *guards, *object_block, *direction, *setting, text_excerpt, style]
+    )
 
 
 def _joined(values) -> str:

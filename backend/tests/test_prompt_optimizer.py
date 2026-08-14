@@ -1,7 +1,7 @@
 import logging
 
 from app.config import STYLE_PRESETS
-from contracts.story_memory import Character, CharacterDescription, FailureReason, Location
+from contracts.story_memory import Character, CharacterDescription, FailureReason, Location, StoryObject
 from pipeline.prompt_optimizer import (
     ANATOMY_CLAUSE,
     IDENTITY_CLAUSE,
@@ -17,6 +17,106 @@ from pipeline.prompt_optimizer import (
 )
 
 FRAG = "flat cel-shaded cartoon, thick clean black outlines"
+
+
+def test_visual_continuity_prompt_blocks_are_in_contract_order():
+    ana = Character(
+        char_id="c0",
+        name="Ana",
+        description=CharacterDescription(
+            species="human",
+            colours=["brown eyes"],
+            body_features=["round face"],
+            clothing=["yellow shirt"],
+        ),
+        canonical_ref_image="story/ref-c0.png",
+    )
+    maya = Character(
+        char_id="c1",
+        name="Maya",
+        description=CharacterDescription(
+            species="human",
+            colours=["black hair"],
+            body_features=["oval face"],
+            clothing=["blue dress"],
+        ),
+    )
+    sword = StoryObject(
+        obj_id="obj0",
+        name="wooden sword",
+        description="a short wooden sword with a red cord grip",
+        owner_char_id="c0",
+    )
+    prompt = build_prompt(
+        "Ana ran toward the forest.",
+        ["c0", "c1"],
+        [ana, maya],
+        "flat cel illustration, no gradients",
+        Location(loc_id="loc0", name="forest", description="tall pine trees"),
+        ["obj0"],
+        [sword],
+        "Ana runs right; Maya stays behind. wooden sword is held by Ana.",
+    )
+
+    markers = [
+        "Image 1 is Ana",
+        "Maya",
+        "exactly 2 characters: Ana and Maya",
+        "Visible objects:",
+        "Visual direction:",
+        "Setting:",
+        "Ana ran toward the forest.",
+        "flat cel illustration, no gradients",
+    ]
+    positions = [prompt.index(marker) for marker in markers]
+    assert positions == sorted(positions)
+    assert "wooden sword, a short wooden sword with a red cord grip" in prompt
+    assert "reference images define appearance, not pose, crop, expression or viewing angle" in prompt
+
+
+def test_build_prompt_skips_unknown_object_ids_and_deduplicates_in_first_seen_order():
+    sword = StoryObject(
+        obj_id="obj0",
+        name="wooden sword",
+        description="a short wooden sword",
+    )
+    shield = StoryObject(
+        obj_id="obj1",
+        name="iron shield",
+        description="a round shield",
+    )
+    prompt = build_prompt(
+        "Ana picked up her tools.",
+        [],
+        [],
+        "flat cel illustration",
+        objects_present=["obj0", "unknown_obj", "obj1", "obj0"],
+        objects=[sword, shield],
+        visual_direction="Ana stands in the center.",
+    )
+
+    assert "Visible objects:\nwooden sword, a short wooden sword\niron shield, a round shield" in prompt
+    assert "unknown_obj" not in prompt
+
+
+def test_build_prompt_filters_style_forbidden_words_from_object_description_not_excerpt():
+    sword = StoryObject(
+        obj_id="obj0",
+        name="glowing sword",
+        description="a glowing magic sword",
+    )
+    prompt = build_prompt(
+        "She held the glowing sword.",
+        [],
+        [],
+        "flat cel illustration, no glow",
+        objects_present=["obj0"],
+        objects=[sword],
+        visual_direction="Ana holds the sword.",
+    )
+
+    assert "glowing sword, a magic sword" in prompt
+    assert "She held the glowing sword." in prompt
 
 
 def _char(char_id: str, name: str, **description_kwargs) -> Character:
