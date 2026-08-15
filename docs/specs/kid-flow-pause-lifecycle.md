@@ -159,8 +159,8 @@ blanket ban: `cel` never says "no glow", so there the chip stands.
 `prompt_optimizer.permitted_words` rather than `filtered_description`, which deliberately leaves that
 axis alone. Chip scope, not description scope: the prompts still say `"glowing orb"`, the child is
 offered `"orb"`. This was the one live leak in ADR-035 — a tapped chip becomes `_mint_targeted`'s
-`notes`, which is unfiltered by the same carve-out, so the forbidden term walked back into a draw
-prompt on a **fresh** job. `main.confirm_job` validates a tap against the stored chips (§4.9), so it
+explicit emphasis, so the forbidden term would walk back into a draw prompt on a **fresh** job.
+`main.confirm_job` validates a tap against the stored chips (§4.9), so it
 could not catch this: the chips were the thing that was wrong. An all-forbidden species offers no chip
 and falls through to fallback 2 below.
 
@@ -201,7 +201,8 @@ the field, so this is a placement choice inside the frozen shape, not an amendme
 ### 4.5 `char_bible`'s targeted mode
 
 When `state.reference_retry` is set, `char_bible` takes a second path: exactly **one**
-`text_to_image` for that `char_id` with the tapped attribute restated in the prompt, **one** `judge`
+`text_to_image` for that `char_id` with the tapped attribute unconditionally restated through
+`Be sure to include: <attribute>.`, **one** `judge`
 call to refresh `ref_verdict`, an unconditional overwrite of `canonical_ref_image` and `ref_verdict`,
 `cost.image_count + 1`, `cost.ref_retry_count + 1`, and `reference_retry` cleared. No re-roll, no
 best-of, one code path away from the ADR-028 loop it sits beside.
@@ -534,7 +535,8 @@ future migration (S1 §6.3).
 - `taps_left == 3 - ref_retry_count`.
 
 **`char_bible` targeted mode, extending `test_char_bible_node.py`:**
-- Exactly one `text_to_image` and one `judge` call; the tapped attribute appears in the prompt.
+- Exactly one `text_to_image` and one `judge` call; an axis-present tapped attribute appears in the
+  unconditional `Be sure to include:` clause.
 - Only the flagged character mutates; every other `Character` is returned byte-identical.
 - `image_count + 1`, `ref_retry_count + 1`, `reference_retry` cleared to `None`.
 - The overwrite is unconditional: a character that already has `canonical_ref_image` is redrawn.

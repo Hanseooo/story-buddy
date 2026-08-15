@@ -263,10 +263,9 @@ def test_build_prompt_keeps_a_multi_word_species_the_name_only_partly_carries():
     assert prompt.split("\n\n")[0] == "the retriever, golden retriever"
 
 
-def test_a_scene_describes_its_characters_the_way_the_reference_prompt_does():
-    """The docstring on `_describe` promises the scene prompt phrases a character the way
-    `char_bible` does. Commit bef9982 moved char_bible to commas and left this copy on
-    `"{name} - {a}; {b}"`, so the promise was false for an hour.
+def test_a_scene_uses_commas_for_the_shared_character_axes():
+    """Commit bef9982 moved char_bible to commas and left this copy on
+    `"{name} - {a}; {b}"`, so their shared-axis phrasing diverged for an hour.
 
     It matters beyond tidiness: that label shape is what a prod cel page rendered as the word
     "Casey" lettered above the character, the same way the reference draw returned "Hoe - Star:".
@@ -925,8 +924,8 @@ def test_the_style_fragment_is_still_last_with_a_location_present():
 
 def test_referenced_characters_deduplicates_a_repeated_char_id():
     """§6 test 17. `segment` no longer emits one, but a checkpoint written before that change
-    still can — and `_fal_ref_url`'s cache would return the SAME fal URL twice, so the roll would
-    say "Image 1 is the star. Image 2 is the star." over a single image."""
+    still can — and `_fal_ref_url` would return fresh signed URLs for the same reference twice, so
+    the roll would say "Image 1 is the star. Image 2 is the star." over one character."""
     star = _char("c1", "the star")
     star.canonical_ref_image = "job-123/ref-c1-1.png"
 

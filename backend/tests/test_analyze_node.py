@@ -182,6 +182,16 @@ def test_extraction_prompt_carries_the_three_asks():
     assert "species" in prompt
 
 
+def test_extraction_prompt_requires_concrete_drawable_visual_values():
+    """Placeholder axes turn narrative roles into canonical-reference prompts."""
+    prompt = EXTRACTION_PROMPT.lower()
+
+    assert "concrete, directly drawable" in prompt
+    assert "never use placeholder values" in prompt
+    for placeholder in ("neutral", "none", "unknown", "unspecified"):
+        assert placeholder in prompt
+
+
 def test_extraction_prompt_prefers_the_name_the_story_gives():
     """A named character keeps their name; the descriptive label is the fallback, not the rule.
 

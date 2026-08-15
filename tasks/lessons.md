@@ -39,3 +39,10 @@
 - **Rule**: For quality work, first ask whether the user needs a research claim or targeted product
   improvement. Concrete observed failures can drive a repro-based design without a paid corpus run;
   record the weaker attribution honestly instead of imposing unused rigor.
+
+### 2026-08-15 Separate pasted context from the actual reproduction input
+- **What happened**: A second story was included in the bug report for context but was not part of
+  the end-to-end run. Treating both stories as runtime input would have widened the diagnosis.
+- **Root cause**: I had not yet distinguished the pasted material from the exact provider payload.
+- **Rule**: Before attributing prompt contamination across stories, anchor the diagnosis to the
+  exact logged prompt and confirm which source text actually entered the run.

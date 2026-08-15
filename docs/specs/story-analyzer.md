@@ -107,7 +107,10 @@ taxonomy the judge scores against. Re-deriving them here would create a second s
 
 `is_humanoid` is a node-local transient flag used only to enforce required clothing on humanoid figures. It is stripped via `exclude={"is_humanoid"}` when converting to `CharacterDescription` so it does not leak into the persisted contract.
 
-The prompt requires filling missing visual axes with neutral, child-safe, non-stereotyped details that distinguish the character across the roster.
+The prompt requires filling missing visual axes with concrete, directly drawable, child-safe,
+non-stereotyped details that distinguish the character across the roster. It explicitly forbids the
+placeholder values `neutral`, `none`, `unknown`, and `unspecified`; this is prompt guidance only,
+not a new semantic Pydantic validator or terminal failure path.
 
 Locations require a strict permanent description. The prompt instructs the model to preserve stated permanent facts and fill missing detail neutrally, excluding temporary conditions.
 

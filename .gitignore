@@ -23,3 +23,4 @@ data/judge/
 # General
 .DS_Store
 *.log
+.worktrees/

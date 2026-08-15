@@ -141,9 +141,8 @@ def filtered_object(
 
 
 def _describe(description: CharacterDescription, name: str) -> str:
-    """The populated CharacterDescription axes as one line — same phrasing char_bible's
-    reference_prompt uses, so the canonical reference and every scene prompt describe the same
-    character consistently.
+    """The populated CharacterDescription axes as one line for scene prompts. This includes
+    narrative `notes`; ADR-039 deliberately narrows only the canonical-reference prompt.
 
     Issue #32: a species the name already carries renders as `"the star - star"` — a definition,
     not a description, and a SECOND bare assertion of the noun the excerpt is independently
@@ -177,7 +176,7 @@ def referenced_characters(
     characters_present: list[str], characters: list[Character]
 ) -> list[Character]:
     """The present characters that HAVE a canonical reference, in the order `generate_scene`
-    uploads them to fal.
+    passes them to fal.
 
     ONE list feeds the image roll below and every `ref_paths` the pipeline builds —
     `generate_scene`, `regenerate` and `output_mod`, the last two because both carry a prompt
@@ -189,8 +188,8 @@ def referenced_characters(
     return [
         character
         # §4.3 D3(a), defensive half. `segment` no longer emits a duplicate, but a checkpoint
-        # written before that change can, and `_fal_ref_url`'s cache would hand fal the same URL
-        # twice. `dict.fromkeys` is order-preserving, so the survivors keep their relative order
+        # written before that change can, and `_fal_ref_url` would hand fal two fresh URLs for the
+        # same reference. `dict.fromkeys` is order-preserving, so the survivors keep their relative order
         # and "Image N is X" still names `ref_paths[N-1]` on all three consumers (invariant 4).
         for char_id in dict.fromkeys(characters_present)
         if (character := by_id.get(char_id)) is not None and character.canonical_ref_image

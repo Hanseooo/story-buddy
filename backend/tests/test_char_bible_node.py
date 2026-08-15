@@ -111,7 +111,7 @@ def test_best_draw_returns_zero_when_every_verdict_is_empty():
 
 # --- reference_prompt (pure) ---
 
-def test_reference_prompt_contains_every_populated_description_axis():
+def test_reference_prompt_contains_the_identity_projection_but_not_notes():
     description = CharacterDescription(
         species="dog",
         colours=["orange"],
@@ -120,8 +120,9 @@ def test_reference_prompt_contains_every_populated_description_axis():
         notes="always smiling",
     )
     prompt = reference_prompt(description, "the orange dog", FRAG)
-    for axis in ["dog", "orange", "three eyes", "a red scarf", "always smiling"]:
+    for axis in ["dog", "orange", "three eyes", "a red scarf"]:
         assert axis in prompt
+    assert "always smiling" not in prompt
 
 
 def test_reference_prompt_floors_to_the_character_name_on_an_empty_description():
@@ -134,18 +135,17 @@ def test_reference_prompt_floors_to_the_character_name_on_an_empty_description()
 # --- visually-thin descriptions (2026-08-11) ---
 
 def test_reference_prompt_enriches_a_description_with_no_visual_axis():
-    """`analyze`'s EXTRACTION_PROMPT says "leave them empty rather than inventing details", so
-    colours/body_features/clothing are routinely all empty — prod job 4cb31620 (2026-08-11) drew
-    c0 from "the narrator, girl, the protagonist". Every page of the book inherits that
-    reference, so the generator needs *something* to draw beyond a role noun.
+    """A legacy checkpoint or model miss can leave all three appearance axes empty — prod job
+    4cb31620 (2026-08-11) drew c0 from "the narrator, girl, the protagonist". Every page of the
+    book inherits that reference, so the generator needs *something* to draw beyond a role noun.
 
-    Triggered on the visual axes, NOT on len(populated): c0 had two populated axes (species and
-    notes) and still specified nothing drawable. `species` and `notes` are identity, not
-    appearance.
+    Triggered on the appearance axes, NOT on len(populated): c0 had species and notes but no
+    colours, body features, or clothing.
     """
     prompt = reference_prompt(CharacterDescription(species="girl", notes="the protagonist"), "the narrator", FRAG)
 
-    assert "the narrator, girl, the protagonist" in prompt
+    assert "the narrator, girl" in prompt
+    assert "the protagonist" not in prompt
     assert "friendly children's picture-book character" in prompt
 
 
@@ -178,11 +178,11 @@ def test_enrichment_reaches_the_draw_prompt_but_never_the_judge_prompt():
 
     assert "friendly children's picture-book character" in draw_prompt
     assert "friendly children's picture-book character" not in judge_prompt
-    # `notes` is the OTHER one-directional divergence (ADR-034 follow-on), so the judge sees the
-    # visual axes only — here that floors the subject to the bare name.
-    assert "the narrator, girl, the protagonist" in draw_prompt
+    # Narrative notes are excluded from both prompts; the draw-only filler is the sole divergence.
+    assert "the narrator, girl" in draw_prompt
     assert "the narrator, girl" in judge_prompt
     assert "the protagonist" not in judge_prompt
+    assert "the protagonist" not in draw_prompt
 
 
 # --- non-humanoid subjects (2026-08-11) ---
@@ -212,24 +212,21 @@ def test_reference_prompt_guards_against_anthropomorphising_a_non_human_subject(
         assert "not a person" in prompt
 
 
-def test_notes_reaches_the_draw_prompt_but_never_the_judge_prompt():
-    """ADR-034 follow-on, measured 2026-08-11: `notes` is free prose, not a visual attribute, and
-    the gate now re-rolls on whatever the judge lists as contradicted.
+def test_reference_prompt_excludes_narrative_notes_from_a_human_identity():
+    """A role note is not an instruction to draw its story object into the canonical portrait."""
+    described = CharacterDescription(
+        species="human",
+        colours=["neutral"],
+        body_features=["none"],
+        clothing=["unknown"],
+        notes="The protagonist who builds and names the robot",
+    )
 
-    Re-judging prod job b9506307's `ref-c1-1.png` under v3 returned
-    `"secondary character - The image does not provide cues as to this character's role."` as a
-    contradiction. No redraw can ever clear that, so the character would burn all 3 draws on every
-    job, forever. The generator still gets `notes` — "secondary character" is useful framing for a
-    drawing — but the judge measures VISUAL axes only, the same line `reveal._chips` already draws
-    ("free prose, not an attribute, and not a thing a child can tap").
-    """
-    described = CharacterDescription(species="star", body_features=["tiny"], notes="secondary character")
-    _, t2i_mock, judge_mock, _ = _mint([_verdict(True)], description=described, name="the star")
+    prompt = reference_prompt(described, "Mina", FRAG)
 
-    assert "secondary character" in t2i_mock.call_args.args[0]
-    assert "secondary character" not in judge_mock.call_args.args[0]
-    # The visual axes still reach the judge — this narrows the subject, it does not gut it.
-    assert "the star, star, tiny" in judge_mock.call_args.args[0]
+    assert "human" in prompt
+    assert "builds and names the robot" not in prompt
+    assert "robot" not in prompt
 
 
 # --- lettering and scenery (2026-08-13) ---
@@ -888,7 +885,9 @@ def _targeted_state(char_id: str = "c0", attribute: str = "orange sock", ref_ret
                     style: Style | None = None) -> StoryMemory:
     from contracts.story_memory import ReferenceRetry
 
-    c0 = _char("c0", "the dog", ref="story-1/ref-c0-1.png")
+    c0 = _char("c0", "the dog", ref="story-1/ref-c0-1.png").model_copy(
+        update={"description": CharacterDescription(species="dog", clothing=["orange sock"])}
+    )
     c0.ref_verdict = _verdict(True, ["dog"])
     c0.ref_moderation_status = "passed"
     return _state(
@@ -910,14 +909,14 @@ def test_char_bible_targeted_mode_makes_exactly_one_draw_and_one_judge_call():
     assert result["characters"][0].char_id == "c0"
 
 
-def test_char_bible_targeted_mode_restates_the_tapped_attribute_in_the_prompt():
+def test_char_bible_targeted_mode_emphasizes_an_attribute_already_in_a_visual_axis():
     state = _targeted_state(attribute="orange sock")
     with patch("pipeline.char_bible.text_to_image", return_value=b"x") as t2i, \
          patch("pipeline.char_bible.judge", return_value=_verdict(True)), \
          patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
         char_bible(state)
 
-    assert "orange sock" in t2i.call_args.args[0]
+    assert "Be sure to include: orange sock." in t2i.call_args.args[0]
 
 
 def test_char_bible_targeted_mode_suppresses_scenery_like_the_first_draw():
@@ -930,29 +929,6 @@ def test_char_bible_targeted_mode_suppresses_scenery_like_the_first_draw():
         char_bible(state)
 
     assert t2i.call_args.kwargs["negative_extra"] == REFERENCE_NEGATIVE
-
-
-def test_char_bible_targeted_mode_never_appends_the_re_injection_clause():
-    """`_mint_targeted`'s `if retry.attribute not in prompt` branch is UNREACHABLE, and has been
-    since the commit that introduced it: the line above writes the attribute into `notes`, and
-    `_describe(notes=True)` always renders `notes`, so the attribute is a substring of the prompt
-    by construction.
-
-    Pinned rather than deleted because the branch is a trap. It is dead only while `notes` and
-    `retry.attribute` are both unfiltered — anything that starts filtering either one reanimates
-    it, and it would then re-append the exact term the filter had just removed, rebuilding the
-    ADR-035 defect on the retry path. If this test ever fails, delete the branch; do not repair it.
-    """
-    for attribute in ("orange sock", "glowing"):
-        state = _targeted_state(attribute=attribute, style=Style(prompt_fragment=STYLE_PRESETS["comic"]))
-        with patch("pipeline.char_bible.text_to_image", return_value=b"x") as t2i, \
-             patch("pipeline.char_bible.judge", return_value=_verdict(True)), \
-             patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
-            char_bible(state)
-
-        prompt = t2i.call_args.args[0]
-        assert attribute in prompt
-        assert "Be sure to include" not in prompt
 
 
 def test_char_bible_still_describes_a_species_the_style_forbids():
