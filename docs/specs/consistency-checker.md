@@ -27,8 +27,9 @@ scene finalizes per pass* — gets its teeth.
 - **Invariants:**
   1. Exactly one scene is finalized per invocation, or the node returns `{}` (nothing left to do).
      Unlike `generate_scene` this node never raises — see §4. Finalization is now conditional on
-     `passed or verdict is None or len(attempts) >= 2` — a checked failure with one attempt is left
-     unfinalized so `route_after_check` can send it to `regenerate`.
+     `passed or verdict is None or len(attempts) >= MAX_SCENE_ATTEMPTS` (3 with ADR-037; was 2) — a
+     checked failure with fewer attempts is left unfinalized so `route_after_check` can send it to
+     `regenerate`.
   2. `final_image_ref` is written by **this node only**. `generate_scene` stops writing it (§3).
      Unchanged and still true after `regeneration-controller` — `regenerate` deliberately does not
      write it.
@@ -89,6 +90,10 @@ class SceneVerdict(BaseModel):
     subjects_unique: bool = True                 # §4.4 — asked after anatomy, before text
     text_free: bool = True                       # lettering-suppression §4.1 — asked after uniqueness, BEFORE failure_reasons
     failure_reasons: list[FailureReason] = []    # LAST — the closed 7 (ADR-028)
+
+class SceneConstraintVerdict(BaseModel):
+    differences_observed: str
+    contradictions: list[str] = []
 ```
 
 Field order mirrors `VlmVerdict` exactly, then appends. `providers._assert_field_order` enforces
@@ -101,11 +106,16 @@ One module-level helper per node (MASTER_SPEC §6 "The node test seam"). The Sto
 **inside** it, same shape as `char_bible.mint_reference` and `generate_scene.generate_and_store`.
 
 ```python
-def judge_attempt(image_path: str, subjects: list[tuple[str, str]]) -> list[SceneVerdict]:
-    """(character name, reference path) → one SceneVerdict each, in subject order.
+def judge_attempt(
+    image_path: str,
+    subjects: list[tuple[str, str]],
+    constraint_prompt: str = "",
+) -> tuple[list[SceneVerdict] | None, SceneConstraintVerdict | None]:
+    """(character name, reference path) → (identity verdicts | None, scene constraint verdict | None).
 
-    Returns [] for empty subjects AND for any judge/Storage failure — both mean *unchecked*,
-    and the node treats them identically, so distinguishing them here would buy nothing.
+    Returns (None, constraint_verdict) if identity judge fails or subjects is empty.
+    Returns (identity_verdicts, None) if scene constraint judge fails.
+    Returns (None, None) if Storage download fails.
     """
 ```
 
@@ -122,16 +132,17 @@ nodes at once, not a hotfix here.
    (`generate_scene` either appended one or raised), so this is a guard, not a path.
 3. Build subjects: each `char_id` in `characters_present` that resolves to a `Character` carrying a
    `canonical_ref_image`, as `(name, canonical_ref_image)`.
-4. `judge_attempt(attempt.image_ref, subjects)`.
-5. **Fold, worst-wins** (`[]` → skip to 6 with `vlm_verdict=None`):
+4. `judge_attempt(attempt.image_ref, subjects, constraint_prompt)`.
+5. **Fold identity verdicts, worst-wins** (`None` or empty subjects → `vlm_verdict=None`):
    - `same_character`, `anatomy_intact`, `style_match`, `subjects_unique`, `text_free` → `all(...)`
    - `attributes_present`, `failure_reasons` → union, deduped; `failure_reasons` emitted in
      `FailureReason` **declaration order**, which is the order `correct_prompt` iterates
    - `differences_observed` → `"\n".join(f"{name}: {v.differences_observed}")`
-6. `passed = same_character and anatomy_intact and text_free and not (GATING_REASONS & reasons)`
-   (`False` when unchecked).
-7. Partial-return the scene with the last attempt updated and
-   `final_image_ref = attempt.image_ref`.
+6. `passed = identity_available and identity_clean and composition_clean`
+   (where no-reference scenes evaluate `identity_available=True` and `identity_clean=True`).
+7. Partial-return the scene with the last attempt updated and `scene_contradictions` persisted.
+   `final_image_ref = best.image_ref` if
+   `passed or not concrete_failure or len(attempts) >= MAX_SCENE_ATTEMPTS` (3, ADR-037).
 
 **The judge scores against the reference, not the description.** A `Character` whose
 `ref_verdict.matches_description is False` is judged against anyway. ADR-028 deliberately ships the
@@ -146,6 +157,8 @@ are the four failures a child notices: wrong character, three arms, a word on th
 read and the app never speaks (CC-6), or a character whose colour and build changed between pages.
 `style_match` and `subjects_unique` are recorded, folded, and available to `regeneration-controller`'s
 ranking, but do **not** gate (ADR-007, §4.4).
+
+The scene-constraint judge checks the `Setting:` line (if present) against the page, reporting only concrete violations of stated permanent features as contradictions. Temporary differences supported by the excerpt (weather, lighting) are ignored. This is enforced by `SCENE_CONSTRAINT_PROMPT_VERSION = 3`.
 
 #### `GATING_REASONS` — the identity-attribute gate (2026-08-13)
 
@@ -172,9 +185,10 @@ construction (issue #24, below) — and the cost of a false gate is a paid redra
 existing closed set*, read at the gate, so the F1 measurement Objective 4 computes over that set is
 untouched.
 
-**Bounded.** The gate buys the same single retry ADR-010 already caps at one — `finalize` is
-`passed or verdict is None or len(attempts) >= 2`. Worst case per book is one extra draw per scene,
-already inside `IMAGE_BUDGET` (45; prod job `483056e0` spent 13 on 9 pages).
+**Bounded.** The gate buys only the retries the retry cap already allows — `finalize` is
+`passed or verdict is None or len(attempts) >= MAX_SCENE_ATTEMPTS`. Worst case per book is two extra
+draws per scene (ADR-037 took the cap 2 → 3), already inside `IMAGE_BUDGET` (55, which funds the
+full legal maximum; prod job `483056e0` spent 13 on 9 pages under the old 45).
 
 **Fallback, pre-registered:** if the redraw rate on these two reasons proves unacceptable, demote
 them to rank-only — the shape `subjects_unique` and `style_match` already sit in. The `_rank` term
@@ -230,8 +244,10 @@ the prompt matches `subjects_unique`'s position in `SceneVerdict`, because
 
 - Folded worst-wins: `subjects_unique = all(v.subjects_unique for v in verdicts)`.
 - Ranked: `_rank` is
-  `(1, same_character, anatomy_intact, text_free, attributes_ok, subjects_unique, style_match)`;
-  the unchecked tuple is `(0, 0, 0, 0, 0, 0, 0)`. `attributes_ok` is
+  `(1, composition_clean, fewer_contradictions, same_character, anatomy_intact, text_free, attributes_ok, subjects_unique, style_match)`;
+  the unchecked tuple is `(False, False, 0, True, True, True, True, True, True)` — term 1 is what
+  sinks it below every checked attempt; the unmeasured axes read `True` deliberately (see `_rank`'s
+  docstring). `attributes_ok` is
   `not (GATING_REASONS & failure_reasons)` — read off `Attempt.failure_reasons`, since `vlm_verdict`
   carries no reason list. It sits **last of the gating axes and ahead of the two record-only ones**.
   Without it the corrected redraw the gate now buys would be invisible to best-of: two attempts
@@ -240,9 +256,9 @@ the prompt matches `subjects_unique`'s position in `SceneVerdict`, because
   regenerations and issue #26 is open and already critical — cost is not the constraint, latency
   is. Precedent for record-and-rank-without-gating is `style_match`, in this same file. Gating is a
   follow-up decision, blocked on a measured duplicate rate and on #26 being closed.
-- CC-5: the per-scene log line carries `subjects_unique`, `text_free`, and `judge_prompt_version` (now version 3).
+- CC-5: the per-scene log line carries `subjects_unique`, `text_free`, and `judge_prompt_version` (now version 4).
 
-`JUDGE_PROMPT_VERSION` is a module constant (set to **3** after adding the text question), bumped on every wording change. It is deliberately
+`JUDGE_PROMPT_VERSION` is a module constant (set to **4** after adding viewpoint tolerance), bumped on every wording change. It is deliberately
 **not** a persisted `Attempt` field — that would be a third contract change for a problem logs
 already make traceable. The underlying gap (this prompt is unversioned in a way `char_bible`'s is
 not) deserves its own issue.
@@ -251,7 +267,7 @@ not) deserves its own issue.
 
 - [x] **CC-5 Observability** — one line per scene: `scene_id`, subject count,
       `checked` | `unchecked=no_subjects` | `unchecked=judge_failed`,
-      `same_character`, `anatomy_intact`, `style_match`, `failure_reasons`, `passed`. A wrong
+      `same_character`, `anatomy_intact`, `style_match`, `failure_reasons`, `passed`, `visual_direction`. A wrong
       character in the finished book traces to a specific scene, a specific attempt, and the
       verdict that let it through.
 - [x] **CC-10 Checkpointing / resumability** — no effects beyond state, so a re-executed super-step
@@ -360,7 +376,7 @@ still ships its reference).
 - ⚠️ **Two base64 images per call is untested against OpenRouter's body limit.** `char_bible` sends
   one and has not yet run for real either. If it rejects, both nodes need the signed-URL helper at
   once (§4).
-- **Judge latency is now on the critical path per scene**, ≤2 calls × 15 scenes. Unmeasured. It
+- **Judge latency is now on the critical path per scene**, ≤3 calls × 10 scenes (ADR-037). Unmeasured. It
   cannot fail the job (every path finalizes), so this is a latency risk, not a correctness one.
 - **The pass rule is a judgement, not a measurement.** Every term of it — including the
   2026-08-13 `GATING_REASONS` addition — is argued from ADR-007, `correct_prompt`'s mechanics and

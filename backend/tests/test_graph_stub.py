@@ -7,7 +7,7 @@ node name, in order, INCLUDING nodes that return {}. That is the replacement for
 """
 from contracts.story_memory import CURRENT_SCHEMA_VERSION, FailureReason, Input, RefVerdict, StoryMemory
 from pipeline.analyze import StoryAnalysis
-from pipeline.consistency_check import SceneVerdict
+from pipeline.consistency_check import SceneConstraintVerdict, SceneVerdict
 from pipeline.graph import build_graph
 from pipeline.segment import ExtractedScene, SceneSegmentation
 
@@ -37,8 +37,18 @@ def _initial_state(story_id: str) -> StoryMemory:
 
 STUB_ANALYSIS = StoryAnalysis.model_validate(
     {
-        "characters": [{"name": "the orange dog", "description": {"species": "dog"}}],
-        "locations": [{"name": "a field"}],
+        "characters": [
+            {
+                "name": "the orange dog",
+                "description": {
+                    "species": "dog",
+                    "is_humanoid": False,
+                    "colours": ["orange fur", "white paws"],
+                    "body_features": ["floppy ears"],
+                },
+            }
+        ],
+        "locations": [{"name": "a field", "description": "a grassy field"}],
         "objects": [],
         "timeline": [{"order": 0, "summary": "A dog runs."}],
     }
@@ -55,8 +65,8 @@ def _mock_call_points(monkeypatch):
     monkeypatch.setattr("pipeline.analyze.extract_entities", lambda text: STUB_ANALYSIS)
     monkeypatch.setattr(
         "pipeline.segment.segment_scenes",
-        lambda units, chars, timeline, locs=None: SceneSegmentation(scenes=[
-            ExtractedScene(start=0, end=len(units) - 1, characters_present=[])
+        lambda units, chars, timeline, locs=None, objs=None: SceneSegmentation(scenes=[
+            ExtractedScene(start=0, end=len(units) - 1, characters_present=[], visual_direction="A scene.")
         ]),
     )
     monkeypatch.setattr(
@@ -71,7 +81,10 @@ def _mock_call_points(monkeypatch):
     )
     monkeypatch.setattr(
         "pipeline.consistency_check.judge_attempt",
-        lambda image_path, subjects: [],   # unchecked — every path still finalizes
+        lambda image_path, subjects, prompt="": (
+            [],
+            SceneConstraintVerdict(differences_observed="none", contradictions=[]),
+        ),   # unchecked identity + clean composition
     )
     monkeypatch.setattr(
         "pipeline.char_bible.mint_reference",
@@ -177,9 +190,9 @@ def test_two_scene_run_loops_once_per_scene_and_reaches_compose(monkeypatch):
     _mock_call_points(monkeypatch)
     monkeypatch.setattr(
         "pipeline.segment.segment_scenes",
-        lambda units, chars, timeline, locs=None: SceneSegmentation(scenes=[
-            ExtractedScene(start=0, end=0, characters_present=[]),
-            ExtractedScene(start=1, end=len(units) - 1, characters_present=[]),
+        lambda units, chars, timeline, locs=None, objs=None: SceneSegmentation(scenes=[
+            ExtractedScene(start=0, end=0, characters_present=[], visual_direction="Scene 0."),
+            ExtractedScene(start=1, end=len(units) - 1, characters_present=[], visual_direction="Scene 1."),
         ]),
     )
     app_graph = build_graph()
@@ -221,9 +234,9 @@ def _judge_returning(*, same: bool, anatomy: bool = True) -> SceneVerdict:
 def _two_scenes(monkeypatch):
     monkeypatch.setattr(
         "pipeline.segment.segment_scenes",
-        lambda units, chars, timeline, locs=None: SceneSegmentation(scenes=[
-            ExtractedScene(start=0, end=0, characters_present=[]),
-            ExtractedScene(start=1, end=len(units) - 1, characters_present=[]),
+        lambda units, chars, timeline, locs=None, objs=None: SceneSegmentation(scenes=[
+            ExtractedScene(start=0, end=0, characters_present=["the orange dog"], visual_direction="Scene 0."),
+            ExtractedScene(start=1, end=len(units) - 1, characters_present=["the orange dog"], visual_direction="Scene 1."),
         ]),
     )
 
@@ -237,7 +250,10 @@ def test_a_failing_scene_retries_once_then_passes_and_the_run_reaches_compose(mo
     # counter would carry across both runs and the second would never see a failure.
     monkeypatch.setattr(
         "pipeline.consistency_check.judge_attempt",
-        lambda image_path, subjects: [_judge_returning(same=not image_path.endswith("s0-1.png"))],
+        lambda image_path, subjects, prompt="": (
+            [_judge_returning(same=not image_path.endswith("s0-1.png"))],
+            SceneConstraintVerdict(differences_observed="none", contradictions=[]),
+        ),
     )
     app_graph = build_graph()
 
@@ -268,13 +284,18 @@ def test_a_failing_scene_retries_once_then_passes_and_the_run_reaches_compose(mo
 
 
 def test_a_book_whose_every_judge_call_fails_still_reaches_compose(monkeypatch):
-    """The ADR-010 best-of termination test: four attempts, both scenes finalized, never a
-    broken page and never an infinite loop. `len(attempts) >= 2` is what bounds it."""
+    """The ADR-010 best-of termination test: six attempts, both scenes finalized, never a
+    broken page and never an infinite loop. `len(attempts) >= MAX_SCENE_ATTEMPTS` is what
+    bounds it (ADR-037 took that from 2 to 3), so no fourth attempt is reachable per scene —
+    spend-and-retry-economics §6.11."""
     _mock_call_points(monkeypatch)
     _two_scenes(monkeypatch)
     monkeypatch.setattr(
         "pipeline.consistency_check.judge_attempt",
-        lambda image_path, subjects: [_judge_returning(same=False)],
+        lambda image_path, subjects, prompt="": (
+            [_judge_returning(same=False)],
+            SceneConstraintVerdict(differences_observed="none", contradictions=[]),
+        ),
     )
     app_graph = build_graph()
 
@@ -283,12 +304,12 @@ def test_a_book_whose_every_judge_call_fails_still_reaches_compose(monkeypatch):
         config={"configurable": {"thread_id": "test-job-allfail"}},
     )
 
-    assert sum(len(s.attempts) for s in result["scenes"]) == 4
+    assert sum(len(s.attempts) for s in result["scenes"]) == 6
     assert all(s.final_image_ref is not None for s in result["scenes"])
     assert all(a.passed is False for s in result["scenes"] for a in s.attempts)
-    assert result["cost"].regen_count == 2
-    # Tie on every ranking term → attempt 2, the `reversed` behaviour, end to end.
-    assert [s.final_image_ref for s in result["scenes"]] == ["stub/s0-2.png", "stub/s1-2.png"]
+    assert result["cost"].regen_count == 4
+    # Tie on every ranking term → attempt 3, the `reversed` behaviour, end to end.
+    assert [s.final_image_ref for s in result["scenes"]] == ["stub/s0-3.png", "stub/s1-3.png"]
 
 
 def test_route_next_scene_routes_to_output_mod_when_all_scenes_have_final_image_ref():

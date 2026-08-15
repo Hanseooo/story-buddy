@@ -62,13 +62,13 @@ manifests, training config, eval (ADR-018). `backend/eval/` — Phase 3 offline 
 is now built — added 2026-07-29; see §6.)*
 
 **The research track gets two screens and one table, and no more.** No metrics dashboard (Tool A is a script
-— §4's "offline scripts + tracing exports"), no run-trace viewer (that is LangSmith, ADR-014), and no separate
+— §4's "offline scripts + tracing exports"), no run-trace viewer (that is Langfuse, ADR-030), and no separate
 researcher application. Objectives 3 and 5 are collected on paper and by form, not in-app. ADR-026.
 
 **Frontend and backend are independent projects** (different languages; no shared monorepo build
 tooling — that would be speculative for a solo build). Their only contract is the HTTP API and the
-Story Memory shape. New ADRs **append** to `docs/product/ADRs.md` — there is no separate
-`decisions/` folder.
+Story Memory shape. New ADRs are **one file each** under `docs/product/adr/`, indexed by
+`docs/product/ADRs.md` — there is no separate `decisions/` folder.
 
 ### Folder rules for AI agents
 - New pipeline module → a new file in `backend/pipeline/`, named for its single concern.
@@ -224,7 +224,7 @@ Product/architecture choices are in the ADRs; this is the working reference, **i
 | Moderation | **meta-llama/llama-guard-4-12b** (OpenRouter) **+ gpt-oss-safeguard-20b** (OpenRouter backstop) (text, both Apache-2.0) + Presidio **+ Filipino recognizers** (PII) + NSFW ViT & VLM rubric (image) | ADR-011 (D-1 resolved) |
 | Narration | **Chatterbox** (MIT, expressive) via hosted inference, pre-rendered per page onto Storage; **Kokoro-82M** CPU fallback | ADR-020 (revised) |
 | Fine-tuning | **The consistency judge only.** Identity = reference conditioning; style = ADR-007 constant; safety = never | ADR-018 (supersedes ADR-016) |
-| Observability | **LangSmith** (tracing, ADR-014) + Sentry (errors) | ADR-014, §16 |
+| Observability | **Langfuse** (tracing, ADR-030 — supersedes LangSmith/ADR-014) + Sentry (errors) | ADR-030, §16 |
 | Rate limiting | ⚙️`slowapi` + cost circuit-breaker; **per-classroom** daily cap deferred to Phase 2 (ADR-025) | §14,§15, ADR-025 |
 | Export | HTML template → PDF via **WeasyPrint** (D-2 resolved, ADR-013) | ADR-013, §8 |
 | **Testing — FE unit** | **vitest** | mock model calls; component + logic |
@@ -305,7 +305,7 @@ pipeline behaviours exercised here, not standalone evaluation legs):
   the held-out set (**Objective 4**; an optional secondary comparison vs. the zero-shot base model and the
   existing prompted baseline is permitted, ADR-008 rev. 2026-07-25), VLM–human agreement.
 - **Software quality** — ISO/IEC 25010 characteristics, 5-point Likert, weighted mean + SD (**Objective 5**).
-- **Is the same instrumentation as the Phase 3 study** (LangSmith/Langfuse) — build once, use for
+- **Is the same instrumentation as the Phase 3 study** (Langfuse) — build once, use for
   both dev feedback and research data. Costs money and is non-deterministic; that's why it's not CI.
 
 **The node test seam (Phase-1 pipeline nodes).**
@@ -344,7 +344,7 @@ mark done. Behavior change later → update the spec in the same change (CLAUDE.
 | Phase | Specs to write |
 |---|---|
 | 1 (core) | `story-memory-contract`, `story-analyzer`, `scene-segmentation`, `character-bible`, `style-presets`, `prompt-optimizer`, `image-generator`, `consistency-checker`, `regeneration-controller`, `compose` |
-| 2 (safety/classroom) | `moderation-stack`, `input-gate-hardening` (absorbed `filipino-pii-recognizers` + `length-guard`), `self-refusal-fallback`, `repeated-failure-offramp` (split out of it 2026-08-02 — counts across job submissions, needs a cross-run counter), `auth-identity-and-classroom-schema` (S1), `auth-session-model` (S2), `auth-authorization-surface` (S3), `auth-routes-and-account-ux` (S4) (the former `auth-and-classroom` row, decomposed by docket `docs/specs/auth-and-classroom-docket.md` — all four specced and built 2026-08-05/06; S3's 33-test isolation suite in `backend/tests/test_rls_isolation.py`), `teacher-dashboard`, ✅ `classroom-sharing` *(built 2026-08-09)* (display-only gallery — no `peer-reflection`/`story-map`, both cut per ADR-021), `narration`, `export-pdf`, `rate-limiting`, `data-deletion`, `kid-flow-book-persistence` (S1), `kid-flow-pause-lifecycle` (S2), `kid-flow-failure-semantics` (S3), `kid-flow-reader-and-wait-states` (S4) |
+| 2 (safety/classroom) | `moderation-stack`, `input-gate-hardening` (absorbed `filipino-pii-recognizers` + `length-guard`), `self-refusal-fallback`, `repeated-failure-offramp` (split out of it 2026-08-02 — counts across job submissions, needs a cross-run counter), `auth-identity-and-classroom-schema` (S1), `auth-session-model` (S2), `auth-authorization-surface` (S3), `auth-routes-and-account-ux` (S4) (the former `auth-and-classroom` row, decomposed by docket `docs/specs/auth-and-classroom-docket.md` — all four specced and built 2026-08-05/06; S3's 33-test isolation suite in `backend/tests/test_rls_isolation.py`), `teacher-dashboard`, ✅ `classroom-sharing` *(built 2026-08-09)* (display-only gallery — no `peer-reflection`/`story-map`, both cut per ADR-021), `narration`, `export-pdf`, `rate-limiting`, `data-deletion`, `kid-flow-book-persistence` (S1), `kid-flow-pause-lifecycle` (S2), `kid-flow-failure-semantics` (S3), `kid-flow-reader-and-wait-states` (S4), ✅ `visual-continuity` *(S1/S2 replacement)*, ✅ `pose-viewpoint-composition` (S3), ✅ `setting-consistency` (S4), ✅ `spend-and-retry-economics` (S5) *(docket `docs/specs/pipeline-consistency-docket.md` — DONE 2026-08-15; S1 and S2 WAIVED, S3–S5 specced and built)* |
 | 2.5 (fine-tune) | ✅ `judge-finetune` *(written)*, `annotation-surface` (ADR-026) |
 | 3 (eval) | `functional-verification-matrix` (Tool A), `metrics-export` |
 
@@ -406,7 +406,7 @@ Phase-2.5 annotators. Design it once, in Phase 1, or invalidate every label coll
 - ~~DreamBench++ image licensing beyond evaluation~~ → **evaluate only, never train on it, never
   redistribute it** (`docs/specs/judge-finetune.md` §5.6, §12). Evaluation is the benchmark's
   intended use; no correspondence with the authors is required.
-- ~~Observability — LangSmith vs Langfuse~~ → ADR-014 (LangSmith).
+- ~~Observability — LangSmith vs Langfuse~~ → ADR-014 (LangSmith), switched to Langfuse by ADR-030.
 - ~~ADR-015's *hardening*~~ → confirmed: **no proprietary models anywhere**. `backend/providers.py` is what
   kept the blast radius to a handful of files. **This did not resolve ADR-015's open question** — see
   "Open" below.

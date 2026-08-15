@@ -585,11 +585,24 @@ def test_the_judge_is_asked_about_text_last_and_the_version_is_bumped():
     """
     from pipeline.char_bible import JUDGE_PROMPT, JUDGE_PROMPT_VERSION
 
-    assert JUDGE_PROMPT_VERSION == 4
+    assert JUDGE_PROMPT_VERSION == 5
 
     prompt = JUDGE_PROMPT.format(subject="the orange dog, dog, orange")
     assert "free of any text" in prompt
     assert prompt.index("attributes are actually present") < prompt.index("free of any text")
+
+
+def test_reference_judge_prompt_binds_the_prose_to_the_contradiction_list():
+    """visual-continuity §4.9. Job 3cc05c4b's judge described the mismatch in prose and returned
+    an empty list; ADR-034 derives acceptance from the list, so the prose alone changed nothing.
+    The prompt has to say the two must agree, and has to ask for a per-attribute walk."""
+    from pipeline.char_bible import JUDGE_PROMPT
+
+    prompt = JUDGE_PROMPT.format(subject="the shadow wizard, wizard, dark, imposing")
+    assert "one at a time" in prompt
+    assert "must appear in that list" in prompt
+    # Still reason-then-score (ADR-004): the walk is asked before the list, never after.
+    assert prompt.index("one at a time") < prompt.index("list the contradictions")
 
 
 def test_mint_reference_reports_a_draw_count_equal_to_the_provider_calls():

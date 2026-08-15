@@ -119,3 +119,33 @@ def test_cost_reported_from_state(caplog):
 
     assert "image_count=7" in caplog.text
     assert "regen_count=3" in caplog.text
+
+
+def test_no_reference_clean_composition_is_reported_passed(caplog):
+    attempt = Attempt(
+        image_ref="p/s1-1.png",
+        passed=True,
+        scene_contradictions=[],
+    )
+    scene = _scene("s1", "p/s1-1.png", [attempt], caption="c1")
+
+    with caplog.at_level(logging.INFO, logger="pipeline.compose"):
+        compose(_mem(scene))
+
+    assert "passed=1" in caplog.text
+    assert "unchecked=0" in caplog.text
+
+
+def test_no_reference_composition_failure_is_reported_failing(caplog):
+    attempt = Attempt(
+        image_ref="p/s1-1.png",
+        passed=False,
+        scene_contradictions=["Maya is absent."],
+    )
+    scene = _scene("s1", "p/s1-1.png", [attempt], caption="c1")
+
+    with caplog.at_level(logging.INFO, logger="pipeline.compose"):
+        compose(_mem(scene))
+
+    assert "failing=1" in caplog.text
+    assert "unchecked=0" in caplog.text

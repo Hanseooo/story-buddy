@@ -459,32 +459,69 @@ function BookTableRow({
   );
 }
 
-function FailedBookRow({ job }: { job: Job }) {
-  const isSafety = job.failure_reason === "child_text";
+export function FailedBookRow({ job }: { job: Job }) {
+  const [copied, setCopied] = useState(false);
   const name = job.profiles?.display_nickname ?? "Unknown";
   const date = new Date(job.created_at).toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
   });
+
+  const getTeacherLabel = (reason: string | null) => {
+    switch (reason) {
+      case "child_text":
+        return "The submitted story did not pass the input safety check.";
+      case "character_safety":
+        return "A generated character reference did not pass the image safety check.";
+      case "scene_safety":
+        return "A generated scene did not pass the image safety check.";
+      case "service_busy":
+        return "A required story-making service was temporarily unavailable.";
+      case "worker_stopped":
+        return "The worker process stopped or exceeded its job deadline.";
+      case "service_limit":
+        return "The configured story-making service reported exhausted quota or credits.";
+      case "book_limit":
+        return "The job reached its paid-image circuit breaker.";
+      default:
+        return "The job ended because of an unclassified system error.";
+    }
+  };
+
+  const handleCopy = () => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(job.id);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
   return (
     <div className="bg-surface border border-primary/10 rounded-2xl p-4">
       <div className="flex items-center justify-between gap-2 mb-2">
         <p className="font-bold text-sm text-foreground">{name}</p>
-        <p className="text-xs text-foreground/50">{date}</p>
-      </div>
-      {isSafety ? (
-        <div>
-          <p className="text-sm text-foreground/70 mb-2">
-            The safety check stopped this story.
-          </p>
-          <blockquote className="text-sm text-foreground/60 italic border-l-2 border-primary/20 pl-3">
-            {job.input_text}
-          </blockquote>
+        <div className="flex items-center gap-2">
+          <div className="inline-flex items-center gap-1 font-mono text-xs text-foreground/60 bg-muted/30 px-2 py-0.5 rounded">
+            <span>Ref: {job.id.slice(0, 8)}</span>
+            <button
+              type="button"
+              aria-label="Copy story reference ID"
+              onClick={handleCopy}
+              className="ml-1 inline-flex items-center justify-center min-h-[44px] min-w-[44px] text-primary font-bold hover:underline"
+            >
+              {copied ? "Copied!" : "Copy"}
+            </button>
+          </div>
+          <p className="text-xs text-foreground/50">{date}</p>
         </div>
-      ) : (
-        <p className="text-sm text-foreground/70">
-          Something went wrong while this was being made. They can try again.
-        </p>
+      </div>
+      <p className="text-sm text-foreground/70 mb-2">
+        {getTeacherLabel(job.failure_reason)}
+      </p>
+      {job.failure_reason === "child_text" && job.input_text && (
+        <blockquote className="text-sm text-foreground/60 italic border-l-2 border-primary/20 pl-3 mt-1">
+          {job.input_text}
+        </blockquote>
       )}
     </div>
   );

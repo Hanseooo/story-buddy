@@ -9,6 +9,7 @@ from contracts.story_memory import (
     Character,
     CharacterDescription,
     Input,
+    Location,
     StoryMemory,
 )
 from pipeline.analyze import (
@@ -30,11 +31,44 @@ def test_extracted_description_requires_species():
         ExtractedDescription.model_validate({"colours": ["red"]})
 
 
-def test_extracted_description_requires_no_visual_attribute():
-    """Guards against someone later 'tightening' this into a Pydantic validator that fires
-    AFTER a successful, paid call — under ADR-025 that fails the child's whole job because
-    they never said what their dog was wearing. Spec §4."""
-    assert ExtractedDescription(species="dog").species == "dog"
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {
+            "species": "dog",
+            "is_humanoid": False,
+            "colours": ["brown"],
+            "body_features": ["floppy ears"],
+        },
+        {
+            "species": "dog",
+            "is_humanoid": False,
+            "colours": ["brown", "cream", "black"],
+        },
+        {
+            "species": "human",
+            "is_humanoid": True,
+            "colours": ["brown"],
+            "body_features": ["round face", "short hair"],
+            "clothing": [],
+        },
+    ],
+)
+def test_extracted_description_rejects_incomplete_visual_canon(payload):
+    with pytest.raises(ValidationError):
+        ExtractedDescription.model_validate(payload)
+
+
+def test_extracted_description_accepts_three_discriminators_across_two_axes():
+    description = ExtractedDescription.model_validate(
+        {
+            "species": "dog",
+            "is_humanoid": False,
+            "colours": ["brown", "cream"],
+            "body_features": ["floppy ears"],
+        }
+    )
+    assert description.species == "dog"
 
 
 def test_extracted_description_inherits_every_contract_axis():
@@ -65,14 +99,25 @@ def test_no_extraction_model_declares_an_id(model, id_field):
 def test_story_analysis_accepts_the_four_collections():
     analysis = StoryAnalysis.model_validate(
         {
-            "characters": [{"name": "the narrator", "description": {"species": "girl"}}],
-            "locations": [{"name": "the beach"}],
-            "objects": [{"name": "a red bucket"}],
+            "characters": [
+                {
+                    "name": "the narrator",
+                    "description": {
+                        "species": "girl",
+                        "is_humanoid": True,
+                        "colours": ["warm brown skin"],
+                        "body_features": ["round face"],
+                        "clothing": ["yellow shirt"],
+                    },
+                }
+            ],
+            "locations": [{"name": "the beach", "description": "a sunny sandy beach with palm trees"}],
+            "objects": [{"name": "a red bucket", "description": "a small red plastic bucket"}],
             "timeline": [{"order": 0, "summary": "They go to the beach."}],
         }
     )
     assert analysis.characters[0].description.species == "girl"
-    assert analysis.locations[0].description is None
+    assert analysis.locations[0].description == "a sunny sandy beach with palm trees"
     assert analysis.timeline[0].summary == "They go to the beach."
 
 
@@ -80,9 +125,9 @@ def _analysis(**overrides) -> StoryAnalysis:
     """A minimal valid StoryAnalysis; override any collection per test."""
     return StoryAnalysis.model_validate(
         {
-            "characters": [{"name": "the narrator", "description": {"species": "girl"}}],
-            "locations": [{"name": "the beach"}],
-            "objects": [{"name": "a red bucket"}],
+            "characters": [_character("the narrator")],
+            "locations": [{"name": "the beach", "description": "a sunny sandy beach with palm trees"}],
+            "objects": [{"name": "a red bucket", "description": "a small red plastic bucket"}],
             "timeline": [{"order": 0, "summary": "They go to the beach."}],
             **overrides,
         }
@@ -183,14 +228,53 @@ def _state(raw_text="A dog runs in a field.", redacted_text="A dog runs in a fie
 
 
 def _character(name: str, species: str = "girl") -> dict:
-    return {"name": name, "description": {"species": species}}
+    return {
+        "name": name,
+        "description": {
+            "species": species,
+            "is_humanoid": True,
+            "colours": ["warm brown skin"],
+            "body_features": ["round face"],
+            "clothing": ["yellow shirt"],
+        },
+    }
+
+
+def test_analyze_persists_story_stated_details_without_the_transient_humanoid_flag():
+    analysis = _analysis(
+        characters=[
+            {
+                "name": "Ana",
+                "description": {
+                    "species": "human",
+                    "is_humanoid": True,
+                    "colours": ["blue eyes"],
+                    "body_features": ["round face"],
+                    "clothing": ["red cape"],
+                },
+            }
+        ]
+    )
+    with patch("pipeline.analyze.extract_entities", return_value=analysis):
+        description = analyze(_state())["characters"][0].description
+
+    assert description.model_dump() == {
+        "species": "human",
+        "colours": ["blue eyes"],
+        "body_features": ["round face"],
+        "clothing": ["red cape"],
+        "notes": None,
+    }
 
 
 def test_analyze_mints_ids_by_list_position():
     analysis = _analysis(
         characters=[_character("the narrator"), _character("the younger sister")],
-        locations=[{"name": "the beach"}, {"name": "the car"}],
-        objects=[{"name": "a red bucket"}],
+        locations=[
+            {"name": "the beach", "description": "sandy beach"},
+            {"name": "the car", "description": "red sedan"},
+        ],
+        objects=[{"name": "a red bucket", "description": "a small red plastic bucket"}],
     )
     with patch("pipeline.analyze.extract_entities", return_value=analysis):
         result = analyze(_state())
@@ -294,16 +378,157 @@ def test_extraction_prompt_asks_for_permanent_location_detail():
     from pipeline.analyze import EXTRACTION_PROMPT
 
     assert (
-        "Describe each location by what is permanently there — not the weather, the time of "
-        "day, or what happens there." in EXTRACTION_PROMPT
+        "Describe each location by what is permanently there — not the weather, the lighting, "
+        "the time of day, any damage, or what happens there." in EXTRACTION_PROMPT
+    )
+    # setting-consistency §4.1: preserve stated facts, fill missing detail once.
+    assert "Copy every stated permanent fact without alteration." in EXTRACTION_PROMPT
+    assert "Fill missing detail once with neutral, child-safe features" in EXTRACTION_PROMPT
+
+
+def test_extracted_location_rejects_blank_description():
+    """setting-consistency §6 test 1. Strict at the transient LLM boundary so a schema violation
+    fails the job before any image is purchased (ADR-025)."""
+    with pytest.raises(ValidationError):
+        ExtractedLocation(name="Park", description="   ")
+    with pytest.raises(ValidationError):
+        ExtractedLocation.model_validate({"name": "Park"})
+    with pytest.raises(ValidationError):
+        ExtractedLocation.model_validate({"name": "Park", "description": None})
+
+    assert ExtractedLocation(name="Park", description="A large green park").description == (
+        "A large green park"
     )
 
 
-def test_extracted_location_description_stays_optional():
-    """§4.1: required would force invention, contradicting the same prompt's rule for character
-    axes ("leave them empty rather than inventing details"). Null degrades the setting line to
-    name-only, which is still better than today's nothing."""
-    from pipeline.analyze import ExtractedLocation
+def test_analyze_persists_the_extracted_description_unchanged():
+    """setting-consistency §6 test 3. The assertion is on the PERSISTED `Location`, not on the
+    boundary type — the node's mapping is what the scene prompt and judge later read."""
+    analysis = _analysis(locations=[{"name": "Park", "description": "A large green park"}])
+    with patch("pipeline.analyze.extract_entities", return_value=analysis):
+        result = analyze(_state())
 
-    assert ExtractedLocation(name="the beach").description is None
+    assert [(loc.loc_id, loc.description) for loc in result["locations"]] == [
+        ("loc0", "A large green park")
+    ]
+
+
+def test_persisted_location_contract_accepts_none():
+    """setting-consistency §6 test 4. Old checkpoints deserialize; only the transient type is
+    strict."""
+    assert Location(loc_id="loc0", name="Park", description=None).description is None
+
+
+def test_analyze_leaves_locations_uncapped():
+    """setting-consistency §6 test 5. Unlike characters, a location is text only — it buys no
+    image and no judge call, so it is not a CC-3 spend lever."""
+    analysis = _analysis(
+        locations=[{"name": f"Park {i}", "description": f"Desc {i}"} for i in range(10)]
+    )
+    with patch("pipeline.analyze.extract_entities", return_value=analysis) as extract:
+        result = analyze(_state())
+
+    assert len(result["locations"]) == 10
+    assert extract.call_count == 1
+
+
+def test_extracted_object_requires_a_stable_physical_description():
+    with pytest.raises(ValidationError):
+        ExtractedObject.model_validate({"name": "wooden sword", "owner_name": "Ana"})
+
+
+def test_story_analysis_rejects_an_entity_in_both_rosters():
+    with pytest.raises(ValidationError, match="both character and object"):
+        _analysis(
+            characters=[_character("talking kettle", species="kettle")],
+            objects=[
+                {
+                    "name": "talking kettle",
+                    "description": "a copper kettle with a black handle",
+                    "owner_name": None,
+                }
+            ],
+        )
+
+
+def test_analyze_maps_owner_name_to_the_capped_character_id():
+    analysis = _analysis(
+        characters=[_character("Ana")],
+        objects=[
+            {
+                "name": "wooden sword",
+                "description": "a short wooden sword with a red cord grip",
+                "owner_name": "Ana",
+            }
+        ],
+    )
+    with patch("pipeline.analyze.extract_entities", return_value=analysis):
+        obj = analyze(_state())["objects"][0]
+
+    assert obj.owner_char_id == "c0"
+    assert obj.description == "a short wooden sword with a red cord grip"
+
+
+def test_analyze_rejects_an_owner_outside_the_persisted_roster():
+    analysis = _analysis(
+        characters=[_character("Ana")],
+        objects=[
+            {
+                "name": "wooden sword",
+                "description": "a short wooden sword with a red cord grip",
+                "owner_name": "Maya",
+            }
+        ],
+    )
+    with patch("pipeline.analyze.extract_entities", return_value=analysis):
+        with pytest.raises(ValueError, match="unknown owner.*Maya"):
+            analyze(_state())
+
+
+def test_analyze_keeps_an_object_whose_owner_was_capped_out_of_the_roster(caplog):
+    """§4.2 errors on an UNKNOWN owner. A 4th extracted character is known — the 3-character cap
+    dropped them — so the prop loses its holder relation, not the whole job."""
+    analysis = _analysis(
+        characters=[_character(name) for name in ("Ana", "Bea", "Cy", "Dov")],
+        objects=[
+            {
+                "name": "wooden sword",
+                "description": "a short wooden sword with a red cord grip",
+                "owner_name": "Dov",
+            }
+        ],
+    )
+    with patch("pipeline.analyze.extract_entities", return_value=analysis):
+        with caplog.at_level(logging.WARNING):
+            result = analyze(_state())
+
+    assert [c.char_id for c in result["characters"]] == ["c0", "c1", "c2"]
+    assert result["objects"][0].owner_char_id is None
+    assert result["objects"][0].description == "a short wooden sword with a red cord grip"
+    assert "capped out of the roster" in caplog.text
+
+
+def test_narrative_notes_do_not_satisfy_the_discriminator_floor():
+    """§6 test 4: `notes` is narrative metadata and never counts as a visual discriminator."""
+    with pytest.raises(ValidationError):
+        ExtractedDescription.model_validate(
+            {
+                "species": "wizard",
+                "is_humanoid": True,
+                "colours": [],
+                "body_features": [],
+                "clothing": [],
+                "notes": "dark, imposing, and feared throughout the valley",
+            }
+        )
+
+
+def test_extraction_prompt_distinguishes_actors_from_props_and_requests_owners():
+    prompt = EXTRACTION_PROMPT.lower()
+    assert "agency" in prompt
+    assert "inert prop" in prompt
+    assert "personified object" in prompt
+    assert "owner_name" in prompt
+    assert "physical description" in prompt
+
 

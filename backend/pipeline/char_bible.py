@@ -56,7 +56,14 @@ BUCKET = "storybook-images"
 # invalidated every verdict before it and the series had to restart.
 # 4 (lettering-suppression §4.1): adds the text question. v3 verdicts carry no `text_free` signal
 # at all — they default True — so the lettering rate is only measurable from v4 forward.
-JUDGE_PROMPT_VERSION = 4
+# 5 (visual-continuity §4.9): makes the walk explicit. Job 3cc05c4b's judge wrote that the
+# reference read young and cheerful where the description said dark and imposing, and STILL
+# returned `contradictions=[]` — the prose found the defect and the list did not carry it, so
+# ADR-034's derived gate accepted the draw. v4 asked for the list without ever saying the two had
+# to agree. v5 says it, and says to take the stated attributes one at a time so a skim cannot
+# clear an axis it never looked at. v4 verdicts are not comparable: an empty v4 list may mean
+# "clean" or "skimmed", and only from v5 do the two stop sharing a value.
+JUDGE_PROMPT_VERSION = 5
 
 JUDGE_PROMPT = """\
 This image is meant to be a character reference drawn from the description below.
@@ -66,9 +73,11 @@ Description: {subject}
 The description lists only what the story stated. The image will necessarily show details it \
 does not mention — hair, clothing, background — and those are NOT differences.
 
+Take the stated attributes one at a time and check each one against the image; do not skip any. \
 First describe any way the image CONTRADICTS a stated attribute. Then list the contradictions: \
 one entry for each stated attribute the image contradicts, naming the attribute and what the \
-image shows instead. If the image contradicts nothing that was stated, leave that list empty. \
+image shows instead. Everything you described as contradicted must appear in that list. If the \
+image contradicts nothing that was stated, leave that list empty. \
 Then say whether the image matches the description, list which of the described attributes \
 are actually present in the image, and finally say whether the picture is free of any text — any \
 letters, numbers or writing anywhere in it, including on signs, doors, books and clothing."""

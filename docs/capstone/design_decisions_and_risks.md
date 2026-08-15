@@ -42,7 +42,7 @@ retired with them; it was scored against the same dead instrument.
 ## R1 — The ablation bundles three components but is described as single-variable
 
 **Status: MOOT (2026-07-20).** The pipeline-ON-vs-OFF ablation this entire risk is about is **dropped as the
-study spine** (`ADRs.md` ADR-008, revised 2026-07-25) — generated-output quality is now
+study spine** (`docs/product/adr/ADR-008-evaluation-three-objective-evaluation-expert-validation.md`, revised 2026-07-25) — generated-output quality is now
 evaluated directly on pipeline-ON books (Objective 3 expert panel + Objective 5 ISO/IEC 25010), not by
 comparing arms. There is no OFF or REF-ONLY condition left to bundle or unbundle, and no third-arm decision
 to make. Kept below for the historical record of what the panel asked and why the owner accepted a 3-arm
@@ -152,12 +152,14 @@ alignment outstanding.
 **Two coupled problems, both blocking a Word/IEEE export.**
 
 1. **Unverified citations.** The literature sweep could not confirm several 2025–2026 arXiv IDs, and your own
-   docs already contain one with the same suspicious pattern: `ADRs.md` (ADR-004 reasoning) cites
+   docs already contain one with the same suspicious pattern: `docs/product/adr/ADR-004-consistency-via-vlm-as-judge-control-loop-human-ratings.md` (its reasoning) cites
    **`NearID (arXiv:2604.01973)`** and attributes a **79.6% human-agreement ceiling to DreamBench++**. A
    `2604.xxxxx` ID means April 2026; it cannot be confirmed here and may be a hallucinated citation baked in
    earlier. **A fabricated citation in an IEEE paper is far more damaging than a slightly overstated gap.**
 2. **The overstatement in authoritative docs.** The falsifiable gap claim (R4) also lives in **frozen**
-   files — `ADRs.md` (ADR-001 line ~21, and lines ~564–565), `RESEARCH_PROTOCOL.md` (§2, §246),
+   files — `docs/product/adr/ADR-001-image-generation-model-qwen-image-edit-open-weight.md` (**Consequences**,
+   the ⚠️ non-human identity bullet) and `docs/product/adr/ADR-018-fine-tune-the-consistency-judge-qwen2-5-vl-7b-qlora.md`
+   (**Context**, the "ADR-001 records that no published benchmark splits…" sentence), `RESEARCH_PROTOCOL.md` (§2, §246),
    `ROADMAP.md` (line ~36). These were **not** edited, per the project's frozen-ADR rule.
 
 **Action list (needs your go-ahead — none done yet).**

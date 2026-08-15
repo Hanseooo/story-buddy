@@ -42,8 +42,7 @@ def test_killed_work_horse_marks_the_row_failed():
     fake.table.assert_called_once_with("jobs")
     payload = _update(fake).call_args.args[0]
     assert payload["status"] == "failed"
-    # ADR-025 D5's machine bucket. Only `moderation_router` may blame the child (issue #27).
-    assert payload["failure_reason"] == "machine"
+    assert payload["failure_reason"] == "worker_stopped"
     assert "Work-horse terminated" in payload["error"]
     _update(fake).return_value.in_.return_value.eq.return_value.execute.assert_called_once()
 

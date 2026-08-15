@@ -326,28 +326,27 @@ One component, four kinds, one action each. Every kind gets the same design care
 (AGENTS.md, CC-9): confused-mascot illustration, Comic Red accent, one giant button. **No screen
 renders a moderation category, a flagged span, or `jobs.error`** (S3 invariant 4).
 
-The kind is selected by `failure_reason`, which is **never rendered as text**.
+The kind is selected by `failure_reason` (or the 8-value safe taxonomy in ADR-038), which is **never rendered as text**.
 
-#### 4.4.1 `revise` — the child's own text was rejected
+#### 4.4.1 `child_text` (revise) — the child's own text was rejected
 
-Selected **only** when `failure_reason` equals the single child's-text value S3 constraint 19
-reserves. *"Hmm — let's change a few words."* Button: **Change my words**.
+Selected when `failure_reason` equals `child_text`. *"Some words need changing before we can make this book."* Button: **Change my words**.
 
 Pressing it stashes `jobs.input_text` and navigates to `/write` (§4.5).
 
-#### 4.4.2 `retry` — the machine
+#### 4.4.2 Safe retry kinds (`character_safety`, `scene_safety`, `service_busy`, `worker_stopped`, `system_error`)
 
-**Every other value, every unknown value, and `null`.** *"Oops! The story machine got stuck. That
-wasn't your fault."* Button: **Try again**.
+Renders approved reassure-and-retry copy per reason (e.g. *"One of the pictures we made couldn’t be used."*, *"The story-making service is busy right now."*, *"The story maker stopped before it finished."*, or *"Something interrupted your story."*). Button: **Make the story again** or **Try again**. Unknown values, `machine`, and `null` fail-safe to `system_error`.
 
 Pressing it posts `input_text` verbatim to `POST /storybooks` and navigates to the new
 `/process/[jobId]`. The button disables on press — required by `DESIGN.md` §5 anyway, and it
 incidentally covers S3 §4.11's double-press case without a dedupe mechanism.
 
-Until `0006` ships, `failure_reason` is `null` on every row and **every failure renders this screen**.
-That is the correct interim behaviour, not a degraded one: the machine never blames the child.
+#### 4.4.3 Safe limit kinds (`service_limit`, `book_limit`)
 
-#### 4.4.3 `not-found` — no row
+Renders allowance/budget limit copy (*"The story-making allowance has run out."* or *"This book reached its picture-making limit."*) and subtext *"Ask a teacher to help."*. Omits the paid retry button and directs the child to show a teacher.
+
+#### 4.4.4 `not-found` — no row
 
 *"We can't find that story."* Button: **Write a new story** → `/write`, empty.
 

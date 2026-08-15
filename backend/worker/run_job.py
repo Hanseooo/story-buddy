@@ -9,6 +9,7 @@ from app.length import word_count
 from contracts.story_memory import CURRENT_SCHEMA_VERSION, Cost, Input, Style, StoryMemory
 from pipeline.compose import outcome
 from pipeline.graph import build_graph
+from worker.failure_classifier import classify_failure_reason
 
 
 _SCENE_NODES = {"generate_scene", "consistency_check", "regenerate", "output_mod"}
@@ -195,7 +196,7 @@ def run_storybook_job(job_id: str) -> None:
         _finish(supabase, job_id, result)
     except Exception as exc:
         msg = str(exc)
-        failure_reason = "child_text" if msg == "content_flagged" else "machine"
+        failure_reason = classify_failure_reason(exc)
         supabase.table("jobs").update(
             {"status": "failed", "error": msg, "failure_reason": failure_reason}
         ).eq("id", job_id).execute()
@@ -230,7 +231,7 @@ def resume_storybook_job(job_id: str, payload: dict) -> None:
         _finish(supabase, job_id, result)
     except Exception as exc:
         msg = str(exc)
-        failure_reason = "child_text" if msg == "content_flagged" else "machine"
+        failure_reason = classify_failure_reason(exc)
         supabase.table("jobs").update(
             {"status": "failed", "error": msg, "failure_reason": failure_reason}
         ).eq("id", job_id).execute()

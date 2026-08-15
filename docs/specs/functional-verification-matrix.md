@@ -10,7 +10,7 @@
 
 ## 1. Purpose
 
-A **script over tracing exports** that computes a per-functional-category success rate from LangSmith traces
+A **script over tracing exports** that computes a per-functional-category success rate from Langfuse traces
 of fixture-story runs, and hands the resulting table to the manuscript. It is not a UI and it does not add a
 new database table — `MASTER_SPEC.md:217` already commits the eval harness to "offline scripts + tracing
 exports," and CC-5 (`MASTER_SPEC.md:246`) already requires every trace to carry gen time, regen count, cost,
@@ -27,7 +27,7 @@ annotation surface, restated here because this is where that data actually lives
 This script writes nothing to `StoryMemory` and adds no table. It is a pure **consumer** of already-emitted
 traces.
 
-- **Reads:** LangSmith trace exports for fixture-story runs — per-node status, gen time, regen count, cost,
+- **Reads:** Langfuse trace exports for fixture-story runs — per-node status, gen time, regen count, cost,
   VLM verdict (CC-5) — plus the terminal `StoryMemory` snapshot per run (for schema validity checks against
   `story-memory-contract.md`).
 - **Writes:** a CSV/table of per-category success rates. No production data, no new schema.
@@ -42,7 +42,7 @@ Not a LangGraph node. It runs **after** a batch of fixture stories has been proc
 Phase-1/2 pipeline, reading their trace exports:
 
 ```
-fixture stories ──► pipeline (unmodified) ──► LangSmith traces (CC-5) ──► functional_verification.py ──► table
+fixture stories ──► pipeline (unmodified) ──► Langfuse traces (CC-5) ──► functional_verification.py ──► table
 ```
 
 It owns no conditional edge — it observes edges the pipeline already took (moderation pass/fail, consistency

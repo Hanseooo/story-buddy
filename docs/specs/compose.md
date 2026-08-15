@@ -75,7 +75,7 @@ from contracts.story_memory import Scene, StoryMemory
 log = logging.getLogger(__name__)
 
 
-def _outcome(scene: Scene) -> str:
+def outcome(scene: Scene) -> str:
     """How the page that shipped got there: passed / failing / unchecked.
 
     Matched by `image_ref`, not by position: ADR-010's best-of may ship attempt 1 or attempt 2,
@@ -84,9 +84,13 @@ def _outcome(scene: Scene) -> str:
     derives it from one — and counts as `unchecked`, because it carries no verdict either way.
     """
     winner = next((a for a in scene.attempts if a.image_ref == scene.final_image_ref), None)
-    if winner is None or winner.vlm_verdict is None:
+    if winner is None:
         return "unchecked"
-    return "passed" if winner.passed else "failing"
+    if winner.passed:
+        return "passed"
+    if winner.vlm_verdict is None and winner.scene_contradictions is None:
+        return "unchecked"
+    return "failing"
 
 
 def compose(state: StoryMemory) -> dict:
@@ -103,7 +107,7 @@ def compose(state: StoryMemory) -> dict:
     if uncaptioned:
         raise ValueError(f"compose: scenes without a caption: {uncaptioned}")
 
-    outcomes = [_outcome(s) for s in state.scenes]
+    outcomes = [outcome(s) for s in state.scenes]
     # CC-5: the only per-book terminal record the run produces.
     log.info(
         "compose: pages=%d passed=%d failing=%d unchecked=%d image_count=%d regen_count=%d",
@@ -120,8 +124,8 @@ def compose(state: StoryMemory) -> dict:
 | **Zero scenes** | `raise ValueError` → `run_job.py`'s handler writes job `failed`. Reachable today: empty/whitespace input (`segment.py:143`) or `repair` clamping every range away, with no `input_gate` length check until Phase 2's `length-guard`. A book with no pages is not a book, and ADR-025 forbids shipping a partial one. |
 | **A scene with `final_image_ref is None`** | Same raise. Unreachable by construction — `route_next_scene` only routes here when none remain — so this is an invariant assertion, not a handled case. It is cheap, and the alternative is a book with a blank page and no signal. |
 | **A page that shipped a *failing* best-of image** | **Ships.** ADR-010's best-of fallback is the designed outcome, and ADR-028 sets the same policy for references: never a placeholder, never a failed job. Counted as `failing` in the summary. |
-| **A page that went unchecked** (`vlm_verdict is None`) | **Ships.** A judge or Storage outage means *the check failed, not the artifact* (ADR-025, `consistency_check.py:157-161`). Counted as `unchecked`. |
-| **A scene whose characters had no canonical reference** | **Ships.** It reaches here with `vlm_verdict is None` and lands in `unchecked` — `judge_attempt` returns `[]` for empty subjects. Nothing about a missing reference is this node's to fail (`character-bible` §5). |
+| **A page that went unchecked** (`vlm_verdict is None` and `scene_contradictions is None`) | **Ships.** A judge or Storage outage means *the check failed, not the artifact* (ADR-025, `consistency_check.py:157-161`). Counted as `unchecked`. |
+| **A scene whose characters had no canonical reference** | **Ships.** If its scene-constraint check passed, it is classified as `passed`; if scene constraints failed, it is `failing`; if the judge failed, it is `unchecked`. Nothing about a missing reference is this node's to fail (`character-bible` §5). |
 | **Re-entry after a lost checkpoint** | Re-runs the assertions and re-logs. Pure, zero cost, no re-pay (CC-10). |
 
 ## 5. Cross-cutting checklist (MASTER_SPEC §5)

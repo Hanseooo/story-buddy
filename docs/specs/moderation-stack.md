@@ -222,7 +222,7 @@ fourth time.
 - [x] **CC-4 Security** — all image checks fetch via short-TTL signed URL; no raw paths leave
   the worker. No moderation result is stored as a URL.
 - [x] **CC-5 Observability** — log classifier name, verdict, and latency per call. A MISS is a
-  named tracing event (not a silent counter) so it's findable in LangSmith.
+  named tracing event (not a silent counter) so it's findable in Langfuse.
 - [ ] **CC-6 Accessibility** — N/A (pipeline nodes). The kid-appropriate failure message is the
   `kid-flow-ui` spec's concern.
 - [ ] **CC-7 Reproducibility** — moderation gates are deterministic given fixed model weights.

@@ -83,7 +83,7 @@ change — ADR-013 already decided it.
 | `tests/test_graph_stub.py:46` | Patches `pipeline.segment.caption_for`; repoint to `segment_scenes`. |
 | `tests/test_analyze_node.py:20–57` | Four `SceneCaption` / `caption_for` tests; **delete** — they test a helper that no longer exists. |
 | `docs/MASTER_SPEC.md:302` | Uses `pipeline.analyze.caption_for` as the worked example of the helper seam. Swap the example to `pipeline.segment.segment_scenes`. |
-| `docs/MASTER_SPEC.md:76`, `docs/product/ADRs.md:1353` | Use `SceneCaption` as D-F's worked example of a transient wrapper. Swap to `SceneSegmentation`, which is the same shape and is not going away. |
+| `docs/MASTER_SPEC.md:76`, `docs/product/adr/ADR-023-story-memory-is-the-langgraph-state-single-int.md` (**Amendment (2026-07-22)**, the "D-F — where structured-output sub-schemas live" bullet) | Use `SceneCaption` as D-F's worked example of a transient wrapper. Swap to `SceneSegmentation`, which is the same shape and is not going away. |
 | `docs/specs/story-analyzer.md:23` | Says `caption_for` "lives in this file per D-F but belongs to `segment`". Update. |
 | `docs/specs/plans/2026-07-29-story-memory-contract.md` | Historical, already-executed plan. **Do not edit** — git keeps the record of what was built. |
 
@@ -93,30 +93,42 @@ change — ADR-013 already decided it.
 ### The LLM boundary schema (D-F: transient wrapper, so it lives beside its node)
 
 ```python
+class ExtractedObjectEvent(BaseModel):
+    object_name: str
+    action: Literal["acquire", "release"]
+    holder_name: str
+
 class ExtractedScene(BaseModel):
     start: int                      # inclusive index into the numbered units
     end: int                        # inclusive
     characters_present: list[str]   # Character.name values — the node maps them to char_ids
+    location_name: str | None = None  # Location.name value — node maps to a loc_id, null → inherit
+    objects_present: list[str] = Field(default_factory=list)
+    object_events: list[ExtractedObjectEvent] = Field(default_factory=list)
+    visual_direction: str           # Required non-blank direction string
 
 class SceneSegmentation(BaseModel):
     scenes: list[ExtractedScene]
 ```
 
-No id field, per D-G. `characters_present` crosses the boundary as **names**, which is the join key
-`story-analyzer` §8 named when it handed this field over; the node maps names to `char_id`s.
+No id field, per D-G. `characters_present` represents intended-visible cast only. All five planning fields (`characters_present`, `location_name`, `objects_present`, `object_events`, `visual_direction`) are preserved through `repair` and `merge_thin`.
 
 ### Happy path
 
 1. `text = state.input.redacted_text or state.input.raw_text`
 2. `units = split_sentences(text)` — pure. If `units` is empty, return `{"scenes": []}` **without
    calling the provider**; there is nothing to pay for.
-3. `segment_scenes(units, state.characters, state.timeline)` — one `providers.structured_text` call,
-   strict `json_schema` → `SceneSegmentation` (ADR-002). The prompt gets the numbered units, the
-   roster names, and `timeline[]` as the plot-point context, and asks for at most 15 scenes that
-   track the story's distinct major plot points.
-4. `repair(...)` — clamp, sort, de-overlap, close gaps, floor, merge to ≤15 (below)
-5. Mint `s{i}`, join units into `text_excerpt`, copy it into `caption`, map names → `char_id`s
-6. Partial-return `{"scenes": [...]}` (ADR-024 — never mutate `state`)
+3. `segment_scenes(units, state.characters, state.timeline, state.locations, state.objects)` — one `providers.structured_text` call,
+   strict `json_schema` → `SceneSegmentation` (ADR-002). The prompt gets the numbered units, roster names,
+   location names, object roster, and `timeline[]` as context.
+4. `repair(...)` — clamp, sort, de-overlap, close gaps, raise if empty, merge to ≤15. `_merge_extracted` combines payload fields deterministically.
+5. Single-pass visible cast validation and object lifecycle resolution:
+   - `characters_present` is strict visible cast authority; unknown character raises `ValueError`.
+   - `visual_direction` naming a roster character outside `characters_present` raises `ValueError`.
+   - Object lifecycle pass tracks active objects and holders, formatting holder relationships into `visual_direction`.
+   - Unknown object or holder raises `ValueError`; unknown location logs warning and carries forward.
+6. Mint `s{i}`, join units into `text_excerpt`, copy it into `caption`, map names → `char_id`s.
+7. Partial-return `{"scenes": [...]}` (ADR-024 — never mutate `state`).
 
 ### Sentence splitting
 
@@ -124,60 +136,31 @@ No id field, per D-G. `characters_present` crosses the boundary as **names**, wh
 Stdlib only — no new dependency, so no AGENTS.md §2 decision gate. This is adequate for ≤800-word
 kid prose (ADR-012), and a wrong boundary costs a slightly-off page break, not a broken book.
 
-**Documented ceiling:** abbreviations, ellipsis-heavy prose, and Filipino/Taglish punctuation habits
-are unmeasured. This is the same measurement gap `story-analyzer` §8 already carries, not a new one.
-A run-on story with no terminal punctuation yields one unit and therefore one scene; a word-chunk
-fallback for that case was considered and **not** taken, because it adds a second code path and a
-threshold constant to defend for an input that `length-guard` (Phase 2) is better placed to catch.
-
 ### `repair(scenes, n)` — deterministic, total, pure
 
-1. **Clamp** each range into `[0, n-1]`; drop any where `start > end` afterwards.
+1. **Clamp** each range into `[0, n-1]`; drop any where `start > end` afterwards (via `model_copy`).
 2. **Sort** by `start`.
 3. **De-overlap** — walking in order, force `start = max(start, prev_end + 1)`; drop the range if
    that empties it. Overlaps resolve in favour of the earlier scene.
 4. **Close gaps** — an uncovered run attaches to the preceding scene (extend its `end`); a leading
    run extends the first scene's `start` to `0`; a trailing run extends the last scene's `end` to
-   `n-1`. After this step every unit is in exactly one scene.
-5. **Floor** — if nothing survived, emit one range `(0, n-1)`. The whole-story fallback is the floor
-   of the repair, not a separate code path.
+   `n-1`.
+5. **No empty floor** — if nothing survived clamp + de-overlap, raise
+   `ValueError("segment: no usable scene range survived clamp and de-overlap")`. The former
+   whole-story floor cannot be rebuilt: it minted a scene with no `visual_direction`, which
+   `generate_scene` would now have to draw blind.
 6. **Merge to ≤15** — while there are more than 15, merge the adjacent pair with the smallest
-   combined unit count (ties → earliest), unioning their `characters_present`.
+   combined unit count using `_merge_extracted(a, b)` (union characters/objects, concatenate events and visual directions).
 
-**Step order is load-bearing.** Merging runs last so the cap applies to an already-dense tiling and
-can never reintroduce a gap.
+### Visible Cast Authority & Object Lifecycle Pass
 
-**Why repair rather than fail.** ADR-025 reserves hard failure for *provider* failures; a
-well-formed response the node dislikes is not one. ADR-010's "always a shippable page" points the
-same way: a child should not lose their whole book to an off-by-one index.
-
-### The 15-scene cap
-
-The prompt asks for ≤15 and the **node is the control** — the same belt-and-braces pattern as
-`analyze`'s 3-character cap, because a prompt is not enforceable. The cap is enforced by *merging*,
-not truncating: ADR-012 confines content-losing truncation to the input gate, and a second one here
-would silently delete the tail of the child's story from a book that ADR-012 promised would contain
-their actual words.
-
-There is **no floor.** Methodology §2 (module 3) and PRD §11.6 target ≥3 scenes *where the arc supports it* and
-state that never-invent overrides the floor. A three-sentence story gets a short book.
+- **Visible Cast Authority:** `characters_present` is the single authoritative visible cast. Regex recovery is removed. If `characters_present` contains an unknown character name, or if `visual_direction` names a roster character not in `characters_present`, `segment` raises `ValueError`.
+- **Object Lifecycle Pass:** `holder_by_obj` is seeded with `owner_char_id`, but `active_objects` starts empty. An object activates upon explicit appearance in `objects_present` or an `acquire` event. In each beat, active objects whose current holder is visible in `characters_present` are included in `objects_present` and formatted into `visual_direction` (`"<object> is held by <holder>."`). Transfers apply `release` then `acquire` in narrative order. An unknown object name or holder raises `ValueError`.
 
 ### Edge cases
 
 | Case | Behavior |
 |---|---|
-| **Empty / whitespace-only text** | Zero units → `{"scenes": []}`, **no LLM call**. A minimum-length gate is `length-guard`'s job (Phase 2), not this node's. |
-| **One sentence** | One scene, `s0`. No floor is enforced — see above. |
-| **Model returns zero scenes** | Repair step 5 → one whole-story scene. Never an empty book from a non-empty story. |
-| **Model returns more than 15** | Merged down to 15. No child sentence is dropped. |
-| **Out-of-order / overlapping / gapped ranges** | Repaired (steps 1–4). Logged, per CC-5, so an odd page break is traceable. |
-| **Out-of-bounds indices** | Clamped. A model that hallucinates index 900 on a 12-sentence story gets index 11. |
-| **Unpunctuated run-on story** | One unit → one scene. Documented ceiling. |
-| **`characters_present` name not in the roster** | Dropped and logged. This node may not extend the roster — `analyze` owns it, and inventing a `char_id` here would produce a character with no canonical reference. |
-| **Duplicate names in the roster** (`analyze`'s documented dedup ceiling) | **First seen wins** — `name_to_id` is built with `setdefault`, so one mention maps to ONE `char_id` and the roster's prominence order picks which. Changed by `scene-setting-and-subject-binding` §4.3 path 2; this row said "every matching `char_id`" until 2026-08-13. §4.6's recovery reads the same map for the same reason. |
-| **Empty roster** (`analyze` found zero characters) | Every scene gets `characters_present: []`. Valid — `generate_scene` runs unreferenced, per ADR-010's "always a shippable page". |
-| **Model omits a character the excerpt names** | Recovered by word-boundary name match and appended (§4.6). Prod job `483056e0`'s `s1`/`s2` drew `refs=0` and shipped unchecked because of this. |
-| **Model omits a character the excerpt names only by pronoun** (`"He roared."`) | **Not recoverable by the backstop** — there is no name in the text to match. `SEGMENTATION_PROMPT` asks the model for these directly (§4.6); if it still omits, the page draws unreferenced and unchecked. Cast carry-forward was considered and rejected: it would also draw a character into a genuine scenery page. |
 | **Empty `timeline[]`** | Valid. The prompt loses its plot-point context and the model segments from the text alone. |
 | **Input was truncated** (ADR-012) | Segments the kept portion only. Correct — the book illustrates what was kept. |
 | **Provider hard failure** | Raises. Job → `failed` with an ADR-025 `failure_reason`; never a partial `scenes[]`. No node-level retry — the `openai` SDK's bounded retry is the entire policy (ADR-025 Decision 1). |
@@ -193,9 +176,11 @@ null). Carry-forward runs last, over the final scene list in order: a null inher
 scene's `location_id`; a null `s0` takes `locations[0].loc_id` if the story named any, else `None`.
 A story that names no location leaves every `location_id` as `None` — identical to before.
 
-`location_name` propagates through **all eight** `ExtractedScene(...)` constructions (seven in
-`repair`, one in `merge_thin`); on a merge, `a.location_name or b.location_name`. The whole-story
-floor deliberately constructs with no location, and carry-forward supplies `locations[0]`.
+Every repair and merge path now rebuilds scenes with `model_copy(update=...)` rather than a fresh
+`ExtractedScene(...)`, so `location_name` — and `visual-continuity`'s `objects_present`,
+`object_events` and `visual_direction` — propagate by construction instead of by being restated at
+eight call sites. `_merge_extracted` is the one place that combines them: `a.location_name or
+b.location_name`, union the object lists, concatenate the events and the directions.
 
 ### Invariant: no duplicate `char_id` (`scene-setting-and-subject-binding.md` §4.3)
 
@@ -206,58 +191,34 @@ order — so removing a duplicate cannot reorder the survivors that `build_promp
 `generate_scene`'s `ref_paths` are both indexed against.
 
 
-### Name recovery — the omitted-character backstop (§4.6, 2026-08-13)
+### Name recovery — removed by `visual-continuity` §4.3 (2026-08-14)
 
-The model is the only thing deciding `characters_present`, and when it returns `[]` for a beat
-whose text plainly names a roster character, the consequences **compound**:
+**This backstop no longer exists.** From 2026-08-13 to 2026-08-14, every roster name the excerpt
+mentioned and that the model had omitted from `characters_present` was appended to `char_ids` by a
+word-boundary regex. `visual-continuity` §4.3 deleted it: *"a name appearing in an excerpt does not
+prove that the character should be visible. The structured `characters_present` decision is the
+authority."* The motivating job drew characters the story only *mentioned*, which is precisely what
+over-recovery buys.
 
-1. `generate_scene` finds no reference and falls through to `text_to_image`
-   (`generate_scene.py:55-57`) — an unanchored draw of a character that has a canonical reference
-   sitting unused in Storage.
-2. `consistency_check` then finds no subject and files the page **unchecked** — which finalizes
-   (`consistency_check.py:211`).
+The regex itself survives as `_names_character`, doing the opposite job: a `visual_direction` that
+names a roster character **outside** the visible cast raises `ValueError` before any fal image is
+purchased. Recovery appended; this rejects.
 
-So the page most likely to be off-model is the one page nothing measured. Prod job `483056e0`
-(2026-08-13) lost the dragon on `s1` and `s2` — `refs=0 prompt_len=552` against 930–1050 on every
-other page — and both shipped unjudged. The child's complaint was that the dragon looked different
-on those pages.
+**What the removal gives back to the model, and the residual risk.** The compounding failure the
+backstop was built for is real and is not fixed by deleting it: an omitted character means
+`generate_scene` finds no reference and falls through to `text_to_image`, and `consistency_check`
+then finds no subject on the identity leg. What changed is that the page is no longer *unchecked* —
+`visual-continuity` §4.6's scene-constraint judge runs on every attempt including reference-free
+ones, so an omitted or unrequested character is now caught by a judge that can read the picture
+rather than by a regex that can only read the text.
 
-**The rule.** After the roster-name mapping, every roster name that the excerpt *mentions* and that
-is not already in `char_ids` is **appended**:
+`SEGMENTATION_PROMPT` keeps its pronoun rule, now the only text-side layer:
 
-- Matched on the name with a leading article stripped (`the|a|an`), so a roster `"the dragon"`
-  recovers from `"a huge red dragon"`.
-- Word boundaries, case-insensitive — so `"the star"` does **not** recover from `"stars"`, which
-  names no character. `prompt_optimizer.REFERENCE_CLAUSE` carves out the same case for the same
-  reason.
-- **Appended, never inserted.** Invariant 4 requires that what the model named keeps its relative
-  order, because `build_prompt`'s "Image N is X" is asserted against `ref_paths` on three separate
-  nodes. Recovered ids follow in roster order, which is prominence order.
-- **Through `name_to_id`, not `state.characters`.** Two roster entries can share a name (§4.3
-  path 2); iterating the roster directly would re-append the loser that first-seen-wins had just
-  excluded, sending two references for one named character. This was caught by
-  `test_segment_maps_two_roster_characters_sharing_a_name_to_one_char_id` during the build.
+> `- List a character in characters_present only when they are intended to be visible in this scene frame. List them even when the sentences refer to them only as he, she, it or they.`
 
-**The failure mode is over-recovery, and that is the intended asymmetry.** A character named in
-passing (`"he dreamed of a dragon"`) gets a reference it did not need, costing at worst one
-`character_absent` retry. Under-recovery costs an unreferenced *and* unchecked page. A word-boundary
-match is not NER and is not trying to be — upgrade path, if the retry rate bites, is to ask the
-judge rather than a regex.
-
-**Pronoun-only beats need the other layer.** A regex needs a name in the text, so `"He roared."`
-recovers nothing — the beat has no name to match, and the residual is exactly the compounding
-failure above. `SEGMENTATION_PROMPT` therefore carries a rule of its own:
-
-> `- List a character even when the sentences refer to them only as he, she, it or they.`
-
-Free — no extra call, no new field — and the two layers fail in opposite directions: the prompt rule
-is unreliable (the model already ignored `characters_present` once, which is why the backstop
-exists), and the backstop is blind to pronouns. Neither covers the case alone, which is why
-`test_the_prompt_asks_for_pronoun_only_beats_which_the_regex_cannot_reach` asserts both halves in
-one test. **Deliberately not built:** a cast carry-forward, mirroring §4.1's location seed — an
-empty cast after recovery is either a pronoun beat *or* a genuine scenery page, and inheriting the
-previous page's cast draws a character into the scenery one. Revisit if the logs show pronoun beats
-still landing at `refs=0`.
+**Deliberately not built:** a cast carry-forward mirroring §4.1's location seed — an empty cast is
+either a pronoun beat *or* a genuine scenery page, and inheriting the previous page's cast draws a
+character into the scenery one. Revisit if the logs show beats still landing at `refs=0`.
 
 ## 5. Cross-cutting checklist (MASTER_SPEC §5)
 
@@ -315,14 +276,16 @@ definition.
 - **Verbatim:** each `text_excerpt` is the join of exactly its own units, and concatenating all
   excerpts in order reproduces the source units in order
 - **ADR-013:** `caption == text_excerpt` for every scene
-- **`characters_present`:** roster names map to `char_id`s; a name absent from the roster is dropped
+- **`characters_present`:** roster names map to `char_id`s; a name absent from the roster **raises**
+  (`visual-continuity` §4.8 — fail before any image draw)
 - **Empty roster:** every scene gets `[]` and the node does not raise
-- **§4.6 name recovery:** a roster name the model omitted is recovered from the excerpt; recovered
-  ids are **appended after** the model's own (invariant 4); a name the model already gave is not
-  duplicated; `"the star"` is **not** recovered from `"stars"` (word boundary); matching is
-  case-insensitive
-- **§4.6 pronoun layer:** the prompt carries the pronoun rule **and** `"He roared."` recovers
-  nothing — asserted together, because either half alone would leave the gap invisible
+- **Visible cast authority:** a merely mentioned off-screen character is absent from
+  `characters_present`; no regex re-adds it
+- **Direction cast check:** a `visual_direction` naming a roster character outside the visible cast
+  raises; `"the star"` does **not** match `"stars"` (word boundary); matching is case-insensitive
+- **Pronoun layer:** the prompt carries the pronoun rule, which is now the only text-side defence
+  against an omitted character — a direction saying only `"He flees."` names no one and correctly
+  does not trip the cast check
 - **CC-2 source:** prefers `redacted_text`; falls back to `raw_text` when it is `None`
 - **Empty text:** returns `{"scenes": []}` and `segment_scenes` is **never called**
 - **Partial-return (ADR-024):** the result keys are exactly `{"scenes"}`; `state` is unmutated
@@ -407,7 +370,9 @@ Per AGENTS.md *Definition of Done*. This module is done when **all** of the foll
      this spec.
    - `docs/MASTER_SPEC.md` §2 — the `segment` row's Writes column reads
      `scenes[].text_excerpt, caption`; extend it with `characters_present`.
-   - `docs/MASTER_SPEC.md` §6 (`:302`) and `:76`, and `docs/product/ADRs.md:1353` — the
+   - `docs/MASTER_SPEC.md` §6 (`:302`) and `:76`, and
+     `docs/product/adr/ADR-023-story-memory-is-the-langgraph-state-single-int.md`
+     (**Amendment (2026-07-22)**, the D-F bullet) — the
      `caption_for` / `SceneCaption` worked examples, per §4's table. Swapping an *example* is not
      an ADR change; D-F's rule is unaltered.
    - `docs/specs/story-analyzer.md` §2 — the line stating `caption_for` lives in `analyze.py`.

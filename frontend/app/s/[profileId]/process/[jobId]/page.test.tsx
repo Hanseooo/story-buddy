@@ -16,8 +16,8 @@ vi.mock("@/lib/useJob", () => ({
 }));
 
 vi.mock("@/components/FailureScreen", () => ({
-  default: ({ kind, inputText }: { kind: string; inputText?: string }) => (
-    <div data-testid="failure-screen" data-kind={kind} data-input={inputText} />
+  default: ({ kind, reason, jobId, inputText }: { kind?: string; reason?: string; jobId?: string; inputText?: string }) => (
+    <div data-testid="failure-screen" data-kind={kind} data-reason={reason} data-jobid={jobId} data-input={inputText} />
   ),
   resetFailChain: vi.fn(),
 }));
@@ -333,9 +333,9 @@ describe("ProcessingPage — stall timer (spec §4.1)", () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "in-flight", row: RUNNING_ROW }));
     await renderPage(makeParams("j1"));
 
-    expect(screen.queryByText(/still going/i)).toBeNull();
+    expect(screen.queryByText(/taking longer than usual/i)).toBeNull();
     await act(async () => { vi.advanceTimersByTime(90_001); });
-    expect(screen.getByText(/still going/i)).toBeDefined();
+    expect(screen.getByText(/taking longer than usual/i)).toBeDefined();
 
     vi.useRealTimers();
   });
@@ -347,7 +347,7 @@ describe("ProcessingPage — stall timer (spec §4.1)", () => {
     const view = await renderPage(paramsPromise);
 
     await act(async () => { vi.advanceTimersByTime(90_001); });
-    expect(screen.getByText(/still going/i)).toBeDefined();
+    expect(screen.getByText(/taking longer than usual/i)).toBeDefined();
 
     // Stage changes — stall timer resets
     mockUseJob.mockReturnValue(jobState({
@@ -358,7 +358,7 @@ describe("ProcessingPage — stall timer (spec §4.1)", () => {
       view.rerender(<ProcessingPage params={paramsPromise} />);
     });
 
-    expect(screen.queryByText(/still going/i)).toBeNull();
+    expect(screen.queryByText(/taking longer than usual/i)).toBeNull();
     vi.useRealTimers();
   });
 });

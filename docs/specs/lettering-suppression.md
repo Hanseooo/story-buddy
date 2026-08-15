@@ -203,7 +203,7 @@ clause is what makes it a **correction** rather than the pure re-roll ADR-010 re
 | Judge/Storage raises | unchecked; page ships; `anatomy_intact` behaves identically today |
 | Reference judge raises mid-loop | accept-unchecked and return, exactly as today — ADR-025's deliberate asymmetry, untouched |
 | All 3 reference draws letter | `best_draw` picks the least-bad and persists a FAILING verdict, as it already does for contradictions. A lettered reference can still ship |
-| Scene fails only on `text_free` | one retry with `TEXT_CLAUSE`; if attempt 2 also letters, `finalize` on `len(attempts) >= 2` and best-of picks between two lettered images |
+| Scene fails only on `text_free` | corrected retries with `TEXT_CLAUSE`; if the last attempt also letters, `finalize` on `len(attempts) >= MAX_SCENE_ATTEMPTS` (3 with ADR-037; was 2) and best-of picks among the lettered images |
 | Old checkpoint resumed | both fields default `True`; a pre-change attempt reads as clean and is never re-judged |
 | Text that is part of the child's story ("a sign that said HOME") | judged as a defect and redrawn. Accepted: the excerpt is read aloud in the app, and pseudo-lettering has never once come back spelling what was asked |
 
@@ -294,7 +294,8 @@ this has branches and a loop).
 11. `_rank` sorts a lettered attempt below a clean one and above one that fails anatomy.
 12. `_rank` prefers a text-free attempt over a duplicate-subject one when the higher keys tie.
 13. Unchecked ranks below every checked attempt with the widened 6-tuple.
-14. `JUDGE_PROMPT_VERSION == 3`, and the question order matches `SceneVerdict`'s declaration order.
+14. `JUDGE_PROMPT_VERSION` is current (**4** since pose-viewpoint-composition §5.2; this spec took
+    it to 3), and the question order matches `SceneVerdict`'s declaration order.
 
 **`prompt_optimizer`**
 15. `correct_prompt(..., text_free=False)` appends `TEXT_CLAUSE`; `text_free=True` does not.

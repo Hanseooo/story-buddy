@@ -40,7 +40,9 @@ one of them.
   reference view is +3 draws per character; a location reference is a new artifact entirely), so
   fixing the page count first would fix a number whose formula three later sessions still change.
   Cutting 15 → 10-12 pages **funds** the extra retries; they are one currency, so they are one
-  session.
+  session. *(Superseded 2026-08-15 by S5/ADR-037: the coefficients are now `* 4` and `* 7`, the
+  preludes are unchanged, and `MAX_SCENES` landed at 10. The reasoning above is why S5 went last
+  and is kept as written.)*
 
 **The trade being made, stated once so no session re-litigates it:** pages are being spent to buy
 retries and reference coverage. A shorter book with pages that are right is the bet. S5 is where the
@@ -54,9 +56,10 @@ top-level folder for one file.
 
 **Workflow (confirmed with the user, 2026-08-14):** one session = one spec = one or more plans in
 `docs/specs/plans/`. Plans are disposable and deleted once built + tests green + spec updated.
-**Build timing is split:** S1 is specced, planned, **built**, and a baseline run taken, before S2
-is specced. S2–S5 are all specced first, then built — so a later session amending an earlier one's
-open questions is a text edit, not a refactor.
+**Build timing is split:** S1's replacement spec was built and its targeted fixed-image rescore was
+taken before S2. S2 was then waived because that work had already absorbed its chosen mechanism.
+S3–S5 are all specced first, then built — so a later session amending an earlier one's open
+questions is a text edit, not a refactor.
 
 **Engine (writes the spec, exactly one per session):** `superpowers:brainstorming` — installed.
 **Hardener (optional, after the engine, writes nothing):** `grilling` — installed. Run it on the
@@ -83,16 +86,73 @@ no session discovers them at implementation time:
 
 Decided in earlier sessions. Later sessions treat these as given, not open.
 
-*(none yet — S1 has not run)*
+| # | Constraint | From |
+|---|---|---|
+| BC-1 | **No population-level consistency rate exists and none may be claimed.** Verification is per-observed-defect (`visual-continuity` §7), never corpus-level. A later session states pass/fail against a named, reproduced defect — never against a percentage. | S1 (paid baseline waived) |
+| BC-2 | **Single rater by design.** Do not propose multi-rater workflows or inter-rater agreement inside this docket. | S1 |
+| BC-3 | **The judge is the instrument, and its error bar is now named rather than unknown.** See *S1 outcome* below. Every number a later session reports inherits it. | S1 |
+| BC-4 | **`settings.vlm_judge_model` is frozen for this docket.** Prompted `gemma-3-27b-it` is a pre-registered baseline — `judge-finetune.md` §7.3 calls it *the product gate*, and `PREREGISTRATION_OBJ4.md` was frozen 2026-08-14. Swapping it after seeing S1's results is a moved goalpost by that document's own definition. Judge calibration belongs to Objective 4, not to any session here. | S1 |
+| BC-5 | **The verification harness is `backend/spikes/`, invoked by a human, never CI.** `backend/evals/` was considered and deliberately not created. Closes two of S1's open questions. | S1 |
+| BC-6 | **A reworded judged prompt requires a version bump, and counts never cross versions.** | S1, ADR-034 |
+| BC-7 | **S2 covers rostered characters only, including reference-capped `c2`.** Entities that `analyze` did not roster remain out of scope. | S2 |
+| BC-8 | **`Character.description` is the sole persisted character canon.** `analyze` fills missing attributes once using the existing complete-profile floor; no source-provenance metadata is stored. | S2 |
+| BC-9 | **An unreferenced character is checked against its frozen text canon on every page where it is visible.** Its first generated image never becomes a reference. | S2 |
+| BC-10 | **Character canon remains style-independent.** ADR-035's transient projection is the only mechanism that removes style-conflicting rendering terms. | S2 |
+| BC-11 | **S2 preserves the existing retry and failure semantics.** A concrete scene contradiction buys the existing single corrected redraw; judge failure ships unchecked; the second failed attempt uses existing best-of. S2 adds no node, provider call, retry, or budget term. | S2 |
+| BC-12 | **S2 receives deterministic verification only.** No real-model run was taken, so it makes no measured visual-quality claim. | S2 |
+| BC-13 | **`Location.name + Location.description` is the sole location canon.** No location reference image, new node, provider call, contract field, location cap, or budget term is added. | S4 |
+| BC-14 | **`analyze` freezes location detail once.** It preserves stated facts and fills missing permanent visual detail; new extraction requires a nonblank description, while persisted `Location.description` remains optional for old checkpoints. | S4 |
+| BC-15 | **Location canon excludes transient conditions.** Existing carry-forward and prompt order remain; the later excerpt controls story-stated weather, lighting, time, and temporary changes. | S4 |
+| BC-16 | **Permanent setting mismatches gate through the existing scene-constraint path.** The same judge call writes `scene_contradictions`, buying only the existing single redraw and using existing best-of behavior. | S4 |
+| BC-17 | **`SCENE_CONSTRAINT_PROMPT_VERSION` moves from 2 to 3 and results never pool across versions.** The judge model and identity prompt remain unchanged. | S4, BC-6 |
+| BC-18 | **S4 adds no spend ceiling or retry allowance.** Setting failures may consume the existing redraw more often; no paid run was taken and no visual-quality claim is made. | S4 |
+| BC-19 | **A scene has at most three consistency-checked attempts** — the initial draw plus two corrected retries (`MAX_SCENE_ATTEMPTS = 3`, ADR-037 amending ADR-010). N is fixed; there is no stop-on-non-improvement rule, and passing or unchecked results remain the only early exits. | S5 |
+| BC-20 | **The retry raised is ADR-010's alone.** `MAX_DRAWS`, `MAX_MOD_REDRAWS`, and `MAX_RETRY_TAPS` keep their existing values. Output moderation retains exactly one softened redraw. | S5 |
+| BC-21 | **`MAX_STORY_WORDS = 300` and `MAX_SCENES = 10` are the price of BC-19.** Length and retries are one currency. The frontend makes the child shorten visible over-cap text rather than silently discarding it; the backend clamp remains authoritative. | S5 |
+| BC-22 | **`IMAGE_BUDGET = MAX_SCENES * 4 + 15 = 55` funds every structurally permitted paid draw.** The `* 4` includes output moderation's redraw, which the pre-S5 `* 2` never counted. `RECURSION_LIMIT = MAX_SCENES * 7 + 17 = 87`. The two preludes stay unequal on purpose — different units. | S5 |
+| BC-23 | **Every paid fal path goes through one breaker.** `output_mod`'s softened redraw is counted in `cost.image_count` and breaker-bound like the others; judge and classifier calls stay absent from `Cost` by decision, not omission. | S5 |
+| BC-24 | **S5 amends BC-11, BC-16, and BC-18's "existing single redraw" to two.** Those rows are left as written — they were true for S2/S4 — and no S5 change adds a node, edge, provider, model, contract field, or paid run. No visual-quality claim is made for the third attempt. | S5, BC-1 |
 
 ---
 
 ## Sessions
 
 Statuses: DONE (spec linked **and** constraints confirmed) · PARTIAL (stopped early,
-resumable) · READY · BLOCKED (needs Sn)
+resumable) · READY · BLOCKED (needs Sn) · WAIVED (owner explicitly removed the session's
+deliverable; never treat it as measured)
 
-### S1 · Verification contract — READY
+### S1 · Verification contract — WAIVED (paid baseline waived by the owner; replacement spec shipped and verified)
+
+**Replacement spec:** `docs/specs/visual-continuity.md`
+
+**Outcome (2026-08-14).** WAIVED, never DONE — no baseline was taken, so nothing here may be
+treated as measured in the population sense. What *was* taken is a targeted §7.1 rescore of the
+three `sample-dataset/` scene pages against their two checked-in references, using
+`backend/spikes/visual_continuity_7_1.py` and one rater's labels. ~20 judge calls, no fal spend.
+
+What it established about the **incumbent prompted `gemma-3-27b-it` judge**:
+
+- **Correct on gross identity substitution.** The Shadow Wizard renders as three different people
+  across the three pages; `same_character=False` on every completed identity call, gating via
+  `wrong_colour` / `wrong_body_feature` on all three. Zero false gates from the correctly-drawn
+  subject. This is `visual-continuity` §1's failure 3, detected.
+- **Prose and contradiction list agreed on every run.** The ADR-034 pattern — prose naming a defect
+  the list then omits — did not reproduce at the scene judge.
+- **The new object channel works.** The missing wooden sword was caught on both village pages; the
+  duplicated crystal was caught under prompt v1.
+- **It hallucinates attribute-level contradictions on a correct subject.** Ana drew contradictions
+  on every page, including braided hair, a white sash and a beaded necklace, none of which are on
+  the page. `SCENE_CONSTRAINT_PROMPT` was bumped v1 → v2 to exclude unstated detail; that moved the
+  nitpick class out of the gating list but did **not** reduce the total, because the dominant cause
+  is misperception, not prompting.
+- **It is blind to movement direction.** The story ends "the wizard ran away"; both village pages
+  show him moving toward Ana. Missed 4/4 across both prompt versions, despite
+  `SCENE_CONSTRAINT_PROMPT` asking for movement direction explicitly.
+- **Reliability is poor.** 3 of 6 identity calls failed in one run — one 120s timeout, two null
+  responses — each degrading to `identity_available=False`.
+
+Read this as **baseline characterization for Objective 4**, not as a defect list to fix here. The
+gap it describes is the gap `judge-finetune.md` exists to close (BC-4).
 
 **Cluster:** what "the pipeline got more consistent" means as a number; what corpus it is measured
 over; what the current value of that number is; how a later change is attributed to itself rather
@@ -107,7 +167,7 @@ already taken**, such that a later session can state a pass/fail against it in a
 of things that would be worth measuring. The distinguishing test: if the spec ships and someone
 cannot say "S3 succeeded" or "S3 failed" from it, the session is not done.
 
-**Open questions:**
+**Former open questions (resolved or waived by the S1 outcome and BC-1…BC-6; retained as planning history):**
 - No eval harness exists. `backend/spikes/phase_05.py` is a one-off probe script and
   `spikes/out/` is its scratch. Does the harness live in `backend/evals/`, extend `spikes/`, or
   ride Langfuse (`settings.langfuse_*` are wired but nothing appears to emit traces)?
@@ -133,7 +193,15 @@ cannot say "S3 succeeded" or "S3 failed" from it, the session is not done.
 
 ---
 
-### S2 · Attributes for characters with no reference — BLOCKED (needs S1)
+### S2 · Attributes for characters with no reference — WAIVED (absorbed by `visual-continuity`)
+
+**Canonical spec:** `docs/specs/visual-continuity.md`
+
+**Outcome (2026-08-14).** The owner waived a separate S2 deliverable because the approved and built
+`visual-continuity` spec already implements the chosen mechanism: `analyze` freezes a complete text
+canon for every rostered character, `build_prompt` repeats that canon for visible characters without
+a reference, and the scene-constraint judge checks it on every attempt. S2 added no behavior, code,
+test, provider call, or standalone spec. BC-7…BC-12 record the decisions later sessions inherit.
 
 **Cluster:** what a character who has no canonical reference image inherits from page to page, who
 invents the attributes the story never stated, and where those attributes persist so page 7 renders
@@ -148,7 +216,7 @@ loop and it is not this session's cluster.
 and exactly one place it persists, *including* the ones nobody stated. A finished answer says where
 "blue shirt" comes from when the story never mentioned a shirt, and why page 7 renders the same one.
 
-**Open questions:**
+**Former open questions (resolved by the S2 outcome and BC-7…BC-12; retained as planning history):**
 - **Which population?** Two exist and they are different problems: (i) `c2` — in the roster, real
   `CharacterDescription`, but capped out of `char_bible`'s 2-reference slot by ADR-004, so it draws
   through `text_to_image`; (ii) entities the story mentions that `analyze` never rostered at all
@@ -179,7 +247,7 @@ and exactly one place it persists, *including* the ones nobody stated. A finishe
 
 ---
 
-### S3 · Pose, viewpoint & scene prompt composition — BLOCKED (needs S2)
+### S3 · Pose, viewpoint & scene prompt composition — DONE (`pose-viewpoint-composition.md`, 2026-08-15)
 
 **Cluster:** what the scene prompt says about how a character is posed and from what angle, and
 whether one canonical reference can serve every scene the story asks for.
@@ -226,7 +294,7 @@ of better phrasings with no rule behind it is the shape that has failed here thr
 
 ---
 
-### S4 · Setting consistency — BLOCKED (needs S2)
+### S4 · Setting consistency — DONE (`setting-consistency.md`, 2026-08-15)
 
 **Cluster:** what makes the same place look like the same place across pages, given that a location
 today reaches the canvas only as `build_prompt`'s `Setting:` line and is never checked.
@@ -264,7 +332,7 @@ opposite ways for stated reasons. Say which one this follows and why.
 
 ---
 
-### S5 · Spend & retry economics — BLOCKED (needs S2, S3, S4)
+### S5 · Spend & retry economics — DONE (`spend-and-retry-economics.md`, 2026-08-15)
 
 **Cluster:** how many pages a book has, how many retries each failure axis buys, and the two
 constants that both of those resize.
@@ -307,6 +375,15 @@ survives someone asking "why 12 and not 11", and survives a later session adding
 - CC-3: judge calls are still uncounted by `Cost`, and every retry adds up to 4 more per scene.
   Does raising the retry cap force that closed?
 
+> **Answered 2026-08-15 by `spend-and-retry-economics.md` and ADR-037.** `MAX_SCENES` is a constant
+> 10; the retry budget raised is ADR-010's alone (1 → 2 corrected redraws, `MAX_SCENE_ATTEMPTS = 3`)
+> while `MAX_DRAWS`, `MAX_MOD_REDRAWS` and `MAX_RETRY_TAPS` are untouched; N is fixed, not
+> improvement-gated; `correct_prompt`'s accumulation is confirmed intended (§6.10); the coefficients
+> became `* 4` and `* 7` with both preludes unchanged — and the old `* 2` was already wrong, having
+> never counted output moderation's redraw. CC-3's uncounted judge calls stay open by decision, not
+> omission (spec §5): they do not weaken the paid-image breaker, and a contract counter with no
+> consumer is YAGNI. The question text above is left as written.
+
 ---
 
 ## Found & parked
@@ -314,7 +391,12 @@ survives someone asking "why 12 and not 11", and survives a later session adding
 Turned up mid-session, belongs to no session here. Recorded so it is not lost, and not this
 docket's work.
 
-*(empty)*
+- **The scene judge cannot see movement direction** (found 2026-08-14, S1 §7.1). Missed 4/4 on a
+  wizard moving toward the protagonist where the direction said he flees away, under both
+  `SCENE_CONSTRAINT_PROMPT` v1 and v2, with the question asked explicitly both times. Parked rather
+  than assigned: S3 owns pose and viewpoint composition, but this is the *judge's* perception, not
+  the prompt's composition, and `judge-finetune.md`'s corpus labels `different_character` only — so
+  Objective 4 will not close it either. It needs its own decision about whose problem it is.
 
 ---
 
@@ -324,6 +406,49 @@ docket's work.
   user's request after the cut was approved; setting and economics shifted to S4 and S5. The
   approved 4-session cut had no home for it — it concerns characters that *do* have a reference,
   so it is not S2, and it is not place or money.
+- 2026-08-14 (from the S1 session): the owner explicitly waived S1's paid corpus baseline. The
+  immediate goal is targeted product improvement from observed failures, not a population-level
+  consistency claim. The replacement `visual-continuity` design combines the observed portions of
+  S2 (frozen text canon for every rostered character), S3 (visible cast, action and viewpoint), and
+  a newly observed recurring-object continuity gap. It adds no node, model swap, reference view, or
+  retry. S1 remains PARTIAL until the written replacement spec is reviewed and its constraints are
+  confirmed; it must then become WAIVED, never DONE, because no baseline was taken.
+- 2026-08-14 (S1 close-out): the replacement spec was reviewed on two axes (standards, spec
+  conformance), its findings fixed, and `visual-continuity` §7.1 was run. **S1 → WAIVED**, **S2 →
+  READY**, and `## Binding constraints` populated with BC-1…BC-6. Two prompt versions moved during
+  close-out and are recorded so no later comparison treats them as one instrument:
+  `char_bible.JUDGE_PROMPT_VERSION` 4 → 5 (§4.9's outstanding requirement) and
+  `consistency_check.SCENE_CONSTRAINT_PROMPT_VERSION` 1 → 2 (unstated-detail exclusion, added in
+  response to the §7.1 result). **`consistency_check.JUDGE_PROMPT_VERSION` remains 3** — that is
+  `judge-finetune.md` §7.3's pre-registered baseline prompt and it was deliberately not touched.
+  §7.2's paid exact-story rerun was **not** performed; the story text was supplied and used to
+  build the §7.1 labels instead, so the rerun remains available and unspent.
+- 2026-08-14 (S2 close-out): the owner chose the rostered-only, text-canon mechanism already built
+  by `visual-continuity`, declined runtime provenance metadata and a real-model verification run,
+  and waived a duplicate S2 spec. **S2 → WAIVED**, **S3 → READY**, and **S4 → READY**; BC-7…BC-12
+  carry the decisions forward. No implementation changed.
+- 2026-08-15 (S3 close-out): `pose-viewpoint-composition.md` was specced and built — viewpoint- and
+  occlusion-tolerant identity prompt, a composition-preservation clause appended last on every
+  `correct_prompt` path, and composition-first `_rank`. **S3 → DONE.** One prompt version moved and
+  supersedes the S1 entry above: **`consistency_check.JUDGE_PROMPT_VERSION` 3 → 4.** That entry
+  recorded the constant as untouched *as of 2026-08-14*; it is no longer current. Per BC-6/ADR-034
+  no v3 and v4 count may be pooled, and `PREREGISTRATION_OBJ4.md`'s "version at eval" row is still
+  to be filled at evaluation time — the judge MODEL is untouched, so BC-4 holds. Tier B was
+  declined: no paid run, and no claim that pose/viewpoint quality improved.
+- 2026-08-15 (S4 close-out): the owner chose the existing text-only location canon, strengthened
+  `analyze` so every new location receives one nonblank permanent description, kept the existing
+  carry-forward and prompt order, and made permanent setting contradictions gate through the
+  existing scene-constraint retry path. **S4 → DONE** and **S5 → READY**; BC-13…BC-18 carry the
+  decisions forward. No implementation or paid run occurred, and no visual-quality claim was made.
+- 2026-08-15 (S5 close-out): `spend-and-retry-economics.md` was specced, ratified as **ADR-037**,
+  and built. The owner traded book length for one more corrected scene attempt: `MAX_STORY_WORDS`
+  800 → 300, `MAX_SCENES` 15 → 10, `MAX_SCENE_ATTEMPTS` 3, and both budget coefficients resized
+  (`IMAGE_BUDGET` = `MAX_SCENES * 4 + 15` = 55, `RECURSION_LIMIT` = `MAX_SCENES * 7 + 17` = 87)
+  with the preludes untouched. An accounting hole closed with it: `output_mod`'s softened redraw
+  was paid but uncounted and unbreakered. **S5 → DONE**; BC-19…BC-24 carry the decisions forward,
+  and BC-24 records that S2's and S4's "existing single redraw" is now two. No node, edge, contract
+  field, or paid run; no claim that a third attempt improves consistency. **The docket is now DONE
+  throughout** — see the roster note below.
 
 ---
 
@@ -333,3 +458,9 @@ docket's work.
 single queued row — `AGENTS.md` calls it "a queued architectural decision" as of 2026-08-13. It
 becomes S4 here. Update both rosters when the docket reaches `DONE` throughout, **not before**, or
 the index points at files that do not exist.
+
+**Closed 2026-08-15 — the docket is DONE throughout.** Neither roster actually carried a setting
+row: `MASTER_SPEC.md` §7's index and `DECISION_BACKLOG.md` were both grepped and neither has one, so
+there was nothing to close. The queued decision lived only in `AGENTS.md`'s 2026-08-13 built-log
+entry, which now points forward to `setting-consistency.md`. `MASTER_SPEC.md` §7's Phase-2 row gains
+this docket's three specs.

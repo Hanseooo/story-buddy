@@ -11,7 +11,7 @@ the Storage round-trip and the CC-10 exists-skip exist once, in `generate_scene`
 """
 import logging
 
-from app.config import IMAGE_BUDGET
+from app.config import check_image_budget
 from contracts.story_memory import Attempt, StoryMemory
 from pipeline.generate_scene import generate_and_store
 from pipeline.prompt_optimizer import correct_prompt, referenced_characters
@@ -30,17 +30,18 @@ def regenerate(state: StoryMemory) -> dict:
             "have routed here (ADR-010, invariant 1)"
         )
 
+    if not scene.visual_direction:
+        raise ValueError(f"regenerate: scene {scene.scene_id} has no visual_direction")
+
     last = scene.attempts[-1]
-    if last.prompt is None and scene.prompt is None:
+    base_prompt = last.prompt or scene.prompt
+    if base_prompt is None:
         # Unreachable today: generate_scene always sets both. Drawing from correction clauses
         # with no base prompt is a guaranteed-garbage PAID image, so ADR-025 hard-fails instead.
         raise RuntimeError(f"regenerate: scene {scene.scene_id} has no prompt to correct (ADR-025)")
 
     # ADR-025 D4: breaker before any spend. A retry is not exempt.
-    if state.cost.image_count >= IMAGE_BUDGET:
-        raise RuntimeError(
-            f"image budget exceeded: {state.cost.image_count} >= {IMAGE_BUDGET} (ADR-025)"
-        )
+    check_image_budget(state.cost.image_count)
 
     # The retry is conditioned on the same references as the original, or it would be measuring a
     # different thing. `correct_prompt` only appends (invariant 3), so the corrected prompt still
@@ -64,13 +65,14 @@ def regenerate(state: StoryMemory) -> dict:
     anatomy_clause = not (v.anatomy_intact if v else True)
     text_clause = not (v.text_free if v else True)
     prompt = correct_prompt(
-        last.prompt or scene.prompt,
+        base_prompt,
         last.failure_reasons,
         state.characters,
         state.style.prompt_fragment,
         same_character=v.same_character if v else True,
         anatomy_intact=v.anatomy_intact if v else True,
         text_free=v.text_free if v else True,
+        scene_contradictions=last.scene_contradictions,
     )
 
     attempt_n = len(scene.attempts) + 1
@@ -86,10 +88,10 @@ def regenerate(state: StoryMemory) -> dict:
     # unfillable) which this flag deliberately does not try to predict; it logs that route itself,
     # on the line immediately above this one.
     log.info(
-        "regenerate: scene_id=%s attempt_n=%d failure_reasons=%s same_character=%s "
+        "regenerate: scene_id=%s attempt_n=%d failure_reasons=%s scene_contradictions=%s same_character=%s "
         "anatomy_intact=%s text_free=%s identity_clause=%s anatomy_clause=%s text_clause=%s "
         "paid=%s prompt_len=%d",
-        scene.scene_id, attempt_n, [r.value for r in last.failure_reasons],
+        scene.scene_id, attempt_n, [r.value for r in last.failure_reasons], last.scene_contradictions,
         v and v.same_character, v and v.anatomy_intact, v and v.text_free,
         identity_clause, anatomy_clause, text_clause, paid, len(prompt),
     )

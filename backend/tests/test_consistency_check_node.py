@@ -22,6 +22,9 @@ from contracts.story_memory import (
 )
 from pipeline.consistency_check import (
     GATING_REASONS,
+    SCENE_CONSTRAINT_PROMPT,
+    SCENE_CONSTRAINT_PROMPT_VERSION,
+    SceneConstraintVerdict,
     SceneVerdict,
     _rank,
     consistency_check,
@@ -71,44 +74,37 @@ def _supabase_returning_path_bytes() -> MagicMock:
 def test_judge_attempt_makes_one_call_per_subject_with_its_own_reference_first():
     """Spec §6 + invariant 5: one call per character, `[reference, scene]` in that order."""
     fake = _supabase_returning_path_bytes()
+    clean = SceneConstraintVerdict(differences_observed="none", contradictions=[])
 
     with patch("pipeline.consistency_check.get_supabase_client", return_value=fake), \
-         patch("pipeline.consistency_check.judge", return_value=_verdict()) as judge_mock:
-        verdicts = judge_attempt(
+         patch("pipeline.consistency_check.judge", side_effect=[_verdict(), _verdict(), clean]) as judge_mock:
+        verdicts, composition = judge_attempt(
             "job-1/s0.png",
             [("the dog", "job-1/ref-c0.png"), ("the cat", "job-1/ref-c1.png")],
+            "prompt",
         )
 
     assert len(verdicts) == 2
-    assert judge_mock.call_count == 2
+    assert composition == clean
+    assert judge_mock.call_count == 3
     assert judge_mock.call_args_list[0].args[1] == [_uri("job-1/ref-c0.png"), _uri("job-1/s0.png")]
     assert judge_mock.call_args_list[1].args[1] == [_uri("job-1/ref-c1.png"), _uri("job-1/s0.png")]
+    assert judge_mock.call_args_list[2].args[1] == [_uri("job-1/s0.png")]
 
 
 def test_judge_attempt_shows_the_judge_base64_never_a_url():
     """CC-4 posture, inherited from char_bible: base64 in, durable paths persisted."""
     fake = _supabase_returning_path_bytes()
+    clean = SceneConstraintVerdict(differences_observed="none", contradictions=[])
 
     with patch("pipeline.consistency_check.get_supabase_client", return_value=fake), \
-         patch("pipeline.consistency_check.judge", return_value=_verdict()) as judge_mock:
-        judge_attempt("job-1/s0.png", [("the dog", "job-1/ref-c0.png")])
+         patch("pipeline.consistency_check.judge", side_effect=[_verdict(), clean]) as judge_mock:
+        judge_attempt("job-1/s0.png", [("the dog", "job-1/ref-c0.png")], "prompt")
 
-    for url in judge_mock.call_args.args[1]:
-        assert url.startswith("data:image/png;base64,")
-        assert not url.startswith("http")
-
-
-def test_judge_attempt_returns_empty_for_no_subjects_without_touching_storage_or_judge():
-    """Spec §6: the `text_to_image` branch of a scene — nothing to judge identity against."""
-    fake = _supabase_returning_path_bytes()
-
-    with patch("pipeline.consistency_check.get_supabase_client", return_value=fake), \
-         patch("pipeline.consistency_check.judge") as judge_mock:
-        verdicts = judge_attempt("job-1/s0.png", [])
-
-    assert verdicts == []
-    judge_mock.assert_not_called()
-    fake.storage.from_.return_value.download.assert_not_called()
+    for call in judge_mock.call_args_list:
+        for url in call.args[1]:
+            assert url.startswith("data:image/png;base64,")
+            assert not url.startswith("http")
 
 
 def test_judge_attempt_swallows_a_raising_judge():
@@ -117,9 +113,10 @@ def test_judge_attempt_swallows_a_raising_judge():
 
     with patch("pipeline.consistency_check.get_supabase_client", return_value=fake), \
          patch("pipeline.consistency_check.judge", side_effect=RuntimeError("openrouter 500")):
-        verdicts = judge_attempt("job-1/s0.png", [("the dog", "job-1/ref-c0.png")])
+        verdicts, composition = judge_attempt("job-1/s0.png", [("the dog", "job-1/ref-c0.png")], "prompt")
 
-    assert verdicts == []
+    assert verdicts is None
+    assert composition is None
 
 
 def test_judge_attempt_swallows_a_raising_storage_download():
@@ -129,9 +126,10 @@ def test_judge_attempt_swallows_a_raising_storage_download():
 
     with patch("pipeline.consistency_check.get_supabase_client", return_value=fake), \
          patch("pipeline.consistency_check.judge") as judge_mock:
-        verdicts = judge_attempt("job-1/s0.png", [("the dog", "job-1/ref-c0.png")])
+        verdicts, composition = judge_attempt("job-1/s0.png", [("the dog", "job-1/ref-c0.png")], "prompt")
 
-    assert verdicts == []
+    assert verdicts is None
+    assert composition is None
     judge_mock.assert_not_called()
 
 
@@ -151,6 +149,94 @@ def test_scene_verdict_declares_differences_first_and_failure_reasons_last():
         "text_free",
         "failure_reasons",
     ]
+
+
+def test_scene_constraint_verdict_is_reason_then_structured_contradictions():
+    assert list(SceneConstraintVerdict.model_fields) == [
+        "differences_observed",
+        "contradictions",
+    ]
+    assert SCENE_CONSTRAINT_PROMPT_VERSION == 3
+
+
+def test_scene_constraint_prompt_gates_permanent_setting_features_only():
+    """setting-consistency §6 test 6. The version is asserted above; this covers the clause the
+    bump is FOR — permanent features gate, excerpt-supported temporary conditions do not."""
+    assert "Setting:" in SCENE_CONSTRAINT_PROMPT
+    assert "permanent description" in SCENE_CONSTRAINT_PROMPT
+    assert "concrete violations of stated permanent features" in SCENE_CONSTRAINT_PROMPT
+    assert "do not report weather, lighting, time" in SCENE_CONSTRAINT_PROMPT.lower()
+
+
+def test_scene_constraint_prompt_excludes_unstated_detail():
+    """visual-continuity §7.1. `concrete_failure` reads `bool(scene_contradictions)`, so a
+    contradiction over a detail the constraints never stated buys a paid redraw of a good page.
+    The rescore measured exactly that; this is the same clause `char_bible.JUDGE_PROMPT` carries.
+
+    The version bump rides in the sibling test above because it is the same edit: an unversioned
+    reword makes v1's contradiction counts silently incomparable to v2's."""
+    from pipeline.consistency_check import SCENE_CONSTRAINT_PROMPT
+
+    prompt = SCENE_CONSTRAINT_PROMPT.format(constraints="Ana: a girl; barefoot.")
+    assert "is NOT a contradiction" in prompt
+    # Stated before the questions are asked, never after — the exclusion has to be in force while
+    # the model is still reading the page, not offered as an afterthought.
+    assert prompt.index("is NOT a contradiction") < prompt.index("First describe")
+
+
+def test_judge_attempt_runs_composition_once_with_no_identity_subjects():
+    clean = SceneConstraintVerdict(differences_observed="none", contradictions=[])
+    with patch("pipeline.consistency_check.get_supabase_client") as db, patch(
+        "pipeline.consistency_check.judge", return_value=clean
+    ) as judge_provider:
+        db.return_value.storage.from_.return_value.download.return_value = b"scene"
+        identity, composition = judge_attempt(
+            "story/s0-1.png",
+            [],
+            "Exactly one character: Maya. Visual direction: Maya runs right.",
+        )
+
+    assert identity == []
+    assert composition == clean
+    assert judge_provider.call_count == 1
+    assert judge_provider.call_args.args[2] is SceneConstraintVerdict
+
+
+def test_identity_failure_does_not_erase_a_clean_composition_result():
+    clean = SceneConstraintVerdict(differences_observed="none", contradictions=[])
+    with patch("pipeline.consistency_check.get_supabase_client") as db, patch(
+        "pipeline.consistency_check.judge",
+        side_effect=[RuntimeError("identity unavailable"), clean],
+    ):
+        db.return_value.storage.from_.return_value.download.return_value = b"png"
+        identity, composition = judge_attempt(
+            "story/s0-1.png",
+            [("Ana", "story/ref-c0.png")],
+            "Exactly one character: Ana.",
+        )
+
+    assert identity is None
+    assert composition == clean
+
+
+def test_composition_failure_does_not_erase_identity_results():
+    identity_verdict = SceneVerdict(
+        differences_observed="none",
+        same_character=True,
+    )
+    with patch("pipeline.consistency_check.get_supabase_client") as db, patch(
+        "pipeline.consistency_check.judge",
+        side_effect=[identity_verdict, RuntimeError("composition unavailable")],
+    ):
+        db.return_value.storage.from_.return_value.download.return_value = b"png"
+        identity, composition = judge_attempt(
+            "story/s0-1.png",
+            [("Ana", "story/ref-c0.png")],
+            "Exactly one character: Ana.",
+        )
+
+    assert identity == [identity_verdict]
+    assert composition is None
 
 
 # --- §4.4 D3(b): uniqueness, measured not gated ---
@@ -187,6 +273,73 @@ def test_scene_verdict_subjects_unique_defaults_to_true():
     assert verdict.subjects_unique is True
 
 
+def test_the_judge_prompt_states_viewpoint_tolerance_before_the_verdict_questions():
+    """§7 test 2. v4's tolerance paragraph has to land BEFORE the structured questions, or the
+    judge reads the questions first and the tolerance never conditions the verdict. ADR-004's
+    field order is asserted separately (see the schema-order test below) and must survive intact:
+    this paragraph is prepended to the framing, not interleaved with the questions.
+    """
+    from pipeline.consistency_check import JUDGE_PROMPT
+
+    prompt = JUDGE_PROMPT.format(name="the dog")
+
+    # The five things §5.2 says v4 must state.
+    for phrase in (
+        "Rear, profile, foreshortened, and partially occluded views",
+        "pose, crop, expression, and viewing angle are not identity differences",
+        "visible evidence only",
+        "naturally hidden by the requested viewpoint is not a missing body part",
+        "still fails normally",
+    ):
+        assert phrase in prompt, phrase
+
+    # Naturally-hidden features must not be routed to these three reasons.
+    for reason in ("wrong_body_feature", "different_face", "character_absent"):
+        assert reason in prompt
+
+    # Before the questions: the whole tolerance block precedes the first "First describe".
+    assert prompt.index("Rear, profile") < prompt.index("First describe")
+    assert prompt.index("still fails normally") < prompt.index("First describe")
+
+
+def test_rank_prioritizes_composition():
+    from pipeline.consistency_check import _rank
+    from contracts.story_memory import Attempt, VlmVerdict
+
+    def make_attempt(same_character=True, contradictions=None, checked=True):
+        vlm = VlmVerdict(
+            same_character=same_character, anatomy_intact=True, text_free=True,
+            subjects_unique=True, style_match=True, differences_observed=""
+        ) if checked else None
+        return Attempt(
+            image_ref="dummy.png", passed=False, vlm_verdict=vlm,
+            scene_contradictions=contradictions, failure_reasons=[]
+        )
+
+    a_comp_clean = make_attempt(same_character=False, contradictions=[])
+    a_comp_fail = make_attempt(same_character=True, contradictions=["Pose"])
+    a_two_contra = make_attempt(same_character=True, contradictions=["1", "2"])
+    a_comp_fail_id_fail = make_attempt(same_character=False, contradictions=["Pose"])
+    a_unchecked = make_attempt(checked=False, contradictions=None)
+    a_comp_unavail = make_attempt(same_character=True, contradictions=None)
+
+    # Composition clean > composition failed
+    assert _rank(a_comp_clean) > _rank(a_comp_fail)
+
+    # Fewer scene contradictions wins
+    assert _rank(a_comp_fail) > _rank(a_two_contra)
+
+    # Identity breaks tie for equal contradictions
+    assert _rank(a_comp_fail) > _rank(a_comp_fail_id_fail)
+
+    # Fully unchecked is lowest
+    assert _rank(a_comp_fail_id_fail) > _rank(a_unchecked)
+
+    # Clean > Unavailable > Bad
+    assert _rank(a_comp_clean) > _rank(a_comp_unavail)
+    assert _rank(a_comp_unavail) > _rank(a_comp_fail)
+
+
 def test_the_scene_judge_asks_about_text_in_schema_order_and_the_version_is_bumped():
     """§6 test 14. `providers._assert_field_order` rejects a provider that answers out of schema
     order, so the prompt asks in `SceneVerdict`'s declaration order: uniqueness, then text, then
@@ -195,7 +348,7 @@ def test_the_scene_judge_asks_about_text_in_schema_order_and_the_version_is_bump
     """
     from pipeline.consistency_check import JUDGE_PROMPT, JUDGE_PROMPT_VERSION
 
-    assert JUDGE_PROMPT_VERSION == 3
+    assert JUDGE_PROMPT_VERSION == 4
 
     prompt = JUDGE_PROMPT.format(name="the dog")
     assert "free of any text" in prompt
@@ -344,9 +497,102 @@ def _scene_with_attempt(scene_id: str = "s0", image_ref: str = "job-1/s0-1.png",
     )
 
 
-def _run(state: StoryMemory, verdicts: list[SceneVerdict]) -> dict:
-    with patch("pipeline.consistency_check.judge_attempt", return_value=verdicts):
+def _state_with_attempt(
+    *,
+    characters: list[Character] | None = None,
+    characters_present: list[str] | None = None,
+) -> StoryMemory:
+    if characters is None:
+        characters = [_char("c0", "Ana", "job-1/ref-c0.png")]
+    if characters_present is None:
+        characters_present = ["c0"]
+    return _state(
+        [_scene_with_attempt(characters_present=characters_present)],
+        characters,
+    )
+
+
+def _run(state: StoryMemory, verdicts: list[SceneVerdict] | None, composition: SceneConstraintVerdict | None = None) -> dict:
+    if composition is None and verdicts is not None:
+        composition = SceneConstraintVerdict(differences_observed="none", contradictions=[])
+    with patch("pipeline.consistency_check.judge_attempt", return_value=(verdicts, composition)):
         return consistency_check(state)
+
+
+def test_no_reference_scene_passes_on_clean_composition_alone():
+    state = _state_with_attempt(characters=[], characters_present=[])
+    clean = SceneConstraintVerdict(differences_observed="none", contradictions=[])
+    with patch("pipeline.consistency_check.judge_attempt", return_value=([], clean)):
+        result = consistency_check(state)
+
+    attempt = result["scenes"][0].attempts[-1]
+    assert attempt.vlm_verdict is None
+    assert attempt.scene_contradictions == []
+    assert attempt.passed is True
+    assert result["scenes"][0].final_image_ref == attempt.image_ref
+
+
+def test_scene_contradictions_persist_verbatim_and_buy_one_retry():
+    state = _state_with_attempt()
+    contradictions = ["Shadow Wizard faces Ana instead of fleeing away from her."]
+    composition = SceneConstraintVerdict(
+        differences_observed="The wizard faces the wrong direction.",
+        contradictions=contradictions,
+    )
+    with patch(
+        "pipeline.consistency_check.judge_attempt",
+        return_value=([_verdict(True)], composition),
+    ):
+        result = consistency_check(state)
+
+    attempt = result["scenes"][0].attempts[-1]
+    assert attempt.scene_contradictions == contradictions
+    assert attempt.passed is False
+    assert result["scenes"][0].final_image_ref is None
+
+
+def test_composition_outage_does_not_buy_a_blind_retry():
+    state = _state_with_attempt(characters=[], characters_present=[])
+    with patch("pipeline.consistency_check.judge_attempt", return_value=([], None)):
+        result = consistency_check(state)
+
+    attempt = result["scenes"][0].attempts[-1]
+    assert attempt.scene_contradictions is None
+    assert attempt.passed is False
+    assert result["scenes"][0].final_image_ref == attempt.image_ref
+
+
+def test_identity_failure_still_buys_retry_when_composition_is_unavailable():
+    state = _state_with_attempt()
+    failed = SceneVerdict(
+        differences_observed="Ana's face differs.",
+        same_character=False,
+        failure_reasons=[FailureReason.different_face],
+    )
+    with patch("pipeline.consistency_check.judge_attempt", return_value=([failed], None)):
+        result = consistency_check(state)
+
+    assert result["scenes"][0].final_image_ref is None
+
+
+def test_rank_uses_the_nine_declared_terms():
+    clean = Attempt(
+        image_ref="clean.png",
+        vlm_verdict=VlmVerdict(differences_observed="none", same_character=True),
+        scene_contradictions=[],
+    )
+    one_problem = clean.model_copy(
+        update={"image_ref": "one.png", "scene_contradictions": ["wrong viewpoint"]}
+    )
+    two_problems = clean.model_copy(
+        update={
+            "image_ref": "two.png",
+            "scene_contradictions": ["wrong viewpoint", "missing sword"],
+        }
+    )
+
+    assert len(_rank(clean)) == 9
+    assert _rank(clean) > _rank(one_problem) > _rank(two_problems)
 
 
 def test_node_folds_two_verdicts_worst_wins():
@@ -420,7 +666,7 @@ def test_node_finalizes_unchecked_when_the_helper_returns_nothing():
     """Spec §6 + invariant 4: vlm_verdict None means UNCHECKED, never checked-and-clean.
     The page still ships (ADR-010) — final_image_ref is still set."""
     state = _state([_scene_with_attempt(characters_present=[])])
-    result = _run(state, [])
+    result = _run(state, None, None)
 
     scene = result["scenes"][0]
     attempt = scene.attempts[-1]
@@ -500,10 +746,11 @@ def test_node_skips_a_char_id_absent_from_the_roster():
         [_char("c0", "the dog", "job-1/ref-c0.png")],
     )
 
-    with patch("pipeline.consistency_check.judge_attempt", return_value=[_verdict(True)]) as helper:
+    clean = SceneConstraintVerdict(differences_observed="none", contradictions=[])
+    with patch("pipeline.consistency_check.judge_attempt", return_value=([_verdict(True)], clean)) as helper:
         consistency_check(state)
 
-    helper.assert_called_once_with("job-1/s0-1.png", [("the dog", "job-1/ref-c0.png")])
+    helper.assert_called_once_with("job-1/s0-1.png", [("the dog", "job-1/ref-c0.png")], "p")
 
 
 def test_node_skips_a_character_carrying_no_reference():
@@ -513,10 +760,11 @@ def test_node_skips_a_character_carrying_no_reference():
         [_char("c0", "the dog", "job-1/ref-c0.png"), _char("c1", "the cat", ref=None)],
     )
 
-    with patch("pipeline.consistency_check.judge_attempt", return_value=[_verdict(True)]) as helper:
+    clean = SceneConstraintVerdict(differences_observed="none", contradictions=[])
+    with patch("pipeline.consistency_check.judge_attempt", return_value=([_verdict(True)], clean)) as helper:
         consistency_check(state)
 
-    helper.assert_called_once_with("job-1/s0-1.png", [("the dog", "job-1/ref-c0.png")])
+    helper.assert_called_once_with("job-1/s0-1.png", [("the dog", "job-1/ref-c0.png")], "p")
 
 
 def test_node_judges_against_a_reference_whose_ref_verdict_failed():
@@ -528,10 +776,11 @@ def test_node_judges_against_a_reference_whose_ref_verdict_failed():
         [_char("c0", "the dog", "job-1/ref-c0.png", verdict=off_spec)],
     )
 
-    with patch("pipeline.consistency_check.judge_attempt", return_value=[_verdict(True)]) as helper:
+    clean = SceneConstraintVerdict(differences_observed="none", contradictions=[])
+    with patch("pipeline.consistency_check.judge_attempt", return_value=([_verdict(True)], clean)) as helper:
         consistency_check(state)
 
-    helper.assert_called_once_with("job-1/s0-1.png", [("the dog", "job-1/ref-c0.png")])
+    helper.assert_called_once_with("job-1/s0-1.png", [("the dog", "job-1/ref-c0.png")], "p")
 
 
 def test_node_returns_only_scenes_and_never_touches_cost_or_state():
@@ -557,11 +806,14 @@ def _attempt(
     unique: bool = True,
     text: bool = True,
     reasons: list[FailureReason] | None = None,
+    contradictions: list[str] | None = None,
 ) -> Attempt:
     """An already-judged attempt. same=None means UNCHECKED (vlm_verdict is None)."""
     if same is None:
         return Attempt(image_ref=image_ref, prompt="p", passed=False)
     reasons = reasons or []
+    if contradictions is None:
+        contradictions = []
     return Attempt(
         image_ref=image_ref,
         prompt="p",
@@ -574,21 +826,23 @@ def _attempt(
             text_free=text,
         ),
         failure_reasons=reasons,
-        passed=same and anatomy and text and not (GATING_REASONS & set(reasons)),
+        scene_contradictions=contradictions,
+        passed=same and anatomy and text and not (GATING_REASONS & set(reasons)) and contradictions == [],
     )
 
 
 def test_rank_prefers_the_unique_attempt_when_the_higher_keys_tie():
     """§6 test 20 / §4.4: the free improvement. When a retry fires for some OTHER reason, best-of
     now prefers the non-duplicated attempt at no extra draw."""
-    scene = _two_attempt_scene(
+    scene = _three_attempt_scene(
         _attempt("job-1/s0-1.png", same=False, anatomy=True, unique=False, style=True),
         _attempt("job-1/s0-2.png", same=False, anatomy=True, unique=True, style=True),
+        Attempt(image_ref="job-1/s0-3.png", prompt="p", passed=False),
     )
 
     result = _run(
         _state([scene], [_char("c0", "the dog")]),
-        [_verdict(False, anatomy=True, unique=True, style=True)],
+        [_verdict(False, anatomy=True, unique=False, style=True)],
     )
 
     assert result["scenes"][0].final_image_ref == "job-1/s0-2.png"
@@ -597,9 +851,10 @@ def test_rank_prefers_the_unique_attempt_when_the_higher_keys_tie():
 def test_rank_puts_uniqueness_above_style_match():
     """The declared order is (same_character, anatomy_intact, subjects_unique, style_match), so a
     unique-but-off-style attempt beats a duplicated-but-on-style one."""
-    scene = _two_attempt_scene(
+    scene = _three_attempt_scene(
         _attempt("job-1/s0-1.png", same=False, anatomy=True, unique=True, style=False),
         _attempt("job-1/s0-2.png", same=False, anatomy=True, unique=False, style=True),
+        Attempt(image_ref="job-1/s0-3.png", prompt="p", passed=False),
     )
 
     result = _run(
@@ -612,9 +867,10 @@ def test_rank_puts_uniqueness_above_style_match():
 
 def test_rank_puts_uniqueness_below_anatomy():
     """Anatomy GATES and uniqueness does not, so anatomy must outrank it."""
-    scene = _two_attempt_scene(
+    scene = _three_attempt_scene(
         _attempt("job-1/s0-1.png", same=False, anatomy=True, unique=False),
         _attempt("job-1/s0-2.png", same=False, anatomy=False, unique=True),
+        Attempt(image_ref="job-1/s0-3.png", prompt="p", passed=False),
     )
 
     result = _run(
@@ -648,11 +904,11 @@ def test_rank_prefers_a_text_free_attempt_over_a_unique_subject_one():
     assert _rank(text_free_but_duplicated) > _rank(lettered_but_unique)
 
 
-def test_the_unchecked_rank_tuple_widened_to_seven_zeros():
+def test_the_unchecked_rank_tuple_widened_to_nine_zeros():
     """§6 test 13: unchecked still sorts below EVERY checked attempt (invariant 4). The tuple
-    widened, so the zeros have to widen with it or the comparison raises on length."""
+    widened to 9 terms."""
     unchecked = Attempt(image_ref="job-1/s0-1.png", prompt="p", passed=False)
-    assert _rank(unchecked) == (0, 0, 0, 0, 0, 0, 0)
+    assert _rank(unchecked) == (False, False, 0, True, True, True, True, True, True)
 
     worst_checked = _attempt(
         "job-1/s0-2.png", same=False, anatomy=False, text=False, unique=False, style=False
@@ -660,14 +916,14 @@ def test_the_unchecked_rank_tuple_widened_to_seven_zeros():
     assert _rank(worst_checked) > _rank(unchecked)
 
 
-def test_the_checked_rank_tuple_is_seven_terms_in_the_declared_order():
+def test_the_checked_rank_tuple_is_nine_terms_in_the_declared_order():
     ranked = _rank(
         _attempt(
             "job-1/s0-1.png", same=True, anatomy=False, text=True, unique=False, style=True,
             reasons=[FailureReason.wrong_colour],
         )
     )
-    assert ranked == (1, True, False, True, False, False, True)
+    assert ranked == (True, True, 0, True, False, True, False, False, True)
 
 
 def test_the_worst_possible_checked_attempt_still_outranks_an_unchecked_one():
@@ -684,6 +940,10 @@ def _two_attempt_scene(first: Attempt, second: Attempt) -> Scene:
     return Scene(scene_id="s0", text_excerpt="x", characters_present=["c0"], attempts=[first, second])
 
 
+def _three_attempt_scene(first: Attempt, second: Attempt, third: Attempt) -> Scene:
+    return Scene(scene_id="s0", text_excerpt="x", characters_present=["c0"], attempts=[first, second, third])
+
+
 def test_node_defers_finalization_when_a_single_attempt_fails_the_gate():
     """The whole point of the change: a checked FAILURE with one attempt is left unfinalized so
     route_after_check can send it to regenerate."""
@@ -693,11 +953,22 @@ def test_node_defers_finalization_when_a_single_attempt_fails_the_gate():
     assert result["scenes"][0].final_image_ref is None
 
 
+def test_node_defers_finalization_when_second_attempt_fails_the_gate():
+    """Spend-and-retry-economics: concrete failure on attempt 2 remains unfinalized and routes to regenerate."""
+    scene = _two_attempt_scene(
+        _attempt("job-1/s0-1.png", same=False, anatomy=False),
+        Attempt(image_ref="job-1/s0-2.png", prompt="corrected", passed=False),
+    )
+    result = _run(_state([scene], [_char("c0", "the dog")]), [_verdict(False, anatomy=False)])
+
+    assert result["scenes"][0].final_image_ref is None
+
+
 def test_node_finalizes_a_single_unchecked_attempt_rather_than_retrying():
     """The `verdict is None` term is load-bearing. A judge or Storage outage must not buy a
     second paid draw with no signal to correct on — that redraw would be a pure resample."""
     state = _state([_scene_with_attempt(characters_present=[])])
-    result = _run(state, [])
+    result = _run(state, [], None)
 
     assert result["scenes"][0].final_image_ref == "job-1/s0-1.png"
 
@@ -711,9 +982,10 @@ def test_node_finalizes_a_single_passing_attempt():
 
 def test_best_of_prefers_the_attempt_that_wins_on_same_character():
     """Lexicographic: same_character is the first term and outranks everything below it."""
-    scene = _two_attempt_scene(
+    scene = _three_attempt_scene(
         _attempt("job-1/s0-1.png", same=True, anatomy=False, style=False),
         _attempt("job-1/s0-2.png", same=False, anatomy=True, style=True),
+        Attempt(image_ref="job-1/s0-3.png", prompt="p", passed=False),
     )
     result = _run(_state([scene], [_char("c0", "the dog")]), [_verdict(False, anatomy=True, style=True)])
 
@@ -721,9 +993,10 @@ def test_best_of_prefers_the_attempt_that_wins_on_same_character():
 
 
 def test_best_of_prefers_the_attempt_that_wins_on_anatomy_when_identity_ties():
-    scene = _two_attempt_scene(
+    scene = _three_attempt_scene(
         _attempt("job-1/s0-1.png", same=False, anatomy=True, style=False),
         _attempt("job-1/s0-2.png", same=False, anatomy=False, style=True),
+        Attempt(image_ref="job-1/s0-3.png", prompt="p", passed=False),
     )
     result = _run(_state([scene], [_char("c0", "the dog")]), [_verdict(False, anatomy=False, style=True)])
 
@@ -731,51 +1004,55 @@ def test_best_of_prefers_the_attempt_that_wins_on_anatomy_when_identity_ties():
 
 
 def test_best_of_prefers_the_attempt_that_wins_on_style_when_the_first_two_terms_tie():
-    """style_match does not GATE, but it is the third term of the ranking (ADR-028)."""
-    scene = _two_attempt_scene(
+    """style_match does not GATE, but it is the ninth term of the ranking."""
+    scene = _three_attempt_scene(
         _attempt("job-1/s0-1.png", same=False, anatomy=True, style=False),
         _attempt("job-1/s0-2.png", same=False, anatomy=True, style=True),
+        Attempt(image_ref="job-1/s0-3.png", prompt="p", passed=False),
     )
-    result = _run(_state([scene], [_char("c0", "the dog")]), [_verdict(False, anatomy=True, style=True)])
+    result = _run(_state([scene], [_char("c0", "the dog")]), [_verdict(False, anatomy=True, style=False)])
 
     assert result["scenes"][0].final_image_ref == "job-1/s0-2.png"
 
 
-def test_best_of_breaks_a_genuine_tie_in_favour_of_attempt_two():
+def test_best_of_breaks_a_genuine_tie_in_favour_of_newest_attempt():
     """Pinned explicitly: max returns the FIRST maximal element, so this only holds because the
     ranking iterates in reverse. On a tie the corrected prompt is the better prior — ADR-010
-    calls attempt 2 refinement, not resampling."""
-    scene = _two_attempt_scene(
+    calls attempt 3 refinement, not resampling."""
+    scene = _three_attempt_scene(
         _attempt("job-1/s0-1.png", same=False, anatomy=True, style=True),
         _attempt("job-1/s0-2.png", same=False, anatomy=True, style=True),
+        Attempt(image_ref="job-1/s0-3.png", prompt="corrected 2", passed=False),
     )
     result = _run(_state([scene], [_char("c0", "the dog")]), [_verdict(False, anatomy=True, style=True)])
 
-    assert result["scenes"][0].final_image_ref == "job-1/s0-2.png"
+    assert result["scenes"][0].final_image_ref == "job-1/s0-3.png"
 
 
 def test_best_of_ranks_a_checked_failure_above_an_unchecked_attempt():
-    """Unchecked sorts last (0,0,0,0). Promoting an unjudged image over a judged one would let
+    """Unchecked sorts last (0,0,0,0,0,0,0,0,0). Promoting an unjudged image over a judged one would let
     a judge outage silently decide the page — invariant 4 says unchecked is never a pass."""
     scene = _two_attempt_scene(
         _attempt("job-1/s0-1.png", same=False, anatomy=False, style=False),
         _attempt("job-1/s0-2.png", same=None),
     )
-    result = _run(_state([scene], [_char("c0", "the dog")]), [])
+    result = _run(_state([scene], [_char("c0", "the dog")]), None, None)
 
     assert result["scenes"][0].final_image_ref == "job-1/s0-1.png"
 
 
-def test_two_attempts_always_finalize_even_when_both_fail():
-    """ADR-010: at most one regeneration per scene, and never a broken page. A real image ships."""
-    scene = _two_attempt_scene(
+def test_three_attempts_always_finalize_even_when_all_fail():
+    """Spend-and-retry-economics: at most two regenerations per scene (3 attempts total). A real image ships."""
+    scene = _three_attempt_scene(
         _attempt("job-1/s0-1.png", same=False, anatomy=False),
         _attempt("job-1/s0-2.png", same=False, anatomy=False),
+        Attempt(image_ref="job-1/s0-3.png", prompt="corrected 2", passed=False),
     )
     result = _run(_state([scene], [_char("c0", "the dog")]), [_verdict(False, anatomy=False)])
 
     finalized = result["scenes"][0]
     assert finalized.final_image_ref is not None
+    assert len(finalized.attempts) == 3
     assert all(a.passed is False for a in finalized.attempts)
 
 
@@ -894,15 +1171,12 @@ def test_the_per_scene_log_line_carries_uniqueness_and_the_prompt_version(caplog
     that let it through, AND the prompt version that produced the verdict."""
     import logging
 
-    from pipeline.consistency_check import JUDGE_PROMPT_VERSION
-
     state = _state([_scene_with_attempt(characters_present=["c0"])], [_char("c0", "the dog")])
     with caplog.at_level(logging.INFO):
         _run(state, [_verdict(True, unique=False)])
 
     assert "subjects_unique=False" in caplog.text
-    assert f"judge_prompt_version={JUDGE_PROMPT_VERSION}" in caplog.text
-
+    assert "identity_prompt_version=4" in caplog.text
 
 
 # --- The identity-attribute gate (prod job 483056e0: s3 and s4 shipped off-colour) ---
@@ -956,11 +1230,12 @@ def test_a_gating_reason_from_either_subject_fails_the_whole_scene():
     assert result["scenes"][0].attempts[-1].passed is False
 
 
-def test_a_second_attempt_that_still_fails_the_attribute_gate_is_finalized_anyway():
-    """ADR-010 caps the retry at one. The gate buys a correction, never an unbounded loop."""
-    scene = _two_attempt_scene(
+def test_a_third_attempt_that_still_fails_the_attribute_gate_is_finalized_anyway():
+    """Spend-and-retry-economics caps the consistency retry at 2 (3 attempts total). The gate buys corrections, never an unbounded loop."""
+    scene = _three_attempt_scene(
         _attempt("job-1/s0-1.png", same=True, reasons=[FailureReason.wrong_colour]),
         _attempt("job-1/s0-2.png", same=True, reasons=[FailureReason.wrong_colour]),
+        Attempt(image_ref="job-1/s0-3.png", prompt="corrected 2", passed=False),
     )
     result = _run(_state([scene], [_char("c0", "the dragon")]), [
         _verdict(True, reasons=[FailureReason.wrong_colour]),
@@ -990,27 +1265,43 @@ def test_rank_puts_the_attribute_gate_below_text_and_above_uniqueness():
 # --- C: an unchecked page names WHY it was unchecked (CC-5) ---
 
 def test_the_log_distinguishes_no_subjects_from_a_judge_outage(caplog):
-    """Both finalize, and they used to log the same word. A page nothing could judge and a page
-    the judge failed on need different responses: the first is a segmentation or ADR-004 cap
-    problem, the second is an outage. Asserting ONE token would not prove they differ, so both
-    branches are exercised here — `judge_attempt` returns `[]` for either reason (see its
-    docstring), and `subjects` is the only thing that tells them apart."""
     no_subjects = _state([_scene_with_attempt(characters_present=[])], [])
     with caplog.at_level(logging.INFO):
         _run(no_subjects, [])
 
-    assert "unchecked=no_subjects" in caplog.text
-    assert "unchecked=judge_failed" not in caplog.text
+    assert "identity_available=True" in caplog.text
 
     caplog.clear()
-    # A real subject with a real canonical reference — so `subjects` is non-empty — and the helper
-    # still returns nothing, which is exactly the Storage/judge outage shape.
     outage = _state(
         [_scene_with_attempt(characters_present=["c0"])],
         [_char("c0", "the dragon", "job-1/ref-c0.png")],
     )
     with caplog.at_level(logging.INFO):
-        _run(outage, [])
+        _run(outage, None, None)
 
-    assert "unchecked=judge_failed" in caplog.text
-    assert "unchecked=no_subjects" not in caplog.text
+    assert "identity_available=False" in caplog.text
+    assert "scene_constraint_available=False" in caplog.text
+
+
+def test_consistency_check_logs_visual_direction(caplog):
+    scene = Scene(
+        scene_id="s0",
+        text_excerpt="Ana ran.",
+        characters_present=["c0"],
+        visual_direction="Ana runs toward the trees.",
+        attempts=[Attempt(image_ref="job-1/s0-1.png", prompt="p", passed=False)],
+    )
+    state = StoryMemory(
+        schema_version=CURRENT_SCHEMA_VERSION,
+        story_id="job-123",
+        classroom_id="dev-classroom",
+        profile_id="dev-profile",
+        input=Input(raw_text="x", redacted_text="x"),
+        scenes=[scene],
+    )
+    clean = SceneConstraintVerdict(differences_observed="none", contradictions=[])
+    with caplog.at_level(logging.INFO, logger="pipeline.consistency_check"), \
+         patch("pipeline.consistency_check.judge_attempt", return_value=([], clean)):
+        consistency_check(state)
+
+    assert "visual_direction='Ana runs toward the trees.'" in caplog.text

@@ -129,10 +129,14 @@ not a spec edit — it changes a frozen cost bound.
   `MAX_SCENES * 2 + 9` to `MAX_SCENES * 3 + 9`. Both are `config.py`/spec-level changes — ADR-025 froze
   the *mechanism*, not the constant — but they must land in the same change as the wrapper or the
   breaker silently under-counts.
+  *(Update 2026-08-15, ADR-037: the constant is now `MAX_SCENES * 4 + 15` = 55 and `output_mod`'s
+  redraw is counted and breaker-bound via `check_image_budget`. Requirement (b) is therefore already
+  paid for. Requirement (a) — a paid **count** rather than a bool — is still open, and is still what
+  this spec's image half needs before a retry inside `generate_and_store` becomes visible.)*
 - [ ] **CC-4 Security** — N/A. No new I/O, no URL handling.
 - [x] **CC-5 Observability** — one `log.warning` per refusal naming the call site and the model, and one
   `log.info` on a softened retry that succeeds. Refusal rate is the metric that tells us whether the
-  image half of this spec is needed at all (§8), so it must be findable in LangSmith, not a silent
+  image half of this spec is needed at all (§8), so it must be findable in Langfuse, not a silent
   counter.
 - [ ] **CC-6 Accessibility** — N/A (pipeline helper). The kid-facing reframe copy is `kid-flow-ui`.
 - [x] **CC-7 Reproducibility** — `soften` is pure and deterministic; the same refusal always produces the

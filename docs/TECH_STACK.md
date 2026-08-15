@@ -49,7 +49,7 @@ self-hosted vLLM (the fine-tuned judge, post-Phase 2.5) rejects the field.
 | **Supabase — Realtime** | Frontend watches job-row progress | Phase 0 | Websockets — more work, same result — ADR-005 |
 | **Redis** | RQ broker for the async job queue | Phase 0 | Postgres-backed queue (viable simplification, revisit if Redis feels like overhead) — ADR-005 |
 | **Modal** | Scale-to-zero GPU container serving the fine-tuned judge behind vLLM (OpenAI-compatible) | Phase 2.5 / Phase 3, **first item on the de-scope ladder** | RunPod Serverless, Baseten (drop-in equivalents); HF Inference Endpoints (thinner VLM LoRA support) — ADR-019 |
-| **LangSmith** | Pipeline tracing — turns on via env vars (`LANGCHAIN_TRACING_V2`, `LANGCHAIN_API_KEY`, `LANGCHAIN_PROJECT`), zero-code LangGraph wiring | Phase 0 (from first commit) | Langfuse — open-source/self-hostable but more ops for a solo build — ADR-014 |
+| **Langfuse** | Pipeline tracing + per-model USD cost from a built-in pricing table — a `CallbackHandler` per job (`LANGFUSE_SECRET_KEY`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_HOST`) | Phase 0 (from first commit) | LangSmith — zero-code env-var wiring but reports tokens only, no USD costs — ADR-014, switched by ADR-030 |
 | **Sentry** | Error tracking, frontend + backend | Phase 0 | — |
 | **fal.ai** | Hosted inference: image generation (both models) + narration (Chatterbox) | Phase 0/1 (images), Phase 2 (narration) | Novita, Replicate — named drop-in alternates for images (ADR-001) |
 | **OpenRouter** | Hosted inference: text pipeline, prompted judge, moderation backstop | Phase 0/1 | — (aggregator chosen specifically so a model swap is a config change, ADR-002) |

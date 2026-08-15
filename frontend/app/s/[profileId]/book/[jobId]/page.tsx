@@ -169,13 +169,13 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
   // ── Bucket routing ──────────────────────────────────────────────────────────
 
   if (bucket === "not-found") {
-    return <FailureScreen kind="not-found" />;
+    return <FailureScreen kind="not-found" jobId={jobId} />;
   }
 
   if (bucket === "terminal-failure") {
     // Signing failure while book was complete: machine screen, counter NOT bumped
     if (signFailed) {
-      return <FailureScreen kind="retry" inputText={row?.input_text} stylePresetId={row?.style_preset_id} countable={false} />;
+      return <FailureScreen kind="retry" reason={row?.failure_reason} jobId={jobId} inputText={row?.input_text} stylePresetId={row?.style_preset_id} countable={false} />;
     }
     const kind =
       row?.failure_reason === "child_text"
@@ -183,7 +183,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
         : row?.status === SWEPT_STATUS
         ? "asleep"
         : "retry";
-    return <FailureScreen kind={kind} inputText={row?.input_text} stylePresetId={row?.style_preset_id} />;
+    return <FailureScreen kind={kind} reason={row?.failure_reason} jobId={jobId} inputText={row?.input_text} stylePresetId={row?.style_preset_id} />;
   }
 
   if (bucket === "in-flight" || bucket === "paused") {
@@ -192,7 +192,10 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
 
   // terminal-success — wait for signing
   if (signFailed) {
-    return <FailureScreen kind="retry" inputText={row?.input_text} stylePresetId={row?.style_preset_id} countable={false} />;
+    // No `reason`: the job succeeded and the row's `failure_reason` is null. Signing is a browser-side
+    // failure with no safe reason behind it, so it keeps the legacy machine copy (spec §3 maps a null
+    // reason to `system_error`, which would be a lie about a book that generated fine).
+    return <FailureScreen kind="retry" jobId={jobId} inputText={row?.input_text} stylePresetId={row?.style_preset_id} countable={false} />;
   }
 
   if (!signedPages) {

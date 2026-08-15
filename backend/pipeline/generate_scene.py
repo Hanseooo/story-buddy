@@ -1,7 +1,7 @@
 import logging
 from functools import lru_cache
 
-from app.config import IMAGE_BUDGET
+from app.config import check_image_budget, settings
 from app.db import get_supabase_client
 from contracts.story_memory import Attempt, StoryMemory
 from pipeline.prompt_optimizer import build_prompt, referenced_characters
@@ -68,11 +68,11 @@ def generate_scene(state: StoryMemory) -> dict:
     if scene is None:
         return {}
 
-    # ADR-025 D4: breaker before any spend. IMAGE_BUDGET = MAX_SCENES * 2 + 9.
-    if state.cost.image_count >= IMAGE_BUDGET:
-        raise RuntimeError(
-            f"image budget exceeded: {state.cost.image_count} >= {IMAGE_BUDGET} (ADR-025)"
-        )
+    # ADR-025 D4: breaker before any spend. IMAGE_BUDGET = MAX_SCENES * 4 + 15.
+    check_image_budget(state.cost.image_count)
+
+    if not scene.visual_direction:
+        raise ValueError(f"generate_scene: scene {scene.scene_id} has no visual_direction")
 
     # §4.1: `segment` wrote the id; this is the one place it is resolved back to the object.
     # A `location_id` absent from the roster resolves to None and the page simply gets no
@@ -85,6 +85,9 @@ def generate_scene(state: StoryMemory) -> dict:
         state.characters,
         state.style.prompt_fragment,
         location,
+        scene.objects_present,
+        state.objects,
+        scene.visual_direction,
     )
 
     # Same list `build_prompt` numbered the image roll off, so "Image 2 is X" always names
@@ -99,8 +102,12 @@ def generate_scene(state: StoryMemory) -> dict:
     )
 
     log.info(
-        "generate_scene: scene_id=%s refs=%d paid=%s prompt_len=%d",
-        scene.scene_id, len(ref_paths), paid, len(prompt),
+        "generate_scene: scene_id=%s refs=%d paid=%s prompt_len=%d image_model=%s",
+        scene.scene_id,
+        len(ref_paths),
+        paid,
+        len(prompt),
+        settings.fal_image_model,
     )
 
     return {

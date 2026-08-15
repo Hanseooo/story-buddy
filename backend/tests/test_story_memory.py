@@ -7,11 +7,13 @@ from contracts.story_memory import (
     Attempt,
     Character,
     Cost,
+    FailureReason,
     Input,
     RefVerdict,
     ReferenceRetry,
     Scene,
     StoryMemory,
+    StoryObject,
     VlmVerdict,
     upsert_scenes,
 )
@@ -246,3 +248,56 @@ def test_cost_declares_ref_mod_retry_count_last_and_defaults_to_zero():
     assert list(Cost.model_fields)[-1] == "ref_mod_retry_count"
     assert Cost().ref_mod_retry_count == 0
     assert Cost.model_validate({"image_count": 4}).ref_mod_retry_count == 0
+
+
+def test_visual_continuity_fields_default_for_old_checkpoint_shapes():
+    obj = StoryObject.model_validate({"obj_id": "obj0", "name": "wooden sword"})
+    scene = Scene.model_validate(
+        {
+            "scene_id": "s0",
+            "text_excerpt": "Ana lifted the sword.",
+            "attempts": [{"image_ref": "job-1/s0-1.png"}],
+        }
+    )
+
+    assert obj.owner_char_id is None
+    assert scene.objects_present == []
+    assert scene.visual_direction is None
+    assert scene.attempts[0].scene_contradictions is None
+
+
+def test_visual_continuity_fields_round_trip_and_stay_last():
+    obj = StoryObject(
+        obj_id="obj0",
+        name="wooden sword",
+        description="a short wooden sword with a red cord grip",
+        owner_char_id="c0",
+    )
+    attempt = Attempt(
+        image_ref="job-1/s0-1.png",
+        scene_contradictions=["Ana faces left instead of toward the wizard."],
+    )
+    scene = Scene(
+        scene_id="s0",
+        text_excerpt="Ana lifted the sword.",
+        objects_present=["obj0"],
+        visual_direction="Ana faces the wizard and raises the sword.",
+        attempts=[attempt],
+    )
+
+    assert StoryObject.model_validate(obj.model_dump()) == obj
+    assert Scene.model_validate(scene.model_dump()) == scene
+    assert list(StoryObject.model_fields)[-1] == "owner_char_id"
+    assert list(Scene.model_fields)[-2:] == ["objects_present", "visual_direction"]
+    assert list(Attempt.model_fields)[-1] == "scene_contradictions"
+    assert CURRENT_SCHEMA_VERSION == 1
+    assert [reason.value for reason in FailureReason] == [
+        "wrong_colour",
+        "wrong_species",
+        "wrong_body_feature",
+        "wrong_clothing",
+        "wrong_style",
+        "different_face",
+        "character_absent",
+    ]
+

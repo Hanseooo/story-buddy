@@ -1,9 +1,10 @@
 import logging
 
 from app.config import STYLE_PRESETS
-from contracts.story_memory import Character, CharacterDescription, FailureReason, Location
+from contracts.story_memory import Character, CharacterDescription, FailureReason, Location, StoryObject
 from pipeline.prompt_optimizer import (
     ANATOMY_CLAUSE,
+    COMPOSITION_CLAUSE,
     IDENTITY_CLAUSE,
     NON_HUMAN_CLAUSE,
     TEXT_CLAUSE,
@@ -17,6 +18,106 @@ from pipeline.prompt_optimizer import (
 )
 
 FRAG = "flat cel-shaded cartoon, thick clean black outlines"
+
+
+def test_visual_continuity_prompt_blocks_are_in_contract_order():
+    ana = Character(
+        char_id="c0",
+        name="Ana",
+        description=CharacterDescription(
+            species="human",
+            colours=["brown eyes"],
+            body_features=["round face"],
+            clothing=["yellow shirt"],
+        ),
+        canonical_ref_image="story/ref-c0.png",
+    )
+    maya = Character(
+        char_id="c1",
+        name="Maya",
+        description=CharacterDescription(
+            species="human",
+            colours=["black hair"],
+            body_features=["oval face"],
+            clothing=["blue dress"],
+        ),
+    )
+    sword = StoryObject(
+        obj_id="obj0",
+        name="wooden sword",
+        description="a short wooden sword with a red cord grip",
+        owner_char_id="c0",
+    )
+    prompt = build_prompt(
+        "Ana ran toward the forest.",
+        ["c0", "c1"],
+        [ana, maya],
+        "flat cel illustration, no gradients",
+        Location(loc_id="loc0", name="forest", description="tall pine trees"),
+        ["obj0"],
+        [sword],
+        "Ana runs right; Maya stays behind. wooden sword is held by Ana.",
+    )
+
+    markers = [
+        "Image 1 is Ana",
+        "Maya",
+        "exactly 2 characters: Ana and Maya",
+        "Visible objects:",
+        "Visual direction:",
+        "Setting:",
+        "Ana ran toward the forest.",
+        "flat cel illustration, no gradients",
+    ]
+    positions = [prompt.index(marker) for marker in markers]
+    assert positions == sorted(positions)
+    assert "wooden sword, a short wooden sword with a red cord grip" in prompt
+    assert "reference images define appearance, not pose, crop, expression or viewing angle" in prompt
+
+
+def test_build_prompt_skips_unknown_object_ids_and_deduplicates_in_first_seen_order():
+    sword = StoryObject(
+        obj_id="obj0",
+        name="wooden sword",
+        description="a short wooden sword",
+    )
+    shield = StoryObject(
+        obj_id="obj1",
+        name="iron shield",
+        description="a round shield",
+    )
+    prompt = build_prompt(
+        "Ana picked up her tools.",
+        [],
+        [],
+        "flat cel illustration",
+        objects_present=["obj0", "unknown_obj", "obj1", "obj0"],
+        objects=[sword, shield],
+        visual_direction="Ana stands in the center.",
+    )
+
+    assert "Visible objects:\nwooden sword, a short wooden sword\niron shield, a round shield" in prompt
+    assert "unknown_obj" not in prompt
+
+
+def test_build_prompt_filters_style_forbidden_words_from_object_description_not_excerpt():
+    sword = StoryObject(
+        obj_id="obj0",
+        name="glowing sword",
+        description="a glowing magic sword",
+    )
+    prompt = build_prompt(
+        "She held the glowing sword.",
+        [],
+        [],
+        "flat cel illustration, no glow",
+        objects_present=["obj0"],
+        objects=[sword],
+        visual_direction="Ana holds the sword.",
+    )
+
+    assert "glowing sword, a magic sword" in prompt
+    assert "She held the glowing sword." in prompt
 
 
 def _char(char_id: str, name: str, **description_kwargs) -> Character:
@@ -388,7 +489,7 @@ def test_correct_prompt_defaults_reproduce_the_previous_behaviour_exactly():
     added by the new params. Every pre-existing assertion in this file depends on it."""
     assert correct_prompt("draw a dog", [], [], "cel") == "draw a dog"
     assert correct_prompt("draw a dog", [FailureReason.different_face], [], "cel") == (
-        "draw a dog\nmatch the reference character's face exactly"
+        f"draw a dog\nmatch the reference character's face exactly\n{COMPOSITION_CLAUSE}"
     )
 
 
@@ -901,6 +1002,65 @@ def test_the_text_clause_never_utters_a_word_the_negative_prompt_suppresses():
         assert not re.search(rf"\b{re.escape(term)}\b", TEXT_CLAUSE, re.I), \
             f"TEXT_CLAUSE names {term!r}, which is what put lettering on the canvas the last three times"
     assert "lettering" not in TEXT_CLAUSE.lower()
+
+
+def test_correct_prompt_appends_every_scene_contradiction_after_existing_corrections():
+    base = "Draw Ana running."
+    ana = _char(
+        "c0",
+        "Ana",
+        species="human",
+        colours=["brown eyes"],
+        body_features=["round face"],
+        clothing=["yellow shirt"],
+    )
+    result = correct_prompt(
+        base,
+        [FailureReason.wrong_colour],
+        [ana],
+        "flat cel illustration",
+        anatomy_intact=False,
+        scene_contradictions=[
+            "Ana faces left instead of right.",
+            "The wooden sword is missing.",
+        ],
+    )
+
+    markers = [
+        "match the reference's exact colours",
+        ANATOMY_CLAUSE,
+        "Correct this scene contradiction: Ana faces left instead of right.",
+        "Correct this scene contradiction: The wooden sword is missing.",
+    ]
+    positions = [result.index(marker) for marker in markers]
+    assert positions == sorted(positions)
+
+
+def test_correct_prompt_appends_composition_clause():
+    """§7 test 7. All four correction paths — generic identity, boolean, reason-based, and scene
+    contradiction — end with the clause, so no path can silently become composition-destructive.
+    §7 test 8: a no-op call is still byte-identical.
+    """
+    base = "Draw Ana."
+
+    # No correction at all → byte-identical, nothing appended.
+    assert correct_prompt(base, [], [], "") == base
+
+    dog = _char("c0", "the dog", colours=["brown"])
+    paths = {
+        "generic identity": correct_prompt(base, [], [], "", same_character=False),
+        "boolean (anatomy)": correct_prompt(base, [], [], "", anatomy_intact=False),
+        "boolean (text)": correct_prompt(base, [], [], "", text_free=False),
+        "reason-based": correct_prompt(base, [FailureReason.wrong_colour], [dog], ""),
+        # Reason present but unfillable → IDENTITY_CLAUSE floors it; the clause still lands last.
+        "identity floor": correct_prompt(base, [FailureReason.wrong_colour], [], ""),
+        "scene contradiction": correct_prompt(base, [], [], "", scene_contradictions=["Ana faces left"]),
+    }
+    for path, corrected in paths.items():
+        assert corrected.endswith(COMPOSITION_CLAUSE), path
+        assert corrected.count(COMPOSITION_CLAUSE) == 1, path
+        assert corrected.startswith(base), path
+
 
 
 

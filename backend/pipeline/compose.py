@@ -20,9 +20,13 @@ def outcome(scene: Scene) -> str:
     derives it from one — and counts as `unchecked`, because it carries no verdict either way.
     """
     winner = next((a for a in scene.attempts if a.image_ref == scene.final_image_ref), None)
-    if winner is None or winner.vlm_verdict is None:
+    if winner is None:
         return "unchecked"
-    return "passed" if winner.passed else "failing"
+    if winner.passed:
+        return "passed"
+    if winner.vlm_verdict is None and winner.scene_contradictions is None:
+        return "unchecked"
+    return "failing"
 
 
 def compose(state: StoryMemory) -> dict:

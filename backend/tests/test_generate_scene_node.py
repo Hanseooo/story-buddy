@@ -1,7 +1,8 @@
+import logging
 import pytest
 from unittest.mock import MagicMock, patch
 
-from app.config import IMAGE_BUDGET
+from app.config import IMAGE_BUDGET, settings
 from contracts.story_memory import (
     CURRENT_SCHEMA_VERSION,
     Character,
@@ -34,6 +35,12 @@ def _state(
     style: Style | None = None,
     cost: Cost | None = None,
 ) -> StoryMemory:
+    updated_scenes = [
+        s.model_copy(update={"visual_direction": "The subject performs an action."})
+        if not s.visual_direction
+        else s
+        for s in scenes
+    ]
     return StoryMemory(
         schema_version=CURRENT_SCHEMA_VERSION,
         story_id="job-123",
@@ -42,7 +49,7 @@ def _state(
         input=Input(raw_text="x", redacted_text="x"),
         characters=characters or [],
         style=style or Style(),
-        scenes=scenes,
+        scenes=updated_scenes,
         cost=cost or Cost(),
     )
 
@@ -220,7 +227,7 @@ def test_generate_scene_calls_build_prompt_with_the_scenes_roster_and_style():
     scene.characters_present, state.characters, state.style.prompt_fragment)."""
     dog = Character(char_id="c0", name="the dog", description=CharacterDescription(species="dog"))
     state = _state(
-        [Scene(scene_id="s0", text_excerpt="The dog ran.", characters_present=["c0"])],
+        [Scene(scene_id="s0", text_excerpt="The dog ran.", characters_present=["c0"], visual_direction="The dog runs.")],
         characters=[dog],
         style=Style(prompt_fragment="flat gouache storybook"),
     )
@@ -229,7 +236,9 @@ def test_generate_scene_calls_build_prompt_with_the_scenes_roster_and_style():
          patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0-1.png", True)):
         generate_scene(state)
 
-    build.assert_called_once_with("The dog ran.", ["c0"], [dog], "flat gouache storybook", None)
+    build.assert_called_once_with(
+        "The dog ran.", ["c0"], [dog], "flat gouache storybook", None, [], [], "The dog runs."
+    )
 
 
 def test_generate_scene_uses_scene_id_in_storage_path():
@@ -258,8 +267,8 @@ def test_generate_scene_two_successive_invocations_produce_distinct_paths():
 
     # Simulate LangGraph applying the partial return before the second invocation
     updated = state.model_copy(update={"scenes": [
-        Scene(scene_id="s0", text_excerpt="0", final_image_ref="job-123/s0-1.png"),
-        Scene(scene_id="s1", text_excerpt="1"),
+        Scene(scene_id="s0", text_excerpt="0", final_image_ref="job-123/s0-1.png", visual_direction="Action 0"),
+        Scene(scene_id="s1", text_excerpt="1", visual_direction="Action 1"),
     ]})
 
     with patch("pipeline.generate_scene.build_prompt", return_value="p"), \
@@ -406,4 +415,29 @@ def test_generate_scene_passes_none_for_a_location_id_absent_from_the_roster():
         generate_scene(state)
 
     assert build.call_args.args[4] is None
+
+
+def test_generate_scene_rejects_legacy_scene_with_no_visual_direction():
+    state = StoryMemory(
+        schema_version=CURRENT_SCHEMA_VERSION,
+        story_id="job-123",
+        classroom_id="dev-classroom",
+        profile_id="dev-profile",
+        input=Input(raw_text="x", redacted_text="x"),
+        scenes=[Scene(scene_id="s0", text_excerpt="x", visual_direction="")],
+    )
+    with patch("pipeline.generate_scene.generate_and_store") as mock_store:
+        with pytest.raises(ValueError, match="has no visual_direction"):
+            generate_scene(state)
+    mock_store.assert_not_called()
+
+
+def test_generate_scene_log_names_configured_image_model(caplog):
+    state = _state([Scene(scene_id="s0", text_excerpt="x")])
+    with caplog.at_level(logging.INFO, logger="pipeline.generate_scene"):
+        with patch("pipeline.generate_scene.build_prompt", return_value="p"), \
+             patch("pipeline.generate_scene.generate_and_store", return_value=("job-123/s0-1.png", True)):
+            generate_scene(state)
+
+    assert settings.fal_image_model in caplog.text
 

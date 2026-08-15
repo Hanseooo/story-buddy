@@ -24,6 +24,78 @@ beforeEach(() => {
   }) as unknown as typeof fetch;
 });
 
+describe("FailureScreen — safe reason taxonomy", () => {
+  it("renders child_text", () => {
+    render(<FailureScreen reason="child_text" />);
+    expect(screen.getByText("Some words need changing before we can make this book.")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Change my words" })).toBeDefined();
+  });
+
+  it("renders character_safety", () => {
+    render(<FailureScreen reason="character_safety" />);
+    expect(screen.getByText("We couldn’t safely use the character picture we made. Your words aren’t in trouble.")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Make the story again" })).toBeDefined();
+  });
+
+  it("renders scene_safety", () => {
+    render(<FailureScreen reason="scene_safety" />);
+    expect(screen.getByText("One of the pictures we made couldn’t be used.")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Make the story again" })).toBeDefined();
+  });
+
+  it("renders service_busy", () => {
+    render(<FailureScreen reason="service_busy" />);
+    expect(screen.getByText("The story-making service is busy right now.")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeDefined();
+  });
+
+  it("renders worker_stopped", () => {
+    render(<FailureScreen reason="worker_stopped" />);
+    expect(screen.getByText("The story maker stopped before it finished.")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeDefined();
+  });
+
+  it("renders service_limit with no retry control and shows story ref", () => {
+    render(<FailureScreen reason="service_limit" jobId="12345678-abcd-efgh-1234" />);
+    expect(screen.getByText("The story-making allowance has run out.")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Make the story again" })).toBeNull();
+    expect(screen.getByText("12345678")).toBeDefined();
+  });
+
+  it("renders book_limit with no retry control", () => {
+    render(<FailureScreen reason="book_limit" jobId="87654321-abcd" />);
+    expect(screen.getByText("This book reached its picture-making limit.")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(screen.getByText("87654321")).toBeDefined();
+  });
+
+  it("renders system_error for unknown values", () => {
+    render(<FailureScreen reason="unknown_garbage" />);
+    expect(screen.getByText("Something interrupted your story.")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeDefined();
+  });
+
+  it("renders system_error for legacy machine reason", () => {
+    render(<FailureScreen reason="machine" />);
+    expect(screen.getByText("Something interrupted your story.")).toBeDefined();
+  });
+
+  it("copies full story reference ID to clipboard when copy button clicked", async () => {
+    const writeTextMock = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, {
+      clipboard: { writeText: writeTextMock },
+    });
+
+    render(<FailureScreen reason="service_busy" jobId="12345678-full-uuid-here" />);
+    const copyBtn = screen.getByRole("button", { name: "Copy story reference ID" });
+    fireEvent.click(copyBtn);
+
+    expect(writeTextMock).toHaveBeenCalledWith("12345678-full-uuid-here");
+    await waitFor(() => expect(screen.getByText("Copied!")).toBeDefined());
+  });
+});
+
 describe("FailureScreen — kind=revise", () => {
   it("shows revise copy and Change my words button", () => {
     render(<FailureScreen kind="revise" inputText="A story." />);
@@ -73,10 +145,6 @@ describe("FailureScreen — kind=retry", () => {
   });
 
   it("retry sends the Bearer token", async () => {
-    // Regression: /storybooks is auth-gated (backend/app/main.py:82) but this POST went out with
-    // no Authorization header — the same bug already fixed for /jobs/{id}/confirm. Every 401 fell
-    // into `res.ok ? json() : null`, which then did nothing at all: the button spun, stopped, and
-    // the child sat on the failure screen with no way forward and no message.
     render(<FailureScreen kind="retry" inputText="A dog runs." />);
     fireEvent.click(screen.getByRole("button", { name: /make this story again/i }));
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
@@ -151,7 +219,7 @@ describe("FailureScreen — kind=not-found", () => {
     render(<FailureScreen kind="not-found" />);
     fireEvent.click(screen.getByRole("button", { name: /write a new story/i }));
     expect(pushMock).toHaveBeenCalledWith("/s/prof-123/write");
-    expect(sessionStorage.getItem("sb.failChain")).toBe("2"); // unchanged
+    expect(sessionStorage.getItem("sb.failChain")).toBe("2");
   });
 
   it("not-found does not POST to /storybooks (spec invariant 9)", () => {
@@ -173,7 +241,7 @@ describe("FailureScreen — kind=asleep", () => {
     render(<FailureScreen kind="asleep" inputText="A story." />);
     fireEvent.click(screen.getByRole("button", { name: /make it again/i }));
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/s/prof-123/process/new-job"));
-    expect(sessionStorage.getItem("sb.failChain")).toBe("2"); // unchanged
+    expect(sessionStorage.getItem("sb.failChain")).toBe("2");
   });
 });
 
@@ -190,8 +258,6 @@ describe("FailureScreen — chain counter & third offer", () => {
   });
 
   it("retry offers the escape at count 0 — the second choice supersedes the §4.5 gate", () => {
-    // A machine failure is never the child's fault, so the way out is offered immediately
-    // rather than after three tries. The gated link stays for kind=revise.
     render(<FailureScreen kind="retry" inputText="x" />);
     expect(screen.getByRole("button", { name: /write something new/i })).toBeDefined();
     expect(screen.queryByText(/try a different story/i)).toBeNull();

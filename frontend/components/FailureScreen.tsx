@@ -2,9 +2,10 @@
 
 import { useState, ReactNode } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { Wrench, Gear, MagnifyingGlass, PencilSimple, BookOpen } from "@phosphor-icons/react";
+import { Wrench, Gear, MagnifyingGlass, PencilSimple, BookOpen, Copy, Check } from "@phosphor-icons/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabaseClient";
+import { FailureReason } from "@/lib/types/jobs";
 
 export type FailureKind = "revise" | "retry" | "not-found" | "asleep";
 
@@ -29,11 +30,52 @@ export function resetFailChain() {
 }
 
 type Props = {
-  kind: FailureKind;
+  kind?: FailureKind;
+  reason?: FailureReason | string | null;
+  jobId?: string;
   inputText?: string;
   stylePresetId?: string | null;
   countable?: boolean;
 };
+
+function StoryReference({ jobId }: { jobId: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(jobId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <div className="mt-6 flex flex-col items-center gap-2">
+      <div className="inline-flex items-center gap-2 font-mono text-sm text-[var(--foreground)]/70 bg-[var(--color-muted)]/30 px-3.5 py-2 rounded-xl">
+        <span className="font-semibold text-xs tracking-wide uppercase text-[var(--foreground)]/50">Ref:</span>
+        <span className="font-bold text-[var(--foreground)]">{jobId.slice(0, 8)}</span>
+        <button
+          type="button"
+          aria-label="Copy story reference ID"
+          onClick={handleCopy}
+          className="ml-2 inline-flex items-center gap-1 min-h-[44px] min-w-[44px] px-2.5 py-1 text-xs font-kid font-bold text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 rounded-lg transition-colors focus-visible:outline-[var(--color-secondary)] focus-visible:outline-2"
+        >
+          {copied ? (
+            <>
+              <Check size={16} weight="bold" className="text-emerald-600" />
+              <span className="text-emerald-700">Copied!</span>
+            </>
+          ) : (
+            <>
+              <Copy size={16} weight="bold" />
+              <span>Copy full ID</span>
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function FailureCard({
   icon,
@@ -43,19 +85,24 @@ function FailureCard({
   onAction,
   submitting,
   secondaryAction,
-  error
+  error,
+  jobId,
 }: {
   icon: ReactNode;
   title: string;
   subtext?: string;
-  buttonLabel: string;
-  onAction: () => void;
+  buttonLabel?: string | null;
+  onAction?: () => void;
   submitting: boolean;
   secondaryAction?: ReactNode;
   error?: boolean;
+  jobId?: string;
 }) {
   return (
-    <div className="min-h-[100dvh] w-full bg-[var(--background)] flex flex-col items-center justify-center px-6 py-12 text-center overflow-x-hidden selection:bg-[var(--color-primary)] selection:text-[var(--color-surface)]">
+    <div
+      role="alert"
+      className="min-h-[100dvh] w-full bg-[var(--background)] flex flex-col items-center justify-center px-6 py-12 text-center overflow-x-hidden selection:bg-[var(--color-primary)] selection:text-[var(--color-surface)]"
+    >
       <motion.div 
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
@@ -64,7 +111,6 @@ function FailureCard({
       >
         {/* Visual Stage */}
         <div className="relative mb-8 md:mb-12 flex items-center justify-center w-full max-w-[280px]">
-          {/* Soft magical glow */}
           <div className="absolute inset-0 bg-[var(--color-primary)]/10 rounded-full blur-2xl md:blur-3xl" aria-hidden="true" />
           <div className="absolute inset-4 bg-[var(--color-secondary)]/15 rounded-full blur-xl md:blur-2xl" aria-hidden="true" />
           
@@ -85,15 +131,20 @@ function FailureCard({
           )}
         </div>
 
+        {/* Story Ref */}
+        {jobId && <StoryReference jobId={jobId} />}
+
         {/* Actions */}
-        <div className="flex flex-col items-center w-full max-w-sm gap-5 mt-10 md:mt-12">
-          <button
-            className="w-full bg-[var(--color-primary)] text-[var(--color-surface)] rounded-2xl min-h-[56px] px-8 py-4 font-kid font-extrabold text-lg shadow-sm hover:bg-[var(--color-primary-deep)] active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed focus-visible:outline-[var(--color-secondary)] focus-visible:outline-3 focus-visible:outline-offset-3"
-            onClick={onAction}
-            disabled={submitting}
-          >
-            {buttonLabel}
-          </button>
+        <div className="flex flex-col items-center w-full max-w-sm gap-5 mt-8 md:mt-10">
+          {buttonLabel && onAction && (
+            <button
+              className="w-full bg-[var(--color-primary)] text-[var(--color-surface)] rounded-2xl min-h-[56px] px-8 py-4 font-kid font-extrabold text-lg shadow-sm hover:bg-[var(--color-primary-deep)] active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed focus-visible:outline-[var(--color-secondary)] focus-visible:outline-3 focus-visible:outline-offset-3"
+              onClick={onAction}
+              disabled={submitting}
+            >
+              {buttonLabel}
+            </button>
+          )}
           {secondaryAction}
         </div>
 
@@ -203,6 +254,8 @@ const RetryVignette = () => (
 
 export default function FailureScreen({
   kind,
+  reason,
+  jobId,
   inputText = "",
   stylePresetId = null,
   countable = true,
@@ -217,12 +270,12 @@ export default function FailureScreen({
     setSubmitting(true);
     setRetryFailed(false);
     try {
-      // /storybooks is auth-gated; without this header every retry was a silent 401.
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/storybooks`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          // /storybooks is auth-gated; without this header every retry was a silent 401.
           Authorization: `Bearer ${session?.access_token}`,
         },
         // The redo is a brand-new job, so the style has to be re-sent or the backend falls back
@@ -262,6 +315,138 @@ export default function FailureScreen({
     </button>
   ) : null;
 
+  const handleRevise = () => {
+    const count = countable ? bumpChain() : chainCount;
+    console.log("sb:action", { action: "revise", kind, chain_count: count });
+    try { sessionStorage.setItem(PREFILL_KEY, inputText); } catch { /* unavailable */ }
+    router.push(`/s/${profileId}/write`);
+  };
+
+  // A machine failure is never the child's fault, so both ways out are offered side by side from
+  // the first failure. Deliberately NOT auto-retried: a redo is a whole new job at a 900s timeout
+  // with fresh paid images (main.py:110), and the commonest machine reason in this pipeline is
+  // that timeout itself (run_worker.py:30) — the case most likely to repeat.
+  const handleRetry = () => {
+    const count = countable ? bumpChain() : chainCount;
+    console.log("sb:action", { action: "retry", kind, chain_count: count });
+    submitRetry();
+  };
+
+  // If the row carries a `reason` at all, use the safe reason taxonomy (spec §5). `null` counts:
+  // spec §3 requires old, null, and unrecognized values to render as `system_error`, so only an
+  // omitted prop (a frontend-side failure with no job row behind it) falls through to `kind`.
+  if (reason !== undefined) {
+    if (reason === "child_text") {
+      return (
+        <FailureCard
+          icon={<ReviseVignette />}
+          title="Some words need changing before we can make this book."
+          buttonLabel="Change my words"
+          submitting={submitting}
+          onAction={handleRevise}
+          secondaryAction={tryDifferent}
+          jobId={jobId}
+        />
+      );
+    }
+    if (reason === "character_safety") {
+      return (
+        <FailureCard
+          icon={<RetryVignette />}
+          title="We couldn’t safely use the character picture we made. Your words aren’t in trouble."
+          buttonLabel={submitting ? "Starting…" : "Make the story again"}
+          submitting={submitting}
+          onAction={handleRetry}
+          secondaryAction={writeSomethingNew}
+          error={retryFailed}
+          jobId={jobId}
+        />
+      );
+    }
+    if (reason === "scene_safety") {
+      return (
+        <FailureCard
+          icon={<RetryVignette />}
+          title="One of the pictures we made couldn’t be used."
+          buttonLabel={submitting ? "Starting…" : "Make the story again"}
+          submitting={submitting}
+          onAction={handleRetry}
+          secondaryAction={writeSomethingNew}
+          error={retryFailed}
+          jobId={jobId}
+        />
+      );
+    }
+    if (reason === "service_busy") {
+      return (
+        <FailureCard
+          icon={<RetryVignette />}
+          title="The story-making service is busy right now."
+          buttonLabel={submitting ? "Starting…" : "Try again"}
+          submitting={submitting}
+          onAction={handleRetry}
+          secondaryAction={writeSomethingNew}
+          error={retryFailed}
+          jobId={jobId}
+        />
+      );
+    }
+    if (reason === "worker_stopped") {
+      return (
+        <FailureCard
+          icon={<RetryVignette />}
+          title="The story maker stopped before it finished."
+          buttonLabel={submitting ? "Starting…" : "Try again"}
+          submitting={submitting}
+          onAction={handleRetry}
+          secondaryAction={writeSomethingNew}
+          error={retryFailed}
+          jobId={jobId}
+        />
+      );
+    }
+    if (reason === "service_limit") {
+      return (
+        <FailureCard
+          icon={<RetryVignette />}
+          title="The story-making allowance has run out."
+          subtext="Ask a teacher to help."
+          buttonLabel={null}
+          submitting={submitting}
+          secondaryAction={writeSomethingNew}
+          jobId={jobId}
+        />
+      );
+    }
+    if (reason === "book_limit") {
+      return (
+        <FailureCard
+          icon={<RetryVignette />}
+          title="This book reached its picture-making limit."
+          subtext="Ask a teacher to help."
+          buttonLabel={null}
+          submitting={submitting}
+          secondaryAction={writeSomethingNew}
+          jobId={jobId}
+        />
+      );
+    }
+    // Fallback: system_error and unknown/legacy values ("machine", null, etc.)
+    return (
+      <FailureCard
+        icon={<RetryVignette />}
+        title="Something interrupted your story."
+        buttonLabel={submitting ? "Starting…" : "Try again"}
+        submitting={submitting}
+        onAction={handleRetry}
+        secondaryAction={writeSomethingNew}
+        error={retryFailed}
+        jobId={jobId}
+      />
+    );
+  }
+
+  // Fallback to legacy `kind` prop when `reason` is not specified
   if (kind === "revise") {
     return (
       <FailureCard
@@ -270,13 +455,9 @@ export default function FailureScreen({
         subtext="Let's change a few words."
         buttonLabel="Change my words"
         submitting={submitting}
-        onAction={() => {
-          const count = countable ? bumpChain() : chainCount;
-          console.log("sb:action", { action: "revise", kind, chain_count: count });
-          try { sessionStorage.setItem(PREFILL_KEY, inputText); } catch { /* unavailable */ }
-          router.push(`/s/${profileId}/write`);
-        }}
+        onAction={handleRevise}
         secondaryAction={tryDifferent}
+        jobId={jobId}
       />
     );
   }
@@ -289,6 +470,7 @@ export default function FailureScreen({
         buttonLabel="Write a new story"
         submitting={submitting}
         onAction={() => router.push(`/s/${profileId}/write`)}
+        jobId={jobId}
       />
     );
   }
@@ -304,14 +486,12 @@ export default function FailureScreen({
         onAction={submitRetry}
         secondaryAction={writeSomethingNew}
         error={retryFailed}
+        jobId={jobId}
       />
     );
   }
 
-  // kind === "retry" — a machine failure is never the child's fault, so both ways out are offered
-  // side by side from the first failure. Deliberately NOT auto-retried: a redo is a whole new job
-  // at a 900s timeout with fresh paid images (main.py:110), and the commonest "machine" reason in
-  // this pipeline is that timeout itself (run_worker.py:30) — the case most likely to repeat.
+  // Default kind === "retry"
   return (
     <FailureCard
       icon={<RetryVignette />}
@@ -319,14 +499,10 @@ export default function FailureScreen({
       subtext="That wasn't your fault. Want to make the same story again?"
       buttonLabel={submitting ? "Starting…" : "Make this story again"}
       submitting={submitting}
-      onAction={() => {
-        const count = countable ? bumpChain() : chainCount;
-        console.log("sb:action", { action: "retry", kind, chain_count: count });
-        submitRetry();
-      }}
+      onAction={handleRetry}
       secondaryAction={writeSomethingNew}
       error={retryFailed}
+      jobId={jobId}
     />
   );
 }
-

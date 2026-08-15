@@ -51,7 +51,16 @@ input_gate ──► analyze ──► segment ──► char_bible ──► ge
 ## 4. Behavior & edge cases
 
 ```python
-def build_prompt(text_excerpt: str, characters_present: list[str], characters: list[Character], style_fragment: str | None, location: Location | None = None) -> str
+def build_prompt(
+    text_excerpt: str,
+    characters_present: list[str],
+    characters: list[Character],
+    style_fragment: str | None,
+    location: Location | None = None,
+    objects_present: list[str] | None = None,
+    objects: list[StoryObject] | None = None,
+    visual_direction: str | None = None,
+) -> str
 def correct_prompt(prompt: str, failure_reasons: list[FailureReason], characters: list[Character], style_fragment: str | None, same_character: bool = True, anatomy_intact: bool = True, text_free: bool = True) -> str
 ```
 
@@ -59,89 +68,31 @@ def correct_prompt(prompt: str, failure_reasons: list[FailureReason], characters
 characters_present → characters join per §4's own prose and the §6 node-level test, which passes
 the full unfiltered roster; `correct_prompt` needs `style_fragment` to restate it for `wrong_style`.)
 
-### `style_prohibitions` / `filtered_description` / `permitted_words` (ADR-035)
+### `style_prohibitions` / `filtered_description` / `filtered_location` / `filtered_object` / `permitted_words` (ADR-035)
 
-Three pure helpers, exported because `char_bible` and `reveal` share them.
+Helpers exported because pipeline nodes share them. `filtered_object` applies the same style-prohibition word filtering to `StoryObject.description` while leaving `obj.name` untouched.
 
-`style_prohibitions(style_fragment)` reads the words the active fragment forbids off its own
-`no <term>` clauses — `comic` yields `{gradients, glow}`, `cel` yields
-`{gradients, glossy, highlights, airbrushing}`. **Derived, never hand-listed**, so ADR-022 keeps sole
-ownership of the fragments and a new preset arrives carrying its own prohibitions. This is why the
-objection that killed the species word-list (`char_bible.py:74-77`) does not apply: that list is
-open-ended, this one is closed by the fragment.
+### Block Ordering and Invariants
 
-`filtered_description(description, style_fragment)` returns a transient copy with those words removed.
+`build_prompt` emits prompt blocks in the exact contract order:
+1. Reference roll (`Image N is...`) with extended `REFERENCE_CLAUSE`:
+   > `"The reference images define appearance, not pose, crop, expression or viewing angle; the Visual direction controls those scene properties."`
+2. Text-only character descriptions (unreferenced present characters)
+3. Exact visible cast count and non-human clause (`SUBJECT_COUNT_CLAUSE`, `NON_HUMAN_CLAUSE`)
+4. Visible objects block:
+   ```text
+   Visible objects:
+   <name>, <description>
+   ```
+5. Visual direction block:
+   ```text
+   Visual direction: <visual_direction>
+   ```
+6. Setting line (`Setting: <name> - <description>`)
+7. Verbatim text excerpt (`text_excerpt`)
+8. Style fragment (`style`)
 
-- **Three list axes word-level, plus `notes` all-or-nothing.** Never `species` (`analyze` makes it
-  required precisely so acceptance can never be vacuous — ADR-035 limit 4).
-- **Word-level** on the list axes: `"glowing eyes"` → `"eyes"`. An entry is dropped only if nothing
-  survives, so a real subject fact is never discarded to remove a rendering one.
-- **All-or-nothing on `notes`** (`_kept_whole`, ADR-035 amendment 2026-08-12b): one forbidden word
-  drops the whole string. `notes` is a sentence, not a noun phrase, so the word-level rule would leave
-  a mangled fragment; and since ADR-034 took `notes` out of the judge prompt, dropping it cannot make
-  acceptance vacuous. It reaches the draw prompt (`char_bible.py:275`) and the scene prompt
-  (`_describe`), which is why the carve-out had to go.
-- **Prefix match in both directions**, floored at 4 characters — `"glowing"`/`"glow"` and
-  `"gradient"`/`"gradients"` match, `"glove"`/`"glow"` does not.
-- **Transient.** `StoryMemory` keeps the child's words verbatim; only the rendered text drops them.
-  No contract change, and the filter is reversible if the style changes.
-
-It **removes, never invents**, so invariant 2 below is untouched.
-
-`permitted_words(value, style_fragment)` applies the same word-level rule to ONE string, and exists
-for exactly one caller: `reveal._chips`, on the `species` axis (ADR-035 amendment, 2026-08-12).
-`None` passes through; a value with nothing left returns `""`, which `_chips` drops as falsy.
-
-**The distinction is describing versus offering, and it is the whole point of the split.**
-`filtered_description` governs what the prompts *say* and leaves `species` alone — that carve-out is
-what stops acceptance going vacuous. `permitted_words` governs what the child is *offered*, where a
-forbidden species is a button that cannot work. Without it the two "never filter" carve-outs
-(`species`, `notes`) composed into a bypass: a species chip became `char_bible._mint_targeted`'s
-`notes` and put `"glowing orb"` back into a draw prompt under `"no glow"` on a fresh job. Do not
-"simplify" this by folding `species` into `filtered_description`.
-
-### `build_prompt`
-
-Renders, for each character in `characters` whose `char_id` is in `characters_present`, the same
-populated description axes `char_bible.reference_prompt` uses (`species`, `colours`, `body_features`,
-`clothing`, `notes`) — consistent phrasing across the canonical reference and every scene prompt —
-**each passed through `filtered_description` first (ADR-035)**. Then appends the verbatim
-`text_excerpt` and the style fragment. `style_fragment=None` falls back to
-`settings.default_style_fragment`, the same fallback `char_bible` already uses.
-
-The filter is what stopped this function asserting an attribute the style clause in the same payload
-forbade. Prod job `b9506307` emitted `the star - star; glowing; tiny` above a fragment ending
-`no glow`, and the reference obeyed the fragment — so the scene's own noun described something
-Image 2 visibly was not, and the edit model drew a second star (issue #23's `s1`). **`text_excerpt`
-is not filtered**: ADR-013 freezes it verbatim, so a story that says "a tiny glowing star" still
-says so.
-
-### The image roll, guard clauses and `Setting:` line (issues #23, #32, scene-setting-and-subject-binding.md)
-
-When at least one present character has a `canonical_ref_image`, `build_prompt` prefixes the prompt
-with a roll naming each image in `referenced_characters` order and **folding that character's
-description into the same sentence** — `"Image 1 is Ana - girl; red; jeans. Image 2 is the star -
-tiny."` — followed by `REFERENCE_CLAUSE`. The fold is the D2 fix
-(`scene-setting-and-subject-binding.md` §4.2): the reference image and its attributes are one
-sentence rather than two blocks the model has to associate. A referenced character does **not** also
-get a separate description line; a present character with no reference still does, below the roll.
-
-Two further clauses sit **outside** `REFERENCE_CLAUSE`, because the roll and its clause are omitted
-entirely on the text-to-image path and both guards must apply there too:
-
-- `SUBJECT_COUNT_CLAUSE` — `"This illustration contains exactly N characters: Ana and the star."`
-  A whole-canvas count, computed **after** the missing-`char_id` filter, singular at `N == 1`.
-- `NON_HUMAN_CLAUSE` — wording from `char_bible.REFERENCE_PROMPT`, emitted unconditionally for the
-  reason `char_bible` gives: branching on species needs a word list that is wrong the first time a
-  child writes something not on it, and the clause is a no-op for a person.
-
-Both are omitted when no present character survives the filter — all three blocks would reference
-nothing.
-
-A `Setting: <name> - <description>` line follows the guards and precedes `text_excerpt`, so on a
-conflict the excerpt is the later and more specific assertion. `location=None` emits no line at all.
-`filtered_location` is ADR-035 **surface 5**: the description is word-filtered against the style
-fragment's own prohibitions; the **name** never is.
+`generate_scene` requires a non-empty `scene.visual_direction` and logs `image_model=settings.fal_image_model` alongside attempt metrics.
 
 `referenced_characters` deduplicates `characters_present` order-preservingly, so a checkpoint
 written before `segment`'s own dedup cannot send one reference image as two subjects on resume.
@@ -173,11 +124,12 @@ could make vacuous is the *reference* gate, whose subject line is built by `char
 
 ### `correct_prompt`
 
-Three module-level constants close the holes where reason clauses alone append nothing (making the retry a pure resample, which ADR-010 rejects):
+Four module-level constants close the holes where reason clauses alone append nothing (making the retry a pure resample, which ADR-010 rejects):
 
 - `IDENTITY_CLAUSE = "the characters must match the reference images exactly"` — fires when `same_character=False` and `failure_reasons` is empty (i.e. the judge named the failure but gave no reason; anatomy is outside the frozen 7 so it has no FailureReason entry). It fires a **second** way, as a floor: see *Unfillable clauses* below.
 - `ANATOMY_CLAUSE = "anatomy must be correct: no merged, missing or duplicated body parts"` — fires when `anatomy_intact=False` (ADR-028 froze anatomy out of `FailureReason`; this is the only correction available).
 - `TEXT_CLAUSE = "every surface in the picture is blank and unmarked"` — fires when `text_free=False` (lettering-suppression §4.4: asserts blankness without naming text, letters, words or writing, which are what summoned text in prior attempts).
+- `COMPOSITION_CLAUSE = "Preserve the Visual direction exactly: do not change the requested action, movement direction, pose, crop, expression, or viewing angle."` — fires on every corrected retry (appended last when clauses exist) to preserve requested composition.
 
 All three boolean params default to `True` so the four-positional-arg signature stays call-compatible.
 

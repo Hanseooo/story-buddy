@@ -1,3 +1,15 @@
+export type FailureReason = 
+  | "child_text" 
+  | "character_safety" 
+  | "scene_safety" 
+  | "service_busy" 
+  | "service_limit" 
+  | "book_limit" 
+  | "worker_stopped" 
+  | "system_error"
+  | "machine"
+  | null;
+
 export type JobPage = {
   scene_id: string;
   caption: string;

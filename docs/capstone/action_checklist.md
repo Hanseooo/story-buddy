@@ -24,7 +24,7 @@ same convention already used for B1.
 | A2 | Confirm the **"79.6% human agreement"** figure inside the DreamBench++ PDF (`arxiv.org/abs/2406.16855`). Reword if the number isn't there. | ADR-004; model_finetuning.md L7 | A specific quantitative claim a reviewer can check and find wrong. | 🔍 | ☐ |
 | A3 | Confirm QLoRA `arXiv:2305.14314` resolves (it does). | Methods citation | Low risk; still confirm. | 🔍 | ☐ |
 | A4 | Verify the 3 Related-Work IDs before citing (ConsiStory 2402.03286 · StoryDiffusion 2405.01434 · The Chosen One 2311.10093). | Related Work paragraph | Citing an unverified ID. | 🔍 | ☐ |
-| A5 | After A1–A2, apply the corrected gap wording + fixed citations to the **frozen** docs (`ADRs.md` ADR-001/ADR-004, `RESEARCH_PROTOCOL.md`, `ROADMAP.md`) so they match the manuscript. Log ADR edits as a one-line factual-correction changelog. | Consistency between manuscript and authoritative docs | Manuscript and source-of-truth disagree — a project-rule violation and a defense inconsistency. | 🛠️ | ☐ |
+| A5 | After A1–A2, apply the corrected gap wording + fixed citations to the **frozen** docs (`docs/product/adr/ADR-001-image-generation-model-qwen-image-edit-open-weight.md` / `docs/product/adr/ADR-004-consistency-via-vlm-as-judge-control-loop-human-ratings.md`, `RESEARCH_PROTOCOL.md`, `ROADMAP.md`) so they match the manuscript. Log ADR edits as a one-line factual-correction changelog. | Consistency between manuscript and authoritative docs | Manuscript and source-of-truth disagree — a project-rule violation and a defense inconsistency. | 🛠️ | ☐ |
 
 ---
 

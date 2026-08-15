@@ -84,7 +84,7 @@ Constants live in `app/config.py` beside `MAX_SCENES`:
 
 ```python
 MIN_STORY_WORDS = 5     # a book needs at least one scene's worth of text
-MAX_STORY_WORDS = 800   # ADR-012 range 500–800, top of range, tunable
+MAX_STORY_WORDS = 300   # ADR-037 amends ADR-012's 500–800 range: length buys retries
 ```
 
 ```python
@@ -414,5 +414,8 @@ deliberately does not build a second harness.
   false-positive surface on a child's story, and nothing has asked for them. Add on evidence.
 - **Coreference is out of scope.** `"Maria"` and `"Maria Santos"` receive different stand-ins.
   Revisit only if the fixture set shows it corrupting stories.
-- **`MAX_STORY_WORDS = 800`** takes the top of ADR-012's 500–800 range. Tunable in `config.py`;
-  lower it if `scene-segmentation` shows quality falling off before the cap bites.
+- **`MAX_STORY_WORDS = 300`.** This spec originally took 800, the top of ADR-012's 500–800 range,
+  and said to lower it if quality fell off before the cap bit. **ADR-037 lowered it (2026-08-15)**,
+  not on that evidence but as a deliberate trade: a shorter book funds a third corrected scene
+  attempt inside a smaller image budget. Still tunable in `config.py`, but it is now one term of a
+  coupled policy — see `spend-and-retry-economics.md` before moving it.

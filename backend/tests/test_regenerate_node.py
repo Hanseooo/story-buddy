@@ -17,6 +17,7 @@ from contracts.story_memory import (
     Input,
     Scene,
     StoryMemory,
+    StoryObject,
     Style,
     VlmVerdict,
 )
@@ -77,6 +78,7 @@ def _state(
 
 
 def _scene(attempts: list[Attempt] | None = None, **kwargs) -> Scene:
+    kwargs.setdefault("visual_direction", "The dog runs.")
     return Scene(
         scene_id="s0",
         text_excerpt="The dog ran.",
@@ -419,3 +421,114 @@ def test_raises_when_neither_the_attempt_nor_the_scene_carries_a_prompt():
         regenerate(state)
 
     store.assert_not_called()
+
+
+def test_regenerate_preserves_visual_direction_and_objects_in_rebuilt_prompt():
+    ana = Character(char_id="c0", name="Ana", description=CharacterDescription(species="girl"))
+    sword = StoryObject(obj_id="obj0", name="wooden sword", description="a wooden sword")
+    prompt = build_prompt(
+        "Ana ran.",
+        ["c0"],
+        [ana],
+        None,
+        None,
+        ["obj0"],
+        [sword],
+        "Ana runs right holding the wooden sword.",
+    )
+    scene = Scene(
+        scene_id="s0",
+        text_excerpt="Ana ran.",
+        characters_present=["c0"],
+        objects_present=["obj0"],
+        visual_direction="Ana runs right holding the wooden sword.",
+        prompt=prompt,
+        attempts=[Attempt(image_ref="job-1/s0-1.png", prompt=prompt, failure_reasons=[FailureReason.wrong_colour], passed=False)],
+    )
+    state = StoryMemory(
+        schema_version=CURRENT_SCHEMA_VERSION,
+        story_id="job-1",
+        classroom_id="dev-classroom",
+        profile_id="dev-profile",
+        input=Input(raw_text="x", redacted_text="x"),
+        characters=[ana],
+        objects=[sword],
+        style=Style(),
+        scenes=[scene],
+    )
+    with patch("pipeline.regenerate.correct_prompt", return_value="corrected prompt") as mock_correct, \
+         patch("pipeline.regenerate.generate_and_store", return_value=("job-1/s0-2.png", True)):
+        regenerate(state)
+
+    mock_correct.assert_called_once()
+    assert "Visible objects:\nwooden sword, a wooden sword" in mock_correct.call_args.args[0]
+    assert "Visual direction: Ana runs right holding the wooden sword." in mock_correct.call_args.args[0]
+
+
+def test_regenerate_rejects_scene_with_empty_visual_direction():
+    scene = Scene(
+        scene_id="s0",
+        text_excerpt="Ana ran.",
+        characters_present=["c0"],
+        visual_direction="",
+        attempts=[_failed_attempt()],
+    )
+    state = _state([scene])
+    with patch("pipeline.regenerate.generate_and_store"):
+        with pytest.raises(ValueError, match="has no visual_direction"):
+            regenerate(state)
+
+
+def test_regenerate_passes_stored_scene_contradictions_and_preserves_refs():
+    attempt = _failed_attempt(
+        reasons=[FailureReason.wrong_colour],
+    ).model_copy(
+        update={"scene_contradictions": ["The wooden sword is missing."]}
+    )
+    state = _state([_scene(attempts=[attempt])])
+    with patch("pipeline.regenerate.correct_prompt", return_value="corrected") as correct, patch(
+        "pipeline.regenerate.generate_and_store",
+        return_value=("story/s0-2.png", True),
+    ) as store:
+        regenerate(state)
+
+    assert correct.call_args.kwargs["scene_contradictions"] == [
+        "The wooden sword is missing."
+    ]
+    assert store.call_args.args[4] == ["job-1/ref-c0.png"]
+
+
+# --- attempt 3 (spend-and-retry-economics §6.10, invariant 4) ---
+
+def test_attempt_3_accumulates_both_correction_rounds_and_uses_the_dash_3_path():
+    """spend-and-retry-economics §6.10 + invariant 4: "Attempt 3 corrects from attempt 2's
+    prompt, preserving the first correction and appending the newest one."
+
+    Round 1 corrected an identity failure, so attempt 2's prompt already carries
+    IDENTITY_CLAUSE. Round 2 corrects an anatomy failure. Because `regenerate` bases the
+    correction on `last.prompt`, attempt 3 must carry BOTH clauses — that accumulation is the
+    whole mechanism, and nothing else in the suite pins it.
+    """
+    round_1 = _failed_attempt(verdict=_verdict(same=False))
+    round_2 = Attempt(
+        image_ref="job-1/s0-2.png",
+        prompt=f"the original prompt. {IDENTITY_CLAUSE}",
+        vlm_verdict=_verdict(same=True, anatomy=False),
+        failure_reasons=[],
+        passed=False,
+    )
+    state = _state([_scene([round_1, round_2])])
+
+    with patch(
+        "pipeline.regenerate.generate_and_store", return_value=("job-1/s0-3.png", True)
+    ) as store:
+        result = regenerate(state)
+
+    third = result["scenes"][0].attempts[-1]
+    assert IDENTITY_CLAUSE in third.prompt, "round 1's correction was dropped"
+    assert ANATOMY_CLAUSE in third.prompt, "round 2's correction was not appended"
+
+    # The per-attempt Storage path is derived from the attempt count (CC-10), so attempt 3
+    # lands on `-3.png` and re-pays nothing on resume.
+    assert store.call_args.args[3] == 3
+    assert third.image_ref == "job-1/s0-3.png"

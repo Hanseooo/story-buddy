@@ -81,6 +81,7 @@ class StoryObject(BaseModel):  # minimal; refined by `story-analyzer` (§8, addi
     obj_id: str
     name: str
     description: Optional[str] = None
+    owner_char_id: Optional[str] = None       # ordinary/initial holder, not immutable current ownership
 
 class TimelineEvent(BaseModel):  # minimal; refined by `story-analyzer` (§8, additive)
     order: int
@@ -112,8 +113,10 @@ class VlmVerdict(BaseModel):
     anatomy_intact: bool = True        # ADR-028: merged, missing or duplicated body parts. Declared
                                        # LAST so the ADR-004 ordering above is untouched. Additive →
                                        # no schema_version bump. Best-of (ADR-010) ranks
-                                       # lexicographically: same_character → anatomy_intact →
-                                       # text_free → subjects_unique → style_match.
+                                       # lexicographically, composition first (pose-viewpoint-
+                                       # composition §5.4): checked → no scene contradictions →
+                                       # fewer of them → same_character → anatomy_intact →
+                                       # text_free → attributes_ok → subjects_unique → style_match.
                                        # ponytail: bool, not a score — widen only if a measured tie forces it.
     subjects_unique: bool = True       # scene-setting-and-subject-binding §4.4: each character
                                        # drawn exactly once. Declared LAST so ADR-004's order above
@@ -127,6 +130,7 @@ class Attempt(BaseModel):
     vlm_verdict: Optional[VlmVerdict] = None
     failure_reasons: list[FailureReason] = Field(default_factory=list)  # closed set; extras rejected
     passed: bool = False
+    scene_contradictions: Optional[list[str]] = None  # None=unavailable, []=checked clean, non-empty=checked failure
 
 class Scene(BaseModel):
     scene_id: str
@@ -140,6 +144,8 @@ class Scene(BaseModel):
     final_image_ref: Optional[str] = None                        # best-of (ADR-010); durable path
     regeneration_count: int = 0
     moderation_status: Optional[str] = None
+    objects_present: list[str] = Field(default_factory=list)      # visible obj_ids with no duplicates
+    visual_direction: Optional[str] = None                       # None=legacy/unplanned state, non-empty on new segmentation
 
 # --- LangGraph reducer (ADR-024): upsert-by-scene_id, replace-matching, keep-others ---
 # SCENE LIST ORDER IS THE CONTRACT: dict semantics keep an upserted scene in its original
@@ -307,6 +313,10 @@ Models mocked (there are no model calls here — this is pure schema). Assertion
   one; ADR-034 puts the gate between the reason and the score so the judge enumerates before it scores).
 - Assets: no field is asserted to be a URL — a plain path validates. *(Guards against signed-URL storage by
   convention; documented, not type-enforced.)*
+- **Visual continuity fields default for old checkpoints & stay declared last (additive, no schema_version bump):**
+  - Old checkpoints deserialize with `owner_char_id is None`, `objects_present == []`, `visual_direction is None`, and `Attempt.scene_contradictions is None`.
+  - New fields round-trip and remain declared last (`StoryObject.owner_char_id`, `Attempt.scene_contradictions`, `Scene.visual_direction`).
+  - `CURRENT_SCHEMA_VERSION` remains 1 and `FailureReason` remains unchanged.
 
 ## 7. Eval / quality checks
 

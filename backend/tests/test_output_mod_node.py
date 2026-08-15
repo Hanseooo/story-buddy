@@ -288,3 +288,72 @@ def test_scene_with_no_final_image_ref_is_skipped():
     mock_sign.assert_not_called()
     # Scene returned unchanged (no moderation_status set for unresolved refs)
     assert result["scenes"][0].moderation_status is None
+
+
+# --- image budget and cost tracking (spec §4.3 & §6 tests 15-17) ---
+
+def test_output_mod_raises_when_image_budget_reached():
+    from app.config import IMAGE_BUDGET
+    from pipeline.output_mod import output_mod
+    state = _state([_scene("s0")])
+    state.cost.image_count = IMAGE_BUDGET
+
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"), \
+         patch("pipeline.output_mod.classify_image_primary", return_value=False), \
+         patch("pipeline.output_mod.classify_image_backstop", return_value=True), \
+         patch("pipeline.output_mod.generate_and_store") as mock_gen:
+        with pytest.raises(RuntimeError, match="image budget exceeded"):
+            output_mod(state)
+        mock_gen.assert_not_called()
+
+
+def test_output_mod_increments_image_count_when_paid():
+    from pipeline.output_mod import output_mod
+    state = _state([_scene("s0")])
+    state.cost.image_count = 10
+
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"), \
+         patch("pipeline.output_mod.classify_image_primary", return_value=False), \
+         patch("pipeline.output_mod.classify_image_backstop", return_value=True), \
+         patch("pipeline.output_mod.generate_and_store", return_value=("job-1/s0-2.png", True)):
+        result = output_mod(state)
+
+    assert result["cost"].image_count == 11
+
+
+def test_output_mod_does_not_increment_image_count_when_reused():
+    from pipeline.output_mod import output_mod
+    state = _state([_scene("s0")])
+    state.cost.image_count = 10
+
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"), \
+         patch("pipeline.output_mod.classify_image_primary", return_value=False), \
+         patch("pipeline.output_mod.classify_image_backstop", return_value=True), \
+         patch("pipeline.output_mod.generate_and_store", return_value=("job-1/s0-2.png", False)):
+        result = output_mod(state)
+
+    assert result["cost"].image_count == 10
+
+
+def test_output_mod_persists_paid_count_on_both_passing_and_failed_retry():
+    from pipeline.output_mod import output_mod
+    state_pass = _state([_scene("s0")])
+    state_pass.cost.image_count = 5
+
+    # Passing retry
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"), \
+         patch("pipeline.output_mod.classify_image_primary", side_effect=[False, True]), \
+         patch("pipeline.output_mod.classify_image_backstop", return_value=True), \
+         patch("pipeline.output_mod.generate_and_store", return_value=("job-1/s0-2.png", True)):
+        res_pass = output_mod(state_pass)
+    assert res_pass["cost"].image_count == 6
+
+    # Failed retry
+    state_fail = _state([_scene("s0")])
+    state_fail.cost.image_count = 5
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"), \
+         patch("pipeline.output_mod.classify_image_primary", return_value=False), \
+         patch("pipeline.output_mod.classify_image_backstop", return_value=True), \
+         patch("pipeline.output_mod.generate_and_store", return_value=("job-1/s0-2.png", True)):
+        res_fail = output_mod(state_fail)
+    assert res_fail["cost"].image_count == 6

@@ -1,6 +1,6 @@
 import logging
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator, model_validator
 
 from contracts.story_memory import Character, CharacterDescription, Location, StoryMemory, StoryObject, TimelineEvent
 from providers import structured_text
@@ -12,20 +12,17 @@ from providers import structured_text
 
 
 class ExtractedDescription(CharacterDescription):
-    """Boundary-strict subclass. The contract's `CharacterDescription` is all-Optional by
-    design (ADR-023: mostly-optional container); real per-field validation belongs at the
-    LLM boundary (ADR-002). Subclassed rather than mirrored so the axes — deliberately
-    aligned to the `FailureReason` taxonomy the judge scores against — stay in one place.
-
-    `species` is required HERE and Optional in the contract. ADR-028's reference-acceptance
-    loop judges each draw against `CharacterDescription`; an entirely empty description makes
-    `matches_description` vacuously true, so the 3-draw re-roll silently collapses to 1 draw.
-    One always-answerable string guarantees the judge has something to check against.
-    No visual attribute is required — strict `json_schema` cannot express "at least one of
-    three lists is non-empty", so that constraint would have to fire after a paid call.
-    """
-
     species: str
+    is_humanoid: bool
+
+    @model_validator(mode="after")
+    def complete_visual_profile(self) -> "ExtractedDescription":
+        axes = (self.colours, self.body_features, self.clothing)
+        if sum(len(axis) for axis in axes) < 3 or sum(bool(axis) for axis in axes) < 2:
+            raise ValueError("character needs at least three visual discriminators across two axes")
+        if self.is_humanoid and not self.clothing:
+            raise ValueError("humanoid character needs a clothing description")
+        return self
 
 
 class ExtractedCharacter(BaseModel):
@@ -35,12 +32,20 @@ class ExtractedCharacter(BaseModel):
 
 class ExtractedLocation(BaseModel):
     name: str
-    description: str | None = None
+    description: str
+
+    @field_validator("description", mode="after")
+    @classmethod
+    def description_not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("description cannot be blank")
+        return v
 
 
 class ExtractedObject(BaseModel):
     name: str
-    description: str | None = None
+    description: str
+    owner_name: str | None = None
 
 
 class StoryAnalysis(BaseModel):
@@ -50,6 +55,14 @@ class StoryAnalysis(BaseModel):
     locations: list[ExtractedLocation]
     objects: list[ExtractedObject]
     timeline: list[TimelineEvent]          # already id-less in contracts/
+
+    @model_validator(mode="after")
+    def entity_rosters_do_not_overlap(self) -> "StoryAnalysis":
+        character_names = {character.name.casefold() for character in self.characters}
+        overlap = character_names & {obj.name.casefold() for obj in self.objects}
+        if overlap:
+            raise ValueError(f"entity appears as both character and object: {sorted(overlap)}")
+        return self
 
 
 log = logging.getLogger(__name__)
@@ -74,11 +87,13 @@ Characters: at most 3, most important first — the first one is the story's pro
 Use the name the story gives the character. If the story never names them, use a short
 descriptive label instead: "the narrator", "the younger sister", "the orange cat". Never emit a
 redaction placeholder like <PERSON_1>. The story is usually first-person, and the narrator is
-usually a character. Every character needs a species — one plain word for what they are:
-"girl", "dog", "robot". Fill colours, body_features and clothing only from what the story
-actually says; leave them empty rather than inventing details.
+usually a character.
+Classify by agency: a character speaks, decides, moves intentionally, or performs an action. An inert prop belongs only in objects. A personified object belongs only in characters, never both.
+Species is the physical kind, never a job title or role: a human wizard is physically human.
+Copy every visual fact the story states without alteration. Fill only missing visual axes once with neutral, child-safe, non-stereotyped details that distinguish this character from the rest of the roster.
+Return at least three stable visual discriminators across at least two of colours, body_features, and clothing. Set is_humanoid accurately; every humanoid needs a non-empty clothing description.
 
-Locations and objects: whatever the story mentions. Describe each location by what is permanently there — not the weather, the time of day, or what happens there.
+Locations and objects: whatever the story mentions. Describe each location by what is permanently there — not the weather, the lighting, the time of day, any damage, or what happens there. Copy every stated permanent fact without alteration. Fill missing detail once with neutral, child-safe features that make the place visually recognizable. For each object, provide a stable physical description and set owner_name to the character's name if owned by a character, or null if unowned.
 
 Timeline: the story's events in the order they happen, one short summary each.
 
@@ -121,7 +136,7 @@ def analyze(state: StoryMemory) -> dict:
             char_id=f"c{i}",
             name=extracted.name,
             # the strict subclass is a boundary concern; what is persisted is the contract type
-            description=CharacterDescription(**extracted.description.model_dump()),
+            description=CharacterDescription(**extracted.description.model_dump(exclude={"is_humanoid"})),
         )
         for i, extracted in enumerate(analysis.characters[:3])
     ]
@@ -131,10 +146,37 @@ def analyze(state: StoryMemory) -> dict:
         Location(loc_id=f"loc{i}", name=extracted.name, description=extracted.description)
         for i, extracted in enumerate(analysis.locations)
     ]
-    objects = [
-        StoryObject(obj_id=f"obj{i}", name=extracted.name, description=extracted.description)
-        for i, extracted in enumerate(analysis.objects)
-    ]
+    name_to_char_id: dict[str, str] = {}
+    for character in characters:
+        name_to_char_id.setdefault(character.name, character.char_id)
+
+    # §4.2 makes an UNKNOWN owner a boundary error. A owner the model did extract but that the
+    # 3-character cap dropped is not unknown — it is known and uncapped, and raising on it would
+    # turn a routine over-extraction (the cap exists precisely because the prompt is not
+    # enforceable) into a dead job before any image is drawn.
+    extracted_names = {extracted.name for extracted in analysis.characters}
+
+    objects = []
+    for i, extracted in enumerate(analysis.objects):
+        owner_char_id = None
+        if extracted.owner_name is not None:
+            owner_char_id = name_to_char_id.get(extracted.owner_name)
+            if owner_char_id is None:
+                if extracted.owner_name not in extracted_names:
+                    raise ValueError(f"analyze: unknown owner {extracted.owner_name!r}")
+                log.warning(
+                    "analyze: owner %r capped out of the roster; object %r kept unowned",
+                    extracted.owner_name,
+                    extracted.name,
+                )
+        objects.append(
+            StoryObject(
+                obj_id=f"obj{i}",
+                name=extracted.name,
+                description=extracted.description,
+                owner_char_id=owner_char_id,
+            )
+        )
     # `order` is re-assigned from list position, never trusted from the model: a returned
     # `1, 2, 5` or a duplicate validates fine against Pydantic and would silently corrupt the
     # only ordering `segment` receives.
