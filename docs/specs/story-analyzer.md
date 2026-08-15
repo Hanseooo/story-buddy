@@ -79,7 +79,7 @@ class ExtractedCharacter(BaseModel):
 
 class ExtractedLocation(BaseModel):
     name: str
-    description: str | None = None
+    description: str   # Enforced strictly at the transient boundary, no longer nullable
 
 class ExtractedObject(BaseModel):
     name: str
@@ -108,6 +108,8 @@ taxonomy the judge scores against. Re-deriving them here would create a second s
 `is_humanoid` is a node-local transient flag used only to enforce required clothing on humanoid figures. It is stripped via `exclude={"is_humanoid"}` when converting to `CharacterDescription` so it does not leak into the persisted contract.
 
 The prompt requires filling missing visual axes with neutral, child-safe, non-stereotyped details that distinguish the character across the roster.
+
+Locations require a strict permanent description. The prompt instructs the model to preserve stated permanent facts and fill missing detail neutrally, excluding temporary conditions.
 
 Objects require a stable physical description and an optional `owner_name`. Initial ownership is mapped after the three-character cap: `owner_name` maps to `owner_char_id`. If an `owner_name` cannot be resolved against the capped character roster, node execution raises `ValueError`.
 

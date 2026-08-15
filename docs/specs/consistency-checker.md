@@ -156,6 +156,8 @@ read and the app never speaks (CC-6), or a character whose colour and build chan
 `style_match` and `subjects_unique` are recorded, folded, and available to `regeneration-controller`'s
 ranking, but do **not** gate (ADR-007, §4.4).
 
+The scene-constraint judge checks the `Setting:` line (if present) against the page, reporting only concrete violations of stated permanent features as contradictions. Temporary differences supported by the excerpt (weather, lighting) are ignored. This is enforced by `SCENE_CONSTRAINT_PROMPT_VERSION = 3`.
+
 #### `GATING_REASONS` — the identity-attribute gate (2026-08-13)
 
 ```python
@@ -240,7 +242,9 @@ the prompt matches `subjects_unique`'s position in `SceneVerdict`, because
 - Folded worst-wins: `subjects_unique = all(v.subjects_unique for v in verdicts)`.
 - Ranked: `_rank` is
   `(1, composition_clean, fewer_contradictions, same_character, anatomy_intact, text_free, attributes_ok, subjects_unique, style_match)`;
-  the unchecked tuple is `(0, 0, 0, 0, 0, 0, 0, 0, 0)`. `attributes_ok` is
+  the unchecked tuple is `(False, False, 0, True, True, True, True, True, True)` — term 1 is what
+  sinks it below every checked attempt; the unmeasured axes read `True` deliberately (see `_rank`'s
+  docstring). `attributes_ok` is
   `not (GATING_REASONS & failure_reasons)` — read off `Attempt.failure_reasons`, since `vlm_verdict`
   carries no reason list. It sits **last of the gating axes and ahead of the two record-only ones**.
   Without it the corrected redraw the gate now buys would be invisible to best-of: two attempts
