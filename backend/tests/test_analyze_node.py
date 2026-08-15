@@ -9,6 +9,7 @@ from contracts.story_memory import (
     Character,
     CharacterDescription,
     Input,
+    Location,
     StoryMemory,
 )
 from pipeline.analyze import (
@@ -110,13 +111,13 @@ def test_story_analysis_accepts_the_four_collections():
                     },
                 }
             ],
-            "locations": [{"name": "the beach"}],
+            "locations": [{"name": "the beach", "description": "a sunny sandy beach with palm trees"}],
             "objects": [{"name": "a red bucket", "description": "a small red plastic bucket"}],
             "timeline": [{"order": 0, "summary": "They go to the beach."}],
         }
     )
     assert analysis.characters[0].description.species == "girl"
-    assert analysis.locations[0].description is None
+    assert analysis.locations[0].description == "a sunny sandy beach with palm trees"
     assert analysis.timeline[0].summary == "They go to the beach."
 
 
@@ -125,7 +126,7 @@ def _analysis(**overrides) -> StoryAnalysis:
     return StoryAnalysis.model_validate(
         {
             "characters": [_character("the narrator")],
-            "locations": [{"name": "the beach"}],
+            "locations": [{"name": "the beach", "description": "a sunny sandy beach with palm trees"}],
             "objects": [{"name": "a red bucket", "description": "a small red plastic bucket"}],
             "timeline": [{"order": 0, "summary": "They go to the beach."}],
             **overrides,
@@ -269,7 +270,10 @@ def test_analyze_persists_story_stated_details_without_the_transient_humanoid_fl
 def test_analyze_mints_ids_by_list_position():
     analysis = _analysis(
         characters=[_character("the narrator"), _character("the younger sister")],
-        locations=[{"name": "the beach"}, {"name": "the car"}],
+        locations=[
+            {"name": "the beach", "description": "sandy beach"},
+            {"name": "the car", "description": "red sedan"},
+        ],
         objects=[{"name": "a red bucket", "description": "a small red plastic bucket"}],
     )
     with patch("pipeline.analyze.extract_entities", return_value=analysis):
@@ -379,13 +383,52 @@ def test_extraction_prompt_asks_for_permanent_location_detail():
     )
 
 
-def test_extracted_location_description_stays_optional():
-    """§4.1: required would force invention, contradicting the same prompt's rule for character
-    axes ("leave them empty rather than inventing details"). Null degrades the setting line to
-    name-only, which is still better than today's nothing."""
-    from pipeline.analyze import ExtractedLocation
+def test_extracted_location_rejects_blank_description():
+    with pytest.raises(ValidationError):
+        ExtractedLocation(name="Park", description="   ")
+    with pytest.raises(ValidationError):
+        ExtractedLocation.model_validate({"name": "Park"})
+    with pytest.raises(ValidationError):
+        ExtractedLocation.model_validate({"name": "Park", "description": None})
 
-    assert ExtractedLocation(name="the beach").description is None
+    valid_loc = ExtractedLocation(name="Park", description="A large green park")
+    assert valid_loc.description == "A large green park"
+
+
+def test_extraction_prompt_contains_new_instructions():
+    assert "permanently there" in EXTRACTION_PROMPT
+    assert "Copy every stated permanent fact" in EXTRACTION_PROMPT
+    assert "neutral, child-safe" in EXTRACTION_PROMPT
+    assert "not the weather" in EXTRACTION_PROMPT
+
+
+def test_valid_description_reaches_location_unchanged(mocker):
+    mock_response = mocker.Mock()
+    mock_response.characters = []
+    mock_response.locations = [ExtractedLocation(name="Park", description="A large green park")]
+    mock_response.objects = []
+    mock_response.timeline = []
+    mocker.patch("pipeline.analyze.structured_text", return_value=mock_response)
+
+    result = extract_entities("some text")
+    assert result.locations[0].description == "A large green park"
+
+
+def test_persisted_location_contract_accepts_none():
+    loc = Location(loc_id="loc0", name="Park", description=None)
+    assert loc.description is None
+
+
+def test_locations_remain_uncapped(mocker):
+    mock_response = mocker.Mock()
+    mock_response.characters = []
+    mock_response.locations = [ExtractedLocation(name=f"Park {i}", description=f"Desc {i}") for i in range(10)]
+    mock_response.objects = []
+    mock_response.timeline = []
+    mocker.patch("pipeline.analyze.structured_text", return_value=mock_response)
+
+    result = extract_entities("some text")
+    assert len(result.locations) == 10
 
 
 def test_extracted_object_requires_a_stable_physical_description():
