@@ -190,8 +190,8 @@ def test_project_reveal_word_filters_a_forbidden_term_out_of_the_species_chip():
     stops acceptance going vacuous — but Decision 5 lists `_chips` as a filtered surface, and its
     reason ("a tap that cannot succeed") applies to a forbidden species word just as much as to a
     forbidden colour. The two cells conflicted, and the species chip was the live leak: the tapped
-    chip becomes `_mint_targeted`'s `notes`, which is unfiltered, so "glowing orb" came back into
-    the draw prompt under a fragment ending "no glow" on a FRESH job, not just an in-flight one.
+    chip becomes `_mint_targeted`'s explicit emphasis, so "glowing orb" would come back into the
+    draw prompt under a fragment ending "no glow" on a FRESH job, not just an in-flight one.
 
     Chip scope only. The reference prompt still says "glowing orb" (see the char_bible test) —
     what is removed is the promise that tapping it can change anything.

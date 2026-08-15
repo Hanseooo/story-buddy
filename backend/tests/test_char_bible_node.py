@@ -111,7 +111,7 @@ def test_best_draw_returns_zero_when_every_verdict_is_empty():
 
 # --- reference_prompt (pure) ---
 
-def test_reference_prompt_contains_the_visual_description_axes_but_not_notes():
+def test_reference_prompt_contains_the_identity_projection_but_not_notes():
     description = CharacterDescription(
         species="dog",
         colours=["orange"],
@@ -135,14 +135,12 @@ def test_reference_prompt_floors_to_the_character_name_on_an_empty_description()
 # --- visually-thin descriptions (2026-08-11) ---
 
 def test_reference_prompt_enriches_a_description_with_no_visual_axis():
-    """`analyze`'s EXTRACTION_PROMPT says "leave them empty rather than inventing details", so
-    colours/body_features/clothing are routinely all empty — prod job 4cb31620 (2026-08-11) drew
-    c0 from "the narrator, girl, the protagonist". Every page of the book inherits that
-    reference, so the generator needs *something* to draw beyond a role noun.
+    """A legacy checkpoint or model miss can leave all three appearance axes empty — prod job
+    4cb31620 (2026-08-11) drew c0 from "the narrator, girl, the protagonist". Every page of the
+    book inherits that reference, so the generator needs *something* to draw beyond a role noun.
 
-    Triggered on the visual axes, NOT on len(populated): c0 had two populated axes (species and
-    notes) and still specified nothing drawable. `species` and `notes` are identity, not
-    appearance.
+    Triggered on the appearance axes, NOT on len(populated): c0 had species and notes but no
+    colours, body features, or clothing.
     """
     prompt = reference_prompt(CharacterDescription(species="girl", notes="the protagonist"), "the narrator", FRAG)
 
@@ -887,7 +885,9 @@ def _targeted_state(char_id: str = "c0", attribute: str = "orange sock", ref_ret
                     style: Style | None = None) -> StoryMemory:
     from contracts.story_memory import ReferenceRetry
 
-    c0 = _char("c0", "the dog", ref="story-1/ref-c0-1.png")
+    c0 = _char("c0", "the dog", ref="story-1/ref-c0-1.png").model_copy(
+        update={"description": CharacterDescription(species="dog", clothing=["orange sock"])}
+    )
     c0.ref_verdict = _verdict(True, ["dog"])
     c0.ref_moderation_status = "passed"
     return _state(
@@ -909,14 +909,14 @@ def test_char_bible_targeted_mode_makes_exactly_one_draw_and_one_judge_call():
     assert result["characters"][0].char_id == "c0"
 
 
-def test_char_bible_targeted_mode_restates_the_tapped_attribute_in_the_prompt():
+def test_char_bible_targeted_mode_emphasizes_an_attribute_already_in_a_visual_axis():
     state = _targeted_state(attribute="orange sock")
     with patch("pipeline.char_bible.text_to_image", return_value=b"x") as t2i, \
          patch("pipeline.char_bible.judge", return_value=_verdict(True)), \
          patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
         char_bible(state)
 
-    assert "orange sock" in t2i.call_args.args[0]
+    assert "Be sure to include: orange sock." in t2i.call_args.args[0]
 
 
 def test_char_bible_targeted_mode_suppresses_scenery_like_the_first_draw():
@@ -929,17 +929,6 @@ def test_char_bible_targeted_mode_suppresses_scenery_like_the_first_draw():
         char_bible(state)
 
     assert t2i.call_args.kwargs["negative_extra"] == REFERENCE_NEGATIVE
-
-
-def test_char_bible_targeted_mode_reinjects_the_tapped_attribute_after_notes_are_excluded():
-    """Targeted redraws preserve the child-selected attribute outside the identity prompt."""
-    state = _targeted_state(attribute="orange sock")
-    with patch("pipeline.char_bible.text_to_image", return_value=b"x") as t2i, \
-         patch("pipeline.char_bible.judge", return_value=_verdict(True)), \
-         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
-        char_bible(state)
-
-    assert "Be sure to include: orange sock." in t2i.call_args.args[0]
 
 
 def test_char_bible_still_describes_a_species_the_style_forbids():

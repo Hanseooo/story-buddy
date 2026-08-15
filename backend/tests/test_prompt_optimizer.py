@@ -263,10 +263,9 @@ def test_build_prompt_keeps_a_multi_word_species_the_name_only_partly_carries():
     assert prompt.split("\n\n")[0] == "the retriever, golden retriever"
 
 
-def test_a_scene_describes_its_characters_the_way_the_reference_prompt_does():
-    """The docstring on `_describe` promises the scene prompt phrases a character the way
-    `char_bible` does. Commit bef9982 moved char_bible to commas and left this copy on
-    `"{name} - {a}; {b}"`, so the promise was false for an hour.
+def test_a_scene_uses_commas_for_the_shared_character_axes():
+    """Commit bef9982 moved char_bible to commas and left this copy on
+    `"{name} - {a}; {b}"`, so their shared-axis phrasing diverged for an hour.
 
     It matters beyond tidiness: that label shape is what a prod cel page rendered as the word
     "Casey" lettered above the character, the same way the reference draw returned "Hoe - Star:".

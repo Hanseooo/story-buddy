@@ -221,11 +221,11 @@ and exactly one place it persists, *including* the ones nobody stated. A finishe
   `CharacterDescription`, but capped out of `char_bible`'s 2-reference slot by ADR-004, so it draws
   through `text_to_image`; (ii) entities the story mentions that `analyze` never rostered at all
   (`analysis.characters[:3]`). Decide scope explicitly; (ii) is a much larger change.
-- The hole is **not** that these characters get no attributes — `build_prompt` already emits
-  `_describe(...)` for every present non-referenced character (`prompt_optimizer.py:290-294`). The
-  hole is that `analyze`'s `EXTRACTION_PROMPT` says *"leave them empty rather than inventing
-  details"*, so an undescribed character has nothing to be consistent **to**, and the image model
-  invents fresh on every page.
+- The hole was **not** that these characters got no attributes — `build_prompt` already emitted
+  `_describe(...)` for every present non-referenced character (`prompt_optimizer.py:290-294`).
+  ~~`analyze` said *"leave them empty rather than inventing details"*, so an undescribed character
+  had nothing to be consistent **to**.~~ S2 resolved this by filling missing appearance axes once
+  with concrete, child-safe details; the image model no longer invents them independently per page.
 - So: who invents? Candidates — (a) relax `analyze` to invent and persist; (b) a new gap-fill node
   between `segment` and the scene loop; (c) capture-from-first-draw: caption the first image the
   character appears in and write the observed attributes back as a de facto textual bible.

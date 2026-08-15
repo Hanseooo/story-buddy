@@ -82,14 +82,13 @@ Then say whether the image matches the description, list which of the described 
 are actually present in the image, and finally say whether the picture is free of any text — any \
 letters, numbers or writing anywhere in it, including on signs, doors, books and clothing."""
 
-# `analyze`'s EXTRACTION_PROMPT deliberately says "leave them empty rather than inventing
-# details", so a character routinely arrives with nothing drawable — prod job 4cb31620
-# (2026-08-11) drew c0 from "the narrator - girl; the protagonist". Every page of the book
-# inherits that one reference, so the generator gets a neutral floor rather than a role noun.
+# `analyze` now asks for concrete visual details, but legacy checkpoints or a model miss can still
+# arrive with nothing drawable — prod job 4cb31620 (2026-08-11) drew c0 from "the narrator - girl;
+# the protagonist". Every page inherits that reference, so the generator gets a neutral floor.
 #
 # Deliberately vague: it must not assert anything the story could contradict. Keyed on the
-# VISUAL axes, not on how many fields are populated — species and notes are identity, not
-# appearance, and c0 had both while specifying nothing to draw.
+# three drawable appearance axes, not on how many fields are populated — species names physical
+# kind and notes are narrative metadata; c0 had both while specifying nothing else to draw.
 THIN_DESCRIPTION_FILLER = ", a friendly children's picture-book character"
 
 # Two clauses here exist to stop the generator anthropomorphising a non-human subject. Prod job
@@ -179,7 +178,7 @@ def _describe(description: CharacterDescription, name: str, notes: bool = True) 
     `notes=False` excludes free-prose narrative metadata from both the normal draw and judge
     prompts. A role such as "builds and names the robot" is not visual identity and can make the
     canonical portrait draw the robot. Targeted redraws retain their tapped attribute through the
-    explicit `Be sure to include:` fallback in `_mint_targeted`.
+    unconditional `Be sure to include:` clause in `_mint_targeted`.
     """
     axes = [
         description.species,
@@ -341,21 +340,13 @@ def _mint_targeted(state: StoryMemory) -> dict:
     retry = state.reference_retry
     character = next(c for c in state.characters if c.char_id == retry.char_id)
     style_fragment = state.style.prompt_fragment or settings.default_style_fragment
-    # ADR-035, same two surfaces. `notes` is set AFTER filtering, so `_kept_whole` never sees the
-    # tapped attribute — it does not need to: the attribute comes from `reveal._chips`, which is
-    # filtered at source, so it can never be a forbidden term.
-    #
-    # That "filtered at source" claim is load-bearing and it was FALSE until the amendment:
-    # `_chips` offered the species axis raw, so a species like "glowing orb" came back through
-    # `notes` under "no glow". It holds now only because `_chips` filters species in chip scope.
-    # Anything that relaxes that puts a forbidden term into this prompt — see
-    # `test_char_bible_targeted_mode_never_appends_the_re_injection_clause` for the second half.
-    description = filtered_description(character.description, style_fragment).model_copy(
-        update={"notes": retry.attribute}
+    # ADR-035 filters the chip at source, so the selected attribute cannot contradict the active
+    # style. ADR-039 keeps it separate from narrative `notes` and restates it unconditionally.
+    description = filtered_description(character.description, style_fragment)
+    prompt = (
+        f"{reference_prompt(description, character.name, style_fragment)}"
+        f"\n\nBe sure to include: {retry.attribute}."
     )
-    prompt = reference_prompt(description, character.name, style_fragment)
-    if retry.attribute not in prompt:
-        prompt = f"{prompt}\n\nBe sure to include: {retry.attribute}."
     judge_prompt = JUDGE_PROMPT.format(subject=_describe(description, character.name, notes=False))
 
     image = text_to_image(prompt, negative_extra=REFERENCE_NEGATIVE)

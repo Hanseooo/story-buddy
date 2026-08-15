@@ -38,14 +38,41 @@ S3/S4 `READY`. No implementation changed and no visual-quality claim was made.
 - [x] Confirm PII pseudonymization remains unchanged.
 - [x] Obtain approval to implement both independent fixes with delegated agents.
 - [x] Create the implementation plan in `docs/specs/plans/2026-08-15-reference-pipeline-hardening.md`.
-- [ ] Implement and review Task 1: character-reference prompt fidelity.
-- [ ] Implement and review Task 2: signed reference URL delivery.
-- [ ] Review the combined blast radius and run backend pre-merge verification.
-- [ ] Record commands, results, unverified external behavior, and residual risks below.
+- [x] Implement and review Task 1: character-reference prompt fidelity.
+- [x] Implement and review Task 2: signed reference URL delivery.
+- [x] Draft ADR-039 and add its index row in a dedicated ADR session.
+- [x] Obtain explicit human acceptance of ADR-039 before retaining the conflicting prompt behavior.
+- [x] Review the combined blast radius and run backend pre-merge verification.
+- [x] Record commands, results, unverified external behavior, and residual risks below.
 
 ## Outcome
 
-In progress.
+ADR-039 was accepted on 2026-08-15. Normal canonical-reference prompts now omit narrative `notes`;
+targeted redraws read `ReferenceRetry.attribute` directly and emphasize it unconditionally. Analyzer
+guidance requires concrete drawable values instead of placeholders. Scene prompts intentionally keep
+`notes`, PII pseudonymization is unchanged, and no contract, graph, model, provider, or moderation
+ordering changed.
+
+Scene generation now gives fal a fresh 300-second Supabase signed URL for each canonical reference
+instead of downloading the full asset through the worker and re-uploading it to fal. URL ordering,
+private Storage paths, checkpoint compatibility, and idempotent resume behavior are preserved.
+
+Verification from `backend/` on 2026-08-15:
+
+- `uv run ruff check .` — passed.
+- `uv run pytest` — 853 passed, 71 intentionally skipped, 6 deselected; one existing Starlette
+  deprecation warning.
+- Focused changed surface — 267 passed.
+- `git diff --check` — clean.
+
+Repository pre-merge verification also passed: `pnpm lint` and `pnpm test` from `frontend/`, with
+34 test files and 269 tests passing. The first frontend test attempt hit the 120-second command
+timeout without a result; the isolated retry completed successfully in 31.5 seconds.
+
+Not verified locally: a paid live fal request fetching a private Supabase signed URL. The deterministic
+tests prove URL creation, freshness, and ordering but cannot prove fal's external fetch. Remaining
+product risk: prompt adherence is probabilistic, and scene prompts still receive narrative `notes` by
+ADR-039's deliberately narrow scope. No population-level quality claim is made from the single repro.
 
 ---
 

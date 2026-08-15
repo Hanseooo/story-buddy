@@ -28,8 +28,8 @@ def _chips(character: Character, style_fragment: str | None) -> list[str]:
     axes = {
         # `species` is the one axis `filtered_description` deliberately leaves alone (Decision 2),
         # so it is filtered here instead — chip scope only. It was the live leak: a chip becomes
-        # `char_bible._mint_targeted`'s `notes`, which is unfiltered too, so a species like
-        # "glowing orb" walked straight back into a draw prompt under "no glow" on a fresh job.
+        # `char_bible._mint_targeted`'s explicit emphasis clause, so a species like "glowing orb"
+        # would walk straight back into a draw prompt under "no glow" on a fresh job.
         "species": permitted_words(description.species, style_fragment),
         "colours": description.colours,
         "body_features": description.body_features,

@@ -3,7 +3,7 @@
 **Status:** built (2026-07-30, `901f50b..1cca83a`) · **Phase:** 1 · **Owner node:** `backend/pipeline/char_bible.py`
 **Derived from:** MASTER_SPEC §2 (system map), §3 (frozen contract), §5 (CC registry), §6 (test seam)
 **Rationale:** ADR-002, ADR-004, ADR-007 (as amended by ADR-028), ADR-010, ADR-022, ADR-023 (D-F, D-G),
-ADR-024, ADR-025, ADR-028, PRD §8
+ADR-024, ADR-025, ADR-028, ADR-039, PRD §8
 
 > The node every other image in the book depends on. It draws the canonical character reference,
 > **checks it against the description it came from** (ADR-028), and persists both. This spec adds
@@ -174,8 +174,8 @@ consequence of the mechanism, not an oversight — see §5.
 Two module-level constants. Neither introduces a contract type; `RefVerdict` already lives in
 `backend/contracts/` because `StoryMemory` embeds it (D-F, ADR-023 amendment).
 
-`reference_prompt` renders the visual `CharacterDescription` axes (`species`, `colours`,
-`body_features`, `clothing`) plus the style fragment, and asks for a single character reference
+`reference_prompt` renders the character name, physical `species`, and three drawable appearance
+axes (`colours`, `body_features`, `clothing`) plus the style fragment, and asks for a single character reference
 **shown in full** on a plain neutral background. It excludes free-prose `notes`: a narrative role
 such as "builds and names the robot" is not visual identity and must not contaminate the canonical
 draw. Per ADR-022 the fragment **names a medium and its physical artifacts** — it never says
@@ -299,8 +299,8 @@ reference.
 When no **visual** axis is populated, `reference_prompt` appends
 `char_bible.THIN_DESCRIPTION_FILLER` (*"a friendly children's picture-book character"*). Keyed on
 the visual axes rather than on how many fields are set: `c0` had two populated axes (`species`,
-`notes`) and still specified nothing drawable, because species and notes are identity, not
-appearance.
+`notes`) and still specified nothing drawable, because species names physical kind while notes are
+narrative metadata; neither fills the three drawable appearance axes.
 
 ⚠️ **The filler reaches the draw prompt and never the judge prompt.** This is the one
 sanctioned divergence from `_describe`'s shared output. If the judge saw the filler it would become a
@@ -321,13 +321,14 @@ contradict it, and that argument is specifically false here. `filtered_descripti
 forbidden `notes` **whole** — one word, the whole string — because a sentence filtered word-by-word
 leaves a fragment. Dropping is safe precisely because neither prompt needs it.
 
-ADR-029 targeted redraws add their tapped visual attribute through the explicit `Be sure to include:`
-fallback after the normal identity prompt is built. This preserves the child's selection without
-restoring narrative `notes` to canonical identity.
+ADR-029 targeted redraws add their tapped visual attribute through an unconditional
+`Be sure to include:` clause after the normal identity prompt is built. The clause reads
+`ReferenceRetry.attribute` directly; `notes` is never overwritten as transport. This preserves the
+child's selection without restoring narrative metadata to canonical identity.
 
-Rejected alternative: letting `analyze` invent the missing detail. It produces richer references but
-writes fiction into the contract the judge measures against, and invents facts about a child's own
-story — the extraction prompt is built around not doing that.
+Rejected alternative: inventing another fallback inside `char_bible`. `analyze` is already the one
+authorized fill step for missing visual axes; adding a second invention here would write prompt-only
+fiction that the judge cannot measure and could contradict the stored contract.
 
 #### Non-humanoid subjects: the prompt stopped asking for a human body (amended 2026-08-11)
 
@@ -464,14 +465,14 @@ for a flat style but not explicitly forbidden still gets through. Mechanism and 
    degradation (nothing drawable survived, so the neutral floor is right), but a consequence rather
    than a decision.
 
-`_mint_targeted`'s `if retry.attribute not in prompt` branch intentionally fires because the normal
-identity prompt excludes `notes`. It appends `Be sure to include: {attribute}.`, preserving the tapped
-visual attribute without letting free-prose narrative notes reach the canonical draw.
+`_mint_targeted` unconditionally appends `Be sure to include: {attribute}.`, including when the
+attribute is already present in an identity axis. This is ADR-029's targeted restatement, not merely
+a stochastic redraw with the normal prompt.
 
 Covered by `test_a_style_forbidden_attribute_reaches_neither_the_draw_prompt_nor_the_judge_prompt`,
 `test_an_attribute_the_active_fragment_never_forbids_still_reaches_both_prompts`,
 `test_char_bible_still_describes_a_species_the_style_forbids` and
-`test_char_bible_targeted_mode_reinjects_the_tapped_attribute_after_notes_are_excluded`.
+`test_char_bible_targeted_mode_emphasizes_an_attribute_already_in_a_visual_axis`.
 
 ### `settings.default_style_fragment`
 
@@ -594,7 +595,7 @@ definition.
 - `best_draw` — fewest `contradictions` wins even when it shows the fewest attributes; equal
   contradiction counts fall through to `text_free`, then `len(attributes_present)`; ties return the lowest index;
   all-empty returns `0`
-- `reference_prompt` — contains each populated visual description axis but excludes `notes`; falls
+- `reference_prompt` — contains the name, species, and each populated appearance axis but excludes `notes`; falls
   back to `Character.name` on a fully empty description; always contains the style fragment
 - `reference_prompt` **framing** (§4, the section that was owed) — asks for a `full shot` and never
   `full body` / `head to toe` / `standing`; never names the artifact (`"reference"` absent

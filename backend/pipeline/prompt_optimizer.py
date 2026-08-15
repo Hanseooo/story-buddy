@@ -141,9 +141,8 @@ def filtered_object(
 
 
 def _describe(description: CharacterDescription, name: str) -> str:
-    """The populated CharacterDescription axes as one line — same phrasing char_bible's
-    reference_prompt uses, so the canonical reference and every scene prompt describe the same
-    character consistently.
+    """The populated CharacterDescription axes as one line for scene prompts. This includes
+    narrative `notes`; ADR-039 deliberately narrows only the canonical-reference prompt.
 
     Issue #32: a species the name already carries renders as `"the star - star"` — a definition,
     not a description, and a SECOND bare assertion of the noun the excerpt is independently
@@ -177,7 +176,7 @@ def referenced_characters(
     characters_present: list[str], characters: list[Character]
 ) -> list[Character]:
     """The present characters that HAVE a canonical reference, in the order `generate_scene`
-    uploads them to fal.
+    passes them to fal.
 
     ONE list feeds the image roll below and every `ref_paths` the pipeline builds —
     `generate_scene`, `regenerate` and `output_mod`, the last two because both carry a prompt
