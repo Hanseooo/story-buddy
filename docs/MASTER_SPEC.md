@@ -67,8 +67,8 @@ researcher application. Objectives 3 and 5 are collected on paper and by form, n
 
 **Frontend and backend are independent projects** (different languages; no shared monorepo build
 tooling — that would be speculative for a solo build). Their only contract is the HTTP API and the
-Story Memory shape. New ADRs **append** to `docs/product/ADRs.md` — there is no separate
-`decisions/` folder.
+Story Memory shape. New ADRs are **one file each** under `docs/product/adr/`, indexed by
+`docs/product/ADRs.md` — there is no separate `decisions/` folder.
 
 ### Folder rules for AI agents
 - New pipeline module → a new file in `backend/pipeline/`, named for its single concern.

@@ -71,7 +71,7 @@ The noise trap in an AI-assisted repo is stale docs the agent has to wade throug
 |---|---|---|
 | Feature specs | `docs/specs/<module>.md` (from `TEMPLATE.md`) | **Keep** — the contract. Update in place, mark status. Never delete. |
 | Plans | `docs/specs/plans/<name>.md` | **Delete** once the module is built + tests green + spec updated. Git keeps history. This folder only ever holds *in-flight* work. |
-| New decisions | append an ADR to `docs/product/ADRs.md` | Permanent, append-only. |
+| New decisions | a new ADR file in `docs/product/adr/` + a row in the `docs/product/ADRs.md` index | Permanent, append-only — never edit a frozen ADR. |
 
 **Point Superpowers at this structure.** By default `brainstorming` would write to
 `docs/superpowers/specs/` — don't let it. It writes feature specs into `docs/specs/`, and

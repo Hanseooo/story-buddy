@@ -83,7 +83,7 @@ change — ADR-013 already decided it.
 | `tests/test_graph_stub.py:46` | Patches `pipeline.segment.caption_for`; repoint to `segment_scenes`. |
 | `tests/test_analyze_node.py:20–57` | Four `SceneCaption` / `caption_for` tests; **delete** — they test a helper that no longer exists. |
 | `docs/MASTER_SPEC.md:302` | Uses `pipeline.analyze.caption_for` as the worked example of the helper seam. Swap the example to `pipeline.segment.segment_scenes`. |
-| `docs/MASTER_SPEC.md:76`, `docs/product/ADRs.md:1353` | Use `SceneCaption` as D-F's worked example of a transient wrapper. Swap to `SceneSegmentation`, which is the same shape and is not going away. |
+| `docs/MASTER_SPEC.md:76`, `docs/product/adr/ADR-023-story-memory-is-the-langgraph-state-single-int.md` (**Amendment (2026-07-22)**, the "D-F — where structured-output sub-schemas live" bullet) | Use `SceneCaption` as D-F's worked example of a transient wrapper. Swap to `SceneSegmentation`, which is the same shape and is not going away. |
 | `docs/specs/story-analyzer.md:23` | Says `caption_for` "lives in this file per D-F but belongs to `segment`". Update. |
 | `docs/specs/plans/2026-07-29-story-memory-contract.md` | Historical, already-executed plan. **Do not edit** — git keeps the record of what was built. |
 
@@ -370,7 +370,9 @@ Per AGENTS.md *Definition of Done*. This module is done when **all** of the foll
      this spec.
    - `docs/MASTER_SPEC.md` §2 — the `segment` row's Writes column reads
      `scenes[].text_excerpt, caption`; extend it with `characters_present`.
-   - `docs/MASTER_SPEC.md` §6 (`:302`) and `:76`, and `docs/product/ADRs.md:1353` — the
+   - `docs/MASTER_SPEC.md` §6 (`:302`) and `:76`, and
+     `docs/product/adr/ADR-023-story-memory-is-the-langgraph-state-single-int.md`
+     (**Amendment (2026-07-22)**, the D-F bullet) — the
      `caption_for` / `SceneCaption` worked examples, per §4's table. Swapping an *example* is not
      an ADR change; D-F's rule is unaltered.
    - `docs/specs/story-analyzer.md` §2 — the line stating `caption_for` lives in `analyze.py`.

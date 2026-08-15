@@ -72,12 +72,13 @@ Test: every changed line traces to the request.
 
 ### Architecture is locked
 
-Every decision in `docs/product/ADRs.md` is **frozen**. Do not refactor around a decision,
+Every decision in `docs/product/adr/` is **frozen**. Do not refactor around a decision,
 swap a library, or change the pipeline shape because a different approach seems cleaner.
 
-- To change a locked decision: **write a new ADR** (append to `docs/product/ADRs.md`) stating
-  context / decision / consequences / alternatives, and **flag it to the human**. Do not implement
-  until the ADR is accepted.
+- To change a locked decision: **write a new ADR** (a new file
+  `docs/product/adr/ADR-0NN-<kebab-title>.md`, plus its row in the `docs/product/ADRs.md` index)
+  stating context / decision / consequences / alternatives, and **flag it to the human**. Do not
+  implement until the ADR is accepted.
 - If a task seems to *require* violating an ADR, stop and surface the conflict. Don't guess.
 - **Architectural decisions get their own session — never decided inline while building.** Open
   ones are queued in `docs/product/DECISION_BACKLOG.md`; each is resolved in a dedicated
@@ -661,7 +662,8 @@ is not documentation of a good design; it is the blast radius, written down so t
   expected judge false positive. `comic` was the only preset feeding either.
   **The halftone is scoped, NOT removed** — ADR-022 makes `comic` the *gating primary* substrate
   because it is "textured enough (halftone) that the no-reference baseline can't fake the separation
-  gate" (`ADRs.md:1234`, pre-registered `PHASE_05_RESULTS.md:512`), so deleting it would make that
+  gate" (`docs/product/adr/ADR-022-selectable-art-style-presets-three-prompt-fragment.md`,
+  "Choosing the three"; pre-registered `PHASE_05_RESULTS.md:512`), so deleting it would make that
   gate lenient retroactively. **The outline clause is untouched on purpose:** "of varied weight" is
   the obvious suspect for the black limbs and is the one thing that must not be pinned — `cel` lost
   "of even weight" the day before because pinning uniformity is what smooshes thin elements.

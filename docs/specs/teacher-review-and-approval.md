@@ -491,7 +491,7 @@ to be made from.
 | File | Change |
 |---|---|
 | `docs/specs/teacher-dashboard-docket.md` | S3 → DONE with its constraints; amendments recording §4.4's changes to S1-7 and S3-8 |
-| `docs/product/ADRs.md` | The `0011` ADR (`AGENTS.md` §2), covering the column, the CHECK, and the revoke |
+| `docs/product/adr/` + the `docs/product/ADRs.md` index | The `0011` ADR (`AGENTS.md` §2) as its own file plus an index row, covering the column, the CHECK, and the revoke |
 | `docs/product/DECISION_BACKLOG.md` | `classroom-sharing` gains §4.10 as an inherited constraint |
 | `docs/specs/ROUTE_MAP.md` | `/classroom/[classroomId]/books` reconciled — this route only (S4-9) |
 

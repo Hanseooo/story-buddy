@@ -527,7 +527,7 @@ separate Objective-4 question, measured on a human-labeled, character-disjoint h
 on, and its results are never substituted for the expert validation.
 
 This is the sharpest question a panel can ask, and the answer is fixed in the project's Architecture Decision
-Records (`docs/product/ADRs.md`, ADR-004) so that it is never improvised under pressure.
+Records (`docs/product/adr/ADR-004-consistency-via-vlm-as-judge-control-loop-human-ratings.md`) so that it is never improvised under pressure.
 
 ---
 
@@ -549,7 +549,7 @@ children.
   prompted, unmodified model.
 - Failure and moderation screens receive the same design care as success screens.
 
-Detail: `docs/capstone/ethics_and_safety.md` and `docs/product/ADRs.md` (ADR-011).
+Detail: `docs/capstone/ethics_and_safety.md` and `docs/product/adr/ADR-011-moderation-safety-stack-four-mechanisms.md`.
 
 ---
 
