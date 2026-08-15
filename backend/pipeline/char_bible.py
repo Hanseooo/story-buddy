@@ -176,20 +176,10 @@ def _describe(description: CharacterDescription, name: str, notes: bool = True) 
     """The `CharacterDescription` axes as one line. Shared by the draw prompt and the judge
     prompt so they can never drift into describing different characters.
 
-    `notes=False` for the judge (ADR-034 follow-on). `notes` is free prose, not a visual
-    attribute, and post-ADR-034 the gate re-rolls on whatever the judge lists as contradicted —
-    re-judging prod job b9506307's `ref-c1-1.png` returned *"secondary character - The image does
-    not provide cues as to this character's role"* as a contradiction, which no redraw can ever
-    clear. The generator keeps it; the judge measures the VISUAL axes. Same line `reveal._chips`
-    already draws, for the same reason.
-
-    This is the SECOND sanctioned divergence between the two prompts, after
-    THIN_DESCRIPTION_FILLER, and it runs the same direction: the draw prompt may know more than
-    the judge, never less. A third one should make someone ask whether the sharing still pays.
-
-    Safe for the ADR-029 targeted redraw, which sets `notes` to the tapped chip: chips come from
-    the VISUAL axes (`reveal._chips`), so the tapped attribute already reaches the judge through
-    its own axis. The `notes` copy is emphasis for the generator, not the judge's only sight of it.
+    `notes=False` excludes free-prose narrative metadata from both the normal draw and judge
+    prompts. A role such as "builds and names the robot" is not visual identity and can make the
+    canonical portrait draw the robot. Targeted redraws retain their tapped attribute through the
+    explicit `Be sure to include:` fallback in `_mint_targeted`.
     """
     axes = [
         description.species,
@@ -216,7 +206,7 @@ def reference_prompt(description: CharacterDescription, name: str, style_fragmen
     it, it would become a *stated* attribute and draws would start failing over our filler
     instead of over the story — ADR-028 measures the generator against the STORY.
     """
-    subject = _describe(description, name)
+    subject = _describe(description, name, notes=False)
     if not (description.colours or description.body_features or description.clothing):
         subject += THIN_DESCRIPTION_FILLER
     return REFERENCE_PROMPT.format(subject=subject, style_fragment=style_fragment)

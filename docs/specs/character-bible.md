@@ -174,10 +174,12 @@ consequence of the mechanism, not an oversight — see §5.
 Two module-level constants. Neither introduces a contract type; `RefVerdict` already lives in
 `backend/contracts/` because `StoryMemory` embeds it (D-F, ADR-023 amendment).
 
-`reference_prompt` renders the `CharacterDescription` axes (`species`, `colours`, `body_features`,
-`clothing`, `notes`) plus the style fragment, and asks for a single character reference **shown in
-full** on a plain neutral background. Per ADR-022 the fragment **names a medium and its physical
-artifacts** — it never says "beautiful", "8k", or "highly detailed".
+`reference_prompt` renders the visual `CharacterDescription` axes (`species`, `colours`,
+`body_features`, `clothing`) plus the style fragment, and asks for a single character reference
+**shown in full** on a plain neutral background. It excludes free-prose `notes`: a narrative role
+such as "builds and names the robot" is not visual identity and must not contaminate the canonical
+draw. Per ADR-022 the fragment **names a medium and its physical artifacts** — it never says
+"beautiful", "8k", or "highly detailed".
 
 The judge prompt shows the drawn image and the description it should depict, and asks for
 `differences_observed`, then `contradictions`, then `matches_description`. ADR-004's reason-then-score
@@ -285,14 +287,14 @@ the two calls establish:
 
 The two contradictions it *did* name were `tiny` (arguably unjudgeable in an isolated reference,
 where framing sets apparent size) and `secondary character` (a `notes` value — the finding that
-produced the `notes=False` divergence above).
+led to excluding narrative notes from normal prompts).
 
 #### Visually-thin descriptions get a neutral floor in the draw prompt only
 
-The judge fix made a thin description *passable*; it did not make the reference *good*. `analyze`'s
-`EXTRACTION_PROMPT` says "leave them empty rather than inventing details", so `colours`,
-`body_features` and `clothing` routinely arrive all-empty — `c0` above was drawn from a role noun,
-and every page of the book inherits that one reference.
+The judge fix made a thin description *passable*; it did not make the reference *good*. Even though
+`analyze` asks for concrete, directly drawable visual values, a legacy checkpoint or model miss can
+leave `colours`, `body_features`, and `clothing` all empty — then every page inherits that thin
+reference.
 
 When no **visual** axis is populated, `reference_prompt` appends
 `char_bible.THIN_DESCRIPTION_FILLER` (*"a friendly children's picture-book character"*). Keyed on
@@ -300,40 +302,28 @@ the visual axes rather than on how many fields are set: `c0` had two populated a
 `notes`) and still specified nothing drawable, because species and notes are identity, not
 appearance.
 
-⚠️ **The filler reaches the draw prompt and never the judge prompt.** This is one of **two**
-sanctioned divergences from `_describe`'s shared output, and both run the same direction: the draw
-prompt may know more than the judge, never less. If the judge saw the filler it would become a
+⚠️ **The filler reaches the draw prompt and never the judge prompt.** This is the one
+sanctioned divergence from `_describe`'s shared output. If the judge saw the filler it would become a
 *stated* attribute, and draws would start failing over our invention — reintroducing the bug fixed
 above from the opposite end. ADR-028 measures the generator against the **story**, never against our
 filler. Covered by `test_enrichment_reaches_the_draw_prompt_but_never_the_judge_prompt`.
 
-⚠️ **`notes` reaches the draw prompt and never the judge prompt** — the second divergence,
-`_describe(..., notes=False)`, added with ADR-034 and for its sake. `notes` is free prose, not a
-visual attribute, and post-ADR-034 the gate re-rolls on whatever the judge lists as contradicted.
-Re-judging `b9506307`'s `ref-c1-1.png` under v3 returned *"secondary character - The image does not
-provide cues as to this character's role"* as a contradiction: **unclearable by any redraw**, so the
-character would exhaust all 3 draws on every job forever. `reveal._chips` already excludes `notes`
-for the same reason (*"free prose, not an attribute, and not a thing a child can tap"*). The
-generator keeps it — "secondary character" is useful framing for a drawing. Covered by
-`test_notes_reaches_the_draw_prompt_but_never_the_judge_prompt`.
+⚠️ **`notes` reaches neither normal prompt.** It is free prose, not a visual attribute: a narrative
+role can cause the canonical draw to add its story object. `reveal._chips` already excludes `notes`
+for the same reason (*"free prose, not an attribute, and not a thing a child can tap"*). This stays
+prompt-only; semantic Pydantic validation would turn a model wording mistake into a terminal job
+failure. Covered by `test_reference_prompt_excludes_narrative_notes_from_a_human_identity`.
 
-That divergence is exactly why `notes` had to enter ADR-035's remit (amendment 2026-08-12b). Being
-invisible to the judge makes a style-forbidden term in `notes` **worse** than the `species` carve-out,
+That exclusion is exactly why `notes` remains in ADR-035's remit (amendment 2026-08-12b). Being
+invisible to both prompts makes a style-forbidden term in `notes` **worse** than the `species` carve-out,
 not equivalent to it: limit 4 accepts `species` on the grounds that the judge can at least see and
 contradict it, and that argument is specifically false here. `filtered_description` now drops a
 forbidden `notes` **whole** — one word, the whole string — because a sentence filtered word-by-word
-leaves a fragment. Dropping is safe precisely because the judge never saw it, so nothing here can make
-acceptance vacuous.
+leaves a fragment. Dropping is safe precisely because neither prompt needs it.
 
-This is safe for the ADR-029 targeted redraw, which overwrites `notes` with the tapped chip: chips
-are drawn from the **visual** axes, so the tapped attribute still reaches the judge through its own
-axis. The `notes` copy is emphasis for the generator, not the judge's only sight of it. The overwrite
-lands **after** the filter, so `_kept_whole` never sees the tapped attribute and the unreachable
-re-injection branch below stays unreachable.
-
-**A third divergence should prompt someone to ask whether sharing `_describe` still pays.** Two is
-still cheaper than two prompts that can drift into describing different characters; a third is the
-point where the flag list is the design.
+ADR-029 targeted redraws add their tapped visual attribute through the explicit `Be sure to include:`
+fallback after the normal identity prompt is built. This preserves the child's selection without
+restoring narrative `notes` to canonical identity.
 
 Rejected alternative: letting `analyze` invent the missing detail. It produces richer references but
 writes fiction into the contract the judge measures against, and invents facts about a child's own
@@ -451,8 +441,7 @@ can *legitimately* contradict `glowing` on all three draws, so that character ex
 budget on every job and ships the same best-of reference anyway. Confirmed on re-judging under v3:
 `attributes_present` still reported `"glowing"` for a flat teal image, so the judge is not a backstop.
 
-⚠️ **This is NOT one of the one-directional divergences above.** The filler and `notes` reach the draw
-prompt and not the judge, because the draw prompt may know more than the judge. A style-forbidden
+⚠️ **This is NOT the one-directional filler divergence above.** A style-forbidden
 attribute reaches **neither** — the defect is asking for it at all. Do not add it back to one side
 "so the generator still tries": trying is exactly what produces the self-contradicting reference.
 
@@ -475,18 +464,14 @@ for a flat style but not explicitly forbidden still gets through. Mechanism and 
    degradation (nothing drawable survived, so the neutral floor is right), but a consequence rather
    than a decision.
 
-⚠️ **`_mint_targeted`'s `if retry.attribute not in prompt` branch is unreachable and must stay that
-way.** The line above writes the attribute into `notes`, and `_describe(notes=True)` always renders
-`notes`, so the attribute is a substring of the prompt by construction — it has never fired. It is
-kept, and pinned by a test, because it is a *trap*: it is dead only while `notes` and `retry.attribute`
-are both unfiltered, and the obvious-looking follow-on (filter the tapped attribute) would reanimate it
-into a clause that re-appends the exact term the filter had just removed. If the test fails, delete the
-branch; do not repair it.
+`_mint_targeted`'s `if retry.attribute not in prompt` branch intentionally fires because the normal
+identity prompt excludes `notes`. It appends `Be sure to include: {attribute}.`, preserving the tapped
+visual attribute without letting free-prose narrative notes reach the canonical draw.
 
 Covered by `test_a_style_forbidden_attribute_reaches_neither_the_draw_prompt_nor_the_judge_prompt`,
 `test_an_attribute_the_active_fragment_never_forbids_still_reaches_both_prompts`,
 `test_char_bible_still_describes_a_species_the_style_forbids` and
-`test_char_bible_targeted_mode_never_appends_the_re_injection_clause`.
+`test_char_bible_targeted_mode_reinjects_the_tapped_attribute_after_notes_are_excluded`.
 
 ### `settings.default_style_fragment`
 
@@ -609,8 +594,8 @@ definition.
 - `best_draw` — fewest `contradictions` wins even when it shows the fewest attributes; equal
   contradiction counts fall through to `text_free`, then `len(attributes_present)`; ties return the lowest index;
   all-empty returns `0`
-- `reference_prompt` — contains each populated description axis; falls back to `Character.name` on a
-  fully empty description; always contains the style fragment
+- `reference_prompt` — contains each populated visual description axis but excludes `notes`; falls
+  back to `Character.name` on a fully empty description; always contains the style fragment
 - `reference_prompt` **framing** (§4, the section that was owed) — asks for a `full shot` and never
   `full body` / `head to toe` / `standing`; never names the artifact (`"reference"` absent
   case-insensitively); states the background positively rather than as `no scenery`; and utters **no**
