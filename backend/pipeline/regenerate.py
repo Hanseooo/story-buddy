@@ -11,7 +11,7 @@ the Storage round-trip and the CC-10 exists-skip exist once, in `generate_scene`
 """
 import logging
 
-from app.config import IMAGE_BUDGET
+from app.config import check_image_budget
 from contracts.story_memory import Attempt, StoryMemory
 from pipeline.generate_scene import generate_and_store
 from pipeline.prompt_optimizer import correct_prompt, referenced_characters
@@ -41,10 +41,7 @@ def regenerate(state: StoryMemory) -> dict:
         raise RuntimeError(f"regenerate: scene {scene.scene_id} has no prompt to correct (ADR-025)")
 
     # ADR-025 D4: breaker before any spend. A retry is not exempt.
-    if state.cost.image_count >= IMAGE_BUDGET:
-        raise RuntimeError(
-            f"image budget exceeded: {state.cost.image_count} >= {IMAGE_BUDGET} (ADR-025)"
-        )
+    check_image_budget(state.cost.image_count)
 
     # The retry is conditioned on the same references as the original, or it would be measuring a
     # different thing. `correct_prompt` only appends (invariant 3), so the corrected prompt still

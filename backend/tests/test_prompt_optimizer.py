@@ -1037,16 +1037,29 @@ def test_correct_prompt_appends_every_scene_contradiction_after_existing_correct
 
 
 def test_correct_prompt_appends_composition_clause():
-    from pipeline.prompt_optimizer import COMPOSITION_CLAUSE, correct_prompt
-
-    # When no corrections, it shouldn't append
+    """§7 test 7. All four correction paths — generic identity, boolean, reason-based, and scene
+    contradiction — end with the clause, so no path can silently become composition-destructive.
+    §7 test 8: a no-op call is still byte-identical.
+    """
     base = "Draw Ana."
+
+    # No correction at all → byte-identical, nothing appended.
     assert correct_prompt(base, [], [], "") == base
 
-    # When corrected, it should append the composition clause last
-    corrected = correct_prompt(base, [], [], "", same_character=False)
-    assert corrected.endswith(COMPOSITION_CLAUSE)
-    assert COMPOSITION_CLAUSE in corrected
+    dog = _char("c0", "the dog", colours=["brown"])
+    paths = {
+        "generic identity": correct_prompt(base, [], [], "", same_character=False),
+        "boolean (anatomy)": correct_prompt(base, [], [], "", anatomy_intact=False),
+        "boolean (text)": correct_prompt(base, [], [], "", text_free=False),
+        "reason-based": correct_prompt(base, [FailureReason.wrong_colour], [dog], ""),
+        # Reason present but unfillable → IDENTITY_CLAUSE floors it; the clause still lands last.
+        "identity floor": correct_prompt(base, [FailureReason.wrong_colour], [], ""),
+        "scene contradiction": correct_prompt(base, [], [], "", scene_contradictions=["Ana faces left"]),
+    }
+    for path, corrected in paths.items():
+        assert corrected.endswith(COMPOSITION_CLAUSE), path
+        assert corrected.count(COMPOSITION_CLAUSE) == 1, path
+        assert corrected.startswith(base), path
 
 
 

@@ -230,7 +230,8 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
   straight to `compose`. It used to run once over the finished book, which meant the gate could
   only ever fire after every image was drawn and paid for — prod job 4f7698d5 (2026-08-12) died on
   s2 of 8 and took 11 fal images with it. ADR-025's no-partial-book rule is unchanged; only the
-  bill is. This is what `RECURSION_LIMIT`'s `MAX_SCENES * 5` counts.
+  bill is. This is what `RECURSION_LIMIT`'s `MAX_SCENES * 7` counts (×5 → ×7 with ADR-037's
+  second corrected retry).
   `moderation_router` (ADR-024 pure router) handles both post-`input_gate` and post-`char_ref_mod`
   edges; `route_after_output_mod` reads `moderation_status="failed"` and raises.
   ⚠️ **The post-`char_ref_mod` edge can also route BACK to `char_bible`** (2026-08-13,
@@ -623,6 +624,8 @@ is not documentation of a good design; it is the blast radius, written down so t
   judge instead of a regex). **The setting is untouched** — a location reaches the canvas only as
   `build_prompt`'s `Setting:` line, no location reference image exists, and the judge is never asked
   about place. That is a queued architectural decision, not a gap these three fixes narrow.
+  ➡️ **That decision was made on 2026-08-15** by `setting-consistency` (docket S4): the answer is a
+  frozen textual canon and no location image. See the entry below.
   **Drift fixed in passing:** `scene-segmentation.md`'s edge-case table still said a duplicate
   roster name maps to *every* matching `char_id`, and `prompt-optimizer.md`'s said the roll could
   read `"Image 1 is the star. Image 2 is the star."` Both described the pre-§4.3 list-valued map;
@@ -703,6 +706,51 @@ is not documentation of a good design; it is the blast radius, written down so t
   LangGraph checkpoint blob) and **D-L** (§2.1's "adjudicator flag" has no column) in `DECISION_BACKLOG.md`
   Tier 2e. ⚠️ **The RLS suite has not been run against any database** — `SUPABASE_DB_URL` is set but
   unreachable from the build host, so all 16 skipped.
+  **`pose-viewpoint-composition` is built (2026-08-15) — prompt/ranking semantics only, no new
+  code path.** The docket's S3. `contracts/` untouched — **no** new field, no `schema_version` bump,
+  no node, no edge, no reference, no extra judge or draw call; `Scene.visual_direction` stays the
+  sole pose/viewpoint source. Three changes: (1) `consistency_check.JUDGE_PROMPT` gains a
+  viewpoint-tolerance paragraph **before** the verdict questions — rear/profile/foreshortened/
+  occluded views can be the same character, and a feature the requested viewpoint hides is not
+  `wrong_body_feature`/`different_face`/`character_absent` — so
+  `consistency_check.JUDGE_PROMPT_VERSION` 3→**4** (ADR-004 field order byte-unchanged; **v3 and v4
+  counts never pool**, BC-6). (2) `prompt_optimizer.COMPOSITION_CLAUSE` is appended **last** by
+  `correct_prompt` whenever any correction fires, on all four paths, so no retry path can be
+  composition-destructive; a no-op call is still byte-identical. (3) `_rank` reorders to
+  **composition-first**: `checked → no scene contradictions → fewer of them → same_character →
+  anatomy_intact → text_free → attributes_ok → subjects_unique → style_match`, so a
+  composition-clean attempt beats an identity-clean one that contradicts the story.
+  ⚠️ **Nothing here is validated against real images**, and Tier B was declined — the policy
+  changed, pose/viewpoint QUALITY is unmeasured and unclaimed. The known instrument limit stands:
+  the scene judge missed the observed movement-direction defect **4/4** under prompt v1 and v2, so
+  composition-first ranking is only as good as contradictions it never emits. `settings.vlm_judge_model`
+  untouched (BC-4); `graph.py`, `providers.py`, `app/config.py`, `regenerate.py` untouched.
+  **`setting-consistency` is built (2026-08-15) — text canon only, no location artifact.** The
+  docket's S4. `analyze.ExtractedLocation.description` becomes a required non-blank `str` at the
+  transient LLM boundary while persisted `Location.description` stays `Optional[str]` so old
+  checkpoints deserialize; `EXTRACTION_PROMPT` must copy stated permanent facts, invent missing
+  permanent detail once, and exclude weather/lighting/time/damage. `SCENE_CONSTRAINT_PROMPT` now
+  checks the `Setting:` line's name and permanent description and reports only concrete violations,
+  so `SCENE_CONSTRAINT_PROMPT_VERSION` 2→**3** (**v2 and v3 counts never pool**, BC-6).
+  ⚠️ **No location reference image, node, edge, provider call, contract field, location cap, or
+  budget term** — a setting failure gates through the existing `scene_contradictions` path.
+  ⚠️ Tier B declined: no paid run, and no claim that setting consistency improved. Residual: the
+  judge compares each page to the canon, never page-to-page, and a hallucinated permanent detail
+  becomes canon (S2's freeze-once posture, inherited without provenance).
+  **`spend-and-retry-economics` is built and ratified as ADR-037 (2026-08-15) — length traded for a
+  third attempt.** The docket's S5, and the docket is now **DONE throughout**. One coupled policy:
+  `MAX_STORY_WORDS` 800→**300**, `MAX_SCENES` 15→**10**, new `MAX_SCENE_ATTEMPTS = 3` (initial draw
+  + two corrected retries, ADR-037 amending ADR-010's one), `IMAGE_BUDGET = MAX_SCENES * 4 + 15` =
+  **55**, `RECURSION_LIMIT = MAX_SCENES * 7 + 17` = **87**. ⚠️ **The two preludes (15 images, 17
+  super-steps) stay unequal on purpose** — different units, only ever coincidentally equal
+  (`test_config.py`). ⚠️ **The old `* 2` was already wrong**: `output_mod`'s softened redraw was
+  paid but never counted or breakered. That hole is closed — every paid fal site now calls one
+  `app.config.check_image_budget()` helper (ADR-025 D4), and the worst-case structural spend *fell*
+  60 → 55 despite the extra attempt. No node, edge, router label, provider, model, contract field,
+  or `schema_version` bump; retry allowance stays derived from `len(scene.attempts)`. `MAX_DRAWS`,
+  `MAX_MOD_REDRAWS`, `MAX_RETRY_TAPS` untouched. Judge/classifier calls remain absent from `Cost`
+  **by decision** — they do not weaken the paid-image breaker. ⚠️ **No evidence a third attempt
+  improves consistency** (BC-1); this is product policy, not a measurement.
   **Phase 2 is in progress. Next: D-K + D-L, then the two routes.** Next free migration is
   **`0015`** — ⚠️ `0014` is the highest on disk and **`0009` is used twice**
   (`0009_avatar_id.sql`, `0009_teacher_identity.sql`). That collision is **left alone deliberately**: both

@@ -93,7 +93,7 @@ Species is the physical kind, never a job title or role: a human wizard is physi
 Copy every visual fact the story states without alteration. Fill only missing visual axes once with neutral, child-safe, non-stereotyped details that distinguish this character from the rest of the roster.
 Return at least three stable visual discriminators across at least two of colours, body_features, and clothing. Set is_humanoid accurately; every humanoid needs a non-empty clothing description.
 
-Locations and objects: whatever the story mentions. Describe each location by what is permanently there — not the weather, the time of day, or what happens there. Copy every stated permanent fact without alteration. Fill missing detail once with neutral, child-safe features that make the place visually recognizable. For each object, provide a stable physical description and set owner_name to the character's name if owned by a character, or null if unowned.
+Locations and objects: whatever the story mentions. Describe each location by what is permanently there — not the weather, the lighting, the time of day, any damage, or what happens there. Copy every stated permanent fact without alteration. Fill missing detail once with neutral, child-safe features that make the place visually recognizable. For each object, provide a stable physical description and set owner_name to the character's name if owned by a character, or null if unowned.
 
 Timeline: the story's events in the order they happen, one short summary each.
 

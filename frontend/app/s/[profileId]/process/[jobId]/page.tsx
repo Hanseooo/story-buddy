@@ -277,7 +277,15 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
         : row?.status === SWEPT_STATUS
         ? "asleep"
         : "retry";
-    return <FailureScreen kind={kind} inputText={row?.input_text} stylePresetId={row?.style_preset_id} />;
+    return (
+      <FailureScreen
+        kind={kind}
+        reason={row?.failure_reason}
+        jobId={jobId}
+        inputText={row?.input_text}
+        stylePresetId={row?.style_preset_id}
+      />
+    );
   }
 
   if (bucket === "paused" && row?.reveal) {
@@ -483,7 +491,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
       </div>
 
       {/* Stalling Text */}
-      <div className="z-10 mt-12 min-h-[60px] flex justify-center w-full">
+      <div className="z-10 mt-12 min-h-[60px] flex justify-center w-full" aria-live="polite">
           {stalling && !isRedrawing && (
             <motion.div
               initial={{ opacity: 0, y: 10, scale: 0.95 }}
@@ -492,7 +500,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
             >
               <div className="w-3 h-3 rounded-full bg-[var(--color-secondary)] animate-pulse shrink-0" />
               <p className="font-kid text-sm md:text-base text-foreground/80 leading-snug">
-                Still going! We saved your spot, so you can leave and come back.
+                This step is taking longer than usual. Your progress is saved, so you can leave and come back.
               </p>
             </motion.div>
           )}

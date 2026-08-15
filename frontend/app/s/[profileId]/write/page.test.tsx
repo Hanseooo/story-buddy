@@ -168,3 +168,49 @@ describe("WriteStoryPage — prefill and chain counter", () => {
     expect(pushMock).not.toHaveBeenCalled();
   });
 });
+
+// spend-and-retry-economics §6.1: "Frontend word count accepts 300, rejects 301, disables
+// submission over cap, and keeps the textual `Too long!` state." The cap moved 800 → 300 with
+// ADR-037; nothing pinned the boundary, so a stale constant would have shipped silently.
+describe("WriteStoryPage — the 300-word cap", () => {
+  const words = (n: number) => Array.from({ length: n }, (_, i) => `w${i}`).join(" ");
+  const submitButton = () => screen.getByText("Make my book").closest("button");
+
+  beforeEach(() => {
+    pushMock.mockClear();
+    sessionStorage.clear();
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ job_id: "abc-123" }),
+    }) as unknown as typeof fetch;
+  });
+
+  it("accepts exactly 300 words — the boundary is inclusive", () => {
+    render(<WriteStoryPage />);
+    fireEvent.change(screen.getByLabelText("story text"), { target: { value: words(300) } });
+
+    expect(screen.queryByText("Too long!")).toBeNull();
+    expect(submitButton()).not.toBeDisabled();
+  });
+
+  it("rejects 301 words with the textual Too long! state, not a colour-only cue (CC-6)", () => {
+    render(<WriteStoryPage />);
+    fireEvent.change(screen.getByLabelText("story text"), { target: { value: words(301) } });
+
+    expect(screen.getByText("Too long!")).toBeDefined();
+    expect(submitButton()).toBeDisabled();
+  });
+
+  it("does not POST over cap — the child shortens the story, nothing is silently discarded", async () => {
+    render(<WriteStoryPage />);
+    fireEvent.change(screen.getByLabelText("story text"), { target: { value: words(400) } });
+    fireEvent.click(screen.getByText("Make my book"));
+
+    // `handleSubmit` awaits getSession before it fetches, so a synchronous assertion here
+    // passes even when the guard is broken. Flush the microtask queue first.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+});

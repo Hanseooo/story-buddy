@@ -444,12 +444,12 @@ def test_failure_reason_is_machine_for_moderation_error():
         except RuntimeError:
             pass
     final = fake_supabase.table.return_value.update.call_args_list[-1][0][0]
-    assert final["failure_reason"] == "machine"
+    assert final["failure_reason"] == "service_busy"
 
 
-def test_failure_reason_is_machine_for_ref_flagged():
+def test_failure_reason_is_character_safety_for_ref_flagged():
     # ref_flagged is what moderation_router raises for a flagged canonical reference —
-    # something the machine drew, not the child's text (spec §4.2).
+    # maps to character_safety.
     fake_supabase = _fake_supabase()
     fake_cm = MagicMock()
     fake_cm.__enter__.return_value = MagicMock()
@@ -461,10 +461,10 @@ def test_failure_reason_is_machine_for_ref_flagged():
         except RuntimeError:
             pass
     final = fake_supabase.table.return_value.update.call_args_list[-1][0][0]
-    assert final["failure_reason"] == "machine"
+    assert final["failure_reason"] == "character_safety"
 
 
-def test_failure_reason_is_machine_for_output_moderation_failed():
+def test_failure_reason_is_scene_safety_for_output_moderation_failed():
     fake_supabase = _fake_supabase()
     fake_cm = MagicMock()
     fake_cm.__enter__.return_value = MagicMock()
@@ -476,10 +476,10 @@ def test_failure_reason_is_machine_for_output_moderation_failed():
         except RuntimeError:
             pass
     final = fake_supabase.table.return_value.update.call_args_list[-1][0][0]
-    assert final["failure_reason"] == "machine"
+    assert final["failure_reason"] == "scene_safety"
 
 
-def test_failure_reason_is_machine_for_arbitrary_provider_error():
+def test_failure_reason_is_system_error_for_arbitrary_provider_error():
     fake_supabase = _fake_supabase()
     fake_cm = MagicMock()
     fake_cm.__enter__.return_value = MagicMock()
@@ -491,7 +491,7 @@ def test_failure_reason_is_machine_for_arbitrary_provider_error():
         except RuntimeError:
             pass
     final = fake_supabase.table.return_value.update.call_args_list[-1][0][0]
-    assert final["failure_reason"] == "machine"
+    assert final["failure_reason"] == "system_error"
 
 
 def test_resume_entrypoint_also_writes_failure_reason():

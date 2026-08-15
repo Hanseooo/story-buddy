@@ -61,11 +61,14 @@ Every state a child can observe that is not a success, and the one action each o
 |---|---|---|---|
 | Text under `MIN_STORY_WORDS` | no job — `422` at `POST /storybooks` | `revise`, in place (never left the editor) | no |
 | Text over the cap | job created, `truncated=true` | **none** — a notice, not a failure (ADR-012) | no |
-| **Input text flagged** | `failed`, the child's-text reason | **`revise`** | yes |
-| Both text classifiers down (`moderation_error`) | `failed`, machine | `retry` | yes |
-| A canonical reference flagged | `failed`, machine | `retry` | yes |
-| An output image flagged after soften-and-retry | `failed`, machine | `retry` | yes |
-| Provider hard error / `compose` assertion / `GraphRecursionError` | `failed`, machine | `retry` | yes |
+| **Input text flagged (`child_text`)** | `failed`, exact `content_flagged` sentinel | **`revise`** | yes |
+| **Character image flagged (`character_safety`)** | `failed`, exact `ref_flagged` sentinel | `retry` | yes |
+| **Scene image flagged (`scene_safety`)** | `failed`, exact `output_moderation_failed` sentinel | `retry` | yes |
+| **Service busy / transient (`service_busy`)** | `failed`, network/timeout, 429, 5xx, or exact `moderation_error` | `retry` | yes |
+| **Service allowance exhausted (`service_limit`)** | `failed`, explicit credit/quota error | **none (no retry button; ask teacher)** | no |
+| **Book picture limit reached (`book_limit`)** | `failed`, image budget exception | **none (no retry button; ask teacher)** | no |
+| **Worker stopped / timed out (`worker_stopped`)** | `failed`, RQ process crash or job deadline | `retry` | yes |
+| **Unclassified system error (`system_error`)** | `failed`, unknown exception, legacy, or null | `retry` | yes |
 | A swept pause | the terminal value `data-deletion` picks — **not** `failed` | `retry`, distinct copy (S2 constraint 15) | no |
 | A complete book whose images will not sign | `complete` | **re-sign**; second failure → `retry` (§4.7) | no |
 | Unknown or stale job UUID | no row — the read `404`s | **none** — no text to resubmit; navigate out | no |
@@ -78,13 +81,16 @@ Every state a child can observe that is not a success, and the one action each o
   a failure** and must never reach the failure vocabulary.
 - a `409`-shaped double-confirm → S2 returns `200` with the current status, by design
 
-### 4.2 The one bit this spec requires of `job-failure-reason`
+### 4.2 The failure taxonomy (amended by ADR-038)
 
-The docket forbids this session from building the enum, and ADR-025 Decision 5 already froze its
-shape (`jobs.failure_reason`). This spec therefore states a **single requirement**, and nothing more:
+ADR-038 replaces the two-value failure taxonomy with an 8-value safe failure taxonomy (`child_text`,
+`character_safety`, `scene_safety`, `service_busy`, `service_limit`, `book_limit`, `worker_stopped`,
+`system_error`).
 
-> **Exactly one `failure_reason` value means "the child's own text was rejected." Every other value —
-> present or future — maps to `retry`.**
+> **Exactly one `failure_reason` value (`child_text`) means "the child's own text was rejected."
+> `character_safety`, `scene_safety`, `service_busy`, `worker_stopped`, and `system_error` map to
+> `retry`. `service_limit` and `book_limit` omit the paid retry control and direct the child to show a
+> teacher. Unknown and null values fail-safe to `system_error`.**
 
 Three properties follow, and they are why the requirement is phrased as a default rather than a list:
 

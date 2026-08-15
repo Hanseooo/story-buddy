@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { jobState, type Job } from "@/lib/types/jobs";
+import { FailedBookRow } from "./page";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -87,25 +89,49 @@ describe("tab filters", () => {
 
 // ── failure_reason rendering ──────────────────────────────────────────────────
 
+// Renders the real FailedBookRow. An earlier version of this suite declared its own copy of
+// `getTeacherLabel` and asserted against that, so it passed no matter what the teacher saw.
 describe("failure_reason rendering", () => {
-  function resolveFailureCopy(reason: string | null): "safety" | "machine" {
-    return reason === "child_text" ? "safety" : "machine";
-  }
+  const LABELS: [string | null, string][] = [
+    ["child_text", "The submitted story did not pass the input safety check."],
+    ["character_safety", "A generated character reference did not pass the image safety check."],
+    ["scene_safety", "A generated scene did not pass the image safety check."],
+    ["service_busy", "A required story-making service was temporarily unavailable."],
+    ["worker_stopped", "The worker process stopped or exceeded its job deadline."],
+    ["service_limit", "The configured story-making service reported exhausted quota or credits."],
+    ["book_limit", "The job reached its paid-image circuit breaker."],
+    [null, "The job ended because of an unclassified system error."],
+    ["some_future_value", "The job ended because of an unclassified system error."],
+    ["machine", "The job ended because of an unclassified system error."],
+  ];
 
-  it("child_text shows safety copy", () => {
-    expect(resolveFailureCopy("child_text")).toBe("safety");
+  it.each(LABELS)("%s shows its exact teacher label", (reason, label) => {
+    render(<FailedBookRow job={makeJob({ status: "failed", failure_reason: reason })} />);
+    expect(screen.getByText(label)).toBeDefined();
   });
 
-  it("null shows machine copy", () => {
-    expect(resolveFailureCopy(null)).toBe("machine");
+  it("shows an abbreviated reference and copies the full job ID", async () => {
+    const writeText = vi.fn();
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    const job = makeJob({ id: "3f8b21c9-0d44-4a71-9e02-6cb5a1d7e330", status: "failed" });
+
+    render(<FailedBookRow job={job} />);
+    expect(screen.getByText(`Ref: ${job.id.slice(0, 8)}`)).toBeDefined();
+    expect(screen.queryByText(job.id)).toBeNull();
+
+    fireEvent.click(screen.getByLabelText("Copy story reference ID"));
+    expect(writeText).toHaveBeenCalledWith(job.id);
+    await waitFor(() => expect(screen.getByText("Copied!")).toBeDefined());
+    vi.unstubAllGlobals();
   });
 
-  it("unknown value shows machine copy (fail-safe default)", () => {
-    expect(resolveFailureCopy("some_future_value")).toBe("machine");
-  });
-
-  it("machine shows machine copy", () => {
-    expect(resolveFailureCopy("machine")).toBe("machine");
+  it("never leaks a raw diagnostic, provider name, or moderation category", () => {
+    const { container } = render(
+      <FailedBookRow job={makeJob({ status: "failed", failure_reason: "scene_safety" })} />
+    );
+    for (const leak of ["output_moderation_failed", "openai", "fal.ai", "sexual", "self-harm", "Traceback"]) {
+      expect(container.textContent?.toLowerCase()).not.toContain(leak.toLowerCase());
+    }
   });
 });
 

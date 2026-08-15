@@ -416,6 +416,12 @@ IMAGE_BUDGET = MAX_SCENES * 2 + 9     # unchanged — 9 IMAGES, a different unit
 > redraw spends real images — the 6 are drawn, not phantom — so raising `IMAGE_BUDGET` here is not
 > the sympathy-raise this section rejects. Do not move one because the other moved.
 
+> **⚠️ SUPERSEDED AGAIN on 2026-08-15 by `spend-and-retry-economics.md` §4.3 (ADR-037) — the
+> COEFFICIENTS moved, the preludes did not.** `RECURSION_LIMIT` is now `MAX_SCENES * 7 + 17` and
+> `IMAGE_BUDGET` is now `MAX_SCENES * 4 + 15`, with `MAX_SCENES` itself cut 15 → **10**. The ×5 → ×7
+> is a second corrected retry; the ×2 → ×4 is that same retry **plus** `output_mod`'s redraw, which
+> was always drawn and never counted. The preludes stay 17 and 15 for exactly the reasons above.
+
 **The two constants stop sharing a number, and that is ADR-029's own position:** the super-step prelude
 "remains a different unit from CC-3's image prelude, exactly as `character-bible` §5 warns." They were
 only ever coincidentally equal at 9. Raising `IMAGE_BUDGET` in sympathy would buy 6 phantom draws of
@@ -556,7 +562,8 @@ future migration (S1 §6.3).
 
 **Config, extending `test_config.py`:**
 - `RECURSION_LIMIT == MAX_SCENES * 5 + 15`; `IMAGE_BUDGET` unchanged at `MAX_SCENES * 2 + 9`.
-  *(True as shipped; both numbers moved to 17 and 15 on 2026-08-13 — see §4.13's banner.)*
+  *(True as shipped; both preludes moved to 17 and 15 on 2026-08-13, and both coefficients moved to
+  ×7 and ×4 on 2026-08-15 — see §4.13's two banners. `test_config.py` is authoritative.)*
 
 **Graph:**
 - A run that taps once reaches `compose` having visited `char_ref_mod` twice (the re-moderation path).

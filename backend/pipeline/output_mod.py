@@ -1,5 +1,6 @@
 import logging
 
+from app.config import check_image_budget
 from contracts.story_memory import Attempt, StoryMemory
 from pipeline.generate_scene import generate_and_store
 from pipeline.prompt_optimizer import referenced_characters
@@ -58,6 +59,8 @@ def _soften_prompt(prompt: str) -> str:
 
 def output_mod(state: StoryMemory) -> dict:
     updated_scenes = []
+    current_image_count = state.cost.image_count
+
     for scene in state.scenes:
         if scene.moderation_status == "passed":
             # Screened on an earlier turn of the loop. This node now runs once per finalized scene
@@ -84,6 +87,9 @@ def output_mod(state: StoryMemory) -> dict:
             updated_scenes.append(scene.model_copy(update={"moderation_status": "passed"}))
             continue
 
+        # ADR-025 D4: breaker before any spend.
+        check_image_budget(current_image_count)
+
         # One soften-and-retry (spec §4c step 4).
         log.info(
             "output_mod: scene_id=%s flagged by %s — softening and retrying",
@@ -100,7 +106,15 @@ def output_mod(state: StoryMemory) -> dict:
         ]
 
         retry_n = len(scene.attempts) + 1
-        retry_path, _ = generate_and_store(softened, state.story_id, scene.scene_id, retry_n, ref_paths)
+        retry_path, paid = generate_and_store(softened, state.story_id, scene.scene_id, retry_n, ref_paths)
+        if paid:
+            current_image_count += 1
+
+        log.info(
+            "output_mod: scene_id=%s retry image paid=%s image_count=%d",
+            scene.scene_id, paid, current_image_count,
+        )
+
         retry_url = get_signed_url(retry_path)
 
         try:
@@ -131,4 +145,7 @@ def output_mod(state: StoryMemory) -> dict:
                 "attempts": [*scene.attempts, Attempt(image_ref=retry_path, prompt=softened, passed=False)],
             }))
 
-    return {"scenes": updated_scenes}
+    return {
+        "scenes": updated_scenes,
+        "cost": state.cost.model_copy(update={"image_count": current_image_count}),
+    }

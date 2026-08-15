@@ -64,7 +64,7 @@ Story plot points:
 {plot}
 
 Rules:
-- At most 15 scenes.
+- At most {max_scenes} scenes.
 - Each scene captures a distinct moment or plot point.
 - start and end are inclusive sentence indices.
 - characters_present lists character names exactly as given above.
@@ -91,7 +91,7 @@ def segment_scenes(
     plot = "\n".join(f"{e.order}. {e.summary}" for e in timeline) if timeline else "(none)"
     result = structured_text(
         SEGMENTATION_PROMPT.format(
-            numbered=numbered, roster=roster, locations=places, objects=things, plot=plot
+            numbered=numbered, roster=roster, locations=places, objects=things, plot=plot, max_scenes=MAX_SCENES
         ),
         SceneSegmentation,
     )

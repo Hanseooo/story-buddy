@@ -1,7 +1,7 @@
 import logging
 from functools import lru_cache
 
-from app.config import IMAGE_BUDGET, settings
+from app.config import check_image_budget, settings
 from app.db import get_supabase_client
 from contracts.story_memory import Attempt, StoryMemory
 from pipeline.prompt_optimizer import build_prompt, referenced_characters
@@ -68,11 +68,8 @@ def generate_scene(state: StoryMemory) -> dict:
     if scene is None:
         return {}
 
-    # ADR-025 D4: breaker before any spend. IMAGE_BUDGET = MAX_SCENES * 2 + 9.
-    if state.cost.image_count >= IMAGE_BUDGET:
-        raise RuntimeError(
-            f"image budget exceeded: {state.cost.image_count} >= {IMAGE_BUDGET} (ADR-025)"
-        )
+    # ADR-025 D4: breaker before any spend. IMAGE_BUDGET = MAX_SCENES * 4 + 15.
+    check_image_budget(state.cost.image_count)
 
     if not scene.visual_direction:
         raise ValueError(f"generate_scene: scene {scene.scene_id} has no visual_direction")

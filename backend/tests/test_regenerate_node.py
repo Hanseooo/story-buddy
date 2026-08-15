@@ -496,3 +496,39 @@ def test_regenerate_passes_stored_scene_contradictions_and_preserves_refs():
         "The wooden sword is missing."
     ]
     assert store.call_args.args[4] == ["job-1/ref-c0.png"]
+
+
+# --- attempt 3 (spend-and-retry-economics §6.10, invariant 4) ---
+
+def test_attempt_3_accumulates_both_correction_rounds_and_uses_the_dash_3_path():
+    """spend-and-retry-economics §6.10 + invariant 4: "Attempt 3 corrects from attempt 2's
+    prompt, preserving the first correction and appending the newest one."
+
+    Round 1 corrected an identity failure, so attempt 2's prompt already carries
+    IDENTITY_CLAUSE. Round 2 corrects an anatomy failure. Because `regenerate` bases the
+    correction on `last.prompt`, attempt 3 must carry BOTH clauses — that accumulation is the
+    whole mechanism, and nothing else in the suite pins it.
+    """
+    round_1 = _failed_attempt(verdict=_verdict(same=False))
+    round_2 = Attempt(
+        image_ref="job-1/s0-2.png",
+        prompt=f"the original prompt. {IDENTITY_CLAUSE}",
+        vlm_verdict=_verdict(same=True, anatomy=False),
+        failure_reasons=[],
+        passed=False,
+    )
+    state = _state([_scene([round_1, round_2])])
+
+    with patch(
+        "pipeline.regenerate.generate_and_store", return_value=("job-1/s0-3.png", True)
+    ) as store:
+        result = regenerate(state)
+
+    third = result["scenes"][0].attempts[-1]
+    assert IDENTITY_CLAUSE in third.prompt, "round 1's correction was dropped"
+    assert ANATOMY_CLAUSE in third.prompt, "round 2's correction was not appended"
+
+    # The per-attempt Storage path is derived from the attempt count (CC-10), so attempt 3
+    # lands on `-3.png` and re-pays nothing on resume.
+    assert store.call_args.args[3] == 3
+    assert third.image_ref == "job-1/s0-3.png"

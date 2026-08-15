@@ -1,6 +1,6 @@
 # Feature Spec — spend-and-retry-economics
 
-**Status:** draft · **Phase:** 2 · **Owner surfaces:** `backend/app/config.py`,
+**Status:** approved · **Phase:** 2 · **Owner surfaces:** `backend/app/config.py`,
 `backend/pipeline/segment.py`, `backend/pipeline/consistency_check.py`,
 `backend/pipeline/output_mod.py`, `frontend/app/s/[profileId]/write/page.tsx`
 

@@ -159,8 +159,9 @@ def test_scene_constraint_verdict_is_reason_then_structured_contradictions():
     assert SCENE_CONSTRAINT_PROMPT_VERSION == 3
 
 
-def test_scene_constraint_prompt_version_and_content():
-    assert SCENE_CONSTRAINT_PROMPT_VERSION == 3
+def test_scene_constraint_prompt_gates_permanent_setting_features_only():
+    """setting-consistency §6 test 6. The version is asserted above; this covers the clause the
+    bump is FOR — permanent features gate, excerpt-supported temporary conditions do not."""
     assert "Setting:" in SCENE_CONSTRAINT_PROMPT
     assert "permanent description" in SCENE_CONSTRAINT_PROMPT
     assert "concrete violations of stated permanent features" in SCENE_CONSTRAINT_PROMPT
@@ -833,14 +834,15 @@ def _attempt(
 def test_rank_prefers_the_unique_attempt_when_the_higher_keys_tie():
     """§6 test 20 / §4.4: the free improvement. When a retry fires for some OTHER reason, best-of
     now prefers the non-duplicated attempt at no extra draw."""
-    scene = _two_attempt_scene(
+    scene = _three_attempt_scene(
         _attempt("job-1/s0-1.png", same=False, anatomy=True, unique=False, style=True),
         _attempt("job-1/s0-2.png", same=False, anatomy=True, unique=True, style=True),
+        Attempt(image_ref="job-1/s0-3.png", prompt="p", passed=False),
     )
 
     result = _run(
         _state([scene], [_char("c0", "the dog")]),
-        [_verdict(False, anatomy=True, unique=True, style=True)],
+        [_verdict(False, anatomy=True, unique=False, style=True)],
     )
 
     assert result["scenes"][0].final_image_ref == "job-1/s0-2.png"
@@ -849,9 +851,10 @@ def test_rank_prefers_the_unique_attempt_when_the_higher_keys_tie():
 def test_rank_puts_uniqueness_above_style_match():
     """The declared order is (same_character, anatomy_intact, subjects_unique, style_match), so a
     unique-but-off-style attempt beats a duplicated-but-on-style one."""
-    scene = _two_attempt_scene(
+    scene = _three_attempt_scene(
         _attempt("job-1/s0-1.png", same=False, anatomy=True, unique=True, style=False),
         _attempt("job-1/s0-2.png", same=False, anatomy=True, unique=False, style=True),
+        Attempt(image_ref="job-1/s0-3.png", prompt="p", passed=False),
     )
 
     result = _run(
@@ -864,9 +867,10 @@ def test_rank_puts_uniqueness_above_style_match():
 
 def test_rank_puts_uniqueness_below_anatomy():
     """Anatomy GATES and uniqueness does not, so anatomy must outrank it."""
-    scene = _two_attempt_scene(
+    scene = _three_attempt_scene(
         _attempt("job-1/s0-1.png", same=False, anatomy=True, unique=False),
         _attempt("job-1/s0-2.png", same=False, anatomy=False, unique=True),
+        Attempt(image_ref="job-1/s0-3.png", prompt="p", passed=False),
     )
 
     result = _run(
@@ -936,11 +940,26 @@ def _two_attempt_scene(first: Attempt, second: Attempt) -> Scene:
     return Scene(scene_id="s0", text_excerpt="x", characters_present=["c0"], attempts=[first, second])
 
 
+def _three_attempt_scene(first: Attempt, second: Attempt, third: Attempt) -> Scene:
+    return Scene(scene_id="s0", text_excerpt="x", characters_present=["c0"], attempts=[first, second, third])
+
+
 def test_node_defers_finalization_when_a_single_attempt_fails_the_gate():
     """The whole point of the change: a checked FAILURE with one attempt is left unfinalized so
     route_after_check can send it to regenerate."""
     state = _state([_scene_with_attempt(characters_present=["c0"])], [_char("c0", "the dog")])
     result = _run(state, [_verdict(False)])
+
+    assert result["scenes"][0].final_image_ref is None
+
+
+def test_node_defers_finalization_when_second_attempt_fails_the_gate():
+    """Spend-and-retry-economics: concrete failure on attempt 2 remains unfinalized and routes to regenerate."""
+    scene = _two_attempt_scene(
+        _attempt("job-1/s0-1.png", same=False, anatomy=False),
+        Attempt(image_ref="job-1/s0-2.png", prompt="corrected", passed=False),
+    )
+    result = _run(_state([scene], [_char("c0", "the dog")]), [_verdict(False, anatomy=False)])
 
     assert result["scenes"][0].final_image_ref is None
 
@@ -963,9 +982,10 @@ def test_node_finalizes_a_single_passing_attempt():
 
 def test_best_of_prefers_the_attempt_that_wins_on_same_character():
     """Lexicographic: same_character is the first term and outranks everything below it."""
-    scene = _two_attempt_scene(
+    scene = _three_attempt_scene(
         _attempt("job-1/s0-1.png", same=True, anatomy=False, style=False),
         _attempt("job-1/s0-2.png", same=False, anatomy=True, style=True),
+        Attempt(image_ref="job-1/s0-3.png", prompt="p", passed=False),
     )
     result = _run(_state([scene], [_char("c0", "the dog")]), [_verdict(False, anatomy=True, style=True)])
 
@@ -973,9 +993,10 @@ def test_best_of_prefers_the_attempt_that_wins_on_same_character():
 
 
 def test_best_of_prefers_the_attempt_that_wins_on_anatomy_when_identity_ties():
-    scene = _two_attempt_scene(
+    scene = _three_attempt_scene(
         _attempt("job-1/s0-1.png", same=False, anatomy=True, style=False),
         _attempt("job-1/s0-2.png", same=False, anatomy=False, style=True),
+        Attempt(image_ref="job-1/s0-3.png", prompt="p", passed=False),
     )
     result = _run(_state([scene], [_char("c0", "the dog")]), [_verdict(False, anatomy=False, style=True)])
 
@@ -984,26 +1005,28 @@ def test_best_of_prefers_the_attempt_that_wins_on_anatomy_when_identity_ties():
 
 def test_best_of_prefers_the_attempt_that_wins_on_style_when_the_first_two_terms_tie():
     """style_match does not GATE, but it is the ninth term of the ranking."""
-    scene = _two_attempt_scene(
+    scene = _three_attempt_scene(
         _attempt("job-1/s0-1.png", same=False, anatomy=True, style=False),
         _attempt("job-1/s0-2.png", same=False, anatomy=True, style=True),
+        Attempt(image_ref="job-1/s0-3.png", prompt="p", passed=False),
     )
-    result = _run(_state([scene], [_char("c0", "the dog")]), [_verdict(False, anatomy=True, style=True)])
+    result = _run(_state([scene], [_char("c0", "the dog")]), [_verdict(False, anatomy=True, style=False)])
 
     assert result["scenes"][0].final_image_ref == "job-1/s0-2.png"
 
 
-def test_best_of_breaks_a_genuine_tie_in_favour_of_attempt_two():
+def test_best_of_breaks_a_genuine_tie_in_favour_of_newest_attempt():
     """Pinned explicitly: max returns the FIRST maximal element, so this only holds because the
     ranking iterates in reverse. On a tie the corrected prompt is the better prior — ADR-010
-    calls attempt 2 refinement, not resampling."""
-    scene = _two_attempt_scene(
+    calls attempt 3 refinement, not resampling."""
+    scene = _three_attempt_scene(
         _attempt("job-1/s0-1.png", same=False, anatomy=True, style=True),
         _attempt("job-1/s0-2.png", same=False, anatomy=True, style=True),
+        Attempt(image_ref="job-1/s0-3.png", prompt="corrected 2", passed=False),
     )
     result = _run(_state([scene], [_char("c0", "the dog")]), [_verdict(False, anatomy=True, style=True)])
 
-    assert result["scenes"][0].final_image_ref == "job-1/s0-2.png"
+    assert result["scenes"][0].final_image_ref == "job-1/s0-3.png"
 
 
 def test_best_of_ranks_a_checked_failure_above_an_unchecked_attempt():
@@ -1018,16 +1041,18 @@ def test_best_of_ranks_a_checked_failure_above_an_unchecked_attempt():
     assert result["scenes"][0].final_image_ref == "job-1/s0-1.png"
 
 
-def test_two_attempts_always_finalize_even_when_both_fail():
-    """ADR-010: at most one regeneration per scene, and never a broken page. A real image ships."""
-    scene = _two_attempt_scene(
+def test_three_attempts_always_finalize_even_when_all_fail():
+    """Spend-and-retry-economics: at most two regenerations per scene (3 attempts total). A real image ships."""
+    scene = _three_attempt_scene(
         _attempt("job-1/s0-1.png", same=False, anatomy=False),
         _attempt("job-1/s0-2.png", same=False, anatomy=False),
+        Attempt(image_ref="job-1/s0-3.png", prompt="corrected 2", passed=False),
     )
     result = _run(_state([scene], [_char("c0", "the dog")]), [_verdict(False, anatomy=False)])
 
     finalized = result["scenes"][0]
     assert finalized.final_image_ref is not None
+    assert len(finalized.attempts) == 3
     assert all(a.passed is False for a in finalized.attempts)
 
 
@@ -1205,11 +1230,12 @@ def test_a_gating_reason_from_either_subject_fails_the_whole_scene():
     assert result["scenes"][0].attempts[-1].passed is False
 
 
-def test_a_second_attempt_that_still_fails_the_attribute_gate_is_finalized_anyway():
-    """ADR-010 caps the retry at one. The gate buys a correction, never an unbounded loop."""
-    scene = _two_attempt_scene(
+def test_a_third_attempt_that_still_fails_the_attribute_gate_is_finalized_anyway():
+    """Spend-and-retry-economics caps the consistency retry at 2 (3 attempts total). The gate buys corrections, never an unbounded loop."""
+    scene = _three_attempt_scene(
         _attempt("job-1/s0-1.png", same=True, reasons=[FailureReason.wrong_colour]),
         _attempt("job-1/s0-2.png", same=True, reasons=[FailureReason.wrong_colour]),
+        Attempt(image_ref="job-1/s0-3.png", prompt="corrected 2", passed=False),
     )
     result = _run(_state([scene], [_char("c0", "the dragon")]), [
         _verdict(True, reasons=[FailureReason.wrong_colour]),

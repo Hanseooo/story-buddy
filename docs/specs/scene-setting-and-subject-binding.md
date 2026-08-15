@@ -83,12 +83,15 @@ body or in a pure helper. The `consistency_check` pass/fail branch keeps its cur
 
 **`analyze.EXTRACTION_PROMPT`** gains one sentence:
 
-> Describe each location by what is permanently there — not the weather, the time of day, or what
-> happens there.
+> Describe each location by what is permanently there — not the weather, the lighting, the time of
+> day, any damage, or what happens there.
 
-`ExtractedLocation.description` **stays `str | None`**. Making it required would force invention,
-contradicting the same prompt's rule for character axes ("leave them empty rather than inventing
-details"). Null degrades the setting line to name-only, which is still better than today's nothing.
+`ExtractedLocation.description` was **`str | None`** here: making it required looked like it would
+force invention, contradicting the same prompt's rule for character axes ("leave them empty rather
+than inventing details"). **Superseded by `setting-consistency.md` §4.1**, which makes the transient
+field a required non-blank `str` and resolves the tension by instructing the prompt to fill missing
+detail once with neutral, child-safe permanent features. The persisted `Location.description` stays
+`Optional[str]` for checkpoint compatibility.
 
 **`segment`** gains `location_name: str | None = None` on `ExtractedScene`, a location roster in
 `SEGMENTATION_PROMPT`, and name → `loc_id` mapping using the same pattern as the character path

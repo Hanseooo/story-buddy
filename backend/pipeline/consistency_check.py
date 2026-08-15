@@ -10,7 +10,7 @@ import logging
 
 from pydantic import BaseModel, Field
 
-from app.config import settings
+from app.config import MAX_SCENE_ATTEMPTS, settings
 from app.db import get_supabase_client
 from contracts.story_memory import Attempt, FailureReason, StoryMemory, VlmVerdict
 from providers import judge
@@ -314,7 +314,7 @@ def consistency_check(state: StoryMemory) -> dict:
         (identity_applicable and verdict is not None and not identity_clean)
         or bool(scene_contradictions)
     )
-    finalize = passed or not concrete_failure or len(scene.attempts) >= 2
+    finalize = passed or not concrete_failure or len(scene.attempts) >= MAX_SCENE_ATTEMPTS
 
     updated = [
         *scene.attempts[:-1],
@@ -338,7 +338,7 @@ def consistency_check(state: StoryMemory) -> dict:
         }
     )
     log.info(
-        "consistency_check: scene_id=%s attempt=%d/2 roster_ids=%s visible_cast=%s "
+        "consistency_check: scene_id=%s attempt=%d/%d roster_ids=%s visible_cast=%s "
         "visible_objects=%s visual_direction=%r identity_available=%s "
         "scene_constraint_available=%s same_character=%s anatomy_intact=%s text_free=%s "
         "subjects_unique=%s style_match=%s failure_reasons=%s scene_contradictions=%s "
@@ -346,6 +346,7 @@ def consistency_check(state: StoryMemory) -> dict:
         "identity_prompt_version=%d scene_constraint_prompt_version=%d judge_model=%s",
         scene.scene_id,
         len(updated),
+        MAX_SCENE_ATTEMPTS,
         [character.char_id for character in state.characters],
         scene.characters_present,
         scene.objects_present,

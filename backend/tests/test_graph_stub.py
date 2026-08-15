@@ -284,8 +284,10 @@ def test_a_failing_scene_retries_once_then_passes_and_the_run_reaches_compose(mo
 
 
 def test_a_book_whose_every_judge_call_fails_still_reaches_compose(monkeypatch):
-    """The ADR-010 best-of termination test: four attempts, both scenes finalized, never a
-    broken page and never an infinite loop. `len(attempts) >= 2` is what bounds it."""
+    """The ADR-010 best-of termination test: six attempts, both scenes finalized, never a
+    broken page and never an infinite loop. `len(attempts) >= MAX_SCENE_ATTEMPTS` is what
+    bounds it (ADR-037 took that from 2 to 3), so no fourth attempt is reachable per scene —
+    spend-and-retry-economics §6.11."""
     _mock_call_points(monkeypatch)
     _two_scenes(monkeypatch)
     monkeypatch.setattr(
@@ -302,12 +304,12 @@ def test_a_book_whose_every_judge_call_fails_still_reaches_compose(monkeypatch):
         config={"configurable": {"thread_id": "test-job-allfail"}},
     )
 
-    assert sum(len(s.attempts) for s in result["scenes"]) == 4
+    assert sum(len(s.attempts) for s in result["scenes"]) == 6
     assert all(s.final_image_ref is not None for s in result["scenes"])
     assert all(a.passed is False for s in result["scenes"] for a in s.attempts)
-    assert result["cost"].regen_count == 2
-    # Tie on every ranking term → attempt 2, the `reversed` behaviour, end to end.
-    assert [s.final_image_ref for s in result["scenes"]] == ["stub/s0-2.png", "stub/s1-2.png"]
+    assert result["cost"].regen_count == 4
+    # Tie on every ranking term → attempt 3, the `reversed` behaviour, end to end.
+    assert [s.final_image_ref for s in result["scenes"]] == ["stub/s0-3.png", "stub/s1-3.png"]
 
 
 def test_route_next_scene_routes_to_output_mod_when_all_scenes_have_final_image_ref():

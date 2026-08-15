@@ -270,24 +270,25 @@ story was stopped must not be invisible to the adult responsible for them, which
 
 **Two readings, selected by `failure_reason`, and nothing else:**
 
-| `failure_reason` | The teacher is told | Also shown |
-|---|---|---|
-| `child_text` | The safety check stopped this story. | The child's own `input_text` |
-| `machine`, `null`, **or any value this spec has not heard of** | Something went wrong while this was being made. They can try again. | Nothing |
+**Eight exact safe teacher readings, selected by `failure_reason` (amended by ADR-038):**
 
-**The fail-safe default is preserved across the audience change.** Kid-flow §4.2 built
-`failure_reason` so that exactly one value blames the child's writing and every other value — present
-or future — falls to *machine*. That property is why the teacher's map is written as a default rather
-than a list: a new enum value can never accidentally tell a teacher that a child wrote something
-wrong. CC-8's "the teacher-facing view is deliberately a different answer" means *more* than the child
-is told, not *differently safe*.
+| `failure_reason` | Teacher-facing label | Also shown |
+|---|---|---|
+| `child_text` | The submitted story did not pass the input safety check. | The child's own `input_text` |
+| `character_safety` | A generated character reference did not pass the image safety check. | Nothing |
+| `scene_safety` | A generated scene did not pass the image safety check. | Nothing |
+| `service_busy` | A required story-making service was temporarily unavailable. | Nothing |
+| `worker_stopped` | The worker process stopped or exceeded its job deadline. | Nothing |
+| `service_limit` | The configured story-making service reported exhausted quota or credits. | Nothing |
+| `book_limit` | The job reached its paid-image circuit breaker. | Nothing |
+| `system_error` (**or null, legacy `machine`, or unknown**) | The job ended because of an unclassified system error. | Nothing |
+
+**The fail-safe default is preserved across the audience change.** `system_error` is the fallback label for any unclassified or unknown failure reason. A new enum value can never accidentally tell a teacher that a child wrote something wrong. CC-8's "the teacher-facing view is deliberately a different answer" means *more* than the child is told, not *differently safe*.
 
 **Never rendered:** a moderation category, a flagged span, or `jobs.error`. This is not only policy —
-it is also what is available. `graph.py:24-31` collapses everything to three raw strings
-(`content_flagged`, `moderation_error`, `ref_flagged`); `mod.categories` lives in the LangGraph
+it is also what is available. `graph.py` writes exact sentinels; `mod.categories` lives in the LangGraph
 checkpoint and is never written to `jobs`. `jobs.error` holds a raw exception string for machine
-failures (provider text, assertion text, `GraphRecursionError`) and ADR-025 D5 marks it dev-only. It
-is unfit for an adult UI for the same reason it is unfit for a child's.
+failures and ADR-025 D5 marks it dev-only. It is unfit for an adult UI for the same reason it is unfit for a child's.
 
 **Showing the flagged text is not a new exposure.** `teachers read classroom jobs` (`0008:36`) already
 grants the teacher `input_text` on every book in their classroom. The choice here is framing, not

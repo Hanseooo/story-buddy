@@ -27,8 +27,9 @@ scene finalizes per pass* — gets its teeth.
 - **Invariants:**
   1. Exactly one scene is finalized per invocation, or the node returns `{}` (nothing left to do).
      Unlike `generate_scene` this node never raises — see §4. Finalization is now conditional on
-     `passed or verdict is None or len(attempts) >= 2` — a checked failure with one attempt is left
-     unfinalized so `route_after_check` can send it to `regenerate`.
+     `passed or verdict is None or len(attempts) >= MAX_SCENE_ATTEMPTS` (3 with ADR-037; was 2) — a
+     checked failure with fewer attempts is left unfinalized so `route_after_check` can send it to
+     `regenerate`.
   2. `final_image_ref` is written by **this node only**. `generate_scene` stops writing it (§3).
      Unchanged and still true after `regeneration-controller` — `regenerate` deliberately does not
      write it.
@@ -140,7 +141,8 @@ nodes at once, not a hotfix here.
 6. `passed = identity_available and identity_clean and composition_clean`
    (where no-reference scenes evaluate `identity_available=True` and `identity_clean=True`).
 7. Partial-return the scene with the last attempt updated and `scene_contradictions` persisted.
-   `final_image_ref = best.image_ref` if `passed or not concrete_failure or len(attempts) >= 2`.
+   `final_image_ref = best.image_ref` if
+   `passed or not concrete_failure or len(attempts) >= MAX_SCENE_ATTEMPTS` (3, ADR-037).
 
 **The judge scores against the reference, not the description.** A `Character` whose
 `ref_verdict.matches_description is False` is judged against anyway. ADR-028 deliberately ships the
@@ -183,9 +185,10 @@ construction (issue #24, below) — and the cost of a false gate is a paid redra
 existing closed set*, read at the gate, so the F1 measurement Objective 4 computes over that set is
 untouched.
 
-**Bounded.** The gate buys the same single retry ADR-010 already caps at one — `finalize` is
-`passed or verdict is None or len(attempts) >= 2`. Worst case per book is one extra draw per scene,
-already inside `IMAGE_BUDGET` (45; prod job `483056e0` spent 13 on 9 pages).
+**Bounded.** The gate buys only the retries the retry cap already allows — `finalize` is
+`passed or verdict is None or len(attempts) >= MAX_SCENE_ATTEMPTS`. Worst case per book is two extra
+draws per scene (ADR-037 took the cap 2 → 3), already inside `IMAGE_BUDGET` (55, which funds the
+full legal maximum; prod job `483056e0` spent 13 on 9 pages under the old 45).
 
 **Fallback, pre-registered:** if the redraw rate on these two reasons proves unacceptable, demote
 them to rank-only — the shape `subjects_unique` and `style_match` already sit in. The `_rank` term
@@ -373,7 +376,7 @@ still ships its reference).
 - ⚠️ **Two base64 images per call is untested against OpenRouter's body limit.** `char_bible` sends
   one and has not yet run for real either. If it rejects, both nodes need the signed-URL helper at
   once (§4).
-- **Judge latency is now on the critical path per scene**, ≤2 calls × 15 scenes. Unmeasured. It
+- **Judge latency is now on the critical path per scene**, ≤3 calls × 10 scenes (ADR-037). Unmeasured. It
   cannot fail the job (every path finalizes), so this is a latency risk, not a correctness one.
 - **The pass rule is a judgement, not a measurement.** Every term of it — including the
   2026-08-13 `GATING_REASONS` addition — is argued from ADR-007, `correct_prompt`'s mechanics and

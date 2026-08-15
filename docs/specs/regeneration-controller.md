@@ -72,7 +72,7 @@ pass/fail is one of the two branch points it sanctions, and this is that branch.
 ### `consistency_check` stops finalizing unconditionally
 
 ```python
-finalize = passed or verdict is None or len(scene.attempts) >= 2
+finalize = passed or verdict is None or len(scene.attempts) >= MAX_SCENE_ATTEMPTS  # 3, ADR-037
 ```
 
 The **`verdict is None` term is load-bearing**: an *unchecked* attempt finalizes, it does not retry.
@@ -96,8 +96,9 @@ The `scene.attempts` guard is load-bearing, not padding: it is what stops `consi
 with no attempts belongs to `generate_scene`, and `route_next_scene` says so.
 
 **The ADR-024 loop invariant survives.** Every entry into `generate_scene`…`consistency_check` still
-finalizes exactly one scene; it now takes at most two node visits instead of one, bounded by
-`len(attempts) >= 2`. The loop still terminates because each pass reduces the count of
+finalizes exactly one scene; it now takes at most three node visits instead of one (two before
+ADR-037), bounded by `len(attempts) >= MAX_SCENE_ATTEMPTS`. The loop still terminates because each
+pass reduces the count of
 `final_image_ref is None` scenes by one.
 
 ## 4. Behavior & edge cases
@@ -257,7 +258,7 @@ def _rank(a: Attempt) -> tuple[int, bool, int, bool, bool, bool, bool, bool, boo
 
 # `updated` replaces the last element, it does not append — len(updated) == len(scene.attempts).
 updated   = [*scene.attempts[:-1], attempt.model_copy(update={...the existing fold's writes...})]
-finalize  = passed or verdict is None or len(scene.attempts) >= 2
+finalize  = passed or verdict is None or len(scene.attempts) >= MAX_SCENE_ATTEMPTS  # 3, ADR-037
 final_ref = max(reversed(updated), key=_rank).image_ref if finalize else None
 ```
 
@@ -296,7 +297,8 @@ spec doubled.
 
 ```python
 # app/config.py, beside IMAGE_BUDGET
-RECURSION_LIMIT = MAX_SCENES * 5 + SUPER_STEP_PRELUDE    # ADR-024: max_scenes × 5 + fixed_prelude
+RECURSION_LIMIT = MAX_SCENES * 7 + SUPER_STEP_PRELUDE    # ADR-024: max_scenes × 7 + fixed_prelude
+                                                         # ×5 → ×7 (ADR-037's second retry)
 ```
 
 Passed as `config={"configurable": {"thread_id": job_id}, "recursion_limit": RECURSION_LIMIT}`. The
@@ -330,14 +332,15 @@ reasoning (prod job `4f7698d5`); nothing in this spec's own loop changed.
 - [x] **CC-5 Observability** — one line per regeneration: `scene_id`, `attempt_n`, the
       `failure_reasons` that drove the correction, `same_character`/`anatomy_intact`, whether the
       identity or anatomy clause fired, `paid`, `prompt_len`. `consistency_check`'s existing line
-      gains `attempt=2/2 best_of=1` — without the winner, a book with an off-character page gives no
+      gains `attempt=n/3 best_of=1` (denominator 2 → 3 with ADR-037) — without the winner, a book
+      with an off-character page gives no
       way to tell whether the retry ran and lost or never ran at all.
 - [x] **CC-10 Checkpointing / resumability** — the per-attempt Storage path preserves
       `image-generator`'s exists-skip at attempt granularity; a re-executed super-step recomputes the
       same path and re-pays nothing. `regen_count`'s ungated increment is correct under resume (§4).
-- [ ] **CC-3 Cost control** — *partial, image half closed.* `IMAGE_BUDGET = MAX_SCENES * 2 + 9` already sized
-      for two draws per scene, so the breaker needs no change and `regenerate` enforces it before any
-      spend. `cost.regen_count` gains its first writer. **Judge calls remain uncounted and this spec
+- [ ] **CC-3 Cost control** — *partial, image half closed.* `IMAGE_BUDGET = MAX_SCENES * 4 + 15` is sized
+      for four draws per scene (ADR-037), so the breaker needs no change and `regenerate` enforces it
+      before any spend. `cost.regen_count` gains its first writer. **Judge calls remain uncounted and this spec
       widens the gap** — a retried scene costs up to 4 judge calls, not 2. Still a `contracts/`
       change, still unowned (§8).
 - [ ] **CC-7 Reproducibility (seed)** — **not satisfied, and ADR-010 explicitly asks for it.** ADR-010

@@ -4,9 +4,10 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 
-from app.config import MIN_SCENE_WORDS, MIN_SCENES
+from app.config import MAX_SCENES, MIN_SCENE_WORDS, MIN_SCENES
 from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, Input, Location, Scene, StoryMemory, StoryObject
 from pipeline.segment import (
+    SEGMENTATION_PROMPT,
     ExtractedObjectEvent,
     ExtractedScene,
     SceneSegmentation,
@@ -215,17 +216,17 @@ def test_repair_clamps_out_of_bounds_indices():
     assert result[0].end == 4
 
 
-def test_repair_merges_18_ranges_to_15_with_union_of_characters():
+def test_repair_merges_18_ranges_to_10_with_union_of_characters():
     # 18 single-unit scenes alternating alice / bob
     scenes = [_r(i, i, ["alice"] if i % 2 == 0 else ["bob"]) for i in range(18)]
     result = repair(scenes, 18)
-    assert len(result) == 15
+    assert len(result) == 10
     # total coverage
     covered: list[int] = []
     for s in result:
         covered.extend(range(s.start, s.end + 1))
     assert sorted(covered) == list(range(18))
-    # merged scenes must carry both characters (3 pairs merged → at least 1 scene has both)
+    # merged scenes must carry both characters (8 pairs merged → at least 1 scene has both)
     merged_pairs = [set(s.characters_present) for s in result]
     assert any("alice" in c and "bob" in c for c in merged_pairs)
 
@@ -314,14 +315,14 @@ def test_location_name_survives_the_trailing_gap_fill_site():
 
 
 def test_location_name_survives_the_max_scenes_merge_site():
-    """16 single-unit scenes → exactly one merge, and ties go to the earliest pair, so scenes
+    """11 single-unit scenes → exactly one merge, and ties go to the earliest pair, so scenes
     0 and 1 fuse."""
-    scenes = [_r(i, i) for i in range(16)]
+    scenes = [_r(i, i) for i in range(11)]
     scenes[1] = _r(1, 1, location="the hill")
 
-    result = repair(scenes, 16)
+    result = repair(scenes, 11)
 
-    assert len(result) == 15
+    assert len(result) == 10
     assert result[0].location_name == "the hill"     # `a.location_name or b.location_name`
 
 
@@ -338,11 +339,11 @@ def test_location_name_survives_the_merge_thin_site():
 def test_a_merge_takes_the_first_scenes_location_when_both_have_one():
     """`a.location_name or b.location_name` — the earlier scene wins, which is the same
     earlier-scene-wins policy de-overlap already uses."""
-    scenes = [_r(i, i) for i in range(16)]
+    scenes = [_r(i, i) for i in range(11)]
     scenes[0] = _r(0, 0, location="the beach")
     scenes[1] = _r(1, 1, location="the hill")
 
-    assert repair(scenes, 16)[0].location_name == "the beach"
+    assert repair(scenes, 11)[0].location_name == "the beach"
 
 
 def test_merge_thin_takes_the_first_scenes_location_when_both_have_one():
@@ -812,3 +813,19 @@ def test_the_prompt_asks_for_pronoun_only_beats():
         segment_scenes(units, [_char("c0", "the dragon")], [], [], [])
 
     assert "he, she, it or they" in mock_provider.call_args.args[0]
+
+
+def test_segmentation_prompt_names_the_shared_scene_ceiling():
+    """spend-and-retry-economics §6.3: "the segmentation prompt names the same ceiling".
+
+    The prompt used to carry a literal `15` while `MAX_SCENES` moved underneath it, so the model
+    was asked for a ceiling the deterministic merge did not enforce. Pin the interpolation, not
+    just the formatted output, or a future edit can re-hardcode the number and still pass.
+    """
+    assert "{max_scenes}" in SEGMENTATION_PROMPT
+
+    formatted = SEGMENTATION_PROMPT.format(
+        numbered="", roster="", locations="", objects="", plot="", max_scenes=MAX_SCENES
+    )
+    assert f"- At most {MAX_SCENES} scenes." in formatted
+    assert "15 scenes" not in formatted

@@ -1,0 +1,29 @@
+[
+  {
+    "image": "QL1YVRiWe0gSJdHfJdILq.png",
+    "constraints": "Visible characters: Ana, the Shadow Wizard. No other character may appear.\n\nAna: a girl; brown skin; shoulder-length dark brown hair; a red patterned crop top with black zigzag trim; a cream tasselled skirt with a red sash; a blue teardrop shell necklace; barefoot.\n\nThe Shadow Wizard: a wizard; a tall black pointed hat with a bent tip; a black cape lined in purple; a pale white round face with black hair; no beard; a small, child-sized build; black legs and shoes.\n\nVisible objects: the wooden sword — a plain light-wood blade with a simple crossguard, held by Ana.\n\nVisual direction: in the dark forest beside a tall stone tower, Ana confronts the Shadow Wizard, who is sending dark shadows toward her.",
+    "subjects": [
+      ["Ana", "k42DwY0KIvLAQFH9ma7V4.png"],
+      ["the Shadow Wizard", "gD2UhKam5NTbg7q-r781V.png"]
+    ],
+    "expect": "Wizard breaks the profile badly: an elderly man with a long white beard, a soft blue-purple pointed hood and a long blue robe with black shoes. Reference is a small child-sized figure with a pale white beardless face, a black pointed hat and a black cape lined purple. Wrong age, beard added, wrong hat colour and shape, robe instead of cape. Ana matches the reference. Sword present and held by Ana, correct. Direction only half delivered: the wizard stands passively with hands clasped and sends no shadows."
+  },
+  {
+    "image": "BDjkzxf1Xc3bOuKR1F655.png",
+    "constraints": "Visible characters: Ana, the Shadow Wizard. No other character may appear.\n\nAna: a girl; brown skin; shoulder-length dark brown hair; a red patterned crop top with black zigzag trim; a cream tasselled skirt with a red sash; a blue teardrop shell necklace; barefoot.\n\nThe Shadow Wizard: a wizard; a tall black pointed hat with a bent tip; a black cape lined in purple; a pale white round face with black hair; no beard; a small, child-sized build; black legs and shoes.\n\nVisible objects: the bright crystal — a single large pale blue glowing gem, held by Ana. The wooden sword — a plain light-wood blade with a simple crossguard, still carried by Ana.\n\nVisual direction: back in the village at night with every house lit, Ana holds the bright crystal high; the Shadow Wizard is running away from her, moving out of the scene.",
+    "subjects": [
+      ["Ana", "k42DwY0KIvLAQFH9ma7V4.png"],
+      ["the Shadow Wizard", "gD2UhKam5NTbg7q-r781V.png"]
+    ],
+    "expect": "Wizard breaks the profile: a small barefoot brown-skinned figure in a plain dark blue-purple hooded robe, smiling, with no hat and no cape. Reference has a tall black pointed hat, a black purple-lined cape and a pale white face. Wrong colour, wrong clothing, wrong face. Also a different person from the wizard on the other two pages. DIRECTION BREAK: he is running toward Ana with an arm raised, not fleeing away from her. OBJECT BREAK: the wooden sword is gone. Ana matches the reference. One crystal, held by Ana, correct."
+  },
+  {
+    "image": "Ww2udH6SPQKud3veVclvM.png",
+    "constraints": "Visible characters: Ana, the Shadow Wizard. No other character may appear.\n\nAna: a girl; brown skin; shoulder-length dark brown hair; a red patterned crop top with black zigzag trim; a cream tasselled skirt with a red sash; a blue teardrop shell necklace; barefoot.\n\nThe Shadow Wizard: a wizard; a tall black pointed hat with a bent tip; a black cape lined in purple; a pale white round face with black hair; no beard; a small, child-sized build; black legs and shoes.\n\nVisible objects: the bright crystal — a single large pale blue glowing gem, held by Ana. The wooden sword — a plain light-wood blade with a simple crossguard, still carried by Ana.\n\nVisual direction: back in the village at night with every house lit, Ana holds the bright crystal high; the Shadow Wizard is running away from her, moving out of the scene.",
+    "subjects": [
+      ["Ana", "k42DwY0KIvLAQFH9ma7V4.png"],
+      ["the Shadow Wizard", "gD2UhKam5NTbg7q-r781V.png"]
+    ],
+    "expect": "Wizard breaks the profile: a brown-bearded man in a purple pointed hat and purple robe with dark boots, holding a stick. Reference is beardless with a black hat and a black purple-lined cape. Beard added, wrong hat colour, wrong garment. A third distinct person again. DIRECTION BREAK: he is lunging toward Ana with an arm outstretched, not fleeing away from her. OBJECT BREAK: two glowing crystals, one in each hand, where the canon says one. OBJECT BREAK: the wooden sword is gone. Ana matches the reference."
+  }
+]

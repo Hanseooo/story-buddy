@@ -107,22 +107,22 @@ def test_recursion_limit_derives_from_max_scenes_and_the_super_step_prelude():
     """ADR-024's formula, corrected prelude: 6 linear steps + 3 retry cycles of 3
     (char_bible, char_ref_mod, reveal) = 15 (spec §4.13).
 
-    ×4 → ×5 on 2026-08-13: `output_mod` moved inside the scene loop, so the deepest a single scene
-    can go is now generate_scene → consistency_check → regenerate → consistency_check → output_mod.
-    Left at ×4, a 15-scene book where every scene regenerates would die on recursion_limit rather
-    than on anything real.
+    ×5 → ×7 on 2026-08-15: spend-and-retry-economics spec §4.3 adds a 3rd consistency attempt.
+    The per-scene sequence is generate_scene → consistency_check → regenerate → consistency_check
+    → regenerate → consistency_check → output_mod (7 super-steps per scene).
 
     15 → 17 on 2026-08-13: `reference-moderation-retry` closes a char_bible → char_ref_mod →
     char_bible loop that can run once, which is exactly one extra pair of super-steps.
     """
     assert SUPER_STEP_PRELUDE == 17
-    assert RECURSION_LIMIT == MAX_SCENES * 5 + SUPER_STEP_PRELUDE
+    assert RECURSION_LIMIT == MAX_SCENES * 7 + SUPER_STEP_PRELUDE
+    assert RECURSION_LIMIT == 87
 
 
 def test_recursion_limit_and_image_budget_no_longer_share_a_prelude_term():
     """Spec §4.13: the two backstops are different units and were only ever coincidentally
     equal at 9. Raising one in sympathy with the other would weaken a cost guard."""
-    assert RECURSION_LIMIT - MAX_SCENES * 5 != IMAGE_BUDGET - MAX_SCENES * 2
+    assert RECURSION_LIMIT - MAX_SCENES * 7 != IMAGE_BUDGET - MAX_SCENES * 4
 
 
 def test_each_prelude_equals_its_documented_decomposition():
@@ -133,7 +133,8 @@ def test_each_prelude_equals_its_documented_decomposition():
     equal at 9. They are asserted separately, and never derived from each other.
     """
     # 6 = 2 refs x 3 draws · 3 = ADR-029 taps · 6 = one moderation redraw cycle, both refs
-    assert IMAGE_BUDGET == MAX_SCENES * 2 + (6 + 3 + 6)
+    assert IMAGE_BUDGET == MAX_SCENES * 4 + (6 + 3 + 6)
+    assert IMAGE_BUDGET == 55
     # 6 linear steps · 3 reveal retry cycles of 3 · 2 = one extra char_bible + char_ref_mod pair
     assert SUPER_STEP_PRELUDE == 6 + 3 * 3 + 2
 
@@ -154,8 +155,12 @@ def test_min_story_words_is_five():
     assert MIN_STORY_WORDS == 5
 
 
-def test_max_story_words_is_eight_hundred():
-    assert MAX_STORY_WORDS == 800
+def test_max_story_words_is_three_hundred():
+    assert MAX_STORY_WORDS == 300
+
+
+def test_max_scenes_is_ten():
+    assert MAX_SCENES == 10
 
 
 def test_settings_has_no_dev_classroom_id():

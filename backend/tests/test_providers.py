@@ -586,7 +586,7 @@ def test_classify_text_backstop_raises_when_it_returns_no_verdict():
 
 def test_text_guards_leave_room_for_reasoning_tokens():
     """The regression guard for the budget itself. 145 completion tokens was the observed high
-    on a 150-word story; the cap is 800 words (ADR-012), so 100 was never enough headroom.
+    on a 150-word story; the cap is 300 words (ADR-037, was 800), so 100 was never enough headroom.
     """
     for call in (
         lambda: providers.classify_text_primary("A dog runs."),

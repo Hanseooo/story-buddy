@@ -378,12 +378,17 @@ def test_extraction_prompt_asks_for_permanent_location_detail():
     from pipeline.analyze import EXTRACTION_PROMPT
 
     assert (
-        "Describe each location by what is permanently there — not the weather, the time of "
-        "day, or what happens there." in EXTRACTION_PROMPT
+        "Describe each location by what is permanently there — not the weather, the lighting, "
+        "the time of day, any damage, or what happens there." in EXTRACTION_PROMPT
     )
+    # setting-consistency §4.1: preserve stated facts, fill missing detail once.
+    assert "Copy every stated permanent fact without alteration." in EXTRACTION_PROMPT
+    assert "Fill missing detail once with neutral, child-safe features" in EXTRACTION_PROMPT
 
 
 def test_extracted_location_rejects_blank_description():
+    """setting-consistency §6 test 1. Strict at the transient LLM boundary so a schema violation
+    fails the job before any image is purchased (ADR-025)."""
     with pytest.raises(ValidationError):
         ExtractedLocation(name="Park", description="   ")
     with pytest.raises(ValidationError):
@@ -391,44 +396,40 @@ def test_extracted_location_rejects_blank_description():
     with pytest.raises(ValidationError):
         ExtractedLocation.model_validate({"name": "Park", "description": None})
 
-    valid_loc = ExtractedLocation(name="Park", description="A large green park")
-    assert valid_loc.description == "A large green park"
+    assert ExtractedLocation(name="Park", description="A large green park").description == (
+        "A large green park"
+    )
 
 
-def test_extraction_prompt_contains_new_instructions():
-    assert "permanently there" in EXTRACTION_PROMPT
-    assert "Copy every stated permanent fact" in EXTRACTION_PROMPT
-    assert "neutral, child-safe" in EXTRACTION_PROMPT
-    assert "not the weather" in EXTRACTION_PROMPT
+def test_analyze_persists_the_extracted_description_unchanged():
+    """setting-consistency §6 test 3. The assertion is on the PERSISTED `Location`, not on the
+    boundary type — the node's mapping is what the scene prompt and judge later read."""
+    analysis = _analysis(locations=[{"name": "Park", "description": "A large green park"}])
+    with patch("pipeline.analyze.extract_entities", return_value=analysis):
+        result = analyze(_state())
 
-
-def test_valid_description_reaches_location_unchanged(mocker):
-    mock_response = mocker.Mock()
-    mock_response.characters = []
-    mock_response.locations = [ExtractedLocation(name="Park", description="A large green park")]
-    mock_response.objects = []
-    mock_response.timeline = []
-    mocker.patch("pipeline.analyze.structured_text", return_value=mock_response)
-
-    result = extract_entities("some text")
-    assert result.locations[0].description == "A large green park"
+    assert [(loc.loc_id, loc.description) for loc in result["locations"]] == [
+        ("loc0", "A large green park")
+    ]
 
 
 def test_persisted_location_contract_accepts_none():
-    loc = Location(loc_id="loc0", name="Park", description=None)
-    assert loc.description is None
+    """setting-consistency §6 test 4. Old checkpoints deserialize; only the transient type is
+    strict."""
+    assert Location(loc_id="loc0", name="Park", description=None).description is None
 
 
-def test_locations_remain_uncapped(mocker):
-    mock_response = mocker.Mock()
-    mock_response.characters = []
-    mock_response.locations = [ExtractedLocation(name=f"Park {i}", description=f"Desc {i}") for i in range(10)]
-    mock_response.objects = []
-    mock_response.timeline = []
-    mocker.patch("pipeline.analyze.structured_text", return_value=mock_response)
+def test_analyze_leaves_locations_uncapped():
+    """setting-consistency §6 test 5. Unlike characters, a location is text only — it buys no
+    image and no judge call, so it is not a CC-3 spend lever."""
+    analysis = _analysis(
+        locations=[{"name": f"Park {i}", "description": f"Desc {i}"} for i in range(10)]
+    )
+    with patch("pipeline.analyze.extract_entities", return_value=analysis) as extract:
+        result = analyze(_state())
 
-    result = extract_entities("some text")
-    assert len(result.locations) == 10
+    assert len(result["locations"]) == 10
+    assert extract.call_count == 1
 
 
 def test_extracted_object_requires_a_stable_physical_description():

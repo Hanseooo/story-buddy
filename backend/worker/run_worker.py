@@ -80,7 +80,7 @@ def _report_failed(job, exc_string: str) -> None:
         # CAS on the in-flight states: `run_job` writes a precise `error` when it can, and this
         # must never overwrite that, a `complete` row, or an `awaiting_confirm` pause.
         get_supabase_client().table("jobs").update(
-            {"status": "failed", "error": exc_string, "failure_reason": "machine"}
+            {"status": "failed", "error": exc_string, "failure_reason": "worker_stopped"}
         ).in_("status", ["queued", "running"]).eq("id", job.args[0]).execute()
     except Exception:
         # Raising here would kill the parent that is meant to pick up the next book — strictly
