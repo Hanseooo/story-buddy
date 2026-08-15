@@ -925,8 +925,8 @@ def test_the_style_fragment_is_still_last_with_a_location_present():
 
 def test_referenced_characters_deduplicates_a_repeated_char_id():
     """§6 test 17. `segment` no longer emits one, but a checkpoint written before that change
-    still can — and `_fal_ref_url`'s cache would return the SAME fal URL twice, so the roll would
-    say "Image 1 is the star. Image 2 is the star." over a single image."""
+    still can — and `_fal_ref_url` would return fresh signed URLs for the same reference twice, so
+    the roll would say "Image 1 is the star. Image 2 is the star." over one character."""
     star = _char("c1", "the star")
     star.canonical_ref_image = "job-123/ref-c1-1.png"
 

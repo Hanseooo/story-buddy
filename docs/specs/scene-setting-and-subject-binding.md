@@ -180,9 +180,9 @@ and `name_to_ids` maps one name to a **list**. Two independent paths to a repeat
    checks for a collision.
 
 `referenced_characters` then iterates that list without deduplicating, so `ref_paths` carries the
-same Storage path twice, `_fal_ref_url`'s cache returns the same fal URL twice, and the roll asserts
-*"Image 1 is the star. Image 2 is the star."* Handed one image as two subjects, a second instance
-at a different scale is the expected output.
+same Storage path twice, `_fal_ref_url` issues fresh signed URLs for the same reference twice, and
+the roll asserts *"Image 1 is the star. Image 2 is the star."* Handed one character as two subjects,
+a second instance at a different scale is the expected output.
 
 **Fix:** deduplicate in `segment` (`dict.fromkeys`, order-preserving), and defensively in
 `referenced_characters` so a checkpoint written before this change cannot reproduce it on resume.
