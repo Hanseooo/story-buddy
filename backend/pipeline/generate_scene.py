@@ -1,27 +1,19 @@
 import logging
-from functools import lru_cache
 
 from app.config import check_image_budget, settings
 from app.db import get_supabase_client
 from contracts.story_memory import Attempt, StoryMemory
 from pipeline.prompt_optimizer import build_prompt, referenced_characters
-from providers import edit_image, text_to_image, upload_reference
+from providers import edit_image, get_signed_url, text_to_image
 
 log = logging.getLogger(__name__)
 
 BUCKET = "storybook-images"
 
 
-@lru_cache(maxsize=8)
 def _fal_ref_url(ref_path: str) -> str:
-    """Download a canonical reference from Storage and upload it to fal.
-
-    Keyed on `ref_path` which already contains story_id + char_id, so collisions
-    across jobs are impossible. Cache is process-local; a worker restart re-uploads
-    at the cost of latency, no correctness loss (spec §8).
-    """
-    image_bytes = get_supabase_client().storage.from_(BUCKET).download(ref_path)
-    return upload_reference(image_bytes)
+    """Give fal a fresh, short-lived signed URL for a canonical reference."""
+    return get_signed_url(ref_path)
 
 
 def generate_and_store(

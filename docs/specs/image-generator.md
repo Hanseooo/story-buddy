@@ -58,16 +58,15 @@ consistency_check ─────┘         └─ none remain ──► compos
 
 ### Effect boundary
 
-One module-level helper per node (MASTER_SPEC §6 "The node test seam"). The fal reference upload
-lives **inside** it, not beside it — same shape as `char_bible.mint_reference`.
+One module-level helper per node (MASTER_SPEC §6 "The node test seam"). It gives fal a direct,
+short-lived signed URL for the private canonical-reference object.
 
 ```python
 IMAGE_BUDGET = MAX_SCENES * 4 + 15   # ADR-025 D4; prelude 9 → 15 (reference-moderation-retry §4.5)
                                      # coefficient 2 → 4 (ADR-037: +1 consistency retry, +1 for
                                      # output_mod's redraw, which was never counted before)
 
-@lru_cache(maxsize=8)                # keyed on the path, which already contains story_id + char_id
-def _fal_ref_url(ref_path: str) -> str: ...        # Storage download → providers.upload_reference
+def _fal_ref_url(ref_path: str) -> str: ...        # providers.get_signed_url(ref_path), fresh per use
 
 def generate_and_store(
     prompt: str, story_id: str, scene_id: str, attempt_n: int, ref_paths: list[str]
@@ -122,8 +121,8 @@ exactly the drift AGENTS.md's *Definition of Done* grep exists to prevent.
 - [x] **CC-10 Checkpointing / resumability** — the Storage-exists skip (ADR-025 Decision 3's named
       optional upgrade) makes a re-executed super-step free. Side effect: it narrows
       `character-bible` §4's widened mid-node re-pay window.
-- [ ] **CC-4 Security** — *partial.* Durable Storage paths are persisted, never signed URLs. But the
-      fal reference upload sends a child's generated character to a third party. Same posture as
+- [ ] **CC-4 Security** — *partial.* Durable Storage paths are persisted, never signed URLs. fal receives
+      a short-lived signed URL to fetch a child's generated character from the private bucket. Same posture as
       `char_bible` sending base64 to OpenRouter; noted, not closed.
 - [ ] **CC-1 Moderation ordering** — **open.** This node produces the images a child actually sees
       and there is no output-image gate. Owned by `moderation-stack` (Phase 2). Not ticked.
@@ -142,8 +141,8 @@ exactly the drift AGENTS.md's *Definition of Done* grep exists to prevent.
   is called.
 - `ref_paths` non-empty → `edit_image` called with the resolved fal URLs.
 - `ref_paths` empty → `text_to_image` called, `edit_image` not.
-- `_fal_ref_url` memoizes: two calls for the same path perform one download and one
-  `upload_reference`.
+- `_fal_ref_url` returns `providers.get_signed_url(ref_path)`. Two calls for the same path issue two
+  signed-URL requests: URLs expire after 300 seconds, so they are never process-cached.
 
 **Node (`generate_scene`, helper patched — the node seam):**
 - The path is `{story_id}/{scene_id}-{attempt_n}.png`, and two successive invocations over evolving state
@@ -188,12 +187,9 @@ breaker) · ADR-028 (a failing `ref_verdict` still ships its reference).
 - **Seed / CC-7** → blocked on Probe 2 (`PHASE_05_RESULTS.md`), which does not gate Phase 1.
 
 **Open:**
-- ⚠️ **fal reference-URL lifetime is unverified.** If a `upload_reference` URL expires inside a
-  15-scene run, later scenes silently lose their reference — fal drops an unfetchable input the same
-  way ADR-001's pre-flight found it drops an unknown key: a confident, well-formed image of the
-  wrong character. Verify on the first real multi-scene run; the fix is re-uploading per scene
-  (drop the cache), which costs latency, not correctness.
-- The `lru_cache` is process-local and lost on worker restart — a re-upload, no correctness loss.
+- ⚠️ **fal reference-URL lifetime is unverified.** Each edit receives a fresh 300-second signed URL,
+  never persisted or process-cached; fal must still fetch it within that lifetime. Verify on the first
+  real multi-scene run.
 - **Character dedup** — still unowned, inherited ceiling from `character-bible` §8. Not taken here.
 
 ## 9. Definition of done

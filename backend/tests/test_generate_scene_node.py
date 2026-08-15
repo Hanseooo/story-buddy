@@ -54,37 +54,29 @@ def _state(
     )
 
 
-# --- _fal_ref_url (lru_cache — clear before and after to avoid test cross-contamination) ---
+# --- _fal_ref_url (short-lived signed URL per fal request) ---
 
-def test_fal_ref_url_downloads_from_storage_and_uploads_to_fal():
-    _fal_ref_url.cache_clear()
-    fake_supabase = MagicMock()
-    fake_supabase.storage.from_.return_value.download.return_value = b"ref-bytes"
-
-    with patch("pipeline.generate_scene.get_supabase_client", return_value=fake_supabase), \
-         patch("pipeline.generate_scene.upload_reference", return_value="https://fal/ref.png") as mock_upload:
+def test_fal_ref_url_returns_the_signed_url_for_its_reference_path():
+    with patch(
+        "pipeline.generate_scene.get_signed_url", return_value="https://supabase/ref.png"
+    ) as mock_signed_url:
         url = _fal_ref_url("job-1/ref-c0.png")
 
-    assert url == "https://fal/ref.png"
-    mock_upload.assert_called_once_with(b"ref-bytes")
-    _fal_ref_url.cache_clear()
+    assert url == "https://supabase/ref.png"
+    mock_signed_url.assert_called_once_with("job-1/ref-c0.png")
 
 
-def test_fal_ref_url_memoizes_so_a_second_call_skips_download_and_upload():
-    """Spec §6: two calls for the same path perform one download and one upload_reference."""
-    _fal_ref_url.cache_clear()
-    fake_supabase = MagicMock()
-    fake_supabase.storage.from_.return_value.download.return_value = b"ref-bytes"
-
-    with patch("pipeline.generate_scene.get_supabase_client", return_value=fake_supabase), \
-         patch("pipeline.generate_scene.upload_reference", return_value="https://fal/ref.png") as mock_upload:
+def test_fal_ref_url_does_not_cache_expiring_signed_urls():
+    with patch(
+        "pipeline.generate_scene.get_signed_url",
+        side_effect=["https://supabase/ref-1.png", "https://supabase/ref-2.png"],
+    ) as mock_signed_url:
         url1 = _fal_ref_url("job-1/ref-c0.png")
         url2 = _fal_ref_url("job-1/ref-c0.png")
 
-    assert url1 == url2 == "https://fal/ref.png"
-    assert fake_supabase.storage.from_.return_value.download.call_count == 1
-    mock_upload.assert_called_once()
-    _fal_ref_url.cache_clear()
+    assert url1 == "https://supabase/ref-1.png"
+    assert url2 == "https://supabase/ref-2.png"
+    assert mock_signed_url.call_count == 2
 
 
 # --- generate_and_store (providers + Supabase mocked) ---
