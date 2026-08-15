@@ -19,7 +19,7 @@ Each ADR now lives in its own file under `docs/product/adr/`; this page is only 
 | [ADR-011](./adr/ADR-011-moderation-safety-stack-four-mechanisms.md) | Moderation & safety stack (four mechanisms) | Accepted · revised 2026-07-10b |
 | [ADR-012](./adr/ADR-012-story-length-hard-cap-truncate-at-boundary-no.md) | Story length: hard cap + truncate-at-boundary (no summarization) | Accepted |
 | [ADR-013](./adr/ADR-013-caption-source-and-pdf-export.md) | Caption source and PDF export | Accepted · revised 2026-07-21 |
-| [ADR-014](./adr/ADR-014-observability-provider-langsmith.md) | Observability provider: LangSmith | Accepted |
+| [ADR-014](./adr/ADR-014-observability-provider-langsmith.md) | Observability provider: LangSmith | Accepted · amended by ADR-030 (Langfuse) |
 | [ADR-015](./adr/ADR-015-open-weight-model-mandate-what-open-source-means-here.md) | Open-weight model mandate: what "open source" means here | Accepted · hardened 2026-07-10b |
 | [ADR-016](./adr/ADR-016-no-fine-tuning-in-v1.md) | No fine-tuning in v1 | Superseded by ADR-018 |
 | [ADR-017](./adr/ADR-017-setting-teacher-managed-classroom-child-holds-an-issued.md) | Setting: teacher-managed classroom; child holds an issued account and operates the app; teacher reviews manually (auto-approve deferred) | Accepted · revised 2026-07-20 |

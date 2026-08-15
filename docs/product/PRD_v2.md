@@ -354,7 +354,7 @@ on**. Defining Pass as "the judge approved it" would score outputs with the judg
 Two authenticated routes, built in Phase 2.5 on the Phase-2 `researcher` role — **`(research)/annotate/`** (with
 `adjudicate/`) for Objective 4's labelling, and **`(research)/books/`** to serve Objective 3's stimuli with
 provenance stripped and order shuffled. Blinding is enforced in code rather than by discipline. There is no
-metrics dashboard and no run-trace viewer; the latter is what LangSmith is for (ADR-014). Objectives 3 and 5
+metrics dashboard and no run-trace viewer; the latter is what Langfuse is for (ADR-030). Objectives 3 and 5
 collect their responses on paper and by form, not in-app. Rationale and rejected alternatives: **ADR-026**.
 
 ### Respondents
@@ -521,7 +521,7 @@ image generation:
 
 ## 16. Observability (doubles as research instrumentation)
 
-Instrument the pipeline with **LangSmith** (native LangGraph tracing; ADR-014 — resolved). This captures generation time, per-scene regeneration counts, cost per book, and VLM-judge scores — i.e. the "AI Resource Usage" metrics and a large share of the eval dataset. Add **Sentry** for error tracking. Instrument from the walking-skeleton phase so data collection is free by the time you evaluate.
+Instrument the pipeline with **Langfuse** (LangGraph tracing via a per-job `CallbackHandler`; ADR-030, superseding ADR-014's LangSmith). This captures generation time, per-scene regeneration counts, cost per book, and VLM-judge scores — i.e. the "AI Resource Usage" metrics and a large share of the eval dataset. Add **Sentry** for error tracking. Instrument from the walking-skeleton phase so data collection is free by the time you evaluate.
 
 ---
 

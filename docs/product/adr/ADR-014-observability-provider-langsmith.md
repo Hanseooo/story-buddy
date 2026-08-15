@@ -1,6 +1,7 @@
 # ADR-014 — Observability provider: LangSmith
 
-**Status:** Accepted
+**Status:** Accepted · **amended by ADR-030** — the provider is now Langfuse. The
+reasoning below stands as written; only the choice it reached has been replaced.
 
 **Context:** MASTER_SPEC §8 flagged the observability provider (LangSmith vs Langfuse) as an
 open Phase 0 decision — ROADMAP requires tracing wired from the first commit, and LangGraph

@@ -132,7 +132,7 @@ not a spec edit — it changes a frozen cost bound.
 - [ ] **CC-4 Security** — N/A. No new I/O, no URL handling.
 - [x] **CC-5 Observability** — one `log.warning` per refusal naming the call site and the model, and one
   `log.info` on a softened retry that succeeds. Refusal rate is the metric that tells us whether the
-  image half of this spec is needed at all (§8), so it must be findable in LangSmith, not a silent
+  image half of this spec is needed at all (§8), so it must be findable in Langfuse, not a silent
   counter.
 - [ ] **CC-6 Accessibility** — N/A (pipeline helper). The kid-facing reframe copy is `kid-flow-ui`.
 - [x] **CC-7 Reproducibility** — `soften` is pure and deterministic; the same refusal always produces the

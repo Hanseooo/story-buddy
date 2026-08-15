@@ -359,8 +359,8 @@ moderation thresholds, failure copy, and narration voice are all calibrated to a
 | Expert validation (Objective 3) | Positive / negative / suggestion tallies per criterion (narrative coherence, story faithfulness, visual presentation, visual style consistency, classroom suitability) | Content analysis of Tool B responses |
 | Judge classification (Objective 4) | Precision, recall, F1 (F1 primary) vs human reference labels, character-identity-level split | Held-out test set; optional comparison vs zero-shot base + prompted baseline |
 | Software quality (Objective 5) | Weighted mean + SD per ISO/IEC 25010 characteristic (Functional Suitability, Performance Efficiency, Usability, Reliability, Security), interpreted against Table 4 bands | Tool C, designated software-quality evaluators |
-| Generation Time | Submission → completed storybook | Instrumentation (LangSmith) |
-| AI Resource Usage | Avg generation time, image count, regen count | Instrumentation (LangSmith; `Cost.image_count` / `Cost.regen_count`) |
+| Generation Time | Submission → completed storybook | Instrumentation (Langfuse) |
+| AI Resource Usage | Avg generation time, image count, regen count | Instrumentation (Langfuse; `Cost.image_count` / `Cost.regen_count`) |
 | AI Resource Usage — cost | API cost/story | ⚠️ **not instrumented** (see below) |
 
 > ⚠️ **One row requires instrumentation that does not exist yet (2026-07-22).** Do not report it until it
@@ -369,7 +369,7 @@ moderation thresholds, failure copy, and narration voice are all calibrated to a
 >   `backend/providers.py` does **no** token or cost accounting and no spec owns populating the field.
 >   Needs a per-call token/price capture at the provider boundary before this metric is producible.
 >
-> Generation time, image count and regen count **are** covered: LangSmith tracing is wired and
+> Generation time, image count and regen count **are** covered: Langfuse tracing is wired and
 > `Cost.image_count` / `Cost.regen_count` are in the Story Memory contract.
 
 ---

@@ -14,7 +14,7 @@ is solo; the research track is not. They run in parallel and meet at Phase 2.5 a
 
 1. **Prove integration before depth.** The place a schedule dies is integration (async jobs, model wiring, storage). Get one story end-to-end through real infrastructure before making any single module smart.
 2. **Riskiest-first.** Validate that the image model holds *your* characters consistent — **especially non-human ones** — and that the VLM-judge actually catches failures, in Phase 0.5, not Phase 4.
-3. **Instrument from Day 1.** LangSmith tracing is your research dataset — turn it on in the skeleton.
+3. **Instrument from Day 1.** Langfuse tracing is your research dataset — turn it on in the skeleton.
 4. **Exit criteria, not calendar.** Each phase has a definition of done.
 5. **Ethics is the long pole and cannot be compressed by coding faster.** It starts before Phase 0.5.
 6. **Findings propagate the same day they land.** A probe result or an ADR amendment silently
@@ -28,7 +28,7 @@ is solo; the research track is not. They run in parallel and meet at Phase 2.5 a
 
 One hardcoded story flows end-to-end through real infrastructure and produces one real slideshow.
 `POST /storybooks` → job row → RQ worker → LangGraph stub nodes → image in Supabase Storage →
-slideshow live via Realtime. LangSmith + Sentry on from the first commit.
+slideshow live via Realtime. Langfuse + Sentry on from the first commit.
 
 **Status:** ✅ complete. Originally built against Gemini + Nano Banana; the open-weight swap
 (ADR-001, ADR-002, ADR-015) landed with `backend/providers.py`, and `google-genai` is out of the

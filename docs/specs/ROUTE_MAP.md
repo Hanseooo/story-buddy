@@ -359,7 +359,7 @@ Each route group also gets an `error.tsx`:
 - [ ] CC-1 Moderation ordering — N/A (routing layer; moderation is pipeline-side)
 - [ ] CC-2 PII redaction — N/A (no PII in URLs; `profileId` is a UUID)
 - [ ] CC-3 Cost control — N/A
-- [ ] CC-5 Observability — N/A (handled at Sentry/LangSmith level)
+- [ ] CC-5 Observability — N/A (handled at Sentry/Langfuse level)
 - [ ] CC-7 Reproducibility — N/A
 - [ ] CC-10 Checkpointing — N/A (process route *displays* checkpoint state but doesn't own it)
 

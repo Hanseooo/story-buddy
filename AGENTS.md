@@ -125,7 +125,7 @@ Two kinds of tests. Never mix them (see `docs/MASTER_SPEC.md` §6).
   is not a unit test). These run in CI and **must stay green** — a change that reddens CI is
   not done.
 - **Eval harness** (offline, real models, story corpus): the only place fuzzy quality is
-  measured. Never put it in CI. It doubles as research instrumentation (LangSmith/Langfuse).
+  measured. Never put it in CI. It doubles as research instrumentation (Langfuse).
 
 **Provider smoke tests** (`backend/tests/test_smoke_providers.py`, added 2026-08-11) sit between
 the two and belong to neither. They call real providers but assert only **reachability and
