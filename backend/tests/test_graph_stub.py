@@ -48,7 +48,7 @@ STUB_ANALYSIS = StoryAnalysis.model_validate(
                 },
             }
         ],
-        "locations": [{"name": "a field"}],
+        "locations": [{"name": "a field", "description": "a grassy field"}],
         "objects": [],
         "timeline": [{"order": 0, "summary": "A dog runs."}],
     }
