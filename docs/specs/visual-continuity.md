@@ -128,8 +128,9 @@ one-per-character as required by ADR-004.
 two sources explicit:
 
 1. Copy visual facts the story states without alteration.
-2. Fill only missing axes once, with neutral, child-safe, non-stereotyped details that make the
-   character visually distinct from the rest of the roster.
+2. Fill only missing axes once, with concrete, directly drawable, child-safe, non-stereotyped
+   details that make the character visually distinct from the rest of the roster. Never use the
+   placeholder values `neutral`, `none`, `unknown`, or `unspecified`.
 
 The physical `species`/kind must not be a job title. A human Shadow Wizard is physically human;
 “shadow wizard” remains the name/role. A valid filled profile could therefore carry a stable age
