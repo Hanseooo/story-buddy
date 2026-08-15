@@ -32,6 +32,23 @@ S3/S4 `READY`. No implementation changed and no visual-quality claim was made.
 
 ---
 
+# Current Task: Reference Pipeline Hardening
+
+- [x] Diagnose character prompt contamination and the Supabase reference timeout.
+- [x] Confirm PII pseudonymization remains unchanged.
+- [x] Obtain approval to implement both independent fixes with delegated agents.
+- [x] Create the implementation plan in `docs/specs/plans/2026-08-15-reference-pipeline-hardening.md`.
+- [ ] Implement and review Task 1: character-reference prompt fidelity.
+- [ ] Implement and review Task 2: signed reference URL delivery.
+- [ ] Review the combined blast radius and run backend pre-merge verification.
+- [ ] Record commands, results, unverified external behavior, and residual risks below.
+
+## Outcome
+
+In progress.
+
+---
+
 # Current Task: Pipeline Consistency Docket — S4 Design
 
 - [x] Explore S4 context: project guidance, docket, relevant specs/code, and recent commits.
