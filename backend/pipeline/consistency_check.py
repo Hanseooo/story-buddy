@@ -90,7 +90,8 @@ class SceneVerdict(BaseModel):
 # detail the constraints never stated, and `concrete_failure` below reads `bool(scene_contradictions)`
 # — so each one buys a paid redraw of a page that was fine. v1 contradiction counts are not
 # comparable: they measure the judge's appetite for unstated detail, not the generator.
-SCENE_CONSTRAINT_PROMPT_VERSION = 2
+# 3 (setting-consistency §4.3, 2026-08-15): adds the setting check clause.
+SCENE_CONSTRAINT_PROMPT_VERSION = 3
 
 SCENE_CONSTRAINT_PROMPT = """\
 The image is one page of a children's picture book. Check it only against the exact scene \
@@ -102,6 +103,10 @@ The constraints state only what the story fixed. The page will necessarily show 
 not mention — scenery, lighting, texture, ornament, how a thing is drawn — and that is NOT a \
 contradiction. A contradiction is a stated requirement the page violates, never a detail the \
 constraints are simply silent about.
+
+When a Setting: line exists, check its name and permanent description against the page. Report \
+only concrete violations of stated permanent features as contradictions. Do not report weather, \
+lighting, time, damage, or other temporary differences when the later excerpt supports them.
 
 First describe every observed difference from those constraints. Then list each contradiction \
 separately. Every contradiction must name the subject and the violated requirement. Check that \
@@ -198,12 +203,12 @@ def judge_attempt(
     return identity, composition
 
 
-def _rank(a: Attempt) -> tuple[int, bool, int, bool, bool, bool, bool, bool, bool]:
+def _rank(a: Attempt) -> tuple[bool, bool, int, bool, bool, bool, bool, bool, bool]:
     """ADR-028's lexicographic best-of signal, in visual-continuity §4.7's declared order.
 
     A pass scores (1, 1, 1, …) and beats anything that gated, so `max` needs no special case for
     it. Term 1 is §4.7's "any checked signal over no checked signal": a FULLY unchecked attempt —
-    neither judge available — scores all zeros and sorts below every checked one, because
+    neither judge available — scores `False` on term 1 and sorts below every checked one, because
     promoting an unjudged image over a judged one would let a judge outage silently decide the
     page (invariant 4: unchecked is never a pass).
 

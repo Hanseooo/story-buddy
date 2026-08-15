@@ -22,6 +22,7 @@ from contracts.story_memory import (
 )
 from pipeline.consistency_check import (
     GATING_REASONS,
+    SCENE_CONSTRAINT_PROMPT,
     SCENE_CONSTRAINT_PROMPT_VERSION,
     SceneConstraintVerdict,
     SceneVerdict,
@@ -155,7 +156,15 @@ def test_scene_constraint_verdict_is_reason_then_structured_contradictions():
         "differences_observed",
         "contradictions",
     ]
-    assert SCENE_CONSTRAINT_PROMPT_VERSION == 2
+    assert SCENE_CONSTRAINT_PROMPT_VERSION == 3
+
+
+def test_scene_constraint_prompt_version_and_content():
+    assert SCENE_CONSTRAINT_PROMPT_VERSION == 3
+    assert "Setting:" in SCENE_CONSTRAINT_PROMPT
+    assert "permanent description" in SCENE_CONSTRAINT_PROMPT
+    assert "concrete violations of stated permanent features" in SCENE_CONSTRAINT_PROMPT
+    assert "do not report weather, lighting, time" in SCENE_CONSTRAINT_PROMPT.lower()
 
 
 def test_scene_constraint_prompt_excludes_unstated_detail():
@@ -263,9 +272,33 @@ def test_scene_verdict_subjects_unique_defaults_to_true():
     assert verdict.subjects_unique is True
 
 
-def test_judge_prompt_version():
-    from pipeline.consistency_check import JUDGE_PROMPT_VERSION
-    assert JUDGE_PROMPT_VERSION == 4
+def test_the_judge_prompt_states_viewpoint_tolerance_before_the_verdict_questions():
+    """§7 test 2. v4's tolerance paragraph has to land BEFORE the structured questions, or the
+    judge reads the questions first and the tolerance never conditions the verdict. ADR-004's
+    field order is asserted separately (see the schema-order test below) and must survive intact:
+    this paragraph is prepended to the framing, not interleaved with the questions.
+    """
+    from pipeline.consistency_check import JUDGE_PROMPT
+
+    prompt = JUDGE_PROMPT.format(name="the dog")
+
+    # The five things §5.2 says v4 must state.
+    for phrase in (
+        "Rear, profile, foreshortened, and partially occluded views",
+        "pose, crop, expression, and viewing angle are not identity differences",
+        "visible evidence only",
+        "naturally hidden by the requested viewpoint is not a missing body part",
+        "still fails normally",
+    ):
+        assert phrase in prompt, phrase
+
+    # Naturally-hidden features must not be routed to these three reasons.
+    for reason in ("wrong_body_feature", "different_face", "character_absent"):
+        assert reason in prompt
+
+    # Before the questions: the whole tolerance block precedes the first "First describe".
+    assert prompt.index("Rear, profile") < prompt.index("First describe")
+    assert prompt.index("still fails normally") < prompt.index("First describe")
 
 
 def test_rank_prioritizes_composition():
