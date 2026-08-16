@@ -1,3 +1,46 @@
+# Current Task: Production visual-output regression follow-up
+
+- [x] Read project guidance, lessons, current pipeline/specs, production prompts/logs, and recent commits.
+- [x] Delegate focused investigations of prompt flow, PII pseudonymization, and recent history/style changes.
+- [x] Confirm the earlier comparison run and intended product priority with the owner.
+- [x] Compare 2–3 root-cause fixes and obtain design approval before implementation.
+- [x] Update the owning spec and self-review it.
+- [x] Obtain written-spec approval from the owner through the current implementation request.
+- [x] Write and execute a disposable implementation plan after the design gates passed.
+
+## Success criteria
+
+The approved design prevents one actor from surviving as both a character and object, stops
+ownership or interaction from becoming an invented physical-holder instruction, preserves mandatory
+PII protection, and treats comic-style quality as a measured variable rather than an assumed cause.
+
+## Spec review outcome
+
+Updated `docs/specs/visual-prompt-reliability.md` to drop explicit parenthetical actor aliases in
+full, make `objects_present` explicit per frame, remove node-local object-event/holder carry-forward,
+and preserve physical interactions only in the selected visual action. The exact Jamie/Bolt story
+in explicitly selected Gouache remains the paid regression check.
+
+## Implementation review outcome
+
+The follow-up implementation now adds explicit selected-frame object rules to the segmentation
+provider prompt, reuses the rendered direction once per scene, and adds deterministic coverage for
+the prompt boundary plus a local Jamie/Bolt contract-shaped scene fixture. The exact production
+story text is not present in the repository, so no exact Tier-B reproduction or paid Gouache call
+was fabricated or run; that acceptance gate remains open.
+
+The requested style-policy change cannot be included in this implementation: ADR-022 freezes three
+selectable presets and Cel as the flagship default. Logged D-O in
+`docs/product/DECISION_BACKLOG.md` for a dedicated superseding-ADR session. Presidio remains enabled;
+canonical-reference timeout policy and raw-before-redaction storage remain separate follow-ups.
+
+Verification: focused analyzer/segment tests passed (152); `uv run ruff check .` passed; full backend
+tests passed (906 passed, 71 skipped, 6 deselected, one pre-existing Starlette/httpx warning); and
+`git diff --check` passed. The exact production Tier-B gate is not complete because the story input is
+not in the repository and no paid provider call was run.
+
+---
+
 # Current Task: Production analyze alias regression
 
 - [x] Reproduce the exact Leo/object alias failure and trace the pre/post-merge behavior.
@@ -15,7 +58,7 @@ the duplicate entity cannot reach downstream state, and the deterministic suite 
 
 The merged validator rejected the model's known `the robot (Leo)` response, and the provider's
 single unchanged re-ask repeated the invalid payload. `StoryAnalysis` now drops exact character
-duplicates and strips a trailing parenthetical character alias while retaining the prop name.
+duplicates and drops a trailing parenthetical character alias in full.
 Updated `story-analyzer.md` and `visual-prompt-reliability.md` to describe normalization.
 
 Verification: TDD red run failed 3 tests on the old behavior; focused analyzer tests passed 49;
@@ -110,10 +153,9 @@ The draft S1 spec defines a visual-only scene prompt, structured one-moment segm
 explicit actor/object-alias boundary handling, and clean-base latest-only retry corrections. It preserves
 verbatim captions, story-appropriate rear/profile/overhead views, the three-attempt cap, graph shape,
 and raw judge evidence. The self-review caught and fixed a merge inconsistency: the later selected
-moment now also owns visible cast, visible objects, and explicit location, while ordered holder
-events from both source ranges survive. ADR-040 now resolves D-M and removes narrative notes from
-newly assembled scene prompts; the spec is unblocked but still awaits owner review. D-N separately
-owns moderation-replacement checking. No runtime code or implementation plan was written.
+ moment now also owns visible cast, visible objects, and explicit location. Node-local holder events
+ are removed rather than merged or replayed. ADR-040 now resolves D-M and removes narrative notes
+ from newly assembled scene prompts; D-N separately owns moderation-replacement checking.
 
 ---
 
@@ -303,3 +345,41 @@ Verification on 2026-08-16:
 
 Residual risk: no paid Tier-B visual-quality validation was run; contract, graph, provider calls, and
 retry policy remain unchanged.
+
+---
+
+# Current Task: Visual-prompt reliability follow-up implementation
+
+- [x] Read and critically review the project instructions, target spec, implementation plan, and affected code/tests.
+- [x] Add failing analyzer and segmentation regression tests.
+- [x] Implement alias dropping and remove object lifecycle propagation.
+- [x] Update the story-analyzer, scene-segmentation, and visual-continuity specs.
+- [x] Run focused tests, backend lint/full verification, strict greps, and review the diff/spec alignment.
+- [x] Run or document the Tier-B Jamie/Bolt reproduction and remove the disposable plan.
+
+## Success criteria
+
+Explicit parenthetical character aliases are dropped, `objects_present` is explicit per frame,
+object ownership does not invent visibility or holder relations, all deterministic checks pass, and
+the affected specs match the runtime behavior.
+
+## Outcome — 2026-08-17
+
+Implemented in commits `a639495`, `8d51b34`, and `58dfa14`:
+
+- `StoryAnalysis` now drops an explicit parenthetical character alias object in full.
+- `segment` no longer accepts object lifecycle events, carries owned objects forward, or appends
+  derived holder relations; `objects_present` is explicit per frame.
+- Updated the three affected module specs and replaced lifecycle assertions with deterministic
+  per-frame tests.
+
+Verification:
+
+- Red tests failed against the old behavior, then focused analyzer/segment tests passed: 149.
+- `uv run ruff check .` — passed.
+- `uv run pytest` — 903 passed, 71 skipped, 6 deselected; one existing Starlette warning.
+- Strict greps and `git diff --check` reviewed clean for runtime lifecycle leakage.
+
+Tier-B Jamie/Bolt reproduction was not run: the exact production story is not checked into the
+repository. No `.env` or secret file was read, and no live paid provider call was made. The
+remaining risk is unmeasured behavior on that external reproduction.
