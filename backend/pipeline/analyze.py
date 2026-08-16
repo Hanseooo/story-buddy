@@ -69,10 +69,7 @@ class StoryAnalysis(BaseModel):
                 continue
             match = _EXPLICIT_ALIAS.search(obj.name)
             if match and match.group(1).strip().casefold() in character_names:
-                name = obj.name[: match.start()].rstrip()
-                if not name or name.casefold() in character_names:
-                    continue
-                obj = obj.model_copy(update={"name": name})
+                continue
             objects.append(obj)
         self.objects = objects
         return self

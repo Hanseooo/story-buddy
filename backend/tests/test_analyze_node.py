@@ -462,7 +462,7 @@ def test_story_analysis_drops_an_exact_character_duplicate_object():
     assert analysis.objects == []
 
 
-def test_story_analysis_strips_explicit_parenthetical_character_alias():
+def test_entity_rosters_alias_dropped_entirely():
     analysis = _analysis(
         characters=[_character("Leo", species="human")],
         objects=[
@@ -474,10 +474,10 @@ def test_story_analysis_strips_explicit_parenthetical_character_alias():
         ],
     )
 
-    assert analysis.objects[0].name == "the robot"
+    assert analysis.objects == []
 
 
-def test_story_analysis_strips_parenthetical_alias_with_casefold_and_whitespace():
+def test_story_analysis_drops_parenthetical_alias_with_casefold_and_whitespace():
     analysis = _analysis(
         characters=[_character("LEO", species="human")],
         objects=[
@@ -489,7 +489,7 @@ def test_story_analysis_strips_parenthetical_alias_with_casefold_and_whitespace(
         ],
     )
 
-    assert analysis.objects[0].name == "the robot"
+    assert analysis.objects == []
 
 
 @pytest.mark.parametrize("object_name", ["Leo's toy", "Leo's robot kit", "toy robot"])
