@@ -53,7 +53,7 @@ class StoryObject(BaseModel):
     obj_id: str
     name: str
     description: Optional[str] = None
-    owner_char_id: Optional[str] = None       # NEW — ordinary/initial holder, not immutable
+    owner_char_id: Optional[str] = None       # NEW — canon metadata; not scene visibility or pose
 
 class Scene(BaseModel):
     ...
@@ -91,7 +91,8 @@ and `clothing` fields become a complete frozen visual profile instead of a spars
    action. An inert prop exists only in `objects[]`. A personified object is a character, not both.
 3. `characters_present` means the intended visible cast only. Mentioned, remembered, or off-screen
    characters are excluded.
-4. `objects_present` contains known `obj_id`s only and has no duplicates.
+4. `objects_present` contains known `obj_id`s only, has no duplicates, and is explicit per selected
+   still frame. Ownership does not imply visibility or carry-forward.
 5. `visual_direction` is non-empty on every generated scene and names subject, action, target or
    movement direction where applicable, and viewpoint.
 6. A canonical reference defines appearance only. Its pose, crop, expression, and viewpoint never
@@ -159,8 +160,9 @@ text canon; only the first two may also receive reference images.
 a narrative relation. `owner_char_id` is mapped from a node-local `owner_name`; an unknown owner is
 a semantic boundary error, not silently set to null. Truly unowned props keep `None`.
 
-`owner_char_id` names the ordinary or initial holder. A transfer does not rewrite the global object;
-scene planning carries the temporary holder locally and states it in `visual_direction`.
+`owner_char_id` records ordinary or initial ownership for canon and is not a scene-state machine.
+It does not make an object visible, carry it into a later scene, or create a physical relation.
+When holding or transfer is visually essential, `key_action` or `pose_expression` states it directly.
 
 ### 4.3 Visible cast and visual direction in `segment`
 
@@ -168,23 +170,18 @@ scene planning carries the temporary holder locally and states it in `visual_dir
 
 ```python
 objects_present: list[str] = []
-object_events: list[ExtractedObjectEvent] = []
 visual_direction: str
-
-class ExtractedObjectEvent(BaseModel):
-    object_name: str
-    action: Literal["acquire", "release"]
-    holder_name: str
 ```
 
-The object list and events carry roster names at the LLM boundary and are mapped to ids by the
-node. `holder_name` makes a transfer unambiguous: release from one holder, then acquire by the
-other. Unknown names, an empty direction, or a direction that names a character outside the visible cast fails before
-`char_bible`, so no fal image has been purchased.
+`objects_present` carries roster names at the LLM boundary and is mapped to ids by the node. It is
+the complete visible-object list for the selected still frame. Unknown names, an empty direction,
+or a direction that names a character outside the visible cast fails before `char_bible`, so no fal
+image has been purchased.
 
 The current unconditional exact-name recovery is removed: a name appearing in an excerpt does not
 prove that the character should be visible. The structured `characters_present` decision is the
-authority. All `ExtractedScene` repair and merge paths must preserve the four new local fields.
+authority. All `ExtractedScene` repair and merge paths preserve the explicit object list and
+structured direction.
 
 `visual_direction` is short and literal, not prose improvement. For the motivating final beat it
 must say the equivalent of:
@@ -194,23 +191,19 @@ must say the equivalent of:
 
 That instruction is distinct from the verbatim caption, which remains `text_excerpt` under ADR-013.
 
-### 4.4 Object lifecycle
+### 4.4 Object visibility and physical interaction
 
-`segment` walks final scenes in order with an active-holder map:
+`objects_present` is explicit per selected still frame, just like `characters_present`:
 
-1. Start with objects explicitly visible in the scene and active objects whose holder is visible.
-2. Process `object_events` in narrative order. `acquire` sets/replaces the holder and makes the
-   object visible when that holder is visible. `release` keeps the object visible in that beat,
-   then clears the holder only when the named releaser is its current holder.
-3. Persist the deduplicated `obj_id` list and carry the resulting holder map into the next scene.
+1. the segmenter lists an object only when it should be visible in that frame;
+2. `owner_char_id` does not imply visibility, holding, or carrying in every scene;
+3. an object listed in an earlier scene is not automatically carried into a later scene;
+4. no node-local acquire/release history is created, merged, or replayed;
+5. when holding or transfer is visually essential, `key_action` or `pose_expression` states it
+   directly — for example, `Leo hands the favorite toy to the little sister`.
 
-A transfer is an ordered release followed by acquisition by the recipient in the same scene. The node appends
-the current holder relation to `visual_direction`, so later prompts do not depend on the object's
-global initial owner.
-
-An owned item remains active while its holder is off-screen but is not rendered there. An unowned
-prop appears only when explicitly requested. If a story starts with “Ana has a sword,” its first
-visible scene is the acquisition point; the sword is not back-projected into an earlier scene.
+This does not ban held-object compositions. It removes only inferred relations such as `the
+refrigerator is held by Leo`. The one selected action remains authoritative.
 
 ### 4.5 Prompt composition
 
@@ -225,8 +218,8 @@ visible scene is the acquisition point; the sword is not back-projected into an 
 7. Style fragment.
 
 Verbatim `text_excerpt` is omitted from the image prompt and reserved exclusively for the printed caption.
-Current holder relations are appended deterministically to `visual_direction` by `segment`; the
-global `owner_char_id` is never reused after a transfer. The roll gains one fixed sentence:
+The prompt describes only the objects explicitly listed for the selected frame. It does not append
+derived holder relations from `owner_char_id`. The roll gains one fixed sentence:
 reference images define appearance, not pose, crop, expression,
 or viewing angle; the visual direction controls those scene properties. This removes the direct
 conflict between the front/slight-angle reference and a character correctly shown fleeing.
@@ -251,7 +244,8 @@ The prompt checks:
 - every expected visible character appears exactly once;
 - no unrequested character appears;
 - text-only characters match their frozen profiles;
-- every `objects_present` item appears with its frozen appearance and current holder;
+- every `objects_present` item appears with its frozen appearance; any holding or transfer is judged
+  only when the selected `visual_direction` states it;
 - the action, direction, and viewpoint match `visual_direction`.
 
 Each contradiction must name the subject and violated requirement. The list alone gates and is
@@ -359,19 +353,21 @@ All provider calls mocked. Generated-content quality is never asserted in CI.
 9. A merely mentioned off-screen character is absent from `characters_present`.
 10. A visibly acting character is mapped to its known `char_id`.
 11. Unknown character/object names and empty visual direction fail before downstream work.
-12. Acquisition makes an owned object visible; later owner-visible scenes carry it forward.
-13. An off-screen owner hides but does not deactivate the item.
-14. Release names its holder, shows the item in the release scene, and removes it afterward.
-15. Release-plus-acquire transfers the item and carries it with the recipient on later scenes.
+12. `objects_present` maps only explicitly listed objects for each selected frame.
+13. An owned object does not appear when omitted from `objects_present` and does not carry forward.
+14. `owner_char_id` never creates an `is held by` suffix or other physical relation.
+15. A holding or transfer instruction remains in `key_action` or `pose_expression`.
 16. Unowned props do not carry forward.
-17. All repair/merge constructors preserve object events and visual direction.
+17. All repair/merge constructors preserve explicit objects and visual direction without lifecycle
+   history.
 
 ### `prompt_optimizer`
 
 18. Prompt block order matches §4.5.
 19. Referenced and text-only characters both carry complete profiles.
 20. The exact visible cast excludes off-screen mentions.
-21. Object description and current holder appear on every active scene.
+21. Object descriptions appear for explicit `objects_present` items; no current-holder text is
+   inferred from ownership.
 22. The reference-pose sentence and visual direction both appear, with direction later.
 
 ### `consistency_check`
@@ -466,9 +462,8 @@ Residual risks:
   subject and never sees movement direction. Recorded as incumbent-baseline characterization in the
   docket's S1 outcome. §7.2's paid exact-story rerun is **not** done and this box stays open until
   it is.
-- [x] Repo-wide greps confirm the old sparse-description rule, prompt order, rank tuple, and object
-  non-use are not still asserted elsewhere. Done during the 2026-08-14 code review; it turned up
-  three stale assertions — `segment.py`'s §4.6 comment block, `scene-segmentation.md`'s live
-  name-recovery section, and `AGENTS.md`'s built-feature entry for (A) — all since corrected.
+- [x] Repo-wide greps confirm the old sparse-description rule, prompt order, rank tuple, and
+  object lifecycle/holder assertions are reconciled. The follow-up removes the stale
+  `object_events`, `holder_by_obj`, and derived `is held by` behavior from runtime and live specs.
 - [x] The completed implementation plan is deleted after build + green verification, per artifact
   hygiene. No `.scratch/` or `docs/plans/` remains.
