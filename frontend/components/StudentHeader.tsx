@@ -12,7 +12,7 @@ type Props = {
 
 export function StudentHeader({ profileId, avatarId, displayNickname }: Props) {
   return (
-    <header className="bg-surface border-b border-primary/15 px-5 py-3 sm:px-8 z-10 sticky top-0">
+    <header className="bg-surface/95 backdrop-blur-md border-b border-primary/15 px-5 py-3 sm:px-8 z-40 sticky top-0">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
         <motion.div 
           className="flex items-center gap-3"

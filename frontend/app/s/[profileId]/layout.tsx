@@ -70,7 +70,7 @@ export default async function StudentLayout({
   return (
     <div className="font-kid min-h-screen bg-background text-foreground flex flex-col">
       <StudentHeader profileId={profileId} avatarId={data.avatar_id} displayNickname={data.display_nickname} />
-      <main className="flex-1 pb-20 md:pb-0">{children}</main>
+      <main className="flex-1 isolate relative z-0 pb-20 md:pb-0">{children}</main>
       <StudentTabBar profileId={profileId} />
     </div>
   );

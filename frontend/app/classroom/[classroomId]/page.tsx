@@ -209,9 +209,9 @@ export default function RosterPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
               whileHover={{ y: -2 }}
-              style={{ zIndex: openMenuId === s.id ? 30 : active.length - i }}
+              style={{ zIndex: openMenuId === s.id ? 20 : 0 }}
               className={`bg-surface border-2 border-primary/5 rounded-2xl p-4 sm:px-6 flex items-center justify-between gap-4 hover:shadow-[0_8px_24px_rgba(49,85,217,0.08)] transition-all group relative ${
-                openMenuId === s.id ? "z-30" : ""
+                openMenuId === s.id ? "z-20" : ""
               }`}
             >
               <div className="flex items-center gap-4 sm:gap-6">
@@ -338,7 +338,7 @@ function RowMenu({
   onRemove: () => void;
 }) {
   return (
-    <div className={`relative inline-block shrink-0 ${open ? "z-30" : ""}`}>
+    <div className={`relative inline-block shrink-0 ${open ? "z-20" : ""}`}>
       {/* ponytail: plain conditional render + backdrop. The popover API put this in the
           top layer, where `position: absolute` resolves against the viewport, not the
           button — `top: 100%` painted the menu below the fold. */}

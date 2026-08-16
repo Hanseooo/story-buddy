@@ -76,6 +76,6 @@ describe("RosterPage & RowMenu Stacking & Interaction", () => {
 
     // Verify row container has z-index elevation class/style when menu is open
     const firstStudentRow = actionBtns[0].closest("div[class*='bg-surface']");
-    expect(firstStudentRow).toHaveClass("z-30");
+    expect(firstStudentRow).toHaveClass("z-20");
   });
 });

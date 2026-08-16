@@ -14,7 +14,7 @@ export default async function TeacherShell({ children }: Props) {
 
   return (
     <div className="font-sans min-h-screen bg-background text-foreground flex flex-col">
-      <header className="bg-surface border-b border-primary/15 px-4 sm:px-8 py-3 sticky top-0 z-10">
+      <header className="bg-surface/95 backdrop-blur-md border-b border-primary/15 px-4 sm:px-8 py-3 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
           <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
             <Link href="/classroom" className="hidden sm:flex items-center gap-2 shrink-0">
@@ -52,7 +52,7 @@ export default async function TeacherShell({ children }: Props) {
         </div>
       </header>
 
-      <main className="flex-1 pb-20 sm:pb-0">{children}</main>
+      <main className="flex-1 isolate relative z-0 pb-20 sm:pb-0">{children}</main>
       <TeacherTabBar />
     </div>
   );

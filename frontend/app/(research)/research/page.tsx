@@ -34,7 +34,7 @@ export default async function ResearchMethodologyPage() {
   return (
     <div className="min-h-[100dvh] bg-background text-foreground font-sans selection:bg-primary/20">
       {/* Navigation */}
-      <nav className="border-b border-primary/10 bg-surface/80 backdrop-blur-md sticky top-0 z-50">
+      <nav className="border-b border-primary/10 bg-surface/80 backdrop-blur-md sticky top-0 z-40">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-10 py-4 flex items-center justify-between">
           <Link 
             href={backHref}

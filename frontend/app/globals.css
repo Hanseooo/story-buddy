@@ -32,9 +32,12 @@
 
   /* Z-index scale */
   --z-base: 0;
-  --z-sticky: 10;
-  --z-overlay: 20;
-  --z-modal: 40;
+  --z-raised: 10;
+  --z-dropdown: 20;
+  --z-sticky-nav: 40;
+  --z-fixed-nav: 50;
+  --z-overlay: 60;
+  --z-modal: 70;
   --z-toast: 100;
 
   /* Motion tokens */
@@ -77,7 +80,11 @@
   --font-kid: var(--font-kid);
 
   --z-base: var(--z-base);
-  --z-sticky: var(--z-sticky);
+  --z-raised: var(--z-raised);
+  --z-dropdown: var(--z-dropdown);
+  --z-sticky-nav: var(--z-sticky-nav);
+  --z-sticky: var(--z-sticky-nav);
+  --z-fixed-nav: var(--z-fixed-nav);
   --z-overlay: var(--z-overlay);
   --z-modal: var(--z-modal);
   --z-toast: var(--z-toast);
