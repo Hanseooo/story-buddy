@@ -263,6 +263,23 @@ def test_build_prompt_keeps_a_multi_word_species_the_name_only_partly_carries():
     assert prompt.split("\n\n")[0] == "the retriever, golden retriever"
 
 
+def test_build_prompt_does_not_repeat_placeholder_character_axes():
+    character = _char(
+        "c0",
+        "Andres",
+        species="human",
+        colours=["unspecified"],
+        body_features=[" NONE "],
+        clothing=["unknown"],
+    )
+
+    prompt = build_prompt("Andres waved.", ["c0"], [character], FRAG)
+
+    assert "unspecified" not in prompt.lower()
+    assert "none" not in prompt.lower()
+    assert "unknown" not in prompt.lower()
+
+
 def test_a_scene_uses_commas_for_the_shared_character_axes():
     """Commit bef9982 moved char_bible to commas and left this copy on
     `"{name} - {a}; {b}"`, so their shared-axis phrasing diverged for an hour.

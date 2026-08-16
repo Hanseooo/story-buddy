@@ -15,6 +15,13 @@ from pydantic import BaseModel, Field
 
 CURRENT_SCHEMA_VERSION = 1
 
+_DESCRIPTION_PLACEHOLDERS = frozenset({"none", "unknown", "unspecified", "neutral"})
+
+
+def _is_description_placeholder(value: str) -> bool:
+    normalized = value.strip().casefold()
+    return not normalized or normalized in _DESCRIPTION_PLACEHOLDERS
+
 
 # --- Closed taxonomy: ONE home, imported by judge schema, regen-controller, finetune tooling ---
 class FailureReason(str, Enum):
@@ -35,6 +42,18 @@ class CharacterDescription(BaseModel):
     body_features: list[str] = Field(default_factory=list)
     clothing: list[str] = Field(default_factory=list)
     notes: Optional[str] = None
+
+    def without_placeholders(self) -> "CharacterDescription":
+        """Return the prompt-safe projection; empty axes remain valid for legacy checkpoints."""
+        return self.model_copy(
+            update={
+                "species": None if self.species and _is_description_placeholder(self.species) else self.species,
+                "colours": [value for value in self.colours if not _is_description_placeholder(value)],
+                "body_features": [value for value in self.body_features if not _is_description_placeholder(value)],
+                "clothing": [value for value in self.clothing if not _is_description_placeholder(value)],
+                "notes": None if self.notes and _is_description_placeholder(self.notes) else self.notes,
+            }
+        )
 
 
 # --- Reference acceptance verdict (ADR-028 Decision 3). Reason-then-score, like every judge call. ---

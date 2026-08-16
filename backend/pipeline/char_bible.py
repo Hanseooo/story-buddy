@@ -168,6 +168,8 @@ The character is {subject}.
 If the character is not a person, draw it as the kind of thing it actually is — give it no human \
 body and no human face unless the description above says so.
 
+For a human or humanoid character, show age-appropriate clothing covering the torso.
+
 Style: {style_fragment}"""
 
 
@@ -180,6 +182,7 @@ def _describe(description: CharacterDescription, name: str, notes: bool = True) 
     canonical portrait draw the robot. Targeted redraws retain their tapped attribute through the
     unconditional `Be sure to include:` clause in `_mint_targeted`.
     """
+    description = description.without_placeholders()
     axes = [
         description.species,
         ", ".join(description.colours),
@@ -205,6 +208,7 @@ def reference_prompt(description: CharacterDescription, name: str, style_fragmen
     it, it would become a *stated* attribute and draws would start failing over our filler
     instead of over the story — ADR-028 measures the generator against the STORY.
     """
+    description = description.without_placeholders()
     subject = _describe(description, name, notes=False)
     if not (description.colours or description.body_features or description.clothing):
         subject += THIN_DESCRIPTION_FILLER

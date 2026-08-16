@@ -87,7 +87,8 @@ def filtered_description(
 ) -> CharacterDescription:
     """Pure, transient (ADR-035 Decision 4) — `StoryMemory` keeps the child's words verbatim and
     only the rendered prompt/chip text drops them, so nothing is destroyed and the filter is
-    reversible if the style changes.
+    reversible if the style changes. Exact blank/placeholder values are removed here as well, so
+    legacy checkpoints cannot leak them into scene prompts.
 
     The three LIST axes word-level, plus `notes` all-or-nothing (limit 6 — it reaches the draw and
     scene prompts, and since ADR-034 the judge can no longer see it, so a forbidden term there is
@@ -97,6 +98,7 @@ def filtered_description(
 
     Removes, never invents, so `build_prompt`'s invariant 2 is untouched.
     """
+    description = description.without_placeholders()
     forbidden = style_prohibitions(style_fragment)
     if not forbidden:
         return description
@@ -154,6 +156,7 @@ def _describe(description: CharacterDescription, name: str) -> str:
     `_describe` (`char_bible.py:109`). `consistency_check.JUDGE_PROMPT` interpolates `{name}` only,
     and `correct_prompt`'s `wrong_species` clause reads `description.species` off the contract.
     """
+    description = description.without_placeholders()
     species = description.species
     if species and species.lower() in name.lower().split():
         species = None
@@ -413,7 +416,7 @@ def correct_prompt(
     descriptions = [filtered_description(character.description, style) for character in characters]
     values = {
         "colours": _joined(colour for description in descriptions for colour in description.colours),
-        "species": _joined(character.description.species for character in characters),
+        "species": _joined(description.species for description in descriptions),
         "body_features": _joined(
             feature for description in descriptions for feature in description.body_features
         ),

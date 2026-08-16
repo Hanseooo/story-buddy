@@ -32,7 +32,7 @@ the redacted input text, so `char_bible` has a stable roster to draw canonical r
 4. `timeline[].order` is **re-assigned by the node** from list index: zero-based and dense. It is
    not trusted from the model. A model that returns `1, 2, 5` or a duplicate `order` validates
    fine against Pydantic and would silently corrupt the only ordering `segment` receives.
-5. Every emitted `Character` has a complete visual profile: at least three discriminators across at least two of `colours`, `body_features`, and `clothing`. Humanoids carry a required `clothing` description. Enforced by transient `is_humanoid` validator at the LLM boundary; `is_humanoid` is not persisted in the contract.
+5. Every emitted `Character` has a complete visual profile: at least three discriminators across at least two of `colours`, `body_features`, and `clothing`. Humanoids carry a required `clothing` description. Enforced by transient `is_humanoid` validation at the LLM boundary; `is_humanoid` is not persisted in the contract. Exact blank/placeholder values are scrubbed from every downstream prompt projection.
 6. `characters[]` and `objects[]` are mutually exclusive by agency: actors perform actions and decide; inert items belong in `objects[]`. An entity appearing in both rosters fails boundary validation.
 7. Every `ExtractedObject` requires a stable physical `description`. `owner_name` is mapped to `owner_char_id` after character capping; an unknown owner fails boundary validation.
 
@@ -109,8 +109,11 @@ taxonomy the judge scores against. Re-deriving them here would create a second s
 
 The prompt requires filling missing visual axes with concrete, directly drawable, child-safe,
 non-stereotyped details that distinguish the character across the roster. It explicitly forbids the
-placeholder values `neutral`, `none`, `unknown`, and `unspecified`; this is prompt guidance only,
-not a new semantic Pydantic validator or terminal failure path.
+placeholder values `neutral`, `none`, `unknown`, and `unspecified`. The prompt remains guidance, in
+line with ADR-039: `CharacterDescription.without_placeholders()` removes exact blank/placeholder
+entries from rendered prompts while leaving the persisted contract permissive. Structural schema
+failures still use the provider's existing single re-ask; placeholder content does not create a new
+terminal failure path.
 
 Locations require a strict permanent description. The prompt instructs the model to preserve stated permanent facts and fill missing detail neutrally, excluding temporary conditions.
 
@@ -125,7 +128,7 @@ Objects require a stable physical description and an optional `owner_name`. Init
 | **Same character named twice** ("my sister", "Ate") | **Documented ceiling, not guarded.** Two `char_id`s, two reference images, two of the three budget slots. Consistent with `story-memory-contract` §2.1 — entities are minted once and never merged or re-indexed within a run. A dedup pass would be a new node, and nothing in Phase 1 justifies one. |
 | **Unbounded `locations[]` / `objects[]`** | **Deliberately uncapped.** Neither costs an image, so neither is a CC-3 lever; the only cost is checkpoint size, which is bounded in practice by a ≤800-word story (ADR-012). Cap them only if a measured checkpoint problem appears — not preemptively. |
 | **Character vs object ambiguity** ("my teddy bear") | Guided by agency in the extraction prompt (actors decide/act; inert items are objects). `StoryAnalysis` model_validator explicitly rejects any entity listed in both rosters with `ValueError`. |
-| **Character with sparse or incomplete description** | **Cannot happen** — `complete_visual_profile` requires at least 3 discriminators across 2 axes (and clothing if humanoid) at the LLM boundary, raising `ValidationError` if incomplete. |
+| **Character with sparse or incomplete description** | A fresh extraction must meet the discriminator/clothing floor. Legacy or model-produced blank/placeholder entries remain contract-compatible but are removed from every rendered prompt; the existing thin-description floor and humanoid clothing instruction keep the image request child-safe without adding a terminal validation path. |
 | **Unknown object owner** | **Fails boundary** — mapping `owner_name` to `owner_char_id` raises `ValueError` if `owner_name` is not in the capped character roster. |
 | **Empty `timeline[]`** | Valid. `segment` falls back to text order. |
 | **Very short input** ("I like dogs") | Valid. Extraction yields whatever it yields; a minimum-length gate is `length-guard`'s job (Phase 2), not this node's. |

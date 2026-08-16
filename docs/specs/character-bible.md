@@ -178,7 +178,8 @@ Two module-level constants. Neither introduces a contract type; `RefVerdict` alr
 axes (`colours`, `body_features`, `clothing`) plus the style fragment, and asks for a single character reference
 **shown in full** on a plain neutral background. It excludes free-prose `notes`: a narrative role
 such as "builds and names the robot" is not visual identity and must not contaminate the canonical
-draw. Per ADR-022 the fragment **names a medium and its physical artifacts** — it never says
+draw. It scrubs blank or placeholder-valued description fields before `text_to_image` is called, so
+legacy checkpoints cannot send malformed canon to Fal. Per ADR-022 the fragment **names a medium and its physical artifacts** — it never says
 "beautiful", "8k", or "highly detailed".
 
 The judge prompt shows the drawn image and the description it should depict, and asks for
@@ -310,9 +311,10 @@ filler. Covered by `test_enrichment_reaches_the_draw_prompt_but_never_the_judge_
 
 ⚠️ **`notes` reaches neither normal prompt.** It is free prose, not a visual attribute: a narrative
 role can cause the canonical draw to add its story object. `reveal._chips` already excludes `notes`
-for the same reason (*"free prose, not an attribute, and not a thing a child can tap"*). This stays
-prompt-only; semantic Pydantic validation would turn a model wording mistake into a terminal job
-failure. Covered by `test_reference_prompt_excludes_narrative_notes_from_a_human_identity`.
+for the same reason (*"free prose, not an attribute, and not a thing a child can tap"*). Ordinary
+narrative notes remain prompt-only; blank or exact placeholder values are removed from prompt
+projections. Covered by
+`test_reference_prompt_excludes_narrative_notes_from_a_human_identity`.
 
 That exclusion is exactly why `notes` remains in ADR-035's remit (amendment 2026-08-12b). Being
 invisible to both prompts makes a style-forbidden term in `notes` **worse** than the `species` carve-out,
