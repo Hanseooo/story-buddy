@@ -95,3 +95,30 @@ existing carry-forward and prompt order, and routes permanent setting mismatches
 existing scene-constraint retry path. The approved spec is `docs/specs/setting-consistency.md`;
 BC-13…BC-18 are confirmed, S4 is `DONE`, and S5 is `READY`. No implementation or paid model run
 occurred, and no visual-quality claim was made.
+
+---
+
+# Current Task: Sanitize placeholder character canon before image generation
+
+- [x] Add regression tests for placeholder values at the canonical and scene prompt boundaries.
+- [x] Preserve the ADR-039 permissive contract while projecting blank/placeholder values out of prompts.
+- [x] Add an age-appropriate torso-clothing instruction for human/humanoid reference renders.
+- [x] Run focused and full backend verification.
+
+## Success criteria
+
+No literal `unspecified`, `none`, `unknown`, or `neutral` value reaches a canonical or scene prompt.
+The persisted contract remains backward-compatible, valid descriptions remain unchanged, and no
+new terminal failure path or model/image call is introduced.
+
+## Outcome
+
+Implemented `CharacterDescription.without_placeholders()` and applied it to canonical-reference,
+judge, reveal, scene, and correction prompt projections. Canonical references now explicitly ask
+human/humanoid subjects to wear age-appropriate torso-covering clothing. The initially proposed
+terminal validator was rejected because ADR-039 freezes a permissive contract and forbids turning
+imperfect extraction into a new child-facing terminal failure; the final fix stays within that ADR.
+
+Verification: `uv run ruff check .` passed; `uv run pytest` passed 861 tests, 71 skipped, 6
+deselected, 1 existing Starlette warning. Focused character/prompt/contract tests passed 258 tests
+after the final regression addition. `git diff --check` passed.

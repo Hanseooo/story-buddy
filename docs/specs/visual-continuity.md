@@ -138,7 +138,8 @@ band and face shape in `body_features`, a fixed palette in `colours`, and an exa
 `clothing`.
 
 The strict node-local extraction schema enforces invariant 1. The persisted contract stays
-backward-compatible and permissive; only newly extracted production data must be complete.
+backward-compatible and permissive; prompt projections call `CharacterDescription.without_placeholders()`
+so legacy and newly extracted sentinel values do not reach image prompts.
 
 Entity classification follows agency, not grammar:
 

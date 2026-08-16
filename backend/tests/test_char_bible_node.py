@@ -125,6 +125,44 @@ def test_reference_prompt_contains_the_identity_projection_but_not_notes():
     assert "always smiling" not in prompt
 
 
+@pytest.mark.parametrize("placeholder", ["none", "unknown", "unspecified", "neutral", " NONE ", ""])
+def test_reference_prompt_replaces_placeholder_visual_values_with_the_safe_floor(placeholder):
+    description = CharacterDescription(
+        species="human",
+        colours=[placeholder],
+        body_features=[placeholder],
+        clothing=[placeholder],
+    )
+
+    prompt = reference_prompt(description, "Andres", FRAG)
+
+    assert "friendly children's picture-book character" in prompt
+    assert "age-appropriate clothing" in prompt
+    if placeholder.strip():
+        assert placeholder.strip().casefold() not in prompt.casefold()
+
+
+def test_mint_reference_scrubs_placeholder_axes_from_draw_and_judge_prompts():
+    description = CharacterDescription(
+        species="human",
+        colours=["unspecified"],
+        body_features=["none"],
+        clothing=["unknown"],
+    )
+
+    (_, _, draws), t2i, judge_mock, _ = _mint(
+        [_verdict(True)], description=description, name="Andres"
+    )
+
+    assert draws == 1
+    assert "unspecified" not in t2i.call_args.args[0].lower()
+    assert "none" not in t2i.call_args.args[0].lower()
+    assert "unknown" not in t2i.call_args.args[0].lower()
+    assert "unspecified" not in judge_mock.call_args.args[0].lower()
+    assert "none" not in judge_mock.call_args.args[0].lower()
+    assert "unknown" not in judge_mock.call_args.args[0].lower()
+
+
 def test_reference_prompt_floors_to_the_character_name_on_an_empty_description():
     """Spec §4: CharacterDescription is all-Optional, so a fully empty one is contract-legal
     (a resumed pre-story-analyzer checkpoint could carry one). The prompt floors to the name."""
@@ -216,9 +254,9 @@ def test_reference_prompt_excludes_narrative_notes_from_a_human_identity():
     """A role note is not an instruction to draw its story object into the canonical portrait."""
     described = CharacterDescription(
         species="human",
-        colours=["neutral"],
-        body_features=["none"],
-        clothing=["unknown"],
+        colours=["warm brown skin"],
+        body_features=["round face"],
+        clothing=["yellow shirt"],
         notes="The protagonist who builds and names the robot",
     )
 
