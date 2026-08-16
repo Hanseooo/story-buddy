@@ -1,10 +1,11 @@
 # Feature Spec — visual-prompt reliability
 
-**Status:** built (deterministic implementation complete; Tier-B product trace unverified pending paid runs) · **Phase:** 2 · **Owner surfaces:** `backend/pipeline/analyze.py`,
+**Status:** built baseline; **production follow-up implementation locally verified (exact Tier-B acceptance pending)** · **Phase:** 2 · **Owner surfaces:** `backend/pipeline/analyze.py`,
 `segment.py`, `prompt_optimizer.py`, `generate_scene.py`, `regenerate.py`
 **Derived from:** `pipeline-consistency-docket.md` S3–S5 · MASTER_SPEC §§2, 3, 5, 6
 **Rationale:** ADR-004, ADR-010, ADR-013, ADR-023, ADR-024, ADR-025, ADR-028, ADR-037,
-ADR-039, ADR-040 · production job `9517f79c-9f9d-46c6-958a-2213c054316c` (2026-08-16)
+ADR-039, ADR-040 · production jobs `9517f79c-9f9d-46c6-958a-2213c054316c` and
+`56836d73-14ae-4815-9af2-07ae0e60c163` (2026-08-16)
 
 > **Declared deviation from “one spec = one module.”** This spec owns one artifact class: the
 > positive prompt sent to the scene image model. The bad instruction can enter through entity
@@ -13,9 +14,17 @@ ADR-039, ADR-040 · production job `9517f79c-9f9d-46c6-958a-2213c054316c` (2026-
 > leave invalid intermediate states in which a clean builder still receives contradictory source data, or clean
 > source data is re-contaminated by retry accumulation.
 
-> **Decision resolved:** ADR-040 accepts D-M and removes `CharacterDescription.notes` from newly
-> assembled scene prompts. This spec is no longer architecturally blocked, but remains a draft until
-> owner review; no implementation plan or code change proceeds before that approval.
+> **Follow-up scope:** the built baseline removed narrative prompt contamination but retained two
+> unsafe inferences: an explicit character alias could be kept as a separate object, and object
+> ownership/lifecycle guesses could be promoted into visible-object and physical-holder commands.
+> This revision removes those two inferences. The current implementation request authorizes the
+> focused code and documentation change; the exact paid Tier-B reproduction remains a separate
+> acceptance gate and is not replaced by a synthetic fixture.
+>
+> **Style decision boundary:** the owner selected Gouache as the desired default and wants Comic
+> removed from new selections. ADR-022 freezes three selectable presets and Cel as the flagship
+> default, so that product change is recorded as D-O and requires a dedicated superseding ADR. This
+> spec does not silently override ADR-022.
 
 ---
 
@@ -39,9 +48,17 @@ The motivating five-page comic run completed with `image_count=19`, `regen_count
 5. judge contradiction prose restated verbatim to the generator, including tautologies such as
    `Andres is holding Leo, rather than holding Leo`.
 
-This is a targeted product reproduction, not a population-level quality result. The three-story
-Tier-B check in §7 measures whether the fix generalizes far enough to retain; it does not create a
-capstone efficacy claim.
+The first paid run after the baseline implementation reproduced the structural defect on a simple
+Jamie/Bolt story. Presidio deterministically changed the names to Andres/Leo, after which analysis
+persisted Leo as a robot character and `the robot` as an object owned by Andres. Segmentation then
+turned ownership and ordinary interactions into `the robot is held by Andres`, `the refrigerator is
+held by Leo`, and `the carpet is held by Leo`, carrying those objects into unrelated garden scenes.
+The job bought 20 images and 10 regenerations, yet composed only 1 passing page out of 5. Comic
+rendering varied aesthetically, but it did not create the duplicate entity or holder instructions.
+
+This is a targeted product reproduction, not a population-level quality result. The exact-story
+Tier-B check in §7 confirms whether the production contradiction is gone; it does not create a
+capstone efficacy claim or compare style presets.
 
 ### 1.1 Success criteria
 
@@ -53,7 +70,12 @@ For every newly generated scene:
   positive scene prompt.
 - The direction describes one key drawable moment and one camera setup while permitting front,
   profile, rear, overhead, foreshortened, and partially occluded views when the story calls for them.
-- An explicit actor alias cannot survive simultaneously in `characters[]` and `objects[]`.
+- An explicit actor alias cannot survive simultaneously in `characters[]` and `objects[]`; the
+  alias object is dropped in full rather than renamed into an implicit duplicate.
+- `objects_present` is explicit per selected still frame. Ownership and inferred lifecycle state do
+  not carry an object into later scenes.
+- No derived `is held by` relation is appended to `visual_direction`. A physical interaction appears
+  only when the selected `key_action` or `pose_expression` explicitly describes it.
 - Every retry starts from the immutable original `Scene.prompt` and adds only the most recent
   checked attempt's corrections.
 - Caption fidelity, graph shape, model/provider choice, attempt count, and paid-image budget do not
@@ -74,6 +96,14 @@ For every newly generated scene:
 - New nodes, edges, provider call sites, dependencies, persisted fields, or schema-version bumps.
   An invalid structured answer may activate `structured_text`'s existing single re-ask; the valid
   path adds no call.
+- Disabling, weakening, or moving Presidio. PII redaction remains mandatory under ADR-011.
+- Changing the available style presets or default style. D-O owns the requested Gouache/Comic
+  policy because it supersedes ADR-022.
+- Changing canonical-reference acceptance after a judge timeout. ADR-028 owns that resilience
+  policy; the production timeout is recorded as a separate follow-up, not bundled into prompt cleanup.
+- Retuning `owner_name` extraction or redefining `StoryObject.owner_char_id`. The existing analyzer
+  prompt and frozen contract meaning remain; this revision only stops treating that field as
+  per-scene visibility or pose authority.
 
 ---
 
@@ -104,6 +134,10 @@ For every newly generated scene:
    string remains a model-adherence risk measured in §7; structure cannot prove semantic atomicity.
 9. A named/personified actor and an inert object are mutually exclusive roster entries.
 10. No paid image call occurs before the existing analyzer/segmenter structured boundaries validate.
+11. `StoryObject.owner_char_id` retains its existing contract meaning as the ordinary/initial holder.
+    It is not evidence that the holder is visibly holding or carrying the object in every scene.
+12. `Scene.objects_present` is the complete visible-object authority for that scene. Visibility is
+    never inherited from an earlier scene or inferred from an object's owner.
 
 Legacy checkpoints retain their already-persisted `Scene.prompt` and `Attempt.prompt`; this change
 does not rewrite or redraw them on resume (CC-10).
@@ -124,7 +158,8 @@ The prompt data flow becomes:
 ```text
 redacted story
   ├─ analyze → mutually-exclusive character/object canon
-  └─ segment → one structured drawable moment → Scene.visual_direction
+  └─ segment → one structured drawable moment + explicit per-frame objects
+              → Scene.visual_direction + Scene.objects_present
 
 Scene.visual_direction + typed canon + setting + style
   └─ build_prompt → Scene.prompt → attempt 1
@@ -148,18 +183,24 @@ The extraction prompt continues using agency as the boundary:
 - an inert prop belongs in `objects[]`;
 - the same entity must not appear in both, even when one name contains an explanatory alias.
 
-The existing `StoryAnalysis` boundary normalizer widens only to **explicit aliases**:
+The `StoryAnalysis` boundary normalizer handles only **explicit aliases**:
 
 1. drop an object whose case-insensitive name equals a character name;
-2. strip the trailing parenthetical alias when it equals a character name after trimming whitespace
-   and case-folding — `the robot (Leo)` becomes `the robot`;
-3. drop the object if stripping leaves no name or leaves another character duplicate;
+2. when an object's trailing parenthetical equals a character name after trimming whitespace and
+   case-folding, drop the **entire object** — `the robot (Leo)` is explicit evidence that the robot
+   is Leo, not evidence for a second unnamed robot;
+3. do not strip the alias and retain the remaining generic noun. That was the production regression:
+   `the robot (Leo)` became `the robot` and survived beside character `Leo`;
 4. do not use fuzzy substring or species matching. `Leo's toy`, `Leo's robot kit`, and a generic
    inert `toy robot` remain valid objects.
 
-This boundary normalization keeps the valid prop while ensuring the actor alias cannot reach
-`segment`. Other structural schema failures still use `providers.structured_text`'s existing
-single schema re-ask; no node-local retry is added.
+This boundary normalization discards only an object that explicitly identifies itself as a known
+character. Other structural schema failures still use `providers.structured_text`'s existing single
+schema re-ask; no node-local retry is added.
+
+Implementation removes the rename-and-keep path in
+`StoryAnalysis.entity_rosters_do_not_overlap`: a matching parenthetical alias takes the drop path
+directly and never reaches `model_copy(update={"name": ...})`.
 
 **Known ceiling:** an implicit alias such as character `Leo` plus object `the robot`, with no name
 link, cannot be proven identical deterministically. A semantic fuzzy matcher would create false
@@ -181,7 +222,6 @@ These fields are node-local and are deterministically rendered into the existing
 
 ```text
 <key_action> <pose_expression when present> Viewpoint: <viewpoint>. Framing: <framing>.
-<current valid object-holder relations>
 ```
 
 The extraction prompt must:
@@ -207,12 +247,35 @@ prompt and the existing `text_free` judge remain defence in depth, while §7 mea
 
 The image does not have to depict every sentence in a multi-sentence caption. “Important detail”
 means any fact required to identify the selected moment correctly: participating visible subjects,
-the action and target, current object holder, setting, and story-required pose/viewpoint. Facts from
+the action and target, visible objects, setting, and story-required pose/viewpoint. Facts from
 earlier or later moments remain in the caption and are not forced into the same frame.
 
-`characters_present`, `objects_present`, holder state, and `location_id` stay structured beside the
-direction. Character appearance comes from typed description axes and canonical images, not from
-the direction. This prevents the direction from becoming a second character bible.
+`characters_present`, `objects_present`, and `location_id` stay structured beside the direction.
+Character appearance comes from typed description axes and canonical images, not from the
+direction. Object ownership stays in typed canon and is not converted into a scene pose. This
+prevents the direction from becoming a second character bible or an invented physical-state log.
+
+#### Object visibility and physical interaction
+
+`objects_present` is explicit per selected still frame, just like `characters_present`:
+
+1. the segmenter lists an object only when it should be visible in the selected frame;
+2. `owner_char_id` does not imply visibility, holding, or carrying in every scene;
+3. an object listed in an earlier scene is not automatically carried into a later scene;
+4. node-local `object_events` and the active-holder map are removed because their model-authored
+   `acquire` classifications cannot distinguish using, touching, placing something inside, and
+   physically taking possession reliably enough to become prompt authority;
+5. when holding or transfer is visually essential, `key_action` states it directly — for example,
+   `Leo hands the favorite toy to the little sister`.
+
+This does not ban held-object compositions. It removes only inferred relations such as `the
+refrigerator is held by Leo`. The one selected action remains authoritative.
+
+The analyzer's `owner_name` instruction and mapping remain unchanged. Tightening ownership
+extraction is deferred because the supplied production trace marked the refrigerator and carpet
+unowned; their false holders came from segmentation's `object_events`, not `owner_name`. After the
+lifecycle pass is removed, an incorrect owner value has no authority to add an object or physical
+relation to a scene.
 
 #### Repair and merge behavior
 
@@ -222,16 +285,15 @@ directions would recreate the defect this spec removes. When two extracted scene
 - retain the later scene's structured drawable moment as the page image;
 - retain the later scene's visible cast and visible objects so subjects belonging only to the
   discarded earlier moment are not summoned into the frame;
-- retain ordered object events from both ranges, because an earlier acquire/release can determine
-  the later moment's valid holder relation;
 - use the later scene's explicit location, falling back to the earlier location only when the later
   one is null;
 - let the combined verbatim caption retain both moments.
 
-The later-moment rule is deterministic and favors the result/climax of a short sequence. It can
+No object-event history is merged or replayed. The later-moment rule is deterministic and favors
+the result/climax of a short sequence. It can
 omit a visually stronger earlier beat; adding a second “choose the merged moment” LLM call is
 rejected because it adds cost, latency, and another failure boundary for a defensive repair path.
-The three-story check records any visibly poor merge choice.
+The exact-story reproduction records any visibly poor merge choice.
 
 ### 4.3 Visual-only base prompt
 
@@ -289,7 +351,7 @@ duplicate current contradiction strings are deduplicated in first-seen order bef
 semantic/fuzzy deduplication is attempted.
 
 **Tradeoff:** a previously fixed issue may return when the latest judge misses it. Carrying all raw
-history avoids forgetting but recreates contradictory growth. The three-story check compares
+history avoids forgetting but recreates contradictory growth. The exact-story reproduction compares
 attempt trajectories and is the evidence gate for revisiting this choice.
 
 ### 4.5 Angle and identity behavior
@@ -311,9 +373,12 @@ evidence and ADR; it is not bundled into prompt cleanup.
 | Case | Required behavior |
 |---|---|
 | Exact character/object duplicate | Boundary normalization drops the duplicate object. |
-| `the robot (Leo)` plus character `Leo` | Boundary normalization keeps the object as `the robot`. |
+| `the robot (Leo)` plus character `Leo` | Boundary normalization drops the entire alias object. |
 | `Leo's toy` plus character `Leo` | Valid object; possession is not identity. |
 | Implicit alias `Leo` / `the robot` | Prompt guidance only; logged Tier-B ceiling, no fuzzy merge. |
+| Object is owned by a visible character | Ownership remains canon metadata; no holding instruction is inferred. |
+| Refrigerator/carpet is used in one scene | It is visible only when that scene explicitly lists it; it does not carry forward. |
+| A character hands over a toy | The transfer stays in `key_action`; no lifecycle replay or added holder suffix is needed. |
 | Story contains direct dialogue | Caption preserves it; image prompt receives only visible action/reaction. |
 | A sign's exact wording matters to the plot | Wording remains in caption; image may depict an unmarked sign only if the selected moment needs it. |
 | Several sequential actions share one page | Later/key moment is illustrated; no montage or duplicate actor. |
@@ -343,7 +408,7 @@ evidence and ADR; it is not bundled into prompt cleanup.
   remains truthful.
 - [x] **CC-5 Observability** — see §5.1.
 - [x] **CC-7 Reproducibility** — no new seed behavior. Fal seed determinism remains an acknowledged
-  unrun probe; the three-story check records prompts and attempt ids rather than claiming causal
+  unrun probe; the exact-story reproduction records prompts and attempt ids rather than claiming causal
   isolation.
 - [x] **CC-10 Checkpointing/resumability** — immutable stored base prompt and per-attempt paths remain;
   legacy prompts are not rewritten.
@@ -378,7 +443,7 @@ generated-image quality.
 ### 6.1 `analyze`
 
 1. Exact same name in both rosters is dropped from `objects[]`.
-2. Character `Leo` plus object `the robot (Leo)` yields object `the robot`.
+2. Character `Leo` plus object `the robot (Leo)` drops the alias object entirely.
 3. Matching is case-insensitive and trims parenthetical whitespace.
 4. `Leo's toy`, `Leo's robot kit`, and inert `toy robot` remain valid objects.
 5. Alias normalization adds no node retry, provider re-ask, or image call.
@@ -391,13 +456,19 @@ generated-image quality.
 4. The renderer emits exactly one `Viewpoint:` and one `Framing:` marker.
 5. Direct-dialogue source text remains byte-identical in `text_excerpt` and `caption`, while rendered
    `visual_direction` contains none of its quoted wording.
-6. Character/object id mapping, holder state, ordinary location carry-forward, gap-free coverage,
-   and deterministic scene ids remain unchanged.
+6. Character/object id mapping, ordinary location carry-forward, gap-free coverage, and
+   deterministic scene ids remain unchanged.
 7. Merging two ranges retains the later structured moment, cast, visible objects, and explicit
-   location rather than concatenating/unioning two frames; ordered object events from both survive.
+   location rather than concatenating/unioning two frames.
 8. A running-away fixture preserves a rear/rear-three-quarter direction; no test requires a face to
    be front-facing.
 9. Malformed structured output is rejected before any downstream image helper can run.
+10. `owner_char_id` never causes an object to enter `objects_present` or adds an `is held by` clause.
+11. Objects visible in one scene do not carry into the next unless the next scene explicitly lists
+    them.
+12. The Jamie/Bolt fixture contains one robot character, no robot object, no refrigerator/carpet in
+    the garden, and no generated holder suffix; its explicit toy handoff remains in `key_action`,
+    and the favorite toy is listed in `objects_present` for that handoff frame only.
 
 ### 6.3 `prompt_optimizer` / `generate_scene`
 
@@ -440,22 +511,18 @@ Full backend verification remains `uv run ruff check . && uv run pytest` from `b
 
 ---
 
-## 7. Tier-B quality check — three targeted stories
+## 7. Tier-B product reproduction — exact Jamie/Bolt story
 
 Run after deterministic tests, never in CI. This is product validation, not the Objective 4 held-out
 evaluation and not evidence that the pipeline is causally superior.
 
-### 7.1 Fixtures
+### 7.1 Fixture
 
-1. **Motivating comic story:** Andres and Leo, direct dialogue, personified robot, held toy, several
-   actions, front/profile views.
-2. **Human-character story:** two visually distinct humans, direct and indirect speech, one
-   multi-action paragraph, front/profile/overhead scenes.
-3. **Non-human story:** invented non-human character, an inert object of a similar category, and a
-   running-away/rear-view scene.
-
-Use three selected style presets across the set, including comic. Keep story inputs and chosen
-style ids fixed in the run record. Do not require seed determinism that has not been proven.
+Re-run the exact Jamie/Bolt story from production job
+`56836d73-14ae-4815-9af2-07ae0e60c163`, selecting Gouache explicitly. This is a regression
+reproduction, not a cross-style experiment: Comic is already the observed unstable preset, while
+changing the product default remains blocked on D-O. Record the chosen style id and do not require
+seed determinism that has not been proven.
 
 ### 7.2 Review every attempt, not only the winner
 
@@ -469,7 +536,9 @@ For each scene record:
 - whether the requested viewpoint is front, profile, rear, overhead, or occluded and whether the
   image follows it;
 - whether any speech bubble/readable text appears;
-- whether an actor/object duplicate or impossible holder relation appears.
+- whether an actor/object duplicate or impossible holder relation appears;
+- whether a refrigerator, carpet, or second robot appears outside the selected scene that explicitly
+  needs it.
 
 ### 7.3 Retention gates
 
@@ -478,9 +547,13 @@ Retain S1 only if all hard product regressions are absent:
 1. no prompt contains the raw excerpt, quoted dialogue, narrative notes, or accumulated prior
    correction block;
 2. no explicit actor alias survives as a second object;
-3. all 3 books complete within existing cost and recursion bounds;
-4. all requested rear/profile/overhead scenes remain eligible and are not rewritten front-facing;
-5. no selected scene loses an essential visible fact of its chosen key moment because the excerpt
+3. the book completes within existing cost and recursion bounds;
+4. no prompt appends a derived `is held by` relation;
+5. no scene inherits a refrigerator, carpet, robot object, or toy solely from an earlier scene or
+   `owner_char_id`;
+6. explicit interactions in `key_action`, including the toy handoff, remain drawable;
+7. all requested rear/profile/overhead scenes remain eligible and are not rewritten front-facing;
+8. no selected scene loses an essential visible fact of its chosen key moment because the excerpt
    was removed.
 
 The following are directional observations, not hard statistical gates:
@@ -495,6 +568,9 @@ If an essential fact is lost, revise the structured direction fields/instruction
 the raw excerpt as a second prompt authority. If rear/profile views are penalized, inspect judge
 reasoning before changing generation toward front-facing poses. If retry outcomes remain near
 chance, revisit correction quality before buying a fourth attempt.
+
+This reproduction does not prove Gouache is globally superior and does not amend ADR-022. It only
+verifies that the selected production path no longer receives the known structural contradictions.
 
 ---
 
@@ -516,6 +592,10 @@ chance, revisit correction quality before buying a fourth attempt.
 - **D-N — moderation replacement consistency:** decide the graph/state mechanism for judging one
   safe replacement without permitting another redraw or making the flagged original eligible.
   This is S2, not a hidden part of S1.
+- **D-O — reliable selectable-style policy:** decide whether to supersede ADR-022 by hiding Comic
+  from new selections and making Gouache the default while retaining backend compatibility for
+  existing Comic jobs. This requires its own ADR session and is not a precondition for the
+  structural entity/object fix.
 
 ### 8.3 Known gaps deliberately carried
 
@@ -532,24 +612,31 @@ chance, revisit correction quality before buying a fourth attempt.
 9. Old checkpoints keep old prompts by design.
 10. Fal seed reproducibility remains unproven, so retry improvements cannot be attributed solely to
    wording.
+11. Presidio can assign a human-coded pseudonym to a non-human character. Redaction remains enabled;
+    changing how visual prompts identify pseudonymized non-humans is not part of this revision.
+12. ADR-028's unchecked-reference behavior can admit an off-spec canonical reference after a judge
+    timeout. The production occurrence is recorded, but changing resilience policy requires a
+    dedicated decision.
 
 ### 8.4 Spec and documentation blast radius at implementation
 
 The implementation change must update, in the same commit, the affected live behavior in:
 
-- `docs/specs/story-analyzer.md`;
-- `docs/specs/scene-segmentation.md`;
-- `docs/specs/prompt-optimizer.md`;
-- `docs/specs/regeneration-controller.md`;
-- `docs/specs/lettering-suppression.md`;
-- `docs/specs/pose-viewpoint-composition.md`.
+- `docs/specs/story-analyzer.md` §3 invariant 6, §4 alias handling, the ambiguity edge case,
+  deterministic alias tests, and the character-dedup handoff;
+- `docs/specs/scene-segmentation.md` §3 transient schema, §4 pipeline steps 4–5,
+  **Visible Cast Authority & Object Lifecycle Pass**, merge propagation, and the deterministic
+  lifecycle tests;
+- `docs/specs/visual-continuity.md` §2 `owner_char_id` comment, §3 invariants, §§4.2–4.5 object
+  canon/lifecycle/prompt behavior, §6 analyze/segment/prompt tests, and §9's stale-assertion list.
 
 ADR-040 governs scene-note removal. ADR-039 and ADR-040 are frozen and are not edited during
-implementation.
+implementation. Style configuration, the frontend picker, `docs/specs/style-presets.md`, and
+ADR-022 remain untouched until D-O is resolved in a dedicated ADR session.
 
 Executed plans remain historical and are not edited. Grep the repo for `text_excerpt`,
-`CharacterDescription.notes`, `last.prompt`, `visual_direction`, `one corrected retry`, and
-`attempts) >=` before calling implementation complete.
+`object_events`, `holder_by_obj`, `owner_char_id`, `objects_present`, `is held by`, and
+`the robot (` before calling implementation complete.
 
 ---
 
@@ -558,11 +645,12 @@ Executed plans remain historical and are not edited. Grep the repo for `text_exc
 S1 is done only when:
 
 1. ADR-040 remains the accepted decision resolving D-M and this spec matches it.
-2. The user approves this written spec after that resolution.
+2. The user approves this production follow-up revision.
 3. A separate implementation plan is written in `docs/specs/plans/`.
 4. Every §6 deterministic assertion exists and passes.
 5. Backend pre-merge verification passes with exact output reported.
-6. The three-story Tier-B check is run and documented with every attempt/winner trace.
+6. The exact Jamie/Bolt Tier-B reproduction is run in explicitly selected Gouache and documented
+   with every attempt/winner trace.
 7. All §7.3 hard retention gates pass, or the change is revised/reverted without making a quality
    claim.
 8. Every live affected spec in §8.4 is updated in the implementation change.
@@ -570,6 +658,7 @@ S1 is done only when:
 
 **Not done** if: Fal still receives the raw excerpt or narrative notes; a retry bases itself on
 `last.prompt`; a merge concatenates two moments; a front-facing pose is forced merely to resemble
-the reference; an actor alias survives as an object in the motivating pattern; a fourth attempt is
-added; moderation or ranking behavior changes inside S1; deterministic tests assert generated
-quality; or the three-story run is described as a capstone efficacy finding.
+the reference; an actor alias survives as an object in the motivating pattern; ownership or an
+earlier scene causes an object to appear or be held in a later frame; a fourth attempt is added;
+moderation, style selection, or ranking behavior changes inside this revision; deterministic tests
+assert generated quality; or the single reproduction is described as a capstone efficacy finding.

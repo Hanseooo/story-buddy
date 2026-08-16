@@ -150,6 +150,19 @@ Tier-A suite are **built** — they depend on neither. The two frontend routes a
 
 ---
 
+## Tier 2g — opened by the first paid visual-prompt follow-up (2026-08-17)
+
+- **D-O · Reliable selectable-style policy.** Production observations report that Comic alone
+  alternates between halftone/doodle-like characters and an older television-cartoon rendering,
+  while Gouache has been the most consistently acceptable preset. The owner wants Gouache to become
+  the default and Comic hidden from new selections, with backend compatibility retained for existing
+  Comic jobs. ADR-022 currently freezes three selectable presets and Cel as the flagship default, so
+  this cannot be implemented as an incidental config/UI edit. Decide whether to supersede ADR-022,
+  what evidence is sufficient to retire a child-visible preset, and how existing Comic jobs remain
+  resumable. This decision is independent of the structural actor/object fix.
+
+---
+
 ## Tier 3 — convention formalizations (likely MASTER_SPEC edits, not ADRs)
 
 *(D-E · Testing-seam convention → MASTER_SPEC §6 "The node test seam", 2026-07-22: one module-level
@@ -497,5 +510,6 @@ now fully specified.
 
 **No open decision blocks Phase 1 or Phase 2 entry.** Tiers 1, 2, 2b, 2c, and 3 are all resolved. D-I closed
 2026-07-31 → ADR-029; it builds in Phase 2 behind the moderation gate (now live). **Open rows: D-J** (Tier 2d,
-non-blocking) and **D-K + D-L** (Tier 2e, 2026-08-14 — these two *do* block, jointly, the two
-`annotation-surface` frontend routes and therefore the Phase 2.5 labelling weekend).
+non-blocking), **D-K + D-L** (Tier 2e, 2026-08-14 — these two *do* block, jointly, the two
+`annotation-surface` frontend routes and therefore the Phase 2.5 labelling weekend), **D-N**
+(moderation replacement consistency), and **D-O** (selectable-style reliability policy).

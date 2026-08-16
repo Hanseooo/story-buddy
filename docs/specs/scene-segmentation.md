@@ -271,6 +271,8 @@ definition.
 
 **Provider seam** — patch `pipeline.segment.structured_text`:
 - `segment_scenes` passes the numbered units and the `SceneSegmentation` schema to the provider
+- the prompt requires objects to be visible in the selected still frame and forbids owner/prior-scene
+  carry-forward or inferred holding/carrying/transfer relations
 - returns the parsed wrapper unchanged
 
 **Node, helper mocked** — patch `pipeline.segment.segment_scenes`:
