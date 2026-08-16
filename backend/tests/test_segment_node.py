@@ -1,3 +1,4 @@
+import inspect
 import logging
 from unittest.mock import patch
 
@@ -8,7 +9,6 @@ from app.config import MAX_SCENES, MIN_SCENE_WORDS, MIN_SCENES
 from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, Input, Location, Scene, StoryMemory, StoryObject
 from pipeline.segment import (
     SEGMENTATION_PROMPT,
-    ExtractedObjectEvent,
     ExtractedScene,
     ExtractedVisualDirection,
     SceneSegmentation,
@@ -69,6 +69,10 @@ def test_split_sentences_single_sentence_no_split():
 def test_extracted_scene_has_no_id_field():
     """D-G: ids minted node-side; LLM schema carries none."""
     assert "scene_id" not in ExtractedScene.model_fields
+
+
+def test_extracted_scene_has_no_object_events():
+    assert "object_events" not in ExtractedScene.model_fields
 
 
 # --- Provider seam ---
@@ -203,12 +207,10 @@ def test_render_visual_direction_emits_structured_moment_and_exact_markers():
         viewpoint="front-facing eye-level view",
         framing="medium close-up",
     )
-    relations = ["wooden sword is held by Ana."]
-    rendered = render_visual_direction(direction, relations)
+    rendered = render_visual_direction(direction)
     assert rendered == (
         "Leo raises his hand in greeting. smiling cheerfully, "
-        "Viewpoint: front-facing eye-level view. Framing: medium close-up. "
-        "wooden sword is held by Ana."
+        "Viewpoint: front-facing eye-level view. Framing: medium close-up."
     )
     assert rendered.count("Viewpoint:") == 1
     assert rendered.count("Framing:") == 1
@@ -229,6 +231,10 @@ def test_render_visual_direction_omits_pose_expression_when_none():
     )
     assert rendered.count("Viewpoint:") == 1
     assert rendered.count("Framing:") == 1
+
+
+def test_render_visual_direction_has_no_relations_argument():
+    assert "relations" not in inspect.signature(render_visual_direction).parameters
 
 
 # --- repair pure tests ---
@@ -319,11 +325,6 @@ def test_segment_scenes_passes_the_object_roster_and_new_schema_to_provider():
                 end=0,
                 characters_present=["Ana"],
                 objects_present=["wooden sword"],
-                object_events=[
-                    ExtractedObjectEvent(
-                        object_name="wooden sword", action="acquire", holder_name="Ana"
-                    )
-                ],
                 visual_direction=_direction(
                     key_action="Ana faces right and lifts the sword.",
                     viewpoint="medium view",
@@ -337,29 +338,23 @@ def test_segment_scenes_passes_the_object_roster_and_new_schema_to_provider():
 
     prompt, schema = provider.call_args.args
     assert "wooden sword" in prompt
-    assert "object_events" in prompt
+    assert "object_events" not in prompt
     assert "visual_direction" in prompt
     assert schema is SceneSegmentation
 
 
 @pytest.mark.parametrize("transform", ["repair", "merge_thin"])
-def test_scene_transform_preserves_object_events_and_direction(transform):
+def test_scene_transform_preserves_explicit_objects_and_direction(transform):
     first = _r(
         0,
         0,
         chars=["Ana"],
         objects_present=["wooden sword"],
-        object_events=[
-            ExtractedObjectEvent(
-                object_name="wooden sword", action="acquire", holder_name="Ana"
-            )
-        ],
         visual_direction="Ana acquires the sword facing right.",
     )
     if transform == "repair":
         result = repair([first], 2)[0]
         assert result.objects_present == ["wooden sword"]
-        assert result.object_events[0].action == "acquire"
         assert result.visual_direction.key_action == "Ana acquires the sword facing right."
     else:
         second = _r(
@@ -374,7 +369,6 @@ def test_scene_transform_preserves_object_events_and_direction(transform):
         units = ["Short.", "Also short.", "Third scene is long enough.", "Fourth scene is long enough."]
         result = merge_thin([first, second, third, fourth], units)[0]
         assert result.objects_present == ["wooden sword"]
-        assert result.object_events[0].action == "acquire"
         assert result.visual_direction.key_action == "Ana runs right in a wide view."
 
 
@@ -437,23 +431,6 @@ def test_merge_extracted_retains_later_scene_moment_and_cast():
     assert merged.visual_direction.pose_expression == "shouting victoriously"
     assert merged.visual_direction.viewpoint == "low-angle front view"
     assert merged.visual_direction.framing == "close-up"
-
-
-def test_merge_extracted_concatenates_object_events_in_source_order():
-    a = _r(
-        0,
-        0,
-        object_events=[_event("acquire", "Ana")],
-    )
-    b = _r(
-        1,
-        1,
-        object_events=[_event("release", "Ana"), _event("acquire", "Maya")],
-    )
-    merged = _merge_extracted(a, b)
-    assert len(merged.object_events) == 3
-    assert [e.action for e in merged.object_events] == ["acquire", "release", "acquire"]
-    assert [e.holder_name for e in merged.object_events] == ["Ana", "Ana", "Maya"]
 
 
 def test_merge_extracted_explicit_later_location_wins():
@@ -775,10 +752,6 @@ SWORD = StoryObject(
 )
 
 
-def _event(action: str, holder: str) -> ExtractedObjectEvent:
-    return ExtractedObjectEvent(object_name="wooden sword", action=action, holder_name=holder)
-
-
 def _segment_objects(raw: SceneSegmentation) -> list[Scene]:
     state = _state(
         raw="One. Two. Three.",
@@ -789,59 +762,47 @@ def _segment_objects(raw: SceneSegmentation) -> list[Scene]:
         return segment(state)["scenes"]
 
 
-def test_acquire_activates_and_carries_an_owned_object_with_a_visible_holder():
+def test_segment_keeps_objects_explicit_to_each_scene():
     raw = SceneSegmentation(
         scenes=[
-            _r(0, 0, chars=["Ana"], object_events=[_event("acquire", "Ana")], visual_direction="Ana picks up the sword."),
+            _r(0, 0, chars=["Ana"], objects_present=["wooden sword"], visual_direction="Ana picks up the sword."),
             _r(1, 1, chars=["Ana"], visual_direction="Ana walks right in a wide view."),
-        ]
-    )
-    scenes = _segment_objects(raw)
-    assert [scene.objects_present for scene in scenes] == [["obj0"], ["obj0"]]
-    assert "wooden sword is held by Ana" in scenes[1].visual_direction
-
-
-def test_an_offscreen_owner_hides_but_does_not_deactivate_the_object():
-    raw = SceneSegmentation(
-        scenes=[
-            _r(0, 0, chars=["Ana"], object_events=[_event("acquire", "Ana")], visual_direction="Ana picks up the sword."),
-            _r(1, 1, chars=["Maya"], visual_direction="Maya waits alone."),
-            _r(2, 2, chars=["Ana"], visual_direction="Ana returns from the left."),
+            _r(2, 2, chars=["Ana"], objects_present=["wooden sword"], visual_direction="Ana sets down the sword."),
         ]
     )
     scenes = _segment_objects(raw)
     assert [scene.objects_present for scene in scenes] == [["obj0"], [], ["obj0"]]
+    assert all("is held by" not in scene.visual_direction for scene in scenes)
 
 
-def test_release_shows_the_object_in_that_beat_then_stops_carrying_it():
+def test_segment_does_not_infer_object_visibility_or_holder_from_owner():
     raw = SceneSegmentation(
         scenes=[
-            _r(0, 0, chars=["Ana"], object_events=[_event("acquire", "Ana")], visual_direction="Ana picks up the sword."),
-            _r(1, 1, chars=["Ana"], object_events=[_event("release", "Ana")], visual_direction="Ana releases the sword."),
-            _r(2, 2, chars=["Ana"], visual_direction="Ana walks away."),
+            _r(0, 0, chars=["Ana"], visual_direction="Ana walks right in a wide view."),
+            _r(1, 1, chars=["Ana"], visual_direction="Ana looks at the sword."),
         ]
     )
     scenes = _segment_objects(raw)
-    assert [scene.objects_present for scene in scenes] == [["obj0"], ["obj0"], []]
+    assert [scene.objects_present for scene in scenes] == [[], []]
+    assert all("is held by" not in scene.visual_direction for scene in scenes)
 
 
-def test_release_then_acquire_transfers_and_carries_with_the_recipient():
+def test_segment_preserves_explicit_object_interaction_in_key_action():
     raw = SceneSegmentation(
         scenes=[
-            _r(0, 0, chars=["Ana"], object_events=[_event("acquire", "Ana")], visual_direction="Ana picks up the sword."),
             _r(
-                1,
-                1,
+                0,
+                0,
                 chars=["Ana", "Maya"],
-                object_events=[_event("release", "Ana"), _event("acquire", "Maya")],
-                visual_direction="Ana passes the sword rightward to Maya.",
+                objects_present=["wooden sword"],
+                visual_direction="Ana hands the wooden sword to Maya.",
             ),
-            _r(2, 2, chars=["Maya"], visual_direction="Maya walks right."),
+            _r(1, 1, chars=["Maya"], visual_direction="Maya walks right."),
         ]
     )
     scenes = _segment_objects(raw)
-    assert scenes[2].objects_present == ["obj0"]
-    assert "wooden sword is held by Maya" in scenes[2].visual_direction
+    assert "Ana hands the wooden sword to Maya." in scenes[0].visual_direction
+    assert "is held by" not in scenes[0].visual_direction
 
 
 def test_unowned_object_explicitly_visible_in_scene_1_and_absent_in_scene_2():

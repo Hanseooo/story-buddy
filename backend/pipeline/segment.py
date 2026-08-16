@@ -1,9 +1,6 @@
 import logging
 import re
 
-from collections.abc import Sequence
-from typing import Literal
-
 from pydantic import BaseModel, Field, PrivateAttr, field_validator
 
 from app.config import MAX_SCENES, MIN_SCENE_WORDS, MIN_SCENES
@@ -16,14 +13,6 @@ log = logging.getLogger(__name__)
 def split_sentences(text: str) -> list[str]:
     units = re.split(r'(?<=[.!?…])\s+|\n+', text)
     return [u.strip() for u in units if u.strip()]
-
-
-# --- LLM boundary (D-F: transient wrapper, lives beside its node) ---
-
-class ExtractedObjectEvent(BaseModel):
-    object_name: str
-    action: Literal["acquire", "release"]
-    holder_name: str
 
 
 class ExtractedVisualDirection(BaseModel):
@@ -51,17 +40,11 @@ class ExtractedVisualDirection(BaseModel):
         return trimmed
 
 
-def render_visual_direction(
-    direction: ExtractedVisualDirection,
-    relations: Sequence[str] = (),
-) -> str:
+def render_visual_direction(direction: ExtractedVisualDirection) -> str:
     base_parts = [direction.key_action]
     if direction.pose_expression:
         base_parts.append(direction.pose_expression)
-    base = f"{' '.join(base_parts)} Viewpoint: {direction.viewpoint}. Framing: {direction.framing}."
-    if relations:
-        return " ".join([base, *relations])
-    return base
+    return f"{' '.join(base_parts)} Viewpoint: {direction.viewpoint}. Framing: {direction.framing}."
 
 
 class ExtractedScene(BaseModel):
@@ -70,7 +53,6 @@ class ExtractedScene(BaseModel):
     characters_present: list[str]     # Character.name values — node maps to char_ids
     location_name: str | None = None  # Location.name value — node maps to a loc_id, null → inherit
     objects_present: list[str] = Field(default_factory=list)
-    object_events: list[ExtractedObjectEvent] = Field(default_factory=list)
     visual_direction: ExtractedVisualDirection
 
     # ponytail: log-only provenance attribute; intentionally not part of the schema or persisted contract
@@ -106,7 +88,6 @@ Rules:
 - location_name is where the scene happens, named exactly as given above. Leave it null if the \
 story does not say.
 - objects_present lists object names exactly as given above.
-- object_events lists ordered acquire or release events for objects in the scene.
 - visual_direction captures exactly one drawable still-frame moment: key_action (one visible action with subject and target), pose_expression (visible pose or facial expression, or null), viewpoint (one camera angle relative to the action: front, profile, rear, three-quarter, overhead, occluded, etc. — choose story-appropriate angle such as rear view when running away), and framing (shot scale: close-up, medium shot, wide shot, etc.). Describe visible-only facts in one still frame. Convert speech into visible gesture or reaction. Never include written words, dialogue, speech bubbles, captions, labels, or readable signage. Never use quotes or newlines.
 - Keep sequential or non-simultaneous actions in the caption instead of creating a montage, split panel, duplicate character, or impossible pose.
 - Together the scenes must cover every sentence."""
@@ -141,7 +122,6 @@ def _merge_extracted(a: ExtractedScene, b: ExtractedScene) -> ExtractedScene:
         characters_present=b.characters_present,
         location_name=b.location_name or a.location_name,
         objects_present=b.objects_present,
-        object_events=[*a.object_events, *b.object_events],
         visual_direction=b.visual_direction,
     )
     merged._direction_source = "retained-later-merge"
@@ -304,10 +284,6 @@ def segment(state: StoryMemory) -> dict:
     prev_loc: str | None = state.locations[0].loc_id if state.locations else None
 
     object_by_name = {obj.name: obj for obj in state.objects}
-    object_by_id = {obj.obj_id: obj for obj in state.objects}
-    character_by_id = {character.char_id: character for character in state.characters}
-    holder_by_obj = {obj.obj_id: obj.owner_char_id for obj in state.objects}
-    active_objects: list[str] = []
 
     scenes = []
     for i, r in enumerate(repaired):
@@ -334,41 +310,10 @@ def segment(state: StoryMemory) -> dict:
             obj = object_by_name.get(name)
             if obj is None:
                 raise ValueError(f"segment: unknown object {name!r}")
-            if obj.obj_id not in active_objects:
-                active_objects.append(obj.obj_id)
             visible_objects.append(obj.obj_id)
 
-        visible_objects.extend(
-            obj_id
-            for obj_id in active_objects
-            if holder_by_obj.get(obj_id) in char_ids
-        )
-
-        for event in r.object_events:
-            obj = object_by_name.get(event.object_name)
-            holder_id = name_to_id.get(event.holder_name)
-            if obj is None:
-                raise ValueError(f"segment: unknown object {event.object_name!r}")
-            if holder_id is None:
-                raise ValueError(f"segment: unknown holder {event.holder_name!r}")
-            if obj.obj_id not in active_objects:
-                active_objects.append(obj.obj_id)
-            if event.action == "acquire":
-                holder_by_obj[obj.obj_id] = holder_id
-                if holder_id in char_ids:
-                    visible_objects.append(obj.obj_id)
-            else:
-                visible_objects.append(obj.obj_id)
-                if holder_by_obj.get(obj.obj_id) == holder_id:
-                    holder_by_obj[obj.obj_id] = None
-
         visible_objects = list(dict.fromkeys(visible_objects))
-        relations = [
-            f"{object_by_id[obj_id].name} is held by {character_by_id[holder_id].name}."
-            for obj_id in visible_objects
-            if (holder_id := holder_by_obj.get(obj_id)) is not None
-        ]
-        visual_direction = render_visual_direction(r.visual_direction, relations)
+        visual_direction = render_visual_direction(r.visual_direction)
 
         loc_id = name_to_loc.get(r.location_name) if r.location_name else None
         if r.location_name and loc_id is None:
