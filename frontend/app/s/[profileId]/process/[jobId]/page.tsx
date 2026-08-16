@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { use, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useJob } from "@/lib/useJob";
 import FailureScreen from "@/components/FailureScreen";
@@ -291,7 +292,15 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   if (bucket === "paused" && row?.reveal) {
     const { characters, taps_left } = row.reveal;
     return (
-      <div className="flex flex-col items-center p-6 w-full max-w-5xl mx-auto min-h-[100dvh] justify-center pt-24 pb-24">
+      <div className="w-full flex-1 min-h-[calc(100dvh-5rem)] flex flex-col justify-center items-center p-6 max-w-5xl mx-auto">
+        <div className="w-full flex justify-start mb-4 z-20">
+          <Link
+            href={`/s/${profileId}`}
+            className="inline-flex items-center gap-1.5 font-kid text-sm font-bold text-foreground/60 hover:text-primary transition-colors focus-visible:outline-secondary focus-visible:outline-2 rounded-lg py-1 px-2.5"
+          >
+            ← Bookshelf
+          </Link>
+        </div>
         <motion.div
           initial={{ opacity: 0, y: -20, scale: 0.9 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -397,8 +406,18 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   };
 
   return (
-    <div className="flex flex-col items-center p-6 w-full max-w-4xl mx-auto min-h-[100dvh] justify-center relative overflow-hidden">
+    <div className="w-full flex-1 min-h-[calc(100dvh-5rem)] flex flex-col justify-center items-center p-6 max-w-4xl mx-auto relative overflow-hidden">
       
+      {/* Top Navigation Exit */}
+      <div className="w-full flex justify-start mb-4 z-20">
+        <Link
+          href={`/s/${profileId}`}
+          className="inline-flex items-center gap-1.5 font-kid text-sm font-bold text-foreground/60 hover:text-primary transition-colors focus-visible:outline-secondary focus-visible:outline-2 rounded-lg py-1 px-2.5"
+        >
+          ← Bookshelf
+        </Link>
+      </div>
+
       {/* Spotlight Background effect */}
       <div className="absolute inset-0 pointer-events-none flex justify-center items-center opacity-30 z-0">
          <div className="w-[600px] h-[600px] bg-[var(--color-secondary)]/20 rounded-full blur-[100px]" />
@@ -496,12 +515,20 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
             <motion.div
               initial={{ opacity: 0, y: 10, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              className="flex items-center gap-3 bg-[var(--color-surface)] neo-border px-6 py-4 rounded-full shadow-sm max-w-sm w-full md:max-w-md mx-auto"
+              className="flex flex-col sm:flex-row items-center gap-3 bg-[var(--color-surface)] neo-border px-6 py-4 rounded-2xl sm:rounded-full shadow-sm max-w-sm sm:max-w-xl w-full mx-auto justify-between"
             >
-              <div className="w-3 h-3 rounded-full bg-[var(--color-secondary)] animate-pulse shrink-0" />
-              <p className="font-kid text-sm md:text-base text-foreground/80 leading-snug">
-                This step is taking longer than usual. Your progress is saved, so you can leave and come back.
-              </p>
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 rounded-full bg-[var(--color-secondary)] animate-pulse shrink-0" />
+                <p className="font-kid text-sm md:text-base text-foreground/80 leading-snug">
+                  This step is taking longer than usual. Your progress is saved, so you can leave and come back.
+                </p>
+              </div>
+              <Link
+                href={"/s/" + profileId}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-surface border border-primary/20 text-foreground font-bold hover:bg-muted/40 transition shrink-0 whitespace-nowrap focus-visible:outline-secondary focus-visible:outline-2 text-sm"
+              >
+                Return to Bookshelf
+              </Link>
             </motion.div>
           )}
       </div>

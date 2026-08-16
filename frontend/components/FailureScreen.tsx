@@ -4,6 +4,7 @@ import { useState, ReactNode } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Wrench, Gear, MagnifyingGlass, PencilSimple, BookOpen, Copy, Check } from "@phosphor-icons/react";
 import { motion, AnimatePresence } from "framer-motion";
+import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import { FailureReason } from "@/lib/types/jobs";
 
@@ -87,6 +88,7 @@ function FailureCard({
   secondaryAction,
   error,
   jobId,
+  profileId,
 }: {
   icon: ReactNode;
   title: string;
@@ -97,11 +99,12 @@ function FailureCard({
   secondaryAction?: ReactNode;
   error?: boolean;
   jobId?: string;
+  profileId?: string;
 }) {
   return (
     <div
       role="alert"
-      className="min-h-[100dvh] w-full bg-[var(--background)] flex flex-col items-center justify-center px-6 py-12 text-center overflow-x-hidden selection:bg-[var(--color-primary)] selection:text-[var(--color-surface)]"
+      className="w-full flex-1 min-h-[calc(100dvh-5rem)] bg-[var(--background)] flex flex-col items-center justify-center px-6 py-8 text-center overflow-x-hidden selection:bg-[var(--color-primary)] selection:text-[var(--color-surface)]"
     >
       <motion.div 
         initial={{ opacity: 0, y: 16 }}
@@ -146,6 +149,14 @@ function FailureCard({
             </button>
           )}
           {secondaryAction}
+          {profileId && (
+            <Link
+              href={`/s/${profileId}`}
+              className="inline-flex items-center gap-1.5 font-kid text-base font-bold text-[var(--foreground)]/60 hover:text-[var(--color-primary)] transition-colors focus-visible:outline-[var(--color-secondary)] focus-visible:outline-2 rounded-lg py-1 px-3 mt-1"
+            >
+              ← Back to Bookshelf
+            </Link>
+          )}
         </div>
 
         <div className="mt-6 min-h-[56px] flex items-start justify-center w-full max-w-sm">
@@ -261,7 +272,8 @@ export default function FailureScreen({
   countable = true,
 }: Props) {
   const router = useRouter();
-  const { profileId } = useParams() as { profileId: string };
+  const params = useParams();
+  const profileId = (params as { profileId?: string })?.profileId;
   const [submitting, setSubmitting] = useState(false);
   const [retryFailed, setRetryFailed] = useState(false);
   const chainCount = getChainCount();
@@ -287,7 +299,7 @@ export default function FailureScreen({
         return;
       }
       const data = await res.json();
-      router.push(`/s/${profileId}/process/${data.job_id}`);
+      router.push(profileId ? `/s/${profileId}/process/${data.job_id}` : `/process/${data.job_id}`);
     } catch {
       setRetryFailed(true);
     } finally {
@@ -298,7 +310,7 @@ export default function FailureScreen({
   const writeSomethingNew = (
     <button
       className="w-full rounded-2xl min-h-[56px] px-8 py-4 font-kid font-extrabold text-lg border-2 border-[var(--color-primary)]/25 text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5 active:scale-[0.98] transition-all duration-150 disabled:opacity-50 focus-visible:outline-[var(--color-secondary)] focus-visible:outline-3 focus-visible:outline-offset-3"
-      onClick={() => router.push(`/s/${profileId}/write`)}
+      onClick={() => router.push(profileId ? `/s/${profileId}/write` : "/write")}
       disabled={submitting}
     >
       Write something new
@@ -308,7 +320,7 @@ export default function FailureScreen({
   const tryDifferent = chainCount >= 3 ? (
     <button
       className="mt-2 font-kid text-lg text-[var(--color-primary)] underline hover:text-[var(--color-primary-deep)] transition-colors focus-visible:outline-[var(--color-secondary)] rounded-md"
-      onClick={() => router.push(`/s/${profileId}/write`)}
+      onClick={() => router.push(profileId ? `/s/${profileId}/write` : "/write")}
       disabled={submitting}
     >
       Want to try a different story instead?
@@ -319,7 +331,7 @@ export default function FailureScreen({
     const count = countable ? bumpChain() : chainCount;
     console.log("sb:action", { action: "revise", kind, chain_count: count });
     try { sessionStorage.setItem(PREFILL_KEY, inputText); } catch { /* unavailable */ }
-    router.push(`/s/${profileId}/write`);
+    router.push(profileId ? `/s/${profileId}/write` : "/write");
   };
 
   // A machine failure is never the child's fault, so both ways out are offered side by side from
@@ -346,6 +358,7 @@ export default function FailureScreen({
           onAction={handleRevise}
           secondaryAction={tryDifferent}
           jobId={jobId}
+          profileId={profileId}
         />
       );
     }
@@ -360,6 +373,7 @@ export default function FailureScreen({
           secondaryAction={writeSomethingNew}
           error={retryFailed}
           jobId={jobId}
+          profileId={profileId}
         />
       );
     }
@@ -374,6 +388,7 @@ export default function FailureScreen({
           secondaryAction={writeSomethingNew}
           error={retryFailed}
           jobId={jobId}
+          profileId={profileId}
         />
       );
     }
@@ -388,6 +403,7 @@ export default function FailureScreen({
           secondaryAction={writeSomethingNew}
           error={retryFailed}
           jobId={jobId}
+          profileId={profileId}
         />
       );
     }
@@ -402,6 +418,7 @@ export default function FailureScreen({
           secondaryAction={writeSomethingNew}
           error={retryFailed}
           jobId={jobId}
+          profileId={profileId}
         />
       );
     }
@@ -415,6 +432,7 @@ export default function FailureScreen({
           submitting={submitting}
           secondaryAction={writeSomethingNew}
           jobId={jobId}
+          profileId={profileId}
         />
       );
     }
@@ -428,6 +446,7 @@ export default function FailureScreen({
           submitting={submitting}
           secondaryAction={writeSomethingNew}
           jobId={jobId}
+          profileId={profileId}
         />
       );
     }
@@ -442,6 +461,7 @@ export default function FailureScreen({
         secondaryAction={writeSomethingNew}
         error={retryFailed}
         jobId={jobId}
+        profileId={profileId}
       />
     );
   }
@@ -458,6 +478,7 @@ export default function FailureScreen({
         onAction={handleRevise}
         secondaryAction={tryDifferent}
         jobId={jobId}
+        profileId={profileId}
       />
     );
   }
@@ -469,8 +490,9 @@ export default function FailureScreen({
         title="We can't find that story."
         buttonLabel="Write a new story"
         submitting={submitting}
-        onAction={() => router.push(`/s/${profileId}/write`)}
+        onAction={() => router.push(profileId ? `/s/${profileId}/write` : "/write")}
         jobId={jobId}
+        profileId={profileId}
       />
     );
   }
@@ -487,6 +509,7 @@ export default function FailureScreen({
         secondaryAction={writeSomethingNew}
         error={retryFailed}
         jobId={jobId}
+        profileId={profileId}
       />
     );
   }
@@ -503,6 +526,7 @@ export default function FailureScreen({
       secondaryAction={writeSomethingNew}
       error={retryFailed}
       jobId={jobId}
+      profileId={profileId}
     />
   );
 }

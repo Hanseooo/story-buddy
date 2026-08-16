@@ -362,3 +362,31 @@ describe("ProcessingPage — stall timer (spec §4.1)", () => {
     vi.useRealTimers();
   });
 });
+
+describe("ProcessingPage — exit navigation", () => {
+  it("in-flight shows top Bookshelf exit link", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "in-flight", row: RUNNING_ROW }));
+    await renderPage(makeParams("j1"));
+    const bookshelfLink = screen.getByRole("link", { name: /bookshelf/i });
+    expect(bookshelfLink).toHaveAttribute("href", "/s/p1");
+  });
+
+  it("paused reveal shows top Bookshelf exit link", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
+    await renderPage(makeParams("j1"));
+    const bookshelfLink = screen.getByRole("link", { name: /bookshelf/i });
+    expect(bookshelfLink).toHaveAttribute("href", "/s/p1");
+  });
+
+  it("stalled prompt shows actionable Return to Bookshelf button", async () => {
+    vi.useFakeTimers();
+    mockUseJob.mockReturnValue(jobState({ bucket: "in-flight", row: RUNNING_ROW }));
+    await renderPage(makeParams("j1"));
+
+    await act(async () => { vi.advanceTimersByTime(90_001); });
+    const returnBtn = screen.getByRole("link", { name: /return to bookshelf/i });
+    expect(returnBtn).toHaveAttribute("href", "/s/p1");
+
+    vi.useRealTimers();
+  });
+});

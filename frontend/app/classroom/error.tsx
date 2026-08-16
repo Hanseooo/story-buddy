@@ -1,22 +1,54 @@
 "use client";
 
-export default function Error({ reset }: { reset: () => void }) {
+import { useEffect } from "react";
+import Link from "next/link";
+import { WarningCircle, ArrowsClockwise, ChalkboardTeacher } from "@phosphor-icons/react";
+import * as Sentry from "@sentry/nextjs";
+
+export default function ClassroomError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") {
+      Sentry.captureException(error);
+    } else {
+      console.error("Classroom error caught:", error);
+    }
+  }, [error]);
+
   return (
-    <div className="flex items-center justify-center min-h-[60vh] p-6">
-      <div className="max-w-md w-full text-center bg-surface border-2 border-primary/10 rounded-[28px] p-8">
-        <h1 className="font-display text-2xl font-extrabold text-primary mb-2">
-          Something went wrong
+    <div className="w-full flex-1 min-h-[calc(100dvh-5rem)] flex items-center justify-center p-6 bg-background text-foreground">
+      <div className="max-w-md w-full text-center bg-surface border border-primary/15 rounded-[24px] p-8 shadow-[0_10px_28px_rgba(49,85,217,0.12)]">
+        <div className="size-16 rounded-2xl bg-warning/15 text-warning flex items-center justify-center mx-auto mb-5">
+          <WarningCircle className="size-10" weight="duotone" />
+        </div>
+        <h1 className="font-display text-2xl md:text-3xl font-extrabold text-foreground tracking-tight mb-2">
+          Unable to load classroom
         </h1>
-        <p className="text-sm text-foreground/70 mb-6">
-          We couldn&apos;t load your classrooms. Try again, or log out and back
-          in.
+        <p className="font-sans text-sm md:text-base text-foreground/70 mb-8 leading-relaxed">
+          We encountered an issue loading your classroom details. You can try refreshing or return to your classroom dashboard.
         </p>
-        <button
-          onClick={reset}
-          className="min-h-11 px-5 py-2 rounded-xl bg-primary text-on-primary font-bold shadow-[0_4px_0_var(--color-primary-deep)]"
-        >
-          Try again
-        </button>
+        <div className="flex flex-col gap-3 w-full">
+          <button
+            type="button"
+            onClick={reset}
+            className="w-full min-h-[48px] inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary font-bold text-sm shadow-[0_6px_18px_rgba(49,85,217,0.10)] hover:bg-primary-deep active:scale-[0.98] transition-all cursor-pointer focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
+          >
+            <ArrowsClockwise className="size-5" weight="bold" />
+            <span>Try again</span>
+          </button>
+          <Link
+            href="/classroom"
+            className="w-full min-h-[48px] inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-background border border-primary/20 text-foreground font-bold text-sm hover:bg-muted/40 active:scale-[0.98] transition-all focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
+          >
+            <ChalkboardTeacher className="size-5" weight="bold" />
+            <span>Back to Classroom</span>
+          </Link>
+        </div>
       </div>
     </div>
   );

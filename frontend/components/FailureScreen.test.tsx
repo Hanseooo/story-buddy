@@ -273,6 +273,14 @@ describe("FailureScreen — chain counter & third offer", () => {
   });
 });
 
+describe("FailureScreen — secondary navigation", () => {
+  it("renders Back to Bookshelf link when profileId is present", () => {
+    render(<FailureScreen kind="revise" inputText="x" />);
+    const link = screen.getByRole("link", { name: /back to bookshelf/i });
+    expect(link).toHaveAttribute("href", "/s/prof-123");
+  });
+});
+
 describe("resetFailChain", () => {
   it("clears sb.failChain from sessionStorage", () => {
     sessionStorage.setItem("sb.failChain", "5");
