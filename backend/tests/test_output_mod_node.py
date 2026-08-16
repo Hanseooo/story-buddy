@@ -111,7 +111,7 @@ def test_retry_ref_paths_agree_with_the_image_roll_the_softened_prompt_carries()
         _char("c2", "the star", "job-1/ref-c2.png"),
     ]
     present = ["c0", "c1", "c2"]
-    prompt = build_prompt("A dog runs.", present, characters, "flat cel-shaded cartoon")
+    prompt = build_prompt(present, characters, "flat cel-shaded cartoon")
     scene = _scene("s0", prompt=prompt).model_copy(update={"characters_present": present})
 
     with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"), \

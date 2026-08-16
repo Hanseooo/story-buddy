@@ -41,8 +41,9 @@ BC-1 still forbids a population-level consistency claim, and no paid run is part
    blind redraw.
 3. A concrete failure on attempt 1 or 2 remains unfinalized and routes to `regenerate`; a concrete
    failure on attempt 3 finalizes the best-ranked attempt.
-4. Attempt 3 corrects from attempt 2's prompt, preserving the first correction and appending the
-   newest one. Prompt growth is bounded at two correction layers.
+4. Attempt 3 corrects from the immutable clean `Scene.prompt` base plus only the latest (attempt 2)
+   checked attempt's verdict (amended by visual-prompt-reliability), avoiding prompt accumulation
+   while keeping the 55-image budget and cost arithmetic unchanged.
 5. Output moderation retains exactly one softened redraw. Its paid draw is counted, breaker-bound,
    and never bypasses moderation.
 6. `IMAGE_BUDGET` funds every structurally permitted paid draw; legal retry paths do not compete
@@ -65,8 +66,9 @@ input_gate → analyze → segment → char_bible → char_ref_mod → reveal
   repair use `MAX_SCENES`; no story-length function or second pagination policy is added.
 - `consistency_check` keeps the existing pass predicate, `_rank`, and conditional edge. Only the
   finalization threshold and attempt-denominator log move from 2 to 3.
-- `regenerate` keeps its node shape and `last.prompt or scene.prompt` base. A second visit naturally
-  writes attempt 3 and accumulates the prior correction.
+- `regenerate` keeps its node shape and uses the immutable clean `Scene.prompt` base (amended by
+  visual-prompt-reliability). A second visit naturally writes attempt 3 using only attempt 2's
+  verdict.
 - `output_mod` keeps its in-node one-redraw safety loop. The redraw adds an image, not a graph
   super-step.
 - No node, graph edge, router label, provider, model, or reference slot is added.
@@ -119,10 +121,10 @@ Best-of keeps the existing lexicographic `_rank`. `max(reversed(...), key=_rank)
 three attempts and continues to make the newest corrected attempt win an exact tie. No scalar score
 or new failure reason is added.
 
-`regenerate` continues to use `last.prompt or scene.prompt`. Attempt 3 therefore contains attempt
-2's correction plus the correction derived from attempt 2's verdict. The design deliberately
-accepts at most two accumulated correction layers instead of adding aggregation or deduplication
-logic without evidence that bounded prompt repetition is harmful.
+`regenerate` uses the immutable `Scene.prompt` as the clean base for both retries (amended by
+visual-prompt-reliability). Attempt 3 therefore contains the clean base prompt plus only the
+correction derived from attempt 2's verdict, avoiding prompt accumulation and contradictory
+instruction growth while exact duplicate contradictions are deduplicated in first-seen order.
 
 ### 4.3 Paid-image accounting and formulas
 
@@ -231,7 +233,7 @@ quality.
 7. Pass or unchecked on attempts 1 or 2 finalizes immediately.
 8. Attempt 3 finalizes whether it passes or concretely fails.
 9. Three-way best-of follows `_rank`; an exact tie selects attempt 3.
-10. Attempt 3's prompt contains both correction rounds and uses the `-3.png` path.
+10. Attempt 3 corrects from `Scene.prompt` plus attempt 2's verdict only and uses the `-3.png` path.
 11. A graph run where every scene fails all three checks terminates with three attempts per scene;
     no fourth attempt is reachable.
 

@@ -1,4 +1,5 @@
 import logging
+import re
 
 from pydantic import BaseModel, field_validator, model_validator
 
@@ -48,6 +49,17 @@ class ExtractedObject(BaseModel):
     owner_name: str | None = None
 
 
+_EXPLICIT_ALIAS = re.compile(r"\(([^()]*)\)\s*$")
+
+
+def _parenthetical_alias(name: str) -> str | None:
+    match = _EXPLICIT_ALIAS.search(name)
+    if not match:
+        return None
+    alias = match.group(1).strip().casefold()
+    return alias or None
+
+
 class StoryAnalysis(BaseModel):
     """The transient wrapper — never persisted."""
 
@@ -59,7 +71,13 @@ class StoryAnalysis(BaseModel):
     @model_validator(mode="after")
     def entity_rosters_do_not_overlap(self) -> "StoryAnalysis":
         character_names = {character.name.casefold() for character in self.characters}
-        overlap = character_names & {obj.name.casefold() for obj in self.objects}
+        overlap: set[str] = set()
+        for obj in self.objects:
+            if obj.name.casefold() in character_names:
+                overlap.add(obj.name.casefold())
+            alias = _parenthetical_alias(obj.name)
+            if alias and alias in character_names:
+                overlap.add(alias)
         if overlap:
             raise ValueError(f"entity appears as both character and object: {sorted(overlap)}")
         return self
@@ -88,7 +106,7 @@ Use the name the story gives the character. If the story never names them, use a
 descriptive label instead: "the narrator", "the younger sister", "the orange cat". Never emit a
 redaction placeholder like <PERSON_1>. The story is usually first-person, and the narrator is
 usually a character.
-Classify by agency: a character speaks, decides, moves intentionally, or performs an action. An inert prop belongs only in objects. A personified object belongs only in characters, never both.
+Classify by agency: a character speaks, decides, moves intentionally, or performs an action. An inert prop belongs only in objects. A personified object belongs only in characters, never both. An object name such as "the robot (Leo)" is an alias for character Leo and must not appear in objects.
 Species is the physical kind, never a job title or role: a human wizard is physically human.
 Copy every visual fact the story states without alteration. Fill only missing visual axes once with concrete, directly drawable, child-safe, non-stereotyped details that distinguish this character from the rest of the roster. Never use placeholder values such as neutral, none, unknown, or unspecified.
 Return at least three stable visual discriminators across at least two of colours, body_features, and clothing. Set is_humanoid accurately; every humanoid needs a non-empty clothing description.

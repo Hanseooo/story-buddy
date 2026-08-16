@@ -13,6 +13,8 @@ from contracts.story_memory import Character, CharacterDescription, FailureReaso
 
 log = logging.getLogger(__name__)
 
+SCENE_PROMPT_VERSION = 2
+
 
 # ADR-035. Every preset states its own prohibitions in its own fragment text ("no gradients,
 # no glow"), so the forbidden set is DERIVED from the fragment rather than hand-listed: ADR-022
@@ -143,11 +145,11 @@ def filtered_object(
 
 
 def _describe(description: CharacterDescription, name: str) -> str:
-    """The populated CharacterDescription axes as one line for scene prompts. This includes
-    narrative `notes`; ADR-039 deliberately narrows only the canonical-reference prompt.
+    """The populated CharacterDescription appearance axes as one line for scene prompts.
+    Per ADR-040, narrative `notes` are omitted from the scene prompt projection.
 
     Issue #32: a species the name already carries renders as `"the star - star"` — a definition,
-    not a description, and a SECOND bare assertion of the noun the excerpt is independently
+    not a description, and a SECOND bare assertion of the noun the direction is independently
     summoning. Exact token match, so a name that only partly carries the species
     (`"the retriever"` / `"golden retriever"`) keeps it.
 
@@ -165,7 +167,6 @@ def _describe(description: CharacterDescription, name: str) -> str:
         ", ".join(description.colours),
         ", ".join(description.body_features),
         ", ".join(description.clothing),
-        description.notes,
     ]
     # Plain commas — commit bef9982's finding, ported here because this copy renders far more
     # images than char_bible's does. `"{name} - {a}; {b}"` after a proper noun is a caption shape,
@@ -236,7 +237,6 @@ def _names(names: list[str]) -> str:
 
 
 def build_prompt(
-    text_excerpt: str,
     characters_present: list[str],
     characters: list[Character],
     style_fragment: str | None,
@@ -246,11 +246,11 @@ def build_prompt(
     visual_direction: str | None = None,
 ) -> str:
     """Pure. Always includes the style fragment (invariant 1); never invents detail beyond
-    `text_excerpt`, the present characters' populated description axes, and the scene's location
-    (invariant 2, widened by `scene-setting-and-subject-binding.md` §2).
+    the present characters' populated description axes, visible objects, rendered visual direction,
+    the scene's location, and the style fragment (invariant 2, updated by ADR-040).
 
-    `location` is defaulted so the four-positional-arg call stays compatible; the one production
-    caller (`generate_scene.py:77`) always passes it.
+    `location` and subsequent arguments are defaulted so the three-positional-arg call stays compatible;
+    the one production caller (`generate_scene.py:74`) always passes all arguments.
     """
     style = style_fragment or settings.default_style_fragment
     by_id = {character.char_id: character for character in characters}
@@ -324,9 +324,6 @@ def build_prompt(
 
     direction = [f"Visual direction: {visual_direction}"] if visual_direction else []
 
-    # Emitted BEFORE the excerpt on purpose: when a location description and the excerpt conflict
-    # ("that night" against a sunny description), the excerpt is then the later and more specific
-    # assertion. Reduced, not eliminated (§4.5.3).
     place = filtered_location(location, style)
     setting = [
         f"Setting: {place.name} - {place.description}" if place.description
@@ -334,7 +331,7 @@ def build_prompt(
     ] if place else []
 
     return "\n\n".join(
-        [*roll, *descriptions, *guards, *object_block, *direction, *setting, text_excerpt, style]
+        [*roll, *descriptions, *guards, *object_block, *direction, *setting, style]
     )
 
 
@@ -386,8 +383,7 @@ COMPOSITION_CLAUSE = (
 )
 
 
-def correct_prompt(
-    prompt: str,
+def correction_clauses(
     failure_reasons: list[FailureReason],
     characters: list[Character],
     style_fragment: str | None,
@@ -395,19 +391,11 @@ def correct_prompt(
     anatomy_intact: bool = True,
     text_free: bool = True,
     scene_contradictions: list[str] | None = None,
-) -> str:
-    """Pure. Never drops content from `prompt` (invariant 3) — only appends emphasis clauses, one
-    per `FailureReason` present in `failure_reasons`, in enum-declaration order, no duplicates.
+) -> list[str]:
+    """Pure. Assembles the list of correction clauses for a retry (spec `prompt-optimizer.md`).
 
-    Attribution ceiling (spec §4): `VlmVerdict`/`Attempt.failure_reasons` carry no per-character
-    breakdown, so axis-based clauses fill from EVERY character in `characters`, joining multiple
-    values — over-specifying rather than guessing wrong. A clause whose axes are ALL empty across
-    ALL of them is dropped rather than rendered hollow (`_fillable`), and if that empties the whole
-    correction, `IDENTITY_CLAUSE` floors it.
-
-    `same_character` / `anatomy_intact` / `text_free` / `scene_contradictions` close the holes where
-    the reason clauses alone append NOTHING, which would make the retry a pure resample (ADR-010
-    rejects resampling). Defaulted so the four-positional-arg signature stays call-compatible.
+    Preserves enum declaration order, _fillable filtering, the identity floor, anatomy/text clauses,
+    first-seen exact deduplication of scene contradictions, and final COMPOSITION_CLAUSE placement.
     """
     style = style_fragment or settings.default_style_fragment
     # ADR-035 surface 4. Issue #24: `wrong_colour` used to answer with "match the reference's
@@ -452,10 +440,46 @@ def correct_prompt(
     # (nothing failed) still returns `prompt` untouched.
     if failure_reasons and not clauses:
         clauses.append(IDENTITY_CLAUSE)
+    unique_contradictions = list(dict.fromkeys(scene_contradictions or []))
     clauses.extend(
         f"Correct this scene contradiction: {contradiction}"
-        for contradiction in scene_contradictions or []
+        for contradiction in unique_contradictions
     )
     if clauses:
         clauses.append(COMPOSITION_CLAUSE)
+    return clauses
+
+
+def correct_prompt(
+    prompt: str,
+    failure_reasons: list[FailureReason],
+    characters: list[Character],
+    style_fragment: str | None,
+    same_character: bool = True,
+    anatomy_intact: bool = True,
+    text_free: bool = True,
+    scene_contradictions: list[str] | None = None,
+) -> str:
+    """Pure. Never drops content from `prompt` (invariant 3) — only appends emphasis clauses, one
+    per `FailureReason` present in `failure_reasons`, in enum-declaration order, no duplicates.
+
+    Attribution ceiling (spec §4): `VlmVerdict`/`Attempt.failure_reasons` carry no per-character
+    breakdown, so axis-based clauses fill from EVERY character in `characters`, joining multiple
+    values — over-specifying rather than guessing wrong. A clause whose axes are ALL empty across
+    ALL of them is dropped rather than rendered hollow (`_fillable`), and if that empties the whole
+    correction, `IDENTITY_CLAUSE` floors it.
+
+    `same_character` / `anatomy_intact` / `text_free` / `scene_contradictions` close the holes where
+    the reason clauses alone append NOTHING, which would make the retry a pure resample (ADR-010
+    rejects resampling). Defaulted so the four-positional-arg signature stays call-compatible.
+    """
+    clauses = correction_clauses(
+        failure_reasons=failure_reasons,
+        characters=characters,
+        style_fragment=style_fragment,
+        same_character=same_character,
+        anatomy_intact=anatomy_intact,
+        text_free=text_free,
+        scene_contradictions=scene_contradictions,
+    )
     return "\n".join([prompt, *clauses]) if clauses else prompt

@@ -1,3 +1,4 @@
+import inspect
 import logging
 
 from app.config import STYLE_PRESETS
@@ -7,9 +8,11 @@ from pipeline.prompt_optimizer import (
     COMPOSITION_CLAUSE,
     IDENTITY_CLAUSE,
     NON_HUMAN_CLAUSE,
+    SCENE_PROMPT_VERSION,
     TEXT_CLAUSE,
     build_prompt,
     correct_prompt,
+    correction_clauses,
     filtered_description,
     filtered_location,
     permitted_words,
@@ -18,6 +21,21 @@ from pipeline.prompt_optimizer import (
 )
 
 FRAG = "flat cel-shaded cartoon, thick clean black outlines"
+
+
+def test_build_prompt_signature_has_no_text_excerpt_parameter():
+    sig = inspect.signature(build_prompt)
+    assert "text_excerpt" not in sig.parameters
+    assert list(sig.parameters.keys()) == [
+        "characters_present",
+        "characters",
+        "style_fragment",
+        "location",
+        "objects_present",
+        "objects",
+        "visual_direction",
+    ]
+    assert SCENE_PROMPT_VERSION == 2
 
 
 def test_visual_continuity_prompt_blocks_are_in_contract_order():
@@ -49,7 +67,6 @@ def test_visual_continuity_prompt_blocks_are_in_contract_order():
         owner_char_id="c0",
     )
     prompt = build_prompt(
-        "Ana ran toward the forest.",
         ["c0", "c1"],
         [ana, maya],
         "flat cel illustration, no gradients",
@@ -66,13 +83,100 @@ def test_visual_continuity_prompt_blocks_are_in_contract_order():
         "Visible objects:",
         "Visual direction:",
         "Setting:",
-        "Ana ran toward the forest.",
         "flat cel illustration, no gradients",
     ]
     positions = [prompt.index(marker) for marker in markers]
     assert positions == sorted(positions)
     assert "wooden sword, a short wooden sword with a red cord grip" in prompt
     assert "reference images define appearance, not pose, crop, expression or viewing angle" in prompt
+
+
+def test_build_prompt_populated_axes_block_order_and_no_excerpt_or_notes():
+    ana = Character(
+        char_id="c0",
+        name="Ana",
+        description=CharacterDescription(
+            species="human",
+            colours=["brown eyes"],
+            body_features=["round face"],
+            clothing=["yellow shirt"],
+            notes="The protagonist, a child who builds a robot",
+        ),
+        canonical_ref_image="story/ref-c0.png",
+    )
+    maya = Character(
+        char_id="c1",
+        name="Maya",
+        description=CharacterDescription(
+            species="human",
+            colours=["black hair"],
+            body_features=["oval face"],
+            clothing=["blue dress"],
+            notes="A helpful friend who loves reading",
+        ),
+    )
+    sword = StoryObject(
+        obj_id="obj0",
+        name="wooden sword",
+        description="a short wooden sword with a red cord grip",
+        owner_char_id="c0",
+    )
+    location = Location(loc_id="loc0", name="forest", description="tall pine trees")
+    direction = "Ana runs right. Viewpoint: eye-level. Framing: wide shot. wooden sword is held by Ana."
+    style = "flat cel illustration, no gradients"
+
+    prompt = build_prompt(
+        ["c0", "c1"],
+        [ana, maya],
+        style,
+        location,
+        ["obj0"],
+        [sword],
+        direction,
+    )
+
+    markers = [
+        "Image 1 is Ana, human, brown eyes, round face, yellow shirt.",
+        "Use them only as references",
+        "Maya, human, black hair, oval face, blue dress",
+        "This illustration contains exactly 2 characters: Ana and Maya.",
+        "Visible objects:\nwooden sword, a short wooden sword with a red cord grip",
+        f"Visual direction: {direction}",
+        "Setting: forest - tall pine trees",
+        style,
+    ]
+    for marker in markers:
+        assert prompt.count(marker) == 1, f"Expected exactly one occurrence of: {marker}"
+
+    positions = [prompt.index(marker) for marker in markers]
+    assert positions == sorted(positions)
+
+    # Populated appearance axes remain present
+    assert "human" in prompt
+    assert "brown eyes" in prompt
+    assert "round face" in prompt
+    assert "yellow shirt" in prompt
+    assert "black hair" in prompt
+    assert "oval face" in prompt
+    assert "blue dress" in prompt
+
+    # Narrative notes and excerpts are omitted
+    assert "protagonist" not in prompt
+    assert "builds a robot" not in prompt
+    assert "helpful friend" not in prompt
+    assert "loves reading" not in prompt
+
+
+def test_build_prompt_direction_emitted_as_one_block_without_restatement():
+    prompt = build_prompt(
+        [],
+        [],
+        FRAG,
+        visual_direction="Ana jumps over a log. Viewpoint: low-angle. Framing: medium shot.",
+    )
+    assert "Visual direction: Ana jumps over a log. Viewpoint: low-angle. Framing: medium shot." in prompt
+    assert prompt.count("Viewpoint:") == 1
+    assert prompt.count("Framing:") == 1
 
 
 def test_build_prompt_skips_unknown_object_ids_and_deduplicates_in_first_seen_order():
@@ -87,7 +191,6 @@ def test_build_prompt_skips_unknown_object_ids_and_deduplicates_in_first_seen_or
         description="a round shield",
     )
     prompt = build_prompt(
-        "Ana picked up her tools.",
         [],
         [],
         "flat cel illustration",
@@ -100,14 +203,13 @@ def test_build_prompt_skips_unknown_object_ids_and_deduplicates_in_first_seen_or
     assert "unknown_obj" not in prompt
 
 
-def test_build_prompt_filters_style_forbidden_words_from_object_description_not_excerpt():
+def test_build_prompt_filters_style_forbidden_words_from_object_description_not_name():
     sword = StoryObject(
         obj_id="obj0",
         name="glowing sword",
         description="a glowing magic sword",
     )
     prompt = build_prompt(
-        "She held the glowing sword.",
         [],
         [],
         "flat cel illustration, no glow",
@@ -117,48 +219,48 @@ def test_build_prompt_filters_style_forbidden_words_from_object_description_not_
     )
 
     assert "glowing sword, a magic sword" in prompt
-    assert "She held the glowing sword." in prompt
 
 
 def _char(char_id: str, name: str, **description_kwargs) -> Character:
     return Character(char_id=char_id, name=name, description=CharacterDescription(**description_kwargs))
 
 
-def test_build_prompt_contains_every_populated_axis_for_each_present_character():
+def test_build_prompt_contains_every_populated_axis_except_notes_for_each_present_character():
     dog = _char("c0", "the orange dog", species="dog", colours=["orange"], body_features=["three eyes"],
                 clothing=["a red scarf"], notes="always smiling")
-    prompt = build_prompt("The dog ran.", ["c0"], [dog], FRAG)
-    for axis in ["dog", "orange", "three eyes", "a red scarf", "always smiling"]:
+    prompt = build_prompt(["c0"], [dog], FRAG)
+    for axis in ["dog", "orange", "three eyes", "a red scarf"]:
         assert axis in prompt
+    assert "always smiling" not in prompt
 
 
 def test_build_prompt_always_contains_the_style_fragment():
-    prompt = build_prompt("The dog ran.", [], [], FRAG)
+    prompt = build_prompt([], [], FRAG)
     assert FRAG in prompt
 
 
 def test_build_prompt_falls_back_to_the_default_style_fragment_when_none():
     from app.config import settings
 
-    prompt = build_prompt("The dog ran.", [], [], None)
+    prompt = build_prompt([], [], None)
     assert settings.default_style_fragment in prompt
 
 
-def test_build_prompt_always_contains_the_verbatim_text_excerpt():
-    prompt = build_prompt("The dog ran across the yard.", [], [], FRAG)
-    assert "The dog ran across the yard." in prompt
+def test_build_prompt_contains_no_text_excerpt_line():
+    prompt = build_prompt([], [], FRAG)
+    assert prompt == FRAG
 
 
-def test_build_prompt_with_empty_characters_present_is_text_excerpt_and_style_only():
+def test_build_prompt_with_empty_characters_present_is_style_only():
     """Spec §4 edge case: valid — segment's and char_bible's precedent is scenes may be unreferenced."""
-    prompt = build_prompt("The dog ran.", [], [], FRAG)
-    assert prompt == "\n\n".join(["The dog ran.", FRAG])
+    prompt = build_prompt([], [], FRAG)
+    assert prompt == FRAG
 
 
 def test_build_prompt_skips_a_char_id_not_found_in_characters():
     """Spec §4 edge case: same posture as segment's 'name not in roster' case — may not extend
     the roster, does not raise."""
-    prompt = build_prompt("The dog ran.", ["c0", "missing-id"], [_char("c0", "the dog", species="dog")], FRAG)
+    prompt = build_prompt(["c0", "missing-id"], [_char("c0", "the dog", species="dog")], FRAG)
     assert "dog" in prompt
     assert "missing-id" not in prompt
 
@@ -166,7 +268,7 @@ def test_build_prompt_skips_a_char_id_not_found_in_characters():
 def test_build_prompt_never_invents_detail_for_an_empty_description():
     """Spec invariant 2: a character with no populated axes floors to just its name."""
     bare = _char("c0", "the mystery creature")
-    prompt = build_prompt("It appeared.", ["c0"], [bare], FRAG)
+    prompt = build_prompt(["c0"], [bare], FRAG)
     assert "the mystery creature" in prompt
 
 
@@ -179,7 +281,7 @@ def test_build_prompt_names_each_reference_image_by_index():
     star = _char("c1", "the star", species="star")
     star.canonical_ref_image = "job-123/ref-c1-1.png"
 
-    prompt = build_prompt("She held it toward the sky.", ["c0", "c1"], [ana, star], FRAG)
+    prompt = build_prompt(["c0", "c1"], [ana, star], FRAG)
 
     assert "Image 1 is Ana, girl." in prompt
     assert "Image 2 is the star." in prompt      # species repeats the name → dropped (issue #32)
@@ -192,7 +294,7 @@ def test_build_prompt_numbers_images_in_upload_order_not_roster_order():
     star = _char("c1", "the star", species="star")
     star.canonical_ref_image = "job-123/ref-c1-1.png"
 
-    prompt = build_prompt("She held it toward the sky.", ["c0", "c1"], [ana, star], FRAG)
+    prompt = build_prompt(["c0", "c1"], [ana, star], FRAG)
 
     assert "Image 1 is the star." in prompt
     assert "Image 2" not in prompt
@@ -201,7 +303,7 @@ def test_build_prompt_numbers_images_in_upload_order_not_roster_order():
 def test_build_prompt_omits_the_image_roll_when_no_character_has_a_reference():
     """The text-to-image path (generate_scene:55-57) sends no images — naming them would lie."""
     bare = _char("c0", "the mystery creature")
-    prompt = build_prompt("It appeared.", ["c0"], [bare], FRAG)
+    prompt = build_prompt(["c0"], [bare], FRAG)
 
     assert "Image 1" not in prompt
 
@@ -212,7 +314,7 @@ def test_build_prompt_binds_a_named_character_in_the_scene_text_to_its_reference
     star = _char("c1", "the star", species="star")
     star.canonical_ref_image = "job-123/ref-c1-1.png"
 
-    prompt = build_prompt("Ana found a tiny glowing star.", ["c1"], [star], FRAG)
+    prompt = build_prompt(["c1"], [star], FRAG)
 
     assert "not to a second thing of the same name" in prompt
 
@@ -222,7 +324,7 @@ def test_build_prompt_omits_the_binding_clause_when_no_reference_was_sent():
     bind the name TO — same reason the image roll is omitted."""
     star = _char("c1", "the star", species="star")
 
-    prompt = build_prompt("Ana found a tiny glowing star.", ["c1"], [star], FRAG)
+    prompt = build_prompt(["c1"], [star], FRAG)
 
     assert "not to a second thing of the same name" not in prompt
 
@@ -232,7 +334,7 @@ def test_build_prompt_drops_a_species_that_only_repeats_the_name():
     of the noun the excerpt is already summoning."""
     star = _char("c1", "the star", species="star")
 
-    prompt = build_prompt("Ana found a star.", ["c1"], [star], FRAG)
+    prompt = build_prompt(["c1"], [star], FRAG)
 
     assert prompt.split("\n\n")[0] == "the star"
 
@@ -240,7 +342,7 @@ def test_build_prompt_drops_a_species_that_only_repeats_the_name():
 def test_build_prompt_keeps_the_other_axes_when_the_species_repeats_the_name():
     star = _char("c1", "the star", species="star", body_features=["tiny"])
 
-    prompt = build_prompt("Ana found a star.", ["c1"], [star], FRAG)
+    prompt = build_prompt(["c1"], [star], FRAG)
 
     assert prompt.split("\n\n")[0] == "the star, tiny"
 
@@ -248,7 +350,7 @@ def test_build_prompt_keeps_the_other_axes_when_the_species_repeats_the_name():
 def test_build_prompt_keeps_a_species_the_name_does_not_carry():
     ana = _char("c0", "Ana", species="girl")
 
-    prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
+    prompt = build_prompt(["c0"], [ana], FRAG)
 
     assert prompt.split("\n\n")[0] == "Ana, girl"
 
@@ -258,7 +360,7 @@ def test_build_prompt_keeps_a_multi_word_species_the_name_only_partly_carries():
     species survives. The degenerate case this drops is exact, not approximate."""
     dog = _char("c0", "the retriever", species="golden retriever")
 
-    prompt = build_prompt("It barked.", ["c0"], [dog], FRAG)
+    prompt = build_prompt(["c0"], [dog], FRAG)
 
     assert prompt.split("\n\n")[0] == "the retriever, golden retriever"
 
@@ -273,7 +375,7 @@ def test_build_prompt_does_not_repeat_placeholder_character_axes():
         clothing=["unknown"],
     )
 
-    prompt = build_prompt("Andres waved.", ["c0"], [character], FRAG)
+    prompt = build_prompt(["c0"], [character], FRAG)
 
     assert "unspecified" not in prompt.lower()
     assert "none" not in prompt.lower()
@@ -290,7 +392,7 @@ def test_a_scene_uses_commas_for_the_shared_character_axes():
     """
     ana = _char("c0", "Ana", species="girl", colours=["red"], clothing=["jeans"])
 
-    line = build_prompt("Ana waved.", ["c0"], [ana], FRAG).split("\n\n")[0]
+    line = build_prompt(["c0"], [ana], FRAG).split("\n\n")[0]
 
     assert line == "Ana, girl, red, jeans"
     assert " - " not in line and ";" not in line
@@ -626,20 +728,11 @@ def test_build_prompt_drops_a_style_forbidden_attribute_from_the_description_lin
     """ADR-035 surface 3 — issue #23's `s1`. The scene prompt asserted "glowing" against a
     reference the same style clause guaranteed would not be glowing."""
     star = _char("c1", "the star", species="star", colours=["glowing"])
-    prompt = build_prompt("Ana found a star.", ["c1"], [star], COMIC)
+    prompt = build_prompt(["c1"], [star], COMIC)
     # The description line survives with the forbidden colour gone; its species is suppressed
     # separately, as a repeat of the name (issue #32).
     assert prompt.split("\n\n")[0] == "the star"
     assert "glowing" not in prompt
-
-
-def test_build_prompt_still_emits_the_text_excerpt_verbatim_when_it_names_a_forbidden_term():
-    """ADR-035 limit 1, pinned: ADR-013 is NOT amended. The excerpt is untouched — only the
-    description axes are filtered."""
-    star = _char("c1", "the star", species="star", colours=["glowing"])
-    prompt = build_prompt("Ana found a tiny glowing star.", ["c1"], [star], COMIC)
-    assert "Ana found a tiny glowing star." in prompt
-    assert prompt.count("glowing") == 1
 
 
 def test_correct_prompt_does_not_reinforce_a_style_forbidden_colour():
@@ -700,7 +793,7 @@ def test_the_roll_folds_the_description_into_the_image_sentence():
     ana = _char("c0", "Ana", species="girl", colours=["red"], clothing=["jeans"])
     ana.canonical_ref_image = "job-123/ref-c0-1.png"
 
-    prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
+    prompt = build_prompt(["c0"], [ana], FRAG)
 
     assert "Image 1 is Ana, girl, red, jeans." in prompt
 
@@ -710,7 +803,7 @@ def test_the_roll_of_a_character_with_no_populated_axes_is_byte_identical_to_bef
     ana = _char("c0", "Ana")
     ana.canonical_ref_image = "job-123/ref-c0-1.png"
 
-    prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
+    prompt = build_prompt(["c0"], [ana], FRAG)
 
     assert "Image 1 is Ana." in prompt
 
@@ -722,7 +815,7 @@ def test_a_present_character_with_no_reference_keeps_a_plain_line_below_the_roll
     star = _char("c1", "the star", body_features=["tiny"])
     star.canonical_ref_image = "job-123/ref-c1-1.png"
 
-    prompt = build_prompt("Ana held the star.", ["c0", "c1"], [ana, star], FRAG)
+    prompt = build_prompt(["c0", "c1"], [ana, star], FRAG)
 
     assert "Image 1 is the star, tiny." in prompt
     assert prompt.index("Image 1 is") < prompt.index("Ana, girl")
@@ -734,7 +827,7 @@ def test_a_referenced_character_is_described_once_and_only_in_the_roll():
     ana = _char("c0", "Ana", species="girl")
     ana.canonical_ref_image = "job-123/ref-c0-1.png"
 
-    prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
+    prompt = build_prompt(["c0"], [ana], FRAG)
 
     assert prompt.count("Ana, girl") == 1
 
@@ -748,7 +841,7 @@ def test_the_roll_order_still_matches_referenced_characters_order():
     star.canonical_ref_image = "job-123/ref-c1-1.png"
     characters = [ana, star]
 
-    prompt = build_prompt("She held it up.", ["c1", "c0"], characters, FRAG)
+    prompt = build_prompt(["c1", "c0"], characters, FRAG)
     order = [c.name for c in referenced_characters(["c1", "c0"], characters)]
 
     assert order == ["the star", "Ana"]
@@ -761,7 +854,7 @@ def test_the_reference_clause_still_follows_the_roll():
     ana = _char("c0", "Ana", species="girl")
     ana.canonical_ref_image = "job-123/ref-c0-1.png"
 
-    prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
+    prompt = build_prompt(["c0"], [ana], FRAG)
 
     assert "Image 1 is Ana, girl. Use them only as references" in prompt
 
@@ -778,7 +871,7 @@ def test_the_subject_count_clause_names_every_present_character():
     ana = _referenced("c0", "Ana", species="girl")
     star = _referenced("c1", "the star", body_features=["tiny"])
 
-    prompt = build_prompt("She held it up.", ["c0", "c1"], [ana, star], FRAG)
+    prompt = build_prompt(["c0", "c1"], [ana, star], FRAG)
 
     assert "This illustration contains exactly 2 characters: Ana and the star." in prompt
 
@@ -787,7 +880,7 @@ def test_both_guard_clauses_appear_on_the_reference_path():
     """§6 test 12, first half."""
     ana = _referenced("c0", "Ana", species="girl")
 
-    prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
+    prompt = build_prompt(["c0"], [ana], FRAG)
 
     assert "This illustration contains exactly 1 character: Ana." in prompt
     assert NON_HUMAN_CLAUSE in prompt
@@ -799,7 +892,7 @@ def test_both_guard_clauses_appear_on_the_text_to_image_path():
     on every reference-less scene."""
     ana = _char("c0", "Ana", species="girl")               # no canonical reference
 
-    prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
+    prompt = build_prompt(["c0"], [ana], FRAG)
 
     assert "Image 1" not in prompt
     assert "This illustration contains exactly 1 character: Ana." in prompt
@@ -810,7 +903,7 @@ def test_the_count_reads_one_character_singular():
     """§6 test 13, second half: no `1 characters`."""
     ana = _referenced("c0", "Ana", species="girl")
 
-    prompt = build_prompt("Ana waved.", ["c0"], [ana], FRAG)
+    prompt = build_prompt(["c0"], [ana], FRAG)
 
     assert "1 characters" not in prompt
 
@@ -820,7 +913,7 @@ def test_the_count_is_computed_after_the_missing_char_id_filter():
     counting before the filter asserts a number the prompt does not name."""
     ana = _referenced("c0", "Ana", species="girl")
 
-    prompt = build_prompt("Ana waved.", ["c0", "ghost-id"], [ana], FRAG)
+    prompt = build_prompt(["c0", "ghost-id"], [ana], FRAG)
 
     assert "This illustration contains exactly 1 character: Ana." in prompt
     assert "ghost-id" not in prompt
@@ -831,7 +924,7 @@ def test_a_present_character_without_a_reference_is_still_counted():
     ana = _char("c0", "Ana", species="girl")               # no reference
     star = _referenced("c1", "the star", body_features=["tiny"])
 
-    prompt = build_prompt("Ana held the star.", ["c0", "c1"], [ana, star], FRAG)
+    prompt = build_prompt(["c0", "c1"], [ana, star], FRAG)
 
     assert "This illustration contains exactly 2 characters: Ana and the star." in prompt
 
@@ -841,7 +934,7 @@ def test_the_count_names_three_characters_with_a_serial_comma_free_join():
     star = _referenced("c1", "the star", body_features=["tiny"])
     bird = _referenced("c2", "the bird", species="bird")
 
-    prompt = build_prompt("They met.", ["c0", "c1", "c2"], [ana, star, bird], FRAG)
+    prompt = build_prompt(["c0", "c1", "c2"], [ana, star, bird], FRAG)
 
     assert "exactly 3 characters: Ana, the star and the bird." in prompt
 
@@ -849,29 +942,30 @@ def test_the_count_names_three_characters_with_a_serial_comma_free_join():
 def test_no_clause_at_all_when_characters_present_is_empty():
     """§6 test 14 / §4.2 edge case: no roll, no count clause, no non-human clause — all three
     would reference nothing."""
-    prompt = build_prompt("The waves crashed.", [], [], FRAG)
+    prompt = build_prompt([], [], FRAG)
 
     assert "Image 1" not in prompt
     assert "This illustration contains exactly" not in prompt
     assert NON_HUMAN_CLAUSE not in prompt
-    assert prompt == "\n\n".join(["The waves crashed.", FRAG])
+    assert prompt == FRAG
 
 
 def test_no_clause_at_all_when_every_char_id_is_missing_from_the_roster():
     """The filter can empty the list even when `characters_present` was not empty."""
-    prompt = build_prompt("The waves crashed.", ["ghost-id"], [], FRAG)
+    prompt = build_prompt(["ghost-id"], [], FRAG)
 
     assert "This illustration contains exactly" not in prompt
     assert NON_HUMAN_CLAUSE not in prompt
 
 
-def test_the_guard_clauses_sit_after_the_descriptions_and_before_the_excerpt():
+def test_the_guard_clauses_sit_after_the_descriptions_and_before_setting():
     ana = _char("c0", "Ana", species="girl")
+    location = Location(loc_id="loc0", name="the beach", description="golden sand")
 
-    prompt = build_prompt("Ana waved at the sea.", ["c0"], [ana], FRAG)
+    prompt = build_prompt(["c0"], [ana], FRAG, location)
 
     assert prompt.index("Ana, girl") < prompt.index("This illustration contains")
-    assert prompt.index(NON_HUMAN_CLAUSE) < prompt.index("Ana waved at the sea.")
+    assert prompt.index(NON_HUMAN_CLAUSE) < prompt.index("Setting: the beach")
 
 
 # --- §4.1 D1: the Setting line (§6 tests 15-16) ---
@@ -879,7 +973,7 @@ def test_the_guard_clauses_sit_after_the_descriptions_and_before_the_excerpt():
 def test_build_prompt_emits_a_setting_line_from_the_location():
     location = Location(loc_id="loc0", name="the beach", description="golden sand, palm trees")
 
-    prompt = build_prompt("She ran.", [], [], FRAG, location)
+    prompt = build_prompt([], [], FRAG, location)
 
     assert "Setting: the beach - golden sand, palm trees" in prompt
 
@@ -887,7 +981,7 @@ def test_build_prompt_emits_a_setting_line_from_the_location():
 def test_build_prompt_emits_a_name_only_setting_line_when_the_description_is_null():
     """§4.1: `ExtractedLocation.description` stays optional, and name-only is still better than
     today's nothing."""
-    prompt = build_prompt("She ran.", [], [], FRAG, Location(loc_id="loc0", name="the beach"))
+    prompt = build_prompt([], [], FRAG, Location(loc_id="loc0", name="the beach"))
 
     assert "Setting: the beach" in prompt
     assert "Setting: the beach -" not in prompt
@@ -895,7 +989,7 @@ def test_build_prompt_emits_a_name_only_setting_line_when_the_description_is_nul
 
 def test_build_prompt_emits_no_setting_line_without_a_location():
     """§6 test 16 — the default, and the whole behaviour for a story that names no place."""
-    prompt = build_prompt("She ran.", [], [], FRAG)
+    prompt = build_prompt([], [], FRAG)
 
     assert "Setting:" not in prompt
 
@@ -904,26 +998,16 @@ def test_the_setting_line_is_style_filtered_but_keeps_its_name():
     """§6 test 15 through `build_prompt`, not just the helper."""
     location = Location(loc_id="loc0", name="the glowing cave", description="glowing cave")
 
-    prompt = build_prompt("She went in.", [], [], COMIC, location)
+    prompt = build_prompt([], [], COMIC, location)
 
     assert "Setting: the glowing cave - cave" in prompt
-
-
-def test_the_setting_line_precedes_the_text_excerpt():
-    """§4.1 edge case: on a conflict ("that night" vs a sunny description) the excerpt must be the
-    LATER and more specific assertion. Reduced, not eliminated (§4.5.3)."""
-    location = Location(loc_id="loc0", name="the beach", description="golden sand")
-
-    prompt = build_prompt("That night it was dark.", [], [], FRAG, location)
-
-    assert prompt.index("Setting: the beach") < prompt.index("That night it was dark.")
 
 
 def test_the_setting_line_follows_the_guard_clauses():
     ana = _char("c0", "Ana", species="girl")
     location = Location(loc_id="loc0", name="the beach", description="golden sand")
 
-    prompt = build_prompt("Ana ran.", ["c0"], [ana], FRAG, location)
+    prompt = build_prompt(["c0"], [ana], FRAG, location)
 
     assert prompt.index(NON_HUMAN_CLAUSE) < prompt.index("Setting: the beach")
 
@@ -932,7 +1016,7 @@ def test_the_style_fragment_is_still_last_with_a_location_present():
     """Invariant 1, pinned against the new block."""
     location = Location(loc_id="loc0", name="the beach", description="golden sand")
 
-    prompt = build_prompt("She ran.", [], [], FRAG, location)
+    prompt = build_prompt([], [], FRAG, location)
 
     assert prompt.endswith(FRAG)
 
@@ -967,7 +1051,7 @@ def test_the_roll_numbers_a_repeated_char_id_only_once():
     star = _char("c1", "the star", body_features=["tiny"])
     star.canonical_ref_image = "job-123/ref-c1-1.png"
 
-    prompt = build_prompt("It shone.", ["c1", "c1"], [star], FRAG)
+    prompt = build_prompt(["c1", "c1"], [star], FRAG)
 
     assert "Image 1 is the star, tiny." in prompt
     assert "Image 2" not in prompt
@@ -1076,6 +1160,71 @@ def test_correct_prompt_appends_composition_clause():
         assert corrected.endswith(COMPOSITION_CLAUSE), path
         assert corrected.count(COMPOSITION_CLAUSE) == 1, path
         assert corrected.startswith(base), path
+
+
+def test_correct_prompt_deduplicates_exact_duplicate_scene_contradictions():
+    base = "Draw Andres and Leo."
+    result = correct_prompt(
+        base,
+        [],
+        [],
+        FRAG,
+        scene_contradictions=["Leo faces left", "Leo faces left", "Leo faces left"],
+    )
+    assert result.count("Correct this scene contradiction: Leo faces left") == 1
+    assert result.endswith(COMPOSITION_CLAUSE)
+
+
+def test_correct_prompt_preserves_first_seen_order_for_scene_contradictions():
+    base = "Draw Andres and Leo."
+    result = correct_prompt(
+        base,
+        [],
+        [],
+        FRAG,
+        scene_contradictions=["Leo faces left", "Andres holds sword", "Leo faces left"],
+    )
+    c1 = "Correct this scene contradiction: Leo faces left"
+    c2 = "Correct this scene contradiction: Andres holds sword"
+    assert result.count(c1) == 1
+    assert result.count(c2) == 1
+    assert result.index(c1) < result.index(c2)
+
+
+def test_correct_prompt_keeps_near_duplicates_because_dedup_is_exact_only():
+    base = "Draw Andres and Leo."
+    result = correct_prompt(
+        base,
+        [],
+        [],
+        FRAG,
+        scene_contradictions=["Leo faces left", "Leo faces slightly left"],
+    )
+    c1 = "Correct this scene contradiction: Leo faces left"
+    c2 = "Correct this scene contradiction: Leo faces slightly left"
+    assert c1 in result
+    assert c2 in result
+    assert result.index(c1) < result.index(c2)
+
+
+def test_correction_clauses_returns_exact_list_of_rendered_clauses():
+    dog = _char("c0", "the dog", colours=["orange"])
+    clauses = correction_clauses(
+        [FailureReason.wrong_colour],
+        [dog],
+        FRAG,
+        same_character=True,
+        anatomy_intact=False,
+        text_free=False,
+        scene_contradictions=["Leo faces left", "Leo faces left"],
+    )
+    assert clauses == [
+        "match the reference's exact colours: orange",
+        ANATOMY_CLAUSE,
+        TEXT_CLAUSE,
+        "Correct this scene contradiction: Leo faces left",
+        COMPOSITION_CLAUSE,
+    ]
 
 
 

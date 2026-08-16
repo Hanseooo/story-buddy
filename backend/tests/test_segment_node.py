@@ -10,14 +10,30 @@ from pipeline.segment import (
     SEGMENTATION_PROMPT,
     ExtractedObjectEvent,
     ExtractedScene,
+    ExtractedVisualDirection,
     SceneSegmentation,
+    _merge_extracted,
     merge_thin,
+    render_visual_direction,
     repair,
     segment,
     segment_scenes,
     split_sentences,
 )
 
+
+def _direction(
+    key_action: str = "The visible subject performs the described action.",
+    pose_expression: str | None = None,
+    viewpoint: str = "wide view",
+    framing: str = "wide shot",
+) -> ExtractedVisualDirection:
+    return ExtractedVisualDirection(
+        key_action=key_action,
+        pose_expression=pose_expression,
+        viewpoint=viewpoint,
+        framing=framing,
+    )
 
 
 def test_split_sentences_on_period():
@@ -59,36 +75,178 @@ def test_extracted_scene_has_no_id_field():
 
 def test_segment_scenes_passes_numbered_units_and_schema_to_provider():
     units = ["The dog ran.", "He found a ball."]
-    stub = SceneSegmentation(scenes=[ExtractedScene(start=0, end=1, characters_present=[], visual_direction="A dog runs.")])
+    stub = SceneSegmentation(scenes=[ExtractedScene(start=0, end=1, characters_present=[], visual_direction=_direction("A dog runs."))])
     with patch("pipeline.segment.structured_text", return_value=stub) as mock_provider:
         segment_scenes(units, [], [], [], [])
     prompt, schema = mock_provider.call_args.args
     assert "0: The dog ran." in prompt
     assert "1: He found a ball." in prompt
+    for concept in ("montage", "split panel", "duplicate character", "impossible pose"):
+        assert concept in prompt
     assert schema is SceneSegmentation
 
 
 def test_segment_scenes_returns_parsed_wrapper_unchanged():
     units = ["A story."]
-    stub = SceneSegmentation(scenes=[ExtractedScene(start=0, end=0, characters_present=[], visual_direction="A dog runs.")])
+    stub = SceneSegmentation(scenes=[ExtractedScene(start=0, end=0, characters_present=[], visual_direction=_direction("A dog runs."))])
     with patch("pipeline.segment.structured_text", return_value=stub):
         result = segment_scenes(units, [], [], [], [])
     assert result is stub
 
 
+# --- Direction validation and rendering tests ---
+
+def test_extracted_visual_direction_accepts_all_four_fields():
+    direction = ExtractedVisualDirection(
+        key_action="Leo builds a toy robot.",
+        pose_expression="smiling cheerfully",
+        viewpoint="front view",
+        framing="medium shot",
+    )
+    assert direction.key_action == "Leo builds a toy robot."
+    assert direction.pose_expression == "smiling cheerfully"
+    assert direction.viewpoint == "front view"
+    assert direction.framing == "medium shot"
+
+
+def test_extracted_visual_direction_accepts_null_pose_expression():
+    direction = ExtractedVisualDirection(
+        key_action="Leo builds a toy robot.",
+        pose_expression=None,
+        viewpoint="front view",
+        framing="medium shot",
+    )
+    assert direction.pose_expression is None
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("key_action", "   "),
+        ("viewpoint", ""),
+        ("framing", " \t "),
+        ("pose_expression", "   "),
+    ],
+)
+def test_extracted_visual_direction_rejects_blank_fields(field, value):
+    payload = {
+        "key_action": "Leo builds a robot.",
+        "pose_expression": None,
+        "viewpoint": "front view",
+        "framing": "medium shot",
+        field: value,
+    }
+    with pytest.raises(ValidationError):
+        ExtractedVisualDirection.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("key_action", "Leo builds\na robot."),
+        ("pose_expression", "smiling\rcheerfully"),
+        ("viewpoint", "front\nview"),
+        ("framing", "medium\r\nshot"),
+    ],
+)
+def test_extracted_visual_direction_rejects_newlines(field, value):
+    payload = {
+        "key_action": "Leo builds a robot.",
+        "pose_expression": None,
+        "viewpoint": "front view",
+        "framing": "medium shot",
+        field: value,
+    }
+    with pytest.raises(ValidationError):
+        ExtractedVisualDirection.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("key_action", 'Leo says "hello" to his robot.'),
+        ("key_action", "Leo says “hello” to his robot."),
+        ("key_action", "Leo says ”hello” to his robot."),
+        ("pose_expression", 'looking "surprised"'),
+        ("pose_expression", "looking “surprised”"),
+        ("viewpoint", 'front "hero" view'),
+        ("framing", '“close-up” shot'),
+    ],
+)
+def test_extracted_visual_direction_rejects_straight_and_curly_quotes(field, value):
+    payload = {
+        "key_action": "Leo builds a robot.",
+        "pose_expression": None,
+        "viewpoint": "front view",
+        "framing": "medium shot",
+        field: value,
+    }
+    with pytest.raises(ValidationError):
+        ExtractedVisualDirection.model_validate(payload)
+
+
+def test_extracted_visual_direction_preserves_ordinary_apostrophe():
+    direction = ExtractedVisualDirection(
+        key_action="Leo's toy robot stands on the table.",
+        pose_expression="Leo's expression is bright",
+        viewpoint="front view",
+        framing="medium shot",
+    )
+    assert direction.key_action == "Leo's toy robot stands on the table."
+    assert direction.pose_expression == "Leo's expression is bright"
+
+
+def test_render_visual_direction_emits_structured_moment_and_exact_markers():
+    direction = ExtractedVisualDirection(
+        key_action="Leo raises his hand in greeting.",
+        pose_expression="smiling cheerfully,",
+        viewpoint="front-facing eye-level view",
+        framing="medium close-up",
+    )
+    relations = ["wooden sword is held by Ana."]
+    rendered = render_visual_direction(direction, relations)
+    assert rendered == (
+        "Leo raises his hand in greeting. smiling cheerfully, "
+        "Viewpoint: front-facing eye-level view. Framing: medium close-up. "
+        "wooden sword is held by Ana."
+    )
+    assert rendered.count("Viewpoint:") == 1
+    assert rendered.count("Framing:") == 1
+    assert rendered.count("Leo raises his hand") == 1
+
+
+def test_render_visual_direction_omits_pose_expression_when_none():
+    direction = ExtractedVisualDirection(
+        key_action="Leo raises his hand in greeting.",
+        pose_expression=None,
+        viewpoint="front-facing eye-level view",
+        framing="medium close-up",
+    )
+    rendered = render_visual_direction(direction)
+    assert rendered == (
+        "Leo raises his hand in greeting. "
+        "Viewpoint: front-facing eye-level view. Framing: medium close-up."
+    )
+    assert rendered.count("Viewpoint:") == 1
+    assert rendered.count("Framing:") == 1
+
 
 # --- repair pure tests ---
 
 def _r(start: int, end: int, chars=None, location=None, **overrides) -> ExtractedScene:
+    vd = overrides.pop("visual_direction", None)
+    if vd is None:
+        vd = _direction()
+    elif isinstance(vd, dict):
+        vd = ExtractedVisualDirection(**vd)
+    elif isinstance(vd, str):
+        vd = _direction(key_action=vd)
     return ExtractedScene(
         start=start,
         end=end,
         characters_present=chars or [],
         location_name=location,
-        visual_direction=overrides.pop(
-            "visual_direction",
-            "The visible subject performs the described action in a wide view.",
-        ),
+        visual_direction=vd,
         **overrides,
     )
 
@@ -166,7 +324,11 @@ def test_segment_scenes_passes_the_object_roster_and_new_schema_to_provider():
                         object_name="wooden sword", action="acquire", holder_name="Ana"
                     )
                 ],
-                visual_direction="Ana faces right and lifts the sword in a medium view.",
+                visual_direction=_direction(
+                    key_action="Ana faces right and lifts the sword.",
+                    viewpoint="medium view",
+                    framing="medium shot",
+                ),
             )
         ]
     )
@@ -196,13 +358,24 @@ def test_scene_transform_preserves_object_events_and_direction(transform):
     )
     if transform == "repair":
         result = repair([first], 2)[0]
+        assert result.objects_present == ["wooden sword"]
+        assert result.object_events[0].action == "acquire"
+        assert result.visual_direction.key_action == "Ana acquires the sword facing right."
     else:
-        second = _r(1, 1, visual_direction="Ana runs right in a wide view.")
-        result = merge_thin([first, second], ["Short.", "Also short."])[0]
-
-    assert result.objects_present == ["wooden sword"]
-    assert result.object_events[0].action == "acquire"
-    assert "Ana acquires" in result.visual_direction
+        second = _r(
+            1,
+            1,
+            chars=["Ana"],
+            objects_present=["wooden sword"],
+            visual_direction="Ana runs right in a wide view.",
+        )
+        third = _r(2, 2)
+        fourth = _r(3, 3)
+        units = ["Short.", "Also short.", "Third scene is long enough.", "Fourth scene is long enough."]
+        result = merge_thin([first, second, third, fourth], units)[0]
+        assert result.objects_present == ["wooden sword"]
+        assert result.object_events[0].action == "acquire"
+        assert result.visual_direction.key_action == "Ana runs right in a wide view."
 
 
 def test_repair_rejects_an_empty_model_scene_list_instead_of_inventing_direction():
@@ -216,7 +389,7 @@ def test_repair_clamps_out_of_bounds_indices():
     assert result[0].end == 4
 
 
-def test_repair_merges_18_ranges_to_10_with_union_of_characters():
+def test_repair_merges_18_ranges_to_10_retaining_later_characters():
     # 18 single-unit scenes alternating alice / bob
     scenes = [_r(i, i, ["alice"] if i % 2 == 0 else ["bob"]) for i in range(18)]
     result = repair(scenes, 18)
@@ -226,9 +399,83 @@ def test_repair_merges_18_ranges_to_10_with_union_of_characters():
     for s in result:
         covered.extend(range(s.start, s.end + 1))
     assert sorted(covered) == list(range(18))
-    # merged scenes must carry both characters (8 pairs merged → at least 1 scene has both)
-    merged_pairs = [set(s.characters_present) for s in result]
-    assert any("alice" in c and "bob" in c for c in merged_pairs)
+    # merged scenes retain the later scene's characters
+    assert all(s.characters_present in (["alice"], ["bob"]) for s in result)
+
+
+def test_merge_extracted_retains_later_scene_moment_and_cast():
+    a = _r(
+        0,
+        0,
+        chars=["Ana"],
+        objects_present=["toy"],
+        visual_direction=_direction(
+            key_action="Ana walks away.",
+            pose_expression="looking back",
+            viewpoint="rear view",
+            framing="wide shot",
+        ),
+    )
+    b = _r(
+        1,
+        1,
+        chars=["Maya"],
+        objects_present=["sword"],
+        visual_direction=_direction(
+            key_action="Maya raises the sword.",
+            pose_expression="shouting victoriously",
+            viewpoint="low-angle front view",
+            framing="close-up",
+        ),
+    )
+    merged = _merge_extracted(a, b)
+    assert merged.start == 0
+    assert merged.end == 1
+    assert merged.characters_present == ["Maya"]
+    assert merged.objects_present == ["sword"]
+    assert merged.visual_direction.key_action == "Maya raises the sword."
+    assert merged.visual_direction.pose_expression == "shouting victoriously"
+    assert merged.visual_direction.viewpoint == "low-angle front view"
+    assert merged.visual_direction.framing == "close-up"
+
+
+def test_merge_extracted_concatenates_object_events_in_source_order():
+    a = _r(
+        0,
+        0,
+        object_events=[_event("acquire", "Ana")],
+    )
+    b = _r(
+        1,
+        1,
+        object_events=[_event("release", "Ana"), _event("acquire", "Maya")],
+    )
+    merged = _merge_extracted(a, b)
+    assert len(merged.object_events) == 3
+    assert [e.action for e in merged.object_events] == ["acquire", "release", "acquire"]
+    assert [e.holder_name for e in merged.object_events] == ["Ana", "Ana", "Maya"]
+
+
+def test_merge_extracted_explicit_later_location_wins():
+    a = _r(0, 0, location="the beach")
+    b = _r(1, 1, location="the hill")
+    merged = _merge_extracted(a, b)
+    assert merged.location_name == "the hill"
+
+
+def test_merge_extracted_later_null_location_falls_back_to_earlier():
+    a = _r(0, 0, location="the beach")
+    b = _r(1, 1, location=None)
+    merged = _merge_extracted(a, b)
+    assert merged.location_name == "the beach"
+
+
+def test_direction_source_provenance_is_transient_and_not_in_model_fields():
+    assert "_direction_source" not in ExtractedScene.model_fields
+    unmerged = _r(0, 0)
+    assert getattr(unmerged, "_direction_source", "unmerged") == "unmerged"
+    merged = _merge_extracted(_r(0, 0), _r(1, 1))
+    assert getattr(merged, "_direction_source", None) == "retained-later-merge"
 
 
 # --- thin-scene floor (#31) ---
@@ -269,12 +516,12 @@ def test_merge_thin_keeps_every_sentence_on_exactly_one_page():
     assert covered == list(range(7))
 
 
-def test_merge_thin_carries_both_pages_characters():
+def test_merge_thin_retains_later_scene_characters():
     units = _units(2, 3, 20, 20)
     result = merge_thin(
         [_r(0, 0, ["alice"]), _r(1, 1, ["bob"]), _r(2, 2), _r(3, 3)], units
     )
-    assert set(result[0].characters_present) == {"alice", "bob"}
+    assert result[0].characters_present == ["bob"]
 
 
 def test_merge_thin_leaves_a_book_of_full_pages_untouched():
@@ -294,8 +541,6 @@ def test_location_name_survives_the_de_overlap_site():
     result = repair([_r(0, 3, location="the beach"), _r(2, 4, location="the hill")], 5)
     assert result[1].start == 4                      # this one WAS reconstructed by de-overlap
     assert result[1].location_name == "the hill"
-
-
 
 
 def test_location_name_survives_the_leading_gap_fill_site():
@@ -323,7 +568,7 @@ def test_location_name_survives_the_max_scenes_merge_site():
     result = repair(scenes, 11)
 
     assert len(result) == 10
-    assert result[0].location_name == "the hill"     # `a.location_name or b.location_name`
+    assert result[0].location_name == "the hill"     # `b.location_name or a.location_name`
 
 
 def test_location_name_survives_the_merge_thin_site():
@@ -331,27 +576,26 @@ def test_location_name_survives_the_merge_thin_site():
     result = merge_thin(
         [_r(0, 0, location="the beach"), _r(1, 1, location="the hill"), _r(2, 2), _r(3, 3)], units
     )
-    assert result[0].location_name == "the beach"
+    assert result[0].location_name == "the hill"
 
 
 # --- §6 test 5: the merge rule itself ---
 
-def test_a_merge_takes_the_first_scenes_location_when_both_have_one():
-    """`a.location_name or b.location_name` — the earlier scene wins, which is the same
-    earlier-scene-wins policy de-overlap already uses."""
+def test_a_merge_takes_the_later_scenes_location_when_both_have_one():
+    """`b.location_name or a.location_name` — the later scene wins."""
     scenes = [_r(i, i) for i in range(11)]
     scenes[0] = _r(0, 0, location="the beach")
     scenes[1] = _r(1, 1, location="the hill")
 
-    assert repair(scenes, 11)[0].location_name == "the beach"
+    assert repair(scenes, 11)[0].location_name == "the hill"
 
 
-def test_merge_thin_takes_the_first_scenes_location_when_both_have_one():
+def test_merge_thin_takes_the_later_scenes_location_when_both_have_one():
     units = _units(2, 3, 20, 20)
     result = merge_thin(
         [_r(0, 0, location="the beach"), _r(1, 1, location="the hill"), _r(2, 2), _r(3, 3)], units
     )
-    assert result[0].location_name == "the beach"
+    assert result[0].location_name == "the hill"
 
 
 
@@ -461,7 +705,11 @@ def test_segment_does_not_add_a_merely_mentioned_offscreen_character():
                 start=0,
                 end=0,
                 characters_present=["Ana"],
-                visual_direction="Ana looks sadly out the window in profile.",
+                visual_direction=_direction(
+                    key_action="Ana looks sadly out the window.",
+                    viewpoint="profile view",
+                    framing="medium shot",
+                ),
             )
         ]
     )
@@ -482,7 +730,11 @@ def test_segment_rejects_an_unknown_visible_character():
                 start=0,
                 end=0,
                 characters_present=["Ghost"],
-                visual_direction="Ghost crosses the room in a wide view.",
+                visual_direction=_direction(
+                    key_action="Ghost crosses the room.",
+                    viewpoint="wide view",
+                    framing="wide shot",
+                ),
             )
         ]
     )
@@ -498,7 +750,11 @@ def test_segment_rejects_direction_naming_a_roster_character_outside_the_cast():
                 start=0,
                 end=0,
                 characters_present=["Ana"],
-                visual_direction="Ana watches the Shadow Wizard flee away from her.",
+                visual_direction=_direction(
+                    key_action="Ana watches the Shadow Wizard flee away from her.",
+                    viewpoint="wide view",
+                    framing="wide shot",
+                ),
             )
         ]
     )
@@ -829,3 +1085,56 @@ def test_segmentation_prompt_names_the_shared_scene_ceiling():
     )
     assert f"- At most {MAX_SCENES} scenes." in formatted
     assert "15 scenes" not in formatted
+
+
+def test_merged_scene_caption_range_remains_merged_redacted_excerpt():
+    raw = SceneSegmentation(
+        scenes=[
+            _r(0, 0, chars=["Ana"], visual_direction=_direction("Ana walks right.")),
+            _r(1, 1, chars=["Ana"], visual_direction=_direction("Ana jumps for joy.")),
+            _r(2, 2, chars=["Ana"], visual_direction=_direction("Ana sleeps.")),
+            _r(3, 3, chars=["Ana"], visual_direction=_direction("Ana wakes up.")),
+        ]
+    )
+    units = ["Ana decided to run.", "She ran fast.", "She went home to rest.", "The sun rose."]
+    state = _state(
+        raw=" ".join(units),
+        characters=[_char("c0", "Ana")],
+    )
+    with patch("pipeline.segment.segment_scenes", return_value=raw):
+        result = segment(state)
+
+    first_scene = result["scenes"][0]
+    assert first_scene.text_excerpt == "Ana decided to run. She ran fast."
+    assert first_scene.caption == "Ana decided to run. She ran fast."
+    assert "Ana jumps for joy" in first_scene.visual_direction
+
+
+def test_dialogue_remains_in_caption_and_absent_from_rendered_direction():
+    raw = SceneSegmentation(
+        scenes=[
+            _r(
+                0,
+                0,
+                chars=["Leo"],
+                visual_direction=_direction(
+                    key_action="Leo stands awake and raises one hand in greeting.",
+                    pose_expression="smiling cheerfully",
+                    viewpoint="front-facing eye-level view",
+                    framing="medium shot",
+                ),
+            )
+        ]
+    )
+    state = _state(
+        raw='Leo said, "Hello world! We did it!"',
+        characters=[_char("c0", "Leo")],
+    )
+    with patch("pipeline.segment.segment_scenes", return_value=raw):
+        scene = segment(state)["scenes"][0]
+
+    assert scene.text_excerpt == 'Leo said, "Hello world! We did it!"'
+    assert scene.caption == 'Leo said, "Hello world! We did it!"'
+    assert "Hello world" not in scene.visual_direction
+    assert "We did it" not in scene.visual_direction
+    assert "Leo stands awake and raises one hand in greeting." in scene.visual_direction

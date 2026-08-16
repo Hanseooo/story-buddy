@@ -1,9 +1,10 @@
 import logging
 import re
 
+from collections.abc import Sequence
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, PrivateAttr, field_validator
 
 from app.config import MAX_SCENES, MIN_SCENE_WORDS, MIN_SCENES
 from contracts.story_memory import Character, Location, Scene, StoryMemory, StoryObject, TimelineEvent
@@ -25,6 +26,44 @@ class ExtractedObjectEvent(BaseModel):
     holder_name: str
 
 
+class ExtractedVisualDirection(BaseModel):
+    key_action: str
+    pose_expression: str | None = None
+    viewpoint: str
+    framing: str
+
+    @field_validator("key_action", "pose_expression", "viewpoint", "framing", mode="before")
+    @classmethod
+    def validate_visual_field(cls, v: str | None, info) -> str | None:
+        if v is None:
+            if info.field_name != "pose_expression":
+                raise ValueError(f"{info.field_name} is required")
+            return None
+        if not isinstance(v, str):
+            raise ValueError(f"{info.field_name} must be a string")
+        trimmed = v.strip()
+        if not trimmed:
+            raise ValueError(f"{info.field_name} must not be blank")
+        if "\n" in v or "\r" in v:
+            raise ValueError(f"{info.field_name} must not contain newlines")
+        if any(q in v for q in ('"', '“', '”')):
+            raise ValueError(f"{info.field_name} must not contain quotes")
+        return trimmed
+
+
+def render_visual_direction(
+    direction: ExtractedVisualDirection,
+    relations: Sequence[str] = (),
+) -> str:
+    base_parts = [direction.key_action]
+    if direction.pose_expression:
+        base_parts.append(direction.pose_expression)
+    base = f"{' '.join(base_parts)} Viewpoint: {direction.viewpoint}. Framing: {direction.framing}."
+    if relations:
+        return " ".join([base, *relations])
+    return base
+
+
 class ExtractedScene(BaseModel):
     start: int                        # inclusive index into the numbered units
     end: int                          # inclusive
@@ -32,15 +71,10 @@ class ExtractedScene(BaseModel):
     location_name: str | None = None  # Location.name value — node maps to a loc_id, null → inherit
     objects_present: list[str] = Field(default_factory=list)
     object_events: list[ExtractedObjectEvent] = Field(default_factory=list)
-    visual_direction: str
+    visual_direction: ExtractedVisualDirection
 
-    @field_validator("visual_direction")
-    @classmethod
-    def direction_is_not_blank(cls, value: str) -> str:
-        value = value.strip()
-        if not value:
-            raise ValueError("visual_direction must not be blank")
-        return value
+    # ponytail: log-only provenance attribute; intentionally not part of the schema or persisted contract
+    _direction_source: str = PrivateAttr(default="unmerged")
 
 
 class SceneSegmentation(BaseModel):
@@ -73,7 +107,8 @@ Rules:
 story does not say.
 - objects_present lists object names exactly as given above.
 - object_events lists ordered acquire or release events for objects in the scene.
-- visual_direction is a short literal visual direction containing subject, action, target or movement direction when applicable, and viewpoint.
+- visual_direction captures exactly one drawable still-frame moment: key_action (one visible action with subject and target), pose_expression (visible pose or facial expression, or null), viewpoint (one camera angle relative to the action: front, profile, rear, three-quarter, overhead, occluded, etc. — choose story-appropriate angle such as rear view when running away), and framing (shot scale: close-up, medium shot, wide shot, etc.). Describe visible-only facts in one still frame. Convert speech into visible gesture or reaction. Never include written words, dialogue, speech bubbles, captions, labels, or readable signage. Never use quotes or newlines.
+- Keep sequential or non-simultaneous actions in the caption instead of creating a montage, split panel, duplicate character, or impossible pose.
 - Together the scenes must cover every sentence."""
 
 
@@ -100,15 +135,17 @@ def segment_scenes(
 
 
 def _merge_extracted(a: ExtractedScene, b: ExtractedScene) -> ExtractedScene:
-    return ExtractedScene(
+    merged = ExtractedScene(
         start=a.start,
         end=b.end,
-        characters_present=list(dict.fromkeys(a.characters_present + b.characters_present)),
-        location_name=a.location_name or b.location_name,
-        objects_present=list(dict.fromkeys(a.objects_present + b.objects_present)),
+        characters_present=b.characters_present,
+        location_name=b.location_name or a.location_name,
+        objects_present=b.objects_present,
         object_events=[*a.object_events, *b.object_events],
-        visual_direction=" ".join([a.visual_direction, b.visual_direction]),
+        visual_direction=b.visual_direction,
     )
+    merged._direction_source = "retained-later-merge"
+    return merged
 
 
 def repair(scenes: list[ExtractedScene], n: int) -> list[ExtractedScene]:
@@ -283,10 +320,11 @@ def segment(state: StoryMemory) -> dict:
             char_ids.append(char_id)
         char_ids = list(dict.fromkeys(char_ids))
 
+        rendered_base = render_visual_direction(r.visual_direction)
         outside_cast = [
             name
             for name, char_id in name_to_id.items()
-            if char_id not in char_ids and _names_character(r.visual_direction, name)
+            if char_id not in char_ids and _names_character(rendered_base, name)
         ]
         if outside_cast:
             raise ValueError(f"segment: visual_direction names character outside visible cast: {outside_cast}")
@@ -330,7 +368,7 @@ def segment(state: StoryMemory) -> dict:
             for obj_id in visible_objects
             if (holder_id := holder_by_obj.get(obj_id)) is not None
         ]
-        visual_direction = " ".join([r.visual_direction, *relations])
+        visual_direction = render_visual_direction(r.visual_direction, relations)
 
         loc_id = name_to_loc.get(r.location_name) if r.location_name else None
         if r.location_name and loc_id is None:
@@ -349,11 +387,14 @@ def segment(state: StoryMemory) -> dict:
             visual_direction=visual_direction,
         ))
         log.info(
-            "segment: s%d chars=%s objs=%s direction=%r",
+            "segment: s%d chars=%s objs=%s key_action=%r viewpoint=%r framing=%r source=%s",
             i,
             char_ids,
             visible_objects,
-            visual_direction,
+            r.visual_direction.key_action,
+            r.visual_direction.viewpoint,
+            r.visual_direction.framing,
+            getattr(r, "_direction_source", "unmerged"),
         )
 
     log.info("segment: minted %s", [s.scene_id for s in scenes])

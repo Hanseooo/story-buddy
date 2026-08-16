@@ -14,7 +14,7 @@ import logging
 from app.config import check_image_budget
 from contracts.story_memory import Attempt, StoryMemory
 from pipeline.generate_scene import generate_and_store
-from pipeline.prompt_optimizer import correct_prompt, referenced_characters
+from pipeline.prompt_optimizer import correct_prompt, correction_clauses, referenced_characters
 
 log = logging.getLogger(__name__)
 
@@ -33,12 +33,11 @@ def regenerate(state: StoryMemory) -> dict:
     if not scene.visual_direction:
         raise ValueError(f"regenerate: scene {scene.scene_id} has no visual_direction")
 
-    last = scene.attempts[-1]
-    base_prompt = last.prompt or scene.prompt
-    if base_prompt is None:
+    if scene.prompt is None:
         # Unreachable today: generate_scene always sets both. Drawing from correction clauses
         # with no base prompt is a guaranteed-garbage PAID image, so ADR-025 hard-fails instead.
         raise RuntimeError(f"regenerate: scene {scene.scene_id} has no prompt to correct (ADR-025)")
+    base_prompt = scene.prompt
 
     # ADR-025 D4: breaker before any spend. A retry is not exempt.
     check_image_budget(state.cost.image_count)
@@ -60,18 +59,36 @@ def regenerate(state: StoryMemory) -> dict:
     # A reason that IS named no longer proves the invariant on its own: `correct_prompt` drops a
     # clause whose axis is empty, so the guarantee now comes from its floor rather than from the
     # reason list being non-empty. Same invariant, enforced one level down.
+    last = scene.attempts[-1]
     v = last.vlm_verdict
-    identity_clause = not (v.same_character if v else True) and not last.failure_reasons
-    anatomy_clause = not (v.anatomy_intact if v else True)
-    text_clause = not (v.text_free if v else True)
+    same_char = v.same_character if v else True
+    anatomy_ok = v.anatomy_intact if v else True
+    text_ok = v.text_free if v else True
+    identity_clause = not same_char and not last.failure_reasons
+    anatomy_clause = not anatomy_ok
+    text_clause = not text_ok
+
+    raw_contradictions = last.scene_contradictions or []
+    unique_contradictions = list(dict.fromkeys(raw_contradictions))
+    dedup_contradictions_count = len(unique_contradictions)
+
+    rendered_clauses = correction_clauses(
+        last.failure_reasons,
+        state.characters,
+        state.style.prompt_fragment,
+        same_character=same_char,
+        anatomy_intact=anatomy_ok,
+        text_free=text_ok,
+        scene_contradictions=last.scene_contradictions,
+    )
     prompt = correct_prompt(
         base_prompt,
         last.failure_reasons,
         state.characters,
         state.style.prompt_fragment,
-        same_character=v.same_character if v else True,
-        anatomy_intact=v.anatomy_intact if v else True,
-        text_free=v.text_free if v else True,
+        same_character=same_char,
+        anatomy_intact=anatomy_ok,
+        text_free=text_ok,
         scene_contradictions=last.scene_contradictions,
     )
 
@@ -88,10 +105,12 @@ def regenerate(state: StoryMemory) -> dict:
     # unfillable) which this flag deliberately does not try to predict; it logs that route itself,
     # on the line immediately above this one.
     log.info(
-        "regenerate: scene_id=%s attempt_n=%d failure_reasons=%s scene_contradictions=%s same_character=%s "
-        "anatomy_intact=%s text_free=%s identity_clause=%s anatomy_clause=%s text_clause=%s "
-        "paid=%s prompt_len=%d",
-        scene.scene_id, attempt_n, [r.value for r in last.failure_reasons], last.scene_contradictions,
+        "regenerate: scene_id=%s attempt_n=%d base=scene.prompt latest_source_attempt=%d "
+        "correction_count=%d deduplicated_contradictions=%d failure_reasons=%s scene_contradictions=%s "
+        "same_character=%s anatomy_intact=%s text_free=%s identity_clause=%s anatomy_clause=%s "
+        "text_clause=%s paid=%s prompt_len=%d",
+        scene.scene_id, attempt_n, len(scene.attempts), len(rendered_clauses),
+        dedup_contradictions_count, [r.value for r in last.failure_reasons], last.scene_contradictions,
         v and v.same_character, v and v.anatomy_intact, v and v.text_free,
         identity_clause, anatomy_clause, text_clause, paid, len(prompt),
     )

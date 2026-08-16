@@ -98,6 +98,12 @@ class ExtractedObjectEvent(BaseModel):
     action: Literal["acquire", "release"]
     holder_name: str
 
+class ExtractedVisualDirection(BaseModel):
+    key_action: str
+    pose_expression: str | None = None
+    viewpoint: str
+    framing: str
+
 class ExtractedScene(BaseModel):
     start: int                      # inclusive index into the numbered units
     end: int                        # inclusive
@@ -105,13 +111,13 @@ class ExtractedScene(BaseModel):
     location_name: str | None = None  # Location.name value — node maps to a loc_id, null → inherit
     objects_present: list[str] = Field(default_factory=list)
     object_events: list[ExtractedObjectEvent] = Field(default_factory=list)
-    visual_direction: str           # Required non-blank direction string
+    visual_direction: ExtractedVisualDirection  # Required structured direction
+
+    _direction_source: str = PrivateAttr(default="unmerged")
 
 class SceneSegmentation(BaseModel):
     scenes: list[ExtractedScene]
 ```
-
-No id field, per D-G. `characters_present` represents intended-visible cast only. All five planning fields (`characters_present`, `location_name`, `objects_present`, `object_events`, `visual_direction`) are preserved through `repair` and `merge_thin`.
 
 ### Happy path
 
@@ -121,11 +127,11 @@ No id field, per D-G. `characters_present` represents intended-visible cast only
 3. `segment_scenes(units, state.characters, state.timeline, state.locations, state.objects)` — one `providers.structured_text` call,
    strict `json_schema` → `SceneSegmentation` (ADR-002). The prompt gets the numbered units, roster names,
    location names, object roster, and `timeline[]` as context.
-4. `repair(...)` — clamp, sort, de-overlap, close gaps, raise if empty, merge to ≤15. `_merge_extracted` combines payload fields deterministically.
+4. `repair(...)` — clamp, sort, de-overlap, close gaps, raise if empty, merge to ≤15. `_merge_extracted` combines payload fields deterministically: retains later structured visual direction, later cast, later objects, later explicit location (`b.location_name or a.location_name`), and concatenates object events in source order.
 5. Single-pass visible cast validation and object lifecycle resolution:
    - `characters_present` is strict visible cast authority; unknown character raises `ValueError`.
    - `visual_direction` naming a roster character outside `characters_present` raises `ValueError`.
-   - Object lifecycle pass tracks active objects and holders, formatting holder relationships into `visual_direction`.
+   - Object lifecycle pass tracks active objects and holders, formatting holder relationships into `visual_direction` via `render_visual_direction(r.visual_direction, relations)`.
    - Unknown object or holder raises `ValueError`; unknown location logs warning and carries forward.
 6. Mint `s{i}`, join units into `text_excerpt`, copy it into `caption`, map names → `char_id`s.
 7. Partial-return `{"scenes": [...]}` (ADR-024 — never mutate `state`).
@@ -150,12 +156,12 @@ kid prose (ADR-012), and a wrong boundary costs a slightly-off page break, not a
    whole-story floor cannot be rebuilt: it minted a scene with no `visual_direction`, which
    `generate_scene` would now have to draw blind.
 6. **Merge to ≤15** — while there are more than 15, merge the adjacent pair with the smallest
-   combined unit count using `_merge_extracted(a, b)` (union characters/objects, concatenate events and visual directions).
+   combined unit count using `_merge_extracted(a, b)` (retains later moment/cast/objects, later location, concatenates object events).
 
 ### Visible Cast Authority & Object Lifecycle Pass
 
 - **Visible Cast Authority:** `characters_present` is the single authoritative visible cast. Regex recovery is removed. If `characters_present` contains an unknown character name, or if `visual_direction` names a roster character not in `characters_present`, `segment` raises `ValueError`.
-- **Object Lifecycle Pass:** `holder_by_obj` is seeded with `owner_char_id`, but `active_objects` starts empty. An object activates upon explicit appearance in `objects_present` or an `acquire` event. In each beat, active objects whose current holder is visible in `characters_present` are included in `objects_present` and formatted into `visual_direction` (`"<object> is held by <holder>."`). Transfers apply `release` then `acquire` in narrative order. An unknown object name or holder raises `ValueError`.
+- **Object Lifecycle Pass:** `holder_by_obj` is seeded with `owner_char_id`, but `active_objects` starts empty. An object activates upon explicit appearance in `objects_present` or an `acquire` event. In each beat, active objects whose current holder is visible in `characters_present` are included in `objects_present` and formatted into `visual_direction` via `render_visual_direction(direction, relations)`. Transfers apply `release` then `acquire` in narrative order. An unknown object name or holder raises `ValueError`.
 
 ### Edge cases
 
@@ -179,8 +185,8 @@ A story that names no location leaves every `location_id` as `None` — identica
 Every repair and merge path now rebuilds scenes with `model_copy(update=...)` rather than a fresh
 `ExtractedScene(...)`, so `location_name` — and `visual-continuity`'s `objects_present`,
 `object_events` and `visual_direction` — propagate by construction instead of by being restated at
-eight call sites. `_merge_extracted` is the one place that combines them: `a.location_name or
-b.location_name`, union the object lists, concatenate the events and the directions.
+eight call sites. `_merge_extracted` is the one place that combines them: `b.location_name or
+a.location_name`, retain later objects/cast/direction, concatenate events.
 
 ### Invariant: no duplicate `char_id` (`scene-setting-and-subject-binding.md` §4.3)
 

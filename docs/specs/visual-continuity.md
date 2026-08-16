@@ -214,18 +214,17 @@ visible scene is the acquisition point; the sword is not back-projected into an 
 
 ### 4.5 Prompt composition
 
-`build_prompt` emits blocks in this order:
+`build_prompt` emits blocks in this order (reconciled by `visual-prompt-reliability` and ADR-040):
 
-1. Numbered reference roll, with each referenced character's complete textual profile folded into
-   the same sentence.
-2. Complete textual profiles for visible characters without a reference.
+1. Numbered reference roll, with each referenced character's appearance axes folded into the same sentence (narrative `notes` omitted per ADR-040).
+2. Appearance axes for visible characters without a reference.
 3. Exact visible-cast count and names.
 4. Visible object descriptions.
-5. `Visual direction: ...`.
+5. `Visual direction: ...` (the sole composition authority).
 6. The existing setting line.
-7. Verbatim `text_excerpt`.
-8. Style fragment.
+7. Style fragment.
 
+Verbatim `text_excerpt` is omitted from the image prompt and reserved exclusively for the printed caption.
 Current holder relations are appended deterministically to `visual_direction` by `segment`; the
 global `owner_char_id` is never reused after a transfer. The roll gains one fixed sentence:
 reference images define appearance, not pose, crop, expression,

@@ -11,24 +11,27 @@
 
 ## 1. Purpose
 
-Build the text prompt `generate_scene` sends to the image model: scene text + present characters'
-descriptions + the frozen style fragment. Separately, build the ADR-010 corrected prompt a future
-targeted-retry node uses after a failed consistency check, by turning the judge's `failure_reasons`
-into emphasis clauses.
+Build the text prompt `generate_scene` sends to the image model: present characters' appearance
+descriptions + visible objects + rendered visual direction + location setting + the frozen style
+fragment (`SCENE_PROMPT_VERSION = 2`). Per ADR-040, narrative text excerpt and character notes are
+excluded from positive scene prompt construction. Separately, build the ADR-010 corrected prompt a
+future targeted-retry node uses after a failed consistency check, by turning the judge's
+`failure_reasons` into emphasis clauses.
 
 ## 2. Contract slice (Story Memory — MASTER_SPEC §3)
 
-- **Reads:** `Scene.text_excerpt`, `Scene.characters_present` (joined against `state.characters` for
-  `CharacterDescription`), `state.style.prompt_fragment`; `correct_prompt` additionally reads
+- **Reads:** `Scene.characters_present` (joined against `state.characters` for appearance axes of
+  `CharacterDescription`), `state.style.prompt_fragment`, `Location`, `Scene.objects_present`,
+  `state.objects`, `Scene.visual_direction`; `correct_prompt` additionally reads
   `Attempt.failure_reasons`.
 - **Writes:** nothing itself. `generate_scene` writes the return value into `Scene.prompt` (the field
   already exists; no schema change, no `schema_version` bump).
 - **Invariants:**
   1. `build_prompt` always includes the style fragment (ADR-007: style rides the reference; the
      fragment is belt-and-suspenders on top of that).
-  2. `build_prompt` never fabricates content beyond `text_excerpt`, the present characters'
-     populated description axes, **and the scene's location** (`Location.name`, plus
-     `Location.description` when populated — widened by `scene-setting-and-subject-binding.md` §2).
+  2. `build_prompt` never fabricates content beyond present characters' populated appearance axes
+     (species, colours, body_features, clothing — omitting narrative notes per ADR-040), visible
+     objects, rendered visual direction, the scene's location, and the style fragment.
   3. `correct_prompt` never drops content from the prior prompt — it only appends emphasis clauses.
 
 ## 3. Position in the system map
@@ -52,7 +55,6 @@ input_gate ──► analyze ──► segment ──► char_bible ──► ge
 
 ```python
 def build_prompt(
-    text_excerpt: str,
     characters_present: list[str],
     characters: list[Character],
     style_fragment: str | None,
@@ -74,10 +76,10 @@ Helpers exported because pipeline nodes share them. `filtered_object` applies th
 
 ### Block Ordering and Invariants
 
-`build_prompt` emits prompt blocks in the exact contract order:
+`build_prompt` emits prompt blocks in the exact contract order (`SCENE_PROMPT_VERSION = 2`):
 1. Reference roll (`Image N is...`) with extended `REFERENCE_CLAUSE`:
    > `"The reference images define appearance, not pose, crop, expression or viewing angle; the Visual direction controls those scene properties."`
-2. Text-only character descriptions (unreferenced present characters)
+2. Text-only character descriptions (unreferenced present characters, appearance axes only)
 3. Exact visible cast count and non-human clause (`SUBJECT_COUNT_CLAUSE`, `NON_HUMAN_CLAUSE`)
 4. Visible objects block:
    ```text
@@ -89,10 +91,9 @@ Helpers exported because pipeline nodes share them. `filtered_object` applies th
    Visual direction: <visual_direction>
    ```
 6. Setting line (`Setting: <name> - <description>`)
-7. Verbatim text excerpt (`text_excerpt`)
-8. Style fragment (`style`)
+7. Style fragment (`style`)
 
-`generate_scene` requires a non-empty `scene.visual_direction` and logs `image_model=settings.fal_image_model` alongside attempt metrics.
+`generate_scene` requires a non-empty `scene.visual_direction` and logs `image_model=settings.fal_image_model` alongside attempt metrics and `scene_prompt_version=2`.
 
 `referenced_characters` deduplicates `characters_present` order-preservingly, so a checkpoint
 written before `segment`'s own dedup cannot send one reference image as two subjects on resume.
