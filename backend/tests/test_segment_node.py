@@ -6,7 +6,16 @@ import pytest
 from pydantic import ValidationError
 
 from app.config import MAX_SCENES, MIN_SCENE_WORDS, MIN_SCENES
-from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, Input, Location, Scene, StoryMemory, StoryObject
+from contracts.story_memory import (
+    CURRENT_SCHEMA_VERSION,
+    Character,
+    CharacterDescription,
+    Input,
+    Location,
+    Scene,
+    StoryMemory,
+    StoryObject,
+)
 from pipeline.segment import (
     SEGMENTATION_PROMPT,
     ExtractedScene,
@@ -341,6 +350,34 @@ def test_segment_scenes_passes_the_object_roster_and_new_schema_to_provider():
     assert "object_events" not in prompt
     assert "visual_direction" in prompt
     assert schema is SceneSegmentation
+
+
+def test_segment_renders_each_scene_direction_once():
+    raw = SceneSegmentation(scenes=[_r(0, 0, chars=["Ana"])])
+    state = _state(raw="Ana walks across the room.", characters=[_char("c0", "Ana")])
+    with patch("pipeline.segment.segment_scenes", return_value=raw), patch(
+        "pipeline.segment.render_visual_direction", wraps=render_visual_direction
+    ) as renderer:
+        segment(state)
+
+    assert renderer.call_count == 1
+
+
+def test_segment_prompt_makes_object_visibility_explicit_per_selected_frame():
+    with patch(
+        "pipeline.segment.structured_text",
+        return_value=SceneSegmentation(scenes=[_r(0, 0)]),
+    ) as provider:
+        segment_scenes(["A story."], [], [], [], [])
+
+    prompt, _ = provider.call_args.args
+    for rule in (
+        "only when the object should be visible in the selected still frame",
+        "Do not list an object merely because a character owns it",
+        "Do not carry an object forward from an earlier scene",
+        "Do not infer holding, carrying, or transfer relations",
+    ):
+        assert rule in prompt
 
 
 @pytest.mark.parametrize("transform", ["repair", "merge_thin"])
@@ -826,6 +863,51 @@ def test_unowned_object_explicitly_visible_in_scene_1_and_absent_in_scene_2():
     with patch("pipeline.segment.segment_scenes", return_value=raw):
         scenes = segment(state)["scenes"]
     assert [scene.objects_present for scene in scenes] == [["obj1"], []]
+
+
+def test_jamie_bolt_contract_keeps_objects_explicit_to_the_selected_frame():
+    """Local contract coverage for the production regression; Tier-B still needs the exact story."""
+    raw = (
+        "Jamie hands the favorite toy to Bolt in the bright kitchen at sunrise. "
+        "Bolt opens the refrigerator while Jamie watches from the doorway with a smile. "
+        "Jamie spreads the blanket across the carpet beside the old garden gate. "
+        "Jamie and Bolt walk together through the quiet garden under the trees."
+    )
+    objects = [
+        StoryObject(obj_id="obj-toy", name="favorite toy", description="a small yellow toy", owner_char_id="c0"),
+        StoryObject(obj_id="obj-fridge", name="refrigerator", description="a tall white refrigerator"),
+        StoryObject(obj_id="obj-carpet", name="carpet", description="a soft blue carpet"),
+    ]
+    raw_segmentation = SceneSegmentation(
+        scenes=[
+            _r(0, 0, chars=["Jamie", "Bolt"], objects_present=["favorite toy"], visual_direction="Jamie hands the favorite toy to Bolt."),
+            _r(1, 1, chars=["Bolt", "Jamie"], objects_present=["refrigerator"], visual_direction="Bolt opens the refrigerator."),
+            _r(2, 2, chars=["Jamie"], objects_present=["carpet"], visual_direction="Jamie spreads the carpet."),
+            _r(3, 3, chars=["Jamie", "Bolt"], location="garden", visual_direction="Jamie and Bolt walk together."),
+        ]
+    )
+    state = _state(
+        raw=raw,
+        characters=[
+            _char("c0", "Jamie"),
+            Character(char_id="c1", name="Bolt", description=CharacterDescription(species="robot")),
+        ],
+        locations=[Location(loc_id="loc0", name="garden", description="a quiet garden")],
+        objects=objects,
+    )
+
+    with patch("pipeline.segment.segment_scenes", return_value=raw_segmentation):
+        scenes = segment(state)["scenes"]
+
+    assert [scene.objects_present for scene in scenes] == [
+        ["obj-toy"],
+        ["obj-fridge"],
+        ["obj-carpet"],
+        [],
+    ]
+    assert all("is held by" not in scene.visual_direction for scene in scenes)
+    assert "Jamie hands the favorite toy to Bolt." in scenes[0].visual_direction
+    assert all("robot" not in obj.name.casefold() for obj in objects)
 
 
 def test_segment_empty_roster_gives_empty_characters_present_no_raise():

@@ -87,7 +87,9 @@ Rules:
 - List a character in characters_present only when they are intended to be visible in this scene frame. List them even when the sentences refer to them only as he, she, it or they.
 - location_name is where the scene happens, named exactly as given above. Leave it null if the \
 story does not say.
-- objects_present lists object names exactly as given above.
+- objects_present lists object names exactly as given above, but only when the object should be visible in the selected still frame. Treat this roster as a reference list, not a visibility list.
+- Do not list an object merely because a character owns it, because it appeared in an earlier scene, or because it is mentioned outside the selected moment.
+- Do not carry an object forward from an earlier scene. Do not infer holding, carrying, or transfer relations from ownership, earlier scenes, or adjacent actions. When physical interaction matters, state it directly in key_action or pose_expression and list the object for this frame.
 - visual_direction captures exactly one drawable still-frame moment: key_action (one visible action with subject and target), pose_expression (visible pose or facial expression, or null), viewpoint (one camera angle relative to the action: front, profile, rear, three-quarter, overhead, occluded, etc. — choose story-appropriate angle such as rear view when running away), and framing (shot scale: close-up, medium shot, wide shot, etc.). Describe visible-only facts in one still frame. Convert speech into visible gesture or reaction. Never include written words, dialogue, speech bubbles, captions, labels, or readable signage. Never use quotes or newlines.
 - Keep sequential or non-simultaneous actions in the caption instead of creating a montage, split panel, duplicate character, or impossible pose.
 - Together the scenes must cover every sentence."""
@@ -313,7 +315,7 @@ def segment(state: StoryMemory) -> dict:
             visible_objects.append(obj.obj_id)
 
         visible_objects = list(dict.fromkeys(visible_objects))
-        visual_direction = render_visual_direction(r.visual_direction)
+        visual_direction = rendered_base
 
         loc_id = name_to_loc.get(r.location_name) if r.location_name else None
         if r.location_name and loc_id is None:
