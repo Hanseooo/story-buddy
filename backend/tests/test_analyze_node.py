@@ -447,46 +447,49 @@ def test_extracted_object_requires_a_stable_physical_description():
         ExtractedObject.model_validate({"name": "wooden sword", "owner_name": "Ana"})
 
 
-def test_story_analysis_rejects_an_entity_in_both_rosters():
-    with pytest.raises(ValidationError, match="both character and object"):
-        _analysis(
-            characters=[_character("talking kettle", species="kettle")],
-            objects=[
-                {
-                    "name": "talking kettle",
-                    "description": "a copper kettle with a black handle",
-                    "owner_name": None,
-                }
-            ],
-        )
+def test_story_analysis_drops_an_exact_character_duplicate_object():
+    analysis = _analysis(
+        characters=[_character("talking kettle", species="kettle")],
+        objects=[
+            {
+                "name": "talking kettle",
+                "description": "a copper kettle with a black handle",
+                "owner_name": None,
+            }
+        ],
+    )
+
+    assert analysis.objects == []
 
 
-def test_story_analysis_rejects_explicit_parenthetical_character_alias():
-    with pytest.raises(ValidationError, match="both character and object"):
-        _analysis(
-            characters=[_character("Leo", species="human")],
-            objects=[
-                {
-                    "name": "the robot (Leo)",
-                    "description": "a small toy robot made of tin",
-                    "owner_name": None,
-                }
-            ],
-        )
+def test_story_analysis_strips_explicit_parenthetical_character_alias():
+    analysis = _analysis(
+        characters=[_character("Leo", species="human")],
+        objects=[
+            {
+                "name": "the robot (Leo)",
+                "description": "a small toy robot made of tin",
+                "owner_name": None,
+            }
+        ],
+    )
+
+    assert analysis.objects[0].name == "the robot"
 
 
-def test_story_analysis_rejects_parenthetical_alias_with_casefold_and_whitespace():
-    with pytest.raises(ValidationError, match="both character and object"):
-        _analysis(
-            characters=[_character("LEO", species="human")],
-            objects=[
-                {
-                    "name": "the robot ( Leo )",
-                    "description": "a small toy robot made of tin",
-                    "owner_name": None,
-                }
-            ],
-        )
+def test_story_analysis_strips_parenthetical_alias_with_casefold_and_whitespace():
+    analysis = _analysis(
+        characters=[_character("LEO", species="human")],
+        objects=[
+            {
+                "name": "the robot ( Leo )",
+                "description": "a small toy robot made of tin",
+                "owner_name": None,
+            }
+        ],
+    )
+
+    assert analysis.objects[0].name == "the robot"
 
 
 @pytest.mark.parametrize("object_name", ["Leo's toy", "Leo's robot kit", "toy robot"])

@@ -52,14 +52,6 @@ class ExtractedObject(BaseModel):
 _EXPLICIT_ALIAS = re.compile(r"\(([^()]*)\)\s*$")
 
 
-def _parenthetical_alias(name: str) -> str | None:
-    match = _EXPLICIT_ALIAS.search(name)
-    if not match:
-        return None
-    alias = match.group(1).strip().casefold()
-    return alias or None
-
-
 class StoryAnalysis(BaseModel):
     """The transient wrapper — never persisted."""
 
@@ -71,15 +63,18 @@ class StoryAnalysis(BaseModel):
     @model_validator(mode="after")
     def entity_rosters_do_not_overlap(self) -> "StoryAnalysis":
         character_names = {character.name.casefold() for character in self.characters}
-        overlap: set[str] = set()
+        objects: list[ExtractedObject] = []
         for obj in self.objects:
             if obj.name.casefold() in character_names:
-                overlap.add(obj.name.casefold())
-            alias = _parenthetical_alias(obj.name)
-            if alias and alias in character_names:
-                overlap.add(alias)
-        if overlap:
-            raise ValueError(f"entity appears as both character and object: {sorted(overlap)}")
+                continue
+            match = _EXPLICIT_ALIAS.search(obj.name)
+            if match and match.group(1).strip().casefold() in character_names:
+                name = obj.name[: match.start()].rstrip()
+                if not name or name.casefold() in character_names:
+                    continue
+                obj = obj.model_copy(update={"name": name})
+            objects.append(obj)
+        self.objects = objects
         return self
 
 

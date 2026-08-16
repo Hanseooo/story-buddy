@@ -1,3 +1,32 @@
+# Current Task: Production analyze alias regression
+
+- [x] Reproduce the exact Leo/object alias failure and trace the pre/post-merge behavior.
+- [x] Identify the smallest fix that preserves the frozen StoryAnalysis boundary and prompt invariants.
+- [x] Add a regression test that fails on the current code.
+- [x] Implement the root-cause fix and update the affected feature spec if behavior changes.
+- [x] Run focused tests, backend lint/full tests, and report residual risk.
+
+## Success criteria
+
+An extraction response containing a character plus an explicit object alias no longer kills a job,
+the duplicate entity cannot reach downstream state, and the deterministic suite proves the behavior.
+
+## Outcome
+
+The merged validator rejected the model's known `the robot (Leo)` response, and the provider's
+single unchanged re-ask repeated the invalid payload. `StoryAnalysis` now drops exact character
+duplicates and strips a trailing parenthetical character alias while retaining the prop name.
+Updated `story-analyzer.md` and `visual-prompt-reliability.md` to describe normalization.
+
+Verification: TDD red run failed 3 tests on the old behavior; focused analyzer tests passed 49;
+`uv run ruff check .` passed; `uv run pytest` passed 903 tests, skipped 71, deselected 6, with one
+pre-existing Starlette warning; `git diff --check` passed.
+
+Residual risk: implicit semantic aliases such as character `Leo` plus object `the robot` remain
+intentionally unresolved because they cannot be merged deterministically without false positives.
+
+---
+
 # Current Task: Visual-prompt reliability implementation
 
 - [x] Plan 1: Analysis & Segmentation (explicit alias boundary, structured drawable moment, deterministic later-moment merge).
@@ -78,7 +107,7 @@ blocked decision is explicit.
 ## Outcome
 
 The draft S1 spec defines a visual-only scene prompt, structured one-moment segmentation,
-explicit actor/object-alias rejection, and clean-base latest-only retry corrections. It preserves
+explicit actor/object-alias boundary handling, and clean-base latest-only retry corrections. It preserves
 verbatim captions, story-appropriate rear/profile/overhead views, the three-attempt cap, graph shape,
 and raw judge evidence. The self-review caught and fixed a merge inconsistency: the later selected
 moment now also owns visible cast, visible objects, and explicit location, while ordered holder

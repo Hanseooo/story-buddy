@@ -148,17 +148,18 @@ The extraction prompt continues using agency as the boundary:
 - an inert prop belongs in `objects[]`;
 - the same entity must not appear in both, even when one name contains an explanatory alias.
 
-The existing `StoryAnalysis` boundary validator widens only to **explicit aliases**:
+The existing `StoryAnalysis` boundary normalizer widens only to **explicit aliases**:
 
-1. preserve its case-insensitive exact-name overlap check;
-2. additionally reject an object whose parenthetical alias equals a character name after trimming
-   whitespace and case-folding — `the robot (Leo)` conflicts with character `Leo`;
-3. do not use fuzzy substring or species matching. `Leo's toy`, `Leo's robot kit`, and a generic
+1. drop an object whose case-insensitive name equals a character name;
+2. strip the trailing parenthetical alias when it equals a character name after trimming whitespace
+   and case-folding — `the robot (Leo)` becomes `the robot`;
+3. drop the object if stripping leaves no name or leaves another character duplicate;
+4. do not use fuzzy substring or species matching. `Leo's toy`, `Leo's robot kit`, and a generic
    inert `toy robot` remain valid objects.
 
-A rejected structured answer uses `providers.structured_text`'s existing single schema re-ask. A
-second invalid answer raises before `char_bible` or Fal spends anything (ADR-025). No node-local
-retry is added.
+This boundary normalization keeps the valid prop while ensuring the actor alias cannot reach
+`segment`. Other structural schema failures still use `providers.structured_text`'s existing
+single schema re-ask; no node-local retry is added.
 
 **Known ceiling:** an implicit alias such as character `Leo` plus object `the robot`, with no name
 link, cannot be proven identical deterministically. A semantic fuzzy matcher would create false
@@ -309,8 +310,8 @@ evidence and ADR; it is not bundled into prompt cleanup.
 
 | Case | Required behavior |
 |---|---|
-| Exact character/object duplicate | Existing boundary rejection and one provider re-ask. |
-| `the robot (Leo)` plus character `Leo` | Explicit-alias rejection and one provider re-ask. |
+| Exact character/object duplicate | Boundary normalization drops the duplicate object. |
+| `the robot (Leo)` plus character `Leo` | Boundary normalization keeps the object as `the robot`. |
 | `Leo's toy` plus character `Leo` | Valid object; possession is not identity. |
 | Implicit alias `Leo` / `the robot` | Prompt guidance only; logged Tier-B ceiling, no fuzzy merge. |
 | Story contains direct dialogue | Caption preserves it; image prompt receives only visible action/reaction. |
@@ -338,8 +339,8 @@ evidence and ADR; it is not bundled into prompt cleanup.
 - [x] **CC-2 PII redaction** — segmentation and captions continue reading `redacted_text`; no raw
   input is reintroduced into the image prompt.
 - [x] **CC-3 Cost control** — no added call site, successful-path call, image call, or changed attempt
-  cap. An alias validation failure may activate the existing single structured-output re-ask before
-  Fal spend. `IMAGE_BUDGET=55` remains truthful.
+  cap. Alias normalization adds no provider call and occurs before Fal spend. `IMAGE_BUDGET=55`
+  remains truthful.
 - [x] **CC-5 Observability** — see §5.1.
 - [x] **CC-7 Reproducibility** — no new seed behavior. Fal seed determinism remains an acknowledged
   unrun probe; the three-story check records prompts and attempt ids rather than claiming causal
@@ -376,12 +377,11 @@ generated-image quality.
 
 ### 6.1 `analyze`
 
-1. Exact same name in both rosters still fails boundary validation.
-2. Character `Leo` plus object `the robot (Leo)` fails boundary validation.
+1. Exact same name in both rosters is dropped from `objects[]`.
+2. Character `Leo` plus object `the robot (Leo)` yields object `the robot`.
 3. Matching is case-insensitive and trims parenthetical whitespace.
 4. `Leo's toy`, `Leo's robot kit`, and inert `toy robot` remain valid objects.
-5. An alias boundary failure reaches `structured_text`'s existing one-re-ask behavior; no node retry
-   or image call is added.
+5. Alias normalization adds no node retry, provider re-ask, or image call.
 
 ### 6.2 `segment`
 

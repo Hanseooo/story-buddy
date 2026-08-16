@@ -33,7 +33,7 @@ the redacted input text, so `char_bible` has a stable roster to draw canonical r
    not trusted from the model. A model that returns `1, 2, 5` or a duplicate `order` validates
    fine against Pydantic and would silently corrupt the only ordering `segment` receives.
 5. Every emitted `Character` has a complete visual profile: at least three discriminators across at least two of `colours`, `body_features`, and `clothing`. Humanoids carry a required `clothing` description. Enforced by transient `is_humanoid` validation at the LLM boundary; `is_humanoid` is not persisted in the contract. Exact blank/placeholder values are scrubbed from every downstream prompt projection.
-6. `characters[]` and `objects[]` are mutually exclusive by agency: actors perform actions and decide; inert items belong in `objects[]`. An entity appearing in both rosters fails boundary validation, including exact case-insensitive matches and explicit parenthetical aliases (e.g. `the robot (Leo)` matching character `Leo`).
+6. `characters[]` and `objects[]` are mutually exclusive by agency: actors perform actions and decide; inert items belong in `objects[]`. Exact character duplicates are dropped, and an explicit parenthetical alias (e.g. `the robot (Leo)` matching character `Leo`) is stripped before the object reaches the node.
 7. Every `ExtractedObject` requires a stable physical `description`. `owner_name` is mapped to `owner_char_id` after character capping; an unknown owner fails boundary validation.
 
 ## 3. Position in the system map
@@ -88,13 +88,6 @@ class ExtractedObject(BaseModel):
 
 _EXPLICIT_ALIAS = re.compile(r"\(([^()]*)\)\s*$")
 
-def _parenthetical_alias(name: str) -> str | None:
-    match = _EXPLICIT_ALIAS.search(name)
-    if not match:
-        return None
-    alias = match.group(1).strip().casefold()
-    return alias or None
-
 class StoryAnalysis(BaseModel):         # the transient wrapper; never persisted
     characters: list[ExtractedCharacter]   # prominence order, protagonist first
     locations: list[ExtractedLocation]
@@ -104,15 +97,18 @@ class StoryAnalysis(BaseModel):         # the transient wrapper; never persisted
     @model_validator(mode="after")
     def entity_rosters_do_not_overlap(self) -> "StoryAnalysis":
         character_names = {character.name.casefold() for character in self.characters}
-        overlap: set[str] = set()
+        objects: list[ExtractedObject] = []
         for obj in self.objects:
             if obj.name.casefold() in character_names:
-                overlap.add(obj.name.casefold())
-            alias = _parenthetical_alias(obj.name)
-            if alias and alias in character_names:
-                overlap.add(alias)
-        if overlap:
-            raise ValueError(f"entity appears as both character and object: {sorted(overlap)}")
+                continue
+            match = _EXPLICIT_ALIAS.search(obj.name)
+            if match and match.group(1).strip().casefold() in character_names:
+                name = obj.name[: match.start()].rstrip()
+                if not name or name.casefold() in character_names:
+                    continue
+                obj = obj.model_copy(update={"name": name})
+            objects.append(obj)
+        self.objects = objects
         return self
 ```
 
@@ -142,7 +138,7 @@ Objects require a stable physical description and an optional `owner_name`. Init
 | **More than 3 characters** | Node truncates to the first 3. The prompt also asks for ≤3, so the truncation is belt-and-braces; the node is the control, because the prompt is not enforceable. |
 | **Same character named twice** ("my sister", "Ate") | **Documented ceiling, not guarded.** Two `char_id`s, two reference images, two of the three budget slots. Consistent with `story-memory-contract` §2.1 — entities are minted once and never merged or re-indexed within a run. A dedup pass would be a new node, and nothing in Phase 1 justifies one. |
 | **Unbounded `locations[]` / `objects[]`** | **Deliberately uncapped.** Neither costs an image, so neither is a CC-3 lever; the only cost is checkpoint size, which is bounded in practice by a ≤800-word story (ADR-012). Cap them only if a measured checkpoint problem appears — not preemptively. |
-| **Character vs object ambiguity** ("the robot (Leo)") | Guided by agency in the extraction prompt (actors decide/act; inert items are objects; aliases forbidden). `StoryAnalysis` model_validator explicitly rejects exact case-insensitive overlap and explicit parenthetical aliases with `ValueError`. |
+| **Character vs object ambiguity** ("the robot (Leo)") | Guided by agency in the extraction prompt (actors decide/act; inert items are objects; aliases forbidden). `StoryAnalysis` drops exact character duplicates and strips a trailing parenthetical character alias before the object reaches the node. |
 | **Character with sparse or incomplete description** | A fresh extraction must meet the discriminator/clothing floor. Legacy or model-produced blank/placeholder entries remain contract-compatible but are removed from every rendered prompt; the existing thin-description floor and humanoid clothing instruction keep the image request child-safe without adding a terminal validation path. |
 | **Unknown object owner** | **Fails boundary** — mapping `owner_name` to `owner_char_id` raises `ValueError` if `owner_name` is not in the capped character roster. |
 | **Empty `timeline[]`** | Valid. `segment` falls back to text order. |
