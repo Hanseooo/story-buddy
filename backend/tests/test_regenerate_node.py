@@ -79,11 +79,11 @@ def _state(
 
 def _scene(attempts: list[Attempt] | None = None, **kwargs) -> Scene:
     kwargs.setdefault("visual_direction", "The dog runs.")
+    kwargs.setdefault("prompt", "the original prompt")
     return Scene(
         scene_id="s0",
         text_excerpt="The dog ran.",
         characters_present=["c0"],
-        prompt="the original prompt",
         attempts=attempts if attempts is not None else [_failed_attempt()],
         **kwargs,
     )
@@ -208,7 +208,7 @@ def test_ref_paths_agree_with_the_image_roll_the_corrected_prompt_carries():
         _char("c2", "the star", ref="job-1/ref-c2.png"),
     ]
     present = ["c0", "c1", "c2"]
-    prompt = build_prompt("The dog ran.", present, characters, "flat cel-shaded cartoon")
+    prompt = build_prompt(present, characters, "flat cel-shaded cartoon")
     scene = _scene(attempts=[_failed_attempt(prompt=prompt)]).model_copy(
         update={"characters_present": present, "prompt": prompt}
     )
@@ -411,13 +411,13 @@ def test_raises_before_any_spend_when_the_image_budget_is_reached():
     store.assert_not_called()
 
 
-def test_raises_when_neither_the_attempt_nor_the_scene_carries_a_prompt():
+def test_raises_when_scene_prompt_is_none():
     """Unreachable today. The alternative — drawing from correction clauses with no base prompt —
     is a guaranteed-garbage PAID image, so an ADR-025 hard failure is the honest outcome."""
-    scene = _scene([_failed_attempt(prompt=None)]).model_copy(update={"prompt": None})
+    scene = _scene([_failed_attempt(prompt="populated attempt prompt")]).model_copy(update={"prompt": None})
     state = _state([scene])
 
-    with patch("pipeline.regenerate.generate_and_store") as store, pytest.raises(RuntimeError):
+    with patch("pipeline.regenerate.generate_and_store") as store, pytest.raises(RuntimeError, match="has no prompt to correct"):
         regenerate(state)
 
     store.assert_not_called()
@@ -427,7 +427,6 @@ def test_regenerate_preserves_visual_direction_and_objects_in_rebuilt_prompt():
     ana = Character(char_id="c0", name="Ana", description=CharacterDescription(species="girl"))
     sword = StoryObject(obj_id="obj0", name="wooden sword", description="a wooden sword")
     prompt = build_prompt(
-        "Ana ran.",
         ["c0"],
         [ana],
         None,
@@ -498,26 +497,21 @@ def test_regenerate_passes_stored_scene_contradictions_and_preserves_refs():
     assert store.call_args.args[4] == ["job-1/ref-c0.png"]
 
 
-# --- attempt 3 (spend-and-retry-economics §6.10, invariant 4) ---
-
-def test_attempt_3_accumulates_both_correction_rounds_and_uses_the_dash_3_path():
-    """spend-and-retry-economics §6.10 + invariant 4: "Attempt 3 corrects from attempt 2's
-    prompt, preserving the first correction and appending the newest one."
-
-    Round 1 corrected an identity failure, so attempt 2's prompt already carries
-    IDENTITY_CLAUSE. Round 2 corrects an anatomy failure. Because `regenerate` bases the
-    correction on `last.prompt`, attempt 3 must carry BOTH clauses — that accumulation is the
-    whole mechanism, and nothing else in the suite pins it.
-    """
+# --- attempt 3 (clean base retry and spend-and-retry-economics §6.10) ---
+ 
+def test_attempt_3_uses_clean_scene_base_and_latest_verdict_only():
+    """Attempt 3 corrects from the immutable Scene.prompt, not Attempt 2's prompt, and uses only
+    the latest attempt's verdict."""
     round_1 = _failed_attempt(verdict=_verdict(same=False))
     round_2 = Attempt(
         image_ref="job-1/s0-2.png",
-        prompt=f"the original prompt. {IDENTITY_CLAUSE}",
+        prompt=f"the original prompt\n{IDENTITY_CLAUSE}",
         vlm_verdict=_verdict(same=True, anatomy=False),
         failure_reasons=[],
         passed=False,
     )
-    state = _state([_scene([round_1, round_2])])
+    scene = _scene([round_1, round_2], prompt="the original prompt")
+    state = _state([scene])
 
     with patch(
         "pipeline.regenerate.generate_and_store", return_value=("job-1/s0-3.png", True)
@@ -525,10 +519,49 @@ def test_attempt_3_accumulates_both_correction_rounds_and_uses_the_dash_3_path()
         result = regenerate(state)
 
     third = result["scenes"][0].attempts[-1]
-    assert IDENTITY_CLAUSE in third.prompt, "round 1's correction was dropped"
-    assert ANATOMY_CLAUSE in third.prompt, "round 2's correction was not appended"
+    assert IDENTITY_CLAUSE not in third.prompt, "round 1's old identity correction was incorrectly retained"
+    assert ANATOMY_CLAUSE in third.prompt, "round 2's latest anatomy correction was missing"
+    assert third.prompt.startswith("the original prompt")
 
     # The per-attempt Storage path is derived from the attempt count (CC-10), so attempt 3
     # lands on `-3.png` and re-pays nothing on resume.
     assert store.call_args.args[3] == 3
     assert third.image_ref == "job-1/s0-3.png"
+
+
+def test_regenerate_deduplicates_duplicate_contradictions_in_stored_prompt():
+    attempt = _failed_attempt().model_copy(
+        update={"scene_contradictions": ["Leo faces left", "Leo faces left", "Leo faces left"]}
+    )
+    scene = _scene([attempt], prompt="the original prompt")
+    state = _state([scene])
+
+    with patch(
+        "pipeline.regenerate.generate_and_store", return_value=("job-1/s0-2.png", True)
+    ):
+        result = regenerate(state)
+
+    second = result["scenes"][0].attempts[-1]
+    assert second.prompt.count("Correct this scene contradiction: Leo faces left") == 1
+
+
+def test_regenerate_logs_provenance_and_deduplication_fields(caplog):
+    import logging
+
+    attempt = _failed_attempt(reasons=[FailureReason.wrong_colour]).model_copy(
+        update={"scene_contradictions": ["Leo faces left", "Leo faces left", "Leo holds the ball"]}
+    )
+    scene = _scene([attempt], prompt="the original prompt")
+    state = _state([scene])
+
+    with caplog.at_level(logging.INFO, logger="pipeline.regenerate"):
+        with patch(
+            "pipeline.regenerate.generate_and_store", return_value=("job-1/s0-2.png", True)
+        ):
+            regenerate(state)
+
+    log_text = caplog.text
+    assert "base=scene.prompt" in log_text
+    assert "latest_source_attempt=1" in log_text
+    assert "correction_count=" in log_text
+    assert "deduplicated_contradictions=2" in log_text

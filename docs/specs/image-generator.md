@@ -84,10 +84,8 @@ exactly the drift AGENTS.md's *Definition of Done* grep exists to prevent.
 1. Select the first `Scene` whose `final_image_ref is None` (ADR-024 — no cursor). None → `{}`.
 2. **Breaker first.** `state.cost.image_count >= IMAGE_BUDGET` → raise. Pure arithmetic, evaluated
    before any spend, so a runaway cannot buy one more image on its way out.
-3. `build_prompt(scene.text_excerpt, scene.characters_present, state.characters,
-   state.style.prompt_fragment, location)` — where `location` is `state.locations` looked up by
-   `scene.location_id`, or `None` when the scene has no location or the id is absent from the
-   roster (`scene-setting-and-subject-binding.md` §4.1).
+3. `build_prompt(scene.characters_present, state.characters, state.style.prompt_fragment, location, scene.objects_present, state.objects, scene.visual_direction)` —
+   where `location` is `state.locations` looked up by `scene.location_id`, or `None` when the scene has no location or the id is absent from the roster (`scene-setting-and-subject-binding.md` §4.1). `scene.text_excerpt` remains caption-only and is not passed to positive scene-prompt construction (ADR-040).
 4. Collect `canonical_ref_image` for each `char_id` in `characters_present` that resolves to a
    `Character` carrying one.
 5. Helper: if `{story_id}/{scene_id}-{attempt_n}.png` already exists in Storage → return it with `paid=False`.

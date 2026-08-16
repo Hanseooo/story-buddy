@@ -138,6 +138,18 @@ Tier-A suite are **built** — they depend on neither. The two frontend routes a
 
 ---
 
+## Tier 2f — opened by visual-prompt reliability (2026-08-16)
+
+- **D-N · How a safety replacement re-enters consistency control.** `output_mod` can replace
+  `final_image_ref` after a moderation flag, then mark the new attempt passed after safety checks
+  without identity/composition judgment. The chosen product policy is: check the safe replacement
+  once, permit no further redraw, and ship it even when consistency fails because the flagged
+  original is ineligible. What remains undecided is the graph/state mechanism: routing through the
+  existing checker risks best-of selecting the unsafe original, while judging inside `output_mod`
+  mixes concerns and duplicates ownership. Resolve in a dedicated ADR session before S2 is specced.
+
+---
+
 ## Tier 3 — convention formalizations (likely MASTER_SPEC edits, not ADRs)
 
 *(D-E · Testing-seam convention → MASTER_SPEC §6 "The node test seam", 2026-07-22: one module-level

@@ -461,6 +461,49 @@ def test_story_analysis_rejects_an_entity_in_both_rosters():
         )
 
 
+def test_story_analysis_rejects_explicit_parenthetical_character_alias():
+    with pytest.raises(ValidationError, match="both character and object"):
+        _analysis(
+            characters=[_character("Leo", species="human")],
+            objects=[
+                {
+                    "name": "the robot (Leo)",
+                    "description": "a small toy robot made of tin",
+                    "owner_name": None,
+                }
+            ],
+        )
+
+
+def test_story_analysis_rejects_parenthetical_alias_with_casefold_and_whitespace():
+    with pytest.raises(ValidationError, match="both character and object"):
+        _analysis(
+            characters=[_character("LEO", species="human")],
+            objects=[
+                {
+                    "name": "the robot ( Leo )",
+                    "description": "a small toy robot made of tin",
+                    "owner_name": None,
+                }
+            ],
+        )
+
+
+@pytest.mark.parametrize("object_name", ["Leo's toy", "Leo's robot kit", "toy robot"])
+def test_story_analysis_accepts_valid_inert_objects_that_are_not_aliases(object_name):
+    analysis = _analysis(
+        characters=[_character("Leo", species="human")],
+        objects=[
+            {
+                "name": object_name,
+                "description": "a box of robot parts and gears",
+                "owner_name": None,
+            }
+        ],
+    )
+    assert analysis.objects[0].name == object_name
+
+
 def test_analyze_maps_owner_name_to_the_capped_character_id():
     analysis = _analysis(
         characters=[_character("Ana")],

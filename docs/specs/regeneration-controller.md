@@ -35,11 +35,13 @@ pipeline loop, and the only place ADR-010 exists in code.
   3. **`regenerate` never writes `scenes[].prompt`.** That field holds the original `build_prompt`
      output; per-attempt provenance is `Attempt.prompt`, which is what the contract comment on that
      field says it exists for (CC-5 tracing).
-  4. At most **one** regeneration per scene (ADR-010). The budget is `len(scene.attempts)`, derived —
-     there is no budget field, for the same reason ADR-024 rejected a loop cursor.
-  5. `regenerate` can never send an **uncorrected** prompt: every path that reaches it appends at
-     least one clause (§4, *"The correction is total"*). A prompt identical to the previous attempt's
-     would be resampling, which ADR-010 rejects.
+  4. At most **two** regenerations per scene (three attempts total, ADR-037). The budget is
+     `len(scene.attempts)`, derived — there is no budget field, for the same reason ADR-024 rejected
+     a loop cursor.
+  5. `regenerate` can never send an **uncorrected** prompt: every retry derives from the immutable
+     clean `Scene.prompt` base plus only the latest checked attempt's verdict (§4, *"The correction
+     is total"*). A prompt identical to the previous attempt's would be resampling, which ADR-010
+     rejects. Exact duplicate contradictions are deduplicated in first-seen order.
   6. `cost.regen_count` is incremented on every invocation; `cost.image_count` only when the image
      was actually paid for. The asymmetry is deliberate — see §4.
   7. `scenes[].regeneration_count` is **deliberately not written**. It equals `len(attempts) - 1`,
@@ -187,26 +189,27 @@ def regenerate(state: StoryMemory) -> dict:
     scene = next((s for s in state.scenes if s.final_image_ref is None), None)   # same rule, no cursor
     if scene is None or not scene.attempts:
         raise RuntimeError(...)                       # invariant 1 — unreachable, never `{}`
-    last = scene.attempts[-1]
-    if last.prompt is None and scene.prompt is None:
-        raise RuntimeError(...)                       # nothing to correct; see below
+    if scene.prompt is None:
+        raise RuntimeError(...)                       # immutable base required (ADR-025)
 
     if state.cost.image_count >= IMAGE_BUDGET:        # ADR-025 D4, before any spend
         raise RuntimeError(...)
 
     ref_paths = [...]                                 # referenced_characters(), the shared list
+    last = scene.attempts[-1]
     v = last.vlm_verdict
     prompt = correct_prompt(
-        last.prompt or scene.prompt,
+        scene.prompt,
         last.failure_reasons,
         state.characters,
         state.style.prompt_fragment,
         same_character=v.same_character if v else True,
         anatomy_intact=v.anatomy_intact if v else True,
         text_free=v.text_free if v else True,
+        scene_contradictions=last.scene_contradictions,
     )
     path, paid = generate_and_store(
-        prompt, state.story_id, state.scene_id, len(scene.attempts) + 1, ref_paths
+        prompt, state.story_id, scene.scene_id, len(scene.attempts) + 1, ref_paths
     )
     return {
         "scenes": [scene.model_copy(update={
@@ -232,9 +235,10 @@ happened to be identical; the next edit to the rule would have desynced them sil
 plausible wrong image rather than an exception. Pinned by
 `test_ref_paths_agree_with_the_image_roll_the_corrected_prompt_carries`.
 
-**No prompt to correct → raise.** Unreachable today (`generate_scene` always sets both `Attempt.prompt`
-and `Scene.prompt`), and the alternative — drawing from correction clauses with no base prompt — is a
-guaranteed-garbage paid image. An ADR-025 hard failure is the honest outcome.
+**Clean-base retry.** Retries derive from immutable `Scene.prompt` and only the latest attempt's verdict
+(`Attempt.scene_contradictions`, `failure_reasons`, and boolean flags). Prior corrections are intentionally
+not accumulated; exact duplicate contradiction strings are deduplicated in first-seen order. Missing
+`Scene.prompt` raises before any spend.
 
 ### Best-of, in `consistency_check`
 
@@ -373,9 +377,9 @@ reasoning (prod job `4f7698d5`); nothing in this spec's own loop changed.
   without raising.
 - `ref_paths` agrees with the numbered image roll the corrected prompt carries, on a scene mixing a
   referenced and an unreferenced character.
-- Raises on: no unfinalized scene, a scene with no attempts, `image_count >= IMAGE_BUDGET`, and no
-  prompt on either the attempt or the scene. **Never returns `{}`** (invariant 1).
-- The prompt handed to the helper is not equal to `last.prompt` (invariant 5) for every reachable
+- Raises on: no unfinalized scene, a scene with no attempts, `image_count >= IMAGE_BUDGET`, and
+  missing `scene.prompt`. **Never returns `{}`** (invariant 1).
+- The prompt handed to the helper derives from `scene.prompt` and differs from previous attempts for every reachable
   verdict: reasons-only, anatomy-only, `same_character is False` with empty reasons, and a
   **gating reason whose axis is empty** (`wrong_colour` against a character with no recorded
   colours) — the one path where a named reason contributes no clause.

@@ -189,6 +189,11 @@ an 8th enum value** (ADR-028).
 `text_clause=%s` so a correction that fired is distinguishable from one that silently appended
 nothing (invariant 5: every reachable path appends at least one clause).
 
+On every retry, `regenerate` starts from the immutable original `Scene.prompt` and appends only
+the correction clauses derived from the latest checked attempt, including `TEXT_CLAUSE` when
+`text_free=False`. It never uses `last.prompt` or accumulates correction history from earlier
+attempts.
+
 **The wording is the whole trick.** It asserts blankness and never says *text, letters, words,
 writing, signage, captions* or *lettering*. Those words are what put lettering on the canvas the
 last three times, and this clause fires precisely on images that already have some — the worst

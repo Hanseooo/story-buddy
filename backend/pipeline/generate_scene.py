@@ -3,7 +3,7 @@ import logging
 from app.config import check_image_budget, settings
 from app.db import get_supabase_client
 from contracts.story_memory import Attempt, StoryMemory
-from pipeline.prompt_optimizer import build_prompt, referenced_characters
+from pipeline.prompt_optimizer import SCENE_PROMPT_VERSION, build_prompt, referenced_characters
 from providers import edit_image, get_signed_url, text_to_image
 
 log = logging.getLogger(__name__)
@@ -72,7 +72,6 @@ def generate_scene(state: StoryMemory) -> dict:
     location = next((loc for loc in state.locations if loc.loc_id == scene.location_id), None)
 
     prompt = build_prompt(
-        scene.text_excerpt,
         scene.characters_present,
         state.characters,
         state.style.prompt_fragment,
@@ -94,11 +93,12 @@ def generate_scene(state: StoryMemory) -> dict:
     )
 
     log.info(
-        "generate_scene: scene_id=%s refs=%d paid=%s prompt_len=%d image_model=%s",
+        "generate_scene: scene_id=%s refs=%d paid=%s prompt_len=%d scene_prompt_version=%d image_model=%s",
         scene.scene_id,
         len(ref_paths),
         paid,
         len(prompt),
+        SCENE_PROMPT_VERSION,
         settings.fal_image_model,
     )
 

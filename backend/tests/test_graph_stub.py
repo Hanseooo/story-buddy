@@ -9,7 +9,16 @@ from contracts.story_memory import CURRENT_SCHEMA_VERSION, FailureReason, Input,
 from pipeline.analyze import StoryAnalysis
 from pipeline.consistency_check import SceneConstraintVerdict, SceneVerdict
 from pipeline.graph import build_graph
-from pipeline.segment import ExtractedScene, SceneSegmentation
+from pipeline.segment import ExtractedScene, ExtractedVisualDirection, SceneSegmentation
+
+
+def _direction(text: str = "A scene.") -> ExtractedVisualDirection:
+    return ExtractedVisualDirection(
+        key_action=text,
+        viewpoint="front view",
+        framing="medium shot",
+    )
+
 
 EXPECTED_ORDER = [
     "input_gate",
@@ -66,7 +75,7 @@ def _mock_call_points(monkeypatch):
     monkeypatch.setattr(
         "pipeline.segment.segment_scenes",
         lambda units, chars, timeline, locs=None, objs=None: SceneSegmentation(scenes=[
-            ExtractedScene(start=0, end=len(units) - 1, characters_present=[], visual_direction="A scene.")
+            ExtractedScene(start=0, end=len(units) - 1, characters_present=[], visual_direction=_direction("A scene."))
         ]),
     )
     monkeypatch.setattr(
@@ -191,8 +200,8 @@ def test_two_scene_run_loops_once_per_scene_and_reaches_compose(monkeypatch):
     monkeypatch.setattr(
         "pipeline.segment.segment_scenes",
         lambda units, chars, timeline, locs=None, objs=None: SceneSegmentation(scenes=[
-            ExtractedScene(start=0, end=0, characters_present=[], visual_direction="Scene 0."),
-            ExtractedScene(start=1, end=len(units) - 1, characters_present=[], visual_direction="Scene 1."),
+            ExtractedScene(start=0, end=0, characters_present=[], visual_direction=_direction("Scene 0.")),
+            ExtractedScene(start=1, end=len(units) - 1, characters_present=[], visual_direction=_direction("Scene 1.")),
         ]),
     )
     app_graph = build_graph()
@@ -235,8 +244,8 @@ def _two_scenes(monkeypatch):
     monkeypatch.setattr(
         "pipeline.segment.segment_scenes",
         lambda units, chars, timeline, locs=None, objs=None: SceneSegmentation(scenes=[
-            ExtractedScene(start=0, end=0, characters_present=["the orange dog"], visual_direction="Scene 0."),
-            ExtractedScene(start=1, end=len(units) - 1, characters_present=["the orange dog"], visual_direction="Scene 1."),
+            ExtractedScene(start=0, end=0, characters_present=["the orange dog"], visual_direction=_direction("Scene 0.")),
+            ExtractedScene(start=1, end=len(units) - 1, characters_present=["the orange dog"], visual_direction=_direction("Scene 1.")),
         ]),
     )
 

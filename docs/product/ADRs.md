@@ -45,3 +45,4 @@ Each ADR now lives in its own file under `docs/product/adr/`; this page is only 
 | [ADR-037](./adr/ADR-037-trade-book-length-for-a-third-scene-attempt-inside-one.md) | Trade book length for a third scene attempt inside one truthful 55-image envelope | Accepted (2026-08-15) |
 | [ADR-038](./adr/ADR-038-safe-failure-diagnostics-one-fixed-reason-taxonomy-for.md) | Safe failure diagnostics: one fixed reason taxonomy for child and teacher recovery | Accepted (2026-08-15, spec review pending) |
 | [ADR-039](./adr/ADR-039-narrative-notes-do-not-define-canonical-character-identity.md) | Narrative notes do not define canonical character identity | Accepted (2026-08-15) · amends ADR-034/035; clarifies ADR-029 |
+| [ADR-040](./adr/ADR-040-narrative-notes-do-not-enter-scene-image-prompts.md) | Narrative notes do not enter scene image prompts | Accepted (2026-08-16) · resolves D-M; amends ADR-039/035 |

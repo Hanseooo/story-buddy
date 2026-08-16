@@ -1,3 +1,93 @@
+# Current Task: Visual-prompt reliability implementation
+
+- [x] Plan 1: Analysis & Segmentation (explicit alias boundary, structured drawable moment, deterministic later-moment merge).
+- [x] Plan 2: Prompt Construction (visual-only `build_prompt` without `text_excerpt` or notes, version bump to 2).
+- [x] Plan 3: Clean-Base Retries & Verification (clean-base retries, exact contradiction deduplication, integration graph test, live spec reconciliation).
+- [x] Run full deterministic test suite and ruff checks.
+- [ ] Tier-B quality check (offline/manual product validation, pending live paid runs).
+- [ ] Obtain user/owner approval per §9.
+
+## Success criteria
+
+Scene prompts are visual-only, retries derive from the immutable clean `Scene.prompt` base plus only the latest verdict, exact duplicate contradictions are deduplicated in first-seen order, the 3-attempt graph order and economics remain unchanged, and all live specs are reconciled.
+
+## Outcome
+
+Implemented clean-base retries in `backend/pipeline/regenerate.py`, extracted `correction_clauses` with exact first-seen contradiction deduplication in `backend/pipeline/prompt_optimizer.py`, and proved the unchanged 3-attempt graph shape and economics in `backend/tests/test_graph.py`. Reconciled `regeneration-controller.md`, `spend-and-retry-economics.md`, `visual-continuity.md`, `pipeline-consistency-docket.md`, and `visual-prompt-reliability.md`.
+
+---
+
+# Current Task: ADR-040 — scene prompts exclude narrative notes
+
+- [x] Read D-M, ADR-039, ADR-035, the proposed visual-prompt spec, current prompt flow, and tests.
+- [x] Audit direct and semantic references with a delegated read-only repository scan.
+- [x] Stress-test removal against thin descriptions, unreferenced characters, retries, targeted
+      redraws, legacy checkpoints, and frozen-contract constraints.
+- [x] Compare retaining notes, heuristically filtering them, splitting the schema, and removing
+      them from newly assembled scene prompts.
+- [x] Present the strengthened decision and obtain owner approval.
+- [x] Write ADR-040, add its index row, remove D-M, and unblock the visual-prompt spec.
+- [x] Self-review the ADR and changed documentation for contradictions, stale gates, and placeholders.
+- [x] Verify the documentation diff, link target, numbering, and frozen/runtime file boundaries.
+- [x] Commit the ADR session.
+
+## Success criteria
+
+ADR-040 makes typed appearance axes and canonical references the only character-identity authority
+in newly assembled scene prompts, while `Scene.visual_direction` owns the drawable moment. It
+preserves the frozen schema, targeted redraw behavior, stored legacy prompts, and runtime code; it
+explicitly amends ADR-039 Decision 4 and ADR-035's scene-note filtering assignment.
+
+## Outcome
+
+ADR-040 accepts D-M for newly assembled scene prompts. It keeps `notes` in the frozen contract but
+removes their normal image-prompt authority, preserves direct ADR-029 targeted attributes and stored
+legacy prompts, and records thin typed descriptions as an upstream extraction miss rather than a
+reason to restore prose. The visual-prompt spec is unblocked but remains a draft awaiting owner
+review; no runtime code or frozen ADR file changed.
+
+Documentation verification on 2026-08-16: `git diff --cached --check` passed; the ADR index target
+exists; ADR files end sequentially at ADR-040; D-M is absent from the decision backlog; and the
+staged frozen/runtime boundary check returned no paths. Code tests were not run because this session
+changes Markdown only.
+
+---
+
+# Current Task: Visual-prompt reliability design
+
+- [x] Read project guidance, lessons, current pipeline/specs, recent commits, Fal prompts, and worker logs.
+- [x] Delegate recent-change, capstone/judge, and end-to-end pipeline diagnosis.
+- [x] Clarify product priority, paid validation size, prompt source, retry policy, moderation
+      replacement policy, angle-aware identity posture, and the one-moment rule.
+- [x] Compare three approaches and select the staged robustness program.
+- [x] Present and obtain approval for the S1 architecture/data flow.
+- [x] Write `docs/specs/visual-prompt-reliability.md` with failure modes, edge cases,
+      deterministic tests, and the three-story Tier-B check.
+- [x] Log ADR-039's scene-notes conflict as D-M and the moderation replacement gap as D-N.
+- [x] Self-review the written spec for placeholders, contradictions, ambiguity, and scope.
+- [x] Commit the design documentation.
+- [ ] Ask the user to review the written spec after D-M resolution and before implementation planning.
+
+## Success criteria
+
+The written design preserves verbatim captions and story-appropriate camera angles while giving Fal
+one visual authority, rebuilding retries from the immutable clean base, and adding no runtime code,
+schema, model-call site, successful-path call, retry loop, or architectural decision inline. Every
+blocked decision is explicit.
+
+## Outcome
+
+The draft S1 spec defines a visual-only scene prompt, structured one-moment segmentation,
+explicit actor/object-alias rejection, and clean-base latest-only retry corrections. It preserves
+verbatim captions, story-appropriate rear/profile/overhead views, the three-attempt cap, graph shape,
+and raw judge evidence. The self-review caught and fixed a merge inconsistency: the later selected
+moment now also owns visible cast, visible objects, and explicit location, while ordered holder
+events from both source ranges survive. ADR-040 now resolves D-M and removes narrative notes from
+newly assembled scene prompts; the spec is unblocked but still awaits owner review. D-N separately
+owns moderation-replacement checking. No runtime code or implementation plan was written.
+
+---
+
 # Current Task: Pipeline Consistency Docket — S2 Design
 
 - [x] Read project guidance, lessons, the docket, S1 carry-forward constraints, current code/specs, and recent commits.
@@ -122,3 +212,65 @@ imperfect extraction into a new child-facing terminal failure; the final fix sta
 Verification: `uv run ruff check .` passed; `uv run pytest` passed 861 tests, 71 skipped, 6
 deselected, 1 existing Starlette warning. Focused character/prompt/contract tests passed 258 tests
 after the final regression addition. `git diff --check` passed.
+
+---
+
+# Current Task: Visual-prompt reliability implementation plan
+
+- [x] Read the project instructions, lessons, master spec, target feature spec, affected module specs, and current runtime/test surfaces.
+- [x] Split the implementation plan into sequential extraction/segmentation, prompt-construction, and retry/verification plans.
+- [x] Write the three disposable plans under `docs/specs/plans/` with exact files, interfaces, TDD steps, verification commands, and live-doc reconciliation.
+- [x] Self-review the plans for target-spec coverage, placeholder instructions, signature consistency, and repository hygiene.
+
+## Success criteria
+
+The plan is executable in order without changing the frozen contract or architecture. It names the
+existing seams, keeps deterministic tests separate from Tier-B product validation, and includes the
+required final grep, full backend verification, owner-approval gate, and disposable-plan cleanup.
+
+## Outcome
+
+Created:
+
+- `docs/specs/plans/2026-08-16-visual-prompt-reliability-1-analysis-segmentation.md`
+- `docs/specs/plans/2026-08-16-visual-prompt-reliability-2-prompt-construction.md`
+- `docs/specs/plans/2026-08-16-visual-prompt-reliability-3-clean-base-retries-verification.md`
+
+Plan-only validation passed: `git diff --check`; placeholder scan found no `TBD`, `TODO`, or vague
+test-stub instructions. No runtime tests were run because implementation was not requested in this
+turn.
+
+---
+
+# Current Task: Visual-prompt reliability review fixes
+
+- [x] Read `AGENTS.md`, `CLAUDE.md`, `tasks/lessons.md`, the review artifact, the target spec, the affected lettering spec, and the current implementation/tests.
+- [x] Verify the three spec-facing review findings against the current tree.
+- [x] Add failing regression assertions for explicit anti-montage guidance and surviving contradiction count.
+- [x] Apply the two runtime fixes and update `docs/specs/lettering-suppression.md`.
+- [x] Run targeted tests, backend lint/tests, and final diff/spec checks.
+- [x] Record the outcome and delete the disposable review-fix plan.
+
+## Success criteria
+
+`SEGMENTATION_PROMPT` explicitly names montage, split-panel, duplicate-character, and impossible-pose prohibitions; regeneration logs the number of unique current contradictions; lettering suppression documents immutable-base/latest-verdict-only corrections; and backend verification is green.
+
+## Outcome
+
+Implemented the three review fixes: `SEGMENTATION_PROMPT` now explicitly prohibits montage, split
+panel, duplicate character, and impossible pose outputs; `regenerate` logs the surviving unique
+contradiction count; and lettering-suppression §4.4 documents immutable-base/latest-attempt-only
+corrections without `last.prompt` or accumulated correction history.
+
+Verification on 2026-08-16:
+
+- Red/green targeted checks: both new assertions failed against the old behavior, then passed after
+  the fixes.
+- `uv run pytest tests/test_segment_node.py tests/test_regenerate_node.py -q` — 136 passed.
+- `uv run ruff check .` — all checks passed.
+- `uv run pytest` — 903 passed, 71 skipped, 6 deselected, 1 existing Starlette deprecation warning.
+- Frontend pre-merge checks: `pnpm lint` passed; `pnpm test` — 34 files and 279 tests passed.
+- `git diff --check` — clean; stale code-expression grep returned no matches.
+
+Residual risk: no paid Tier-B visual-quality validation was run; contract, graph, provider calls, and
+retry policy remain unchanged.

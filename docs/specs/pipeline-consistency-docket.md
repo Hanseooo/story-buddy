@@ -449,6 +449,12 @@ docket's work.
   and BC-24 records that S2's and S4's "existing single redraw" is now two. No node, edge, contract
   field, or paid run; no claim that a third attempt improves consistency. **The docket is now DONE
   throughout** — see the roster note below.
+- 2026-08-16 (S5 retry-prompt reliability amendment): `visual-prompt-reliability.md` and ADR-040
+  superseded the former retry accumulation behavior and prompt structure. Retries derive from the
+  immutable clean `Scene.prompt` base plus only the latest checked verdict, with exact duplicate
+  contradictions deduplicated in first-seen order. The S5 economics (10 scenes, 3 attempts, 55 image
+  budget, 87 recursion limit) and cost arithmetic remain frozen and unchanged while historical docket
+  rows remain visible as design context.
 
 ---
 

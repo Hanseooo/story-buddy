@@ -80,20 +80,20 @@ segment → generate_scene → consistency_check
 
 ### 5.1 Composition authority
 
-`build_prompt` keeps its existing block order:
+`Scene.visual_direction` is authored during segmentation (from the transient structured direction rendered into a single string) and persisted as a single required string field. `build_prompt` emits prompt blocks in the visual-only contract order (`SCENE_PROMPT_VERSION = 2`, ADR-040):
 
 1. reference roll and `REFERENCE_CLAUSE`;
-2. text-only character descriptions;
+2. text-only character descriptions (appearance axes only);
 3. cast-count and non-human guards;
 4. visible objects;
-5. `Visual direction`;
-6. setting;
-7. verbatim excerpt;
-8. style.
+5. `Visual direction: <visual_direction>`;
+6. setting (`Setting: <name> - <description>`);
+7. style (`style_fragment`).
 
 The existing reference clause remains the governing rule: reference images define appearance, not
 pose, crop, expression, or viewing angle; `Visual direction` controls those properties. The
-setting-before-excerpt and visual-direction-before-setting ordering are unchanged.
+setting-line and visual-direction-before-setting ordering are unchanged. Per ADR-040, narrative text
+excerpts are omitted from positive scene prompts.
 
 ### 5.2 Viewpoint-tolerant identity judgment
 
