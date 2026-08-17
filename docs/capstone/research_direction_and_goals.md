@@ -281,7 +281,7 @@ The corpus is one grade band in one country. **A tight population is a delimitat
 **In scope (the pipeline's ten logical modules):** Input Moderation · Story Analyzer · Scene Segmentation
 (up to 10–15 scenes, target ≥ 3 distinct major plot points where the arc supports it — never padded, and
 never-invent overrides the floor) · Story Memory Manager · Character Bible + canonical reference (≤ 2
-canonical references) · Style Preset (three presets) · Prompt Optimizer · AI Scene Generation
+canonical references) · Style Preset (finite catalog; see ADR-042) · Prompt Optimizer · AI Scene Generation
 (Qwen-Image-Edit) · Consistency Judge & Targeted Regeneration (prompted judge in the product; fine-tuned
 `Qwen2.5-VL-7B` evaluated in Objective 4) · Picture Book Composition (slide composer with expressive TTS
 narration via Chatterbox, PDF export). Moderation stack (input text, output images, Filipino PII redaction)

@@ -578,6 +578,10 @@ Neither number gates Phase 1. But **a preset that cannot hold an invented chimer
 as generic AI art, is re-authored or dropped before a child sees it** — that is the binding
 acceptance condition on ADR-022.
 
+> **Decision note added 2026-08-17:** ADR-042 applies that operational product-quality veto to
+> Comic, makes Gouache the target default, and gates a Cut-paper replacement on fresh current-stack
+> validation. It does not reinterpret or delete the confounded historical results below.
+
 **Decision:** **Deferred to after Run 2.** No preset is dropped on Run 1 numbers — the `comic`
 identity cell is void and the other two were scored under the drifted instrument.
 

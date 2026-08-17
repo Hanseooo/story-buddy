@@ -8,8 +8,8 @@ spec edit). Per `CLAUDE.md §1`, architectural decisions are made in their own s
 inline while building a module. When a row is decided: write the ADR, delete the row from
 this file (git keeps the history), and update the affected spec in the same change.
 
-**ADR numbering.** ADRs are append-only sequential; the last is **ADR-029**, so the next free
-number is **ADR-030**. Numbers are assigned *when the ADR is written*, not reserved here —
+**ADR numbering.** ADRs are append-only sequential; the last assigned number is **ADR-042**, so the
+next free number is **ADR-043**. Numbers are assigned *when the ADR is written*, not reserved here —
 the items below use stable `D-*` ids instead, because the write order can shift.
 
 **Two non-decisions, recorded so they don't get reopened by reflex:**
@@ -150,16 +150,23 @@ Tier-A suite are **built** — they depend on neither. The two frontend routes a
 
 ---
 
-## Tier 2g — opened by the first paid visual-prompt follow-up (2026-08-17)
+## Tier 2h — deferred by canonical-character consistency (2026-08-17)
 
-- **D-O · Reliable selectable-style policy.** Production observations report that Comic alone
-  alternates between halftone/doodle-like characters and an older television-cartoon rendering,
-  while Gouache has been the most consistently acceptable preset. The owner wants Gouache to become
-  the default and Comic hidden from new selections, with backend compatibility retained for existing
-  Comic jobs. ADR-022 currently freezes three selectable presets and Cel as the flagship default, so
-  this cannot be implemented as an incidental config/UI edit. Decide whether to supersede ADR-022,
-  what evidence is sufficient to retire a child-visible preset, and how existing Comic jobs remain
-  resumable. This decision is independent of the structural actor/object fix.
+- **D-P · Whether pseudonymized names leave every model-facing scene surface.** Proposed ADR-041
+  removes names only from canonical-reference generation and judging. Names still appear in scene
+  reference rolls, unreferenced character descriptions, subject-count clauses, structured visual
+  directions, retry corrections, and identity-judge labels. Do not remove one occurrence in
+  isolation: the scene path needs one deterministic alias projection that preserves multi-reference
+  binding and character-absent corrections. Reopen when a Tier-B run starts from a correct reference
+  but shows name-driven scene drift, or when a measured prompt ablation supports broader removal.
+
+- **D-Q · Whether canonical-reference failure must stop or hold the book.** ADR-028 owns the
+  best-failing reference after three rejected draws; `character-bible.md` owns accept-unchecked on a
+  judge exception; a mandatory human hold would amend ADR-029's reveal semantics. Proposed ADR-041
+  improves judgeable morphology but preserves all three. If character fidelity outranks completion,
+  decide among fail-closed job failure, a required human hold at reveal, or the existing fail-open
+  fallback. Resolve only with child-facing failure/recovery and image-budget consequences specified
+  together.
 
 ---
 
@@ -511,5 +518,5 @@ now fully specified.
 **No open decision blocks Phase 1 or Phase 2 entry.** Tiers 1, 2, 2b, 2c, and 3 are all resolved. D-I closed
 2026-07-31 → ADR-029; it builds in Phase 2 behind the moderation gate (now live). **Open rows: D-J** (Tier 2d,
 non-blocking), **D-K + D-L** (Tier 2e, 2026-08-14 — these two *do* block, jointly, the two
-`annotation-surface` frontend routes and therefore the Phase 2.5 labelling weekend), **D-N**
-(moderation replacement consistency), and **D-O** (selectable-style reliability policy).
+`annotation-surface` frontend routes and therefore the Phase 2.5 labelling weekend), and **D-N**
+(moderation replacement consistency). D-O was resolved by ADR-042 (2026-08-17).
