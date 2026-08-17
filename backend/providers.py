@@ -291,7 +291,8 @@ def _fal() -> fal_client.SyncClient:
 # behaviour above, which degrades rather than breaks.
 NEGATIVE_PROMPT = (
     "text, letters, words, writing, signage, labels, captions, subtitles, "
-    "watermark, signature, speech bubbles, speech balloons, comic panels"
+    "watermark, signature, speech bubbles, speech balloons, comic panels, "
+    "3d, 3d render, photorealistic, cgi, 3d model, 3d shading"
 )
 
 
