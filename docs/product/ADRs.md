@@ -48,3 +48,5 @@ Each ADR now lives in its own file under `docs/product/adr/`; this page is only 
 | [ADR-040](./adr/ADR-040-narrative-notes-do-not-enter-scene-image-prompts.md) | Narrative notes do not enter scene image prompts | Accepted (2026-08-16) · resolves D-M; amends ADR-039/035 |
 | [ADR-041](./adr/ADR-041-character-names-are-not-canonical-visual-identity.md) | Character names are not canonical visual identity | Accepted (2026-08-17) · amends ADR-039/034/029 |
 | [ADR-042](./adr/ADR-042-reliable-selectable-styles-gouache-default-comic-retired.md) | Reliable selectable styles: Gouache default, Comic retired, Cut-paper candidate | Accepted (2026-08-17) · resolves D-O; amends ADR-022 |
+| [ADR-043](./adr/ADR-043-preventing-hybrid-characters-via-is-humanoid-signal-and-conditional-negative-prompting.md) | Preventing hybrid characters via `is_humanoid` contract signal and conditional negative prompting | Accepted (2026-08-17) · amends ADR-041/028/040 |
+

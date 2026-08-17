@@ -1,10 +1,11 @@
 # Feature Spec — canonical-character consistency hardening
 
-**Status:** built (2026-08-17) · owner-approved (ADR-041 accepted 2026-08-17) · **Phase:** 2 · **Owner surfaces:**
+**Status:** built (2026-08-17) · owner-approved (ADR-041/ADR-043 accepted 2026-08-17) · **Phase:** 2 · **Owner surfaces:**
 `backend/pipeline/analyze.py`, `backend/pipeline/char_bible.py`, `backend/pipeline/reveal.py`
 **Derived from:** MASTER_SPEC §§2, 3, 5, 6 · `character-bible.md` · `story-analyzer.md`
 **Rationale:** ADR-004, ADR-011, ADR-023, ADR-028, ADR-034, ADR-035, ADR-039, ADR-040,
-ADR-041 · production Jamie/Bolt reproduction (2026-08-17)
+ADR-041, ADR-043 · production Jamie/Bolt reproduction (2026-08-17)
+
 
 > **Declared deviation from “one spec = one module.”** This feature owns one artifact crossing one
 > existing seam: `analyze` materializes the stable character canon and `char_bible` consumes that
