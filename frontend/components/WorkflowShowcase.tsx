@@ -73,7 +73,7 @@ export default function WorkflowShowcase({ isMobileForm = false }: { isMobileFor
                 <span className="font-kid text-[11px] font-extrabold text-foreground">Cartoon</span>
               </div>
               
-              {/* Comic */}
+              {/* Gouache / Painted — the ADR-042 default, shown as selected */}
               <motion.div 
                 className="flex-1 rounded-2xl bg-surface border border-primary ring-1 ring-primary flex flex-col items-center justify-center py-4 gap-1.5 shadow-sm relative"
                 initial={{ scale: 1 }}
@@ -83,14 +83,14 @@ export default function WorkflowShowcase({ isMobileForm = false }: { isMobileFor
                 <div className="absolute -top-1.5 -right-1.5 bg-secondary text-primary rounded-full p-0.5 border-2 border-surface">
                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 </div>
-                <span className="text-3xl">💥</span>
-                <span className="font-kid text-[11px] font-extrabold text-foreground">Comic</span>
-              </motion.div>
-              
-              {/* Gouache / Painted */}
-              <div className="flex-1 rounded-2xl bg-surface border border-primary/20 flex flex-col items-center justify-center py-4 gap-1.5 shadow-sm">
                 <span className="text-3xl">🎨</span>
                 <span className="font-kid text-[11px] font-extrabold text-foreground">Painted</span>
+              </motion.div>
+              
+              {/* Cut-paper / Paper Cutout */}
+              <div className="flex-1 rounded-2xl bg-surface border border-primary/20 flex flex-col items-center justify-center py-4 gap-1.5 shadow-sm">
+                <span className="text-3xl">✂️</span>
+                <span className="font-kid text-[11px] font-extrabold text-foreground">Paper Cutout</span>
               </div>
             </div>
           </motion.div>

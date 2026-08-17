@@ -140,7 +140,7 @@ describe("FailureScreen — kind=retry", () => {
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/s/prof-123/process/new-job"));
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/storybooks"),
-      expect.objectContaining({ body: JSON.stringify({ text: "A dog runs.", style_preset_id: null }) })
+      expect.objectContaining({ body: JSON.stringify({ text: "A dog runs.", style_preset_id: "cel" }) })
     );
   });
 

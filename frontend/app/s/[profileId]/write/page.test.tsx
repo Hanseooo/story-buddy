@@ -43,17 +43,19 @@ describe("WriteStoryPage", () => {
       expect.stringContaining("/storybooks"),
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ text: "A dog runs in a field.", style_preset_id: "cel" }),
+        body: JSON.stringify({ text: "A dog runs in a field.", style_preset_id: "gouache" }),
       })
     );
   });
 
-  it("sends the selected style_preset_id (ADR-022), defaulting to cel", async () => {
+  it("sends the selected style_preset_id (ADR-022), defaulting to gouache (ADR-042)", async () => {
     render(<WriteStoryPage />);
+    expect(screen.queryByText("Comic")).toBeNull();
+    expect(screen.getByText("Paper Cutout")).toBeDefined();
     fireEvent.change(screen.getByLabelText("story text"), {
       target: { value: "A dog runs in a field." },
     });
-    fireEvent.click(screen.getByLabelText("Comic"));
+    fireEvent.click(screen.getByLabelText("Cartoon"));
     fireEvent.click(screen.getByText("Make my book"));
 
     await waitFor(() => expect(pushMock).toHaveBeenCalled());
@@ -61,7 +63,7 @@ describe("WriteStoryPage", () => {
     const body = JSON.parse(
       (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body
     );
-    expect(body.style_preset_id).toBe("comic");
+    expect(body.style_preset_id).toBe("cel");
   });
 
   it("sends the session bearer token — POST /storybooks is auth-guarded", async () => {
@@ -96,9 +98,9 @@ describe("WriteStoryPage", () => {
 // Mirrors Avatar.test.tsx's manifest-integrity check: the picker is useless if the
 // sample art is missing or misnamed.
 describe("Style preset sample art", () => {
-  it("every ADR-022 preset has a sample image in public/style-presets/", () => {
+  it("every ADR-042 selectable preset has a sample image in public/style-presets/", () => {
     const dir = path.resolve(__dirname, "..", "..", "..", "..", "public", "style-presets");
-    for (const id of ["cel", "comic", "gouache"]) {
+    for (const id of ["cel", "gouache", "cut_paper"]) {
       expect(fs.existsSync(path.join(dir, `${id}.png`)), `missing file: ${id}.png`).toBe(true);
     }
   });

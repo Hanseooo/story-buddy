@@ -290,9 +290,9 @@ export default function FailureScreen({
           // /storybooks is auth-gated; without this header every retry was a silent 401.
           Authorization: `Bearer ${session?.access_token}`,
         },
-        // The redo is a brand-new job, so the style has to be re-sent or the backend falls back
-        // to "cel" (main.py:167) and the child's book comes back in a style they never picked.
-        body: JSON.stringify({ text: inputText, style_preset_id: stylePresetId }),
+        // The redo is a brand-new job, so the style has to be re-sent or a legacy row with null style
+        // would fall back to the new "gouache" default and the child's book would be silently re-styled.
+        body: JSON.stringify({ text: inputText, style_preset_id: stylePresetId ?? "cel" }),
       });
       if (!res.ok) {
         setRetryFailed(true);

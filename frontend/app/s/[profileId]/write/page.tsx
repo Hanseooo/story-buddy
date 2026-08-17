@@ -12,12 +12,10 @@ const MAX_STORY_WORDS = 300;
 const PREFILL_KEY = "sb.prefill";
 const CHAIN_KEY = "sb.failChain";
 
-// ADR-022's three presets. Keys mirror backend/app/config.py STYLE_PRESETS and the CHECK
-// constraint in supabase/migrations/0002_jobs_style_preset_id.sql — `cel` is the default.
 const STYLE_PRESETS = [
   { id: "cel", label: "Cartoon" },
-  { id: "comic", label: "Comic" },
   { id: "gouache", label: "Painted" },
+  { id: "cut_paper", label: "Paper Cutout" },
 ] as const;
 
 function countWords(text: string): number {
@@ -120,7 +118,7 @@ export default function WriteStoryPage() {
                 type="radio"
                 name="style_preset_id"
                 value={id}
-                defaultChecked={id === "cel"}
+                defaultChecked={id === "gouache"}
                 className="sr-only peer"
               />
               <div className="relative rounded-2xl overflow-hidden bg-surface border border-primary/20 transition-all hover:-translate-y-0.5 hover:shadow-sm peer-checked:border-primary peer-checked:ring-2 peer-checked:ring-primary peer-checked:shadow-sm peer-focus-visible:ring-[3px] peer-focus-visible:ring-secondary peer-focus-visible:ring-offset-[3px] peer-focus-visible:ring-offset-background">
