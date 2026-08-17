@@ -46,3 +46,10 @@
 - **Root cause**: I had not yet distinguished the pasted material from the exact provider payload.
 - **Rule**: Before attributing prompt contamination across stories, anchor the diagnosis to the
   exact logged prompt and confirm which source text actually entered the run.
+
+### 2026-08-17 Distinguish retiring a preset from retiring its catalog slot
+- **What happened**: I framed removing Comic as permanently shrinking the selectable catalog, while
+  the user intended to test a more consistent replacement before making that replacement official.
+- **Root cause**: I treated the named preset and the product's three-choice slot as the same decision.
+- **Rule**: When a selectable option is removed for quality, ask whether the catalog should shrink or
+  the slot should enter quarantine pending a replacement; do not silently make either permanent.

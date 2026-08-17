@@ -383,3 +383,127 @@ Verification:
 Tier-B Jamie/Bolt reproduction was not run: the exact production story is not checked into the
 repository. No `.env` or secret file was read, and no live paid provider call was made. The
 remaining risk is unmeasured behavior on that external reproduction.
+
+---
+
+# Current Task: Character-bible consistency and art-style ADR session
+
+- [x] Trace the exact PII redaction, analysis, character-bible, prompt, and reference-generation flow.
+- [x] Reconcile the Jamie/Bolt/Leo repro with recent visual-prompt reliability changes.
+- [x] Clarify the intended handling of fictional character names: consistency first; do not disable Presidio.
+- [x] Compare minimal consistency options for PII, character canon, prompt generation, and reference acceptance.
+- [x] Resolve the separate art-style policy in ADR-042 without mixing it into ADR-041.
+- [x] Present the hardened no-second-LLM design and obtain owner approval to draft it.
+- [x] Write and self-review the proposed canonical ADR/spec; request owner acceptance before implementation.
+
+## Success criteria
+
+The design identifies the evidenced source of the Bolt-to-Leo mutation, keeps child-safety guarantees,
+gives image generation one stable non-human character identity, and selects an art-style policy with
+a reproducible validation method. No runtime, frozen ADR, schema, provider, or model change occurs
+before explicit owner approval.
+
+## Character-consistency design outcome
+
+Drafted `docs/specs/canonical-character-consistency.md` and proposed ADR-041. The design keeps
+Presidio and the existing analyzer call, adds transient body-plan/face-interface structure folded
+into `body_features`, removes direct name concatenation from fresh canonical draw/judge projections,
+and replaces reveal's empty name chip with `overall physical appearance`. It adds no runtime code,
+provider/model call, persisted contract field, graph change, retry, or style decision.
+
+Independent review tightened the legacy predicate, targeted-restatement rule, child-facing chip
+bound, placeholder/species validation, PII limitation, Objective-4 distribution versioning, and
+fail-open decision ownership. It rejected a deterministic name-string scrubber because names such as
+`Blue`, `Star`, and `Bolt` can be legitimate visual facts.
+
+Documentation verification: `git diff --check` passed; ADR-041 is indexed as Proposed; D-P and D-Q
+record the deferred full-scene alias and reference-failure policies. No backend/frontend tests or
+paid Tier-B images were run because this is a documentation-only design session. D-O art-style
+policy is independently resolved by ADR-042; implementation and Cut-paper validation remain pending.
+
+---
+
+# Current Task: D-O selectable-style ADR
+
+- [x] Read ADR-022, the style-presets spec, current picker/API/worker compatibility flow, historical
+      preset evidence, and production notes.
+- [x] Decide hard retirement for new Comic jobs while preserving existing Comic execution.
+- [x] Make Gouache the immediate new-job default without changing legacy null→Cel behavior.
+- [x] Select Cut-paper collage as the provisional replacement candidate.
+- [x] Freeze a three-book, zero-style-family-miss promotion gate.
+- [x] Draft ADR-042, update the ADR index, remove D-O, and reconcile affected live specs.
+- [x] Self-review and verify the documentation change.
+- [ ] Ask the owner to review ADR-042 before implementation or paid candidate validation.
+
+## Success criteria
+
+ADR-042 distinguishes selectable from compatibility-supported presets, preserves every existing
+Comic/null job, names one exact Cut-paper candidate fragment, and prevents that candidate from
+becoming public before its paid three-book gate passes. This session changes no runtime behavior.
+
+## Outcome
+
+ADR-042 is accepted as the policy decision. It makes Gouache the target new-job default, hard-retires
+Comic from new creation while retaining historical execution, and freezes Cut-paper collage as the
+only provisional replacement. Promotion requires three frozen production-equivalent books, the
+accepted picker sample, zero style-family misses, intact identity/anatomy, and owner acceptance.
+
+Documentation verification on 2026-08-17: all twelve ADR requirement assertions passed; the
+placeholder scan returned none; D-O has no open backlog row and points to ADR-042 as resolved; the
+ADR index target exists; `git diff --check` passed; and the changed-path check found no runtime,
+frontend, or migration files. Code tests and paid image calls were not run because this session is
+documentation-only.
+---
+
+# Current Task: Canonical-character consistency implementation plan
+
+- [x] Read AGENTS.md, CLAUDE.md, lessons, MASTER_SPEC §5–§6, ADR-041, the target spec, linked module specs, and current code/tests.
+- [x] Map the cross-module work into analyzer, reference/reveal, and integration/documentation/Tier-B slices.
+- [x] Write three TDD-first disposable plans under docs/specs/plans/.
+- [x] Self-review plan coverage, placeholders, signatures, paths, and whitespace.
+- [x] Obtain/confirm owner approval for the target feature spec before runtime implementation.
+- [x] Execute the three plans in order and delete them after implementation, verification, and Tier-B retention.
+
+## Success criteria
+
+The plans are executable without changing Story Memory, graph shape, providers, model choice, retry policy, or failure posture; every behavior has a red-green test path; live specs and status surfaces are reconciled; and the Tier-B gate is explicit and honest.
+
+## Implementation outcome
+
+Implemented across three plans and verified:
+- `analyze` incorporates required transient `body_plan` and `face_or_interface` morphology folded into `body_features`, with 120-code-point limits, single-line / non-placeholder validation, and `EXTRACTION_PROMPT_VERSION = 1`.
+- `char_bible` removes direct name concatenation from fresh normal and targeted canonical reference draw and judge projections (`JUDGE_PROMPT_VERSION = 6`), maintaining legacy fallback only when all visual axes are empty.
+- `reveal` empty-chip fallback uses `overall physical appearance` instead of the character name; standalone morphology chips are preserved.
+- Added deterministic integration regression in `test_canonical_character_consistency.py`.
+- Reconciled `canonical-character-consistency.md` (built), `story-analyzer.md`, `character-bible.md`, `kid-flow-pause-lifecycle.md`, `visual-prompt-reliability.md`, and `ADRs.md`.
+- Deterministic verification: 935 passed, 71 skipped, 6 deselected; ruff clean; git diff --check clean.
+
+---
+
+# Current Task: ADR-042 selectable-style policy implementation
+
+- [x] Add failing backend tests for the separate creation allowlist, Gouache new-job default, Comic rejection, and historical worker compatibility.
+- [x] Implement the backend creation allowlist and Gouache default without changing `STYLE_PRESETS` execution compatibility.
+- [x] Add failing frontend tests for the two-card Gouache-default picker and legacy-null retry preservation.
+- [x] Implement the picker and retry boundary changes.
+- [x] Reconcile current style behavior in the feature spec, Master Spec, workflow, user flow, and PRD.
+- [x] Run focused red/green checks, full backend/frontend verification, and stale-surface review.
+- [x] Delete the disposable implementation plan and record the outcome.
+
+## Success criteria
+
+New jobs store Gouache when style is omitted or null, accept Cel and Gouache, reject Comic, and
+show only Cel/Gouache with Gouache selected. Historical Comic rows still execute, historical null
+rows still resolve to Cel, Cut-paper remains offline-only, and all required checks are green.
+
+## Outcome — 2026-08-17
+
+Implemented ADR-042 style policy:
+- Backend: `SELECTABLE_STYLE_PRESET_IDS` restricts creation API to `{"cel", "gouache"}`; Comic is rejected with 422; new jobs with omitted or null `style_preset_id` store `"gouache"`. Worker retains full `STYLE_PRESETS` mapping (`cel`, `comic`, `gouache`) and resolves legacy null rows to `"cel"`.
+- Frontend: Write page style picker displays only Cel ("Cartoon") and Gouache ("Painted"), with Gouache selected by default. Comic sample card is kept on disk for historical compatibility but excluded from the picker. `FailureScreen` retry defaults null `stylePresetId` to `"cel"` to protect legacy books from silent restyling.
+- Docs: Reconciled `style-presets.md`, `MASTER_SPEC.md`, `WORKFLOW.md`, `USER_FLOW.md`, and `PRD_v2.md`.
+- Verification:
+  - Backend: `uv run ruff check .` clean; `uv run pytest` — 938 passed, 71 skipped, 6 deselected, 1 pre-existing warning.
+  - Frontend: `pnpm lint` clean; `pnpm test` — 34 test files, 279 passed.
+  - `git diff --check` clean.
+- Cut-paper collage remains an unpromoted offline candidate fragment for future paid validation per ADR-042; no runtime or schema promotion was performed.
