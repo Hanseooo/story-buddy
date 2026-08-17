@@ -42,7 +42,7 @@ def _chips(character: Character, style_fragment: str | None) -> list[str]:
         if v
     ]
     if not full_axis_list:
-        return [character.name]
+        return ["overall physical appearance"]
     # ADR-034: the same acceptance predicate `char_bible` gates on, for the same reason. This
     # branch means "the reference passed" — if it read `matches_description` while the gate read
     # `contradictions`, a reference accepted by one and rejected by the other would offer the

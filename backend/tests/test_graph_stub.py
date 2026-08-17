@@ -51,6 +51,8 @@ STUB_ANALYSIS = StoryAnalysis.model_validate(
                 "name": "the orange dog",
                 "description": {
                     "species": "dog",
+                    "body_plan": "four-legged canine body with orange fur",
+                    "face_or_interface": "snout with floppy ears and friendly eyes",
                     "is_humanoid": False,
                     "colours": ["orange fur", "white paws"],
                     "body_features": ["floppy ears"],

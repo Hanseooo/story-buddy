@@ -113,10 +113,31 @@ def test_project_reveal_subtracts_when_contradictions_disagree_with_matches_desc
     assert _project_reveal(state)["characters"][0]["chips"] == ["one floppy ear"]
 
 
-def test_project_reveal_falls_back_to_name_when_description_has_no_axes():
-    state = _state([_char("c0", "Kiko", description=CharacterDescription(), verdict=None)])
-    chips = _project_reveal(state)["characters"][0]["chips"]
-    assert chips == ["Kiko"]
+def test_project_reveal_falls_back_to_fixed_chip_when_description_has_no_axes():
+    state = _state([_char("c0", "Leo", description=CharacterDescription(), verdict=None)])
+
+    assert _project_reveal(state)["characters"][0]["chips"] == [
+        "overall physical appearance"
+    ]
+
+
+def test_project_reveal_offers_body_and_face_as_separate_standalone_chips():
+    description = CharacterDescription(
+        species="robot",
+        colours=["silver"],
+        body_features=[
+            "small box-shaped metal body",
+            "rounded metal head with two blue LED lenses",
+        ],
+    )
+    state = _state([_char("c0", "Leo", description=description, verdict=None)])
+
+    assert _project_reveal(state)["characters"][0]["chips"] == [
+        "robot",
+        "silver",
+        "small box-shaped metal body",
+        "rounded metal head with two blue LED lenses",
+    ]
 
 
 def test_project_reveal_never_offers_notes_as_a_chip():
@@ -205,13 +226,17 @@ def test_project_reveal_word_filters_a_forbidden_term_out_of_the_species_chip():
     assert payload["characters"][0]["chips"] == ["orb", "blue"]
 
 
-def test_project_reveal_falls_back_to_the_name_when_the_style_forbids_every_axis():
+def test_project_reveal_falls_back_to_fixed_chip_when_style_forbids_every_axis():
     """Invariant 4: an empty chip list dead-ends the "try again" button. The existing fallback
     already covers this — pinned because filtering is now a way to reach it."""
-    star = _char("c1", "the star", description=CharacterDescription(species="glowing", colours=["glowing"]))
+    star = _char(
+        "c1",
+        "the star",
+        description=CharacterDescription(species="glowing", colours=["glowing"]),
+    )
     payload = _project_reveal(_state([star], style=Style(prompt_fragment=STYLE_PRESETS["comic"])))
 
-    assert payload["characters"][0]["chips"] == ["the star"]
+    assert payload["characters"][0]["chips"] == ["overall physical appearance"]
 
 
 def test_project_reveal_still_offers_the_chip_when_the_active_style_permits_it():

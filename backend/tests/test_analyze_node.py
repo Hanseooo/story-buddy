@@ -63,12 +63,73 @@ def test_extracted_description_accepts_three_discriminators_across_two_axes():
     description = ExtractedDescription.model_validate(
         {
             "species": "dog",
+            "body_plan": "four-legged canine body",
+            "face_or_interface": "short snout with floppy ears",
             "is_humanoid": False,
             "colours": ["brown", "cream"],
             "body_features": ["floppy ears"],
         }
     )
     assert description.species == "dog"
+
+
+@pytest.mark.parametrize("field", ["body_plan", "face_or_interface"])
+@pytest.mark.parametrize(
+    "value",
+    ["", "   ", "none", "neutral", "unknown", "unspecified", "one\nline", "x" * 121],
+)
+def test_extracted_morphology_requires_trimmed_single_line_non_placeholder_under_120_chars(field, value):
+    payload = {
+        "species": "robot",
+        "body_plan": "small metal body",
+        "face_or_interface": "two blue camera lenses",
+        "is_humanoid": False,
+        "colours": ["silver"],
+        "body_features": ["blue chest button"],
+        "clothing": ["canvas vest"],
+    }
+    payload[field] = value
+
+    with pytest.raises(ValidationError):
+        ExtractedDescription.model_validate(payload)
+
+
+def test_extracted_description_trims_valid_morphology():
+    result = ExtractedDescription.model_validate({
+        "species": "robot",
+        "body_plan": "  small metal body  ",
+        "face_or_interface": "  two blue camera lenses  ",
+        "is_humanoid": False,
+        "colours": ["silver"],
+        "body_features": ["blue chest button"],
+        "clothing": ["canvas vest"],
+    })
+
+    assert result.body_plan == "small metal body"
+    assert result.face_or_interface == "two blue camera lenses"
+
+
+def test_extracted_description_folds_morphology_before_the_visual_floor():
+    result = ExtractedDescription.model_validate({
+        "species": "robot",
+        "body_plan": "box-shaped metal body",
+        "face_or_interface": "rounded head with two blue lenses",
+        "is_humanoid": False,
+        "colours": ["silver"],
+        "body_features": [
+            "box-shaped metal body",
+            "blue chest button",
+            "rounded head with two blue lenses",
+            "blue chest button",
+        ],
+        "clothing": [],
+    })
+
+    assert result.body_features == [
+        "box-shaped metal body",
+        "rounded head with two blue lenses",
+        "blue chest button",
+    ]
 
 
 def test_extracted_description_inherits_every_contract_axis():
@@ -104,6 +165,8 @@ def test_story_analysis_accepts_the_four_collections():
                     "name": "the narrator",
                     "description": {
                         "species": "girl",
+                        "body_plan": "small upright body with two arms and two legs",
+                        "face_or_interface": "round face with two bright eyes",
                         "is_humanoid": True,
                         "colours": ["warm brown skin"],
                         "body_features": ["round face"],
@@ -227,6 +290,32 @@ def test_extract_entities_logs_the_extracted_counts(caplog):
     assert "1 characters" in caplog.text
 
 
+def test_extraction_prompt_separates_identity_from_appearance():
+    prompt = EXTRACTION_PROMPT.lower()
+
+    for phrase in (
+        "name as an identifier only",
+        "speech",
+        "actions",
+        "emotions",
+        "smiled",
+        "body_plan",
+        "face_or_interface",
+        "positive",
+        "smooth unbroken front surface",
+        "name or a pronoun alone",
+    ):
+        assert phrase in prompt
+
+
+def test_extract_entities_logs_prompt_version(caplog):
+    with caplog.at_level(logging.INFO, logger="pipeline.analyze"):
+        with patch("pipeline.analyze.structured_text", return_value=_analysis()):
+            extract_entities("I went to the beach.")
+
+    assert "extraction_prompt_version=1" in caplog.text
+
+
 def _state(raw_text="A dog runs in a field.", redacted_text="A dog runs in a field.") -> StoryMemory:
     return StoryMemory(
         schema_version=CURRENT_SCHEMA_VERSION,
@@ -242,6 +331,8 @@ def _character(name: str, species: str = "girl") -> dict:
         "name": name,
         "description": {
             "species": species,
+            "body_plan": "small upright body with two arms and two legs",
+            "face_or_interface": "round face with two bright eyes",
             "is_humanoid": True,
             "colours": ["warm brown skin"],
             "body_features": ["round face"],
@@ -250,31 +341,39 @@ def _character(name: str, species: str = "girl") -> dict:
     }
 
 
-def test_analyze_persists_story_stated_details_without_the_transient_humanoid_flag():
-    analysis = _analysis(
-        characters=[
-            {
-                "name": "Ana",
-                "description": {
-                    "species": "human",
-                    "is_humanoid": True,
-                    "colours": ["blue eyes"],
-                    "body_features": ["round face"],
-                    "clothing": ["red cape"],
-                },
-            }
-        ]
-    )
-    with patch("pipeline.analyze.extract_entities", return_value=analysis):
-        description = analyze(_state())["characters"][0].description
+def test_analyze_persists_folded_morphology_without_transient_fields():
+    analysis = _analysis(characters=[_character("Leo", species="robot")])
 
-    assert description.model_dump() == {
-        "species": "human",
-        "colours": ["blue eyes"],
-        "body_features": ["round face"],
-        "clothing": ["red cape"],
-        "notes": None,
+    with patch("pipeline.analyze.extract_entities", return_value=analysis):
+        character = analyze(_state())["characters"][0]
+
+    assert type(character.description) is CharacterDescription
+    assert character.description.body_features[:2] == [
+        "small upright body with two arms and two legs",
+        "round face with two bright eyes",
+    ]
+    assert "body_plan" not in character.description.model_dump()
+    assert "face_or_interface" not in character.description.model_dump()
+    assert CURRENT_SCHEMA_VERSION == 1
+
+
+def test_is_humanoid_still_controls_the_existing_clothing_floor():
+    assert {"body_plan", "face_or_interface"} <= set(ExtractedDescription.model_fields)
+
+    payload = {
+        "species": "robot",
+        "body_plan": "small upright body",
+        "face_or_interface": "round face with two eyes",
+        "is_humanoid": False,
+        "colours": ["silver", "blue"],
+        "body_features": ["short limbs"],
+        "clothing": [],
     }
+
+    assert ExtractedDescription.model_validate(payload).clothing == []
+    payload["is_humanoid"] = True
+    with pytest.raises(ValidationError):
+        ExtractedDescription.model_validate(payload)
 
 
 def test_analyze_mints_ids_by_list_position():
@@ -570,6 +669,8 @@ def test_narrative_notes_do_not_satisfy_the_discriminator_floor():
         ExtractedDescription.model_validate(
             {
                 "species": "wizard",
+                "body_plan": "tall upright body",
+                "face_or_interface": "lined face with long grey beard",
                 "is_humanoid": True,
                 "colours": [],
                 "body_features": [],

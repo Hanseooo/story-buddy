@@ -3,7 +3,15 @@ import re
 
 from pydantic import BaseModel, field_validator, model_validator
 
-from contracts.story_memory import Character, CharacterDescription, Location, StoryMemory, StoryObject, TimelineEvent
+from contracts.story_memory import (
+    Character,
+    CharacterDescription,
+    Location,
+    StoryMemory,
+    StoryObject,
+    TimelineEvent,
+    _DESCRIPTION_PLACEHOLDERS,
+)
 from providers import structured_text
 
 
@@ -14,10 +22,31 @@ from providers import structured_text
 
 class ExtractedDescription(CharacterDescription):
     species: str
+    body_plan: str
+    face_or_interface: str
     is_humanoid: bool
+
+    @field_validator("body_plan", "face_or_interface", mode="before")
+    @classmethod
+    def morphology_is_concrete(cls, value: str) -> str:
+        if not isinstance(value, str):
+            raise ValueError("morphology must be text")
+        value = value.strip()
+        if not value or value.casefold() in _DESCRIPTION_PLACEHOLDERS:
+            raise ValueError("morphology must not be blank or a placeholder")
+        if "\n" in value or "\r" in value:
+            raise ValueError("morphology must be single-line")
+        if len(value) > 120:
+            raise ValueError("morphology must be at most 120 characters")
+        return value
 
     @model_validator(mode="after")
     def complete_visual_profile(self) -> "ExtractedDescription":
+        self.body_features = list(dict.fromkeys([
+            self.body_plan,
+            self.face_or_interface,
+            *self.body_features,
+        ]))
         axes = (self.colours, self.body_features, self.clothing)
         if sum(len(axis) for axis in axes) < 3 or sum(bool(axis) for axis in axes) < 2:
             raise ValueError("character needs at least three visual discriminators across two axes")
@@ -77,6 +106,8 @@ class StoryAnalysis(BaseModel):
 
 log = logging.getLogger(__name__)
 
+EXTRACTION_PROMPT_VERSION = 1
+
 # `analyze` reads REDACTED text, so any name reaching this prompt is already a pseudonym from
 # `providers._PSEUDONYM_POOL` — a story about "Jun" arrives as a story about "Ana". Using that
 # name is the entire point of pseudonymizing rather than hard-redacting ("so the story survives
@@ -100,7 +131,24 @@ redaction placeholder like <PERSON_1>. The story is usually first-person, and th
 usually a character.
 Classify by agency: a character speaks, decides, moves intentionally, or performs an action. An inert prop belongs only in objects. A personified object belongs only in characters, never both. An object name such as "the robot (Leo)" is an alias for character Leo and must not appear in objects.
 Species is the physical kind, never a job title or role: a human wizard is physically human.
-Copy every visual fact the story states without alteration. Fill only missing visual axes once with concrete, directly drawable, child-safe, non-stereotyped details that distinguish this character from the rest of the roster. Never use placeholder values such as neutral, none, unknown, or unspecified.
+Treat every character name as an identifier only. Do not infer age, gender, ethnicity, body,
+face, clothing, or temperament from a name. Do not treat pronouns, speech, dialogue, jobs,
+actions, or emotions as permanent appearance; "smiled" describes an expression in that moment,
+not a human mouth or human face. Copy every stated permanent physical fact without alteration.
+When the story is silent, choose one neutral, child-safe, drawable design once. Keep animals,
+robots, vehicles, objects, and other non-people species-appropriate unless the story explicitly
+anthropomorphizes them. Prefer positive visible morphology over a bare prohibition: use a positive
+faceless surface/interface such as "smooth unbroken front surface" rather than only "no face".
+Choose body_plan for the stable whole-subject silhouette and construction, and
+face_or_interface for the stable visible head, face, sensory interface, or positive faceless
+surface. Both are permanent facts, not pose, expression, damage, lighting, weather, style, or
+story action. Derive is_humanoid from the resolved body plan; speech, walking, or emotion are
+insufficient; a name or a pronoun alone never makes it true. Preserve explicit human-faced robots and explicit
+anthropomorphic animals. If two characters are not stated to be identical, use distinct missing
+visual details where possible; never invent a difference for stated twins.
+Return both body_plan and face_or_interface as trimmed, single-line, concrete values under
+120 Unicode code points. Never use none, neutral, unknown, or unspecified for them.
+Fill only missing visual axes once with concrete, directly drawable, child-safe, non-stereotyped details that distinguish this character from the rest of the roster. Never use placeholder values such as neutral, none, unknown, or unspecified.
 Return at least three stable visual discriminators across at least two of colours, body_features, and clothing. Set is_humanoid accurately; every humanoid needs a non-empty clothing description.
 
 Locations and objects: whatever the story mentions. Describe each location by what is permanently there — not the weather, the lighting, the time of day, any damage, or what happens there. Copy every stated permanent fact without alteration. Fill missing detail once with neutral, child-safe features that make the place visually recognizable. For each object, provide a stable physical description and set owner_name to the character's name if owned by a character, or null if unowned.
@@ -120,7 +168,8 @@ def extract_entities(text: str) -> StoryAnalysis:
     """
     analysis = structured_text(EXTRACTION_PROMPT.format(text=text), StoryAnalysis)
     log.info(
-        "analyze: extracted %d characters, %d locations, %d objects, %d timeline events",
+        "analyze: extraction_prompt_version=%d; extracted %d characters, %d locations, %d objects, %d timeline events",
+        EXTRACTION_PROMPT_VERSION,
         len(analysis.characters),
         len(analysis.locations),
         len(analysis.objects),
@@ -146,7 +195,11 @@ def analyze(state: StoryMemory) -> dict:
             char_id=f"c{i}",
             name=extracted.name,
             # the strict subclass is a boundary concern; what is persisted is the contract type
-            description=CharacterDescription(**extracted.description.model_dump(exclude={"is_humanoid"})),
+            description=CharacterDescription(
+                **extracted.description.model_dump(
+                    exclude={"is_humanoid", "body_plan", "face_or_interface"}
+                )
+            ),
         )
         for i, extracted in enumerate(analysis.characters[:3])
     ]

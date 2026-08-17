@@ -1,3 +1,4 @@
+import logging
 import re
 from unittest.mock import MagicMock, patch
 
@@ -111,6 +112,57 @@ def test_best_draw_returns_zero_when_every_verdict_is_empty():
 
 # --- reference_prompt (pure) ---
 
+def test_reference_prompt_omits_character_name_for_fresh_physical_identity():
+    description = CharacterDescription(
+        species="robot",
+        colours=["silver"],
+        body_features=[
+            "small box-shaped metal body with short hinged limbs",
+            "rounded metal head with two blue LED lenses",
+        ],
+        clothing=[],
+    )
+
+    prompt = reference_prompt(description, "Leo", STYLE_PRESETS["gouache"])
+
+    assert "Leo" not in prompt
+    for value in [
+        "robot",
+        "silver",
+        "small box-shaped metal body with short hinged limbs",
+        "rounded metal head with two blue LED lenses",
+    ]:
+        assert value in prompt
+
+
+def test_mint_reference_gives_draw_and_judge_the_same_name_free_axes():
+    description = CharacterDescription(
+        species="robot",
+        colours=["silver"],
+        body_features=[
+            "small box-shaped metal body with short hinged limbs",
+            "rounded metal head with two blue LED lenses",
+        ],
+    )
+
+    (_, _, draws), t2i, judge_mock, _ = _mint(
+        [_verdict(True)],
+        description=description,
+        name="Leo",
+        style_fragment=STYLE_PRESETS["gouache"],
+    )
+
+    draw_prompt = t2i.call_args.args[0]
+    judge_prompt = judge_mock.call_args.args[0]
+
+    assert draws == 1
+    assert "Leo" not in draw_prompt
+    assert "Leo" not in judge_prompt
+    for value in description.body_features:
+        assert value in draw_prompt
+        assert value in judge_prompt
+
+
 def test_reference_prompt_contains_the_identity_projection_but_not_notes():
     description = CharacterDescription(
         species="dog",
@@ -170,6 +222,35 @@ def test_reference_prompt_floors_to_the_character_name_on_an_empty_description()
     assert "The character is the orange dog," in prompt
 
 
+def test_species_only_legacy_description_stays_name_free():
+    prompt = reference_prompt(
+        CharacterDescription(species="robot"),
+        "Leo",
+        STYLE_PRESETS["gouache"],
+    )
+
+    assert "Leo" not in prompt
+    assert "robot" in prompt
+    assert "friendly children's picture-book character" in prompt
+
+
+def test_fully_empty_legacy_projection_uses_name_and_logs_only_id_and_boolean(caplog):
+    with caplog.at_level(logging.INFO, logger="pipeline.char_bible"):
+        (_, _, draws), t2i, _, _ = _mint(
+            [_verdict(True)],
+            description=CharacterDescription(),
+            name="Leo",
+            style_fragment=STYLE_PRESETS["gouache"],
+        )
+
+    assert draws == 1
+    assert "Leo" in t2i.call_args.args[0]
+    assert "legacy_name_fallback=True" in caplog.text
+    assert "c0" in caplog.text
+    assert "Leo" not in caplog.text
+    assert "prompt" not in caplog.text.lower()
+
+
 # --- visually-thin descriptions (2026-08-11) ---
 
 def test_reference_prompt_enriches_a_description_with_no_visual_axis():
@@ -182,7 +263,8 @@ def test_reference_prompt_enriches_a_description_with_no_visual_axis():
     """
     prompt = reference_prompt(CharacterDescription(species="girl", notes="the protagonist"), "the narrator", FRAG)
 
-    assert "the narrator, girl" in prompt
+    assert "girl" in prompt
+    assert "the narrator" not in prompt
     assert "the protagonist" not in prompt
     assert "friendly children's picture-book character" in prompt
 
@@ -217,8 +299,10 @@ def test_enrichment_reaches_the_draw_prompt_but_never_the_judge_prompt():
     assert "friendly children's picture-book character" in draw_prompt
     assert "friendly children's picture-book character" not in judge_prompt
     # Narrative notes are excluded from both prompts; the draw-only filler is the sole divergence.
-    assert "the narrator, girl" in draw_prompt
-    assert "the narrator, girl" in judge_prompt
+    assert "girl" in draw_prompt
+    assert "girl" in judge_prompt
+    assert "the narrator" not in draw_prompt
+    assert "the narrator" not in judge_prompt
     assert "the protagonist" not in judge_prompt
     assert "the protagonist" not in draw_prompt
 
@@ -603,7 +687,8 @@ def test_judge_prompt_scopes_the_question_to_contradiction_not_to_any_difference
     # ADR-004 reason-then-score survives the rewording: reason is still asked for first.
     assert prompt.index("First describe") < prompt.index("Then say whether")
     # The description still reaches the judge — _describe and the prompt must not drift apart.
-    assert "the orange dog, dog, orange" in prompt
+    assert "dog, orange" in prompt
+    assert "the orange dog" not in prompt
 
 
 def test_the_judge_is_asked_about_text_last_and_the_version_is_bumped():
@@ -620,7 +705,7 @@ def test_the_judge_is_asked_about_text_last_and_the_version_is_bumped():
     """
     from pipeline.char_bible import JUDGE_PROMPT, JUDGE_PROMPT_VERSION
 
-    assert JUDGE_PROMPT_VERSION == 5
+    assert JUDGE_PROMPT_VERSION == 6
 
     prompt = JUDGE_PROMPT.format(subject="the orange dog, dog, orange")
     assert "free of any text" in prompt
@@ -957,6 +1042,32 @@ def test_char_bible_targeted_mode_emphasizes_an_attribute_already_in_a_visual_ax
     assert "Be sure to include: orange sock." in t2i.call_args.args[0]
 
 
+def test_targeted_legacy_redraw_uses_neutral_chip_and_the_same_fallback():
+    from contracts.story_memory import ReferenceRetry
+
+    character = _char("c0", "Leo", ref="story-1/ref-c0-1.png").model_copy(
+        update={"description": CharacterDescription()}
+    )
+    state = _state(
+        [character],
+        cost=Cost(image_count=1),
+    ).model_copy(update={
+        "reference_retry": ReferenceRetry(
+            char_id="c0",
+            attribute="overall physical appearance",
+        )
+    })
+
+    with patch("pipeline.char_bible.text_to_image", return_value=b"x") as t2i, \
+         patch("pipeline.char_bible.judge", return_value=_verdict(True)), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+        char_bible(state)
+
+    prompt = t2i.call_args.args[0]
+    assert "Leo" in prompt
+    assert prompt.count("overall physical appearance") == 1
+
+
 def test_char_bible_targeted_mode_suppresses_scenery_like_the_first_draw():
     """A targeted redraw replaces the canonical reference outright, so a room drawn behind THIS
     draw reaches every page exactly the same way. Two call sites, one policy."""
@@ -1091,7 +1202,8 @@ def test_a_style_forbidden_attribute_reaches_neither_the_draw_prompt_nor_the_jud
     assert "glowing" not in t2i_mock.call_args.args[0]
     assert "glowing" not in judge_mock.call_args.args[0]
     # Narrowed, not gutted: species and the permitted axes still describe the character.
-    assert "the star, star, tiny" in judge_mock.call_args.args[0]
+    assert "star, tiny" in judge_mock.call_args.args[0]
+    assert "the star" not in judge_mock.call_args.args[0]
 
 
 def test_an_attribute_the_active_fragment_never_forbids_still_reaches_both_prompts():

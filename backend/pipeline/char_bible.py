@@ -57,13 +57,10 @@ BUCKET = "storybook-images"
 # 4 (lettering-suppression §4.1): adds the text question. v3 verdicts carry no `text_free` signal
 # at all — they default True — so the lettering rate is only measurable from v4 forward.
 # 5 (visual-continuity §4.9): makes the walk explicit. Job 3cc05c4b's judge wrote that the
-# reference read young and cheerful where the description said dark and imposing, and STILL
-# returned `contradictions=[]` — the prose found the defect and the list did not carry it, so
-# ADR-034's derived gate accepted the draw. v4 asked for the list without ever saying the two had
-# to agree. v5 says it, and says to take the stated attributes one at a time so a skim cannot
-# clear an axis it never looked at. v4 verdicts are not comparable: an empty v4 list may mean
-# "clean" or "skimmed", and only from v5 do the two stop sharing a value.
-JUDGE_PROMPT_VERSION = 5
+# 6 (canonical-character-consistency §4.2): removes character names from the fresh
+# canonical-reference draw and judge subject projections. Assessed subject changed, so the
+# series must be segmented even though the acceptance predicate did not.
+JUDGE_PROMPT_VERSION = 6
 
 JUDGE_PROMPT = """\
 This image is meant to be a character reference drawn from the description below.
@@ -173,6 +170,19 @@ For a human or humanoid character, show age-appropriate clothing covering the to
 Style: {style_fragment}"""
 
 
+def _visual_axes(description: CharacterDescription) -> list[str]:
+    return [
+        axis
+        for axis in [
+            description.species,
+            ", ".join(description.colours),
+            ", ".join(description.body_features),
+            ", ".join(description.clothing),
+        ]
+        if axis
+    ]
+
+
 def _describe(description: CharacterDescription, name: str, notes: bool = True) -> str:
     """The `CharacterDescription` axes as one line. Shared by the draw prompt and the judge
     prompt so they can never drift into describing different characters.
@@ -183,20 +193,11 @@ def _describe(description: CharacterDescription, name: str, notes: bool = True) 
     unconditional `Be sure to include:` clause in `_mint_targeted`.
     """
     description = description.without_placeholders()
-    axes = [
-        description.species,
-        ", ".join(description.colours),
-        ", ".join(description.body_features),
-        ", ".join(description.clothing),
-        description.notes if notes else None,
-    ]
-    # Plain commas, no " - " and no ";". Those two separators made the line read as a caption, and
-    # Qwen-Image drew it: a 2026-08-13 draw of `the star - star; tiny` came back with **"Hoe -
-    # Star:"** lettered across the top — a mangled render of this very string, dash and all. It is
-    # the same defect as the old prompt's "Reference;", one layer in, and it is the "name above the
-    # character" a reader sees. Commas describe; dashes and colons label.
-    populated = [axis for axis in axes if axis]
-    return ", ".join([name, *populated])
+    visual_axes = _visual_axes(description)
+    populated = [*visual_axes]
+    if notes and description.notes:
+        populated.append(description.notes)
+    return ", ".join(populated) or name
 
 
 def reference_prompt(description: CharacterDescription, name: str, style_fragment: str) -> str:
@@ -287,6 +288,9 @@ def mint_reference(
     # contradict it on all 3 draws, burning the budget on every job. Unlike the two one-directional
     # divergences in `_describe`, this is filtered for BOTH prompts — the defect is asking at all.
     description = filtered_description(description, style_fragment)
+    legacy_name_fallback = not _visual_axes(description)
+    if legacy_name_fallback:
+        log.info("char_bible: %s legacy_name_fallback=%s", char_id, legacy_name_fallback)
     prompt = reference_prompt(description, name, style_fragment)
     judge_prompt = JUDGE_PROMPT.format(subject=_describe(description, name, notes=False))
     candidates: list[tuple[bytes, RefVerdict]] = []
@@ -347,6 +351,9 @@ def _mint_targeted(state: StoryMemory) -> dict:
     # ADR-035 filters the chip at source, so the selected attribute cannot contradict the active
     # style. ADR-039 keeps it separate from narrative `notes` and restates it unconditionally.
     description = filtered_description(character.description, style_fragment)
+    legacy_name_fallback = not _visual_axes(description)
+    if legacy_name_fallback:
+        log.info("char_bible: %s legacy_name_fallback=%s", character.char_id, legacy_name_fallback)
     prompt = (
         f"{reference_prompt(description, character.name, style_fragment)}"
         f"\n\nBe sure to include: {retry.attribute}."
