@@ -132,7 +132,9 @@ STYLE_PRESETS: dict[str, str] = {
     "cel": settings.default_style_fragment,
     "comic": "bold comic-book illustration, heavy ink outlines of varied weight, flat spot colours, ben-day halftone dot shading in the backgrounds and shadows, the character itself in flat unscreened colour, limited palette, no gradients, no glow",
     "gouache": "flat gouache storybook illustration, no outlines, shapes formed by brushed colour, matte paper grain, limited warm palette, flat colour fills, no gradients, no glossy highlights",
+    "cut_paper": "flat cut-paper storybook collage, clean simplified shapes with crisp cut edges, flat layered colour areas, limited warm palette, subtle paper fibre texture, no outlines, no gradients, no glossy highlights, no dimensional shadows",
 }
+SELECTABLE_STYLE_PRESET_IDS: frozenset[str] = frozenset({"cel", "gouache", "cut_paper"})
 
 # Spec `docs/specs/image-generator.md` §4: ADR-025 D4 domain-level breaker.
 # IMAGE_BUDGET derives from MAX_SCENES so both share one source of truth.

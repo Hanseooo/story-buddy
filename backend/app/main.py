@@ -7,7 +7,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 
-from app.config import MIN_STORY_WORDS, STYLE_PRESETS, settings
+from app.config import MIN_STORY_WORDS, SELECTABLE_STYLE_PRESET_IDS, settings
 from app.length import clamp_story, word_count
 from app.db import get_supabase_client
 from app.queue import get_queue
@@ -60,7 +60,7 @@ class CreateStorybookRequest(BaseModel):
     @field_validator("style_preset_id")
     @classmethod
     def validate_style_preset(cls, v: str | None) -> str | None:
-        if v is not None and v not in STYLE_PRESETS:
+        if v is not None and v not in SELECTABLE_STYLE_PRESET_IDS:
             raise ValueError(f"Unknown style_preset_id: {v!r}")
         return v
 
@@ -113,7 +113,7 @@ def create_storybook(
             "current_stage": "queued",
             "input_text": text,
             "truncated": truncated,
-            "style_preset_id": payload.style_preset_id,
+            "style_preset_id": payload.style_preset_id or "gouache",
             "profile_id": user.id,
             "classroom_id": classroom_id,
         }

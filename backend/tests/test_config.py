@@ -6,6 +6,7 @@ from app.config import (
     MAX_STORY_WORDS,
     MIN_STORY_WORDS,
     RECURSION_LIMIT,
+    SELECTABLE_STYLE_PRESET_IDS,
     STYLE_PRESETS,
     SUPER_STEP_PRELUDE,
     settings,
@@ -14,8 +15,12 @@ from pipeline.prompt_optimizer import style_prohibitions
 from providers import NEGATIVE_PROMPT
 
 
-def test_style_presets_has_exactly_three_keys():
-    assert set(STYLE_PRESETS.keys()) == {"cel", "comic", "gouache"}
+def test_style_presets_has_exactly_four_keys():
+    assert set(STYLE_PRESETS.keys()) == {"cel", "comic", "gouache", "cut_paper"}
+
+
+def test_selectable_style_preset_ids_excludes_worker_compatibility_only_comic():
+    assert SELECTABLE_STYLE_PRESET_IDS == frozenset({"cel", "gouache", "cut_paper"})
 
 
 def test_cel_preset_equals_default_style_fragment():
@@ -43,17 +48,11 @@ def test_no_preset_utters_a_term_the_negative_prompt_suppresses():
                 f"{name} names {term!r}, which its own negative prompt is trying to subtract"
 
 
-def test_outline_treatment_is_what_separates_the_three_presets():
-    """`gouache` asked for "thick confident ink outlines" until 2026-08-13 and the model overrode
-    it — the seed-21 picker sample has no keyline anywhere, which is the look the preset is for.
-    Left as a clause the model may or may not honour, that coin is flipped ONCE: `char_bible` mints
-    the reference from this fragment and every page inherits it, so a whole book comes back outlined
-    or not outlined on the same seed. A prod gouache run landed outlined; the sample did not.
-
-    Stating the absence makes the outcome the specification instead of luck, and it is also the only
-    axis on which the three presets genuinely differ — strip it and `gouache` is `cel` with grain.
-    """
+def test_outline_treatment_differentiates_presets():
+    """`gouache` and `cut_paper` prohibit outlines; `cel` and `comic` allow them. The outline
+    axis is what separates the line-based presets from the fill-based ones."""
     assert "outlines" in style_prohibitions(STYLE_PRESETS["gouache"])
+    assert "outlines" in style_prohibitions(STYLE_PRESETS["cut_paper"])
     assert "outlines" not in style_prohibitions(STYLE_PRESETS["cel"])
     assert "outlines" not in style_prohibitions(STYLE_PRESETS["comic"])
 
@@ -87,6 +86,20 @@ def test_no_preset_screens_texture_over_the_character_itself():
         "comic's halftone is unscoped again — it must name what it screens"
     assert re.search(r"\bcharacter\b[^,]*\bflat\b", comic, re.I), \
         "comic screens texture but never puts the character itself in flat colour"
+
+
+def test_cut_paper_prohibits_outlines_gradients_glossy_highlights_and_dimensional_shadows():
+    """ADR-042 §6 frozen fragment: 'no outlines, no gradients, no glossy highlights, no
+    dimensional shadows'. The prohibition set is derived by `style_prohibitions`, never
+    hand-listed (ADR-035)."""
+    cut_paper = STYLE_PRESETS["cut_paper"]
+    prohibitions = style_prohibitions(cut_paper)
+    assert "outlines" in prohibitions
+    assert "gradients" in prohibitions
+    assert "glossy" in prohibitions
+    assert "highlights" in prohibitions
+    assert "dimensional" in prohibitions
+    assert "shadows" in prohibitions
 
 
 def test_no_preset_asks_for_a_thing_its_own_no_clause_forbids():

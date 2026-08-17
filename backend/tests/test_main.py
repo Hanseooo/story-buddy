@@ -48,7 +48,7 @@ def test_create_storybook_inserts_job_and_enqueues():
 
 # --- style-presets spec: API validation (tests 3–5) ---
 
-def test_create_storybook_stores_style_preset_id_when_provided():
+def test_create_storybook_rejects_comic_style_preset_with_422():
     fake_supabase = MagicMock()
     fake_queue = MagicMock()
 
@@ -56,9 +56,8 @@ def test_create_storybook_stores_style_preset_id_when_provided():
          patch("app.main.get_queue", return_value=fake_queue):
         response = client.post("/storybooks", json={"text": "A dog runs in a field.", "style_preset_id": "comic"})
 
-    assert response.status_code == 200
-    insert_args = fake_supabase.table.return_value.insert.call_args[0][0]
-    assert insert_args["style_preset_id"] == "comic"
+    assert response.status_code == 422
+    fake_supabase.table.return_value.insert.assert_not_called()
 
 
 def test_create_storybook_rejects_unknown_style_preset_with_422():
@@ -81,7 +80,7 @@ def test_create_storybook_rejects_empty_string_style_preset_with_422():
     fake_supabase.table.return_value.insert.assert_not_called()
 
 
-def test_create_storybook_omitting_style_preset_stores_null():
+def test_create_storybook_omitting_style_preset_stores_gouache():
     fake_supabase = MagicMock()
     fake_queue = MagicMock()
 
@@ -91,7 +90,40 @@ def test_create_storybook_omitting_style_preset_stores_null():
 
     assert response.status_code == 200
     insert_args = fake_supabase.table.return_value.insert.call_args[0][0]
-    assert insert_args["style_preset_id"] is None
+    assert insert_args["style_preset_id"] == "gouache"
+
+
+def test_create_storybook_null_style_preset_stores_gouache():
+    fake_supabase = MagicMock()
+    fake_queue = MagicMock()
+
+    with patch("app.main.get_supabase_client", return_value=fake_supabase), \
+         patch("app.main.get_queue", return_value=fake_queue):
+        response = client.post(
+            "/storybooks",
+            json={"text": "A dog runs in a field.", "style_preset_id": None},
+        )
+
+    assert response.status_code == 200
+    insert_args = fake_supabase.table.return_value.insert.call_args[0][0]
+    assert insert_args["style_preset_id"] == "gouache"
+
+
+def test_create_storybook_accepts_cut_paper_style_preset():
+    """ADR-042 §10: cut_paper is the third selectable preset after promotion."""
+    fake_supabase = MagicMock()
+    fake_queue = MagicMock()
+
+    with patch("app.main.get_supabase_client", return_value=fake_supabase), \
+         patch("app.main.get_queue", return_value=fake_queue):
+        response = client.post(
+            "/storybooks",
+            json={"text": "A dog runs in a field.", "style_preset_id": "cut_paper"},
+        )
+
+    assert response.status_code == 200
+    insert_args = fake_supabase.table.return_value.insert.call_args[0][0]
+    assert insert_args["style_preset_id"] == "cut_paper"
 
 
 # --- input-gate-hardening spec: length guard (§4d) ---

@@ -233,6 +233,23 @@ def test_run_storybook_job_resolves_gouache_style_preset():
     assert state.style.prompt_fragment == STYLE_PRESETS["gouache"]
 
 
+def test_run_storybook_job_resolves_comic_style_preset():
+    """A stored compatibility-only Comic row still reaches StoryMemory unchanged."""
+    fake_supabase = _fake_supabase(style_preset_id="comic")
+    fake_cm = MagicMock()
+    fake_cm.__enter__.return_value = MagicMock()
+    fake_graph = _fake_graph()
+
+    with patch("worker.run_job.get_supabase_client", return_value=fake_supabase), \
+         patch("worker.run_job.PostgresSaver.from_conn_string", return_value=fake_cm), \
+         patch("worker.run_job.build_graph", return_value=fake_graph):
+        run_storybook_job("job-1")
+
+    state = fake_graph.stream.call_args.args[0]
+    assert state.style.style_preset_id == "comic"
+    assert state.style.prompt_fragment == STYLE_PRESETS["comic"]
+
+
 def test_run_storybook_job_defaults_style_to_cel_when_preset_is_null():
     """Given style_preset_id=None in the jobs row, StoryMemory.style defaults to 'cel'."""
     fake_supabase = _fake_supabase(style_preset_id=None)
