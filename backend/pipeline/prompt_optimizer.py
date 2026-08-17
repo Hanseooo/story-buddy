@@ -173,7 +173,14 @@ def _describe(description: CharacterDescription, name: str) -> str:
     # and Qwen-Image draws captions: the reference draw returned "Hoe - Star:" lettered on the
     # canvas, and a prod cel page returned the name "Casey" above the character. Commas describe.
     populated = [axis for axis in axes if axis]
-    return ", ".join([name, *populated])
+    base = ", ".join([name, *populated])
+    
+    # Enforce non-human morphology purely in the positive prompt, scoped to this specific character.
+    # This prevents global negative prompt contamination in mixed-character scenes (e.g. Jamie + Bolt).
+    if not getattr(description, "is_humanoid", True):
+        base += " (Non-human entity, drawn exactly as what it actually is)"
+        
+    return base
 
 
 def referenced_characters(
@@ -219,17 +226,9 @@ REFERENCE_CLAUSE = (
 # contradict it.
 SUBJECT_COUNT_CLAUSE = "This illustration contains exactly {n} character{plural}: {names}."
 
-# Wording from `char_bible.REFERENCE_PROMPT` (prod job 4cb31620 drew "the star" as a smiling mascot
-# with arms and legs), scoped to the scene path and closed with "unless described above".
-# UNCONDITIONAL, for the reason char_bible gives: branching on species needs a word list that is
-# wrong the first time a child writes something not on it, and this is a no-op for a person.
-NON_HUMAN_CLAUSE = (
-    "If a character is not a person, draw it as the kind of thing it actually is — give it no "
-    "human body and no human face unless described above."
-)
-
 
 def _names(names: list[str]) -> str:
+
     """"Ana" / "Ana and the star" / "Ana, the star and the bird"."""
     if len(names) < 2:
         return "".join(names)
@@ -293,17 +292,17 @@ def build_prompt(
         if character.char_id not in referenced_ids
     ]
 
-    # Emitted only when there is a subject to count — all three clauses would otherwise reference
-    # nothing. The count is computed from `present`, i.e. AFTER the missing-char_id filter above,
+    # Emitted only when there is a subject to count — otherwise references nothing.
+    # The count is computed from `present`, i.e. AFTER the missing-char_id filter above,
     # or it asserts a number the prompt does not name.
-    guards = ["\n".join([
+    guards = [
         SUBJECT_COUNT_CLAUSE.format(
             n=len(present),
             plural="" if len(present) == 1 else "s",
             names=_names([character.name for character in present]),
-        ),
-        NON_HUMAN_CLAUSE,
-    ])] if present else []
+        )
+    ] if present else []
+
 
     by_object_id = {obj.obj_id: obj for obj in objects or []}
     visible_objects: list[StoryObject] = []

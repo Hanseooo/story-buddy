@@ -4,9 +4,19 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, CharacterDescription, Cost, Input, RefVerdict, StoryMemory, Style
 from app.config import STYLE_PRESETS
-from pipeline.char_bible import REFERENCE_NEGATIVE, best_draw, char_bible, mint_reference, reference_prompt
+from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, CharacterDescription, Cost, Input, RefVerdict, StoryMemory, Style
+from pipeline.char_bible import (
+    HUMANOID_CLOTHING_CLAUSE,
+    NON_HUMAN_NEGATIVE,
+    REFERENCE_NEGATIVE,
+    best_draw,
+    char_bible,
+    mint_reference,
+    reference_prompt,
+)
+
+
 
 FRAG = "flat cel-shaded cartoon, thick clean black outlines"
 DRAWS = [b"draw-1-bytes", b"draw-2-bytes", b"draw-3-bytes"]
@@ -321,17 +331,15 @@ def test_reference_prompt_does_not_order_a_humanoid_pose():
     assert "standing" not in reference_prompt(CharacterDescription(species="star"), "the star", FRAG)
 
 
-def test_reference_prompt_guards_against_anthropomorphising_a_non_human_subject():
-    """The direct counter to c1, and it deliberately does NOT branch on species.
+def test_reference_prompt_branches_clothing_clause_on_is_humanoid():
+    """ADR-043: only humanoid characters get the torso clothing clause in positive prompt."""
+    human_prompt = reference_prompt(CharacterDescription(species="girl", is_humanoid=True), "the girl", FRAG)
+    assert HUMANOID_CLOTHING_CLAUSE in human_prompt
+    assert "not a person" not in human_prompt
 
-    Classifying "star", "cloud", "jeepney", "kalabaw" as non-humanoid needs a word list that is
-    wrong the first time a child writes something not on it — and unlike the thin-description
-    filler there is no cheap structural signal to key on. An unconditional clause is a no-op for
-    a girl or a dog, which is what makes the branchless version the correct lazy one.
-    """
-    for species in ["star", "girl", "dog"]:
-        prompt = reference_prompt(CharacterDescription(species=species), f"the {species}", FRAG)
-        assert "not a person" in prompt
+    non_human_prompt = reference_prompt(CharacterDescription(species="star", is_humanoid=False), "the star", FRAG)
+    assert HUMANOID_CLOTHING_CLAUSE not in non_human_prompt
+    assert "not a person" not in non_human_prompt
 
 
 def test_reference_prompt_excludes_narrative_notes_from_a_human_identity():
@@ -407,9 +415,6 @@ def test_reference_prompt_states_its_background_positively_instead_of_negating()
     prompt = reference_prompt(CharacterDescription(species="dog"), "the dog", FRAG)
     assert "no scenery" not in prompt
     assert "No other characters" not in prompt
-    # The clause that ISN'T a background prohibition stays — it guards anatomy, not the backdrop,
-    # and there is no negative-prompt phrasing for "no human body *unless* the story said so".
-    assert "not a person" in prompt
 
 
 def test_reference_prompt_asks_for_a_full_shot_without_asserting_an_anatomy():
@@ -456,28 +461,35 @@ def test_the_reference_draw_suppresses_scenery_through_the_negative_prompt():
     `text_to_image` is also `generate_scene`'s no-reference fallback (`generate_scene.py:57`), and
     a scene needs the scenery this suppresses.
     """
-    _, t2i_mock, _, _ = _mint([_verdict(True)])
+    _, t2i_mock, _, _ = _mint([_verdict(True)], description=CharacterDescription(is_humanoid=True))
     assert t2i_mock.call_args.kwargs["negative_extra"] == REFERENCE_NEGATIVE
 
 
-def test_the_non_humanoid_guard_never_reaches_the_judge_prompt():
+def test_non_human_reference_draw_suppresses_human_features_in_negative_prompt():
+    """ADR-043: is_humanoid=False appends NON_HUMAN_NEGATIVE to negative_extra."""
+    _, t2i_mock, _, _ = _mint([_verdict(True)], description=CharacterDescription(species="robot", is_humanoid=False))
+    assert t2i_mock.call_args.kwargs["negative_extra"] == f"{REFERENCE_NEGATIVE}, {NON_HUMAN_NEGATIVE}"
+
+
+def test_the_humanoid_clothing_guard_never_reaches_the_judge_prompt():
     """Same one-directional rule the thin-description filler follows, for the same reason.
 
-    Structural today — the clause lives in REFERENCE_PROMPT and the judge is built from
+    Structural today — the clause lives in reference_prompt and the judge is built from
     JUDGE_PROMPT — but asserted anyway, because "obviously separate" is exactly what the shared
     `_describe` helper was before it started leaking.
     """
     _, t2i_mock, judge_mock, _ = _mint(
-        [_verdict(True)], description=CharacterDescription(species="star"), name="the star"
+        [_verdict(True)], description=CharacterDescription(species="girl", is_humanoid=True), name="the girl"
     )
-    assert "not a person" in t2i_mock.call_args.args[0]
-    assert "not a person" not in judge_mock.call_args.args[0]
+    assert HUMANOID_CLOTHING_CLAUSE in t2i_mock.call_args.args[0]
+    assert HUMANOID_CLOTHING_CLAUSE not in judge_mock.call_args.args[0]
 
 
 def test_reference_prompt_always_contains_the_style_fragment():
     """ADR-022: style rides the reference, so the fragment is never optional in this prompt."""
     assert FRAG in reference_prompt(CharacterDescription(), "the orange dog", FRAG)
     assert FRAG in reference_prompt(CharacterDescription(species="dog"), "the orange dog", FRAG)
+
 
 
 # --- mint_reference (effect boundary) ---

@@ -7,7 +7,6 @@ from pipeline.prompt_optimizer import (
     ANATOMY_CLAUSE,
     COMPOSITION_CLAUSE,
     IDENTITY_CLAUSE,
-    NON_HUMAN_CLAUSE,
     SCENE_PROMPT_VERSION,
     TEXT_CLAUSE,
     build_prompt,
@@ -876,17 +875,16 @@ def test_the_subject_count_clause_names_every_present_character():
     assert "This illustration contains exactly 2 characters: Ana and the star." in prompt
 
 
-def test_both_guard_clauses_appear_on_the_reference_path():
+def test_the_subject_count_clause_appears_on_the_reference_path():
     """§6 test 12, first half."""
     ana = _referenced("c0", "Ana", species="girl")
 
     prompt = build_prompt(["c0"], [ana], FRAG)
 
     assert "This illustration contains exactly 1 character: Ana." in prompt
-    assert NON_HUMAN_CLAUSE in prompt
 
 
-def test_both_guard_clauses_appear_on_the_text_to_image_path():
+def test_the_subject_count_clause_appears_on_the_text_to_image_path():
     """§6 test 12, second half — the load-bearing half. The roll and REFERENCE_CLAUSE are omitted
     when no character has a reference, so a guard placed INSIDE the clause would be silently inert
     on every reference-less scene."""
@@ -896,7 +894,6 @@ def test_both_guard_clauses_appear_on_the_text_to_image_path():
 
     assert "Image 1" not in prompt
     assert "This illustration contains exactly 1 character: Ana." in prompt
-    assert NON_HUMAN_CLAUSE in prompt
 
 
 def test_the_count_reads_one_character_singular():
@@ -940,13 +937,11 @@ def test_the_count_names_three_characters_with_a_serial_comma_free_join():
 
 
 def test_no_clause_at_all_when_characters_present_is_empty():
-    """§6 test 14 / §4.2 edge case: no roll, no count clause, no non-human clause — all three
-    would reference nothing."""
+    """§6 test 14 / §4.2 edge case: no roll, no count clause — would reference nothing."""
     prompt = build_prompt([], [], FRAG)
 
     assert "Image 1" not in prompt
     assert "This illustration contains exactly" not in prompt
-    assert NON_HUMAN_CLAUSE not in prompt
     assert prompt == FRAG
 
 
@@ -955,7 +950,6 @@ def test_no_clause_at_all_when_every_char_id_is_missing_from_the_roster():
     prompt = build_prompt(["ghost-id"], [], FRAG)
 
     assert "This illustration contains exactly" not in prompt
-    assert NON_HUMAN_CLAUSE not in prompt
 
 
 def test_the_guard_clauses_sit_after_the_descriptions_and_before_setting():
@@ -965,7 +959,7 @@ def test_the_guard_clauses_sit_after_the_descriptions_and_before_setting():
     prompt = build_prompt(["c0"], [ana], FRAG, location)
 
     assert prompt.index("Ana, girl") < prompt.index("This illustration contains")
-    assert prompt.index(NON_HUMAN_CLAUSE) < prompt.index("Setting: the beach")
+    assert prompt.index("This illustration contains") < prompt.index("Setting: the beach")
 
 
 # --- §4.1 D1: the Setting line (§6 tests 15-16) ---
@@ -1009,7 +1003,8 @@ def test_the_setting_line_follows_the_guard_clauses():
 
     prompt = build_prompt(["c0"], [ana], FRAG, location)
 
-    assert prompt.index(NON_HUMAN_CLAUSE) < prompt.index("Setting: the beach")
+    assert prompt.index("This illustration contains") < prompt.index("Setting: the beach")
+
 
 
 def test_the_style_fragment_is_still_last_with_a_location_present():

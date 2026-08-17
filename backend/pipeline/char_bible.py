@@ -128,45 +128,23 @@ REFERENCE_NEGATIVE = (
     "model sheet, turnaround, multiple views, colour swatches, name plate, border, frame"
 )
 
-# The opening clause describes the PICTURE and never names the document. It used to read "A single
-# character reference of one character", and on 2026-08-13 a draw for "the monster - monster;
-# purple; tiny, lost" returned the word **"Reference;"** lettered across the top in the style's own
-# font. NEGATIVE_PROMPT already listed "text, letters, words, labels, captions" and did not stop it:
-# a negative prompt subtracts a tendency, it cannot outvote a word sitting in the positive prompt.
-# "character reference" also carries the model-sheet prior — in training data that phrase means a
-# sheet WITH a name plate — so we were asking for the artifact whose defining feature is the label
-# we then asked not to have.
-#
-# The framing clause replaces "shown in full", measured being ignored in the same batch (a "girl"
-# came back as a head-and-shoulders crop). "full shot" is a framing term, not an anatomy one — the
-# note below on "standing" applies to any phrasing that implies a body, so "head to toe" is out.
-# REFERENCE_NEGATIVE carries the other half; the positive clause alone did not hold on a human.
-#
-# "facing forward" became "seen from a slight angle rather than straight on" (2026-08-13). Head-on
-# is the WORST view of a snouted or long-bodied subject: foreshortening hides the snout, the neck,
-# the tail and the wing profile — the whole identifying silhouette — so the reference anchored least
-# of the character it matters most for. Prod job 483056e0's dragon came back head-on and every page
-# inherited it. The turn is a framing term, not an anatomy one, so the 2026-08-11 "standing" lesson
-# is respected; and dropping the word "facing" is what makes it a no-op for a subject with no face
-# at all, where "facing forward" was arguably part of what induced the mascot.
-#
-# UNCONDITIONAL, on the same reasoning as the non-human clause below. A "has a snout" test is the
-# species word list that comment already rejects, and it would be wrong on "the star" first.
-#
-# NOT "three-quarter view": that is model-sheet vocabulary, and REFERENCE_NEGATIVE spends four terms
-# suppressing the model-sheet prior. The negative carries the overshoot half — a slight turn that
-# runs to a back view anchors nothing — on the channel that moves framing.
-REFERENCE_PROMPT = """\
+# ADR-043: Suppresses human features when drawing non-human characters (robots, animals, objects).
+# Kept orthogonal: does not ban clothing, eyes/mouth, or bipedal limbs so clothed animals and
+# mechanical robots render correctly.
+NON_HUMAN_NEGATIVE = (
+    "human, human face, human body, person, human head, human skin, flesh, "
+    "child face, boy, girl, human hands, human fingers"
+)
+
+# The opening clause describes the PICTURE and never names the document.
+REFERENCE_PROMPT_BASE = """\
 One character alone, a full shot showing the whole of it, seen from a slight angle rather than \
 straight on, centred against a flat empty background of one single colour.
 
-The character is {subject}.
+The character is {subject}."""
 
-If the character is not a person, draw it as the kind of thing it actually is.
+HUMANOID_CLOTHING_CLAUSE = "Show age-appropriate clothing covering the torso."
 
-For a human or humanoid character, show age-appropriate clothing covering the torso.
-
-Style: {style_fragment}"""
 
 
 def _visual_axes(description: CharacterDescription) -> list[str]:
@@ -212,7 +190,11 @@ def reference_prompt(description: CharacterDescription, name: str, style_fragmen
     subject = _describe(description, name, notes=False)
     if not (description.colours or description.body_features or description.clothing):
         subject += THIN_DESCRIPTION_FILLER
-    return REFERENCE_PROMPT.format(subject=subject, style_fragment=style_fragment)
+    parts = [REFERENCE_PROMPT_BASE.format(subject=subject)]
+    if description.is_humanoid:
+        parts.append(HUMANOID_CLOTHING_CLAUSE)
+    parts.append(f"Style: {style_fragment}")
+    return "\n\n".join(parts)
 
 
 def best_draw(verdicts: list[RefVerdict]) -> int:
@@ -292,6 +274,11 @@ def mint_reference(
         log.info("char_bible: %s legacy_name_fallback=%s", char_id, legacy_name_fallback)
     prompt = reference_prompt(description, name, style_fragment)
     judge_prompt = JUDGE_PROMPT.format(subject=_describe(description, name, notes=False))
+    negative_extra = (
+        REFERENCE_NEGATIVE
+        if description.is_humanoid
+        else f"{REFERENCE_NEGATIVE}, {NON_HUMAN_NEGATIVE}"
+    )
     candidates: list[tuple[bytes, RefVerdict]] = []
     draws = 0
 
@@ -299,7 +286,7 @@ def mint_reference(
         # No seed: a fixed one makes every draw identical and the re-roll a no-op (§4).
         # A hard failure raises → job `failed` with an ADR-025 `failure_reason`. No artifact
         # exists, so there is nothing to ship and no node-level retry.
-        image = text_to_image(prompt, negative_extra=REFERENCE_NEGATIVE)
+        image = text_to_image(prompt, negative_extra=negative_extra)
         draws += 1
         try:
             verdict = judge(judge_prompt, [_data_uri(image)], RefVerdict)
@@ -358,8 +345,14 @@ def _mint_targeted(state: StoryMemory) -> dict:
         f"\n\nBe sure to include: {retry.attribute}."
     )
     judge_prompt = JUDGE_PROMPT.format(subject=_describe(description, character.name, notes=False))
+    negative_extra = (
+        REFERENCE_NEGATIVE
+        if description.is_humanoid
+        else f"{REFERENCE_NEGATIVE}, {NON_HUMAN_NEGATIVE}"
+    )
 
-    image = text_to_image(prompt, negative_extra=REFERENCE_NEGATIVE)
+    image = text_to_image(prompt, negative_extra=negative_extra)
+
     verdict = judge(judge_prompt, [_data_uri(image)], RefVerdict)
     # PRE-bump on BOTH counters — rc is incremented below, mrc is not touched by this path.
     # +2 = +1(initial mint) +1(this tap). Spec §4.4.
