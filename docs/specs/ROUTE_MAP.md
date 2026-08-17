@@ -31,11 +31,10 @@ All routes are Next.js App Router filesystem routes under `frontend/app/`.
 
 | URL pattern | Page | Rendering | Notes |
 |---|---|---|---|
-| `/dashboard` | Teacher home | Client | Grid of classroom cards + "Create Classroom" CTA |
-| `/classroom/[classroomId]` | Classroom detail | Client | Student list, classroom code, settings |
-| `/classroom/[classroomId]/students` | Student management | Client | Add/edit/remove student profiles |
-| `/classroom/[classroomId]/library` | Story library | Client | All stories in this classroom. Status badges (Needs Review / Approved) |
-| `/classroom/[classroomId]/library/[bookId]` | Story review | Client | Full-screen overlay — teacher reads & approves |
+| `/classroom` | Teacher home | Server | Grid of classroom cards (ClassroomPicker) |
+| `/classroom/[classroomId]` | Classroom detail | Client | Student list, classroom code, Quick Actions |
+| `/classroom/[classroomId]/add` | Add students | Client | Bulk student provisioning wizard |
+| `/classroom/[classroomId]/books` | Story library & review | Client | All classroom stories with inline review dialog & status tabs |
 | `/classroom/[classroomId]/settings` | Classroom settings | Client | Rename, danger zone (delete). No review-gate toggle — teacher approval is always manual (auto-approve deferred to Future Work, ADR-017) |
 | `/settings` | Teacher account settings | Client | Profile, password, account deletion |
 
@@ -49,18 +48,11 @@ by the child), just not the Supabase Auth session teachers use — session is es
 | URL pattern | Page | Rendering | Notes |
 |---|---|---|---|
 | `/s/[profileId]` | Student home (Bookshelf) | Client | Past stories as book covers + "Write a New Story!" CTA |
-| `/s/[profileId]/write` | Story editor | Client | **Full-screen wizard** — nav hidden. Large textarea, live word count |
-| `/s/[profileId]/write/style` | Style preset picker | Client | Part of the write wizard flow. 3 large tappable image cards |
-| `/s/[profileId]/process/[jobId]` | Processing view | Client | **Full-screen** — no nav. Staged progress via Supabase Realtime; inline character reveal |
-| `/s/[profileId]/book/[bookId]` | Storybook reader | Client | **Immersive full-screen**. Image + caption + narration. Next/prev |
+| `/s/[profileId]/write` | Story editor + style picker | Client | Full-screen flow. Large textarea, live word count, inline style preset cards |
+| `/s/[profileId]/process/[jobId]` | Processing view | Client | Full-screen. Staged progress via Supabase Realtime; inline character reveal |
+| `/s/[profileId]/book/[jobId]` | Storybook reader | Client | Immersive full-screen. Image + caption + narration. Next/prev |
 | `/s/[profileId]/gallery` | Classroom gallery | Server | Browse & read classmates' approved books. Display-only — no reflection surface |
 | `/s/[profileId]/settings` | Student account settings | Client | Change password. No email, no self-serve recovery — reset otherwise is teacher-initiated |
-
-> **Status note (2026-08-02, `kid-flow-book-persistence` S1):** the kid routes above stay flat
-> (`/write`, `/process/[jobId]`, `/book/[jobId]`) until `auth-and-classroom` lands. Moving to the
-> `/s/[profileId]/…` tree now would put `settings.dev_profile_id` in a URL — a sentinel as a route
-> segment, guarding nothing, easily mistaken for a guard. The later move is a directory rename plus
-> a middleware entry; nothing built under the flat routes is affected.
 
 ---
 
@@ -72,52 +64,31 @@ Next.js App Router nested layouts. Each layout is a `layout.tsx` that wraps its 
 app/
 ├── layout.tsx                          # RootLayout — html/body, fonts (Outfit, Nunito, Inter),
 │                                       # theme provider, Supabase client init, Sentry
-├── (marketing)/
-│   ├── layout.tsx                      # MarketingLayout — minimal header + footer, SSR-safe
-│   └── page.tsx                        # Landing page (/)
+├── page.tsx                            # Landing page (/)
+├── login/page.tsx                      # /login
+├── signup/page.tsx                     # /signup
+├── join/
+│   ├── page.tsx                        # /join
+│   └── [code]/page.tsx                 # /join/[code]
 │
-├── (auth)/
-│   ├── layout.tsx                      # AuthLayout — centered card, no nav chrome
-│   ├── login/page.tsx                  # /login
-│   ├── signup/page.tsx                 # /signup
-│   └── join/
-│       ├── page.tsx                    # /join
-│       └── [code]/page.tsx            # /join/[code]
-│
-├── (teacher)/
-│   ├── layout.tsx                      # TeacherShell — sidebar (desktop) / bottom-sheet nav (mobile)
-│   │                                   # + breadcrumbs (desktop) + top app bar (mobile)
-│   ├── dashboard/page.tsx              # /dashboard
-│   ├── settings/page.tsx               # /settings
-│   └── classroom/[classroomId]/
-│       ├── layout.tsx                  # ClassroomLayout — adds breadcrumb segment
+├── classroom/
+│   ├── layout.tsx                      # TeacherShell (sidebar/drawer, context, auth)
+│   ├── page.tsx                        # /classroom (ClassroomPicker)
+│   └── [classroomId]/
 │       ├── page.tsx                    # /classroom/[classroomId]
-│       ├── students/page.tsx
-│       ├── library/
-│       │   ├── page.tsx
-│       │   └── [bookId]/page.tsx       # Full-screen overlay (breaks out of TeacherShell)
-│       ├── gallery/page.tsx
-│       └── settings/page.tsx
+│       ├── add/page.tsx                # /classroom/[classroomId]/add
+│       ├── books/page.tsx              # /classroom/[classroomId]/books (with BookReviewDialog)
+│       └── settings/page.tsx           # /classroom/[classroomId]/settings
+├── settings/page.tsx                   # /settings (teacher account)
 │
-├── (student)/
-│   └── s/[profileId]/
-│       ├── layout.tsx                  # StudentShell — bottom tab bar (mobile) / top navbar (desktop)
-│       ├── page.tsx                    # /s/[profileId] (Bookshelf/Home)
-│       ├── settings/page.tsx           # /s/[profileId]/settings (password change)
-│       ├── gallery/
-│       │   ├── page.tsx                # /s/[profileId]/gallery
-│       │
-│       ├── (immersive)/
-│       │   ├── layout.tsx              # ImmersiveLayout — NO nav chrome, full-screen
-│       │   ├── write/
-│       │   │   ├── page.tsx            # /s/[profileId]/write
-│       │   │   └── style/page.tsx      # /s/[profileId]/write/style
-│       │   ├── process/[jobId]/
-│       │   │   └── page.tsx            # /s/[profileId]/process/[jobId] (includes inline reveal)
-│       │   └── book/[bookId]/
-│       │       └── page.tsx            # /s/[profileId]/book/[bookId]
-│       │
-│       └── (immersive)/layout.tsx      # (same as above — listed for clarity)
+└── s/[profileId]/
+    ├── layout.tsx                      # StudentLayout (StudentHeader + StudentTabBar)
+    ├── page.tsx                        # /s/[profileId] (Bookshelf/Home)
+    ├── settings/page.tsx               # /s/[profileId]/settings (password change)
+    ├── gallery/page.tsx                # /s/[profileId]/gallery
+    ├── write/page.tsx                  # /s/[profileId]/write (inline style picker)
+    ├── process/[jobId]/page.tsx        # /s/[profileId]/process/[jobId] (inline reveal)
+    └── book/[jobId]/page.tsx           # /s/[profileId]/book/[jobId] (reader)
 ```
 
 ### Layout responsibilities
@@ -282,20 +253,20 @@ Every route group gets a `loading.tsx` that renders before the page component hy
 |---|---|---|---|
 | **Landing** (`/`) | Full page — hero image placeholder + CTA button skeletons | Subtle shimmer (left-to-right gradient) | — |
 | **Auth** (`/login`, `/signup`, `/join`) | Centered card with input field placeholders | Pulse opacity | — |
-| **Teacher Dashboard** | 2×2 grid of classroom card skeletons (rounded-xl, neo-shadow) | Shimmer | Inter |
+| **Teacher Dashboard** | 2×2 grid of classroom card skeletons (rounded-2xl) | Shimmer | Inter |
 | **Classroom detail** | Header skeleton + student list (6 row placeholders) | Shimmer | Inter |
 | **Story library** | Header + 3 story card skeletons with status badge placeholder | Shimmer | Inter |
 | **Story review** (teacher) | Full-screen: image placeholder (60% height) + text block (40%) | Shimmer | Inter |
-| **Student Bookshelf** | Horizontal carousel of 3 book-cover skeletons (aspect 3:4) + bottom CTA skeleton | Shimmer + subtle bounce on covers | Nunito |
+| **Student Bookshelf** | Horizontal carousel of 3 book-cover skeletons (aspect 3:4) + bottom CTA skeleton | Shimmer (left-to-right gradient) | Nunito |
 | **Student Write** | Full-screen: large textarea skeleton + floating button skeleton | Pulse | Nunito |
-| **Processing** | Full-screen: centered Lottie animation (book pages flipping). No skeleton — the Lottie *is* the loading state | Lottie loop | Nunito, large |
+| **Processing** | Full-screen: 4-step vertical progress stepper synced with Realtime | Step pulse | Nunito, large |
 | **Character Reveal** | Centered card skeleton with image placeholder (1:1 aspect) + 2 button skeletons below | Shimmer | Nunito |
 | **Book Reader** | Full-screen: image placeholder (top 60%) + 2 text-line skeletons (bottom) + page indicator dot. *Note: `/book/[jobId]` handles all four job buckets.* | Fade in | — |
 | **Gallery** | Masonry grid (desktop) / vertical stack (mobile) of 4 book-card skeletons | Shimmer | Nunito |
 
 ### Loading state rules
 1. **Skeletons match content shape** — reserve exact layout space to prevent CLS (DESIGN.md §5).
-2. **Kid routes use Lottie micro-narratives** inside skeletons when appropriate (pencil scribbling, wand spinning).
+2. **Kid routes use subtle shimmer/pulse skeletons** matching Cobalt Playroom guidelines (DESIGN.md §11).
 3. **Teacher routes use shimmer** — clean, fast, no distraction.
 4. **Never show a blank white page** — every route group must have a `loading.tsx`.
 5. **Buttons disable + show spinner** during async operations (form submissions, approvals).
@@ -307,8 +278,8 @@ Each route group also gets an `error.tsx`:
 
 | Route group | Error behavior | Design |
 |---|---|---|
-| Teacher routes | "Something went wrong" card + "Try again" button + link to dashboard | Clean, Inter, Comic Red left-border (DESIGN.md) |
-| Student routes | Friendly confused mascot + "Oops! Let's go back and try again" + big button | Cartoon-pop, Nunito, warm, non-scary |
+| Teacher routes | "Something went wrong" card + "Try again" button + link to classroom | Clean, Inter, soft border with destructive accent (DESIGN.md §3, §6) |
+| Student routes | Failure screen stage with Phosphor icons + retry button (FailureScreen.tsx) | Cobalt Playroom, Nunito, warm, non-scary (DESIGN.md §11) |
 | Immersive routes | Overlay error card + "Go to Bookshelf" button | Transparent backdrop, centered card |
 
 ---
@@ -321,6 +292,14 @@ Each route group also gets an `error.tsx`:
 | `POST /storybooks` | Student (`get_current_user`) | Enqueues a new story job |
 | `POST /jobs/{job_id}/confirm` | Student (`get_current_user`) | Confirms or retries a job at the reveal checkpoint |
 | `PATCH /me/avatar` | Student (`get_current_user`) | Body `{"avatar_id": "<id>" \| null}`. Guarded by `get_current_user`; writes only `auth.uid()`'s own row. 422 on invalid id. |
+| `POST /classrooms` | Teacher (`require_teacher`) | Creates a classroom with a unique 6-character code |
+| `PATCH /classrooms/{classroom_id}` | Teacher (`owned_classroom`) | Renames an owned classroom |
+| `DELETE /classrooms/{classroom_id}` | Teacher (`owned_classroom`) | Deletes an owned classroom (204) |
+| `POST /classrooms/{classroom_id}/students` | Teacher (`owned_classroom`) | Bulk provisions up to 60 student accounts (service_role) |
+| `POST /classrooms/{classroom_id}/students/{profile_id}/reset` | Teacher (`owned_classroom`) | Generates a new random password for a student |
+| `POST /classrooms/{classroom_id}/students/{profile_id}/remove` | Teacher (`owned_classroom`) | Soft-removes student (`removed_at` + auth ban) (204) |
+| `POST /classrooms/{classroom_id}/students/{profile_id}/restore` | Teacher (`owned_classroom`) | Restores removed student and returns new password |
+| `POST /jobs/{job_id}/review` | Teacher (`require_teacher` + `owned_job`) | Sets review state (`approved`, `rejected`, `pending`) |
 
 ---
 
@@ -328,22 +307,20 @@ Each route group also gets an `error.tsx`:
 
 ```
 /                                           Landing (SSR, public)
+/classroom                                  Teacher home / Classroom picker (teacher)
 /classroom/[classroomId]                    Classroom detail (teacher)
-/classroom/[classroomId]/library            Story library (teacher)
-/classroom/[classroomId]/library/[bookId]   Story review (teacher)
+/classroom/[classroomId]/add                Add students (teacher)
+/classroom/[classroomId]/books              Story library & review (teacher)
 /classroom/[classroomId]/settings           Classroom settings (teacher)
-/classroom/[classroomId]/students           Student management (teacher)
-/dashboard                                  Teacher home (teacher)
 /join                                       Student login — classroom code + nickname + password (public)
 /join/[code]                                Direct join link, code pre-filled (public)
 /login                                      Login (public, teacher/BEED student)
 /s/[profileId]                              Student bookshelf (student)
-/s/[profileId]/book/[bookId]                Storybook reader (student)
+/s/[profileId]/book/[jobId]                 Storybook reader (student)
 /s/[profileId]/gallery                      Classroom gallery (student)
 /s/[profileId]/process/[jobId]              Processing view (student)
 /s/[profileId]/settings                     Password change (student)
-/s/[profileId]/write                        Story editor (student)
-/s/[profileId]/write/style                  Style preset picker (student)
+/s/[profileId]/write                        Story editor + style picker (student)
 /settings                                   Teacher account settings (teacher)
 /signup                                     Signup (public, teacher/BEED student)
 ```

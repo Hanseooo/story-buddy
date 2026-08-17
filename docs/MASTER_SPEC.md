@@ -120,20 +120,20 @@ are specced in Phase 2 (`moderation-stack`, `length-guard`, `export-pdf`). Read 
 this table for what runs.
 
 ```
-input_gate ──► analyze ──► segment ──► char_bible ──► [char-ref moderation]
-   (length,                                  ▲               │ pass
-    PII,                                     │               ▼
-    text mod)                                │            reveal ──┐ try again (≤3, 1 draw each)
-                                             └─────────────────────┘
-                                                                 │ confirm
-                                                                 ▼
-                                                          generate_scene ──► consistency_check
-                                                            ▲                    │
-                                                            │ fail: 1 targeted   │ pass
-                                                            └──── regenerate ◄────┤
-                                                                 (best-of)        │ (each scene)
-                                                                                  ▼
-                                                          [output image moderation] ──► compose ──► export
+input_gate ──► analyze ──► segment ──► char_bible ──► [char_ref_mod]
+   (length,                               ▲  ▲               │ pass (or retry ≤1)
+    PII,                                  │  └───────────────┘
+    text mod)                             │                  ▼
+                                          │               reveal ──┐ try again (≤3, 1 draw each)
+                                          └────────────────────────┘
+                                                                │ confirm
+                                                                ▼
+                                             ┌──────────► generate_scene ──► consistency_check
+                                             │                 ▲                    │
+                                             │ (next scene)    │ fail (≤2 retries)  │ pass
+                                             │                 └──── regenerate ◄────┤
+                                             │                       (best-of)      ▼
+                                             └────────────────────────────── output_mod ──► compose ──► END
 ```
 
 | Node / module | Reads (Story Memory) | Writes | ADR / PRD |
@@ -142,15 +142,15 @@ input_gate ──► analyze ──► segment ──► char_bible ──► [c
 | `analyze` | `input.redacted_text` | `characters[]`, `locations[]`, `objects[]`, `timeline[]` | §8 |
 | `segment` | analysis + timeline | `scenes[].text_excerpt`, `caption`, `characters_present` | ADR-012 / §5,§8 |
 | `char_bible` | `characters[]`, `style.prompt_fragment` | `characters[].canonical_ref_image`, `ref_verdict`, `cost.image_count` | ADR-001,007,028 |
-| *char-ref moderation* (Phase 2) | `characters[].canonical_ref_image` | `characters[].ref_moderation_status` | ADR-011 |
+| *char_ref_mod* (Phase 2) | `characters[].canonical_ref_image` | `characters[].ref_moderation_status` | ADR-011, ADR-002 |
 | *`reveal`* | `characters[]`, `ref_verdict` | `reference_retry`, `cost.ref_retry_count` — **no effects**; pauses on `interrupt()` | ADR-029 |
 | `generate_scene` | scene + char refs + `style` | `scenes[].attempts[].image_ref` | ADR-001,010 |
 | `consistency_check` | ref + attempt image | `scenes[].attempts[].vlm_verdict`, `failure_reasons`, `passed` | ADR-004 |
-| `regenerate` | `failure_reasons` | corrected `prompt` → new attempt; `final_image_ref` (best-of) | ADR-010 |
-| `output moderation` | each `final_image_ref` | `scenes[].moderation_status` | ADR-011 |
-| `compose` / `export` | passed scenes + captions | storybook + PDF in Storage | ADR-013 |
+| `regenerate` | `failure_reasons` | corrected `prompt` → new attempt (≤2 retries per ADR-037); `final_image_ref` (best-of) | ADR-010, ADR-037 |
+| `output_mod` | scene `final_image_ref` (per scene) | `scenes[].moderation_status` | ADR-011, ADR-025 |
+| `compose` | passed scenes + captions | validates all scenes finalized; returns `{}` | ADR-013, ADR-024 |
 
-**Style presets are config, not a node** (ADR-007, ADR-022): **three** hand-authored prompt fragments, one
+**Style presets are config, not a node** (ADR-007, ADR-022, ADR-042): **three** selectable prompt fragments (`cel`, `gouache`, `cut_paper`), plus compatibility-retained `comic` for existing jobs, one
 chosen by the author *before* the canonical reference is generated and then frozen for the storybook
 (`style.style_preset_id`). Identity *and* style both ride the canonical reference — which is exactly why
 adding presets costs a dict and no new machinery, and why there is **no style-anchor image**.
@@ -211,17 +211,17 @@ Product/architecture choices are in the ADRs; this is the working reference, **i
 
 | Layer | Choice | Notes / ADR |
 |---|---|---|
-| Frontend | Next.js (React) + Tailwind + ⚙️shadcn/ui (teacher) + hand-built cartoon-pop (kid) + ⚙️Motion + ⚙️Lottie | Vercel, SSR landing. §9,§12 |
+| Frontend | Next.js (React) + Tailwind 4 + Cobalt Playroom components + framer-motion | Vercel, SSR landing. §9,§12 |
 | Backend web | FastAPI | Northflank (Singapore). ADR-031 |
 | Worker / queue | RQ worker + Redis broker | Separate service. ADR-005 |
 | Pipeline engine | LangGraph (deterministic) + `langgraph-checkpoint-postgres`. Checkpoints go over the **direct** Postgres connection (5432), not the 6543 transaction pooler | ADR-003,005,033 |
 | LLM / VLM | `mistralai/mistral-small-3.2-24b-instruct` (nodes; ~~`qwen/qwen3-32b`~~ until 2026-08-11) + judge (`gemma-3-27b-it` → fine-tuned `Qwen2.5-VL-7B` in Phase 2.5) | ADR-002 (amended 2026-08-11),004,015,018 |
-| Image model | Qwen-Image-Edit 2509/2511 (Apache-2.0), hosted on fal.ai | ADR-001,015 |
+| Image model | `fal-ai/qwen-image` (text→image refs & fallback) + `fal-ai/qwen-image-edit-2511` (reference-conditioned scenes) via fal.ai | ADR-001, ADR-015 |
 | Judge serving | vLLM on a scale-to-zero GPU container (Modal). OpenAI-compatible — `JUDGE_BASE_URL` is the swap | ADR-019 |
 | Model access layer | `backend/providers.py` — thin functions, one impl each. **The only file naming a *provider*** (model *ids* are env vars read in `app/config.py` — ADR-015: "swapping a model is an env var; swapping a provider is one file") | ADR-015 |
 | Data / auth / storage / realtime | Supabase (Postgres + Auth + Storage + Realtime + RLS). **Classroom-scoped** | ADR-006, ADR-017 |
 | Structured extraction | `json_schema` (strict) + `require_parameters` (OpenRouter only) + Pydantic | §12, §3, ADR-002 |
-| Moderation | **meta-llama/llama-guard-4-12b** (OpenRouter) **+ gpt-oss-safeguard-20b** (OpenRouter backstop) (text, both Apache-2.0) + Presidio **+ Filipino recognizers** (PII) + NSFW ViT & VLM rubric (image) | ADR-011 (D-1 resolved) |
+| Moderation | **meta-llama/llama-guard-4-12b** (OpenRouter) **+ gpt-oss-safeguard-20b** (OpenRouter backstop) (text) + Presidio **+ Filipino recognizers** (PII) + **mistral-small-3.2-24b** (NSFW gate via OpenRouter) & **gemma-3-27b-it** safety rubric (image) | ADR-011, ADR-032, ADR-002 (amended) |
 | Narration | **Chatterbox** (MIT, expressive) via hosted inference, pre-rendered per page onto Storage; **Kokoro-82M** CPU fallback | ADR-020 (revised) |
 | Fine-tuning | **The consistency judge only.** Identity = reference conditioning; style = ADR-007 constant; safety = never | ADR-018 (supersedes ADR-016) |
 | Observability | **Langfuse** (tracing, ADR-030 — supersedes LangSmith/ADR-014) + Sentry (errors) | ADR-030, §16 |
@@ -257,12 +257,12 @@ Concerns that touch many modules. **Every feature spec ticks the ones it affects
 |---|---|---|---|
 | CC-1 | **Moderation ordering** | input text → char-ref → **reveal** → output image; no image reaches a kid unmoderated. The reveal is the surface the char-ref gate exists for, so it ships behind it (ADR-029) | ADR-011, ADR-029 / §13 |
 | CC-2 | **PII redaction** | Presidio before storage/caption/export; redacted text is what's persisted | ADR-011 / §14 |
-| CC-3 | **Cost control** | count-based per-book breaker on `cost.image_count`, bound `max_scenes × 2 + 9` (trips → job `failed`); per-classroom daily cap deferred to Phase 2 | ADR-025, ADR-029, §15 |
+| CC-3 | **Cost control** | count-based per-book breaker on `cost.image_count`, bound `IMAGE_BUDGET = MAX_SCENES * 4 + 15` = 55 (trips → job `failed`); `RECURSION_LIMIT = MAX_SCENES * 7 + 17` = 87 | ADR-025, ADR-029, ADR-037 |
 | CC-4 | **Security (RLS + signed URLs)** | **classroom**-scoped DB isolation; no public assets | ADR-006, ADR-017 / §14 |
 | CC-5 | **Observability** | emits traces/metrics (gen time, regen count, cost, VLM score) | §16 |
 | CC-6 | **Accessibility** | Expressive TTS narration per page (Chatterbox, hosted); large targets; minimal text | §17, ADR-020 |
 | CC-7 | **Reproducibility** | honors `eval.seed`; deterministic where the model allows | §20, ADR-010 |
-| CC-8 | **Student vs teacher design language** | cartoon-pop (student flow) vs calmer/denser (teacher) | §9 |
+| CC-8 | **Student vs teacher design language** | Cobalt Playroom: playful/Nunito (student flow) vs calm/Inter (teacher) | §9 |
 | CC-9 | **Failure states = success states** | moderation/failure screens get equal design care; kid-legible; UI branches on `jobs.failure_reason` enum, never raw `error` | ADR-025, §9,§13 |
 | CC-10 | **Checkpointing / resumability** | node is safe to resume mid-run; no re-roll of completed scenes | ADR-005 |
 
@@ -286,12 +286,8 @@ Everything with one right answer, **with every `providers.py` call mocked**:
   *(N=3 off-ramp belongs here too, but is not testable until `repeated-failure-offramp` has a cross-run
   counter to test — see the backlog row.)*
 - RLS isolation (one classroom cannot read another classroom's data — ADR-017); signed-URL access.
-  ⚠️ **Not true today.** There are exactly two policy surfaces —
-  `supabase/migrations/0001_jobs_table.sql` on `jobs` (`select ... to anon using (true)`) and
-  `0004_jobs_pages.sql` on `storage.objects` (bucket-scoped only) — so there is no classroom scoping and no
-  classroom/profile tables to scope by. There is no RLS test. This is a **child-facing** gap, not a
-  paperwork one; `auth-and-classroom` replaces **both** surfaces in one migration (CC-4,
-  `kid-flow-book-persistence` constraint 4).
+  ✅ **Built (CC-4):** Migrations `0007` and `0008` enforce classroom-scoped RLS on `jobs`, `profiles`,
+  `classrooms`, and `storage.objects`. Tested via 39 isolation tests in `backend/tests/test_rls_isolation.py`.
 - e2e happy path + processing→slideshow via Realtime + PDF export (Playwright ⚙️).
 - **Never assert on generated content.** "Is the character consistent?" is Tier B.
 
@@ -388,9 +384,7 @@ Phase-2.5 annotators. Design it once, in Phase 1, or invalidate every label coll
 
 **Verify at build time (do not guess):**
 - **Modal cold-start budget** for a study session (ADR-019). Measure.
-- **Worker RAM** — Presidio+spaCy, NSFW ViT, and the CPU text gate are resident (~2–3 GB); narration is a
-  hosted TTS call (ADR-020, revised), so Kokoro is only resident if the fallback is kept warm.
-  Check the plan tier at the *start* of Phase 2.
+- **Worker RAM** — Presidio+spaCy (`en_core_web_sm`) is resident (~211 MB; ADR-032 moved all moderation models to OpenRouter APIs to prevent OOM on 512 MB worker instances; torch/transformers excluded); narration is a hosted TTS call (ADR-020, revised).
 
 **Deferred by design:**
 - **The failure-reason taxonomy** — extend it in Phase 1, never during Phase 2.5 annotation.

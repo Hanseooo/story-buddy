@@ -175,7 +175,7 @@ ten-year-olds (ADR-017).
 1. Story Analyzer (grammar-tolerant entity + coreference extraction; tolerant of light Taglish)
 2. Scene Segmentation Engine (selects up to 10–15 scenes; graceful floor behavior for short stories)
 3. Character Bible Generator + auto-generated canonical reference image (multi-character, max 2 canonical refs in v1)
-4. **Style Presets** (three fixed styles, author picks one before generation; config, not a generator — ADR-007, ADR-022)
+4. **Style Presets** (selectable styles defaulting to Gouache, author picks one before generation; config, not a generator — ADR-007, ADR-022, ADR-042)
 5. Prompt Optimization Engine
 6. Image Generation Engine (reference-conditioned, Qwen-Image-Edit)
 7. Consistency Checker (VLM-as-judge; triggers one targeted regeneration). **Fine-tuned in Phase 2.5** — ADR-018
@@ -252,8 +252,8 @@ it is the long pole and cannot be compressed by coding faster (§10, §18, RESEA
 - Story Analyzer (grammar-tolerant extraction: characters/locations/objects/events + coreference)
 - Scene Segmentation (up to 10–15 scenes; **floor behavior**: fewer scenes allowed, never invent content)
 - Character Bible + auto-generated canonical reference image (≤2 canonical characters)
-- **Style Presets** — three hand-authored prompt fragments; the author picks one **before** the canonical
-  reference is generated, and it is then frozen for the storybook. No style-anchor image (ADR-022).
+- **Style Presets** — hand-authored prompt fragments (Gouache default, Cel selectable, Comic compatibility); the author picks one **before** the canonical
+  reference is generated, and it is then frozen for the storybook. No style-anchor image (ADR-022, ADR-042).
 - Prompt Optimizer (scene + character bible + selected style preset + story memory → structured prompt)
 - Image Generator (reference-conditioned via Qwen-Image-Edit)
 - Consistency Checker (VLM-as-judge: presence, identity, key attributes, style; emits **reasoning first**, then a structured verdict + failure reasons — ADR-004)

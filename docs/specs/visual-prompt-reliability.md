@@ -21,10 +21,10 @@ ADR-039, ADR-040 · production jobs `9517f79c-9f9d-46c6-958a-2213c054316c` and
 > focused code and documentation change; the exact paid Tier-B reproduction remains a separate
 > acceptance gate and is not replaced by a synthetic fixture.
 >
-> **Style decision boundary:** the owner selected Gouache as the desired default and wants Comic
-> removed from new selections. ADR-022 freezes three selectable presets and Cel as the flagship
-> default, so that product change is recorded as D-O and requires a dedicated superseding ADR. This
-> spec does not silently override ADR-022.
+> **Style decision boundary:** ADR-042 resolves D-O: Gouache becomes the default, Comic is retired
+> from new selection but remains executable for existing jobs, and Cut-paper collage is a provisional
+> replacement behind a three-book zero-miss gate. ADR-042 implementation and candidate validation
+> remain separate from this spec.
 
 ---
 
@@ -97,8 +97,8 @@ For every newly generated scene:
   An invalid structured answer may activate `structured_text`'s existing single re-ask; the valid
   path adds no call.
 - Disabling, weakening, or moving Presidio. PII redaction remains mandatory under ADR-011.
-- Changing the available style presets or default style. D-O owns the requested Gouache/Comic
-  policy because it supersedes ADR-022.
+- Implementing ADR-042's selectable catalog, Gouache default, Comic compatibility boundary, or
+  Cut-paper candidate validation.
 - Changing canonical-reference acceptance after a judge timeout. ADR-028 owns that resilience
   policy; the production timeout is recorded as a separate follow-up, not bundled into prompt cleanup.
 - Retuning `owner_name` extraction or redefining `StoryObject.owner_char_id`. The existing analyzer
@@ -520,9 +520,9 @@ evaluation and not evidence that the pipeline is causally superior.
 
 Re-run the exact Jamie/Bolt story from production job
 `56836d73-14ae-4815-9af2-07ae0e60c163`, selecting Gouache explicitly. This is a regression
-reproduction, not a cross-style experiment: Comic is already the observed unstable preset, while
-changing the product default remains blocked on D-O. Record the chosen style id and do not require
-seed determinism that has not been proven.
+reproduction, not a cross-style experiment: ADR-042 separately makes Gouache the target default and
+retires Comic from new selection. Record the chosen style id and do not require seed determinism that
+has not been proven.
 
 ### 7.2 Review every attempt, not only the winner
 
@@ -592,9 +592,9 @@ verifies that the selected production path no longer receives the known structur
 - **D-N — moderation replacement consistency:** decide the graph/state mechanism for judging one
   safe replacement without permitting another redraw or making the flagged original eligible.
   This is S2, not a hidden part of S1.
-- **D-O — reliable selectable-style policy:** decide whether to supersede ADR-022 by hiding Comic
-  from new selections and making Gouache the default while retaining backend compatibility for
-  existing Comic jobs. This requires its own ADR session and is not a precondition for the
+- **ADR-042 — reliable selectable-style policy:** Gouache is the target default; Comic is retired
+  from new selection but retained for existing jobs; Cut-paper collage is a provisional replacement
+  behind a separate three-book zero-miss gate. Its implementation is not a precondition for the
   structural entity/object fix.
 
 ### 8.3 Known gaps deliberately carried
@@ -613,10 +613,12 @@ verifies that the selected production path no longer receives the known structur
 10. Fal seed reproducibility remains unproven, so retry improvements cannot be attributed solely to
    wording.
 11. Presidio can assign a human-coded pseudonym to a non-human character. Redaction remains enabled;
-    changing how visual prompts identify pseudonymized non-humans is not part of this revision.
+    the canonical reference hardening ([`canonical-character-consistency.md`](./canonical-character-consistency.md))
+    removes the pseudonym from fresh reference draw and judge prompts and establishes explicit morphology.
+    Scene prompts remain name-bearing under D-P, and reference fail-open behavior remains under D-Q.
 12. ADR-028's unchecked-reference behavior can admit an off-spec canonical reference after a judge
     timeout. The production occurrence is recorded, but changing resilience policy requires a
-    dedicated decision.
+    dedicated decision (D-Q).
 
 ### 8.4 Spec and documentation blast radius at implementation
 
@@ -632,7 +634,7 @@ The implementation change must update, in the same commit, the affected live beh
 
 ADR-040 governs scene-note removal. ADR-039 and ADR-040 are frozen and are not edited during
 implementation. Style configuration, the frontend picker, `docs/specs/style-presets.md`, and
-ADR-022 remain untouched until D-O is resolved in a dedicated ADR session.
+ADR-022's runtime surfaces remain untouched by this spec; ADR-042 owns their separate implementation.
 
 Executed plans remain historical and are not edited. Grep the repo for `text_excerpt`,
 `object_events`, `holder_by_obj`, `owner_char_id`, `objects_present`, `is held by`, and

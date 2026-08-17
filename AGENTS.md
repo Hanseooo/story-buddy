@@ -167,12 +167,9 @@ concerns registry (MASTER_SPEC §5). If a spec doesn't exist, write it from
 - **PII is redacted (Presidio) before** storage, captioning, or export. A child narrating real
   life is the expected case, not the exception.
 - **RLS on every table**; signed URLs for every asset; no public buckets.
-  ⚠️ **Not satisfied today.** `supabase/migrations/0001_jobs_table.sql:18-21` and
-  `0004_jobs_pages.sql`'s `storage.objects` policy are the only policies, and both read
-  `using (true)` / `using (bucket_id = 'storybook-images')` — RLS is *enabled*, but nothing is
-  *restricted*; scoping is a client-side `.eq('id', …)` convention, and no classroom/profile
-  columns exist to scope by. Closes in Phase 2 (CC-4). Treat any `jobs`-table or storage-policy work
-  as touching this gap.
+  ✅ **Satisfied (CC-4):** Migrations `0007` and `0008` established classroom-scoped RLS across
+  `profiles`, `classrooms`, `jobs`, and `storage.objects`, dropping the legacy `0001`/`0004`
+  permissive policies. Verified by 39 isolation tests in `backend/tests/test_rls_isolation.py`.
 - Failure and moderation screens get the **same** design care as success screens.
   ✅ **Now built (2026-08-02):** `input_gate` (meta-llama/llama-guard-4-12b + Presidio + OpenRouter backstop),
   `char_ref_mod` (~~qwen/qwen3-vl-32b-instruct~~ → mistralai/mistral-small-3.2-24b-instruct since 2026-08-11,
@@ -260,7 +257,7 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
 - Always read: `./AGENTS.md` (this file — all hard rules + commands), `docs/MASTER_SPEC.md`
   (how pieces connect).
 - Read when:
-  - Visual styling / UI/UX decisions → `DESIGN.md` (neo-pop / neo-brutalist theme reference)
+  - Visual styling / UI/UX decisions → `DESIGN.md` (Cobalt Playroom theme reference)
   - Product rationale / why a decision was made → `docs/product/ADRs.md` (frozen — see
     "Architecture is locked" above before touching anything it governs)
   - What the product is / user flow → `docs/product/PRD_v2.md`
@@ -312,7 +309,7 @@ Two independent projects, no shared root tooling — run commands from the named
 - Backend (from `backend/`): `uv run ruff check . && uv run pytest`
 
 ### Granular Testing
-- Frontend, single file: `pnpm exec vitest run app/write/page.test.tsx` (path relative to
+- Frontend, single file: `pnpm exec vitest run app/s/[profileId]/write/page.test.tsx` (path relative to
   `frontend/`)
 - Frontend, watch mode: `pnpm exec vitest` (no `run` flag) — for iteration, not verification
 - Backend, single file: `uv run pytest tests/test_analyze_node.py`
@@ -752,7 +749,7 @@ is not documentation of a good design; it is the blast radius, written down so t
   **by decision** — they do not weaken the paid-image breaker. ⚠️ **No evidence a third attempt
   improves consistency** (BC-1); this is product policy, not a measurement.
   **Phase 2 is in progress. Next: D-K + D-L, then the two routes.** Next free migration is
-  **`0015`** — ⚠️ `0014` is the highest on disk and **`0009` is used twice**
+  **`0016`** — ⚠️ `0015` is the highest on disk (`0015_add_cut_paper_style_preset.sql`) and **`0009` is used twice**
   (`0009_avatar_id.sql`, `0009_teacher_identity.sql`). That collision is **left alone deliberately**: both
   were hand-run under those names and this directory records what a human executed, so renaming them would
   trade a visible collision for an invisible lie (rationale in `0014`'s header). Do not add a third.

@@ -20,15 +20,14 @@ or an SDK call at a call site, stop and read §5 first.
 | Consistency judge (fine-tuned, replaces prompted if it ships) | `Qwen2.5-VL-7B-Instruct` + QLoRA adapter | Apache-2.0 | Modal (vLLM, scale-to-zero), reached via `settings.judge_base_url` | `settings.judge_base_url` / `settings.judge_api_key` | ADR-018, ADR-019 | Phase 2.5 |
 | Canonical character reference (text→image) | `fal-ai/qwen-image` | Apache-2.0 | fal.ai | `settings.fal_image_model` | ADR-001, ADR-007 | Phase 1 |
 | Scene generation (reference-conditioned edit) | `fal-ai/qwen-image-edit-2511` | Apache-2.0 | fal.ai | `settings.fal_image_edit_model` | ADR-001 | Phase 1 |
-| Input-text moderation (primary) | `meta-llama/llama-guard-4-12b` 0.6B | Apache-2.0 | OpenRouter | not yet in `config.py` — Phase-2 `moderation-stack` spec defines the shape | ADR-011 (revised 2026-07-21c) | Phase 2 |
-| Input-text moderation (backstop) | `openai/gpt-oss-safeguard-20b` | Apache-2.0 (open weights, not the OpenAI API) | OpenRouter | `settings.moderation_backstop_model` (currently `None` — see §8) | ADR-011 | Phase 2 |
-| Input-text moderation (config default, demoted) | `meta-llama/llama-guard-4-12b` | Meta Community License (not OSI) | OpenRouter | `settings.moderation_model` | ADR-011 | placeholder only — see §8 |
+| Input-text moderation (primary) | `meta-llama/llama-guard-4-12b` 0.6B | Apache-2.0 | OpenRouter | `settings.moderation_primary_model` | ADR-011 (revised 2026-07-21c), ADR-032 | Phase 2 |
+| Input-text moderation (backstop) | `openai/gpt-oss-safeguard-20b` | Apache-2.0 (open weights, not the OpenAI API) | OpenRouter | `settings.moderation_backstop_model` | ADR-011c | Phase 2 |
 | Output-image NSFW gate (primary image guard) | `mistralai/mistral-small-3.2-24b-instruct` | Apache-2.0 | OpenRouter | `settings.moderation_primary_image_model` | ADR-011, ADR-032, ADR-002 (amended 2026-08-11) | Phase 2 |
 | ~~Output-image NSFW gate~~ (superseded 2026-08-11) | ~~`qwen/qwen3-vl-32b-instruct`~~ | Apache-2.0 | OpenRouter | — | ADR-011, ADR-032 | Served by Alibaba Cloud it emitted `is_safe` before `safety_reasoning`; `providers._assert_field_order` rejects that under ADR-004 reason-then-score and hard-failed the job at `char_ref_mod`. Same class as the `text_model` failure one row up — the *provider*, not the model, decides structured-output fidelity. |
-| Output-image safety rubric (violence/gore) | `google/gemma-3-27b-it` (separate call, separate concern from the judge) | Gemma license | OpenRouter | reuses `settings.vlm_judge_model`'s model id via a distinct prompt/call — **never the fine-tuned judge** | ADR-011, ADR-004 amendment (b) | Phase 2 |
+| Output-image safety rubric (violence/gore) | `google/gemma-3-27b-it` (separate call, separate concern from the judge) | Gemma license | OpenRouter | `settings.moderation_backstop_image_model` — **never the fine-tuned judge** | ADR-011, ADR-004 amendment (b), ADR-032 | Phase 2 |
 | Narration (primary) | `Chatterbox` (Resemble AI) | MIT | fal.ai | not yet in `config.py` | ADR-020 | Phase 2 |
 | Narration (CPU fallback) | `Kokoro-82M` | Apache-2.0 | OpenRouter | not yet in `config.py` | ADR-020 | Phase 2 |
-| PII redaction | Presidio + spaCy | MIT / MIT | OpenRouter | not yet in `config.py` | ADR-011 | Phase 2 |
+| PII redaction | Presidio + spaCy + Filipino recognizers | MIT / MIT | Worker (local CPU) | `providers._presidio` | ADR-011, `input-gate-hardening` | Phase 2 |
 
 **Not a model, but a required call param:** every OpenRouter structured-output call must send
 `provider.require_parameters: true` in `extra_body` (`backend/providers.py:54`) — omitting it lets
@@ -246,13 +245,9 @@ Be honest — these are open, not silently resolved:
   "meta-llama/llama-guard-4-12b"` (an OpenRouter model, per ADR-032), `moderation_backstop_model = "openai/gpt-oss-safeguard-20b"` (ADR-011c), and
   `moderation_backstop_image_model = "google/gemma-3-27b-it"` (a separate field from `vlm_judge_model` so
   the safety rubric and the consistency judge can diverge).
-- **RLS is not actually restrictive today.** There are exactly **two** policy surfaces:
-  `supabase/migrations/0001_jobs_table.sql:18-21` on `jobs` (`for select to anon using (true)`) and
-  `0004_jobs_pages.sql:19-22` on `storage.objects` (scoped only to the bucket) — RLS is *enabled* but
-  nothing is *restricted*. Scoping today is a client-side `.eq('id', job_id)` convention (the UUID is the
-  capability link), and no classroom/profile columns exist yet to scope by. Both migrations carry a
-  `ponytail:` comment flagging that Phase 2's `auth-and-classroom` migration must drop both and replace
-  them in one change (`kid-flow-book-persistence` constraint 4); no later spec may add a third surface.
+- ~~**RLS is not actually restrictive today.**~~ — resolved 2026-08-06 by `auth-authorization-surface`
+  (`0008_authorization_surface.sql`): drops both legacy surfaces and enforces classroom-scoped RLS
+  across all tables and storage, backed by 39 isolation tests in `test_rls_isolation.py`.
 - **Whether fal.ai actually routes OmniGen2, HiDream-O1, or Z-Image is unverified** (ADR-001). This gates
   whether escalating the fallback ladder is a one-env-var change or a `providers.py` provider change.
 - **Whether fal accepts an `output_format` arg is unverified** (ADR-027). This gates whether WebP encoding is a

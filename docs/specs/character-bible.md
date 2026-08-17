@@ -219,12 +219,13 @@ the prompt behind it is under active development. Nothing recorded *which* promp
 verdict, so a wording change that alters what FALSE means invalidates every prior verdict rather
 than partitioning them.
 
-`char_bible.JUDGE_PROMPT_VERSION` (now `4`; `3` added enumerated contradictions, `2` asked for the verdict as a boolean, `1` is everything
-before 2026-08-11; `4` adds the text question for lettering suppression) is stamped onto
+`char_bible.JUDGE_PROMPT_VERSION` (now `6`; `6` removes character names under ADR-041 so the judge subject matches the name-free draw projection; `5` removed narrative notes under ADR-039; `4` added the text question for lettering suppression; `3` added enumerated contradictions; `2` asked for the verdict as a boolean; `1` is everything
+before 2026-08-11) is stamped onto
 `Character.ref_verdict_prompt_version` on every write of `ref_verdict`, in both the first-pass and
 the ADR-029 targeted-redraw paths — the targeted path judges with the same prompt, so leaving it
 unstamped would make the retries an unlabelled subset and defeat the point. **Bump it whenever the
-wording changes what a FALSE verdict means.**
+wording changes what a FALSE verdict means.** Historical verdict counts from earlier versions must
+not pool with the new series.
 
 It is on `Character`, not on `RefVerdict`, because `RefVerdict` is passed to `providers.judge` as
 `response_format`: a field there becomes a required model output under strict `json_schema`, and
@@ -597,8 +598,7 @@ definition.
 - `best_draw` — fewest `contradictions` wins even when it shows the fewest attributes; equal
   contradiction counts fall through to `text_free`, then `len(attributes_present)`; ties return the lowest index;
   all-empty returns `0`
-- `reference_prompt` — contains the name, species, and each populated appearance axis but excludes `notes`; falls
-  back to `Character.name` on a fully empty description; always contains the style fragment
+- `reference_prompt` — contains species and each populated appearance axis (including folded morphology in `body_features`) while excluding `notes` and `Character.name`; contains `Character.name` only for a fully empty filtered legacy projection where `_visual_axes()` is empty; always contains the style fragment. Log-only `char_id` and boolean evidence is recorded on legacy fallback without logging names or prompts. Fresh normal/targeted draw and judge maintain strict parity on the name-free physical identity.
 - `reference_prompt` **framing** (§4, the section that was owed) — asks for a `full shot` and never
   `full body` / `head to toe` / `standing`; never names the artifact (`"reference"` absent
   case-insensitively); states the background positively rather than as `no scenery`; and utters **no**

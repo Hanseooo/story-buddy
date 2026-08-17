@@ -27,7 +27,7 @@ This document outlines the step-by-step user flow, interaction patterns, and UX 
 - **Desktop (≥ 768px):** 
   - **Navigation:** Persistent **Left Sidebar** with clear routing (`Classrooms`, `Story Library`, `Settings`).
   - **Breadcrumbs:** Used in the top header (`Classrooms > Grade 5 > Story Library`) to provide deep context.
-  - **Data Display:** Dense data tables (`shadcn/ui` style) for efficient batch approvals.
+  - **Data Display:** Dense data tables and responsive cards (native HTML / Tailwind) for efficient batch approvals.
 
 ### Student Layout Pattern
 - **Mobile (< 768px):**
@@ -49,7 +49,7 @@ Whenever a table or list is empty, display a friendly placeholder:
 
 1. **Onboarding & Auth:**
    - Teacher or BEED student signs up / logs in via Supabase Auth.
-   - Lands on **Teacher Dashboard** (Grid of classroom cards).
+   - Lands on **Classroom Picker** (Grid of classroom cards at `/classroom`).
 2. **Classroom Creation:**
    - Clicks "Create Classroom". (Opens a **Bottom Sheet** on mobile, **Dialog** on desktop). Enters a name.
      A single classroom code is generated for sharing with students.
@@ -58,8 +58,8 @@ Whenever a table or list is empty, display a friendly placeholder:
    - Desktop: Inline table row addition. Mobile: **Bottom Sheet** form.
    - Shares the classroom code with students (they combine it with their own nickname + password to log in).
 4. **Story Library & Review:**
-   - Badges indicate status: "Needs Review" (Warning Yellow), "Approved" (Mint Lime).
-   - Teacher clicks a story to read it (opens a **Full-Screen Overlay**).
+   - Badges indicate status: "Needs Review" (`--color-warning`), "Approved" (`--color-success`).
+   - Teacher clicks a story to read it (opens a **Full-Screen Overlay** / `BookReviewDialog`).
    - Manually approves or rejects into the gallery via a large Switch component — every book is reviewed;
      there is no auto-approve mode (deferred to Future Work behind an ethics re-review).
 
@@ -72,18 +72,18 @@ Whenever a table or list is empty, display a friendly placeholder:
    - Then enters their nickname + password (teacher-set; changeable from Settings). No email, no
      self-serve signup — this is a real login, not a profile pick.
 2. **Dashboard (Bookshelf):**
-   - Student sees their past stories as 3D book covers (horizontal scrolling carousel on mobile, grid on desktop).
+   - Student sees their past stories as book covers (horizontal scrolling carousel on mobile, grid on desktop).
    - Giant primary CTA: **"Write a New Story!"** (Fixed at the bottom of the screen on mobile for easy thumb reach).
 3. **The Editor (Distraction-Free Mode):**
    - **Interface:** The navigation bar hides. A large text area takes up 80% of the screen.
    - **Assistive UX:** Live word count / progress bar against the 500-word limit fixed directly above the keyboard.
-   - **Action:** Floating Action Button (FAB) or sticky bottom button to "Create Picture Book".
+   - **Action:** Sticky bottom button to "Create Picture Book".
 4. **Input Gate & Loading (Crucial UX):**
-   - **Wait State:** Screen transitions to a full-screen loading state: "Reading your story..." with a looping Lottie animation (e.g., book pages flipping).
+   - **Wait State:** Screen transitions to a full-screen loading state: "Reading your story..." with subtle shimmer / pulse progress.
    - *If Over-length:* A **Bottom Sheet** slides up gently interrupting: "Whoa, that's a long adventure! Let's make a book out of the first part." (Requires confirmation).
-   - *If Moderation Fails:* Error state with a confused mascot. "Oops! The story machine didn't quite get that. Let's try changing a few words."
+   - *If Moderation Fails:* Friendly failure stage via `FailureScreen.tsx`: "Oops! The story machine didn't quite get that. Let's try changing a few words."
 5. **Style & Character Reveal:**
-   - Student selects from 3 **Style Presets** presented as large, tappable image cards.
+   - Student selects from selectable **Style Presets** (`cel`, `gouache`, `cut_paper`; ADR-042) presented as large, tappable image cards.
    - The system reveals the generated **Canonical Character Reference**.
 6. **Full Generation Wait State:**
    - "Drawing your scenes..." 

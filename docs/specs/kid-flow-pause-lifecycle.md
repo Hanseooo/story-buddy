@@ -177,12 +177,12 @@ ADR-029's *"the button never dead-ends"* would be false at the top of the pause 
    It reads `contradictions`, never `matches_description` — those two disagree in production, and a
    `reveal` that branched on the boolean would hand the child the full chip list for a reference the
    gate had just rejected, so the tap would target an attribute that was never the problem.
-2. **No axes at all** — `analyze` produced a bare name with no species, colours, features or clothing,
+2. **No axes at all** — `analyze` produced a bare description with no species, colours, features or clothing,
    or ADR-035 filtered every one of them away (including the species, post-amendment).
-   Fall back to **`[name]`**. The tap then restates the character's name, which is all
-   `char_bible._describe` had to work with anyway, so the redraw is an honest blind re-roll. ADR-029's
-   "targeted, not blind" premise assumes described attributes exist; where none do, blind is the only
-   retry available, and it beats no retry.
+   Fall back to **`["overall physical appearance"]`** (ADR-041). The tap then restates that neutral chip rather than
+   the character's name, preventing fresh pseudonyms from entering targeted prompt projections. `body_plan`
+   and `face_or_interface` arrive as separate standalone chips, and targeted redraw restates the tapped stored
+   chip exactly once.
 
 ### 4.4 The counter increments in `char_bible`, not in `reveal`
 

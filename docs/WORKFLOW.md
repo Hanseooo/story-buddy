@@ -109,9 +109,7 @@ enforces verbatim excerpts, maps roster names → char_ids, enforces `caption = 
 references (ADR-004), judges each against its `CharacterDescription` and re-rolls up to 3 times
 (ADR-028), persists the verdict — including a failing one — and bumps `cost.image_count`.
 
-`style-presets` is **built** (2026-07-31): `settings.style_presets` computed field, `POST /storybooks`
-validates and stores `style_preset_id`, worker resolves `None → "cel"` and writes `StoryMemory.style`
-before the graph starts. Migration: `supabase/migrations/0002_jobs_style_preset_id.sql`.
+`style-presets` is **built** (2026-07-31, amended by ADR-042 2026-08-17): `STYLE_PRESETS` compatibility mapping and `SELECTABLE_STYLE_PRESET_IDS`, `POST /storybooks` validates selectable presets (`cel`, `gouache`, `cut_paper`) and defaults new jobs to `gouache`, worker resolves legacy `None → "cel"` and writes `StoryMemory.style` before the graph starts. Migration: `supabase/migrations/0002_jobs_style_preset_id.sql`, `0015_add_cut_paper_style_preset.sql`.
 
 `prompt-optimizer` is **built** (2026-07-31): `backend/pipeline/prompt_optimizer.py` — `build_prompt`
 (wired into `generate_scene`, replacing the `scene.caption or scene.text_excerpt` stub) and
@@ -166,13 +164,13 @@ replaced the `filipino-pii-recognizers` stub and the `length-guard` row. `app/le
 
 `job-failure-reason` is **built** (2026-08-04): `supabase/migrations/0006_jobs_failure_reason.sql` plus the
 taxonomy map in `run_job.py` — `child_text` only where `moderation_router` raises for the input text,
-everything else and `null` → `machine`. (`0007` and `0008` are now claimed by the auth specs; next free
-is `0009`.)
+everything else and `null` → `machine`. (`0007` and `0008` are claimed by the auth specs; migrations
+up to `0015` exist on disk; next free is `0016`.)
 
 **`auth-and-classroom` is complete (2026-08-06).** The docket is DONE, `0007` and `0008` are applied,
 S3's 33-test Tier-A isolation suite (`backend/tests/test_rls_isolation.py`) is written, and S4
 (`middleware.ts`, `/join`, `/join/[code]`, `/s/[profileId]` bookshelf + settings) is fully built —
 144 frontend tests across 17 files. ADR-017's classroom boundary is enforced and verified. Next free
-migration is `0009`. **Next action per `docs/product/DECISION_BACKLOG.md`:** `data-deletion`
+migration is `0016`. **Next action per `docs/product/DECISION_BACKLOG.md`:** `data-deletion`
 (ethics-gated; owes the `awaiting_confirm` sweep and S4's `asleep` status value) or `export-pdf`
 (second reader of `jobs.pages`).
