@@ -162,8 +162,7 @@ straight on, centred against a flat empty background of one single colour.
 
 The character is {subject}.
 
-If the character is not a person, draw it as the kind of thing it actually is — give it no human \
-body and no human face unless the description above says so.
+If the character is not a person, draw it as the kind of thing it actually is.
 
 For a human or humanoid character, show age-appropriate clothing covering the torso.
 
