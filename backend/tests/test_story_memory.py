@@ -6,6 +6,7 @@ from contracts.story_memory import (
     CURRENT_SCHEMA_VERSION,
     Attempt,
     Character,
+    CharacterDescription,
     Cost,
     FailureReason,
     Input,
@@ -300,4 +301,23 @@ def test_visual_continuity_fields_round_trip_and_stay_last():
         "different_face",
         "character_absent",
     ]
+
+
+def test_character_description_is_humanoid_defaults_and_preserves():
+    """ADR-043: is_humanoid defaults to True for backwards compatibility and round trips."""
+    legacy = CharacterDescription.model_validate({"species": "human", "colours": ["brown"]})
+    assert legacy.is_humanoid is True
+
+    robot = CharacterDescription(species="robot", colours=["metallic silver"], is_humanoid=False)
+    assert robot.is_humanoid is False
+
+    cleaned = robot.without_placeholders()
+    assert cleaned.is_humanoid is False
+    assert cleaned.species == "robot"
+
+    dumped = robot.model_dump()
+    assert dumped["is_humanoid"] is False
+    reconstituted = CharacterDescription.model_validate(dumped)
+    assert reconstituted == robot
+
 

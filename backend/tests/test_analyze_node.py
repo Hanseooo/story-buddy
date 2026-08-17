@@ -689,3 +689,42 @@ def test_extraction_prompt_distinguishes_actors_from_props_and_requests_owners()
     assert "physical description" in prompt
 
 
+def test_analyze_persists_is_humanoid_on_character_description():
+    """ADR-043: analyze propagates is_humanoid from ExtractedDescription into CharacterDescription."""
+    analysis = _analysis(
+        characters=[
+            {
+                "name": "Bolt",
+                "description": {
+                    "species": "robot",
+                    "body_plan": "boxy metallic chassis",
+                    "face_or_interface": "smooth unbroken front plate",
+                    "is_humanoid": False,
+                    "colours": ["metallic silver", "blue"],
+                    "body_features": [],
+                    "clothing": [],
+                },
+            },
+            {
+                "name": "Jamie",
+                "description": {
+                    "species": "human",
+                    "body_plan": "small child body",
+                    "face_or_interface": "round friendly face",
+                    "is_humanoid": True,
+                    "colours": ["brown"],
+                    "body_features": [],
+                    "clothing": ["blue shirt"],
+                },
+            },
+        ]
+    )
+    with patch("pipeline.analyze.extract_entities", return_value=analysis):
+        result = analyze(_state())
+
+    bolt, jamie = result["characters"]
+    assert bolt.description.is_humanoid is False
+    assert jamie.description.is_humanoid is True
+
+
+

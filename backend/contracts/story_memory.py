@@ -42,6 +42,7 @@ class CharacterDescription(BaseModel):
     body_features: list[str] = Field(default_factory=list)
     clothing: list[str] = Field(default_factory=list)
     notes: Optional[str] = None
+    is_humanoid: bool = True
 
     def without_placeholders(self) -> "CharacterDescription":
         """Return the prompt-safe projection; empty axes remain valid for legacy checkpoints."""

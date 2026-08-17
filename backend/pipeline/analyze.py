@@ -197,7 +197,7 @@ def analyze(state: StoryMemory) -> dict:
             # the strict subclass is a boundary concern; what is persisted is the contract type
             description=CharacterDescription(
                 **extracted.description.model_dump(
-                    exclude={"is_humanoid", "body_plan", "face_or_interface"}
+                    exclude={"body_plan", "face_or_interface"}
                 )
             ),
         )
