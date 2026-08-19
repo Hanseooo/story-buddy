@@ -1,0 +1,245 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { submitAdjudication, getConflictedPair } from "./actions";
+
+const mockGetUser = vi.fn();
+const mockProfilesSelect = vi.fn();
+const mockAnnotationsUpsert = vi.fn();
+
+vi.mock("@/utils/supabase/server", () => ({
+  createSupabaseServerClient: vi.fn(() => ({
+    auth: { getUser: mockGetUser },
+    from: vi.fn((table: string) => {
+      if (table === "profiles") return { select: vi.fn(() => ({ eq: vi.fn(() => ({ single: mockProfilesSelect })) })) };
+      if (table === "annotations") return { upsert: mockAnnotationsUpsert };
+      return {};
+    }),
+  })),
+}));
+
+vi.mock("next/cache", () => ({
+  revalidatePath: vi.fn(),
+}));
+
+const mockAdminSelect = vi.fn();
+const mockAdminUpdate = vi.fn();
+const mockAdminCreateSignedUrl = vi.fn();
+
+vi.mock("@supabase/supabase-js", () => ({
+  createClient: vi.fn(() => ({
+    from: vi.fn((table: string) => ({
+      select: vi.fn((cols: string, opts?: { count?: string; head?: boolean }) => {
+        return mockAdminSelect(table, cols, opts);
+      }),
+      update: vi.fn((vals: Record<string, unknown>) => ({
+        eq: vi.fn((col: string, val: string) => mockAdminUpdate(table, vals, col, val)),
+      })),
+    })),
+    storage: {
+      from: vi.fn(() => ({ createSignedUrl: mockAdminCreateSignedUrl })),
+    },
+  })),
+}));
+
+describe("Adjudication Server Actions", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test";
+
+    mockGetUser.mockResolvedValue({ data: { user: { id: "adjudicator-1" } }, error: null });
+    mockProfilesSelect.mockResolvedValue({ data: { role: "researcher", is_adjudicator: true }, error: null });
+  });
+
+  describe("submitAdjudication Invariants & Role Isolation", () => {
+    it("rejects unauthenticated user", async () => {
+      mockGetUser.mockResolvedValueOnce({ data: { user: null }, error: new Error("No session") });
+      const res = await submitAdjudication("pair-1", [], true, true, true);
+      expect(res.error).toBe("Unauthorized");
+    });
+
+    it("rejects non-adjudicator (is_adjudicator=false)", async () => {
+      mockProfilesSelect.mockResolvedValueOnce({ data: { role: "researcher", is_adjudicator: false }, error: null });
+      const res = await submitAdjudication("pair-1", [], true, true, true);
+      expect(res.error).toBe("Unauthorized");
+    });
+
+    it("rejects non-researcher role", async () => {
+      mockProfilesSelect.mockResolvedValueOnce({ data: { role: "student", is_adjudicator: true }, error: null });
+      const res = await submitAdjudication("pair-1", [], true, true, true);
+      expect(res.error).toBe("Unauthorized");
+    });
+
+    it("rejects same_character=true when failure_reasons are provided", async () => {
+      const res = await submitAdjudication("pair-1", ["wrong_colour"], true, true, true);
+      expect(res.error).toBe("Invalid state: same_character is true but failure reasons provided");
+    });
+
+    it("rejects same_character=false when failure_reasons is empty", async () => {
+      const res = await submitAdjudication("pair-1", [], false, true, true);
+      expect(res.error).toBe("Invalid state: same_character is false but no failure reasons provided");
+    });
+
+    it("rejects non-boolean anatomy_intact or text_free", async () => {
+      // @ts-expect-error test invalid type
+      const res1 = await submitAdjudication("pair-1", [], true, undefined, true);
+      expect(res1.error).toBe("Invalid state: anatomy_intact and text_free must be explicitly provided");
+
+      // @ts-expect-error test invalid type
+      const res2 = await submitAdjudication("pair-1", [], true, true, null);
+      expect(res2.error).toBe("Invalid state: anatomy_intact and text_free must be explicitly provided");
+    });
+
+    it("rejects if pair is no longer conflicted", async () => {
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: { status: "complete" } }) })
+      });
+      const res = await submitAdjudication("pair-1", [], true, true, true);
+      expect(res.error).toBe("Pair is no longer conflicted");
+    });
+
+    it("rejects if pair does not have exactly 2 prior annotations", async () => {
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: { status: "conflicted" } }) })
+      });
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockResolvedValue({ data: [{ annotator_id: "annotator-1" }], error: null })
+      });
+      const res = await submitAdjudication("pair-1", [], true, true, true);
+      expect(res.error).toBe("Invalid pair state: requires exactly 2 prior annotations");
+    });
+
+    it("rejects when adjudicator is one of original annotators", async () => {
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: { status: "conflicted" } }) })
+      });
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockResolvedValue({ data: [{ annotator_id: "adjudicator-1" }, { annotator_id: "other" }], error: null })
+      });
+      const res = await submitAdjudication("pair-1", [], true, true, true);
+      expect(res.error).toBe("Adjudicator cannot resolve their own annotations");
+    });
+
+    it("handles idempotency when adjudicator already submitted but status update failed", async () => {
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: { status: "conflicted" } }) })
+      });
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockResolvedValue({ data: [{ annotator_id: "other-1" }, { annotator_id: "other-2" }, { annotator_id: "adjudicator-1" }], error: null })
+      });
+      mockAdminUpdate.mockResolvedValue({ error: null });
+
+      const res = await submitAdjudication("pair-1", [], true, true, true);
+      expect(res.success).toBe(true);
+      expect(mockAdminUpdate).toHaveBeenCalledWith("research_pairs", { status: "adjudicated" }, "id", "pair-1");
+    });
+
+    it("rejects when already adjudicated by another adjudicator", async () => {
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: { status: "conflicted" } }) })
+      });
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockResolvedValue({ data: [{ annotator_id: "other-1" }, { annotator_id: "other-2" }, { annotator_id: "another-adjudicator" }], error: null })
+      });
+      const res = await submitAdjudication("pair-1", [], true, true, true);
+      expect(res.error).toBe("Pair already adjudicated by another adjudicator");
+    });
+
+    it("successfully submits third annotation and updates pair status to adjudicated", async () => {
+      mockAnnotationsUpsert.mockResolvedValue({ error: null });
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: { status: "conflicted" } }) })
+      });
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockResolvedValue({ data: [{ annotator_id: "other-1" }, { annotator_id: "other-2" }], error: null })
+      });
+      mockAdminUpdate.mockResolvedValue({ error: null });
+
+      const res = await submitAdjudication("pair-1", ["wrong_colour"], false, true, false);
+      expect(res.success).toBe(true);
+      expect(mockAnnotationsUpsert).toHaveBeenCalledWith(
+        {
+          pair_id: "pair-1",
+          annotator_id: "adjudicator-1",
+          same_character: false,
+          anatomy_intact: true,
+          text_free: false,
+          failure_reasons: ["wrong_colour"],
+        },
+        {
+          onConflict: "pair_id,annotator_id",
+          ignoreDuplicates: true,
+        }
+      );
+      expect(mockAdminUpdate).toHaveBeenCalledWith("research_pairs", { status: "adjudicated" }, "id", "pair-1");
+    });
+  });
+
+  describe("getConflictedPair Logic", () => {
+    it("returns unauthorized if user is not an adjudicator", async () => {
+      mockProfilesSelect.mockResolvedValueOnce({ data: { role: "researcher", is_adjudicator: false }, error: null });
+      const res = await getConflictedPair();
+      expect(res.error).toBe("Unauthorized");
+    });
+
+    it("returns null if no conflicted pairs exist", async () => {
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockReturnValue({ order: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue({ data: [] }) }) })
+      });
+      const res = await getConflictedPair();
+      expect(res.pair).toBeNull();
+    });
+
+    it("skips pair if user is one of the original annotators and returns the valid one", async () => {
+      const mockPairs = [{ id: "pair-1", canonical_storage_path: "path/c1.png", scene_storage_path: "path/s1.png" }, { id: "pair-2", canonical_storage_path: "path/c2.png", scene_storage_path: "path/s2.png" }];
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockReturnValue({ order: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue({ data: mockPairs }) }) })
+      });
+      // Pair 1 query: user is annotator
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockResolvedValue({ data: [{ annotator_id: "adjudicator-1", same_character: true }, { annotator_id: "other", same_character: false }] })
+      });
+      // Pair 2 query: valid conflict
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockResolvedValue({ 
+          data: [
+            { annotator_id: "other-1", same_character: true, failure_reasons: [], anatomy_intact: true, text_free: true }, 
+            { annotator_id: "other-2", same_character: false, failure_reasons: ["wrong_colour"], anatomy_intact: true, text_free: true }
+          ] 
+        })
+      });
+
+      mockAdminCreateSignedUrl
+        .mockResolvedValueOnce({ data: { signedUrl: "https://signed.url/canonical-2" } })
+        .mockResolvedValueOnce({ data: { signedUrl: "https://signed.url/scene-2" } });
+
+      const res = await getConflictedPair();
+      expect(res.pair?.id).toBe("pair-2");
+      expect(res.pair?.canonical_signed_url).toBe("https://signed.url/canonical-2");
+      expect(res.pair?.scene_signed_url).toBe("https://signed.url/scene-2");
+      expect(res.annotationA?.same_character).toBe(true);
+      expect(res.annotationB?.same_character).toBe(false);
+      // Ensure annotator identities are stripped
+      expect((res.annotationA as Record<string, unknown>).annotator_id).toBeUndefined();
+      expect((res.annotationB as Record<string, unknown>).annotator_id).toBeUndefined();
+    });
+
+    it("skips pair if annotations agree under normalized set equality", async () => {
+      const mockPairs = [{ id: "pair-agree" }];
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockReturnValue({ order: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue({ data: mockPairs }) }) })
+      });
+      // Annotations agree despite different order/duplicates of failure reasons
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockResolvedValue({ 
+          data: [
+            { annotator_id: "other-1", same_character: false, failure_reasons: ["wrong_style", "wrong_colour"], anatomy_intact: true, text_free: true }, 
+            { annotator_id: "other-2", same_character: false, failure_reasons: ["wrong_colour", "wrong_style", "wrong_colour"], anatomy_intact: true, text_free: true }
+          ] 
+        })
+      });
+
+      const res = await getConflictedPair();
+      expect(res.pair).toBeNull();
+    });
+  });
+});
