@@ -1,4 +1,4 @@
-﻿# 02 — Annotation UI Hardening, Server Invariants & 3-Tier Blinding Verification
+# 02 � Annotation UI Hardening, Server Invariants & 3-Tier Blinding Verification
 
 **What to build:**
 Harden the Next.js `/annotate` route and server actions (`frontend/app/(research)/annotate/`). Fix broken imports (`createSupabaseServerClient`), correct role checks on `profiles.role`, enforce server-side validation invariants, implement per-annotator pseudo-random presentation order, and restrict adjudicators from ordinary annotator queues (`Annotator A != Annotator B != Adjudicator`).
@@ -19,15 +19,15 @@ Harden the Next.js `/annotate` route and server actions (`frontend/app/(research
 
 **Blocked by:** 00-preflight-migration-verification (can develop against mocked `getNextPair()` until 01 completes)
 
-**Status:** ready-for-agent
+**Status:** completed
 
 ### Checklist & Assertions:
-- [ ] Fix Supabase client imports to use `createSupabaseServerClient` and query `profiles.role`.
-- [ ] Block `is_adjudicator = true` users from `/annotate`.
-- [ ] Implement server-side validation for `same_character`, `failure_reasons`, `anatomy_intact`, and `text_free`.
-- [ ] Implement randomized/shuffled pair assignment per annotator in `getNextPair()`.
-- [ ] Handle UI states: queue-empty/done state, loading transitions, keyboard shortcuts (1-7, A, T, Enter), and double-submit prevention.
-- [ ] **3-Tier Test Suite:**
+- [x] Fix Supabase client imports to use `createSupabaseServerClient` and query `profiles.role`.
+- [x] Block `is_adjudicator = true` users from `/annotate`.
+- [x] Implement server-side validation for `same_character`, `failure_reasons`, `anatomy_intact`, and `text_free`.
+- [x] Implement randomized/shuffled pair assignment per annotator in `getNextPair()`.
+- [x] Handle UI states: queue-empty/done state, loading transitions, keyboard shortcuts (1-7, A, T, Enter), and double-submit prevention.
+- [x] **3-Tier Test Suite:**
   - *Tier 1 (UI / Component Tests - Vitest):* Verify form state transitions, disabled checkboxes when Same Character, done state, and assert NO metadata (`char_id`, `split`, story titles, model verdicts) in DOM.
   - *Tier 2 (Server Action Unit Tests - Vitest):* Verify allowlisted payload, invariant rejection, and signed URL generation.
   - *Tier 3 (DB / RLS Integration Tests - pytest):* Verify ordinary researchers cannot SELECT `research_pairs`, cannot view other annotators' rows, and cannot update `is_adjudicator`.

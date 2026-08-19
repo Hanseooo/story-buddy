@@ -1,4 +1,4 @@
-﻿# 06 — Automated Multi-Fixture E2E Golden-Path Test
+# 06 � Automated Multi-Fixture E2E Golden-Path Test
 
 **What to build:**
 A comprehensive end-to-end integration test (`backend/tests/test_annotation_pipeline_e2e.py`) validating the entire research pipeline across a 3-fixture test matrix from Supabase seeding through annotation, adjudication, dataset compilation, and ShareGPT serialization.
@@ -21,9 +21,9 @@ A comprehensive end-to-end integration test (`backend/tests/test_annotation_pipe
 
 **Blocked by:** 05-cross-cutting-integrity
 
-**Status:** ready-for-agent
+**Status:** completed
 
 ### Checklist & Assertions:
-- [ ] Write end-to-end integration tests implementing Fixtures A, B, and C.
-- [ ] Assert valid ShareGPT output for Fixtures A and B.
-- [ ] Assert strict export failure for Fixture C.
+- [x] Write end-to-end integration tests implementing Fixtures A, B, and C.
+- [x] Assert valid ShareGPT output for Fixtures A and B.
+- [x] Assert strict export failure for Fixture C.

@@ -1,4 +1,4 @@
-﻿# 04 — Hardened Dataset Exporter, Consensus Resolution & Manifest
+# 04 � Hardened Dataset Exporter, Consensus Resolution & Manifest
 
 **What to build:**
 Update `backend/finetune/build_dataset.py` with strict hard-fails for invalid states or unresolved conflicts, replacing loose warning drops. Generate `dataset_manifest.json` reporting both character counts (`num_characters`) and pair counts (`num_pairs`) across splits, class balance, failure taxonomy distributions, and SHA-256 dataset hashes.
@@ -20,10 +20,10 @@ Update `backend/finetune/build_dataset.py` with strict hard-fails for invalid st
 
 **Blocked by:** 03-adjudication
 
-**Status:** ready-for-agent
+**Status:** completed
 
 ### Checklist & Assertions:
-- [ ] Implement strict resolution algorithm and hard-fail error triggers in `backend/finetune/build_dataset.py`.
-- [ ] Strictly filter out `is_pilot = true` rows during production dataset export.
-- [ ] Include detailed split statistics in `dataset_manifest.json`: character counts, natural/constructed pair counts, taxonomy breakdown, adjudication rate, and SHA-256 hash.
-- [ ] Write unit tests for consensus resolution (2 agreeing, 2 conflicting + 1 adjudicator, >2 annotators fail, unresolved conflict fail, invalid adjudicator fail).
+- [x] Implement strict resolution algorithm and hard-fail error triggers in `backend/finetune/build_dataset.py`.
+- [x] Strictly filter out `is_pilot = true` rows during production dataset export.
+- [x] Include detailed split statistics in `dataset_manifest.json`: character counts, natural/constructed pair counts, taxonomy breakdown, adjudication rate, and SHA-256 hash.
+- [x] Write unit tests for consensus resolution (2 agreeing, 2 conflicting + 1 adjudicator, >2 annotators fail, unresolved conflict fail, invalid adjudicator fail).

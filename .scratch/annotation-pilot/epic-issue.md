@@ -16,21 +16,21 @@ To establish ground-truth labels on the held-out character-disjoint test set wit
 ## Sub-Issues & Execution Roadmap
 
 ### Phase 1: Preflight & Parallel Foundations
-- [ ] #44 — **00: Preflight Migration & Environment Verification**
+- [x] #44 — **00: Preflight Migration & Environment Verification**
 - [x] #45 — **01: Meaningful Visual Pilot Fixtures & Robust Seeding**
-- [ ] #46 — **02: Annotation UI Hardening, Server Invariants & 3-Tier Blinding Verification**
+- [x] #46 — **02: Annotation UI Hardening, Server Invariants & 3-Tier Blinding Verification**
 - [x] #52 — **08: Corpus Storage, Generation Telemetry & Cost Smoke Test**
 
 ### Phase 2: Adjudication & Exporter Hardening
-- [ ] #47 — **03: Adjudication Flow & Final Label Authoritative Resolution**
-- [ ] #48 — **04: Hardened Dataset Exporter, Consensus Resolution & Manifest**
+- [x] #47 — **03: Adjudication Flow & Final Label Authoritative Resolution**
+- [x] #48 — **04: Hardened Dataset Exporter, Consensus Resolution & Manifest**
 
 ### Phase 3: Verification & Automated Pipeline
-- [ ] #49 — **05: Cross-Cutting Research Integrity Suite**
-- [ ] #50 — **06: Automated Multi-Fixture E2E Golden-Path Test**
+- [x] #49 — **05: Cross-Cutting Research Integrity Suite**
+- [x] #50 — **06: Automated Multi-Fixture E2E Golden-Path Test**
 
 ### Phase 4: Pilot Execution & Instrument Freeze
-- [ ] #51 — **07: Human Annotation Pilot & Instrument Freeze**
+- [x] #51 — **07: Human Annotation Pilot & Instrument Freeze**
 
 ---
 

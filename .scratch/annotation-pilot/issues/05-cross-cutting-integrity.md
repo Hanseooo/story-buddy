@@ -1,4 +1,4 @@
-﻿# 05 — Cross-Cutting Research Integrity Suite
+# 05 � Cross-Cutting Research Integrity Suite
 
 **What to build:**
 A global research integrity test suite (`backend/tests/test_research_integrity.py`) that fails CI if methodological constraints are violated. Dual-boundary rule: preserve internal research metadata (`story_id`, `char_id`, `split`, `source_type` / `provenance`, `is_constructed_negative`) in DB and manifest records to enable automated audits, while strictly asserting that all external surfaces (Annotation UI, ShareGPT prompts) strip all identifiers.
@@ -17,11 +17,11 @@ A global research integrity test suite (`backend/tests/test_research_integrity.p
 
 **Blocked by:** 04-exporter-manifest
 
-**Status:** ready-for-agent
+**Status:** completed
 
 ### Checklist & Assertions:
-- [ ] Write CI tests asserting character-level disjointness across train/val/test splits.
-- [ ] Write CI tests asserting test set is 100% donated real-child stories with no constructed negatives.
-- [ ] Write CI tests asserting constructed negatives reside strictly in train split.
-- [ ] Write CI tests reconciling dataset item counts and character counts with `dataset_manifest.json`.
-- [ ] Write CI tests scanning serialized ShareGPT outputs for metadata/provenance leakage.
+- [x] Write CI tests asserting character-level disjointness across train/val/test splits.
+- [x] Write CI tests asserting test set is 100% donated real-child stories with no constructed negatives.
+- [x] Write CI tests asserting constructed negatives reside strictly in train split.
+- [x] Write CI tests reconciling dataset item counts and character counts with `dataset_manifest.json`.
+- [x] Write CI tests scanning serialized ShareGPT outputs for metadata/provenance leakage.

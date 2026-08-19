@@ -1,4 +1,4 @@
-﻿# 03 — Adjudication Flow & Final Label Authoritative Resolution
+# 03 � Adjudication Flow & Final Label Authoritative Resolution
 
 **What to build:**
 Build the `/adjudicate` interface and server actions (`frontend/app/(research)/adjudicate/`). Surface conflicting pairs across `same_character`, taxonomy reasons (normalized set equality), `anatomy_intact`, and `text_free`. An adjudicator resolves the disagreement by submitting an authoritative third row to `annotations`.
@@ -20,12 +20,12 @@ Build the `/adjudicate` interface and server actions (`frontend/app/(research)/a
 
 **Blocked by:** 01-visual-fixtures, 02-annotation-ui
 
-**Status:** ready-for-agent
+**Status:** completed
 
 ### Checklist & Assertions:
-- [ ] Build `/adjudicate` page fetching pairs with status `conflicted` and exactly 2 competing non-adjudicator annotations.
-- [ ] Render blinded side-by-side images and anonymous Annotator A vs Annotator B labels.
-- [ ] Implement conflict detection comparing `same_character`, `anatomy_intact`, `text_free`, and set-normalized `failure_reasons`.
-- [ ] Implement adjudication submission action writing authoritative third row and updating `research_pairs.status = 'adjudicated'`.
-- [ ] Enforce `adjudicator_id != annotator_A_id` and `adjudicator_id != annotator_B_id`.
-- [ ] Write component and server-action unit tests covering eligibility, conflict detection, anonymization, and persistence.
+- [x] Build `/adjudicate` page fetching pairs with status `conflicted` and exactly 2 competing non-adjudicator annotations.
+- [x] Render blinded side-by-side images and anonymous Annotator A vs Annotator B labels.
+- [x] Implement conflict detection comparing `same_character`, `anatomy_intact`, `text_free`, and set-normalized `failure_reasons`.
+- [x] Implement adjudication submission action writing authoritative third row and updating `research_pairs.status = 'adjudicated'`.
+- [x] Enforce `adjudicator_id != annotator_A_id` and `adjudicator_id != annotator_B_id`.
+- [x] Write component and server-action unit tests covering eligibility, conflict detection, anonymization, and persistence.
