@@ -8,6 +8,7 @@ every number still looks plausible.
 """
 import hashlib
 import itertools
+import json
 import logging
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -16,6 +17,7 @@ from typing import Iterable, NamedTuple
 from app.db import get_supabase_client
 from contracts.story_memory import Character, FailureReason, StoryMemory
 from finetune.manifest import (
+    ManifestError,
     ManifestRecord,
     PairType,
     Provenance,
@@ -60,6 +62,7 @@ class Consensus(NamedTuple):
     failure_reasons: list[str]
     anatomy_intact: bool = True
     text_free: bool = True
+    adjudicated: bool = False
 
 
 # --- pairing (§5.4 step 2 — a loop, not a labelling task) ------------------------------------
@@ -107,40 +110,74 @@ def fetch_annotations() -> list[dict]:
     return get_supabase_client().table(ANNOTATIONS_TABLE).select("*").execute().data or []
 
 
-def resolve_annotations(rows: Iterable[dict]) -> dict[str, Consensus]:
-    """Independent labels → one consensus per pair. Majority on `same_character`.
+def fetch_adjudicator_ids() -> set[str]:
+    data = get_supabase_client().table("profiles").select("id").eq("is_adjudicator", True).execute().data or []
+    return {row["id"] for row in data}
 
-    Two agreeing annotators resolve; two disagreeing plus an adjudicator resolve (three rows, one
-    majority — annotation-surface §4 keys the adjudicator as any other annotator, so no
-    special-casing). An unresolved disagreement is DROPPED, not guessed: a coin-flip label on the
-    exact pairs humans found hardest is the worst noise this dataset could carry.
+
+def fetch_pilot_pairs() -> set[str]:
+    data = get_supabase_client().table("research_pairs").select("id").eq("is_pilot", True).execute().data or []
+    return {row["id"] for row in data}
+
+
+def resolve_annotations(
+    rows: Iterable[dict],
+    adjudicators: set[str],
+    pilot_pairs: set[str],
+) -> dict[str, Consensus]:
+    """Independent labels → one consensus per pair.
+
+    Hard fails on invalid states: >2 ordinary annotations, <2 ordinary annotations,
+    unresolved conflicts, multiple adjudicators, or adjudicator rows on agreeing pairs.
+    Pilot pairs are silently excluded.
 
     The gating booleans fold worst-wins and the reasons union, mirroring `consistency_check`'s
     fold so a human label and a judge verdict are combined the same way.
     """
     grouped: dict[str, list[dict]] = defaultdict(list)
     for row in rows:
+        if row["pair_id"] in pilot_pairs:
+            continue
         grouped[row["pair_id"]].append(row)
 
     resolved: dict[str, Consensus] = {}
     for pair_id, pair_rows in grouped.items():
-        votes = Counter(bool(r["same_character"]) for r in pair_rows)
-        (winner, top), *rest = votes.most_common()
-        if rest and rest[0][1] == top:
-            log.warning("build_dataset: pair %s is an unadjudicated tie — dropped", pair_id)
-            continue
+        ordinary = [r for r in pair_rows if r["annotator_id"] not in adjudicators]
+        adjs = [r for r in pair_rows if r["annotator_id"] in adjudicators]
+
+        if len(ordinary) > 2:
+            raise ManifestError(f"Pair {pair_id} has >2 ordinary annotations.")
+        if len(ordinary) < 2:
+            raise ManifestError(f"Pair {pair_id} has <2 ordinary annotations.")
+
+        votes = Counter(bool(r["same_character"]) for r in ordinary)
+        if len(votes) == 1:
+            if len(adjs) > 0:
+                raise ManifestError(f"Pair {pair_id}: ordinary annotators agreed, but adjudicator row exists.")
+            winner = bool(ordinary[0]["same_character"])
+            final_rows = ordinary
+            adjudicated = False
+        else:
+            if len(adjs) == 0:
+                raise ManifestError(f"Pair {pair_id}: unresolved conflict (no adjudicator).")
+            if len(adjs) > 1:
+                raise ManifestError(f"Pair {pair_id}: multiple adjudicator rows.")
+            winner = bool(adjs[0]["same_character"])
+            final_rows = [r for r in ordinary if bool(r["same_character"]) == winner] + adjs
+            adjudicated = True
+
         reasons: list[str] = []
-        for row in pair_rows:
+        for row in final_rows:
             for reason in row.get("failure_reasons") or []:
                 if reason not in reasons:
                     reasons.append(reason)
+
         resolved[pair_id] = Consensus(
             same_character=winner,
             failure_reasons=reasons,
-            # Absent columns take the production schema defaults — `VlmVerdict` declares both
-            # `True`, so a missing annotation reads "nothing wrong seen" rather than a failure.
-            anatomy_intact=all(r.get("anatomy_intact", True) for r in pair_rows),
-            text_free=all(r.get("text_free", True) for r in pair_rows),
+            anatomy_intact=all(r.get("anatomy_intact", True) for r in final_rows),
+            text_free=all(r.get("text_free", True) for r in final_rows),
+            adjudicated=adjudicated,
         )
     return resolved
 
@@ -178,18 +215,24 @@ def build_records(
     split: Split,
     provenance: Provenance,
     consensus: dict[str, Consensus],
+    pilot_pairs: set[str],
     pair_type: PairType = "pipeline",
 ) -> list[ManifestRecord]:
-    """Pairs that have a resolved human label become manifest records. Unlabelled pairs are dropped.
+    """Pairs that have a resolved human label become manifest records. Pilot pairs are dropped.
+    Non-pilot pairs with missing annotations trigger a HARD FAIL.
 
     THIS is the single polarity conversion site (`annotation-surface.md` §2.1).
     """
     by_id = {c.char_id: c for c in memory.characters}
     records = []
     for pair in pairs_from_memory(memory):
+        if pair.pair_id in pilot_pairs:
+            continue
+
         agreed = consensus.get(pair.pair_id)
         if agreed is None:
-            continue
+            raise ManifestError(f"Pair {pair.pair_id} has <2 annotations and is not a pilot pair.")
+
         records.append(ManifestRecord(
             pair_id=pair.pair_id,
             char_id=pair.char_id,
@@ -254,13 +297,60 @@ def build_dataset(
     out_path: Path = Path("data/judge/manifest.jsonl"),
     add_constructed: bool = True,
 ) -> list[ManifestRecord]:
-    """The entry point. Reads every annotation once, then writes a validated manifest."""
-    consensus = resolve_annotations(fetch_annotations())
+    """The entry point. Reads every annotation once, then writes a validated manifest and stats."""
+    out_path = Path(out_path)
+    adjudicators = fetch_adjudicator_ids()
+    pilot_pairs = fetch_pilot_pairs()
+    consensus = resolve_annotations(fetch_annotations(), adjudicators, pilot_pairs)
+
     records: list[ManifestRecord] = []
     for memory, split, provenance in corpus:
-        records += build_records(memory, split, provenance, consensus)
+        records += build_records(memory, split, provenance, consensus, pilot_pairs)
     if add_constructed:
         records += constructed_records(records)
+
     write_manifest(out_path, records)     # validates — §3.2's guard is not optional
     log.info("build_dataset: wrote %d records to %s", len(records), out_path)
+
+    # Compute SHA-256 of the generated JSONL
+    h = hashlib.sha256()
+    with open(out_path, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            h.update(chunk)
+    file_hash = h.hexdigest()
+
+    # Generate statistics
+    stats = {
+        "splits": {},
+        "overall": {
+            "characters": len(set(r.char_id for r in records)),
+            "natural_pairs": sum(1 for r in records if r.pair_type == "pipeline"),
+            "constructed_pairs": sum(1 for r in records if r.pair_type == "constructed"),
+            "total_pairs": len(records),
+        },
+        "class_balance": {
+            "same_character": sum(1 for r in records if r.same_character),
+            "different_character": sum(1 for r in records if not r.same_character),
+        },
+        "failure_reasons": dict(Counter(
+            reason.value if hasattr(reason, "value") else str(reason)
+            for r in records
+            for reason in r.failure_reasons
+        )),
+        "adjudication_rate": sum(1 for c in consensus.values() if getattr(c, "adjudicated", False)) / max(1, len(consensus)),
+        "dataset_sha256": file_hash,
+    }
+
+    for s in ["train", "val", "test"]:
+        split_records = [r for r in records if r.split == s]
+        stats["splits"][s] = {
+            "characters": len(set(r.char_id for r in split_records)),
+            "natural_pairs": sum(1 for r in split_records if r.pair_type == "pipeline"),
+            "constructed_pairs": sum(1 for r in split_records if r.pair_type == "constructed"),
+        }
+
+    stats_path = out_path.with_name("dataset_manifest.json")
+    stats_path.write_text(json.dumps(stats, indent=2), encoding="utf-8")
+    log.info("build_dataset: wrote stats to %s", stats_path)
+
     return records

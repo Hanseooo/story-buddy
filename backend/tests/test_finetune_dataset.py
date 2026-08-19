@@ -18,6 +18,7 @@ from contracts.story_memory import (
 )
 from finetune import build_dataset as bd
 from finetune import evaluate as ev
+from finetune.manifest import ManifestError
 
 
 def memory() -> StoryMemory:
@@ -82,14 +83,19 @@ def rows(pair_id, *specs):
 
 def test_consensus_is_majority_on_same_character():
     resolved = bd.resolve_annotations(
-        rows("p1", {"same_character": True}, {"same_character": False}, {"same_character": True})
+        rows("p1", {"same_character": True}, {"same_character": True}),
+        set(), set(),
     )
     assert resolved["p1"].same_character is True
+    assert resolved["p1"].adjudicated is False
 
 
-def test_an_unadjudicated_tie_is_dropped():
-    resolved = bd.resolve_annotations(rows("p1", {"same_character": True}, {"same_character": False}))
-    assert resolved == {}
+def test_an_unadjudicated_tie_raises_manifest_error():
+    with pytest.raises(ManifestError, match="unresolved conflict"):
+        bd.resolve_annotations(
+            rows("p1", {"same_character": True}, {"same_character": False}),
+            set(), set(),
+        )
 
 
 def test_gating_booleans_fold_worst_wins_and_reasons_union():
@@ -97,15 +103,76 @@ def test_gating_booleans_fold_worst_wins_and_reasons_union():
         "p1",
         {"same_character": False, "failure_reasons": ["wrong_colour"], "anatomy_intact": False},
         {"same_character": False, "failure_reasons": ["wrong_clothing"], "text_free": False},
-    ))
+    ), set(), set())
     c = resolved["p1"]
     assert c.anatomy_intact is False and c.text_free is False
     assert c.failure_reasons == ["wrong_colour", "wrong_clothing"]
 
 
 def test_missing_gating_columns_default_to_the_schema_defaults():
-    resolved = bd.resolve_annotations([{"pair_id": "p1", "annotator_id": "a", "same_character": True}])
+    resolved = bd.resolve_annotations(
+        rows("p1", {"same_character": True}, {"same_character": True}),
+        set(), set(),
+    )
     assert resolved["p1"].anatomy_intact is True and resolved["p1"].text_free is True
+
+
+def test_resolve_annotations_strict_rules():
+    # >2 ordinary annotations -> hard fail
+    with pytest.raises(ManifestError, match=">2 ordinary annotations"):
+        bd.resolve_annotations(
+            rows("p1", {"same_character": True}, {"same_character": True}, {"same_character": True}),
+            set(), set(),
+        )
+
+    # <2 ordinary annotations -> hard fail
+    with pytest.raises(ManifestError, match="<2 ordinary annotations"):
+        bd.resolve_annotations(
+            rows("p1", {"same_character": True}),
+            set(), set(),
+        )
+
+    # 2 disagreeing ordinary rows + 1 adjudicator -> adjudicator decides
+    res = bd.resolve_annotations(
+        rows("p1",
+            {"same_character": True, "annotator_id": "a1"},
+            {"same_character": False, "annotator_id": "a2"},
+            {"same_character": False, "annotator_id": "adj1", "failure_reasons": ["wrong_colour"]},
+        ),
+        {"adj1"}, set(),
+    )
+    assert res["p1"].same_character is False
+    assert res["p1"].adjudicated is True
+    assert res["p1"].failure_reasons == ["wrong_colour"]
+
+    # 2 disagreeing ordinary rows + >1 adjudicators -> hard fail
+    with pytest.raises(ManifestError, match="multiple adjudicator rows"):
+        bd.resolve_annotations(
+            rows("p1",
+                {"same_character": True, "annotator_id": "a1"},
+                {"same_character": False, "annotator_id": "a2"},
+                {"same_character": False, "annotator_id": "adj1"},
+                {"same_character": True, "annotator_id": "adj2"},
+            ),
+            {"adj1", "adj2"}, set(),
+        )
+
+    # 2 agreeing ordinary rows + adjudicator present -> hard fail
+    with pytest.raises(ManifestError, match="ordinary annotators agreed, but adjudicator row exists"):
+        bd.resolve_annotations(
+            rows("p1",
+                {"same_character": True, "annotator_id": "a1"},
+                {"same_character": True, "annotator_id": "a2"},
+                {"same_character": True, "annotator_id": "adj1"},
+            ),
+            {"adj1"}, set(),
+        )
+
+    # Pilot pairs are silently excluded from resolution
+    assert bd.resolve_annotations(
+        rows("pilot_1", {"same_character": True}),
+        set(), {"pilot_1"},
+    ) == {}
 
 
 # --- polarity ------------------------------------------------------------------------------
@@ -113,33 +180,48 @@ def test_missing_gating_columns_default_to_the_schema_defaults():
 @pytest.mark.parametrize("same_character", [True, False])
 def test_label_is_the_inverse_of_same_character_and_is_converted_only_here(same_character):
     consensus = bd.resolve_annotations(
-        rows("x", {"same_character": same_character}, {"same_character": same_character})
+        rows("x", {"same_character": same_character}, {"same_character": same_character}),
+        set(), set(),
     )
     pairs = bd.pairs_from_memory(memory())
     keyed = {pairs[0].pair_id: consensus["x"]}
-    records = bd.build_records(memory(), "train", "synthetic", keyed)
+    records = bd.build_records(memory(), "train", "synthetic", keyed, {pairs[1].pair_id})
 
     assert len(records) == 1
     assert records[0].same_character is same_character
     assert records[0].label is (not same_character)
 
 
-def test_unannotated_pairs_are_dropped():
-    assert bd.build_records(memory(), "train", "synthetic", {}) == []
+def test_unannotated_pairs_hard_fail_if_not_pilot():
+    with pytest.raises(ManifestError, match="<2 annotations"):
+        bd.build_records(memory(), "train", "synthetic", {}, set())
+
+
+def test_pilot_pairs_are_dropped():
+    pairs = bd.pairs_from_memory(memory())
+    pilot_pairs = {p.pair_id for p in pairs}
+    assert bd.build_records(memory(), "train", "synthetic", {}, pilot_pairs) == []
 
 
 def test_build_records_carries_the_gating_booleans_and_the_split_metadata():
     pairs = bd.pairs_from_memory(memory())
-    keyed = {pairs[0].pair_id: bd.Consensus(
-        same_character=False, failure_reasons=["wrong_colour"], anatomy_intact=False, text_free=False,
-    )}
-    (rec,) = bd.build_records(memory(), "test", "donated", keyed)
-    assert (rec.split, rec.provenance, rec.pair_type) == ("test", "donated", "pipeline")
-    assert rec.anatomy_intact is False and rec.text_free is False
-    assert rec.failure_reasons == ["wrong_colour"]
+    keyed = {
+        pairs[0].pair_id: bd.Consensus(
+            same_character=False, failure_reasons=["wrong_colour"], anatomy_intact=False, text_free=False,
+        ),
+        pairs[1].pair_id: bd.Consensus(
+            same_character=True, failure_reasons=[], anatomy_intact=True, text_free=True,
+        ),
+    }
+    rec1, rec2 = bd.build_records(memory(), "test", "donated", keyed, set())
+    assert (rec1.split, rec1.provenance, rec1.pair_type) == ("test", "donated", "pipeline")
+    assert rec1.anatomy_intact is False and rec1.text_free is False
+    assert rec1.failure_reasons == ["wrong_colour"]
     # Local dataset paths, NOT the raw Storage paths — LLaMA-Factory resolves `images` against
     # the filesystem and `build_corpus` writes the flattened name (manifest.local_image_path).
-    assert rec.images == ["data/judge/ref/story_1_ref-quill.png", "data/judge/scene/story_1_s1-1.png"]
+    assert rec1.images == ["data/judge/ref/story_1_ref-quill.png", "data/judge/scene/story_1_s1-1.png"]
+    assert rec2.same_character is True
+    assert rec2.label is False
 
 
 # --- rationale template --------------------------------------------------------------------
@@ -202,6 +284,22 @@ def test_fetch_annotations_reads_the_annotations_table_through_the_existing_clie
     client.table.assert_called_once_with("annotations")
 
 
+def test_fetch_adjudicator_ids_reads_profiles_table():
+    client = MagicMock()
+    client.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{"id": "a1"}]
+    with patch("finetune.build_dataset.get_supabase_client", return_value=client):
+        assert bd.fetch_adjudicator_ids() == {"a1"}
+    client.table.assert_called_with("profiles")
+
+
+def test_fetch_pilot_pairs_reads_research_pairs_table():
+    client = MagicMock()
+    client.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{"id": "p1"}]
+    with patch("finetune.build_dataset.get_supabase_client", return_value=client):
+        assert bd.fetch_pilot_pairs() == {"p1"}
+    client.table.assert_called_with("research_pairs")
+
+
 # --- evaluate.py metrics -------------------------------------------------------------------
 
 def test_prf1_scores_the_different_character_class():
@@ -224,3 +322,65 @@ def test_bootstrap_resamples_by_char_id_not_by_pair():
     char_ids = ["a", "a", "a", "a", "b", "b", "b", "b"]
     lo, hi = ev.bootstrap_f1_ci(labels, preds, char_ids, resamples=50, seed=0)
     assert 0.0 <= lo <= hi <= 1.0
+
+
+# --- build_dataset manifest & stats --------------------------------------------------------
+
+def test_build_dataset_creates_manifest_and_stats(tmp_path):
+    import json
+    out = tmp_path / "manifest.jsonl"
+    with patch("finetune.build_dataset.fetch_annotations", return_value=[]), \
+         patch("finetune.build_dataset.fetch_adjudicator_ids", return_value=set()), \
+         patch("finetune.build_dataset.fetch_pilot_pairs", return_value=set()):
+        records = bd.build_dataset([], out_path=out, add_constructed=False)
+
+    assert out.exists()
+    assert records == []
+    stats_out = tmp_path / "dataset_manifest.json"
+    assert stats_out.exists()
+    stats = json.loads(stats_out.read_text(encoding="utf-8"))
+    assert stats["overall"]["total_pairs"] == 0
+    assert stats["overall"]["characters"] == 0
+    assert stats["overall"]["natural_pairs"] == 0
+    assert stats["overall"]["constructed_pairs"] == 0
+    assert "splits" in stats
+    assert set(stats["splits"].keys()) == {"train", "val", "test"}
+    assert "class_balance" in stats
+    assert "failure_reasons" in stats
+    assert "adjudication_rate" in stats
+    assert "dataset_sha256" in stats
+
+
+def test_build_dataset_computes_accurate_statistics(tmp_path):
+    import json
+    out = tmp_path / "manifest.jsonl"
+    mem = memory()
+    pairs = bd.pairs_from_memory(mem)
+    pair1, pair2 = pairs[0], pairs[1]
+
+    # pair1: 2 annotators disagree (a1=True, a2=False), adj1=False (adjudicated)
+    # pair2: 2 annotators agree (a1=True, a2=True)
+    raw_annotations = [
+        {"pair_id": pair1.pair_id, "annotator_id": "a1", "same_character": True, "failure_reasons": []},
+        {"pair_id": pair1.pair_id, "annotator_id": "a2", "same_character": False, "failure_reasons": ["wrong_colour"]},
+        {"pair_id": pair1.pair_id, "annotator_id": "adj1", "same_character": False, "failure_reasons": ["wrong_colour"]},
+        {"pair_id": pair2.pair_id, "annotator_id": "a1", "same_character": True, "failure_reasons": []},
+        {"pair_id": pair2.pair_id, "annotator_id": "a2", "same_character": True, "failure_reasons": []},
+    ]
+    with patch("finetune.build_dataset.fetch_annotations", return_value=raw_annotations), \
+         patch("finetune.build_dataset.fetch_adjudicator_ids", return_value={"adj1"}), \
+         patch("finetune.build_dataset.fetch_pilot_pairs", return_value=set()):
+        records = bd.build_dataset([(mem, "train", "synthetic")], out_path=out, add_constructed=False)
+
+    assert len(records) == 2
+    stats_out = tmp_path / "dataset_manifest.json"
+    stats = json.loads(stats_out.read_text(encoding="utf-8"))
+    assert stats["overall"]["characters"] == 1
+    assert stats["overall"]["natural_pairs"] == 2
+    assert stats["overall"]["constructed_pairs"] == 0
+    assert stats["overall"]["total_pairs"] == 2
+    assert stats["class_balance"]["same_character"] == 1
+    assert stats["class_balance"]["different_character"] == 1
+    assert stats["failure_reasons"] == {"wrong_colour": 1}
+    assert stats["adjudication_rate"] == 0.5
+    assert len(stats["dataset_sha256"]) == 64
