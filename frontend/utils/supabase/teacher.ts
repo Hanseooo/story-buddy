@@ -5,7 +5,7 @@ import { createSupabaseServerClient } from "./server";
 export type Classroom = { id: string; name: string; code: string };
 
 export type TeacherContext = {
-  profile: { id: string; role: string; display_name: string | null };
+  profile: { id: string; role: string; display_name: string | null; is_adjudicator?: boolean | null };
   classrooms: Classroom[];
 };
 
@@ -28,7 +28,7 @@ export const getTeacherContext = cache(async (): Promise<TeacherContext> => {
   const [profileRes, classroomsRes] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, role, display_name")
+      .select("id, role, display_name, is_adjudicator")
       .eq("id", user.id)
       .single(),
     supabase
@@ -50,6 +50,15 @@ export const getTeacherContext = cache(async (): Promise<TeacherContext> => {
           ? `${profileRes.error.code}: ${profileRes.error.message}`
           : "query returned no row and no error")
     );
+
+  if (profile.role === "researcher") {
+    if (profile.is_adjudicator) {
+      redirect("/adjudicate");
+    } else {
+      redirect("/annotate");
+    }
+  }
+
   if (profile.role !== "teacher") redirect(`/s/${profile.id}`);
 
   return { profile, classrooms: classroomsRes.data ?? [] };

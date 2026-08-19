@@ -8,12 +8,18 @@ const mockSignUp = vi.hoisted(() => vi.fn());
 const mockPush = vi.hoisted(() => vi.fn());
 const mockSearchParamsGet = vi.hoisted(() => vi.fn(() => null as string | null));
 
+const mockFrom = vi.hoisted(() => vi.fn());
+const mockSelect = vi.hoisted(() => vi.fn());
+const mockEq = vi.hoisted(() => vi.fn());
+const mockSingle = vi.hoisted(() => vi.fn());
+
 vi.mock("@/lib/supabaseClient", () => ({
   supabase: {
     auth: {
       signInWithPassword: mockSignIn,
       signUp: mockSignUp,
     },
+    from: mockFrom,
   },
 }));
 
@@ -26,6 +32,11 @@ describe("Teacher Auth Pages", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSearchParamsGet.mockImplementation(() => null);
+    
+    mockFrom.mockReturnValue({ select: mockSelect });
+    mockSelect.mockReturnValue({ eq: mockEq });
+    mockEq.mockReturnValue({ single: mockSingle });
+    mockSingle.mockResolvedValue({ data: { role: "teacher" } });
   });
 
   it("renders login form with Inter font", () => {
@@ -38,7 +49,7 @@ describe("Teacher Auth Pages", () => {
   });
 
   it("redirects to /classroom on successful login", async () => {
-    mockSignIn.mockResolvedValueOnce({ error: null });
+    mockSignIn.mockResolvedValueOnce({ data: { user: { id: "123" } }, error: null });
     render(<Login />);
 
     fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "teacher@school.org" } });

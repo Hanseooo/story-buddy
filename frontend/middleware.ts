@@ -13,7 +13,10 @@ export function guardRequest(
     if (profileId !== userId) return `/s/${userId}`;
   }
   if (
-    (pathname.startsWith("/classroom") || pathname === "/settings") &&
+    (pathname.startsWith("/classroom") ||
+      pathname === "/settings" ||
+      pathname.startsWith("/annotate") ||
+      pathname.startsWith("/adjudicate")) &&
     !userId
   )
     return `/login?next=${safe(pathname) ?? ""}`;
@@ -50,5 +53,9 @@ export const config = {
     "/signup",
     "/join",
     "/join/:path*",
+    "/annotate",
+    "/annotate/:path*",
+    "/adjudicate",
+    "/adjudicate/:path*",
   ],
 };
