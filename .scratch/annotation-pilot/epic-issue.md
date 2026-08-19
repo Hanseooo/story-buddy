@@ -1,4 +1,4 @@
-﻿# [Epic] Objective 4: Research Annotation Surface, Pilot Validation & Dataset Infrastructure
+# [Epic] Objective 4: Research Annotation Surface, Pilot Validation & Dataset Infrastructure
 
 ## Overview & Capstone Context
 This epic tracks the implementation, hardening, pilot validation, and dataset compilation infrastructure for **Objective 4: Fine-Tuning the VLM Consistency Judge** (`Qwen2.5-VL-7B-Instruct` via QLoRA with LLaMA-Factory).
@@ -17,9 +17,9 @@ To establish ground-truth labels on the held-out character-disjoint test set wit
 
 ### Phase 1: Preflight & Parallel Foundations
 - [ ] #44 — **00: Preflight Migration & Environment Verification**
-- [ ] #45 — **01: Meaningful Visual Pilot Fixtures & Robust Seeding**
+- [x] #45 — **01: Meaningful Visual Pilot Fixtures & Robust Seeding**
 - [ ] #46 — **02: Annotation UI Hardening, Server Invariants & 3-Tier Blinding Verification**
-- [ ] #52 — **08: Corpus Storage, Generation Telemetry & Cost Smoke Test**
+- [x] #52 — **08: Corpus Storage, Generation Telemetry & Cost Smoke Test**
 
 ### Phase 2: Adjudication & Exporter Hardening
 - [ ] #47 — **03: Adjudication Flow & Final Label Authoritative Resolution**

@@ -1,4 +1,4 @@
-﻿# 01 — Meaningful Visual Pilot Fixtures & Robust Seeding
+# 01 — Meaningful Visual Pilot Fixtures & Robust Seeding
 
 **What to build:**
 Replace the dummy 1x1 blank base64 seeding script with a robust Python generator (`backend/scripts/generate_visual_pilot.py` and updated `backend/scripts/pilot_annotate_seed.py`) using `Pillow` to draw 34 meaningful visual fixtures (17 pairs). These must cover PASS cases with varied pose/expression/lighting, and specific FAIL cases targeting the closed taxonomy (`wrong_colour`, `wrong_clothing`, `wrong_body_feature`, `different_face`, `wrong_species`, `character_absent`).
@@ -12,12 +12,12 @@ Replace the dummy 1x1 blank base64 seeding script with a robust Python generator
 
 **Blocked by:** 00-preflight-migration-verification
 
-**Status:** ready-for-agent
+**Status:** completed
 
 ### Checklist & Assertions:
-- [ ] Create `backend/scripts/generate_visual_pilot.py` using Pillow to generate 34 distinct 512x512 PNG images (17 pairs) representing canonical and scene variations.
-- [ ] Ensure opaque path formatting (`research/pilot/<uuid>/a.png`, `b.png`) and UUID `char_id`s.
-- [ ] Define test-side `EXPECTED_PILOT_LABELS` manifest in test fixtures without leaking into DB/API.
-- [ ] Update `pilot_annotate_seed.py` to upload fixtures to `private_assets` with atomic error handling (raise on failure, clean up orphans).
-- [ ] Insert 17 pairs into `research_pairs` with `is_pilot = true` and `status = 'pending'`.
-- [ ] Write unit/integration tests verifying image generation, opaque path generation, and seed atomicity.
+- [x] Create `backend/scripts/generate_visual_pilot.py` using Pillow to generate 34 distinct 512x512 PNG images (17 pairs) representing canonical and scene variations.
+- [x] Ensure opaque path formatting (`research/pilot/<uuid>/a.png`, `b.png`) and UUID `char_id`s.
+- [x] Define test-side `EXPECTED_PILOT_LABELS` manifest in test fixtures without leaking into DB/API.
+- [x] Update `pilot_annotate_seed.py` to upload fixtures to `private_assets` with atomic error handling (raise on failure, clean up orphans).
+- [x] Insert 17 pairs into `research_pairs` with `is_pilot = true` and `status = 'pending'`.
+- [x] Write unit/integration tests verifying image generation, opaque path generation, and seed atomicity.

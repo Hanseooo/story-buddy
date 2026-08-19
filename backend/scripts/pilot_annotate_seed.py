@@ -1,70 +1,131 @@
-import os
-import sys
-import uuid
+"""Seeding script for the research visual pilot pairs.
+
+Generates 17 meaningful visual pilot pairs (34 512x512 PNG images) using Pillow,
+uploads them to Supabase Storage ('private_assets') using opaque paths, and inserts
+them into 'research_pairs' with atomic fail-loud semantics.
+
+Architectural Invariants (Ticket 01, ADR-017, ADR-028):
+1. Opaque Storage Paths: Strictly 'research/pilot/<uuid>/a.png' and 'research/pilot/<uuid>/b.png'.
+2. Randomized UUID char_ids: Prevents pattern recognition or sequence leakage.
+3. Mark Pilot Data: 'is_pilot = true' ensures strict exclusion from training dataset export.
+4. Atomic / Fail-Loud Seeding: Any storage or DB failure raises immediately and rolls back
+   any uploaded storage objects.
+"""
+
 import asyncio
+import logging
+import uuid
+from typing import Any
 
-# Ensure we can import backend code
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from app.db import get_supabase_client
+from scripts.generate_visual_pilot import generate_pilot_fixtures, PilotFixturePair
 
-from app.supabase import get_service_client
+logger = logging.getLogger(__name__)
 
-async def main():
-    print("Seeding pilot pairs for the Annotation UI...")
-    supabase = get_service_client()
-    
-    # We need to generate tiny blank/colored PNGs and upload them to Supabase
-    # We'll use a simple 1x1 transparent PNG data to keep it fast
-    import base64
-    tiny_png_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAANSURBVBhXY3jP4PgfAAWpA52h+k/KAAAAAElFTkSuQmCC"
-    png_bytes = base64.b64decode(tiny_png_b64)
+BUCKET_NAME = "private_assets"
 
-    # 17 adversarial pairs for smoke testing and protocol breaking
-    pair_definitions = [
-        ("char_1", "same_1"), ("char_2", "same_2"), ("char_3", "same_3"),
-        ("char_4", "wrong_col_1"), ("char_5", "wrong_col_2"),
-        ("char_6", "wrong_body_1"), ("char_7", "wrong_body_2"),
-        ("char_8", "wrong_cloth_1"), ("char_9", "wrong_cloth_2"),
-        ("char_10", "wrong_style_1"), ("char_11", "wrong_style_2"),
-        ("char_12", "diff_face_1"), ("char_13", "diff_face_2"),
-        ("char_14", "wrong_spec_1"),
-        ("char_15", "absent_1"),
-        ("char_16", "ambiguous_1"), ("char_17", "ambiguous_2"),
-    ]
 
-    pairs = []
-    bucket_name = "private_assets"
+def prepare_pilot_seed_records(
+    fixtures: dict[str, PilotFixturePair] | None = None,
+) -> list[dict[str, Any]]:
+    """Prepares the 17 pilot seed record definitions with opaque UUIDs and paths.
 
-    for char_id, test_case in pair_definitions:
-        pair_id = f"pilot-{uuid.uuid4()}"
-        ref_path = f"pilot/{pair_id}/ref.png"
-        scene_path = f"pilot/{pair_id}/scene_{test_case}.png"
+    Returns a list of 17 records ready for seeding.
+    """
+    if fixtures is None:
+        fixtures = generate_pilot_fixtures()
 
-        # Upload images to storage
-        # If they already exist, we ignore the error
-        try:
-            supabase.storage.from_(bucket_name).upload(ref_path, png_bytes, {"content-type": "image/png"})
-            supabase.storage.from_(bucket_name).upload(scene_path, png_bytes, {"content-type": "image/png"})
-        except Exception as e:
-            # Might already exist or fail, but we continue for the sake of the seed
-            print(f"Storage upload note for {pair_id}: {e}")
+    records: list[dict[str, Any]] = []
 
-        pairs.append({
+    for _key, fixture in fixtures.items():
+        pair_id = str(uuid.uuid4())
+        char_id = str(uuid.uuid4())
+        canonical_path = f"research/pilot/{pair_id}/a.png"
+        scene_path = f"research/pilot/{pair_id}/b.png"
+
+        records.append({
             "id": pair_id,
-            "canonical_storage_path": ref_path,
+            "canonical_storage_path": canonical_path,
             "scene_storage_path": scene_path,
             "char_id": char_id,
             "split": "val",
             "status": "pending",
             "is_constructed_negative": False,
-            "is_pilot": True
+            "is_pilot": True,
+            # Transient byte payloads for uploading; stripped before DB insert
+            "_bytes_a": fixture.image_a_bytes,
+            "_bytes_b": fixture.image_b_bytes,
         })
 
-    response = supabase.table("research_pairs").insert(pairs).execute()
-    
-    if hasattr(response, 'data') and response.data:
-        print(f"Successfully seeded {len(response.data)} pilot pairs!")
-    else:
-        print(f"Failed to seed pairs. Result: {response}")
+    return records
+
+
+async def seed_pilot_pairs(supabase=None, bucket_name: str = BUCKET_NAME) -> list[dict[str, Any]]:
+    """Generates, uploads, and seeds the 17 pilot pairs with atomic error rollback."""
+    if supabase is None:
+        supabase = get_supabase_client()
+
+    logger.info("Generating 17 meaningful visual pilot fixture pairs...")
+    fixtures = generate_pilot_fixtures()
+    records = prepare_pilot_seed_records(fixtures)
+
+    uploaded_paths: list[str] = []
+
+    try:
+        # 1. Atomic Storage Uploads
+        logger.info("Uploading %d images to bucket '%s'...", len(records) * 2, bucket_name)
+        storage_bucket = supabase.storage.from_(bucket_name)
+
+        for record in records:
+            path_a = record["canonical_storage_path"]
+            bytes_a = record["_bytes_a"]
+            storage_bucket.upload(path_a, bytes_a, {"content-type": "image/png"})
+            uploaded_paths.append(path_a)
+
+            path_b = record["scene_storage_path"]
+            bytes_b = record["_bytes_b"]
+            storage_bucket.upload(path_b, bytes_b, {"content-type": "image/png"})
+            uploaded_paths.append(path_b)
+
+        # 2. Database Insert
+        db_payload = [
+            {
+                "id": r["id"],
+                "canonical_storage_path": r["canonical_storage_path"],
+                "scene_storage_path": r["scene_storage_path"],
+                "char_id": r["char_id"],
+                "split": r["split"],
+                "status": r["status"],
+                "is_constructed_negative": r["is_constructed_negative"],
+                "is_pilot": r["is_pilot"],
+            }
+            for r in records
+        ]
+
+        logger.info("Inserting %d records into table 'research_pairs'...", len(db_payload))
+        response = supabase.table("research_pairs").insert(db_payload).execute()
+
+        if getattr(response, "error", None) is not None:
+            raise RuntimeError(f"Supabase DB insert error: {response.error}")
+
+        logger.info("Successfully seeded %d pilot pairs atomically!", len(db_payload))
+        return db_payload
+
+    except Exception as e:
+        logger.error("Seeding failed with error: %s. Rolling back %d uploaded objects...", e, len(uploaded_paths))
+        if uploaded_paths:
+            try:
+                supabase.storage.from_(bucket_name).remove(uploaded_paths)
+                logger.info("Successfully cleaned up %d orphan storage objects.", len(uploaded_paths))
+            except Exception as cleanup_err:
+                logger.error("Failed to clean up storage objects during rollback: %s", cleanup_err)
+        raise e
+
+
+def main():
+    logging.basicConfig(level=logging.INFO)
+    asyncio.run(seed_pilot_pairs())
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
