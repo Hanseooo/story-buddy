@@ -1,8 +1,9 @@
+export const dynamic = "force-dynamic";
+
 import AnnotationClient from "./AnnotationClient";
 import { getNextPair } from "./actions";
 
 export default async function AnnotatePage() {
-
   const result = await getNextPair();
   const pair = result?.pair;
   const error = result?.error;

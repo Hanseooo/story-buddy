@@ -42,17 +42,28 @@ const TAXONOMY_LABELS: Record<keyof TaxonomyState, { label: string; shortcut: st
 
 export default function AnnotationClient({ pair, nextPairUrl }: { pair: ResearchPair, nextPairUrl?: string }) {
   const router = useRouter();
+  const [explicitSameCharacter, setExplicitSameCharacter] = useState(false);
   const [taxonomy, setTaxonomy] = useState<TaxonomyState>(INITIAL_TAXONOMY);
   const [brokenAnatomy, setBrokenAnatomy] = useState(false);
   const [textVisible, setTextVisible] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  // If any checkbox is true, same_character is false
   const failureReasons = (Object.keys(taxonomy) as Array<keyof TaxonomyState>).filter(k => taxonomy[k]);
-  const sameCharacter = failureReasons.length === 0;
+  const sameCharacter = explicitSameCharacter;
 
-  const toggle = useCallback((key: keyof TaxonomyState) => {
+  const toggleSameCharacter = useCallback(() => {
+    setExplicitSameCharacter(prev => {
+      if (!prev) {
+        setTaxonomy(INITIAL_TAXONOMY);
+        return true;
+      }
+      return false;
+    });
+  }, []);
+
+  const toggleTaxonomy = useCallback((key: keyof TaxonomyState) => {
+    setExplicitSameCharacter(false);
     setTaxonomy(prev => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
@@ -77,6 +88,7 @@ export default function AnnotationClient({ pair, nextPairUrl }: { pair: Research
 
       // Reset state for next pair (which will load via Next.js navigation)
       setTaxonomy(INITIAL_TAXONOMY);
+      setExplicitSameCharacter(false);
       setBrokenAnatomy(false);
       setTextVisible(false);
       router.refresh();
@@ -85,37 +97,43 @@ export default function AnnotationClient({ pair, nextPairUrl }: { pair: Research
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if user is focused on an input (though we don't have any here yet)
+      // Don't trigger if user is focused on an input
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
-      if (e.key === "Enter") {
+      if (e.key === "Enter" && !isPending) {
         e.preventDefault();
         handleSubmit();
         return;
       }
+
+      if (e.key === "0" && !isPending) {
+        e.preventDefault();
+        toggleSameCharacter();
+        return;
+      }
       
-      if (e.key.toLowerCase() === "a") {
+      if (e.key.toLowerCase() === "a" && !isPending) {
         e.preventDefault();
         setBrokenAnatomy(p => !p);
         return;
       }
 
-      if (e.key.toLowerCase() === "t") {
+      if (e.key.toLowerCase() === "t" && !isPending) {
         e.preventDefault();
         setTextVisible(p => !p);
         return;
       }
 
       const entry = Object.entries(TAXONOMY_LABELS).find(([, v]) => v.shortcut === e.key);
-      if (entry) {
+      if (entry && !isPending) {
         e.preventDefault();
-        toggle(entry[0] as keyof TaxonomyState);
+        toggleTaxonomy(entry[0] as keyof TaxonomyState);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleSubmit, toggle]);
+  }, [handleSubmit, toggleSameCharacter, toggleTaxonomy, isPending]);
 
   return (
     <div className="w-full flex gap-8">
@@ -147,16 +165,32 @@ export default function AnnotationClient({ pair, nextPairUrl }: { pair: Research
       {/* Control Panel */}
       <div className="w-80 flex-shrink-0 bg-white p-6 rounded-lg shadow-sm border border-gray-200 flex flex-col">
         <h2 className="font-semibold mb-2 border-b pb-2">Taxonomy</h2>
-        <p className="text-xs text-gray-500 mb-4">Select all failures that apply. Same character if none selected.</p>
+        <p className="text-xs text-gray-500 mb-4">Select Same Character (0) or all failure reasons that apply (1-7).</p>
         
         <div className="flex-1 flex flex-col gap-3">
+          <label className={`flex items-center gap-3 cursor-pointer group p-2 hover:bg-green-50 rounded transition-colors mb-2 border border-gray-200 bg-gray-50 ${isPending ? "opacity-50 cursor-not-allowed" : ""}`}>
+            <input
+              type="checkbox"
+              checked={explicitSameCharacter}
+              onChange={toggleSameCharacter}
+              disabled={isPending}
+              data-testid="same-character-checkbox"
+              aria-label="Mark as same character"
+              className="w-5 h-5 rounded border-gray-300 text-green-600 focus:ring-green-500 disabled:bg-gray-200"
+            />
+            <span className="flex-1 text-sm font-bold text-green-800">Same Character</span>
+            <kbd className="px-2 py-1 bg-white border border-gray-200 rounded text-xs text-gray-500 font-mono">0</kbd>
+          </label>
+
           {(Object.entries(TAXONOMY_LABELS) as [keyof TaxonomyState, { label: string; shortcut: string }][]).map(([key, { label, shortcut }]) => (
-            <label key={key} className="flex items-center gap-3 cursor-pointer group p-2 hover:bg-gray-50 rounded transition-colors">
+            <label key={key} className={`flex items-center gap-3 cursor-pointer group p-2 hover:bg-gray-50 rounded transition-colors ${isPending ? "opacity-50 cursor-not-allowed" : ""}`}>
               <input
                 type="checkbox"
                 checked={taxonomy[key]}
-                onChange={() => toggle(key)}
-                className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                onChange={() => toggleTaxonomy(key)}
+                disabled={isPending}
+                aria-label={label}
+                className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:bg-gray-200"
               />
               <span className="flex-1 text-sm font-medium text-gray-700 group-hover:text-gray-900">{label}</span>
               <kbd className="px-2 py-1 bg-gray-100 border border-gray-200 rounded text-xs text-gray-500 font-mono">
@@ -167,23 +201,27 @@ export default function AnnotationClient({ pair, nextPairUrl }: { pair: Research
           
           <div className="border-t my-2 pt-2"></div>
           
-          <label className="flex items-center gap-3 cursor-pointer group p-2 hover:bg-gray-50 rounded transition-colors">
+          <label className={`flex items-center gap-3 cursor-pointer group p-2 hover:bg-gray-50 rounded transition-colors ${isPending ? "opacity-50 cursor-not-allowed" : ""}`}>
             <input
               type="checkbox"
               checked={brokenAnatomy}
               onChange={() => setBrokenAnatomy(p => !p)}
-              className="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+              disabled={isPending}
+              aria-label="Broken Anatomy"
+              className="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 disabled:bg-gray-200"
             />
             <span className="flex-1 text-sm font-medium text-gray-700 group-hover:text-gray-900">Broken Anatomy</span>
             <kbd className="px-2 py-1 bg-gray-100 border border-gray-200 rounded text-xs text-gray-500 font-mono">A</kbd>
           </label>
           
-          <label className="flex items-center gap-3 cursor-pointer group p-2 hover:bg-gray-50 rounded transition-colors">
+          <label className={`flex items-center gap-3 cursor-pointer group p-2 hover:bg-gray-50 rounded transition-colors ${isPending ? "opacity-50 cursor-not-allowed" : ""}`}>
             <input
               type="checkbox"
               checked={textVisible}
               onChange={() => setTextVisible(p => !p)}
-              className="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+              disabled={isPending}
+              aria-label="Text Visible"
+              className="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 disabled:bg-gray-200"
             />
             <span className="flex-1 text-sm font-medium text-gray-700 group-hover:text-gray-900">Text Visible</span>
             <kbd className="px-2 py-1 bg-gray-100 border border-gray-200 rounded text-xs text-gray-500 font-mono">T</kbd>
@@ -193,8 +231,14 @@ export default function AnnotationClient({ pair, nextPairUrl }: { pair: Research
         <div className="mt-6 pt-4 border-t flex flex-col gap-2">
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm font-semibold">Verdict:</span>
-            <span className={`text-sm font-bold px-2 py-1 rounded ${sameCharacter ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
-              {sameCharacter ? "Same Character" : "Different Character"}
+            <span className={`text-sm font-bold px-2 py-1 rounded ${
+              sameCharacter 
+                ? "bg-green-100 text-green-800" 
+                : failureReasons.length > 0 
+                  ? "bg-red-100 text-red-800" 
+                  : "bg-gray-100 text-gray-600"
+            }`}>
+              {sameCharacter ? "Same Character" : failureReasons.length > 0 ? "Different Character" : "Unselected"}
             </span>
           </div>
           

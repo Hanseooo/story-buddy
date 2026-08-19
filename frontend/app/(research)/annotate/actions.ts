@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/utils/supabase/server";
 
 export async function submitAnnotation(
@@ -10,32 +11,48 @@ export async function submitAnnotation(
   textFree: boolean
 ) {
   const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-  if (!user) {
+  if (authError || !user) {
     return { error: "Unauthorized" };
   }
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, is_adjudicator")
     .eq("id", user.id)
     .single();
 
-  if (profile?.role !== "researcher") {
+  // Fail secure: if is_adjudicator doesn't exist or query fails, deny access
+  if (profileError || profile?.role !== "researcher" || profile?.is_adjudicator) {
+    console.error("Authorization error or invalid role:", profileError);
     return { error: "Unauthorized" };
   }
 
-  // Insert annotation
+  // Server-Side Invariant Validation
+  if (sameCharacter && failureReasons.length > 0) {
+    return { error: "Invalid state: same_character is true but failure reasons provided" };
+  }
+  if (!sameCharacter && failureReasons.length === 0) {
+    return { error: "Invalid state: same_character is false but no failure reasons provided" };
+  }
+  if (typeof anatomyIntact !== "boolean" || typeof textFree !== "boolean") {
+    return { error: "Invalid state: anatomy_intact and text_free must be explicitly provided" };
+  }
+
+  // Insert annotation with first-write-wins idempotency
   const { error: insertError } = await supabase
     .from("annotations")
-    .insert({
+    .upsert({
       pair_id: pairId,
       annotator_id: user.id,
       same_character: sameCharacter,
       anatomy_intact: anatomyIntact,
       text_free: textFree,
       failure_reasons: failureReasons,
+    }, {
+      onConflict: "pair_id,annotator_id",
+      ignoreDuplicates: true,
     });
 
   if (insertError) {
@@ -45,7 +62,7 @@ export async function submitAnnotation(
 
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const { createClient: createSupabaseClient } = await import('@supabase/supabase-js');
+  const { createClient: createSupabaseClient } = await import("@supabase/supabase-js");
   const adminClient = createSupabaseClient(supabaseUrl, serviceKey);
 
   // We need to count annotations for this pair
@@ -71,54 +88,57 @@ export async function submitAnnotation(
     if (annotations && annotations.length === 2) {
       const [a1, a2] = annotations;
       
+      const a1Reasons = Array.isArray(a1.failure_reasons) ? [...a1.failure_reasons].sort() : [];
+      const a2Reasons = Array.isArray(a2.failure_reasons) ? [...a2.failure_reasons].sort() : [];
+
       const agree = a1.same_character === a2.same_character && 
                     a1.anatomy_intact === a2.anatomy_intact &&
                     a1.text_free === a2.text_free &&
-                    JSON.stringify(a1.failure_reasons.sort()) === JSON.stringify(a2.failure_reasons.sort());
+                    JSON.stringify(a1Reasons) === JSON.stringify(a2Reasons);
                     
       const newStatus = agree ? "complete" : "conflicted";
       await adminClient.from("research_pairs").update({ status: newStatus }).eq("id", pairId);
     }
   }
 
+  // Clear router cache to ensure the next fetch retrieves a fresh randomized pair
+  revalidatePath("/(research)/annotate", "page");
+
   return { success: true };
 }
 
 export async function getNextPair() {
   const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-  if (!user) {
+  if (authError || !user) {
     return { error: "Unauthorized" };
   }
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, is_adjudicator")
     .eq("id", user.id)
     .single();
 
-  if (profile?.role !== "researcher") {
+  if (profileError || profile?.role !== "researcher" || profile?.is_adjudicator) {
     return { error: "Unauthorized" };
   }
 
   // Use service role to bypass RLS and fetch a pair that this user hasn't annotated yet
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const { createClient: createSupabaseClient } = await import('@supabase/supabase-js');
+  const { createClient: createSupabaseClient } = await import("@supabase/supabase-js");
   const adminClient = createSupabaseClient(supabaseUrl, serviceKey);
 
-  // We need a pair where status IN ('pending', 'partially_annotated') 
-  // AND where this user hasn't already annotated it.
-  // For simplicity, we fetch a few and filter in JS if we can't do a complex join here.
-  const { data: pairs } = await adminClient
+  const { data: pairs, error: pairsError } = await adminClient
     .from("research_pairs")
     .select("id, canonical_storage_path, scene_storage_path")
     .in("status", ["pending", "partially_annotated"])
     .order("created_at", { ascending: true })
-    .limit(20);
+    .limit(50);
 
-  if (!pairs || pairs.length === 0) {
+  if (pairsError || !pairs || pairs.length === 0) {
     return { pair: null };
   }
 
@@ -129,7 +149,23 @@ export async function getNextPair() {
 
   const annotatedPairIds = new Set((userAnnotations || []).map(a => a.pair_id));
   
-  const nextPair = pairs.find(p => !annotatedPairIds.has(p.id));
+  const unannotatedPairs = pairs.filter(p => !annotatedPairIds.has(p.id));
+
+  if (unannotatedPairs.length === 0) {
+    return { pair: null };
+  }
+
+  // Reproducible pseudo-random shuffle per annotator
+  const hashedSort = unannotatedPairs.map(p => {
+    let hash = 0;
+    const str = p.id + user.id;
+    for (let i = 0; i < str.length; i++) {
+      hash = (Math.imul(31, hash) + str.charCodeAt(i)) | 0;
+    }
+    return { ...p, sortVal: hash };
+  }).sort((a, b) => a.sortVal - b.sortVal);
+
+  const nextPair = hashedSort[0];
 
   if (!nextPair) {
     return { pair: null };

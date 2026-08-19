@@ -11,12 +11,12 @@ export default async function AnnotateLayout({ children }: { children: React.Rea
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, is_adjudicator")
     .eq("id", user.id)
     .single();
 
-  if (profile?.role !== "researcher") {
-    redirect("/login");
+  if (profile?.role !== "researcher" || profile?.is_adjudicator) {
+    redirect("/");
   }
 
   return (
