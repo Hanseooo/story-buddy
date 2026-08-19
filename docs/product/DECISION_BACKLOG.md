@@ -93,6 +93,89 @@ precede the reveal, so the node, migration and endpoint land together with it. `
 
 - **D-J · Child-initiated job deletion.** The shelf shows every failed job forever
   (`auth-routes-and-account-ux` §7.2 accepted this as "permanent debris"). It is now *collapsed*
+the items below use stable `D-*` ids instead, because the write order can shift.
+
+**Two non-decisions, recorded so they don't get reopened by reflex:**
+- The **provider abstraction layer** is already decided — ADR-015 + `backend/providers.py`
+  (four thin functions, one impl each, *"not a plugin framework"*). What's open is its
+  *internals* (D-C below), not whether to build a wrapper/adapter layer.
+- The **structured-output → Pydantic funnel** is already consistent — every LLM call goes
+  through `providers.structured_text` / `judge`. The field-order *enforcement technique* is now
+  settled too (D-D → parsed-key-order, MASTER_SPEC §3).
+
+---
+
+## Tier 1 — resolved
+
+- ~~**D-1 · Moderation backstop routing**~~ → **ADR-011 (revised 2026-07-21c):** primary meta-llama/llama-guard-4-12b
+  on the OpenRouter, backstop routed to `gpt-oss-safeguard-20b` on OpenRouter.
+- ~~**D-2 · PDF renderer**~~ → **ADR-013 (revised 2026-07-21):** WeasyPrint.
+- ~~**D-B · LangGraph node & edge conventions**~~ → **ADR-024 (2026-07-22):** partial-return node signature;
+  sequential per-scene loop (position from `final_image_ref is None`, no cursor); upsert-by-`scene_id` reducer
+  on `scenes[]` only; two pure routers (moderation, consistency). Amends ADR-003, ADR-023.
+- ~~**D-C · Provider resilience & failure-mode policy**~~ → **ADR-025 (2026-07-22):** transient-vs-hard error
+  taxonomy + retry (OpenAI SDK config for text/judge, one small helper for the fal/httpx path, no new dep);
+  hard provider failure raises → job `failed`, never a partial/placeholder book (extends ADR-010); at-least-once
+  re-pay accepted (ms window); count-based per-book cost breaker on `cost.image_count`; `jobs.failure_reason`
+  enum contract for CC-9, `error` string dev-only. Phase-2 mechanisms (N=3 off-ramp, daily cap, self-refusal
+  soften-and-retry) deferred to their specs.
+
+---
+
+## Tier 2 — implementation-architecture (Phase-1 blockers, the real meat)
+
+The ADRs froze *what* (models, pipeline shape); these freeze *how the code is built*. **All Tier 2 items are
+resolved:** D-B → ADR-024, D-C → ADR-025, and **D-F + D-G → ADR-023 amendment (2026-07-22)** (D-F: sub-schema
+in `contracts/` iff `StoryMemory` embeds it, else beside its node; D-G: `{prefix}{index}` ids —
+`s`/`c`/`loc`/`obj` — minted once by the creating node, no id in the LLM schema, stable within-run/resume).
+`story-memory-contract` is now `approved` (shape frozen); its **§9 construction gate is resolved** (ADR-023
+amendment 2026-07-22b — the worker supplies `story_id = job_id` + Phase-1 dev sentinels for
+`classroom_id`/`profile_id` in `config.py`, contract unweakened), so the `job_state.py` port is unblocked.
+
+*(D-C · Provider resilience & failure-mode policy → ADR-025, 2026-07-22. Phase-2 mechanisms it deferred —
+N=3 moderation off-ramp, per-classroom daily cap, self-refusal soften-and-retry — are owned by the
+`repeated-failure-offramp` / `rate-limiting` / `self-refusal-fallback` specs, not this backlog.
+**Reassignment note (2026-08-02):** ADR-025 pointed the N=3 off-ramp at `moderation-stack`, which shipped
+without it; ownership now sits on its own row below. ADR-025 is **not** amended — the backlog is the live
+owner map, same convention `input-gate-hardening` used for the length guard.)*
+
+---
+
+## Tier 2b — opened by Phase 0.5 — **closed**
+
+*(D-H · Image acceptance → **ADR-028**, 2026-07-29. All three sub-questions resolved: **(1)** `FailureReason`
+is **frozen permanently at 7** — it is the *identity* taxonomy, and anatomy/composition are properties of the
+rendering, so they stay out of the closed set Objective 4's F1 is computed over; **(2)** `VlmVerdict` gains
+`anatomy_intact: bool = True`, declared last so ADR-004's ordering is untouched — additive, no `schema_version`
+bump, and it also resolves the best-of ranking signal ADR-024 handed to `regeneration-controller`
+(lexicographic over `same_character` → `anatomy_intact` → `style_match`, no scalar); **(3)** the canonical
+reference is judged against its description inside `char_bible` with a **3-draw cap and best-of fallback**,
+persisted as `Character.ref_verdict` — a node-internal loop, **not** a conditional edge, so ADR-003 and ADR-024
+are unamended. ADR-007 is amended. No capstone document changes. Nothing blocks the `job_state.py` port.)*
+
+---
+
+## Tier 2c — opened by `character-bible` (2026-07-30) — **closed**
+
+*(D-I · The character/style reveal + confirm step → **ADR-029**, 2026-07-31. All three sub-questions resolved:
+**(1)** a dedicated `reveal` node holding an `interrupt()` and **no effects** — so a resumed re-execution re-pays
+nothing — with a pure `route_reveal` looping `"try_again"` back to `char_bible`; **(2)** one tap = **one** draw +
+**one** judge call for the flagged character only, capped at **3 taps per book**, the redraw targeted by the
+attribute the child tapped, the overwrite unconditional because the child is the judge; **(3)** CC-3's `prelude`
+**6 → 9**, and ADR-024's `fixed_prelude` +7 super-steps. Amends ADR-003 on its branch **count** but not its
+rationale — the router is pure and the nondeterminism is a human, not an orchestrator — plus ADR-024 (wiring) and
+ADR-025 Decision 4 (breaker bound). Adds `awaiting_confirm` to `jobs.status` (a Phase-2 migration; `0002` goes to
+`style-presets`) and
+`POST /jobs/{id}/confirm`. **Nothing is built in Phase 1:** CC-1 requires the Phase-2 char-ref moderation gate to
+precede the reveal, so the node, migration and endpoint land together with it. `character-bible` §5 and
+`story-memory-contract` are corrected in the same change.)*
+
+---
+
+## Tier 2d — opened by the bookshelf failure-card pass (2026-08-12)
+
+- **D-J · Child-initiated job deletion.** The shelf shows every failed job forever
+  (`auth-routes-and-account-ux` §7.2 accepted this as "permanent debris"). It is now *collapsed*
   behind a `Didn't finish (n)` `<details>`, which needs no decision — but an actual delete control
   does, on three counts. **(1)** S3 §4.1 grants students `SELECT` on `jobs` and nothing else; a
   delete needs either a new `DELETE` policy or a service-role `DELETE /jobs/{id}` — an
@@ -104,37 +187,9 @@ precede the reveal, so the node, migration and endpoint land together with it. `
 
 ---
 
-## Tier 2e — opened by `annotation-surface` (2026-08-14)
+## Tier 2e — opened by `annotation-surface` (2026-08-14) — **closed**
 
-Both rows were hit while building `annotation-surface.md`. Migration `0014_annotations.sql` and its
-Tier-A suite are **built** — they depend on neither. The two frontend routes are **blocked on D-K**;
-`adjudicate/`'s RLS policy is additionally blocked on D-L.
-
-- **D-K · Where the pair queue lives.** `annotate/` must fetch "the next unlabelled pair" and render
-  two images, so something must map `pair_id → (ref Storage path, scene Storage path)`. **Nothing
-  does.** `annotations` stores only the label; `build_dataset.pairs_from_memory` derives pairs from a
-  `StoryMemory`, which exists only inside the LangGraph Postgres checkpoint blob (default-deny RLS,
-  `0008` §8) and is not readable by a browser; `jobs.pages` carries `{scene_id, caption, image_path}`
-  with no canonical reference, no `char_id` and no per-attempt images. `build_corpus.py` writes no
-  `jobs` row at all, so `0008`'s researcher policies (`approved_at is not null`) do not reach corpus
-  images either. `annotation-surface.md` §2.1 says only that `pair_id` is *"minted by
-  `build_dataset.py`'s pairing step"* and never says where the pairs are persisted for the UI to read.
-  **Sketch of the options, not a decision:** (1) a new `annotation_pairs` table seeded by a backend
-  script that reuses `pairs_from_memory` + `mint_pair_id`, with its own RLS grant for researchers, and
-  a matching storage policy for corpus images; (2) `annotate/` fetches pairs from a FastAPI endpoint
-  backed by `service_role`, keeping the pairing logic in one place and adding no table but moving the
-  blinding guarantee out of RLS; (3) a checked-in `pairs.jsonl` build artifact served by the route,
-  which needs no schema but re-introduces the resident-training-data problem §3 rejects. Whichever
-  wins also decides whether `pair_id` stays opaque to the *server* or only to the annotator.
-- **D-L · How an adjudicator is identified.** §2.1 grants read-all to *"the `researcher` role with the
-  adjudicator flag"*. There is no adjudicator flag: `0007`'s `profiles.role` check is
-  `('teacher','student','researcher')` and `profiles_role_shape` forbids extra shape per role. Options:
-  a `profiles.is_adjudicator boolean` column (a schema change, and the first per-person capability flag
-  in the system); a fourth role value (breaks `profiles_role_shape`'s two-branch structure and every
-  `auth_role()` consumer); or `adjudicate/` reading through `service_role` server-side, the pattern
-  `(research)/research/metrics/page.tsx` already uses — no schema change, but the adjudicator's
-  read-all stops being an RLS fact and becomes an app fact. `0014` therefore writes **no** read-all
-  policy, and `test_adjudicator_reads_all_rows` is skipped naming this row.
+*(D-K · Where the pair queue lives & D-L · How an adjudicator is identified → **0016_research_pairs_and_adjudicator.sql**. D-K is resolved by a `research_pairs` table that maps `id` to the storage URLs and holds the pair status. D-L is resolved by adding an `is_adjudicator` boolean to `profiles`. Both routes are now unblocked.)*
 
 ---
 

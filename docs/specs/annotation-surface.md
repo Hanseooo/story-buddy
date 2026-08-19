@@ -1,7 +1,7 @@
 # Feature Spec — Annotation Surface
 
 **Status:** draft · **partially built 2026-08-14** — migration `0014_annotations.sql` + its Tier-A suite
-are in; **both routes are blocked on D-K** (and `adjudicate/`'s policy on D-L), see §2.1 · **Phase:** 2.5 ·
+are in; **D-K and D-L resolved** (2026-08-19, via migrations 0016/0017 and explicit backend fetching) · **Phase:** 2.5 ·
 **Owner node:** `frontend/app/(research)/` (route group, not a pipeline node) + `annotations` table (Supabase)
 **Derived from:** MASTER_SPEC §2 (system map), §7 (spec index) · **Rationale:** ADR-026 (decision), ADR-017 (auth/roles), ADR-004 (non-circularity), ADR-008 (Objective 4)
 
@@ -76,20 +76,10 @@ create table annotations (
   submitted row final, so the client resolves a double-submit with `on conflict do nothing` (first write wins)
   rather than a true upsert, which would need an `update` grant and would hand an annotator a self-revision
   path.
-  ⚠️ **The adjudicator's read-all policy is NOT written.** "The `researcher` role with the adjudicator flag"
-  has no schema representation — `profiles` carries no such column — and adding one is a schema decision.
-  Logged as **D-L** in `docs/product/DECISION_BACKLOG.md`; `0014` grants read-all to no one, and the §6 test
-  for it is skipped naming that row.
-- `pair_id` is opaque — minted by `build_dataset.py`'s pairing step, never a filename or a `char_id`. Blinding
+  ⚠️ **The adjudicator's read-all policy is NOT written in 0014.** However, migration `0016` adds `is_adjudicator` to `profiles` and implements the read/update policies (resolving **D-L**).
+- `pair_id` is opaque — minted by `build_dataset.py`'s pairing step or the seed script, never a filename or a `char_id`. Blinding
   depends on this (§4).
-  ⚠️ **Where the pairs themselves live is UNDECIDED (2026-08-14).** This spec never says how `annotate/`
-  gets from a `pair_id` to two Storage paths. `annotations` stores only the label; `pairs_from_memory`
-  derives pairs from a `StoryMemory` that exists only inside the LangGraph checkpoint blob (default-deny
-  RLS) and is unreachable from a browser; `jobs.pages` carries neither the canonical reference nor
-  per-attempt images; `build_corpus.py` writes no `jobs` row at all, so `0008`'s researcher storage policy
-  (`approved_at is not null`) does not reach corpus images. Logged as **D-K** in
-  `docs/product/DECISION_BACKLOG.md`. **Both routes in §4 are blocked on it** — it decides the fetch query,
-  the props, the RLS/storage grants and the blinding boundary all at once.
+  ⚠️ **Where the pairs themselves live (D-K)** is resolved via the `research_pairs` queue table (migrations `0016` and `0017`). Direct `SELECT` by ordinary researchers is revoked; the Next.js server actions bypass RLS via the service role to fetch pairs and mint short-lived signed URLs from `canonical_storage_path` and `scene_storage_path`, stripping all identity/metadata before passing the blinded pair to the browser.
 
 ---
 
@@ -139,9 +129,7 @@ route can be built. Built in **Phase 2.5**, alongside the labelling weekend it e
    after seeing the next item — a submitted row is final for that annotator (adjudication is the only
    correction path, not self-revision).
 
-**`adjudicate/`** — a third annotator, shown **only** the pairs where the two annotators' `same_character`
-values disagree. Same blinded rendering; the adjudicator's row is a third `annotations` entry, keyed as any
-other annotator so `build_dataset.py` can resolve ties without special-casing the schema.
+**`adjudicate/`** — a third annotator, shown **only** the pairs where the two annotators disagree on `same_character`, `failure_reasons` taxonomy checkboxes, `anatomy_intact`, OR `text_free`. Same blinded rendering; the adjudicator's row is the **authoritative final label**, not merely a third vote. `build_dataset.py` uses this adjudicator row exclusively when it exists to resolve conflicts.
 
 **Resumability.** ~750–1000 pairs per annotator cannot be labelled in one sitting. The "next unlabelled pair"
 query is the entire resume mechanism: closing the tab and returning later re-derives position from the
@@ -187,7 +175,7 @@ Models mocked (there are no model calls here). Assertions:
   `story-memory-contract.md` §6's `FailureReason` test).
 - The composite primary key (`pair_id`, `annotator_id`) makes a resubmission an upsert, not a second row.
 - `adjudicate/`'s query returns exactly the pairs with two `annotations` rows disagreeing on
-  `same_character` — no false positives from pairs with only one label so far.
+  `same_character`, `failure_reasons`, `anatomy_intact`, or `text_free` — no false positives from pairs with only one label so far.
 - The pair-fetch query for `annotate/` never returns a pair the current annotator already has a row for.
 - No component under `frontend/app/(research)/` renders a filename, story title, character name, or model
   prediction alongside a pair awaiting a label (blinding, asserted at the component-test level).
@@ -198,8 +186,7 @@ closed taxonomy in all three directions (rejects an outsider, accepts all 7, acc
 gating booleans' defaults and their `false` storage, the composite key (first-write-wins and
 two-annotators-one-pair), and the disagreement query including the one-label-so-far false positive.
 ⚠️ **`skipif`-gated on `SUPABASE_DB_URL` and therefore not run in CI** — the same contract as
-`test_rls_isolation.py`. The adjudicator read-all case is **skipped** pending **D-L**; the pair-fetch and
-blinding cases are **not written** — they belong to routes blocked on **D-K**.
+`test_rls_isolation.py`. The pair-fetch and blinding test cases are pending implementation of the Next.js server actions.
 
 ---
 

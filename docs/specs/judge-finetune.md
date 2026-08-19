@@ -91,8 +91,7 @@ brilliantly on your validation set and be useless in the loop.
 
 **Positives must be human-confirmed. There is no way around this.** It is one weekend (§5.4).
 
-Hard negatives must be **same species, same style**. A cartoon dragon against a photorealistic cat
-teaches the model nothing it doesn't already know.
+Hard negatives must use a tiered matching strategy. Mandatory: species and style. Then maximize similarity over: dominant colour, body configuration, silhouette, clothing/accessories, and facial structure, and select the most similar valid other-character candidate. This keeps negatives genuinely difficult without pre-deciding their specific taxonomy failures.
 
 ### 3.2 Character leakage across splits
 
@@ -111,9 +110,9 @@ loop acts on, and a missed failure ships a broken page to a child.
 distribution. Concretely: constructed negatives go into **train only** (§5.4 step 4). Val and test contain
 pipeline pairs exclusively.
 
-### 3.4 Rationale distillation caps you at the teacher
+### 3.4 Structured intermediate rationale supervision
 
-`differences_observed` must be a training target, or reason-then-score dies in the fine-tune. But if you
+`differences_observed` is retained as a deterministic intermediate supervision signal generated exclusively from the adjudicated failure taxonomy. It precedes the binary verdict in the serialized target so that discrepancy identification is learned before classification. The study does not interpret this field as a faithful representation of internal model reasoning. (A suggested ablation: compare `rationale -> verdict -> taxonomy` against `verdict -> taxonomy`). But if you
 generate those rationales with Gemma-27B and train on them, **you have distilled the incumbent's errors
 and cannot beat it.** That is arithmetic, not pessimism.
 
@@ -315,18 +314,16 @@ resolve those differences.** That requirement, not the training set, sets the sp
 
 | Split | Characters | Provenance | Pairs | Contents |
 |---|---|---|---|---|
-| Train | 33 | **synthetic** | ~495 pipeline + ~450 constructed = **~945** | balanced; drift induced deliberately |
-| Validation | 5 | **synthetic** | ~75 | pipeline only, natural distribution. **All iteration happens here** |
-| Held-out test | **12, stratified human / non-human** | **donated — enforced** | ~240+ (oversampled) | pipeline only, natural distribution, 2 annotators + adjudication, IRR reported |
+| Train | ~40–45 | **synthetic** | ~378 pipeline + ~300-400 constructed = **~678-778** | balanced; drift induced deliberately |
+| Validation | ~8–10 | **synthetic** | ~72 | pipeline only, natural distribution. **All iteration happens here** |
+| Held-out test | **~15–20, maximizing qualifying real characters** | **donated — enforced** | ~192 (additional unique held-out scenes) | pipeline only, natural distribution, 2 annotators + adjudication, IRR reported |
 | Transfer test | — | DreamBench++ | as published | **DreamBench++**, never trained on |
 
 The provenance column is not documentation — `manifest.py`'s guard raises on a `test` record marked
 `synthetic`, and CI tests it. A synthetic story leaking into the held-out split would void Objective 4
 silently, which is the same failure class as §3.2's character leakage and gets the same treatment.
 
-⚠️ **The held-out character count is bounded by what the donation actually yields.** Twelve is the target;
-at ≤2 canonical references per story (ADR-004), 15 donated stories yield roughly 15–20 characters, so 12 is
-reachable but not guaranteed. Objective 4's power is reported against the **achieved** count, and that count
+⚠️ **The held-out character count is bounded by what the donation actually yields.** The goal is to maximize naturally qualifying real characters, targeting ~15–20. At ≤2 canonical references per story (ADR-004), 15 donated stories yield roughly 15–20 characters. Objective 4's power is reported against the **achieved** count, and that count
 is not knowable before collection closes.
 
 Three consequences worth internalizing:
@@ -335,9 +332,7 @@ Three consequences worth internalizing:
   out, and the primary endpoint is void. Tune on validation.
 - **The primary endpoint (§7.1) is cheap to power** — base-vs-tuned gaps on in-domain data are large. The
   *secondary* Gemma comparison and the non-human slice are not, and that is where the contribution lives.
-  So **oversample scenes for the twelve test characters before labelling**: at a 20% drift rate, 240 test
-  pairs hold only ~48 minority-class examples, and a 3-point ΔF1 is not resolvable at that size. Growing the
-  test set beforehand is legitimate, and so is stratifying it; moving a character after seeing results is not.
+  The dataset's statistical power is derived from the **character** count rather than the per-character pair count, making character diversity the primary unit of useful variation. Growing the test set with additional unique characters (if more are naturally generated in the donations) is legitimate, and so is stratifying it; moving a character after seeing results is not.
 - **Induce drift deliberately** — weaker reference conditioning, higher temperature — to harvest natural
   negatives. **Training split only.** The test set must keep the deployment distribution (§3.3).
 
@@ -345,7 +340,7 @@ Three consequences worth internalizing:
 validation halves of that power are a *writing* task rather than a recruitment one: adding characters to
 `corpus_synthetic.json` costs a few sentences and ~$0.40 of fal draws. **The held-out split's character count
 is still unfixable by Phase 2.5** and still tracks the donation (RESEARCH_PROTOCOL §8), which is why the test
-split is the one to oversample scenes for and the one whose achieved count gets reported honestly.
+split's achieved character count gets reported honestly.
 
 ### 5.6 Why DreamBench++ is a *test* set and not a *training* set
 
@@ -376,7 +371,7 @@ and the one thing that will silently corrupt a run:
 
 ```json
 [{"conversations": [
-    {"from": "human",  "value": "<image><image>Do these two images show the same character? ..."},
+    {"from": "human",  "value": "<image><image>Identify the differences that correspond to the allowed failure taxonomy. Then output the required JSON object."},
     {"from": "gpt",    "value": "{\"differences_observed\": \"...\", \"same_character\": false, \"failure_reasons\": [\"wrong_clothing\"]}"}],
   "images": ["data/judge/ref/quill_007.png", "data/judge/scene/quill_007_s03_a1.png"]}]
 ```
@@ -572,9 +567,10 @@ pipeline.** Write that sentence into the paper before the defense, not during it
    (**Objective 3**, `research_instruments.md` §A) is at least as favorable as under the prompted judge.
    This ties the fine-tune to the shipped outputs instead of leaving it a bolt-on.
    (Non-comparative — the pipeline on/off ablation once planned here stays dropped.)
+7. **Data Scaling Ablation:** A 50% vs. 100% training-data learning curve comparison evaluated on the validation set. This establishes whether the dataset size has hit diminishing returns.
 
 Also report AUROC from the verdict-token logprob, and precision and recall separately — they are different
-failures with different costs.
+failures with different costs. Note that **per-taxonomy performance** (recall/F1 on specific failure reasons) must be treated as an **exploratory diagnostic analysis** rather than a primary conclusion, as the natural drift rate means some taxonomy categories may only have a handful of examples in the held-out test set.
 
 ### 7.5 Pre-registration and the claim ladder
 

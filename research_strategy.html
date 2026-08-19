@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StoryBuddy: Dataset Strategy & Fine-Tuning Blueprint</title>
+    <style>
+      :root {
+        --primary: #2563eb;
+        --primary-light: #eff6ff;
+        --text-main: #1f2937;
+        --text-muted: #4b5563;
+        --bg-main: #f9fafb;
+        --card-bg: #ffffff;
+        --border: #e5e7eb;
+        --success: #10b981;
+        --warning: #f59e0b;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+          Arial, sans-serif;
+        line-height: 1.6;
+        color: var(--text-main);
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 2.5rem 1.5rem;
+        background: var(--bg-main);
+      }
+
+      h1,
+      h2,
+      h3,
+      h4 {
+        color: #111827;
+        font-weight: 600;
+      }
+
+      h1 {
+        font-size: 2.25rem;
+        border-bottom: 2px solid var(--border);
+        padding-bottom: 0.75rem;
+        margin-bottom: 2rem;
+      }
+
+      h2 {
+        font-size: 1.5rem;
+        margin-bottom: 1rem;
+        color: #1e3a8a;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 0.5rem;
+      }
+
+      h3 {
+        font-size: 1.25rem;
+        margin-top: 1.5rem;
+        color: #374151;
+      }
+
+      .card {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+
+      code {
+        background: var(--primary-light);
+        padding: 0.2rem 0.4rem;
+        border-radius: 4px;
+        font-family: Consolas, Monaco, monospace;
+        font-size: 0.85em;
+        color: var(--primary);
+      }
+
+      pre {
+        background: #1e293b;
+        color: #f8fafc;
+        padding: 1.25rem;
+        border-radius: 8px;
+        overflow-x: auto;
+        font-size: 0.9em;
+        line-height: 1.5;
+      }
+
+      .alert {
+        padding: 1rem 1.25rem;
+        border-radius: 8px;
+        margin: 1.5rem 0;
+        border-left: 4px solid;
+      }
+
+      .alert-info {
+        background: #f0f9ff;
+        border-color: #3b82f6;
+        color: #0c4a6e;
+      }
+
+      .alert-warning {
+        background: #fffbeb;
+        border-color: #f59e0b;
+        color: #92400e;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1.5rem 0;
+        border: 1px solid var(--border);
+      }
+
+      th,
+      td {
+        padding: 0.75rem 1rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+      }
+
+      th {
+        background: #f8fafc;
+        font-weight: 600;
+        color: #334155;
+      }
+
+      ul,
+      ol {
+        padding-left: 1.5rem;
+        margin-bottom: 1.5rem;
+      }
+
+      li {
+        margin-bottom: 0.5rem;
+      }
+
+      .checkbox-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 0.75rem;
+        background: #f8fafc;
+        padding: 1.25rem;
+        border-radius: 6px;
+        border: 1px dashed #cbd5e1;
+        margin-top: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>StoryBuddy: Research & Fine-Tuning Blueprint</h1>
+    <p>
+      This document synthesizes the frozen capstone research context, dataset
+      generation strategy, budget calculations, and model infrastructure for
+      Objective 4 (Fine-Tuning the Consistency Judge).
+    </p>
+
+    <div class="card">
+      <h2>1. Research Objective & Experimental Claims</h2>
+      <p>
+        The goal is to replace the expensive prompted
+        <code>gemma-3-27b-it</code> judge with a lightweight, fine-tuned
+        Vision-Language Model (VLM) that is self-hostable and executes with
+        near-zero marginal cost.
+      </p>
+      <h3>Experimental Claims</h3>
+      <p>
+        We evaluate three models on the consistency task: the frozen Base Model, the Fine-tuned Model, and the Prompted Gemma Baseline. Our research claims are:
+      </p>
+      <ul>
+        <li>The Fine-tuned Model will significantly outperform the Base Model in macro-F1 and balanced accuracy.</li>
+        <li>The Fine-tuned Model will be competitive with or superior to the Prompted Gemma Baseline, while operating at a fraction of the inference cost and latency.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>2. Model & Software Architecture</h2>
+      <ul>
+        <li>
+          <strong>Base Model:</strong>
+          <code>Qwen2.5-VL-7B-Instruct</code> (Apache-2.0, native multi-image
+          support).
+        </li>
+        <li>
+          <strong>Method:</strong> QLoRA (4-bit quantized base weights with a
+          trainable low-rank adapter). Hyperparameters are pinned to LoRA rank
+          16 and alpha 32.
+        </li>
+        <li>
+          <strong>Serving Infrastructure:</strong> The trained adapter will be
+          served over the frozen base model using vLLM on a Modal scale-to-zero
+          container, maintaining compatibility with the OpenAI API protocol.
+        </li>
+      </ul>
+      <h3>LLaMA-Factory vs. Unsloth AI</h3>
+      <p>
+        The architecture specification strictly mandates <strong>LLaMA-Factory</strong>. While Unsloth AI offers superior training efficiency (often ~2&times; speedup and 60-70% less VRAM usage), the capstone's constraints heavily favor LLaMA-Factory for the following reasons:
+      </p>
+      <ul>
+        <li><strong>Dataset Scale:</strong> The training run is small (~950–1,050 labeled pairs). A 2&times; speedup saves only ~$5-10 and an hour of time.</li>
+        <li><strong>Reproducibility (CC-7):</strong> LLaMA-Factory provides a declarative YAML configuration (<code>train_qlora.yaml</code>) and uses standard ShareGPT formats. By freezing the training environment (LLaMA-Factory commit, <code>uv.lock</code>, PyTorch version, model revision hash, dataset manifest hash, random seeds), the experiment is reproducibly specified.</li>
+        <li><strong>Multimodal Serialization:</strong> The VLM requires strict serialization. Changing the framework risks subtle alterations to the multimodal chat template.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>3. Dataset Design</h2>
+      <p>
+        The dataset is manufactured specifically for pairwise identity judgments over stylized, non-human characters.
+      </p>
+      <h3>Unit of Analysis and Generalization Target</h3>
+      <p>
+        The unit of analysis and generalization target is <strong>character disjointness</strong>. The model must learn the comparative consistency task, not memorize specific character identities.
+      </p>
+      <h3>Corpus Composition & Disjoint Splitting</h3>
+      <p>Splits are defined by <code>char_id</code>, never by pair. Every image derived from a given canonical reference belongs to exactly one split.</p>
+      <ul>
+        <li><strong>Train (~40-45 Characters, Synthetic):</strong> ~378 natural pairs + ~300-400 constructed negatives = ~678-778 pairs.</li>
+        <li><strong>Validation (~8-10 Characters, Synthetic):</strong> ~72 natural pairs.</li>
+        <li><strong>Test (~15-20 Characters, Real Child Data):</strong> ~192 natural pairs.</li>
+      </ul>
+      <h3>Natural vs. Constructed Negative Rationale</h3>
+      <ul>
+        <li>
+          <strong>Hierarchy of Evidence:</strong> Pipeline Negatives (Natural Drift) represent real-world deployment failures (expected ~15-25%). These are the most valuable evidence and are retained across all splits.
+        </li>
+        <li>
+          <strong>Hard-Negative Matching Rules:</strong> Constructed Negatives are artificially paired to balance the minority class at zero marginal cost. They require a mandatory species + style match, then maximize similarity over colour/body/silhouette/clothing/face, ensuring they act as true hard negatives rather than trivial rejections. These are injected into the Training split only.
+        </li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>4. Dataset Sufficiency</h2>
+      <h3>Learning-Curve Analysis</h3>
+      <p>
+        To determine dataset sufficiency, we conduct a <strong>50% vs 100% data ablation</strong> on the validation set. 
+        This establishes whether the model is still learning (improving with more data) or has hit a distillation ceiling. 
+        If 50% yields identical performance to 100%, generating more data is wasteful and the dataset is sufficient.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>5. Human Ground Truth</h2>
+      <p>
+        Labeling relies on a custom, blinded web UI. Annotators assess pairs and select failures from a closed taxonomy.
+      </p>
+      <h3>Annotation Ground-Truth Model</h3>
+      <ul>
+        <li><strong>Independence:</strong> Every image pair is scored independently by two researchers. Annotators are blinded to each other's responses and model predictions.</li>
+        <li><strong>Adjudication is Authoritative:</strong> Disagreements are surfaced to a third researcher for final adjudication. The adjudicator's decision acts as the absolute ground truth.</li>
+        <li><strong>Data Preservation:</strong> The original A/B annotations are preserved alongside the final label to compute agreement statistics on pre-adjudicated data, quantifying task ambiguity.</li>
+      </ul>
+      <h3>Pilot Validation Gate</h3>
+      <p>
+        Before full-scale labeling, a pilot phase of ~50-100 pairs must be completed. 
+        <br/><strong>Why it exists:</strong> To identify taxonomy confusion, UI friction, or ambiguous edge cases early. 
+        <br/><strong>What it must demonstrate:</strong> High inter-rater reliability on the pilot set before proceeding to the full dataset.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>6. Data Serialization</h2>
+      <p>
+        The manifest must be strictly converted into the ShareGPT format required by LLaMA-Factory, stripping <code>char_id</code> and <code>split</code> to prevent leakage.
+      </p>
+      <pre><code>[
+  {
+    "conversations": [
+      {
+        "from": "human",
+        "value": "&lt;image&gt;&lt;image&gt;Identify the differences that correspond to the allowed failure taxonomy. Then output the required JSON object."
+      },
+      {
+        "from": "gpt",
+        "value": "{\"differences_observed\": \"The character does not show the expected three amber eyes; the striped scarf is missing.\", \"same_character\": false, \"failure_reasons\": [\"wrong_body_feature\", \"wrong_clothing\"]}"
+      }
+    ],
+    "images": [
+      "data/judge/ref/quill_007.png",
+      "data/judge/scene/quill_007_s03_a1.png"
+    ]
+  }
+]</code></pre>
+      <div class="alert alert-info">
+        <strong>Automated CI Serialization Gate:</strong> A pre-training CI test enforces image counts, reference ordering, schema parsing, and absence of metadata leakage.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>7. Experimental Evaluation</h2>
+      <h3>Statistical Analysis Plan</h3>
+      <ul>
+        <li><strong>Comparisons:</strong> Base Model vs. Fine-Tuned Model vs. Prompted Gemma Baseline.</li>
+        <li><strong>Primary Metrics:</strong> Macro-F1, <code>different_character</code> recall, <code>different_character</code> precision, and balanced accuracy.</li>
+        <li><strong>Secondary Metrics:</strong> Overall accuracy, JSON/schema-validity rate, inference latency, and inference cost.</li>
+        <li><strong>Character-Aware Uncertainty:</strong> Bootstrapping will be conducted at the character level (sampling characters with replacement, not pairs) to compute confidence intervals, accounting for intra-character correlation.</li>
+        <li><strong>Exploratory Taxonomy:</strong> Per-reason performance metrics (precision/recall/F1) to diagnose specific blind spots, where sample size permits.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>8. Test-Set Discipline</h2>
+      <p>
+        The test set enforces the following strict disciplines:
+      </p>
+      <ul>
+        <li><strong>Real-Child Only:</strong> Sourced exclusively from real, donated Grade 5-6 child writing.</li>
+        <li><strong>Completely Disjoint:</strong> Character IDs in the test set never appear in train or validation sets.</li>
+        <li><strong>Frozen:</strong> The test set is locked and blinded during training. Synthetic stories must never leak into the test set; doing so silently voids Objective 4.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>9. Budget & Resource Constraints</h2>
+      <h3>Cost and Storage Assumptions</h3>
+      <ul>
+        <li><strong>Current Budget ($20 Limit):</strong> Fal.ai pricing ($0.03 per MP) allows ~847 images at 1024x768. Generating ~707 images fits within budget and provides sufficient headroom for the labeled dataset.</li>
+        <li><strong>Storage:</strong> Images are stored in the Supabase Free tier bucket. If capacity limits are reached, an R2 failover will be provisioned.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>10. Reproducibility</h2>
+      <p>
+        By freezing the training environment (LLaMA-Factory commit, <code>uv.lock</code>, PyTorch version, model revision hash, dataset manifest hash, random seeds), the experiment is reproducibly specified and reviewers can accurately reconstruct the training setup.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>11. Threats to Validity</h2>
+      <ul>
+        <li><strong>Internal Validity:</strong> Labeler bias (mitigated by blinding and independent dual-annotation); potential data leakage if strict character-disjoint splitting fails.</li>
+        <li><strong>External Validity:</strong> The fine-tuned model's generalizability is limited to the specific art styles and generative model distributions present in the dataset.</li>
+        <li><strong>Construct Validity:</strong> Does the closed taxonomy adequately capture all true inconsistencies without forcing unnatural categories?</li>
+        <li><strong>Statistical Conclusion:</strong> Sample size limitations, particularly for rare failure reasons in the taxonomy, reducing statistical power for granular per-reason metrics.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>12. Decision Criteria</h2>
+      <p>
+        The success of this objective is evaluated in two tiers:
+      </p>
+      <ul>
+        <li><strong>Beneficial Fine-Tuning:</strong> Does the Fine-Tuned Model demonstrably outperform the Base Model?</li>
+        <li><strong>Viable Replacement:</strong> Does the Fine-Tuned Model meet or exceed the performance of the Prompted Gemma Baseline, justifying its use in production given the cost and latency benefits?</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>13. Architectural / Ethical Constraints</h2>
+      <ul>
+        <li><strong>ADR-026 (Annotation Surface):</strong> Labeling must occur in a web UI connected to secure storage rather than offline CSVs, ensuring data security for child-donated data.</li>
+        <li><strong>ADR-011 (Moderation Ordering):</strong> The fine-tuned consistency judge is strictly for character consistency. Safety moderation remains gated by prompted rubrics.</li>
+        <li><strong>ADR-004 (Non-Circularity):</strong> The judge is a control signal. Annotators must never see model predictions, ensuring human labels remain independent.</li>
+        <li><strong>ADR-019 (Serving via vLLM):</strong> The fine-tuned QLoRA adapter must be served over the frozen base model using vLLM in a Modal container, maintaining the identical API contract.</li>
+      </ul>
+    </div>
+  </body>
+</html>

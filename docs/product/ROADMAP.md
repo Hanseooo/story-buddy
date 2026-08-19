@@ -219,8 +219,7 @@ swaps one replaceable part. If it fails its gate, nothing else changes.
   School — RESEARCH_PROTOCOL §8). Positives are **human-confirmed** by the researchers; auto-labelling them
   trains a detector for *"was a reference used?"*. Hard negatives are constructed for free and go into
   **train only**. Rationales are a **fixed checkbox taxonomy**, never model-generated. Splits are
-  **character-disjoint** (train / validation / held-out test), test stratified human vs. non-human and
-  oversampled. Two annotators, IRR reported. ⚠️ Exact per-split character/image counts are a planning
+  **character-disjoint** (train / validation / held-out test), test stratified human vs. non-human. Two annotators, IRR reported. ⚠️ Exact per-split character/image counts are a planning
   target owned by `docs/specs/judge-finetune.md` and need revisiting against the reduced 15-story corpus —
   they are not restated here.
 - **Annotation surface** (`docs/specs/annotation-surface.md`, ADR-026) — `frontend/app/(research)/annotate/`
