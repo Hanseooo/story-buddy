@@ -1,0 +1,215 @@
+"use client";
+
+import { useState, useEffect, useCallback, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { submitAnnotation } from "./actions";
+
+export type ResearchPair = {
+  id: string;
+  canonical_signed_url: string;
+  scene_signed_url: string;
+};
+
+type TaxonomyState = {
+  wrong_colour: boolean;
+  wrong_species: boolean;
+  wrong_body_feature: boolean;
+  wrong_clothing: boolean;
+  wrong_style: boolean;
+  different_face: boolean;
+  character_absent: boolean;
+};
+
+const INITIAL_TAXONOMY: TaxonomyState = {
+  wrong_colour: false,
+  wrong_species: false,
+  wrong_body_feature: false,
+  wrong_clothing: false,
+  wrong_style: false,
+  different_face: false,
+  character_absent: false,
+};
+
+const TAXONOMY_LABELS: Record<keyof TaxonomyState, { label: string; shortcut: string }> = {
+  wrong_colour: { label: "Wrong Color", shortcut: "1" },
+  wrong_species: { label: "Wrong Species", shortcut: "2" },
+  wrong_body_feature: { label: "Wrong Body Feature", shortcut: "3" },
+  wrong_clothing: { label: "Wrong Clothing/Accessories", shortcut: "4" },
+  wrong_style: { label: "Wrong Style", shortcut: "5" },
+  different_face: { label: "Different Face", shortcut: "6" },
+  character_absent: { label: "Character Absent", shortcut: "7" },
+};
+
+export default function AnnotationClient({ pair, nextPairUrl }: { pair: ResearchPair, nextPairUrl?: string }) {
+  const router = useRouter();
+  const [taxonomy, setTaxonomy] = useState<TaxonomyState>(INITIAL_TAXONOMY);
+  const [brokenAnatomy, setBrokenAnatomy] = useState(false);
+  const [textVisible, setTextVisible] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  // If any checkbox is true, same_character is false
+  const failureReasons = (Object.keys(taxonomy) as Array<keyof TaxonomyState>).filter(k => taxonomy[k]);
+  const sameCharacter = failureReasons.length === 0;
+
+  const toggle = useCallback((key: keyof TaxonomyState) => {
+    setTaxonomy(prev => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  const handleSubmit = useCallback(async () => {
+    if (isPending) return;
+    setError(null);
+    
+    startTransition(async () => {
+      // anatomy_intact is !brokenAnatomy, text_free is !textVisible
+      const result = await submitAnnotation(
+        pair.id, 
+        failureReasons, 
+        sameCharacter, 
+        !brokenAnatomy, 
+        !textVisible
+      );
+      
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+
+      // Reset state for next pair (which will load via Next.js navigation)
+      setTaxonomy(INITIAL_TAXONOMY);
+      setBrokenAnatomy(false);
+      setTextVisible(false);
+      router.refresh();
+    });
+  }, [isPending, pair.id, failureReasons, sameCharacter, brokenAnatomy, textVisible, router]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is focused on an input (though we don't have any here yet)
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleSubmit();
+        return;
+      }
+      
+      if (e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        setBrokenAnatomy(p => !p);
+        return;
+      }
+
+      if (e.key.toLowerCase() === "t") {
+        e.preventDefault();
+        setTextVisible(p => !p);
+        return;
+      }
+
+      const entry = Object.entries(TAXONOMY_LABELS).find(([, v]) => v.shortcut === e.key);
+      if (entry) {
+        e.preventDefault();
+        toggle(entry[0] as keyof TaxonomyState);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleSubmit, toggle]);
+
+  return (
+    <div className="w-full flex gap-8">
+      {/* Hidden prefetch for the next pair's images to ensure zero-latency loading */}
+      {nextPairUrl && (
+        <div className="hidden">
+           {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={nextPairUrl} alt="prefetch" />
+        </div>
+      )}
+
+      {/* Dual pane view for images */}
+      <div className="flex-1 flex flex-col gap-4">
+        <div className="aspect-square bg-gray-200 rounded-lg overflow-hidden relative border border-gray-300">
+           {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={pair.canonical_signed_url} alt="Canonical Reference" className="object-contain w-full h-full" />
+        </div>
+        <p className="text-center font-medium text-sm text-gray-500">Canonical Reference</p>
+      </div>
+      
+      <div className="flex-1 flex flex-col gap-4">
+        <div className="aspect-square bg-gray-200 rounded-lg overflow-hidden relative border border-gray-300">
+           {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={pair.scene_signed_url} alt="Generated Scene" className="object-contain w-full h-full" />
+        </div>
+        <p className="text-center font-medium text-sm text-gray-500">Generated Scene</p>
+      </div>
+      
+      {/* Control Panel */}
+      <div className="w-80 flex-shrink-0 bg-white p-6 rounded-lg shadow-sm border border-gray-200 flex flex-col">
+        <h2 className="font-semibold mb-2 border-b pb-2">Taxonomy</h2>
+        <p className="text-xs text-gray-500 mb-4">Select all failures that apply. Same character if none selected.</p>
+        
+        <div className="flex-1 flex flex-col gap-3">
+          {(Object.entries(TAXONOMY_LABELS) as [keyof TaxonomyState, { label: string; shortcut: string }][]).map(([key, { label, shortcut }]) => (
+            <label key={key} className="flex items-center gap-3 cursor-pointer group p-2 hover:bg-gray-50 rounded transition-colors">
+              <input
+                type="checkbox"
+                checked={taxonomy[key]}
+                onChange={() => toggle(key)}
+                className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="flex-1 text-sm font-medium text-gray-700 group-hover:text-gray-900">{label}</span>
+              <kbd className="px-2 py-1 bg-gray-100 border border-gray-200 rounded text-xs text-gray-500 font-mono">
+                {shortcut}
+              </kbd>
+            </label>
+          ))}
+          
+          <div className="border-t my-2 pt-2"></div>
+          
+          <label className="flex items-center gap-3 cursor-pointer group p-2 hover:bg-gray-50 rounded transition-colors">
+            <input
+              type="checkbox"
+              checked={brokenAnatomy}
+              onChange={() => setBrokenAnatomy(p => !p)}
+              className="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+            />
+            <span className="flex-1 text-sm font-medium text-gray-700 group-hover:text-gray-900">Broken Anatomy</span>
+            <kbd className="px-2 py-1 bg-gray-100 border border-gray-200 rounded text-xs text-gray-500 font-mono">A</kbd>
+          </label>
+          
+          <label className="flex items-center gap-3 cursor-pointer group p-2 hover:bg-gray-50 rounded transition-colors">
+            <input
+              type="checkbox"
+              checked={textVisible}
+              onChange={() => setTextVisible(p => !p)}
+              className="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+            />
+            <span className="flex-1 text-sm font-medium text-gray-700 group-hover:text-gray-900">Text Visible</span>
+            <kbd className="px-2 py-1 bg-gray-100 border border-gray-200 rounded text-xs text-gray-500 font-mono">T</kbd>
+          </label>
+        </div>
+
+        <div className="mt-6 pt-4 border-t flex flex-col gap-2">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-sm font-semibold">Verdict:</span>
+            <span className={`text-sm font-bold px-2 py-1 rounded ${sameCharacter ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+              {sameCharacter ? "Same Character" : "Different Character"}
+            </span>
+          </div>
+          
+          {error && <p className="text-sm text-red-600 mb-2">{error}</p>}
+          
+          <button
+            onClick={handleSubmit}
+            disabled={isPending}
+            className="w-full py-3 bg-blue-600 text-white rounded-md font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {isPending ? "Submitting..." : "Submit"}
+            <kbd className="px-2 py-0.5 bg-blue-500 rounded text-xs border border-blue-400">Enter</kbd>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
