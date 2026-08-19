@@ -670,6 +670,8 @@ Models mocked. Never assert on generated content.
 - **`to_llamafactory.py` emits exactly as many `<image>` tokens as entries in `images`** (§6.1), and its `gpt`
   turn round-trips through the production verdict schema.
 - `pair_type == "constructed"` never appears in the `val` or `test` splits (§3.3).
+- **`test_research_integrity.py` executes the cross-cutting research integrity suite:** character-disjoint splits across train/val/test, test set purity (100% donated, 0 constructed negatives), constructed negatives restricted to train, manifest reconciliation against `dataset_manifest.json`, and strict ShareGPT prompt/output blinding (no leaked identifiers or split tokens).
+
 
 ## 11. Eval / quality checks (Tier B — never CI)
 
