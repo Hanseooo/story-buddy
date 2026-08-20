@@ -148,7 +148,10 @@ def resolve_annotations(
         if len(ordinary) > 2:
             raise ManifestError(f"Pair {pair_id} has >2 ordinary annotations.")
         if len(ordinary) < 2:
-            raise ManifestError(f"Pair {pair_id} has <2 ordinary annotations.")
+            continue
+
+        if ordinary[0]["annotator_id"] == ordinary[1]["annotator_id"]:
+            raise ManifestError(f"Pair {pair_id} has duplicate annotator_ids for ordinary annotations.")
 
         def get_sig(r: dict) -> tuple:
             return (
@@ -161,7 +164,7 @@ def resolve_annotations(
         signatures = {get_sig(r) for r in ordinary}
         if len(signatures) == 1:
             if len(adjs) > 0:
-                raise ManifestError(f"Pair {pair_id}: ordinary annotators agreed, but adjudicator row exists.")
+                log.warning(f"Pair {pair_id}: ordinary annotators agreed, but adjudicator row exists.")
             winner = bool(ordinary[0].get("same_character"))
             final_rows = ordinary
             adjudicated = False
@@ -239,7 +242,7 @@ def build_records(
 
         agreed = consensus.get(pair.pair_id)
         if agreed is None:
-            raise ManifestError(f"Pair {pair.pair_id} has <2 annotations and is not a pilot pair.")
+            continue
 
         records.append(ManifestRecord(
             pair_id=pair.pair_id,

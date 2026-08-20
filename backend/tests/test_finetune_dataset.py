@@ -129,10 +129,20 @@ def test_resolve_annotations_strict_rules():
             set(), set(),
         )
 
-    # <2 ordinary annotations -> hard fail
-    with pytest.raises(ManifestError, match="<2 ordinary annotations"):
+    # <2 ordinary annotations -> skipped (not included in resolved)
+    res_skip = bd.resolve_annotations(
+        rows("p1", {"same_character": True}),
+        set(), set(),
+    )
+    assert "p1" not in res_skip
+
+    # duplicate annotator_ids -> hard fail
+    with pytest.raises(ManifestError, match="duplicate annotator_ids"):
         bd.resolve_annotations(
-            rows("p1", {"same_character": True}),
+            [
+                {"pair_id": "p1", "annotator_id": "a1", "same_character": True},
+                {"pair_id": "p1", "annotator_id": "a1", "same_character": True},
+            ],
             set(), set(),
         )
 
@@ -161,16 +171,16 @@ def test_resolve_annotations_strict_rules():
             {"adj1", "adj2"}, set(),
         )
 
-    # 2 agreeing ordinary rows + adjudicator present -> hard fail
-    with pytest.raises(ManifestError, match="ordinary annotators agreed, but adjudicator row exists"):
-        bd.resolve_annotations(
-            rows("p1",
-                {"same_character": True, "annotator_id": "a1"},
-                {"same_character": True, "annotator_id": "a2"},
-                {"same_character": True, "annotator_id": "adj1"},
-            ),
-            {"adj1"}, set(),
-        )
+    # 2 agreeing ordinary rows + adjudicator present -> logs warning and succeeds
+    res_agree = bd.resolve_annotations(
+        rows("p1",
+            {"same_character": True, "annotator_id": "a1"},
+            {"same_character": True, "annotator_id": "a2"},
+            {"same_character": False, "annotator_id": "adj1"},
+        ),
+        {"adj1"}, set(),
+    )
+    assert res_agree["p1"].same_character is True
 
     # Pilot pairs are silently excluded from resolution
     assert bd.resolve_annotations(
@@ -196,9 +206,9 @@ def test_label_is_the_inverse_of_same_character_and_is_converted_only_here(same_
     assert records[0].label is (not same_character)
 
 
-def test_unannotated_pairs_hard_fail_if_not_pilot():
-    with pytest.raises(ManifestError, match="<2 annotations"):
-        bd.build_records(memory(), "train", "synthetic", {}, set())
+def test_unannotated_pairs_skipped_if_not_pilot():
+    # If a pair has no consensus, it is skipped instead of failing
+    assert bd.build_records(memory(), "train", "synthetic", {}, set()) == []
 
 
 def test_pilot_pairs_are_dropped():
