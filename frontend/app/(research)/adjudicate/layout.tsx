@@ -8,7 +8,7 @@ export default async function AdjudicateLayout({ children }: { children: React.R
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/login");
+    throw new Error("Unauthorized");
   }
 
   const { data: profile } = await supabase
@@ -18,7 +18,7 @@ export default async function AdjudicateLayout({ children }: { children: React.R
     .single();
 
   if (profile?.role !== "researcher" || !profile?.is_adjudicator) {
-    redirect("/");
+    throw new Error("Unauthorized");
   }
 
   return (

@@ -2,14 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 
-export async function submitAnnotation(
-  pairId: string, 
-  failureReasons: string[], 
-  sameCharacter: boolean,
-  anatomyIntact: boolean,
-  textFree: boolean
-) {
+export type SubmissionPayload = {
+  pairId: string;
+  failureReasons: string[];
+  sameCharacter: boolean;
+  anatomyIntact: boolean;
+  textFree: boolean;
+};
+
+export async function submitAnnotation(payload: SubmissionPayload) {
+  const { pairId, failureReasons, sameCharacter, anatomyIntact, textFree } = payload;
   const supabase = await createSupabaseServerClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
 
@@ -43,27 +47,27 @@ export async function submitAnnotation(
   // Insert annotation with first-write-wins idempotency
   const { error: insertError } = await supabase
     .from("annotations")
-    .upsert({
+    .insert({
       pair_id: pairId,
       annotator_id: user.id,
       same_character: sameCharacter,
       anatomy_intact: anatomyIntact,
       text_free: textFree,
       failure_reasons: failureReasons,
-    }, {
-      onConflict: "pair_id,annotator_id",
-      ignoreDuplicates: true,
     });
 
   if (insertError) {
-    console.error("Failed to insert annotation:", insertError);
-    return { error: "Failed to save annotation" };
+    if (insertError.code === "23505") {
+      console.log("Annotation already exists for pair", pairId);
+      // Let it fall through, or return success, but we should continue to update queue status if needed?
+      // Actually, if it's already there, maybe the queue status is already updated. But to be safe, we just proceed.
+    } else {
+      console.error("Failed to insert annotation:", insertError);
+      return { error: "Failed to save annotation" };
+    }
   }
 
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const { createClient: createSupabaseClient } = await import("@supabase/supabase-js");
-  const adminClient = createSupabaseClient(supabaseUrl, serviceKey);
+  const adminClient = await createAdminClient();
 
   // We need to count annotations for this pair
   const { count, error: countError } = await adminClient
@@ -126,34 +130,33 @@ export async function getNextPair() {
   }
 
   // Use service role to bypass RLS and fetch a pair that this user hasn't annotated yet
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const { createClient: createSupabaseClient } = await import("@supabase/supabase-js");
-  const adminClient = createSupabaseClient(supabaseUrl, serviceKey);
-
-  const { data: pairs, error: pairsError } = await adminClient
-    .from("research_pairs")
-    .select("id, canonical_storage_path, scene_storage_path")
-    .in("status", ["pending", "partially_annotated"])
-    .order("created_at", { ascending: true })
-    .limit(50);
-
-  if (pairsError || !pairs || pairs.length === 0) {
-    return { pair: null };
-  }
+  const adminClient = await createAdminClient();
 
   const { data: userAnnotations } = await adminClient
     .from("annotations")
     .select("pair_id")
     .eq("annotator_id", user.id);
 
-  const annotatedPairIds = new Set((userAnnotations || []).map(a => a.pair_id));
-  
-  const unannotatedPairs = pairs.filter(p => !annotatedPairIds.has(p.id));
+  const annotatedPairIds = (userAnnotations || []).map(a => a.pair_id);
 
-  if (unannotatedPairs.length === 0) {
+  let query = adminClient
+    .from("research_pairs")
+    .select("id, canonical_storage_path, scene_storage_path")
+    .in("status", ["pending", "partially_annotated"])
+    .order("created_at", { ascending: true })
+    .limit(50);
+
+  if (annotatedPairIds.length > 0) {
+    query = query.not("id", "in", `(${annotatedPairIds.join(",")})`);
+  }
+
+  const { data: pairs, error: pairsError } = await query;
+
+  if (pairsError || !pairs || pairs.length === 0) {
     return { pair: null };
   }
+
+  const unannotatedPairs = pairs;
 
   // Reproducible pseudo-random shuffle per annotator
   const hashedSort = unannotatedPairs.map(p => {

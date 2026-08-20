@@ -6,7 +6,7 @@ export default async function AnnotateLayout({ children }: { children: React.Rea
   const { data: { user } } = await supabase.auth.getUser();
   
   if (!user) {
-    redirect("/login");
+    throw new Error("Unauthorized");
   }
 
   const { data: profile } = await supabase
@@ -16,7 +16,7 @@ export default async function AnnotateLayout({ children }: { children: React.Rea
     .single();
 
   if (profile?.role !== "researcher" || profile?.is_adjudicator) {
-    redirect("/");
+    throw new Error("Unauthorized");
   }
 
   return (

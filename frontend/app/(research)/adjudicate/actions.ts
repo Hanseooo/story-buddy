@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 
 export type BlindAnnotation = {
   same_character: boolean;
@@ -10,13 +11,16 @@ export type BlindAnnotation = {
   text_free: boolean;
 };
 
-export async function submitAdjudication(
-  pairId: string, 
-  failureReasons: string[], 
-  sameCharacter: boolean,
-  anatomyIntact: boolean,
-  textFree: boolean
-) {
+export type SubmissionPayload = {
+  pairId: string;
+  failureReasons: string[];
+  sameCharacter: boolean;
+  anatomyIntact: boolean;
+  textFree: boolean;
+};
+
+export async function submitAdjudication(payload: SubmissionPayload) {
+  const { pairId, failureReasons, sameCharacter, anatomyIntact, textFree } = payload;
   const supabase = await createSupabaseServerClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
 
@@ -43,10 +47,7 @@ export async function submitAdjudication(
     return { error: "Invalid state: anatomy_intact and text_free must be explicitly provided" };
   }
 
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const { createClient } = await import("@supabase/supabase-js");
-  const adminClient = createClient(supabaseUrl, serviceKey);
+  const adminClient = await createAdminClient();
 
   // Validate that the pair is still conflicted
   const { data: pairInfo } = await adminClient
@@ -84,21 +85,22 @@ export async function submitAdjudication(
   // Insert the authoritative annotation (first-write-wins idempotency)
   const { error: insertError } = await supabase
     .from("annotations")
-    .upsert({
+    .insert({
       pair_id: pairId,
       annotator_id: user.id,
       same_character: sameCharacter,
       anatomy_intact: anatomyIntact,
       text_free: textFree,
       failure_reasons: failureReasons,
-    }, {
-      onConflict: "pair_id,annotator_id",
-      ignoreDuplicates: true,
     });
 
   if (insertError) {
-    console.error("Failed to insert adjudication:", insertError);
-    return { error: "Failed to save adjudication" };
+    if (insertError.code === "23505") {
+      console.log("Adjudication already exists for pair", pairId);
+    } else {
+      console.error("Failed to insert adjudication:", insertError);
+      return { error: "Failed to save adjudication" };
+    }
   }
 
   // Update status to adjudicated
@@ -132,17 +134,27 @@ export async function getConflictedPair() {
     return { error: "Unauthorized" };
   }
 
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const { createClient } = await import("@supabase/supabase-js");
-  const adminClient = createClient(supabaseUrl, serviceKey);
+  const adminClient = await createAdminClient();
 
-  const { data: pairs, error: pairsError } = await adminClient
+  const { data: userAnnotations } = await adminClient
+    .from("annotations")
+    .select("pair_id")
+    .eq("annotator_id", user.id);
+
+  const annotatedPairIds = (userAnnotations || []).map(a => a.pair_id);
+
+  let query = adminClient
     .from("research_pairs")
     .select("id, canonical_storage_path, scene_storage_path")
     .eq("status", "conflicted")
     .order("created_at", { ascending: true })
     .limit(50);
+
+  if (annotatedPairIds.length > 0) {
+    query = query.not("id", "in", `(${annotatedPairIds.join(",")})`);
+  }
+
+  const { data: pairs, error: pairsError } = await query;
 
   if (pairsError || !pairs || pairs.length === 0) {
     return { pair: null };

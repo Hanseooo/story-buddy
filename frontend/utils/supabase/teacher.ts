@@ -52,14 +52,10 @@ export const getTeacherContext = cache(async (): Promise<TeacherContext> => {
     );
 
   if (profile.role === "researcher") {
-    if (profile.is_adjudicator) {
-      redirect("/adjudicate");
-    } else {
-      redirect("/annotate");
-    }
+    throw new Error("Unauthorized");
   }
 
-  if (profile.role !== "teacher") redirect(`/s/${profile.id}`);
+  if (profile.role !== "teacher") throw new Error("Unauthorized");
 
   return { profile, classrooms: classroomsRes.data ?? [] };
 });

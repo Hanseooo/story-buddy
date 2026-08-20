@@ -1,0 +1,9 @@
+﻿4647862 chore(docs): mark pilot epic as complete and add annotation guide
+1089954 test(backend): add corpus storage telemetry and smoke test
+6c1403e feat(frontend): harden annotation UI, add logout and validation
+9cf1891 test: add multi-fixture e2e golden-path tests for annotation pipeline (closes #50)
+afd6478 test: add cross-cutting research integrity test suite (ticket 05 / #49)
+09e3f91 feat(finetune): harden dataset exporter, consensus resolution, and manifest stats
+4ebf853 feat(research): implement adjudication flow and final label authoritative resolution (ticket 03)
+c786cf0 feat(annotate): ticket 02 - annotation UI hardening, server invariants and 3-tier blinding verification
+378c920 feat(research): implement ticket 01 visual pilot fixtures, opaque paths and atomic seeding

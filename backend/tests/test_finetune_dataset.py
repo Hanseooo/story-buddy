@@ -98,15 +98,19 @@ def test_an_unadjudicated_tie_raises_manifest_error():
         )
 
 
-def test_gating_booleans_fold_worst_wins_and_reasons_union():
+def test_disagreeing_fields_goes_to_adjudication_and_is_exclusive():
+    # If they agree on same_character but disagree on fields, it's a conflict and requires an adjudicator.
+    # The adjudicator's row is used exclusively.
     resolved = bd.resolve_annotations(rows(
         "p1",
-        {"same_character": False, "failure_reasons": ["wrong_colour"], "anatomy_intact": False},
-        {"same_character": False, "failure_reasons": ["wrong_clothing"], "text_free": False},
-    ), set(), set())
+        {"annotator_id": "a1", "same_character": False, "failure_reasons": ["wrong_colour"], "anatomy_intact": False},
+        {"annotator_id": "a2", "same_character": False, "failure_reasons": ["wrong_clothing"], "text_free": False},
+        {"annotator_id": "adj1", "same_character": False, "failure_reasons": ["wrong_colour"], "anatomy_intact": True, "text_free": True},
+    ), {"adj1"}, set())
     c = resolved["p1"]
-    assert c.anatomy_intact is False and c.text_free is False
-    assert c.failure_reasons == ["wrong_colour", "wrong_clothing"]
+    # Should exactly match adj1, no unioning
+    assert c.anatomy_intact is True and c.text_free is True
+    assert c.failure_reasons == ["wrong_colour"]
 
 
 def test_missing_gating_columns_default_to_the_schema_defaults():

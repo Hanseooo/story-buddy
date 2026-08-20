@@ -150,11 +150,19 @@ def resolve_annotations(
         if len(ordinary) < 2:
             raise ManifestError(f"Pair {pair_id} has <2 ordinary annotations.")
 
-        votes = Counter(bool(r["same_character"]) for r in ordinary)
-        if len(votes) == 1:
+        def get_sig(r: dict) -> tuple:
+            return (
+                bool(r.get("same_character")),
+                bool(r.get("anatomy_intact", True)),
+                bool(r.get("text_free", True)),
+                tuple(sorted(r.get("failure_reasons") or [])),
+            )
+
+        signatures = {get_sig(r) for r in ordinary}
+        if len(signatures) == 1:
             if len(adjs) > 0:
                 raise ManifestError(f"Pair {pair_id}: ordinary annotators agreed, but adjudicator row exists.")
-            winner = bool(ordinary[0]["same_character"])
+            winner = bool(ordinary[0].get("same_character"))
             final_rows = ordinary
             adjudicated = False
         else:
@@ -162,8 +170,8 @@ def resolve_annotations(
                 raise ManifestError(f"Pair {pair_id}: unresolved conflict (no adjudicator).")
             if len(adjs) > 1:
                 raise ManifestError(f"Pair {pair_id}: multiple adjudicator rows.")
-            winner = bool(adjs[0]["same_character"])
-            final_rows = [r for r in ordinary if bool(r["same_character"]) == winner] + adjs
+            winner = bool(adjs[0].get("same_character"))
+            final_rows = adjs
             adjudicated = True
 
         reasons: list[str] = []
