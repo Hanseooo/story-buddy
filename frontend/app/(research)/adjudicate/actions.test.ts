@@ -10,7 +10,7 @@ vi.mock("@/utils/supabase/server", () => ({
     auth: { getUser: mockGetUser },
     from: vi.fn((table: string) => {
       if (table === "profiles") return { select: vi.fn(() => ({ eq: vi.fn(() => ({ single: mockProfilesSelect })) })) };
-      if (table === "annotations") return { upsert: mockAnnotationsUpsert };
+      if (table === "annotations") return { insert: mockAnnotationsUpsert };
       return {};
     }),
   })),
@@ -24,16 +24,43 @@ const mockAdminSelect = vi.fn();
 const mockAdminUpdate = vi.fn();
 const mockAdminCreateSignedUrl = vi.fn();
 
+const createQueryMock = (resolvedValue: unknown) => {
+  const chain: Record<string, unknown> = {
+    eq: vi.fn(() => chain),
+    in: vi.fn(() => chain),
+    not: vi.fn(() => chain),
+    order: vi.fn(() => chain),
+    limit: vi.fn(() => chain),
+    then: (resolve: (v: unknown) => void) => resolve(resolvedValue)
+  };
+  return chain;
+};
+
 vi.mock("@supabase/supabase-js", () => ({
   createClient: vi.fn(() => ({
-    from: vi.fn((table: string) => ({
-      select: vi.fn((cols: string, opts?: { count?: string; head?: boolean }) => {
-        return mockAdminSelect(table, cols, opts);
-      }),
-      update: vi.fn((vals: Record<string, unknown>) => ({
-        eq: vi.fn((col: string, val: string) => mockAdminUpdate(table, vals, col, val)),
-      })),
-    })),
+    from: vi.fn((table: string) => {
+      const chainable = {
+        select: vi.fn((cols: string, opts?: { count?: string; head?: boolean }) => {
+          const res = mockAdminSelect(table, cols, opts);
+          // If the mock returned a value (like from mockReturnValueOnce), use it.
+          // Otherwise, build a chainable object.
+          if (res) return res;
+          const chain = {
+            eq: vi.fn(() => chain),
+            in: vi.fn(() => chain),
+            not: vi.fn(() => chain),
+            order: vi.fn(() => chain),
+            limit: vi.fn(() => chain),
+            then: (resolve: (v: unknown) => void) => resolve({ data: [], error: null })
+          };
+          return chain;
+        }),
+        update: vi.fn((vals: Record<string, unknown>) => ({
+          eq: vi.fn((col: string, val: string) => mockAdminUpdate(table, vals, col, val)),
+        })),
+      };
+      return chainable;
+    }),
     storage: {
       from: vi.fn(() => ({ createSignedUrl: mockAdminCreateSignedUrl })),
     },
@@ -53,39 +80,39 @@ describe("Adjudication Server Actions", () => {
   describe("submitAdjudication Invariants & Role Isolation", () => {
     it("rejects unauthenticated user", async () => {
       mockGetUser.mockResolvedValueOnce({ data: { user: null }, error: new Error("No session") });
-      const res = await submitAdjudication("pair-1", [], true, true, true);
+      const res = await submitAdjudication({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
       expect(res.error).toBe("Unauthorized");
     });
 
     it("rejects non-adjudicator (is_adjudicator=false)", async () => {
       mockProfilesSelect.mockResolvedValueOnce({ data: { role: "researcher", is_adjudicator: false }, error: null });
-      const res = await submitAdjudication("pair-1", [], true, true, true);
+      const res = await submitAdjudication({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
       expect(res.error).toBe("Unauthorized");
     });
 
     it("rejects non-researcher role", async () => {
       mockProfilesSelect.mockResolvedValueOnce({ data: { role: "student", is_adjudicator: true }, error: null });
-      const res = await submitAdjudication("pair-1", [], true, true, true);
+      const res = await submitAdjudication({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
       expect(res.error).toBe("Unauthorized");
     });
 
     it("rejects same_character=true when failure_reasons are provided", async () => {
-      const res = await submitAdjudication("pair-1", ["wrong_colour"], true, true, true);
+      const res = await submitAdjudication({ pairId: "pair-1", failureReasons: ["wrong_colour"], sameCharacter: true, anatomyIntact: true, textFree: true });
       expect(res.error).toBe("Invalid state: same_character is true but failure reasons provided");
     });
 
     it("rejects same_character=false when failure_reasons is empty", async () => {
-      const res = await submitAdjudication("pair-1", [], false, true, true);
+      const res = await submitAdjudication({ pairId: "pair-1", failureReasons: [], sameCharacter: false, anatomyIntact: true, textFree: true });
       expect(res.error).toBe("Invalid state: same_character is false but no failure reasons provided");
     });
 
     it("rejects non-boolean anatomy_intact or text_free", async () => {
       // @ts-expect-error test invalid type
-      const res1 = await submitAdjudication("pair-1", [], true, undefined, true);
+      const res1 = await submitAdjudication({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: undefined, textFree: true });
       expect(res1.error).toBe("Invalid state: anatomy_intact and text_free must be explicitly provided");
 
       // @ts-expect-error test invalid type
-      const res2 = await submitAdjudication("pair-1", [], true, true, null);
+      const res2 = await submitAdjudication({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: null });
       expect(res2.error).toBe("Invalid state: anatomy_intact and text_free must be explicitly provided");
     });
 
@@ -93,7 +120,7 @@ describe("Adjudication Server Actions", () => {
       mockAdminSelect.mockReturnValueOnce({
         eq: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: { status: "complete" } }) })
       });
-      const res = await submitAdjudication("pair-1", [], true, true, true);
+      const res = await submitAdjudication({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
       expect(res.error).toBe("Pair is no longer conflicted");
     });
 
@@ -104,7 +131,7 @@ describe("Adjudication Server Actions", () => {
       mockAdminSelect.mockReturnValueOnce({
         eq: vi.fn().mockResolvedValue({ data: [{ annotator_id: "annotator-1" }], error: null })
       });
-      const res = await submitAdjudication("pair-1", [], true, true, true);
+      const res = await submitAdjudication({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
       expect(res.error).toBe("Invalid pair state: requires exactly 2 prior annotations");
     });
 
@@ -115,7 +142,7 @@ describe("Adjudication Server Actions", () => {
       mockAdminSelect.mockReturnValueOnce({
         eq: vi.fn().mockResolvedValue({ data: [{ annotator_id: "adjudicator-1" }, { annotator_id: "other" }], error: null })
       });
-      const res = await submitAdjudication("pair-1", [], true, true, true);
+      const res = await submitAdjudication({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
       expect(res.error).toBe("Adjudicator cannot resolve their own annotations");
     });
 
@@ -128,7 +155,7 @@ describe("Adjudication Server Actions", () => {
       });
       mockAdminUpdate.mockResolvedValue({ error: null });
 
-      const res = await submitAdjudication("pair-1", [], true, true, true);
+      const res = await submitAdjudication({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
       expect(res.success).toBe(true);
       expect(mockAdminUpdate).toHaveBeenCalledWith("research_pairs", { status: "adjudicated" }, "id", "pair-1");
     });
@@ -140,7 +167,7 @@ describe("Adjudication Server Actions", () => {
       mockAdminSelect.mockReturnValueOnce({
         eq: vi.fn().mockResolvedValue({ data: [{ annotator_id: "other-1" }, { annotator_id: "other-2" }, { annotator_id: "another-adjudicator" }], error: null })
       });
-      const res = await submitAdjudication("pair-1", [], true, true, true);
+      const res = await submitAdjudication({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
       expect(res.error).toBe("Pair already adjudicated by another adjudicator");
     });
 
@@ -154,7 +181,7 @@ describe("Adjudication Server Actions", () => {
       });
       mockAdminUpdate.mockResolvedValue({ error: null });
 
-      const res = await submitAdjudication("pair-1", ["wrong_colour"], false, true, false);
+      const res = await submitAdjudication({ pairId: "pair-1", failureReasons: ["wrong_colour"], sameCharacter: false, anatomyIntact: true, textFree: false });
       expect(res.success).toBe(true);
       expect(mockAnnotationsUpsert).toHaveBeenCalledWith(
         {
@@ -164,10 +191,6 @@ describe("Adjudication Server Actions", () => {
           anatomy_intact: true,
           text_free: false,
           failure_reasons: ["wrong_colour"],
-        },
-        {
-          onConflict: "pair_id,annotator_id",
-          ignoreDuplicates: true,
         }
       );
       expect(mockAdminUpdate).toHaveBeenCalledWith("research_pairs", { status: "adjudicated" }, "id", "pair-1");
@@ -182,18 +205,16 @@ describe("Adjudication Server Actions", () => {
     });
 
     it("returns null if no conflicted pairs exist", async () => {
-      mockAdminSelect.mockReturnValueOnce({
-        eq: vi.fn().mockReturnValue({ order: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue({ data: [] }) }) })
-      });
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [] })); // userAnnotations
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [] })); // research_pairs
       const res = await getConflictedPair();
       expect(res.pair).toBeNull();
     });
 
     it("skips pair if user is one of the original annotators and returns the valid one", async () => {
       const mockPairs = [{ id: "pair-1", canonical_storage_path: "path/c1.png", scene_storage_path: "path/s1.png" }, { id: "pair-2", canonical_storage_path: "path/c2.png", scene_storage_path: "path/s2.png" }];
-      mockAdminSelect.mockReturnValueOnce({
-        eq: vi.fn().mockReturnValue({ order: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue({ data: mockPairs }) }) })
-      });
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [] })); // userAnnotations
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: mockPairs })); // research_pairs
       // Pair 1 query: user is annotator
       mockAdminSelect.mockReturnValueOnce({
         eq: vi.fn().mockResolvedValue({ data: [{ annotator_id: "adjudicator-1", same_character: true }, { annotator_id: "other", same_character: false }] })
@@ -225,9 +246,8 @@ describe("Adjudication Server Actions", () => {
 
     it("skips pair if annotations agree under normalized set equality", async () => {
       const mockPairs = [{ id: "pair-agree" }];
-      mockAdminSelect.mockReturnValueOnce({
-        eq: vi.fn().mockReturnValue({ order: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue({ data: mockPairs }) }) })
-      });
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [] })); // userAnnotations
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: mockPairs })); // research_pairs
       // Annotations agree despite different order/duplicates of failure reasons
       mockAdminSelect.mockReturnValueOnce({
         eq: vi.fn().mockResolvedValue({ 

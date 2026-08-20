@@ -4,45 +4,22 @@ import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 
-export type SubmissionPayload = {
-  pairId: string;
-  failureReasons: string[];
-  sameCharacter: boolean;
-  anatomyIntact: boolean;
-  textFree: boolean;
-};
+import { verifyResearchAuth, validateSubmissionPayload, type SubmissionPayload } from "../_shared/actions";
 
 export async function submitAnnotation(payload: SubmissionPayload) {
   const { pairId, failureReasons, sameCharacter, anatomyIntact, textFree } = payload;
-  const supabase = await createSupabaseServerClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-
+  
+  const { error: authError, user } = await verifyResearchAuth(false);
   if (authError || !user) {
-    return { error: "Unauthorized" };
+    return { error: authError || "Unauthorized" };
   }
 
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("role, is_adjudicator")
-    .eq("id", user.id)
-    .single();
-
-  // Fail secure: if is_adjudicator doesn't exist or query fails, deny access
-  if (profileError || profile?.role !== "researcher" || profile?.is_adjudicator) {
-    console.error("Authorization error or invalid role:", profileError);
-    return { error: "Unauthorized" };
+  const { error: validationError } = validateSubmissionPayload(payload);
+  if (validationError) {
+    return { error: validationError };
   }
 
-  // Server-Side Invariant Validation
-  if (sameCharacter && failureReasons.length > 0) {
-    return { error: "Invalid state: same_character is true but failure reasons provided" };
-  }
-  if (!sameCharacter && failureReasons.length === 0) {
-    return { error: "Invalid state: same_character is false but no failure reasons provided" };
-  }
-  if (typeof anatomyIntact !== "boolean" || typeof textFree !== "boolean") {
-    return { error: "Invalid state: anatomy_intact and text_free must be explicitly provided" };
-  }
+  const supabase = await createSupabaseServerClient();
 
   // Insert annotation with first-write-wins idempotency
   const { error: insertError } = await supabase
@@ -112,21 +89,9 @@ export async function submitAnnotation(payload: SubmissionPayload) {
 }
 
 export async function getNextPair() {
-  const supabase = await createSupabaseServerClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-
+  const { error: authError, user } = await verifyResearchAuth(false);
   if (authError || !user) {
-    return { error: "Unauthorized" };
-  }
-
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("role, is_adjudicator")
-    .eq("id", user.id)
-    .single();
-
-  if (profileError || profile?.role !== "researcher" || profile?.is_adjudicator) {
-    return { error: "Unauthorized" };
+    return { error: authError || "Unauthorized" };
   }
 
   // Use service role to bypass RLS and fetch a pair that this user hasn't annotated yet

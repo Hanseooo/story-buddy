@@ -39,29 +39,25 @@ describe("AdjudicateLayout", () => {
 
     await expect(
       AdjudicateLayout({ children: <div>Child Content</div> })
-    ).rejects.toThrow("REDIRECT:/login");
+    ).rejects.toThrow("Unauthorized");
   });
 
   it("redirects to / if user is a non-researcher", async () => {
     mockGetUser.mockResolvedValueOnce({ data: { user: { id: "user-1" } } });
-    mockProfilesSelect.mockResolvedValueOnce({
-      data: { role: "student", is_adjudicator: true },
-    });
+    mockProfilesSelect.mockResolvedValueOnce({ data: { role: "student", is_adjudicator: true }, error: null });
 
     await expect(
       AdjudicateLayout({ children: <div>Child Content</div> })
-    ).rejects.toThrow("REDIRECT:/");
+    ).rejects.toThrow("Unauthorized");
   });
 
   it("redirects to / if researcher is not an adjudicator (is_adjudicator=false)", async () => {
     mockGetUser.mockResolvedValueOnce({ data: { user: { id: "user-1" } } });
-    mockProfilesSelect.mockResolvedValueOnce({
-      data: { role: "researcher", is_adjudicator: false },
-    });
+    mockProfilesSelect.mockResolvedValueOnce({ data: { role: "researcher", is_adjudicator: false }, error: null });
 
     await expect(
       AdjudicateLayout({ children: <div>Child Content</div> })
-    ).rejects.toThrow("REDIRECT:/");
+    ).rejects.toThrow("Unauthorized");
   });
 
   it("renders children for authorized adjudicator (researcher with is_adjudicator=true)", async () => {

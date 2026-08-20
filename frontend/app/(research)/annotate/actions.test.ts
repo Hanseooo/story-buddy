@@ -23,7 +23,7 @@ vi.mock("@/utils/supabase/server", () => ({
       }
       if (table === "annotations") {
         return {
-          upsert: mockAnnotationsUpsert,
+          insert: mockAnnotationsUpsert,
         };
       }
       return {};
@@ -41,16 +41,41 @@ const mockAdminSelect = vi.fn();
 const mockAdminUpdate = vi.fn();
 const mockAdminCreateSignedUrl = vi.fn();
 
+const createQueryMock = (resolvedValue: unknown) => {
+  const chain: Record<string, unknown> = {
+    eq: vi.fn(() => chain),
+    in: vi.fn(() => chain),
+    not: vi.fn(() => chain),
+    order: vi.fn(() => chain),
+    limit: vi.fn(() => chain),
+    then: (resolve: (v: unknown) => void) => resolve(resolvedValue)
+  };
+  return chain;
+};
+
 vi.mock("@supabase/supabase-js", () => ({
   createClient: vi.fn(() => ({
-    from: vi.fn((table: string) => ({
-      select: vi.fn((cols: string, opts?: { count?: string; head?: boolean }) => {
-        return mockAdminSelect(table, cols, opts);
-      }),
-      update: vi.fn((vals: Record<string, unknown>) => ({
-        eq: vi.fn((col: string, val: string) => mockAdminUpdate(table, vals, col, val)),
-      })),
-    })),
+    from: vi.fn((table: string) => {
+      const chainable = {
+        select: vi.fn((cols: string, opts?: { count?: string; head?: boolean }) => {
+          const res = mockAdminSelect(table, cols, opts);
+          if (res) return res;
+          const chain = {
+            eq: vi.fn(() => chain),
+            in: vi.fn(() => chain),
+            not: vi.fn(() => chain),
+            order: vi.fn(() => chain),
+            limit: vi.fn(() => chain),
+            then: (resolve: (v: unknown) => void) => resolve({ data: [], error: null })
+          };
+          return chain;
+        }),
+        update: vi.fn((vals: Record<string, unknown>) => ({
+          eq: vi.fn((col: string, val: string) => mockAdminUpdate(table, vals, col, val)),
+        })),
+      };
+      return chainable;
+    }),
     storage: {
       from: vi.fn(() => ({
         createSignedUrl: mockAdminCreateSignedUrl,
@@ -79,22 +104,22 @@ describe("Tier 2: Server Action Unit Tests", () => {
 
   describe("submitAnnotation Invariant Validation", () => {
     it("rejects same_character=true when failure_reasons are provided", async () => {
-      const res = await submitAnnotation("pair-1", ["wrong_colour"], true, true, true);
+      const res = await submitAnnotation({ pairId: "pair-1", failureReasons: ["wrong_colour"], sameCharacter: true, anatomyIntact: true, textFree: true });
       expect(res.error).toBe("Invalid state: same_character is true but failure reasons provided");
     });
 
     it("rejects same_character=false when failure_reasons is empty", async () => {
-      const res = await submitAnnotation("pair-1", [], false, true, true);
+      const res = await submitAnnotation({ pairId: "pair-1", failureReasons: [], sameCharacter: false, anatomyIntact: true, textFree: true });
       expect(res.error).toBe("Invalid state: same_character is false but no failure reasons provided");
     });
 
     it("rejects undefined or non-boolean anatomy_intact and text_free", async () => {
       // @ts-expect-error test invalid type
-      const res1 = await submitAnnotation("pair-1", [], true, undefined, true);
+      const res1 = await submitAnnotation({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: undefined, textFree: true });
       expect(res1.error).toBe("Invalid state: anatomy_intact and text_free must be explicitly provided");
 
       // @ts-expect-error test invalid type
-      const res2 = await submitAnnotation("pair-1", [], true, true, null);
+      const res2 = await submitAnnotation({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: null });
       expect(res2.error).toBe("Invalid state: anatomy_intact and text_free must be explicitly provided");
     });
 
@@ -103,7 +128,7 @@ describe("Tier 2: Server Action Unit Tests", () => {
         eq: vi.fn().mockResolvedValue({ count: 1, error: null }),
       });
 
-      const res = await submitAnnotation("pair-1", [], true, true, true);
+      const res = await submitAnnotation({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
       expect(res.error).toBeUndefined();
       expect(res.success).toBe(true);
       expect(mockAnnotationsUpsert).toHaveBeenCalledWith(
@@ -114,10 +139,6 @@ describe("Tier 2: Server Action Unit Tests", () => {
           anatomy_intact: true,
           text_free: true,
           failure_reasons: [],
-        },
-        {
-          onConflict: "pair_id,annotator_id",
-          ignoreDuplicates: true,
         }
       );
     });
@@ -127,7 +148,7 @@ describe("Tier 2: Server Action Unit Tests", () => {
         eq: vi.fn().mockResolvedValue({ count: 1, error: null }),
       });
 
-      const res = await submitAnnotation("pair-1", ["wrong_clothing", "wrong_style"], false, false, true);
+      const res = await submitAnnotation({ pairId: "pair-1", failureReasons: ["wrong_clothing", "wrong_style"], sameCharacter: false, anatomyIntact: false, textFree: true });
       expect(res.error).toBeUndefined();
       expect(res.success).toBe(true);
       expect(mockAnnotationsUpsert).toHaveBeenCalledWith(
@@ -138,10 +159,6 @@ describe("Tier 2: Server Action Unit Tests", () => {
           anatomy_intact: false,
           text_free: true,
           failure_reasons: ["wrong_clothing", "wrong_style"],
-        },
-        {
-          onConflict: "pair_id,annotator_id",
-          ignoreDuplicates: true,
         }
       );
     });
@@ -150,7 +167,7 @@ describe("Tier 2: Server Action Unit Tests", () => {
   describe("Role Isolation & Security Checks", () => {
     it("rejects unauthenticated user in submitAnnotation", async () => {
       mockGetUser.mockResolvedValueOnce({ data: { user: null }, error: new Error("No session") });
-      const res = await submitAnnotation("pair-1", [], true, true, true);
+      const res = await submitAnnotation({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
       expect(res.error).toBe("Unauthorized");
     });
 
@@ -159,7 +176,7 @@ describe("Tier 2: Server Action Unit Tests", () => {
         data: { role: "researcher", is_adjudicator: true },
         error: null,
       });
-      const res = await submitAnnotation("pair-1", [], true, true, true);
+      const res = await submitAnnotation({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
       expect(res.error).toBe("Unauthorized");
     });
 
@@ -168,7 +185,7 @@ describe("Tier 2: Server Action Unit Tests", () => {
         data: { role: "student", is_adjudicator: false },
         error: null,
       });
-      const res = await submitAnnotation("pair-1", [], true, true, true);
+      const res = await submitAnnotation({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
       expect(res.error).toBe("Unauthorized");
     });
 
@@ -194,7 +211,7 @@ describe("Tier 2: Server Action Unit Tests", () => {
         eq: vi.fn().mockResolvedValueOnce({ count: 1, error: null }),
       });
 
-      const res = await submitAnnotation("pair-1", [], true, true, true);
+      const res = await submitAnnotation({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
       expect(res.success).toBe(true);
       expect(mockAdminUpdate).toHaveBeenCalledWith(
         "research_pairs",
@@ -220,7 +237,7 @@ describe("Tier 2: Server Action Unit Tests", () => {
         }),
       });
 
-      const res = await submitAnnotation("pair-1", [], true, true, true);
+      const res = await submitAnnotation({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
       expect(res.success).toBe(true);
       expect(mockAdminUpdate).toHaveBeenCalledWith(
         "research_pairs",
@@ -246,7 +263,7 @@ describe("Tier 2: Server Action Unit Tests", () => {
         }),
       });
 
-      const res = await submitAnnotation("pair-1", ["wrong_colour"], false, true, true);
+      const res = await submitAnnotation({ pairId: "pair-1", failureReasons: ["wrong_colour"], sameCharacter: false, anatomyIntact: true, textFree: true });
       expect(res.success).toBe(true);
       expect(mockAdminUpdate).toHaveBeenCalledWith(
         "research_pairs",
@@ -271,17 +288,8 @@ describe("Tier 2: Server Action Unit Tests", () => {
         },
       ];
 
-      mockAdminSelect.mockReturnValueOnce({
-        in: vi.fn().mockReturnValue({
-          order: vi.fn().mockReturnValue({
-            limit: vi.fn().mockResolvedValue({ data: mockPairs, error: null }),
-          }),
-        }),
-      });
-
-      mockAdminSelect.mockReturnValueOnce({
-        eq: vi.fn().mockResolvedValue({ data: [], error: null }),
-      });
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: mockPairs, error: null }));
 
       mockAdminCreateSignedUrl
         .mockResolvedValueOnce({ data: { signedUrl: "https://signed.url/canonical-1" }, error: null })
@@ -308,21 +316,8 @@ describe("Tier 2: Server Action Unit Tests", () => {
     });
 
     it("returns null pair when all queue items are annotated", async () => {
-      const mockPairs = [
-        { id: "pair-1", canonical_storage_path: "p1", scene_storage_path: "p1" },
-      ];
-
-      mockAdminSelect.mockReturnValueOnce({
-        in: vi.fn().mockReturnValue({
-          order: vi.fn().mockReturnValue({
-            limit: vi.fn().mockResolvedValue({ data: mockPairs, error: null }),
-          }),
-        }),
-      });
-
-      mockAdminSelect.mockReturnValueOnce({
-        eq: vi.fn().mockResolvedValue({ data: [{ pair_id: "pair-1" }], error: null }),
-      });
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [{ pair_id: "pair-1" }], error: null }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null }));
 
       const res = await getNextPair();
       expect(res.pair).toBeNull();

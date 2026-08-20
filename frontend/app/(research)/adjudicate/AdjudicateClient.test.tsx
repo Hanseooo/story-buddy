@@ -71,9 +71,9 @@ describe("AdjudicateClient Component Tests", () => {
       />
     );
 
-    expect(screen.getByText("Conflicts Detected:")).toBeInTheDocument();
-    expect(screen.getByText("Annotator 1")).toBeInTheDocument();
-    expect(screen.getByText("Annotator 2")).toBeInTheDocument();
+    expect(screen.getByText("Conflicts Detected")).toBeInTheDocument();
+    expect(screen.getAllByText("A1").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("A2").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("Same Character").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Failure Reasons")).toBeInTheDocument();
     expect(screen.getAllByText("Broken Anatomy").length).toBeGreaterThanOrEqual(1);
@@ -89,32 +89,42 @@ describe("AdjudicateClient Component Tests", () => {
       />
     );
 
-    const sameCharCheckbox = screen.getByTestId("same-character-checkbox");
+    const sameCharRadio = screen.getByRole("radio", { name: /Same Character/i });
+    const diffCharRadio = screen.getByRole("radio", { name: /Different Character/i });
     const wrongColorCheckbox = screen.getByLabelText(/Wrong Color/i);
     const wrongSpeciesCheckbox = screen.getByLabelText(/Wrong Species/i);
 
-    expect(sameCharCheckbox).not.toBeChecked();
+    expect(sameCharRadio).not.toBeChecked();
+    expect(diffCharRadio).not.toBeChecked();
     expect(wrongColorCheckbox).not.toBeChecked();
 
-    // Selecting a failure reason unchecks Same Character
+    // Must select Different Character first to enable taxonomy
+    fireEvent.click(diffCharRadio);
+    expect(diffCharRadio).toBeChecked();
+    expect(sameCharRadio).not.toBeChecked();
+
+    // Selecting a failure reason sets it
     fireEvent.click(wrongColorCheckbox);
     expect(wrongColorCheckbox).toBeChecked();
-    expect(sameCharCheckbox).not.toBeChecked();
+    expect(sameCharRadio).not.toBeChecked();
 
     fireEvent.click(wrongSpeciesCheckbox);
     expect(wrongColorCheckbox).toBeChecked();
     expect(wrongSpeciesCheckbox).toBeChecked();
 
     // Clicking Same Character clears all failure reasons
-    fireEvent.click(sameCharCheckbox);
-    expect(sameCharCheckbox).toBeChecked();
+    fireEvent.click(sameCharRadio);
+    expect(sameCharRadio).toBeChecked();
+    expect(diffCharRadio).not.toBeChecked();
     expect(wrongColorCheckbox).not.toBeChecked();
     expect(wrongSpeciesCheckbox).not.toBeChecked();
 
-    // Clicking taxonomy clears Same Character
+    // Clicking Different Character allows selecting taxonomy again
+    fireEvent.click(diffCharRadio);
     fireEvent.click(wrongColorCheckbox);
+    expect(diffCharRadio).toBeChecked();
     expect(wrongColorCheckbox).toBeChecked();
-    expect(sameCharCheckbox).not.toBeChecked();
+    expect(sameCharRadio).not.toBeChecked();
   });
 
   it("toggles gating booleans (Broken Anatomy & Text Visible) independently", () => {
@@ -128,14 +138,14 @@ describe("AdjudicateClient Component Tests", () => {
 
     const brokenAnatomyCheckbox = screen.getByLabelText(/Broken Anatomy/i);
     const textVisibleCheckbox = screen.getByLabelText(/Text Visible/i);
-    const sameCharCheckbox = screen.getByTestId("same-character-checkbox");
+    const sameCharRadio = screen.getByRole("radio", { name: /Same Character/i });
 
-    fireEvent.click(sameCharCheckbox);
-    expect(sameCharCheckbox).toBeChecked();
+    fireEvent.click(sameCharRadio);
+    expect(sameCharRadio).toBeChecked();
 
     fireEvent.click(brokenAnatomyCheckbox);
     expect(brokenAnatomyCheckbox).toBeChecked();
-    expect(sameCharCheckbox).toBeChecked();
+    expect(sameCharRadio).toBeChecked();
 
     fireEvent.click(textVisibleCheckbox);
     expect(textVisibleCheckbox).toBeChecked();
@@ -150,20 +160,20 @@ describe("AdjudicateClient Component Tests", () => {
       />
     );
 
-    const sameCharCheckbox = screen.getByTestId("same-character-checkbox");
+    const sameCharRadio = screen.getByRole("radio", { name: /Same Character/i });
     const submitBtn = screen.getByRole("button", { name: /Submit Final Decision/i });
 
-    fireEvent.click(sameCharCheckbox);
+    fireEvent.click(sameCharRadio);
     fireEvent.click(submitBtn);
 
     await waitFor(() => {
-      expect(actions.submitAdjudication).toHaveBeenCalledWith(
-        "pair-conflict-123",
-        [],
-        true,
-        true, // anatomy_intact (!brokenAnatomy)
-        true  // text_free (!textVisible)
-      );
+      expect(actions.submitAdjudication).toHaveBeenCalledWith({
+        pairId: "pair-conflict-123",
+        failureReasons: [],
+        sameCharacter: true,
+        anatomyIntact: true, // (!brokenAnatomy)
+        textFree: true       // (!textVisible)
+      });
       expect(mockRefresh).toHaveBeenCalled();
     });
   });
@@ -181,7 +191,11 @@ describe("AdjudicateClient Component Tests", () => {
       />
     );
 
+    const sameCharRadio = screen.getByRole("radio", { name: /Same Character/i });
     const submitBtn = screen.getByRole("button", { name: /Submit Final Decision/i });
+    
+    // Make submission valid
+    fireEvent.click(sameCharRadio);
     fireEvent.click(submitBtn);
 
     await waitFor(() => {
@@ -198,20 +212,36 @@ describe("AdjudicateClient Component Tests", () => {
       />
     );
 
-    const sameCharCheckbox = screen.getByTestId("same-character-checkbox");
+    const sameCharRadio = screen.getByRole("radio", { name: /Same Character/i });
+    const diffCharRadio = screen.getByRole("radio", { name: /Different Character/i });
     const wrongColorCheckbox = screen.getByLabelText(/Wrong Color/i);
     const brokenAnatomyCheckbox = screen.getByLabelText(/Broken Anatomy/i);
     const textVisibleCheckbox = screen.getByLabelText(/Text Visible/i);
 
+    // Shortcut 'Shift+D' for Different Character
+    fireEvent.keyDown(window, { key: "D", shiftKey: true });
+    expect(diffCharRadio).toBeChecked();
+    expect(sameCharRadio).not.toBeChecked();
+
     // Shortcut '1' for Wrong Color
     fireEvent.keyDown(window, { key: "1" });
     expect(wrongColorCheckbox).toBeChecked();
-    expect(sameCharCheckbox).not.toBeChecked();
+    expect(diffCharRadio).toBeChecked();
+    expect(sameCharRadio).not.toBeChecked();
 
     // Shortcut '0' for Same Character
     fireEvent.keyDown(window, { key: "0" });
-    expect(sameCharCheckbox).toBeChecked();
+    expect(sameCharRadio).toBeChecked();
+    expect(diffCharRadio).not.toBeChecked();
     expect(wrongColorCheckbox).not.toBeChecked();
+
+    // Shortcut 'Shift+D' for Different Character
+    fireEvent.keyDown(window, { key: "D", shiftKey: true });
+    expect(diffCharRadio).toBeChecked();
+    expect(sameCharRadio).not.toBeChecked();
+
+    // Select a reason to make it valid for submission
+    fireEvent.keyDown(window, { key: "1" });
 
     // Shortcut 'a' for Broken Anatomy
     fireEvent.keyDown(window, { key: "a" });
@@ -224,13 +254,13 @@ describe("AdjudicateClient Component Tests", () => {
     // Shortcut 'Enter' for Submit
     fireEvent.keyDown(window, { key: "Enter" });
     await waitFor(() => {
-      expect(actions.submitAdjudication).toHaveBeenCalledWith(
-        "pair-conflict-123",
-        [],
-        true,
-        false, // anatomy_intact is false
-        false  // text_free is false
-      );
+      expect(actions.submitAdjudication).toHaveBeenCalledWith({
+        pairId: "pair-conflict-123",
+        failureReasons: ["wrong_colour"],
+        sameCharacter: false, // explicit same character is false
+        anatomyIntact: false, // anatomy_intact is false
+        textFree: false       // text_free is false
+      });
     });
   });
 });

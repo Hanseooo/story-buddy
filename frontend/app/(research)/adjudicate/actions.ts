@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 
+import { verifyResearchAuth, validateSubmissionPayload, type SubmissionPayload } from "../_shared/actions";
+
 export type BlindAnnotation = {
   same_character: boolean;
   failure_reasons: string[];
@@ -11,41 +13,16 @@ export type BlindAnnotation = {
   text_free: boolean;
 };
 
-export type SubmissionPayload = {
-  pairId: string;
-  failureReasons: string[];
-  sameCharacter: boolean;
-  anatomyIntact: boolean;
-  textFree: boolean;
-};
-
 export async function submitAdjudication(payload: SubmissionPayload) {
   const { pairId, failureReasons, sameCharacter, anatomyIntact, textFree } = payload;
+  
+  const { error: authError, user } = await verifyResearchAuth(true);
+  if (authError || !user) return { error: authError || "Unauthorized" };
+
+  const { error: validationError } = validateSubmissionPayload(payload);
+  if (validationError) return { error: validationError };
+
   const supabase = await createSupabaseServerClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-  if (authError || !user) return { error: "Unauthorized" };
-
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("role, is_adjudicator")
-    .eq("id", user.id)
-    .single();
-
-  if (profileError || profile?.role !== "researcher" || !profile?.is_adjudicator) {
-    return { error: "Unauthorized" };
-  }
-
-  // Server-Side Invariant Validation
-  if (sameCharacter && failureReasons.length > 0) {
-    return { error: "Invalid state: same_character is true but failure reasons provided" };
-  }
-  if (!sameCharacter && failureReasons.length === 0) {
-    return { error: "Invalid state: same_character is false but no failure reasons provided" };
-  }
-  if (typeof anatomyIntact !== "boolean" || typeof textFree !== "boolean") {
-    return { error: "Invalid state: anatomy_intact and text_free must be explicitly provided" };
-  }
 
   const adminClient = await createAdminClient();
 
@@ -119,20 +96,8 @@ export async function submitAdjudication(payload: SubmissionPayload) {
 }
 
 export async function getConflictedPair() {
-  const supabase = await createSupabaseServerClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-  if (authError || !user) return { error: "Unauthorized" };
-
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("role, is_adjudicator")
-    .eq("id", user.id)
-    .single();
-
-  if (profileError || profile?.role !== "researcher" || !profile?.is_adjudicator) {
-    return { error: "Unauthorized" };
-  }
+  const { error: authError, user } = await verifyResearchAuth(true);
+  if (authError || !user) return { error: authError || "Unauthorized" };
 
   const adminClient = await createAdminClient();
 

@@ -51,11 +51,7 @@ export const getTeacherContext = cache(async (): Promise<TeacherContext> => {
           : "query returned no row and no error")
     );
 
-  if (profile.role === "researcher") {
-    throw new Error("Unauthorized");
-  }
-
-  if (profile.role !== "teacher") throw new Error("Unauthorized");
+  if (profile.role !== "teacher") redirect(`/s/${profile.id}`);
 
   return { profile, classrooms: classroomsRes.data ?? [] };
 });

@@ -14,7 +14,11 @@ export default async function AdjudicatePage() {
     <div className="w-full max-w-6xl px-4 flex flex-col items-center pb-20">
       <h1 className="text-2xl font-bold mb-6 text-purple-900">Adjudicate Conflicts</h1>
 
-      {error || !pair || !annotationA || !annotationB ? (
+      {error ? (
+        <div className="p-8 bg-destructive/10 border border-destructive/20 rounded-lg shadow text-center w-full">
+          <p className="text-destructive font-medium">{error}</p>
+        </div>
+      ) : !pair || !annotationA || !annotationB ? (
         <div className="p-8 bg-white rounded-lg shadow text-center w-full">
           <p className="text-gray-500">No conflicted pairs pending adjudication found.</p>
         </div>

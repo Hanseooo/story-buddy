@@ -42,49 +42,58 @@ describe("Tier 1: AnnotationClient Component Tests", () => {
 
   it("handles form state transitions properly between Same Character and failure taxonomy", () => {
     render(<AnnotationClient pair={mockPair} />);
-    const sameCharCheckbox = screen.getByTestId("same-character-checkbox");
+    const sameCharRadio = screen.getByRole("radio", { name: /Same Character/i });
+    const diffCharRadio = screen.getByRole("radio", { name: /Different Character/i });
     const wrongColorCheckbox = screen.getByLabelText(/Wrong Color/i);
     const wrongSpeciesCheckbox = screen.getByLabelText(/Wrong Species/i);
 
     // Initial state: unselected
-    expect(sameCharCheckbox).not.toBeChecked();
+    expect(sameCharRadio).not.toBeChecked();
+    expect(diffCharRadio).not.toBeChecked();
     expect(wrongColorCheckbox).not.toBeChecked();
 
-    // Selecting a failure reason sets it and ensures same character is false
+    // Must select Different Character first to enable taxonomy
+    fireEvent.click(diffCharRadio);
+    expect(diffCharRadio).toBeChecked();
+    expect(sameCharRadio).not.toBeChecked();
+
+    // Selecting a failure reason sets it
     fireEvent.click(wrongColorCheckbox);
     expect(wrongColorCheckbox).toBeChecked();
-    expect(sameCharCheckbox).not.toBeChecked();
+    expect(sameCharRadio).not.toBeChecked();
 
     // Selecting another failure reason allows multi-select
     fireEvent.click(wrongSpeciesCheckbox);
     expect(wrongColorCheckbox).toBeChecked();
     expect(wrongSpeciesCheckbox).toBeChecked();
-    expect(sameCharCheckbox).not.toBeChecked();
     
     // Clicking Same Character clears all taxonomy failures
-    fireEvent.click(sameCharCheckbox);
-    expect(sameCharCheckbox).toBeChecked();
+    fireEvent.click(sameCharRadio);
+    expect(sameCharRadio).toBeChecked();
+    expect(diffCharRadio).not.toBeChecked();
     expect(wrongColorCheckbox).not.toBeChecked();
     expect(wrongSpeciesCheckbox).not.toBeChecked();
     
-    // Clicking taxonomy again clears Same Character
+    // Clicking Different Character allows selecting taxonomy again
+    fireEvent.click(diffCharRadio);
     fireEvent.click(wrongColorCheckbox);
+    expect(diffCharRadio).toBeChecked();
     expect(wrongColorCheckbox).toBeChecked();
-    expect(sameCharCheckbox).not.toBeChecked();
+    expect(sameCharRadio).not.toBeChecked();
   });
 
   it("toggles gating booleans (Broken Anatomy & Text Visible) independently", () => {
     render(<AnnotationClient pair={mockPair} />);
     const brokenAnatomyCheckbox = screen.getByLabelText(/Broken Anatomy/i);
     const textVisibleCheckbox = screen.getByLabelText(/Text Visible/i);
-    const sameCharCheckbox = screen.getByTestId("same-character-checkbox");
+    const sameCharRadio = screen.getByRole("radio", { name: /Same Character/i });
 
-    fireEvent.click(sameCharCheckbox);
-    expect(sameCharCheckbox).toBeChecked();
+    fireEvent.click(sameCharRadio);
+    expect(sameCharRadio).toBeChecked();
 
     fireEvent.click(brokenAnatomyCheckbox);
     expect(brokenAnatomyCheckbox).toBeChecked();
-    expect(sameCharCheckbox).toBeChecked(); // Gating checkbox does not clear Same Character
+    expect(sameCharRadio).toBeChecked(); // Gating checkbox does not clear Same Character
 
     fireEvent.click(textVisibleCheckbox);
     expect(textVisibleCheckbox).toBeChecked();
@@ -92,20 +101,20 @@ describe("Tier 1: AnnotationClient Component Tests", () => {
 
   it("submits valid annotation payload and refreshes router", async () => {
     render(<AnnotationClient pair={mockPair} />);
-    const sameCharCheckbox = screen.getByTestId("same-character-checkbox");
+    const sameCharRadio = screen.getByRole("radio", { name: /Same Character/i });
     const submitBtn = screen.getByRole("button", { name: /Submit/i });
 
-    fireEvent.click(sameCharCheckbox);
+    fireEvent.click(sameCharRadio);
     fireEvent.click(submitBtn);
 
     await waitFor(() => {
-      expect(actions.submitAnnotation).toHaveBeenCalledWith(
-        "pair-123",
-        [],
-        true,
-        true, // anatomy_intact (!brokenAnatomy)
-        true  // text_free (!textVisible)
-      );
+      expect(actions.submitAnnotation).toHaveBeenCalledWith({
+        pairId: "pair-123",
+        failureReasons: [],
+        sameCharacter: true,
+        anatomyIntact: true, // (!brokenAnatomy)
+        textFree: true       // (!textVisible)
+      });
       expect(mockRefresh).toHaveBeenCalled();
     });
   });
@@ -117,7 +126,11 @@ describe("Tier 1: AnnotationClient Component Tests", () => {
 
     render(<AnnotationClient pair={mockPair} />);
     const submitBtn = screen.getByRole("button", { name: /Submit/i });
-
+    const sameCharRadio = screen.getByRole("radio", { name: /Same Character/i });
+    
+    // The submit button won't do anything if we don't have a valid submission
+    // Let's ensure it's valid so it calls submitAnnotation
+    fireEvent.click(sameCharRadio);
     fireEvent.click(submitBtn);
 
     await waitFor(() => {
@@ -127,20 +140,35 @@ describe("Tier 1: AnnotationClient Component Tests", () => {
 
   it("supports keyboard shortcuts (0, 1-7, A, T, Enter)", async () => {
     render(<AnnotationClient pair={mockPair} />);
-    const sameCharCheckbox = screen.getByTestId("same-character-checkbox");
+    const sameCharRadio = screen.getByRole("radio", { name: /Same Character/i });
+    const diffCharRadio = screen.getByRole("radio", { name: /Different Character/i });
     const wrongColorCheckbox = screen.getByLabelText(/Wrong Color/i);
     const brokenAnatomyCheckbox = screen.getByLabelText(/Broken Anatomy/i);
     const textVisibleCheckbox = screen.getByLabelText(/Text Visible/i);
 
+    // Shortcut 'Shift+D' for Different Character
+    fireEvent.keyDown(window, { key: "D", shiftKey: true });
+    expect(diffCharRadio).toBeChecked();
+    expect(sameCharRadio).not.toBeChecked();
+
     // Shortcut '1' for Wrong Color
     fireEvent.keyDown(window, { key: "1" });
     expect(wrongColorCheckbox).toBeChecked();
-    expect(sameCharCheckbox).not.toBeChecked();
+    expect(diffCharRadio).toBeChecked();
+    expect(sameCharRadio).not.toBeChecked();
 
     // Shortcut '0' for Same Character
     fireEvent.keyDown(window, { key: "0" });
-    expect(sameCharCheckbox).toBeChecked();
+    expect(sameCharRadio).toBeChecked();
+    expect(diffCharRadio).not.toBeChecked();
     expect(wrongColorCheckbox).not.toBeChecked();
+
+    // Shortcut 'Shift+D' again to prepare for submit
+    fireEvent.keyDown(window, { key: "D", shiftKey: true });
+    expect(diffCharRadio).toBeChecked();
+
+    // Select a reason to make it valid for submission
+    fireEvent.keyDown(window, { key: "1" });
 
     // Shortcut 'a' for Broken Anatomy
     fireEvent.keyDown(window, { key: "a" });
@@ -153,13 +181,13 @@ describe("Tier 1: AnnotationClient Component Tests", () => {
     // Shortcut 'Enter' for Submit
     fireEvent.keyDown(window, { key: "Enter" });
     await waitFor(() => {
-      expect(actions.submitAnnotation).toHaveBeenCalledWith(
-        "pair-123",
-        [],
-        true,
-        false, // anatomy_intact is false because brokenAnatomy is true
-        false  // text_free is false because textVisible is true
-      );
+      expect(actions.submitAnnotation).toHaveBeenCalledWith({
+        pairId: "pair-123",
+        failureReasons: ["wrong_colour"],
+        sameCharacter: false, // Explicit same character is false when different character is selected
+        anatomyIntact: false, // anatomy_intact is false because brokenAnatomy is true
+        textFree: false       // text_free is false because textVisible is true
+      });
     });
   });
 });
