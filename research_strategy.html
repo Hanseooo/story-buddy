@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>StoryBuddy: Dataset Strategy & Fine-Tuning Blueprint</title>
+    <title>StoryBuddy: Research Operations Blueprint</title>
     <style>
       :root {
         --primary: #2563eb;
@@ -148,33 +148,46 @@
     </style>
   </head>
   <body>
-    <h1>StoryBuddy: Research & Fine-Tuning Blueprint</h1>
+    <h1>StoryBuddy: Research Operations Blueprint</h1>
     <p>
-      This document synthesizes the frozen capstone research context, dataset
-      generation strategy, budget calculations, and model infrastructure for
-      Objective 4 (Fine-Tuning the Consistency Judge).
+      This single-file runbook covers Objective 4: manufacture a reproducible
+      character-consistency dataset, collect blinded human labels, fine-tune
+      the judge, and evaluate it without leaking identities or child data.
+      It follows the accepted ADRs and preregistered protocol; it is not a
+      prediction of the result.
     </p>
 
     <div class="card">
-      <h2>1. Research Objective & Experimental Claims</h2>
+      <h2>1. Objective & frozen boundaries</h2>
       <p>
-        The goal is to replace the expensive prompted
-        <code>gemma-3-27b-it</code> judge with a lightweight, fine-tuned
-        Vision-Language Model (VLM) that is self-hostable and executes with
-        near-zero marginal cost.
-      </p>
-      <h3>Experimental Claims</h3>
-      <p>
-        We evaluate three models on the consistency task: the frozen Base Model, the Fine-tuned Model, and the Prompted Gemma Baseline. Our research claims are:
+        The task is binary character consistency: compare a canonical
+        reference with a scene and classify whether they show the same
+        character. The research model is
+        <code>Qwen2.5-VL-7B-Instruct</code> with QLoRA; the prompted
+        <code>gemma-3-27b-it</code> judge remains the incumbent baseline.
       </p>
       <ul>
-        <li>The Fine-tuned Model will significantly outperform the Base Model in macro-F1 and balanced accuracy.</li>
-        <li>The Fine-tuned Model will be competitive with or superior to the Prompted Gemma Baseline, while operating at a fraction of the inference cost and latency.</li>
+        <li>The fine-tuned judge is an Objective 4 research outcome, never a safety moderator.</li>
+        <li>Annotators never see model predictions; Objective 3 book quality is judged by experts.</li>
+        <li>Whether the model replaces the incumbent is decided only by the preregistered deployment gate.</li>
       </ul>
     </div>
 
     <div class="card">
-      <h2>2. Model & Software Architecture</h2>
+      <h2>2. End-to-end runbook and stop gates</h2>
+      <table>
+        <tr><th>Phase</th><th>Action</th><th>Stop gate</th></tr>
+        <tr><td>Consent and intake</td><td>Collect 15 original Grade 5–6 stories; manually redact PII and obtain a second spot-check. Select 10 primary and 5 backup stories.</td><td>No signed consent allowing AI build/train/evaluate, missing redaction review, or withdrawal ambiguity → stop.</td></tr>
+        <tr><td>Pilot cleanup</td><td>Optionally export aggregate diagnostics from the 17-pair visual pilot, then delete pilot annotations, pair rows, and private assets together.</td><td>Orphaned labels/objects or non-zero post-cleanup counts → stop.</td></tr>
+        <tr><td>Generation smoke</td><td>Run the exact production graph on a small explicit fal budget. Capture model ID, attempts, latency, bytes, MIME, paths, and failures.</td><td>Any contract, moderation, storage, or spend-cap failure → stop before scaling.</td></tr>
+        <tr><td>Corpus generation</td><td>Run <code>backend/finetune/build_corpus.py</code> in resumable batches; reuse canonical references and retain required scene attempts.</td><td>Hard cap, incomplete story, missing image, or checkpoint mismatch → halt and never mark incomplete work done.</td></tr>
+        <tr><td>Annotation lock</td><td>Two independent researchers label each non-pilot pair; a third adjudicates disagreements.</td><td>Unresolved pair, duplicate annotator, taxonomy drift, or failed blinding/RLS → stop.</td></tr>
+        <tr><td>Manifest and evaluation</td><td>Build/validate the manifest, add train-only constructed negatives, train QLoRA, and evaluate on the frozen character-disjoint test set.</td><td>Character leakage, synthetic test data, missing image, metadata leakage, or failed preregistered gate → do not ship.</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>3. Model & Software Architecture</h2>
       <ul>
         <li>
           <strong>Base Model:</strong>
@@ -192,14 +205,15 @@
           container, maintaining compatibility with the OpenAI API protocol.
         </li>
       </ul>
-      <h3>LLaMA-Factory vs. Unsloth AI</h3>
+      <h3>Training toolchain</h3>
       <p>
-        The architecture specification strictly mandates <strong>LLaMA-Factory</strong>. While Unsloth AI offers superior training efficiency (often ~2&times; speedup and 60-70% less VRAM usage), the capstone's constraints heavily favor LLaMA-Factory for the following reasons:
+        The architecture specification mandates <strong>LLaMA-Factory</strong>.
+        Freeze its configuration, environment, model revision, manifest hash,
+        and random seeds.
       </p>
       <ul>
-        <li><strong>Dataset Scale:</strong> The training run is small (~950–1,050 labeled pairs). A 2&times; speedup saves only ~$5-10 and an hour of time.</li>
-        <li><strong>Reproducibility (CC-7):</strong> LLaMA-Factory provides a declarative YAML configuration (<code>train_qlora.yaml</code>) and uses standard ShareGPT formats. By freezing the training environment (LLaMA-Factory commit, <code>uv.lock</code>, PyTorch version, model revision hash, dataset manifest hash, random seeds), the experiment is reproducibly specified.</li>
-        <li><strong>Multimodal Serialization:</strong> The VLM requires strict serialization. Changing the framework risks subtle alterations to the multimodal chat template.</li>
+        <li><strong>Reproducibility:</strong> <code>train_qlora.yaml</code> and the generated manifest are the source artifacts.</li>
+        <li><strong>Serialization:</strong> Preserve the multimodal chat template and image ordering exactly.</li>
       </ul>
     </div>
 
@@ -215,17 +229,16 @@
       <h3>Corpus Composition & Disjoint Splitting</h3>
       <p>Splits are defined by <code>char_id</code>, never by pair. Every image derived from a given canonical reference belongs to exactly one split.</p>
       <ul>
-        <li><strong>Train (~40-45 Characters, Synthetic):</strong> ~378 natural pairs + ~300-400 constructed negatives = ~678-778 pairs.</li>
-        <li><strong>Validation (~8-10 Characters, Synthetic):</strong> ~72 natural pairs.</li>
-        <li><strong>Test (~15-20 Characters, Real Child Data):</strong> ~192 natural pairs.</li>
+        <li><strong>Train and validation:</strong> synthetic stories, used to develop the judge and create train-only constructed negatives.</li>
+        <li><strong>Held-out test:</strong> donated child stories only; the achieved qualifying character count determines power.</li>
       </ul>
       <h3>Natural vs. Constructed Negative Rationale</h3>
       <ul>
         <li>
-          <strong>Hierarchy of Evidence:</strong> Pipeline Negatives (Natural Drift) represent real-world deployment failures (expected ~15-25%). These are the most valuable evidence and are retained across all splits.
+          <strong>Natural pairs:</strong> human labels are required, including positives; reference reuse is not a free positive label.
         </li>
         <li>
-          <strong>Hard-Negative Matching Rules:</strong> Constructed Negatives are artificially paired to balance the minority class at zero marginal cost. They require a mandatory species + style match, then maximize similarity over colour/body/silhouette/clothing/face, ensuring they act as true hard negatives rather than trivial rejections. These are injected into the Training split only.
+          <strong>Constructed negatives:</strong> zero-image-cost pairings, train only, matched on species/style and made hard by visual similarity.
         </li>
       </ul>
     </div>
@@ -251,11 +264,14 @@
         <li><strong>Adjudication is Authoritative:</strong> Disagreements are surfaced to a third researcher for final adjudication. The adjudicator's decision acts as the absolute ground truth.</li>
         <li><strong>Data Preservation:</strong> The original A/B annotations are preserved alongside the final label to compute agreement statistics on pre-adjudicated data, quantifying task ambiguity.</li>
       </ul>
-      <h3>Pilot Validation Gate</h3>
+      <h3>Pilot disposition and data lock</h3>
       <p>
-        Before full-scale labeling, a pilot phase of ~50-100 pairs must be completed. 
-        <br/><strong>Why it exists:</strong> To identify taxonomy confusion, UI friction, or ambiguous edge cases early. 
-        <br/><strong>What it must demonstrate:</strong> High inter-rater reliability on the pilot set before proceeding to the full dataset.
+        The completed 17-pair pilot is an instrument and UX diagnostic, not a
+        powered reliability claim and not training data. Export its agreement,
+        adjudication, confusion, and latency diagnostics before any cleanup.
+        Inventory both rows and private Storage objects, then delete them as
+        one coordinated operation. Once full labeling starts, the
+        taxonomy, schema, and UI are frozen.
       </p>
     </div>
 
@@ -315,8 +331,9 @@
       <h2>9. Budget & Resource Constraints</h2>
       <h3>Cost and Storage Assumptions</h3>
       <ul>
-        <li><strong>Current Budget ($20 Limit):</strong> Fal.ai pricing ($0.03 per MP) allows ~847 images at 1024x768. Generating ~707 images fits within budget and provides sufficient headroom for the labeled dataset.</li>
-        <li><strong>Storage:</strong> Images are stored in the Supabase Free tier bucket. If capacity limits are reached, an R2 failover will be provisioned.</li>
+        <li><strong>Fal budget:</strong> target spend is <strong>$25</strong>; the absolute run cap is <strong>$30</strong>, including retries. Every invocation uses an explicit image budget and resumable state.</li>
+        <li><strong>Storage:</strong> Supabase remains the Storage/Auth/RLS/signed-URL system under ADR-027. Any provider change requires a new accepted ADR before implementation.</li>
+        <li><strong>Encoding:</strong> canonical references remain PNG; scene assets are intended to be WebP at approximately quality 82. Verify fal support first, otherwise encode on the worker with the approved Pillow path. PDFs are generated on demand.</li>
       </ul>
     </div>
 

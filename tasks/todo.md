@@ -1,3 +1,36 @@
+# Current Task: Research corpus operations design
+
+- [x] Explore corpus, annotation, telemetry, ethics, storage ADR, and training context.
+- [x] Clarify consent status, donated-test role, budget, storage posture, and pilot disposition.
+- [x] Compare corpus-generation approaches and obtain approval for the staged diversity-first design.
+- [x] Present and obtain approval for architecture, failure/cost controls, phases, and artifacts.
+- [x] Write the canonical corpus-operations spec and consent/assent draft.
+- [x] Update and verify the self-contained research-strategy HTML artifact.
+- [x] Self-review all written artifacts for drift, ambiguity, placeholders, and broken links.
+- [x] Commit the approved design documentation; ask the owner to review it before implementation planning.
+
+## Success criteria
+
+The written design provides an end-to-end, fail-closed lineage from consent through one-time evaluation;
+preserves ADR-027's Supabase/PNG-reference/WebP-scene decision; caps Fal spend at USD 30; prevents pilot,
+split, identity and byte-provenance leakage; and clearly separates ethics drafts from approved materials.
+
+## Review outcome
+
+Added the canonical `research-corpus-operations` spec, an explicitly unapproved guardian-consent/child-assent
+draft, and a pointer from the existing ethics document. Updated the root HTML artifact to remove stale R2,
+USD-20, 50–100-pair pilot and predictive-superiority claims. Independent review aligned pilot deletion with
+the canonical spec and confirmed the missing `StoryMemory` materialization and queue bridge as implementation
+gaps rather than claiming the existing scripts are end-to-end.
+
+Verification: `git diff --check` passed; stale-claim grep returned no matches; the HTML parser confirmed 14
+cards, balanced tags and the current title. The in-app browser render check was unavailable because its bridge
+could not start, so visual rendering remains unverified. No code tests were run because this change is
+documentation-only. Consent/assent administrative blanks are deliberate and the draft is marked do-not-use
+until adviser, ethics and participating-school approval.
+
+---
+
 # Current Task: Annotation implementation review verification
 
 - [x] Trace each review finding through specs, migrations, server actions, exporter, and tests.
