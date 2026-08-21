@@ -50,6 +50,15 @@ export default function GlobalError({
             >
               Return to StoryBuddy Home
             </Link>
+
+            <form action="/auth/signout" method="post">
+              <button
+                type="submit"
+                className="w-full min-h-[44px] px-4 py-2 rounded-2xl border border-[#3155D9]/20 text-sm font-bold text-[#3155D9] hover:bg-[#3155D9]/5 transition-colors"
+              >
+                Log out
+              </button>
+            </form>
           </div>
         </div>
       </body>

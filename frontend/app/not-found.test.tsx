@@ -28,6 +28,16 @@ describe("NotFound Page (404)", () => {
     expect(createLink).toHaveAttribute("href", "/signup");
   });
 
+  it("offers a logout escape hatch for stale sessions", () => {
+    render(<NotFound />);
+
+    const logoutButton = screen.getByRole("button", { name: /log out/i });
+    const logoutForm = logoutButton.closest("form");
+
+    expect(logoutForm).toHaveAttribute("action", "/auth/signout");
+    expect(logoutForm).toHaveAttribute("method", "post");
+  });
+
   it("displays the 404 unwritten page visual badge and storybook frame", () => {
     render(<NotFound />);
 
