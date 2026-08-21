@@ -53,3 +53,12 @@
 - **Root cause**: I treated the named preset and the product's three-choice slot as the same decision.
 - **Rule**: When a selectable option is removed for quality, ask whether the catalog should shrink or
   the slot should enter quarantine pending a replacement; do not silently make either permanent.
+
+### 2026-08-21 Authenticated role defaults need an end-to-end trace
+- **What happened**: Error-page logout recovery was added, but the researcher could still land on the
+  student-only surface because the auth flow had separate role-blind fallbacks: an incompatible
+  `next`, a silent profile-query failure, and the teacher resolver's non-teacher redirect.
+- **Root cause**: The earlier verification covered clean unauthenticated routing and isolated role
+  tests, but not an already-authenticated researcher traversing `/login` → `/classroom` → `/s/<id>`.
+- **Rule**: For auth bugs, trace both the fresh-login and stale-session paths through middleware,
+  server layouts, and role resolution; never use a student route as the unknown-profile fallback.

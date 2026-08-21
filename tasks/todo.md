@@ -507,3 +507,68 @@ Implemented ADR-042 style policy:
   - Frontend: `pnpm lint` clean; `pnpm test` — 34 test files, 279 passed.
   - `git diff --check` clean.
 - Cut-paper collage remains an unpromoted offline candidate fragment for future paid validation per ADR-042; no runtime or schema promotion was performed.
+
+---
+
+# Current Task: Error-page auth recovery and route verification
+
+- [x] Verify the reported route unauthenticated without changing route guards; authenticated reproduction remains dependent on a sanitized signed-in browser state.
+- [x] Add failing tests for logout recovery, signout cookie clearing, and role/auth routing gaps.
+- [x] Implement the smallest error-page recovery change using the existing `/auth/signout` route.
+- [x] Update the owning auth UX spec without changing the auth model or role policy.
+- [x] Run focused tests, lint, the full frontend suite, the build, and diff checks.
+
+## Success criteria
+
+The reported route remains governed by the existing middleware contract, error and 404 surfaces offer a safe logout escape hatch, auth/role behavior is covered by deterministic tests, and all required frontend verification is green with no unrelated dirty-worktree changes overwritten.
+
+## Outcome — 2026-08-21
+
+Added native `POST /auth/signout` recovery forms to the root 404, root/global error, student,
+classroom, gallery, research metrics, annotate, and adjudicate fallbacks. Added deterministic coverage for the recovery forms,
+raw-error non-disclosure, signout redirects and `sb-*` cookie sweeping, safe login redirects, and
+teacher/student/researcher role destinations. The reported `/s/c4f346f6-829e-41d3-b642-b0f4ef06bad0`
+route still returns `307 → /join?next=...` for a clean unauthenticated request; `/does-not-exist`
+returns the StoryBuddy 404. No authenticated reproduction was available in this session.
+
+Verification: focused tests 66 passed, then the final full frontend suite 366 passed across 42 files;
+production build succeeded. Targeted changed-file `git diff --check` is clean. Whole-worktree diff
+check still reports a pre-existing trailing-whitespace line in
+`frontend/app/(research)/adjudicate/actions.ts:145`, which was not changed.
+
+---
+
+# Current Task: Researcher redirect trap
+
+- [x] Reproduce the clean unauthenticated request and trace authenticated role-routing paths without reading secrets.
+- [x] Delegate independent read-only traces for login redirects, student-route rendering, and Supabase signout.
+- [x] Add failing tests for incompatible `next` targets, profile lookup failure, researcher role routing, and logout recovery.
+- [x] Implement the smallest role-aware fixes at login and the existing teacher/student route boundaries.
+- [x] Update the owning auth UX spec with role-compatible `next` behavior and failure handling.
+- [x] Run focused tests, lint, the full frontend suite, the build, and live smoke checks.
+
+## Success criteria
+
+A researcher cannot be pushed into `/s/<id>` by a stale/incompatible login target or a silent profile
+lookup fallback; authenticated teacher-surface resolution routes researchers to `/annotate` or
+`/adjudicate`; any student-route fallback has a correct research link and visible logout; and all
+required frontend checks are green without overwriting unrelated worktree changes.
+
+## Outcome — 2026-08-21
+
+Root causes were confirmed in separate paths: login honored role-incompatible internal `next`
+targets; a failed profile lookup silently fell through to `/s/<userId>`; and the teacher resolver
+sent every non-teacher to that student tree. The fixes keep middleware role-blind, constrain `next`
+by the resolved role, fail visibly on profile lookup failure, route researchers through the existing
+server profile resolver, and add research-specific recovery plus logout to the student fallback.
+
+TDD evidence: the new login/layout/teacher tests first failed for the expected redirects and missing
+logout, then passed after the fixes. Final verification: focused auth tests 43 passed; `pnpm lint`
+passed; `pnpm test` passed with 371 tests across 42 files; `pnpm build` completed successfully.
+HTTP smoke returned `307 /join?next=...` for the clean unauthenticated reported URL, `404` with
+`Page 404` for an unknown route, and `303 /login` for `POST /auth/signout`.
+
+The signed-in researcher URL could not be replayed because no sanitized authenticated browser state
+was available; the current remote Supabase migration state is also unverified. Whole-worktree
+`git diff --check` still reports the pre-existing trailing-whitespace line at
+`frontend/app/(research)/adjudicate/actions.ts:145`, which was not changed.
