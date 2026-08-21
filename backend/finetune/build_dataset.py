@@ -107,7 +107,20 @@ def fetch_annotations() -> list[dict]:
     their tables exactly this way. Upgrade path: if a second consumer of `annotations` appears,
     lift this into `app/db.py` beside `get_supabase_client`.
     """
-    return get_supabase_client().table(ANNOTATIONS_TABLE).select("*").execute().data or []
+    page_size = 1000
+    rows = []
+    query = (
+        get_supabase_client()
+        .table(ANNOTATIONS_TABLE)
+        .select("*")
+        .order("pair_id")
+        .order("annotator_id")
+    )
+    for start in itertools.count(0, page_size):
+        page = query.range(start, start + page_size - 1).execute().data or []
+        rows.extend(page)
+        if len(page) < page_size:
+            return rows
 
 
 def fetch_adjudicator_ids() -> set[str]:
@@ -148,7 +161,7 @@ def resolve_annotations(
         if len(ordinary) > 2:
             raise ManifestError(f"Pair {pair_id} has >2 ordinary annotations.")
         if len(ordinary) < 2:
-            continue
+            raise ManifestError(f"Pair {pair_id} has <2 ordinary annotations.")
 
         if ordinary[0]["annotator_id"] == ordinary[1]["annotator_id"]:
             raise ManifestError(f"Pair {pair_id} has duplicate annotator_ids for ordinary annotations.")
@@ -164,7 +177,7 @@ def resolve_annotations(
         signatures = {get_sig(r) for r in ordinary}
         if len(signatures) == 1:
             if len(adjs) > 0:
-                log.warning(f"Pair {pair_id}: ordinary annotators agreed, but adjudicator row exists.")
+                raise ManifestError(f"Pair {pair_id}: ordinary annotators agreed, but adjudicator row exists.")
             winner = bool(ordinary[0].get("same_character"))
             final_rows = ordinary
             adjudicated = False
@@ -242,7 +255,7 @@ def build_records(
 
         agreed = consensus.get(pair.pair_id)
         if agreed is None:
-            continue
+            raise ManifestError(f"Pair {pair.pair_id} has <2 annotations and is not a pilot pair.")
 
         records.append(ManifestRecord(
             pair_id=pair.pair_id,

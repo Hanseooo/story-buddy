@@ -14,6 +14,18 @@ export type BlindAnnotation = {
   text_free: boolean;
 };
 
+async function findAdjudicatorIds(
+  adminClient: Awaited<ReturnType<typeof createAdminClient>>,
+  userIds: string[],
+) {
+  const { data, error } = await adminClient
+    .from("profiles")
+    .select("id")
+    .in("id", userIds)
+    .eq("is_adjudicator", true);
+  return { ids: new Set((data || []).map(profile => profile.id)), error };
+}
+
 export async function submitAdjudication(payload: SubmissionPayload) {
   const { pairId, failureReasons, sameCharacter, anatomyIntact, textFree } = payload;
   
@@ -48,16 +60,32 @@ export async function submitAdjudication(payload: SubmissionPayload) {
   }
 
   if (existingAnnotations.length === 3) {
-    if (existingAnnotations.some(a => a.annotator_id === user.id)) {
-      // Idempotency: Already adjudicated by this user, just retry status update
-      await adminClient.from("research_pairs").update({ status: "adjudicated" }).eq("id", pairId);
-      return { success: true };
+    if (!existingAnnotations.some(a => a.annotator_id === user.id)) {
+      return { error: "Pair already adjudicated by another adjudicator" };
     }
-    return { error: "Pair already adjudicated by another adjudicator" };
   }
 
-  if (existingAnnotations.some(a => a.annotator_id === user.id)) {
+  const priorAnnotations = existingAnnotations.filter(annotation => annotation.annotator_id !== user.id);
+  if (priorAnnotations.length !== 2) {
     return { error: "Adjudicator cannot resolve their own annotations" };
+  }
+
+  const { ids: priorAdjudicators, error: profileError } = await findAdjudicatorIds(
+    adminClient,
+    priorAnnotations.map(annotation => annotation.annotator_id),
+  );
+  if (profileError) return { error: "Failed to verify prior annotators" };
+  if (priorAdjudicators.size > 0) {
+    return { error: "Invalid pair state: prior annotations must be from ordinary annotators" };
+  }
+
+  if (existingAnnotations.length === 3) {
+    const { error: updateError } = await adminClient
+      .from("research_pairs")
+      .update({ status: "adjudicated" })
+      .eq("id", pairId);
+    if (updateError) return { error: "Saved, but failed to update pair status" };
+    return { success: true };
   }
 
   // Insert the authoritative annotation (first-write-wins idempotency)
@@ -102,12 +130,21 @@ export async function getConflictedPair() {
 
   const adminClient = await createAdminClient();
 
-  const { data: userAnnotations } = await adminClient
+  const { data: userAnnotations, error: annotationsError } = await adminClient
     .from("annotations")
     .select("pair_id")
     .eq("annotator_id", user.id);
 
+  if (annotationsError) return { error: "Failed to load adjudication queue" };
+
   const annotatedPairIds = new Set((userAnnotations || []).map(a => a.pair_id));
+
+  const { data: adjudicatorProfiles, error: profilesError } = await adminClient
+    .from("profiles")
+    .select("id")
+    .eq("is_adjudicator", true);
+  if (profilesError) return { error: "Failed to load adjudication queue" };
+  const adjudicatorIds = new Set((adjudicatorProfiles || []).map(profile => profile.id));
 
   const PAGE_SIZE = 50;
   let page = 0;
@@ -126,7 +163,8 @@ export async function getConflictedPair() {
       .order("created_at", { ascending: true })
       .range(from, to);
 
-    if (pairsError || !pairs || pairs.length === 0) {
+    if (pairsError) return { error: "Failed to load adjudication queue" };
+    if (!pairs || pairs.length === 0) {
       break;
     }
 
@@ -135,12 +173,18 @@ export async function getConflictedPair() {
         continue;
       }
 
-      const { data: annotations } = await adminClient
+      const { data: annotations, error: annotationsError } = await adminClient
         .from("annotations")
         .select("annotator_id, same_character, failure_reasons, anatomy_intact, text_free")
         .eq("pair_id", pair.id);
 
-      if (annotations && annotations.length === 2 && !annotations.some(a => a.annotator_id === user.id)) {
+      if (annotationsError) return { error: "Failed to load adjudication queue" };
+
+      if (
+        annotations &&
+        annotations.length === 2 &&
+        !annotations.some(a => a.annotator_id === user.id || adjudicatorIds.has(a.annotator_id))
+      ) {
         const [a1, a2] = annotations;
         
         if (isConsensus(a1, a2)) continue; // Not truly conflicted
@@ -178,19 +222,23 @@ export async function getConflictedPair() {
     return { pair: null };
   }
 
-  const { data: canonicalUrlData } = await adminClient.storage
+  const { data: canonicalUrlData, error: canonicalUrlError } = await adminClient.storage
     .from("private_assets")
     .createSignedUrl(selectedPair.canonical_storage_path, 3600);
     
-  const { data: sceneUrlData } = await adminClient.storage
+  const { data: sceneUrlData, error: sceneUrlError } = await adminClient.storage
     .from("private_assets")
     .createSignedUrl(selectedPair.scene_storage_path, 3600);
+
+  if (canonicalUrlError || sceneUrlError || !canonicalUrlData?.signedUrl || !sceneUrlData?.signedUrl) {
+    return { error: "Failed to load adjudication images" };
+  }
 
   return {
     pair: {
       id: selectedPair.id,
-      canonical_signed_url: canonicalUrlData?.signedUrl || "",
-      scene_signed_url: sceneUrlData?.signedUrl || ""
+      canonical_signed_url: canonicalUrlData.signedUrl,
+      scene_signed_url: sceneUrlData.signedUrl
     },
     annotationA,
     annotationB

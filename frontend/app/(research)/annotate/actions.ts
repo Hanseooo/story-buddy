@@ -59,13 +59,19 @@ export async function submitAnnotation(payload: SubmissionPayload) {
   }
 
   if (count === 1) {
-    await adminClient.from("research_pairs").update({ status: "partially_annotated" }).eq("id", pairId);
+    const { error } = await adminClient
+      .from("research_pairs")
+      .update({ status: "partially_annotated" })
+      .eq("id", pairId);
+    if (error) return { error: "Saved, but failed to update queue status" };
   } else if (count === 2) {
     // Fetch both to see if they agree
-    const { data: annotations } = await adminClient
+    const { data: annotations, error: annotationsError } = await adminClient
       .from("annotations")
       .select("same_character, failure_reasons, anatomy_intact, text_free")
       .eq("pair_id", pairId);
+
+    if (annotationsError) return { error: "Saved, but failed to update queue status" };
       
     if (annotations && annotations.length === 2) {
       const [a1, a2] = annotations;
@@ -73,7 +79,11 @@ export async function submitAnnotation(payload: SubmissionPayload) {
       const agree = isConsensus(a1, a2);
                     
       const newStatus = agree ? "complete" : "conflicted";
-      await adminClient.from("research_pairs").update({ status: newStatus }).eq("id", pairId);
+      const { error } = await adminClient
+        .from("research_pairs")
+        .update({ status: newStatus })
+        .eq("id", pairId);
+      if (error) return { error: "Saved, but failed to update queue status" };
     }
   }
 
@@ -92,16 +102,20 @@ export async function getNextPair() {
   // Use service role to bypass RLS and fetch a pair that this user hasn't annotated yet
   const adminClient = await createAdminClient();
 
-  const { data: userAnnotations } = await adminClient
+  const { data: userAnnotations, error: annotationsError } = await adminClient
     .from("annotations")
     .select("pair_id")
     .eq("annotator_id", user.id);
+
+  if (annotationsError) {
+    return { error: "Failed to load annotation queue" };
+  }
 
   const annotatedPairIds = new Set((userAnnotations || []).map(a => a.pair_id));
 
   const PAGE_SIZE = 50;
   let page = 0;
-  let unannotatedPairs: Array<{ id: string; canonical_storage_path: string; scene_storage_path: string }> = [];
+  const unannotatedPairs: Array<{ id: string; canonical_storage_path: string; scene_storage_path: string }> = [];
 
   while (true) {
     const from = page * PAGE_SIZE;
@@ -114,15 +128,16 @@ export async function getNextPair() {
       .order("created_at", { ascending: true })
       .range(from, to);
 
-    if (pairsError || !pairs || pairs.length === 0) {
+    if (pairsError) {
+      return { error: "Failed to load annotation queue" };
+    }
+
+    if (!pairs || pairs.length === 0) {
       break;
     }
 
     const available = pairs.filter(p => !annotatedPairIds.has(p.id));
-    if (available.length > 0) {
-      unannotatedPairs = available;
-      break;
-    }
+    unannotatedPairs.push(...available);
 
     if (pairs.length < PAGE_SIZE) {
       break;
@@ -152,19 +167,23 @@ export async function getNextPair() {
   }
 
   // Mint signed URLs
-  const { data: canonicalUrlData } = await adminClient.storage
+  const { data: canonicalUrlData, error: canonicalUrlError } = await adminClient.storage
     .from("private_assets")
     .createSignedUrl(nextPair.canonical_storage_path, 3600);
     
-  const { data: sceneUrlData } = await adminClient.storage
+  const { data: sceneUrlData, error: sceneUrlError } = await adminClient.storage
     .from("private_assets")
     .createSignedUrl(nextPair.scene_storage_path, 3600);
+
+  if (canonicalUrlError || sceneUrlError || !canonicalUrlData?.signedUrl || !sceneUrlData?.signedUrl) {
+    return { error: "Failed to load annotation images" };
+  }
 
   return {
     pair: {
       id: nextPair.id,
-      canonical_signed_url: canonicalUrlData?.signedUrl || "",
-      scene_signed_url: sceneUrlData?.signedUrl || ""
+      canonical_signed_url: canonicalUrlData.signedUrl,
+      scene_signed_url: sceneUrlData.signedUrl
     }
   };
 }

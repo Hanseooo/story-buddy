@@ -71,6 +71,22 @@ def test_pairs_are_reference_first_one_per_attempt_and_skip_characters_without_a
 
 # --- annotation consensus ------------------------------------------------------------------
 
+def test_fetch_annotations_paginates_past_supabase_default_row_limit():
+    client = MagicMock()
+    query = client.table.return_value.select.return_value
+    query.order.return_value = query
+    first_page = MagicMock()
+    first_page.execute.return_value.data = [{"pair_id": f"p{i}"} for i in range(1000)]
+    second_page = MagicMock()
+    second_page.execute.return_value.data = [{"pair_id": "p1000"}]
+    query.range.side_effect = [first_page, second_page]
+
+    with patch.object(bd, "get_supabase_client", return_value=client):
+        result = bd.fetch_annotations()
+
+    assert len(result) == 1001
+    assert query.range.call_args_list == [((0, 999),), ((1000, 1999),)]
+
 def rows(pair_id, *specs):
     out = []
     for i, spec in enumerate(specs):
@@ -129,12 +145,12 @@ def test_resolve_annotations_strict_rules():
             set(), set(),
         )
 
-    # <2 ordinary annotations -> skipped (not included in resolved)
-    res_skip = bd.resolve_annotations(
-        rows("p1", {"same_character": True}),
-        set(), set(),
-    )
-    assert "p1" not in res_skip
+    # <2 ordinary annotations -> hard fail
+    with pytest.raises(ManifestError, match="<2 ordinary annotations"):
+        bd.resolve_annotations(
+            rows("p1", {"same_character": True}),
+            set(), set(),
+        )
 
     # duplicate annotator_ids -> hard fail
     with pytest.raises(ManifestError, match="duplicate annotator_ids"):
@@ -171,16 +187,16 @@ def test_resolve_annotations_strict_rules():
             {"adj1", "adj2"}, set(),
         )
 
-    # 2 agreeing ordinary rows + adjudicator present -> logs warning and succeeds
-    res_agree = bd.resolve_annotations(
-        rows("p1",
-            {"same_character": True, "annotator_id": "a1"},
-            {"same_character": True, "annotator_id": "a2"},
-            {"same_character": False, "annotator_id": "adj1"},
-        ),
-        {"adj1"}, set(),
-    )
-    assert res_agree["p1"].same_character is True
+    # 2 agreeing ordinary rows + adjudicator present -> hard fail
+    with pytest.raises(ManifestError, match="ordinary annotators agreed, but adjudicator row exists"):
+        bd.resolve_annotations(
+            rows("p1",
+                {"same_character": True, "annotator_id": "a1"},
+                {"same_character": True, "annotator_id": "a2"},
+                {"same_character": False, "annotator_id": "adj1"},
+            ),
+            {"adj1"}, set(),
+        )
 
     # Pilot pairs are silently excluded from resolution
     assert bd.resolve_annotations(
@@ -206,9 +222,9 @@ def test_label_is_the_inverse_of_same_character_and_is_converted_only_here(same_
     assert records[0].label is (not same_character)
 
 
-def test_unannotated_pairs_skipped_if_not_pilot():
-    # If a pair has no consensus, it is skipped instead of failing
-    assert bd.build_records(memory(), "train", "synthetic", {}, set()) == []
+def test_unannotated_pairs_hard_fail_if_not_pilot():
+    with pytest.raises(ManifestError, match="<2 annotations"):
+        bd.build_records(memory(), "train", "synthetic", {}, set())
 
 
 def test_pilot_pairs_are_dropped():
@@ -292,7 +308,9 @@ def test_constructed_negatives_ignore_val_and_test_records():
 
 def test_fetch_annotations_reads_the_annotations_table_through_the_existing_client_seam():
     client = MagicMock()
-    client.table.return_value.select.return_value.execute.return_value.data = [{"pair_id": "p1"}]
+    query = client.table.return_value.select.return_value
+    query.order.return_value = query
+    query.range.return_value.execute.return_value.data = [{"pair_id": "p1"}]
     with patch("finetune.build_dataset.get_supabase_client", return_value=client):
         assert bd.fetch_annotations() == [{"pair_id": "p1"}]
     client.table.assert_called_once_with("annotations")

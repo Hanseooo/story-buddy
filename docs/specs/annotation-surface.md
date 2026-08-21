@@ -180,6 +180,8 @@ Models mocked (there are no model calls here). Assertions:
 - `adjudicate/`'s query returns exactly the pairs with two `annotations` rows disagreeing on
   `same_character`, `failure_reasons`, `anatomy_intact`, or `text_free` — no false positives from pairs with only one label so far.
 - The pair-fetch query for `annotate/` never returns a pair the current annotator already has a row for.
+- `build_dataset.py` paginates the `annotations` read beyond Supabase's default 1,000-row response cap;
+  the full dual-annotation campaign cannot be exported from a truncated first page.
 - No component under `frontend/app/(research)/` renders a filename, story title, character name, or model
   prediction alongside a pair awaiting a label (blinding, asserted at the component-test level).
 - The `annotate/` and `adjudicate/` error boundaries expose the existing signout route without

@@ -89,6 +89,10 @@ vi.mock("@supabase/supabase-js", () => ({
 describe("Tier 2: Server Action Unit Tests", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAdminSelect.mockReset();
+    mockAdminUpdate.mockReset();
+    mockAdminCreateSignedUrl.mockReset();
+    mockAnnotationsUpsert.mockReset();
     process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-key";
     process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
 
@@ -102,6 +106,7 @@ describe("Tier 2: Server Action Unit Tests", () => {
       error: null,
     });
     mockAnnotationsUpsert.mockResolvedValue({ error: null });
+    mockAdminUpdate.mockResolvedValue({ error: null });
   });
 
   describe("submitAnnotation Invariant Validation", () => {
@@ -274,6 +279,28 @@ describe("Tier 2: Server Action Unit Tests", () => {
         "pair-1"
       );
     });
+
+    it("reports a queue status update failure after saving the annotation", async () => {
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockResolvedValueOnce({ count: 1, error: null }),
+      });
+      mockAdminUpdate.mockResolvedValueOnce({ error: { message: "database unavailable" } });
+
+      const res = await submitAnnotation({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
+      expect(res).toEqual({ error: "Saved, but failed to update queue status" });
+    });
+
+    it("reports a consensus read failure after saving the second annotation", async () => {
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockResolvedValueOnce({ count: 2, error: null }),
+      });
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockResolvedValueOnce({ data: null, error: { message: "database unavailable" } }),
+      });
+
+      const res = await submitAnnotation({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
+      expect(res).toEqual({ error: "Saved, but failed to update queue status" });
+    });
   });
 
   describe("getNextPair Strict Blinding & Randomized Delivery", () => {
@@ -354,6 +381,51 @@ describe("Tier 2: Server Action Unit Tests", () => {
       expect(res.pair?.id).toBe("pair-50");
       expect(res.pair?.canonical_signed_url).toBe("https://signed.url/canonical-50");
       expect(res.pair?.scene_signed_url).toBe("https://signed.url/scene-50");
+    });
+
+    it("hash-orders all available pages instead of preferring the earliest page", async () => {
+      const annotatedPairs = Array.from({ length: 49 }, (_, i) => ({ pair_id: `done-${i}` }));
+      const page0Pairs = [
+        ...annotatedPairs.map(({ pair_id }) => ({
+          id: pair_id,
+          canonical_storage_path: `path/${pair_id}-ref.png`,
+          scene_storage_path: `path/${pair_id}-scene.png`,
+        })),
+        { id: "pair-z", canonical_storage_path: "path/z-ref.png", scene_storage_path: "path/z-scene.png" },
+      ];
+      const page1Pairs = [
+        { id: "pair-a", canonical_storage_path: "path/a-ref.png", scene_storage_path: "path/a-scene.png" },
+      ];
+
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: annotatedPairs, error: null }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: page0Pairs, error: null }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: page1Pairs, error: null }));
+      mockAdminCreateSignedUrl
+        .mockResolvedValueOnce({ data: { signedUrl: "https://signed.url/a-ref" }, error: null })
+        .mockResolvedValueOnce({ data: { signedUrl: "https://signed.url/a-scene" }, error: null });
+
+      const res = await getNextPair();
+      expect(res.pair?.id).toBe("pair-a");
+    });
+
+    it("returns an error instead of a labelable pair when URL signing fails", async () => {
+      const pair = { id: "pair-1", canonical_storage_path: "ref.png", scene_storage_path: "scene.png" };
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [pair], error: null }));
+      mockAdminCreateSignedUrl
+        .mockResolvedValueOnce({ data: null, error: { message: "signing failed" } })
+        .mockResolvedValueOnce({ data: { signedUrl: "https://signed.url/scene" }, error: null });
+
+      const res = await getNextPair();
+      expect(res).toEqual({ error: "Failed to load annotation images" });
+    });
+
+    it("returns an error instead of queue complete when the pair query fails", async () => {
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: null, error: { message: "database unavailable" } }));
+
+      const res = await getNextPair();
+      expect(res).toEqual({ error: "Failed to load annotation queue" });
     });
   });
 });

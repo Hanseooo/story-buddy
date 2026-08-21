@@ -1,3 +1,40 @@
+# Current Task: Annotation implementation review verification
+
+- [x] Trace each review finding through specs, migrations, server actions, exporter, and tests.
+- [x] Reject findings that conflict with intentional architecture; record the evidence.
+- [x] Add failing regression tests for every confirmed behavior defect.
+- [x] Apply the smallest fixes and update the owning annotation spec where behavior changes.
+- [x] Run focused red/green checks and full frontend/backend verification.
+- [x] Record the outcome, unverified external state, and residual risks.
+
+## Success criteria
+
+Dataset export hard-fails on incomplete or invalid non-pilot annotation states; adjudication accepts
+only two independent ordinary labels; annotation ordering satisfies the documented per-annotator
+randomization rule; signed-URL failures cannot present a labelable broken pair; and intentional
+service-role access remains no broader than the approved blinded-queue design.
+
+## Outcome
+
+Confirmed and fixed the exporter hard-fail regressions, ordinary-annotator eligibility checks,
+whole-queue deterministic ordering, signed-URL failure handling, and swallowed queue/status read or
+write errors. Kept the authenticated server-action service-role seam: ordinary annotation RLS cannot
+read the second annotator's row, while the server must compute pair consensus without exposing those
+rows to either annotator.
+
+The second-pass investigation found and fixed an additional blocker: Supabase returns at most 1,000
+rows by default, but `fetch_annotations()` made one unpaginated request for a campaign expected to
+produce 1,500–2,000+ rows. The exporter now reads stable ordered pages until exhausted, with a
+1,001-row regression test and the annotation spec updated.
+
+Verification: frontend focused action tests passed 42; full frontend suite passed 380 tests across
+42 files; production build/type-check passed. Backend focused exporter tests passed 26; full backend
+suite passed 973 tests, skipped 80 environment-dependent cases, and deselected 6 smoke tests. Frontend
+lint and backend Ruff passed. Remote Supabase migration/RLS state remains unverified because the DB
+integration tests require `SUPABASE_DB_URL` and skipped locally.
+
+---
+
 # Current Task: Production visual-output regression follow-up
 
 - [x] Read project guidance, lessons, current pipeline/specs, production prompts/logs, and recent commits.

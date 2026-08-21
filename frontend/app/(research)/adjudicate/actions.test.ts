@@ -72,11 +72,16 @@ vi.mock("@supabase/supabase-js", () => ({
 describe("Adjudication Server Actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAdminSelect.mockReset();
+    mockAdminUpdate.mockReset();
+    mockAdminCreateSignedUrl.mockReset();
+    mockAnnotationsUpsert.mockReset();
     process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
     process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test";
 
     mockGetUser.mockResolvedValue({ data: { user: { id: "adjudicator-1" } }, error: null });
     mockProfilesSelect.mockResolvedValue({ data: { role: "researcher", is_adjudicator: true }, error: null });
+    mockAnnotationsUpsert.mockResolvedValue({ error: null });
   });
 
   describe("submitAdjudication Invariants & Role Isolation", () => {
@@ -148,6 +153,19 @@ describe("Adjudication Server Actions", () => {
       expect(res.error).toBe("Adjudicator cannot resolve their own annotations");
     });
 
+    it("rejects when either prior annotation belongs to an adjudicator", async () => {
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: { status: "conflicted" } }) })
+      });
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockResolvedValue({ data: [{ annotator_id: "other-1" }, { annotator_id: "other-2" }], error: null })
+      });
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [{ id: "other-1" }], error: null }));
+
+      const res = await submitAdjudication({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
+      expect(res.error).toBe("Invalid pair state: prior annotations must be from ordinary annotators");
+    });
+
     it("handles idempotency when adjudicator already submitted but status update failed", async () => {
       mockAdminSelect.mockReturnValueOnce({
         eq: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: { status: "conflicted" } }) })
@@ -160,6 +178,26 @@ describe("Adjudication Server Actions", () => {
       const res = await submitAdjudication({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
       expect(res.success).toBe(true);
       expect(mockAdminUpdate).toHaveBeenCalledWith("research_pairs", { status: "adjudicated" }, "id", "pair-1");
+    });
+
+    it("does not repair status when an idempotent adjudication has a non-ordinary prior row", async () => {
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: { status: "conflicted" } }) })
+      });
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockResolvedValue({
+          data: [
+            { annotator_id: "other-adjudicator" },
+            { annotator_id: "ordinary-1" },
+            { annotator_id: "adjudicator-1" },
+          ],
+          error: null,
+        })
+      });
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [{ id: "other-adjudicator" }], error: null }));
+
+      const res = await submitAdjudication({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
+      expect(res.error).toBe("Invalid pair state: prior annotations must be from ordinary annotators");
     });
 
     it("rejects when already adjudicated by another adjudicator", async () => {
@@ -208,6 +246,7 @@ describe("Adjudication Server Actions", () => {
 
     it("returns null if no conflicted pairs exist", async () => {
       mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [] })); // userAnnotations
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [] })); // adjudicator profiles
       mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [] })); // research_pairs
       const res = await getConflictedPair();
       expect(res.pair).toBeNull();
@@ -216,6 +255,7 @@ describe("Adjudication Server Actions", () => {
     it("skips pair if user is one of the original annotators and returns the valid one", async () => {
       const mockPairs = [{ id: "pair-1", canonical_storage_path: "path/c1.png", scene_storage_path: "path/s1.png" }, { id: "pair-2", canonical_storage_path: "path/c2.png", scene_storage_path: "path/s2.png" }];
       mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [] })); // userAnnotations
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [] })); // adjudicator profiles
       mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: mockPairs })); // research_pairs
       // Pair 1 query: user is annotator
       mockAdminSelect.mockReturnValueOnce({
@@ -249,6 +289,7 @@ describe("Adjudication Server Actions", () => {
     it("skips pair if annotations agree under normalized set equality", async () => {
       const mockPairs = [{ id: "pair-agree" }];
       mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [] })); // userAnnotations
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [] })); // adjudicator profiles
       mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: mockPairs })); // research_pairs
       // Annotations agree despite different order/duplicates of failure reasons
       mockAdminSelect.mockReturnValueOnce({
@@ -268,6 +309,7 @@ describe("Adjudication Server Actions", () => {
       // 50 pairs on page 0 that are all already annotated by the adjudicator
       const annotatedPairs = Array.from({ length: 50 }, (_, i) => ({ pair_id: `pair-${i}` }));
       mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: annotatedPairs })); // userAnnotations
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [] })); // adjudicator profiles
 
       const page0Pairs = Array.from({ length: 50 }, (_, i) => ({
         id: `pair-${i}`,
@@ -305,6 +347,40 @@ describe("Adjudication Server Actions", () => {
       expect(res.pair?.scene_signed_url).toBe("https://signed.url/scene-50");
       expect(res.annotationA?.same_character).toBe(true);
       expect(res.annotationB?.same_character).toBe(false);
+    });
+
+    it("returns an error instead of a labelable pair when URL signing fails", async () => {
+      const pair = { id: "pair-1", canonical_storage_path: "ref.png", scene_storage_path: "scene.png" };
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [] }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [] }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [pair] }));
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockResolvedValue({
+          data: [
+            { annotator_id: "other-1", same_character: true, failure_reasons: [], anatomy_intact: true, text_free: true },
+            { annotator_id: "other-2", same_character: false, failure_reasons: ["wrong_colour"], anatomy_intact: true, text_free: true },
+          ],
+        }),
+      });
+      mockAdminCreateSignedUrl
+        .mockResolvedValueOnce({ data: null, error: { message: "signing failed" } })
+        .mockResolvedValueOnce({ data: { signedUrl: "https://signed.url/scene" }, error: null });
+
+      const res = await getConflictedPair();
+      expect(res).toEqual({ error: "Failed to load adjudication images" });
+    });
+
+    it("returns an error instead of queue complete when competing labels cannot be read", async () => {
+      const pair = { id: "pair-1", canonical_storage_path: "ref.png", scene_storage_path: "scene.png" };
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [] }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [] }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [pair] }));
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockResolvedValue({ data: null, error: { message: "database unavailable" } }),
+      });
+
+      const res = await getConflictedPair();
+      expect(res).toEqual({ error: "Failed to load adjudication queue" });
     });
   });
 });
