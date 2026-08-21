@@ -642,3 +642,24 @@ The signed-in researcher URL could not be replayed because no sanitized authenti
 was available; the current remote Supabase migration state is also unverified. Whole-worktree
 `git diff --check` still reports the pre-existing trailing-whitespace line at
 `frontend/app/(research)/adjudicate/actions.ts:145`, which was not changed.
+# Research corpus operations implementation planning (2026-08-21)
+
+- [x] Read the approved design and writing-plans instructions.
+- [x] Map existing corpus, annotation, storage, and integrity seams.
+- [x] Write the test-first implementation plan under `docs/specs/plans/`.
+- [x] Self-review the plan against every approved spec requirement.
+- [x] Create bounded GitHub issues with explicit manual/code gates (#54-#65).
+- [x] Verify links, issue state, diff hygiene, and commit the planning artifacts.
+
+## Success criteria
+
+- Every design requirement maps to an executable task or explicit human gate.
+- No new provider, datastore, dependency, schema, or public contract is introduced.
+- Paid execution is blocked behind zero-cost tests, consent approval, and dollar caps.
+- Issues are independently reviewable and ordered by stop gates.
+
+## Review / outcome
+
+- Plan covers governance, intake, immutable corpus persistence, exact image encoding/hashing, Fal spend and uncertain billing, pair materialization, annotation reconciliation, freeze guards, pilot cleanup, storage telemetry, paid smoke, annotation, training, and one-time evaluation.
+- Existing Objective-4 epic #53 now links issues #54-#65 and no longer directs a donated training corpus or stale image-count budget.
+- No application code, data, database, provider configuration, or paid service was changed or invoked.
