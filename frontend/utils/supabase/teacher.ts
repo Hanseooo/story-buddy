@@ -51,6 +51,8 @@ export const getTeacherContext = cache(async (): Promise<TeacherContext> => {
           : "query returned no row and no error")
     );
 
+  if (profile.role === "researcher")
+    redirect(profile.is_adjudicator ? "/adjudicate" : "/annotate");
   if (profile.role !== "teacher") redirect(`/s/${profile.id}`);
 
   return { profile, classrooms: classroomsRes.data ?? [] };

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockGetUser = vi.fn();
+const mockProfileSingle = vi.fn();
 
 vi.mock("@supabase/ssr", () => ({
   createServerClient: () => ({
@@ -8,7 +9,7 @@ vi.mock("@supabase/ssr", () => ({
     from: () => ({
       select: () => ({
         eq: () => ({
-          single: () => Promise.resolve({ data: null }),
+          single: mockProfileSingle,
           order: () => Promise.resolve({ data: [] }),
         }),
       }),
@@ -29,7 +30,10 @@ vi.mock("next/navigation", () => ({
 import { getTeacherContext } from "./teacher";
 
 describe("getTeacherContext", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockProfileSingle.mockResolvedValue({ data: null });
+  });
 
   // Middleware already guards /classroom for anonymous users. If the render
   // disagrees, redirecting to /login sends the browser straight back here
@@ -49,5 +53,23 @@ describe("getTeacherContext", () => {
     await expect(getTeacherContext()).rejects.toThrow(
       /no profiles row for authenticated user user-1/
     );
+  });
+
+  it("routes a researcher to annotation instead of the student tree", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "researcher-1" } } });
+    mockProfileSingle.mockResolvedValue({
+      data: { id: "researcher-1", role: "researcher", is_adjudicator: false },
+    });
+
+    await expect(getTeacherContext()).rejects.toThrow("REDIRECT:/annotate");
+  });
+
+  it("routes an adjudicating researcher to adjudication", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "researcher-1" } } });
+    mockProfileSingle.mockResolvedValue({
+      data: { id: "researcher-1", role: "researcher", is_adjudicator: true },
+    });
+
+    await expect(getTeacherContext()).rejects.toThrow("REDIRECT:/adjudicate");
   });
 });

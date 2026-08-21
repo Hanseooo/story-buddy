@@ -61,6 +61,78 @@ describe("Teacher Auth Pages", () => {
     });
   });
 
+  it.each([
+    ["teacher", false, "/classroom"],
+    ["researcher", false, "/annotate"],
+    ["researcher", true, "/adjudicate"],
+    ["student", false, "/s/user-1"],
+  ])("routes %s accounts to their role surface", async (role, isAdjudicator, expectedPath) => {
+    mockSignIn.mockResolvedValueOnce({ data: { user: { id: "user-1" } }, error: null });
+    mockSingle.mockResolvedValueOnce({
+      data: { role, is_adjudicator: isAdjudicator },
+    });
+    render(<Login />);
+
+    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "person@school.org" } });
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: "secret123" } });
+    fireEvent.click(screen.getByRole("button", { name: /log in/i }));
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith(expectedPath);
+    });
+  });
+
+  it("ignores an external next target and uses the account role", async () => {
+    mockSearchParamsGet.mockImplementation((key: string) =>
+      key === "next" ? "https://evil.example" : null
+    );
+    mockSignIn.mockResolvedValueOnce({ data: { user: { id: "user-1" } }, error: null });
+    mockSingle.mockResolvedValueOnce({ data: { role: "teacher" } });
+    render(<Login />);
+
+    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "teacher@school.org" } });
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: "secret123" } });
+    fireEvent.click(screen.getByRole("button", { name: /log in/i }));
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith("/classroom");
+    });
+    expect(mockPush).not.toHaveBeenCalledWith("https://evil.example");
+  });
+
+  it("does not let a researcher resume a student next target", async () => {
+    mockSearchParamsGet.mockImplementation((key: string) =>
+      key === "next" ? "/s/student-1/write" : null
+    );
+    mockSignIn.mockResolvedValueOnce({ data: { user: { id: "researcher-1" } }, error: null });
+    mockSingle.mockResolvedValueOnce({ data: { role: "researcher", is_adjudicator: false } });
+    render(<Login />);
+
+    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "researcher@school.org" } });
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: "secret123" } });
+    fireEvent.click(screen.getByRole("button", { name: /log in/i }));
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith("/annotate");
+    });
+    expect(mockPush).not.toHaveBeenCalledWith("/s/student-1/write");
+  });
+
+  it("does not fall back to the student tree when the profile lookup fails", async () => {
+    mockSignIn.mockResolvedValueOnce({ data: { user: { id: "researcher-1" } }, error: null });
+    mockSingle.mockResolvedValueOnce({ data: null, error: { message: "profile lookup failed" } });
+    render(<Login />);
+
+    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "researcher@school.org" } });
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: "secret123" } });
+    fireEvent.click(screen.getByRole("button", { name: /log in/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent(/couldn't load your account/i);
+    });
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
   it("handles login submit error", async () => {
     mockSignIn.mockResolvedValueOnce({ error: { message: "Invalid login credentials" } });
     render(<Login />);
