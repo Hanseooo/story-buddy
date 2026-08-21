@@ -1,5 +1,10 @@
 # Lessons Log
 
+### 2026-08-22 Use canonical preset IDs, not display-name guesses
+- **What happened**: I described the Paper Cutout preset as `paper_cut` while discussing corpus records.
+- **Root cause**: I inferred the identifier from the display name before checking the locked style catalog.
+- **Rule**: Before documenting stored enum/config values, read the owning spec or source constant. StoryBuddy's canonical ID is `cut_paper`; “Paper Cutout” is only its display label.
+
 > Updated after every correction. Reviewed at session start.
 
 ## Patterns

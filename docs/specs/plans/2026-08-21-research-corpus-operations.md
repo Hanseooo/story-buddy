@@ -16,6 +16,8 @@
 - Split by character lineage, never by pair; constructed negatives are train-only.
 - Raw submissions and the identity/receipt ledger never enter this repository, Supabase research storage, logs, checkpoints, or model artifacts.
 - Donated input requires guardian consent, child assent, manual PII redaction, and independent redaction review.
+- Every story declares `cel`, `gouache`, or `cut_paper`; references, scenes, and constructed negatives remain
+  within that preset. Synthetic allocation is 8 train + 2 validation stories per preset.
 - `finetune.build_corpus` remains the only corpus caller of the production graph and Fal.
 - Supabase Storage stays private; canonical references are PNG and scenes are WebP quality approximately 82 per ADR-027.
 - USD 25 is the working allocation; USD 30 is the absolute campaign cap; uncertain billing stops the run.
@@ -26,6 +28,7 @@
 
 | File | Responsibility |
 |---|---|
+| `backend/finetune/corpus_synthetic.json` | Store the 30 validated synthetic records with explicit split, roster, and 10/10/10 style allocation. |
 | `backend/finetune/corpus_io.py` | Validate sanitized intake and read/write immutable corpus run bundles and asset inventories. |
 | `backend/finetune/build_corpus.py` | Drive the existing graph, enforce dollar reserves, persist completed memories, and quarantine uncertain runs. |
 | `backend/providers.py` | Emit corpus-scoped Fal attempt/completion/failure events at the existing private `_run_fal` seam; ordinary product calls remain unchanged. |
@@ -54,30 +57,33 @@
 - Create: `docs/capstone/research_runbook.md`
 
 **Interfaces:**
-- Consumes: a controlled JSON record containing `donation_id`, `text`, `provenance`, `split`, approval booleans, `candidate_role`, and `withdrawal_state`.
+- Consumes: strict JSON-list records containing opaque `story_id`, text, declared roster, provenance/split/role, explicit selectable style, and donated-only approval/withdrawal fields.
 - Produces: `IntakeRecord`, `load_intake(path: Path) -> list[IntakeRecord]`, and an operational approval checklist. It must not accept names, contact details, receipt codes, or raw submissions.
 
 ```python
 class IntakeRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    donation_id: str
+    story_id: str
     text: str
+    declared_characters: list[str]
+    declared_non_human: list[str]
     provenance: Literal["synthetic", "donated"]
     split: Literal["train", "val", "test"]
     candidate_role: Literal["primary", "backup", "not_applicable"]
-    guardian_consent: bool
-    child_assent: bool
-    manual_pii_redaction: bool
-    independent_redaction_review: bool
-    withdrawal_state: Literal["active", "withdrawn"]
+    style_preset_id: Literal["cel", "gouache", "cut_paper"]
+    guardian_consent: bool | None = None
+    child_assent: bool | None = None
+    manual_pii_redaction: bool | None = None
+    independent_redaction_review: bool | None = None
+    withdrawal_state: Literal["active", "withdrawn"] | None = None
     selection_frozen_at: datetime | None = None
 
 def load_intake(path: Path) -> list[IntakeRecord]: ...
 ```
 
-- [ ] **Step 1: Write failing intake tests** for rejection when any of `guardian_consent`, `child_assent`, `manual_pii_redaction`, or `independent_redaction_review` is false; reject donated train/val, synthetic test, duplicate IDs, unknown keys, blank text, withdrawn records, and primary/backup assignment made after `selection_frozen_at`.
+- [ ] **Step 1: Write failing intake tests** for rejection when any donated approval is absent/false; reject donated train/val, synthetic test, duplicate IDs, unknown keys, blank text, withdrawn records, invalid/non-selectable styles, `declared_non_human` outside `declared_characters`, synthetic records carrying donated-only fields, and primary/backup or style assignment made after `selection_frozen_at`. Assert the synthetic corpus is 24 train/6 val with 8/2 per style and donated candidates are five per style with primary counts 4 Gouache/3 Cel/3 Cut-paper.
 - [ ] **Step 2: Run the focused test** from `backend/`: `uv run pytest tests/test_corpus_io.py -q`. Expected: collection fails because `finetune.corpus_io` does not exist.
-- [ ] **Step 3: Implement strict Pydantic models** with `extra="forbid"`, `Provenance = Literal["synthetic", "donated"]`, `Split = Literal["train", "val", "test"]`, and `CandidateRole = Literal["primary", "backup", "not_applicable"]`. Put cross-field rules in one model validator; do not add fields to `StoryMemory`.
+- [ ] **Step 3: Implement strict Pydantic validation** with the literals above and one cross-field validator. Keep one JSON-list format for checked-in synthetic and controlled gitignored donated input; do not add fields to `StoryMemory`.
 - [ ] **Step 4: Document the manual boundary** in the runbook: adviser/HCDC/school approval, receipt ledger location outside StoryBuddy, manual redaction plus second-person review, 10 primary + 5 backup freeze, withdrawal handling, and the rule that the draft cannot be administered until its remaining blanks and translations are institutionally approved.
 - [ ] **Step 5: Run** `uv run pytest tests/test_corpus_io.py -q` and `uv run ruff check finetune/corpus_io.py tests/test_corpus_io.py`. Expected: PASS.
 - [ ] **Step 6: Commit** `test/implementation/docs` together: `git commit -m "feat(research): validate sanitized corpus intake"`.
@@ -119,6 +125,7 @@ def load_completed_bundles(root: Path) -> list[RunBundle]: ...
 
 - [ ] **Step 1: Add failing tests** proving a completed graph result is revalidated with `StoryMemory.model_validate`, atomically persisted via temporary file + `Path.replace`, reloadable, and immutable on identical rerun; differing bytes or metadata must raise `CorpusError` instead of overwrite.
 - [ ] **Step 2: Add a failing zero-cost test** using the existing `FakeGraph`/`FakeSupabase`: `build(..., fixture=True)` must make zero provider/Storage calls, write a complete fixture bundle from checked-in/generated local fixture bytes, and pass on an identical rerun.
+- [ ] **Step 2a: Add failing style/roster tests** proving `_initial_state` resolves each record's exact `STYLE_PRESETS[style_preset_id]`, all produced assets retain that ID, and declared versus final character/non-human rosters must reconcile before completion.
 - [ ] **Step 3: Run** `uv run pytest tests/test_corpus_io.py tests/test_finetune_corpus.py -q`. Expected: FAIL on missing bundle API and `fixture` argument.
 - [ ] **Step 4: Implement asset inspection** with `hashlib.sha256`, Pillow decode, and magic-byte checks (`image/png` for refs, `image/webp` for scenes). Encode WebP exactly once at quality 82 before hashing; never recompress an existing completed asset.
 - [ ] **Step 5: Replace count-only `build_state.json` entries** with bundle completion references while preserving backward safety: legacy count-only entries are not trusted as complete and are quarantined with a clear message rather than silently skipped or regenerated.
@@ -299,8 +306,8 @@ def calculate_corpus_projections(
 - [ ] **Step 2: Run pilot cleanup dry-run**, archive its counts, execute only after checking the exact IDs/prefix, then archive the zero-count verification.
 - [ ] **Step 3: Run the zero-cost fixture path** and full deterministic backend verification: `uv run ruff check . && uv run pytest`. Stop on any failure.
 - [ ] **Step 4: Run the three-story synthetic smoke** with `--max-usd 1.50`; record pricing source/time, attempted/completed/failed/uncertain calls, bytes, latency, signed delivery, and actual invoice reconciliation. Stop before campaign generation on discrepancy.
-- [ ] **Step 5: Finalize sanitized intake** with 10 primary + 5 backup donated candidates. Replacements are allowed only for withdrawal, unusable de-identification, terminal pipeline failure, or inadequate character yield under the recorded rule.
-- [ ] **Step 6: Generate synthetic train/val first**, reserving enough of the USD 30 ceiling to finish every started story; generate donated test only after the intake gate. Never select donated cases based on judge behavior.
+- [ ] **Step 5: Finalize sanitized intake** with 10 primary + 5 backup donated candidates, five candidates per style, primaries 4 Gouache/3 Cel/3 Cut-paper, and backups 1/2/2 respectively. Replacements preserve the style slot where possible and are allowed only for withdrawal, unusable de-identification, terminal pipeline failure, or inadequate character yield under the recorded rule.
+- [ ] **Step 6: Generate synthetic train/val first** after verifying 24 train/6 val and 8/2 per style, reserving enough of the USD 30 ceiling to finish every started story; generate donated test only after the intake gate. Never restyle or select cases based on judge behavior.
 - [ ] **Step 7: Materialize and annotate:** verify signed URLs, calibrate researchers on non-study fixtures, collect two independent labels, adjudicate only disagreements, reconcile status, and record agreement/drift after collection.
 - [ ] **Step 8: Freeze once** after all integrity guards pass and adviser signs the report. Store a controlled copy of the immutable dataset and hashes.
 - [ ] **Step 9: Qualify school hardware** by recording GPU/VRAM, RAM, storage, OS, driver/CUDA, and allowed runtime; run loader + one forward pass before training. Use cloud only if this predeclared qualification fails.

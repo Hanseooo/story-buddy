@@ -13,7 +13,7 @@ are in; **D-K and D-L resolved** (2026-08-19, via migrations 0016/0017 and expli
 
 ## 1. Purpose
 
-Give two researchers a resumable, blinded web surface to label ~750–1000 reference/scene image pairs
+Give two researchers a resumable, blinded web surface to label every materialized reference/scene image pair
 `same_character` (plus closed-taxonomy reasons) for Objective 4, and give a third researcher an adjudication
 view over only the disagreements. It exists because Objective 4's human-established reference labels have no
 other legitimate path to a laptop or a spreadsheet — see §3.
@@ -131,7 +131,7 @@ route can be built. Built in **Phase 2.5**, alongside the labelling weekend it e
 
 **`adjudicate/`** — a third annotator, shown **only** the pairs where the two annotators disagree on `same_character`, `failure_reasons` taxonomy checkboxes, `anatomy_intact`, OR `text_free`. Same blinded rendering; the adjudicator's row is the **authoritative final label**, not merely a third vote. `build_dataset.py` uses this adjudicator row exclusively when it exists to resolve conflicts.
 
-**Resumability.** ~750–1000 pairs per annotator cannot be labelled in one sitting. The "next unlabelled pair"
+**Resumability.** The achieved corpus may not be labelled in one sitting. The "next unlabelled pair"
 query is the entire resume mechanism: closing the tab and returning later re-derives position from the
 `annotations` table, no separate progress cursor to keep in sync.
 
@@ -232,11 +232,11 @@ its implied CSV-merge mechanism. `build_dataset.py` reads the `annotations` tabl
 **Open — do not guess (CLAUDE.md §1, §7):**
 
 - Held-out test set discipline (`methodology.md:343-344`) is a labelling-order concern, not a schema concern:
-  whoever schedules the labelling weekend must not let the twelve held-out characters' pairs be looked at
+  whoever schedules the labelling weekend must not let the achieved held-out characters' pairs be looked at
   more than once end-to-end (the test set, once adjudicated and used, is read exactly one time). This spec's
   table has no way to enforce "read once" in code — it is a process discipline for whoever runs
   `build_dataset.py` against it, flagged here rather than silently assumed.
 - `books/` (the Objective-3 book-review route also decided in ADR-026) is out of scope for this spec — it is
   a separate route in the same route group and gets its own spec when built.
-- Exact split of ~750–1000 pairs across the two annotators, and whether adjudication runs continuously or in
+- Exact achieved pair count across the two annotators, and whether adjudication runs continuously or in
   a single pass at the end, is a scheduling decision for the labelling weekend, not a build decision here.

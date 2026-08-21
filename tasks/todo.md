@@ -663,3 +663,34 @@ was available; the current remote Supabase migration state is also unverified. W
 - Plan covers governance, intake, immutable corpus persistence, exact image encoding/hashing, Fal spend and uncertain billing, pair materialization, annotation reconciliation, freeze guards, pilot cleanup, storage telemetry, paid smoke, annotation, training, and one-time evaluation.
 - Existing Objective-4 epic #53 now links issues #54-#65 and no longer directs a donated training corpus or stale image-count budget.
 - No application code, data, database, provider configuration, or paid service was changed or invoked.
+
+---
+
+# Current Task: Objective-4 corpus style and story-input gap closure
+
+- [x] Inspect the locked selectable-style catalog and existing corpus input path.
+- [x] Obtain explicit owner acceptance of `cut_paper` under ADR-042's escape hatch.
+- [x] Decide explicit per-story style assignment and one JSON-list input contract.
+- [x] Freeze synthetic and donated style allocations before paid generation.
+- [x] Define declared roster validation and post-run `StoryMemory` reconciliation.
+- [x] Amend the preregistration before any held-out result, study label, or fine-tune exists.
+- [x] Run repository-wide contradiction and placeholder checks.
+- [x] Commit the documentation-only change and request owner review.
+
+## Success criteria
+
+Canonical docs use `cel`, `gouache`, and `cut_paper`; explain exactly how a story is entered; prevent style
+from becoming an identity shortcut; keep all allocation choices outcome-blind; and give the implementation
+plan deterministic validation and sequencing checks. No code, corpus data, paid call, or external store changes.
+
+## Review / outcome
+
+Owner acceptance is recorded as ADR-042's dated escape-hatch amendment without claiming the waived paid
+validation passed. Canonical research docs now freeze one strict JSON-list input contract, roster
+reconciliation, 24/6 synthetic splitting with 8/2 per style, 5/5/5 donated candidate coverage, and
+within-style pairing. Historical ADR statements remain visible.
+
+Verification: `git diff --check` passed; the added JSON example parsed; `research_strategy.html` parsed and
+its tags balanced; changed-line placeholder scan was empty; repository scan found no live `paper_cut`,
+single-style, or obsolete 50-story claim in the owning corpus documents. Application tests were not run
+because no runtime, data, schema, or UI behavior changed.

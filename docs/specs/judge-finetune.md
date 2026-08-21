@@ -93,6 +93,11 @@ brilliantly on your validation set and be useless in the loop.
 
 Hard negatives must use a tiered matching strategy. Mandatory: species and style. Then maximize similarity over: dominant colour, body configuration, silhouette, clothing/accessories, and facial structure, and select the most similar valid other-character candidate. This keeps negatives genuinely difficult without pre-deciding their specific taxonomy failures.
 
+Style is controlled at story/character-lineage level. Each lineage belongs to exactly one of the three
+selectable ADR-042 presets (`cel`, `gouache`, `cut_paper`), and its reference and scenes use that same preset.
+The model must therefore compare identity within a style rather than learn that style disagreement implies a
+different character. Constructed negatives with different `style_preset_id` values are invalid.
+
 ### 3.2 Character leakage across splits
 
 **Split by character, never by pair.** If Bok-Bok the chicken appears in both train and test, κ inflates
@@ -132,7 +137,7 @@ A closed set. Shared by the judge's training targets and the regeneration contro
 | `wrong_species` | Fox cub rendered as a dog | Restate species + defining silhouette |
 | `wrong_body_feature` | Two eyes instead of three; wings missing | Restate the countable feature |
 | `wrong_clothing` | Striped scarf absent or recoloured | Restate the accessory |
-| `wrong_style` | Photorealistic rather than flat gouache | Re-inject the style constant (ADR-007) |
+| `wrong_style` | Scene does not match its reference's declared preset | Re-inject that story's frozen style fragment (ADR-007/042) |
 | `different_face` | Same species, unrelated individual | Strengthen reference conditioning |
 | `character_absent` | Character not in the frame at all | Restate presence requirement |
 
@@ -223,7 +228,7 @@ training-target/production-schema round-trip already requires. If a model wrote 
 
 ```
 backend/finetune/
-  corpus_synthetic.json  # the 30 synthetic train/val stories — CHECKED IN, static, hashable (§5.4)
+  corpus_synthetic.json  # 30 strict JSON records: 24 train + 6 val, 10 stories/style; checked in
   build_corpus.py        # corpus_synthetic.json -> paid fal draws -> data/judge/. Spend-capped.
   manifest.py            # Pydantic record above + the guards (CI-tested) + `local_image_path`
   build_dataset.py       # pipeline output + the `annotations` table -> manifest.jsonl
@@ -233,6 +238,14 @@ backend/finetune/
 data/judge/              # gitignored — images + manifest.jsonl live here
   ref/    scene/    manifest.jsonl    build_state.json
 ```
+
+The input is a JSON list, not a Python list edited into `build_corpus.py`. Every record declares `story_id`,
+`text`, `declared_characters`, `declared_non_human`, `provenance`, `split`, `candidate_role` and
+`style_preset_id`. Donated records use the same contract from a controlled gitignored file and add the
+approval/withdrawal fields required by `research-corpus-operations.md` §4.1. Before paid generation, the
+loader rejects unknown fields, invalid split/provenance combinations, non-selectable styles, duplicate IDs,
+or a non-human roster that is not a subset of the declared roster. After generation, declared and extracted
+rosters must reconcile before any pair is materialized.
 
 > **⚠️ Superseded (2026-07-28, ADR-026): `labels/` no longer exists.** This spec originally kept raw
 > annotator CSVs on disk, one per researcher. Labels now live in the **`annotations` table**, written by the
@@ -266,6 +279,8 @@ bookkeeping, and if they leaked into the prompt the model could read the answer 
 > - **Train + validation characters come from a synthetic corpus** authored for this purpose
 >   (`backend/finetune/corpus_synthetic.json`), written deliberately as Grade 5–6 child writing and weighted
 >   toward non-human characters — the contribution slice (§7.4 item 2) and the least-powered one.
+> - The 30 synthetic stories are frozen as 24 train and 6 validation: exactly 8 train and 2 validation
+>   stories per selectable style. Style allocation is explicit in JSON and frozen before paid generation.
 > - **The held-out test split is drawn exclusively from the donated stories.** External validity lives
 >   entirely in the test split, which is exactly where Objective 4 reads.
 > - `manifest.py` carries `provenance: Literal["synthetic", "donated"]` and its guard **refuses** a
@@ -286,21 +301,11 @@ The worked example below is retained for its **arithmetic**, not its corpus size
 > **character** count — what Objective 4's character-clustered bootstrap actually resolves — not to a pair
 > total; pair counts scale with scenes but are not the binding unit for power.
 
-1. **Run the Phase 1 pipeline over all 50 stories.** Each yields one canonical character reference and
-   up to ~15 scene images. ≈ 800 images total, up to ≈ **$29** in fal.ai credits, a few hours of wall-clock.
-2. **Pair each scene against its own character's reference.** Up to ~750 candidate pairs. This is a loop, not a
-   labelling task — `build_dataset.py` does it.
-3. **Two researchers label all 750 independently; the third adjudicates.** Reference and scene side by
-   side, *"same character?"* plus the §4 checkboxes. About **8 seconds a pair — two hours each.**
-   Report Cohen's κ between annotators. A judge that agrees with humans less than humans agree with each
-   other has hit its ceiling, not a bug.
-4. **The failures you find are your best negatives.** If ~20% drifted, that is ~150 pairs of *real* drift
-   produced by the model you actually ship. Worth more than anything you could construct.
-5. **Constructed negatives cost $0 and no new images.** Pair Quill's reference against a scene generated
-   from Bok-Bok's — same style, matched species where possible. Add ~450, **into the training split only**
-   (§3.3).
-
-Total ≈ **1,200 examples for ~$29 and one weekend.**
+The live operational counts, spend limits, source order and stop conditions are owned by
+`research-corpus-operations.md`; do not reuse the superseded 50-story arithmetic. Run the existing pipeline
+over frozen synthetic train/validation records and consented donated held-out records, pair each scene with
+its own character reference, collect two independent labels plus disagreement-only adjudication, retain
+natural pipeline failures, and add same-style constructed negatives to train only.
 
 > **Reuse the labelling instrument for step 3.** The same interface that shows a human a reference and a scene
 > and asks "same character?" produces both the human reference labels and the training labels. One instrument,
@@ -528,8 +533,8 @@ labels either way; the optional secondary comparison against Gemma (§7.4.1) is 
 regardless of which way the gate falls.
 
 **Why the Gemma comparison is winnable anyway.** You are not beating Gemma-27B at general vision-language.
-You are beating it on ~50 Filipino children's invented characters, in one fixed style, drawn by one image
-model — the exact distribution the LoRA trains on, and the exact regime where ADR-004 records a prompting
+You are beating it on Filipino children's invented characters across three controlled StoryBuddy styles,
+drawn by one image model — the exact distribution the LoRA trains on, and the exact regime where ADR-004 records a prompting
 ceiling and ADR-001 records that nobody has measured anything. Narrow-domain specialization against a large
 prompted generalist is the most reliable way a small fine-tune wins.
 

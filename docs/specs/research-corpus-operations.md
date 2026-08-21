@@ -23,13 +23,15 @@ paid draw or upload; and cumulative Fal spend cannot exceed USD 30.
 - The closed annotation taxonomy cannot change after real annotation begins.
 - Annotators, training and evaluation consume the same hashed asset bytes.
 - The held-out donated test is opened only after training configuration and checkpoint selection are frozen.
+- Every story declares exactly one selectable ADR-042 style ID: `cel`, `gouache` or `cut_paper`. Its
+  canonical references and scenes remain in that style; legacy-only `comic` is excluded.
 
 ## 3. Artifact ownership
 
 | Artifact | Canonical home | Required contents |
 |---|---|---|
 | Identity/consent ledger | Ethics-approved restricted store, outside StoryBuddy | Contact record ↔ random receipt code; consent/assent evidence |
-| Sanitized intake | De-identified controlled research file | `donation_id`, redacted text, consent/assent, redaction review, provenance, primary/backup, withdrawal state |
+| Story intake | Checked-in synthetic JSON or de-identified controlled donated JSON | Opaque `story_id`, text, declared roster, provenance/split/role, frozen style, and donated-only approvals |
 | Corpus run | `data/judge/` (gitignored) | Completed `StoryMemory`, split/provenance, run metadata, telemetry and asset hashes |
 | Research assets | Private Supabase Storage | PNG canonical references and WebP q≈82 scenes per ADR-027 |
 | Pair queue | `research_pairs` | Opaque deterministic pair ID and two private Storage paths; no provenance exposed to annotators |
@@ -49,7 +51,53 @@ backup test stories is selected before generation or model outcomes are observed
 primary only for withdrawal, unusable/de-identification failure, terminal pipeline failure or inadequate
 character yield under a recorded rule—never because the judge performs poorly.
 
-### 4.2 Corpus generation
+Both sources use one JSON-list contract; stories are data, not Python edits. Synthetic input is the checked-in
+`backend/finetune/corpus_synthetic.json`. Donated input is a separately controlled, gitignored JSON file that
+contains only redacted text and research metadata. It never contains a name, contact detail, receipt code or
+raw submission. The minimum record shape is:
+
+```json
+[
+  {
+    "story_id": "syn-001",
+    "text": "De-identified story text...",
+    "declared_characters": ["Quill", "Bok-Bok"],
+    "declared_non_human": ["Quill", "Bok-Bok"],
+    "provenance": "synthetic",
+    "split": "train",
+    "candidate_role": "not_applicable",
+    "style_preset_id": "cel"
+  }
+]
+```
+
+Donated records additionally require affirmative `guardian_consent`, `child_assent`,
+`manual_pii_redaction` and `independent_redaction_review`, plus `withdrawal_state` and a selection-freeze
+timestamp. Synthetic records must not fabricate those donated-only fields. `declared_non_human` must be a
+subset of `declared_characters`; names are fictional roster labels from the already-redacted story, not donor
+identities. After generation, the declared roster is reconciled case-insensitively with the final
+`StoryMemory.characters`. A missing, unexpected or differently classified character quarantines the story
+for manual review before pair materialization; it is never silently rewritten after seeing judge output.
+
+### 4.2 Style allocation and control
+
+Style is a nuisance variable to control, not the fine-tune target. The 30 synthetic stories are frozen as 24
+train and 6 validation stories, with 8 train and 2 validation stories in each of `cel`, `gouache` and
+`cut_paper`. Assignment considers character diversity before any paid generation and never changes in
+response to generated quality or judge behavior.
+
+The 15 donated candidates are assigned five per style before generation. The 10 primary slots are allocated
+4 Gouache, 3 Cel and 3 Cut-paper; the five backups are 1 Gouache, 2 Cel and 2 Cut-paper. Gouache receives the
+extra primary slot because it is the product default (ADR-042), not because of generated outcomes.
+A replacement fills the same style slot when an eligible backup exists. If it cannot, report the achieved
+imbalance; do not restyle an already generated character or select by outcome. If all backups are admitted to
+increase held-out power before labeling, the resulting 15-story candidate set is 5/5/5.
+
+Constructed negatives must match `style_preset_id`. Overall held-out performance remains primary. Per-style
+metrics are pre-declared exploratory diagnostics because the held-out character count is too small for strong
+style-specific claims.
+
+### 4.3 Corpus generation
 
 `finetune.build_corpus` continues to drive `pipeline.graph.build_graph()` and is the sole corpus Fal caller.
 It must materialize, for every completed story:
@@ -65,13 +113,13 @@ A story is complete only when memory, inventory and files reconcile. Completed s
 free to resume. Partial stories resume from their LangGraph checkpoint. Untrustworthy checkpoint state is
 quarantined rather than silently regenerated or pooled.
 
-### 4.3 Queue materialization
+### 4.4 Queue materialization
 
 One idempotent command reads completed memories, uploads the exact corpus files to private Supabase Storage
 and inserts deterministic opaque `research_pairs`. Existing identical path/hash records are skipped. A
 pair-ID, path or hash conflict is terminal. The command does not generate images or labels.
 
-### 4.4 Annotation and adjudication
+### 4.5 Annotation and adjudication
 
 The existing annotation surface remains authoritative: short-lived signed URLs, blinded ordering, two
 different ordinary annotators, immutable first writes and adjudication on disagreement across any complete
@@ -80,7 +128,7 @@ label field. A signed-URL or image-load failure makes a pair unlabelable.
 Pair status is a cache, not ground truth. Because label insertion and status update are not transactional,
 export derives truth from annotation rows and a reconciliation command repairs stale statuses.
 
-### 4.5 Freeze and conversion
+### 4.6 Freeze and conversion
 
 One export command loads completed memories, derives consensus, creates train-only constructed negatives,
 runs manifest guards, verifies every local asset hash and produces the LLaMA-Factory files. It fails on:
@@ -91,6 +139,9 @@ runs manifest guards, verifies every local asset hash and produces the LLaMA-Fac
 - character leakage across splits;
 - synthetic test data or constructed validation/test data;
 - pair/memory mismatch, duplicate IDs or unknown exclusions.
+- absent/unknown style IDs, reference/scene style disagreement, allocation drift or a constructed negative
+  whose two characters have different styles;
+- unresolved declared-roster versus `StoryMemory.characters` reconciliation.
 
 The freeze report records dataset SHA-256, counts by story/character/split/class/reason, adjudication rate,
 exclusions and all pinned software/model/prompt versions.
@@ -131,7 +182,8 @@ controlled rerun. Deployment remains a separate decision and is not required for
 
 ## 9. Phases and gates
 
-1. Governance: approve consent/assent and receipt process; inventory and clear pilot data.
+1. Governance: approve consent/assent and receipt process; freeze story/split/style assignments; build and
+   verify the bounded pilot cleanup before clearing pilot data.
 2. Zero-cost engineering: ADR-027 encoding, corpus persistence, intake validation, queue materialization,
    status reconciliation and freeze CLI pass end-to-end on fixtures.
 3. Intake: recontact donors; redact, independently review and freeze 10 primary + 5 backup candidates.

@@ -134,7 +134,7 @@ A deterministic pipeline of **ten logical modules**, in order:
 | 3 | Scene Segmentation | Selects **up to** 10–15 scenes; scene count tracks the story's distinct major plot points (target ≥ 3 where the arc supports it); never padded to reach a count and never invents content — never-invent overrides the floor |
 | 4 | Story Memory Manager | Maintains the versioned Pydantic *Story Memory* contract that carries state across every stage |
 | 5 | Character Bible | ≤ 2 canonical characters, each rendered **once** as a reference image |
-| 6 | Style Preset | One of three hand-authored prompt fragments, frozen for the storybook |
+| 6 | Style Preset | `cel`, `gouache`, or `cut_paper`, explicitly assigned and frozen for the storybook |
 | 7 | Prompt Optimizer | Scene + character bible + style preset + story memory → structured prompt |
 | 8 | AI Scene Generation | Reference-conditioned image edit — the pipeline's single generation mode |
 | 9 | Consistency Judge & Targeted Regeneration | Vision-language judge (emits `differences_observed` **before** `same_character`); one targeted, prompt-corrected retry; best-of fallback; capped |
@@ -252,9 +252,9 @@ control; every reported artifact is regenerable from a fixed seed (§10).
 
 ### 4.1 The story corpus
 
-Stories are **donated child writing**, not researcher-authored prose. Builder-authored clean text would
-measure best-case behavior only, and the system's handling of under-length, messy child writing would be
-unobservable by construction.
+Two story sources have separate research roles. Researcher-authored synthetic stories supply Objective-4
+train and validation only. Donated child writing supplies the held-out test and Objective-3 book stimuli;
+using it only at evaluation preserves the study's external-validity test.
 
 - **Population:** Grade 5–6 (ages 10–12), Philippines. English, with Taglish code-switching tolerated.
 - **Size:** **fifteen (15) original stories collected**; after screening against the inclusion/exclusion
@@ -262,19 +262,14 @@ unobservable by construction.
   substituted if a primary story is later excluded.
 - **Provenance:** documented. Reviewers will ask.
 
-**One corpus, two uses:** the picture books generated from these stories are the expert-validation stimuli
-(Objective 3); and — once the pipeline has illustrated them and researchers have labelled the character image
-pairs — the judge's training and evaluation data (Objective 4). Corpus = **donated child writing + researcher
-labels**; researcher-written stories appear only as judge-training-split augmentation (§4.3), never as
-evaluation stimuli or in the judge's validation/held-out-test splits (ADR-008).
+**One generation process, separated provenance:** donated picture books are the Objective-3 expert-validation
+stimuli and the exclusive Objective-4 held-out test source. The 30 synthetic stories supply Objective-4 train
+and validation. No donated character enters train/validation, and no synthetic character enters held-out
+test. See the frozen allocation in `docs/specs/research-corpus-operations.md` §4.2.
 
-> **Open reconciliation item (flag for adviser).** With the corpus fixed at ten primary stories, the number of
-> **distinct characters** available for the judge's character-disjoint split (§4.3) is far smaller than the
-> ~50-character split the earlier ~50-story plan assumed. The judge's split sizes are therefore **planning
-> targets to be finalized against the actual character yield of the ten primary stories** (see
-> `docs/specs/judge-finetune.md`), and Objective-4 statistical power — governed by the held-out **character**
-> count — must be reported honestly against that yield. Training-split augmentation with researcher-written
-> stories (train only) partially offsets a small character count but does not enlarge the held-out set.
+The held-out character count remains bounded by the donated stories' achieved yield and is reported honestly.
+Synthetic training volume cannot repair a small held-out sample; uncertainty is therefore clustered by
+character and per-style held-out results remain exploratory.
 
 Software development and debugging use **researcher-written fixture stories**. These carry no ethics load,
 are never used as stimuli, and are never reported as evidence.
@@ -290,14 +285,11 @@ Candidates were surveyed and rejected on the record (full table in `docs/specs/j
 | **PororoSV / FlintstonesSV** | Nine and seven characters in total. With so few, a character-disjoint split is impossible, so the model learns *"recognise Pororo,"* not *"compare two images."* |
 | **StorySalon** | No identity ratings, and copyright-encumbered (frames scraped from video and e-books). |
 
-**That absence is itself a contribution of this work.** The dataset is therefore *manufactured* from the
-pipeline's own output over the donated corpus: each primary story yields canonical character references and
-generated scene images, which are paired — a canonical reference against a scene containing that character —
-and augmented with **constructed hard negatives** (one character's reference against a scene generated from a
-different character's reference). Each pair is human-labelled Same/Different Character. Exact image, pair, and
-cost totals are **planning targets** in `docs/specs/judge-finetune.md`, to be finalized against the character
-yield of the ten primary stories; **Objective-4 statistical power is set by the number of held-out
-characters** (§4.3) — the effect-size bootstrap clusters by character — not by the raw pair total.
+**That absence is itself a contribution of this work.** The dataset is manufactured from the production
+pipeline's output over both provenance-separated sources. Each story yields canonical references and scenes;
+each reference/scene pair remains within the story's frozen style. Same-style **constructed hard negatives**
+augment train only. Each pipeline pair is human-labelled Same/Different Character. Exact totals are achieved
+values, while Objective-4 power is set by held-out character count rather than raw pair count.
 
 ### 4.3 Splits, and the three ways this dataset can lie to you
 
@@ -305,6 +297,11 @@ The annotated image-pair dataset is divided into **train / validation / held-out
 character-identity level** — the same character identity never appears in more than one subset. Target split
 sizes are planning figures (`docs/specs/judge-finetune.md` §5.5) to be finalized against the corpus's actual
 character yield (§4.1).
+
+Synthetic input is fixed at 24 train and 6 validation stories—8 train and 2 validation stories for each of
+`cel`, `gouache`, and `cut_paper`. The 15 donated candidates are assigned five per style before generation;
+the 10 primary slots are 4 Gouache, 3 Cel and 3 Cut-paper. Overall held-out performance is primary, and
+per-style results are descriptive exploratory diagnostics.
 
 **Character leakage.** Splits are by **character, never by pair**. Every image derived from a given canonical
 reference belongs to exactly one split. If one character appears in both train and test, agreement inflates
@@ -561,7 +558,8 @@ Detail: `docs/capstone/ethics_and_safety.md` and `docs/product/adr/ADR-011-moder
 | **Circularity** of judge-as-metric | §7.4. Structural, not procedural. |
 | **Character leakage** across judge splits inflates Objective-4 metrics | Character-disjoint splits, enforced in code with a leakage test in the deterministic suite (§4.3; CI is planned, not yet standing). |
 | **Shortcut learning** on auto-labelled positives | Positives are human-confirmed; constructed negatives are train-only. |
-| **Small held-out character count.** Ten primary stories yield few distinct characters, limiting Objective-4 power. | Split sizes are planning targets finalized against actual yield; power reported against the held-out **character** count (bootstrap clusters by character); backup stories and train-only augmentation partially offset. **Flagged as an open reconciliation item (§4.1).** |
+| **Small held-out character count.** Ten primary stories yield few distinct characters, limiting Objective-4 power. | Power is reported against achieved held-out **character** count, bootstrap resamples by character, and backups may enlarge the test before labeling. Synthetic training volume does not overstate held-out power. |
+| **Art style as an identity shortcut.** A judge could infer “different” from style mismatch. | One frozen style per character lineage; references, scenes, and constructed negatives are matched within `cel`, `gouache`, or `cut_paper`; overall results are primary and per-style results exploratory. |
 | **Annotator fatigue and drift** | Calibration before scoring; mid-session drift check; adjudication rate reported. |
 | **Perceived quality mistaken for efficacy** | §6.4. The ISO/IEC 25010 result is never presented as an answer to Objective 3 or 4. |
 | **No causal or comparative claim** | By design: no control/comparison group. The study does not claim superiority over other picture-book generation methods, and makes **no learning-gain claim** — creativity, literacy, writing ability, and long-term outcomes are outside scope. |

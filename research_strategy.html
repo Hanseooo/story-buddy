@@ -177,10 +177,10 @@
       <h2>2. End-to-end runbook and stop gates</h2>
       <table>
         <tr><th>Phase</th><th>Action</th><th>Stop gate</th></tr>
-        <tr><td>Consent and intake</td><td>Collect 15 original Grade 5–6 stories; manually redact PII and obtain a second spot-check. Select 10 primary and 5 backup stories.</td><td>No signed consent allowing AI build/train/evaluate, missing redaction review, or withdrawal ambiguity → stop.</td></tr>
+        <tr><td>Consent and intake</td><td>Collect 15 original Grade 5–6 stories; manually redact PII and obtain a second review. Store only strict, de-identified JSON records. Select 10 primary and 5 backup stories before generation.</td><td>No signed consent allowing AI build/train/evaluate, missing redaction review, invalid JSON, or withdrawal ambiguity → stop.</td></tr>
         <tr><td>Pilot cleanup</td><td>Optionally export aggregate diagnostics from the 17-pair visual pilot, then delete pilot annotations, pair rows, and private assets together.</td><td>Orphaned labels/objects or non-zero post-cleanup counts → stop.</td></tr>
         <tr><td>Generation smoke</td><td>Run the exact production graph on a small explicit fal budget. Capture model ID, attempts, latency, bytes, MIME, paths, and failures.</td><td>Any contract, moderation, storage, or spend-cap failure → stop before scaling.</td></tr>
-        <tr><td>Corpus generation</td><td>Run <code>backend/finetune/build_corpus.py</code> in resumable batches; reuse canonical references and retain required scene attempts.</td><td>Hard cap, incomplete story, missing image, or checkpoint mismatch → halt and never mark incomplete work done.</td></tr>
+        <tr><td>Corpus generation</td><td>Run <code>backend/finetune/build_corpus.py</code> in resumable batches over frozen per-story style assignments; reuse canonical references and retain required scene attempts.</td><td>Hard cap, incomplete story, roster/style mismatch, missing image, or checkpoint mismatch → halt and never mark incomplete work done.</td></tr>
         <tr><td>Annotation lock</td><td>Two independent researchers label each non-pilot pair; a third adjudicates disagreements.</td><td>Unresolved pair, duplicate annotator, taxonomy drift, or failed blinding/RLS → stop.</td></tr>
         <tr><td>Manifest and evaluation</td><td>Build/validate the manifest, add train-only constructed negatives, train QLoRA, and evaluate on the frozen character-disjoint test set.</td><td>Character leakage, synthetic test data, missing image, metadata leakage, or failed preregistered gate → do not ship.</td></tr>
       </table>
@@ -229,8 +229,9 @@
       <h3>Corpus Composition & Disjoint Splitting</h3>
       <p>Splits are defined by <code>char_id</code>, never by pair. Every image derived from a given canonical reference belongs to exactly one split.</p>
       <ul>
-        <li><strong>Train and validation:</strong> synthetic stories, used to develop the judge and create train-only constructed negatives.</li>
-        <li><strong>Held-out test:</strong> donated child stories only; the achieved qualifying character count determines power.</li>
+        <li><strong>Train and validation:</strong> 30 synthetic stories: 24 train and 6 validation, with 8 train and 2 validation stories in each of <code>cel</code>, <code>gouache</code>, and <code>cut_paper</code>.</li>
+        <li><strong>Held-out test:</strong> donated child stories only; candidates are assigned five per style before generation, with 4 Gouache / 3 Cel / 3 Cut-paper primary slots.</li>
+        <li><strong>Input contract:</strong> stories are strict JSON-list records, not Python edits. Each declares an opaque ID, redacted text, roster, provenance, split, role, and one frozen style.</li>
       </ul>
       <h3>Natural vs. Constructed Negative Rationale</h3>
       <ul>
@@ -238,7 +239,7 @@
           <strong>Natural pairs:</strong> human labels are required, including positives; reference reuse is not a free positive label.
         </li>
         <li>
-          <strong>Constructed negatives:</strong> zero-image-cost pairings, train only, matched on species/style and made hard by visual similarity.
+          <strong>Constructed negatives:</strong> zero-image-cost pairings, train only, matched on the exact style preset and species, then made hard by visual similarity.
         </li>
       </ul>
     </div>
@@ -324,6 +325,7 @@
         <li><strong>Real-Child Only:</strong> Sourced exclusively from real, donated Grade 5-6 child writing.</li>
         <li><strong>Completely Disjoint:</strong> Character IDs in the test set never appear in train or validation sets.</li>
         <li><strong>Frozen:</strong> The test set is locked and blinded during training. Synthetic stories must never leak into the test set; doing so silently voids Objective 4.</li>
+        <li><strong>Style-controlled:</strong> Each character lineage, its reference, and its scenes use one frozen preset. Overall performance is primary; per-style results are exploratory.</li>
       </ul>
     </div>
 
@@ -349,6 +351,7 @@
       <ul>
         <li><strong>Internal Validity:</strong> Labeler bias (mitigated by blinding and independent dual-annotation); potential data leakage if strict character-disjoint splitting fails.</li>
         <li><strong>External Validity:</strong> The fine-tuned model's generalizability is limited to the specific art styles and generative model distributions present in the dataset.</li>
+        <li><strong>Style Shortcut:</strong> Cross-style negatives are forbidden so the judge cannot use a preset mismatch as a shortcut for character mismatch.</li>
         <li><strong>Construct Validity:</strong> Does the closed taxonomy adequately capture all true inconsistencies without forcing unnatural categories?</li>
         <li><strong>Statistical Conclusion:</strong> Sample size limitations, particularly for rare failure reasons in the taxonomy, reducing statistical power for granular per-reason metrics.</li>
       </ul>
