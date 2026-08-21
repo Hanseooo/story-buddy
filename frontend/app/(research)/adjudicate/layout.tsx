@@ -21,7 +21,7 @@ export default async function AdjudicateLayout({ children }: { children: React.R
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center pt-8">
+    <div className="min-h-[100dvh] bg-background text-foreground flex flex-col selection:bg-primary/20">
       {children}
     </div>
   );

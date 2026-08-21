@@ -144,6 +144,9 @@ query is the entire resume mechanism: closing the tab and returning later re-der
   upsert: an upsert would overwrite the submitted label, which is the self-revision this section's
   forward-only rule forbids, and it would need an RLS `update` grant `0014` deliberately withholds.
 - Annotator has no pairs left — a plain "you're done" state, not an error.
+- If `annotate/` or `adjudicate/` fails at runtime, its generic error boundary keeps provider and
+  database details out of the UI and offers retry, the research lab, and `POST /auth/signout` for
+  stale-session recovery.
 
 ---
 
@@ -179,6 +182,8 @@ Models mocked (there are no model calls here). Assertions:
 - The pair-fetch query for `annotate/` never returns a pair the current annotator already has a row for.
 - No component under `frontend/app/(research)/` renders a filename, story title, character name, or model
   prediction alongside a pair awaiting a label (blinding, asserted at the component-test level).
+- The `annotate/` and `adjudicate/` error boundaries expose the existing signout route without
+  rendering the caught error message.
 
 **Built 2026-08-14 — `backend/tests/test_annotations_rls.py`, 16 cases.** Covers own-rows isolation
 (read, cross-annotator read, insert-as-someone-else, non-researcher), the no-`update` finality rule, the

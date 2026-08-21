@@ -1,4 +1,4 @@
-import { CheckCircle, XCircle, Info } from "@phosphor-icons/react";
+import { CheckCircle, XCircle, Info, CircleNotch } from "@phosphor-icons/react";
 
 type VerdictBarProps = {
   sameCharacter: boolean;
@@ -56,6 +56,7 @@ export function VerdictBar({
 
       {/* Main Submit Button */}
       <button
+        type="button"
         onClick={onSubmit}
         disabled={isPending || !isSubmissionValid}
         className={`w-full py-3.5 px-4 rounded-xl font-display font-bold text-sm sm:text-base transition-all flex items-center justify-center gap-2.5 active:scale-[0.98] ${
@@ -63,19 +64,28 @@ export function VerdictBar({
             ? "bg-muted text-foreground/40 border border-muted cursor-not-allowed"
             : !isSubmissionValid
             ? "bg-surface text-foreground/40 border border-muted cursor-not-allowed"
-            : "bg-secondary text-foreground hover:brightness-95 cursor-pointer neo-shadow-sm shadow-secondary/20"
+            : "bg-secondary text-foreground hover:brightness-95 cursor-pointer neo-shadow-sm shadow-secondary/20 hover:shadow-secondary/30"
         }`}
       >
-        <span>{isPending ? "Submitting..." : submitLabel}</span>
-        <kbd
-          className={`px-2 py-0.5 rounded text-xs font-mono font-medium ${
-            isSubmissionValid && !isPending
-              ? "bg-foreground/10 text-foreground"
-              : "bg-foreground/5 text-foreground/40"
-          }`}
-        >
-          Enter ↵
-        </kbd>
+        {isPending ? (
+          <>
+            <CircleNotch className="size-4.5 animate-spin text-foreground/60" />
+            <span>Submitting...</span>
+          </>
+        ) : (
+          <>
+            <span>{submitLabel}</span>
+            <kbd
+              className={`px-2 py-0.5 rounded text-xs font-mono font-medium ${
+                isSubmissionValid
+                  ? "bg-foreground/10 text-foreground"
+                  : "bg-foreground/5 text-foreground/40"
+              }`}
+            >
+              Enter ↵
+            </kbd>
+          </>
+        )}
       </button>
     </div>
   );

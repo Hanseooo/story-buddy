@@ -22,7 +22,7 @@ describe("AdjudicatePage", () => {
     const ui = await AdjudicatePage();
     render(ui);
 
-    expect(screen.getByText("Adjudicate Conflicts")).toBeInTheDocument();
+    expect(screen.getByText("All Conflicts Adjudicated")).toBeInTheDocument();
     expect(
       screen.getByText("No conflicted pairs pending adjudication found.")
     ).toBeInTheDocument();
@@ -53,7 +53,6 @@ describe("AdjudicatePage", () => {
     const ui = await AdjudicatePage();
     render(ui);
 
-    expect(screen.getByText("Adjudicate Conflicts")).toBeInTheDocument();
     expect(screen.getByTestId("adjudicate-client")).toBeInTheDocument();
   });
 });

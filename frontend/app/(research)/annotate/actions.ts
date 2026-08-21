@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 
-import { verifyResearchAuth, validateSubmissionPayload, type SubmissionPayload } from "../_shared/actions";
+import { verifyResearchAuth } from "../_shared/actions";
+import { validateSubmissionPayload, type SubmissionPayload, isConsensus } from "../_shared/validation";
 
 export async function submitAnnotation(payload: SubmissionPayload) {
   const { pairId, failureReasons, sameCharacter, anatomyIntact, textFree } = payload;
@@ -69,13 +70,7 @@ export async function submitAnnotation(payload: SubmissionPayload) {
     if (annotations && annotations.length === 2) {
       const [a1, a2] = annotations;
       
-      const a1Reasons = Array.isArray(a1.failure_reasons) ? [...a1.failure_reasons].sort() : [];
-      const a2Reasons = Array.isArray(a2.failure_reasons) ? [...a2.failure_reasons].sort() : [];
-
-      const agree = a1.same_character === a2.same_character && 
-                    a1.anatomy_intact === a2.anatomy_intact &&
-                    a1.text_free === a2.text_free &&
-                    JSON.stringify(a1Reasons) === JSON.stringify(a2Reasons);
+      const agree = isConsensus(a1, a2);
                     
       const newStatus = agree ? "complete" : "conflicted";
       await adminClient.from("research_pairs").update({ status: newStatus }).eq("id", pairId);
@@ -102,26 +97,43 @@ export async function getNextPair() {
     .select("pair_id")
     .eq("annotator_id", user.id);
 
-  const annotatedPairIds = (userAnnotations || []).map(a => a.pair_id);
+  const annotatedPairIds = new Set((userAnnotations || []).map(a => a.pair_id));
 
-  let query = adminClient
-    .from("research_pairs")
-    .select("id, canonical_storage_path, scene_storage_path")
-    .in("status", ["pending", "partially_annotated"])
-    .order("created_at", { ascending: true })
-    .limit(50);
+  const PAGE_SIZE = 50;
+  let page = 0;
+  let unannotatedPairs: Array<{ id: string; canonical_storage_path: string; scene_storage_path: string }> = [];
 
-  if (annotatedPairIds.length > 0) {
-    query = query.not("id", "in", `(${annotatedPairIds.join(",")})`);
+  while (true) {
+    const from = page * PAGE_SIZE;
+    const to = (page + 1) * PAGE_SIZE - 1;
+
+    const { data: pairs, error: pairsError } = await adminClient
+      .from("research_pairs")
+      .select("id, canonical_storage_path, scene_storage_path")
+      .in("status", ["pending", "partially_annotated"])
+      .order("created_at", { ascending: true })
+      .range(from, to);
+
+    if (pairsError || !pairs || pairs.length === 0) {
+      break;
+    }
+
+    const available = pairs.filter(p => !annotatedPairIds.has(p.id));
+    if (available.length > 0) {
+      unannotatedPairs = available;
+      break;
+    }
+
+    if (pairs.length < PAGE_SIZE) {
+      break;
+    }
+
+    page++;
   }
 
-  const { data: pairs, error: pairsError } = await query;
-
-  if (pairsError || !pairs || pairs.length === 0) {
+  if (unannotatedPairs.length === 0) {
     return { pair: null };
   }
-
-  const unannotatedPairs = pairs;
 
   // Reproducible pseudo-random shuffle per annotator
   const hashedSort = unannotatedPairs.map(p => {

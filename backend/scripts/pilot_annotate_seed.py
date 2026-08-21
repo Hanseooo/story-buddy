@@ -52,9 +52,6 @@ def prepare_pilot_seed_records(
             "status": "pending",
             "is_constructed_negative": False,
             "is_pilot": True,
-            # Transient byte payloads for uploading; stripped before DB insert
-            "_bytes_a": fixture.image_a_bytes,
-            "_bytes_b": fixture.image_b_bytes,
         })
 
     return records
@@ -76,40 +73,24 @@ async def seed_pilot_pairs(supabase=None, bucket_name: str = BUCKET_NAME) -> lis
         logger.info("Uploading %d images to bucket '%s'...", len(records) * 2, bucket_name)
         storage_bucket = supabase.storage.from_(bucket_name)
 
-        for record in records:
+        for record, fixture in zip(records, fixtures.values()):
             path_a = record["canonical_storage_path"]
-            bytes_a = record["_bytes_a"]
-            storage_bucket.upload(path_a, bytes_a, {"content-type": "image/png"})
+            storage_bucket.upload(path_a, fixture.image_a_bytes, {"content-type": "image/png"})
             uploaded_paths.append(path_a)
 
             path_b = record["scene_storage_path"]
-            bytes_b = record["_bytes_b"]
-            storage_bucket.upload(path_b, bytes_b, {"content-type": "image/png"})
+            storage_bucket.upload(path_b, fixture.image_b_bytes, {"content-type": "image/png"})
             uploaded_paths.append(path_b)
 
         # 2. Database Insert
-        db_payload = [
-            {
-                "id": r["id"],
-                "canonical_storage_path": r["canonical_storage_path"],
-                "scene_storage_path": r["scene_storage_path"],
-                "char_id": r["char_id"],
-                "split": r["split"],
-                "status": r["status"],
-                "is_constructed_negative": r["is_constructed_negative"],
-                "is_pilot": r["is_pilot"],
-            }
-            for r in records
-        ]
-
-        logger.info("Inserting %d records into table 'research_pairs'...", len(db_payload))
-        response = supabase.table("research_pairs").insert(db_payload).execute()
+        logger.info("Inserting %d records into table 'research_pairs'...", len(records))
+        response = supabase.table("research_pairs").insert(records).execute()
 
         if getattr(response, "error", None) is not None:
             raise RuntimeError(f"Supabase DB insert error: {response.error}")
 
-        logger.info("Successfully seeded %d pilot pairs atomically!", len(db_payload))
-        return db_payload
+        logger.info("Successfully seeded %d pilot pairs atomically!", len(records))
+        return records
 
     except Exception as e:
         logger.error("Seeding failed with error: %s. Rolling back %d uploaded objects...", e, len(uploaded_paths))

@@ -48,6 +48,7 @@ const createQueryMock = (resolvedValue: unknown) => {
     not: vi.fn(() => chain),
     order: vi.fn(() => chain),
     limit: vi.fn(() => chain),
+    range: vi.fn(() => chain),
     then: (resolve: (v: unknown) => void) => resolve(resolvedValue)
   };
   return chain;
@@ -66,6 +67,7 @@ vi.mock("@supabase/supabase-js", () => ({
             not: vi.fn(() => chain),
             order: vi.fn(() => chain),
             limit: vi.fn(() => chain),
+            range: vi.fn(() => chain),
             then: (resolve: (v: unknown) => void) => resolve({ data: [], error: null })
           };
           return chain;
@@ -321,6 +323,37 @@ describe("Tier 2: Server Action Unit Tests", () => {
 
       const res = await getNextPair();
       expect(res.pair).toBeNull();
+    });
+
+    it("paginates beyond page 0 when user has annotated the first 50 pairs", async () => {
+      const annotatedPairs = Array.from({ length: 50 }, (_, i) => ({ pair_id: `pair-${i}` }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: annotatedPairs, error: null }));
+
+      const page0Pairs = Array.from({ length: 50 }, (_, i) => ({
+        id: `pair-${i}`,
+        canonical_storage_path: `path/c-${i}.png`,
+        scene_storage_path: `path/s-${i}.png`,
+      }));
+      const page1Pairs = [
+        {
+          id: "pair-50",
+          canonical_storage_path: "path/c-50.png",
+          scene_storage_path: "path/s-50.png",
+        },
+      ];
+
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: page0Pairs, error: null }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: page1Pairs, error: null }));
+
+      mockAdminCreateSignedUrl
+        .mockResolvedValueOnce({ data: { signedUrl: "https://signed.url/canonical-50" }, error: null })
+        .mockResolvedValueOnce({ data: { signedUrl: "https://signed.url/scene-50" }, error: null });
+
+      const res = await getNextPair();
+      expect(res.error).toBeUndefined();
+      expect(res.pair?.id).toBe("pair-50");
+      expect(res.pair?.canonical_signed_url).toBe("https://signed.url/canonical-50");
+      expect(res.pair?.scene_signed_url).toBe("https://signed.url/scene-50");
     });
   });
 });

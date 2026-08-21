@@ -31,6 +31,7 @@ const createQueryMock = (resolvedValue: unknown) => {
     not: vi.fn(() => chain),
     order: vi.fn(() => chain),
     limit: vi.fn(() => chain),
+    range: vi.fn(() => chain),
     then: (resolve: (v: unknown) => void) => resolve(resolvedValue)
   };
   return chain;
@@ -51,6 +52,7 @@ vi.mock("@supabase/supabase-js", () => ({
             not: vi.fn(() => chain),
             order: vi.fn(() => chain),
             limit: vi.fn(() => chain),
+            range: vi.fn(() => chain),
             then: (resolve: (v: unknown) => void) => resolve({ data: [], error: null })
           };
           return chain;
@@ -260,6 +262,49 @@ describe("Adjudication Server Actions", () => {
 
       const res = await getConflictedPair();
       expect(res.pair).toBeNull();
+    });
+
+    it("paginates beyond page 0 when all 50 pairs on page 0 are ineligible", async () => {
+      // 50 pairs on page 0 that are all already annotated by the adjudicator
+      const annotatedPairs = Array.from({ length: 50 }, (_, i) => ({ pair_id: `pair-${i}` }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: annotatedPairs })); // userAnnotations
+
+      const page0Pairs = Array.from({ length: 50 }, (_, i) => ({
+        id: `pair-${i}`,
+        canonical_storage_path: `path/c-${i}.png`,
+        scene_storage_path: `path/s-${i}.png`,
+      }));
+      const page1Pairs = [
+        {
+          id: "pair-50",
+          canonical_storage_path: "path/c-50.png",
+          scene_storage_path: "path/s-50.png",
+        },
+      ];
+
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: page0Pairs })); // page 0
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: page1Pairs })); // page 1
+
+      // Conflict query for pair-50
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockResolvedValue({
+          data: [
+            { annotator_id: "other-1", same_character: true, failure_reasons: [], anatomy_intact: true, text_free: true },
+            { annotator_id: "other-2", same_character: false, failure_reasons: ["wrong_colour"], anatomy_intact: true, text_free: true },
+          ],
+        }),
+      });
+
+      mockAdminCreateSignedUrl
+        .mockResolvedValueOnce({ data: { signedUrl: "https://signed.url/canonical-50" } })
+        .mockResolvedValueOnce({ data: { signedUrl: "https://signed.url/scene-50" } });
+
+      const res = await getConflictedPair();
+      expect(res.pair?.id).toBe("pair-50");
+      expect(res.pair?.canonical_signed_url).toBe("https://signed.url/canonical-50");
+      expect(res.pair?.scene_signed_url).toBe("https://signed.url/scene-50");
+      expect(res.annotationA?.same_character).toBe(true);
+      expect(res.annotationB?.same_character).toBe(false);
     });
   });
 });

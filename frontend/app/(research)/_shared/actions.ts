@@ -3,13 +3,7 @@
 import { createSupabaseServerClient } from "@/utils/supabase/server";
 import { User } from "@supabase/supabase-js";
 
-export type SubmissionPayload = {
-  pairId: string;
-  failureReasons: string[];
-  sameCharacter: boolean;
-  anatomyIntact: boolean;
-  textFree: boolean;
-};
+export type { SubmissionPayload } from "./validation";
 
 export async function verifyResearchAuth(requireAdjudicator: boolean = false): Promise<{ error: string | null, user: User | null }> {
   const supabase = await createSupabaseServerClient();
@@ -38,18 +32,4 @@ export async function verifyResearchAuth(requireAdjudicator: boolean = false): P
   }
 
   return { error: null, user };
-}
-
-export function validateSubmissionPayload(payload: SubmissionPayload) {
-  const { sameCharacter, failureReasons, anatomyIntact, textFree } = payload;
-  if (sameCharacter && failureReasons.length > 0) {
-    return { error: "Invalid state: same_character is true but failure reasons provided" };
-  }
-  if (!sameCharacter && failureReasons.length === 0) {
-    return { error: "Invalid state: same_character is false but no failure reasons provided" };
-  }
-  if (typeof anatomyIntact !== "boolean" || typeof textFree !== "boolean") {
-    return { error: "Invalid state: anatomy_intact and text_free must be explicitly provided" };
-  }
-  return { error: null };
 }

@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 
-import { verifyResearchAuth, validateSubmissionPayload, type SubmissionPayload } from "../_shared/actions";
+import { verifyResearchAuth } from "../_shared/actions";
+import { validateSubmissionPayload, type SubmissionPayload, isConsensus } from "../_shared/validation";
 
 export type BlindAnnotation = {
   same_character: boolean;
@@ -106,64 +107,71 @@ export async function getConflictedPair() {
     .select("pair_id")
     .eq("annotator_id", user.id);
 
-  const annotatedPairIds = (userAnnotations || []).map(a => a.pair_id);
+  const annotatedPairIds = new Set((userAnnotations || []).map(a => a.pair_id));
 
-  let query = adminClient
-    .from("research_pairs")
-    .select("id, canonical_storage_path, scene_storage_path")
-    .eq("status", "conflicted")
-    .order("created_at", { ascending: true })
-    .limit(50);
-
-  if (annotatedPairIds.length > 0) {
-    query = query.not("id", "in", `(${annotatedPairIds.join(",")})`);
-  }
-
-  const { data: pairs, error: pairsError } = await query;
-
-  if (pairsError || !pairs || pairs.length === 0) {
-    return { pair: null };
-  }
-
+  const PAGE_SIZE = 50;
+  let page = 0;
   let selectedPair = null;
   let annotationA: BlindAnnotation | null = null;
   let annotationB: BlindAnnotation | null = null;
 
-  for (const pair of pairs) {
-    const { data: annotations } = await adminClient
-      .from("annotations")
-      .select("annotator_id, same_character, failure_reasons, anatomy_intact, text_free")
-      .eq("pair_id", pair.id);
+  while (true) {
+    const from = page * PAGE_SIZE;
+    const to = (page + 1) * PAGE_SIZE - 1;
 
-    if (annotations && annotations.length === 2 && !annotations.some(a => a.annotator_id === user.id)) {
-      const [a1, a2] = annotations;
-      
-      const a1Reasons = Array.from(new Set(a1.failure_reasons || [])).sort();
-      const a2Reasons = Array.from(new Set(a2.failure_reasons || [])).sort();
+    const { data: pairs, error: pairsError } = await adminClient
+      .from("research_pairs")
+      .select("id, canonical_storage_path, scene_storage_path")
+      .eq("status", "conflicted")
+      .order("created_at", { ascending: true })
+      .range(from, to);
 
-      const agree = a1.same_character === a2.same_character && 
-                    a1.anatomy_intact === a2.anatomy_intact &&
-                    a1.text_free === a2.text_free &&
-                    JSON.stringify(a1Reasons) === JSON.stringify(a2Reasons);
-
-      if (agree) continue; // Not truly conflicted
-
-      selectedPair = pair;
-      // Strip identities
-      annotationA = {
-        same_character: a1.same_character,
-        failure_reasons: a1.failure_reasons,
-        anatomy_intact: a1.anatomy_intact,
-        text_free: a1.text_free,
-      };
-      annotationB = {
-        same_character: a2.same_character,
-        failure_reasons: a2.failure_reasons,
-        anatomy_intact: a2.anatomy_intact,
-        text_free: a2.text_free,
-      };
+    if (pairsError || !pairs || pairs.length === 0) {
       break;
     }
+
+    for (const pair of pairs) {
+      if (annotatedPairIds.has(pair.id)) {
+        continue;
+      }
+
+      const { data: annotations } = await adminClient
+        .from("annotations")
+        .select("annotator_id, same_character, failure_reasons, anatomy_intact, text_free")
+        .eq("pair_id", pair.id);
+
+      if (annotations && annotations.length === 2 && !annotations.some(a => a.annotator_id === user.id)) {
+        const [a1, a2] = annotations;
+        
+        if (isConsensus(a1, a2)) continue; // Not truly conflicted
+
+        selectedPair = pair;
+        // Strip identities
+        annotationA = {
+          same_character: a1.same_character,
+          failure_reasons: a1.failure_reasons,
+          anatomy_intact: a1.anatomy_intact,
+          text_free: a1.text_free,
+        };
+        annotationB = {
+          same_character: a2.same_character,
+          failure_reasons: a2.failure_reasons,
+          anatomy_intact: a2.anatomy_intact,
+          text_free: a2.text_free,
+        };
+        break;
+      }
+    }
+
+    if (selectedPair) {
+      break;
+    }
+
+    if (pairs.length < PAGE_SIZE) {
+      break;
+    }
+
+    page++;
   }
 
   if (!selectedPair || !annotationA || !annotationB) {
