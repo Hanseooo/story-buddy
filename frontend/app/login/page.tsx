@@ -5,6 +5,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { safe } from "@/lib/safe-redirect";
+
+function isPathUnder(path: string | null, base: string) {
+  return Boolean(path && (path === base || path.startsWith(`${base}/`)));
+}
 
 export default function Login() {
   const router = useRouter();
@@ -22,7 +27,7 @@ export default function Login() {
     setLoading(true);
     setError("");
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
+    const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -30,8 +35,45 @@ export default function Login() {
     if (signInError) {
       setError(signInError.message);
       setLoading(false);
-    } else {
-      router.push("/classroom");
+    } else if (authData.user) {
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role, is_adjudicator")
+        .eq("id", authData.user.id)
+        .single();
+
+      if (profileError || !profile) {
+        setError("We couldn't load your account. Please try again.");
+        setLoading(false);
+        return;
+      }
+
+      const next = searchParams.get("next");
+      const safeNext = next ? safe(next) : null;
+      const allowedNext =
+        profile.role === "student"
+          ? isPathUnder(safeNext, `/s/${authData.user.id}`)
+          : profile.role === "teacher"
+            ? isPathUnder(safeNext, "/classroom") || isPathUnder(safeNext, "/settings")
+            : profile.role === "researcher"
+              ? profile.is_adjudicator
+                ? isPathUnder(safeNext, "/adjudicate")
+                : isPathUnder(safeNext, "/annotate")
+              : false;
+
+      if (allowedNext && safeNext) {
+        router.push(safeNext);
+      } else if (profile?.role === "researcher") {
+        if (profile.is_adjudicator) {
+          router.push("/adjudicate");
+        } else {
+          router.push("/annotate");
+        }
+      } else if (profile?.role === "teacher") {
+        router.push("/classroom");
+      } else {
+        router.push(`/s/${authData.user.id}`);
+      }
     }
   };
 

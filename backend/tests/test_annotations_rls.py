@@ -191,13 +191,19 @@ def test_submitted_row_is_final_no_update_policy(conn):
     ).rowcount == 0
 
 
-@pytest.mark.skip(
-    reason="D-L: §2.1's 'researcher role with the adjudicator flag' has no "
-           "schema representation yet — profiles carries no adjudicator column. "
-           "Logged in DECISION_BACKLOG.md; 0014 grants no read-all policy."
-)
 def test_adjudicator_reads_all_rows(conn):
-    raise AssertionError("unreachable until D-L is decided")
+    a, b = _researcher(conn, "A"), _researcher(conn, "B")
+    adj = _researcher(conn, "Adj")
+    conn.execute("UPDATE profiles SET is_adjudicator = true WHERE id = %s", (adj,))
+
+    _annotate(conn, "pair-1", a, True)
+    _annotate(conn, "pair-1", b, False)
+
+    _as_user(conn, adj)
+    rows = conn.execute("SELECT annotator_id FROM annotations ORDER BY annotator_id").fetchall()
+    assert len(rows) == 2
+    assert set(r[0] for r in rows) == {a, b}
+
 
 
 # ── Closed taxonomy (§2.1, judge-finetune.md §4, ADR-028: frozen at 7) ───────
@@ -290,3 +296,32 @@ def test_disagreement_query_ignores_a_pair_with_one_label_so_far(conn):
 
     _reset_role(conn)
     assert conn.execute(DISAGREEMENT_SQL).fetchall() == []
+
+
+# ── Blinding & role isolation (§6, migration 0017) ───────────────────────────
+
+
+def test_researcher_cannot_select_research_pairs(conn):
+    a = _researcher(conn, "A")
+    _as_user(conn, a)
+    # RLS blocks direct selection of research_pairs by ordinary researchers
+    rows = conn.execute("SELECT * FROM research_pairs").fetchall()
+    assert rows == []
+
+
+def test_researcher_cannot_update_is_adjudicator(conn):
+    a = _researcher(conn, "A")
+    _as_user(conn, a)
+    # Attempt to elevate privileges directly
+    try:
+        conn.execute(
+            "UPDATE profiles SET is_adjudicator = true WHERE id = %s", (a,)
+        )
+    except Exception:
+        pass
+    _reset_role(conn)
+    is_adj = conn.execute(
+        "SELECT is_adjudicator FROM profiles WHERE id = %s", (a,)
+    ).fetchone()[0]
+    assert is_adj is False
+

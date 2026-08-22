@@ -28,4 +28,14 @@ describe("Root Layout Global Error Boundary (global-error.tsx)", () => {
 
     expect(resetFn).toHaveBeenCalledTimes(1);
   });
+
+  it("offers a logout escape hatch for stale sessions", () => {
+    render(<GlobalError error={new Error("Root layout crash")} reset={vi.fn()} />);
+
+    const logoutButton = screen.getByRole("button", { name: /log out/i });
+    const logoutForm = logoutButton.closest("form");
+
+    expect(logoutForm).toHaveAttribute("action", "/auth/signout");
+    expect(logoutForm).toHaveAttribute("method", "post");
+  });
 });

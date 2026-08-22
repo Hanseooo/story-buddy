@@ -524,5 +524,27 @@ amendment here.
 
 ## 12. Amendments
 
-*None. Any amendment is appended here with its own date, and states whether any held-out number had been
-seen at the time it was made. Superseded prose above is struck through, never deleted.*
+### 2026-08-22 — Preset allocation and story-input freeze
+
+**State when amended:** zero held-out results had been seen; donated stories had not entered the corpus;
+no study labels had been collected; no fine-tune had been trained.
+
+The original registration controlled style within each character cluster (§5.1) but did not state how the
+product's three selectable ADR-042 presets enter the corpus. This amendment closes that degree of freedom:
+
+- each story explicitly declares one of `cel`, `gouache` or `cut_paper`; its references and scenes remain in
+  that preset, and legacy-only `comic` is excluded;
+- the 30 synthetic stories are 24 train and 6 validation, allocated as 8 train and 2 validation stories per
+  preset;
+- the 15 donated candidates are assigned five per preset before generation; the 10 primary slots are
+  4 Gouache, 3 Cel and 3 Cut-paper, and the five backups are 1 Gouache, 2 Cel and 2 Cut-paper. Gouache receives
+  the extra primary slot because it is the product default, not because of generated outcomes;
+- replacements preserve the vacated style slot when an eligible backup exists. Otherwise the achieved
+  imbalance is reported without restyling or outcome-based selection;
+- constructed negatives match style; overall held-out performance remains primary, and per-style results
+  are exploratory diagnostics only.
+
+Story input is a validated JSON list, not Python source. The checked-in synthetic file and controlled,
+gitignored donated file share the strict record contract in `research-corpus-operations.md` §4.1. Declared
+fictional character/non-human rosters are reconciled with final `StoryMemory` before pair materialization.
+This amendment changes neither the primary endpoint nor the one-time held-out-test rule.

@@ -59,6 +59,15 @@ export default function ErrorBoundary({
             <Books className="size-5" weight="bold" />
             <span>Back to Bookshelf</span>
           </Link>
+
+          <form action="/auth/signout" method="post">
+            <button
+              type="submit"
+              className="w-full min-h-[48px] inline-flex items-center justify-center px-6 py-3 rounded-xl border border-primary/20 text-primary font-kid font-bold text-base hover:bg-muted/40 active:scale-[0.98] transition-all focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
+            >
+              Log out
+            </button>
+          </form>
         </div>
       </div>
     </div>

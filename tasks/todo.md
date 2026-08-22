@@ -1,3 +1,73 @@
+# Current Task: Research corpus operations design
+
+- [x] Explore corpus, annotation, telemetry, ethics, storage ADR, and training context.
+- [x] Clarify consent status, donated-test role, budget, storage posture, and pilot disposition.
+- [x] Compare corpus-generation approaches and obtain approval for the staged diversity-first design.
+- [x] Present and obtain approval for architecture, failure/cost controls, phases, and artifacts.
+- [x] Write the canonical corpus-operations spec and consent/assent draft.
+- [x] Update and verify the self-contained research-strategy HTML artifact.
+- [x] Self-review all written artifacts for drift, ambiguity, placeholders, and broken links.
+- [x] Commit the approved design documentation; ask the owner to review it before implementation planning.
+
+## Success criteria
+
+The written design provides an end-to-end, fail-closed lineage from consent through one-time evaluation;
+preserves ADR-027's Supabase/PNG-reference/WebP-scene decision; caps Fal spend at USD 30; prevents pilot,
+split, identity and byte-provenance leakage; and clearly separates ethics drafts from approved materials.
+
+## Review outcome
+
+Added the canonical `research-corpus-operations` spec, an explicitly unapproved guardian-consent/child-assent
+draft, and a pointer from the existing ethics document. Updated the root HTML artifact to remove stale R2,
+USD-20, 50–100-pair pilot and predictive-superiority claims. Independent review aligned pilot deletion with
+the canonical spec and confirmed the missing `StoryMemory` materialization and queue bridge as implementation
+gaps rather than claiming the existing scripts are end-to-end.
+
+Verification: `git diff --check` passed; stale-claim grep returned no matches; the HTML parser confirmed 14
+cards, balanced tags and the current title. The in-app browser render check was unavailable because its bridge
+could not start, so visual rendering remains unverified. No code tests were run because this change is
+documentation-only. Consent/assent administrative blanks are deliberate and the draft is marked do-not-use
+until adviser, ethics and participating-school approval.
+
+---
+
+# Current Task: Annotation implementation review verification
+
+- [x] Trace each review finding through specs, migrations, server actions, exporter, and tests.
+- [x] Reject findings that conflict with intentional architecture; record the evidence.
+- [x] Add failing regression tests for every confirmed behavior defect.
+- [x] Apply the smallest fixes and update the owning annotation spec where behavior changes.
+- [x] Run focused red/green checks and full frontend/backend verification.
+- [x] Record the outcome, unverified external state, and residual risks.
+
+## Success criteria
+
+Dataset export hard-fails on incomplete or invalid non-pilot annotation states; adjudication accepts
+only two independent ordinary labels; annotation ordering satisfies the documented per-annotator
+randomization rule; signed-URL failures cannot present a labelable broken pair; and intentional
+service-role access remains no broader than the approved blinded-queue design.
+
+## Outcome
+
+Confirmed and fixed the exporter hard-fail regressions, ordinary-annotator eligibility checks,
+whole-queue deterministic ordering, signed-URL failure handling, and swallowed queue/status read or
+write errors. Kept the authenticated server-action service-role seam: ordinary annotation RLS cannot
+read the second annotator's row, while the server must compute pair consensus without exposing those
+rows to either annotator.
+
+The second-pass investigation found and fixed an additional blocker: Supabase returns at most 1,000
+rows by default, but `fetch_annotations()` made one unpaginated request for a campaign expected to
+produce 1,500–2,000+ rows. The exporter now reads stable ordered pages until exhausted, with a
+1,001-row regression test and the annotation spec updated.
+
+Verification: frontend focused action tests passed 42; full frontend suite passed 380 tests across
+42 files; production build/type-check passed. Backend focused exporter tests passed 26; full backend
+suite passed 973 tests, skipped 80 environment-dependent cases, and deselected 6 smoke tests. Frontend
+lint and backend Ruff passed. Remote Supabase migration/RLS state remains unverified because the DB
+integration tests require `SUPABASE_DB_URL` and skipped locally.
+
+---
+
 # Current Task: Production visual-output regression follow-up
 
 - [x] Read project guidance, lessons, current pipeline/specs, production prompts/logs, and recent commits.
@@ -507,3 +577,120 @@ Implemented ADR-042 style policy:
   - Frontend: `pnpm lint` clean; `pnpm test` — 34 test files, 279 passed.
   - `git diff --check` clean.
 - Cut-paper collage remains an unpromoted offline candidate fragment for future paid validation per ADR-042; no runtime or schema promotion was performed.
+
+---
+
+# Current Task: Error-page auth recovery and route verification
+
+- [x] Verify the reported route unauthenticated without changing route guards; authenticated reproduction remains dependent on a sanitized signed-in browser state.
+- [x] Add failing tests for logout recovery, signout cookie clearing, and role/auth routing gaps.
+- [x] Implement the smallest error-page recovery change using the existing `/auth/signout` route.
+- [x] Update the owning auth UX spec without changing the auth model or role policy.
+- [x] Run focused tests, lint, the full frontend suite, the build, and diff checks.
+
+## Success criteria
+
+The reported route remains governed by the existing middleware contract, error and 404 surfaces offer a safe logout escape hatch, auth/role behavior is covered by deterministic tests, and all required frontend verification is green with no unrelated dirty-worktree changes overwritten.
+
+## Outcome — 2026-08-21
+
+Added native `POST /auth/signout` recovery forms to the root 404, root/global error, student,
+classroom, gallery, research metrics, annotate, and adjudicate fallbacks. Added deterministic coverage for the recovery forms,
+raw-error non-disclosure, signout redirects and `sb-*` cookie sweeping, safe login redirects, and
+teacher/student/researcher role destinations. The reported `/s/c4f346f6-829e-41d3-b642-b0f4ef06bad0`
+route still returns `307 → /join?next=...` for a clean unauthenticated request; `/does-not-exist`
+returns the StoryBuddy 404. No authenticated reproduction was available in this session.
+
+Verification: focused tests 66 passed, then the final full frontend suite 366 passed across 42 files;
+production build succeeded. Targeted changed-file `git diff --check` is clean. Whole-worktree diff
+check still reports a pre-existing trailing-whitespace line in
+`frontend/app/(research)/adjudicate/actions.ts:145`, which was not changed.
+
+---
+
+# Current Task: Researcher redirect trap
+
+- [x] Reproduce the clean unauthenticated request and trace authenticated role-routing paths without reading secrets.
+- [x] Delegate independent read-only traces for login redirects, student-route rendering, and Supabase signout.
+- [x] Add failing tests for incompatible `next` targets, profile lookup failure, researcher role routing, and logout recovery.
+- [x] Implement the smallest role-aware fixes at login and the existing teacher/student route boundaries.
+- [x] Update the owning auth UX spec with role-compatible `next` behavior and failure handling.
+- [x] Run focused tests, lint, the full frontend suite, the build, and live smoke checks.
+
+## Success criteria
+
+A researcher cannot be pushed into `/s/<id>` by a stale/incompatible login target or a silent profile
+lookup fallback; authenticated teacher-surface resolution routes researchers to `/annotate` or
+`/adjudicate`; any student-route fallback has a correct research link and visible logout; and all
+required frontend checks are green without overwriting unrelated worktree changes.
+
+## Outcome — 2026-08-21
+
+Root causes were confirmed in separate paths: login honored role-incompatible internal `next`
+targets; a failed profile lookup silently fell through to `/s/<userId>`; and the teacher resolver
+sent every non-teacher to that student tree. The fixes keep middleware role-blind, constrain `next`
+by the resolved role, fail visibly on profile lookup failure, route researchers through the existing
+server profile resolver, and add research-specific recovery plus logout to the student fallback.
+
+TDD evidence: the new login/layout/teacher tests first failed for the expected redirects and missing
+logout, then passed after the fixes. Final verification: focused auth tests 43 passed; `pnpm lint`
+passed; `pnpm test` passed with 371 tests across 42 files; `pnpm build` completed successfully.
+HTTP smoke returned `307 /join?next=...` for the clean unauthenticated reported URL, `404` with
+`Page 404` for an unknown route, and `303 /login` for `POST /auth/signout`.
+
+The signed-in researcher URL could not be replayed because no sanitized authenticated browser state
+was available; the current remote Supabase migration state is also unverified. Whole-worktree
+`git diff --check` still reports the pre-existing trailing-whitespace line at
+`frontend/app/(research)/adjudicate/actions.ts:145`, which was not changed.
+# Research corpus operations implementation planning (2026-08-21)
+
+- [x] Read the approved design and writing-plans instructions.
+- [x] Map existing corpus, annotation, storage, and integrity seams.
+- [x] Write the test-first implementation plan under `docs/specs/plans/`.
+- [x] Self-review the plan against every approved spec requirement.
+- [x] Create bounded GitHub issues with explicit manual/code gates (#54-#65).
+- [x] Verify links, issue state, diff hygiene, and commit the planning artifacts.
+
+## Success criteria
+
+- Every design requirement maps to an executable task or explicit human gate.
+- No new provider, datastore, dependency, schema, or public contract is introduced.
+- Paid execution is blocked behind zero-cost tests, consent approval, and dollar caps.
+- Issues are independently reviewable and ordered by stop gates.
+
+## Review / outcome
+
+- Plan covers governance, intake, immutable corpus persistence, exact image encoding/hashing, Fal spend and uncertain billing, pair materialization, annotation reconciliation, freeze guards, pilot cleanup, storage telemetry, paid smoke, annotation, training, and one-time evaluation.
+- Existing Objective-4 epic #53 now links issues #54-#65 and no longer directs a donated training corpus or stale image-count budget.
+- No application code, data, database, provider configuration, or paid service was changed or invoked.
+
+---
+
+# Current Task: Objective-4 corpus style and story-input gap closure
+
+- [x] Inspect the locked selectable-style catalog and existing corpus input path.
+- [x] Obtain explicit owner acceptance of `cut_paper` under ADR-042's escape hatch.
+- [x] Decide explicit per-story style assignment and one JSON-list input contract.
+- [x] Freeze synthetic and donated style allocations before paid generation.
+- [x] Define declared roster validation and post-run `StoryMemory` reconciliation.
+- [x] Amend the preregistration before any held-out result, study label, or fine-tune exists.
+- [x] Run repository-wide contradiction and placeholder checks.
+- [x] Commit the documentation-only change and request owner review.
+
+## Success criteria
+
+Canonical docs use `cel`, `gouache`, and `cut_paper`; explain exactly how a story is entered; prevent style
+from becoming an identity shortcut; keep all allocation choices outcome-blind; and give the implementation
+plan deterministic validation and sequencing checks. No code, corpus data, paid call, or external store changes.
+
+## Review / outcome
+
+Owner acceptance is recorded as ADR-042's dated escape-hatch amendment without claiming the waived paid
+validation passed. Canonical research docs now freeze one strict JSON-list input contract, roster
+reconciliation, 24/6 synthetic splitting with 8/2 per style, 5/5/5 donated candidate coverage, and
+within-style pairing. Historical ADR statements remain visible.
+
+Verification: `git diff --check` passed; the added JSON example parsed; `research_strategy.html` parsed and
+its tags balanced; changed-line placeholder scan was empty; repository scan found no live `paper_cut`,
+single-style, or obsolete 50-story claim in the owning corpus documents. Application tests were not run
+because no runtime, data, schema, or UI behavior changed.

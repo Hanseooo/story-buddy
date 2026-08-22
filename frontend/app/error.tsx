@@ -128,6 +128,15 @@ export default function ErrorBoundary({
             </Link>
           </motion.div>
 
+          <form action="/auth/signout" method="post" className="mt-4">
+            <button
+              type="submit"
+              className="min-h-[44px] rounded-xl border border-primary/20 px-5 py-2 text-sm font-kid font-bold text-primary hover:bg-primary/5 transition-colors focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
+            >
+              Log out
+            </button>
+          </form>
+
         </div>
       </main>
 

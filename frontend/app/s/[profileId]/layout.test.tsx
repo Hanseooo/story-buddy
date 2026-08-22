@@ -76,5 +76,24 @@ describe("Student Shell Layout", () => {
       "href",
       "/classroom"
     );
+    expect(screen.getByRole("button", { name: /log out/i })).toBeDefined();
+  });
+
+  it("offers a researcher their assigned research surface", async () => {
+    mockSingle.mockResolvedValueOnce({
+      data: { display_nickname: "Researcher", role: "researcher", is_adjudicator: false },
+    });
+
+    const jsx = await StudentLayout({
+      children: <div>Child Content</div>,
+      params: Promise.resolve({ profileId: "researcher-1" }),
+    });
+
+    render(jsx);
+
+    expect(screen.getByRole("link", { name: /go to annotation area/i })).toHaveAttribute(
+      "href",
+      "/annotate"
+    );
   });
 });

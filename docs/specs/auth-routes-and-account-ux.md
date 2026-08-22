@@ -148,6 +148,12 @@ page. The security boundary is RLS (S3), not this comparison.
 **`?next=` is validated.** Accepted only when it starts with `/` and not `//`. Otherwise
 `/join?next=https://evil.com` is a phishing hop off a child's login screen.
 
+The login page applies one more check after reading `profiles.role`: a student may resume only
+their own `/s/<sub>` tree, a teacher may resume `/classroom` or `/settings`, and a researcher may
+resume `/annotate` or `/adjudicate` only when that surface matches `is_adjudicator`. An incompatible
+internal target is ignored in favor of the role destination. A profile lookup error stays on the
+login form with a generic account-loading message; it must never fall through to `/s/<sub>`.
+
 **`getUser()` failing fails closed** — redirect to the login door. Failing open on an auth guard is
 not acceptable. The cost is bounded: a running job continues server-side (S2 §3.2) and the child
 returns to it after logging back in.
@@ -321,9 +327,10 @@ forget it, ask your teacher."* There is no inbox to recover to, by construction 
 | Stale bookmark, another child's URL | → own bookshelf, silently (§4) |
 | Job UUID belonging to another child | RLS returns no row → `classify(null)` = `not-found` → kid-flow's **already-built** not-found screen |
 | Classroom deleted while the child is logged in | Bounded to ≤1h. S1's `on_profile_deleted` trigger removes the `auth.users` row, so *new* logins fail generically — but a live access token survives its hour with no `profiles` row, and RLS then returns empty everything. Shell's profile query returns nothing → *"Your class isn't set up anymore. Ask your teacher."* + log out |
-| Teacher or researcher on a student route | Passes the guard on their own id. Shell reads `role !== 'student'` → *"This part is for students"* + link to `/dashboard`, instead of a silently empty bookshelf |
+| Teacher or researcher on a student route | Passes the guard on their own id. Shell reads `role !== 'student'` → *"This part is for students"* + link to `/classroom`, `/annotate`, or `/adjudicate` as appropriate, plus log out, instead of a silently empty bookshelf |
+| Runtime error or unknown page with a stale session | The friendly error/404 fallback keeps retry/home recovery and adds a native `POST /auth/signout` escape hatch. Signout clears all `sb-*` cookies and redirects to `/login`, even when Supabase cannot revoke the stale session. |
 
-Six of these need no new component: they reuse what kid-flow S4 already shipped.
+Six of the original states need no new component: they reuse what kid-flow S4 already shipped. The new fallback action reuses the existing signout route.
 
 ### 7.5 Loading, errors, accessibility
 
@@ -332,6 +339,8 @@ Six of these need no new component: they reuse what kid-flow S4 already shipped.
   (`ROUTE_MAP.md` §8 rule 5).
 - `loading.tsx` for the student tree and the auth pages; `error.tsx` in ROUTE_MAP §8's two registers
   (kid: friendly, Nunito; teacher: clean, Inter).
+- Root, student, classroom, research error boundaries, and the 404 page expose a visible `Log out`
+  form targeting `/auth/signout` so a stale session always has a recovery path.
 - The active field is autofocused on each step; step changes are announced to screen readers; touch
   targets are ≥44px (DESIGN.md §1.6).
 - Register is **Cobalt Playroom** per the current `DESIGN.md` — light-first, Outfit / Nunito for the
@@ -345,8 +354,8 @@ Six of these need no new component: they reuse what kid-flow S4 already shipped.
 - [x] **CC-6 Accessibility** — 44px targets, autofocus per step, screen-reader step announcements,
   visible password by default.
 - [x] **CC-8 Kid vs teacher design** — two registers, no shared auth layout, separate `error.tsx`.
-- [x] **CC-9 Failure states = success states** — §7.4 renders eight of them, six with existing
-  components.
+- [x] **CC-9 Failure states = success states** — §7.4 renders nine states, including a stale-session
+  logout escape hatch on every fallback surface.
 - [x] **CC-2 PII** — no PII in URLs; `profileId` is a UUID. No new PII collected.
 - [ ] CC-1, CC-3, CC-5, CC-7, CC-10 — not touched by this spec.
 
@@ -363,7 +372,9 @@ Six of these need no new component: they reuse what kid-flow S4 already shipped.
 3. Authenticated, URL segment ≠ `sub` → redirect to `/s/<sub>`.
 4. Authenticated on `/join` **and** on `/join/[code]` → `/s/<sub>`; authenticated on `/login` →
    `/dashboard`.
-5. `?next=https://evil.com` and `?next=//evil.com` are rejected; `?next=/s/x/write` is honored.
+5. `?next=https://evil.com` and `?next=//evil.com` are rejected; a role-compatible internal target
+   is honored, while a researcher target such as `?next=/s/x/write` is ignored in favor of
+   `/annotate` or `/adjudicate`.
 
 **`/join`:**
 
@@ -381,6 +392,11 @@ Six of these need no new component: they reuse what kid-flow S4 already shipped.
 12. Each of `classify`'s four buckets renders its card with the correct `href`.
 13. Absent `profiles` row → the "class isn't set up" screen; `role = 'teacher'` → the
     "this part is for students" screen.
+14. The 404 and every route error boundary expose `POST /auth/signout`; the handler returns `303
+    /login`, clears all `sb-*` cookies, and still clears locally when Supabase signout fails.
+15. A failed login profile lookup renders a generic account-loading error and never routes to
+    `/s/<userId>`; a researcher reaching the teacher resolver routes to `/annotate` or
+    `/adjudicate` from `is_adjudicator`.
 
 Nickname normalization needs no new vectors — S1 §5.1's fourteen are already bound in
 `frontend/lib/nickname.test.ts`.

@@ -1,8 +1,8 @@
-# ADR-042 — Reliable selectable styles: Gouache default, Comic retired, Cut-paper candidate
+# ADR-042 — Reliable selectable styles: Gouache default, Comic retired, Cut-paper promoted
 
-**Status:** Accepted (2026-08-17; owner approved) · **resolves D-O** · **amends ADR-022's
+**Status:** Accepted (2026-08-17; owner approved) · amended 2026-08-22 (Cut-paper promoted) · **resolves D-O** · **amends ADR-022's
 exact selectable catalog, flagship default, and preset acceptance policy** · preserves ADR-007's
-reference-carried style mechanism · implementation and paid candidate validation pending
+reference-carried style mechanism · paid candidate validation waived by the 2026-08-22 owner amendment
 
 **Context:** ADR-022 made `cel`, `comic`, and `gouache` selectable and named Cel the flagship
 default. Production observations since then show Comic resolving into materially different visual
@@ -123,3 +123,15 @@ change style.
 **Escape hatch:** Changing the default, restoring Comic for new jobs, promoting a candidate that did
 not pass the gate, weakening the zero-miss rule, or substituting a different candidate requires a
 new ADR or an explicit owner-accepted amendment before implementation.
+
+## Amendment — 2026-08-22: owner accepts Cut-paper as the third preset
+
+The owner explicitly accepts `cut_paper` as the third selectable and Objective-4 corpus preset despite
+the three-book paid validation remaining unexecuted. This exercises the escape hatch above; it does not
+rewrite the original decision or claim that the zero-style-family-miss gate passed.
+
+The selectable catalog is now exactly `gouache`, `cel`, and `cut_paper`; Gouache remains the new-job
+default, Comic remains legacy-execution-only, and the stored ID/display label remain `cut_paper` / “Paper
+Cutout.” The missing paid validation is retained as a product-quality limitation and must not be reported as
+empirical evidence. Objective-4 may include all three presets only with explicit per-story assignment,
+within-preset reference/scene pairing, and style-stratified descriptive reporting.
