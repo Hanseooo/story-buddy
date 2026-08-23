@@ -6,16 +6,30 @@ This module owns the **one** polarity conversion in the project. `annotations.sa
 (`annotation-surface.md` §2.1) — inverting it flips precision and recall for Objective 4 while
 every number still looks plausible.
 """
+import argparse
 import hashlib
 import itertools
 import json
 import logging
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Iterable, NamedTuple
 
 from app.db import get_supabase_client
 from contracts.story_memory import Character, FailureReason, StoryMemory
+from finetune.annotation_truth import (
+    Consensus,
+    fetch_adjudicator_ids,
+    fetch_annotations,
+    fetch_pilot_pairs,
+    reconcile_pair_status,
+    reconcile_remote_status,
+    repair_pair_statuses,
+    resolve_annotations,
+)
+from finetune.corpus_io import CorpusError
+from finetune.freeze_dataset import FreezeReport, freeze_dataset
 from finetune.manifest import (
     ManifestError,
     ManifestRecord,
@@ -26,9 +40,21 @@ from finetune.manifest import (
     write_manifest,
 )
 
+__all__ = [
+    "Consensus",
+    "FreezeReport",
+    "fetch_adjudicator_ids",
+    "fetch_annotations",
+    "fetch_pilot_pairs",
+    "freeze_dataset",
+    "reconcile_pair_status",
+    "reconcile_remote_status",
+    "repair_pair_statuses",
+    "resolve_annotations",
+]
+
 log = logging.getLogger(__name__)
 
-ANNOTATIONS_TABLE = "annotations"
 
 # §5.2: the rationale is rendered deterministically from the ticked taxonomy — no human writes it
 # and no model writes it, so §3.4's distillation ceiling cannot come back through the side door.
@@ -56,15 +82,6 @@ class Pair(NamedTuple):
     scene_image: str
 
 
-class Consensus(NamedTuple):
-    """What the annotators (plus the adjudicator) agreed a pair is."""
-    same_character: bool
-    failure_reasons: list[str]
-    anatomy_intact: bool = True
-    text_free: bool = True
-    adjudicated: bool = False
-
-
 # --- pairing (§5.4 step 2 — a loop, not a labelling task) ------------------------------------
 
 def mint_pair_id(char_id: str, scene_image: str) -> str:
@@ -73,8 +90,13 @@ def mint_pair_id(char_id: str, scene_image: str) -> str:
     return hashlib.sha256(f"{char_id}\0{scene_image}".encode()).hexdigest()[:16]
 
 
+def lineage_id(story_id: str, char_id: str) -> str:
+    """Qualify StoryMemory's story-local character IDs for corpus-wide split guards."""
+    return f"{story_id}:{char_id}"
+
+
 def pairs_from_memory(memory: StoryMemory) -> list[Pair]:
-    """Every attempt image against the canonical reference of every character present in it.
+    """Each finalized scene against the canonical reference of every character present in it.
 
     Reference first, scene second — order is load-bearing (§5.2), and it is the same order
     `providers.judge` sends them in.
@@ -82,128 +104,19 @@ def pairs_from_memory(memory: StoryMemory) -> list[Pair]:
     by_id = {c.char_id: c for c in memory.characters}
     pairs = []
     for scene in memory.scenes:
+        if not scene.final_image_ref:
+            continue
         for char_id in scene.characters_present:
             character = by_id.get(char_id)
             if character is None or not character.canonical_ref_image:
                 continue    # nothing to compare against; consistency_check skips these too
-            for attempt in scene.attempts:
-                pairs.append(Pair(
-                    pair_id=mint_pair_id(char_id, attempt.image_ref),
-                    char_id=char_id,
-                    ref_image=character.canonical_ref_image,
-                    scene_image=attempt.image_ref,
-                ))
+            pairs.append(Pair(
+                pair_id=mint_pair_id(char_id, scene.final_image_ref),
+                char_id=char_id,
+                ref_image=character.canonical_ref_image,
+                scene_image=scene.final_image_ref,
+            ))
     return pairs
-
-
-# --- the `annotations` table (ADR-026) -------------------------------------------------------
-
-def fetch_annotations() -> list[dict]:
-    """The one effect boundary of this module — mocked by every deterministic test.
-
-    ponytail: read straight through the existing `app.db` Supabase seam rather than adding a
-    function to `providers.py`. `providers.py` is the *vendor model* seam (ADR-015); this is a
-    plain table read, and `app/classrooms.py`, `app/auth.py` and `worker/run_job.py` all read
-    their tables exactly this way. Upgrade path: if a second consumer of `annotations` appears,
-    lift this into `app/db.py` beside `get_supabase_client`.
-    """
-    page_size = 1000
-    rows = []
-    query = (
-        get_supabase_client()
-        .table(ANNOTATIONS_TABLE)
-        .select("*")
-        .order("pair_id")
-        .order("annotator_id")
-    )
-    for start in itertools.count(0, page_size):
-        page = query.range(start, start + page_size - 1).execute().data or []
-        rows.extend(page)
-        if len(page) < page_size:
-            return rows
-
-
-def fetch_adjudicator_ids() -> set[str]:
-    data = get_supabase_client().table("profiles").select("id").eq("is_adjudicator", True).execute().data or []
-    return {row["id"] for row in data}
-
-
-def fetch_pilot_pairs() -> set[str]:
-    data = get_supabase_client().table("research_pairs").select("id").eq("is_pilot", True).execute().data or []
-    return {row["id"] for row in data}
-
-
-def resolve_annotations(
-    rows: Iterable[dict],
-    adjudicators: set[str],
-    pilot_pairs: set[str],
-) -> dict[str, Consensus]:
-    """Independent labels → one consensus per pair.
-
-    Hard fails on invalid states: >2 ordinary annotations, <2 ordinary annotations,
-    unresolved conflicts, multiple adjudicators, or adjudicator rows on agreeing pairs.
-    Pilot pairs are silently excluded.
-
-    The gating booleans fold worst-wins and the reasons union, mirroring `consistency_check`'s
-    fold so a human label and a judge verdict are combined the same way.
-    """
-    grouped: dict[str, list[dict]] = defaultdict(list)
-    for row in rows:
-        if row["pair_id"] in pilot_pairs:
-            continue
-        grouped[row["pair_id"]].append(row)
-
-    resolved: dict[str, Consensus] = {}
-    for pair_id, pair_rows in grouped.items():
-        ordinary = [r for r in pair_rows if r["annotator_id"] not in adjudicators]
-        adjs = [r for r in pair_rows if r["annotator_id"] in adjudicators]
-
-        if len(ordinary) > 2:
-            raise ManifestError(f"Pair {pair_id} has >2 ordinary annotations.")
-        if len(ordinary) < 2:
-            raise ManifestError(f"Pair {pair_id} has <2 ordinary annotations.")
-
-        if ordinary[0]["annotator_id"] == ordinary[1]["annotator_id"]:
-            raise ManifestError(f"Pair {pair_id} has duplicate annotator_ids for ordinary annotations.")
-
-        def get_sig(r: dict) -> tuple:
-            return (
-                bool(r.get("same_character")),
-                bool(r.get("anatomy_intact", True)),
-                bool(r.get("text_free", True)),
-                tuple(sorted(r.get("failure_reasons") or [])),
-            )
-
-        signatures = {get_sig(r) for r in ordinary}
-        if len(signatures) == 1:
-            if len(adjs) > 0:
-                raise ManifestError(f"Pair {pair_id}: ordinary annotators agreed, but adjudicator row exists.")
-            winner = bool(ordinary[0].get("same_character"))
-            final_rows = ordinary
-            adjudicated = False
-        else:
-            if len(adjs) == 0:
-                raise ManifestError(f"Pair {pair_id}: unresolved conflict (no adjudicator).")
-            if len(adjs) > 1:
-                raise ManifestError(f"Pair {pair_id}: multiple adjudicator rows.")
-            winner = bool(adjs[0].get("same_character"))
-            final_rows = adjs
-            adjudicated = True
-
-        reasons: list[str] = []
-        for row in final_rows:
-            for reason in row.get("failure_reasons") or []:
-                if reason not in reasons:
-                    reasons.append(reason)
-
-        resolved[pair_id] = Consensus(
-            same_character=winner,
-            failure_reasons=reasons,
-            anatomy_intact=all(r.get("anatomy_intact", True) for r in final_rows),
-            text_free=all(r.get("text_free", True) for r in final_rows),
-            adjudicated=adjudicated,
-        )
-    return resolved
 
 
 # --- rationale rendering (§5.2) --------------------------------------------------------------
@@ -241,6 +154,7 @@ def build_records(
     consensus: dict[str, Consensus],
     pilot_pairs: set[str],
     pair_type: PairType = "pipeline",
+    image_root: Path | None = None,
 ) -> list[ManifestRecord]:
     """Pairs that have a resolved human label become manifest records. Pilot pairs are dropped.
     Non-pilot pairs with missing annotations trigger a HARD FAIL.
@@ -259,15 +173,15 @@ def build_records(
 
         records.append(ManifestRecord(
             pair_id=pair.pair_id,
-            char_id=pair.char_id,
+            char_id=lineage_id(memory.story_id, pair.char_id),
             split=split,
             provenance=provenance,
             pair_type=pair_type,
             # Storage paths -> the local files `build_corpus` wrote. LLaMA-Factory resolves these
             # against the filesystem, so the manifest must carry the on-disk name (manifest.py).
             images=[
-                local_image_path(pair.ref_image, "ref"),
-                local_image_path(pair.scene_image, "scene"),
+                local_image_path(pair.ref_image, "ref", root=image_root),
+                local_image_path(pair.scene_image, "scene", root=image_root),
             ],
             differences_observed=render_rationale(
                 agreed.same_character, agreed.failure_reasons, bible_attributes(by_id[pair.char_id])
@@ -281,7 +195,9 @@ def build_records(
     return records
 
 
-def constructed_records(records: list[ManifestRecord]) -> list[ManifestRecord]:
+def constructed_records(
+    records: list[ManifestRecord], styles_by_char: dict[str, str] | None = None
+) -> list[ManifestRecord]:
     """§5.4 step 5 — character A's reference against a scene generated from character B's.
 
     Free, definitely different, and TRAIN ONLY (§3.3): val and test must keep the deployment
@@ -299,6 +215,8 @@ def constructed_records(records: list[ManifestRecord]) -> list[ManifestRecord]:
 
     made = []
     for a, b in itertools.combinations(sorted(by_char), 2):
+        if styles_by_char is not None and styles_by_char.get(a) != styles_by_char.get(b):
+            continue
         ref = by_char[a][0].images[0]
         scene = by_char[b][0].images[1]
         made.append(ManifestRecord(
@@ -320,18 +238,27 @@ def build_dataset(
     corpus: Iterable[tuple[StoryMemory, Split, Provenance]],
     out_path: Path = Path("data/judge/manifest.jsonl"),
     add_constructed: bool = True,
+    *,
+    annotation_rows: Iterable[dict] | None = None,
+    adjudicator_ids: set[str] | None = None,
+    pilot_pair_ids: set[str] | None = None,
+    image_root: Path | None = None,
+    styles_by_char: dict[str, str] | None = None,
 ) -> list[ManifestRecord]:
     """The entry point. Reads every annotation once, then writes a validated manifest and stats."""
     out_path = Path(out_path)
-    adjudicators = fetch_adjudicator_ids()
-    pilot_pairs = fetch_pilot_pairs()
-    consensus = resolve_annotations(fetch_annotations(), adjudicators, pilot_pairs)
+    adjudicators = fetch_adjudicator_ids() if adjudicator_ids is None else adjudicator_ids
+    pilot_pairs = fetch_pilot_pairs() if pilot_pair_ids is None else pilot_pair_ids
+    rows = fetch_annotations() if annotation_rows is None else annotation_rows
+    consensus = resolve_annotations(rows, adjudicators, pilot_pairs)
 
     records: list[ManifestRecord] = []
     for memory, split, provenance in corpus:
-        records += build_records(memory, split, provenance, consensus, pilot_pairs)
+        records += build_records(
+            memory, split, provenance, consensus, pilot_pairs, image_root=image_root
+        )
     if add_constructed:
-        records += constructed_records(records)
+        records += constructed_records(records, styles_by_char)
 
     write_manifest(out_path, records)     # validates — §3.2's guard is not optional
     log.info("build_dataset: wrote %d records to %s", len(records), out_path)
@@ -378,3 +305,30 @@ def build_dataset(
     log.info("build_dataset: wrote stats to %s", stats_path)
 
     return records
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Reconcile or freeze the Objective-4 judge dataset.")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--reconcile-only", action="store_true")
+    mode.add_argument("--freeze", action="store_true")
+    parser.add_argument("--data", type=Path, default=Path("data/judge"))
+    parser.add_argument("--out", type=Path)
+    args = parser.parse_args(argv)
+    try:
+        if args.reconcile_only:
+            statuses, changed = reconcile_remote_status(get_supabase_client())
+            print(json.dumps({"changed": changed, "statuses": dict(Counter(statuses.values()))}))
+            return 0
+        if args.out is None:
+            parser.error("--freeze requires --out")
+        report = freeze_dataset(args.data, args.out)
+        print(report.model_dump_json())
+        return 0
+    except (CorpusError, ManifestError) as error:
+        print(str(error), file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

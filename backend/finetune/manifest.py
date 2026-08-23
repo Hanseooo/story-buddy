@@ -74,6 +74,9 @@ class ManifestRecord(BaseModel):
 def validate_manifest(records: list[ManifestRecord]) -> None:
     """The §10 CI guard. Raises `ManifestError` on any of the three silent corruptions."""
     splits_by_char: dict[str, set[str]] = {}
+    pair_ids = [record.pair_id for record in records]
+    if len(pair_ids) != len(set(pair_ids)):
+        raise ManifestError("duplicate pair_id in manifest")
     for record in records:
         splits_by_char.setdefault(record.char_id, set()).add(record.split)
 

@@ -25,7 +25,7 @@ other legitimate path to a laptop or a spreadsheet — see §3.
 This surface does not touch `StoryMemory`. It reads already-generated, already-moderated assets and writes to
 a new table, not the pipeline's contract.
 
-- **Reads:** `Character.canonical_ref_image`, `Attempt.image_ref` (both durable Storage **paths**, per
+- **Reads:** `Character.canonical_ref_image`, `Scene.final_image_ref` (both durable Storage **paths**, per
   `story-memory-contract.md` §2, §5) — resolved to short-lived signed URLs at render time, never persisted.
 - **Writes:** rows in the new `annotations` table (§2.1). Nothing in `StoryMemory` changes.
 - **Invariants:** an annotator sees a pair exactly once per session state (resumable, §4), never sees another

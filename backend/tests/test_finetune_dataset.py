@@ -4,9 +4,13 @@
 `label = not same_character` (annotation-surface §2.1). That inversion happens in
 `build_dataset.py` and nowhere else, so it is asserted here and nowhere else.
 """
+import hashlib
+import json
+from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 import pytest
+from PIL import Image
 
 from contracts.story_memory import (
     Attempt,
@@ -14,10 +18,14 @@ from contracts.story_memory import (
     CharacterDescription,
     Input,
     Scene,
+    Style,
     StoryMemory,
 )
 from finetune import build_dataset as bd
+from finetune import annotation_truth as at
 from finetune import evaluate as ev
+from finetune import freeze_dataset as fd
+from finetune.corpus_io import AssetRecord, CorpusError, RunBundle, write_bundle
 from finetune.manifest import ManifestError
 
 
@@ -46,10 +54,115 @@ def memory() -> StoryMemory:
                 text_excerpt="x",
                 characters_present=["quill_007", "noref_1"],
                 attempts=[Attempt(image_ref="story_1/s1-1.png"), Attempt(image_ref="story_1/s1-2.png")],
+                final_image_ref="story_1/s1-2.png",
             ),
-            Scene(scene_id="s2", text_excerpt="y", characters_present=[], attempts=[Attempt(image_ref="story_1/s2-1.png")]),
+            Scene(
+                scene_id="s2",
+                text_excerpt="y",
+                characters_present=[],
+                attempts=[Attempt(image_ref="story_1/s2-1.png")],
+                final_image_ref="story_1/s2-1.png",
+            ),
+            Scene(
+                scene_id="s3",
+                text_excerpt="z",
+                characters_present=["quill_007"],
+                attempts=[Attempt(image_ref="story_1/s3-1.png")],
+                final_image_ref="story_1/s3-1.png",
+            ),
         ],
     )
+
+
+def freeze_bundle(
+    data_dir, *, split="train", provenance="synthetic", exclusions=None, fixture=True,
+    include_roster=True,
+):
+    ref = BytesIO()
+    scene = BytesIO()
+    Image.new("RGB", (2, 3), "purple").save(ref, format="PNG")
+    Image.new("RGB", (2, 3), "purple").save(scene, format="WEBP", quality=82)
+    ref_bytes, scene_bytes = ref.getvalue(), scene.getvalue()
+    ref_path = data_dir / "ref" / "story-freeze_ref.png"
+    scene_path = data_dir / "scene" / "story-freeze_scene.webp"
+    ref_path.parent.mkdir(parents=True, exist_ok=True)
+    scene_path.parent.mkdir(parents=True, exist_ok=True)
+    ref_path.write_bytes(ref_bytes)
+    scene_path.write_bytes(scene_bytes)
+    story = StoryMemory(
+        schema_version=1,
+        story_id="story-freeze",
+        classroom_id="c1",
+        profile_id="p1",
+        input=Input(raw_text="redacted fixture"),
+        style=Style(style_preset_id="cel", prompt_fragment="fixture cel"),
+        characters=[
+            Character(char_id="char-freeze", name="Moss", canonical_ref_image="story-freeze/ref.png")
+        ],
+        scenes=[
+            Scene(
+                scene_id="s1",
+                text_excerpt="Moss waved.",
+                characters_present=["char-freeze"],
+                attempts=[Attempt(image_ref="story-freeze/scene.webp")],
+                final_image_ref="story-freeze/scene.webp",
+            )
+        ],
+    )
+    bundle = RunBundle(
+        memory=story,
+        provenance=provenance,
+        split=split,
+        candidate_role="not_applicable" if provenance == "synthetic" else "primary",
+        declared_characters=["Moss"] if include_roster else None,
+        declared_non_human=[] if include_roster else None,
+        exclusions=exclusions or [],
+        run_metadata={
+            "fixture": "true" if fixture else "false",
+            "schema_version": 1,
+            "style_preset_id": "cel",
+            "code_commit": "fixture-commit",
+            "text_model": "fixture-text",
+            "image_model": "fixture-image",
+            "image_edit_model": "fixture-image-edit",
+            "judge_model": "fixture-judge",
+            "moderation_primary_model": "fixture-mod-text",
+            "moderation_primary_image_model": "fixture-mod-image",
+            "moderation_backstop_model": "fixture-mod-backstop",
+            "moderation_backstop_image_model": "fixture-mod-image-backstop",
+            "extraction_prompt_version": 1,
+            "reference_judge_prompt_version": 6,
+            "scene_prompt_version": 2,
+            "judge_prompt_version": 4,
+            "scene_constraint_prompt_version": 3,
+            "image_budget": 55,
+            "recursion_limit": 87,
+        },
+        assets=[
+            AssetRecord(
+                storage_path="story-freeze/ref.png",
+                local_path=ref_path.relative_to(data_dir).as_posix(),
+                sha256=hashlib.sha256(ref_bytes).hexdigest(),
+                mime_type="image/png",
+                width=2,
+                height=3,
+                byte_length=len(ref_bytes),
+                kind="ref",
+            ),
+            AssetRecord(
+                storage_path="story-freeze/scene.webp",
+                local_path=scene_path.relative_to(data_dir).as_posix(),
+                sha256=hashlib.sha256(scene_bytes).hexdigest(),
+                mime_type="image/webp",
+                width=2,
+                height=3,
+                byte_length=len(scene_bytes),
+                kind="scene",
+            ),
+        ],
+    )
+    write_bundle(data_dir, bundle)
+    return bundle
 
 
 # --- pairing -------------------------------------------------------------------------------
@@ -61,11 +174,11 @@ def test_pair_id_is_deterministic_and_opaque():
     assert "quill" not in a and ".png" not in a
 
 
-def test_pairs_are_reference_first_one_per_attempt_and_skip_characters_without_a_reference():
+def test_pairs_are_reference_first_one_per_finalized_scene_and_skip_missing_references():
     pairs = bd.pairs_from_memory(memory())
     assert [(p.char_id, p.ref_image, p.scene_image) for p in pairs] == [
-        ("quill_007", "story_1/ref-quill.png", "story_1/s1-1.png"),
         ("quill_007", "story_1/ref-quill.png", "story_1/s1-2.png"),
+        ("quill_007", "story_1/ref-quill.png", "story_1/s3-1.png"),
     ]
 
 
@@ -81,7 +194,7 @@ def test_fetch_annotations_paginates_past_supabase_default_row_limit():
     second_page.execute.return_value.data = [{"pair_id": "p1000"}]
     query.range.side_effect = [first_page, second_page]
 
-    with patch.object(bd, "get_supabase_client", return_value=client):
+    with patch.object(at, "get_supabase_client", return_value=client):
         result = bd.fetch_annotations()
 
     assert len(result) == 1001
@@ -205,6 +318,104 @@ def test_resolve_annotations_strict_rules():
     ) == {}
 
 
+def test_reconcile_pair_status_derives_every_state_without_trusting_cached_status():
+    annotation_rows = [
+        {"pair_id": "pending", "annotator_id": None, "status": "adjudicated"},
+        *rows("partial", {"same_character": True, "status": "complete"}),
+        *rows("complete", {"same_character": True}, {"same_character": True}),
+        *rows("conflicted", {"same_character": True}, {"same_character": False}),
+        *rows(
+            "adjudicated",
+            {"annotator_id": "a1", "same_character": True},
+            {"annotator_id": "a2", "same_character": False},
+            {"annotator_id": "adj", "same_character": False},
+        ),
+    ]
+
+    assert bd.reconcile_pair_status(annotation_rows, {"adj"}) == {
+        "pending": "pending",
+        "partial": "partially_annotated",
+        "complete": "complete",
+        "conflicted": "conflicted",
+        "adjudicated": "adjudicated",
+    }
+
+
+def test_reconcile_pair_status_rejects_impossible_annotation_states():
+    with pytest.raises(ManifestError, match="duplicate annotator"):
+        bd.reconcile_pair_status(
+            rows(
+                "p1",
+                {"annotator_id": "a1", "same_character": True},
+                {"annotator_id": "a1", "same_character": True},
+            ),
+            set(),
+        )
+
+
+def test_repair_pair_statuses_updates_only_stale_rows_and_is_idempotent():
+    client = MagicMock()
+    response = MagicMock(data=[])
+    response.error = None
+    client.table.return_value.update.return_value.in_.return_value.execute.return_value = response
+    current = [
+        {"id": "p1", "status": "pending"},
+        {"id": "p2", "status": "partially_annotated"},
+    ]
+    statuses = {"p1": "complete", "p2": "partially_annotated"}
+
+    assert bd.repair_pair_statuses(client, current, statuses) == 1
+    client.table.assert_called_once_with("research_pairs")
+    client.table.return_value.update.assert_called_once_with({"status": "complete"})
+    client.table.return_value.update.return_value.in_.assert_called_once_with("id", ["p1"])
+
+    client.reset_mock()
+    assert bd.repair_pair_statuses(
+        client,
+        [{"id": "p1", "status": "complete"}, {"id": "p2", "status": "partially_annotated"}],
+        statuses,
+    ) == 0
+    client.table.assert_not_called()
+
+
+def test_reconcile_remote_status_includes_unlabelled_queue_rows_and_repairs_cache():
+    client = MagicMock()
+    current = [{"id": "p1", "status": "complete"}, {"id": "p2", "status": "pending"}]
+    annotations = rows("p1", {"same_character": True}, {"same_character": True})
+    with (
+        patch.object(at, "_fetch_pair_status_rows", return_value=current),
+        patch.object(at, "fetch_annotations", return_value=annotations),
+        patch.object(at, "fetch_adjudicator_ids", return_value=set()),
+        patch.object(at, "repair_pair_statuses", return_value=0) as repair,
+    ):
+        statuses, changed = bd.reconcile_remote_status(client)
+
+    assert statuses == {"p1": "complete", "p2": "pending"}
+    assert changed == 0
+    repair.assert_called_once_with(client, current, statuses)
+
+
+def test_cli_exposes_reconcile_and_freeze_modes(tmp_path):
+    with (
+        patch.object(bd, "get_supabase_client", return_value=MagicMock()),
+        patch.object(bd, "reconcile_remote_status", return_value=({"p1": "complete"}, 1)),
+    ):
+        assert bd.main(["--reconcile-only"]) == 0
+
+    report = bd.FreezeReport(
+        dataset_sha256="a" * 64,
+        counts={},
+        adjudication_rate=0.0,
+        exclusions=[],
+        pinned_versions={},
+    )
+    with patch.object(bd, "freeze_dataset", return_value=report) as freeze:
+        assert bd.main(
+            ["--freeze", "--data", str(tmp_path / "data"), "--out", str(tmp_path / "frozen")]
+        ) == 0
+    freeze.assert_called_once_with(tmp_path / "data", tmp_path / "frozen")
+
+
 # --- polarity ------------------------------------------------------------------------------
 
 @pytest.mark.parametrize("same_character", [True, False])
@@ -245,13 +456,56 @@ def test_build_records_carries_the_gating_booleans_and_the_split_metadata():
     }
     rec1, rec2 = bd.build_records(memory(), "test", "donated", keyed, set())
     assert (rec1.split, rec1.provenance, rec1.pair_type) == ("test", "donated", "pipeline")
+    assert rec1.char_id == "story_1:quill_007"
     assert rec1.anatomy_intact is False and rec1.text_free is False
     assert rec1.failure_reasons == ["wrong_colour"]
     # Local dataset paths, NOT the raw Storage paths — LLaMA-Factory resolves `images` against
     # the filesystem and `build_corpus` writes the flattened name (manifest.local_image_path).
-    assert rec1.images == ["data/judge/ref/story_1_ref-quill.png", "data/judge/scene/story_1_s1-1.png"]
+    assert rec1.images == ["data/judge/ref/story_1_ref-quill.png", "data/judge/scene/story_1_s1-2.png"]
     assert rec2.same_character is True
     assert rec2.label is False
+
+
+def test_manifest_lineage_ids_qualify_story_local_character_ids(tmp_path):
+    first = memory().model_copy(update={"story_id": "story-a"})
+    second = memory().model_copy(
+        update={
+            "story_id": "story-b",
+            "characters": [
+                memory().characters[0].model_copy(
+                    update={"canonical_ref_image": "story-b/ref-quill.png"}
+                )
+            ],
+            "scenes": [
+                memory().scenes[0].model_copy(
+                    update={
+                        "attempts": [Attempt(image_ref="story-b/s1-1.png")],
+                        "final_image_ref": "story-b/s1-1.png",
+                    }
+                )
+            ],
+        }
+    )
+    pairs = [*bd.pairs_from_memory(first), *bd.pairs_from_memory(second)]
+    annotations = [
+        row
+        for pair in pairs
+        for row in rows(pair.pair_id, {"same_character": True}, {"same_character": True})
+    ]
+
+    records = bd.build_dataset(
+        [(first, "train", "synthetic"), (second, "val", "synthetic")],
+        out_path=tmp_path / "manifest.jsonl",
+        add_constructed=False,
+        annotation_rows=annotations,
+        adjudicator_ids=set(),
+        pilot_pair_ids=set(),
+    )
+
+    assert {record.char_id for record in records} == {
+        "story-a:quill_007",
+        "story-b:quill_007",
+    }
 
 
 # --- rationale template --------------------------------------------------------------------
@@ -304,6 +558,32 @@ def test_constructed_negatives_ignore_val_and_test_records():
     assert bd.constructed_records(recs) == []
 
 
+def test_constructed_negatives_never_cross_style_presets():
+    records = [
+        bd.ManifestRecord(
+            pair_id=f"p-{char_id}",
+            char_id=char_id,
+            split="train",
+            provenance="synthetic",
+            pair_type="pipeline",
+            images=[f"ref/{char_id}.png", f"scene/{char_id}.webp"],
+            differences_observed="ok",
+            same_character=True,
+            label=False,
+        )
+        for char_id in ("cel-a", "cel-b", "gouache-a")
+    ]
+
+    made = bd.constructed_records(
+        records,
+        {"cel-a": "cel", "cel-b": "cel", "gouache-a": "gouache"},
+    )
+
+    assert len(made) == 1
+    assert made[0].char_id == "cel-a"
+    assert "cel-b" in made[0].images[1]
+
+
 # --- the supabase seam ---------------------------------------------------------------------
 
 def test_fetch_annotations_reads_the_annotations_table_through_the_existing_client_seam():
@@ -311,7 +591,7 @@ def test_fetch_annotations_reads_the_annotations_table_through_the_existing_clie
     query = client.table.return_value.select.return_value
     query.order.return_value = query
     query.range.return_value.execute.return_value.data = [{"pair_id": "p1"}]
-    with patch("finetune.build_dataset.get_supabase_client", return_value=client):
+    with patch("finetune.annotation_truth.get_supabase_client", return_value=client):
         assert bd.fetch_annotations() == [{"pair_id": "p1"}]
     client.table.assert_called_once_with("annotations")
 
@@ -319,7 +599,7 @@ def test_fetch_annotations_reads_the_annotations_table_through_the_existing_clie
 def test_fetch_adjudicator_ids_reads_profiles_table():
     client = MagicMock()
     client.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{"id": "a1"}]
-    with patch("finetune.build_dataset.get_supabase_client", return_value=client):
+    with patch("finetune.annotation_truth.get_supabase_client", return_value=client):
         assert bd.fetch_adjudicator_ids() == {"a1"}
     client.table.assert_called_with("profiles")
 
@@ -327,7 +607,7 @@ def test_fetch_adjudicator_ids_reads_profiles_table():
 def test_fetch_pilot_pairs_reads_research_pairs_table():
     client = MagicMock()
     client.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{"id": "p1"}]
-    with patch("finetune.build_dataset.get_supabase_client", return_value=client):
+    with patch("finetune.annotation_truth.get_supabase_client", return_value=client):
         assert bd.fetch_pilot_pairs() == {"p1"}
     client.table.assert_called_with("research_pairs")
 
@@ -383,6 +663,208 @@ def test_build_dataset_creates_manifest_and_stats(tmp_path):
     assert "dataset_sha256" in stats
 
 
+def test_freeze_dataset_writes_complete_immutable_artifacts_from_annotation_truth(tmp_path):
+    data_dir = tmp_path / "corpus"
+    run_bundle = freeze_bundle(data_dir)
+    pair_id = bd.pairs_from_memory(run_bundle.memory)[0].pair_id
+    annotations = rows(pair_id, {"same_character": True}, {"same_character": True})
+    out_dir = tmp_path / "freeze"
+
+    with (
+        patch.object(fd, "fetch_annotations", return_value=annotations),
+        patch.object(fd, "fetch_adjudicator_ids", return_value=set()),
+        patch.object(fd, "fetch_pilot_pairs", return_value=set()),
+    ):
+        first = bd.freeze_dataset(data_dir, out_dir)
+        second = bd.freeze_dataset(data_dir, out_dir)
+
+    assert first == second
+    assert first.dataset_sha256 == hashlib.sha256((out_dir / "manifest.jsonl").read_bytes()).hexdigest()
+    assert first.counts["story"] == {"story-freeze": 1}
+    assert first.counts["split"] == {"train": 1}
+    assert first.exclusions == []
+    assert first.pinned_versions["code_commit"] == "fixture-commit"
+    [manifest_row] = [json.loads(line) for line in (out_dir / "manifest.jsonl").read_text().splitlines()]
+    assert manifest_row["images"] == [
+        "assets/ref/story-freeze_ref.png",
+        "assets/scene/story-freeze_scene.webp",
+    ]
+    assert (out_dir / manifest_row["images"][0]).read_bytes() == (
+        data_dir / run_bundle.assets[0].local_path
+    ).read_bytes()
+    assert (out_dir / manifest_row["images"][1]).read_bytes() == (
+        data_dir / run_bundle.assets[1].local_path
+    ).read_bytes()
+    assert {
+        "manifest.jsonl",
+        "dataset_manifest.json",
+        "train.json",
+        "val.json",
+        "test.json",
+        "dataset_info.json",
+        "freeze_report.json",
+    } <= {path.name for path in out_dir.iterdir()}
+    assert json.loads((out_dir / "freeze_report.json").read_text(encoding="utf-8")) == first.model_dump(
+        mode="json"
+    )
+
+
+def test_freeze_dataset_rejects_bundle_without_declared_roster(tmp_path):
+    data_dir = tmp_path / "corpus"
+    run_bundle = freeze_bundle(data_dir, include_roster=False)
+    pair_id = bd.pairs_from_memory(run_bundle.memory)[0].pair_id
+    annotations = rows(pair_id, {"same_character": True}, {"same_character": True})
+    with (
+        patch.object(fd, "fetch_annotations", return_value=annotations),
+        patch.object(fd, "fetch_adjudicator_ids", return_value=set()),
+        patch.object(fd, "fetch_pilot_pairs", return_value=set()),
+        pytest.raises(ManifestError, match="missing declared roster"),
+    ):
+        bd.freeze_dataset(data_dir, tmp_path / "freeze")
+
+
+def test_freeze_counts_assign_constructed_pair_to_reference_story():
+    natural = bd.ManifestRecord(
+        pair_id="natural",
+        char_id="char-a",
+        split="train",
+        provenance="synthetic",
+        pair_type="pipeline",
+        images=["ref/a.png", "scene/a.webp"],
+        differences_observed="ok",
+        same_character=True,
+        label=False,
+    )
+    constructed = natural.model_copy(
+        update={"pair_id": "constructed", "pair_type": "constructed", "same_character": False}
+    )
+
+    counts = fd._freeze_counts(
+        [natural, constructed], {"natural": "story-a"}, {"char-a": "story-a"}
+    )
+
+    assert counts["story"] == {"story-a": 2}
+
+
+def test_freeze_dataset_ignores_pilot_annotations_outside_the_corpus(tmp_path):
+    data_dir = tmp_path / "corpus"
+    run_bundle = freeze_bundle(data_dir)
+    pair_id = bd.pairs_from_memory(run_bundle.memory)[0].pair_id
+    annotations = [
+        *rows(pair_id, {"same_character": True}, {"same_character": True}),
+        *rows("pilot-pair", {"same_character": False}),
+    ]
+    with (
+        patch.object(fd, "fetch_annotations", return_value=annotations),
+        patch.object(fd, "fetch_adjudicator_ids", return_value=set()),
+        patch.object(fd, "fetch_pilot_pairs", return_value={"pilot-pair"}),
+    ):
+        report = bd.freeze_dataset(data_dir, tmp_path / "freeze")
+
+    assert report.adjudication_rate == 0.0
+    assert report.exclusions == []
+
+
+def test_freeze_dataset_rejects_changed_existing_output(tmp_path):
+    data_dir = tmp_path / "corpus"
+    run_bundle = freeze_bundle(data_dir)
+    pair_id = bd.pairs_from_memory(run_bundle.memory)[0].pair_id
+    annotations = rows(pair_id, {"same_character": True}, {"same_character": True})
+    out_dir = tmp_path / "freeze"
+    with (
+        patch.object(fd, "fetch_annotations", return_value=annotations),
+        patch.object(fd, "fetch_adjudicator_ids", return_value=set()),
+        patch.object(fd, "fetch_pilot_pairs", return_value=set()),
+    ):
+        bd.freeze_dataset(data_dir, out_dir)
+        (out_dir / "train.json").write_text("changed", encoding="utf-8")
+        with pytest.raises(ManifestError, match="immutable freeze differs"):
+            bd.freeze_dataset(data_dir, out_dir)
+
+
+def test_freeze_dataset_rejects_unknown_annotation_pair_and_asset_drift(tmp_path):
+    data_dir = tmp_path / "corpus"
+    run_bundle = freeze_bundle(data_dir)
+    pair_id = bd.pairs_from_memory(run_bundle.memory)[0].pair_id
+    annotations = [
+        *rows(pair_id, {"same_character": True}, {"same_character": True}),
+        *rows("not-in-bundles", {"same_character": True}, {"same_character": True}),
+    ]
+    with (
+        patch.object(fd, "fetch_annotations", return_value=annotations),
+        patch.object(fd, "fetch_adjudicator_ids", return_value=set()),
+        patch.object(fd, "fetch_pilot_pairs", return_value=set()),
+        pytest.raises(ManifestError, match="pair/memory mismatch"),
+    ):
+        bd.freeze_dataset(data_dir, tmp_path / "unknown")
+
+    (data_dir / run_bundle.assets[0].local_path).write_bytes(b"changed")
+    with (
+        patch.object(fd, "fetch_annotations", return_value=annotations[:2]),
+        patch.object(fd, "fetch_adjudicator_ids", return_value=set()),
+        patch.object(fd, "fetch_pilot_pairs", return_value=set()),
+        pytest.raises(CorpusError),
+    ):
+        bd.freeze_dataset(data_dir, tmp_path / "drift")
+
+
+def test_freeze_dataset_accepts_only_bundle_declared_exclusions(tmp_path):
+    data_dir = tmp_path / "corpus"
+    initial = freeze_bundle(data_dir)
+    pair_id = bd.pairs_from_memory(initial.memory)[0].pair_id
+    # Recreate in a separate root because completed bundles are immutable.
+    declared_dir = tmp_path / "declared-corpus"
+    freeze_bundle(declared_dir, exclusions=[pair_id])
+    with (
+        patch.object(fd, "fetch_annotations", return_value=[]),
+        patch.object(fd, "fetch_adjudicator_ids", return_value=set()),
+        patch.object(fd, "fetch_pilot_pairs", return_value=set()),
+    ):
+        report = bd.freeze_dataset(declared_dir, tmp_path / "declared-freeze")
+    assert report.exclusions == [pair_id]
+
+    unknown_dir = tmp_path / "unknown-corpus"
+    freeze_bundle(unknown_dir, exclusions=["unknown-pair"])
+    with (
+        patch.object(fd, "fetch_annotations", return_value=[]),
+        patch.object(fd, "fetch_adjudicator_ids", return_value=set()),
+        patch.object(fd, "fetch_pilot_pairs", return_value=set()),
+        pytest.raises(ManifestError, match="unknown exclusions"),
+    ):
+        bd.freeze_dataset(unknown_dir, tmp_path / "unknown-freeze")
+
+
+@pytest.mark.parametrize("drift", ["missing", "hash", "mime"])
+def test_freeze_dataset_revalidates_local_asset_inventory(tmp_path, drift):
+    data_dir = tmp_path / "corpus"
+    run_bundle = freeze_bundle(data_dir)
+    pair_id = bd.pairs_from_memory(run_bundle.memory)[0].pair_id
+    annotations = rows(pair_id, {"same_character": True}, {"same_character": True})
+    if drift == "missing":
+        (data_dir / run_bundle.assets[0].local_path).unlink()
+    else:
+        inventory_path = data_dir / "runs" / run_bundle.memory.story_id / "assets.json"
+        inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+        inventory[0][drift] = "0" * 64 if drift == "hash" else "image/webp"
+        if drift == "hash":
+            inventory[0]["sha256"] = inventory[0].pop("hash")
+        else:
+            inventory[0]["mime_type"] = inventory[0].pop("mime")
+        inventory_path.write_text(json.dumps(inventory), encoding="utf-8")
+    with (
+        patch.object(fd, "fetch_annotations", return_value=annotations),
+        patch.object(fd, "fetch_adjudicator_ids", return_value=set()),
+        patch.object(fd, "fetch_pilot_pairs", return_value=set()),
+        pytest.raises(CorpusError),
+    ):
+        bd.freeze_dataset(data_dir, tmp_path / "freeze")
+
+
+def test_freeze_dataset_rejects_production_style_allocation_drift(tmp_path):
+    data_dir = tmp_path / "corpus"
+    freeze_bundle(data_dir, fixture=False)
+    with pytest.raises(ManifestError, match="style allocation drift"):
+        bd.freeze_dataset(data_dir, tmp_path / "freeze")
 def test_build_dataset_computes_accurate_statistics(tmp_path):
     import json
     out = tmp_path / "manifest.jsonl"

@@ -4,8 +4,10 @@ Character leakage across splits is the one mistake that is invisible in the metr
 gets a test before it gets an implementation.
 """
 import json
+from io import BytesIO
 
 import pytest
+from PIL import Image
 from pydantic import ValidationError
 
 from finetune.manifest import (
@@ -123,7 +125,9 @@ def test_local_image_path_matches_build_corpus_layout(tmp_path):
             return self
 
         def download(self, _path):
-            return b"png"
+            output = BytesIO()
+            Image.new("RGB", (1, 1), "purple").save(output, format="PNG")
+            return output.getvalue()
 
     class _Supabase:
         storage = _Storage()
