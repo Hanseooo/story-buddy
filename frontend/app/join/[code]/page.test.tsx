@@ -44,7 +44,7 @@ describe("Join code page — §9.6–10", () => {
     fireEvent.change(screen.getByLabelText(/nickname/i), { target: { value: "Juan" } });
     fireEvent.click(screen.getByRole("button", { name: /next/i }));
     await waitFor(() =>
-      expect(screen.getByRole("heading", { name: /create your password/i })).toBeDefined()
+      expect(screen.getByRole("heading", { name: /secret word/i })).toBeDefined()
     );
   });
 
@@ -54,9 +54,9 @@ describe("Join code page — §9.6–10", () => {
 
     fireEvent.change(screen.getByLabelText(/nickname/i), { target: { value: "Juan" } });
     fireEvent.click(screen.getByRole("button", { name: /next/i }));
-    await waitFor(() => screen.getByRole("heading", { name: /create your password/i }));
+    await waitFor(() => screen.getByRole("heading", { name: /secret word/i }));
 
-    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: "wrongpass" } });
+    fireEvent.change(screen.getByLabelText(/secret word/i), { target: { value: "wrongpass" } });
     fireEvent.click(screen.getByRole("button", { name: /join class/i }));
 
     await waitFor(() => {
@@ -74,9 +74,9 @@ describe("Join code page — §9.6–10", () => {
 
       fireEvent.change(screen.getByLabelText(/nickname/i), { target: { value: "test" } });
       fireEvent.click(screen.getByRole("button", { name: /next/i }));
-      await waitFor(() => screen.getByRole("heading", { name: /create your password/i }));
+      await waitFor(() => screen.getByRole("heading", { name: /secret word/i }));
 
-      fireEvent.change(screen.getByLabelText(/password/i), { target: { value: "pass" } });
+      fireEvent.change(screen.getByLabelText(/secret word/i), { target: { value: "pass" } });
       fireEvent.click(screen.getByRole("button", { name: /join class/i }));
 
       await waitFor(() => {
@@ -91,9 +91,9 @@ describe("Join code page — §9.6–10", () => {
 
     fireEvent.change(screen.getByLabelText(/nickname/i), { target: { value: "Juan" } });
     fireEvent.click(screen.getByRole("button", { name: /next/i }));
-    await waitFor(() => screen.getByRole("heading", { name: /create your password/i }));
+    await waitFor(() => screen.getByRole("heading", { name: /secret word/i }));
 
-    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: "pass" } });
+    fireEvent.change(screen.getByLabelText(/secret word/i), { target: { value: "pass" } });
     fireEvent.click(screen.getByRole("button", { name: /join class/i }));
 
     await waitFor(() => {
@@ -108,9 +108,9 @@ describe("Join code page — §9.6–10", () => {
 
     fireEvent.change(screen.getByLabelText(/nickname/i), { target: { value: "Maria" } });
     fireEvent.click(screen.getByRole("button", { name: /next/i }));
-    await waitFor(() => screen.getByRole("heading", { name: /create your password/i }));
+    await waitFor(() => screen.getByRole("heading", { name: /secret word/i }));
 
-    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: "pass" } });
+    fireEvent.change(screen.getByLabelText(/secret word/i), { target: { value: "pass" } });
     fireEvent.click(screen.getByRole("button", { name: /join class/i }));
 
     await waitFor(() => {
@@ -123,17 +123,17 @@ describe("Join code page — §9.6–10", () => {
     await renderJoinCode();
     fireEvent.change(screen.getByLabelText(/nickname/i), { target: { value: "Juan" } });
     fireEvent.click(screen.getByRole("button", { name: /next/i }));
-    await waitFor(() => screen.getByRole("heading", { name: /create your password/i }));
-    expect(screen.getByLabelText(/password/i)).toHaveAttribute("type", "text");
+    await waitFor(() => screen.getByRole("heading", { name: /secret word/i }));
+    expect(screen.getByLabelText(/secret word/i)).toHaveAttribute("type", "text");
   });
 
   it("show/hide toggle changes password visibility", async () => {
     await renderJoinCode();
     fireEvent.change(screen.getByLabelText(/nickname/i), { target: { value: "Juan" } });
     fireEvent.click(screen.getByRole("button", { name: /next/i }));
-    await waitFor(() => screen.getByRole("heading", { name: /create your password/i }));
+    await waitFor(() => screen.getByRole("heading", { name: /secret word/i }));
 
-    const passwordInput = screen.getByLabelText(/password/i);
+    const passwordInput = screen.getByLabelText(/secret word/i);
     expect(passwordInput).toHaveAttribute("type", "text");
     fireEvent.click(screen.getByRole("button", { name: /hide/i }));
     expect(passwordInput).toHaveAttribute("type", "password");
