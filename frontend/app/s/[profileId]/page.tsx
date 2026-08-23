@@ -124,8 +124,8 @@ export default function BookshelfPage({
           animate={{ opacity: 1, scale: 1 }}
           className="flex-1 flex flex-col items-center justify-center p-12 text-center bg-surface border-4 border-dashed border-primary/10 rounded-[32px] max-w-2xl mx-auto w-full my-auto"
         >
-          <div className="w-24 h-24 bg-secondary/20 text-secondary rounded-full flex items-center justify-center mb-6">
-            <Books weight="fill" className="w-12 h-12" aria-hidden="true" />
+          <div className="size-20 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mb-6 shadow-sm">
+            <Books weight="duotone" className="size-10" aria-hidden="true" />
           </div>
           <h2 className="font-display text-3xl font-extrabold text-primary mb-3">Your shelf is empty!</h2>
           <p className="text-foreground/70 text-lg mb-8 max-w-[30ch]">
@@ -277,7 +277,7 @@ function BookCard({
           {/* Status Badge Overlays */}
           {card.bucket === "in-flight" && (
             <div className="absolute inset-0 flex items-end justify-center pb-4">
-              <span className="px-3 py-1.5 rounded-full bg-primary/90 text-on-primary text-xs font-extrabold backdrop-blur-sm shadow-sm">
+              <span className="px-3 py-1.5 rounded-full bg-primary text-on-primary text-xs font-extrabold shadow-sm">
                 Writing...
               </span>
             </div>
