@@ -1,3 +1,86 @@
+# Current Task: ISO/IEC 25010 readiness audit and remediation guide
+
+- [x] Re-verify promised product and capstone scope, especially narration and PDF export.
+- [x] Write a comprehensive, evidence-backed, AI-agent-friendly readiness audit.
+- [x] Separate confirmed blockers, conditional scope gaps, evidence gaps, and rejected findings.
+- [x] Create one sanitized public GitHub umbrella issue without disclosing sensitive mechanics.
+- [x] Verify document links, issue content, diff hygiene, and record the outcome.
+
+## Success criteria
+
+The audit uses the ISO/IEC 25010:2023 nine-characteristic model, distinguishes implementation defects from
+unproven evaluation claims and optional scope, gives agents exact constraints and verification gates, and
+publishes only a sanitized public issue. Narration and export are classified from canonical project sources
+rather than assumed to be universal ISO requirements.
+
+## Review / outcome
+
+Created `docs/capstone/iso_iec_25010_readiness_audit.md`, a commit-pinned ISO/IEC 25010:2023 readiness report with
+system/study context, nine-characteristic matrix, scope gates, public/private finding groups, rejected findings,
+remediation workstreams, an Objective-5 instrument gate, an agent ticket contract, and evidence limitations.
+Narration and PDF export are both required but undemonstrated under current accepted sources; PDF is eligible for
+formal de-scope only through a new superseding ADR and full promise/instrument reconciliation.
+
+Created public umbrella issue `#68` (`ISO/IEC 25010:2023 readiness program and evidence gates`) with the
+`documentation` label. A disclosure review replaced sensitive mechanics with opaque private work IDs; the public
+document and issue retain only safe classifications and exit criteria. Verification confirmed all 11 local
+Markdown links resolve, forbidden sensitive-mechanics patterns are absent, issue #68 is open with corrected ADR
+wording, and `git diff --check` reports no patch errors. Application tests were not rerun for this docs-only change;
+the audit records the earlier green deterministic baseline and explicitly states that raw logs/live integration
+evidence were not retained or run in this step.
+
+---
+
+# Current Task: Expert-evaluation decision brief HTML artifact
+
+- [x] Explore the existing research artifact, Cobalt Playroom design language, canonical evaluation docs, and recent changes.
+- [x] Clarify whether the artifact is a researcher decision brief, an administration-ready instrument, or both: include both, with the instrument marked pending adviser approval.
+- [x] Compare artifact approaches and obtain approval for the recommended structure and visual direction.
+- [x] Write and self-review the approved design document.
+- [ ] Obtain owner review, then create the implementation plan.
+- [ ] Build and verify the standalone HTML artifact.
+
+## Success criteria
+
+Researchers can understand StoryBuddy's current evaluation design, the implemented pipeline, what CANVAS /
+ContinuityEval can and cannot support, the evidence and limitations behind that judgment, the recommended
+next actions, and any decisions requiring adviser approval. The artifact must remain honest about unresolved
+methodological and documentation gaps and must not silently change a frozen ADR or research instrument.
+
+---
+
+# Current Task: Expert-evaluation literature and pipeline-context review
+
+- [x] Map the capstone objectives, methodology, expert-evaluation instruments, and implemented pipeline.
+- [x] Delegate a read-only review of ContinuityEval and related expert-evaluation literature.
+- [x] Compare the paper's constructs and prompts with StoryBuddy's research questions and outputs.
+- [x] Report citation/adaptation guidance, instrument recommendations, and pipeline implications.
+
+## Success criteria
+
+The report accurately traces the current code and canonical capstone documents, distinguishes product
+control signals from research outcome measures, assesses whether and how ContinuityEval may be cited or
+adapted, and proposes the smallest defensible expert-evaluation design without changing code or frozen ADRs.
+
+## Review / outcome
+
+ContinuityEval is a useful cited source for continuity vocabulary and optional open-ended probes, but it is
+not a drop-in expert-validation instrument: it is a VLM autorater for storyboard frame transitions. Its
+hair/body rubric is human-centric, its prop denominator can conceal disappearances, and its validation prose
+and Table 14 disagree on whether 100 or 50 transitions were sampled. StoryBuddy's accepted Objective-3 design
+remains a three-validator, five-criterion open-ended interview analysed by content analysis; the repository
+currently describes that instrument but contains no administerable question form.
+
+Recommended minimum: operationalize one open-ended question per existing criterion, borrowing ContinuityEval's
+visible-evidence, viewpoint/occlusion, recurring-character, recurring-prop and recurring-setting concepts without
+adding a numeric score. Keep the runtime judge out of the outcome measure. No pipeline change is justified by
+this literature review; cross-frame runtime checks would require a separate ADR/design session if expert evidence
+later shows a repeated failure. Verification was read-only apart from this tracker update: canonical docs, graph,
+contract and judge prompts were traced; arXiv metadata, CC BY 4.0 license, formulas and validation figures were
+checked against arXiv. No application tests or paid/provider calls were run.
+
+---
+
 # Current Task: Research corpus review fixes
 
 - [x] Verify the spend-cap and retry-asset findings against code, tests, specs, and issues.
