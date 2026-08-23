@@ -230,6 +230,38 @@ def test_edit_image_passes_references_and_seed_and_returns_bytes():
     mock_get.assert_called_once()
 
 
+def test_run_fal_emits_attempted_then_completed_after_download():
+    events = []
+    fal = MagicMock()
+    fal.subscribe.return_value = {"images": [{"url": "https://fal.example/x.png"}]}
+    token = providers._fal_event_sink.set(events.append)
+    try:
+        with patch("providers._fal", return_value=fal), patch(
+            "providers.httpx.get", return_value=MagicMock(content=b"png-bytes")
+        ):
+            providers.text_to_image("a fox")
+    finally:
+        providers._fal_event_sink.reset(token)
+
+    assert events == ["attempted", "completed"]
+
+
+def test_run_fal_marks_a_post_submission_failure_as_billing_uncertain():
+    events = []
+    fal = MagicMock()
+    fal.subscribe.return_value = {"images": [{"url": "https://fal.example/x.png"}]}
+    token = providers._fal_event_sink.set(events.append)
+    try:
+        with patch("providers._fal", return_value=fal), patch(
+            "providers.httpx.get", side_effect=TimeoutError("download timed out")
+        ), pytest.raises(TimeoutError):
+            providers.text_to_image("a fox")
+    finally:
+        providers._fal_event_sink.reset(token)
+
+    assert events == ["attempted", "failed_uncertain"]
+
+
 def test_edit_image_renames_reference_field_per_endpoint():
     """OmniGen2 calls it `input_image_urls`. fal drops unknown keys silently, so sending Qwen's
     name here would degrade every scene to text-to-image with no error (pre-flight 2026-07-29)."""

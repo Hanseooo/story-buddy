@@ -1,68 +1,110 @@
-"""Turn `corpus_synthetic.json` into judge training images (spec `docs/specs/judge-finetune.md` §5.3).
+"""Turn `corpus_synthetic.json` into immutable judge-training corpus bundles.
 
-Runs the **existing** Phase-1 pipeline — `pipeline.graph.build_graph()`, driven exactly the way
-`worker/run_job.py` drives it — over each checked-in story, then downloads the canonical
-references and the finalized scene images into `data/judge/ref/` and `data/judge/scene/`.
-Nothing about the pipeline is forked, reimplemented or configured differently; if the pipeline
-changes, so does this corpus, which is the point.
-
-    uv run python -m finetune.build_corpus --budget 40          # from backend/
-
-**Every image is a paid fal.ai draw ($0.02–0.035).** `--budget` is a hard ceiling on the number
-of images this script will let the pipeline draw, checked after every super-step, and it is the
-most important line in the file (§6.2). It defaults deliberately low: spending real money is an
-explicit act, not something you get by forgetting a flag.
-
-Resume: a story that finished is recorded in `data/judge/build_state.json` and is never
-resubmitted. That guard is NOT redundant with `generate_scene`'s CC-10 Storage-exists skip —
-the skip makes a *re-executed scene* free, but `char_bible.mint_reference` has no exists-check
-at all, so re-entering a finished story would redraw and re-bill every canonical reference
-(up to 3 draws each). Mid-story resume comes from the LangGraph Postgres checkpointer, keyed on
-`thread_id = story_id`, the same mechanism `resume_storybook_job` uses.
+Runs the existing Phase-1 graph over each sanitized intake record. Completed results are persisted
+under `data/judge/runs/<story_id>/` with their validated Story Memory and hashed local assets;
+the legacy count-only state file is never trusted as completion. `--fixture` exercises that same
+bundle path using generated local image bytes, without a graph, provider, database, or Storage call.
 """
 import argparse
+import hashlib
 import json
 import pathlib
+import subprocess
 import sys
+from collections import Counter
+from dataclasses import dataclass
+from decimal import Decimal
+from io import BytesIO
 
-from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.types import Command
+from PIL import Image, UnidentifiedImageError
 
-from app.config import RECURSION_LIMIT, STYLE_PRESETS, settings
-from app.db import get_supabase_client
+from app.config import IMAGE_BUDGET, RECURSION_LIMIT, STYLE_PRESETS, settings
 from app.length import word_count
-from contracts.story_memory import CURRENT_SCHEMA_VERSION, Input, Style, StoryMemory
+from contracts.story_memory import (
+    CURRENT_SCHEMA_VERSION,
+    Character,
+    CharacterDescription,
+    Cost,
+    Input,
+    Scene,
+    Style,
+    StoryMemory,
+)
+from finetune.corpus_io import (
+    AssetRecord,
+    CorpusError,
+    IntakeRecord,
+    RunBundle,
+    load_completed_bundles,
+    load_intake,
+    reconcile_declared_roster,
+    write_bundle,
+)
 from finetune.manifest import local_image_path
-from pipeline.graph import build_graph
+from pipeline.analyze import EXTRACTION_PROMPT_VERSION
+from pipeline.char_bible import JUDGE_PROMPT_VERSION as REFERENCE_JUDGE_PROMPT_VERSION
+from pipeline.consistency_check import (
+    JUDGE_PROMPT_VERSION,
+    SCENE_CONSTRAINT_PROMPT_VERSION,
+)
+from pipeline.prompt_optimizer import SCENE_PROMPT_VERSION
+from providers import _fal_event_sink
 
 CORPUS_PATH = pathlib.Path(__file__).with_name("corpus_synthetic.json")
-# `backend/finetune/build_corpus.py` -> repo root -> `data/judge/` (spec §5.3, gitignored).
+# `backend/finetune/build_corpus.py` -> repo root -> `data/judge/` (gitignored).
 DATA_DIR = pathlib.Path(__file__).resolve().parents[2] / "data" / "judge"
 STATE_FILE = "build_state.json"
 BUCKET = "storybook-images"
-
-# fal.ai per-image price band (§5.4). Reported as a range because the two models differ.
-COST_LOW, COST_HIGH = 0.02, 0.035
-
-# ponytail: 40 images ≈ three stories. Low enough that a mistyped command costs about a dollar,
-# and the whole 30-story run is a deliberate `--budget 500`. Ceiling: it is a count, not dollars,
-# so a price change needs the band above updated too.
-DEFAULT_BUDGET = 40
-
-# The reveal (ADR-029) interrupts once per book, and `route_reveal` can loop it up to
-# MAX_RETRY_TAPS times. This script always confirms, so one resume is the expected case; the
-# cap only exists so a pathological graph cannot spin here forever.
+# The reveal can interrupt once per book and retry taps are cap-bounded; this is production's
+# existing resume ceiling, unchanged by fixture mode.
 MAX_RESUMES = 4
 CONFIRM = {"action": "confirm"}
+TELEMETRY_KEYS = ("attempted", "completed", "failed", "uncertain")
 
-# ponytail: one style for the whole corpus. Style diversity in the training set is a research
-# decision (§3.1 shortcut learning), not a scripting one — add a per-story `style_preset_id`
-# key and read it here if that decision lands.
-STYLE_ID = "cel"
+
+def _code_commit() -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=pathlib.Path(__file__).resolve().parents[2],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
+
+
+@dataclass(frozen=True)
+class SpendPolicy:
+    max_usd: Decimal = Decimal("25.00")
+    hard_usd: Decimal = Decimal("30.00")
+    smoke_usd: Decimal = Decimal("1.50")
+    conservative_call_usd: Decimal = Decimal("0.035")
+
+    def __post_init__(self) -> None:
+        if self.max_usd < 0 or self.hard_usd <= 0 or self.smoke_usd < 0:
+            raise ValueError("spend limits must be non-negative and hard_usd must be positive")
+        if self.conservative_call_usd <= 0:
+            raise ValueError("conservative_call_usd must be positive")
+
+    @property
+    def authorized_usd(self) -> Decimal:
+        return min(self.max_usd, self.hard_usd)
+
+    def story_draw_limit(self, story_count: int) -> int:
+        if story_count <= 0:
+            return 0
+        if self.authorized_usd <= self.smoke_usd:
+            return int(self.authorized_usd / self.conservative_call_usd) // story_count
+        return IMAGE_BUDGET
 
 
 def load_corpus(path: pathlib.Path = CORPUS_PATH) -> list[dict]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _record(story: IntakeRecord | dict) -> IntakeRecord:
+    return story if isinstance(story, IntakeRecord) else IntakeRecord.model_validate(story)
 
 
 def _image_count(values: dict | None) -> int:
@@ -70,39 +112,27 @@ def _image_count(values: dict | None) -> int:
     return getattr(cost, "image_count", 0) if cost is not None else 0
 
 
-def _initial_state(story: dict) -> StoryMemory:
-    """Byte-for-byte the shape `run_job.run_storybook_job` builds, minus the `jobs` row.
-
-    `classroom_id` / `profile_id` are required by the contract but read by no pipeline node
-    (grepped); a corpus run has no classroom, so it says so rather than borrowing a real one.
-    """
+def _initial_state(story: IntakeRecord) -> StoryMemory:
     return StoryMemory(
         schema_version=CURRENT_SCHEMA_VERSION,
-        story_id=story["story_id"],
+        story_id=story.story_id,
         classroom_id="judge-corpus",
         profile_id="judge-corpus",
-        input=Input(raw_text=story["text"], word_count=word_count(story["text"]), truncated=False),
-        style=Style(style_preset_id=STYLE_ID, prompt_fragment=STYLE_PRESETS[STYLE_ID]),
+        input=Input(raw_text=story.text, word_count=word_count(story.text), truncated=False),
+        style=Style(
+            style_preset_id=story.style_preset_id,
+            prompt_fragment=STYLE_PRESETS[story.style_preset_id],
+        ),
     )
 
 
-def run_story(app_graph, story: dict, budget_left: int) -> tuple[dict, int, bool]:
-    """Drive one story through the graph. Returns `(values, images_drawn, halted)`.
-
-    THE SPEND CAP. `cost.image_count` is re-read after every `values` chunk — i.e. after every
-    super-step — and the moment it reaches `budget_left` the loop **breaks**, abandoning the
-    generator. Abandoning it is what makes this a stop rather than a tally: LangGraph only runs
-    the next node when the consumer asks for the next chunk.
-    """
-    config = {"configurable": {"thread_id": story["story_id"]}, "recursion_limit": RECURSION_LIMIT}
+def run_story(app_graph, story: IntakeRecord, budget_left: int) -> tuple[dict, int, bool]:
+    config = {"configurable": {"thread_id": story.story_id}, "recursion_limit": RECURSION_LIMIT}
     graph_input = _initial_state(story)
     values: dict = {}
-
     for _ in range(MAX_RESUMES + 1):
         interrupted = False
         for chunk in app_graph.stream(graph_input, config, stream_mode=["updates", "values"]):
-            # 2-tuple (mode, payload) top-level, 3-tuple (ns, mode, payload) for subgraphs —
-            # the same unpacking `run_job._run_with_progress` does.
             mode, payload = chunk[-2:]
             if mode == "values":
                 values = payload
@@ -113,114 +143,409 @@ def run_story(app_graph, story: dict, budget_left: int) -> tuple[dict, int, bool
         if not interrupted:
             return values, _image_count(values), False
         graph_input = Command(resume=CONFIRM)
-
     return values, _image_count(values), False
 
 
-def download_images(values: dict, out_dir: pathlib.Path, supabase) -> tuple[int, int]:
-    """Land the two image classes where §5.3 says they go. Free — Storage reads are not billed.
+def _image_details(contents: bytes, expected_mime: str | None = None) -> tuple[str, int, int]:
+    if contents.startswith(b"\x89PNG\r\n\x1a\n"):
+        mime_type = "image/png"
+    elif contents.startswith(b"RIFF") and contents[8:12] == b"WEBP":
+        mime_type = "image/webp"
+    else:
+        raise CorpusError("invalid image magic bytes")
+    if expected_mime is not None and mime_type != expected_mime:
+        raise CorpusError(f"invalid image MIME: expected {expected_mime}, got {mime_type}")
+    try:
+        with Image.open(BytesIO(contents)) as image:
+            image.load()
+            return mime_type, image.width, image.height
+    except (OSError, UnidentifiedImageError) as error:
+        raise CorpusError("invalid image payload") from error
 
-    The local filename is the durable Storage path with `/` replaced by `_`, so it is unique
-    across stories (the path is prefixed with `story_id`) and losslessly reversible. Inventing a
-    naming scheme here would be a second source of truth for something the pipeline already
-    decided.
-    """
+
+def _webp_bytes(contents: bytes) -> bytes:
+    try:
+        with Image.open(BytesIO(contents)) as image:
+            image.load()
+            output = BytesIO()
+            image.save(output, format="WEBP", quality=82)
+            return output.getvalue()
+    except (OSError, UnidentifiedImageError) as error:
+        raise CorpusError("invalid image payload") from error
+
+
+def _value_attr(value, key):
+    return getattr(value, key) if hasattr(value, key) else value.get(key)
+
+
+def download_images(values: dict | StoryMemory, out_dir: pathlib.Path, supabase) -> tuple[int, int]:
+    """Download references as PNG and encode each scene exactly once as WebP quality 82."""
     counts = {"ref": 0, "scene": 0}
     targets = [
-        ("ref", c.canonical_ref_image)
-        for c in values.get("characters") or []
-        if c.canonical_ref_image
+        ("ref", _value_attr(character, "canonical_ref_image"))
+        for character in _value_attr(values, "characters") or []
+        if _value_attr(character, "canonical_ref_image")
     ]
     targets += [
-        ("scene", s.final_image_ref) for s in values.get("scenes") or [] if s.final_image_ref
+        ("scene", _value_attr(scene, "final_image_ref"))
+        for scene in _value_attr(values, "scenes") or []
+        if _value_attr(scene, "final_image_ref")
     ]
-
-    for kind, path in targets:
-        local = pathlib.Path(local_image_path(path, kind, root=out_dir))
+    for kind, storage_path in targets:
+        local = pathlib.Path(local_image_path(storage_path, kind, root=out_dir))
         counts[kind] += 1
+        expected_mime = "image/png" if kind == "ref" else "image/webp"
         if local.exists():
+            _image_details(local.read_bytes(), expected_mime)
             continue
+        contents = supabase.storage.from_(BUCKET).download(storage_path)
+        if kind == "scene":
+            contents = _webp_bytes(contents)
+        _image_details(contents, expected_mime)
         local.parent.mkdir(parents=True, exist_ok=True)
-        local.write_bytes(supabase.storage.from_(BUCKET).download(path))
+        local.write_bytes(contents)
     return counts["ref"], counts["scene"]
 
 
-def build(stories: list[dict], app_graph, budget: int, out_dir: pathlib.Path, supabase) -> dict:
-    """The loop: skip what is done, run what is not, stop the moment the budget is gone."""
+def _asset(storage_path: str, kind: str, out_dir: pathlib.Path) -> AssetRecord:
+    local = pathlib.Path(local_image_path(storage_path, kind, root=out_dir))
+    if not local.is_file():
+        raise CorpusError(f"missing completed asset: {local}")
+    contents = local.read_bytes()
+    mime_type, width, height = _image_details(contents, "image/png" if kind == "ref" else "image/webp")
+    return AssetRecord(
+        storage_path=storage_path,
+        local_path=local.relative_to(out_dir).as_posix(),
+        sha256=hashlib.sha256(contents).hexdigest(),
+        mime_type=mime_type,
+        width=width,
+        height=height,
+        byte_length=len(contents),
+        kind=kind,
+    )
+
+
+def _assets(memory: StoryMemory, out_dir: pathlib.Path) -> list[AssetRecord]:
+    paths = [("ref", character.canonical_ref_image) for character in memory.characters]
+    paths += [("scene", scene.final_image_ref) for scene in memory.scenes]
+    assets = [_asset(path, kind, out_dir) for kind, path in paths if path]
+    if len({asset.storage_path for asset in assets}) != len(assets):
+        raise CorpusError("completed assets contain duplicate storage paths")
+    return assets
+
+
+def _verify_bundle_assets(bundle: RunBundle, out_dir: pathlib.Path) -> None:
+    for asset in bundle.assets:
+        try:
+            actual = _asset(asset.storage_path, asset.kind, out_dir)
+        except CorpusError as error:
+            raise CorpusError(f"immutable bundle asset differs: {bundle.memory.story_id}") from error
+        if actual != asset:
+            raise CorpusError(f"immutable bundle asset differs: {bundle.memory.story_id}")
+
+
+def _reconcile_roster(story: IntakeRecord, memory: StoryMemory) -> None:
+    reconcile_declared_roster(story.declared_characters, story.declared_non_human, memory)
+
+
+def _fixture_memory(story: IntakeRecord) -> StoryMemory:
+    characters = [
+        Character(
+            char_id=f"c{index}",
+            name=name,
+            description=CharacterDescription(is_humanoid=name not in story.declared_non_human),
+            canonical_ref_image=f"{story.story_id}/ref-c{index}.png",
+        )
+        for index, name in enumerate(story.declared_characters, start=1)
+    ]
+    return _initial_state(story).model_copy(
+        update={
+            "characters": characters,
+            "scenes": [
+                Scene(
+                    scene_id="fixture-scene-1",
+                    text_excerpt=story.text,
+                    characters_present=[character.char_id for character in characters],
+                    final_image_ref=f"{story.story_id}/fixture-scene-1.png",
+                )
+            ],
+            "cost": Cost(),
+        }
+    )
+
+
+def _write_fixture_images(memory: StoryMemory, out_dir: pathlib.Path) -> None:
+    for character in memory.characters:
+        local = pathlib.Path(local_image_path(character.canonical_ref_image, "ref", root=out_dir))
+        if not local.exists():
+            local.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("RGB", (2, 2), "purple").save(local, format="PNG")
+    for scene in memory.scenes:
+        local = pathlib.Path(local_image_path(scene.final_image_ref, "scene", root=out_dir))
+        if not local.exists():
+            local.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("RGB", (2, 2), "purple").save(local, format="WEBP", quality=82)
+
+
+def _bundle(
+    story: IntakeRecord,
+    memory: StoryMemory,
+    out_dir: pathlib.Path,
+    fixture: bool,
+    telemetry: Counter | None = None,
+    price_per_call: Decimal = Decimal("0.035"),
+) -> RunBundle:
+    if memory.story_id != story.story_id:
+        raise CorpusError(f"completed story_id differs from intake: {story.story_id}")
+    if memory.style.style_preset_id != story.style_preset_id:
+        raise CorpusError(f"completed style differs from intake: {story.story_id}")
+    _reconcile_roster(story, memory)
+    return RunBundle(
+        memory=memory,
+        provenance=story.provenance,
+        split=story.split,
+        candidate_role=story.candidate_role,
+        declared_characters=story.declared_characters,
+        declared_non_human=story.declared_non_human,
+        run_metadata={
+            "code_commit": _code_commit(),
+            "schema_version": memory.schema_version,
+            "style_preset_id": story.style_preset_id,
+            "text_model": settings.text_model,
+            "image_model": settings.fal_image_model,
+            "image_edit_model": settings.fal_image_edit_model,
+            "judge_model": settings.vlm_judge_model,
+            "moderation_primary_model": settings.moderation_primary_model,
+            "moderation_primary_image_model": settings.moderation_primary_image_model,
+            "moderation_backstop_model": settings.moderation_backstop_model,
+            "moderation_backstop_image_model": settings.moderation_backstop_image_model,
+            "extraction_prompt_version": EXTRACTION_PROMPT_VERSION,
+            "reference_judge_prompt_version": REFERENCE_JUDGE_PROMPT_VERSION,
+            "scene_prompt_version": SCENE_PROMPT_VERSION,
+            "judge_prompt_version": JUDGE_PROMPT_VERSION,
+            "scene_constraint_prompt_version": SCENE_CONSTRAINT_PROMPT_VERSION,
+            "image_budget": IMAGE_BUDGET,
+            "recursion_limit": RECURSION_LIMIT,
+            "fixture": "true" if fixture else "false",
+            "conservative_call_usd": str(price_per_call),
+            "attempted_calls": (telemetry or {}).get("attempted", 0),
+            "completed_calls": (telemetry or {}).get("completed", 0),
+            "failed_calls": (telemetry or {}).get("failed", 0),
+            "uncertain_calls": (telemetry or {}).get("uncertain", 0),
+        },
+        assets=_assets(memory, out_dir),
+    )
+
+
+def _write_state(path: pathlib.Path, state: dict) -> None:
+    temporary = path.with_suffix(f"{path.suffix}.tmp")
+    temporary.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.replace(path)
+
+
+def _persisted_telemetry(values: dict, policy: SpendPolicy, source: str) -> Counter:
+    try:
+        price = Decimal(str(values["conservative_call_usd"]))
+        telemetry = Counter(
+            {
+                key: values.get(f"{key}_calls", values.get("telemetry", {}).get(key, 0))
+                for key in TELEMETRY_KEYS
+            }
+        )
+    except (AttributeError, KeyError, TypeError, ValueError) as error:
+        raise CorpusError(f"invalid persisted billing telemetry: {source}") from error
+    if price != policy.conservative_call_usd or any(
+        type(telemetry[key]) is not int or telemetry[key] < 0 for key in TELEMETRY_KEYS
+    ):
+        raise CorpusError(f"invalid persisted billing telemetry: {source}")
+    return telemetry
+
+
+def build(
+    stories: list[IntakeRecord | dict],
+    app_graph,
+    out_dir: pathlib.Path,
+    supabase,
+    fixture: bool = False,
+    policy: SpendPolicy = SpendPolicy(),
+) -> dict:
+    """Run only incomplete stories; a completed run is the immutable bundle, never a count."""
+    records = [_record(story) for story in stories]
     out_dir.mkdir(parents=True, exist_ok=True)
     state_path = out_dir / STATE_FILE
     state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
-
-    spent = 0
+    bundles = {bundle.memory.story_id: bundle for bundle in load_completed_bundles(out_dir)}
+    campaign_spent = sum(bundle.memory.cost.image_count for bundle in bundles.values())
+    invocation_spent = 0
+    telemetry = Counter(attempted=0, completed=0, failed=0, uncertain=0)
+    if not fixture:
+        for story_id, bundle in bundles.items():
+            telemetry.update(_persisted_telemetry(bundle.run_metadata, policy, story_id))
+        for story_id, entry in state.items():
+            if story_id not in bundles and isinstance(entry, dict) and "telemetry" in entry:
+                telemetry.update(_persisted_telemetry(entry, policy, story_id))
+    story_draw_limit = policy.story_draw_limit(len(records))
+    smoke = policy.authorized_usd <= policy.smoke_usd
     summary = {
-        "stories_run": 0, "stories_skipped": 0, "characters": 0, "scenes": 0,
-        "images_spent": 0, "halted": False,
+        "stories_run": 0,
+        "stories_skipped": 0,
+        "characters": 0,
+        "scenes": 0,
+        "images_spent": 0,
+        "halted": False,
     }
-
-    for story in stories:
-        story_id = story["story_id"]
-        if story_id in state:
+    for story in records:
+        story_id = story.story_id
+        state_entry = state.get(story_id)
+        expected_reference = {"bundle": f"runs/{story_id}"}
+        if state_entry is not None and state_entry != expected_reference:
+            if not isinstance(state_entry, dict) or "telemetry" not in state_entry:
+                state[story_id] = {"quarantined": "legacy count-only state; completed bundle required"}
+                _write_state(state_path, state)
+                raise CorpusError(
+                    f"legacy build state quarantined for {story_id}; completed bundle required"
+                )
+            if "quarantined" in state_entry:
+                raise CorpusError(f"{state_entry['quarantined']} for {story_id}")
+        if story_id in bundles:
+            _verify_bundle_assets(bundles[story_id], out_dir)
+            if state_entry != expected_reference:
+                state[story_id] = expected_reference
+                _write_state(state_path, state)
             summary["stories_skipped"] += 1
             continue
+        if fixture:
+            memory = _fixture_memory(story)
+            _write_fixture_images(memory, out_dir)
+            drawn = 0
+            halted = False
+            refs = len(memory.characters)
+            scenes = len(memory.scenes)
+            story_telemetry = Counter(attempted=0, completed=0, failed=0, uncertain=0)
+        else:
+            billable_calls = max(campaign_spent, telemetry["attempted"])
+            remaining_usd = policy.authorized_usd - billable_calls * policy.conservative_call_usd
+            reserve_usd = story_draw_limit * policy.conservative_call_usd
+            if story_draw_limit <= 0 or reserve_usd > remaining_usd:
+                summary["halted"] = True
+                break
+            story_telemetry = (
+                _persisted_telemetry(state_entry, policy, story_id)
+                if state_entry is not None
+                else Counter(attempted=0, completed=0, failed=0, uncertain=0)
+            )
 
-        budget_left = budget - spent
-        if budget_left <= 0:
-            summary["halted"] = True
-            break
+            def record_fal_event(event: str) -> None:
+                if event == "failed_uncertain":
+                    key = "uncertain"
+                else:
+                    key = event
+                story_telemetry[key] += 1
+                telemetry[key] += 1
+                state[story_id] = {
+                    "in_progress": True,
+                    "conservative_call_usd": str(policy.conservative_call_usd),
+                    "telemetry": dict(story_telemetry),
+                }
+                _write_state(state_path, state)
 
-        values, drawn, halted = run_story(app_graph, story, budget_left)
-        spent += drawn
-        refs, scenes = download_images(values, out_dir, supabase)
-        print(
-            f"{story_id}: images={drawn} refs={refs} scenes={scenes} "
-            f"total={spent}/{budget} (${spent * COST_LOW:.2f}-${spent * COST_HIGH:.2f})"
-            + ("  ** BUDGET REACHED — HALTED **" if halted else ""),
-            flush=True,
-        )
+            token = _fal_event_sink.set(record_fal_event)
+            try:
+                values, drawn, halted = run_story(app_graph, story, story_draw_limit)
+            except Exception as error:
+                if story_telemetry["uncertain"]:
+                    state[story_id] = {
+                        "quarantined": "billing uncertain; reconcile before retry",
+                        "conservative_call_usd": str(policy.conservative_call_usd),
+                        "telemetry": dict(story_telemetry),
+                    }
+                    _write_state(state_path, state)
+                    raise CorpusError(f"billing uncertain for {story_id}; reconcile before retry") from error
+                raise
+            finally:
+                _fal_event_sink.reset(token)
+            campaign_spent += drawn
+            invocation_spent += drawn
+            memory = StoryMemory.model_validate(values)
+            refs, scenes = download_images(memory, out_dir, supabase)
         if halted:
-            # Deliberately NOT recorded as done: the book is unfinished, and a resume must be
-            # allowed to pick it back up from the checkpointer.
+            if smoke:
+                state[story_id] = {
+                    "quarantined": "smoke draw ceiling reached; reconcile before retry",
+                    "conservative_call_usd": str(policy.conservative_call_usd),
+                    "telemetry": dict(story_telemetry),
+                }
+                _write_state(state_path, state)
             summary["halted"] = True
             break
-
-        state[story_id] = {"images": drawn, "characters": refs, "scenes": scenes}
-        state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        write_bundle(
+            out_dir,
+            _bundle(
+                story,
+                memory,
+                out_dir,
+                fixture,
+                story_telemetry,
+                policy.conservative_call_usd,
+            ),
+        )
+        state[story_id] = expected_reference
+        _write_state(state_path, state)
         summary["stories_run"] += 1
         summary["characters"] += refs
         summary["scenes"] += scenes
-
-    summary["images_spent"] = spent
-    summary["usd_low"] = round(spent * COST_LOW, 2)
-    summary["usd_high"] = round(spent * COST_HIGH, 2)
+    summary["images_spent"] = invocation_spent
+    summary["usd_high"] = str(
+        max(campaign_spent, telemetry["attempted"]) * policy.conservative_call_usd
+    )
+    summary["telemetry"] = dict(telemetry)
     return summary
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--budget", type=int, default=DEFAULT_BUDGET,
-                        help=f"hard ceiling on paid images (default {DEFAULT_BUDGET})")
+    paid_or_fixture = parser.add_mutually_exclusive_group()
+    paid_or_fixture.add_argument("--max-usd", type=Decimal)
+    paid_or_fixture.add_argument("--fixture", action="store_true")
+    parser.add_argument("--price-per-call", type=Decimal)
     parser.add_argument("--corpus", type=pathlib.Path, default=CORPUS_PATH)
     parser.add_argument("--out", type=pathlib.Path, default=DATA_DIR)
     parser.add_argument("--limit", type=int, default=None, help="run only the first N stories")
     args = parser.parse_args(argv)
+    if args.fixture and args.price_per_call is not None:
+        parser.error("--fixture cannot be combined with --price-per-call")
+    stories = load_intake(args.corpus)[: args.limit]
+    try:
+        if args.fixture:
+            summary = build(stories, None, args.out, None, fixture=True)
+        else:
+            from app.config import settings
+            from app.db import get_supabase_client
+            from langgraph.checkpoint.postgres import PostgresSaver
+            from pipeline.graph import build_graph
 
-    stories = load_corpus(args.corpus)[: args.limit]
-    supabase = get_supabase_client()
-
-    with PostgresSaver.from_conn_string(settings.supabase_db_url) as checkpointer:
-        checkpointer.setup()
-        summary = build(stories, build_graph(checkpointer=checkpointer), args.budget, args.out, supabase)
-
-    print(
-        "\n--- summary ---\n"
-        f"stories run:      {summary['stories_run']}\n"
-        f"stories skipped:  {summary['stories_skipped']} (already built)\n"
-        f"characters minted:{summary['characters']}\n"
-        f"scenes drawn:     {summary['scenes']}\n"
-        f"images spent:     {summary['images_spent']} / {args.budget}\n"
-        f"estimated cost:   ${summary['usd_low']:.2f}-${summary['usd_high']:.2f}\n"
-        f"halted on budget: {summary['halted']}"
-    )
+            with PostgresSaver.from_conn_string(settings.supabase_db_url) as checkpointer:
+                checkpointer.setup()
+                defaults = SpendPolicy()
+                policy = SpendPolicy(
+                    max_usd=args.max_usd if args.max_usd is not None else defaults.max_usd,
+                    conservative_call_usd=(
+                        args.price_per_call
+                        if args.price_per_call is not None
+                        else defaults.conservative_call_usd
+                    ),
+                )
+                summary = build(
+                    stories,
+                    build_graph(checkpointer=checkpointer),
+                    args.out,
+                    get_supabase_client(),
+                    policy=policy,
+                )
+    except CorpusError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    print(json.dumps(summary, sort_keys=True))
     return 0
 
 
