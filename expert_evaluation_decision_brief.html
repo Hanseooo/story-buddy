@@ -1,0 +1,2615 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Evidence-led decision brief and draft expert-validation instrument for StoryBuddy's capstone research."
+    />
+    <title>StoryBuddy Expert Evaluation — Evidence, Decision, and Draft Instrument</title>
+    <style>
+      :root {
+        --paper: #fffdf7;
+        --paper-deep: #f3eee2;
+        --ink: #17213f;
+        --muted: #596276;
+        --cobalt: #3155d9;
+        --cobalt-deep: #213c9a;
+        --cobalt-pale: #e8edff;
+        --sun: #f2c85f;
+        --sun-pale: #fff5ce;
+        --coral: #ec6a51;
+        --coral-pale: #fff0eb;
+        --green: #36785a;
+        --green-pale: #e8f3ec;
+        --red: #a8394d;
+        --red-pale: #fbecef;
+        --line: #d9d4c9;
+        --line-dark: #a9a596;
+        --white: #ffffff;
+        --shadow: 0 18px 52px rgba(28, 43, 94, 0.11);
+        --radius-sm: 10px;
+        --radius-md: 18px;
+        --radius-lg: 30px;
+        --display: Georgia, "Times New Roman", serif;
+        --body: "Aptos", "Trebuchet MS", sans-serif;
+        --mono: "Cascadia Code", "Consolas", monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+        scroll-padding-top: 1.5rem;
+      }
+
+      body {
+        margin: 0;
+        color: var(--ink);
+        background:
+          linear-gradient(rgba(49, 85, 217, 0.035) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(49, 85, 217, 0.035) 1px, transparent 1px),
+          var(--paper);
+        background-size: 32px 32px;
+        font-family: var(--body);
+        font-size: 17px;
+        line-height: 1.68;
+      }
+
+      a {
+        color: var(--cobalt-deep);
+        text-decoration-thickness: 0.08em;
+        text-underline-offset: 0.18em;
+      }
+
+      a:hover {
+        color: var(--coral);
+      }
+
+      a:focus-visible,
+      button:focus-visible,
+      summary:focus-visible {
+        outline: 4px solid var(--sun);
+        outline-offset: 3px;
+        border-radius: 4px;
+      }
+
+      .skip-link {
+        position: fixed;
+        z-index: 100;
+        top: 0.75rem;
+        left: 0.75rem;
+        transform: translateY(-180%);
+        padding: 0.7rem 1rem;
+        border-radius: 999px;
+        color: var(--white);
+        background: var(--cobalt-deep);
+        font-weight: 800;
+      }
+
+      .skip-link:focus {
+        transform: translateY(0);
+      }
+
+      .reading-progress {
+        position: fixed;
+        z-index: 90;
+        inset: 0 0 auto;
+        height: 5px;
+        background: rgba(49, 85, 217, 0.12);
+      }
+
+      .reading-progress span {
+        display: block;
+        width: 0;
+        height: 100%;
+        background: var(--coral);
+        transition: width 120ms linear;
+      }
+
+      .page-shell {
+        display: grid;
+        grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+        gap: clamp(1.2rem, 3vw, 3.5rem);
+        width: min(1500px, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: 1.6rem 0 5rem;
+      }
+
+      .toc {
+        position: sticky;
+        top: 1.6rem;
+        align-self: start;
+        max-height: calc(100vh - 3.2rem);
+        overflow: auto;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: rgba(255, 253, 247, 0.94);
+        box-shadow: 0 10px 32px rgba(23, 33, 63, 0.08);
+        backdrop-filter: blur(12px);
+      }
+
+      .toc-head {
+        padding: 1.25rem 1.25rem 1rem;
+        color: var(--white);
+        background: var(--cobalt-deep);
+        border-radius: var(--radius-md) var(--radius-md) 0 0;
+      }
+
+      .eyebrow,
+      .toc-kicker,
+      .section-index,
+      .badge,
+      .status-chip,
+      .tiny-label {
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        line-height: 1.2;
+        text-transform: uppercase;
+      }
+
+      .toc-title {
+        margin: 0.4rem 0 0;
+        font-family: var(--display);
+        font-size: 1.35rem;
+        line-height: 1.15;
+      }
+
+      .toc ol {
+        margin: 0;
+        padding: 0.8rem;
+        list-style: none;
+      }
+
+      .toc a {
+        display: grid;
+        grid-template-columns: 2rem 1fr;
+        gap: 0.5rem;
+        align-items: baseline;
+        padding: 0.54rem 0.62rem;
+        border-radius: 8px;
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 0.86rem;
+        line-height: 1.3;
+      }
+
+      .toc a::before {
+        content: attr(data-number);
+        color: var(--cobalt);
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        font-weight: 800;
+      }
+
+      .toc a:hover,
+      .toc a[aria-current="true"] {
+        color: var(--ink);
+        background: var(--cobalt-pale);
+      }
+
+      .toc-actions {
+        display: grid;
+        gap: 0.55rem;
+        padding: 0 1rem 1rem;
+      }
+
+      button {
+        border: 0;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .print-button {
+        padding: 0.72rem 0.9rem;
+        border-radius: 10px;
+        color: var(--white);
+        background: var(--cobalt);
+        font-size: 0.84rem;
+        font-weight: 850;
+        box-shadow: inset 0 -3px 0 var(--cobalt-deep);
+      }
+
+      .print-button:hover {
+        transform: translateY(-1px);
+      }
+
+      main {
+        min-width: 0;
+      }
+
+      .hero {
+        position: relative;
+        overflow: hidden;
+        min-height: 620px;
+        padding: clamp(2rem, 6vw, 5.5rem);
+        border-radius: var(--radius-lg);
+        color: var(--white);
+        background: var(--cobalt-deep);
+        box-shadow: var(--shadow);
+      }
+
+      .hero::before,
+      .hero::after {
+        position: absolute;
+        content: "";
+        border-radius: 50%;
+        pointer-events: none;
+      }
+
+      .hero::before {
+        width: 31rem;
+        height: 31rem;
+        top: -15rem;
+        right: -8rem;
+        border: 2px solid rgba(255, 255, 255, 0.18);
+        box-shadow:
+          0 0 0 38px rgba(255, 255, 255, 0.035),
+          0 0 0 92px rgba(255, 255, 255, 0.025);
+      }
+
+      .hero::after {
+        width: 12rem;
+        height: 12rem;
+        right: 8%;
+        bottom: -4rem;
+        background: var(--sun);
+        opacity: 0.98;
+      }
+
+      .hero > * {
+        position: relative;
+        z-index: 1;
+      }
+
+      .hero .eyebrow {
+        color: var(--sun);
+      }
+
+      h1,
+      h2,
+      h3,
+      h4 {
+        font-family: var(--display);
+        text-wrap: balance;
+      }
+
+      h1 {
+        max-width: 920px;
+        margin: 1.1rem 0 1.5rem;
+        font-size: clamp(3rem, 7vw, 6.6rem);
+        font-weight: 500;
+        letter-spacing: -0.055em;
+        line-height: 0.94;
+      }
+
+      .hero-lede {
+        max-width: 790px;
+        margin: 0;
+        color: #e7ecff;
+        font-size: clamp(1.05rem, 2vw, 1.38rem);
+        line-height: 1.55;
+      }
+
+      .hero-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.55rem;
+        margin-top: 2rem;
+      }
+
+      .status-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.55rem 0.72rem;
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        border-radius: 999px;
+        color: var(--white);
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .status-chip::before {
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: 50%;
+        background: var(--sun);
+        content: "";
+      }
+
+      .decision-strip {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.85rem;
+        margin-top: 3rem;
+      }
+
+      .decision-mini {
+        min-height: 145px;
+        padding: 1.1rem;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: var(--radius-sm);
+        background: rgba(255, 255, 255, 0.095);
+      }
+
+      .decision-mini strong {
+        display: block;
+        margin: 0.35rem 0;
+        font-family: var(--display);
+        font-size: 1.25rem;
+      }
+
+      .decision-mini p {
+        margin: 0;
+        color: #e5eaff;
+        font-size: 0.9rem;
+        line-height: 1.48;
+      }
+
+      .content-section {
+        margin-top: 1.3rem;
+        padding: clamp(1.5rem, 4vw, 4rem);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
+        background: rgba(255, 253, 247, 0.96);
+        box-shadow: 0 12px 38px rgba(23, 33, 63, 0.06);
+      }
+
+      .section-head {
+        display: grid;
+        grid-template-columns: 4.5rem 1fr;
+        gap: 1rem;
+        align-items: start;
+        margin-bottom: 2rem;
+      }
+
+      .section-index {
+        display: grid;
+        place-items: center;
+        width: 4rem;
+        height: 4rem;
+        border: 1px solid var(--cobalt);
+        border-radius: 50%;
+        color: var(--cobalt);
+        background: var(--cobalt-pale);
+        font-size: 0.88rem;
+      }
+
+      h2 {
+        margin: 0;
+        font-size: clamp(2rem, 4vw, 3.7rem);
+        font-weight: 500;
+        letter-spacing: -0.035em;
+        line-height: 1.02;
+      }
+
+      .section-intro {
+        max-width: 880px;
+        margin: 0.8rem 0 0;
+        color: var(--muted);
+        font-size: 1.05rem;
+      }
+
+      h3 {
+        margin: 2.4rem 0 0.75rem;
+        font-size: clamp(1.45rem, 2.6vw, 2.25rem);
+        font-weight: 550;
+        letter-spacing: -0.025em;
+        line-height: 1.15;
+      }
+
+      h4 {
+        margin: 0 0 0.45rem;
+        font-size: 1.15rem;
+      }
+
+      p,
+      li {
+        max-width: 78ch;
+      }
+
+      .big-answer {
+        display: grid;
+        grid-template-columns: minmax(0, 0.8fr) minmax(260px, 1.2fr);
+        gap: 1.2rem;
+        align-items: stretch;
+      }
+
+      .answer-stamp {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        min-height: 260px;
+        padding: 1.7rem;
+        border-radius: var(--radius-md);
+        color: var(--white);
+        background: var(--green);
+      }
+
+      .answer-stamp .stamp-word {
+        font-family: var(--display);
+        font-size: clamp(3.2rem, 7vw, 6.4rem);
+        line-height: 0.85;
+      }
+
+      .answer-stamp p {
+        margin: 1.3rem 0 0;
+        color: #ecfff3;
+      }
+
+      .why-panel {
+        padding: 1.7rem;
+        border: 1px solid #bdc9ff;
+        border-radius: var(--radius-md);
+        background: var(--cobalt-pale);
+      }
+
+      .why-panel h3 {
+        margin-top: 0;
+      }
+
+      .why-panel ul,
+      .plain-list {
+        margin: 0;
+        padding-left: 1.25rem;
+      }
+
+      .why-panel li + li,
+      .plain-list li + li {
+        margin-top: 0.65rem;
+      }
+
+      .callout {
+        position: relative;
+        margin: 1.5rem 0;
+        padding: 1.35rem 1.45rem 1.35rem 4.4rem;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: var(--white);
+      }
+
+      .callout::before {
+        position: absolute;
+        top: 1.25rem;
+        left: 1.25rem;
+        display: grid;
+        place-items: center;
+        width: 2.2rem;
+        height: 2.2rem;
+        border-radius: 50%;
+        font-family: var(--display);
+        font-size: 1.25rem;
+        font-weight: 700;
+        content: "i";
+      }
+
+      .callout strong {
+        display: block;
+        margin-bottom: 0.3rem;
+      }
+
+      .callout p {
+        margin: 0;
+      }
+
+      .callout.caution {
+        border-color: #e1bd5d;
+        background: var(--sun-pale);
+      }
+
+      .callout.caution::before {
+        color: #5a4000;
+        background: var(--sun);
+        content: "!";
+      }
+
+      .callout.stop {
+        border-color: #d88b99;
+        background: var(--red-pale);
+      }
+
+      .callout.stop::before {
+        color: var(--white);
+        background: var(--red);
+        content: "×";
+      }
+
+      .callout.good {
+        border-color: #83ad96;
+        background: var(--green-pale);
+      }
+
+      .callout.good::before {
+        color: var(--white);
+        background: var(--green);
+        content: "✓";
+      }
+
+      .objective-map {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+      }
+
+      .objective {
+        position: relative;
+        padding: 1.45rem;
+        border: 1px solid var(--line);
+        border-top: 8px solid var(--cobalt);
+        border-radius: var(--radius-md);
+        background: var(--white);
+      }
+
+      .objective:nth-child(2) {
+        border-top-color: var(--coral);
+      }
+
+      .objective:nth-child(3) {
+        border-top-color: var(--green);
+      }
+
+      .objective .number {
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 0.76rem;
+        font-weight: 850;
+      }
+
+      .objective h3 {
+        margin-top: 0.45rem;
+        font-size: 1.4rem;
+      }
+
+      .objective p {
+        margin-bottom: 0;
+      }
+
+      .do-not-mix {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.6rem;
+        margin-top: 1.2rem;
+      }
+
+      .do-not-mix div {
+        padding: 0.8rem;
+        border: 1px dashed var(--line-dark);
+        border-radius: 10px;
+        color: var(--muted);
+        background: var(--paper-deep);
+        font-size: 0.88rem;
+        text-align: center;
+      }
+
+      .pipeline-context {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr auto 1fr;
+        gap: 0.55rem;
+        align-items: center;
+        margin-bottom: 1.4rem;
+      }
+
+      .context-box {
+        padding: 1rem;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        background: var(--white);
+        text-align: center;
+      }
+
+      .context-box strong {
+        display: block;
+        margin-bottom: 0.25rem;
+      }
+
+      .arrow {
+        color: var(--cobalt);
+        font-size: 1.5rem;
+        font-weight: 900;
+      }
+
+      .pipeline {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(140px, 1fr));
+        gap: 0.75rem;
+        overflow-x: auto;
+        padding: 0.3rem 0.2rem 1rem;
+      }
+
+      .pipeline-node {
+        position: relative;
+        min-height: 150px;
+        padding: 1rem;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        background: var(--white);
+      }
+
+      .pipeline-node::after {
+        position: absolute;
+        top: 50%;
+        right: -0.63rem;
+        z-index: 2;
+        color: var(--cobalt);
+        font-weight: 900;
+        content: "→";
+        transform: translateY(-50%);
+      }
+
+      .pipeline-node:last-child::after,
+      .pipeline-node:nth-child(6)::after {
+        content: "";
+      }
+
+      .pipeline-node .node-id {
+        color: var(--cobalt);
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        font-weight: 850;
+      }
+
+      .pipeline-node strong {
+        display: block;
+        margin: 0.35rem 0;
+        font-family: var(--display);
+        font-size: 1.05rem;
+      }
+
+      .pipeline-node p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.82rem;
+        line-height: 1.42;
+      }
+
+      .pipeline-node.loop {
+        border-color: #b7c4ff;
+        background: var(--cobalt-pale);
+      }
+
+      .loop-band {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(150px, 1fr));
+        gap: 0.75rem;
+        margin-top: 0.9rem;
+        padding: 1rem;
+        border: 2px solid var(--cobalt);
+        border-radius: var(--radius-md);
+        background: rgba(232, 237, 255, 0.48);
+      }
+
+      .loop-band .pipeline-node::after {
+        content: "→";
+      }
+
+      .loop-band .pipeline-node:last-child::after {
+        content: "↺";
+      }
+
+      .loop-label {
+        grid-column: 1 / -1;
+        color: var(--cobalt-deep);
+        font-family: var(--mono);
+        font-size: 0.75rem;
+        font-weight: 850;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+      }
+
+      .fact-row {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.75rem;
+        margin-top: 1.2rem;
+      }
+
+      .fact {
+        padding: 1rem;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        background: var(--paper-deep);
+      }
+
+      .fact strong {
+        display: block;
+        color: var(--cobalt-deep);
+        font-family: var(--display);
+        font-size: 1.35rem;
+      }
+
+      .fact span {
+        display: block;
+        margin-top: 0.2rem;
+        color: var(--muted);
+        font-size: 0.82rem;
+        line-height: 1.4;
+      }
+
+      .validity-gates {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.85rem;
+        counter-reset: gates;
+      }
+
+      .validity-gate {
+        position: relative;
+        min-height: 190px;
+        padding: 1.25rem;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: var(--white);
+        counter-increment: gates;
+      }
+
+      .validity-gate::before {
+        display: grid;
+        place-items: center;
+        width: 2.1rem;
+        height: 2.1rem;
+        margin-bottom: 1rem;
+        border-radius: 50%;
+        color: var(--white);
+        background: var(--cobalt);
+        font-family: var(--mono);
+        font-size: 0.75rem;
+        font-weight: 850;
+        content: counter(gates, decimal-leading-zero);
+      }
+
+      .validity-gate p {
+        margin-bottom: 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .equation {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        gap: 0.8rem;
+        align-items: center;
+        margin: 1.5rem 0;
+        padding: 1.25rem;
+        border: 1px solid #dcb857;
+        border-radius: var(--radius-md);
+        background: var(--sun-pale);
+      }
+
+      .equation .symbol {
+        color: #795900;
+        font-family: var(--display);
+        font-size: 2.8rem;
+        text-align: center;
+      }
+
+      .equation-block {
+        text-align: center;
+      }
+
+      .equation-block strong {
+        display: block;
+        font-family: var(--mono);
+        font-size: clamp(1rem, 2vw, 1.35rem);
+      }
+
+      .equation-block span {
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+
+      .evidence-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+      }
+
+      .evidence-card {
+        display: flex;
+        flex-direction: column;
+        min-height: 330px;
+        padding: 1.4rem;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: var(--white);
+      }
+
+      .evidence-top {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+        align-items: center;
+        margin-bottom: 1rem;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 1.8rem;
+        padding: 0.35rem 0.55rem;
+        border-radius: 999px;
+        color: var(--cobalt-deep);
+        background: var(--cobalt-pale);
+      }
+
+      .badge.verified {
+        color: #1d5f42;
+        background: var(--green-pale);
+      }
+
+      .badge.limit {
+        color: #7d5900;
+        background: var(--sun-pale);
+      }
+
+      .badge.reject {
+        color: var(--red);
+        background: var(--red-pale);
+      }
+
+      .evidence-card h3 {
+        margin: 0;
+        font-size: 1.6rem;
+      }
+
+      .evidence-card p {
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .evidence-card dl {
+        display: grid;
+        grid-template-columns: 7.5rem 1fr;
+        gap: 0.55rem 0.8rem;
+        margin: 0;
+        font-size: 0.88rem;
+      }
+
+      .evidence-card dt {
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .evidence-card dd {
+        margin: 0;
+      }
+
+      .evidence-card .source-link {
+        margin-top: auto;
+        padding-top: 1rem;
+        font-weight: 800;
+      }
+
+      .matrix-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: var(--white);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+      }
+
+      th,
+      td {
+        padding: 0.9rem 1rem;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        color: var(--white);
+        background: var(--cobalt-deep);
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      tbody tr:last-child td {
+        border-bottom: 0;
+      }
+
+      tbody tr:hover {
+        background: #faf8f1;
+      }
+
+      .decision-pill {
+        display: inline-block;
+        min-width: 5.2rem;
+        padding: 0.32rem 0.55rem;
+        border-radius: 999px;
+        color: var(--white);
+        background: var(--green);
+        font-family: var(--mono);
+        font-size: 0.68rem;
+        font-weight: 850;
+        letter-spacing: 0.06em;
+        text-align: center;
+        text-transform: uppercase;
+      }
+
+      .decision-pill.adapt {
+        color: var(--ink);
+        background: var(--sun);
+      }
+
+      .decision-pill.reject {
+        background: var(--red);
+      }
+
+      .formula-demo {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+      }
+
+      .frame-card {
+        padding: 1.2rem;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: var(--white);
+      }
+
+      .prop-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.55rem;
+        margin-top: 1rem;
+      }
+
+      .prop {
+        display: grid;
+        place-items: center;
+        width: 3rem;
+        height: 3rem;
+        border: 2px solid var(--cobalt);
+        border-radius: 9px;
+        color: var(--cobalt-deep);
+        background: var(--cobalt-pale);
+        font-family: var(--mono);
+        font-size: 0.68rem;
+        font-weight: 850;
+      }
+
+      .prop.lost {
+        border-style: dashed;
+        border-color: var(--line-dark);
+        color: var(--muted);
+        background: var(--paper-deep);
+        opacity: 0.55;
+      }
+
+      details {
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        background: var(--white);
+      }
+
+      details + details {
+        margin-top: 0.7rem;
+      }
+
+      summary {
+        position: relative;
+        padding: 1rem 3.2rem 1rem 1rem;
+        list-style: none;
+        cursor: pointer;
+        font-weight: 850;
+      }
+
+      summary::-webkit-details-marker {
+        display: none;
+      }
+
+      summary::after {
+        position: absolute;
+        top: 50%;
+        right: 1.2rem;
+        color: var(--cobalt);
+        font-size: 1.3rem;
+        content: "+";
+        transform: translateY(-50%);
+      }
+
+      details[open] summary::after {
+        content: "−";
+      }
+
+      .details-body {
+        padding: 0 1rem 1.2rem;
+        color: var(--muted);
+      }
+
+      .edge-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.85rem;
+      }
+
+      .edge-card {
+        padding: 1.2rem;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: var(--white);
+      }
+
+      .edge-card .edge-number {
+        color: var(--coral);
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        font-weight: 850;
+      }
+
+      .edge-card h3 {
+        margin: 0.35rem 0 0.65rem;
+        font-size: 1.25rem;
+      }
+
+      .edge-rule {
+        margin-top: 0.8rem;
+        padding-top: 0.8rem;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+
+      .edge-rule strong {
+        color: var(--ink);
+      }
+
+      .procedure {
+        position: relative;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        counter-reset: steps;
+      }
+
+      .procedure::before {
+        position: absolute;
+        top: 1.5rem;
+        bottom: 1.5rem;
+        left: 1.35rem;
+        width: 2px;
+        background: var(--line);
+        content: "";
+      }
+
+      .procedure li {
+        position: relative;
+        max-width: none;
+        min-height: 4rem;
+        padding: 0 0 1.2rem 4rem;
+        counter-increment: steps;
+      }
+
+      .procedure li::before {
+        position: absolute;
+        z-index: 1;
+        top: 0;
+        left: 0;
+        display: grid;
+        place-items: center;
+        width: 2.8rem;
+        height: 2.8rem;
+        border-radius: 50%;
+        color: var(--white);
+        background: var(--cobalt);
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        font-weight: 850;
+        content: counter(steps, decimal-leading-zero);
+      }
+
+      .procedure strong {
+        display: block;
+        margin-bottom: 0.2rem;
+        font-family: var(--display);
+        font-size: 1.12rem;
+      }
+
+      .procedure span {
+        color: var(--muted);
+      }
+
+      .instrument {
+        border: 2px solid var(--ink);
+        border-radius: var(--radius-md);
+        background: var(--white);
+      }
+
+      .instrument-cover {
+        padding: 2rem;
+        color: var(--white);
+        background: var(--cobalt-deep);
+        border-radius: 14px 14px 0 0;
+      }
+
+      .draft-banner {
+        display: inline-block;
+        padding: 0.5rem 0.7rem;
+        border-radius: 999px;
+        color: #533b00;
+        background: var(--sun);
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        font-weight: 900;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .instrument-cover h2 {
+        margin-top: 1rem;
+        color: var(--white);
+        font-size: clamp(2.2rem, 5vw, 4.2rem);
+      }
+
+      .instrument-cover p {
+        color: #e5eaff;
+      }
+
+      .instrument-body {
+        padding: clamp(1.3rem, 4vw, 3rem);
+      }
+
+      .field-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem 1.2rem;
+      }
+
+      .field {
+        min-height: 3.2rem;
+        padding-top: 1rem;
+        border-bottom: 1px solid var(--ink);
+      }
+
+      .field span {
+        display: block;
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .instructions {
+        margin: 2rem 0;
+        padding: 1.4rem;
+        border: 1px solid #b7c4ff;
+        border-radius: var(--radius-md);
+        background: var(--cobalt-pale);
+      }
+
+      .instructions ol {
+        margin-bottom: 0;
+        padding-left: 1.25rem;
+      }
+
+      .question-block {
+        margin: 2rem 0;
+        break-inside: avoid;
+      }
+
+      .question-kicker {
+        display: flex;
+        gap: 0.55rem;
+        align-items: center;
+        color: var(--cobalt);
+        font-family: var(--mono);
+        font-size: 0.74rem;
+        font-weight: 900;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .question-block h3 {
+        margin-top: 0.6rem;
+        font-size: 1.5rem;
+      }
+
+      .probe-note {
+        padding: 0.9rem 1rem;
+        border-left: 4px solid var(--sun);
+        color: var(--muted);
+        background: var(--sun-pale);
+        font-size: 0.88rem;
+      }
+
+      .evidence-fields {
+        display: grid;
+        grid-template-columns: 1fr 2fr;
+        gap: 0.8rem;
+        margin-top: 1rem;
+      }
+
+      .mini-field {
+        min-height: 2.7rem;
+        padding: 0.65rem;
+        border: 1px solid var(--line-dark);
+        border-radius: 8px;
+      }
+
+      .mini-field span {
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 0.67rem;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .writing-space {
+        min-height: 180px;
+        margin-top: 0.8rem;
+        border: 1px solid var(--line-dark);
+        border-radius: 8px;
+        background: repeating-linear-gradient(
+          to bottom,
+          transparent 0,
+          transparent 31px,
+          #cac6bb 32px
+        );
+      }
+
+      .coding-guide {
+        display: grid;
+        grid-template-columns: 0.9fr 1.1fr;
+        gap: 1rem;
+        margin-top: 1.3rem;
+      }
+
+      .codebook {
+        padding: 1.3rem;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: var(--paper-deep);
+      }
+
+      .codebook h3 {
+        margin-top: 0;
+      }
+
+      .orientation-list {
+        display: grid;
+        gap: 0.65rem;
+      }
+
+      .orientation {
+        padding: 0.8rem;
+        border-radius: 8px;
+        background: var(--white);
+      }
+
+      .orientation strong {
+        display: block;
+      }
+
+      .approval-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+      }
+
+      .approval-card {
+        padding: 1.25rem;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: var(--white);
+      }
+
+      .approval-card.safe {
+        border-top: 8px solid var(--green);
+      }
+
+      .approval-card.approve {
+        border-top: 8px solid var(--sun);
+      }
+
+      .approval-card.adr {
+        border-top: 8px solid var(--red);
+      }
+
+      .approval-card h3 {
+        margin-top: 0.4rem;
+        font-size: 1.35rem;
+      }
+
+      .approval-card ul {
+        padding-left: 1.15rem;
+      }
+
+      .source-list {
+        display: grid;
+        gap: 0.8rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .source-list li {
+        display: grid;
+        grid-template-columns: 3.3rem 1fr;
+        gap: 0.9rem;
+        max-width: none;
+        padding: 1rem;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        background: var(--white);
+      }
+
+      .source-number {
+        color: var(--cobalt);
+        font-family: var(--mono);
+        font-size: 0.78rem;
+        font-weight: 900;
+      }
+
+      .source-list cite {
+        display: block;
+        font-style: normal;
+        font-weight: 750;
+      }
+
+      .source-list small {
+        display: block;
+        margin-top: 0.3rem;
+        color: var(--muted);
+      }
+
+      footer {
+        margin-top: 1.3rem;
+        padding: 2rem;
+        border-radius: var(--radius-lg);
+        color: var(--white);
+        background: var(--ink);
+      }
+
+      footer p {
+        margin: 0;
+        color: #dce2f2;
+      }
+
+      .print-only {
+        display: none;
+      }
+
+      @media (max-width: 1120px) {
+        .page-shell {
+          grid-template-columns: 1fr;
+          width: min(1000px, calc(100% - 1.2rem));
+        }
+
+        .toc {
+          position: relative;
+          top: 0;
+          max-height: none;
+        }
+
+        .toc ol {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+        }
+
+        .pipeline {
+          grid-template-columns: repeat(3, minmax(170px, 1fr));
+        }
+
+        .pipeline-node:nth-child(3)::after,
+        .pipeline-node:nth-child(6)::after {
+          content: "";
+        }
+      }
+
+      @media (max-width: 760px) {
+        body {
+          font-size: 16px;
+        }
+
+        .hero {
+          min-height: auto;
+          padding: 2rem 1.3rem 7rem;
+          border-radius: 20px;
+        }
+
+        h1 {
+          font-size: clamp(2.65rem, 15vw, 4.7rem);
+        }
+
+        .decision-strip,
+        .objective-map,
+        .validity-gates,
+        .evidence-grid,
+        .edge-grid,
+        .approval-grid,
+        .fact-row,
+        .field-grid,
+        .coding-guide,
+        .big-answer,
+        .formula-demo {
+          grid-template-columns: 1fr;
+        }
+
+        .toc ol {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .content-section {
+          padding: 1.25rem;
+          border-radius: 20px;
+        }
+
+        .section-head {
+          grid-template-columns: 3rem 1fr;
+        }
+
+        .section-index {
+          width: 2.7rem;
+          height: 2.7rem;
+        }
+
+        .pipeline-context {
+          grid-template-columns: 1fr;
+        }
+
+        .pipeline-context .arrow {
+          transform: rotate(90deg);
+          text-align: center;
+        }
+
+        .pipeline,
+        .loop-band {
+          grid-template-columns: 1fr;
+        }
+
+        .pipeline-node::after,
+        .pipeline-node:nth-child(3)::after,
+        .loop-band .pipeline-node::after {
+          top: auto;
+          right: 50%;
+          bottom: -1.05rem;
+          content: "↓";
+          transform: translateX(50%);
+        }
+
+        .pipeline-node:last-child::after,
+        .loop-band .pipeline-node:last-child::after {
+          content: "";
+        }
+
+        .equation {
+          grid-template-columns: 1fr;
+        }
+
+        .equation .symbol {
+          transform: rotate(90deg);
+        }
+
+        .evidence-fields {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+
+      @media print {
+        @page {
+          size: A4;
+          margin: 13mm 12mm 15mm;
+        }
+
+        :root {
+          --paper: #ffffff;
+          --paper-deep: #f4f4f4;
+          --line: #b9b9b9;
+        }
+
+        body {
+          color: #000000;
+          background: #ffffff;
+          font-size: 10.5pt;
+        }
+
+        .reading-progress,
+        .toc,
+        .skip-link,
+        .screen-only {
+          display: none !important;
+        }
+
+        .print-only {
+          display: block;
+        }
+
+        .page-shell {
+          display: block;
+          width: 100%;
+          padding: 0;
+        }
+
+        .hero,
+        .content-section,
+        footer {
+          margin: 0 0 8mm;
+          padding: 9mm;
+          border: 1px solid #777777;
+          border-radius: 0;
+          box-shadow: none;
+        }
+
+        .hero {
+          min-height: 245mm;
+          color: #000000;
+          background: #ffffff;
+          break-after: page;
+        }
+
+        .hero::before,
+        .hero::after {
+          display: none;
+        }
+
+        .hero .eyebrow,
+        .hero-lede,
+        .hero-meta,
+        .decision-mini p {
+          color: #000000;
+        }
+
+        .decision-mini {
+          border-color: #777777;
+          background: #ffffff;
+        }
+
+        .content-section {
+          break-before: page;
+        }
+
+        a {
+          color: #000000;
+          text-decoration: none;
+        }
+
+        a[href^="http"]::after {
+          color: #555555;
+          content: " <" attr(href) ">";
+          font-family: var(--mono);
+          font-size: 7.5pt;
+          overflow-wrap: anywhere;
+        }
+
+        .objective-map,
+        .evidence-grid,
+        .edge-grid,
+        .approval-grid,
+        .validity-gates,
+        .coding-guide,
+        .field-grid,
+        .formula-demo,
+        .fact-row {
+          grid-template-columns: repeat(2, 1fr);
+        }
+
+        .objective,
+        .evidence-card,
+        .edge-card,
+        .approval-card,
+        details,
+        .question-block,
+        .codebook,
+        .frame-card {
+          break-inside: avoid;
+          box-shadow: none;
+        }
+
+        details > * {
+          display: block !important;
+        }
+
+        summary::after {
+          display: none;
+        }
+
+        .instrument {
+          border-color: #000000;
+          border-radius: 0;
+        }
+
+        .instrument-cover {
+          color: #000000;
+          background: #ffffff;
+          border-bottom: 3px solid #000000;
+          border-radius: 0;
+          break-after: page;
+        }
+
+        .instrument-cover h2,
+        .instrument-cover p {
+          color: #000000;
+        }
+
+        .question-block {
+          break-before: page;
+        }
+
+        .writing-space {
+          min-height: 120mm;
+        }
+
+        .matrix-wrap {
+          overflow: visible;
+        }
+
+        table {
+          font-size: 8.5pt;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to the research brief</a>
+    <div class="reading-progress" aria-hidden="true"><span id="progress-bar"></span></div>
+
+    <div class="page-shell">
+      <aside class="toc" aria-label="Document navigation">
+        <div class="toc-head">
+          <div class="toc-kicker">Research field guide</div>
+          <p class="toc-title">Expert evaluation decision brief</p>
+        </div>
+        <ol>
+          <li><a href="#decision" data-number="01">Decision</a></li>
+          <li><a href="#objectives" data-number="02">Evaluation legs</a></li>
+          <li><a href="#pipeline" data-number="03">Pipeline</a></li>
+          <li><a href="#exact-questionnaire" data-number="04">Exact questionnaire</a></li>
+          <li><a href="#evidence" data-number="05">Evidence ledger</a></li>
+          <li><a href="#canvas" data-number="06">CANVAS review</a></li>
+          <li><a href="#matrix" data-number="07">Use / adapt / reject</a></li>
+          <li><a href="#edge-cases" data-number="08">Edge cases</a></li>
+          <li><a href="#procedure" data-number="09">Procedure</a></li>
+          <li><a href="#tool-b" data-number="10">Draft Tool B</a></li>
+          <li><a href="#coding" data-number="11">Coding guide</a></li>
+          <li><a href="#actions" data-number="12">Next actions</a></li>
+          <li><a href="#references" data-number="13">References</a></li>
+        </ol>
+        <div class="toc-actions">
+          <button class="print-button" type="button" onclick="window.print()">Print / save as PDF</button>
+        </div>
+      </aside>
+
+      <main id="main">
+        <header class="hero">
+          <div class="eyebrow">StoryBuddy capstone · evidence review · 24 August 2026</div>
+          <h1>Use prior research carefully. Keep the method honest.</h1>
+          <p class="hero-lede">
+            A fact-checked decision brief for researchers considering an existing questionnaire for the
+            expert evaluation of AI-generated children's picture books—plus a complete, printable draft of
+            StoryBuddy's qualitative expert-validation instrument.
+          </p>
+          <div class="hero-meta" aria-label="Document status">
+            <span class="status-chip">Researcher-facing</span>
+            <span class="status-chip">Primary sources linked</span>
+            <span class="status-chip">Tool B pending approval</span>
+            <span class="status-chip">No pipeline change proposed</span>
+          </div>
+          <div class="decision-strip" aria-label="Executive decision">
+            <div class="decision-mini">
+              <span class="tiny-label">Keep</span>
+              <strong>The qualitative method</strong>
+              <p>Three expert validators, five pre-set criteria, open responses, directed content analysis.</p>
+            </div>
+            <div class="decision-mini">
+              <span class="tiny-label">Adapt</span>
+              <strong>Continuity concepts</strong>
+              <p>Visible evidence, viewpoint tolerance, recurring characters, important props, and settings.</p>
+            </div>
+            <div class="decision-mini">
+              <span class="tiny-label">Do not adopt</span>
+              <strong>A mismatched score</strong>
+              <p>Neither ContinuityEval's VLM rubric nor PropCons is a validated book-acceptability outcome.</p>
+            </div>
+          </div>
+        </header>
+
+        <section class="content-section" id="decision" aria-labelledby="decision-title">
+          <div class="section-head">
+            <div class="section-index">01</div>
+            <div>
+              <h2 id="decision-title">What should StoryBuddy do?</h2>
+              <p class="section-intro">
+                Do not replace the current research design with a single newly found paper. Build a transparent
+                chain of evidence in which each source supports only the construct it actually studied.
+              </p>
+            </div>
+          </div>
+
+          <div class="big-answer">
+            <div class="answer-stamp">
+              <span class="tiny-label">Recommended answer</span>
+              <span class="stamp-word">Keep.<br />Adapt.<br />Validate.</span>
+              <p>The existing qualitative method remains the strongest fit for Objective 3.</p>
+            </div>
+            <div class="why-panel">
+              <h3>Why this is stronger than copying a questionnaire</h3>
+              <ul>
+                <li>
+                  <strong>It matches the claim.</strong> StoryBuddy asks whether complete books are acceptable
+                  in presentation quality and classroom suitability—not whether two cinematic frames receive
+                  the same autorater score.
+                </li>
+                <li>
+                  <strong>It respects the sample.</strong> Three purposively selected validators can produce
+                  rich expert evidence, but they do not support population estimates or a psychometric scale.
+                </li>
+                <li>
+                  <strong>It avoids circularity.</strong> The runtime judge helps choose images. Human expert
+                  responses—not that judge—must carry the acceptability finding.
+                </li>
+                <li>
+                  <strong>It remains traceable.</strong> Every prompt maps to an accepted criterion and every
+                  borrowed concept maps to a named source.
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="callout caution">
+            <strong>Important distinction: “from an existing study” is not the same as “valid here.”</strong>
+            <p>
+              Exact wording improves defensibility only when the original construct, evaluated object,
+              respondents, context, administration, and score interpretation also match StoryBuddy. Otherwise,
+              exact copying can faithfully measure the wrong thing.
+            </p>
+          </div>
+        </section>
+
+        <section class="content-section" id="objectives" aria-labelledby="objectives-title">
+          <div class="section-head">
+            <div class="section-index">02</div>
+            <div>
+              <h2 id="objectives-title">Three instruments. Three different claims.</h2>
+              <p class="section-intro">
+                Separating the objects of evaluation is the study's main defense against overstated results.
+              </p>
+            </div>
+          </div>
+
+          <div class="objective-map">
+            <article class="objective">
+              <span class="number">OBJECTIVE 03 · TOOL B</span>
+              <h3>Generated-book acceptability</h3>
+              <p>
+                Arts and Education validators review complete books through open-ended questions about
+                coherence, faithfulness, presentation, consistency, and classroom suitability.
+              </p>
+            </article>
+            <article class="objective">
+              <span class="number">OBJECTIVE 04 · LABELLED PAIRS</span>
+              <h3>Judge classification performance</h3>
+              <p>
+                The fine-tuned judge predicts same versus different character on a character-disjoint held-out
+                set. Precision, recall, and F1 compare predictions with human reference labels.
+              </p>
+            </article>
+            <article class="objective">
+              <span class="number">OBJECTIVE 05 · TOOL C</span>
+              <h3>Perceived software quality</h3>
+              <p>
+                A separate evaluator group rates the software using applicable ISO/IEC 25010 characteristics.
+                This evaluates the system, not the artistic quality of its books.
+              </p>
+            </article>
+          </div>
+
+          <div class="do-not-mix" aria-label="Invalid substitutions">
+            <div>Software usability ≠ book acceptability</div>
+            <div>Judge F1 ≠ expert artistic judgment</div>
+            <div>Expert feedback ≠ causal pipeline effect</div>
+          </div>
+
+          <div class="callout stop">
+            <strong>The runtime judge cannot be the Objective-3 outcome.</strong>
+            <p>
+              It drives corrected retries and best-of selection. Using it to grade the resulting pages would let
+              the system grade work it already influenced. Human expert feedback remains independent.
+            </p>
+          </div>
+        </section>
+
+        <section class="content-section" id="pipeline" aria-labelledby="pipeline-title">
+          <div class="section-head">
+            <div class="section-index">03</div>
+            <div>
+              <h2 id="pipeline-title">How StoryBuddy works</h2>
+              <p class="section-intro">
+                The implemented system is a fixed LangGraph state machine. It is not an autonomous agent, and
+                its production control signals are not research outcomes.
+              </p>
+            </div>
+          </div>
+
+          <div class="pipeline-context" aria-label="Asynchronous request flow">
+            <div class="context-box"><strong>Frontend</strong>POST /storybooks</div>
+            <div class="arrow" aria-hidden="true">→</div>
+            <div class="context-box"><strong>Supabase + Redis</strong>Job row and RQ queue</div>
+            <div class="arrow" aria-hidden="true">→</div>
+            <div class="context-box"><strong>Worker</strong>Checkpointed LangGraph run</div>
+          </div>
+
+          <div class="pipeline" aria-label="Pipeline prelude">
+            <article class="pipeline-node">
+              <span class="node-id">NODE 01</span>
+              <strong>input_gate</strong>
+              <p>Length handling, text moderation, and PII redaction before downstream use.</p>
+            </article>
+            <article class="pipeline-node">
+              <span class="node-id">NODE 02</span>
+              <strong>analyze</strong>
+              <p>Extracts characters, identity axes, locations, props, ownership, and timeline.</p>
+            </article>
+            <article class="pipeline-node">
+              <span class="node-id">NODE 03</span>
+              <strong>segment</strong>
+              <p>Selects up to ten drawable scenes with explicit visible cast, props, setting, and action.</p>
+            </article>
+            <article class="pipeline-node">
+              <span class="node-id">NODE 04</span>
+              <strong>char_bible</strong>
+              <p>Draws and judges up to two canonical character references in the selected style.</p>
+            </article>
+            <article class="pipeline-node">
+              <span class="node-id">NODE 05</span>
+              <strong>char_ref_mod</strong>
+              <p>Moderates references before they can reach the reveal; one moderation redraw is bounded.</p>
+            </article>
+            <article class="pipeline-node">
+              <span class="node-id">NODE 06</span>
+              <strong>reveal</strong>
+              <p>Effect-free pause: the child confirms or requests a bounded reference retry.</p>
+            </article>
+          </div>
+
+          <div class="loop-band" aria-label="Per-scene pipeline loop">
+            <div class="loop-label">Per-scene loop · maximum three image attempts per scene</div>
+            <article class="pipeline-node loop">
+              <span class="node-id">NODE 07</span>
+              <strong>generate_scene</strong>
+              <p>Uses canonical references, frozen style, and structured scene constraints.</p>
+            </article>
+            <article class="pipeline-node loop">
+              <span class="node-id">NODE 08</span>
+              <strong>consistency_check</strong>
+              <p>Checks each character against its reference and the page against scene constraints.</p>
+            </article>
+            <article class="pipeline-node loop">
+              <span class="node-id">NODE 09</span>
+              <strong>regenerate</strong>
+              <p>Applies concrete failure corrections; after the attempt cap, best-of selects a page.</p>
+            </article>
+            <article class="pipeline-node loop">
+              <span class="node-id">NODE 10</span>
+              <strong>output_mod</strong>
+              <p>Moderates each finalized page before the next one is generated, reducing wasted spend.</p>
+            </article>
+          </div>
+
+          <article class="pipeline-node" style="margin-top: 0.9rem; max-width: 360px">
+            <span class="node-id">NODE 11 · TERMINAL</span>
+            <strong>compose</strong>
+            <p>Verifies all pages and captions are finalized and records the book outcome.</p>
+          </article>
+
+          <div class="fact-row">
+            <div class="fact"><strong>StoryMemory</strong><span>The shared Pydantic contract, not a graph node.</span></div>
+            <div class="fact"><strong>10 scenes</strong><span>Current configured maximum after ADR-037.</span></div>
+            <div class="fact"><strong>3 attempts</strong><span>One initial image plus two corrected retries.</span></div>
+            <div class="fact"><strong>No export node</strong><span>Compose is built; graph-level export is not.</span></div>
+          </div>
+
+          <div class="callout good">
+            <strong>Where ContinuityEval already aligns with the pipeline</strong>
+            <p>
+              StoryBuddy's judge uses visible evidence, tolerates pose/viewpoint/occlusion, checks inclusive
+              character identity axes, and evaluates visible objects and permanent setting constraints.
+            </p>
+          </div>
+          <div class="callout caution">
+            <strong>Where it differs</strong>
+            <p>
+              StoryBuddy compares pages with canonical references and structured scene constraints. It does not
+              compute pairwise page-to-page FaceCons, BodyCons, background consistency, or PropCons.
+            </p>
+          </div>
+        </section>
+
+        <section class="content-section" id="exact-questionnaire" aria-labelledby="exact-title">
+          <div class="section-head">
+            <div class="section-index">04</div>
+            <div>
+              <h2 id="exact-title">“Can we use an exact questionnaire for validity?”</h2>
+              <p class="section-intro">
+                Sometimes—but only after it passes a transfer-validity test. Validity is evidence supporting a
+                particular interpretation and use, not a permanent stamp attached to a list of questions.
+              </p>
+            </div>
+          </div>
+
+          <div class="validity-gates">
+            <article class="validity-gate">
+              <h4>Same construct?</h4>
+              <p>Book acceptability, character continuity, software usability, and learning effectiveness are different constructs.</p>
+            </article>
+            <article class="validity-gate">
+              <h4>Same evaluated object?</h4>
+              <p>A complete child-written picture book is not a frame transition, award submission, or generic learning object.</p>
+            </article>
+            <article class="validity-gate">
+              <h4>Same respondents?</h4>
+              <p>Arts and Education experts are not interchangeable with VLM autoraters, crowd workers, children, or software testers.</p>
+            </article>
+            <article class="validity-gate">
+              <h4>Same setting?</h4>
+              <p>Grade 5–6 Philippine classroom suitability differs from preschool mediation or cinematic storyboard continuity.</p>
+            </article>
+            <article class="validity-gate">
+              <h4>Same administration and score?</h4>
+              <p>Open responses coded by meaning unit cannot inherit evidence from a 1–5 automated score without a new validation study.</p>
+            </article>
+            <article class="validity-gate">
+              <h4>Permitted reuse?</h4>
+              <p>Citation, adaptation rights, item reproduction, translations, and score validity are separate checks.</p>
+            </article>
+          </div>
+
+          <div class="equation" aria-label="Validity transfer principle">
+            <div class="equation-block">
+              <strong>Exact wording</strong>
+              <span>without construct match</span>
+            </div>
+            <div class="symbol" aria-hidden="true">≠</div>
+            <div class="equation-block">
+              <strong>Valid use</strong>
+              <span>for StoryBuddy's claim</span>
+            </div>
+          </div>
+
+          <div class="callout good">
+            <strong>The defensible compromise</strong>
+            <p>
+              Preserve StoryBuddy's five accepted criteria, operationalize them as neutral open-ended
+              questions, map each supporting concept to its source, then obtain content/face review from the
+              adviser before administration. This is adaptation with a visible audit trail, not invention
+              disguised as a validated scale.
+            </p>
+          </div>
+        </section>
+
+        <section class="content-section" id="evidence" aria-labelledby="evidence-title">
+          <div class="section-head">
+            <div class="section-index">05</div>
+            <div>
+              <h2 id="evidence-title">Evidence ledger</h2>
+              <p class="section-intro">
+                Each source is assigned only the job its design and evidence can support. “Primary source”
+                indicates provenance; it does not imply an exact fit.
+              </p>
+            </div>
+          </div>
+
+          <div class="evidence-grid">
+            <article class="evidence-card">
+              <div class="evidence-top">
+                <span class="badge verified">Primary source verified</span>
+                <span class="badge">Adaptable constructs</span>
+              </div>
+              <h3>CANVAS / ContinuityEval</h3>
+              <p>Automated storyboard-transition evaluation covering characters, backgrounds, and props.</p>
+              <dl>
+                <dt>Use for</dt><dd>Visible-evidence rules and continuity vocabulary.</dd>
+                <dt>Do not call</dt><dd>A validated StoryBuddy expert questionnaire.</dd>
+                <dt>Evidence</dt><dd>Three expert raters; κ = 0.74; reported Pearson r = 0.61–0.71.</dd>
+                <dt>Caution</dt><dd>Appendix says 100 transitions; Table 14 says 50.</dd>
+                <dt>License</dt><dd>arXiv version identifies CC BY 4.0.</dd>
+              </dl>
+              <a class="source-link" href="https://arxiv.org/abs/2604.13452">Open CANVAS on arXiv</a>
+            </article>
+
+            <article class="evidence-card">
+              <div class="evidence-top">
+                <span class="badge verified">Metadata and abstract verified</span>
+                <span class="badge limit">Full items not inspected</span>
+              </div>
+              <h3>Picture-book rating scale</h3>
+              <p>Harrison and Neira-Piñeiro's 2018 action-research study in preschool teacher education.</p>
+              <dl>
+                <dt>Participants</dt><dd>46 Spanish preservice preschool teachers at two universities.</dd>
+                <dt>Activity</dt><dd>Students collaboratively created and applied a picture-book scale.</dd>
+                <dt>Study goal</dt><dd>Develop literary-mediator judgment and identify training needs.</dd>
+                <dt>Not shown</dt><dd>Psychometric validity for AI books, Grade 5–6, or Philippine classrooms.</dd>
+                <dt>Decision</dt><dd>Related research, not verified exact-use Tool B.</dd>
+              </dl>
+              <a class="source-link" href="https://doi.org/10.17398/1988-8430.27.81">Open DOI record</a>
+            </article>
+
+            <article class="evidence-card">
+              <div class="evidence-top">
+                <span class="badge verified">Official criteria verified</span>
+                <span class="badge">Criteria source</span>
+              </div>
+              <h3>ALSC Caldecott criteria</h3>
+              <p>Authoritative award criteria for distinguished American picture-book illustration.</p>
+              <dl>
+                <dt>Use for</dt><dd>Artistic execution, visual interpretation, style, characters, setting, and child audience.</dd>
+                <dt>Do not call</dt><dd>A psychometrically validated questionnaire or classroom-suitability scale.</dd>
+                <dt>Transfer issue</dt><dd>Award selection is not AI-output expert validation.</dd>
+                <dt>Decision</dt><dd>Ground visual-presentation prompts and rationale.</dd>
+              </dl>
+              <a class="source-link" href="https://www.ala.org/alsc/awardsgrants/bookmedia/caldecott">Open official criteria</a>
+            </article>
+
+            <article class="evidence-card">
+              <div class="evidence-top">
+                <span class="badge verified">Published reliability study</span>
+                <span class="badge reject">Wrong evaluated object</span>
+              </div>
+              <h3>LORI</h3>
+              <p>Learning Object Review Instrument research on collaborative expert evaluation and inter-rater reliability.</p>
+              <dl>
+                <dt>Use for</dt><dd>Example of how structured expert review can document rater agreement.</dd>
+                <dt>Object</dt><dd>Digital learning objects.</dd>
+                <dt>Mismatch</dt><dd>Not whole-book visual continuity, story faithfulness, or artistic presentation.</dd>
+                <dt>Decision</dt><dd>Context only; exact adoption would answer a different question.</dd>
+              </dl>
+              <a class="source-link" href="https://doi.org/10.1080/1206212X.2003.11441703">Open LORI study DOI</a>
+            </article>
+
+            <article class="evidence-card">
+              <div class="evidence-top">
+                <span class="badge verified">Primary standards source</span>
+                <span class="badge">Validity principle</span>
+              </div>
+              <h3>Testing Standards</h3>
+              <p>The AERA, APA, and NCME standards frame validity around evidence for proposed score interpretations and uses.</p>
+              <dl>
+                <dt>Use for</dt><dd>Explaining why instrument evidence does not automatically transfer across uses.</dd>
+                <dt>Decision</dt><dd>Anchor the exact-questionnaire explanation.</dd>
+              </dl>
+              <a class="source-link" href="https://www.testingstandards.net/uploads/7/6/6/4/76643089/standards_2014edition.pdf">Open official standards PDF</a>
+            </article>
+
+            <article class="evidence-card">
+              <div class="evidence-top">
+                <span class="badge verified">Published method source</span>
+                <span class="badge">Analysis method</span>
+              </div>
+              <h3>Qualitative content analysis</h3>
+              <p>Elo and Kyngäs describe preparation, organization, and reporting for inductive and deductive content analysis.</p>
+              <dl>
+                <dt>Use for</dt><dd>Grounding StoryBuddy's pre-set categories and transparent coding procedure.</dd>
+                <dt>Why fit</dt><dd>Objective 3 uses prior criteria, making a directed/deductive structure appropriate.</dd>
+              </dl>
+              <a class="source-link" href="https://doi.org/10.1111/j.1365-2648.2007.04569.x">Open method paper DOI</a>
+            </article>
+          </div>
+
+          <h3>Complementary benchmark sources</h3>
+          <div class="matrix-wrap">
+            <table>
+              <thead>
+                <tr><th>Source</th><th>Useful contribution</th><th>Boundary</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><a href="https://arxiv.org/abs/2406.16855">DreamBench++</a></td>
+                  <td>Human-aligned personalized subject preservation and explicit visual-difference reasoning.</td>
+                  <td>Better aligned with Objective 4 identity evaluation than holistic Tool B acceptability.</td>
+                </tr>
+                <tr>
+                  <td><a href="https://arxiv.org/abs/2505.24862">ViStoryBench</a></td>
+                  <td>Multi-frame story visualization, prompt alignment, and cross-frame evaluation context.</td>
+                  <td>A benchmark suite, not an administration-ready expert questionnaire for children's books.</td>
+                </tr>
+                <tr>
+                  <td><a href="https://arxiv.org/abs/2303.11897">TIFA</a></td>
+                  <td>Decomposes text–image faithfulness into observable question-answer checks.</td>
+                  <td>Automated image faithfulness does not establish whole-book classroom suitability.</td>
+                </tr>
+                <tr>
+                  <td><a href="https://www.iso.org/standard/78176.html">ISO/IEC 25010</a></td>
+                  <td>Exact standard family for software product quality characteristics.</td>
+                  <td>Already belongs to Objective 5; cannot substitute for generated-book quality.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="content-section" id="canvas" aria-labelledby="canvas-title">
+          <div class="section-head">
+            <div class="section-index">06</div>
+            <div>
+              <h2 id="canvas-title">CANVAS: what transfers and what breaks</h2>
+              <p class="section-intro">
+                ContinuityEval is useful because it forces observable comparisons. It is insufficient because
+                it measures storyboard transitions through autoraters, not complete child-facing books through
+                an expert acceptability interview.
+              </p>
+            </div>
+          </div>
+
+          <h3>Hair/body prompt: adapt the logic, not the human assumptions</h3>
+          <div class="matrix-wrap">
+            <table>
+              <thead><tr><th>ContinuityEval cue</th><th>StoryBuddy adaptation</th><th>Why</th></tr></thead>
+              <tbody>
+                <tr><td>Hairstyle and hair length</td><td>Optional visible feature</td><td>Robots, vehicles, animals, and personified objects may have no hair.</td></tr>
+                <tr><td>Body silhouette/build</td><td>Body plan or silhouette</td><td>Works across humanoid and non-human subjects.</td></tr>
+                <tr><td>Hair colour</td><td>Primary colours and distinctive markings</td><td>Colour identity may live on scales, shells, fur, metal, screens, or clothing.</td></tr>
+                <tr><td>Wearable accessories</td><td>Clothing and accessories</td><td>Retains glasses, hats, backpacks, armour, and story-defined objects.</td></tr>
+                <tr><td>Same character assumed</td><td>Name the target character and page</td><td>Multi-character scenes otherwise invite identity swaps.</td></tr>
+                <tr><td>Ignore viewpoint and occlusion</td><td>Retain exactly</td><td>A hidden feature is not a visible contradiction.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>PropCons: the smaller-set denominator can hide disappearance</h3>
+          <div class="formula-demo" aria-label="Prop consistency example">
+            <article class="frame-card">
+              <span class="tiny-label">Frame A · five props</span>
+              <div class="prop-row" aria-label="Five props in Frame A">
+                <span class="prop">BOOK</span><span class="prop lost">LAMP</span><span class="prop lost">CUP</span><span class="prop lost">BAG</span><span class="prop lost">KEY</span>
+              </div>
+            </article>
+            <article class="frame-card">
+              <span class="tiny-label">Frame B · one matching prop</span>
+              <div class="prop-row" aria-label="One prop in Frame B"><span class="prop">BOOK</span></div>
+            </article>
+          </div>
+          <div class="equation" aria-label="PropCons smaller-set example">
+            <div class="equation-block"><strong>min(5, 1) = 1</strong><span>reference props</span></div>
+            <div class="symbol" aria-hidden="true">→</div>
+            <div class="equation-block"><strong>1 ÷ 1 = 100%</strong><span>despite four disappearances</span></div>
+          </div>
+
+          <div class="callout stop">
+            <strong>Do not use this percentage as StoryBuddy's headline prop-continuity result.</strong>
+            <p>
+              It can reward subset retention, gives incidental and story-critical props equal weight, and the
+              quoted protocol does not state how to handle a zero denominator. Instead, experts should discuss
+              important recurring props expected in both pages and distinguish unexplained drift from
+              story-supported transfer, damage, transformation, consumption, or absence.
+            </p>
+          </div>
+
+          <details>
+            <summary>What the reported human-alignment evidence actually supports</summary>
+            <div class="details-body">
+              Three evaluators experienced in image generation and visual evaluation reportedly used the same
+              transition rubrics, yielding average Fleiss' κ of 0.74. Autorater correlations are reported from
+              0.61 to 0.71 across background, character, and prop dimensions. This supports ContinuityEval as a
+              promising storyboard metric. It does not validate StoryBuddy's five-criterion expert interview,
+              its classroom-suitability claim, or a new composite book score.
+            </div>
+          </details>
+          <details>
+            <summary>Why the sample-count inconsistency must be disclosed</summary>
+            <div class="details-body">
+              Appendix A.7 states that correlations were computed on 100 randomly sampled transitions; Table 14's
+              caption states 50. Without a correction from the authors, StoryBuddy should report the discrepancy
+              rather than silently choose one number. The correlations can be cited cautiously, but not as a
+              fully resolved validation protocol.
+            </div>
+          </details>
+        </section>
+
+        <section class="content-section" id="matrix" aria-labelledby="matrix-title">
+          <div class="section-head">
+            <div class="section-index">07</div>
+            <div>
+              <h2 id="matrix-title">Use / adapt / reject</h2>
+              <p class="section-intro">A compact decision record researchers can defend source by source.</p>
+            </div>
+          </div>
+          <div class="matrix-wrap">
+            <table>
+              <thead><tr><th>Material</th><th>Decision</th><th>Why</th><th>Where it belongs</th></tr></thead>
+              <tbody>
+                <tr><td>Visible-evidence rule</td><td><span class="decision-pill">Use</span></td><td>Prevents unfair penalties for hidden attributes.</td><td>Tool B instructions and runtime judge.</td></tr>
+                <tr><td>Pose, crop, viewpoint, and occlusion tolerance</td><td><span class="decision-pill">Use</span></td><td>Already matches StoryBuddy's implemented identity prompt.</td><td>Visual-style consistency cue.</td></tr>
+                <tr><td>Face / clothing / body decomposition</td><td><span class="decision-pill adapt">Adapt</span></td><td>Useful decomposition but must include non-human face/interface and body plans.</td><td>Non-scored cue list.</td></tr>
+                <tr><td>Prop shape, colour, and material</td><td><span class="decision-pill adapt">Adapt</span></td><td>Useful identity cues for important recurring objects.</td><td>Story faithfulness and visual consistency.</td></tr>
+                <tr><td>Recurring-background continuity</td><td><span class="decision-pill adapt">Adapt</span></td><td>Permanent setting identity matters, while temporary changes may be legitimate.</td><td>Narrative coherence and visual consistency.</td></tr>
+                <tr><td>Hair/body 1–5 score</td><td><span class="decision-pill reject">Reject</span></td><td>Human-centric, incomplete alone, and incompatible with the accepted qualitative method.</td><td>Nowhere in Tool B scoring.</td></tr>
+                <tr><td>PropCons percentage</td><td><span class="decision-pill reject">Reject</span></td><td>Smaller-set denominator can hide disappearance and lacks a stated zero case.</td><td>Discussion as a limitation only.</td></tr>
+                <tr><td>Gemini or GPT autoraters</td><td><span class="decision-pill reject">Reject</span></td><td>Not human expert validation; conflicts with the project's open-weight posture and risks circularity.</td><td>Literature context only.</td></tr>
+                <tr><td>Caldecott criteria</td><td><span class="decision-pill adapt">Adapt</span></td><td>Authoritative artistic criteria, not a validated questionnaire.</td><td>Visual-presentation rationale.</td></tr>
+                <tr><td>ISO/IEC 25010</td><td><span class="decision-pill">Use</span></td><td>Correct standard family for software quality, not book acceptability.</td><td>Objective 5 only.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="content-section" id="edge-cases" aria-labelledby="edge-title">
+          <div class="section-head">
+            <div class="section-index">08</div>
+            <div>
+              <h2 id="edge-title">Edge-case laboratory</h2>
+              <p class="section-intro">
+                The instrument needs rules for the cases most likely to create false criticism, hidden bias, or
+                unreportable data.
+              </p>
+            </div>
+          </div>
+
+          <div class="edge-grid">
+            <article class="edge-card"><span class="edge-number">CASE 01</span><h3>Hairless or non-human character</h3><p>A robot's display, a dragon's markings, or a vehicle's body plan may carry identity.</p><div class="edge-rule"><strong>Rule:</strong> Mark hair not applicable; use face/interface, silhouette, colours, body features, clothing, and accessories.</div></article>
+            <article class="edge-card"><span class="edge-number">CASE 02</span><h3>Rear, profile, or occluded view</h3><p>A feature hidden by the requested camera angle cannot be inspected.</p><div class="edge-rule"><strong>Rule:</strong> Do not code absence unless visible evidence contradicts the canon or the story required visibility.</div></article>
+            <article class="edge-card"><span class="edge-number">CASE 03</span><h3>Multiple characters</h3><p>Feedback such as “the shirt changed” is unusable if the target character is unclear.</p><div class="edge-rule"><strong>Rule:</strong> Record character and page identifiers; retain separate observations for each recurring character.</div></article>
+            <article class="edge-card"><span class="edge-number">CASE 04</span><h3>Intentional appearance change</h3><p>A costume change, growth, disguise, injury, or transformation may be story-supported.</p><div class="edge-rule"><strong>Rule:</strong> Code inconsistency only when the change is unsupported or contradicts the source story.</div></article>
+            <article class="edge-card"><span class="edge-number">CASE 05</span><h3>Transferred, broken, or consumed prop</h3><p>State change is not the same as identity drift.</p><div class="edge-rule"><strong>Rule:</strong> Check story sequence and expected state; code unexplained change separately from faithful transformation.</div></article>
+            <article class="edge-card"><span class="edge-number">CASE 06</span><h3>No visible props</h3><p>A numeric recoverability formula may divide by zero or force an invented judgment.</p><div class="edge-rule"><strong>Rule:</strong> Record “not applicable”; do not treat it as zero consistency or perfect consistency.</div></article>
+            <article class="edge-card"><span class="edge-number">CASE 07</span><h3>Weather, lighting, time, or damage</h3><p>The same location can look different while remaining the same place.</p><div class="edge-rule"><strong>Rule:</strong> Judge permanent features; accept temporary changes supported by later events or conditions.</div></article>
+            <article class="edge-card"><span class="edge-number">CASE 08</span><h3>Lighting mistaken for colour drift</h3><p>Warm or cool lighting can alter apparent colour without changing character identity.</p><div class="edge-rule"><strong>Rule:</strong> Require a stable visible contradiction, not a plausible rendering shift.</div></article>
+            <article class="edge-card"><span class="edge-number">CASE 09</span><h3>Critical versus incidental prop</h3><p>A story's magic key and a background cup should not silently carry equal interpretive weight.</p><div class="edge-rule"><strong>Rule:</strong> Explain narrative importance in the qualitative finding; do not flatten both into one percentage.</div></article>
+            <article class="edge-card"><span class="edge-number">CASE 10</span><h3>Faithfulness without exposing PII</h3><p>Experts need the story to judge fidelity, but raw child identifiers must stay hidden.</p><div class="edge-rule"><strong>Rule:</strong> Present the anonymized, redacted source story beside the book under an opaque ID.</div></article>
+            <article class="edge-card"><span class="edge-number">CASE 11</span><h3>Blank or unclear response</h3><p>Silence does not mean approval and does not mean criticism.</p><div class="edge-rule"><strong>Rule:</strong> Code missing or unclear separately; never convert it into positive or negative feedback.</div></article>
+            <article class="edge-card"><span class="edge-number">CASE 12</span><h3>Page-level versus book-level feedback</h3><p>“Inconsistent” may refer to one frame, one transition, or the whole book.</p><div class="edge-rule"><strong>Rule:</strong> Capture page IDs and scope; report isolated and recurring findings differently.</div></article>
+            <article class="edge-card"><span class="edge-number">CASE 13</span><h3>Reviewer fatigue and order effects</h3><p>Later books may receive shorter or harsher reviews.</p><div class="edge-rule"><strong>Rule:</strong> Shuffle book order, record review duration, allow breaks, and keep instructions identical.</div></article>
+            <article class="edge-card"><span class="edge-number">CASE 14</span><h3>Discipline disagreement</h3><p>An Arts validator and Education validator may reasonably prioritize different issues.</p><div class="edge-rule"><strong>Rule:</strong> Preserve role and disagreement; do not force consensus or average unlike expertise.</div></article>
+            <article class="edge-card"><span class="edge-number">CASE 15</span><h3>All-positive responses</h3><p>A leading form can manufacture praise and hide missing scrutiny.</p><div class="edge-rule"><strong>Rule:</strong> Ask “what, if anything” and request page evidence; do not require a criticism.</div></article>
+            <article class="edge-card"><span class="edge-number">CASE 16</span><h3>One passage contains several judgments</h3><p>A response can praise colour while criticizing character drift and suggesting a clearer caption.</p><div class="edge-rule"><strong>Rule:</strong> Split into meaning units and allow multiple criterion/orientation codes.</div></article>
+          </div>
+        </section>
+
+        <section class="content-section" id="procedure" aria-labelledby="procedure-title">
+          <div class="section-head">
+            <div class="section-index">09</div>
+            <div>
+              <h2 id="procedure-title">Recommended evaluation procedure</h2>
+              <p class="section-intro">A reproducible path from adviser approval to defensible reporting.</p>
+            </div>
+          </div>
+
+          <ol class="procedure">
+            <li><strong>Freeze the instrument.</strong><span>Resolve wording, roles, coding unit, privacy, and reporting rules before the first expert sees a book.</span></li>
+            <li><strong>Record source provenance.</strong><span>Maintain a private source map for each adapted concept; include citation, version, license, and change description.</span></li>
+            <li><strong>Prepare blinded packets.</strong><span>Pair each opaque book ID with its anonymized, PII-redacted source story. Remove judge results, retry history, model details, and internal file paths.</span></li>
+            <li><strong>Assign expertise deliberately.</strong><span>Arts validators focus on visual/artistic presentation; the Education validator focuses on classroom suitability. All may comment elsewhere, but scope stays visible.</span></li>
+            <li><strong>Shuffle and pace.</strong><span>Randomize book order per validator, record review time, and schedule breaks to reduce fatigue and order bias.</span></li>
+            <li><strong>Collect page-grounded responses.</strong><span>Use identical neutral questions and require page identifiers when a judgment concerns a specific image or transition.</span></li>
+            <li><strong>Segment meaning units.</strong><span>Split compound answers before coding; do not assign one sentiment to an entire paragraph.</span></li>
+            <li><strong>Apply the codebook.</strong><span>Code criterion plus positive, negative, suggestion, missing, or unclear. One unit may receive more than one code.</span></li>
+            <li><strong>Double-code a declared subset.</strong><span>Use a second researcher to check the codebook's application, document disagreements, and resolve them transparently without inventing a threshold after results.</span></li>
+            <li><strong>Report descriptively.</strong><span>Show per-criterion patterns, page-grounded examples, representative anonymous excerpts, disagreements, missing responses, and limits. Do not imply population prevalence.</span></li>
+          </ol>
+        </section>
+
+        <section class="content-section" id="tool-b" aria-labelledby="tool-b-title">
+          <div class="section-head screen-only">
+            <div class="section-index">10</div>
+            <div>
+              <h2 id="tool-b-title">Printable Tool B draft</h2>
+              <p class="section-intro">
+                This form operationalizes the five already accepted criteria. It is not validated or approved
+                merely because it appears in this brief.
+              </p>
+            </div>
+          </div>
+
+          <div class="instrument" role="document" aria-label="Draft expert validation interview form">
+            <div class="instrument-cover">
+              <span class="draft-banner">Draft · do not administer before adviser and ethics approval</span>
+              <h2>Tool B — Expert Validation Interview</h2>
+              <p>
+                StoryBuddy generated picture-book acceptability: narrative coherence, story faithfulness,
+                visual presentation, visual style consistency, and classroom suitability.
+              </p>
+              <p class="print-only"><strong>Version:</strong> Draft dated 24 August 2026</p>
+            </div>
+
+            <div class="instrument-body">
+              <div class="field-grid" aria-label="Validator and review metadata">
+                <div class="field"><span>Anonymous validator ID</span></div>
+                <div class="field"><span>Validator role / discipline</span></div>
+                <div class="field"><span>Opaque book ID</span></div>
+                <div class="field"><span>Date</span></div>
+                <div class="field"><span>Start time</span></div>
+                <div class="field"><span>End time</span></div>
+              </div>
+
+              <div class="instructions">
+                <h3 style="margin-top: 0">Instructions to the validator</h3>
+                <ol>
+                  <li>Read the anonymized source story, then examine the complete generated picture book.</li>
+                  <li>Respond in your own words. There is no numeric score and no expected positive answer.</li>
+                  <li>When possible, identify the page or transition supporting your observation.</li>
+                  <li>Use only visible evidence. Do not assume that an occluded or off-page feature is missing.</li>
+                  <li>Distinguish unexplained inconsistency from changes supported by the story, viewpoint, lighting, weather, time, or action.</li>
+                  <li>Do not evaluate generation models, judge logs, or retry decisions; evaluate only the source story and finished book shown to you.</li>
+                </ol>
+              </div>
+
+              <article class="question-block">
+                <div class="question-kicker">Question 1 · Narrative coherence</div>
+                <h3>Which page transitions, if any, made the sequence of events difficult to follow? Identify the pages and explain why.</h3>
+                <div class="probe-note"><strong>Optional prompt if clarification is needed:</strong> Consider event order, continuity of action, location changes, and whether each page leads understandably to the next. Do not score illustration beauty here.</div>
+                <div class="evidence-fields"><div class="mini-field"><span>Relevant page(s)</span></div><div class="mini-field"><span>Short evidence note</span></div></div>
+                <div class="writing-space" aria-label="Response space for narrative coherence"></div>
+              </article>
+
+              <article class="question-block">
+                <div class="question-kicker">Question 2 · Story faithfulness</div>
+                <h3>Which characters, actions, settings, or important objects, if any, contradict or omit details essential to the anonymized source story?</h3>
+                <div class="probe-note"><strong>Optional prompt if clarification is needed:</strong> Distinguish a contradiction or meaningful omission from harmless visual detail that the story never fixed.</div>
+                <div class="evidence-fields"><div class="mini-field"><span>Relevant story passage / page(s)</span></div><div class="mini-field"><span>Short evidence note</span></div></div>
+                <div class="writing-space" aria-label="Response space for story faithfulness"></div>
+              </article>
+
+              <article class="question-block">
+                <div class="question-kicker">Question 3 · Visual presentation</div>
+                <h3>Which aspects of illustration, composition, layout, caption legibility, or page balance help or hinder the book's presentation?</h3>
+                <div class="probe-note"><strong>Optional prompt if clarification is needed:</strong> Consider whether illustration choices interpret the story clearly and whether visual emphasis, framing, typography, and page organization support reading.</div>
+                <div class="evidence-fields"><div class="mini-field"><span>Relevant page(s) / whole book</span></div><div class="mini-field"><span>Short evidence note</span></div></div>
+                <div class="writing-space" aria-label="Response space for visual presentation"></div>
+              </article>
+
+              <article class="question-block">
+                <div class="question-kicker">Question 4 · Visual style consistency</div>
+                <h3>Across pages, what unexpected changes, if any, occur in recurring characters, props, settings, or drawing style?</h3>
+                <div class="probe-note">
+                  <strong>Non-scored continuity cues:</strong> Consider body plan or silhouette; face or interface;
+                  colours and markings; distinctive body features; clothing and accessories; important recurring
+                  props; recurring locations; linework, shading, and colouring technique. Hair is considered only
+                  when visible and relevant. Ignore changes reasonably explained by pose, viewpoint, occlusion,
+                  lighting, weather, time, damage, or story-supported events.
+                </div>
+                <div class="evidence-fields"><div class="mini-field"><span>Compared page(s)</span></div><div class="mini-field"><span>Character / prop / setting / style involved</span></div></div>
+                <div class="writing-space" aria-label="Response space for visual style consistency"></div>
+              </article>
+
+              <article class="question-block">
+                <div class="question-kicker">Question 5 · Classroom suitability</div>
+                <h3>What, if anything, makes the book unsuitable or difficult to use with Grade 5–6 learners, and what should be improved?</h3>
+                <div class="probe-note"><strong>Optional prompt if clarification is needed:</strong> Consider age appropriateness, clarity, emotional and physical safety, cultural/contextual appropriateness, readability, and realistic teacher-guided use. Do not substitute a general software-usability rating.</div>
+                <div class="evidence-fields"><div class="mini-field"><span>Relevant page(s) / whole book</span></div><div class="mini-field"><span>Short evidence note</span></div></div>
+                <div class="writing-space" aria-label="Response space for classroom suitability"></div>
+              </article>
+
+              <article class="question-block">
+                <div class="question-kicker">Closing question · Priorities</div>
+                <h3>If the research team could make only three improvements to this book or process, what should be addressed first, and why?</h3>
+                <div class="writing-space" aria-label="Response space for priority improvements"></div>
+              </article>
+
+              <div class="callout caution">
+                <strong>Researcher reminder</strong>
+                <p>Do not calculate an overall Tool B score. The output is a structured qualitative account by criterion, including positive observations, negative observations, suggestions, disagreements, and missing responses.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="content-section" id="coding" aria-labelledby="coding-title">
+          <div class="section-head">
+            <div class="section-index">11</div>
+            <div>
+              <h2 id="coding-title">Researcher coding guide</h2>
+              <p class="section-intro">The trustworthiness of open-ended evidence depends on what counts as a unit and how decisions are recorded.</p>
+            </div>
+          </div>
+
+          <div class="coding-guide">
+            <div class="codebook">
+              <h3>Unit of analysis</h3>
+              <p>A <strong>meaning unit</strong>: the smallest passage expressing one interpretable judgment. Split compound answers before coding.</p>
+              <div class="orientation-list">
+                <div class="orientation"><strong>Positive</strong>The validator identifies something working well under a criterion.</div>
+                <div class="orientation"><strong>Negative</strong>The validator identifies a concrete problem or limitation.</div>
+                <div class="orientation"><strong>Suggestion</strong>The validator proposes a change, whether or not the passage also contains criticism.</div>
+                <div class="orientation"><strong>Missing</strong>No response was provided for the question.</div>
+                <div class="orientation"><strong>Unclear</strong>A response exists but cannot be interpreted reliably or grounded to the criterion.</div>
+              </div>
+            </div>
+            <div class="codebook">
+              <h3>Required coding fields</h3>
+              <ul class="plain-list">
+                <li>Anonymous validator ID and role</li>
+                <li>Opaque book ID</li>
+                <li>Verbatim meaning unit</li>
+                <li>One or more of the five criteria</li>
+                <li>One or more orientation codes</li>
+                <li>Page or transition identifiers when available</li>
+                <li>Character, prop, setting, or presentation subject when applicable</li>
+                <li>Coder ID, date, and resolution note if disputed</li>
+              </ul>
+              <div class="callout good" style="margin-bottom: 0">
+                <strong>Multiple coding is expected.</strong>
+                <p>“The colours are engaging, but the dragon changes wings; keep the first design” can be positive visual presentation, negative visual consistency, and a suggestion.</p>
+              </div>
+            </div>
+          </div>
+
+          <h3>Blank coding sheet</h3>
+          <div class="matrix-wrap">
+            <table aria-label="Blank researcher coding sheet">
+              <thead><tr><th>Validator / role</th><th>Book / page</th><th>Meaning unit</th><th>Criterion</th><th>Orientation</th><th>Coder note</th></tr></thead>
+              <tbody>
+                <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+                <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+                <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+                <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+                <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+                <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout caution">
+            <strong>How to report three validators</strong>
+            <p>
+              Report descriptive counts and patterns by criterion and validator role. Do not convert “two of
+              three” into a population percentage, average unlike disciplines into a pseudo-score, or claim
+              reliability from a statistic selected after seeing the results.
+            </p>
+          </div>
+        </section>
+
+        <section class="content-section" id="actions" aria-labelledby="actions-title">
+          <div class="section-head">
+            <div class="section-index">12</div>
+            <div>
+              <h2 id="actions-title">Approval gates and next actions</h2>
+              <p class="section-intro">The literature review informs a decision; it does not authorize a silent methodology change.</p>
+            </div>
+          </div>
+
+          <div class="approval-grid">
+            <article class="approval-card safe">
+              <span class="tiny-label">Safe now</span>
+              <h3>Prepare the evidence</h3>
+              <ul>
+                <li>Cite CANVAS as continuity research.</li>
+                <li>Cite Caldecott as artistic criteria.</li>
+                <li>Use the transfer-validity explanation.</li>
+                <li>Review Tool B wording internally.</li>
+                <li>Reconcile documented pipeline drift.</li>
+              </ul>
+            </article>
+            <article class="approval-card approve">
+              <span class="tiny-label">Adviser / ethics approval</span>
+              <h3>Freeze before use</h3>
+              <ul>
+                <li>Final question wording and optional probes</li>
+                <li>Validator identities, roles, and workload</li>
+                <li>Story/book presentation and blinding</li>
+                <li>Coding unit and double-coding subset</li>
+                <li>Adult-participant protocol and data retention</li>
+              </ul>
+            </article>
+            <article class="approval-card adr">
+              <span class="tiny-label">New ADR session required</span>
+              <h3>Do not decide inline</h3>
+              <ul>
+                <li>Replacing Tool B with a numeric scale</li>
+                <li>Adding or removing a headline criterion</li>
+                <li>Adding a cross-frame runtime evaluator</li>
+                <li>Changing the graph or retry policy</li>
+                <li>Using a proprietary model as evaluator</li>
+              </ul>
+            </article>
+          </div>
+
+          <h3>Recommended research-team decision</h3>
+          <div class="callout good">
+            <strong>Approve Tool B for content and face review—not administration yet.</strong>
+            <p>
+              Ask the adviser to confirm that the five questions are relevant, comprehensive, comprehensible,
+              neutral, and correctly assigned to the Arts and Education perspectives. Record every revision and
+              its reason. After ethics and participant documents align, freeze the version and administer it
+              unchanged.
+            </p>
+          </div>
+        </section>
+
+        <section class="content-section" id="references" aria-labelledby="references-title">
+          <div class="section-head">
+            <div class="section-index">13</div>
+            <div>
+              <h2 id="references-title">References and evidence notes</h2>
+              <p class="section-intro">Direct sources are provided so researchers can verify the claims before manuscript submission.</p>
+            </div>
+          </div>
+
+          <ol class="source-list">
+            <li><span class="source-number">[01]</span><div><cite>Mondal, I., Song, Y., Parmar, M., Goyal, P., Boyd-Graber, J., Pfister, T., &amp; Song, Y. (2026). CANVAS: Continuity-Aware Narratives via Visual Agentic Storyboarding. arXiv:2604.13452v1.</cite><a href="https://arxiv.org/abs/2604.13452">https://arxiv.org/abs/2604.13452</a><small>Title, authors, submission date, abstract, tables, prompts, validation text, and arXiv license were checked. OpenReview acceptance status was not verified.</small></div></li>
+            <li><span class="source-number">[02]</span><div><cite>Creative Commons. Attribution 4.0 International (CC BY 4.0).</cite><a href="https://creativecommons.org/licenses/by/4.0/">https://creativecommons.org/licenses/by/4.0/</a><small>Sharing and adaptation require attribution, a license link, and indication of changes. Institutional requirements should also be followed.</small></div></li>
+            <li><span class="source-number">[03]</span><div><cite>Martín-Macho Harrison, A., &amp; Neira-Piñeiro, M. R. (2018). Diseño de una escala de valoración de álbumes ilustrados para educación infantil / Designing a picture-book rating scale for preschool education.</cite><a href="https://doi.org/10.17398/1988-8430.27.81">https://doi.org/10.17398/1988-8430.27.81</a><small>Crossref/OpenAlex metadata and indexed abstract were checked. The full item set was not accessible during this review and is not reproduced or characterized beyond the abstract.</small></div></li>
+            <li><span class="source-number">[04]</span><div><cite>Association for Library Service to Children. Caldecott Medal: Terms and Criteria.</cite><a href="https://www.ala.org/alsc/awardsgrants/bookmedia/caldecott">https://www.ala.org/alsc/awardsgrants/bookmedia/caldecott</a><small>Official criteria page checked. This is an award framework, not a psychometric questionnaire.</small></div></li>
+            <li><span class="source-number">[05]</span><div><cite>Vargo, J., Nesbit, J. C., Belfer, K., &amp; Archambault, A. (2003). Learning Object Evaluation: Computer-Mediated Collaboration and Inter-Rater Reliability.</cite><a href="https://doi.org/10.1080/1206212X.2003.11441703">https://doi.org/10.1080/1206212X.2003.11441703</a><small>Published source and DOI verified; evaluated object differs from StoryBuddy books.</small></div></li>
+            <li><span class="source-number">[06]</span><div><cite>American Educational Research Association, American Psychological Association, &amp; National Council on Measurement in Education. (2014). Standards for Educational and Psychological Testing.</cite><a href="https://www.testingstandards.net/uploads/7/6/6/4/76643089/standards_2014edition.pdf">Official open-access PDF</a><small>Used for the principle that validity evidence supports proposed interpretations and uses.</small></div></li>
+            <li><span class="source-number">[07]</span><div><cite>Elo, S., &amp; Kyngäs, H. (2008). The qualitative content analysis process. Journal of Advanced Nursing, 62(1), 107–115.</cite><a href="https://doi.org/10.1111/j.1365-2648.2007.04569.x">https://doi.org/10.1111/j.1365-2648.2007.04569.x</a><small>Method source for preparation, organization, and reporting in qualitative content analysis.</small></div></li>
+            <li><span class="source-number">[08]</span><div><cite>Peng, Y. et al. (2024). DreamBench++: A Human-Aligned Benchmark for Personalized Image Generation.</cite><a href="https://arxiv.org/abs/2406.16855">https://arxiv.org/abs/2406.16855</a><small>Complementary identity-preservation benchmark; not Tool B.</small></div></li>
+            <li><span class="source-number">[09]</span><div><cite>Zhuang, C. et al. (2025). ViStoryBench: Comprehensive Benchmark Suite for Story Visualization.</cite><a href="https://arxiv.org/abs/2505.24862">https://arxiv.org/abs/2505.24862</a><small>Complementary story-visualization benchmark; not a complete expert questionnaire.</small></div></li>
+            <li><span class="source-number">[10]</span><div><cite>Hu, Y. et al. (2023). TIFA: Accurate and Interpretable Text-to-Image Faithfulness Evaluation with Question Answering.</cite><a href="https://arxiv.org/abs/2303.11897">https://arxiv.org/abs/2303.11897</a><small>Complementary image-faithfulness decomposition; not classroom suitability or whole-book acceptability.</small></div></li>
+          </ol>
+
+          <div class="callout caution">
+            <strong>Evidence status at the time of this brief</strong>
+            <p>
+              No traceable source reviewed here supplies a psychometrically validated, administration-ready
+              questionnaire that simultaneously measures AI-generated Grade 5–6 picture-book narrative
+              coherence, source-story faithfulness, visual presentation, cross-page continuity, and Philippine
+              classroom suitability. This is a bounded conclusion from the reviewed evidence, not a claim that
+              no such instrument can exist.
+            </p>
+          </div>
+        </section>
+
+        <footer>
+          <p><strong>StoryBuddy research decision:</strong> retain independent qualitative expert validation, adapt observable continuity cues with attribution, validate the final form for this context, and keep automated product gates separate from research outcomes.</p>
+        </footer>
+      </main>
+    </div>
+
+    <script>
+      (() => {
+        const progress = document.getElementById("progress-bar");
+        const navLinks = [...document.querySelectorAll(".toc a[href^='#']")];
+        const sections = navLinks
+          .map((link) => document.querySelector(link.getAttribute("href")))
+          .filter(Boolean);
+
+        const updateProgress = () => {
+          const scrollable = document.documentElement.scrollHeight - window.innerHeight;
+          const percent = scrollable > 0 ? Math.min(100, Math.max(0, (window.scrollY / scrollable) * 100)) : 0;
+          progress.style.width = `${percent}%`;
+        };
+
+        const updateCurrentSection = () => {
+          const marker = window.scrollY + Math.min(window.innerHeight * 0.35, 260);
+          let current = sections[0];
+          for (const section of sections) {
+            if (section.offsetTop <= marker) current = section;
+          }
+          for (const link of navLinks) {
+            const active = link.getAttribute("href") === `#${current.id}`;
+            if (active) link.setAttribute("aria-current", "true");
+            else link.removeAttribute("aria-current");
+          }
+        };
+
+        const update = () => {
+          updateProgress();
+          updateCurrentSection();
+        };
+
+        update();
+        window.addEventListener("scroll", update, { passive: true });
+        window.addEventListener("resize", update);
+      })();
+    </script>
+  </body>
+</html>

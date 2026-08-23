@@ -1,3 +1,19 @@
+# Current Task: Storybook deletion implementation planning
+
+- [ ] Explore storybook ownership, UI surfaces, job/worker lifecycle, database relationships, checkpoints, Storage objects, telemetry, and governing decisions.
+- [ ] Resolve who may delete which storybooks and whether deletion is hard, soft, or staged.
+- [ ] Compare safe deletion designs and obtain owner approval for the selected data lifecycle.
+- [ ] Write and self-review the durable feature spec.
+- [ ] Write and self-review the TDD-first implementation plan under `docs/specs/plans/`.
+
+## Success criteria
+
+The approved plan names every affected persistence layer and user surface; prevents cross-classroom deletion,
+worker resurrection, orphaned Storage/checkpoint data, and silent loss of required research/audit evidence; and
+provides exact red-green tests plus live Supabase verification without changing runtime code or external data.
+
+---
+
 # Current Task: ISO/IEC 25010 readiness audit and remediation guide
 
 - [x] Re-verify promised product and capstone scope, especially narration and PDF export.
@@ -37,8 +53,8 @@ evidence were not retained or run in this step.
 - [x] Clarify whether the artifact is a researcher decision brief, an administration-ready instrument, or both: include both, with the instrument marked pending adviser approval.
 - [x] Compare artifact approaches and obtain approval for the recommended structure and visual direction.
 - [x] Write and self-review the approved design document.
-- [ ] Obtain owner review, then create the implementation plan.
-- [ ] Build and verify the standalone HTML artifact.
+- [x] Follow the owner's instruction to implement immediately without another planning round.
+- [x] Build and verify the standalone HTML artifact.
 
 ## Success criteria
 
@@ -46,6 +62,20 @@ Researchers can understand StoryBuddy's current evaluation design, the implement
 ContinuityEval can and cannot support, the evidence and limitations behind that judgment, the recommended
 next actions, and any decisions requiring adviser approval. The artifact must remain honest about unresolved
 methodological and documentation gaps and must not silently change a frozen ADR or research instrument.
+
+## Review / outcome
+
+Created the standalone root artifact `expert_evaluation_decision_brief.html`. It combines the research decision,
+implemented StoryBuddy pipeline, exact-questionnaire transfer test, source-by-source evidence ledger, CANVAS /
+ContinuityEval review, use/adapt/reject recommendations, edge cases, procedure, printable Tool B draft, coding guide,
+approval gates, and linked references. Tool B is explicitly marked pending adviser/content review; the artifact does
+not change the accepted methodology, a frozen ADR, or pipeline behavior.
+
+Verification confirmed all nine required content landmarks, 28 unique IDs, 14 valid internal fragment links, one
+`h1`, zero external asset dependencies, zero placeholder markers, and valid inline JavaScript syntax. Headless Chrome
+rendered the artifact successfully at 1440 px and 500 px widths; both renders were visually inspected. `git diff
+--check -- expert_evaluation_decision_brief.html` reported no whitespace errors. Application tests were not run
+because this is an isolated documentation artifact with no application-code or dependency changes.
 
 ---
 
