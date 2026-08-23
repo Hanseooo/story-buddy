@@ -1,3 +1,35 @@
+# Current Task: Research corpus review fixes
+
+- [x] Verify the spend-cap and retry-asset findings against code, tests, specs, and issues.
+- [x] Add a failing two-invocation regression test for completed-bundle spend.
+- [x] Add a failing restart regression test for known failed-call spend.
+- [x] Persist and restore campaign telemetry with pinned-price validation.
+- [x] Resolve the retry dataset-composition choice with the owner, then fix it test-first.
+- [x] Run focused tests, backend Ruff/full pytest, and record the outcome.
+
+## Success criteria
+
+Sequential corpus-build processes include completed and unfinished Fal attempts before reserving a
+new story, never exceed the configured campaign ceiling, and reject invalid or price-drifted billing
+state. Retry-containing bundles materialize under the owner-selected dataset policy. The two
+maintainability-only findings remain unchanged.
+
+## Outcome
+
+The spend guard now restores completed-bundle and unfinished-story telemetry, persists each Fal
+event through an atomic state-file replacement, retains the campaign total across invocations, and
+fails closed on invalid counters or pinned-price drift. Pair construction now follows the canonical
+finalized-scene policy: rejected retries remain in `StoryMemory` provenance, while only each scene's
+`final_image_ref` is uploaded and annotated.
+
+Both spend regressions and the retry-materialization regression failed on the old behavior and pass
+after the fixes. Focused corpus/annotation verification passed 99 tests with 7 intentional skips;
+full backend verification passed 1,069 tests with 80 skips and 6 deselected smoke tests; Ruff passed.
+The existing Starlette/httpx deprecation warning remains. Frontend checks and paid provider smoke
+tests were not run because no frontend, model, provider, or external-service behavior changed.
+
+---
+
 # Current Task: Research corpus operations design
 
 - [x] Explore corpus, annotation, telemetry, ethics, storage ADR, and training context.
@@ -663,6 +695,72 @@ was available; the current remote Supabase migration state is also unverified. W
 - Plan covers governance, intake, immutable corpus persistence, exact image encoding/hashing, Fal spend and uncertain billing, pair materialization, annotation reconciliation, freeze guards, pilot cleanup, storage telemetry, paid smoke, annotation, training, and one-time evaluation.
 - Existing Objective-4 epic #53 now links issues #54-#65 and no longer directs a donated training corpus or stale image-count budget.
 - No application code, data, database, provider configuration, or paid service was changed or invoked.
+
+---
+
+# Current Task: Research corpus operations tasks 1–5
+
+- [x] Task 1: Validate sanitized intake and document governance gates.
+- [x] Task 2: Persist immutable run bundles and add zero-cost fixture mode.
+- [x] Task 3: Enforce dollar-denominated spend reserves and uncertain-billing quarantine.
+- [x] Task 4: Materialize exact assets and blinded pair rows idempotently.
+- [x] Task 5: Reconcile annotation truth and freeze immutable dataset artifacts.
+- [x] Run focused checks, full backend verification, two-axis code review, and commit all work.
+
+## Success criteria
+
+Tasks 1–5 of `docs/specs/plans/2026-08-21-research-corpus-operations.md` match the approved spec,
+use test-first seams, pass focused and full backend checks, receive standards/spec review, and are
+committed on the current feature branch. Tasks 6 onward remain unchanged.
+
+## Review / outcome
+
+Task 4 now preflights immutable PNG/WebP inventory, existing private Storage bytes, and complete
+`research_pairs` rows before mutation; uploads are idempotent and database failure rolls back only
+objects created by that invocation. Task 5 derives queue status from annotation rows, supports
+bundle-declared exclusions, revalidates exact local assets, enforces split/style/duplicate guards,
+and installs only byte-identical immutable freeze artifacts with pinned run versions.
+
+Review fixes made the freeze self-contained, persisted and revalidated declared rosters before
+materialization and freeze, counted constructed pairs under their reference story, qualified
+story-local character IDs for corpus-wide lineage guards, and split annotation truth/freeze concerns
+out of the manifest builder. Final focused Task 4–5 tests passed 61. Full backend Ruff passed; full
+backend pytest passed 1057, skipped 80 environment-dependent tests, and deselected 6 provider smoke
+tests. Frontend lint passed and all 380 tests across 42 files passed. Both final standards and spec
+reviews were clean after fixes. The zero-cost fixture reported `images_spent=0`, `usd_high=0.000`, and
+persisted all required commit/model/prompt/config pins. No paid provider call or remote Supabase write
+was made; live Storage, RLS, and database state remain unverified locally.
+
+---
+
+# Current Task: Research corpus operations tasks 6–7
+
+- [x] Task 6: Add dry-run-first, confirmed pilot cleanup with exact ordered deletion.
+- [x] Task 7: Align storage telemetry with PNG references, WebP scenes, and Supabase-only reporting.
+- [x] Run focused checks, full verification, two-axis code review, and commit all work.
+
+## Success criteria
+
+Tasks 6–7 of `docs/specs/plans/2026-08-21-research-corpus-operations.md` match the approved spec,
+use test-first seams, pass focused and full checks, receive standards/spec review, and are committed.
+Task 8 remains an explicit human/paid operational sequence and is not executed automatically.
+
+## Review / outcome
+
+Task 6 uses paginated Supabase reads, recursively enumerates only the literal `research/pilot/`
+Storage prefix, deletes annotations before pairs before objects, requires the exact confirmation,
+and verifies all three scopes are empty. Focused verification: 8 tests passed; Ruff passed.
+
+Task 7 measures PNG references and quality-82 WebP scenes separately, verifies format and dimensions,
+reports only Supabase storage/egress headroom, and writes zero-cost output under `.scratch/`. The owning
+judge spec now points to the corpus-operations spec for live counts/costs, and MASTER_SPEC records the
+existing research modules as built. Focused verification: 5 tests passed; Ruff passed; the stale scan
+found only negative test assertions and an unrelated CVPR URL substring, not operational guidance.
+
+Final verification: backend Ruff passed; backend pytest passed 1066 with 80 environment-dependent skips
+and 6 provider smoke tests deselected; frontend ESLint passed; frontend Vitest passed 380 tests across 42
+files; `git diff --check` passed. Inline Standards and Spec reviews were clean after adding regression
+coverage for Supabase delete calls that raise instead of returning an error-bearing response.
 
 ---
 

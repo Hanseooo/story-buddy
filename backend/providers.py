@@ -10,8 +10,9 @@ import random
 import re
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import ContextVar
 from functools import lru_cache
-from typing import TypeVar
+from typing import Callable, TypeVar
 
 import fal_client
 import httpx
@@ -22,6 +23,10 @@ from app.config import settings
 from app.db import get_supabase_client
 
 _log = logging.getLogger(__name__)
+
+_fal_event_sink: ContextVar[Callable[[str], None] | None] = ContextVar(
+    "fal_event_sink", default=None
+)
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
@@ -299,14 +304,25 @@ NEGATIVE_PROMPT = (
 def _run_fal(endpoint: str, arguments: dict, seed: int | None) -> bytes:
     if seed is not None:
         arguments = {**arguments, "seed": seed}
-    # Defaults first so `arguments` can override either one; no caller does today.
-    result = _fal().subscribe(
-        endpoint,
-        arguments={"output_format": "png", "negative_prompt": NEGATIVE_PROMPT, **arguments},
-    )
-    response = httpx.get(result["images"][0]["url"], timeout=60.0)
-    response.raise_for_status()
-    return response.content
+    sink = _fal_event_sink.get()
+    if sink:
+        sink("attempted")
+    try:
+        # Defaults first so `arguments` can override either one; no caller does today.
+        result = _fal().subscribe(
+            endpoint,
+            arguments={"output_format": "png", "negative_prompt": NEGATIVE_PROMPT, **arguments},
+        )
+        response = httpx.get(result["images"][0]["url"], timeout=60.0)
+        response.raise_for_status()
+        contents = response.content
+    except Exception:
+        if sink:
+            sink("failed_uncertain")
+        raise
+    if sink:
+        sink("completed")
+    return contents
 
 
 # ---------------------------------------------------------------------------

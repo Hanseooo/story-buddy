@@ -15,8 +15,10 @@ from typing import Any
 import pytest
 
 from finetune.manifest import (
+    ManifestError,
     ManifestRecord,
     read_manifest,
+    validate_manifest,
 )
 
 DATA_DIR = Path("data/judge")
@@ -280,6 +282,16 @@ def test_unit_constructed_negatives_only_in_train():
         assert_constructed_negatives_only_in_train(invalid_val)
 
 
+def test_manifest_guard_rejects_duplicate_pair_ids():
+    with pytest.raises(ManifestError, match="duplicate pair_id"):
+        validate_manifest(
+            [
+                _sample_record(pair_id="duplicate", char_id="char_1"),
+                _sample_record(pair_id="duplicate", char_id="char_2"),
+            ]
+        )
+
+
 def test_unit_manifest_reconciliation():
     recs = [
         _sample_record(pair_id="p1", char_id="c1", split="train", pair_type="pipeline"),
@@ -428,8 +440,8 @@ def test_end_to_end_research_integrity_pipeline(tmp_path):
             ),
         ],
         scenes=[
-            Scene(scene_id="s1", text_excerpt="s1", characters_present=["char_train_1"], attempts=[Attempt(image_ref="story_train/s1.png")]),
-            Scene(scene_id="s2", text_excerpt="s2", characters_present=["char_train_2"], attempts=[Attempt(image_ref="story_train/s2.png")]),
+            Scene(scene_id="s1", text_excerpt="s1", characters_present=["char_train_1"], attempts=[Attempt(image_ref="story_train/s1.png")], final_image_ref="story_train/s1.png"),
+            Scene(scene_id="s2", text_excerpt="s2", characters_present=["char_train_2"], attempts=[Attempt(image_ref="story_train/s2.png")], final_image_ref="story_train/s2.png"),
         ],
     )
 
@@ -448,7 +460,7 @@ def test_end_to_end_research_integrity_pipeline(tmp_path):
             ),
         ],
         scenes=[
-            Scene(scene_id="s1", text_excerpt="s1", characters_present=["char_val_1"], attempts=[Attempt(image_ref="story_val/s1.png")]),
+            Scene(scene_id="s1", text_excerpt="s1", characters_present=["char_val_1"], attempts=[Attempt(image_ref="story_val/s1.png")], final_image_ref="story_val/s1.png"),
         ],
     )
 
@@ -467,7 +479,7 @@ def test_end_to_end_research_integrity_pipeline(tmp_path):
             ),
         ],
         scenes=[
-            Scene(scene_id="s1", text_excerpt="s1", characters_present=["char_test_1"], attempts=[Attempt(image_ref="story_test/s1.png")]),
+            Scene(scene_id="s1", text_excerpt="s1", characters_present=["char_test_1"], attempts=[Attempt(image_ref="story_test/s1.png")], final_image_ref="story_test/s1.png"),
         ],
     )
 

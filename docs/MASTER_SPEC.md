@@ -55,11 +55,12 @@ story-buddy/
     migrations/          # schema, RLS policies, buckets (CC-4)
 ```
 
-**Not built yet** (listed so they are not invented elsewhere): `backend/finetune/` — Phase 2.5 data
-manifests, training config, eval (ADR-018). `backend/eval/` — Phase 3 offline eval scripts, starting with
-`functional_verification.py` (Tool A). `frontend/app/(research)/` — the Phase-2.5 researcher route group
-(`annotate/`, `adjudicate/`, `books/`), behind the `researcher` role (ADR-026). *(`.github/workflows/ci.yml`
-is now built — added 2026-07-29; see §6.)*
+**Built research modules:** `backend/finetune/` owns Phase-2.5 corpus intake, generation, immutable bundles,
+pair materialization, annotation reconciliation, manifest export, and training configuration (ADR-018);
+`frontend/app/(research)/` owns the researcher annotation and adjudication routes (ADR-026).
+
+**Not built yet** (listed so it is not invented elsewhere): `backend/eval/` — Phase 3 offline eval scripts,
+starting with `functional_verification.py` (Tool A). *(`.github/workflows/ci.yml` is built; see §6.)*
 
 **The research track gets two screens and one table, and no more.** No metrics dashboard (Tool A is a script
 — §4's "offline scripts + tracing exports"), no run-trace viewer (that is Langfuse, ADR-030), and no separate

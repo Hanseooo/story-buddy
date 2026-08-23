@@ -40,6 +40,7 @@ def mock_memory() -> StoryMemory:
                 text_excerpt="x",
                 characters_present=["char_1"],
                 attempts=[Attempt(image_ref="scene-1.png")],
+                final_image_ref="scene-1.png",
             )
         ],
     )

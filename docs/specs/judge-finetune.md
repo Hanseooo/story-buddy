@@ -269,43 +269,10 @@ bookkeeping, and if they leaked into the prompt the model could read the answer 
 
 ### 5.4 How the examples get made
 
-> **✅ Reconciled 2026-08-14 — this was never an adviser decision; it was drift.** §5.4–§5.5 were written
-> against **~50 donated stories**. The corpus is **15 collected → 10 primary + 5 backup**
-> (`RESEARCH_PROTOCOL.md` §8, `docs/capstone/methodology.md` §4.1), and RESEARCH_PROTOCOL §8 **already
-> answers the question this banner used to ask**: *"researcher-written stories appear only as
-> judge-training-split augmentation, never as evaluation stimuli."*
->
-> **The resolution, therefore, is the one the protocol already specifies:**
-> - **Train + validation characters come from a synthetic corpus** authored for this purpose
->   (`backend/finetune/corpus_synthetic.json`), written deliberately as Grade 5–6 child writing and weighted
->   toward non-human characters — the contribution slice (§7.4 item 2) and the least-powered one.
-> - The 30 synthetic stories are frozen as 24 train and 6 validation: exactly 8 train and 2 validation
->   stories per selectable style. Style allocation is explicit in JSON and frozen before paid generation.
-> - **The held-out test split is drawn exclusively from the donated stories.** External validity lives
->   entirely in the test split, which is exactly where Objective 4 reads.
-> - `manifest.py` carries `provenance: Literal["synthetic", "donated"]` and its guard **refuses** a
->   `test`-split record with `provenance == "synthetic"`. This is enforced in CI, not by convention.
->
-> **What a panel will ask, and the pre-registered answer:** *does a judge trained on synthetic stories
-> generalize to children's?* The held-out set **is** that test, and it is read once. See
-> `docs/product/PREREGISTRATION_OBJ4.md` §2.
->
-> ⚠️ **RESEARCH_PROTOCOL §8 bans the old numbers outright** — *"Do not use the old '~50 (60–70) donated
-> stories' numbers anywhere."* The worked example below is retained **only** as the arithmetic showing how
-> pair counts scale with characters. Its story count is dead; do not cite it.
-
-The worked example below is retained for its **arithmetic**, not its corpus size. One corpus, two uses.
-
-> **These are upper-bound planning numbers.** They assume a near-maximum ~15 scenes per story; under-length
-> corpus items yield fewer, so real image, pair, and cost totals run lower. The split in §5.5 is sized to the
-> **character** count — what Objective 4's character-clustered bootstrap actually resolves — not to a pair
-> total; pair counts scale with scenes but are not the binding unit for power.
-
-The live operational counts, spend limits, source order and stop conditions are owned by
-`research-corpus-operations.md`; do not reuse the superseded 50-story arithmetic. Run the existing pipeline
-over frozen synthetic train/validation records and consented donated held-out records, pair each scene with
-its own character reference, collect two independent labels plus disagreement-only adjudication, retain
-natural pipeline failures, and add same-style constructed negatives to train only.
+The live corpus allocation, encoding, spend limits, source order, and stop conditions are owned by
+[`research-corpus-operations.md`](research-corpus-operations.md). Synthetic stories supply train and
+validation, consented donated stories supply held-out test only, and character lineage never crosses a
+split. Do not derive operational counts or costs from examples in this judge-training spec.
 
 > **Reuse the labelling instrument for step 3.** The same interface that shows a human a reference and a scene
 > and asks "same character?" produces both the human reference labels and the training labels. One instrument,
@@ -343,7 +310,7 @@ Three consequences worth internalizing:
 
 **More distinct characters is the cheapest statistical power available** — and since 2026-08-14 the train and
 validation halves of that power are a *writing* task rather than a recruitment one: adding characters to
-`corpus_synthetic.json` costs a few sentences and ~$0.40 of fal draws. **The held-out split's character count
+`corpus_synthetic.json` costs authoring time plus the spend governed by the corpus-operations run. **The held-out split's character count
 is still unfixable by Phase 2.5** and still tracks the donation (RESEARCH_PROTOCOL §8), which is why the test
 split's achieved character count gets reported honestly.
 

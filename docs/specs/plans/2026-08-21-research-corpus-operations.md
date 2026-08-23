@@ -81,12 +81,12 @@ class IntakeRecord(BaseModel):
 def load_intake(path: Path) -> list[IntakeRecord]: ...
 ```
 
-- [ ] **Step 1: Write failing intake tests** for rejection when any donated approval is absent/false; reject donated train/val, synthetic test, duplicate IDs, unknown keys, blank text, withdrawn records, invalid/non-selectable styles, `declared_non_human` outside `declared_characters`, synthetic records carrying donated-only fields, and primary/backup or style assignment made after `selection_frozen_at`. Assert the synthetic corpus is 24 train/6 val with 8/2 per style and donated candidates are five per style with primary counts 4 Gouache/3 Cel/3 Cut-paper.
-- [ ] **Step 2: Run the focused test** from `backend/`: `uv run pytest tests/test_corpus_io.py -q`. Expected: collection fails because `finetune.corpus_io` does not exist.
-- [ ] **Step 3: Implement strict Pydantic validation** with the literals above and one cross-field validator. Keep one JSON-list format for checked-in synthetic and controlled gitignored donated input; do not add fields to `StoryMemory`.
-- [ ] **Step 4: Document the manual boundary** in the runbook: adviser/HCDC/school approval, receipt ledger location outside StoryBuddy, manual redaction plus second-person review, 10 primary + 5 backup freeze, withdrawal handling, and the rule that the draft cannot be administered until its remaining blanks and translations are institutionally approved.
-- [ ] **Step 5: Run** `uv run pytest tests/test_corpus_io.py -q` and `uv run ruff check finetune/corpus_io.py tests/test_corpus_io.py`. Expected: PASS.
-- [ ] **Step 6: Commit** `test/implementation/docs` together: `git commit -m "feat(research): validate sanitized corpus intake"`.
+- [x] **Step 1: Write failing intake tests** for rejection when any donated approval is absent/false; reject donated train/val, synthetic test, duplicate IDs, unknown keys, blank text, withdrawn records, invalid/non-selectable styles, `declared_non_human` outside `declared_characters`, synthetic records carrying donated-only fields, and primary/backup or style assignment made after `selection_frozen_at`. Assert the synthetic corpus is 24 train/6 val with 8/2 per style and donated candidates are five per style with primary counts 4 Gouache/3 Cel/3 Cut-paper.
+- [x] **Step 2: Run the focused test** from `backend/`: `uv run pytest tests/test_corpus_io.py -q`. Expected: collection fails because `finetune.corpus_io` does not exist.
+- [x] **Step 3: Implement strict Pydantic validation** with the literals above and one cross-field validator. Keep one JSON-list format for checked-in synthetic and controlled gitignored donated input; do not add fields to `StoryMemory`.
+- [x] **Step 4: Document the manual boundary** in the runbook: adviser/HCDC/school approval, receipt ledger location outside StoryBuddy, manual redaction plus second-person review, 10 primary + 5 backup freeze, withdrawal handling, and the rule that the draft cannot be administered until its remaining blanks and translations are institutionally approved.
+- [x] **Step 5: Run** `uv run pytest tests/test_corpus_io.py -q` and `uv run ruff check finetune/corpus_io.py tests/test_corpus_io.py`. Expected: PASS.
+- [x] **Step 6: Commit** `test/implementation/docs` together: `git commit -m "feat(research): validate sanitized corpus intake"`.
 
 ### Task 2: Immutable run bundles and zero-cost fixture mode
 
@@ -97,7 +97,7 @@ def load_intake(path: Path) -> list[IntakeRecord]: ...
 - Modify: `backend/tests/test_finetune_corpus.py`
 
 **Interfaces:**
-- Produces: `AssetRecord(storage_path, local_path, sha256, mime_type, width, height, byte_length, kind)`, `RunBundle(memory, provenance, split, candidate_role, run_metadata, assets)`, `write_bundle(...)`, and `load_completed_bundles(...)`.
+- Produces: `AssetRecord(storage_path, local_path, sha256, mime_type, width, height, byte_length, kind)`, `RunBundle(memory, provenance, split, candidate_role, declared_characters, declared_non_human, run_metadata, assets)`, `write_bundle(...)`, and `load_completed_bundles(...)`.
 - Bundle layout: `data/judge/runs/<story_id>/memory.json`, `run.json`, `assets.json`; images continue under the existing `ref/` and `scene/` paths named by `local_image_path`.
 
 ```python
@@ -123,15 +123,15 @@ def write_bundle(root: Path, bundle: RunBundle) -> Path: ...
 def load_completed_bundles(root: Path) -> list[RunBundle]: ...
 ```
 
-- [ ] **Step 1: Add failing tests** proving a completed graph result is revalidated with `StoryMemory.model_validate`, atomically persisted via temporary file + `Path.replace`, reloadable, and immutable on identical rerun; differing bytes or metadata must raise `CorpusError` instead of overwrite.
-- [ ] **Step 2: Add a failing zero-cost test** using the existing `FakeGraph`/`FakeSupabase`: `build(..., fixture=True)` must make zero provider/Storage calls, write a complete fixture bundle from checked-in/generated local fixture bytes, and pass on an identical rerun.
-- [ ] **Step 2a: Add failing style/roster tests** proving `_initial_state` resolves each record's exact `STYLE_PRESETS[style_preset_id]`, all produced assets retain that ID, and declared versus final character/non-human rosters must reconcile before completion.
-- [ ] **Step 3: Run** `uv run pytest tests/test_corpus_io.py tests/test_finetune_corpus.py -q`. Expected: FAIL on missing bundle API and `fixture` argument.
-- [ ] **Step 4: Implement asset inspection** with `hashlib.sha256`, Pillow decode, and magic-byte checks (`image/png` for refs, `image/webp` for scenes). Encode WebP exactly once at quality 82 before hashing; never recompress an existing completed asset.
-- [ ] **Step 5: Replace count-only `build_state.json` entries** with bundle completion references while preserving backward safety: legacy count-only entries are not trusted as complete and are quarantined with a clear message rather than silently skipped or regenerated.
-- [ ] **Step 6: Add CLI `--fixture`**; it must be mutually exclusive with paid execution inputs and usable without Supabase/provider credentials. Keep the production graph path unchanged when absent.
-- [ ] **Step 7: Run focused tests and lint.** Expected: PASS and fixture summary reports `images_spent=0`, `usd_high=0`.
-- [ ] **Step 8: Commit:** `git commit -m "feat(research): persist immutable corpus bundles"`.
+- [x] **Step 1: Add failing tests** proving a completed graph result is revalidated with `StoryMemory.model_validate`, atomically persisted via temporary file + `Path.replace`, reloadable, and immutable on identical rerun; differing bytes or metadata must raise `CorpusError` instead of overwrite.
+- [x] **Step 2: Add a failing zero-cost test** using the existing `FakeGraph`/`FakeSupabase`: `build(..., fixture=True)` must make zero provider/Storage calls, write a complete fixture bundle from checked-in/generated local fixture bytes, and pass on an identical rerun.
+- [x] **Step 2a: Add failing style/roster tests** proving `_initial_state` resolves each record's exact `STYLE_PRESETS[style_preset_id]`, all produced assets retain that ID, and declared versus final character/non-human rosters must reconcile before completion.
+- [x] **Step 3: Run** `uv run pytest tests/test_corpus_io.py tests/test_finetune_corpus.py -q`. Expected: FAIL on missing bundle API and `fixture` argument.
+- [x] **Step 4: Implement asset inspection** with `hashlib.sha256`, Pillow decode, and magic-byte checks (`image/png` for refs, `image/webp` for scenes). Encode WebP exactly once at quality 82 before hashing; never recompress an existing completed asset.
+- [x] **Step 5: Replace count-only `build_state.json` entries** with bundle completion references while preserving backward safety: legacy count-only entries are not trusted as complete and are quarantined with a clear message rather than silently skipped or regenerated.
+- [x] **Step 6: Add CLI `--fixture`**; it must be mutually exclusive with paid execution inputs and usable without Supabase/provider credentials. Keep the production graph path unchanged when absent.
+- [x] **Step 7: Run focused tests and lint.** Expected: PASS and fixture summary reports `images_spent=0`, `usd_high=0`.
+- [x] **Step 8: Commit:** `git commit -m "feat(research): persist immutable corpus bundles"`.
 
 ### Task 3: Dollar-denominated spend reserve and uncertain-billing quarantine
 
@@ -157,14 +157,14 @@ _fal_event_sink: ContextVar[Callable[[str], None] | None] = ContextVar(
 )
 ```
 
-- [ ] **Step 1: Write failing tests** that a story starts only when its maximum remaining draws fit the reserve, three-story smoke cannot exceed USD 1.50, campaign spend cannot exceed USD 30, and a provider timeout marked billing-uncertain halts and quarantines without automatic retry.
-- [ ] **Step 2: Run** `uv run pytest tests/test_finetune_corpus.py -q`. Expected: FAIL because the current cap is image-count-only and defaults to 40.
-- [ ] **Step 3: Add the event sink at the existing seam:** `_run_fal` emits `attempted` immediately before `subscribe`, `completed` only after image bytes download successfully, and `failed_uncertain` for any exception after submission begins. Use a `ContextVar` defaulting to `None`, so production behavior and call signatures do not change and parallel runs cannot share counters.
-- [ ] **Step 4: Implement the minimal spend policy** with `Decimal`, a required pinned conservative per-call price in run metadata, `--max-usd` defaulting to `25.00`, and an unconditional `30.00` ceiling. Retain an image counter for audit, not authorization.
-- [ ] **Step 5: Derive the pre-story maximum** from existing `IMAGE_BUDGET`/graph retry caps; if it cannot fit, stop before graph submission. Preserve post-super-step checks as defense in depth.
-- [ ] **Step 6: Treat uncertain billing as terminal for the invocation:** persist telemetry and quarantine state, print the reconciliation action, and return non-zero. Do not infer whether Fal charged.
-- [ ] **Step 7: Run** `uv run pytest tests/test_providers.py tests/test_finetune_corpus.py -q` and lint both implementation files. Expected: PASS.
-- [ ] **Step 8: Commit:** `git commit -m "feat(research): enforce fal campaign spend ceiling"`.
+- [x] **Step 1: Write failing tests** that a story starts only when its maximum remaining draws fit the reserve, three-story smoke cannot exceed USD 1.50, campaign spend cannot exceed USD 30, and a provider timeout marked billing-uncertain halts and quarantines without automatic retry.
+- [x] **Step 2: Run** `uv run pytest tests/test_finetune_corpus.py -q`. Expected: FAIL because the current cap is image-count-only and defaults to 40.
+- [x] **Step 3: Add the event sink at the existing seam:** `_run_fal` emits `attempted` immediately before `subscribe`, `completed` only after image bytes download successfully, and `failed_uncertain` for any exception after submission begins. Use a `ContextVar` defaulting to `None`, so production behavior and call signatures do not change and parallel runs cannot share counters.
+- [x] **Step 4: Implement the minimal spend policy** with `Decimal`, a required pinned conservative per-call price in run metadata, `--max-usd` defaulting to `25.00`, and an unconditional `30.00` ceiling. Retain an image counter for audit, not authorization.
+- [x] **Step 5: Derive the pre-story maximum** from existing `IMAGE_BUDGET`/graph retry caps; if it cannot fit, stop before graph submission. Preserve post-super-step checks as defense in depth. For `--max-usd 1.50`, the approved deviation divides the affordable draws evenly across the selected smoke stories, so three stories receive 14 draws each at the pinned USD 0.035 price; reaching that reduced ceiling quarantines the story.
+- [x] **Step 6: Treat uncertain billing as terminal for the invocation:** persist telemetry and quarantine state, print the reconciliation action, and return non-zero. Do not infer whether Fal charged.
+- [x] **Step 7: Run** `uv run pytest tests/test_providers.py tests/test_finetune_corpus.py -q` and lint both implementation files. Expected: PASS.
+- [x] **Step 8: Commit:** `git commit -m "feat(research): enforce fal campaign spend ceiling"`.
 
 ### Task 4: Exact asset and pair queue materialization
 
@@ -189,13 +189,13 @@ def materialize(
 ) -> MaterializeSummary: ...
 ```
 
-- [ ] **Step 1: Write failing tests** for exact-byte upload, private storage paths, deterministic IDs, exact `canonical_storage_path`/`scene_storage_path`, no labels or model calls, pagination, and rerun idempotency.
-- [ ] **Step 2: Add conflict tests:** same path with different hash, same pair ID with different paths, missing local file, hash/length/MIME/dimension mismatch, donated non-test, synthetic test, and incomplete bundle all fail before any insert.
-- [ ] **Step 3: Run** `uv run pytest tests/test_materialize_pairs.py -q`. Expected: collection failure.
-- [ ] **Step 4: Implement preflight-first materialization:** validate every bundle and asset before writes; query existing objects/rows; for an existing path download and hash the remote bytes, skipping only an exact match; fail before row mutation on a mismatch; insert rows using the hardened `0017_research_pair_blinding.sql` column names. This avoids a schema migration solely for hash columns. Never add a public bucket or signed URL to stored rows.
-- [ ] **Step 5: On a database insert failure**, remove only objects uploaded by this invocation after verifying their exact paths; never delete pre-existing objects.
-- [ ] **Step 6: Run focused tests and lint.** Expected: PASS.
-- [ ] **Step 7: Commit:** `git commit -m "feat(research): materialize blinded annotation queue"`.
+- [x] **Step 1: Write failing tests** for exact-byte upload, private storage paths, deterministic IDs, exact `canonical_storage_path`/`scene_storage_path`, no labels or model calls, pagination, and rerun idempotency.
+- [x] **Step 2: Add conflict tests:** same path with different hash, same pair ID with different paths, missing local file, hash/length/MIME/dimension mismatch, donated non-test, synthetic test, and incomplete bundle all fail before any insert.
+- [x] **Step 3: Run** `uv run pytest tests/test_materialize_pairs.py -q`. Expected: collection failure.
+- [x] **Step 4: Implement preflight-first materialization:** validate every bundle and asset before writes; query existing objects/rows; for an existing path download and hash the remote bytes, skipping only an exact match; fail before row mutation on a mismatch; insert rows using the hardened `0017_research_pair_blinding.sql` column names. This avoids a schema migration solely for hash columns. Never add a public bucket or signed URL to stored rows.
+- [x] **Step 5: On a database insert failure**, remove only objects uploaded by this invocation after verifying their exact paths; never delete pre-existing objects.
+- [x] **Step 6: Run focused tests and lint.** Expected: PASS.
+- [x] **Step 7: Commit:** `git commit -m "feat(research): materialize blinded annotation queue"`.
 
 ### Task 5: Annotation truth reconciliation and frozen export
 
@@ -208,6 +208,10 @@ def materialize(
 
 **Interfaces:**
 - Produces: `reconcile_pair_status(rows, adjudicator_ids) -> dict[pair_id, status]`, `freeze_dataset(data_dir, out_dir) -> FreezeReport`, and CLI flags `--reconcile-only` / `--freeze`.
+- The freeze output is self-contained: it copies verified image bytes under `out_dir/assets/`, emits relative
+  manifest paths, and counts constructed negatives under the reference character's story.
+- Export qualifies story-local `StoryMemory.char_id` values with the opaque story ID before corpus-wide
+  lineage, split, and style checks.
 
 ```python
 class FreezeReport(BaseModel):
@@ -224,14 +228,14 @@ def reconcile_pair_status(
 def freeze_dataset(data_dir: Path, out_dir: Path) -> FreezeReport: ...
 ```
 
-- [ ] **Step 1: Write failing reconciliation tests** for `pending`, `partially_annotated`, `complete`, `conflicted`, and `adjudicated`, deriving exclusively from immutable annotation rows; stale `research_pairs.status` must be repaired idempotently.
-- [ ] **Step 2: Write failing freeze tests** for every spec guard: missing/duplicate/excess ordinary labels; unresolved, unnecessary, or multiple adjudications; missing/hash/MIME mismatch; character leakage; synthetic test; constructed val/test; pair-memory mismatch; duplicate IDs; and exclusions not listed in the run bundle.
-- [ ] **Step 3: Run** `uv run pytest tests/test_finetune_dataset.py tests/test_research_integrity.py -q`. Expected: FAIL on missing APIs/guards.
-- [ ] **Step 4: Implement reconciliation** by reusing `resolve_annotations` signatures and one bulk status update. Do not trust cached status during export.
-- [ ] **Step 5: Implement freeze** by loading completed bundles, verifying local bytes again, calling existing `build_dataset` and `to_llamafactory.write_dataset`, then writing `freeze_report.json` atomically with dataset SHA-256; counts by story/character/split/class/reason; adjudication rate; exclusions; and pinned commit/schema/model/prompt/style/config values.
-- [ ] **Step 6: Make freeze immutable:** if output exists, accept only byte-identical artifacts; otherwise fail. Require an explicit new output directory for a revised freeze.
-- [ ] **Step 7: Run focused tests plus** `uv run pytest tests/test_annotation_pipeline_e2e.py -q`. Expected: PASS.
-- [ ] **Step 8: Commit:** `git commit -m "feat(research): reconcile and freeze judge dataset"`.
+- [x] **Step 1: Write failing reconciliation tests** for `pending`, `partially_annotated`, `complete`, `conflicted`, and `adjudicated`, deriving exclusively from immutable annotation rows; stale `research_pairs.status` must be repaired idempotently.
+- [x] **Step 2: Write failing freeze tests** for every spec guard: missing/duplicate/excess ordinary labels; unresolved, unnecessary, or multiple adjudications; missing/hash/MIME mismatch; character leakage; synthetic test; constructed val/test; pair-memory mismatch; duplicate IDs; and exclusions not listed in the run bundle.
+- [x] **Step 3: Run** `uv run pytest tests/test_finetune_dataset.py tests/test_research_integrity.py -q`. Expected: FAIL on missing APIs/guards.
+- [x] **Step 4: Implement reconciliation** by reusing `resolve_annotations` signatures and idempotent updates grouped by target status. The existing Supabase REST seam cannot set different row values in one safe update without a new RPC/migration. Do not trust cached status during export.
+- [x] **Step 5: Implement freeze** by loading completed bundles, verifying local bytes again, calling existing `build_dataset` and `to_llamafactory.write_dataset`, then writing `freeze_report.json` atomically with dataset SHA-256; counts by story/character/split/class/reason; adjudication rate; exclusions; and pinned commit/schema/model/prompt/style/config values.
+- [x] **Step 6: Make freeze immutable:** if output exists, accept only byte-identical artifacts; otherwise fail. Require an explicit new output directory for a revised freeze.
+- [x] **Step 7: Run focused tests plus** `uv run pytest tests/test_annotation_pipeline_e2e.py -q`. Expected: PASS.
+- [x] **Step 8: Commit:** `git commit -m "feat(research): reconcile and freeze judge dataset"`.
 
 ### Task 6: Safe pilot-data cleanup
 
@@ -255,13 +259,13 @@ def execute_cleanup(
 ) -> None: ...
 ```
 
-- [ ] **Step 1: Write failing tests** proving default dry-run performs no mutation and reports annotation, pair, and `research/pilot/` object counts.
-- [ ] **Step 2: Write deletion tests** proving exact order: annotations whose `pair_id` belongs to pilot pairs, then `research_pairs`, then only objects under `research/pilot/`; unrelated research rows/objects remain untouched.
-- [ ] **Step 3: Add failure tests:** partial deletion stops non-zero and reports remaining IDs; confirmation mismatch performs no writes; final verification must observe zero in all three scopes.
-- [ ] **Step 4: Run** `uv run pytest tests/test_clear_research_pilot.py -q`. Expected: collection failure.
-- [ ] **Step 5: Implement with the existing Supabase client seam**, paginated reads, exact IDs from `is_pilot=true`, and literal prefix filtering. Do not use recursive filesystem deletion or broad Storage paths.
-- [ ] **Step 6: Run focused tests and lint.** Expected: PASS.
-- [ ] **Step 7: Commit:** `git commit -m "feat(research): add confirmed pilot cleanup"`.
+- [x] **Step 1: Write failing tests** proving default dry-run performs no mutation and reports annotation, pair, and `research/pilot/` object counts.
+- [x] **Step 2: Write deletion tests** proving exact order: annotations whose `pair_id` belongs to pilot pairs, then `research_pairs`, then only objects under `research/pilot/`; unrelated research rows/objects remain untouched.
+- [x] **Step 3: Add failure tests:** partial deletion stops non-zero and reports remaining IDs; confirmation mismatch performs no writes; final verification must observe zero in all three scopes.
+- [x] **Step 4: Run** `uv run pytest tests/test_clear_research_pilot.py -q`. Expected: collection failure.
+- [x] **Step 5: Implement with the existing Supabase client seam**, paginated reads, exact IDs from `is_pilot=true`, and literal prefix filtering. Do not use recursive filesystem deletion or broad Storage paths.
+- [x] **Step 6: Run focused tests and lint.** Expected: PASS.
+- [x] **Step 7: Commit:** `git commit -m "feat(research): add confirmed pilot cleanup"`.
 
 ### Task 7: Correct mixed-format storage telemetry
 
@@ -284,13 +288,13 @@ def calculate_corpus_projections(
 ) -> dict[str, float | int]: ...
 ```
 
-- [ ] **Step 1: Write failing tests** that generated reference bytes are PNG, scene bytes are WebP, both magic bytes/dimensions are verified, totals use separate distributions, and output contains neither `Cloudflare` nor `R2`.
-- [ ] **Step 2: Run** `uv run pytest tests/test_corpus_storage_telemetry.py -q`. Expected: FAIL because the script supports only PNG and recommends R2.
-- [ ] **Step 3: Replace the all-PNG projection** with separate reference/scene counts and measured byte samples. Report Supabase quota headroom as a measurement, not an architecture recommendation; if limits are insufficient, the runbook says to stop and open an ADR session.
-- [ ] **Step 4: Keep it zero-cost** and write reports only under `.scratch/`; do not add a new artifact home.
-- [ ] **Step 5: Synchronize durable docs:** replace the stale ~50-donated-story/all-PNG/cost arithmetic in `judge-finetune.md` with a pointer to the approved corpus-operations spec, and update `MASTER_SPEC.md` so it no longer says the existing `backend/finetune/` modules are unbuilt. Preserve preregistered history where the repo rules require strike-through rather than deletion.
-- [ ] **Step 6: Run focused tests, lint, and** `rg -n "Cloudflare|R2|~50 donated|all-PNG|not built yet" backend/scripts backend/tests docs/specs/judge-finetune.md docs/MASTER_SPEC.md`. Expected: no stale operational recommendation/status hit; historical/alternative mentions must be explicitly marked rejected if retained.
-- [ ] **Step 7: Commit:** `git commit -m "fix(research): align storage telemetry with adr 027"`.
+- [x] **Step 1: Write failing tests** that generated reference bytes are PNG, scene bytes are WebP, both magic bytes/dimensions are verified, totals use separate distributions, and output contains neither `Cloudflare` nor `R2`.
+- [x] **Step 2: Run** `uv run pytest tests/test_corpus_storage_telemetry.py -q`. Expected: FAIL because the script supports only PNG and recommends R2.
+- [x] **Step 3: Replace the all-PNG projection** with separate reference/scene counts and measured byte samples. Report Supabase quota headroom as a measurement, not an architecture recommendation; if limits are insufficient, the runbook says to stop and open an ADR session.
+- [x] **Step 4: Keep it zero-cost** and write reports only under `.scratch/`; do not add a new artifact home.
+- [x] **Step 5: Synchronize durable docs:** replace the stale ~50-donated-story/all-PNG/cost arithmetic in `judge-finetune.md` with a pointer to the approved corpus-operations spec, and update `MASTER_SPEC.md` so it no longer says the existing `backend/finetune/` modules are unbuilt. Preserve preregistered history where the repo rules require strike-through rather than deletion.
+- [x] **Step 6: Run focused tests, lint, and** `rg -n "Cloudflare|R2|~50 donated|all-PNG|not built yet" backend/scripts backend/tests docs/specs/judge-finetune.md docs/MASTER_SPEC.md`. Expected: no stale operational recommendation/status hit; historical/alternative mentions must be explicitly marked rejected if retained.
+- [x] **Step 7: Commit:** `git commit -m "fix(research): align storage telemetry with adr 027"`.
 
 ### Task 8: Operational gates, paid smoke, annotation, training, and evaluation
 

@@ -104,6 +104,7 @@ It must materialize, for every completed story:
 
 - the full final `StoryMemory`;
 - provenance and assigned split;
+- the intake-declared full and non-human rosters used for final reconciliation;
 - code commit, schema, prompt, model and style identifiers;
 - attempted, completed, failed and uncertain-billing paid calls;
 - canonical PNG references and finalized WebP q≈82 scenes;
@@ -116,8 +117,10 @@ quarantined rather than silently regenerated or pooled.
 ### 4.4 Queue materialization
 
 One idempotent command reads completed memories, uploads the exact corpus files to private Supabase Storage
-and inserts deterministic opaque `research_pairs`. Existing identical path/hash records are skipped. A
-pair-ID, path or hash conflict is terminal. The command does not generate images or labels.
+and inserts one deterministic opaque `research_pair` per finalized scene and referenced character. Rejected
+retry attempts are retained in `StoryMemory` provenance but are not stored or annotated. Existing identical
+path/hash records are skipped. A pair-ID, path or hash conflict is terminal. The command does not generate
+images or labels.
 
 ### 4.5 Annotation and adjudication
 
@@ -131,7 +134,9 @@ export derives truth from annotation rows and a reconciliation command repairs s
 ### 4.6 Freeze and conversion
 
 One export command loads completed memories, derives consensus, creates train-only constructed negatives,
-runs manifest guards, verifies every local asset hash and produces the LLaMA-Factory files. It fails on:
+runs manifest guards, verifies every local asset hash and produces a self-contained LLaMA-Factory directory
+containing the exact verified image bytes. Manifest image paths resolve inside that immutable directory. It
+fails on:
 
 - missing, duplicate or excess ordinary labels;
 - unresolved, unnecessary or multiple adjudications;
@@ -143,8 +148,16 @@ runs manifest guards, verifies every local asset hash and produces the LLaMA-Fac
   whose two characters have different styles;
 - unresolved declared-roster versus `StoryMemory.characters` reconciliation.
 
+Because production `StoryMemory.char_id` values are story-local (`c0`, `c1`, …), export qualifies the
+manifest lineage key as `<opaque story_id>:<char_id>` before corpus-wide split and style checks.
+
+Any deliberate pair exclusion is recorded in its immutable run bundle before freeze; migration-flagged
+pilot pairs are the only external exclusions. The freeze rejects unknown exclusions and reports the exact
+excluded pair IDs.
+
 The freeze report records dataset SHA-256, counts by story/character/split/class/reason, adjudication rate,
-exclusions and all pinned software/model/prompt versions.
+exclusions and all pinned software/model/prompt versions. A constructed negative belongs to the story that
+owns its reference character for story-level counts.
 
 ## 5. Encoding and storage
 
@@ -157,7 +170,13 @@ annotation and training. Filename extensions are not trusted; magic bytes and de
 - USD 25 is the working Fal allocation; USD 30 is the absolute campaign ceiling.
 - A zero-cost fixture run must pass first.
 - A three-story synthetic smoke run is capped at USD 1.50.
+- For that smoke only, the affordable call count is divided evenly across the selected stories at the pinned
+  conservative price. Reaching a story's reduced ceiling quarantines it for reconciliation rather than
+  breaching the smoke cap; campaign runs continue to reserve the full production image budget per story.
 - Pricing is pinned at campaign start and budgeting uses the conservative per-call price.
+- Before another story can start, the builder restores completed and unfinished attempted-call
+  telemetry from disk and rejects missing, invalid or price-drifted billing state. Each Fal event is
+  persisted atomically so a later process cannot reset the campaign total.
 - A story starts only if its maximum permitted draws fit the remaining reserve.
 - A timeout or uncertain billing result stops the campaign for reconciliation; it is not blindly retried.
 - The USD 25–30 reserve is released only to finish a story or materially improve character coverage.
