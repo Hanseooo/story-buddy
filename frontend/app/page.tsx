@@ -32,13 +32,19 @@ export default function Home() {
               How it works
             </a>
             <Link
-              href="/login"
+              href="/research"
+              className="hidden min-h-11 items-center text-sm font-bold text-on-primary/85 transition-opacity hover:opacity-70 md:flex"
+            >
+              Methodology
+            </Link>
+            <Link
+              href="/welcome?action=login"
               className="hidden min-h-11 items-center text-sm font-bold text-on-primary/85 transition-opacity hover:opacity-70 sm:flex"
             >
               Log in
             </Link>
             <Link
-              href="/signup"
+              href="/welcome?action=signup"
               className="inline-flex min-h-11 items-center justify-center rounded-xl bg-secondary px-4 py-2 text-sm font-extrabold text-on-secondary shadow-[0_5px_0_var(--color-primary-deep)] transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_2px_0_var(--color-primary-deep)]"
             >
               Sign up
@@ -60,9 +66,6 @@ export default function Home() {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src="/logo.png" alt="StoryBuddy" className="h-full w-full object-contain scale-[1.35] sm:scale-[1.45]" />
               </div>
-              <p className="mb-5 font-display text-sm font-extrabold tracking-[0.12em] text-secondary uppercase">
-                Stories become keepsakes
-              </p>
               <h1 className="max-w-[11ch] font-display text-5xl leading-[0.95] font-extrabold tracking-[-0.065em] text-balance sm:text-6xl lg:text-7xl xl:text-[5.5rem]">
                 Big ideas. Bright pages.
               </h1>
@@ -77,16 +80,16 @@ export default function Home() {
                 className="mt-8 flex flex-col items-stretch gap-4 sm:flex-row sm:items-center"
               >
                 <Link
-                  href="/signup"
+                  href="/welcome"
                   className="inline-flex min-h-13 items-center justify-center rounded-xl bg-secondary px-6 py-3 font-extrabold text-on-secondary shadow-[0_7px_0_var(--color-primary-deep)] transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_3px_0_var(--color-primary-deep)]"
                 >
-                  Teacher / Parent Sign up
+                  Get Started
                 </Link>
                 <Link
                   href="/join"
                   className="inline-flex min-h-13 items-center justify-center rounded-xl border-2 border-secondary px-6 py-3 font-extrabold text-secondary transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0.5"
                 >
-                  Student? Enter class code
+                  Enter Class Code
                 </Link>
               </motion.div>
             </motion.div>
@@ -174,57 +177,39 @@ export default function Home() {
               </p>
             </div>
 
-            <div className="border-t border-primary/20">
+            <div className="divide-y divide-primary/20 border-y border-primary/20">
               <motion.div 
                 whileHover={shouldReduceMotion ? {} : { x: 8 }}
-                className="grid gap-4 border-b border-primary/20 py-7 sm:grid-cols-[52px_1fr] sm:gap-6 transition-transform"
+                className="py-7 transition-transform"
               >
-                <span className="font-display text-lg font-extrabold text-primary">
-                  01
-                </span>
-                <div>
-                  <h3 className="font-display text-2xl font-extrabold tracking-[-0.035em]">
-                    Write your story
-                  </h3>
-                  <p className="mt-2 max-w-xl leading-7 text-foreground/65">
-                    Start with a few sentences or a whole adventure in your own
-                    words.
-                  </p>
-                </div>
+                <h3 className="font-display text-2xl font-extrabold tracking-[-0.035em] text-primary">
+                  Write your story
+                </h3>
+                <p className="mt-2 max-w-xl font-kid text-lg leading-7 text-foreground/75">
+                  Start with a few sentences or a whole adventure in your own words.
+                </p>
               </motion.div>
               <motion.div 
                 whileHover={shouldReduceMotion ? {} : { x: 8 }}
-                className="grid gap-4 border-b border-primary/20 py-7 sm:grid-cols-[52px_1fr] sm:gap-6 transition-transform"
+                className="py-7 transition-transform"
               >
-                <span className="font-display text-lg font-extrabold text-primary">
-                  02
-                </span>
-                <div>
-                  <h3 className="font-display text-2xl font-extrabold tracking-[-0.035em]">
-                    Meet your cast
-                  </h3>
-                  <p className="mt-2 max-w-xl leading-7 text-foreground/65">
-                    Preview the main characters before their adventure becomes
-                    a book.
-                  </p>
-                </div>
+                <h3 className="font-display text-2xl font-extrabold tracking-[-0.035em] text-primary">
+                  Meet your cast
+                </h3>
+                <p className="mt-2 max-w-xl font-kid text-lg leading-7 text-foreground/75">
+                  Preview the main characters before their adventure becomes a book.
+                </p>
               </motion.div>
               <motion.div 
                 whileHover={shouldReduceMotion ? {} : { x: 8 }}
-                className="grid gap-4 border-b border-primary/20 py-7 sm:grid-cols-[52px_1fr] sm:gap-6 transition-transform"
+                className="py-7 transition-transform"
               >
-                <span className="font-display text-lg font-extrabold text-primary">
-                  03
-                </span>
-                <div>
-                  <h3 className="font-display text-2xl font-extrabold tracking-[-0.035em]">
-                    Read every page
-                  </h3>
-                  <p className="mt-2 max-w-xl leading-7 text-foreground/65">
-                    Open the finished picture book and move through it at your
-                    own pace.
-                  </p>
-                </div>
+                <h3 className="font-display text-2xl font-extrabold tracking-[-0.035em] text-primary">
+                  Read every page
+                </h3>
+                <p className="mt-2 max-w-xl font-kid text-lg leading-7 text-foreground/75">
+                  Open the finished picture book and move through it at your own pace.
+                </p>
               </motion.div>
             </div>
           </div>
@@ -354,27 +339,9 @@ export default function Home() {
                   <WorkflowShowcase isMobileForm={true} />
                 </div>
               </div>
-              
-              <motion.div
-                initial={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.8, rotate: shouldReduceMotion ? 0 : -15 }}
-                whileInView={{ opacity: 1, scale: 1, rotate: shouldReduceMotion ? 0 : -5 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6, delay: shouldReduceMotion ? 0 : 0.3 }}
-                className="absolute -bottom-6 -left-4 sm:bottom-4 sm:left-4 z-20 rounded-2xl border border-primary/10 bg-surface px-4 py-3 shadow-[0_12px_24px_rgba(49,85,217,0.12)]"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-primary">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  </div>
-                  <p className="font-display text-sm font-bold text-primary">Pipeline complete</p>
-                </div>
-              </motion.div>
             </div>
 
             <div className="order-1 lg:order-2">
-              <p className="mb-4 font-display text-sm font-extrabold tracking-[0.12em] text-primary uppercase">
-                Capstone & Research
-              </p>
               <h2 className="max-w-[15ch] font-display text-4xl leading-[1.02] font-extrabold tracking-[-0.05em] sm:text-5xl">
                 The science behind the magic.
               </h2>
@@ -415,12 +382,20 @@ export default function Home() {
                 Bring the words. StoryBuddy will help turn them into pages.
               </p>
             </div>
-            <Link
-              href="/signup"
-              className="inline-flex min-h-13 shrink-0 items-center justify-center rounded-xl bg-secondary px-6 py-3 font-extrabold text-on-secondary shadow-[0_7px_0_var(--color-primary-deep)] transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_3px_0_var(--color-primary-deep)]"
-            >
-              Teacher / Parent Sign up
-            </Link>
+            <div className="flex flex-col gap-4 sm:flex-row shrink-0">
+              <Link
+                href="/welcome"
+                className="inline-flex min-h-13 items-center justify-center rounded-xl bg-secondary px-6 py-3 font-extrabold text-on-secondary shadow-[0_7px_0_var(--color-primary-deep)] transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_3px_0_var(--color-primary-deep)]"
+              >
+                Get Started
+              </Link>
+              <Link
+                href="/join"
+                className="inline-flex min-h-13 items-center justify-center rounded-xl border-2 border-secondary px-6 py-3 font-extrabold text-secondary transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0.5"
+              >
+                Enter Class Code
+              </Link>
+            </div>
           </motion.div>
         </section>
       </main>

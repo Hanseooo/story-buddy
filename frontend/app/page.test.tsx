@@ -14,12 +14,10 @@ describe("Home", () => {
     ).toBeDefined();
 
     const signupLinks = screen.getAllByRole("link", { name: /sign up/i });
-    signupLinks.forEach((link) => expect(link).toHaveAttribute("href", "/signup"));
+    signupLinks.forEach((link) => expect(link).toHaveAttribute("href", "/welcome?action=signup"));
 
-    expect(screen.getByRole("link", { name: /student\? enter class code/i })).toHaveAttribute(
-      "href",
-      "/join"
-    );
+    const joinLinks = screen.getAllByRole("link", { name: /enter class code/i });
+    joinLinks.forEach((link) => expect(link).toHaveAttribute("href", "/join"));
 
     expect(
       screen.getByRole("navigation", { name: /main navigation/i })
