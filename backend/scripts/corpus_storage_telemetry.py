@@ -1,270 +1,160 @@
+"""Zero-cost telemetry for the locked PNG-reference/WebP-scene corpus design."""
+
 import io
 import math
-import os
 import random
 import statistics
-import sys
+from pathlib import Path
 from typing import Any
 
 from PIL import Image, ImageDraw
 
-# Ensure backend root is on sys.path when executed directly
-backend_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if backend_root not in sys.path:
-    sys.path.insert(0, backend_root)
-
-if sys.stdout and hasattr(sys.stdout, "reconfigure"):
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")
-    except Exception:
-        pass
-
 
 def generate_sample_image(width: int = 1024, height: int = 768, seed: int = 0) -> Image.Image:
-    """Generate a representative synthetic illustration with complex shapes, colors, and gradients
-    using Pillow (zero external API calls) to accurately mimic production 1024x768 illustration entropy."""
+    """Generate a deterministic illustration-like sample without provider calls."""
     rng = random.Random(seed)
-    img = Image.new("RGB", (width, height), color=(rng.randint(220, 255), rng.randint(220, 255), rng.randint(220, 255)))
-    draw = ImageDraw.Draw(img)
-
-    # Draw simulated background elements (hills, sky, ground, clouds)
+    image = Image.new("RGB", (width, height), (rng.randint(220, 255),) * 3)
+    draw = ImageDraw.Draw(image)
     for _ in range(15):
-        x0 = rng.randint(0, width)
-        y0 = rng.randint(height // 3, height)
-        x1 = rng.randint(x0, width + 200)
-        y1 = rng.randint(y0, height + 200)
-        fill_col = (rng.randint(30, 220), rng.randint(30, 220), rng.randint(30, 220))
-        draw.ellipse([x0, y0, x1, y1], fill=fill_col)
-
-    # Draw character-like foreground silhouettes and colorful elements
+        x0, y0 = rng.randint(0, width), rng.randint(height // 3, height)
+        x1, y1 = rng.randint(x0, width + 200), rng.randint(y0, height + 200)
+        draw.ellipse([x0, y0, x1, y1], fill=tuple(rng.randint(30, 220) for _ in range(3)))
     for _ in range(30):
-        shape_type = rng.choice(["rect", "polygon", "circle", "line"])
-        fill_col = (rng.randint(0, 255), rng.randint(0, 255), rng.randint(0, 255))
-        outline_col = (0, 0, 0)
-        margin_x = max(1, width // 10)
-        margin_y = max(1, height // 10)
-        x = rng.randint(0, max(0, width - margin_x))
-        y = rng.randint(0, max(0, height - margin_y))
-        w = max(5, min(rng.randint(10, 250), width - x))
-        h = max(5, min(rng.randint(10, 250), height - y))
-
-        if shape_type == "rect":
-            draw.rectangle([x, y, x + w, y + h], fill=fill_col, outline=outline_col, width=2)
-        elif shape_type == "circle":
-            draw.ellipse([x, y, x + w, y + h], fill=fill_col, outline=outline_col, width=2)
-        elif shape_type == "polygon":
-            points = [(x + rng.randint(-10, 10), y + rng.randint(-10, 10)) for _ in range(4)]
-            draw.polygon(points, fill=fill_col, outline=outline_col)
-        elif shape_type == "line":
-            draw.line([(x, y), (x + w, y + h)], fill=outline_col, width=max(1, rng.randint(1, 4)))
-
-    # Add fine-grained illustration texture to accurately mimic real neural rendering entropy
-    noise_bytes = rng.randbytes(width * height)
-    noise_img = Image.frombytes("L", (width, height), noise_bytes)
-    noise_rgb = Image.merge("RGB", (noise_img, noise_img, noise_img))
-    img_blended = Image.blend(img, noise_rgb, alpha=0.15)
-
-    return img_blended
+        x, y = rng.randint(0, width - 1), rng.randint(0, height - 1)
+        draw.rectangle(
+            [x, y, min(width, x + rng.randint(5, 250)), min(height, y + rng.randint(5, 250))],
+            fill=tuple(rng.randint(0, 255) for _ in range(3)),
+        )
+    noise = Image.frombytes("L", (width, height), rng.randbytes(width * height))
+    return Image.blend(image, Image.merge("RGB", (noise, noise, noise)), alpha=0.15)
 
 
-def encode_image(img: Image.Image, format: str = "PNG", **kwargs: Any) -> bytes:
-    """Encode Pillow Image to bytes in memory."""
-    buf = io.BytesIO()
-    img.save(buf, format=format, **kwargs)
-    return buf.getvalue()
+def encode_image(image: Image.Image, format: str = "PNG", **kwargs: Any) -> bytes:
+    output = io.BytesIO()
+    image.save(output, format=format, **kwargs)
+    return output.getvalue()
 
 
-def verify_mime_type(image_bytes: bytes, expected_format: str) -> tuple[bool, str]:
-    """Verify MIME header magic bytes for PNG."""
-    fmt = expected_format.upper()
-    if fmt == "PNG":
-        if image_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
-            return True, "image/png"
+def verify_mime_type(
+    image_bytes: bytes,
+    expected_format: str,
+    expected_size: tuple[int, int] | None = None,
+) -> tuple[bool, str]:
+    """Verify magic bytes, decode, format, and optional dimensions."""
+    image_format = expected_format.upper()
+    mime = {"PNG": "image/png", "WEBP": "image/webp"}.get(image_format)
+    magic_ok = image_bytes.startswith(b"\x89PNG\r\n\x1a\n") if image_format == "PNG" else (
+        image_format == "WEBP" and image_bytes[:4] == b"RIFF" and image_bytes[8:12] == b"WEBP"
+    )
+    if mime is None or not magic_ok:
         return False, "unknown"
-    return False, "unknown"
+    try:
+        with Image.open(io.BytesIO(image_bytes)) as image:
+            image.load()
+            if image.format != image_format or (expected_size is not None and image.size != expected_size):
+                return False, "unknown"
+    except Exception:
+        return False, "unknown"
+    return True, mime
 
 
 def calculate_byte_statistics(sizes: list[int]) -> dict[str, float]:
-    """Calculate min, max, mean, median, and p95 byte distribution."""
     if not sizes:
         return {"min": 0.0, "max": 0.0, "mean": 0.0, "median": 0.0, "p95": 0.0, "count": 0}
-
-    sorted_sizes = sorted(sizes)
-    n = len(sorted_sizes)
-    p95_index = min(n - 1, math.ceil(0.95 * n) - 1)
-
+    ordered = sorted(sizes)
     return {
-        "min": float(min(sorted_sizes)),
-        "max": float(max(sorted_sizes)),
-        "mean": float(statistics.mean(sorted_sizes)),
-        "median": float(statistics.median(sorted_sizes)),
-        "p95": float(sorted_sizes[p95_index]),
-        "count": n,
+        "min": float(ordered[0]),
+        "max": float(ordered[-1]),
+        "mean": float(statistics.mean(ordered)),
+        "median": float(statistics.median(ordered)),
+        "p95": float(ordered[min(len(ordered) - 1, math.ceil(0.95 * len(ordered)) - 1)]),
+        "count": len(ordered),
     }
 
 
 def calculate_corpus_projections(
-    sample_png_sizes: list[int],
-    total_images: int = 707,
-    total_stories: int = 88,
-    num_annotators: int = 2,
-    num_adjudicators: int = 1,
-    cost_per_image_usd: float = 0.035,
-    retry_margin_factor: float = 1.10,
-) -> dict[str, Any]:
-    """Calculate deduplication, storage capacity, egress bandwidth, and compute budget."""
-    canonical_references = total_stories
-    scene_images = max(0, total_images - canonical_references)
-    total_unique_assets = total_images
-    naive_total_assets = canonical_references + (scene_images * 2)
-
-    dedup_saved_assets = naive_total_assets - total_unique_assets
-    dedup_savings_pct = (dedup_saved_assets / naive_total_assets) * 100.0 if naive_total_assets > 0 else 0.0
-
-    mean_png_bytes = statistics.mean(sample_png_sizes) if sample_png_sizes else 1_500_000
-
-    png_total_mb = (total_images * mean_png_bytes) / (1024 * 1024)
-    png_total_gb = png_total_mb / 1024.0
-
-    viewers = num_annotators + num_adjudicators
-    png_egress_gb = png_total_gb * viewers
-
-    compute_base = total_images * cost_per_image_usd
-    compute_with_margin = compute_base * retry_margin_factor
-
-    supabase_free_png_status = "exceeded" if (png_total_gb > 1.0 or png_egress_gb > 2.0) else "within_limit"
-
+    reference_png_sizes: list[int],
+    scene_webp_sizes: list[int],
+    canonical_references: int,
+    scene_images: int,
+    viewers: int = 3,
+) -> dict[str, float | int]:
+    """Project measured bytes against the locked Supabase design."""
+    reference_bytes = int(statistics.mean(reference_png_sizes) * canonical_references) if reference_png_sizes else 0
+    scene_bytes = int(statistics.mean(scene_webp_sizes) * scene_images) if scene_webp_sizes else 0
+    total_bytes = reference_bytes + scene_bytes
+    gib = 1024**3
     return {
         "canonical_references": canonical_references,
         "scene_images": scene_images,
-        "total_unique_assets": total_unique_assets,
-        "naive_total_assets_without_dedup": naive_total_assets,
-        "dedup_saved_assets": dedup_saved_assets,
-        "dedup_savings_pct": dedup_savings_pct,
-        "png_total_mb": png_total_mb,
-        "png_total_gb": png_total_gb,
+        "total_unique_assets": canonical_references + scene_images,
+        "reference_storage_bytes": reference_bytes,
+        "scene_storage_bytes": scene_bytes,
+        "total_storage_gb": total_bytes / gib,
         "viewers": viewers,
-        "png_egress_gb": png_egress_gb,
-        "compute_cost_base_usd": compute_base,
-        "compute_cost_with_retry_margin_usd": compute_with_margin,
-        "storage_decision": {
-            "supabase_free_png_status": supabase_free_png_status,
-            "cloudflare_r2_status": "recommended",
-            "decision_summary": "Cloudflare R2 recommended for zero egress fees and 10GB free storage.",
-        },
+        "campaign_egress_gb": total_bytes * viewers / gib,
+        "supabase_storage_headroom_gb": 1.0 - total_bytes / gib,
+        "supabase_egress_headroom_gb": 5.0 - total_bytes * viewers / gib,
     }
 
 
 def generate_telemetry_report(
-    sample_png_sizes: list[int],
-    total_images: int = 707,
-    total_stories: int = 88,
+    reference_png_sizes: list[int],
+    scene_webp_sizes: list[int],
+    canonical_references: int,
+    scene_images: int,
 ) -> str:
-    """Format full markdown telemetry and decision document."""
-    png_stats = calculate_byte_statistics(sample_png_sizes)
-    proj = calculate_corpus_projections(sample_png_sizes, total_images, total_stories)
-
+    references = calculate_byte_statistics(reference_png_sizes)
+    scenes = calculate_byte_statistics(scene_webp_sizes)
+    projection = calculate_corpus_projections(
+        reference_png_sizes, scene_webp_sizes, canonical_references, scene_images
+    )
     return f"""# Corpus Storage, Generation Telemetry & Cost Smoke Test Report
 
-**Ticket:** #52 (Issue 08)  
-**Objective:** Fine-Tuning the VLM Consistency Judge (Objective 4) Corpus Pre-Flight  
-**Status:** Completed (Zero-Cost Verification)
+## Encoded Byte Distribution
 
----
+| Asset | Count | Sample mean | Sample p95 |
+| :--- | ---: | ---: | ---: |
+| PNG references | {canonical_references} | {references['mean'] / 1024:.1f} KiB | {references['p95'] / 1024:.1f} KiB |
+| WebP quality 82 scenes | {scene_images} | {scenes['mean'] / 1024:.1f} KiB | {scenes['p95'] / 1024:.1f} KiB |
 
-## 1. Encoded Byte Distribution (Sample Size: {png_stats['count']} images @ 1024x768)
+Magic bytes, Pillow decode, format, and dimensions were verified for both samples.
 
-| Metric | PNG (Lossless) |
-| :--- | :--- |
-| **Min** | {png_stats['min'] / (1024*1024):.3f} MB ({int(png_stats['min']):,} B) |
-| **Max** | {png_stats['max'] / (1024*1024):.3f} MB ({int(png_stats['max']):,} B) |
-| **Mean** | {png_stats['mean'] / (1024*1024):.3f} MB ({int(png_stats['mean']):,} B) |
-| **Median** | {png_stats['median'] / (1024*1024):.3f} MB ({int(png_stats['median']):,} B) |
-| **p95** | {png_stats['p95'] / (1024*1024):.3f} MB ({int(png_stats['p95']):,} B) |
+## Storage & Bandwidth Projections
 
-**MIME Verification:**
-- PNG Magic Bytes (`\\\\x89PNG\\\\r\\\\n\\\\x1a\\\\n`): `image/png` (Valid)
+| Measurement | Projection |
+| :--- | ---: |
+| Reference storage | {projection['reference_storage_bytes'] / 1024**2:.1f} MiB |
+| Scene storage | {projection['scene_storage_bytes'] / 1024**2:.1f} MiB |
+| Total storage | {projection['total_storage_gb']:.3f} GiB |
+| Campaign egress ({projection['viewers']} viewers) | {projection['campaign_egress_gb']:.3f} GiB |
 
----
+## Supabase quota headroom
 
-## 2. Reference Asset De-duplication
-
-In the StoryBuddy pipeline (`char_bible` -> `generate_scene`), canonical character reference images are reused across all scenes of the same story:
-
-* **Estimated Story Count:** {total_stories} stories
-* **Canonical Reference Images (1 per story):** {proj['canonical_references']} assets
-* **Output Scene Images:** {proj['scene_images']} assets
-* **Total Unique Storage Assets:** **{proj['total_unique_assets']} images**
-* **Naive Assets Without Deduplication:** {proj['naive_total_assets_without_dedup']} images
-* **Deduplication Storage Savings:** **{proj['dedup_savings_pct']:.1f}%** ({proj['dedup_saved_assets']} duplicate reference uploads avoided)
-
----
-
-## 3. Storage & Bandwidth Projections (Full {total_images}-Image Corpus)
-
-| Format | Corpus Total Storage | Annotation Campaign Egress Bandwidth (3 viewers) |
-| :--- | :--- | :--- |
-| **PNG (Production Source)** | **{proj['png_total_mb']:.1f} MB** ({proj['png_total_gb']:.2f} GB) | **{proj['png_egress_gb']:.2f} GB** |
-
-*Note: Egress bandwidth is calculated across 2 independent annotators (Annotator A, Annotator B) + 1 adjudicator downloading signed URLs from the private bucket.*
-
----
-
-## 4. Compute Cost Projections (`fal.ai/qwen-image-edit-2511`)
-
-* **Base fal.ai Unit Cost:** $0.035 / image
-* **Base Generation Budget ({total_images} images):** **${proj['compute_cost_base_usd']:.2f} USD**
-* **Budget with 10% Retry/Moderation Margin:** **${proj['compute_cost_with_retry_margin_usd']:.2f} USD**
-
----
-
-## 5. Storage Provider Decision Matrix
-
-| Provider | Free Storage Tier | Free Egress Tier | Status for {total_images} Corpus | Decision / Notes |
-| :--- | :--- | :--- | :--- | :--- |
-| **Supabase Storage (PNG)** | 1.0 GB | 2.0 GB / month | ⚠️ Exceeds ({proj['png_total_gb']:.2f} GB / {proj['png_egress_gb']:.2f} GB egress) | Risk of storage/egress limit overages if stored as raw PNG. |
-| **Cloudflare R2 (S3 API)** | 10.0 GB | **$0.00 Unlimited** | ✅ **Recommended** | Holds uncompressed PNGs with 0 egress cost risk. |
-
-**Final Recommendation:**
-Use **Cloudflare R2** as primary/failover storage for large research datasets to stay safely within quotas.
+Measured headroom is **{projection['supabase_storage_headroom_gb']:.3f} GiB storage** and
+**{projection['supabase_egress_headroom_gb']:.3f} GiB campaign egress**. This is a measurement of the
+locked design. Insufficient headroom stops the run and requires a separate ADR session.
 """
 
 
 def main() -> None:
-    print("Running Corpus Storage, Generation Telemetry & Cost Smoke Test (Zero-Cost)...")
-    sample_png_sizes: list[int] = []
+    reference_sizes, scene_sizes = [], []
+    for index in range(25):
+        image = generate_sample_image(seed=1000 + index)
+        reference = encode_image(image, format="PNG")
+        scene = encode_image(image, format="WEBP", quality=82)
+        assert verify_mime_type(reference, "PNG", image.size) == (True, "image/png")
+        assert verify_mime_type(scene, "WEBP", image.size) == (True, "image/webp")
+        reference_sizes.append(len(reference))
+        scene_sizes.append(len(scene))
 
-    # Generate 25 sample representative images
-    sample_count = 25
-    for i in range(sample_count):
-        img = generate_sample_image(width=1024, height=768, seed=1000 + i)
-        png_b = encode_image(img, format="PNG")
-
-        is_png, mime_png = verify_mime_type(png_b, "PNG")
-        assert is_png and mime_png == "image/png"
-
-        sample_png_sizes.append(len(png_b))
-
-    report = generate_telemetry_report(
-        sample_png_sizes=sample_png_sizes,
-        total_images=707,
-        total_stories=88,
-    )
-
-    output_path = os.path.join(
-        os.path.dirname(backend_root),
-        ".scratch",
-        "annotation-pilot",
-        "corpus_storage_telemetry_report.md",
-    )
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(report)
-
-    print(f"Report successfully generated at: {output_path}")
+    report = generate_telemetry_report(reference_sizes, scene_sizes, 60, 450)
+    output = Path(__file__).parents[2] / ".scratch" / "annotation-pilot" / "corpus_storage_telemetry_report.md"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(report, encoding="utf-8")
+    print(f"Report successfully generated at: {output}")
     print(report)
 
 
 if __name__ == "__main__":
     main()
-

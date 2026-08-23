@@ -103,8 +103,8 @@ Keep this outside the repository and research database in the ethics-approved re
 | Receipt code | Approved participant/contact record | Guardian consent date | Child assent date | Withdrawal state/date |
 |---|---|---|---|---|
 
-The de-identified intake and all derived artifacts carry only the receipt-derived `donation_id`, never the
-participant/contact record.
+The de-identified intake and all derived artifacts carry only an opaque `story_id` assigned after clearance,
+never a participant/contact record, receipt code or raw submission.
 
 ## D. Approval checklist
 

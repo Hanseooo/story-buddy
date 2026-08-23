@@ -67,3 +67,4 @@
   tests, but not an already-authenticated researcher traversing `/login` → `/classroom` → `/s/<id>`.
 - **Rule**: For auth bugs, trace both the fresh-login and stale-session paths through middleware,
   server layouts, and role resolution; never use a student route as the unknown-profile fallback.
+# Inline implementation means the primary agent edits and verifies directly; do not substitute a subagent-driven workspace even when a referenced plan recommends one.
