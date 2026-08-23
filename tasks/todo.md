@@ -1,8 +1,9 @@
 # Current Task: Storybook deletion implementation planning
 
-- [ ] Explore storybook ownership, UI surfaces, job/worker lifecycle, database relationships, checkpoints, Storage objects, telemetry, and governing decisions.
-- [ ] Resolve who may delete which storybooks and whether deletion is hard, soft, or staged.
-- [ ] Compare safe deletion designs and obtain owner approval for the selected data lifecycle.
+- [x] Explore storybook ownership, UI surfaces, job/worker lifecycle, database relationships, checkpoints, Storage objects, telemetry, and governing decisions.
+- [x] Resolve who may delete which storybooks and whether deletion is hard, soft, or staged.
+- [x] Compare safe deletion designs and obtain owner approval for the selected data lifecycle.
+- [x] Record the approved architecture in ADR-044 and reconcile D-J's decision surfaces.
 - [ ] Write and self-review the durable feature spec.
 - [ ] Write and self-review the TDD-first implementation plan under `docs/specs/plans/`.
 
@@ -11,6 +12,18 @@
 The approved plan names every affected persistence layer and user surface; prevents cross-classroom deletion,
 worker resurrection, orphaned Storage/checkpoint data, and silent loss of required research/audit evidence; and
 provides exact red-green tests plus live Supabase verification without changing runtime code or external data.
+
+## ADR review / outcome
+
+ADR-044 selects child-owned hard deletion for quiescent `complete`, `failed`, and `awaiting_confirm` jobs.
+Deletion stays behind authenticated FastAPI, uses `worker_finished_at` as the no-producer barrier, moves the row
+to `deleting`, and delegates idempotent Storage/checkpoint/Langfuse/row cleanup to existing RQ. Direct browser
+DELETE policies, teacher per-book deletion, soft-delete metrics retention, and in-flight cancellation are out.
+
+ADR verification passed: required sections and escape hatch are present; ADR numbering is unique through 044;
+the index target resolves; D-J has no open backlog row; placeholder, runtime-change, and targeted diff checks are
+clean. No application tests ran because this session changed decision documentation only. The feature spec and
+implementation plan remain pending and must be authored in a fresh session per the architecture-session gate.
 
 ---
 

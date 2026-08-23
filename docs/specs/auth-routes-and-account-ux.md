@@ -282,8 +282,9 @@ no child is stranded: closing the tab mid-generation still leaves a route back t
 | `paused` | "Come meet your cast!" | `/s/[pid]/process/[jobId]` |
 | `terminal-failure` | "This one didn't finish" | ~~`/s/[pid]/write` (a new job — kid-flow S3)~~ `/s/[pid]/process/[jobId]` — **amended 2026-08-12**, see below |
 
-The accepted cost of showing all four: a failed job is permanent debris, because kid-flow S3 makes a
-terminal job immutable and recovery is always a new job.
+This built spec still leaves a failed job as permanent debris: kid-flow S3 makes terminal generation
+immutable and recovery creates a new job. ADR-044 now permits the separate `data-deletion` feature to
+remove a quiescent terminal row and its external assets without reopening generation semantics.
 
 #### The failure card routes through `/process`, not `/write` (amended 2026-08-12)
 
@@ -295,10 +296,10 @@ one tap, text intact. The destination is a better door to the same room.
 
 The debris itself is now **collapsed, not deleted**: failed cards render inside a `<details>`
 titled *"Didn't finish (n)"* below the grid — the pattern already shipped on the teacher books page
-(`teacher-review-and-approval` §4.8). There is no delete control. Child-initiated deletion would
-need a student `DELETE` policy on `jobs` (S3 §4.1 grants none) and would destroy the research
-metrics on the row (`0013_jobs_research_metrics.sql`); that is an authorization-surface decision,
-queued as **D-J** in `DECISION_BACKLOG.md`, not settled here.
+(`teacher-review-and-approval` §4.8). There is no delete control in this built spec. **ADR-044 now
+resolves D-J:** the later `data-deletion` feature adds a server-side, child-owned hard-delete path for
+quiescent storybooks and removes the row's metrics with the rest of the book; it does not add a direct
+student `DELETE` policy.
 
 - **Covers** are `pages[0].image_path`, signed at read time (kid-flow constraint), via **one batched
   `createSignedUrls`** call, not one per card.
