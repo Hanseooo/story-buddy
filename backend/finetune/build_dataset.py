@@ -29,6 +29,7 @@ from finetune.annotation_truth import (
     resolve_annotations,
 )
 from finetune.corpus_io import CorpusError
+from finetune.dataset_selection import lineage_id
 from finetune.freeze_dataset import FreezeReport, freeze_dataset
 from finetune.manifest import (
     ManifestError,
@@ -88,11 +89,6 @@ def mint_pair_id(char_id: str, scene_image: str) -> str:
     """Opaque and deterministic. Opaque because `annotate/` blinds on it (annotation-surface §2.1);
     deterministic because a re-run must line up with labels already collected against it."""
     return hashlib.sha256(f"{char_id}\0{scene_image}".encode()).hexdigest()[:16]
-
-
-def lineage_id(story_id: str, char_id: str) -> str:
-    """Qualify StoryMemory's story-local character IDs for corpus-wide split guards."""
-    return f"{story_id}:{char_id}"
 
 
 def pairs_from_memory(memory: StoryMemory) -> list[Pair]:

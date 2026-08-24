@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Literal, Self
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from contracts.story_memory import StoryMemory
 
@@ -155,7 +155,7 @@ class IntakeRecord(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def validate_source_rules(self) -> Self:
+    def validate_source_rules(self, info: ValidationInfo) -> Self:
         if not set(self.declared_non_human) <= set(self.declared_characters):
             raise ValueError("declared_non_human must be a subset of declared_characters")
 
@@ -189,8 +189,11 @@ class IntakeRecord(BaseModel):
             )
         ):
             raise ValueError("donated records require every approval")
-        if self.withdrawal_state != "active":
+        allow_withdrawn = bool(info.context and info.context.get("allow_withdrawn"))
+        if not allow_withdrawn and self.withdrawal_state != "active":
             raise ValueError("withdrawn donated records cannot enter generation")
+        if self.withdrawal_state not in ("active", "withdrawn"):
+            raise ValueError("donated records require active or withdrawn state")
         if self.selection_frozen_at is None:
             raise ValueError("donated records require selection_frozen_at")
         if self.selection_frozen_at.tzinfo is None or self.selection_frozen_at > datetime.now(timezone.utc):
@@ -223,13 +226,21 @@ def intake_sha256(record: IntakeRecord) -> str:
     return hashlib.sha256(canonical).hexdigest()
 
 
-def load_intake(path: Path) -> list[IntakeRecord]:
+IntakeMode = Literal["generation", "freeze_audit"]
+
+
+def load_intake(path: Path, *, mode: IntakeMode = "generation") -> list[IntakeRecord]:
     """Load one strict JSON-list intake file and reject duplicate opaque story identifiers."""
+    if mode not in ("generation", "freeze_audit"):
+        raise ValueError(f"unknown intake mode: {mode}")
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, list):
         raise ValueError("intake must be a JSON list")
 
-    records = [IntakeRecord.model_validate(item) for item in payload]
+    records = [
+        IntakeRecord.model_validate(item, context={"allow_withdrawn": mode == "freeze_audit"})
+        for item in payload
+    ]
     story_ids = [record.story_id for record in records]
     if len(story_ids) != len(set(story_ids)):
         raise ValueError("duplicate story_id")
