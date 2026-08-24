@@ -25,11 +25,13 @@ from finetune.corpus_io import (
 from finetune.dataset_selection import (
     DatasetSelection,
     DonatedReplacement,
+    HardNegativeMatch,
     candidate_report,
     load_dataset_selection,
     prepare_dataset_bundles,
     select_dataset_bundles,
     selection_sha256,
+    validate_hard_negative_matches,
 )
 from finetune.manifest import ManifestError
 
@@ -496,3 +498,118 @@ def test_prepare_dataset_bundles_mixed_fixture_fails():
     ]
     with pytest.raises(ManifestError, match="mixed fixture"):
         prepare_dataset_bundles(mixed, None, None)
+
+
+# --- validate_hard_negative_matches tests ---
+
+def test_validate_hard_negative_matches_success():
+    bundles = [
+        make_bundle("syn-001", "c1", species="fox", style="cel", split="train"),
+        make_bundle("syn-002", "c2", species="fox", style="cel", split="train"),
+    ]
+    frozen_at = datetime(2026, 8, 24, 10, 0, tzinfo=timezone.utc)
+    selection = DatasetSelection(
+        hard_negatives_frozen_at=frozen_at,
+        hard_negative_matches=[
+            HardNegativeMatch(reference_char_id="syn-001:c1", target_char_id="syn-002:c2"),
+            HardNegativeMatch(reference_char_id="syn-002:c2", target_char_id="syn-001:c1"),
+        ],
+        donated_replacements=[],
+    )
+    annotations = [
+        {"pair_id": "p1", "created_at": "2026-08-24T11:00:00+00:00"},
+        {"pair_id": "pilot-1", "created_at": "2026-08-24T09:00:00+00:00"},  # pilot ignored
+    ]
+    matches = validate_hard_negative_matches(bundles, selection, annotations, {"pilot-1"})
+    assert matches == {
+        "syn-001:c1": "syn-002:c2",
+        "syn-002:c2": "syn-001:c1",
+    }
+
+
+def test_validate_hard_negative_matches_rejects_missing_or_excess_reference():
+    bundles = [
+        make_bundle("syn-001", "c1", species="fox", style="cel", split="train"),
+        make_bundle("syn-002", "c2", species="fox", style="cel", split="train"),
+    ]
+    # Missing syn-002:c2
+    selection = DatasetSelection(
+        hard_negatives_frozen_at=datetime.now(timezone.utc),
+        hard_negative_matches=[
+            HardNegativeMatch(reference_char_id="syn-001:c1", target_char_id="syn-002:c2"),
+        ],
+        donated_replacements=[],
+    )
+    with pytest.raises(ManifestError, match="synthetic training reference"):
+        validate_hard_negative_matches(bundles, selection, [], set())
+
+
+def test_validate_hard_negative_matches_rejects_species_or_style_mismatch():
+    bundles = [
+        make_bundle("syn-001", "c1", species="fox", style="cel", split="train"),
+        make_bundle("syn-002", "c2", species="bear", style="cel", split="train"),
+        make_bundle("syn-003", "c3", species="fox", style="gouache", split="train"),
+    ]
+    # Species mismatch
+    selection_species = DatasetSelection(
+        hard_negatives_frozen_at=datetime.now(timezone.utc),
+        hard_negative_matches=[
+            HardNegativeMatch(reference_char_id="syn-001:c1", target_char_id="syn-002:c2"),
+            HardNegativeMatch(reference_char_id="syn-002:c2", target_char_id="syn-001:c1"),
+            HardNegativeMatch(reference_char_id="syn-003:c3", target_char_id="syn-001:c1"),
+        ],
+        donated_replacements=[],
+    )
+    with pytest.raises(ManifestError, match="species"):
+        validate_hard_negative_matches(bundles, selection_species, [], set())
+
+    # Style mismatch
+    selection_style = DatasetSelection(
+        hard_negatives_frozen_at=datetime.now(timezone.utc),
+        hard_negative_matches=[
+            HardNegativeMatch(reference_char_id="syn-001:c1", target_char_id="syn-003:c3"),
+            HardNegativeMatch(reference_char_id="syn-002:c2", target_char_id="syn-001:c1"),
+            HardNegativeMatch(reference_char_id="syn-003:c3", target_char_id="syn-001:c1"),
+        ],
+        donated_replacements=[],
+    )
+    with pytest.raises(ManifestError, match="style"):
+        validate_hard_negative_matches(bundles, selection_style, [], set())
+
+
+def test_validate_hard_negative_matches_rejects_target_without_natural_scenes():
+    bundles = [
+        make_bundle("syn-001", "c1", species="fox", style="cel", split="train", num_scenes=1),
+        make_bundle("syn-002", "c2", species="fox", style="cel", split="train", num_scenes=0),
+    ]
+    selection = DatasetSelection(
+        hard_negatives_frozen_at=datetime.now(timezone.utc),
+        hard_negative_matches=[
+            HardNegativeMatch(reference_char_id="syn-001:c1", target_char_id="syn-002:c2"),
+            HardNegativeMatch(reference_char_id="syn-002:c2", target_char_id="syn-001:c1"),
+        ],
+        donated_replacements=[],
+    )
+    with pytest.raises(ManifestError, match="natural scenes"):
+        validate_hard_negative_matches(bundles, selection, [], set())
+
+
+def test_validate_hard_negative_matches_rejects_annotation_earlier_than_freeze():
+    bundles = [
+        make_bundle("syn-001", "c1", species="fox", style="cel", split="train"),
+        make_bundle("syn-002", "c2", species="fox", style="cel", split="train"),
+    ]
+    frozen_at = datetime(2026, 8, 24, 12, 0, tzinfo=timezone.utc)
+    selection = DatasetSelection(
+        hard_negatives_frozen_at=frozen_at,
+        hard_negative_matches=[
+            HardNegativeMatch(reference_char_id="syn-001:c1", target_char_id="syn-002:c2"),
+            HardNegativeMatch(reference_char_id="syn-002:c2", target_char_id="syn-001:c1"),
+        ],
+        donated_replacements=[],
+    )
+    annotations = [
+        {"pair_id": "p1", "created_at": "2026-08-24T11:59:59+00:00"},  # Earlier than frozen_at!
+    ]
+    with pytest.raises(ManifestError, match="precede"):
+        validate_hard_negative_matches(bundles, selection, annotations, set())

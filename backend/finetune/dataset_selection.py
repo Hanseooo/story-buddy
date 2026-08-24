@@ -138,7 +138,7 @@ def candidate_report(bundles: Sequence[RunBundle]) -> list[dict[str, object]]:
             char_info[lid] = {
                 "lineage_id": lid,
                 "character": char,
-                "species": char.description.species.strip(),
+                "species": (char.description.species or "").strip(),
                 "style": style,
                 "canonical_ref": char.canonical_ref_image,
                 "scene_count": scene_counts[char.char_id],
@@ -307,3 +307,99 @@ def prepare_dataset_bundles(
         bundles, synthetic, donated, selection, selection_sha256(selection_path)
     )
     return selected, selection, audit
+
+
+def validate_hard_negative_matches(
+    bundles: Sequence[RunBundle],
+    selection: DatasetSelection,
+    annotation_rows: Sequence[dict[str, object]],
+    pilot_pair_ids: set[str],
+) -> dict[str, str]:
+    """Validate frozen hard-negative matches against synthetic train character eligibility and time."""
+    train_bundles = [
+        b for b in bundles if b.provenance == "synthetic" and b.split == "train"
+    ]
+
+    train_characters: dict[str, dict[str, object]] = {}
+    for bundle in train_bundles:
+        style = str(bundle.run_metadata.get("style_preset_id", ""))
+        scene_counts: Counter[str] = Counter()
+        for scene in bundle.memory.scenes:
+            if scene.final_image_ref:
+                for cid in scene.characters_present:
+                    scene_counts[cid] += 1
+
+        for char in bundle.memory.characters:
+            if not char.canonical_ref_image:
+                continue
+            lid = lineage_id(bundle.memory.story_id, char.char_id)
+            train_characters[lid] = {
+                "character": char,
+                "species": (char.description.species or "").strip(),
+                "style": style,
+                "scene_count": scene_counts[char.char_id],
+            }
+
+    matches = {
+        item.reference_char_id: item.target_char_id
+        for item in selection.hard_negative_matches
+    }
+
+    if set(matches.keys()) != set(train_characters.keys()):
+        raise ManifestError("every synthetic training reference requires exactly one hard-negative match")
+
+    for ref_id, target_id in matches.items():
+        if target_id not in train_characters:
+            raise ManifestError(f"target character {target_id} is not a synthetic training character")
+        if ref_id == target_id:
+            raise ManifestError(f"self-pair forbidden: {ref_id}")
+
+        ref_species = str(train_characters[ref_id]["species"])
+        target_species = str(train_characters[target_id]["species"])
+        if not ref_species or not target_species or ref_species.casefold() != target_species.casefold():
+            raise ManifestError(
+                f"species mismatch: reference {ref_id} ({ref_species}) != target {target_id} ({target_species})"
+            )
+
+        ref_style = str(train_characters[ref_id]["style"])
+        target_style = str(train_characters[target_id]["style"])
+        if ref_style != target_style:
+            raise ManifestError(
+                f"style mismatch: reference {ref_id} ({ref_style}) != target {target_id} ({target_style})"
+            )
+
+        if int(train_characters[target_id]["scene_count"]) < 1:
+            raise ManifestError(f"target character {target_id} has no finalized natural scenes")
+
+    non_pilot_timestamps: list[datetime] = []
+    for row in annotation_rows:
+        pair_id = str(row.get("pair_id", ""))
+        if pair_id in pilot_pair_ids:
+            continue
+        created_at_raw = row.get("created_at")
+        if not created_at_raw:
+            raise ManifestError(f"annotation row {pair_id} missing created_at")
+        if isinstance(created_at_raw, str):
+            try:
+                dt = datetime.fromisoformat(created_at_raw.replace("Z", "+00:00"))
+            except Exception as e:
+                raise ManifestError(f"malformed created_at in annotation {pair_id}: {created_at_raw}") from e
+        elif isinstance(created_at_raw, datetime):
+            dt = created_at_raw
+        else:
+            raise ManifestError(f"invalid created_at type in annotation {pair_id}")
+
+        if dt.tzinfo is None:
+            raise ManifestError(f"naive created_at in annotation {pair_id}")
+        if dt > datetime.now(timezone.utc):
+            raise ManifestError(f"future created_at in annotation {pair_id}")
+        non_pilot_timestamps.append(dt)
+
+    if non_pilot_timestamps:
+        earliest = min(non_pilot_timestamps)
+        if selection.hard_negatives_frozen_at > earliest:
+            raise ManifestError(
+                f"hard_negatives_frozen_at ({selection.hard_negatives_frozen_at.isoformat()}) must precede all non-pilot annotations (earliest: {earliest.isoformat()})"
+            )
+
+    return matches

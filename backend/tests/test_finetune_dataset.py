@@ -7,6 +7,7 @@
 import hashlib
 import json
 from io import BytesIO
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -526,62 +527,80 @@ def test_negative_with_no_ticked_reason_still_renders_prose():
     assert bd.render_rationale(False, [], []).strip()
 
 
+def manifest_record(
+    pair_id: str,
+    char_id: str,
+    ref_image: str,
+    scene_image: str,
+    *,
+    split: str = "train",
+    provenance: str = "synthetic",
+    pair_type: str = "pipeline",
+) -> bd.ManifestRecord:
+    return bd.ManifestRecord(
+        pair_id=pair_id,
+        char_id=char_id,
+        split=split,  # type: ignore[arg-type]
+        provenance=provenance,  # type: ignore[arg-type]
+        pair_type=pair_type,  # type: ignore[arg-type]
+        images=[ref_image, scene_image],
+        differences_observed="ok",
+        same_character=True,
+        label=False,
+        failure_reasons=[],
+    )
+
+
 # --- constructed negatives -----------------------------------------------------------------
 
-def test_constructed_negatives_are_train_only_cross_character_and_labelled_different():
-    pipeline_records = [
-        bd.ManifestRecord(
-            pair_id=f"p{i}", char_id=cid, split="train", provenance="synthetic", pair_type="pipeline",
-            images=[f"ref/{cid}.png", f"scene/{cid}.png"], differences_observed="ok",
-            same_character=True, label=False, failure_reasons=[],
-        )
-        for i, cid in enumerate(["a", "b", "c"])
+def test_constructed_negatives_use_every_natural_target_scene():
+    records = [
+        manifest_record("ref", "story-a:a", "ref/a.png", "scene/a.webp"),
+        manifest_record("target-1", "story-b:b", "ref/b.png", "scene/b-1.webp"),
+        manifest_record("target-2", "story-b:b", "ref/b.png", "scene/b-2.webp"),
     ]
-    made = bd.constructed_records(pipeline_records)
-    assert made
-    for rec in made:
-        assert rec.split == "train" and rec.pair_type == "constructed"
-        assert rec.same_character is False and rec.label is True
-        assert rec.char_id in rec.images[0]          # the reference decides the split owner
-        assert rec.char_id not in rec.images[1]      # the scene came from a different character
+    made = bd.constructed_records(records, {"story-a:a": "story-b:b"})
+    assert [row.images for row in made] == [
+        ["ref/a.png", "scene/b-1.webp"],
+        ["ref/a.png", "scene/b-2.webp"],
+    ]
+    for row in made:
+        assert row.split == "train"
+        assert row.pair_type == "constructed"
+        assert row.same_character is False
+        assert row.label is True
+        assert row.char_id == "story-a:a"
 
 
 def test_constructed_negatives_ignore_val_and_test_records():
-    recs = [
-        bd.ManifestRecord(
-            pair_id=f"p{i}", char_id=cid, split=split, provenance=prov, pair_type="pipeline",
-            images=[f"ref/{cid}.png", f"scene/{cid}.png"], differences_observed="ok",
-            same_character=True, label=False, failure_reasons=[],
-        )
-        for i, (cid, split, prov) in enumerate([("a", "val", "synthetic"), ("b", "test", "donated")])
-    ]
-    assert bd.constructed_records(recs) == []
-
-
-def test_constructed_negatives_never_cross_style_presets():
     records = [
-        bd.ManifestRecord(
-            pair_id=f"p-{char_id}",
-            char_id=char_id,
-            split="train",
-            provenance="synthetic",
-            pair_type="pipeline",
-            images=[f"ref/{char_id}.png", f"scene/{char_id}.webp"],
-            differences_observed="ok",
-            same_character=True,
-            label=False,
-        )
-        for char_id in ("cel-a", "cel-b", "gouache-a")
+        manifest_record("ref", "story-a:a", "ref/a.png", "scene/a.webp", split="val"),
+        manifest_record("target", "story-b:b", "ref/b.png", "scene/b.webp", split="test"),
     ]
+    with pytest.raises(ManifestError, match="natural training records"):
+        bd.constructed_records(records, {"story-a:a": "story-b:b"})
 
-    made = bd.constructed_records(
-        records,
-        {"cel-a": "cel", "cel-b": "cel", "gouache-a": "gouache"},
-    )
 
-    assert len(made) == 1
-    assert made[0].char_id == "cel-a"
-    assert "cel-b" in made[0].images[1]
+def test_constructed_negatives_rejects_missing_reference_or_target():
+    records = [
+        manifest_record("ref", "story-a:a", "ref/a.png", "scene/a.webp"),
+    ]
+    with pytest.raises(ManifestError, match="target character"):
+        bd.constructed_records(records, {"story-a:a": "story-b:b"})
+
+
+def test_build_dataset_requires_hard_negative_matches_when_constructed_enabled():
+    with pytest.raises(ManifestError, match="hard-negative selection is required"):
+        bd.build_dataset(
+            [],
+            out_path=Path("tmp.jsonl"),
+            add_constructed=True,
+            annotation_rows=[],
+            adjudicator_ids=set(),
+            pilot_pair_ids=set(),
+            hard_negative_matches=None,
+        )
+
 
 
 # --- the supabase seam ---------------------------------------------------------------------
@@ -898,3 +917,21 @@ def test_build_dataset_computes_accurate_statistics(tmp_path):
     assert stats["failure_reasons"] == {"wrong_colour": 1}
     assert stats["adjudication_rate"] == 0.5
     assert len(stats["dataset_sha256"]) == 64
+
+
+def test_candidate_report_cli(tmp_path, capsys):
+    data_dir = tmp_path / "corpus"
+    freeze_bundle(data_dir, fixture=True)
+    with (
+        patch("finetune.build_dataset.get_supabase_client", side_effect=RuntimeError("remote not allowed")),
+        patch("finetune.build_dataset.fetch_annotations", side_effect=RuntimeError("remote not allowed")),
+        patch("finetune.build_dataset.freeze_dataset", side_effect=RuntimeError("freeze not allowed")),
+    ):
+        ret = bd.main(["--candidate-report", "--data", str(data_dir)])
+
+    assert ret == 0
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+    assert isinstance(report, list)
+    assert len(report) == 1
+    assert report[0]["reference_char_id"] == "story-freeze:char-freeze"

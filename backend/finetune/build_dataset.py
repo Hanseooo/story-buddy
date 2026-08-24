@@ -8,7 +8,6 @@ every number still looks plausible.
 """
 import argparse
 import hashlib
-import itertools
 import json
 import logging
 import sys
@@ -28,8 +27,8 @@ from finetune.annotation_truth import (
     repair_pair_statuses,
     resolve_annotations,
 )
-from finetune.corpus_io import CorpusError
-from finetune.dataset_selection import lineage_id
+from finetune.corpus_io import CorpusError, load_completed_bundles
+from finetune.dataset_selection import candidate_report, lineage_id
 from finetune.freeze_dataset import FreezeReport, freeze_dataset
 from finetune.manifest import (
     ManifestError,
@@ -192,17 +191,12 @@ def build_records(
 
 
 def constructed_records(
-    records: list[ManifestRecord], styles_by_char: dict[str, str] | None = None
+    records: list[ManifestRecord], matches: dict[str, str]
 ) -> list[ManifestRecord]:
-    """§5.4 step 5 — character A's reference against a scene generated from character B's.
+    """§5.4 step 5 — character A's reference against scenes generated from character B's.
 
     Free, definitely different, and TRAIN ONLY (§3.3): val and test must keep the deployment
-    distribution. Non-train inputs are ignored rather than rejected so the caller can hand over
-    the whole manifest.
-
-    ponytail: one pass over adjacent character pairs, not the full cross product — the cross
-    product of ~33 train characters is thousands of near-duplicate negatives and §5.4 budgets
-    ~450. Upgrade path: if the class balance needs more, widen the `combinations` window.
+    distribution. Uses the manually frozen exact matches mapping.
     """
     train = [r for r in records if r.split == "train" and r.pair_type == "pipeline"]
     by_char: dict[str, list[ManifestRecord]] = defaultdict(list)
@@ -210,23 +204,35 @@ def constructed_records(
         by_char[record.char_id].append(record)
 
     made = []
-    for a, b in itertools.combinations(sorted(by_char), 2):
-        if styles_by_char is not None and styles_by_char.get(a) != styles_by_char.get(b):
-            continue
-        ref = by_char[a][0].images[0]
-        scene = by_char[b][0].images[1]
-        made.append(ManifestRecord(
-            pair_id=mint_pair_id(a, scene),
-            char_id=a,                        # the REFERENCE owns the split (§3.2)
-            split="train",
-            provenance=by_char[a][0].provenance,
-            pair_type="constructed",
-            images=[ref, scene],
-            differences_observed=CONSTRUCTED_RATIONALE,
-            same_character=False,
-            label=True,
-            failure_reasons=[FailureReason.different_face],
-        ))
+    seen_pair_ids: set[str] = set()
+    for ref_char_id, target_char_id in sorted(matches.items()):
+        if ref_char_id not in by_char:
+            raise ManifestError(f"reference character {ref_char_id} has no natural training records")
+        if target_char_id not in by_char:
+            raise ManifestError(f"target character {target_char_id} has no natural training records")
+
+        ref_image = by_char[ref_char_id][0].images[0]
+        provenance = by_char[ref_char_id][0].provenance
+
+        for target_record in by_char[target_char_id]:
+            scene_image = target_record.images[1]
+            pair_id = mint_pair_id(ref_char_id, scene_image)
+            if pair_id in seen_pair_ids:
+                raise ManifestError(f"duplicate constructed pair ID: {pair_id}")
+            seen_pair_ids.add(pair_id)
+
+            made.append(ManifestRecord(
+                pair_id=pair_id,
+                char_id=ref_char_id,  # the REFERENCE owns the split (§3.2)
+                split="train",
+                provenance=provenance,
+                pair_type="constructed",
+                images=[ref_image, scene_image],
+                differences_observed=CONSTRUCTED_RATIONALE,
+                same_character=False,
+                label=True,
+                failure_reasons=[FailureReason.different_face],
+            ))
     return made
 
 
@@ -239,7 +245,7 @@ def build_dataset(
     adjudicator_ids: set[str] | None = None,
     pilot_pair_ids: set[str] | None = None,
     image_root: Path | None = None,
-    styles_by_char: dict[str, str] | None = None,
+    hard_negative_matches: dict[str, str] | None = None,
 ) -> list[ManifestRecord]:
     """The entry point. Reads every annotation once, then writes a validated manifest and stats."""
     out_path = Path(out_path)
@@ -254,7 +260,9 @@ def build_dataset(
             memory, split, provenance, consensus, pilot_pairs, image_root=image_root
         )
     if add_constructed:
-        records += constructed_records(records, styles_by_char)
+        if hard_negative_matches is None:
+            raise ManifestError("hard-negative selection is required")
+        records += constructed_records(records, hard_negative_matches)
 
     write_manifest(out_path, records)     # validates — §3.2's guard is not optional
     log.info("build_dataset: wrote %d records to %s", len(records), out_path)
@@ -306,12 +314,18 @@ def build_dataset(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Reconcile or freeze the Objective-4 judge dataset.")
     mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--candidate-report", action="store_true")
     mode.add_argument("--reconcile-only", action="store_true")
     mode.add_argument("--freeze", action="store_true")
-    parser.add_argument("--data", type=Path, default=Path("data/judge"))
+    parser.add_argument("--data", type=Path, default=Path("data/judge/corpus"))
     parser.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
     try:
+        if args.candidate_report:
+            bundles = load_completed_bundles(args.data)
+            report = candidate_report(bundles)
+            print(json.dumps(report, indent=2))
+            return 0
         if args.reconcile_only:
             statuses, changed = reconcile_remote_status(get_supabase_client())
             print(json.dumps({"changed": changed, "statuses": dict(Counter(statuses.values()))}))
