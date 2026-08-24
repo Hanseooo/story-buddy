@@ -414,7 +414,12 @@ def test_cli_exposes_reconcile_and_freeze_modes(tmp_path):
         assert bd.main(
             ["--freeze", "--data", str(tmp_path / "data"), "--out", str(tmp_path / "frozen")]
         ) == 0
-    freeze.assert_called_once_with(tmp_path / "data", tmp_path / "frozen")
+    freeze.assert_called_once_with(
+        tmp_path / "data",
+        tmp_path / "frozen",
+        donated_intake_path=None,
+        selection_path=None,
+    )
 
 
 # --- polarity ------------------------------------------------------------------------------
@@ -879,11 +884,42 @@ def test_freeze_dataset_revalidates_local_asset_inventory(tmp_path, drift):
         bd.freeze_dataset(data_dir, tmp_path / "freeze")
 
 
-def test_freeze_dataset_rejects_production_style_allocation_drift(tmp_path):
+def test_freeze_dataset_rejects_production_without_controlled_inputs(tmp_path):
     data_dir = tmp_path / "corpus"
     freeze_bundle(data_dir, fixture=False)
-    with pytest.raises(ManifestError, match="style allocation drift"):
+    with pytest.raises(ManifestError, match="production dataset preparation requires"):
         bd.freeze_dataset(data_dir, tmp_path / "freeze")
+
+
+def test_freeze_dataset_cli_passes_controlled_inputs(tmp_path):
+    report = fd.FreezeReport(
+        dataset_sha256="hash123",
+        counts={},
+        adjudication_rate=0.0,
+        exclusions=[],
+        pinned_versions={},
+        selected_donated_stories=["don-001"],
+        excluded_donated_stories=["don-011"],
+        replacement_reasons={"don-001": "withdrawal"},
+        selection_sha256="sel-sha",
+    )
+    with patch("finetune.build_dataset.freeze_dataset", return_value=report) as mock_freeze:
+        ret = bd.main([
+            "--freeze",
+            "--data", str(tmp_path / "corpus"),
+            "--out", str(tmp_path / "freeze"),
+            "--donated-intake", "donated.json",
+            "--selection", "selection.json",
+        ])
+
+    assert ret == 0
+    mock_freeze.assert_called_once_with(
+        tmp_path / "corpus",
+        tmp_path / "freeze",
+        donated_intake_path=Path("donated.json"),
+        selection_path=Path("selection.json"),
+    )
+
 def test_build_dataset_computes_accurate_statistics(tmp_path):
     import json
     out = tmp_path / "manifest.jsonl"

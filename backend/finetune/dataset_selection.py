@@ -281,7 +281,7 @@ def prepare_dataset_bundles(
     synthetic_intake_path: Path = SYNTHETIC_INTAKE,
 ) -> tuple[list[RunBundle], DatasetSelection | None, DatasetSelectionAudit]:
     """Prepare and audit bundles before remote materialization and freeze."""
-    fixture_flags = [bool(b.run_metadata.get("fixture")) for b in bundles]
+    fixture_flags = [b.run_metadata.get("fixture") in (True, "true") for b in bundles]
     if all(fixture_flags):
         return (
             list(bundles),

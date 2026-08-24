@@ -19,6 +19,8 @@ from finetune.corpus_io import (
     load_completed_bundles,
     reconcile_declared_roster,
 )
+from finetune.dataset_selection import prepare_dataset_bundles
+from finetune.manifest import ManifestError
 
 log = logging.getLogger(__name__)
 
@@ -214,10 +216,16 @@ def materialize(bundles: Sequence[RunBundle], supabase: Any, bucket: str = BUCKE
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--data", type=Path, default=DATA_DIR)
+    parser.add_argument("--donated-intake", type=Path, default=None)
+    parser.add_argument("--selection", type=Path, default=None)
     args = parser.parse_args(argv)
     try:
-        summary = _materialize(load_completed_bundles(args.data), get_supabase_client(), BUCKET, args.data)
-    except CorpusError as error:
+        bundles = load_completed_bundles(args.data)
+        selected, _, _ = prepare_dataset_bundles(
+            bundles, args.donated_intake, args.selection
+        )
+        summary = _materialize(selected, get_supabase_client(), BUCKET, args.data)
+    except (CorpusError, ManifestError) as error:
         print(str(error))
         return 1
     print(json.dumps(asdict(summary), sort_keys=True))
