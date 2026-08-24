@@ -13,6 +13,7 @@ import subprocess
 import sys
 from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from decimal import Decimal
 from io import BytesIO
 from typing import Literal
@@ -310,6 +311,7 @@ def _bundle(
     fixture: bool,
     telemetry: Counter | None = None,
     price_per_call: Decimal = Decimal("0.035"),
+    billing_acknowledged_at: str | None = None,
 ) -> RunBundle:
     if memory.story_id != story.story_id:
         raise CorpusError(f"completed story_id differs from intake: {story.story_id}")
@@ -349,6 +351,11 @@ def _bundle(
             "completed_calls": (telemetry or {}).get("completed", 0),
             "failed_calls": (telemetry or {}).get("failed", 0),
             "uncertain_calls": (telemetry or {}).get("uncertain", 0),
+            **(
+                {"billing_acknowledged_at": billing_acknowledged_at}
+                if billing_acknowledged_at is not None
+                else {}
+            ),
         },
         assets=_assets(memory, out_dir),
     )
@@ -378,6 +385,35 @@ def _persisted_telemetry(values: dict, policy: SpendPolicy, source: str) -> Coun
     return telemetry
 
 
+RECOVERABLE_REASONS = {"budget_stopped", "resume_exhausted", "billing_uncertain"}
+
+
+def _validate_recovery(
+    app_graph,
+    story: IntakeRecord,
+    state_entry: dict,
+    resume_quarantined: str | None,
+    acknowledge_uncertain_billing: str | None,
+) -> str | None:
+    reason = state_entry.get("reason_code")
+    if resume_quarantined != story.story_id or reason not in RECOVERABLE_REASONS:
+        raise CorpusError(f"{state_entry['quarantined']} for {story.story_id}")
+    if state_entry.get("intake_sha256") != intake_sha256(story):
+        raise CorpusError(f"intake digest differs for quarantined story: {story.story_id}")
+    if reason == "billing_uncertain" and acknowledge_uncertain_billing != story.story_id:
+        raise CorpusError(f"acknowledge uncertain billing before retry: {story.story_id}")
+    snapshot = app_graph.get_state({"configurable": {"thread_id": story.story_id}})
+    try:
+        StoryMemory.model_validate(snapshot.values)
+    except (AttributeError, ValidationError) as error:
+        raise CorpusError(f"checkpoint is not resumable: {story.story_id}") from error
+    return (
+        datetime.now(timezone.utc).isoformat()
+        if reason == "billing_uncertain"
+        else state_entry.get("billing_acknowledged_at")
+    )
+
+
 def _quarantine(
     state: dict,
     state_path: pathlib.Path,
@@ -404,6 +440,8 @@ def build(
     supabase,
     fixture: bool = False,
     policy: SpendPolicy = SpendPolicy(),
+    resume_quarantined: str | None = None,
+    acknowledge_uncertain_billing: str | None = None,
 ) -> dict:
     """Run only incomplete stories; a completed run is the immutable bundle, never a count."""
     records = [_record(story) for story in stories]
@@ -433,6 +471,7 @@ def build(
         story_id = story.story_id
         state_entry = state.get(story_id)
         expected_reference = {"bundle": f"runs/{story_id}"}
+        billing_acknowledged_at = None
         if state_entry is not None and state_entry != expected_reference:
             if not isinstance(state_entry, dict) or "telemetry" not in state_entry:
                 state[story_id] = {"quarantined": "legacy count-only state; completed bundle required"}
@@ -441,7 +480,18 @@ def build(
                     f"legacy build state quarantined for {story_id}; completed bundle required"
                 )
             if "quarantined" in state_entry:
-                raise CorpusError(f"{state_entry['quarantined']} for {story_id}")
+                if fixture:
+                    raise CorpusError(f"{state_entry['quarantined']} for {story_id}")
+                billing_acknowledged_at = _validate_recovery(
+                    app_graph,
+                    story,
+                    state_entry,
+                    resume_quarantined,
+                    acknowledge_uncertain_billing,
+                )
+                if billing_acknowledged_at is not None:
+                    state_entry["billing_acknowledged_at"] = billing_acknowledged_at
+                    _write_state(state_path, state)
         if story_id in bundles:
             if bundles[story_id].run_metadata.get("intake_sha256") != intake_sha256(story):
                 bundle_telemetry = _persisted_telemetry(
@@ -551,6 +601,7 @@ def build(
                     fixture,
                     story_telemetry,
                     policy.conservative_call_usd,
+                    billing_acknowledged_at=billing_acknowledged_at,
                 )
             except (CorpusError, ValidationError) as error:
                 _quarantine(
@@ -587,9 +638,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--corpus", type=pathlib.Path, default=CORPUS_PATH)
     parser.add_argument("--out", type=pathlib.Path, default=DATA_DIR)
     parser.add_argument("--limit", type=int, default=None, help="run only the first N stories")
+    parser.add_argument("--resume-quarantined", metavar="STORY_ID")
+    parser.add_argument("--acknowledge-uncertain-billing", metavar="STORY_ID")
     args = parser.parse_args(argv)
     if args.fixture and args.price_per_call is not None:
         parser.error("--fixture cannot be combined with --price-per-call")
+    if args.fixture and (
+        args.resume_quarantined is not None or args.acknowledge_uncertain_billing is not None
+    ):
+        parser.error("--fixture cannot be combined with quarantine recovery options")
+    if (
+        args.acknowledge_uncertain_billing is not None
+        and args.acknowledge_uncertain_billing != args.resume_quarantined
+    ):
+        parser.error("--acknowledge-uncertain-billing requires matching --resume-quarantined")
     stories = load_intake(args.corpus)[: args.limit]
     try:
         if args.fixture:
@@ -617,6 +679,8 @@ def main(argv: list[str] | None = None) -> int:
                     args.out,
                     get_supabase_client(),
                     policy=policy,
+                    resume_quarantined=args.resume_quarantined,
+                    acknowledge_uncertain_billing=args.acknowledge_uncertain_billing,
                 )
     except CorpusError as error:
         print(str(error), file=sys.stderr)

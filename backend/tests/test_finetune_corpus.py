@@ -12,6 +12,7 @@ import hashlib
 import json
 from decimal import Decimal
 from io import BytesIO
+from types import SimpleNamespace
 
 import pytest
 from PIL import Image
@@ -126,6 +127,41 @@ class FakeGraph:
                 ],
             )
             yield "values", values
+
+
+class UncertainGraph:
+    def __init__(self):
+        self.calls = 0
+
+    def stream(self, graph_input, config, stream_mode=None):
+        self.calls += 1
+        sink = build_corpus._fal_event_sink.get()
+        sink("attempted")
+        sink("failed_uncertain")
+        raise TimeoutError("provider result unknown")
+        yield
+
+
+class RecoverableGraph(FakeGraph):
+    def __init__(self, story, per_story_images):
+        super().__init__(per_story_images)
+        self.story = story
+
+    def get_state(self, config):
+        return SimpleNamespace(values=build_corpus._initial_state(self.story).model_dump())
+
+    def stream(self, graph_input, config, stream_mode=None):
+        for mode, values in super().stream(graph_input, config, stream_mode):
+            values["characters"] = [
+                Character(
+                    char_id=f"c{i}",
+                    name=name,
+                    description={"is_humanoid": name not in self.story.declared_non_human},
+                    canonical_ref_image=f"story/ref-c{i}-1.png",
+                )
+                for i, name in enumerate(self.story.declared_characters)
+            ]
+            yield mode, values
 
 
 class FakeStorage:
@@ -309,18 +345,6 @@ def test_campaign_persists_failed_call_spend_before_restart(tmp_path, stories):
 
 
 def test_uncertain_billing_quarantines_and_stops_without_retry(tmp_path):
-    class UncertainGraph:
-        def __init__(self):
-            self.calls = 0
-
-        def stream(self, graph_input, config, stream_mode=None):
-            self.calls += 1
-            sink = build_corpus._fal_event_sink.get()
-            sink("attempted")
-            sink("failed_uncertain")
-            raise TimeoutError("provider result unknown")
-            yield
-
     graph = UncertainGraph()
     with pytest.raises(CorpusError, match="billing uncertain"):
         build_corpus.build([intake_story()], graph, out_dir=tmp_path, supabase=FakeSupabase())
@@ -333,6 +357,104 @@ def test_uncertain_billing_quarantines_and_stops_without_retry(tmp_path):
         "failed": 0,
         "uncertain": 1,
     }
+
+
+def test_budget_stop_requires_explicit_resume_and_preserves_telemetry(tmp_path, stories):
+    smoke = build_corpus.SpendPolicy(max_usd=Decimal("0.07"))
+    build_corpus.build(
+        stories[:1], FakeGraph(3), out_dir=tmp_path, supabase=FakeSupabase(), policy=smoke
+    )
+
+    resumed = RecoverableGraph(stories[0], per_story_images=1)
+    summary = build_corpus.build(
+        stories[:1],
+        resumed,
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        resume_quarantined="a",
+    )
+    [bundle] = load_completed_bundles(tmp_path)
+
+    assert summary["stories_run"] == 1
+    assert bundle.run_metadata["attempted_calls"] == 3
+    assert bundle.run_metadata["completed_calls"] == 3
+
+
+def test_uncertain_billing_requires_matching_acknowledgment(tmp_path):
+    story = intake_story()
+    with pytest.raises(CorpusError, match="billing uncertain"):
+        build_corpus.build(
+            [story], UncertainGraph(), out_dir=tmp_path, supabase=FakeSupabase()
+        )
+
+    resumed = RecoverableGraph(story, per_story_images=1)
+    with pytest.raises(CorpusError, match="acknowledge uncertain billing"):
+        build_corpus.build(
+            [story],
+            resumed,
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+            resume_quarantined=story.story_id,
+        )
+    assert resumed.calls == []
+
+
+def test_uncertain_billing_acknowledgment_never_reduces_spend(tmp_path):
+    story = intake_story()
+    with pytest.raises(CorpusError):
+        build_corpus.build(
+            [story], UncertainGraph(), out_dir=tmp_path, supabase=FakeSupabase()
+        )
+
+    build_corpus.build(
+        [story],
+        RecoverableGraph(story, per_story_images=1),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        resume_quarantined=story.story_id,
+        acknowledge_uncertain_billing=story.story_id,
+    )
+    [bundle] = load_completed_bundles(tmp_path)
+
+    assert bundle.run_metadata["attempted_calls"] == 2
+    assert bundle.run_metadata["uncertain_calls"] == 1
+    assert "billing_acknowledged_at" in bundle.run_metadata
+
+
+@pytest.mark.parametrize(
+    ("reason_code", "include_digest", "resume_id"),
+    [
+        ("invalid_terminal", True, "fixture-story"),
+        ("intake_mismatch", True, "fixture-story"),
+        ("budget_stopped", False, "fixture-story"),
+        ("budget_stopped", True, "different-story"),
+    ],
+)
+def test_nonrecoverable_or_unbound_quarantine_cannot_resume(
+    tmp_path, reason_code, include_digest, resume_id
+):
+    story = intake_story()
+    entry = {
+        "quarantined": reason_code.replace("_", " "),
+        "reason_code": reason_code,
+        "conservative_call_usd": "0.035",
+        "telemetry": {"attempted": 1, "completed": 1, "failed": 0, "uncertain": 0},
+    }
+    if include_digest:
+        entry["intake_sha256"] = intake_sha256(story)
+    (tmp_path / "build_state.json").write_text(
+        json.dumps({story.story_id: entry}), encoding="utf-8"
+    )
+
+    with pytest.raises(CorpusError):
+        build_corpus.build(
+            [story],
+            RecoverableGraph(story, per_story_images=1),
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+            resume_quarantined=resume_id,
+        )
+    assert load_completed_bundles(tmp_path) == []
 
 
 def test_cli_reports_the_uncertain_billing_reconciliation_action(monkeypatch, capsys, tmp_path):
@@ -610,3 +732,21 @@ def test_build_quarantines_a_completion_with_extra_non_human_occurrences(tmp_pat
             out_dir=tmp_path,
             supabase=FakeSupabase(),
         )
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--fixture", "--resume-quarantined", "fixture-story"],
+        ["--acknowledge-uncertain-billing", "fixture-story"],
+        [
+            "--resume-quarantined",
+            "fixture-story",
+            "--acknowledge-uncertain-billing",
+            "different-story",
+        ],
+    ],
+)
+def test_cli_rejects_unsafe_recovery_combinations(argv):
+    with pytest.raises(SystemExit):
+        build_corpus.main(argv)
