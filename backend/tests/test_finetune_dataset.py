@@ -733,10 +733,55 @@ def test_freeze_dataset_writes_complete_immutable_artifacts_from_annotation_trut
         "test.json",
         "dataset_info.json",
         "freeze_report.json",
+        "manifest.train.jsonl",
+        "manifest.val.jsonl",
+        "manifest.test.jsonl",
+        "annotation_agreement.jsonl",
+        "character_slices.json",
     } <= {path.name for path in out_dir.iterdir()}
     assert json.loads((out_dir / "freeze_report.json").read_text(encoding="utf-8")) == first.model_dump(
         mode="json"
     )
+
+
+def test_freeze_writes_hashed_evaluation_projections_without_identity_fields(tmp_path):
+    data_dir = tmp_path / "corpus"
+    bundle = freeze_bundle(data_dir)
+    pair_id = bd.pairs_from_memory(bundle.memory)[0].pair_id
+    annotations = rows(
+        pair_id,
+        {"same_character": True},
+        {"same_character": False},
+        {"same_character": True, "annotator_id": "adjudicator"},
+    )
+    out_dir = tmp_path / "freeze"
+
+    with (
+        patch.object(fd, "fetch_annotations", return_value=annotations),
+        patch.object(fd, "fetch_adjudicator_ids", return_value={"adjudicator"}),
+        patch.object(fd, "fetch_pilot_pairs", return_value=set()),
+    ):
+        report = fd.freeze_dataset(data_dir, out_dir)
+
+    combined = (out_dir / "manifest.jsonl").read_bytes()
+    assert (out_dir / "manifest.train.jsonl").read_bytes() == combined
+    assert (out_dir / "manifest.val.jsonl").read_bytes() == b""
+    assert (out_dir / "manifest.test.jsonl").read_bytes() == b""
+    agreement = [json.loads(line) for line in (out_dir / "annotation_agreement.jsonl").read_text().splitlines()]
+    assert agreement == [{"pair_id": pair_id, "labels": [True, False]}]
+    assert "annotator_id" not in (out_dir / "annotation_agreement.jsonl").read_text()
+    assert json.loads((out_dir / "character_slices.json").read_text()) == {
+        "story-freeze:char-freeze": "human"
+    }
+    for name in (
+        "manifest.train.jsonl",
+        "manifest.val.jsonl",
+        "manifest.test.jsonl",
+        "annotation_agreement.jsonl",
+        "character_slices.json",
+    ):
+        assert report.artifact_sha256[name] == hashlib.sha256((out_dir / name).read_bytes()).hexdigest()
+
 
 
 def test_freeze_dataset_rejects_bundle_without_declared_roster(tmp_path):

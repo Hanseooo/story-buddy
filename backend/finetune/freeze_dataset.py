@@ -48,6 +48,7 @@ class FreezeReport(BaseModel):
     excluded_donated_stories: list[str] = Field(default_factory=list)
     replacement_reasons: dict[str, str] = Field(default_factory=dict)
     selection_sha256: str | None = None
+    artifact_sha256: dict[str, str] = Field(default_factory=dict)
 
 
 def _pinned_versions(bundles: list[RunBundle]) -> dict[str, str]:
@@ -145,6 +146,73 @@ def _same_directory(left: Path, right: Path) -> bool:
     )
 
 
+EVALUATION_ARTIFACTS = (
+    "manifest.train.jsonl",
+    "manifest.val.jsonl",
+    "manifest.test.jsonl",
+    "annotation_agreement.jsonl",
+    "character_slices.json",
+)
+
+
+def _write_evaluation_artifacts(
+    staged: Path,
+    records: list[ManifestRecord],
+    bundles: list[RunBundle],
+    annotations: list[dict],
+    adjudicator_ids: set[str],
+    ignored_pair_ids: set[str],
+) -> dict[str, str]:
+    from finetune.build_dataset import lineage_id
+    from finetune.manifest import write_manifest
+
+    for split in ("train", "val", "test"):
+        write_manifest(staged / f"manifest.{split}.jsonl", [r for r in records if r.split == split])
+    projected = b"".join((staged / f"manifest.{split}.jsonl").read_bytes() for split in ("train", "val", "test"))
+    if projected != (staged / "manifest.jsonl").read_bytes():
+        raise ManifestError("split manifest projections differ from combined manifest order")
+
+    rows_by_pair: dict[str, list[dict]] = {}
+    for row in annotations:
+        if row["pair_id"] not in ignored_pair_ids:
+            rows_by_pair.setdefault(row["pair_id"], []).append(row)
+    agreement = []
+    for record in records:
+        if record.pair_type != "pipeline":
+            continue
+        ordinary = [
+            row for row in rows_by_pair.get(record.pair_id, [])
+            if row.get("annotator_id") not in adjudicator_ids
+        ]
+        if len(ordinary) != 2:
+            raise ManifestError(f"{record.pair_id}: agreement evidence requires two ordinary labels")
+        agreement.append({"pair_id": record.pair_id, "labels": [bool(row["same_character"]) for row in ordinary]})
+    (staged / "annotation_agreement.jsonl").write_text(
+        "".join(json.dumps(row, sort_keys=True) + "\n" for row in agreement), encoding="utf-8"
+    )
+
+    manifest_chars = {record.char_id for record in records}
+    slices = {}
+    for bundle in bundles:
+        non_human = {name.casefold() for name in bundle.declared_non_human or []}
+        for character in bundle.memory.characters:
+            qid = lineage_id(bundle.memory.story_id, character.char_id)
+            if qid in manifest_chars:
+                slices[qid] = (
+                    "non_human" if character.name.casefold() in non_human else "human"
+                )
+    if set(slices) != manifest_chars:
+        raise ManifestError("character slice keys differ from manifest characters")
+    (staged / "character_slices.json").write_text(
+        json.dumps(dict(sorted(slices.items())), indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+    return {
+        name: hashlib.sha256((staged / name).read_bytes()).hexdigest()
+        for name in EVALUATION_ARTIFACTS
+    }
+
+
 def freeze_dataset(
     data_dir: Path,
     out_dir: Path,
@@ -224,6 +292,14 @@ def freeze_dataset(
             hard_negative_matches=matches,
         )
         write_dataset(records, staged)
+        artifact_hashes = _write_evaluation_artifacts(
+            staged,
+            records,
+            selected_bundles,
+            relevant_annotations,
+            adjudicators,
+            ignored_pairs,
+        )
         consensus = resolve_annotations(relevant_annotations, adjudicators, ignored_pairs)
         report = FreezeReport(
             dataset_sha256=hashlib.sha256((staged / "manifest.jsonl").read_bytes()).hexdigest(),
@@ -235,6 +311,7 @@ def freeze_dataset(
             excluded_donated_stories=audit.excluded_donated_stories,
             replacement_reasons=audit.replacement_reasons,
             selection_sha256=audit.selection_sha256,
+            artifact_sha256=artifact_hashes,
         )
         (staged / "freeze_report.json").write_text(
             json.dumps(report.model_dump(mode="json"), indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -245,3 +322,4 @@ def freeze_dataset(
         else:
             staged.replace(out_dir)
     return report
+
