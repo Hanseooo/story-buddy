@@ -32,11 +32,12 @@ paid draw or upload; and cumulative Fal spend cannot exceed USD 30.
 |---|---|---|
 | Identity/consent ledger | Ethics-approved restricted store, outside StoryBuddy | Contact record ↔ random receipt code; consent/assent evidence |
 | Story intake | Checked-in synthetic JSON or de-identified controlled donated JSON | Opaque `story_id`, text, declared roster, provenance/split/role, frozen style, and donated-only approvals |
-| Corpus run | `data/judge/` (gitignored) | Completed `StoryMemory`, split/provenance, run metadata, telemetry and asset hashes |
+| Dataset selection | `data/judge/intake/dataset_selection.json` (gitignored) | Outcome-blind hard-negative matches, approved donated replacements and selection hash input |
+| Corpus run | `data/judge/corpus/` (gitignored) | Completed `StoryMemory`, split/provenance, run metadata, telemetry and asset hashes |
 | Research assets | Private Supabase Storage | PNG canonical references and WebP q≈82 scenes per ADR-027 |
 | Pair queue | `research_pairs` | Opaque deterministic pair ID and two private Storage paths; no provenance exposed to annotators |
 | Labels | `annotations` | Two independent ordinary labels and adjudicator label only on disagreement |
-| Frozen dataset | `data/judge/` plus controlled snapshot | Manifest, split files, statistics, hashes, exclusions and pinned run configuration |
+| Frozen dataset | `data/judge/freezes/<freeze-id>/` plus controlled snapshot | Manifest, split files, statistics, hashes, exclusions and pinned run configuration |
 
 ## 4. End-to-end flow
 
@@ -89,9 +90,9 @@ response to generated quality or judge behavior.
 The 15 donated candidates are assigned five per style before generation. The 10 primary slots are allocated
 4 Gouache, 3 Cel and 3 Cut-paper; the five backups are 1 Gouache, 2 Cel and 2 Cut-paper. Gouache receives the
 extra primary slot because it is the product default (ADR-042), not because of generated outcomes.
-A replacement fills the same style slot when an eligible backup exists. If it cannot, report the achieved
-imbalance; do not restyle an already generated character or select by outcome. If all backups are admitted to
-increase held-out power before labeling, the resulting 15-story candidate set is 5/5/5.
+A replacement fills the same style slot when an eligible backup exists. If no same-style backup is eligible,
+the freeze stops; it does not restyle a character, admit all backups, change the registered 4/3/3 allocation
+or select by outcome.
 
 Constructed negatives must match `style_preset_id`. Overall held-out performance remains primary. Per-style
 metrics are pre-declared exploratory diagnostics because the held-out character count is too small for strong
@@ -160,10 +161,54 @@ export derives truth from annotation rows and a reconciliation command repairs s
 
 ### 4.6 Freeze and conversion
 
-One export command loads completed memories, derives consensus, creates train-only constructed negatives,
-runs manifest guards, verifies every local asset hash and produces a self-contained LLaMA-Factory directory
-containing the exact verified image bytes. Manifest image paths resolve inside that immutable directory. It
-fails on:
+Before annotation, a read-only candidate-report mode lists every synthetic training character, its canonical
+reference path and all same-species, same-style candidate characters. It reads completed corpus bundles only;
+it does not contact Supabase, create labels or inspect judge outcomes. A researcher compares canonical
+references using dominant colour, body configuration, silhouette, clothing/accessories and facial structure,
+then records exactly one visually closest target for each training reference in the controlled selection
+file. Dataset construction pairs that reference with every natural training scene belonging to the selected
+target. The selection is therefore one manual decision per character lineage rather than one decision per
+constructed image pair.
+
+The controlled selection file has this strict shape; all identifiers are opaque and `evidence_ref` points to
+the restricted study record rather than containing identity, consent or withdrawal evidence:
+
+```json
+{
+  "hard_negatives_frozen_at": "2026-08-24T10:00:00+08:00",
+  "hard_negative_matches": [
+    {"reference_char_id": "syn-001:c0", "target_char_id": "syn-007:c0"}
+  ],
+  "donated_replacements": [
+    {
+      "primary_story_id": "don-001",
+      "backup_story_id": "don-011",
+      "reason": "withdrawal",
+      "approved_at": "2026-08-25T10:00:00+08:00",
+      "evidence_ref": "restricted-record-017"
+    }
+  ]
+}
+```
+
+Replacement reasons are closed to `withdrawal`, `deidentification_failure`,
+`terminal_pipeline_failure` and `inadequate_character_yield`. The default held-out membership is the ten
+preselected primaries. A listed backup replaces one primary only, must preserve its style slot, cannot be
+reused and requires a completed approval timestamp plus a nonblank opaque evidence reference. The hard-negative
+mapping becomes immutable at `hard_negatives_frozen_at`, before non-pilot annotation; later donated withdrawals
+may append a replacement without reopening that mapping. The resulting held-out set remains exactly ten stories
+with the frozen 4 Gouache / 3 Cel / 3 Cut-paper allocation.
+
+Generation intake rejects withdrawn donated records. Freeze-audit intake accepts them only so a completed
+bundle can be located and excluded. The immutable intake digest deliberately excludes `withdrawal_state`, so
+freeze can both prove that every other intake field is unchanged and honor the current withdrawal state.
+Withdrawn and unselected backup bundles, their assets, labels and records are excluded before materialization.
+
+One export command loads completed memories, the current donated intake and the controlled selection file;
+derives consensus; creates train-only constructed negatives; runs manifest guards; verifies every local asset
+hash; and produces a self-contained LLaMA-Factory directory containing the exact verified image bytes.
+Production freeze requires both controlled inputs. Fixture freeze may omit them. Manifest image paths resolve
+inside that immutable directory. It fails on:
 
 - missing, duplicate or excess ordinary labels;
 - unresolved, unnecessary or multiple adjudications;
@@ -174,6 +219,12 @@ fails on:
 - absent/unknown style IDs, reference/scene style disagreement, allocation drift or a constructed negative
   whose two characters have different styles;
 - unresolved declared-roster versus `StoryMemory.characters` reconciliation.
+- a missing, future-dated or post-annotation hard-negative freeze timestamp;
+- a missing or changed intake digest, or a withdrawn story that remains selected;
+- donated role drift, backup reuse, cross-style replacement, unknown replacement reason, invalid approval time
+  or missing evidence;
+- a hard-negative mapping that is missing, duplicated, self-paired, outside synthetic training, different in
+  species or style, or points to a character with no natural training scene.
 
 Because production `StoryMemory.char_id` values are story-local (`c0`, `c1`, …), export qualifies the
 manifest lineage key as `<opaque story_id>:<char_id>` before corpus-wide split and style checks.
@@ -183,8 +234,9 @@ pilot pairs are the only external exclusions. The freeze rejects unknown exclusi
 excluded pair IDs.
 
 The freeze report records dataset SHA-256, counts by story/character/split/class/reason, adjudication rate,
-exclusions and all pinned software/model/prompt versions. A constructed negative belongs to the story that
-owns its reference character for story-level counts.
+selected and excluded donated stories, replacement reasons, the selection-file SHA-256, exclusions and all
+pinned software/model/prompt versions. A constructed negative belongs to the story that owns its reference
+character for story-level counts.
 
 ## 5. Encoding and storage
 
@@ -247,6 +299,15 @@ controlled rerun. Deployment remains a separate decision and is not required for
 9. Evaluation: frozen baselines and one-time donated test; report uncertainty by character cluster.
 
 No phase advances while its gate is unresolved.
+
+The canonical working corpus is `data/judge/corpus/`; controlled de-identified inputs are under
+`data/judge/intake/`; and immutable exports are written to a new `data/judge/freezes/<freeze-id>/` directory.
+Training and evaluation consume only one named freeze directory, never the mutable corpus tree. Split values
+are assigned in intake before generation and propagated into the manifest; there is no post-generation random
+80/10/10 split. The frozen preregistration's earlier seeded-assignment wording requires a dated amendment
+before real dataset construction. The same amendment records that freeze now stops when a vacated primary has
+no eligible same-style backup, superseding the earlier instruction to report an imbalanced held-out set. It
+preserves both superseded passages and states that no held-out result was seen.
 
 ## 10. Stop conditions and residual risks
 

@@ -229,14 +229,16 @@ training-target/production-schema round-trip already requires. If a model wrote 
 ```
 backend/finetune/
   corpus_synthetic.json  # 30 strict JSON records: 24 train + 6 val, 10 stories/style; checked in
-  build_corpus.py        # corpus_synthetic.json -> paid fal draws -> data/judge/. Spend-capped.
+  build_corpus.py        # corpus_synthetic.json -> paid fal draws -> data/judge/corpus/. Spend-capped.
   manifest.py            # Pydantic record above + the guards (CI-tested) + `local_image_path`
   build_dataset.py       # pipeline output + the `annotations` table -> manifest.jsonl
   to_llamafactory.py     # manifest.jsonl -> sharegpt JSON + dataset_info.json
   train_qlora.yaml       # the training config (§6.3)
   evaluate.py            # the four baselines (§7)
-data/judge/              # gitignored — images + manifest.jsonl live here
-  ref/    scene/    manifest.jsonl    build_state.json
+data/judge/              # gitignored
+  intake/                # controlled donated input + dataset selection
+  corpus/                # mutable run bundles, assets, quarantine and build state
+  freezes/<freeze-id>/   # immutable manifest, split JSON, verified assets and freeze report
 ```
 
 The input is a JSON list, not a Python list edited into `build_corpus.py`. Every record declares `story_id`,
@@ -256,12 +258,12 @@ rosters must reconcile before any pair is materialized.
 > `true` for *same*, so the manuscript's positive class is `label = not same_character` — converted once, in
 > `build_dataset.py`, and nowhere else.
 
-**One naming rule, in one place — `manifest.local_image_path`.** `build_corpus` writes each image to
-`data/judge/{kind}/{storage_path with / → _}`; the manifest's `images` must carry **that** on-disk name, not
-the Storage path, because LLaMA-Factory resolves `images` against the filesystem and **reports nothing useful
-when a path is wrong — it trains on what it managed to load.** Both sides import the rule; neither
-re-implements it. (Built 2026-08-14 by two agents that disagreed on exactly this and produced a manifest
-pointing at files that did not exist. The shared function and its test are what closed it.)
+**One naming rule, in one place — `manifest.local_image_path`.** The immutable freeze copies verified bytes
+under `assets/{kind}/{storage_path with / → _}`; the manifest's `images` must carry **that** freeze-relative
+name, not the Storage path, because LLaMA-Factory resolves `images` against the dataset directory and
+**reports nothing useful when a path is wrong — it trains on what it managed to load.** Both sides import
+the rule; neither re-implements it. (Built 2026-08-14 by two agents that disagreed on exactly this and
+produced a manifest pointing at files that did not exist. The shared function and its test are what closed it.)
 
 The manifest is the source of truth. The LLaMA-Factory JSON is a **build artifact** — regenerate it, never
 edit it. That is why `char_id` and `split` live in the manifest and not in the training file: they are
@@ -273,6 +275,13 @@ The live corpus allocation, encoding, spend limits, source order, and stop condi
 [`research-corpus-operations.md`](research-corpus-operations.md). Synthetic stories supply train and
 validation, consented donated stories supply held-out test only, and character lineage never crosses a
 split. Do not derive operational counts or costs from examples in this judge-training spec.
+
+Constructed negatives use the outcome-blind manual selection protocol in `research-corpus-operations.md`
+§4.6. Before annotation, a researcher selects the visually closest valid same-species, same-style target
+character for each synthetic training reference using §3.1's five visual dimensions. Dataset construction
+then pairs that reference with every natural training scene belonging to the selected target. The controlled
+selection file and its hash are frozen with the dataset; an unmapped or ineligible training character is a
+hard failure, not an automatic fallback to an easier negative.
 
 > **Reuse the labelling instrument for step 3.** The same interface that shows a human a reference and a scene
 > and asks "same character?" produces both the human reference labels and the training labels. One instrument,
@@ -345,7 +354,7 @@ and the one thing that will silently corrupt a run:
 [{"conversations": [
     {"from": "human",  "value": "<image><image>Identify the differences that correspond to the allowed failure taxonomy. Then output the required JSON object."},
     {"from": "gpt",    "value": "{\"differences_observed\": \"...\", \"same_character\": false, \"failure_reasons\": [\"wrong_clothing\"]}"}],
-  "images": ["data/judge/ref/quill_007.png", "data/judge/scene/quill_007_s03_a1.png"]}]
+  "images": ["assets/ref/quill_007.png", "assets/scene/quill_007_s03_a1.png"]}]
 ```
 
 The `gpt` turn is the verdict **serialized exactly as the Pydantic schema serializes it**. Import the schema;

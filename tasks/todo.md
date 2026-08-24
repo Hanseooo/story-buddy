@@ -8,6 +8,13 @@
 - [x] Write and self-review the disposable TDD implementation plan for Batch 1.
 - [x] Execute and verify Batch 1 in a separate implementation cycle.
 - [ ] Design and implement Batch 2 dataset-validity safeguards.
+  - [x] Revalidate hard-negative, withdrawal, role, split and path blockers against current HEAD.
+  - [x] Approve the full canonical-dataset boundary and manual frozen hard-negative mapping.
+  - [x] Approve the controlled selection artifact, fail-closed validation and canonical path flow.
+  - [x] Record and self-review the Batch 2 design in the owning research specs.
+  - [ ] Obtain owner review of the written Batch 2 spec.
+  - [ ] Write the disposable TDD implementation plan.
+  - [ ] Implement and verify Batch 2.
 - [ ] Design and implement Batch 3 training/evaluation execution.
 - [ ] Finalize the existing research runbook as the sole operator guide.
 
