@@ -13,6 +13,7 @@ from finetune.corpus_io import (
     CorpusError,
     IntakeRecord,
     RunBundle,
+    intake_sha256,
     load_completed_bundles,
     load_intake,
     write_bundle,
@@ -62,6 +63,15 @@ def donated_record(**changes):
     }
     record.update(changes)
     return record
+
+
+def test_intake_sha256_is_stable_and_excludes_only_withdrawal_state():
+    active = IntakeRecord.model_validate(donated_record())
+    withdrawn = active.model_copy(update={"withdrawal_state": "withdrawn"})
+
+    assert intake_sha256(active) == intake_sha256(withdrawn)
+    assert intake_sha256(active) != intake_sha256(active.model_copy(update={"text": "Changed"}))
+    assert len(intake_sha256(active)) == 64
 
 
 def write_intake(tmp_path, records):

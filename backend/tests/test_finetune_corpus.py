@@ -21,7 +21,7 @@ from app.config import MAX_STORY_WORDS, MIN_STORY_WORDS, STYLE_PRESETS
 from app.length import clamp_story, word_count
 from contracts.story_memory import Character, Cost, Scene
 from finetune import build_corpus
-from finetune.corpus_io import CorpusError, IntakeRecord, load_completed_bundles
+from finetune.corpus_io import CorpusError, IntakeRecord, intake_sha256, load_completed_bundles
 
 
 # --------------------------------------------------------------------------- corpus data
@@ -419,6 +419,23 @@ def test_fixture_build_writes_a_complete_zero_cost_bundle_without_external_calls
     assert first["images_spent"] == second["images_spent"] == 0
     assert Decimal(first["usd_high"]) == Decimal(second["usd_high"]) == 0
     assert second["stories_skipped"] == 1
+    assert bundle.run_metadata["intake_sha256"] == intake_sha256(intake_story())
+
+
+def test_completed_bundle_rejects_changed_immutable_intake(tmp_path):
+    story = intake_story()
+    build_corpus.build(
+        [story], FakeGraph(1), out_dir=tmp_path, supabase=FakeSupabase(), fixture=True
+    )
+
+    with pytest.raises(CorpusError, match="intake digest differs"):
+        build_corpus.build(
+            [story.model_copy(update={"text": "Changed redacted text."})],
+            FakeGraph(1),
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+            fixture=True,
+        )
 
 
 def test_fixture_inventory_matches_the_exact_emitted_image_bytes(tmp_path):

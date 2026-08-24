@@ -36,6 +36,7 @@ from finetune.corpus_io import (
     CorpusError,
     IntakeRecord,
     RunBundle,
+    intake_sha256,
     load_completed_bundles,
     load_intake,
     reconcile_declared_roster,
@@ -310,6 +311,7 @@ def _bundle(
         run_metadata={
             "code_commit": _code_commit(),
             "schema_version": memory.schema_version,
+            "intake_sha256": intake_sha256(story),
             "style_preset_id": story.style_preset_id,
             "text_model": settings.text_model,
             "image_model": settings.fal_image_model,
@@ -408,6 +410,8 @@ def build(
             if "quarantined" in state_entry:
                 raise CorpusError(f"{state_entry['quarantined']} for {story_id}")
         if story_id in bundles:
+            if bundles[story_id].run_metadata.get("intake_sha256") != intake_sha256(story):
+                raise CorpusError(f"intake digest differs for completed bundle: {story_id}")
             _verify_bundle_assets(bundles[story_id], out_dir)
             if state_entry != expected_reference:
                 state[story_id] = expected_reference

@@ -1,4 +1,5 @@
 """Validation for de-identified Objective-4 story intake (research-corpus-operations §4.1)."""
+import hashlib
 import json
 from collections import Counter
 from datetime import datetime, timezone
@@ -195,6 +196,31 @@ class IntakeRecord(BaseModel):
         if self.selection_frozen_at.tzinfo is None or self.selection_frozen_at > datetime.now(timezone.utc):
             raise ValueError("selection_frozen_at must be a completed timestamp")
         return self
+
+
+IMMUTABLE_INTAKE_FIELDS = {
+    "story_id",
+    "text",
+    "declared_characters",
+    "declared_non_human",
+    "provenance",
+    "split",
+    "candidate_role",
+    "style_preset_id",
+    "guardian_consent",
+    "child_assent",
+    "manual_pii_redaction",
+    "independent_redaction_review",
+    "selection_frozen_at",
+}
+
+
+def intake_sha256(record: IntakeRecord) -> str:
+    payload = record.model_dump(mode="json", include=IMMUTABLE_INTAKE_FIELDS)
+    canonical = json.dumps(
+        payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
 
 
 def load_intake(path: Path) -> list[IntakeRecord]:
