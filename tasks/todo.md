@@ -1096,8 +1096,8 @@ checks pass without paid calls, real donor data, held-out evaluation, or live re
 - [x] Confirm the Batch 3 scope boundary with the owner.
 - [x] Present minimal implementation approaches and recommend one.
 - [x] Write and self-review the approved durable Batch 3 design in the owning spec.
-- [ ] Obtain owner approval of the written design.
-- [ ] Write and self-review the disposable TDD implementation plan under `docs/specs/plans/`.
+- [x] Obtain owner approval of the written design.
+- [x] Write and self-review the disposable TDD implementation plan under `docs/specs/plans/`.
 
 ## Success criteria
 
@@ -1106,3 +1106,10 @@ selects checkpoints and thresholds on validation only, implements every preregis
 new backend dependency, makes held-out access auditable and fail-closed, and gives operators exact dry-run,
 training, selection, and one-time evaluation commands. Planning must not train a model, call a provider,
 read real `test.json`, or mutate live research infrastructure.
+
+## Planning outcome
+
+- Written plan: `docs/specs/plans/2026-08-25-objective-4-training-evaluation.md`.
+- Eight independently reviewable TDD tasks cover freeze evidence, pinned three-seed training, standard-library metrics, provider metadata, validation selection, held-out access, reporting, and operator closure.
+- Self-review reconciled the model-serving boundary with a generated checkpoint inventory/vLLM command, kept Gemma on the evaluation-only OpenRouter route, required spend-alarm confirmation and a separate evaluation-lock sign-off, and preserved the production `providers.judge()` contract.
+- Planning performed no training, provider calls, dataset reads, held-out access, live research mutations, or dependency installation.
