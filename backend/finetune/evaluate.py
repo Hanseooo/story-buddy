@@ -11,8 +11,10 @@ already that class; it is read, never re-derived (`build_dataset.py` owns the in
 import hashlib
 import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Literal, Sequence
+
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -480,6 +482,240 @@ def validate_offline(
     return write_evaluation_lock(out_path, lock_payload)
 
 
+class HeldOutLedgerEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    run_id: str
+    timestamp: str
+    approver: str
+    purpose: str
+    status: Literal["reserved", "running", "completed", "failed"]
+    lock_sha256: str
+    manifest_test_sha256: str
+    error: str | None = None
+    predictions_written: list[str] = Field(default_factory=list)
+
+
+class HeldOutLedger(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    entries: list[HeldOutLedgerEntry] = Field(default_factory=list)
+
+
+def _read_ledger(path: Path) -> HeldOutLedger:
+    path = Path(path)
+    if not path.exists():
+        return HeldOutLedger(entries=[])
+    return HeldOutLedger.model_validate(json.loads(path.read_text(encoding="utf-8")))
+
+
+def _write_ledger(path: Path, ledger: HeldOutLedger) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(ledger.model_dump(mode="json"), indent=2, sort_keys=True) + "\n"
+    tmp_path = path.with_suffix(f".tmp.{path.name}")
+    try:
+        tmp_path.write_text(text, encoding="utf-8")
+        tmp_path.replace(path)
+    except Exception:
+        if tmp_path.exists():
+            tmp_path.unlink()
+        raise
+
+
+def reserve_test_read(
+    ledger_path: Path,
+    lock_path: Path,
+    freeze_dir: Path,
+    *,
+    run_id: str,
+    approver: str,
+    purpose: str,
+) -> dict:
+    lock_path = Path(lock_path)
+    if not lock_path.exists():
+        raise ManifestError(f"evaluation lock missing at {lock_path}")
+    lock_dict = json.loads(lock_path.read_text(encoding="utf-8"))
+    EvaluationLock.model_validate(lock_dict)
+
+    freeze_dir = Path(freeze_dir)
+    test_mf = freeze_dir / "manifest.test.jsonl"
+    if not test_mf.exists():
+        raise ManifestError(f"manifest.test.jsonl missing at {test_mf}")
+
+    lock_sha = hashlib.sha256(lock_path.read_bytes()).hexdigest()
+    test_mf_sha = hashlib.sha256(test_mf.read_bytes()).hexdigest()
+
+    ledger = _read_ledger(ledger_path)
+    for entry in ledger.entries:
+        if entry.status in ("reserved", "running", "completed"):
+            if entry.run_id != run_id:
+                raise ManifestError(
+                    f"held-out test split has already been accessed (run {entry.run_id} status {entry.status})"
+                )
+            if entry.status == "completed":
+                raise ManifestError(f"run {run_id} already completed")
+            return entry.model_dump(mode="json")
+
+    entry = HeldOutLedgerEntry(
+        run_id=run_id,
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        approver=approver,
+        purpose=purpose,
+        status="reserved",
+        lock_sha256=lock_sha,
+        manifest_test_sha256=test_mf_sha,
+    )
+    ledger.entries.append(entry)
+    _write_ledger(ledger_path, ledger)
+    return entry.model_dump(mode="json")
+
+
+def record_test_result(
+    ledger_path: Path,
+    *,
+    run_id: str,
+    status: Literal["running", "completed", "failed"],
+    error: str | None = None,
+    predictions_written: list[str] | None = None,
+) -> dict:
+    ledger = _read_ledger(ledger_path)
+    target = None
+    for entry in ledger.entries:
+        if entry.run_id == run_id:
+            target = entry
+            break
+    if target is None:
+        raise ManifestError(f"run_id {run_id} not found in ledger")
+
+    target.status = status
+    if error is not None:
+        target.error = error
+    if predictions_written is not None:
+        target.predictions_written = sorted(set(target.predictions_written + predictions_written))
+
+    _write_ledger(ledger_path, ledger)
+    return target.model_dump(mode="json")
+
+
+def run_heldout(
+    freeze_dir: Path,
+    lock_path: Path,
+    ledger_path: Path,
+    *,
+    run_id: str,
+    approver: str,
+    purpose: str,
+    predictions_dir: Path,
+    predict_fn: Callable[[str, ManifestRecord], JudgeObservation] | None = None,
+    image_loader: Callable[[str], str] | None = None,
+) -> dict:
+    reserve_test_read(
+        ledger_path, lock_path, freeze_dir,
+        run_id=run_id, approver=approver, purpose=purpose,
+    )
+    record_test_result(ledger_path, run_id=run_id, status="running")
+
+    lock_dict = json.loads(Path(lock_path).read_text(encoding="utf-8"))
+    lock = EvaluationLock.model_validate(lock_dict)
+
+    freeze_dir = Path(freeze_dir)
+    test_records = list(read_manifest(freeze_dir / "manifest.test.jsonl"))
+
+    test_sha = hashlib.sha256((freeze_dir / "manifest.test.jsonl").read_bytes()).hexdigest()
+    if lock.manifest_hashes.get("manifest.test.jsonl") != test_sha:
+        err = f"manifest.test.jsonl sha256 mismatch against evaluation lock ({test_sha} vs {lock.manifest_hashes.get('manifest.test.jsonl')})"
+        record_test_result(ledger_path, run_id=run_id, status="failed", error=err)
+        raise ManifestError(err)
+
+    predictions_dir = Path(predictions_dir)
+    predictions_dir.mkdir(parents=True, exist_ok=True)
+    written_files = []
+    results = {}
+
+    try:
+        for seed_key, ckpt_info in lock.selected_checkpoints.items():
+            judge_id = seed_key
+            pred_file = predictions_dir / f"{judge_id}.jsonl"
+            if predict_fn is not None:
+                rows = capture_predictions(
+                    test_records, judge_id, lambda r, j=judge_id: predict_fn(j, r),
+                    model_id=BASE_MODEL, prompt_version=lock.prompt_version,
+                    adapter_id=ckpt_info["path"], checkpoint_id=ckpt_info["checkpoint_id"],
+                )
+            else:
+                judge_callable = finetuned_judge(image_loader or (lambda p: p), model=ckpt_info["checkpoint_id"])
+                rows = capture_predictions(
+                    test_records, judge_id,
+                    lambda r: JudgeObservation(prediction=judge_callable(r), confidence=None, score=None, latency_ms=0),
+                    model_id=BASE_MODEL, prompt_version=lock.prompt_version,
+                    adapter_id=ckpt_info["path"], checkpoint_id=ckpt_info["checkpoint_id"],
+                )
+            write_predictions(pred_file, rows)
+            written_files.append(pred_file.name)
+            results[judge_id] = rows
+
+        pred_file = predictions_dir / "zero_shot_base.jsonl"
+        if predict_fn is not None:
+            rows = capture_predictions(
+                test_records, "zero_shot_base", lambda r: predict_fn("zero_shot_base", r),
+                model_id=BASE_MODEL, prompt_version=lock.prompt_version,
+            )
+        else:
+            judge_callable = zero_shot_base_judge(image_loader or (lambda p: p), model=BASE_MODEL)
+            rows = capture_predictions(
+                test_records, "zero_shot_base",
+                lambda r: JudgeObservation(prediction=judge_callable(r), confidence=None, score=None, latency_ms=0),
+                model_id=BASE_MODEL, prompt_version=lock.prompt_version,
+            )
+        write_predictions(pred_file, rows)
+        written_files.append(pred_file.name)
+        results["zero_shot_base"] = rows
+
+        pred_file = predictions_dir / "prompted_gemma.jsonl"
+        if predict_fn is not None:
+            rows = capture_predictions(
+                test_records, "prompted_gemma", lambda r: predict_fn("prompted_gemma", r),
+                model_id=lock.vlm_judge_model, prompt_version=lock.prompt_version,
+            )
+        else:
+            judge_callable = prompted_gemma_judge(image_loader or (lambda p: p))
+            rows = capture_predictions(
+                test_records, "prompted_gemma",
+                lambda r: JudgeObservation(prediction=judge_callable(r), confidence=None, score=None, latency_ms=0),
+                model_id=lock.vlm_judge_model, prompt_version=lock.prompt_version,
+            )
+        write_predictions(pred_file, rows)
+        written_files.append(pred_file.name)
+        results["prompted_gemma"] = rows
+
+        for ctrl_name in ("clip_cosine", "dinov2_cosine"):
+            if ctrl_name in lock.controls:
+                ctrl_threshold = lock.controls[ctrl_name]["threshold"]
+                pred_file = predictions_dir / f"{ctrl_name}.jsonl"
+                if predict_fn is not None:
+                    rows = capture_predictions(
+                        test_records, ctrl_name, lambda r, c=ctrl_name: predict_fn(c, r),
+                        model_id=ctrl_name, prompt_version=lock.prompt_version,
+                        threshold_id=str(ctrl_threshold),
+                    )
+                else:
+                    judge_callable = embedding_control(ctrl_name, ctrl_threshold, image_loader or (lambda p: p))
+                    rows = capture_predictions(
+                        test_records, ctrl_name,
+                        lambda r: JudgeObservation(prediction=judge_callable(r), confidence=None, score=None, latency_ms=0),
+                        model_id=ctrl_name, prompt_version=lock.prompt_version,
+                        threshold_id=str(ctrl_threshold),
+                    )
+                write_predictions(pred_file, rows)
+                written_files.append(pred_file.name)
+                results[ctrl_name] = rows
+
+        record_test_result(ledger_path, run_id=run_id, status="completed", predictions_written=written_files)
+        return {"run_id": run_id, "predictions": results, "written": written_files}
+    except Exception as exc:
+        record_test_result(ledger_path, run_id=run_id, status="failed", error=str(exc))
+        raise
+
+
 def cli() -> None:
     import argparse
 
@@ -496,12 +732,41 @@ def cli() -> None:
     val_p.add_argument("--predictions", required=True, type=Path)
     val_p.add_argument("--out", required=True, type=Path)
 
+    res_p = subparsers.add_parser("reserve-test")
+    res_p.add_argument("--ledger", required=True, type=Path)
+    res_p.add_argument("--lock", required=True, type=Path)
+    res_p.add_argument("--freeze", required=True, type=Path)
+    res_p.add_argument("--run-id", required=True, type=str)
+    res_p.add_argument("--approver", required=True, type=str)
+    res_p.add_argument("--purpose", required=True, type=str)
+
+    run_p = subparsers.add_parser("run-heldout")
+    run_p.add_argument("--freeze", required=True, type=Path)
+    run_p.add_argument("--lock", required=True, type=Path)
+    run_p.add_argument("--ledger", required=True, type=Path)
+    run_p.add_argument("--run-id", required=True, type=str)
+    run_p.add_argument("--approver", required=True, type=str)
+    run_p.add_argument("--purpose", required=True, type=str)
+    run_p.add_argument("--predictions", required=True, type=Path)
+
     args = parser.parse_args()
     if args.command == "validation-inventory":
         inventory_checkpoints(args.runs, args.out)
     elif args.command == "validate":
         validate_offline(args.freeze, args.candidates, args.predictions, args.out)
+    elif args.command == "reserve-test":
+        reserve_test_read(
+            args.ledger, args.lock, args.freeze,
+            run_id=args.run_id, approver=args.approver, purpose=args.purpose,
+        )
+    elif args.command == "run-heldout":
+        run_heldout(
+            freeze_dir=args.freeze, lock_path=args.lock, ledger_path=args.ledger,
+            run_id=args.run_id, approver=args.approver, purpose=args.purpose,
+            predictions_dir=args.predictions,
+        )
 
 
 if __name__ == "__main__":
     cli()
+

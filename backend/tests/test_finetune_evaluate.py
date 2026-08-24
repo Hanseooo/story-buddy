@@ -6,11 +6,12 @@ from finetune.manifest import ManifestError, ManifestRecord
 
 
 def manifest_record(pair_id: str, split: str = "val", char_id: str = "story:char") -> ManifestRecord:
+    provenance = "donated" if split == "test" else "synthetic"
     return ManifestRecord(
         pair_id=pair_id,
         char_id=char_id,
         split=split,  # type: ignore[arg-type]
-        provenance="synthetic",
+        provenance=provenance,  # type: ignore[arg-type]
         pair_type="pipeline",
         images=[f"assets/ref/{pair_id}.png", f"assets/scene/{pair_id}.webp"],
         differences_observed="none",
@@ -18,6 +19,7 @@ def manifest_record(pair_id: str, split: str = "val", char_id: str = "story:char
         label=False,
         failure_reasons=[],
     )
+
 
 
 def test_capture_predictions_is_ordered_and_scores_malformed_output_as_a_miss():
@@ -236,5 +238,94 @@ def test_validate_offline_creates_evaluation_lock(tmp_path, val_records):
     assert lock["deployment_seed"] in (0, 1, 2)
     assert "seed_0" in lock["selected_checkpoints"]
     assert lock_out.exists()
+
+
+def test_reserve_test_read_prevents_duplicate_reservations(tmp_path, valid_lock):
+    freeze_dir = tmp_path / "freeze"
+    freeze_dir.mkdir()
+    (freeze_dir / "manifest.test.jsonl").write_text("test_data", encoding="utf-8")
+    lock_path = tmp_path / "evaluation_lock.json"
+    ev.write_evaluation_lock(lock_path, valid_lock)
+    ledger_path = tmp_path / "access_ledger.json"
+
+    # First reservation succeeds
+    entry1 = ev.reserve_test_read(
+        ledger_path, lock_path, freeze_dir, run_id="run-1", approver="Hanseooo", purpose="capstone final test"
+    )
+    assert entry1["status"] == "reserved"
+    assert entry1["run_id"] == "run-1"
+
+    # Second reservation for different run_id fails closed
+    with pytest.raises(ManifestError, match="already been accessed"):
+        ev.reserve_test_read(
+            ledger_path, lock_path, freeze_dir, run_id="run-2", approver="Hanseooo", purpose="repeat"
+        )
+
+
+def test_record_test_result_updates_status(tmp_path, valid_lock):
+    freeze_dir = tmp_path / "freeze"
+    freeze_dir.mkdir()
+    (freeze_dir / "manifest.test.jsonl").write_text("test_data", encoding="utf-8")
+    lock_path = tmp_path / "evaluation_lock.json"
+    ev.write_evaluation_lock(lock_path, valid_lock)
+    ledger_path = tmp_path / "access_ledger.json"
+
+    ev.reserve_test_read(
+        ledger_path, lock_path, freeze_dir, run_id="run-1", approver="Hanseooo", purpose="capstone final test"
+    )
+    res = ev.record_test_result(ledger_path, run_id="run-1", status="completed", predictions_written=["preds.jsonl"])
+    assert res["status"] == "completed"
+    assert res["predictions_written"] == ["preds.jsonl"]
+
+
+def test_run_heldout_evaluates_only_test_manifest_and_records_ledger(tmp_path, valid_lock):
+    import json
+    freeze_dir = tmp_path / "freeze"
+    freeze_dir.mkdir()
+    test_rec = manifest_record("p_test", split="test")
+    (freeze_dir / "manifest.test.jsonl").write_text(json.dumps(test_rec.model_dump(mode="json")) + "\n", encoding="utf-8")
+    for split in ("train", "val"):
+        (freeze_dir / f"manifest.{split}.jsonl").write_text("", encoding="utf-8")
+
+    # Update manifest hash in valid_lock for test manifest
+    import hashlib
+    valid_lock["manifest_hashes"]["manifest.test.jsonl"] = hashlib.sha256(
+        (freeze_dir / "manifest.test.jsonl").read_bytes()
+    ).hexdigest()
+
+    lock_path = tmp_path / "evaluation_lock.json"
+    ev.write_evaluation_lock(lock_path, valid_lock)
+    ledger_path = tmp_path / "access_ledger.json"
+    preds_dir = tmp_path / "test_predictions"
+
+    def mock_predict(judge_name, record):
+        return ev.JudgeObservation(prediction=True, confidence=0.85, score=0.85, latency_ms=20)
+
+    res = ev.run_heldout(
+        freeze_dir=freeze_dir,
+        lock_path=lock_path,
+        ledger_path=ledger_path,
+        run_id="run-1",
+        approver="Hanseooo",
+        purpose="capstone final held-out run",
+        predictions_dir=preds_dir,
+        predict_fn=mock_predict,
+    )
+    assert "predictions" in res
+    assert (preds_dir / "seed_0.jsonl").exists()
+
+    # Repeat run fails closed
+    with pytest.raises(ManifestError, match="already completed|already been accessed"):
+        ev.run_heldout(
+            freeze_dir=freeze_dir,
+            lock_path=lock_path,
+            ledger_path=ledger_path,
+            run_id="run-2",
+            approver="Hanseooo",
+            purpose="repeat attempt",
+            predictions_dir=preds_dir,
+            predict_fn=mock_predict,
+        )
+
 
 
