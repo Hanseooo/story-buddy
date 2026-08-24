@@ -90,6 +90,41 @@ def test_chat_accepts_fields_in_schema_order():
     assert verdict.same_character is True
 
 
+def test_judge_with_metadata_returns_verdict_confidence_and_latency_without_changing_judge():
+    import math
+    parsed = _Verdict(differences_observed="none", same_character=True)
+    completion = _fake_completion(parsed, '{"differences_observed":"none","same_character":true}')
+    completion.choices[0].logprobs = MagicMock()
+    completion.choices[0].logprobs.content = [
+        MagicMock(token='"same_character"', logprob=-0.01),
+        MagicMock(token="true", logprob=math.log(0.8)),
+    ]
+    with patch("providers.OpenAI") as mock_openai:
+        mock_openai.return_value.chat.completions.parse.return_value = completion
+        rich = providers.judge_with_metadata("compare", ["https://ref", "https://scene"], _Verdict)
+        plain = providers.judge("compare", ["https://ref", "https://scene"], _Verdict)
+
+    assert rich.verdict == parsed
+    assert rich.confidence == pytest.approx(0.8)
+    assert rich.latency_ms >= 0
+    assert plain == parsed
+
+
+def test_judge_with_metadata_passes_logprobs_and_temperature_zero():
+    parsed = _Verdict(differences_observed="none", same_character=True)
+    completion = _fake_completion(parsed, '{"differences_observed":"none","same_character":true}')
+    completion.choices[0].logprobs = None
+    with patch("providers.OpenAI") as mock_openai:
+        mock_openai.return_value.chat.completions.parse.return_value = completion
+        rich = providers.judge_with_metadata("compare", ["https://ref"], _Verdict)
+        kwargs = mock_openai.return_value.chat.completions.parse.call_args.kwargs
+        assert kwargs["temperature"] == 0
+        assert kwargs["logprobs"] is True
+        assert kwargs["top_logprobs"] == 5
+        assert rich.confidence is None
+
+
+
 class _Verdict3(BaseModel):
     differences_observed: str
     failure_reason: str

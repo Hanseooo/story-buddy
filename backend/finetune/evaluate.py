@@ -11,17 +11,133 @@ already that class; it is read, never re-derived (`build_dataset.py` owns the in
 import json
 import logging
 from pathlib import Path
-from typing import Callable, Iterable, Sequence
+from typing import Callable, Iterable, Literal, Sequence
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.config import settings
 from contracts.story_memory import VlmVerdict
 from finetune.evaluation_metrics import clustered_f1_ci, prf1
-from finetune.manifest import ManifestRecord, read_manifest
+from finetune.manifest import ManifestError, ManifestRecord, read_manifest
 from finetune.to_llamafactory import QUESTION
 
 log = logging.getLogger(__name__)
 
 Judge = Callable[[ManifestRecord], bool]      # record → predicted `different_character`
+
+
+class JudgeObservation(BaseModel):
+    prediction: bool
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    score: float | None = None
+    latency_ms: int = Field(ge=0)
+
+
+class PredictionRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    pair_id: str
+    char_id: str
+    split: Literal["val", "test"]
+    judge_id: str
+    prediction: bool
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    score: float | None = None
+    latency_ms: int = Field(ge=0)
+    parse_status: Literal["parsed", "malformed"]
+    model_id: str
+    adapter_id: str | None = None
+    prompt_version: str
+    threshold_id: str | None = None
+    checkpoint_id: str | None = None
+
+
+def validate_prediction_alignment(
+    records: Sequence[ManifestRecord], predictions: Sequence[PredictionRecord]
+) -> None:
+    if len(records) != len(predictions):
+        raise ManifestError(f"alignment error: {len(records)} records vs {len(predictions)} predictions")
+    for r, p in zip(records, predictions):
+        if r.pair_id != p.pair_id:
+            raise ManifestError(f"alignment error: expected pair_id {r.pair_id}, got {p.pair_id}")
+        if r.char_id != p.char_id:
+            raise ManifestError(f"alignment error: expected char_id {r.char_id}, got {p.char_id}")
+        if r.split != p.split:
+            raise ManifestError(f"alignment error: expected split {r.split}, got {p.split}")
+
+
+def capture_predictions(
+    records: Sequence[ManifestRecord],
+    judge_id: str,
+    predict_fn: Callable[[ManifestRecord], JudgeObservation],
+    model_id: str,
+    prompt_version: str,
+    adapter_id: str | None = None,
+    threshold_id: str | None = None,
+    checkpoint_id: str | None = None,
+) -> list[PredictionRecord]:
+    rows: list[PredictionRecord] = []
+    for record in records:
+        try:
+            obs = predict_fn(record)
+            rows.append(
+                PredictionRecord(
+                    pair_id=record.pair_id,
+                    char_id=record.char_id,
+                    split=record.split,  # type: ignore[arg-type]
+                    judge_id=judge_id,
+                    prediction=obs.prediction,
+                    confidence=obs.confidence,
+                    score=obs.score,
+                    latency_ms=obs.latency_ms,
+                    parse_status="parsed",
+                    model_id=model_id,
+                    adapter_id=adapter_id,
+                    prompt_version=prompt_version,
+                    threshold_id=threshold_id,
+                    checkpoint_id=checkpoint_id,
+                )
+            )
+        except Exception as exc:
+            log.warning("malformed output for pair %s: %s", record.pair_id, exc)
+            rows.append(
+                PredictionRecord(
+                    pair_id=record.pair_id,
+                    char_id=record.char_id,
+                    split=record.split,  # type: ignore[arg-type]
+                    judge_id=judge_id,
+                    prediction=False,
+                    confidence=None,
+                    score=None,
+                    latency_ms=0,
+                    parse_status="malformed",
+                    model_id=model_id,
+                    adapter_id=adapter_id,
+                    prompt_version=prompt_version,
+                    threshold_id=threshold_id,
+                    checkpoint_id=checkpoint_id,
+                )
+            )
+    return rows
+
+
+def write_predictions(path: Path, rows: list[PredictionRecord]) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = "".join(json.dumps(row.model_dump(mode="json"), sort_keys=True) + "\n" for row in rows)
+    if path.exists():
+        existing = path.read_text(encoding="utf-8")
+        if existing != text:
+            raise ManifestError(f"immutable prediction file differs at {path}")
+        return
+
+    tmp_path = path.with_suffix(f".tmp.{path.name}")
+    try:
+        tmp_path.write_text(text, encoding="utf-8")
+        tmp_path.replace(path)
+    except Exception:
+        if tmp_path.exists():
+            tmp_path.unlink()
+        raise
 
 
 def score(records: Sequence[ManifestRecord], preds: Sequence[bool]) -> dict:
