@@ -25,9 +25,9 @@ from contracts.story_memory import (
 )
 from finetune import build_dataset as bd
 from finetune import annotation_truth as at
-from finetune import evaluate as ev
 from finetune import freeze_dataset as fd
 from finetune.corpus_io import AssetRecord, CorpusError, RunBundle, write_bundle
+
 from finetune.dataset_selection import (
     DatasetSelection,
     DatasetSelectionAudit,
