@@ -10,13 +10,12 @@ already that class; it is read, never re-derived (`build_dataset.py` owns the in
 """
 import json
 import logging
-import random
-from collections import defaultdict
 from pathlib import Path
 from typing import Callable, Iterable, Sequence
 
 from app.config import settings
 from contracts.story_memory import VlmVerdict
+from finetune.evaluation_metrics import clustered_f1_ci, prf1
 from finetune.manifest import ManifestRecord, read_manifest
 from finetune.to_llamafactory import QUESTION
 
@@ -25,62 +24,10 @@ log = logging.getLogger(__name__)
 Judge = Callable[[ManifestRecord], bool]      # record → predicted `different_character`
 
 
-# --- metrics (pure, unit tested) --------------------------------------------------------------
-
-def prf1(labels: Sequence[bool], preds: Sequence[bool]) -> tuple[float, float, float]:
-    """Precision, recall, F1 on the positive (`different_character`) class.
-
-    Zero rather than undefined on an empty denominator: §7.5's malformed-output rule scores an
-    unparseable verdict as a miss, so a judge that predicts nothing must score 0, not crash.
-    """
-    tp = sum(1 for y, p in zip(labels, preds) if y and p)
-    fp = sum(1 for y, p in zip(labels, preds) if not y and p)
-    fn = sum(1 for y, p in zip(labels, preds) if y and not p)
-    precision = tp / (tp + fp) if tp + fp else 0.0
-    recall = tp / (tp + fn) if tp + fn else 0.0
-    f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
-    return precision, recall, f1
-
-
-def bootstrap_f1_ci(
-    labels: Sequence[bool],
-    preds: Sequence[bool],
-    char_ids: Sequence[str],
-    resamples: int = 10_000,
-    seed: int = 0,
-    alpha: float = 0.05,
-) -> tuple[float, float]:
-    """95% bootstrap CI on F1, **resampled by `char_id`, not by pair** (§7.1).
-
-    Fifteen scenes from one character are not fifteen independent observations; a pair-level
-    bootstrap yields an interval that is too narrow, and this is the likeliest place a statistics
-    reviewer finds a hole.
-
-    ponytail: percentile bootstrap in stdlib `random` — no numpy, no scipy. McNemar's exact test
-    (§7.1's significance leg) is deliberately NOT here: it needs a binomial CDF, i.e. a new
-    dependency, for one number computed once. Upgrade path: compute it in the analysis notebook
-    that already has scipy, or add `statsmodels` in a dedicated change.
-    """
-    clusters: dict[str, list[int]] = defaultdict(list)
-    for i, char_id in enumerate(char_ids):
-        clusters[char_id].append(i)
-    keys = sorted(clusters)
-
-    rng = random.Random(seed)
-    scores = []
-    for _ in range(resamples):
-        drawn = [i for key in rng.choices(keys, k=len(keys)) for i in clusters[key]]
-        scores.append(prf1([labels[i] for i in drawn], [preds[i] for i in drawn])[2])
-    scores.sort()
-    lo = scores[int(alpha / 2 * len(scores))]
-    hi = scores[min(len(scores) - 1, int((1 - alpha / 2) * len(scores)))]
-    return lo, hi
-
-
 def score(records: Sequence[ManifestRecord], preds: Sequence[bool]) -> dict:
     labels = [r.label for r in records]
     precision, recall, f1 = prf1(labels, preds)
-    lo, hi = bootstrap_f1_ci(labels, preds, [r.char_id for r in records])
+    lo, hi = clustered_f1_ci(labels, preds, [r.char_id for r in records])
     return {"n": len(records), "precision": precision, "recall": recall, "f1": f1, "f1_ci95": [lo, hi]}
 
 

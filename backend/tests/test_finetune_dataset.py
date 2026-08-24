@@ -642,31 +642,8 @@ def test_fetch_pilot_pairs_reads_research_pairs_table():
     client.table.assert_called_with("research_pairs")
 
 
-# --- evaluate.py metrics -------------------------------------------------------------------
-
-def test_prf1_scores_the_different_character_class():
-    #                 labels                     predictions
-    labels = [True, True, True, False, False]
-    preds = [True, True, False, True, False]
-    p, r, f1 = ev.prf1(labels, preds)
-    assert p == pytest.approx(2 / 3)
-    assert r == pytest.approx(2 / 3)
-    assert f1 == pytest.approx(2 / 3)
-
-
-def test_prf1_is_zero_rather_than_undefined_when_nothing_is_predicted_positive():
-    assert ev.prf1([True, False], [False, False]) == (0.0, 0.0, 0.0)
-
-
-def test_bootstrap_resamples_by_char_id_not_by_pair():
-    labels = [True] * 4 + [False] * 4
-    preds = [True] * 4 + [False] * 4
-    char_ids = ["a", "a", "a", "a", "b", "b", "b", "b"]
-    lo, hi = ev.bootstrap_f1_ci(labels, preds, char_ids, resamples=50, seed=0)
-    assert 0.0 <= lo <= hi <= 1.0
-
-
 # --- build_dataset manifest & stats --------------------------------------------------------
+
 
 def test_build_dataset_creates_manifest_and_stats(tmp_path):
     import json
