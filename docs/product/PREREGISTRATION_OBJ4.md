@@ -476,7 +476,7 @@ document's timestamp.
 | Pin | Value | Status |
 |---|---|---|
 | Base model | `Qwen/Qwen2.5-VL-7B-Instruct` | Fixed (ADR-018) |
-| Base model **revision hash** | `________________________` | ⬜ **To be filled at training time.** Pin the exact commit; never `main`. |
+| Base model **revision hash** | `cc594898137f460bfe9f0759e9844b3ce807cfb5` | ✅ Fixed 2026-08-25 before training or held-out access. |
 | LoRA rank / alpha | **16 / 32** | Fixed (`train_qlora.yaml`, §6.3) |
 | `lora_target` | `all` | Fixed |
 | Quantization | 4-bit, `bnb` (QLoRA) | Fixed |
@@ -486,12 +486,12 @@ document's timestamp.
 | Epochs / LR / scheduler | 3.0 / 1.0e-4 / cosine, warmup 0.1 | Fixed |
 | Batch × grad-accum | 1 × 8 | Fixed |
 | **`manifest.jsonl` hash** | `________________________` | ⬜ **To be filled when the dataset is built.** This hash is what proves the splits did not move (§3). |
-| **LLaMA-Factory version** | `________________________` | ⬜ **To be filled at training time** (exact release or commit). |
+| **LLaMA-Factory version** | `v0.9.5` / `7af909522a951e3ad9f022ea6f88b6755257eaa5` | ✅ Fixed 2026-08-25 before training or held-out access. |
 | Evaluation decoding | **temperature 0** | Fixed |
 | `consistency_check.JUDGE_PROMPT_VERSION` at eval | `______` | ⬜ **To be filled at evaluation time.** Verdict rates are only comparable within one prompt version — an unrecorded reword once forced a whole prior series to be discarded (`story_memory.py`, `ref_verdict_prompt_version`). |
 | Image generator that produced the pairs | `fal_image_model` / `fal_image_edit_model` as configured at generation time | ⬜ **Record the exact model IDs and the date.** ADR-018's distribution-shift warning: a judge trained on one generator's drift is matched to that generator. |
-| Adapter artifact location | W&B artifact registry or Storage | ⬜ To be filled |
-| Bootstrap RNG seed | `______` | ⬜ **To be filled at analysis time**, and reported. |
+| Adapter artifact location | Local immutable run directory; optional W&B mirror or controlled Storage copy | ⬜ Exact locations filled after training. |
+| Bootstrap RNG seed | `0` | ✅ Fixed 2026-08-25 before analysis. |
 
 ---
 
@@ -562,3 +562,21 @@ Implemented rules:
 - **Intake-assigned propagated splits:** synthetic stories carry `split="train"` (24 stories) or `split="val"` (6 stories) in `corpus_synthetic.json`; donated stories carry `split="test"` in `donated.json`. Splits are validated during intake loading and propagated strictly through `RunBundle` into `ManifestRecord`.
 - **Fail-closed backup replacement:** 10 primary donated stories are fixed at candidate intake (4 Gouache, 3 Cel, 3 Cut-paper). If a primary story is withdrawn or fails, it must be replaced by an approved, unused backup of the exact same style preset from `donated.json` documented in `dataset_selection.json`. If an approved same-style backup is not available, the dataset freeze fails closed (`ManifestError`) rather than admitting style drift or post-hoc allocation changes.
 - **Frozen manual hard negatives:** cross-character constructed negative pairs in the training split are selected and frozen in `dataset_selection.json` before non-pilot annotations begin, matching character species and art style.
+
+### 2026-08-25 — Batch-3 execution pins and exploratory diagnostics
+
+**State when amended:** zero held-out results had been seen; donated stories had not entered the corpus;
+no study labels had been collected; no fine-tune had been trained.
+
+This amendment fills reproducibility values at the moment they were selected: base revision
+`cc594898137f460bfe9f0759e9844b3ce807cfb5`, LLaMA-Factory `v0.9.5` at
+`7af909522a951e3ad9f022ea6f88b6755257eaa5`, and bootstrap RNG seed `0`. Local immutable run evidence is
+canonical; W&B is an optional mirror, not a required research service.
+
+The combined manifest remains the hashed source of truth, but deterministic split projections prevent
+validation code from parsing donated test records before the guarded held-out run. The freeze also preserves
+de-identified ordinary-label pairs for inter-rater κ and the intake-declared human/non-human character slice.
+The one-read rule and Rung-D-only second-read exception are unchanged.
+
+A fixed ten-bin reliability table and Brier score are added only as **exploratory calibration diagnostics**.
+They do not replace, gate, or modify any endpoint in §1 or §5 and must be labelled exploratory in reporting.

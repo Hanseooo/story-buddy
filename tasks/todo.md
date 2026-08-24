@@ -1089,3 +1089,20 @@ withdrawn and unselected donated bundles cannot enter the dataset; every synthet
 one manually frozen same-species/same-style target and all of that target's eligible natural train scenes;
 mutable and immutable paths are distinct; the frozen preregistration is amended visibly; and all deterministic
 checks pass without paid calls, real donor data, held-out evaluation, or live research mutations.
+
+# Current Task: Objective-4 training and evaluation Batch 3 planning
+
+- [x] Re-read the governing Objective-4 specs, preregistration, runbook, current trainer config, evaluator, and tests.
+- [x] Confirm the Batch 3 scope boundary with the owner.
+- [x] Present minimal implementation approaches and recommend one.
+- [x] Write and self-review the approved durable Batch 3 design in the owning spec.
+- [ ] Obtain owner approval of the written design.
+- [ ] Write and self-review the disposable TDD implementation plan under `docs/specs/plans/`.
+
+## Success criteria
+
+The plan pins every training input and tool version, runs seeds 0/1/2 without touching held-out data,
+selects checkpoints and thresholds on validation only, implements every preregistered statistic without a
+new backend dependency, makes held-out access auditable and fail-closed, and gives operators exact dry-run,
+training, selection, and one-time evaluation commands. Planning must not train a model, call a provider,
+read real `test.json`, or mutate live research infrastructure.

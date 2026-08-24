@@ -239,6 +239,21 @@ counts by story/character/split/class/reason, adjudication rate, selected and ex
 replacement reasons, the selection-file SHA-256, exclusions and all pinned software/model/prompt versions. A
 constructed negative belongs to the story that owns its reference character for story-level counts.
 
+For held-out isolation and reproducible agreement reporting, freeze also emits deterministic, hash-recorded
+projections without changing the combined `manifest.jsonl` source of truth:
+
+- `manifest.train.jsonl`, `manifest.val.jsonl` and `manifest.test.jsonl`, preserving combined-manifest order;
+- `annotation_agreement.jsonl`, containing only `pair_id` and the two ordinary binary labels, with no
+  annotator or adjudicator identifiers;
+- `character_slices.json`, mapping every qualified `char_id` to the intake-declared `human` or `non_human`
+  slice after roster reconciliation.
+
+Training and validation may parse only the train/validation projections. They may hash the combined manifest
+as bytes but must not parse it, because filtering after parsing would expose donated test records. Only the
+guarded held-out command may open `manifest.test.jsonl`. Freeze rejects projections whose concatenation
+differs from the combined manifest, agreement rows that do not cover natural annotated pairs, or slice keys
+that do not exactly cover every manifest character.
+
 ## 5. Encoding and storage
 
 ADR-027 is binding: Supabase remains the asset store, canonical references remain PNG and scenes are WebP at
