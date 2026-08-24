@@ -141,6 +141,9 @@ def test_local_image_path_matches_build_corpus_layout(tmp_path):
 
 
 def test_local_image_path_is_posix_and_rooted_at_the_dataset_dir():
+    from finetune import build_corpus, materialize_pairs
     from finetune.manifest import local_image_path
 
-    assert local_image_path("judge-01/ref-c0-1.png", "ref") == "data/judge/ref/judge-01_ref-c0-1.png"
+    assert build_corpus.DATA_DIR.as_posix().endswith("data/judge/corpus")
+    assert materialize_pairs.DATA_DIR == build_corpus.DATA_DIR
+    assert local_image_path("judge-01/ref-c0-1.png", "ref") == "data/judge/corpus/ref/judge-01_ref-c0-1.png"

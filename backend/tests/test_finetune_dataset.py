@@ -467,7 +467,7 @@ def test_build_records_carries_the_gating_booleans_and_the_split_metadata():
     assert rec1.failure_reasons == ["wrong_colour"]
     # Local dataset paths, NOT the raw Storage paths — LLaMA-Factory resolves `images` against
     # the filesystem and `build_corpus` writes the flattened name (manifest.local_image_path).
-    assert rec1.images == ["data/judge/ref/story_1_ref-quill.png", "data/judge/scene/story_1_s1-2.png"]
+    assert rec1.images == ["data/judge/corpus/ref/story_1_ref-quill.png", "data/judge/corpus/scene/story_1_s1-2.png"]
     assert rec2.same_character is True
     assert rec2.label is False
 

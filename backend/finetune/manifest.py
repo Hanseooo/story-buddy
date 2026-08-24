@@ -20,7 +20,7 @@ PairType = Literal["pipeline", "constructed"]
 Provenance = Literal["synthetic", "donated"]
 
 
-DATA_ROOT = Path("data/judge")
+DATA_ROOT = Path("data/judge/corpus")
 ImageKind = Literal["ref", "scene"]
 
 

@@ -548,3 +548,17 @@ Story input is a validated JSON list, not Python source. The checked-in syntheti
 gitignored donated file share the strict record contract in `research-corpus-operations.md` §4.1. Declared
 fictional character/non-human rosters are reconciled with final `StoryMemory` before pair materialization.
 This amendment changes neither the primary endpoint nor the one-time held-out-test rule.
+
+### 2026-08-24 — Intake-assigned splits and fail-closed backup replacement
+
+**State when amended:** zero held-out results had been seen; donated stories had not entered the corpus;
+no study labels had been collected; no fine-tune had been trained.
+
+This amendment explicitly supersedes:
+- the earlier statement in §3.2 item 5 describing split assignment by `build_dataset.py` from a seeded assignment;
+- the 2026-08-22 amendment instruction allowing an achieved style imbalance to be reported without replacement.
+
+Implemented rules:
+- **Intake-assigned propagated splits:** synthetic stories carry `split="train"` (24 stories) or `split="val"` (6 stories) in `corpus_synthetic.json`; donated stories carry `split="test"` in `donated.json`. Splits are validated during intake loading and propagated strictly through `RunBundle` into `ManifestRecord`.
+- **Fail-closed backup replacement:** 10 primary donated stories are fixed at candidate intake (4 Gouache, 3 Cel, 3 Cut-paper). If a primary story is withdrawn or fails, it must be replaced by an approved, unused backup of the exact same style preset from `donated.json` documented in `dataset_selection.json`. If an approved same-style backup is not available, the dataset freeze fails closed (`ManifestError`) rather than admitting style drift or post-hoc allocation changes.
+- **Frozen manual hard negatives:** cross-character constructed negative pairs in the training split are selected and frozen in `dataset_selection.json` before non-pilot annotations begin, matching character species and art style.

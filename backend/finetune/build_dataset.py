@@ -238,7 +238,7 @@ def constructed_records(
 
 def build_dataset(
     corpus: Iterable[tuple[StoryMemory, Split, Provenance]],
-    out_path: Path = Path("data/judge/manifest.jsonl"),
+    out_path: Path = Path("data/judge/freezes/obj4-v1/manifest.jsonl"),
     add_constructed: bool = True,
     *,
     annotation_rows: Iterable[dict] | None = None,

@@ -8,6 +8,7 @@ Asserts methodological invariants from `judge-finetune.md`:
 5. Prompt and serialized ShareGPT blinding (no leaked identifiers or split tokens).
 """
 import json
+import os
 from pathlib import Path
 import re
 from typing import Any
@@ -161,15 +162,20 @@ def assert_sharegpt_blinding(
 
 @pytest.fixture(scope="session")
 def dataset_artifacts():
-    if not (DATA_DIR / "manifest.jsonl").exists():
-        pytest.skip("Dataset artifacts not found. Run dataset export first.")
+    freeze_dir_env = os.getenv("STORYBUDDY_JUDGE_FREEZE_DIR")
+    if not freeze_dir_env:
+        pytest.skip("STORYBUDDY_JUDGE_FREEZE_DIR not set. Skipping real-artifact tests.")
 
-    manifest = read_manifest(DATA_DIR / "manifest.jsonl")
-    stats = json.loads((DATA_DIR / "dataset_manifest.json").read_text(encoding="utf-8"))
+    freeze_dir = Path(freeze_dir_env)
+    if not (freeze_dir / "manifest.jsonl").exists():
+        pytest.skip(f"Dataset artifacts not found in {freeze_dir}.")
+
+    manifest = read_manifest(freeze_dir / "manifest.jsonl")
+    stats = json.loads((freeze_dir / "dataset_manifest.json").read_text(encoding="utf-8"))
 
     sharegpt: dict[str, list[dict[str, Any]]] = {}
     for split in ["train", "val", "test"]:
-        path = DATA_DIR / f"{split}.json"
+        path = freeze_dir / f"{split}.json"
         if path.exists():
             sharegpt[split] = json.loads(path.read_text(encoding="utf-8"))
 
@@ -178,6 +184,10 @@ def dataset_artifacts():
         "stats": stats,
         "sharegpt": sharegpt,
     }
+
+
+def test_root_judge_dir_is_never_selected_implicitly():
+    assert os.getenv("STORYBUDDY_JUDGE_FREEZE_DIR") is None or not Path(os.environ["STORYBUDDY_JUDGE_FREEZE_DIR"]).samefile(Path("data/judge"))
 
 
 # --- Artifact Integrity Integration Tests ---
@@ -221,7 +231,7 @@ def _sample_record(**overrides) -> ManifestRecord:
         split="train",
         provenance="synthetic",
         pair_type="pipeline",
-        images=["data/judge/ref/char_a.png", "data/judge/scene/char_a_s1.png"],
+        images=["data/judge/corpus/ref/char_a.png", "data/judge/corpus/scene/char_a_s1.png"],
         differences_observed="Attribute match.",
         same_character=True,
         label=False,
@@ -514,7 +524,15 @@ def test_end_to_end_research_integrity_pipeline(tmp_path):
     with patch("finetune.build_dataset.fetch_annotations", return_value=annotations), \
          patch("finetune.build_dataset.fetch_adjudicator_ids", return_value={"adj1"}), \
          patch("finetune.build_dataset.fetch_pilot_pairs", return_value=set()):
-        records = build_dataset(corpus, out_path=manifest_path, add_constructed=True)
+        records = build_dataset(
+            corpus,
+            out_path=manifest_path,
+            add_constructed=True,
+            hard_negative_matches={
+                "story_train:char_train_1": "story_train:char_train_2",
+                "story_train:char_train_2": "story_train:char_train_1",
+            },
+        )
 
     write_dataset(records, tmp_path)
 

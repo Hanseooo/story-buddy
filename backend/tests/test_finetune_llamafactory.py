@@ -19,7 +19,7 @@ def record(**overrides) -> ManifestRecord:
         split="train",
         provenance="synthetic",
         pair_type="pipeline",
-        images=["data/judge/ref/quill_007.png", "data/judge/scene/quill_007_s03_a1.png"],
+        images=["data/judge/corpus/ref/quill_007.png", "data/judge/corpus/scene/quill_007_s03_a1.png"],
         differences_observed="Two eyes rather than three; the scarf is unstriped.",
         same_character=False,
         label=True,

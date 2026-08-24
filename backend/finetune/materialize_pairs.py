@@ -27,7 +27,7 @@ log = logging.getLogger(__name__)
 BUCKET = "private_assets"
 PAIRS_TABLE = "research_pairs"
 PAGE_SIZE = 1000
-DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "judge"
+DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "judge" / "corpus"
 
 
 @dataclass(frozen=True)

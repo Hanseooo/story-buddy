@@ -1,7 +1,7 @@
 """Turn `corpus_synthetic.json` into immutable judge-training corpus bundles.
 
 Runs the existing Phase-1 graph over each sanitized intake record. Completed results are persisted
-under `data/judge/runs/<story_id>/` with their validated Story Memory and hashed local assets;
+under `data/judge/corpus/runs/<story_id>/` with their validated Story Memory and hashed local assets;
 the legacy count-only state file is never trusted as completion. `--fixture` exercises that same
 bundle path using generated local image bytes, without a graph, provider, database, or Storage call.
 """
@@ -56,8 +56,8 @@ from pipeline.prompt_optimizer import SCENE_PROMPT_VERSION
 from providers import _fal_event_sink
 
 CORPUS_PATH = pathlib.Path(__file__).with_name("corpus_synthetic.json")
-# `backend/finetune/build_corpus.py` -> repo root -> `data/judge/` (gitignored).
-DATA_DIR = pathlib.Path(__file__).resolve().parents[2] / "data" / "judge"
+# `backend/finetune/build_corpus.py` -> repo root -> `data/judge/corpus` (gitignored).
+DATA_DIR = pathlib.Path(__file__).resolve().parents[2] / "data" / "judge" / "corpus"
 STATE_FILE = "build_state.json"
 BUCKET = "storybook-images"
 # The reveal can interrupt once per book and retry taps are cap-bounded; this is production's
