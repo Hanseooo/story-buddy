@@ -328,4 +328,69 @@ def test_run_heldout_evaluates_only_test_manifest_and_records_ledger(tmp_path, v
         )
 
 
+def test_build_report_computes_three_seeds_baselines_slices_and_deployment_rung(tmp_path, valid_lock):
+    import json
+    import hashlib
+    freeze_dir = tmp_path / "freeze"
+    freeze_dir.mkdir()
+
+    r1 = manifest_record("p1", split="test", char_id="dragon")
+    r1 = r1.model_copy(update={"label": True, "same_character": False})
+    r2 = manifest_record("p2", split="test", char_id="human")
+    r2 = r2.model_copy(update={"label": False, "same_character": True})
+    records = [r1, r2]
+
+    (freeze_dir / "manifest.test.jsonl").write_text("".join(json.dumps(r.model_dump(mode="json")) + "\n" for r in records), encoding="utf-8")
+    for split in ("train", "val"):
+        (freeze_dir / f"manifest.{split}.jsonl").write_text("", encoding="utf-8")
+    (freeze_dir / "character_slices.json").write_text(json.dumps({"non_human": ["dragon"]}), encoding="utf-8")
+
+    valid_lock["manifest_hashes"]["manifest.test.jsonl"] = hashlib.sha256(
+        (freeze_dir / "manifest.test.jsonl").read_bytes()
+    ).hexdigest()
+
+    lock_path = tmp_path / "evaluation_lock.json"
+    ev.write_evaluation_lock(lock_path, valid_lock)
+
+    preds_dir = tmp_path / "predictions"
+    preds_dir.mkdir()
+
+    # Write prediction files for all baselines
+    for judge_name in ("seed_0", "seed_1", "seed_2", "zero_shot_base", "prompted_gemma", "clip_cosine", "dinov2_cosine"):
+        # Give prompted_gemma lower F1 so candidate beats incumbent
+        p_val = False if judge_name == "prompted_gemma" and r1.pair_id == "p1" else True
+        p_list = [
+            ev.PredictionRecord(
+                pair_id=r.pair_id,
+                char_id=r.char_id,
+                split="test",
+                judge_id=judge_name,
+                prediction=p_val if r.pair_id == "p1" else False,
+                confidence=0.85,
+                score=0.4 if r.pair_id == "p1" else 0.9,
+                latency_ms=15,
+                parse_status="parsed",
+                model_id="m",
+                prompt_version="1",
+            )
+            for r in records
+        ]
+        ev.write_predictions(preds_dir / f"{judge_name}.jsonl", p_list)
+
+
+    out_file = tmp_path / "objective4_results.json"
+    report = ev.build_report(freeze_dir, lock_path, preds_dir, out_file)
+
+    assert report["schema_version"] == 1
+    assert "seeds_f1_summary" in report
+    assert report["seeds_f1_summary"]["mean"] == pytest.approx(1.0)
+    assert "baselines" in report
+    assert "slices" in report
+    assert "non_human" in report["slices"]
+    assert "deployment_decision" in report
+    assert report["deployment_decision"]["status"] == "pass"
+    assert out_file.exists()
+
+
+
 

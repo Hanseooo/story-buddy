@@ -21,9 +21,19 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.config import settings
 from contracts.story_memory import VlmVerdict
-from finetune.evaluation_metrics import clustered_f1_ci, prf1
+from finetune.evaluation_metrics import (
+    auroc,
+    calibration,
+    clustered_delta_f1_ci,
+    clustered_f1_ci,
+    cohen_kappa,
+    mcnemar_exact,
+    mean_sample_std,
+    prf1,
+)
 from finetune.manifest import ManifestError, ManifestRecord, read_manifest
 from finetune.to_llamafactory import QUESTION
+
 
 log = logging.getLogger(__name__)
 
@@ -716,6 +726,129 @@ def run_heldout(
         raise
 
 
+def build_report(
+    freeze_dir: Path,
+    lock_path: Path,
+    predictions_dir: Path,
+    out_path: Path | None = None,
+) -> dict:
+    freeze_dir = Path(freeze_dir)
+    lock_path = Path(lock_path)
+    predictions_dir = Path(predictions_dir)
+
+    lock_dict = json.loads(lock_path.read_text(encoding="utf-8"))
+    lock = EvaluationLock.model_validate(lock_dict)
+
+    test_records = list(read_manifest(freeze_dir / "manifest.test.jsonl"))
+    test_labels = [r.label for r in test_records]
+    test_char_ids = [r.char_id for r in test_records]
+
+    slices_file = freeze_dir / "character_slices.json"
+    slices_data = json.loads(slices_file.read_text(encoding="utf-8")) if slices_file.exists() else {}
+    non_human_char_ids = set(slices_data.get("non_human", []))
+
+    predictions_by_judge: dict[str, list[PredictionRecord]] = {}
+    for judge_name in ("seed_0", "seed_1", "seed_2", "zero_shot_base", "prompted_gemma", "clip_cosine", "dinov2_cosine"):
+        pred_file = predictions_dir / f"{judge_name}.jsonl"
+        if not pred_file.exists():
+            raise ManifestError(f"prediction file missing for {judge_name} at {pred_file}")
+        lines = [json.loads(line) for line in pred_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+        preds = [PredictionRecord.model_validate(p) for p in lines]
+        validate_prediction_alignment(test_records, preds)
+        predictions_by_judge[judge_name] = preds
+
+    deployment_seed = lock.deployment_seed
+    dep_key = f"seed_{deployment_seed}"
+    dep_preds = [p.prediction for p in predictions_by_judge[dep_key]]
+
+    baselines_report = {}
+    for judge_name, preds_list in predictions_by_judge.items():
+        preds = [p.prediction for p in preds_list]
+        scores = [p.score for p in preds_list]
+        confidences = [p.confidence for p in preds_list]
+        p_val, r_val, f1_val = prf1(test_labels, preds)
+        f1_lo, f1_hi = clustered_f1_ci(test_labels, preds, test_char_ids, seed=BOOTSTRAP_SEED)
+
+        record_dict = {
+            "n": len(preds_list),
+            "precision": p_val,
+            "recall": r_val,
+            "f1": f1_val,
+            "f1_ci95": [f1_lo, f1_hi],
+            "auroc": auroc(test_labels, scores),
+            "cohen_kappa": cohen_kappa(test_labels, preds),
+            "calibration": calibration(test_labels, confidences),
+        }
+
+        if judge_name in ("zero_shot_base", "prompted_gemma"):
+            delta_lo, delta_hi = clustered_delta_f1_ci(
+                test_labels, dep_preds, preds, test_char_ids, seed=BOOTSTRAP_SEED
+            )
+            record_dict["delta_f1_ci95_vs_deployment_seed"] = [delta_lo, delta_hi]
+            record_dict["mcnemar_p_vs_deployment_seed"] = mcnemar_exact(test_labels, dep_preds, preds)
+
+        baselines_report[judge_name] = record_dict
+
+    seed_f1s = [baselines_report[f"seed_{s}"]["f1"] for s in (0, 1, 2)]
+    seeds_summary = mean_sample_std(seed_f1s)
+    seeds_summary["values"] = seed_f1s
+
+    slices_report = {}
+    non_human_indices = [i for i, r in enumerate(test_records) if r.char_id in non_human_char_ids]
+    if non_human_indices:
+        nh_labels = [test_labels[i] for i in non_human_indices]
+        nh_chars = [test_char_ids[i] for i in non_human_indices]
+        nh_results = {}
+        for jname in (dep_key, "zero_shot_base", "prompted_gemma"):
+            nh_preds = [predictions_by_judge[jname][i].prediction for i in non_human_indices]
+            p_val, r_val, f1_val = prf1(nh_labels, nh_preds)
+            f1_lo, f1_hi = clustered_f1_ci(nh_labels, nh_preds, nh_chars, seed=BOOTSTRAP_SEED)
+            nh_results[jname] = {
+                "n": len(non_human_indices),
+                "precision": p_val,
+                "recall": r_val,
+                "f1": f1_val,
+                "f1_ci95": [f1_lo, f1_hi],
+            }
+        slices_report["non_human"] = nh_results
+    else:
+        slices_report["non_human"] = {"status": "no non_human characters in test split"}
+
+    incumbent_f1 = baselines_report["prompted_gemma"]["f1"]
+    candidate_f1 = baselines_report[dep_key]["f1"]
+    status = "pass" if candidate_f1 > incumbent_f1 else "fail"
+    model_to_deploy = (
+        lock.selected_checkpoints[dep_key]["path"] if status == "pass" else lock.vlm_judge_model
+    )
+    deployment_decision = {
+        "status": status,
+        "incumbent_model": lock.vlm_judge_model,
+        "incumbent_f1": incumbent_f1,
+        "candidate_seed": deployment_seed,
+        "candidate_checkpoint": lock.selected_checkpoints[dep_key]["checkpoint_id"],
+        "candidate_f1": candidate_f1,
+        "delta_f1": candidate_f1 - incumbent_f1,
+        "model_to_deploy": model_to_deploy,
+    }
+
+    report = {
+        "schema_version": PREDICTION_SCHEMA_VERSION,
+        "bootstrap_seed": BOOTSTRAP_SEED,
+        "deployment_seed": deployment_seed,
+        "seeds_f1_summary": seeds_summary,
+        "baselines": baselines_report,
+        "slices": slices_report,
+        "deployment_decision": deployment_decision,
+    }
+
+    if out_path:
+        out_path = Path(out_path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    return report
+
+
 def cli() -> None:
     import argparse
 
@@ -749,6 +882,12 @@ def cli() -> None:
     run_p.add_argument("--purpose", required=True, type=str)
     run_p.add_argument("--predictions", required=True, type=Path)
 
+    agg_p = subparsers.add_parser("aggregate")
+    agg_p.add_argument("--freeze", required=True, type=Path)
+    agg_p.add_argument("--lock", required=True, type=Path)
+    agg_p.add_argument("--predictions", required=True, type=Path)
+    agg_p.add_argument("--out", required=True, type=Path)
+
     args = parser.parse_args()
     if args.command == "validation-inventory":
         inventory_checkpoints(args.runs, args.out)
@@ -765,8 +904,11 @@ def cli() -> None:
             run_id=args.run_id, approver=args.approver, purpose=args.purpose,
             predictions_dir=args.predictions,
         )
+    elif args.command == "aggregate":
+        build_report(args.freeze, args.lock, args.predictions, args.out)
 
 
 if __name__ == "__main__":
     cli()
+
 
