@@ -196,6 +196,17 @@ def select_dataset_bundles(
         intake_rec = intake_by_id.get(story_id)
         if intake_rec is None:
             raise ManifestError(f"bundle {story_id} not found in intake")
+        copied_fields = {
+            "provenance": bundle.provenance,
+            "split": bundle.split,
+            "candidate_role": bundle.candidate_role,
+            "declared_characters": bundle.declared_characters,
+            "declared_non_human": bundle.declared_non_human,
+            "style_preset_id": bundle.run_metadata.get("style_preset_id"),
+        }
+        for field, value in copied_fields.items():
+            if value != getattr(intake_rec, field):
+                raise ManifestError(f"bundle {story_id} {field} differs from intake")
         expected_hash = intake_sha256(intake_rec)
         recorded_hash = bundle.run_metadata.get("intake_sha256")
         if recorded_hash != expected_hash:
@@ -229,6 +240,8 @@ def select_dataset_bundles(
         primary_rec = donated_by_id[pid]
         backup_rec = donated_by_id[bid]
 
+        if repl.reason == "withdrawal" and primary_rec.withdrawal_state != "withdrawn":
+            raise ManifestError(f"withdrawal replacement primary {pid} is active")
         if primary_rec.style_preset_id != backup_rec.style_preset_id:
             raise ManifestError(
                 f"cross-style replacement forbidden: primary {pid} ({primary_rec.style_preset_id}) != backup {bid} ({backup_rec.style_preset_id})"
@@ -397,7 +410,7 @@ def validate_hard_negative_matches(
 
     if non_pilot_timestamps:
         earliest = min(non_pilot_timestamps)
-        if selection.hard_negatives_frozen_at > earliest:
+        if selection.hard_negatives_frozen_at >= earliest:
             raise ManifestError(
                 f"hard_negatives_frozen_at ({selection.hard_negatives_frozen_at.isoformat()}) must precede all non-pilot annotations (earliest: {earliest.isoformat()})"
             )

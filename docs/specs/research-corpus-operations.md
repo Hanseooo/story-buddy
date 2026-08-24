@@ -161,7 +161,7 @@ export derives truth from annotation rows and a reconciliation command repairs s
 
 ### 4.6 Freeze and conversion
 
-Before annotation, a read-only candidate-report mode lists every synthetic training character, its canonical
+Before annotation, a read-only candidate-report mode lists every reference-bearing synthetic training character, its canonical
 reference path and all same-species, same-style candidate characters. It reads completed corpus bundles only;
 it does not contact Supabase, create labels or inspect judge outcomes. A researcher compares canonical
 references using dominant colour, body configuration, silhouette, clothing/accessories and facial structure,
@@ -233,10 +233,11 @@ Any deliberate pair exclusion is recorded in its immutable run bundle before fre
 pilot pairs are the only external exclusions. The freeze rejects unknown exclusions and reports the exact
 excluded pair IDs.
 
-The freeze report records dataset SHA-256, counts by story/character/split/class/reason, adjudication rate,
-selected and excluded donated stories, replacement reasons, the selection-file SHA-256, exclusions and all
-pinned software/model/prompt versions. A constructed negative belongs to the story that owns its reference
-character for story-level counts.
+The immutable directory contains the exact controlled `dataset_selection.json` bytes and the freeze rejects
+any change between selection validation and snapshot installation. The freeze report records dataset SHA-256,
+counts by story/character/split/class/reason, adjudication rate, selected and excluded donated stories,
+replacement reasons, the selection-file SHA-256, exclusions and all pinned software/model/prompt versions. A
+constructed negative belongs to the story that owns its reference character for story-level counts.
 
 ## 5. Encoding and storage
 

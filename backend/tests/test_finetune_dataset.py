@@ -6,6 +6,7 @@
 """
 import hashlib
 import json
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -27,6 +28,11 @@ from finetune import annotation_truth as at
 from finetune import evaluate as ev
 from finetune import freeze_dataset as fd
 from finetune.corpus_io import AssetRecord, CorpusError, RunBundle, write_bundle
+from finetune.dataset_selection import (
+    DatasetSelection,
+    DatasetSelectionAudit,
+    validate_hard_negative_matches,
+)
 from finetune.manifest import ManifestError
 
 
@@ -787,6 +793,150 @@ def test_freeze_dataset_ignores_pilot_annotations_outside_the_corpus(tmp_path):
 
     assert report.adjudication_rate == 0.0
     assert report.exclusions == []
+
+
+def test_freeze_dataset_checks_hard_negative_timestamp_against_excluded_annotations(tmp_path):
+    data_dir = tmp_path / "corpus"
+    selected = freeze_bundle(data_dir)
+    excluded_memory = selected.memory.model_copy(
+        update={
+            "story_id": "excluded-story",
+            "scenes": [
+                selected.memory.scenes[0].model_copy(
+                    update={"final_image_ref": "excluded-story/scene.webp"}
+                )
+            ],
+        }
+    )
+    excluded = selected.model_copy(update={"memory": excluded_memory})
+    selected_pair = bd.pairs_from_memory(selected.memory)[0].pair_id
+    excluded_pair = bd.pairs_from_memory(excluded.memory)[0].pair_id
+    frozen_at = datetime.now(timezone.utc) - timedelta(hours=1)
+    selection = DatasetSelection(
+        hard_negatives_frozen_at=frozen_at,
+        hard_negative_matches=[],
+        donated_replacements=[],
+    )
+    selected_annotations = [
+        {
+            **row,
+            "created_at": (frozen_at + timedelta(minutes=1)).isoformat(),
+        }
+        for row in rows(selected_pair, {"same_character": True}, {"same_character": True})
+    ]
+    annotations = [
+        *selected_annotations,
+        {
+            **rows(excluded_pair, {"same_character": True})[0],
+            "created_at": (frozen_at - timedelta(minutes=1)).isoformat(),
+        },
+    ]
+
+    def validate_timestamp(_bundles, current_selection, annotation_rows, pilot_pair_ids):
+        return validate_hard_negative_matches(
+            [], current_selection, annotation_rows, pilot_pair_ids
+        )
+
+    with (
+        patch.object(
+            fd,
+            "prepare_dataset_bundles",
+            return_value=([selected], selection, DatasetSelectionAudit([], [], {}, "hash")),
+        ),
+        patch.object(fd, "load_completed_bundles", return_value=[selected, excluded]),
+        patch.object(fd, "fetch_annotations", return_value=annotations),
+        patch.object(fd, "fetch_adjudicator_ids", return_value=set()),
+        patch.object(fd, "fetch_pilot_pairs", return_value=set()),
+        patch.object(fd, "validate_hard_negative_matches", side_effect=validate_timestamp),
+        pytest.raises(ManifestError, match="must precede all non-pilot annotations"),
+    ):
+        bd.freeze_dataset(data_dir, tmp_path / "freeze")
+
+
+def test_freeze_dataset_snapshots_exact_selection_artifact(tmp_path):
+    data_dir = tmp_path / "corpus"
+    selected = freeze_bundle(data_dir)
+    pair_id = bd.pairs_from_memory(selected.memory)[0].pair_id
+    selection_path = tmp_path / "dataset_selection.json"
+    selection_bytes = b'{"controlled": true}\r\n'
+    selection_path.write_bytes(selection_bytes)
+    selection_hash = hashlib.sha256(selection_bytes).hexdigest()
+    selection = DatasetSelection(
+        hard_negatives_frozen_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        hard_negative_matches=[],
+        donated_replacements=[],
+    )
+    out_dir = tmp_path / "freeze"
+
+    with (
+        patch.object(
+            fd,
+            "prepare_dataset_bundles",
+            return_value=(
+                [selected],
+                selection,
+                DatasetSelectionAudit([], [], {}, selection_hash),
+            ),
+        ),
+        patch.object(
+            fd,
+            "fetch_annotations",
+            return_value=rows(pair_id, {"same_character": True}, {"same_character": True}),
+        ),
+        patch.object(fd, "fetch_adjudicator_ids", return_value=set()),
+        patch.object(fd, "fetch_pilot_pairs", return_value=set()),
+        patch.object(fd, "validate_hard_negative_matches", return_value={}),
+    ):
+        report = bd.freeze_dataset(
+            data_dir,
+            out_dir,
+            selection_path=selection_path,
+        )
+
+    assert (out_dir / "dataset_selection.json").read_bytes() == selection_bytes
+    assert report.selection_sha256 == selection_hash
+
+
+def test_freeze_dataset_rejects_selection_snapshot_hash_mismatch(tmp_path):
+    data_dir = tmp_path / "corpus"
+    selected = freeze_bundle(data_dir)
+    pair_id = bd.pairs_from_memory(selected.memory)[0].pair_id
+    selection_path = tmp_path / "dataset_selection.json"
+    selection_path.write_bytes(b'{"changed": true}\n')
+    selection = DatasetSelection(
+        hard_negatives_frozen_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        hard_negative_matches=[],
+        donated_replacements=[],
+    )
+    out_dir = tmp_path / "freeze"
+
+    with (
+        patch.object(
+            fd,
+            "prepare_dataset_bundles",
+            return_value=(
+                [selected],
+                selection,
+                DatasetSelectionAudit([], [], {}, "validated-before-change"),
+            ),
+        ),
+        patch.object(
+            fd,
+            "fetch_annotations",
+            return_value=rows(pair_id, {"same_character": True}, {"same_character": True}),
+        ),
+        patch.object(fd, "fetch_adjudicator_ids", return_value=set()),
+        patch.object(fd, "fetch_pilot_pairs", return_value=set()),
+        patch.object(fd, "validate_hard_negative_matches", return_value={}),
+        pytest.raises(ManifestError, match="selection artifact changed during freeze"),
+    ):
+        bd.freeze_dataset(
+            data_dir,
+            out_dir,
+            selection_path=selection_path,
+        )
+
+    assert not out_dir.exists()
 
 
 def test_freeze_dataset_rejects_changed_existing_output(tmp_path):

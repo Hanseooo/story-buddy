@@ -191,13 +191,20 @@ def freeze_dataset(
     ]
 
     matches = {} if selection is None else validate_hard_negative_matches(
-        selected_bundles, selection, relevant_annotations, pilot_pairs
+        selected_bundles, selection, annotations, pilot_pairs
     )
 
     out_dir.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=f".{out_dir.name}.", dir=out_dir.parent) as temporary:
         staged = Path(temporary) / out_dir.name
         staged.mkdir()
+        if selection is not None:
+            if selection_path is None:
+                raise ManifestError("selection path missing during production freeze")
+            frozen_selection = staged / "dataset_selection.json"
+            frozen_selection.write_bytes(selection_path.read_bytes())
+            if hashlib.sha256(frozen_selection.read_bytes()).hexdigest() != audit.selection_sha256:
+                raise ManifestError("selection artifact changed during freeze")
         for bundle in selected_bundles:
             for asset in bundle.assets:
                 target = Path(local_image_path(asset.storage_path, asset.kind, root=Path("assets")))

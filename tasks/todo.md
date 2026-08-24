@@ -15,6 +15,17 @@
   - [x] Obtain owner review of the written Batch 2 spec.
   - [x] Write the disposable TDD implementation plan.
   - [x] Implement and verify Batch 2.
+- [x] Close verified Batch 2 review findings.
+  - [x] Bind copied bundle metadata to its current intake record.
+  - [x] Apply the hard-negative freeze timestamp gate to all non-pilot annotations.
+  - [x] Reject withdrawal replacements for active primaries.
+  - [x] Clarify that hard-negative selection covers reference-bearing characters.
+  - [x] Run focused tests, backend lint, and the full backend suite.
+- [x] Close the final Batch 2 reproducibility findings.
+  - [x] Add a failing regression for freezing the exact selection artifact.
+  - [x] Copy and hash-verify `dataset_selection.json` inside the immutable freeze.
+  - [x] Reconcile the runbook with the preregistered Rung-D second-read exception.
+  - [x] Run focused and full verification, review, and commit only Batch 2 files.
 - [ ] Design and implement Batch 3 training/evaluation execution.
 - [ ] Finalize the existing research runbook as the sole operator guide.
 
@@ -33,16 +44,20 @@ Implemented and verified in Tasks 1–5:
 - **Frozen manual hard negatives:** Cross-character train-split pairs validated for same species, same style, >=1 finalized target scene, and `hard_negatives_frozen_at` preceding all non-pilot annotations.
 - **Pre-materialization bundle filtering:** `prepare_dataset_bundles()` filters and validates bundles before any Supabase client initialization or remote network calls in `materialize_pairs.py` and `freeze_dataset.py`.
 - **Immutable freeze reporting:** `FreezeReport` captures `selected_donated_stories`, `excluded_donated_stories`, `replacement_reasons`, and `selection_sha256`.
+- **Self-contained selection audit:** The immutable freeze snapshots the exact `dataset_selection.json` bytes, verifies their SHA-256 against the validated selection, and rejects annotation timestamps that do not strictly follow the hard-negative freeze.
 - **Canonical workspace paths:** Root `data/judge` references separated into `data/judge/corpus`, `data/judge/intake`, and `data/judge/freezes/obj4-v1`.
 - **Preregistration amendment & runbook:** Added 2026-08-24 dated amendment to `PREREGISTRATION_OBJ4.md` §12 superseding earlier seeded assignment/imbalance clauses; updated `research_runbook.md` with the 8-step pipeline.
 
 Verification:
-- Focused tests: 207 passed, 7 skipped in `test_corpus_io.py`, `test_dataset_selection.py`, `test_finetune_corpus.py`, `test_materialize_pairs.py`, `test_finetune_dataset.py`, `test_finetune_manifest.py`, `test_finetune_llamafactory.py`, `test_research_integrity.py`.
-- Full backend suite: 1,128 passed, 80 skipped (RLS/remote DB), 6 deselected smoke tests, 0 failed (`uv run pytest`).
+- Focused tests: 218 passed, 7 skipped in `test_corpus_io.py`, `test_dataset_selection.py`, `test_finetune_corpus.py`, `test_materialize_pairs.py`, `test_finetune_dataset.py`, `test_finetune_manifest.py`, `test_finetune_llamafactory.py`, `test_research_integrity.py`.
+- Full backend suite: 1,139 passed, 80 skipped (RLS/remote DB), 6 deselected smoke tests, 0 failed (`uv run pytest`).
 - Backend lint: `uv run ruff check .` passed with 0 errors.
 - Frontend suite: 380 passed across 42 files (`pnpm lint && pnpm test`).
 - Zero-cost fixture: 1 story completed, 0 paid images spent, `usd_high="0.000"`, valid candidate report JSON, fixture freeze passed without production files.
-- Senior Code Review: Passed cleanly with 0 Critical, 0 Important issues; minor CLI error stream consistency fixed.
+- Final senior code review: 0 Critical and 0 Important issues; ready to merge after the strict timestamp-boundary regression was added.
+- Review follow-up: bundle metadata now matches intake fields, timestamp gating sees every non-pilot annotation,
+  active primaries cannot cite withdrawal, the exact selection artifact is frozen and hash-verified, the Rung-D
+  exception is explicit, and the owning spec names reference-bearing characters explicitly.
 - Confirmed no live provider, paid Fal call, real donor intake, live database/Storage mutation, or `.env` access occurred.
 
 ## Batch 1 Outcome — Research Corpus Integrity
@@ -1065,7 +1080,7 @@ Critical or Important findings. No provider call, paid draw, live database mutat
 - [x] Record and self-review the durable design in the two owning specs.
 - [x] Obtain owner approval of the written Batch 2 specification.
 - [x] Write and self-review the disposable TDD implementation plan.
-- [ ] Execute the plan inline, verify it, review it, and delete it after completion.
+- [x] Execute the plan inline, verify it, review it, and delete it after completion.
 
 ## Success criteria
 

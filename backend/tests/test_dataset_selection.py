@@ -305,8 +305,20 @@ def sample_intakes_and_bundles():
         }),
     ]
     syn_bundles = [
-        make_bundle("syn-001", "a", species="fox", style="cel", split="train", intake_hash=intake_sha256(syn_intakes[0])),
-        make_bundle("syn-002", "b", species="fox", style="cel", split="train", intake_hash=intake_sha256(syn_intakes[1])),
+        make_bundle(
+            "syn-001", "a", species="fox", style="cel", split="train",
+            intake_hash=intake_sha256(syn_intakes[0]),
+        ).model_copy(update={
+            "declared_characters": syn_intakes[0].declared_characters,
+            "declared_non_human": syn_intakes[0].declared_non_human,
+        }),
+        make_bundle(
+            "syn-002", "b", species="fox", style="cel", split="train",
+            intake_hash=intake_sha256(syn_intakes[1]),
+        ).model_copy(update={
+            "declared_characters": syn_intakes[1].declared_characters,
+            "declared_non_human": syn_intakes[1].declared_non_human,
+        }),
     ]
 
     # 15 donated records
@@ -348,7 +360,10 @@ def sample_intakes_and_bundles():
             provenance="donated",
             role=role,
             intake_hash=intake_sha256(don_intakes[i - 1]),
-        )
+        ).model_copy(update={
+            "declared_characters": don_intakes[i - 1].declared_characters,
+            "declared_non_human": don_intakes[i - 1].declared_non_human,
+        })
         for i, (style, role) in enumerate(styles_and_roles, start=1)
     ]
 
@@ -377,9 +392,57 @@ def test_select_dataset_bundles_default_primaries():
     assert audit.replacement_reasons == {}
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("provenance", "synthetic"),
+        ("split", "train"),
+        ("candidate_role", "backup"),
+        ("declared_characters", ["Drifted character"]),
+        ("declared_non_human", ["Drifted character"]),
+    ],
+)
+def test_select_dataset_bundles_rejects_bundle_metadata_drift(field, value):
+    syn_intakes, syn_bundles, don_intakes, don_bundles = sample_intakes_and_bundles()
+    don_bundles[0] = don_bundles[0].model_copy(update={field: value})
+
+    with pytest.raises(ManifestError, match=f"{field} differs from intake"):
+        select_dataset_bundles(
+            syn_bundles + don_bundles,
+            syn_intakes,
+            don_intakes,
+            DatasetSelection(
+                hard_negatives_frozen_at=datetime.now(timezone.utc),
+                hard_negative_matches=[],
+                donated_replacements=[],
+            ),
+            "sel-hash",
+        )
+
+
+def test_select_dataset_bundles_rejects_bundle_style_drift():
+    syn_intakes, syn_bundles, don_intakes, don_bundles = sample_intakes_and_bundles()
+    metadata = {**don_bundles[0].run_metadata, "style_preset_id": "cel"}
+    don_bundles[0] = don_bundles[0].model_copy(update={"run_metadata": metadata})
+
+    with pytest.raises(ManifestError, match="style_preset_id differs from intake"):
+        select_dataset_bundles(
+            syn_bundles + don_bundles,
+            syn_intakes,
+            don_intakes,
+            DatasetSelection(
+                hard_negatives_frozen_at=datetime.now(timezone.utc),
+                hard_negative_matches=[],
+                donated_replacements=[],
+            ),
+            "sel-hash",
+        )
+
+
 def test_select_dataset_bundles_with_valid_backup_replacement():
     syn_intakes, syn_bundles, don_intakes, don_bundles = sample_intakes_and_bundles()
     # don-005 is cel primary. don-012 is cel backup.
+    don_intakes[4] = don_intakes[4].model_copy(update={"withdrawal_state": "withdrawn"})
     all_bundles = syn_bundles + don_bundles
     selection = DatasetSelection(
         hard_negatives_frozen_at=datetime.now(timezone.utc),
@@ -405,6 +468,28 @@ def test_select_dataset_bundles_with_valid_backup_replacement():
     assert "don-005" in audit.excluded_donated_stories
 
 
+def test_select_dataset_bundles_rejects_withdrawal_replacement_for_active_primary():
+    syn_intakes, syn_bundles, don_intakes, don_bundles = sample_intakes_and_bundles()
+    selection = DatasetSelection(
+        hard_negatives_frozen_at=datetime.now(timezone.utc),
+        hard_negative_matches=[],
+        donated_replacements=[
+            DonatedReplacement(
+                primary_story_id="don-005",
+                backup_story_id="don-012",
+                reason="withdrawal",
+                approved_at=datetime.now(timezone.utc),
+                evidence_ref="doc-123",
+            )
+        ],
+    )
+
+    with pytest.raises(ManifestError, match="withdrawal replacement primary don-005 is active"):
+        select_dataset_bundles(
+            syn_bundles + don_bundles, syn_intakes, don_intakes, selection, "sel-hash"
+        )
+
+
 def test_select_dataset_bundles_rejects_withdrawn_primary_without_replacement():
     syn_intakes, syn_bundles, don_intakes, don_bundles = sample_intakes_and_bundles()
     # Mark don-001 withdrawn in intake
@@ -422,7 +507,8 @@ def test_select_dataset_bundles_rejects_withdrawn_primary_without_replacement():
 
 def test_select_dataset_bundles_rejects_withdrawn_backup():
     syn_intakes, syn_bundles, don_intakes, don_bundles = sample_intakes_and_bundles()
-    # don-012 is cel backup, mark withdrawn
+    # don-005 is the withdrawn cel primary; don-012 is a withdrawn cel backup.
+    don_intakes[4] = don_intakes[4].model_copy(update={"withdrawal_state": "withdrawn"})
     don_intakes[11] = don_intakes[11].model_copy(update={"withdrawal_state": "withdrawn"})
     selection = DatasetSelection(
         hard_negatives_frozen_at=datetime.now(timezone.utc),
@@ -446,6 +532,7 @@ def test_select_dataset_bundles_rejects_withdrawn_backup():
 def test_select_dataset_bundles_rejects_cross_style_replacement():
     syn_intakes, syn_bundles, don_intakes, don_bundles = sample_intakes_and_bundles()
     # don-001 is gouache primary, don-012 is cel backup
+    don_intakes[0] = don_intakes[0].model_copy(update={"withdrawal_state": "withdrawn"})
     selection = DatasetSelection(
         hard_negatives_frozen_at=datetime.now(timezone.utc),
         hard_negative_matches=[],
@@ -594,7 +681,11 @@ def test_validate_hard_negative_matches_rejects_target_without_natural_scenes():
         validate_hard_negative_matches(bundles, selection, [], set())
 
 
-def test_validate_hard_negative_matches_rejects_annotation_earlier_than_freeze():
+@pytest.mark.parametrize(
+    "created_at",
+    ["2026-08-24T11:59:59+00:00", "2026-08-24T12:00:00+00:00"],
+)
+def test_validate_hard_negative_matches_rejects_annotation_not_after_freeze(created_at):
     bundles = [
         make_bundle("syn-001", "c1", species="fox", style="cel", split="train"),
         make_bundle("syn-002", "c2", species="fox", style="cel", split="train"),
@@ -609,7 +700,7 @@ def test_validate_hard_negative_matches_rejects_annotation_earlier_than_freeze()
         donated_replacements=[],
     )
     annotations = [
-        {"pair_id": "p1", "created_at": "2026-08-24T11:59:59+00:00"},  # Earlier than frozen_at!
+        {"pair_id": "p1", "created_at": created_at},
     ]
     with pytest.raises(ManifestError, match="precede"):
         validate_hard_negative_matches(bundles, selection, annotations, set())

@@ -77,7 +77,7 @@ uv run python -m finetune.build_dataset --freeze --data ../data/judge/corpus --d
 - **Immutable freeze directories:** `data/judge/freezes/obj4-v1` is strictly immutable. Any legitimate pre-training modification must produce a new named directory (e.g. `obj4-v2`) and a deliberate configuration update.
 - **Test-unopened rule:** The test split (`test.json` in the freeze) is held-out and must never be inspected, browsed, or evaluated during model development.
 - **Three-seed validation-only development:** Checkpoint selection and hyperparameter exploration use only `train.json` and `val.json` over 3 random seeds (0, 1, 2).
-- **One-time held-out evaluation:** The final selected model checkpoint is evaluated exactly once on the held-out test split at study conclusion.
+- **Held-out evaluation:** The final selected model checkpoint is evaluated once on the held-out test split at study conclusion. Only preregistration §7's Rung-D defect exception permits exactly one second read after debugging exclusively on train/validation; both readings and the deviation must then be reported, and no third read is allowed.
 
 ## Evidence to retain outside intake data
 
