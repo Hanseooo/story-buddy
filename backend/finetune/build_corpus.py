@@ -370,9 +370,10 @@ def _write_state(path: pathlib.Path, state: dict) -> None:
 def _persisted_telemetry(values: dict, policy: SpendPolicy, source: str) -> Counter:
     try:
         price = Decimal(str(values["conservative_call_usd"]))
+        stored = values.get("telemetry")
         telemetry = Counter(
             {
-                key: values.get(f"{key}_calls", values.get("telemetry", {}).get(key, 0))
+                key: stored[key] if stored is not None else values[f"{key}_calls"]
                 for key in TELEMETRY_KEYS
             }
         )
@@ -382,10 +383,28 @@ def _persisted_telemetry(values: dict, policy: SpendPolicy, source: str) -> Coun
         type(telemetry[key]) is not int or telemetry[key] < 0 for key in TELEMETRY_KEYS
     ):
         raise CorpusError(f"invalid persisted billing telemetry: {source}")
+    terminal_calls = sum(telemetry[key] for key in ("completed", "failed", "uncertain"))
+    if terminal_calls > telemetry["attempted"]:
+        raise CorpusError(f"invalid persisted billing telemetry: {source}")
     return telemetry
 
 
 RECOVERABLE_REASONS = {"budget_stopped", "resume_exhausted", "billing_uncertain"}
+
+
+def _validated_checkpoint(app_graph, story: IntakeRecord) -> StoryMemory:
+    snapshot = app_graph.get_state({"configurable": {"thread_id": story.story_id}})
+    try:
+        checkpoint = StoryMemory.model_validate(snapshot.values)
+    except (AttributeError, ValidationError) as error:
+        raise CorpusError(f"checkpoint is not resumable: {story.story_id}") from error
+    if (
+        checkpoint.story_id != story.story_id
+        or checkpoint.input.raw_text != story.text
+        or checkpoint.style.style_preset_id != story.style_preset_id
+    ):
+        raise CorpusError(f"checkpoint does not match intake: {story.story_id}")
+    return checkpoint
 
 
 def _validate_recovery(
@@ -402,11 +421,7 @@ def _validate_recovery(
         raise CorpusError(f"intake digest differs for quarantined story: {story.story_id}")
     if reason == "billing_uncertain" and acknowledge_uncertain_billing != story.story_id:
         raise CorpusError(f"acknowledge uncertain billing before retry: {story.story_id}")
-    snapshot = app_graph.get_state({"configurable": {"thread_id": story.story_id}})
-    try:
-        StoryMemory.model_validate(snapshot.values)
-    except (AttributeError, ValidationError) as error:
-        raise CorpusError(f"checkpoint is not resumable: {story.story_id}") from error
+    _validated_checkpoint(app_graph, story)
     return (
         datetime.now(timezone.utc).isoformat()
         if reason == "billing_uncertain"
@@ -423,12 +438,18 @@ def _quarantine(
     telemetry: Counter,
     policy: SpendPolicy,
 ) -> None:
+    previous = state.get(story.story_id, {})
     state[story.story_id] = {
         "quarantined": message,
         "reason_code": reason_code,
         "intake_sha256": intake_sha256(story),
         "conservative_call_usd": str(policy.conservative_call_usd),
         "telemetry": dict(telemetry),
+        **(
+            {"billing_acknowledged_at": previous["billing_acknowledged_at"]}
+            if isinstance(previous, dict) and "billing_acknowledged_at" in previous
+            else {}
+        ),
     }
     _write_state(state_path, state)
 
@@ -492,6 +513,44 @@ def build(
                 if billing_acknowledged_at is not None:
                     state_entry["billing_acknowledged_at"] = billing_acknowledged_at
                     _write_state(state_path, state)
+            else:
+                state_telemetry = _persisted_telemetry(state_entry, policy, story_id)
+                if state_entry.get("intake_sha256") != intake_sha256(story):
+                    _quarantine(
+                        state,
+                        state_path,
+                        story,
+                        "intake_mismatch",
+                        "intake digest differs from in-progress state",
+                        state_telemetry,
+                        policy,
+                    )
+                    raise CorpusError(f"intake digest differs for in-progress story: {story_id}")
+                try:
+                    _validated_checkpoint(app_graph, story)
+                except CorpusError as error:
+                    _quarantine(
+                        state,
+                        state_path,
+                        story,
+                        "invalid_terminal",
+                        str(error),
+                        state_telemetry,
+                        policy,
+                    )
+                    raise
+                terminal_calls = sum(state_telemetry[key] for key in ("completed", "failed", "uncertain"))
+                if terminal_calls < state_telemetry["attempted"]:
+                    _quarantine(
+                        state,
+                        state_path,
+                        story,
+                        "billing_uncertain",
+                        "billing uncertain; reconcile before retry",
+                        state_telemetry,
+                        policy,
+                    )
+                    raise CorpusError(f"billing uncertain for {story_id}; reconcile before retry")
         if story_id in bundles:
             if bundles[story_id].run_metadata.get("intake_sha256") != intake_sha256(story):
                 bundle_telemetry = _persisted_telemetry(
@@ -551,8 +610,14 @@ def build(
                 telemetry[key] += 1
                 state[story_id] = {
                     "in_progress": True,
+                    "intake_sha256": intake_sha256(story),
                     "conservative_call_usd": str(policy.conservative_call_usd),
                     "telemetry": dict(story_telemetry),
+                    **(
+                        {"billing_acknowledged_at": billing_acknowledged_at}
+                        if billing_acknowledged_at is not None
+                        else {}
+                    ),
                 }
                 _write_state(state_path, state)
 

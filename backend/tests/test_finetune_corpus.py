@@ -335,7 +335,7 @@ def test_campaign_persists_failed_call_spend_before_restart(tmp_path, stories):
 
     state = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
     assert state["a"]["telemetry"]["attempted"] == 1
-    resumed_graph = FakeGraph(per_story_images=1)
+    resumed_graph = RecoverableGraph(stories[0], per_story_images=1)
     summary = build_corpus.build(
         stories[:1], resumed_graph, out_dir=tmp_path, supabase=FakeSupabase(), policy=policy
     )
@@ -357,6 +357,27 @@ def test_uncertain_billing_quarantines_and_stops_without_retry(tmp_path):
         "failed": 0,
         "uncertain": 1,
     }
+
+
+def test_restart_quarantines_an_attempt_without_a_terminal_billing_event(tmp_path):
+    story = intake_story()
+
+    class CrashedGraph:
+        def stream(self, graph_input, config, stream_mode=None):
+            build_corpus._fal_event_sink.get()("attempted")
+            raise SystemExit("process died")
+            yield
+
+    with pytest.raises(SystemExit, match="process died"):
+        build_corpus.build([story], CrashedGraph(), out_dir=tmp_path, supabase=FakeSupabase())
+
+    resumed = RecoverableGraph(story, per_story_images=1)
+    with pytest.raises(CorpusError, match="billing uncertain"):
+        build_corpus.build([story], resumed, out_dir=tmp_path, supabase=FakeSupabase())
+
+    state = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
+    assert resumed.calls == []
+    assert state[story.story_id]["reason_code"] == "billing_uncertain"
 
 
 def test_budget_stop_requires_explicit_resume_and_preserves_telemetry(tmp_path, stories):
@@ -419,6 +440,160 @@ def test_uncertain_billing_acknowledgment_never_reduces_spend(tmp_path):
     assert bundle.run_metadata["attempted_calls"] == 2
     assert bundle.run_metadata["uncertain_calls"] == 1
     assert "billing_acknowledged_at" in bundle.run_metadata
+
+
+def test_recovery_rejects_a_checkpoint_bound_to_different_intake(tmp_path):
+    story = intake_story()
+    state = {
+        story.story_id: {
+            "quarantined": "budget stopped",
+            "reason_code": "budget_stopped",
+            "intake_sha256": intake_sha256(story),
+            "conservative_call_usd": "0.035",
+            "telemetry": {"attempted": 1, "completed": 1, "failed": 0, "uncertain": 0},
+        }
+    }
+    (tmp_path / "build_state.json").write_text(json.dumps(state), encoding="utf-8")
+    graph = RecoverableGraph(story, per_story_images=1)
+    wrong = build_corpus._initial_state(story).model_copy(update={"story_id": "different-story"})
+    graph.get_state = lambda config: SimpleNamespace(values=wrong.model_dump())
+
+    with pytest.raises(CorpusError, match="checkpoint does not match intake"):
+        build_corpus.build(
+            [story],
+            graph,
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+            resume_quarantined=story.story_id,
+        )
+    assert graph.calls == []
+
+
+def test_recovery_rejects_more_terminal_events_than_attempts(tmp_path):
+    story = intake_story()
+    state = {
+        story.story_id: {
+            "quarantined": "budget stopped",
+            "reason_code": "budget_stopped",
+            "intake_sha256": intake_sha256(story),
+            "conservative_call_usd": "0.035",
+            "telemetry": {"attempted": 0, "completed": 1, "failed": 0, "uncertain": 0},
+        }
+    }
+    (tmp_path / "build_state.json").write_text(json.dumps(state), encoding="utf-8")
+
+    with pytest.raises(CorpusError, match="invalid persisted billing telemetry"):
+        build_corpus.build(
+            [story],
+            RecoverableGraph(story, per_story_images=1),
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+            resume_quarantined=story.story_id,
+        )
+
+
+def test_restart_rejects_non_integer_billing_counters_as_corpus_error(tmp_path):
+    story = intake_story()
+    state = {
+        story.story_id: {
+            "in_progress": True,
+            "intake_sha256": intake_sha256(story),
+            "conservative_call_usd": "0.035",
+            "telemetry": {"attempted": 1, "completed": "1", "failed": 0, "uncertain": 0},
+        }
+    }
+    (tmp_path / "build_state.json").write_text(json.dumps(state), encoding="utf-8")
+    graph = RecoverableGraph(story, per_story_images=1)
+
+    with pytest.raises(CorpusError, match="invalid persisted billing telemetry"):
+        build_corpus.build([story], graph, out_dir=tmp_path, supabase=FakeSupabase())
+    assert graph.calls == []
+
+
+def test_restart_rejects_missing_billing_counters_before_graph_execution(tmp_path):
+    story = intake_story()
+    state = {
+        story.story_id: {
+            "in_progress": True,
+            "intake_sha256": intake_sha256(story),
+            "conservative_call_usd": "0.035",
+            "telemetry": {"attempted": 1, "completed": 1, "failed": 0},
+        }
+    }
+    (tmp_path / "build_state.json").write_text(json.dumps(state), encoding="utf-8")
+    graph = RecoverableGraph(story, per_story_images=1)
+
+    with pytest.raises(CorpusError, match="invalid persisted billing telemetry"):
+        build_corpus.build([story], graph, out_dir=tmp_path, supabase=FakeSupabase())
+    assert graph.calls == []
+
+
+def test_in_progress_restart_quarantines_an_intake_digest_mismatch(tmp_path):
+    story = intake_story()
+    state = {
+        story.story_id: {
+            "in_progress": True,
+            "intake_sha256": "0" * 64,
+            "conservative_call_usd": "0.035",
+            "telemetry": {"attempted": 1, "completed": 1, "failed": 0, "uncertain": 0},
+        }
+    }
+    (tmp_path / "build_state.json").write_text(json.dumps(state), encoding="utf-8")
+    graph = RecoverableGraph(story, per_story_images=1)
+
+    with pytest.raises(CorpusError, match="intake digest differs"):
+        build_corpus.build([story], graph, out_dir=tmp_path, supabase=FakeSupabase())
+
+    saved = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
+    assert graph.calls == []
+    assert saved[story.story_id]["reason_code"] == "intake_mismatch"
+
+
+def test_in_progress_restart_quarantines_a_checkpoint_mismatch(tmp_path):
+    story = intake_story()
+    state = {
+        story.story_id: {
+            "in_progress": True,
+            "intake_sha256": intake_sha256(story),
+            "conservative_call_usd": "0.035",
+            "telemetry": {"attempted": 1, "completed": 1, "failed": 0, "uncertain": 0},
+        }
+    }
+    (tmp_path / "build_state.json").write_text(json.dumps(state), encoding="utf-8")
+    graph = RecoverableGraph(story, per_story_images=1)
+    wrong = build_corpus._initial_state(story).model_copy(update={"story_id": "different-story"})
+    graph.get_state = lambda config: SimpleNamespace(values=wrong.model_dump())
+
+    with pytest.raises(CorpusError, match="checkpoint does not match intake"):
+        build_corpus.build([story], graph, out_dir=tmp_path, supabase=FakeSupabase())
+
+    saved = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
+    assert graph.calls == []
+    assert saved[story.story_id]["reason_code"] == "invalid_terminal"
+
+
+def test_billing_acknowledgment_survives_requarantine(tmp_path):
+    story = intake_story()
+    with pytest.raises(CorpusError, match="billing uncertain"):
+        build_corpus.build([story], UncertainGraph(), out_dir=tmp_path, supabase=FakeSupabase())
+
+    class InterruptGraph(RecoverableGraph):
+        def stream(self, graph_input, config, stream_mode=None):
+            yield "updates", {"__interrupt__": [object()]}
+
+    summary = build_corpus.build(
+        [story],
+        InterruptGraph(story, per_story_images=0),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        resume_quarantined=story.story_id,
+        acknowledge_uncertain_billing=story.story_id,
+    )
+    state = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
+
+    assert summary["halted"] is True
+    assert state[story.story_id]["reason_code"] == "resume_exhausted"
+    assert state[story.story_id]["billing_acknowledged_at"].endswith("+00:00")
 
 
 @pytest.mark.parametrize(

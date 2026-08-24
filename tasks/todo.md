@@ -41,7 +41,7 @@ Verification:
 - [x] Resolve who may delete which storybooks and whether deletion is hard, soft, or staged.
 - [x] Compare safe deletion designs and obtain owner approval for the selected data lifecycle.
 - [x] Record the approved architecture in ADR-044 and reconcile D-J's decision surfaces.
-- [ ] Write and self-review the durable feature spec.
+- [x] Write and self-review the durable feature spec.
 - [ ] Write and self-review the TDD-first implementation plan under `docs/specs/plans/`.
 
 ## Success criteria
@@ -61,6 +61,13 @@ ADR verification passed: required sections and escape hatch are present; ADR num
 the index target resolves; D-J has no open backlog row; placeholder, runtime-change, and targeted diff checks are
 clean. No application tests ran because this session changed decision documentation only. The feature spec and
 implementation plan remain pending and must be authored in a fresh session per the architecture-session gate.
+
+## Feature-spec outcome — 2026-08-24
+
+Drafted `docs/specs/storybook-deletion.md` from accepted ADR-044. It fixes the per-book boundary,
+quiescence/CAS rules, immediate RLS revocation, four-store cleanup order, retry semantics, UI states,
+deterministic tests, live Supabase proof, and explicit retention limits. Owner review is pending;
+the implementation plan remains blocked until the spec is approved.
 
 ---
 
@@ -955,3 +962,70 @@ Verification: `git diff --check` passed; the added JSON example parsed; `researc
 its tags balanced; changed-line placeholder scan was empty; repository scan found no live `paper_cut`,
 single-style, or obsolete 50-story claim in the owning corpus documents. Application tests were not run
 because no runtime, data, schema, or UI behavior changed.
+# Current Task: Research corpus integrity code review
+
+- [x] Pin `290bc6e...HEAD` and verify the four-commit diff is non-empty.
+- [x] Run independent Standards review against repository rules and smell baseline.
+- [x] Run independent Spec review against `docs/specs/research-corpus-operations.md`.
+- [x] Validate findings against the diff and record the review outcome.
+
+## Success criteria
+
+Report Standards and Spec findings separately with actionable file/line references, preserving the
+existing working tree and making no implementation changes.
+
+## Review / outcome
+
+Standards review found no hard violations and one advisory Divergent Change concern in the 693-line
+corpus runner. Spec review found three recovery defects: unresolved attempted calls can restart without
+uncertain-billing acknowledgment, checkpoint contents are not bound to intake, and a billing
+acknowledgment is lost after re-quarantine. Focused verification passed 76 tests; these three crash and
+recovery cases are not covered by that suite.
+# Current Task: Verify corpus recovery review findings
+
+- [x] Trace persisted telemetry, checkpoint validation, and acknowledgment state end to end.
+- [x] Add one failing regression test for each confirmed recovery defect.
+- [x] Apply the smallest fail-closed fixes; leave the advisory file split alone.
+- [x] Run focused tests, backend Ruff, and record the outcome.
+
+## Success criteria
+
+Crash-window attempts require uncertain-billing acknowledgment, recovered checkpoints match immutable
+intake fields, and billing acknowledgments survive re-quarantine without refactoring unrelated runner code.
+
+## Review / outcome
+
+All three Spec findings reproduced with focused tests and were fixed in the existing runner. In-progress
+state now carries the intake digest; unmatched attempted-call telemetry becomes `billing_uncertain` before
+restart; checkpoint story/text/style must match intake; and billing acknowledgment survives subsequent
+state writes and quarantine. The advisory module split was deliberately left alone as unrelated refactoring.
+
+Verification: all four regressions failed before their fixes and passed afterward; `uv run ruff check .`
+passed; full backend pytest passed 1088, skipped 80 environment-dependent
+tests, and deselected 6 provider smoke tests. No paid provider or remote database call ran.
+
+# Current Task: Close Objective-4 corpus integrity Batch 1
+
+- [x] Add failing regressions for malformed persisted telemetry and untrusted in-progress restarts.
+- [x] Reject malformed telemetry and mismatched intake/checkpoints before any graph or provider call.
+- [x] Run focused tests, full backend verification, and a zero-cost fixture.
+- [x] Review and commit only the Batch 1 implementation, tests, and task outcome.
+
+## Success criteria
+
+Malformed persisted billing counters fail closed through the supported corpus error path; all existing
+recovery safeguards remain green; the zero-cost fixture completes without paid calls; and the complete
+Batch 1 change is committed without touching unrelated working-tree files.
+
+## Review / outcome
+
+Batch 1 now fails closed on non-integer or missing persisted billing counters, crash-window attempts without
+a terminal billing event, changed intake bytes, and stale or invalid LangGraph checkpoints. Uncertain-billing
+acknowledgments remain auditable across re-quarantine. The approved smoke policy remains unchanged: a story
+that exhausts its assigned allowance halts the smoke before another paid call.
+
+TDD evidence: each new malformed-state and restart regression failed before its fix and passed afterward.
+Final verification: 84 focused corpus tests passed; `uv run ruff check .` passed; full backend pytest passed
+1092, skipped 80 environment-dependent tests, and deselected 6 provider smoke tests. The zero-cost fixture
+completed one story with zero paid attempts and `usd_high="0.000"`. Independent re-review found no remaining
+Critical or Important findings. No provider call, paid draw, live database mutation, or `.env` access occurred.
