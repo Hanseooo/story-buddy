@@ -1036,3 +1036,21 @@ Final verification: 84 focused corpus tests passed; `uv run ruff check .` passed
 1092, skipped 80 environment-dependent tests, and deselected 6 provider smoke tests. The zero-cost fixture
 completed one story with zero paid attempts and `usd_high="0.000"`. Independent re-review found no remaining
 Critical or Important findings. No provider call, paid draw, live database mutation, or `.env` access occurred.
+
+# Current Task: Objective-4 dataset validity Batch 2
+
+- [x] Revalidate hard-negative, withdrawal, candidate-role, preregistration, and path blockers.
+- [x] Approve the full canonical-dataset boundary and manual same-species/same-style mapping.
+- [x] Approve the controlled selection artifact, fail-closed replacement rules, and canonical paths.
+- [x] Record and self-review the durable design in the two owning specs.
+- [x] Obtain owner approval of the written Batch 2 specification.
+- [x] Write and self-review the disposable TDD implementation plan.
+- [ ] Execute the plan inline, verify it, review it, and delete it after completion.
+
+## Success criteria
+
+Production materialization and freeze consume the current donated intake plus one strict selection artifact;
+withdrawn and unselected donated bundles cannot enter the dataset; every synthetic training reference uses
+one manually frozen same-species/same-style target and all of that target's eligible natural train scenes;
+mutable and immutable paths are distinct; the frozen preregistration is amended visibly; and all deterministic
+checks pass without paid calls, real donor data, held-out evaluation, or live research mutations.
