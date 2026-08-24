@@ -343,7 +343,12 @@ def test_build_report_computes_three_seeds_baselines_slices_and_deployment_rung(
     (freeze_dir / "manifest.test.jsonl").write_text("".join(json.dumps(r.model_dump(mode="json")) + "\n" for r in records), encoding="utf-8")
     for split in ("train", "val"):
         (freeze_dir / f"manifest.{split}.jsonl").write_text("", encoding="utf-8")
-    (freeze_dir / "character_slices.json").write_text(json.dumps({"non_human": ["dragon"]}), encoding="utf-8")
+    (freeze_dir / "character_slices.json").write_text(json.dumps({"dragon": "non_human", "human": "human"}), encoding="utf-8")
+    (freeze_dir / "annotation_agreement.jsonl").write_text(
+        json.dumps({"pair_id": "p1", "annotator1_different_character": True, "annotator2_different_character": True}) + "\n"
+        + json.dumps({"pair_id": "p2", "annotator1_different_character": False, "annotator2_different_character": False}) + "\n",
+        encoding="utf-8",
+    )
 
     valid_lock["manifest_hashes"]["manifest.test.jsonl"] = hashlib.sha256(
         (freeze_dir / "manifest.test.jsonl").read_bytes()
@@ -357,8 +362,8 @@ def test_build_report_computes_three_seeds_baselines_slices_and_deployment_rung(
 
     # Write prediction files for all baselines
     for judge_name in ("seed_0", "seed_1", "seed_2", "zero_shot_base", "prompted_gemma", "clip_cosine", "dinov2_cosine"):
-        # Give prompted_gemma lower F1 so candidate beats incumbent
-        p_val = False if judge_name == "prompted_gemma" and r1.pair_id == "p1" else True
+        # Give prompted_gemma and zero_shot_base lower F1 so candidate beats them
+        p_val = False if judge_name in ("prompted_gemma", "zero_shot_base") and r1.pair_id == "p1" else True
         p_list = [
             ev.PredictionRecord(
                 pair_id=r.pair_id,
@@ -387,9 +392,14 @@ def test_build_report_computes_three_seeds_baselines_slices_and_deployment_rung(
     assert "baselines" in report
     assert "slices" in report
     assert "non_human" in report["slices"]
+    assert report["slices"]["non_human"]["seed_0"]["f1"] == pytest.approx(1.0)
+    assert "human_inter_rater_agreement" in report
+    assert report["human_inter_rater_agreement"]["percent_agreement"] == pytest.approx(1.0)
     assert "deployment_decision" in report
     assert report["deployment_decision"]["status"] == "pass"
+    assert report["deployment_decision"]["rung"] == "A"
     assert out_file.exists()
+
 
 
 

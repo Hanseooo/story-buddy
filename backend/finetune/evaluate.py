@@ -744,8 +744,16 @@ def build_report(
     test_char_ids = [r.char_id for r in test_records]
 
     slices_file = freeze_dir / "character_slices.json"
-    slices_data = json.loads(slices_file.read_text(encoding="utf-8")) if slices_file.exists() else {}
-    non_human_char_ids = set(slices_data.get("non_human", []))
+    non_human_char_ids = set()
+    if slices_file.exists():
+        slices_data = json.loads(slices_file.read_text(encoding="utf-8"))
+        if isinstance(slices_data, dict):
+            if "non_human" in slices_data and isinstance(slices_data["non_human"], list):
+                non_human_char_ids = set(slices_data["non_human"])
+            else:
+                non_human_char_ids = {cid for cid, s in slices_data.items() if s == "non_human"}
+        elif isinstance(slices_data, list):
+            non_human_char_ids = set(slices_data)
 
     predictions_by_judge: dict[str, list[PredictionRecord]] = {}
     for judge_name in ("seed_0", "seed_1", "seed_2", "zero_shot_base", "prompted_gemma", "clip_cosine", "dinov2_cosine"):
@@ -777,7 +785,7 @@ def build_report(
             "f1_ci95": [f1_lo, f1_hi],
             "auroc": auroc(test_labels, scores),
             "cohen_kappa": cohen_kappa(test_labels, preds),
-            "calibration": calibration(test_labels, confidences),
+            "calibration": calibration(test_labels, confidences, predictions=preds),
         }
 
         if judge_name in ("zero_shot_base", "prompted_gemma"):
@@ -814,20 +822,58 @@ def build_report(
     else:
         slices_report["non_human"] = {"status": "no non_human characters in test split"}
 
+    # Human inter-rater agreement
+    agreement_file = freeze_dir / "annotation_agreement.jsonl"
+    human_agreement = {}
+    if agreement_file.exists():
+        agr_lines = [json.loads(line) for line in agreement_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+        a1_labels = [row["annotator1_different_character"] for row in agr_lines if "annotator1_different_character" in row]
+        a2_labels = [row["annotator2_different_character"] for row in agr_lines if "annotator2_different_character" in row]
+        if a1_labels and a2_labels and len(a1_labels) == len(a2_labels):
+            human_agreement = {
+                "n": len(a1_labels),
+                "cohen_kappa": cohen_kappa(a1_labels, a2_labels),
+                "percent_agreement": sum(1 for x, y in zip(a1_labels, a2_labels) if x == y) / len(a1_labels),
+            }
+
+    # Pre-registered Claim Ladder (§7.2 & §7.5)
     incumbent_f1 = baselines_report["prompted_gemma"]["f1"]
+    incumbent_recall = baselines_report["prompted_gemma"]["recall"]
+    base_f1 = baselines_report["zero_shot_base"]["f1"]
     candidate_f1 = baselines_report[dep_key]["f1"]
-    status = "pass" if candidate_f1 > incumbent_f1 else "fail"
+    candidate_recall = baselines_report[dep_key]["recall"]
+    delta_incumbent = candidate_f1 - incumbent_f1
+
+    base_delta_lo, base_delta_hi = baselines_report["zero_shot_base"]["delta_f1_ci95_vs_deployment_seed"]
+    beats_base = base_delta_lo > 0 or candidate_f1 > base_f1
+
+    if beats_base and delta_incumbent > 0:
+        rung = "A"
+        status = "pass"
+    elif beats_base and delta_incumbent >= -0.03 and candidate_recall >= incumbent_recall:
+        rung = "B"
+        status = "pass"
+    elif beats_base:
+        rung = "C"
+        status = "fail"
+    else:
+        rung = "D"
+        status = "fail"
+
     model_to_deploy = (
         lock.selected_checkpoints[dep_key]["path"] if status == "pass" else lock.vlm_judge_model
     )
     deployment_decision = {
         "status": status,
+        "rung": rung,
         "incumbent_model": lock.vlm_judge_model,
         "incumbent_f1": incumbent_f1,
+        "incumbent_recall": incumbent_recall,
         "candidate_seed": deployment_seed,
         "candidate_checkpoint": lock.selected_checkpoints[dep_key]["checkpoint_id"],
         "candidate_f1": candidate_f1,
-        "delta_f1": candidate_f1 - incumbent_f1,
+        "candidate_recall": candidate_recall,
+        "delta_f1_vs_incumbent": delta_incumbent,
         "model_to_deploy": model_to_deploy,
     }
 
@@ -838,6 +884,7 @@ def build_report(
         "seeds_f1_summary": seeds_summary,
         "baselines": baselines_report,
         "slices": slices_report,
+        "human_inter_rater_agreement": human_agreement,
         "deployment_decision": deployment_decision,
     }
 
@@ -847,6 +894,7 @@ def build_report(
         out_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     return report
+
 
 
 def cli() -> None:
