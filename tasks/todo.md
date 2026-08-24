@@ -6,7 +6,7 @@
 - [x] Record and self-review the Batch 1 corpus-integrity design.
 - [x] Obtain owner review of the written Batch 1 design.
 - [x] Write and self-review the disposable TDD implementation plan for Batch 1.
-- [ ] Execute and verify Batch 1 in a separate implementation cycle.
+- [x] Execute and verify Batch 1 in a separate implementation cycle.
 - [ ] Design and implement Batch 2 dataset-validity safeguards.
 - [ ] Design and implement Batch 3 training/evaluation execution.
 - [ ] Finalize the existing research runbook as the sole operator guide.
@@ -17,6 +17,21 @@ Zero-cost fixture work proves exact-boundary completion, fail-closed quarantine 
 resetting spend; immutable intake bytes bind every corpus bundle; dataset freeze enforces the preregistered
 negative/selection rules; training and evaluation fail closed on missing pins or premature test access; and
 the canonical runbook contains the complete executable sequence without duplicating another permanent guide.
+
+## Batch 1 Outcome — Research Corpus Integrity
+
+Implemented and verified in Tasks 1–3:
+- **Intake binding:** `intake_sha256()` computes canonical SHA-256 over immutable intake fields (excluding mutable `withdrawal_state`), persisted in `run_metadata` and re-verified on bundle load and resume.
+- **Paid-call boundary & quarantine:** The shared `_fal_event_sink` rejects attempts past the draw limit before submission (`StoryBudgetStopped`), and `run_story()` explicitly outputs `completed`, `budget_stopped`, or `quarantined` (`resume_exhausted`, `billing_uncertain`, `invalid_terminal`, `intake_mismatch`).
+- **Quarantine recovery:** `--resume-quarantined <story_id>` and `--acknowledge-uncertain-billing <story_id>` validate checkpoint state and intake digest, record UTC acknowledgment timestamp, and preserve all attempted spend at the pinned conservative price.
+
+Verification:
+- Focused tests: 76 passed (36 in `test_corpus_io.py`, 40 in `test_finetune_corpus.py`).
+- Full backend suite: 1,084 passed, 80 intentionally skipped (RLS/remote DB tests requiring live credentials), 6 deselected smoke tests, 1 pre-existing Starlette deprecation warning.
+- Backend lint: `uv run ruff check .` passed with 0 errors.
+- Zero-cost CLI fixture: 1 story completed, 0 images spent, `usd_high="0.000"`, and valid bundle reference in `build_state.json`.
+- Confirmed no live provider, paid Fal call, live database mutation, or `.env` access occurred.
+- Remaining blockers: Batch 2 dataset-validity safeguards (construct train negatives, split lineage guards, freeze report) and Batch 3 training/eval execution.
 
 ---
 
