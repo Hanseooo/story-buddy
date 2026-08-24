@@ -8,7 +8,7 @@
 
 ### model
 model_name_or_path: Qwen/Qwen2.5-VL-7B-Instruct
-model_revision: PIN_THE_EXACT_COMMIT_HASH   # CC-7. Not "main" — grab it from the model card (§13).
+model_revision: cc594898137f460bfe9f0759e9844b3ce807cfb5
 image_max_pixels: 262144                    # 512 x 512
 trust_remote_code: true
 
@@ -32,7 +32,7 @@ cutoff_len: 2048
 
 ### output
 output_dir: saves/judge-lora-seed0
-report_to: wandb
+report_to: none
 run_name: judge-qlora-seed0
 plot_loss: true
 
