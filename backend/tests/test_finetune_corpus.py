@@ -15,7 +15,6 @@ from io import BytesIO
 
 import pytest
 from PIL import Image
-from pydantic import ValidationError
 
 from app.config import MAX_STORY_WORDS, MIN_STORY_WORDS, STYLE_PRESETS
 from app.length import clamp_story, word_count
@@ -113,22 +112,20 @@ class FakeGraph:
     def stream(self, graph_input, config, stream_mode=None):
         self.calls.append(config["configurable"]["thread_id"])
         for n in range(1, self.per_story_images + 1):
+            sink = build_corpus._fal_event_sink.get()
+            if sink:
+                sink("attempted")
             self.consumed += 1
+            if sink:
+                sink("completed")
             values = graph_input.model_dump()
             values.update(
                 cost=Cost(image_count=n),
-                characters=[Character(char_id="c0", name="c0", canonical_ref_image="story/ref-c0-1.png")],
+                characters=[
+                    Character(char_id="c0", name="c0", canonical_ref_image="story/ref-c0-1.png")
+                ],
             )
             yield "values", values
-
-
-class TelemetryGraph(FakeGraph):
-    def stream(self, graph_input, config, stream_mode=None):
-        for chunk in super().stream(graph_input, config, stream_mode):
-            sink = build_corpus._fal_event_sink.get()
-            sink("attempted")
-            sink("completed")
-            yield chunk
 
 
 class FakeStorage:
@@ -208,21 +205,74 @@ def test_smoke_divides_affordable_draws_and_quarantines_at_the_ceiling(tmp_path,
     assert graph.consumed == 14
     assert summary["images_spent"] == 14
     assert Decimal(summary["usd_high"]) == Decimal("0.490")
-    assert state["a"]["quarantined"] == "smoke draw ceiling reached; reconcile before retry"
+    assert state["a"]["reason_code"] == "budget_stopped"
 
 
 def test_campaign_hard_cap_is_unconditionally_thirty_dollars():
     assert build_corpus.SpendPolicy(max_usd=Decimal("31.00")).authorized_usd == Decimal("30.00")
 
 
+def test_exact_story_draw_limit_still_writes_a_completed_bundle(tmp_path, stories):
+    graph = FakeGraph(per_story_images=2)
+    policy = build_corpus.SpendPolicy(
+        max_usd=Decimal("0.07"), conservative_call_usd=Decimal("0.035")
+    )
+
+    summary = build_corpus.build(
+        stories[:1], graph, out_dir=tmp_path, supabase=FakeSupabase(), policy=policy
+    )
+
+    assert summary["stories_run"] == 1
+    assert summary["halted"] is False
+    assert graph.consumed == 2
+    assert load_completed_bundles(tmp_path)[0].memory.story_id == "a"
+
+
+def test_next_call_past_story_limit_is_blocked_before_submission(tmp_path, stories):
+    graph = FakeGraph(per_story_images=3)
+    policy = build_corpus.SpendPolicy(
+        max_usd=Decimal("0.07"), conservative_call_usd=Decimal("0.035")
+    )
+
+    summary = build_corpus.build(
+        stories[:1], graph, out_dir=tmp_path, supabase=FakeSupabase(), policy=policy
+    )
+    state = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
+
+    assert graph.consumed == 2
+    assert summary["halted"] is True
+    assert state["a"]["reason_code"] == "budget_stopped"
+    assert load_completed_bundles(tmp_path) == []
+
+
+def test_resume_exhaustion_is_quarantined_without_a_bundle(tmp_path, stories):
+    class InterruptGraph:
+        calls = 0
+
+        def stream(self, graph_input, config, stream_mode=None):
+            self.calls += 1
+            yield "updates", {"__interrupt__": [object()]}
+
+    graph = InterruptGraph()
+    summary = build_corpus.build(
+        stories[:1], graph, out_dir=tmp_path, supabase=FakeSupabase()
+    )
+    state = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
+
+    assert graph.calls == build_corpus.MAX_RESUMES + 1
+    assert summary["halted"] is True
+    assert state["a"]["reason_code"] == "resume_exhausted"
+    assert load_completed_bundles(tmp_path) == []
+
+
 def test_campaign_reserves_completed_bundle_spend_across_invocations(tmp_path, stories):
-    first_graph = TelemetryGraph(per_story_images=2)
+    first_graph = FakeGraph(per_story_images=2)
     policy = build_corpus.SpendPolicy(max_usd=Decimal("1.95"))
     build_corpus.build(
         stories[:1], first_graph, out_dir=tmp_path, supabase=FakeSupabase(), policy=policy
     )
 
-    resumed_graph = TelemetryGraph(per_story_images=1)
+    resumed_graph = FakeGraph(per_story_images=1)
     summary = build_corpus.build(
         stories[:2], resumed_graph, out_dir=tmp_path, supabase=FakeSupabase(), policy=policy
     )
@@ -249,7 +299,7 @@ def test_campaign_persists_failed_call_spend_before_restart(tmp_path, stories):
 
     state = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
     assert state["a"]["telemetry"]["attempted"] == 1
-    resumed_graph = TelemetryGraph(per_story_images=1)
+    resumed_graph = FakeGraph(per_story_images=1)
     summary = build_corpus.build(
         stories[:1], resumed_graph, out_dir=tmp_path, supabase=FakeSupabase(), policy=policy
     )
@@ -488,10 +538,14 @@ def test_build_revalidates_the_completed_graph_result(tmp_path):
         def stream(self, graph_input, config, stream_mode=None):
             yield "values", {"story_id": "fixture-story"}
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(CorpusError, match="invalid terminal state"):
         build_corpus.build(
             [intake_story()], InvalidGraph(), out_dir=tmp_path, supabase=FakeSupabase()
         )
+
+    state = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
+    assert state["fixture-story"]["reason_code"] == "invalid_terminal"
+    assert load_completed_bundles(tmp_path) == []
 
 
 def test_build_quarantines_a_declared_roster_that_does_not_match_completion(tmp_path):

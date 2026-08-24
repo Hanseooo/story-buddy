@@ -15,9 +15,11 @@ from collections import Counter
 from dataclasses import dataclass
 from decimal import Decimal
 from io import BytesIO
+from typing import Literal
 
 from langgraph.types import Command
 from PIL import Image, UnidentifiedImageError
+from pydantic import ValidationError
 
 from app.config import IMAGE_BUDGET, RECURSION_LIMIT, STYLE_PRESETS, settings
 from app.length import word_count
@@ -127,24 +129,37 @@ def _initial_state(story: IntakeRecord) -> StoryMemory:
     )
 
 
-def run_story(app_graph, story: IntakeRecord, budget_left: int) -> tuple[dict, int, bool]:
+class StoryBudgetStopped(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class StoryRun:
+    values: dict
+    image_count: int
+    outcome: Literal["completed", "budget_stopped", "quarantined"]
+    reason: str | None = None
+
+
+def run_story(app_graph, story: IntakeRecord) -> StoryRun:
     config = {"configurable": {"thread_id": story.story_id}, "recursion_limit": RECURSION_LIMIT}
     graph_input = _initial_state(story)
     values: dict = {}
     for _ in range(MAX_RESUMES + 1):
         interrupted = False
-        for chunk in app_graph.stream(graph_input, config, stream_mode=["updates", "values"]):
-            mode, payload = chunk[-2:]
-            if mode == "values":
-                values = payload
-                if _image_count(values) >= budget_left:
-                    return values, _image_count(values), True
-            elif "__interrupt__" in payload:
-                interrupted = True
+        try:
+            for chunk in app_graph.stream(graph_input, config, stream_mode=["updates", "values"]):
+                mode, payload = chunk[-2:]
+                if mode == "values":
+                    values = payload
+                elif "__interrupt__" in payload:
+                    interrupted = True
+        except StoryBudgetStopped:
+            return StoryRun(values, _image_count(values), "budget_stopped", "budget_stopped")
         if not interrupted:
-            return values, _image_count(values), False
+            return StoryRun(values, _image_count(values), "completed")
         graph_input = Command(resume=CONFIRM)
-    return values, _image_count(values), False
+    return StoryRun(values, _image_count(values), "quarantined", "resume_exhausted")
 
 
 def _image_details(contents: bytes, expected_mime: str | None = None) -> tuple[str, int, int]:
@@ -363,6 +378,25 @@ def _persisted_telemetry(values: dict, policy: SpendPolicy, source: str) -> Coun
     return telemetry
 
 
+def _quarantine(
+    state: dict,
+    state_path: pathlib.Path,
+    story: IntakeRecord,
+    reason_code: str,
+    message: str,
+    telemetry: Counter,
+    policy: SpendPolicy,
+) -> None:
+    state[story.story_id] = {
+        "quarantined": message,
+        "reason_code": reason_code,
+        "intake_sha256": intake_sha256(story),
+        "conservative_call_usd": str(policy.conservative_call_usd),
+        "telemetry": dict(telemetry),
+    }
+    _write_state(state_path, state)
+
+
 def build(
     stories: list[IntakeRecord | dict],
     app_graph,
@@ -387,7 +421,6 @@ def build(
             if story_id not in bundles and isinstance(entry, dict) and "telemetry" in entry:
                 telemetry.update(_persisted_telemetry(entry, policy, story_id))
     story_draw_limit = policy.story_draw_limit(len(records))
-    smoke = policy.authorized_usd <= policy.smoke_usd
     summary = {
         "stories_run": 0,
         "stories_skipped": 0,
@@ -411,6 +444,18 @@ def build(
                 raise CorpusError(f"{state_entry['quarantined']} for {story_id}")
         if story_id in bundles:
             if bundles[story_id].run_metadata.get("intake_sha256") != intake_sha256(story):
+                bundle_telemetry = _persisted_telemetry(
+                    bundles[story_id].run_metadata, policy, story_id
+                )
+                _quarantine(
+                    state,
+                    state_path,
+                    story,
+                    "intake_mismatch",
+                    "intake digest differs from completed bundle",
+                    bundle_telemetry,
+                    policy,
+                )
                 raise CorpusError(f"intake digest differs for completed bundle: {story_id}")
             _verify_bundle_assets(bundles[story_id], out_dir)
             if state_entry != expected_reference:
@@ -421,11 +466,17 @@ def build(
         if fixture:
             memory = _fixture_memory(story)
             _write_fixture_images(memory, out_dir)
-            drawn = 0
-            halted = False
             refs = len(memory.characters)
             scenes = len(memory.scenes)
             story_telemetry = Counter(attempted=0, completed=0, failed=0, uncertain=0)
+            bundle = _bundle(
+                story,
+                memory,
+                out_dir,
+                fixture,
+                story_telemetry,
+                policy.conservative_call_usd,
+            )
         else:
             billable_calls = max(campaign_spent, telemetry["attempted"])
             remaining_usd = policy.authorized_usd - billable_calls * policy.conservative_call_usd
@@ -440,6 +491,8 @@ def build(
             )
 
             def record_fal_event(event: str) -> None:
+                if event == "attempted" and story_telemetry["attempted"] >= story_draw_limit:
+                    raise StoryBudgetStopped
                 if event == "failed_uncertain":
                     key = "uncertain"
                 else:
@@ -455,44 +508,63 @@ def build(
 
             token = _fal_event_sink.set(record_fal_event)
             try:
-                values, drawn, halted = run_story(app_graph, story, story_draw_limit)
+                run = run_story(app_graph, story)
             except Exception as error:
                 if story_telemetry["uncertain"]:
-                    state[story_id] = {
-                        "quarantined": "billing uncertain; reconcile before retry",
-                        "conservative_call_usd": str(policy.conservative_call_usd),
-                        "telemetry": dict(story_telemetry),
-                    }
-                    _write_state(state_path, state)
+                    _quarantine(
+                        state,
+                        state_path,
+                        story,
+                        "billing_uncertain",
+                        "billing uncertain; reconcile before retry",
+                        story_telemetry,
+                        policy,
+                    )
                     raise CorpusError(f"billing uncertain for {story_id}; reconcile before retry") from error
                 raise
             finally:
                 _fal_event_sink.reset(token)
-            campaign_spent += drawn
-            invocation_spent += drawn
-            memory = StoryMemory.model_validate(values)
-            refs, scenes = download_images(memory, out_dir, supabase)
-        if halted:
-            if smoke:
-                state[story_id] = {
-                    "quarantined": "smoke draw ceiling reached; reconcile before retry",
-                    "conservative_call_usd": str(policy.conservative_call_usd),
-                    "telemetry": dict(story_telemetry),
-                }
-                _write_state(state_path, state)
-            summary["halted"] = True
-            break
-        write_bundle(
-            out_dir,
-            _bundle(
-                story,
-                memory,
-                out_dir,
-                fixture,
-                story_telemetry,
-                policy.conservative_call_usd,
-            ),
-        )
+
+            campaign_spent += run.image_count
+            invocation_spent += run.image_count
+            if run.outcome != "completed":
+                reason = run.reason or "invalid_terminal"
+                _quarantine(
+                    state,
+                    state_path,
+                    story,
+                    reason,
+                    reason.replace("_", " "),
+                    story_telemetry,
+                    policy,
+                )
+                summary["halted"] = True
+                break
+
+            try:
+                memory = StoryMemory.model_validate(run.values)
+                refs, scenes = download_images(memory, out_dir, supabase)
+                bundle = _bundle(
+                    story,
+                    memory,
+                    out_dir,
+                    fixture,
+                    story_telemetry,
+                    policy.conservative_call_usd,
+                )
+            except (CorpusError, ValidationError) as error:
+                _quarantine(
+                    state,
+                    state_path,
+                    story,
+                    "invalid_terminal",
+                    f"invalid terminal state: {error}",
+                    story_telemetry,
+                    policy,
+                )
+                raise CorpusError(f"invalid terminal state for {story_id}: {error}") from error
+
+        write_bundle(out_dir, bundle)
         state[story_id] = expected_reference
         _write_state(state_path, state)
         summary["stories_run"] += 1
