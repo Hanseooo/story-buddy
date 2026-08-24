@@ -87,3 +87,154 @@ def test_write_predictions_and_validate_alignment(tmp_path):
     # Misaligned rows fail validation
     with pytest.raises(ManifestError, match="alignment"):
         ev.validate_prediction_alignment(records, [rows[1], rows[0]])
+
+
+def predictions(records, preds):
+    return [
+        ev.PredictionRecord(
+            pair_id=r.pair_id,
+            char_id=r.char_id,
+            split="val",
+            judge_id="candidate",
+            prediction=p,
+            confidence=0.9,
+            score=0.9 if p else 0.1,
+            latency_ms=10,
+            parse_status="parsed",
+            model_id="m",
+            prompt_version="1",
+        )
+        for r, p in zip(records, preds)
+    ]
+
+
+@pytest.fixture
+def val_records():
+    r1 = manifest_record("p1", split="val")
+    r1 = r1.model_copy(update={"label": True, "same_character": False})
+    r2 = manifest_record("p2", split="val")
+    r2 = r2.model_copy(update={"label": False, "same_character": True})
+    return [r1, r2]
+
+
+@pytest.fixture
+def valid_lock():
+    return {
+        "schema_version": 1,
+        "bootstrap_seed": 0,
+        "base_model": "Qwen/Qwen2.5-VL-7B-Instruct",
+        "base_revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
+        "llamafactory_version": "v0.9.5",
+        "llamafactory_commit": "7af909522a951e3ad9f022ea6f88b6755257eaa5",
+        "deployment_seed": 0,
+        "seeds": [0, 1, 2],
+        "selected_checkpoints": {
+            "seed_0": {
+                "checkpoint_id": "checkpoint-050",
+                "step": 50,
+                "path": "runs/seed-0/output/checkpoint-050",
+                "sha256": "a" * 64,
+                "val_f1": 0.85,
+            },
+            "seed_1": {
+                "checkpoint_id": "checkpoint-100",
+                "step": 100,
+                "path": "runs/seed-1/output/checkpoint-100",
+                "sha256": "b" * 64,
+                "val_f1": 0.82,
+            },
+            "seed_2": {
+                "checkpoint_id": "checkpoint-050",
+                "step": 50,
+                "path": "runs/seed-2/output/checkpoint-050",
+                "sha256": "c" * 64,
+                "val_f1": 0.80,
+            },
+        },
+        "controls": {
+            "clip_cosine": {"threshold": 0.75, "val_f1": 0.65},
+            "dinov2_cosine": {"threshold": 0.80, "val_f1": 0.70},
+        },
+        "manifest_hashes": {
+            "manifest.train.jsonl": "1" * 64,
+            "manifest.val.jsonl": "2" * 64,
+            "manifest.test.jsonl": "3" * 64,
+        },
+        "prompt_version": "4",
+        "vlm_judge_model": "google/gemma-3-27b-it",
+    }
+
+
+def test_checkpoint_selection_uses_val_f1_and_breaks_ties_by_earlier_step(val_records):
+    selected = ev.select_checkpoint({
+        "checkpoint-100": predictions(val_records, [True, False]),
+        "checkpoint-050": predictions(val_records, [True, False]),
+        "checkpoint-150": predictions(val_records, [False, False]),
+    }, val_records)
+    assert selected["checkpoint_id"] == "checkpoint-050"
+    assert selected["step"] == 50
+
+
+def test_threshold_selection_maximizes_val_f1_then_prefers_lower_threshold(val_records):
+    # p1 is label=True (different), p2 is label=False (same).
+    # cosine similarity is lower for different characters: p1=0.4, p2=0.9
+    selected = ev.select_threshold([0.4, 0.9], val_records)
+    assert selected["threshold"] in {0.4, 0.9}
+    assert selected["val_f1"] == pytest.approx(1.0)
+    assert selected["selected_on"] == "manifest.val.jsonl"
+
+
+def test_evaluation_lock_is_immutable_and_contains_all_required_pins(tmp_path, valid_lock):
+    path = tmp_path / "evaluation_lock.json"
+    ev.write_evaluation_lock(path, valid_lock)
+    ev.write_evaluation_lock(path, valid_lock)
+    with pytest.raises(ManifestError, match="evaluation lock differs"):
+        ev.write_evaluation_lock(path, {**valid_lock, "prompt_version": "5"})
+
+
+
+def test_inventory_checkpoints_discovers_and_hashes(tmp_path):
+    run_root = tmp_path / "runs"
+    ckpt_dir = run_root / "seed-0" / "output" / "checkpoint-50"
+    ckpt_dir.mkdir(parents=True)
+    (ckpt_dir / "adapter_model.safetensors").write_bytes(b"weights")
+    out = tmp_path / "candidates.json"
+    result = ev.inventory_checkpoints(run_root, out)
+    assert len(result["candidates"]) == 1
+    assert result["candidates"][0]["model_id"] == "seed0_checkpoint50"
+    assert "vllm_command" in result
+    assert out.exists()
+
+
+def test_validate_offline_creates_evaluation_lock(tmp_path, val_records):
+    import json
+    freeze_dir = tmp_path / "freeze"
+    freeze_dir.mkdir()
+    val_mf = freeze_dir / "manifest.val.jsonl"
+    val_mf.write_text("".join(json.dumps(r.model_dump(mode="json")) + "\n" for r in val_records), encoding="utf-8")
+    for split in ("train", "test"):
+        (freeze_dir / f"manifest.{split}.jsonl").write_text("", encoding="utf-8")
+
+    run_root = tmp_path / "runs"
+    for s in (0, 1, 2):
+        ckpt = run_root / f"seed-{s}" / "output" / "checkpoint-50"
+        ckpt.mkdir(parents=True)
+        (ckpt / "adapter_model.safetensors").write_bytes(b"weights")
+
+    candidates_path = tmp_path / "candidates.json"
+    ev.inventory_checkpoints(run_root, candidates_path)
+
+    preds_dir = tmp_path / "predictions"
+    preds_dir.mkdir()
+    for s in (0, 1, 2):
+        preds = predictions(val_records, [True, False])
+        pred_file = preds_dir / f"seed{s}_checkpoint50.jsonl"
+        ev.write_predictions(pred_file, preds)
+
+    lock_out = tmp_path / "evaluation_lock.json"
+    lock = ev.validate_offline(freeze_dir, candidates_path, preds_dir, lock_out)
+    assert lock["deployment_seed"] in (0, 1, 2)
+    assert "seed_0" in lock["selected_checkpoints"]
+    assert lock_out.exists()
+
+

@@ -8,12 +8,14 @@ The metric is F1 on `different_character` — the minority class, the class the 
 on, and the class where a miss ships a broken page to a child (§3.3). `ManifestRecord.label` is
 already that class; it is read, never re-derived (`build_dataset.py` owns the inversion).
 """
+import hashlib
 import json
 import logging
 from pathlib import Path
-from typing import Callable, Iterable, Literal, Sequence
+from typing import Callable, Literal, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
+
 
 from app.config import settings
 from contracts.story_memory import VlmVerdict
@@ -22,6 +24,14 @@ from finetune.manifest import ManifestError, ManifestRecord, read_manifest
 from finetune.to_llamafactory import QUESTION
 
 log = logging.getLogger(__name__)
+
+BASE_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct"
+BASE_REVISION = "cc594898137f460bfe9f0759e9844b3ce807cfb5"
+LLAMAFACTORY_VERSION = "v0.9.5"
+LLAMAFACTORY_COMMIT = "7af909522a951e3ad9f022ea6f88b6755257eaa5"
+BOOTSTRAP_SEED = 0
+PREDICTION_SCHEMA_VERSION = 1
+SEEDS = (0, 1, 2)
 
 Judge = Callable[[ManifestRecord], bool]      # record → predicted `different_character`
 
@@ -49,6 +59,154 @@ class PredictionRecord(BaseModel):
     prompt_version: str
     threshold_id: str | None = None
     checkpoint_id: str | None = None
+
+
+def _hash_directory(dir_path: Path) -> str:
+    hasher = hashlib.sha256()
+    for file_path in sorted(p for p in dir_path.rglob("*") if p.is_file()):
+        rel_path = file_path.relative_to(dir_path).as_posix()
+        file_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()
+        hasher.update(f"{rel_path}:{file_hash}\n".encode("utf-8"))
+    return hasher.hexdigest()
+
+
+def inventory_checkpoints(runs_root: Path, out_path: Path | None = None) -> dict:
+    runs_root = Path(runs_root)
+    candidates = []
+    for seed_dir in sorted(runs_root.glob("seed-*")):
+        if not seed_dir.is_dir():
+            continue
+        seed_str = seed_dir.name.replace("seed-", "")
+        if not seed_str.isdigit():
+            continue
+        seed = int(seed_str)
+        output_dir = seed_dir / "output"
+        if not output_dir.is_dir():
+            continue
+        for ckpt_dir in sorted(output_dir.glob("checkpoint-*")):
+            if not ckpt_dir.is_dir():
+                continue
+            step_str = ckpt_dir.name.replace("checkpoint-", "")
+            if not step_str.isdigit():
+                continue
+            step = int(step_str)
+            model_id = f"seed{seed}_checkpoint{step}"
+            ckpt_hash = _hash_directory(ckpt_dir)
+            candidates.append({
+                "model_id": model_id,
+                "seed": seed,
+                "step": step,
+                "path": str(ckpt_dir),
+                "sha256": ckpt_hash,
+                "checkpoint_id": ckpt_dir.name,
+            })
+    candidates.sort(key=lambda c: (c["seed"], c["step"]))
+    vllm_command = [
+        "vllm", "serve", BASE_MODEL, "--revision", BASE_REVISION,
+        "--enable-lora", "--max-lora-rank", "16", "--lora-modules",
+        *[f"{item['model_id']}={item['path']}" for item in candidates],
+    ]
+    payload = {"candidates": candidates, "vllm_command": vllm_command}
+    if out_path:
+        out_path = Path(out_path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return payload
+
+
+def select_checkpoint(
+    candidates: dict[str, list[PredictionRecord]],
+    records: Sequence[ManifestRecord],
+) -> dict:
+    scored = []
+    labels = [r.label for r in records]
+    for ckpt_id, preds in candidates.items():
+        validate_prediction_alignment(records, preds)
+        f1 = prf1(labels, [p.prediction for p in preds])[2]
+        digits = "".join(ch for ch in ckpt_id if ch.isdigit())
+        step = int(digits) if digits else 0
+        scored.append({"checkpoint_id": ckpt_id, "step": step, "val_f1": f1})
+    scored.sort(key=lambda item: (-item["val_f1"], item["step"]))
+    if not scored:
+        raise ManifestError("no checkpoint candidates provided for selection")
+    return scored[0]
+
+
+def select_threshold(
+    scores: Sequence[float],
+    records: Sequence[ManifestRecord],
+) -> dict:
+    if not scores:
+        raise ManifestError("no scores provided for threshold selection")
+    labels = [r.label for r in records]
+    unique_scores = sorted(set(scores))
+    candidates = [unique_scores[0] - 0.01, *unique_scores, unique_scores[-1] + 0.01]
+    scored = []
+    for t in candidates:
+        preds = [s < t for s in scores]
+        f1 = prf1(labels, preds)[2]
+        scored.append({"threshold": t, "val_f1": f1})
+    scored.sort(key=lambda item: (-item["val_f1"], item["threshold"]))
+    best = scored[0]
+    return {
+        "threshold": best["threshold"],
+        "val_f1": best["val_f1"],
+        "selected_on": "manifest.val.jsonl",
+    }
+
+
+class EvaluationLock(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    schema_version: int = 1
+    bootstrap_seed: int = 0
+    base_model: str
+    base_revision: str
+    llamafactory_version: str
+    llamafactory_commit: str
+    deployment_seed: int
+    seeds: list[int]
+    selected_checkpoints: dict[str, dict]
+    controls: dict[str, dict]
+    manifest_hashes: dict[str, str]
+    prompt_version: str
+    vlm_judge_model: str
+
+
+def write_evaluation_lock(path: Path, payload: dict | EvaluationLock) -> dict:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if isinstance(payload, dict):
+        lock_obj = EvaluationLock.model_validate(payload)
+    else:
+        lock_obj = payload
+
+    if lock_obj.seeds != [0, 1, 2]:
+        raise ManifestError("evaluation lock seeds must be [0, 1, 2]")
+    if lock_obj.base_model != BASE_MODEL or lock_obj.base_revision != BASE_REVISION:
+        raise ManifestError("evaluation lock base model/revision does not match fixed pins")
+    if lock_obj.llamafactory_version != LLAMAFACTORY_VERSION or lock_obj.llamafactory_commit != LLAMAFACTORY_COMMIT:
+        raise ManifestError("evaluation lock LLaMA-Factory pins do not match fixed pins")
+    if lock_obj.bootstrap_seed != BOOTSTRAP_SEED:
+        raise ManifestError(f"bootstrap_seed must be {BOOTSTRAP_SEED}")
+    if lock_obj.deployment_seed not in (0, 1, 2):
+        raise ManifestError("deployment_seed must be 0, 1, or 2")
+
+    text = json.dumps(lock_obj.model_dump(mode="json"), indent=2, sort_keys=True) + "\n"
+    if path.exists():
+        existing = path.read_text(encoding="utf-8")
+        if json.loads(existing) != json.loads(text):
+            raise ManifestError(f"immutable evaluation lock differs at {path}")
+        return json.loads(text)
+
+    tmp_path = path.with_suffix(f".tmp.{path.name}")
+    try:
+        tmp_path.write_text(text, encoding="utf-8")
+        tmp_path.replace(path)
+    except Exception:
+        if tmp_path.exists():
+            tmp_path.unlink()
+        raise
+    return json.loads(text)
 
 
 def validate_prediction_alignment(
@@ -240,22 +398,110 @@ BASELINES: dict[str, str] = {
 }
 
 
-def evaluate(records: Sequence[ManifestRecord], judges: dict[str, Judge]) -> dict:
-    """Run each baseline over the same pairs and report §7's metrics per baseline.
+def validate_offline(
+    freeze_dir: Path,
+    candidates_path: Path,
+    predictions_dir: Path,
+    out_path: Path,
+) -> dict:
+    freeze_dir = Path(freeze_dir)
+    val_manifest = freeze_dir / "manifest.val.jsonl"
+    if not val_manifest.exists():
+        raise ManifestError(f"validation manifest missing at {val_manifest}")
+    val_records = list(read_manifest(val_manifest))
 
-    ⚠️ **The held-out test set is read exactly once** (§5.5, §7.5). Tune on validation.
-    """
-    return {name: score(records, [predict(r) for r in records]) for name, predict in judges.items()}
+    candidates_payload = json.loads(Path(candidates_path).read_text(encoding="utf-8"))
+    candidates = candidates_payload["candidates"]
+
+    predictions_dir = Path(predictions_dir)
+    seed_groups: dict[int, dict[str, list[PredictionRecord]]] = {s: {} for s in SEEDS}
+    for item in candidates:
+        seed = item["seed"]
+        model_id = item["model_id"]
+        pred_file = predictions_dir / f"{model_id}.jsonl"
+        if not pred_file.exists():
+            raise ManifestError(f"prediction file missing for candidate {model_id} at {pred_file}")
+        lines = [json.loads(line) for line in pred_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+        preds = [PredictionRecord.model_validate(p) for p in lines]
+        validate_prediction_alignment(val_records, preds)
+        seed_groups[seed][item["checkpoint_id"]] = preds
+
+    selected_checkpoints = {}
+    for seed in SEEDS:
+        ckpt_preds = seed_groups[seed]
+        if not ckpt_preds:
+            raise ManifestError(f"no candidate checkpoints found for seed {seed}")
+        best = select_checkpoint(ckpt_preds, val_records)
+        cand_detail = next(c for c in candidates if c["seed"] == seed and c["checkpoint_id"] == best["checkpoint_id"])
+        selected_checkpoints[f"seed_{seed}"] = {
+            "checkpoint_id": best["checkpoint_id"],
+            "step": best["step"],
+            "path": cand_detail["path"],
+            "sha256": cand_detail["sha256"],
+            "val_f1": best["val_f1"],
+        }
+
+    deployment_seed = min(SEEDS, key=lambda s: (-selected_checkpoints[f"seed_{s}"]["val_f1"], s))
+
+    controls = {}
+    for ctrl_name in ("clip_cosine", "dinov2_cosine"):
+        ctrl_pred_file = predictions_dir / f"{ctrl_name}.jsonl"
+        if ctrl_pred_file.exists():
+            ctrl_lines = [json.loads(line) for line in ctrl_pred_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+            ctrl_records = [PredictionRecord.model_validate(p) for p in ctrl_lines]
+            validate_prediction_alignment(val_records, ctrl_records)
+            scores = [p.score for p in ctrl_records if p.score is not None]
+            threshold_res = select_threshold(scores, val_records)
+            controls[ctrl_name] = threshold_res
+        else:
+            controls[ctrl_name] = {"threshold": 0.5, "val_f1": 0.0, "selected_on": "manifest.val.jsonl"}
+
+    manifest_hashes = {}
+    for split_name in ("train", "val", "test"):
+        mf_path = freeze_dir / f"manifest.{split_name}.jsonl"
+        if mf_path.exists():
+            manifest_hashes[f"manifest.{split_name}.jsonl"] = hashlib.sha256(mf_path.read_bytes()).hexdigest()
+
+    lock_payload = {
+        "schema_version": PREDICTION_SCHEMA_VERSION,
+        "bootstrap_seed": BOOTSTRAP_SEED,
+        "base_model": BASE_MODEL,
+        "base_revision": BASE_REVISION,
+        "llamafactory_version": LLAMAFACTORY_VERSION,
+        "llamafactory_commit": LLAMAFACTORY_COMMIT,
+        "deployment_seed": deployment_seed,
+        "seeds": list(SEEDS),
+        "selected_checkpoints": selected_checkpoints,
+        "controls": controls,
+        "manifest_hashes": manifest_hashes,
+        "prompt_version": "4",
+        "vlm_judge_model": settings.vlm_judge_model,
+    }
+    return write_evaluation_lock(out_path, lock_payload)
 
 
-def main(manifest: Path, split: str, judges: dict[str, Judge], out: Path | None = None) -> dict:
-    records = [r for r in read_manifest(manifest) if r.split == split]
-    results = evaluate(records, judges)
-    if out:
-        Path(out).write_text(json.dumps(results, indent=2), encoding="utf-8")
-    return results
+def cli() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Objective-4 evaluation and validation runner.")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    inv_p = subparsers.add_parser("validation-inventory")
+    inv_p.add_argument("--runs", required=True, type=Path)
+    inv_p.add_argument("--out", required=True, type=Path)
+
+    val_p = subparsers.add_parser("validate")
+    val_p.add_argument("--freeze", required=True, type=Path)
+    val_p.add_argument("--candidates", required=True, type=Path)
+    val_p.add_argument("--predictions", required=True, type=Path)
+    val_p.add_argument("--out", required=True, type=Path)
+
+    args = parser.parse_args()
+    if args.command == "validation-inventory":
+        inventory_checkpoints(args.runs, args.out)
+    elif args.command == "validate":
+        validate_offline(args.freeze, args.candidates, args.predictions, args.out)
 
 
-def slice_by(records: Iterable[ManifestRecord], char_ids: set[str]) -> list[ManifestRecord]:
-    """§7.4 item 2 — the non-human character slice. Membership is a curated list, not inferred."""
-    return [r for r in records if r.char_id in char_ids]
+if __name__ == "__main__":
+    cli()
