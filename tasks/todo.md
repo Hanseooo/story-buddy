@@ -7,14 +7,14 @@
 - [x] Obtain owner review of the written Batch 1 design.
 - [x] Write and self-review the disposable TDD implementation plan for Batch 1.
 - [x] Execute and verify Batch 1 in a separate implementation cycle.
-- [ ] Design and implement Batch 2 dataset-validity safeguards.
+- [x] Design and implement Batch 2 dataset-validity safeguards.
   - [x] Revalidate hard-negative, withdrawal, role, split and path blockers against current HEAD.
   - [x] Approve the full canonical-dataset boundary and manual frozen hard-negative mapping.
   - [x] Approve the controlled selection artifact, fail-closed validation and canonical path flow.
   - [x] Record and self-review the Batch 2 design in the owning research specs.
-  - [ ] Obtain owner review of the written Batch 2 spec.
-  - [ ] Write the disposable TDD implementation plan.
-  - [ ] Implement and verify Batch 2.
+  - [x] Obtain owner review of the written Batch 2 spec.
+  - [x] Write the disposable TDD implementation plan.
+  - [x] Implement and verify Batch 2.
 - [ ] Design and implement Batch 3 training/evaluation execution.
 - [ ] Finalize the existing research runbook as the sole operator guide.
 
@@ -24,6 +24,26 @@ Zero-cost fixture work proves exact-boundary completion, fail-closed quarantine 
 resetting spend; immutable intake bytes bind every corpus bundle; dataset freeze enforces the preregistered
 negative/selection rules; training and evaluation fail closed on missing pins or premature test access; and
 the canonical runbook contains the complete executable sequence without duplicating another permanent guide.
+
+## Batch 2 Outcome — Dataset Validity Safeguards
+
+Implemented and verified in Tasks 1–5:
+- **Strict selection artifact & fail-closed donor replacement:** `DatasetSelection` (`dataset_selection.json`) controls primary donors (4 Gouache, 3 Cel, 3 Cut-paper) and documented backup replacements with matching art styles and valid non-blank justifications.
+- **Intake mode separation:** `corpus_io.load_intake` supports `mode="generation"` (rejecting withdrawn stories) vs `mode="freeze_audit"` (accepting them to locate and audit exclusions).
+- **Frozen manual hard negatives:** Cross-character train-split pairs validated for same species, same style, >=1 finalized target scene, and `hard_negatives_frozen_at` preceding all non-pilot annotations.
+- **Pre-materialization bundle filtering:** `prepare_dataset_bundles()` filters and validates bundles before any Supabase client initialization or remote network calls in `materialize_pairs.py` and `freeze_dataset.py`.
+- **Immutable freeze reporting:** `FreezeReport` captures `selected_donated_stories`, `excluded_donated_stories`, `replacement_reasons`, and `selection_sha256`.
+- **Canonical workspace paths:** Root `data/judge` references separated into `data/judge/corpus`, `data/judge/intake`, and `data/judge/freezes/obj4-v1`.
+- **Preregistration amendment & runbook:** Added 2026-08-24 dated amendment to `PREREGISTRATION_OBJ4.md` §12 superseding earlier seeded assignment/imbalance clauses; updated `research_runbook.md` with the 8-step pipeline.
+
+Verification:
+- Focused tests: 207 passed, 7 skipped in `test_corpus_io.py`, `test_dataset_selection.py`, `test_finetune_corpus.py`, `test_materialize_pairs.py`, `test_finetune_dataset.py`, `test_finetune_manifest.py`, `test_finetune_llamafactory.py`, `test_research_integrity.py`.
+- Full backend suite: 1,128 passed, 80 skipped (RLS/remote DB), 6 deselected smoke tests, 0 failed (`uv run pytest`).
+- Backend lint: `uv run ruff check .` passed with 0 errors.
+- Frontend suite: 380 passed across 42 files (`pnpm lint && pnpm test`).
+- Zero-cost fixture: 1 story completed, 0 paid images spent, `usd_high="0.000"`, valid candidate report JSON, fixture freeze passed without production files.
+- Senior Code Review: Passed cleanly with 0 Critical, 0 Important issues; minor CLI error stream consistency fixed.
+- Confirmed no live provider, paid Fal call, real donor intake, live database/Storage mutation, or `.env` access occurred.
 
 ## Batch 1 Outcome — Research Corpus Integrity
 

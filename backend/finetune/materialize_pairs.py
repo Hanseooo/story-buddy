@@ -6,6 +6,7 @@ import logging
 from dataclasses import asdict, dataclass
 from io import BytesIO
 from pathlib import Path
+import sys
 from typing import Any, Sequence
 
 from PIL import Image, UnidentifiedImageError
@@ -226,7 +227,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         summary = _materialize(selected, get_supabase_client(), BUCKET, args.data)
     except (CorpusError, ManifestError) as error:
-        print(str(error))
+        print(str(error), file=sys.stderr)
         return 1
     print(json.dumps(asdict(summary), sort_keys=True))
     return 0
