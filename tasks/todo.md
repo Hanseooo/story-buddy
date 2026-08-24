@@ -4,8 +4,8 @@
 - [x] Separate external governance gates from engineering readiness work.
 - [x] Compare staged, combined and documentation-first approaches; obtain approval for staged delivery.
 - [x] Record and self-review the Batch 1 corpus-integrity design.
-- [ ] Obtain owner review of the written Batch 1 design.
-- [ ] Write the disposable TDD implementation plan for Batch 1.
+- [x] Obtain owner review of the written Batch 1 design.
+- [x] Write and self-review the disposable TDD implementation plan for Batch 1.
 - [ ] Execute and verify Batch 1 in a separate implementation cycle.
 - [ ] Design and implement Batch 2 dataset-validity safeguards.
 - [ ] Design and implement Batch 3 training/evaluation execution.

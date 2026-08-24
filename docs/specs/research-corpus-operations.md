@@ -135,8 +135,8 @@ resuming a bundle requires the digest to match the current intake; a mismatch is
 call, upload or dataset operation.
 
 Recovery reuses `finetune.build_corpus`; it does not add another state store or generation path.
-`--resume-quarantined <story_id>` may resume only `budget_stopped` or resume-exhausted state after validating
-the intake digest, telemetry and checkpoint. Uncertain billing additionally requires
+`--resume-quarantined <story_id>` may resume only `budget_stopped`, resume-exhausted or uncertain-billing
+state after validating the intake digest, telemetry and checkpoint. Uncertain billing additionally requires
 `--acknowledge-uncertain-billing <story_id>` for the same story; acknowledgment records UTC time and preserves
 the uncertain attempt as fully spent. Neither option may decrement attempted calls, bypass the campaign
 reserve or modify a completed bundle.
