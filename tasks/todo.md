@@ -1,3 +1,25 @@
+# Current Task: Objective-4 dataset readiness engineering
+
+- [x] Revalidate the earlier readiness audit against current HEAD.
+- [x] Separate external governance gates from engineering readiness work.
+- [x] Compare staged, combined and documentation-first approaches; obtain approval for staged delivery.
+- [x] Record and self-review the Batch 1 corpus-integrity design.
+- [ ] Obtain owner review of the written Batch 1 design.
+- [ ] Write the disposable TDD implementation plan for Batch 1.
+- [ ] Execute and verify Batch 1 in a separate implementation cycle.
+- [ ] Design and implement Batch 2 dataset-validity safeguards.
+- [ ] Design and implement Batch 3 training/evaluation execution.
+- [ ] Finalize the existing research runbook as the sole operator guide.
+
+## Success criteria
+
+Zero-cost fixture work proves exact-boundary completion, fail-closed quarantine and auditable recovery without
+resetting spend; immutable intake bytes bind every corpus bundle; dataset freeze enforces the preregistered
+negative/selection rules; training and evaluation fail closed on missing pins or premature test access; and
+the canonical runbook contains the complete executable sequence without duplicating another permanent guide.
+
+---
+
 # Current Task: Storybook deletion implementation planning
 
 - [x] Explore storybook ownership, UI surfaces, job/worker lifecycle, database relationships, checkpoints, Storage objects, telemetry, and governing decisions.

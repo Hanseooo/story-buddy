@@ -114,6 +114,33 @@ A story is complete only when memory, inventory and files reconcile. Completed s
 free to resume. Partial stories resume from their LangGraph checkpoint. Untrustworthy checkpoint state is
 quarantined rather than silently regenerated or pooled.
 
+The corpus runner has three explicit terminal outcomes:
+
+- `completed`: the graph reached its terminal state, the final `StoryMemory` validates, and the bundle and
+  assets reconcile;
+- `budget_stopped`: the next Fal attempt would exceed the story or campaign allowance; no provider call is
+  made, no completed bundle is written, and the recoverable stop is persisted in quarantine state;
+- `quarantined`: resume exhaustion, invalid terminal state, uncertain billing or inconsistent persisted
+  state requires an explicit operator decision before another run.
+
+Reaching the exact draw allowance is not itself failure. The runner may finish non-paid graph work and write
+a valid terminal bundle, but the Fal provider seam must reject the next attempted paid call before submission.
+After the configured interrupt-resume limit, the runner quarantines the story; it never returns an unfinished
+state as completed.
+
+Every bundle records `intake_sha256`, computed from canonical JSON for the immutable intake fields: `story_id`,
+redacted `text`, declared rosters, provenance, split, candidate role, style, donated approval flags and
+`selection_frozen_at`. `withdrawal_state` is excluded because it is the one mutable stop flag. Reusing or
+resuming a bundle requires the digest to match the current intake; a mismatch is quarantined before any paid
+call, upload or dataset operation.
+
+Recovery reuses `finetune.build_corpus`; it does not add another state store or generation path.
+`--resume-quarantined <story_id>` may resume only `budget_stopped` or resume-exhausted state after validating
+the intake digest, telemetry and checkpoint. Uncertain billing additionally requires
+`--acknowledge-uncertain-billing <story_id>` for the same story; acknowledgment records UTC time and preserves
+the uncertain attempt as fully spent. Neither option may decrement attempted calls, bypass the campaign
+reserve or modify a completed bundle.
+
 ### 4.4 Queue materialization
 
 One idempotent command reads completed memories, uploads the exact corpus files to private Supabase Storage
@@ -178,7 +205,12 @@ annotation and training. Filename extensions are not trusted; magic bytes and de
   telemetry from disk and rejects missing, invalid or price-drifted billing state. Each Fal event is
   persisted atomically so a later process cannot reset the campaign total.
 - A story starts only if its maximum permitted draws fit the remaining reserve.
+- The per-story allowance is enforced at the shared Fal-call seam before submission. Reaching the allowance
+  may not prevent already-paid output from completing the remaining non-paid graph nodes.
 - A timeout or uncertain billing result stops the campaign for reconciliation; it is not blindly retried.
+- Resuming a budget-stopped or resume-exhausted story is explicit and retains its persisted call counters.
+  Acknowledging uncertain billing retains that attempt at the conservative pinned price; reconciliation can
+  never lower recorded campaign spend.
 - The USD 25–30 reserve is released only to finish a story or materially improve character coverage.
 - Spend stopping cannot silently change split rules, taxonomy or held-out membership.
 
@@ -203,8 +235,9 @@ controlled rerun. Deployment remains a separate decision and is not required for
 
 1. Governance: approve consent/assent and receipt process; freeze story/split/style assignments; build and
    verify the bounded pilot cleanup before clearing pilot data.
-2. Zero-cost engineering: ADR-027 encoding, corpus persistence, intake validation, queue materialization,
-   status reconciliation and freeze CLI pass end-to-end on fixtures.
+2. Zero-cost engineering: ADR-027 encoding, corpus persistence, intake validation, exact-boundary completion,
+   quarantine recovery, queue materialization, status reconciliation and freeze CLI pass end-to-end on
+   fixtures.
 3. Intake: recontact donors; redact, independently review and freeze 10 primary + 5 backup candidates.
 4. Paid smoke: three synthetic stories; measure cost, failures, bytes, latency and signed delivery.
 5. Generation: synthetic train/validation, then donated held-out test, within the USD 30 ceiling.
@@ -224,3 +257,12 @@ safely finish a started story, or held-out character yield is inadequate for the
 Residual risks to report rather than hide: WebP and cost projections are not measurements until the paid
 smoke; donated character yield is unknown before generation; rare failure reasons may be underpowered; and
 school hardware may force the predeclared cloud fallback.
+
+## 11. Cross-cutting concerns
+
+- CC-2 PII redaction: only already-redacted intake text is hashed or persisted.
+- CC-3 cost control: allowances stop paid calls before submission and restored telemetry never decreases.
+- CC-4 security: recovery adds no public asset or database path.
+- CC-5 observability: outcome, quarantine reason and billing acknowledgment remain auditable.
+- CC-7 reproducibility: canonical intake hashes bind bundles to their frozen inputs.
+- CC-10 resumability: only validated checkpoints resume; terminal bundles remain immutable.
