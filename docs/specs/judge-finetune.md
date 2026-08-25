@@ -658,9 +658,11 @@ after seeing which baseline emits broken JSON would be a degree of freedom; it i
 
 ### 7.6 Batch-3 evaluation evidence and access control
 
-Predictions are immutable JSONL rows keyed by `pair_id`, `char_id`, split and judge ID. Each row records the
+Predictions use schema version 2 and are immutable JSONL rows keyed by `pair_id`, `char_id`, split and judge ID. Each row records the
 binary prediction, verdict-token confidence when supplied, latency, parse status, model and adapter IDs,
-prompt version and threshold ID. Every judge must cover the same ordered pair IDs. A duplicate, missing,
+prompt version and threshold ID. The first row per judge is explicitly `cold`; all later rows are `warm`.
+Malformed calls keep latency unavailable rather than fabricating zero milliseconds. Every judge must cover
+the same ordered pair IDs. A duplicate, missing,
 reordered or unknown pair aborts the report. Missing confidence makes AUROC unavailable for that judge with a
 recorded reason; it never becomes a fabricated probability.
 
@@ -675,8 +677,9 @@ be signed off before test access and cannot be replaced in place.
 
 Held-out access is file-ledgered and fail-closed. The runner acquires an exclusive lock and reserves a read
 before opening `manifest.test.jsonl`. It evaluates all three selected fine-tunes and all four baselines in one
-run. The evaluation lock requires schema version 1, normalized SHA-256 values, nonblank registered identifiers,
-and all three selected checkpoint directories to still match their frozen paths and directory digests. Lock
+run. The evaluation lock requires prediction schema version 2, normalized SHA-256 values, nonblank registered identifiers,
+the frozen hashes for `character_slices.json` and `annotation_agreement.jsonl`, and all three selected
+checkpoint directories to still match their frozen paths and directory digests. Lock
 creation is exclusive and an existing byte-identical lock is the only idempotent success. Each completed judge
 prediction file has an immutable SHA-256 sidecar; a crashed run records `resumed`, verifies the file hash,
 alignment and frozen judge/checkpoint identity, and invokes only judges whose evidence is missing. The ledger
@@ -697,6 +700,21 @@ are reported individually plus mean and sample standard deviation.
 Results also record latency, parse failures, label prevalence and prediction-rate drift. A fixed ten-bin
 reliability table and Brier score are exploratory calibration diagnostics, not new Objective-4 endpoints.
 Empty slices, one-class AUROC inputs and zero-variance κ are reported as unavailable with their reason.
+
+`Objective4Report` in `backend/finetune/evaluate.py` is the one emitted report schema (schema version 1).
+For every registered judge, `judges` records `n`, precision, recall, F1 and its clustered 95% interval,
+AUROC, Cohen's κ versus adjudicated truth, exploratory calibration, warm-start latency count/mean/sample SD
+with the first cold-start observation reported separately,
+cost/call availability, parse-failure count/rate, label prevalence, and prediction rate. `slices.human` and
+`slices.non_human` repeat that schema without pair, character, story, or asset identifiers.
+`human_inter_rater_agreement` reports overall and slice-level κ and percent agreement. The report also
+contains prediction-rate drift versus the validation-selected deployment seed, an `objective4` conclusion,
+and a separate `deployment_decision`. Missing evidence and undefined statistics remain explicit unavailable
+objects with reasons. Registered transfer, downstream, and validation-only endpoints remain visible with
+their collection status rather than disappearing from the report. Before aggregation, the writer verifies
+prediction sidecars plus the freeze-report hashes for slice and agreement evidence. It validates the nested
+schema and publishes the sorted JSON exclusively/idempotently, so the same immutable inputs regenerate
+byte-identical report bytes and a different report can never replace ledgered evidence.
 
 ---
 

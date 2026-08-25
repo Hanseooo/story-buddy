@@ -37,8 +37,11 @@ def test_capture_predictions_is_ordered_and_scores_malformed_output_as_a_miss():
     assert rows[0].parse_status == "parsed"
     assert rows[0].prediction is True
     assert rows[0].confidence == 0.8
+    assert rows[0].latency_phase == "cold"
     assert rows[1].prediction is False
     assert rows[1].confidence is None
+    assert rows[1].latency_ms is None
+    assert rows[1].latency_phase == "warm"
     assert rows[1].parse_status == "malformed"
 
 
@@ -54,6 +57,7 @@ def test_write_predictions_and_validate_alignment(tmp_path):
             confidence=0.9,
             score=0.9,
             latency_ms=10,
+            latency_phase="warm",
             parse_status="parsed",
             model_id="m1",
             prompt_version="1",
@@ -67,6 +71,7 @@ def test_write_predictions_and_validate_alignment(tmp_path):
             confidence=0.8,
             score=0.2,
             latency_ms=15,
+            latency_phase="warm",
             parse_status="parsed",
             model_id="m1",
             prompt_version="1",
@@ -91,23 +96,56 @@ def test_write_predictions_and_validate_alignment(tmp_path):
         ev.validate_prediction_alignment(records, [rows[1], rows[0]])
 
 
-def predictions(records, preds):
+def predictions(records, preds, judge_id="candidate"):
     return [
         ev.PredictionRecord(
             pair_id=r.pair_id,
             char_id=r.char_id,
             split=r.split,
-            judge_id="candidate",
+            judge_id=judge_id,
             prediction=p,
             confidence=0.9,
             score=0.9 if p else 0.1,
             latency_ms=10,
+            latency_phase="cold" if index == 0 else "warm",
             parse_status="parsed",
             model_id="m",
             prompt_version="1",
         )
-        for r, p in zip(records, preds)
+        for index, (r, p) in enumerate(zip(records, preds))
     ]
+
+
+def write_report_evidence_hashes(freeze_dir, lock=None):
+    import hashlib
+    import json
+
+    names = ("character_slices.json", "annotation_agreement.jsonl")
+    hashes = {
+        name: hashlib.sha256((freeze_dir / name).read_bytes()).hexdigest()
+        for name in names
+    }
+    (freeze_dir / "freeze_report.json").write_text(
+        json.dumps({"artifact_sha256": hashes}), encoding="utf-8"
+    )
+    if lock is not None:
+        lock["report_artifact_hashes"] = hashes
+
+
+def write_report_evidence(freeze_dir, records, lock):
+    import json
+
+    (freeze_dir / "character_slices.json").write_text(
+        json.dumps({record.char_id: "human" for record in records}), encoding="utf-8"
+    )
+    (freeze_dir / "annotation_agreement.jsonl").write_text(
+        "".join(
+            json.dumps({"pair_id": record.pair_id, "labels": [True, True]}) + "\n"
+            for record in records
+        ),
+        encoding="utf-8",
+    )
+    write_report_evidence_hashes(freeze_dir, lock)
 
 
 @pytest.fixture
@@ -128,7 +166,7 @@ def valid_lock(tmp_path):
         (checkpoint / "adapter_model.safetensors").write_bytes(f"seed-{seed}".encode())
         checkpoints[seed] = checkpoint
     return {
-        "schema_version": 1,
+        "schema_version": ev.PREDICTION_SCHEMA_VERSION,
         "bootstrap_seed": 0,
         "base_model": "Qwen/Qwen2.5-VL-7B-Instruct",
         "base_revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
@@ -170,6 +208,10 @@ def valid_lock(tmp_path):
             "manifest.train.jsonl": "1" * 64,
             "manifest.val.jsonl": "2" * 64,
             "manifest.test.jsonl": "3" * 64,
+        },
+        "report_artifact_hashes": {
+            "annotation_agreement.jsonl": "4" * 64,
+            "character_slices.json": "5" * 64,
         },
         "prompt_version": "4",
         "vlm_judge_model": "google/gemma-3-27b-it",
@@ -219,7 +261,7 @@ def test_concurrent_identical_lock_creation_returns_unambiguous_success(tmp_path
 
 
 @pytest.mark.parametrize("field,value", [
-    ("schema_version", 2),
+    ("schema_version", 1),
     ("schema_version", "1"),
     ("prompt_version", "   "),
     ("vlm_judge_model", ""),
@@ -267,6 +309,9 @@ def test_validate_offline_creates_evaluation_lock(tmp_path, val_records):
     (freeze_dir / "freeze_report.json").write_text(json.dumps({"artifact_sha256": {
         f"manifest.{split}.jsonl": hashlib.sha256((freeze_dir / f"manifest.{split}.jsonl").read_bytes()).hexdigest()
         for split in ("train", "val", "test")
+    } | {
+        "annotation_agreement.jsonl": "4" * 64,
+        "character_slices.json": "5" * 64,
     }}), encoding="utf-8")
 
     run_root = tmp_path / "runs"
@@ -344,6 +389,7 @@ def test_run_heldout_evaluates_only_test_manifest_and_records_ledger(tmp_path, v
     freeze_dir.mkdir()
     test_rec = manifest_record("p_test", split="test")
     (freeze_dir / "manifest.test.jsonl").write_text(json.dumps(test_rec.model_dump(mode="json")) + "\n", encoding="utf-8")
+    write_report_evidence(freeze_dir, [test_rec], valid_lock)
     for split in ("train", "val"):
         (freeze_dir / f"manifest.{split}.jsonl").write_text("", encoding="utf-8")
 
@@ -396,7 +442,9 @@ def test_heldout_reserves_before_manifest_parse(tmp_path, valid_lock, monkeypatc
     freeze_dir = tmp_path / "freeze"
     freeze_dir.mkdir()
     test_path = freeze_dir / "manifest.test.jsonl"
-    test_path.write_text(manifest_record("p_test", split="test").model_dump_json() + "\n", encoding="utf-8")
+    record = manifest_record("p_test", split="test")
+    test_path.write_text(record.model_dump_json() + "\n", encoding="utf-8")
+    write_report_evidence(freeze_dir, [record], valid_lock)
     valid_lock["manifest_hashes"]["manifest.test.jsonl"] = hashlib.sha256(test_path.read_bytes()).hexdigest()
     lock_path = tmp_path / "lock.json"
     ev.write_evaluation_lock(lock_path, valid_lock)
@@ -425,6 +473,7 @@ def test_heldout_resume_reuses_hash_verified_predictions(tmp_path, valid_lock, m
     record = manifest_record("p_test", split="test")
     test_path = freeze_dir / "manifest.test.jsonl"
     test_path.write_text(record.model_dump_json() + "\n", encoding="utf-8")
+    write_report_evidence(freeze_dir, [record], valid_lock)
     valid_lock["manifest_hashes"]["manifest.test.jsonl"] = hashlib.sha256(test_path.read_bytes()).hexdigest()
     lock_path = tmp_path / "lock.json"
     ev.write_evaluation_lock(lock_path, valid_lock)
@@ -500,6 +549,7 @@ def test_build_report_computes_three_seeds_baselines_slices_and_deployment_rung(
         + json.dumps({"pair_id": "p2", "labels": [True, True]}) + "\n",
         encoding="utf-8",
     )
+    write_report_evidence_hashes(freeze_dir, valid_lock)
 
     valid_lock["manifest_hashes"]["manifest.test.jsonl"] = hashlib.sha256(
         (freeze_dir / "manifest.test.jsonl").read_bytes()
@@ -525,11 +575,12 @@ def test_build_report_computes_three_seeds_baselines_slices_and_deployment_rung(
                 confidence=0.85,
                 score=0.4 if r.pair_id == "p1" else 0.9,
                 latency_ms=15,
+                latency_phase="cold" if index == 0 else "warm",
                 parse_status="parsed",
                 model_id="m",
                 prompt_version="1",
             )
-            for r in records
+            for index, r in enumerate(records)
         ]
         ev.write_predictions(preds_dir / f"{judge_name}.jsonl", p_list)
 
@@ -537,19 +588,223 @@ def test_build_report_computes_three_seeds_baselines_slices_and_deployment_rung(
     out_file = tmp_path / "objective4_results.json"
     report = ev.build_report(freeze_dir, lock_path, preds_dir, out_file, test_records=records)
 
-    assert report["schema_version"] == 1
+    assert ev.Objective4Report.model_validate(report).schema_version == 1
     assert "seeds_f1_summary" in report
     assert report["seeds_f1_summary"]["mean"] == pytest.approx(1.0)
-    assert "baselines" in report
+    assert set(report["judges"]) == set(ev.REPORT_JUDGES)
     assert "slices" in report
-    assert "non_human" in report["slices"]
+    assert set(report["slices"]) == {"human", "non_human"}
     assert report["slices"]["non_human"]["seed_0"]["f1"] == pytest.approx(1.0)
+    assert report["slices"]["human"]["seed_0"]["n"] == 1
+    assert report["slices"]["human"]["seed_0"]["auroc"] == {
+        "value": None, "reason": "AUROC requires both classes"
+    }
     assert "human_inter_rater_agreement" in report
     assert report["human_inter_rater_agreement"]["percent_agreement"] == pytest.approx(1.0)
+    assert report["human_inter_rater_agreement"]["slices"]["human"]["n"] == 1
+    assert report["human_inter_rater_agreement"]["slices"]["non_human"]["n"] == 1
     assert "deployment_decision" in report
-    assert report["deployment_decision"]["status"] == "fail"
+    assert report["objective4"]["requirement_met"] is False
+    assert report["deployment_decision"]["ship_candidate"] is False
     assert report["deployment_decision"]["rung"] == "D"
+    seed = report["judges"]["seed_0"]
+    assert seed["latency_ms"] == {"n": 1, "mean": 15, "sample_std": 0.0}
+    assert seed["cold_start_latency_ms"] == {"value": 15, "reason": None}
+    assert seed["parse_failures"] == {"count": 0, "rate": 0.0}
+    assert seed["label_prevalence"] == 0.5
+    assert seed["prediction_rate"] == 0.5
     assert out_file.exists()
+
+    second_file = tmp_path / "objective4_results_copy.json"
+    ev.build_report(freeze_dir, lock_path, preds_dir, second_file, test_records=records)
+    assert second_file.read_bytes() == out_file.read_bytes()
+
+
+@pytest.mark.parametrize(
+    ("beats_base", "delta", "candidate_recall", "incumbent_recall", "rung", "met", "ships"),
+    [
+        (True, 0.01, 0.1, 0.9, "A", True, True),
+        (True, -0.03, 0.8, 0.8, "B", True, True),
+        (True, -0.03, 0.79, 0.8, "C", True, False),
+        (True, -0.031, 0.9, 0.8, "C", True, False),
+        (False, 0.2, 1.0, 0.0, "D", False, False),
+    ],
+)
+def test_claim_ladder_matches_frozen_preregistration(
+    beats_base, delta, candidate_recall, incumbent_recall, rung, met, ships
+):
+    decision = ev.classify_claim_rung(
+        beats_base=beats_base,
+        delta_f1_vs_incumbent=delta,
+        candidate_recall=candidate_recall,
+        incumbent_recall=incumbent_recall,
+    )
+    assert decision == {
+        "rung": rung,
+        "objective4_requirement_met": met,
+        "ship_candidate": ships,
+    }
+
+
+def test_report_counts_parse_failures_and_aggregates_only_immutable_prediction_rows(
+    tmp_path, valid_lock
+):
+    import hashlib
+    import json
+
+    freeze_dir = tmp_path / "freeze"
+    freeze_dir.mkdir()
+    records = [
+        manifest_record("p1", split="test", char_id="human"),
+        manifest_record("p2", split="test", char_id="creature").model_copy(
+            update={"label": True, "same_character": False}
+        ),
+    ]
+    manifest = freeze_dir / "manifest.test.jsonl"
+    manifest.write_text(
+        "".join(json.dumps(row.model_dump(mode="json")) + "\n" for row in records),
+        encoding="utf-8",
+    )
+    (freeze_dir / "character_slices.json").write_text(
+        '{"human":"human","creature":"non_human"}', encoding="utf-8"
+    )
+    (freeze_dir / "annotation_agreement.jsonl").write_text(
+        '{"pair_id":"p1","labels":[true,false]}\n'
+        '{"pair_id":"p2","labels":[false,false]}\n', encoding="utf-8"
+    )
+    write_report_evidence_hashes(freeze_dir, valid_lock)
+    valid_lock["manifest_hashes"]["manifest.test.jsonl"] = hashlib.sha256(
+        manifest.read_bytes()
+    ).hexdigest()
+    lock_path = tmp_path / "evaluation_lock.json"
+    ev.write_evaluation_lock(lock_path, valid_lock)
+    predictions_dir = tmp_path / "predictions"
+    predictions_dir.mkdir()
+    for judge in ev.REPORT_JUDGES:
+        rows = predictions(records, [False, False])
+        rows = [
+            row.model_copy(update={
+                "judge_id": judge,
+                "latency_ms": latency,
+                "parse_status": status,
+                "latency_phase": phase,
+                "confidence": None if status == "malformed" else row.confidence,
+                "score": None if status == "malformed" else row.score,
+            })
+            for row, latency, status, phase in zip(
+                rows, (10, 30), ("parsed", "malformed"), ("cold", "warm")
+            )
+        ]
+        ev.write_predictions(predictions_dir / f"{judge}.jsonl", rows)
+
+    report = ev.build_report(
+        freeze_dir, lock_path, predictions_dir, test_records=records
+    )
+
+    metric = report["judges"]["seed_0"]
+    assert metric["parse_failures"] == {"count": 1, "rate": 0.5}
+    assert metric["latency_ms"] == {"n": 1, "mean": 30, "sample_std": 0.0}
+    assert metric["cold_start_latency_ms"] == {"value": 10, "reason": None}
+    assert metric["calibration"]["status"] == "unavailable"
+    assert report["prediction_rate_drift"]["seed_0_vs_zero_shot_base"] == 0.0
+    assert report["human_inter_rater_agreement"]["n"] == 2
+    assert report["human_inter_rater_agreement"]["slices"]["non_human"]["n"] == 1
+    assert "pair_id" not in json.dumps(report)
+
+    invalid = dict(report)
+    invalid["judges"] = {"seed_0": {"n": 2}}
+    with pytest.raises(Exception):
+        ev.Objective4Report.model_validate(invalid)
+    invalid = dict(report)
+    invalid["registered_endpoints"] = {"cost_per_call": report["registered_endpoints"]["cost_per_call"]}
+    with pytest.raises(Exception):
+        ev.Objective4Report.model_validate(invalid)
+
+
+def test_report_fails_closed_on_unfrozen_or_incomplete_slice_evidence(tmp_path, valid_lock):
+    import hashlib
+
+    freeze_dir = tmp_path / "freeze"
+    freeze_dir.mkdir()
+    records = [manifest_record("p1", split="test", char_id="c1")]
+    manifest = freeze_dir / "manifest.test.jsonl"
+    manifest.write_text(records[0].model_dump_json() + "\n", encoding="utf-8")
+    (freeze_dir / "character_slices.json").write_text("{}", encoding="utf-8")
+    (freeze_dir / "annotation_agreement.jsonl").write_text(
+        '{"pair_id":"p1","labels":[true,true]}\n', encoding="utf-8"
+    )
+    write_report_evidence_hashes(freeze_dir, valid_lock)
+    valid_lock["manifest_hashes"]["manifest.test.jsonl"] = hashlib.sha256(
+        manifest.read_bytes()
+    ).hexdigest()
+    lock_path = tmp_path / "lock.json"
+    ev.write_evaluation_lock(lock_path, valid_lock)
+    predictions_dir = tmp_path / "predictions"
+    predictions_dir.mkdir()
+    for judge in ev.REPORT_JUDGES:
+        ev.write_predictions(
+            predictions_dir / f"{judge}.jsonl", predictions(records, [False], judge)
+        )
+
+    with pytest.raises(ManifestError, match="character slice evidence"):
+        ev.build_report(freeze_dir, lock_path, predictions_dir, test_records=records)
+
+    (freeze_dir / "character_slices.json").write_text('{"c1":"human"}', encoding="utf-8")
+    with pytest.raises(ManifestError, match="SHA-256"):
+        ev.build_report(freeze_dir, lock_path, predictions_dir, test_records=records)
+
+
+def test_report_publication_is_exclusive(tmp_path, valid_lock):
+    import hashlib
+
+    freeze_dir = tmp_path / "freeze"
+    freeze_dir.mkdir()
+    records = [manifest_record("p1", split="test", char_id="c1")]
+    manifest = freeze_dir / "manifest.test.jsonl"
+    manifest.write_text(records[0].model_dump_json() + "\n", encoding="utf-8")
+    (freeze_dir / "character_slices.json").write_text('{"c1":"human"}', encoding="utf-8")
+    (freeze_dir / "annotation_agreement.jsonl").write_text(
+        '{"pair_id":"p1","labels":[true,true]}\n', encoding="utf-8"
+    )
+    write_report_evidence_hashes(freeze_dir, valid_lock)
+    valid_lock["manifest_hashes"]["manifest.test.jsonl"] = hashlib.sha256(
+        manifest.read_bytes()
+    ).hexdigest()
+    lock_path = tmp_path / "lock.json"
+    ev.write_evaluation_lock(lock_path, valid_lock)
+    predictions_dir = tmp_path / "predictions"
+    predictions_dir.mkdir()
+    for judge in ev.REPORT_JUDGES:
+        ev.write_predictions(
+            predictions_dir / f"{judge}.jsonl", predictions(records, [False], judge)
+        )
+    report_path = tmp_path / "report.json"
+    report_path.write_text("different", encoding="utf-8")
+
+    with pytest.raises(ManifestError, match="report differs"):
+        ev.build_report(freeze_dir, lock_path, predictions_dir, report_path, test_records=records)
+
+
+@pytest.mark.parametrize(
+    "pair_ids",
+    [("p2", "p1"), ("p1", "p1")],
+)
+def test_agreement_evidence_requires_exact_ordered_pair_ids(pair_ids):
+    rows = [{"pair_id": pair_id, "labels": [True, True]} for pair_id in pair_ids]
+    with pytest.raises(ManifestError, match="agreement evidence alignment"):
+        ev.validate_agreement_alignment(["p1", "p2"], rows)
+
+
+@pytest.mark.parametrize("change", ["judge", "phase"])
+def test_report_prediction_evidence_requires_judge_identity_and_cold_then_warm(change):
+    records = [manifest_record("p1", split="test"), manifest_record("p2", split="test")]
+    rows = predictions(records, [False, False])
+    if change == "judge":
+        rows[1] = rows[1].model_copy(update={"judge_id": "other"})
+    else:
+        rows[0] = rows[0].model_copy(update={"latency_phase": "warm"})
+    with pytest.raises(ManifestError, match="prediction evidence"):
+        ev.validate_report_prediction_evidence(records, rows, "candidate")
 
 
 def test_validate_never_reads_test_and_requires_both_control_predictions(
@@ -568,6 +823,8 @@ def test_validate_never_reads_test_and_requires_both_control_predictions(
                 "manifest.train.jsonl": "1" * 64,
                 "manifest.val.jsonl": hashlib.sha256(val_bytes).hexdigest(),
                 "manifest.test.jsonl": "3" * 64,
+                "annotation_agreement.jsonl": "4" * 64,
+                "character_slices.json": "5" * 64,
             }
         }),
         encoding="utf-8",
@@ -613,13 +870,16 @@ def test_report_reads_frozen_ordered_agreement_labels(tmp_path, valid_lock):
         '{"pair_id":"p1","labels":[true,false]}\n{"pair_id":"p2","labels":[false,false]}\n',
         encoding="utf-8",
     )
+    write_report_evidence_hashes(freeze_dir, valid_lock)
     valid_lock["manifest_hashes"]["manifest.test.jsonl"] = hashlib.sha256(test_path.read_bytes()).hexdigest()
     lock_path = tmp_path / "lock.json"
     ev.write_evaluation_lock(lock_path, valid_lock)
     predictions_dir = tmp_path / "predictions"
     predictions_dir.mkdir()
     for judge in ("seed_0", "seed_1", "seed_2", "zero_shot_base", "prompted_gemma", "clip_cosine", "dinov2_cosine"):
-        ev.write_predictions(predictions_dir / f"{judge}.jsonl", predictions(records, [False, False]))
+        ev.write_predictions(
+            predictions_dir / f"{judge}.jsonl", predictions(records, [False, False], judge)
+        )
 
     report = ev.build_report(freeze_dir, lock_path, predictions_dir, test_records=records)
     assert report["human_inter_rater_agreement"]["n"] == 2
@@ -630,6 +890,7 @@ def test_deployment_never_passes_when_base_ci_includes_zero_or_recall_regresses(
     tmp_path, valid_lock, monkeypatch
 ):
     import hashlib
+    import json
 
     freeze_dir = tmp_path / "freeze"
     freeze_dir.mkdir()
@@ -638,7 +899,17 @@ def test_deployment_never_passes_when_base_ci_includes_zero_or_recall_regresses(
     records[1] = records[1].model_copy(update={"label": True, "same_character": False})
     test_path = freeze_dir / "manifest.test.jsonl"
     test_path.write_text("".join(r.model_dump_json() + "\n" for r in records), encoding="utf-8")
-    (freeze_dir / "character_slices.json").write_text("{}", encoding="utf-8")
+    (freeze_dir / "character_slices.json").write_text(
+        json.dumps({f"c{i}": "human" for i in range(4)}), encoding="utf-8"
+    )
+    (freeze_dir / "annotation_agreement.jsonl").write_text(
+        "".join(
+            json.dumps({"pair_id": f"p{i}", "labels": [True, True]}) + "\n"
+            for i in range(4)
+        ),
+        encoding="utf-8",
+    )
+    write_report_evidence_hashes(freeze_dir, valid_lock)
     valid_lock["manifest_hashes"]["manifest.test.jsonl"] = hashlib.sha256(test_path.read_bytes()).hexdigest()
     lock_path = tmp_path / "lock.json"
     ev.write_evaluation_lock(lock_path, valid_lock)
@@ -648,16 +919,26 @@ def test_deployment_never_passes_when_base_ci_includes_zero_or_recall_regresses(
     base = [False, False, False, False]
     incumbent = [True, True, False, False]
     for judge in ("seed_0", "seed_1", "seed_2"):
-        ev.write_predictions(predictions_dir / f"{judge}.jsonl", predictions(records, candidate))
-    ev.write_predictions(predictions_dir / "zero_shot_base.jsonl", predictions(records, base))
-    ev.write_predictions(predictions_dir / "prompted_gemma.jsonl", predictions(records, incumbent))
+        ev.write_predictions(
+            predictions_dir / f"{judge}.jsonl", predictions(records, candidate, judge)
+        )
+    ev.write_predictions(
+        predictions_dir / "zero_shot_base.jsonl", predictions(records, base, "zero_shot_base")
+    )
+    ev.write_predictions(
+        predictions_dir / "prompted_gemma.jsonl",
+        predictions(records, incumbent, "prompted_gemma"),
+    )
     for judge in ("clip_cosine", "dinov2_cosine"):
-        ev.write_predictions(predictions_dir / f"{judge}.jsonl", predictions(records, base))
+        ev.write_predictions(
+            predictions_dir / f"{judge}.jsonl", predictions(records, base, judge)
+        )
     monkeypatch.setattr(ev, "clustered_delta_f1_ci", lambda *args, **kwargs: (-0.1, 0.4))
 
     report = ev.build_report(freeze_dir, lock_path, predictions_dir, test_records=records)
     assert report["deployment_decision"]["rung"] == "D"
-    assert report["deployment_decision"]["status"] == "fail"
+    assert report["objective4"]["requirement_met"] is False
+    assert report["deployment_decision"]["ship_candidate"] is False
 
 
 def test_vlm_observation_uses_metadata_and_shipped_prompt_for_gemma(monkeypatch):
@@ -701,6 +982,8 @@ def test_selected_checkpoint_keeps_unique_vllm_model_id(tmp_path, val_records):
         "manifest.train.jsonl": "1" * 64,
         "manifest.val.jsonl": hashlib.sha256(val_path.read_bytes()).hexdigest(),
         "manifest.test.jsonl": "3" * 64,
+        "annotation_agreement.jsonl": "4" * 64,
+        "character_slices.json": "5" * 64,
     }
     (freeze_dir / "freeze_report.json").write_text(json.dumps({"artifact_sha256": hashes}), encoding="utf-8")
     runs = tmp_path / "runs"

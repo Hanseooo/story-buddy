@@ -108,6 +108,19 @@ report and additionally requires `--deviation <PATH>` with the preregistered rep
 train/validation-only evidence,
 and approval timestamp. There is no third-read command and no automatic deployment.
 
+The held-out command validates and writes the canonical `Objective4Report` schema documented in
+`docs/specs/judge-finetune.md` §7.7. Preserve `objective4_results.json` with its prediction JSONL files and
+sidecars. Re-running the same guarded evidence produces byte-identical sorted JSON. Read
+`objective4.requirement_met` as the research conclusion and `deployment_decision.ship_candidate` as the
+separate product decision; Rung C is a met research requirement that keeps the incumbent, while only Rung D
+marks Objective 4 unmet.
+The command verifies `character_slices.json` and `annotation_agreement.jsonl` against
+`freeze_report.json`, requires complete held-out coverage, and publishes the report exclusively: an
+identical existing report is the only idempotent success, while different bytes stop the run.
+Those two artifact hashes are copied into the signed evaluation lock, which is their immutable trust anchor;
+agreement pair IDs must also match held-out order exactly. Prediction schema version 2 marks each judge's
+first observation as cold-start, excludes it from headline warm latency, and reports it separately.
+
 Steps 11 and 13 run in the qualified GPU environment whose exact PyTorch, CUDA, bitsandbytes and transformers
 versions are recorded with the run evidence. Install those hardware-specific versions with `uv`, never bare
 `pip`; they deliberately remain outside the deployed backend dependency set.

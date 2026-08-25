@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Callable, Literal, Sequence
 
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 
 from app.config import settings
@@ -46,8 +46,13 @@ BASE_REVISION = "cc594898137f460bfe9f0759e9844b3ce807cfb5"
 LLAMAFACTORY_VERSION = "v0.9.5"
 LLAMAFACTORY_COMMIT = "7af909522a951e3ad9f022ea6f88b6755257eaa5"
 BOOTSTRAP_SEED = 0
-PREDICTION_SCHEMA_VERSION = 1
+PREDICTION_SCHEMA_VERSION = 2
+REPORT_SCHEMA_VERSION = 1
 SEEDS = (0, 1, 2)
+REPORT_JUDGES = (
+    "seed_0", "seed_1", "seed_2", "zero_shot_base", "prompted_gemma",
+    "clip_cosine", "dinov2_cosine",
+)
 
 Judge = Callable[[ManifestRecord], bool]      # record → predicted `different_character`
 Observer = Callable[[ManifestRecord], "JudgeObservation"]
@@ -69,13 +74,162 @@ class PredictionRecord(BaseModel):
     prediction: bool
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     score: float | None = None
-    latency_ms: int = Field(ge=0)
+    latency_ms: int | None = Field(default=None, ge=0)
+    latency_phase: Literal["cold", "warm"]
     parse_status: Literal["parsed", "malformed"]
     model_id: str
     adapter_id: str | None = None
     prompt_version: str
     threshold_id: str | None = None
     checkpoint_id: str | None = None
+
+
+class AvailabilityMetric(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    value: float | None
+    reason: str | None
+
+
+class CalibrationBin(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    bin: int = Field(ge=0, le=9)
+    range: list[float] = Field(min_length=2, max_length=2)
+    count: int = Field(ge=0)
+    mean_probability: float | None
+    positive_rate: float | None
+
+
+class CalibrationSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: Literal["available", "unavailable"]
+    reason: str | None
+    brier_score: float | None
+    bins: list[CalibrationBin]
+
+
+class LatencySummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    n: int = Field(ge=0)
+    mean: float | None
+    sample_std: float | None
+
+
+class ParseFailureSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    count: int = Field(ge=0)
+    rate: float = Field(ge=0.0, le=1.0)
+
+
+class JudgeMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    n: int = Field(ge=0)
+    precision: float
+    recall: float
+    f1: float
+    f1_ci95: list[float] = Field(min_length=2, max_length=2)
+    auroc: AvailabilityMetric
+    cohen_kappa: AvailabilityMetric
+    calibration: CalibrationSummary
+    latency_ms: LatencySummary
+    cold_start_latency_ms: AvailabilityMetric
+    cost_per_call_usd: AvailabilityMetric
+    parse_failures: ParseFailureSummary
+    label_prevalence: float | None
+    prediction_rate: float | None
+    delta_f1_ci95_vs_deployment_seed: list[float] | None = None
+    mcnemar_p_vs_deployment_seed: float | None = None
+
+
+class ObjectiveConclusion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    requirement_met: bool
+    primary_judge: str
+    reported_result: JudgeMetrics
+
+
+class SeedSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mean: float
+    sample_std: float
+    values: list[float] = Field(min_length=3, max_length=3)
+
+
+class UnavailableSlice(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: Literal["unavailable"]
+    reason: str
+
+
+class AgreementMetric(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: Literal["available", "unavailable"]
+    reason: str | None = None
+    n: int | None = Field(default=None, ge=0)
+    cohen_kappa: AvailabilityMetric | None = None
+    percent_agreement: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class HumanAgreement(AgreementMetric):
+    slices: dict[str, AgreementMetric]
+
+
+class RegisteredEndpoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: Literal["unavailable", "not_collected_by_heldout_runner"]
+    reason: str
+
+
+class DeploymentDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    rung: Literal["A", "B", "C", "D"]
+    ship_candidate: bool
+    incumbent_model: str
+    incumbent_f1: float
+    incumbent_recall: float
+    candidate_seed: int
+    candidate_checkpoint: str
+    candidate_f1: float
+    candidate_recall: float
+    delta_f1_vs_incumbent: float
+    model_to_deploy: str
+
+
+class Objective4Report(BaseModel):
+    """Canonical, identifier-free schema for the preregistered Objective-4 report."""
+    model_config = ConfigDict(extra="forbid")
+    schema_version: Literal[1]
+    bootstrap_seed: int
+    deployment_seed: int
+    seeds_f1_summary: SeedSummary
+    judges: dict[str, JudgeMetrics]
+    slices: dict[str, dict[str, JudgeMetrics] | UnavailableSlice]
+    human_inter_rater_agreement: HumanAgreement
+    prediction_rate_drift: dict[str, float]
+    registered_endpoints: dict[str, RegisteredEndpoint]
+    objective4: ObjectiveConclusion
+    deployment_decision: DeploymentDecision
+
+    @model_validator(mode="after")
+    def validate_registered_structure(self) -> "Objective4Report":
+        if set(self.judges) != set(REPORT_JUDGES):
+            raise ValueError("report must contain every registered judge exactly once")
+        if set(self.slices) != {"human", "non_human"}:
+            raise ValueError("report must contain both registered character slices")
+        for value in self.slices.values():
+            if isinstance(value, dict) and set(value) != set(REPORT_JUDGES):
+                raise ValueError("available slices must contain every registered judge")
+        if set(self.human_inter_rater_agreement.slices) != {"human", "non_human"}:
+            raise ValueError("inter-rater agreement must contain both character slices")
+        if set(self.registered_endpoints) != {
+            "cost_per_call", "dreambench_transfer", "downstream_expert_feedback",
+            "data_scaling_ablation",
+        }:
+            raise ValueError("report must contain every registered external endpoint exactly once")
+        met = self.deployment_decision.rung != "D"
+        ships = self.deployment_decision.rung in ("A", "B")
+        if self.objective4.requirement_met != met or self.deployment_decision.ship_candidate != ships:
+            raise ValueError("claim rung conflicts with research or deployment conclusion")
+        return self
 
 
 def _hash_directory(dir_path: Path) -> str:
@@ -204,6 +358,7 @@ class EvaluationLock(BaseModel):
     selected_checkpoints: dict[str, dict]
     controls: dict[str, dict]
     manifest_hashes: dict[str, str]
+    report_artifact_hashes: dict[str, str]
     prompt_version: str
     vlm_judge_model: str
 
@@ -278,6 +433,11 @@ def _validate_evaluation_lock(lock: EvaluationLock, *, verify_checkpoints: bool 
         raise ManifestError("evaluation lock requires exactly the train, val, and test manifest hashes")
     if any(not _is_sha256(value) for value in lock.manifest_hashes.values()):
         raise ManifestError("evaluation lock manifest hashes must be normalized SHA-256 values")
+    required_report_artifacts = {"annotation_agreement.jsonl", "character_slices.json"}
+    if set(lock.report_artifact_hashes) != required_report_artifacts:
+        raise ManifestError("evaluation lock requires both report artifact hashes")
+    if any(not _is_sha256(value) for value in lock.report_artifact_hashes.values()):
+        raise ManifestError("evaluation lock report artifact hashes must be normalized SHA-256 values")
 
 
 def write_evaluation_lock(path: Path, payload: dict | EvaluationLock) -> dict:
@@ -312,6 +472,23 @@ def validate_prediction_alignment(
             raise ManifestError(f"alignment error: expected split {r.split}, got {p.split}")
 
 
+def validate_agreement_alignment(pair_ids: Sequence[str], rows: Sequence[dict]) -> None:
+    actual = [row.get("pair_id") for row in rows]
+    if len(actual) != len(set(actual)) or actual != list(pair_ids):
+        raise ManifestError("agreement evidence alignment must match held-out pair order exactly")
+
+
+def validate_report_prediction_evidence(
+    records: Sequence[ManifestRecord], predictions: Sequence[PredictionRecord], judge_id: str,
+) -> None:
+    validate_prediction_alignment(records, predictions)
+    if any(row.judge_id != judge_id for row in predictions):
+        raise ManifestError("prediction evidence judge identity mismatch")
+    phases = [row.latency_phase for row in predictions]
+    if phases != (["cold"] + ["warm"] * (len(phases) - 1) if phases else []):
+        raise ManifestError("prediction evidence must record cold then warm latency phases")
+
+
 def capture_predictions(
     records: Sequence[ManifestRecord],
     judge_id: str,
@@ -323,7 +500,7 @@ def capture_predictions(
     checkpoint_id: str | None = None,
 ) -> list[PredictionRecord]:
     rows: list[PredictionRecord] = []
-    for record in records:
+    for index, record in enumerate(records):
         try:
             obs = predict_fn(record)
             rows.append(
@@ -336,6 +513,7 @@ def capture_predictions(
                     confidence=obs.confidence,
                     score=obs.score,
                     latency_ms=obs.latency_ms,
+                    latency_phase="cold" if index == 0 else "warm",
                     parse_status="parsed",
                     model_id=model_id,
                     adapter_id=adapter_id,
@@ -355,7 +533,8 @@ def capture_predictions(
                     prediction=False,
                     confidence=None,
                     score=None,
-                    latency_ms=0,
+                    latency_ms=None,
+                    latency_phase="cold" if index == 0 else "warm",
                     parse_status="malformed",
                     model_id=model_id,
                     adapter_id=adapter_id,
@@ -649,9 +828,13 @@ def validate_offline(
     freeze_report = json.loads(freeze_report_path.read_text(encoding="utf-8"))
     artifact_hashes = freeze_report.get("artifact_sha256", {})
     required_manifests = {f"manifest.{split}.jsonl" for split in ("train", "val", "test")}
-    if not required_manifests.issubset(artifact_hashes):
-        raise ManifestError("freeze report is missing split manifest hashes")
+    required_report_artifacts = {"annotation_agreement.jsonl", "character_slices.json"}
+    if not (required_manifests | required_report_artifacts).issubset(artifact_hashes):
+        raise ManifestError("freeze report is missing evaluation artifact hashes")
     manifest_hashes = {name: artifact_hashes[name] for name in sorted(required_manifests)}
+    report_artifact_hashes = {
+        name: artifact_hashes[name] for name in sorted(required_report_artifacts)
+    }
 
     lock_payload = {
         "schema_version": PREDICTION_SCHEMA_VERSION,
@@ -665,6 +848,7 @@ def validate_offline(
         "selected_checkpoints": selected_checkpoints,
         "controls": controls,
         "manifest_hashes": manifest_hashes,
+        "report_artifact_hashes": report_artifact_hashes,
         "prompt_version": "4",
         "vlm_judge_model": settings.vlm_judge_model,
     }
@@ -1033,6 +1217,83 @@ def run_heldout(
         raise
 
 
+def classify_claim_rung(
+    *,
+    beats_base: bool,
+    delta_f1_vs_incumbent: float,
+    candidate_recall: float,
+    incumbent_recall: float,
+) -> dict[str, str | bool]:
+    if not beats_base:
+        rung = "D"
+    elif delta_f1_vs_incumbent > 0:
+        rung = "A"
+    elif delta_f1_vs_incumbent >= -0.03 and candidate_recall >= incumbent_recall:
+        rung = "B"
+    else:
+        rung = "C"
+    return {
+        "rung": rung,
+        "objective4_requirement_met": rung != "D",
+        "ship_candidate": rung in ("A", "B"),
+    }
+
+
+def _judge_metrics(
+    labels: Sequence[bool],
+    records: Sequence[PredictionRecord],
+    char_ids: Sequence[str],
+) -> dict:
+    preds = [record.prediction for record in records]
+    precision, recall, f1 = prf1(labels, preds)
+    f1_lo, f1_hi = clustered_f1_ci(labels, preds, char_ids, seed=BOOTSTRAP_SEED)
+    warm_latencies = [
+        record.latency_ms for record in records
+        if record.latency_phase == "warm" and record.latency_ms is not None
+    ]
+    cold_latencies = [
+        record.latency_ms for record in records
+        if record.latency_phase == "cold" and record.latency_ms is not None
+    ]
+    malformed = sum(record.parse_status == "malformed" for record in records)
+    n = len(records)
+    return {
+        "n": n,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "f1_ci95": [f1_lo, f1_hi],
+        "auroc": auroc(labels, [record.score for record in records]),
+        "cohen_kappa": cohen_kappa(labels, preds),
+        "calibration": calibration(
+            labels, [record.confidence for record in records], predictions=preds,
+        ),
+        "latency_ms": {"n": len(warm_latencies), **mean_sample_std(warm_latencies)},
+        "cold_start_latency_ms": {
+            "value": cold_latencies[0] if cold_latencies else None,
+            "reason": None if cold_latencies else "cold-start observation missing",
+        },
+        "cost_per_call_usd": {
+            "value": None,
+            "reason": "cost is not recorded in immutable prediction evidence",
+        },
+        "parse_failures": {"count": malformed, "rate": malformed / n if n else 0.0},
+        "label_prevalence": sum(labels) / n if n else None,
+        "prediction_rate": sum(preds) / n if n else None,
+    }
+
+
+def _read_frozen_report_artifact(freeze_dir: Path, lock: EvaluationLock, name: str) -> bytes:
+    expected = lock.report_artifact_hashes.get(name)
+    path = freeze_dir / name
+    if not isinstance(expected, str) or not path.exists():
+        raise ManifestError(f"frozen report artifact missing: {name}")
+    content = path.read_bytes()
+    if hashlib.sha256(content).hexdigest() != expected:
+        raise ManifestError(f"frozen report artifact SHA-256 mismatch: {name}")
+    return content
+
+
 def build_report(
     freeze_dir: Path,
     lock_path: Path,
@@ -1054,50 +1315,44 @@ def build_report(
     test_labels = [r.label for r in test_records]
     test_char_ids = [r.char_id for r in test_records]
 
-    slices_file = freeze_dir / "character_slices.json"
-    non_human_char_ids = set()
-    if slices_file.exists():
-        slices_data = json.loads(slices_file.read_text(encoding="utf-8"))
-        if isinstance(slices_data, dict):
-            if "non_human" in slices_data and isinstance(slices_data["non_human"], list):
-                non_human_char_ids = set(slices_data["non_human"])
-            else:
-                non_human_char_ids = {cid for cid, s in slices_data.items() if s == "non_human"}
-        elif isinstance(slices_data, list):
-            non_human_char_ids = set(slices_data)
+    slices_data = json.loads(
+        _read_frozen_report_artifact(freeze_dir, lock, "character_slices.json").decode("utf-8")
+    )
+    if not isinstance(slices_data, dict) or any(
+        not isinstance(char_id, str) or value not in ("human", "non_human")
+        for char_id, value in slices_data.items()
+    ):
+        raise ManifestError("character slice evidence must map character IDs to human/non_human")
+    missing_slice_ids = sorted(set(test_char_ids) - set(slices_data))
+    if missing_slice_ids:
+        raise ManifestError("character slice evidence does not cover every held-out character")
+    non_human_char_ids = {
+        char_id for char_id, slice_name in slices_data.items() if slice_name == "non_human"
+    }
 
     predictions_by_judge: dict[str, list[PredictionRecord]] = {}
-    for judge_name in ("seed_0", "seed_1", "seed_2", "zero_shot_base", "prompted_gemma", "clip_cosine", "dinov2_cosine"):
+    for judge_name in REPORT_JUDGES:
         pred_file = predictions_dir / f"{judge_name}.jsonl"
         if not pred_file.exists():
             raise ManifestError(f"prediction file missing for {judge_name} at {pred_file}")
-        lines = [json.loads(line) for line in pred_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+        pred_bytes = pred_file.read_bytes()
+        digest_file = pred_file.with_suffix(pred_file.suffix + ".sha256")
+        actual_digest = hashlib.sha256(pred_bytes).hexdigest()
+        if not digest_file.exists() or digest_file.read_text(encoding="ascii").strip() != actual_digest:
+            raise ManifestError(f"immutable prediction SHA-256 differs at {digest_file.name}")
+        lines = [json.loads(line) for line in pred_bytes.decode("utf-8").splitlines() if line.strip()]
         preds = [PredictionRecord.model_validate(p) for p in lines]
-        validate_prediction_alignment(test_records, preds)
+        validate_report_prediction_evidence(test_records, preds, judge_name)
         predictions_by_judge[judge_name] = preds
 
     deployment_seed = lock.deployment_seed
     dep_key = f"seed_{deployment_seed}"
     dep_preds = [p.prediction for p in predictions_by_judge[dep_key]]
 
-    baselines_report = {}
+    judges_report = {}
     for judge_name, preds_list in predictions_by_judge.items():
         preds = [p.prediction for p in preds_list]
-        scores = [p.score for p in preds_list]
-        confidences = [p.confidence for p in preds_list]
-        p_val, r_val, f1_val = prf1(test_labels, preds)
-        f1_lo, f1_hi = clustered_f1_ci(test_labels, preds, test_char_ids, seed=BOOTSTRAP_SEED)
-
-        record_dict = {
-            "n": len(preds_list),
-            "precision": p_val,
-            "recall": r_val,
-            "f1": f1_val,
-            "f1_ci95": [f1_lo, f1_hi],
-            "auroc": auroc(test_labels, scores),
-            "cohen_kappa": cohen_kappa(test_labels, preds),
-            "calibration": calibration(test_labels, confidences, predictions=preds),
-        }
+        record_dict = _judge_metrics(test_labels, preds_list, test_char_ids)
 
         if judge_name in ("zero_shot_base", "prompted_gemma"):
             delta_lo, delta_hi = clustered_delta_f1_ci(
@@ -1106,38 +1361,52 @@ def build_report(
             record_dict["delta_f1_ci95_vs_deployment_seed"] = [delta_lo, delta_hi]
             record_dict["mcnemar_p_vs_deployment_seed"] = mcnemar_exact(test_labels, dep_preds, preds)
 
-        baselines_report[judge_name] = record_dict
+        judges_report[judge_name] = record_dict
 
-    seed_f1s = [baselines_report[f"seed_{s}"]["f1"] for s in (0, 1, 2)]
+    seed_f1s = [judges_report[f"seed_{s}"]["f1"] for s in SEEDS]
     seeds_summary = mean_sample_std(seed_f1s)
     seeds_summary["values"] = seed_f1s
 
     slices_report = {}
-    non_human_indices = [i for i, r in enumerate(test_records) if r.char_id in non_human_char_ids]
-    if non_human_indices:
-        nh_labels = [test_labels[i] for i in non_human_indices]
-        nh_chars = [test_char_ids[i] for i in non_human_indices]
-        nh_results = {}
-        for jname in (dep_key, "zero_shot_base", "prompted_gemma"):
-            nh_preds = [predictions_by_judge[jname][i].prediction for i in non_human_indices]
-            p_val, r_val, f1_val = prf1(nh_labels, nh_preds)
-            f1_lo, f1_hi = clustered_f1_ci(nh_labels, nh_preds, nh_chars, seed=BOOTSTRAP_SEED)
-            nh_results[jname] = {
-                "n": len(non_human_indices),
-                "precision": p_val,
-                "recall": r_val,
-                "f1": f1_val,
-                "f1_ci95": [f1_lo, f1_hi],
+    for slice_name, include in (
+        ("human", lambda char_id: char_id not in non_human_char_ids),
+        ("non_human", lambda char_id: char_id in non_human_char_ids),
+    ):
+        indices = [i for i, char_id in enumerate(test_char_ids) if include(char_id)]
+        if not indices:
+            slices_report[slice_name] = {
+                "status": "unavailable",
+                "reason": f"no {slice_name} characters in test split",
             }
-        slices_report["non_human"] = nh_results
-    else:
-        slices_report["non_human"] = {"status": "no non_human characters in test split"}
+            continue
+        labels = [test_labels[i] for i in indices]
+        char_ids = [test_char_ids[i] for i in indices]
+        slices_report[slice_name] = {
+            judge_name: _judge_metrics(
+                labels, [predictions_by_judge[judge_name][i] for i in indices], char_ids,
+            )
+            for judge_name in REPORT_JUDGES
+        }
 
     # Human inter-rater agreement
-    agreement_file = freeze_dir / "annotation_agreement.jsonl"
-    human_agreement = {}
-    if agreement_file.exists():
-        agr_lines = [json.loads(line) for line in agreement_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+    agreement_bytes = _read_frozen_report_artifact(
+        freeze_dir, lock, "annotation_agreement.jsonl"
+    )
+    if not agreement_bytes:
+        raise ManifestError("agreement evidence is empty")
+    else:
+        agr_lines = [json.loads(line) for line in agreement_bytes.decode("utf-8").splitlines() if line.strip()]
+        test_slice_by_pair = {
+            record.pair_id: (
+                "non_human" if record.char_id in non_human_char_ids else "human"
+            )
+            for record in test_records
+        }
+        all_agreement_ids = [row.get("pair_id") for row in agr_lines]
+        if len(all_agreement_ids) != len(set(all_agreement_ids)):
+            raise ManifestError("agreement evidence contains duplicate pair IDs")
+        agr_lines = [row for row in agr_lines if row.get("pair_id") in test_slice_by_pair]
+        validate_agreement_alignment([record.pair_id for record in test_records], agr_lines)
         if agr_lines:
             if any(
                 not isinstance(row.get("labels"), list)
@@ -1148,41 +1417,54 @@ def build_report(
                 raise ManifestError("annotation agreement rows require exactly two boolean labels")
             a1_labels = [not row["labels"][0] for row in agr_lines]
             a2_labels = [not row["labels"][1] for row in agr_lines]
+            def agreement(rows: Sequence[dict]) -> dict:
+                if not rows:
+                    return {"status": "unavailable", "reason": "empty slice"}
+                left = [not row["labels"][0] for row in rows]
+                right = [not row["labels"][1] for row in rows]
+                return {
+                    "status": "available",
+                    "n": len(rows),
+                    "cohen_kappa": cohen_kappa(left, right),
+                    "percent_agreement": sum(x == y for x, y in zip(left, right)) / len(rows),
+                }
+
             human_agreement = {
+                "status": "available",
                 "n": len(a1_labels),
                 "cohen_kappa": cohen_kappa(a1_labels, a2_labels),
                 "percent_agreement": sum(1 for x, y in zip(a1_labels, a2_labels) if x == y) / len(a1_labels),
+                "slices": {
+                    name: agreement([
+                        row for row in agr_lines if test_slice_by_pair[row["pair_id"]] == name
+                    ])
+                    for name in ("human", "non_human")
+                },
             }
 
     # Pre-registered Claim Ladder (§7.2 & §7.5)
-    incumbent_f1 = baselines_report["prompted_gemma"]["f1"]
-    incumbent_recall = baselines_report["prompted_gemma"]["recall"]
-    candidate_f1 = baselines_report[dep_key]["f1"]
-    candidate_recall = baselines_report[dep_key]["recall"]
+    incumbent_f1 = judges_report["prompted_gemma"]["f1"]
+    incumbent_recall = judges_report["prompted_gemma"]["recall"]
+    candidate_f1 = judges_report[dep_key]["f1"]
+    candidate_recall = judges_report[dep_key]["recall"]
     delta_incumbent = candidate_f1 - incumbent_f1
 
-    base_delta_lo, base_delta_hi = baselines_report["zero_shot_base"]["delta_f1_ci95_vs_deployment_seed"]
+    base_delta_lo, _ = judges_report["zero_shot_base"]["delta_f1_ci95_vs_deployment_seed"]
     beats_base = base_delta_lo > 0
-
-    if beats_base and delta_incumbent > 0 and candidate_recall >= incumbent_recall:
-        rung = "A"
-        status = "pass"
-    elif beats_base and delta_incumbent >= -0.03 and candidate_recall >= incumbent_recall:
-        rung = "B"
-        status = "pass"
-    elif beats_base:
-        rung = "C"
-        status = "fail"
-    else:
-        rung = "D"
-        status = "fail"
+    claim = classify_claim_rung(
+        beats_base=beats_base,
+        delta_f1_vs_incumbent=delta_incumbent,
+        candidate_recall=candidate_recall,
+        incumbent_recall=incumbent_recall,
+    )
+    rung = claim["rung"]
 
     model_to_deploy = (
-        lock.selected_checkpoints[dep_key]["path"] if status == "pass" else lock.vlm_judge_model
+        lock.selected_checkpoints[dep_key]["path"] if claim["ship_candidate"] else lock.vlm_judge_model
     )
     deployment_decision = {
-        "status": status,
         "rung": rung,
+        "ship_candidate": claim["ship_candidate"],
         "incumbent_model": lock.vlm_judge_model,
         "incumbent_f1": incumbent_f1,
         "incumbent_recall": incumbent_recall,
@@ -1194,21 +1476,53 @@ def build_report(
         "model_to_deploy": model_to_deploy,
     }
 
-    report = {
-        "schema_version": PREDICTION_SCHEMA_VERSION,
+    prediction_rates = {
+        name: metrics["prediction_rate"] for name, metrics in judges_report.items()
+    }
+    report = Objective4Report.model_validate({
+        "schema_version": REPORT_SCHEMA_VERSION,
         "bootstrap_seed": BOOTSTRAP_SEED,
         "deployment_seed": deployment_seed,
         "seeds_f1_summary": seeds_summary,
-        "baselines": baselines_report,
+        "judges": judges_report,
         "slices": slices_report,
         "human_inter_rater_agreement": human_agreement,
+        "prediction_rate_drift": {
+            f"{dep_key}_vs_{name}": prediction_rates[dep_key] - rate
+            for name, rate in prediction_rates.items() if name != dep_key
+        },
+        "registered_endpoints": {
+            "cost_per_call": {
+                "status": "unavailable",
+                "reason": "not recorded in immutable prediction evidence",
+            },
+            "dreambench_transfer": {
+                "status": "not_collected_by_heldout_runner",
+                "reason": "separate descriptive transfer evaluation",
+            },
+            "downstream_expert_feedback": {
+                "status": "not_collected_by_heldout_runner",
+                "reason": "reported under Objective 3",
+            },
+            "data_scaling_ablation": {
+                "status": "not_collected_by_heldout_runner",
+                "reason": "validation-only experiment",
+            },
+        },
+        "objective4": {
+            "requirement_met": claim["objective4_requirement_met"],
+            "primary_judge": dep_key,
+            "reported_result": judges_report[dep_key],
+        },
         "deployment_decision": deployment_decision,
-    }
+    }).model_dump(mode="json")
 
     if out_path:
         out_path = Path(out_path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        content = (json.dumps(report, indent=2, sort_keys=True) + "\n").encode("utf-8")
+        if not _publish_exclusive(out_path, content) and out_path.read_bytes() != content:
+            raise ManifestError(f"immutable report differs at {out_path}")
 
     return report
 

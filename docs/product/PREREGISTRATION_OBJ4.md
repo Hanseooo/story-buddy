@@ -580,3 +580,26 @@ The one-read rule and Rung-D-only second-read exception are unchanged.
 
 A fixed ten-bin reliability table and Brier score are added only as **exploratory calibration diagnostics**.
 They do not replace, gate, or modify any endpoint in §1 or §5 and must be labelled exploratory in reporting.
+
+### 2026-08-25 implementation interpretation — before held-out evaluation
+
+No held-out result had been seen. The canonical schema reports every judge overall and on both frozen
+human/non-human slices: sample count, precision, recall, F1 with the registered clustered interval, AUROC,
+judge-versus-human κ, exploratory calibration, latency count/mean/sample SD, parse-failure count/rate,
+cost/call availability, label prevalence, and prediction rate. Inter-rater κ and percent agreement are reported overall and by the
+same slices. Only aggregate statistics are emitted; story, character, pair, and asset identifiers remain in
+immutable evidence and never enter the report.
+
+The first recorded call per judge is the cold-start observation. It is reported separately and excluded from
+the warm-start latency mean and sample SD, preserving §9.6's measurement condition.
+
+DreamBench++ transfer, downstream expert feedback, and the validation-only data-scaling ablation stay
+explicit in the schema with their collection status when they are not inputs to the one guarded held-out
+runner. “Unavailable” is not silently converted into a number and does not change a gate.
+
+For §6, “beats base” remains exactly the registered paired clustered ΔF1 interval excluding zero. Rung A
+uses that result plus positive F1 difference versus prompted Gemma; it does not add recall as an undeclared
+gate. Rung B alone adds the registered no-recall-regression condition to the fixed δ = 3 non-inferiority
+boundary. Rung C records Objective 4 as met while keeping the incumbent deployment. Only Rung D records the
+research requirement as unmet. The Objective-4 conclusion and engineering deployment decision are therefore
+separate schema fields.

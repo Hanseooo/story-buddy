@@ -88,7 +88,7 @@ def test_heldout_fails_closed_if_test_manifest_modified_after_lock(tmp_path):
         checkpoints[seed] = checkpoint
 
     valid_lock = {
-        "schema_version": 1,
+        "schema_version": ev.PREDICTION_SCHEMA_VERSION,
         "bootstrap_seed": 0,
         "base_model": "Qwen/Qwen2.5-VL-7B-Instruct",
         "base_revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
@@ -115,6 +115,10 @@ def test_heldout_fails_closed_if_test_manifest_modified_after_lock(tmp_path):
             "manifest.train.jsonl": "1" * 64,
             "manifest.val.jsonl": "2" * 64,
             "manifest.test.jsonl": hashlib.sha256(test_mf.read_bytes()).hexdigest(),
+        },
+        "report_artifact_hashes": {
+            "annotation_agreement.jsonl": "4" * 64,
+            "character_slices.json": "5" * 64,
         },
         "prompt_version": "4",
         "vlm_judge_model": "google/gemma-3-27b-it",
