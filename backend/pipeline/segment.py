@@ -83,8 +83,10 @@ Rules:
 - At most {max_scenes} scenes.
 - Each scene captures a distinct moment or plot point.
 - start and end are inclusive sentence indices.
-- characters_present lists character names exactly as given above.
+- characters_present lists character names exactly as given above and is the complete intended-visible cast.
 - List a character in characters_present only when they are intended to be visible in this scene frame. List them even when the sentences refer to them only as he, she, it or they.
+- Every roster character named or depicted anywhere in visual_direction—including one referred to by a pronoun—must be listed in characters_present using its exact roster name.
+- If a character is remembered, mentioned, or off-screen, do not name or depict that character in visual_direction; describe only what is visibly present in the selected frame.
 - location_name is where the scene happens, named exactly as given above. Leave it null if the \
 story does not say.
 - objects_present lists object names exactly as given above, but only when the object should be visible in the selected still frame. Treat this roster as a reference list, not a visibility list.

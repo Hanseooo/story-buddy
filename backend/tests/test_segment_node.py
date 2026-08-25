@@ -1114,6 +1114,19 @@ def test_the_prompt_asks_for_pronoun_only_beats():
     assert "he, she, it or they" in mock_provider.call_args.args[0]
 
 
+def test_segment_prompt_enforces_visible_cast_and_direction_alignment():
+    units = ["Quill looked for lost things.", "He found Bok-Bok."]
+    stub = SceneSegmentation(scenes=[_r(0, 1, chars=[])])
+    with patch("pipeline.segment.structured_text", return_value=stub) as mock_provider:
+        segment_scenes(units, [_char("c0", "Quill"), _char("c1", "Bok-Bok")], [], [], [])
+
+    prompt = mock_provider.call_args.args[0]
+    assert "complete intended-visible cast" in prompt
+    assert "Every roster character named or depicted anywhere in visual_direction" in prompt
+    assert "must be listed in characters_present using its exact roster name" in prompt
+    assert "If a character is remembered, mentioned, or off-screen, do not name or depict that character in visual_direction" in prompt
+
+
 def test_segmentation_prompt_names_the_shared_scene_ceiling():
     """spend-and-retry-economics §6.3: "the segmentation prompt names the same ceiling".
 

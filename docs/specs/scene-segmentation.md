@@ -215,7 +215,10 @@ rather than by a regex that can only read the text.
 
 `SEGMENTATION_PROMPT` keeps its pronoun rule, now the only text-side layer:
 
+> `- characters_present lists character names exactly as given above and is the complete intended-visible cast.`
 > `- List a character in characters_present only when they are intended to be visible in this scene frame. List them even when the sentences refer to them only as he, she, it or they.`
+> `- Every roster character named or depicted anywhere in visual_direction—including one referred to by a pronoun—must be listed in characters_present using its exact roster name.`
+> `- If a character is remembered, mentioned, or off-screen, do not name or depict that character in visual_direction; describe only what is visibly present in the selected frame.`
 
 **Deliberately not built:** a cast carry-forward mirroring §4.1's location seed — an empty cast is
 either a pronoun beat *or* a genuine scenery page, and inheriting the previous page's cast draws a
