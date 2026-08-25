@@ -84,12 +84,15 @@ class SpendPolicy:
     hard_usd: Decimal = Decimal("30.00")
     smoke_usd: Decimal = Decimal("1.50")
     price_per_megapixel: Decimal = Decimal("0.035")
+    price_basis: str = "programmatic"
 
     def __post_init__(self) -> None:
         if self.max_usd < 0 or self.hard_usd <= 0 or self.smoke_usd < 0:
             raise ValueError("spend limits must be non-negative and hard_usd must be positive")
         if self.price_per_megapixel <= 0:
             raise ValueError("price_per_megapixel must be positive")
+        if not self.price_basis.strip():
+            raise ValueError("price_basis must be non-empty")
 
     @property
     def maximum_megapixels(self) -> Decimal:
@@ -123,6 +126,7 @@ def _budget_basis(policy: SpendPolicy) -> dict:
         "maximum_megapixels": str(policy.maximum_megapixels),
         "billable_megapixels": policy.billable_megapixels,
         "price_per_megapixel": str(policy.price_per_megapixel),
+        "price_basis": policy.price_basis,
         "authorized_usd": str(policy.authorized_usd),
         "conservative_call_usd": str(policy.conservative_call_usd),
     }
@@ -726,6 +730,7 @@ def main(argv: list[str] | None = None) -> int:
     paid_or_fixture.add_argument("--max-usd", type=Decimal)
     paid_or_fixture.add_argument("--fixture", action="store_true")
     parser.add_argument("--price-per-megapixel", type=Decimal)
+    parser.add_argument("--price-basis")
     parser.add_argument("--corpus", type=pathlib.Path, default=CORPUS_PATH)
     parser.add_argument("--out", type=pathlib.Path, default=DATA_DIR)
     parser.add_argument("--limit", type=int, default=None, help="run only the first N stories")
@@ -734,8 +739,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.fixture and args.price_per_megapixel is not None:
         parser.error("--fixture cannot be combined with --price-per-megapixel")
-    if not args.fixture and args.price_per_megapixel is None:
-        parser.error("paid runs require --price-per-megapixel")
+    if args.fixture and args.price_basis is not None:
+        parser.error("--fixture cannot be combined with --price-basis")
+    if not args.fixture and (args.price_per_megapixel is None or args.price_basis is None):
+        parser.error("paid runs require --price-per-megapixel and --price-basis")
     if args.fixture and (
         args.resume_quarantined is not None or args.acknowledge_uncertain_billing is not None
     ):
@@ -761,6 +768,7 @@ def main(argv: list[str] | None = None) -> int:
                 policy = SpendPolicy(
                     max_usd=args.max_usd if args.max_usd is not None else defaults.max_usd,
                     price_per_megapixel=args.price_per_megapixel,
+                    price_basis=args.price_basis,
                 )
                 summary = build(
                     stories,

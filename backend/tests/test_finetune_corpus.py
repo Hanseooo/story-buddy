@@ -218,7 +218,11 @@ def test_spend_policy_rounds_fractional_megapixels_up_for_each_call():
 
 
 def test_operator_output_records_the_budget_basis(tmp_path, stories):
-    policy = build_corpus.SpendPolicy(max_usd=Decimal("0.03"), price_per_megapixel=Decimal("0.03"))
+    policy = build_corpus.SpendPolicy(
+        max_usd=Decimal("0.03"),
+        price_per_megapixel=Decimal("0.03"),
+        price_basis="https://fal.ai/models/example checked 2026-08-25",
+    )
 
     summary = build_corpus.build(
         stories[:1], FakeGraph(1), out_dir=tmp_path, supabase=FakeSupabase(), policy=policy
@@ -230,6 +234,7 @@ def test_operator_output_records_the_budget_basis(tmp_path, stories):
         "maximum_megapixels": "0.786432",
         "billable_megapixels": 1,
         "price_per_megapixel": "0.03",
+        "price_basis": "https://fal.ai/models/example checked 2026-08-25",
         "authorized_usd": "0.03",
         "conservative_call_usd": "0.03",
     }
@@ -941,7 +946,9 @@ def test_build_quarantines_a_completion_with_extra_non_human_occurrences(tmp_pat
     "argv",
     [
         [],
+        ["--price-per-megapixel", "0.03"],
         ["--fixture", "--price-per-megapixel", "0.03"],
+        ["--fixture", "--price-basis", "official price checked today"],
         ["--fixture", "--resume-quarantined", "fixture-story"],
         ["--acknowledge-uncertain-billing", "fixture-story"],
         [

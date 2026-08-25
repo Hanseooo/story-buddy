@@ -169,6 +169,10 @@ Phase-1 measurement — the reference generator's true hit rate — silently rev
 re-roll a no-op. Draws are therefore independent and unseeded. CC-7 is unsatisfied here as a direct
 consequence of the mechanism, not an oversight — see §5.
 
+The shared provider seam pins every reference draw to `1024x768` via Fal's explicit `image_size` input.
+This is the known generation ceiling used by the research corpus spend policy; callers cannot inherit an
+endpoint default or an input-image size.
+
 ### Prompts (D-F: transient, so they live beside their node)
 
 Two module-level constants. Neither introduces a contract type; `RefVerdict` already lives in

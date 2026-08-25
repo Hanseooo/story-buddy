@@ -364,6 +364,24 @@ def test_edit_image_pins_corpus_generation_size():
     }
 
 
+def test_budget_rejection_happens_before_real_fal_submission():
+    fal = MagicMock()
+    token = providers._fal_event_sink.set(
+        lambda event: (_ for _ in ()).throw(RuntimeError("budget stopped"))
+        if event == "attempted"
+        else None
+    )
+    try:
+        with patch("providers._fal", return_value=fal), pytest.raises(
+            RuntimeError, match="budget stopped"
+        ):
+            providers.text_to_image("a fox")
+    finally:
+        providers._fal_event_sink.reset(token)
+
+    fal.subscribe.assert_not_called()
+
+
 def test_text_to_image_appends_negative_extra_without_dropping_the_shared_terms():
     """`text_to_image` has two callers that want opposite backgrounds: `char_bible`'s canonical
     reference must have none, and `generate_scene`'s no-reference fallback (`generate_scene.py:57`)

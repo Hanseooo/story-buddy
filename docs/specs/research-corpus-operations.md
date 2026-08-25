@@ -268,9 +268,9 @@ annotation and training. Filename extensions are not trusted; magic bytes and de
 - Both Fal image routes pin `image_size={"width": 1024, "height": 768}` before dispatch. The maximum is
   `1024 * 768 / 1,000,000 = 0.786432` MP; Fal rounds fractional megapixels up, so each request reserves
   `ceil(0.786432) * <operator-recorded USD/MP>`.
-- Paid runs require `--price-per-megapixel`, copied from the current official endpoint price at campaign
-  start. The JSON summary and immutable run metadata record the size, raw and rounded megapixels, rate,
-  per-call ceiling, and authorization.
+- Paid runs require `--price-per-megapixel` and `--price-basis`; the latter records the official source URL
+  and lookup date used at campaign start. The JSON summary and immutable run metadata record that provenance,
+  the size, raw and rounded megapixels, rate, per-call ceiling, and authorization.
 - For that smoke only, the affordable call count is divided evenly across the selected stories at the derived
   conservative per-call ceiling. Reaching a story's reduced ceiling quarantines it for reconciliation rather than
   breaching the smoke cap; campaign runs continue to reserve the full production image budget per story.
