@@ -42,19 +42,22 @@
 ## Execution pipeline sequence
 
 Run all commands from `backend/`. Angle-bracket values (`<...>`) are operator inputs, not copy-ready literals.
+Before a paid run, record the official Fal price URL, lookup date, authorized USD, pinned `1024x768` size,
+raw maximum `0.786432` MP, Fal's `ceil(MP)` billing rule, and the resulting per-call ceiling. Supply the
+current highest applicable rate for the two configured image endpoints as `<current-usd-per-megapixel>`.
 
 ```powershell
 # 1. Zero-cost verification on temporary fixture directory
 uv run python -m finetune.build_corpus --fixture --limit 1 --out <temporary-fixture-directory>
 
 # 2. Paid synthetic smoke run (3 stories, conservative budget cap)
-uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --limit 3 --max-usd 1.50 --price-per-call <pinned-conservative-price>
+uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --limit 3 --max-usd 1.50 --price-per-megapixel <current-usd-per-megapixel>
 
 # 3. Full synthetic generation (24 train + 6 val stories)
-uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --max-usd 25 --price-per-call <same-pinned-price>
+uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --max-usd 25 --price-per-megapixel <same-current-usd-per-megapixel>
 
 # 4. Full donated generation (15 candidate stories: 10 primary + 5 backup)
-uv run python -m finetune.build_corpus --corpus ../data/judge/intake/donated.json --out ../data/judge/corpus --max-usd 25 --price-per-call <same-pinned-price>
+uv run python -m finetune.build_corpus --corpus ../data/judge/intake/donated.json --out ../data/judge/corpus --max-usd 25 --price-per-megapixel <same-current-usd-per-megapixel>
 
 # 5. Read-only candidate inspection for hard negative selection
 uv run python -m finetune.build_dataset --candidate-report --data ../data/judge/corpus

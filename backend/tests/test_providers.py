@@ -260,6 +260,7 @@ def test_edit_image_passes_references_and_seed_and_returns_bytes():
         "negative_prompt": providers.NEGATIVE_PROMPT,
         "prompt": "a fox",
         "image_urls": ["https://ref/1.png"],
+        "image_size": {"width": 1024, "height": 768},
         "seed": 7,
     }
     mock_get.assert_called_once()
@@ -333,6 +334,34 @@ def test_text_to_image_omits_seed_when_not_given():
     # The canonical reference suppresses lettering too — it is drawn on the t2i path, and a
     # reference with text in it teaches every scene the same habit.
     assert arguments["negative_prompt"] == providers.NEGATIVE_PROMPT
+
+
+def test_text_to_image_pins_corpus_generation_size():
+    fal = MagicMock()
+    fal.subscribe.return_value = {"images": [{"url": "https://fal.example/x.png"}]}
+
+    with patch("providers._fal", return_value=fal), \
+         patch("providers.httpx.get", return_value=MagicMock(content=b"png")):
+        providers.text_to_image("a fox")
+
+    assert fal.subscribe.call_args.kwargs["arguments"]["image_size"] == {
+        "width": 1024,
+        "height": 768,
+    }
+
+
+def test_edit_image_pins_corpus_generation_size():
+    fal = MagicMock()
+    fal.subscribe.return_value = {"images": [{"url": "https://fal.example/x.png"}]}
+
+    with patch("providers._fal", return_value=fal), \
+         patch("providers.httpx.get", return_value=MagicMock(content=b"png")):
+        providers.edit_image("a fox", ["https://ref/1.png"])
+
+    assert fal.subscribe.call_args.kwargs["arguments"]["image_size"] == {
+        "width": 1024,
+        "height": 768,
+    }
 
 
 def test_text_to_image_appends_negative_extra_without_dropping_the_shared_terms():

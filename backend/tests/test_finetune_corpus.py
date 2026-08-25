@@ -209,6 +209,34 @@ def stories():
 # --------------------------------------------------------------------------- the spend cap
 
 
+def test_spend_policy_rounds_fractional_megapixels_up_for_each_call():
+    policy = build_corpus.SpendPolicy(price_per_megapixel=Decimal("0.03"))
+
+    assert policy.maximum_megapixels == Decimal("0.786432")
+    assert policy.billable_megapixels == 1
+    assert policy.conservative_call_usd == Decimal("0.03")
+
+
+def test_operator_output_records_the_budget_basis(tmp_path, stories):
+    policy = build_corpus.SpendPolicy(max_usd=Decimal("0.03"), price_per_megapixel=Decimal("0.03"))
+
+    summary = build_corpus.build(
+        stories[:1], FakeGraph(1), out_dir=tmp_path, supabase=FakeSupabase(), policy=policy
+    )
+    [bundle] = load_completed_bundles(tmp_path)
+
+    expected = {
+        "image_size": "1024x768",
+        "maximum_megapixels": "0.786432",
+        "billable_megapixels": 1,
+        "price_per_megapixel": "0.03",
+        "authorized_usd": "0.03",
+        "conservative_call_usd": "0.03",
+    }
+    assert expected.items() <= summary.items()
+    assert expected.items() <= bundle.run_metadata.items()
+
+
 def test_campaign_refuses_to_start_a_story_whose_maximum_draws_do_not_fit(tmp_path, stories):
     graph = FakeGraph(per_story_images=1)
 
@@ -251,7 +279,7 @@ def test_campaign_hard_cap_is_unconditionally_thirty_dollars():
 def test_exact_story_draw_limit_still_writes_a_completed_bundle(tmp_path, stories):
     graph = FakeGraph(per_story_images=2)
     policy = build_corpus.SpendPolicy(
-        max_usd=Decimal("0.07"), conservative_call_usd=Decimal("0.035")
+        max_usd=Decimal("0.06"), price_per_megapixel=Decimal("0.03")
     )
 
     summary = build_corpus.build(
@@ -267,7 +295,7 @@ def test_exact_story_draw_limit_still_writes_a_completed_bundle(tmp_path, storie
 def test_next_call_past_story_limit_is_blocked_before_submission(tmp_path, stories):
     graph = FakeGraph(per_story_images=3)
     policy = build_corpus.SpendPolicy(
-        max_usd=Decimal("0.07"), conservative_call_usd=Decimal("0.035")
+        max_usd=Decimal("0.06"), price_per_megapixel=Decimal("0.03")
     )
 
     summary = build_corpus.build(
@@ -912,6 +940,8 @@ def test_build_quarantines_a_completion_with_extra_non_human_occurrences(tmp_pat
 @pytest.mark.parametrize(
     "argv",
     [
+        [],
+        ["--fixture", "--price-per-megapixel", "0.03"],
         ["--fixture", "--resume-quarantined", "fixture-story"],
         ["--acknowledge-uncertain-billing", "fixture-story"],
         [

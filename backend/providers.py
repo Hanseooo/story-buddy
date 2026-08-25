@@ -327,6 +327,9 @@ def _assert_field_order(raw: str, schema: type[BaseModel], model: str) -> None:
         )
 
 
+GENERATED_IMAGE_SIZE = {"width": 1024, "height": 768}
+
+
 def text_to_image(prompt: str, seed: int | None = None, negative_extra: str = "") -> bytes:
     """Standalone image — the canonical character reference (ADR-001), and `generate_scene`'s
     no-reference fallback.
@@ -336,7 +339,11 @@ def text_to_image(prompt: str, seed: int | None = None, negative_extra: str = ""
     replacement — the lettering terms apply to every image this project draws.
     """
     negative = f"{NEGATIVE_PROMPT}, {negative_extra}" if negative_extra else NEGATIVE_PROMPT
-    return _run_fal(settings.fal_image_model, {"prompt": prompt, "negative_prompt": negative}, seed)
+    return _run_fal(
+        settings.fal_image_model,
+        {"prompt": prompt, "negative_prompt": negative, "image_size": GENERATED_IMAGE_SIZE},
+        seed,
+    )
 
 
 # fal endpoints disagree on what the reference-image field is called, and fal **silently ignores
@@ -361,7 +368,11 @@ def edit_image(prompt: str, image_urls: list[str], seed: int | None = None) -> b
             "checking fal's openapi. Failing loudly is deliberate — an unrecognised key is dropped "
             "silently, so the alternative is every scene quietly ignoring its character reference."
         )
-    return _run_fal(endpoint, {"prompt": prompt, REFERENCE_FIELD[endpoint]: image_urls}, seed)
+    return _run_fal(
+        endpoint,
+        {"prompt": prompt, REFERENCE_FIELD[endpoint]: image_urls, "image_size": GENERATED_IMAGE_SIZE},
+        seed,
+    )
 
 
 def upload_reference(image_bytes: bytes) -> str:

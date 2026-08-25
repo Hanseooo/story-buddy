@@ -14,7 +14,7 @@ import sys
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import ROUND_CEILING, Decimal
 from io import BytesIO
 from typing import Literal
 
@@ -53,7 +53,7 @@ from pipeline.consistency_check import (
     SCENE_CONSTRAINT_PROMPT_VERSION,
 )
 from pipeline.prompt_optimizer import SCENE_PROMPT_VERSION
-from providers import _fal_event_sink
+from providers import GENERATED_IMAGE_SIZE, _fal_event_sink
 
 CORPUS_PATH = pathlib.Path(__file__).with_name("corpus_synthetic.json")
 # `backend/finetune/build_corpus.py` -> repo root -> `data/judge/corpus` (gitignored).
@@ -83,13 +83,27 @@ class SpendPolicy:
     max_usd: Decimal = Decimal("25.00")
     hard_usd: Decimal = Decimal("30.00")
     smoke_usd: Decimal = Decimal("1.50")
-    conservative_call_usd: Decimal = Decimal("0.035")
+    price_per_megapixel: Decimal = Decimal("0.035")
 
     def __post_init__(self) -> None:
         if self.max_usd < 0 or self.hard_usd <= 0 or self.smoke_usd < 0:
             raise ValueError("spend limits must be non-negative and hard_usd must be positive")
-        if self.conservative_call_usd <= 0:
-            raise ValueError("conservative_call_usd must be positive")
+        if self.price_per_megapixel <= 0:
+            raise ValueError("price_per_megapixel must be positive")
+
+    @property
+    def maximum_megapixels(self) -> Decimal:
+        return Decimal(GENERATED_IMAGE_SIZE["width"] * GENERATED_IMAGE_SIZE["height"]) / Decimal(
+            1_000_000
+        )
+
+    @property
+    def billable_megapixels(self) -> int:
+        return int(self.maximum_megapixels.to_integral_value(rounding=ROUND_CEILING))
+
+    @property
+    def conservative_call_usd(self) -> Decimal:
+        return self.price_per_megapixel * self.billable_megapixels
 
     @property
     def authorized_usd(self) -> Decimal:
@@ -101,6 +115,17 @@ class SpendPolicy:
         if self.authorized_usd <= self.smoke_usd:
             return int(self.authorized_usd / self.conservative_call_usd) // story_count
         return IMAGE_BUDGET
+
+
+def _budget_basis(policy: SpendPolicy) -> dict:
+    return {
+        "image_size": f'{GENERATED_IMAGE_SIZE["width"]}x{GENERATED_IMAGE_SIZE["height"]}',
+        "maximum_megapixels": str(policy.maximum_megapixels),
+        "billable_megapixels": policy.billable_megapixels,
+        "price_per_megapixel": str(policy.price_per_megapixel),
+        "authorized_usd": str(policy.authorized_usd),
+        "conservative_call_usd": str(policy.conservative_call_usd),
+    }
 
 
 def load_corpus(path: pathlib.Path = CORPUS_PATH) -> list[dict]:
@@ -310,7 +335,7 @@ def _bundle(
     out_dir: pathlib.Path,
     fixture: bool,
     telemetry: Counter | None = None,
-    price_per_call: Decimal = Decimal("0.035"),
+    policy: SpendPolicy = SpendPolicy(),
     billing_acknowledged_at: str | None = None,
 ) -> RunBundle:
     if memory.story_id != story.story_id:
@@ -346,7 +371,7 @@ def _bundle(
             "image_budget": IMAGE_BUDGET,
             "recursion_limit": RECURSION_LIMIT,
             "fixture": "true" if fixture else "false",
-            "conservative_call_usd": str(price_per_call),
+            **_budget_basis(policy),
             "attempted_calls": (telemetry or {}).get("attempted", 0),
             "completed_calls": (telemetry or {}).get("completed", 0),
             "failed_calls": (telemetry or {}).get("failed", 0),
@@ -443,7 +468,7 @@ def _quarantine(
         "quarantined": message,
         "reason_code": reason_code,
         "intake_sha256": intake_sha256(story),
-        "conservative_call_usd": str(policy.conservative_call_usd),
+        **_budget_basis(policy),
         "telemetry": dict(telemetry),
         **(
             {"billing_acknowledged_at": previous["billing_acknowledged_at"]}
@@ -487,6 +512,7 @@ def build(
         "scenes": 0,
         "images_spent": 0,
         "halted": False,
+        **_budget_basis(policy),
     }
     for story in records:
         story_id = story.story_id
@@ -584,7 +610,7 @@ def build(
                 out_dir,
                 fixture,
                 story_telemetry,
-                policy.conservative_call_usd,
+                policy,
             )
         else:
             billable_calls = max(campaign_spent, telemetry["attempted"])
@@ -611,7 +637,7 @@ def build(
                 state[story_id] = {
                     "in_progress": True,
                     "intake_sha256": intake_sha256(story),
-                    "conservative_call_usd": str(policy.conservative_call_usd),
+                    **_budget_basis(policy),
                     "telemetry": dict(story_telemetry),
                     **(
                         {"billing_acknowledged_at": billing_acknowledged_at}
@@ -665,7 +691,7 @@ def build(
                     out_dir,
                     fixture,
                     story_telemetry,
-                    policy.conservative_call_usd,
+                    policy,
                     billing_acknowledged_at=billing_acknowledged_at,
                 )
             except (CorpusError, ValidationError) as error:
@@ -699,15 +725,17 @@ def main(argv: list[str] | None = None) -> int:
     paid_or_fixture = parser.add_mutually_exclusive_group()
     paid_or_fixture.add_argument("--max-usd", type=Decimal)
     paid_or_fixture.add_argument("--fixture", action="store_true")
-    parser.add_argument("--price-per-call", type=Decimal)
+    parser.add_argument("--price-per-megapixel", type=Decimal)
     parser.add_argument("--corpus", type=pathlib.Path, default=CORPUS_PATH)
     parser.add_argument("--out", type=pathlib.Path, default=DATA_DIR)
     parser.add_argument("--limit", type=int, default=None, help="run only the first N stories")
     parser.add_argument("--resume-quarantined", metavar="STORY_ID")
     parser.add_argument("--acknowledge-uncertain-billing", metavar="STORY_ID")
     args = parser.parse_args(argv)
-    if args.fixture and args.price_per_call is not None:
-        parser.error("--fixture cannot be combined with --price-per-call")
+    if args.fixture and args.price_per_megapixel is not None:
+        parser.error("--fixture cannot be combined with --price-per-megapixel")
+    if not args.fixture and args.price_per_megapixel is None:
+        parser.error("paid runs require --price-per-megapixel")
     if args.fixture and (
         args.resume_quarantined is not None or args.acknowledge_uncertain_billing is not None
     ):
@@ -732,11 +760,7 @@ def main(argv: list[str] | None = None) -> int:
                 defaults = SpendPolicy()
                 policy = SpendPolicy(
                     max_usd=args.max_usd if args.max_usd is not None else defaults.max_usd,
-                    conservative_call_usd=(
-                        args.price_per_call
-                        if args.price_per_call is not None
-                        else defaults.conservative_call_usd
-                    ),
+                    price_per_megapixel=args.price_per_megapixel,
                 )
                 summary = build(
                     stories,
