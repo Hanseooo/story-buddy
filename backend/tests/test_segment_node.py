@@ -757,15 +757,15 @@ def test_segment_rejects_an_unknown_visible_character():
             segment(_state(raw="Someone crossed the room."))
 
 
-def test_segment_rejects_direction_naming_a_roster_character_outside_the_cast():
+def test_segment_reconciles_direction_characters_in_roster_order(caplog):
     raw = SceneSegmentation(
         scenes=[
             ExtractedScene(
                 start=0,
                 end=0,
-                characters_present=["Ana"],
+                characters_present=["Maya"],
                 visual_direction=_direction(
-                    key_action="Ana watches the Shadow Wizard flee away from her.",
+                    key_action="Shadow Wizard and Ana greet Maya.",
                     viewpoint="wide view",
                     framing="wide shot",
                 ),
@@ -774,11 +774,19 @@ def test_segment_rejects_direction_naming_a_roster_character_outside_the_cast():
     )
     state = _state(
         raw="Ana watched him flee.",
-        characters=[Character(char_id="c0", name="Ana"), Character(char_id="c1", name="Shadow Wizard")],
+        characters=[
+            Character(char_id="c0", name="Ana"),
+            Character(char_id="c1", name="Shadow Wizard"),
+            Character(char_id="c2", name="Maya"),
+        ],
     )
-    with patch("pipeline.segment.segment_scenes", return_value=raw):
-        with pytest.raises(ValueError, match="outside visible cast"):
-            segment(state)
+    with patch("pipeline.segment.segment_scenes", return_value=raw), caplog.at_level(logging.INFO):
+        scene = segment(state)["scenes"][0]
+
+    assert scene.characters_present == ["c2", "c0", "c1"]
+    assert len(scene.characters_present) == len(set(scene.characters_present))
+    assert "reconciled visual_direction character 'Ana'" in caplog.text
+    assert "reconciled visual_direction character 'Shadow Wizard'" in caplog.text
 
 
 SWORD = StoryObject(

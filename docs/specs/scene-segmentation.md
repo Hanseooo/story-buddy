@@ -123,8 +123,10 @@ class SceneSegmentation(BaseModel):
    location names, object roster, and `timeline[]` as context.
 4. `repair(...)` — clamp, sort, de-overlap, close gaps, raise if empty, merge to ≤15. `_merge_extracted` combines payload fields deterministically: retains later structured visual direction, later cast, later objects, and later explicit location (`b.location_name or a.location_name`).
 5. Single-pass visible cast validation and explicit object mapping:
-   - `characters_present` is strict visible cast authority; unknown character raises `ValueError`.
-   - `visual_direction` naming a roster character outside `characters_present` raises `ValueError`.
+   - `characters_present` names are mapped in listed order; unknown character raises `ValueError`.
+   - After that mapping, roster characters explicitly named in rendered `visual_direction` are
+     appended in `name_to_id` (roster) order, without duplicates, and each reconciliation is logged.
+     A character mentioned only in the excerpt is not appended.
    - `objects_present` maps only the object names explicitly listed for that selected frame; duplicate
      names are removed while preserving order.
    - Unknown object raises `ValueError`; unknown location logs warning and carries forward.
@@ -153,9 +155,12 @@ kid prose (ADR-012), and a wrong boundary costs a slightly-off page break, not a
 6. **Merge to ≤15** — while there are more than 15, merge the adjacent pair with the smallest
    combined unit count using `_merge_extracted(a, b)` (retains later moment/cast/objects and later location).
 
-### Visible Cast Authority & Explicit Object Pass
+### Visible Cast Reconciliation & Explicit Object Pass
 
-- **Visible Cast Authority:** `characters_present` is the single authoritative visible cast. Regex recovery is removed. If `characters_present` contains an unknown character name, or if `visual_direction` names a roster character not in `characters_present`, `segment` raises `ValueError`.
+- **Visible Cast Reconciliation:** `characters_present` is the model's listed visible cast and is
+  mapped in first-seen order. Unknown names still raise `ValueError`. A roster character explicitly
+  named in rendered `visual_direction` is appended when omitted, in roster/name-map order, without
+  duplicates; each append is logged. Excerpt-only mentions are never recovered.
 - **Explicit Object Pass:** `objects_present` is the complete visible-object list for the selected still frame. `owner_char_id` is canon metadata only: it does not make an object visible, carry it into a later scene, or add a physical relation. `segment` does not create an `is held by` suffix; a holding or transfer instruction must be stated in `key_action` or `pose_expression`.
 
 ### Edge cases
@@ -192,28 +197,29 @@ order — so removing a duplicate cannot reorder the survivors that `build_promp
 `generate_scene`'s `ref_paths` are both indexed against.
 
 
-### Name recovery — removed by `visual-continuity` §4.3 (2026-08-14)
+### Name recovery — excerpt recovery remains removed; direction reconciliation is retained
 
-**This backstop no longer exists.** From 2026-08-13 to 2026-08-14, every roster name the excerpt
+**Excerpt recovery does not exist.** From 2026-08-13 to 2026-08-14, every roster name the excerpt
 mentioned and that the model had omitted from `characters_present` was appended to `char_ids` by a
-word-boundary regex. `visual-continuity` §4.3 deleted it: *"a name appearing in an excerpt does not
-prove that the character should be visible. The structured `characters_present` decision is the
-authority."* The motivating job drew characters the story only *mentioned*, which is precisely what
-over-recovery buys.
+word-boundary regex. `visual-continuity` §4.3 deleted that path: *"a name appearing in an excerpt
+does not prove that the character should be visible."* The motivating job drew characters the story
+only *mentioned*, which is precisely what over-recovery buys.
 
-The regex itself survives as `_names_character`, doing the opposite job: a `visual_direction` that
-names a roster character **outside** the visible cast raises `ValueError` before any fal image is
-purchased. Recovery appended; this rejects.
+The regex itself survives as `_names_character` for the narrower direction reconciliation: a roster
+character explicitly named in `visual_direction` is appended to `char_ids` when omitted from the
+model list. Iterating `name_to_id` gives roster order; existing model-listed order remains first,
+and each append is logged. Unknown names in `characters_present` still raise.
 
-**What the removal gives back to the model, and the residual risk.** The compounding failure the
-backstop was built for is real and is not fixed by deleting it: an omitted character means
-`generate_scene` finds no reference and falls through to `text_to_image`, and `consistency_check`
-then finds no subject on the identity leg. What changed is that the page is no longer *unchecked* —
-`visual-continuity` §4.6's scene-constraint judge runs on every attempt including reference-free
-ones, so an omitted or unrequested character is now caught by a judge that can read the picture
-rather than by a regex that can only read the text.
+**What remains after the removal, and the residual risk.** An explicitly named roster character
+omitted from `characters_present` is now reconciled from `visual_direction` before image generation,
+so that mismatch receives its canonical reference. The remaining omission risk is a character that
+is not explicitly named in the direction — for example, a pronoun-only or alias reference that
+`_names_character` cannot identify. In that case `generate_scene` can still find no reference and
+fall through to `text_to_image`; `visual-continuity` §4.6's scene-constraint judge remains the
+downstream detector for such reference-free output, not a text-side recovery mechanism.
 
-`SEGMENTATION_PROMPT` keeps its pronoun rule, now the only text-side layer:
+`SEGMENTATION_PROMPT` keeps its pronoun rule and asks the model to provide the complete cast; the
+deterministic direction reconciliation is the safety net for an explicit name mismatch:
 
 > `- characters_present lists character names exactly as given above and is the complete intended-visible cast.`
 > `- List a character in characters_present only when they are intended to be visible in this scene frame. List them even when the sentences refer to them only as he, she, it or they.`
@@ -286,17 +292,19 @@ definition.
 - **`characters_present`:** roster names map to `char_id`s; a name absent from the roster **raises**
   (`visual-continuity` §4.8 — fail before any image draw)
 - **Empty roster:** every scene gets `[]` and the node does not raise
-- **Visible cast authority:** a merely mentioned off-screen character is absent from
-  `characters_present`; no regex re-adds it
+- **Visible cast reconciliation:** a merely mentioned off-screen character is absent from
+  `characters_present`; a character explicitly named in `visual_direction` is appended in roster
+  order when omitted, without duplicates, and each append is logged
 - **Explicit object visibility:** an object appears only when its name is in that scene's
   `objects_present`; `owner_char_id` does not carry it forward or add an `is held by` relation
 - **Direction rendering:** `render_visual_direction` accepts only the structured direction and
   emits no derived object-holder text
-- **Direction cast check:** a `visual_direction` naming a roster character outside the visible cast
-  raises; `"the star"` does **not** match `"stars"` (word boundary); matching is case-insensitive
+- **Direction cast reconciliation:** explicitly named roster characters omitted from the model cast
+  are appended in roster order; `"the star"` does **not** match `"stars"` (word boundary); matching
+  is case-insensitive
 - **Pronoun layer:** the prompt carries the pronoun rule, which is now the only text-side defence
-  against an omitted character — a direction saying only `"He flees."` names no one and correctly
-  does not trip the cast check
+  against an omitted character — a direction saying only `"He flees."` names no one and does not
+  trigger reconciliation
 - **CC-2 source:** prefers `redacted_text`; falls back to `raw_text` when it is `None`
 - **Empty text:** returns `{"scenes": []}` and `segment_scenes` is **never called**
 - **Partial-return (ADR-024):** the result keys are exactly `{"scenes"}`; `state` is unmutated
