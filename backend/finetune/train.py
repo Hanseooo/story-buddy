@@ -16,6 +16,11 @@ LLAMAFACTORY_VERSION = "v0.9.5"
 LLAMAFACTORY_COMMIT = "7af909522a951e3ad9f022ea6f88b6755257eaa5"
 SEEDS = (0, 1, 2)
 ALLOWED_OVERRIDES = {"seed", "output_dir", "run_name", "report_to"}
+DATASET_DIR_SENTINEL = "__SELECTED_FREEZE__"
+TRAINING_ARTIFACTS = (
+    "manifest.jsonl", "manifest.train.jsonl", "manifest.val.jsonl",
+    "train.json", "val.json", "dataset_info.json", "dataset_manifest.json",
+)
 
 FIXED_CONFIG_PINS = {
     "model_name_or_path": BASE_MODEL,
@@ -82,9 +87,24 @@ def hardware_inventory() -> dict[str, str]:
     }
 
 
-def command_for(config: Path, seed: int, seed_dir: Path, report_to: str) -> list[str]:
+def installed_llamafactory_commit() -> str:
+    tool_root = Path(subprocess.run(
+        ["uv", "tool", "dir"], capture_output=True, text=True, check=True,
+    ).stdout.strip()) / "llamafactory"
+    records = [
+        path for path in tool_root.rglob("direct_url.json")
+        if path.parent.name.startswith("llamafactory-")
+    ]
+    if len(records) != 1:
+        raise ManifestError(f"cannot locate installed LLaMA-Factory provenance under {tool_root}")
+    direct_url = json.loads(records[0].read_text(encoding="utf-8"))
+    return str(direct_url.get("vcs_info", {}).get("commit_id", ""))
+
+
+def command_for(config: Path, freeze: Path, seed: int, seed_dir: Path, report_to: str) -> list[str]:
     return [
         "llamafactory-cli", "train", str(config),
+        f"dataset_dir={freeze.resolve()}",
         f"seed={seed}",
         f"output_dir={seed_dir / 'output'}",
         f"run_name=judge-qlora-seed{seed}",
@@ -109,6 +129,8 @@ def _validate_config(config_path: Path) -> dict:
         raise ManifestError(f"invalid eval_dataset in config: {eval_dataset}")
     if "test" in raw.get("dataset", ""):
         raise ManifestError(f"test dataset forbidden in training config: {raw.get('dataset')}")
+    if raw.get("dataset_dir") != DATASET_DIR_SENTINEL:
+        raise ManifestError(f"dataset_dir must be {DATASET_DIR_SENTINEL!r}; got {raw.get('dataset_dir')!r}")
 
     return raw
 
@@ -128,33 +150,52 @@ def _validate_freeze(freeze: Path) -> dict:
     freeze_report = json.loads(freeze_report_path.read_text(encoding="utf-8"))
     artifact_hashes = freeze_report.get("artifact_sha256", {})
 
-    for required_file in ("train.json", "val.json", "dataset_info.json", "dataset_manifest.json"):
-        if not (freeze / required_file).exists():
+    for required_file in TRAINING_ARTIFACTS:
+        artifact = freeze / required_file
+        if not artifact.exists():
             raise ManifestError(f"required dataset artifact missing: {required_file}")
-
-    train_manifest = freeze / "manifest.train.jsonl"
-    val_manifest = freeze / "manifest.val.jsonl"
-    if not train_manifest.exists() or not val_manifest.exists():
-        raise ManifestError("manifest.train.jsonl or manifest.val.jsonl missing")
-
-    train_sha = sha256(train_manifest)
-    val_sha = sha256(val_manifest)
-    if train_sha != artifact_hashes.get("manifest.train.jsonl"):
-        raise ManifestError("manifest.train.jsonl hash does not match freeze_report.json")
-    if val_sha != artifact_hashes.get("manifest.val.jsonl"):
-        raise ManifestError("manifest.val.jsonl hash does not match freeze_report.json")
+        recorded = freeze_report.get("dataset_sha256") if required_file == "manifest.jsonl" else artifact_hashes.get(required_file)
+        if sha256(artifact) != recorded:
+            raise ManifestError(f"{required_file} hash does not match freeze_report.json")
 
     # Read train and val manifest records to ensure validity
-    read_manifest(train_manifest)
-    read_manifest(val_manifest)
+    read_manifest(freeze / "manifest.train.jsonl")
+    read_manifest(freeze / "manifest.val.jsonl")
 
     return freeze_report
 
 
-def prepare(freeze: Path, run_root: Path, config: Path, report_to: str = "none") -> dict:
-    freeze, run_root, config = Path(freeze), Path(run_root), Path(config)
+def _validate_qualification(path: Path) -> dict:
+    if not path.exists():
+        raise ManifestError(f"training qualification not found: {path}")
+    record = json.loads(path.read_text(encoding="utf-8"))
+    pins = {
+        "base_model": BASE_MODEL,
+        "base_revision": BASE_REVISION,
+        "llamafactory_version": LLAMAFACTORY_VERSION,
+        "llamafactory_commit": LLAMAFACTORY_COMMIT,
+    }
+    for key, expected in pins.items():
+        if record.get(key) != expected:
+            raise ManifestError(f"qualification {key} differs from fixed pin: expected {expected!r}, got {record.get(key)!r}")
+    installed_commit = installed_llamafactory_commit()
+    if installed_commit != LLAMAFACTORY_COMMIT:
+        raise ManifestError(
+            f"installed LLaMA-Factory commit differs from fixed pin: expected {LLAMAFACTORY_COMMIT}, "
+            f"got {installed_commit or '<missing>'}"
+        )
+    approved = record.get("hardware")
+    live = hardware_inventory()
+    if not isinstance(approved, dict) or approved != live or any(not approved.get(key) for key in ("gpu", "torch", "cuda", "bitsandbytes")):
+        raise ManifestError(f"hardware does not match approved qualification: approved={approved}, live={live}")
+    return record
+
+
+def prepare(freeze: Path, run_root: Path, config: Path, qualification: Path, report_to: str = "none") -> dict:
+    freeze, run_root, config, qualification = map(Path, (freeze, run_root, config, qualification))
     _validate_config(config)
     freeze_report = _validate_freeze(freeze)
+    qualification_record = _validate_qualification(qualification)
     freeze_sha = freeze_report.get("dataset_sha256") or sha256(freeze / "manifest.jsonl")
 
     try:
@@ -171,7 +212,7 @@ def prepare(freeze: Path, run_root: Path, config: Path, report_to: str = "none")
     for seed in SEEDS:
         seed_dir = run_root / f"seed-{seed}"
         seed_dir.mkdir(parents=True, exist_ok=True)
-        command = command_for(config, seed, seed_dir, report_to)
+        command = command_for(config, freeze, seed, seed_dir, report_to)
         run_plan = {
             "seed": seed,
             "base_model": BASE_MODEL,
@@ -179,14 +220,17 @@ def prepare(freeze: Path, run_root: Path, config: Path, report_to: str = "none")
             "llamafactory_version": LLAMAFACTORY_VERSION,
             "llamafactory_commit": LLAMAFACTORY_COMMIT,
             "uv_install_command": (
-                f"uv tool install --python 3.12 --git https://github.com/hiyouga/LLaMA-Factory.git "
-                f"--tag {LLAMAFACTORY_VERSION} --commit {LLAMAFACTORY_COMMIT} llamafactory"
+                f"uv tool install --python 3.12 \"llamafactory @ "
+                f"git+https://github.com/hiyouga/LLaMA-Factory.git@{LLAMAFACTORY_COMMIT}\""
             ),
             "git_commit": git_commit,
             "freeze_path": str(freeze),
             "freeze_dataset_sha256": freeze_sha,
             "config_path": str(config),
             "config_sha256": sha256(config),
+            "qualification_path": str(qualification),
+            "qualification_sha256": sha256(qualification),
+            "hardware": qualification_record["hardware"],
             "command": command,
         }
         plan_file = seed_dir / "run_plan.json"
@@ -211,13 +255,14 @@ def execute(
     freeze: Path,
     run_root: Path,
     config: Path,
+    qualification: Path,
     report_to: str = "none",
     spend_alarm_confirmed: bool = False,
 ) -> dict:
     if not spend_alarm_confirmed:
         raise ManifestError("explicit spend alarm confirmation is required before training execution")
 
-    plan = prepare(freeze, run_root, config, report_to=report_to)
+    plan = prepare(freeze, run_root, config, qualification, report_to=report_to)
     hardware = hardware_inventory()
 
     for key in ("gpu", "torch", "cuda", "bitsandbytes"):
@@ -262,6 +307,7 @@ def main():
         default=Path(__file__).resolve().parent / "train_qlora.yaml",
         help="Path to training config YAML",
     )
+    parser.add_argument("--qualification", required=True, type=Path, help="Approved toolchain and hardware record")
     parser.add_argument("--report-to", choices=["none", "wandb"], default="none", help="Experiment reporting target")
 
     mode_group = parser.add_mutually_exclusive_group(required=True)
@@ -273,11 +319,11 @@ def main():
     args = parser.parse_args()
 
     if args.prepare:
-        plan = prepare(args.freeze, args.run_root, args.config, report_to=args.report_to)
-        print(f"Prepared {len(plan['runs'])} runs at {args.run_root}")
+        plan = prepare(args.freeze, args.run_root, args.config, args.qualification, report_to=args.report_to)
+        print(json.dumps(plan, indent=2, sort_keys=True))
     elif args.execute:
         result = execute(
-            args.freeze, args.run_root, args.config,
+            args.freeze, args.run_root, args.config, args.qualification,
             report_to=args.report_to, spend_alarm_confirmed=args.spend_alarm_confirmed,
         )
         print(f"Executed training successfully: {result['status']}")

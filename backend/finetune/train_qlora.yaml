@@ -26,7 +26,7 @@ quantization_method: bnb
 # Registered by `to_llamafactory.DATASET_INFO`; regenerate, never hand-edit (§5.3).
 dataset: storybuddy_judge_train
 eval_dataset: storybuddy_judge_val          # character-disjoint, synthetic corpus. §3.2
-dataset_dir: data/judge/freezes/obj4-v1
+dataset_dir: __SELECTED_FREEZE__               # overridden from finetune.train --freeze
 template: qwen2_vl
 cutoff_len: 2048
 

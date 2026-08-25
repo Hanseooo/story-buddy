@@ -153,6 +153,7 @@ EVALUATION_ARTIFACTS = (
     "annotation_agreement.jsonl",
     "character_slices.json",
 )
+TRAINING_ARTIFACTS = ("train.json", "val.json", "dataset_info.json", "dataset_manifest.json")
 
 
 def _write_evaluation_artifacts(
@@ -209,7 +210,7 @@ def _write_evaluation_artifacts(
 
     return {
         name: hashlib.sha256((staged / name).read_bytes()).hexdigest()
-        for name in EVALUATION_ARTIFACTS
+        for name in EVALUATION_ARTIFACTS + TRAINING_ARTIFACTS
     }
 
 

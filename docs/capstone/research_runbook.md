@@ -75,11 +75,14 @@ uv run python -m finetune.build_dataset --freeze --data ../data/judge/corpus --d
 # 9. Install the exact training tool in the qualified GPU environment
 uv tool install "llamafactory @ git+https://github.com/hiyouga/LlamaFactory.git@7af909522a951e3ad9f022ea6f88b6755257eaa5"
 
-# 10. Verify pins and write immutable plans for seeds 0, 1 and 2 (zero-cost)
-uv run python -m finetune.train --freeze ../data/judge/freezes/obj4-v1 --run-root ../data/judge/runs/obj4-v1 --prepare
+# 10. On the qualified host, have the operator record the approved base/tool pins and exact
+# hardware_inventory() output in ../data/judge/training_qualification.json. Verify that record and
+# installed uv-tool commit provenance, and every training artifact hash; then print/write immutable
+# plans for seeds 0, 1 and 2 (zero-cost).
+uv run python -m finetune.train --freeze ../data/judge/freezes/obj4-v1 --qualification ../data/judge/training_qualification.json --run-root ../data/judge/runs/obj4-v1 --prepare
 
 # 11. After recording the qualified hardware and activating the external spend alarm, train all seeds
-uv run python -m finetune.train --freeze ../data/judge/freezes/obj4-v1 --run-root ../data/judge/runs/obj4-v1 --execute --spend-alarm-confirmed
+uv run python -m finetune.train --freeze ../data/judge/freezes/obj4-v1 --qualification ../data/judge/training_qualification.json --run-root ../data/judge/runs/obj4-v1 --execute --spend-alarm-confirmed
 
 # 12. Inventory every checkpoint and obtain the exact generated vLLM command
 uv run python -m finetune.evaluate validation-inventory --runs ../data/judge/runs/obj4-v1 --out ../data/judge/evaluations/obj4-v1/validation_candidates.json
@@ -109,7 +112,8 @@ versions are recorded with the run evidence. Install those hardware-specific ver
 - **Visual comparison dimensions:** Hard negative candidate inspection evaluates five dimensions: body shape/structure, key colours, prominent facial/body features, clothing/accessories, and rendered art style.
 - **Hard negative freeze-before-annotation gate:** All cross-character hard negative matches in `dataset_selection.json` must be frozen with a timestamp preceding all non-pilot annotations in Supabase.
 - **Replacement evidence rule:** Any primary donor withdrawal/failure replacement requires documented evidence in `dataset_selection.json` satisfying the exact same style preset and leaving exactly 10 primaries (4 Gouache, 3 Cel, 3 Cut-paper).
-- **Immutable freeze directories:** `data/judge/freezes/obj4-v1` is strictly immutable. Any legitimate pre-training modification must produce a new named directory (e.g. `obj4-v2`) and a deliberate configuration update.
+- **Immutable freeze directories:** `data/judge/freezes/obj4-v1` is strictly immutable. Any legitimate pre-training modification must produce a new named directory (e.g. `obj4-v2`); `finetune.train --freeze` is the sole dataset-directory selection and is injected into every generated command after hash preflight.
+- **Qualified training host:** `training_qualification.json` records the approved base revision, exact LLaMA-Factory commit/version, and full hardware inventory. Preparation and execution fail unless the live host matches it exactly.
 - **Test-unopened rule:** The test split (`test.json` in the freeze) is held-out and must never be inspected, browsed, or evaluated during model development.
 - **Three-seed validation-only development:** Checkpoint selection and hyperparameter exploration use only `train.json` and `val.json` over 3 random seeds (0, 1, 2).
 - **Held-out evaluation:** The final selected model checkpoint is evaluated once on the held-out test split at study conclusion. Only preregistration §7's Rung-D defect exception permits exactly one second read after debugging exclusively on train/validation; both readings and the deviation must then be reported, and no third read is allowed.

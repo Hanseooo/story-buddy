@@ -37,12 +37,20 @@ def test_split_isolation_and_no_leakage(tmp_path, monkeypatch):
         (freeze_dir / f).write_text("{}", encoding="utf-8")
 
     monkeypatch.setattr("finetune.train._validate_freeze", lambda f: {"dataset_sha256": "abc"})
+    hardware = {"gpu": "gpu", "torch": "torch", "cuda": "cuda", "bitsandbytes": "bnb"}
+    monkeypatch.setattr("finetune.train._validate_qualification", lambda p: {"hardware": hardware})
 
     yaml_path = tmp_path / "train.yaml"
-    yaml_path.write_text(yaml.safe_dump(tr.FIXED_CONFIG_PINS), encoding="utf-8")
+    yaml_path.write_text(yaml.safe_dump(tr.FIXED_CONFIG_PINS | {
+        "dataset_dir": tr.DATASET_DIR_SENTINEL,
+    }), encoding="utf-8")
+    (tmp_path / "qualification.json").write_text("{}", encoding="utf-8")
 
     # Training preparation only references train_llamafactory.json and train split
-    plan = tr.prepare(freeze=freeze_dir, run_root=tmp_path / "runs", config=yaml_path)
+    plan = tr.prepare(
+        freeze=freeze_dir, run_root=tmp_path / "runs", config=yaml_path,
+        qualification=tmp_path / "qualification.json",
+    )
     for run in plan["runs"]:
         cmd_str = " ".join(run["command"])
         assert "manifest.test.jsonl" not in cmd_str

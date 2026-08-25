@@ -430,12 +430,14 @@ load_best_model_at_end: true                  # early stopping on the disjoint v
 
 ```bash
 uv tool install "llamafactory @ git+https://github.com/hiyouga/LlamaFactory.git@7af909522a951e3ad9f022ea6f88b6755257eaa5"
-uv run python -m finetune.train --freeze data/judge/freezes/obj4-v1 --prepare
+uv run python -m finetune.train --freeze data/judge/freezes/obj4-v1 --qualification data/judge/training_qualification.json --run-root data/judge/runs/obj4-v1 --prepare
 ```
 
 The command runs in a separate GPU environment, never by adding Torch, Transformers or LLaMA-Factory to
 the production backend. `finetune.train` first validates the immutable freeze and required pins, then records
-the three exact invocations. `--execute` is the explicit boundary that starts GPU work. LLaMA-Factory supports
+the three exact invocations, including a `dataset_dir` override resolved from that same `--freeze`. The checked-in
+YAML contains only the `__SELECTED_FREEZE__` sentinel, so another hardcoded dataset directory fails preflight.
+`--execute` is the explicit boundary that starts GPU work. LLaMA-Factory supports
 command-line overrides after the YAML path; the runner varies only `seed`, `output_dir`, `run_name` and
 `report_to`, leaving one checked-in YAML as the scientific source of truth.
 
@@ -477,16 +479,35 @@ exist. `finetune.train` and the evaluation lock reject blanks, placeholder text 
 than inventing them.
 
 PyTorch/CUDA and bitsandbytes builds are hardware-specific. Their exact versions are selected only after the
-school-or-cloud hardware qualification, then written to the run lock before `--execute`; changing hardware
-requires a new run directory and lock. This is an explicit sequencing rule, not permission to use an
-unpinned package.
+school-or-cloud hardware qualification and declared in `training_qualification.json` with `base_model`,
+`base_revision`, `llamafactory_version`, `llamafactory_commit`, and the exact `hardware` inventory emitted by
+the target host. Both `--prepare` and `--execute` require that file, reject pin drift, and require the live
+inventory to equal its approved record. Preflight also reads the uv tool environment's installed
+`direct_url.json` and requires its VCS commit to equal the frozen LLaMA-Factory commit. Changing hardware
+requires a new qualification and run directory.
+This is an explicit sequencing rule, not permission to use an unpinned package.
+
+The approved record has this exact shape (values under `hardware` must equal
+`finetune.train.hardware_inventory()` on the qualified host):
+
+```json
+{
+  "base_model": "Qwen/Qwen2.5-VL-7B-Instruct",
+  "base_revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
+  "llamafactory_version": "v0.9.5",
+  "llamafactory_commit": "7af909522a951e3ad9f022ea6f88b6755257eaa5",
+  "hardware": {"os": "...", "python": "...", "gpu": "...", "torch": "...", "cuda": "...", "bitsandbytes": "..."}
+}
+```
 
 ### 6.7 Batch-3 training runner
 
-`finetune.train` has two modes. `--prepare` is zero-cost: it verifies `freeze_report.json`,
-`dataset_manifest.json`, `manifest.jsonl`, split dataset files and their recorded hashes; rejects a test
+`finetune.train` has two modes. `--prepare` is zero-cost: it verifies the recorded hashes of `manifest.jsonl`,
+`manifest.train.jsonl`, `manifest.val.jsonl`, `train.json`, `val.json`, `dataset_info.json`, and
+`dataset_manifest.json`; rejects a test
 dataset referenced by the training config; validates the fixed scientific settings; records the current git
-commit and hardware/tool inventory; and creates one run directory per seed. `--execute` repeats the preflight
+commit and the approved hardware/tool inventory; and prints the three resolved command plans while creating
+one run directory per seed. It never opens test data. `--execute` repeats the preflight
 and invokes the pinned `llamafactory-cli` once per seed. A non-zero child process stops the sequence without
 deleting completed evidence.
 
