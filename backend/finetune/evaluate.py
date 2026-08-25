@@ -13,13 +13,14 @@ import hashlib
 import json
 import logging
 import os
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Literal, Sequence
 
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 
 from app.config import settings
@@ -84,6 +85,25 @@ def _hash_directory(dir_path: Path) -> str:
         file_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()
         hasher.update(f"{rel_path}:{file_hash}\n".encode("utf-8"))
     return hasher.hexdigest()
+
+
+def _publish_exclusive(path: Path, content: bytes) -> bool:
+    """Publish complete bytes without ever exposing a partial final file."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=path.parent, prefix=f".{path.name}.", delete=False) as handle:
+        temp_path = Path(handle.name)
+        handle.write(content)
+        handle.flush()
+        os.fsync(handle.fileno())
+    try:
+        try:
+            os.link(temp_path, path)
+            return True
+        except FileExistsError:
+            return False
+    finally:
+        temp_path.unlink(missing_ok=True)
 
 
 def inventory_checkpoints(runs_root: Path, out_path: Path | None = None) -> dict:
@@ -172,7 +192,7 @@ def select_threshold(
 
 
 class EvaluationLock(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
     schema_version: int = 1
     bootstrap_seed: int = 0
     base_model: str
@@ -188,43 +208,93 @@ class EvaluationLock(BaseModel):
     vlm_judge_model: str
 
 
+def _is_sha256(value: object) -> bool:
+    return isinstance(value, str) and len(value) == 64 and all(c in "0123456789abcdef" for c in value)
+
+
+def _validate_evaluation_lock(lock: EvaluationLock, *, verify_checkpoints: bool = True) -> None:
+    if lock.schema_version != PREDICTION_SCHEMA_VERSION:
+        raise ManifestError(f"evaluation lock schema_version must be {PREDICTION_SCHEMA_VERSION}")
+    if lock.seeds != list(SEEDS):
+        raise ManifestError(f"evaluation lock seeds must be {list(SEEDS)}")
+    if lock.base_model != BASE_MODEL or lock.base_revision != BASE_REVISION:
+        raise ManifestError("evaluation lock base model/revision does not match fixed pins")
+    if lock.llamafactory_version != LLAMAFACTORY_VERSION or lock.llamafactory_commit != LLAMAFACTORY_COMMIT:
+        raise ManifestError("evaluation lock LLaMA-Factory pins do not match fixed pins")
+    if lock.bootstrap_seed != BOOTSTRAP_SEED:
+        raise ManifestError(f"bootstrap_seed must be {BOOTSTRAP_SEED}")
+    if lock.deployment_seed not in SEEDS:
+        raise ManifestError(f"deployment_seed must be one of {SEEDS}")
+    for name, value in {
+        "prompt_version": lock.prompt_version,
+        "vlm_judge_model": lock.vlm_judge_model,
+    }.items():
+        if not value.strip():
+            raise ManifestError(f"evaluation lock {name} must be non-blank")
+
+    expected_seeds = {f"seed_{seed}" for seed in SEEDS}
+    if set(lock.selected_checkpoints) != expected_seeds:
+        raise ManifestError(f"evaluation lock selected_checkpoints must be {sorted(expected_seeds)}")
+    for seed in SEEDS:
+        key = f"seed_{seed}"
+        checkpoint = lock.selected_checkpoints[key]
+        required = {"model_id", "checkpoint_id", "step", "path", "sha256", "val_f1"}
+        if set(checkpoint) != required:
+            raise ManifestError(f"evaluation lock {key} fields must be {sorted(required)}")
+        if any(not str(checkpoint[name]).strip() for name in ("model_id", "checkpoint_id", "path")):
+            raise ManifestError(f"evaluation lock {key} identifiers must be non-blank")
+        step = checkpoint["step"]
+        val_f1 = checkpoint["val_f1"]
+        if not isinstance(step, int) or isinstance(step, bool) or step < 0:
+            raise ManifestError(f"evaluation lock {key} step must be a non-negative integer")
+        if not isinstance(val_f1, (int, float)) or isinstance(val_f1, bool) or not 0.0 <= val_f1 <= 1.0:
+            raise ManifestError(f"evaluation lock {key} val_f1 must be between 0 and 1")
+        if checkpoint["model_id"] != f"seed{seed}_checkpoint{step}":
+            raise ManifestError(f"evaluation lock {key} model_id does not match its seed and step")
+        if not _is_sha256(checkpoint["sha256"]):
+            raise ManifestError(f"evaluation lock {key} checkpoint SHA-256 must be lowercase hexadecimal")
+        checkpoint_path = Path(checkpoint["path"])
+        if checkpoint_path.name != checkpoint["checkpoint_id"]:
+            raise ManifestError(f"evaluation lock {key} checkpoint path does not match checkpoint_id")
+        if verify_checkpoints:
+            if not checkpoint_path.is_dir():
+                raise ManifestError(f"evaluation lock {key} checkpoint path is missing")
+            if _hash_directory(checkpoint_path) != checkpoint["sha256"]:
+                raise ManifestError(f"evaluation lock {key} checkpoint digest does not match its path")
+
+    if set(lock.controls) != {"clip_cosine", "dinov2_cosine"}:
+        raise ManifestError("evaluation lock requires both registered controls")
+    for name, control in lock.controls.items():
+        if set(control) != {"threshold", "val_f1", "selected_on"}:
+            raise ManifestError(f"evaluation lock {name} fields are invalid")
+        if control["selected_on"] != "manifest.val.jsonl":
+            raise ManifestError(f"evaluation lock {name} must be selected on validation")
+        if not isinstance(control["threshold"], (int, float)) or isinstance(control["threshold"], bool):
+            raise ManifestError(f"evaluation lock {name} threshold must be numeric")
+        if not isinstance(control["val_f1"], (int, float)) or isinstance(control["val_f1"], bool) or not 0.0 <= control["val_f1"] <= 1.0:
+            raise ManifestError(f"evaluation lock {name} val_f1 must be between 0 and 1")
+    required_manifests = {f"manifest.{split}.jsonl" for split in ("train", "val", "test")}
+    if set(lock.manifest_hashes) != required_manifests:
+        raise ManifestError("evaluation lock requires exactly the train, val, and test manifest hashes")
+    if any(not _is_sha256(value) for value in lock.manifest_hashes.values()):
+        raise ManifestError("evaluation lock manifest hashes must be normalized SHA-256 values")
+
+
 def write_evaluation_lock(path: Path, payload: dict | EvaluationLock) -> dict:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    if isinstance(payload, dict):
+    try:
         lock_obj = EvaluationLock.model_validate(payload)
-    else:
-        lock_obj = payload
-
-    if lock_obj.seeds != [0, 1, 2]:
-        raise ManifestError("evaluation lock seeds must be [0, 1, 2]")
-    if lock_obj.base_model != BASE_MODEL or lock_obj.base_revision != BASE_REVISION:
-        raise ManifestError("evaluation lock base model/revision does not match fixed pins")
-    if lock_obj.llamafactory_version != LLAMAFACTORY_VERSION or lock_obj.llamafactory_commit != LLAMAFACTORY_COMMIT:
-        raise ManifestError("evaluation lock LLaMA-Factory pins do not match fixed pins")
-    if lock_obj.bootstrap_seed != BOOTSTRAP_SEED:
-        raise ManifestError(f"bootstrap_seed must be {BOOTSTRAP_SEED}")
-    if lock_obj.deployment_seed not in (0, 1, 2):
-        raise ManifestError("deployment_seed must be 0, 1, or 2")
+    except ValidationError as exc:
+        raise ManifestError(f"invalid evaluation lock schema: {exc}") from exc
+    _validate_evaluation_lock(lock_obj)
 
     text = json.dumps(lock_obj.model_dump(mode="json"), indent=2, sort_keys=True) + "\n"
-    if path.exists():
-        existing = path.read_text(encoding="utf-8")
-        if json.loads(existing) != json.loads(text):
-            raise ManifestError(f"immutable evaluation lock differs at {path}")
-        return json.loads(text)
-
-    try:
-        descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-    except FileExistsError:
+    if not _publish_exclusive(path, text.encode("utf-8")):
         existing = path.read_text(encoding="utf-8")
         if existing != text:
-            raise ManifestError(f"immutable prediction file differs at {path}")
-        return
-    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-        handle.write(text)
-        handle.flush()
-        os.fsync(handle.fileno())
+            raise ManifestError(f"immutable evaluation lock differs at {path}")
+        return json.loads(text)
     return json.loads(text)
 
 
@@ -301,20 +371,42 @@ def write_predictions(path: Path, rows: list[PredictionRecord]) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     text = "".join(json.dumps(row.model_dump(mode="json"), sort_keys=True) + "\n" for row in rows)
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    digest_path = path.with_suffix(path.suffix + ".sha256")
     if path.exists():
-        existing = path.read_text(encoding="utf-8")
-        if existing != text:
+        if path.read_text(encoding="utf-8") != text:
             raise ManifestError(f"immutable prediction file differs at {path}")
+        if not digest_path.exists() or digest_path.read_text(encoding="ascii").strip() != digest:
+            raise ManifestError(f"immutable prediction SHA-256 differs at {digest_path.name}")
         return
 
-    tmp_path = path.with_suffix(f".tmp.{path.name}")
+    digest_path.write_text(digest + "\n", encoding="ascii")
+    if not _publish_exclusive(path, text.encode("utf-8")) and path.read_bytes() != text.encode("utf-8"):
+        raise ManifestError(f"immutable prediction file differs at {path}")
+
+
+def _load_completed_predictions(
+    path: Path,
+    records: Sequence[ManifestRecord],
+    judge_id: str,
+    **identity: object,
+) -> list[PredictionRecord] | None:
+    if not path.exists():
+        return None
+    digest_path = path.with_suffix(path.suffix + ".sha256")
+    if not digest_path.exists() or digest_path.read_text(encoding="ascii").strip() != hashlib.sha256(path.read_bytes()).hexdigest():
+        raise ManifestError(f"prediction SHA-256 verification failed for {path.name}")
     try:
-        tmp_path.write_text(text, encoding="utf-8")
-        tmp_path.replace(path)
-    except Exception:
-        if tmp_path.exists():
-            tmp_path.unlink()
-        raise
+        rows = [PredictionRecord.model_validate_json(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    except ValidationError as exc:
+        raise ManifestError(f"invalid immutable prediction schema for {path.name}") from exc
+    validate_prediction_alignment(records, rows)
+    if any(row.judge_id != judge_id for row in rows):
+        raise ManifestError(f"immutable prediction judge identity mismatch for {path.name}")
+    for field, expected in identity.items():
+        if any(getattr(row, field) != expected for row in rows):
+            raise ManifestError(f"immutable prediction {field} mismatch for {path.name}")
+    return rows
 
 
 def score(records: Sequence[ManifestRecord], preds: Sequence[bool]) -> dict:
@@ -600,7 +692,7 @@ class HeldOutLedgerEvent(BaseModel):
     model_config = ConfigDict(extra="forbid")
     run_id: str
     timestamp: datetime
-    status: Literal["reserved", "completed", "failed"]
+    status: Literal["reserved", "resumed", "completed", "failed"]
     ordinal: int = Field(ge=1, le=2)
     lock_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     manifest_test_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -653,8 +745,11 @@ def reserve_test_read(
     lock_path = Path(lock_path)
     if not lock_path.exists():
         raise ManifestError(f"evaluation lock missing at {lock_path}")
-    lock_dict = json.loads(lock_path.read_text(encoding="utf-8"))
-    EvaluationLock.model_validate(lock_dict)
+    try:
+        lock = EvaluationLock.model_validate_json(lock_path.read_text(encoding="utf-8"))
+    except ValidationError as exc:
+        raise ManifestError("invalid evaluation lock schema") from exc
+    _validate_evaluation_lock(lock)
 
     lock_sha = hashlib.sha256(lock_path.read_bytes()).hexdigest()
     _load_signoff(signoff_path, lock_sha)
@@ -678,7 +773,15 @@ def reserve_test_read(
                 raise ManifestError("same-run resume requires identical hashes")
             if any(event.status == "completed" for event in same_run):
                 raise ManifestError(f"run {run_id} already completed")
-            return first.model_dump(mode="json")
+            event = first.model_copy(update={
+                "timestamp": datetime.now(timezone.utc),
+                "status": "resumed",
+                "report_sha256": None,
+                "rung": None,
+                "error": None,
+            })
+            _append_ledger(ledger_path, event)
+            return event.model_dump(mode="json")
 
         reservations = [event for event in events if event.status == "reserved"]
         completed = [event for event in events if event.status == "completed"]
@@ -761,8 +864,11 @@ def run_heldout(
     predict_fn: Callable[[str, ManifestRecord], JudgeObservation] | None = None,
     image_loader: Callable[[str], str] | None = None,
 ) -> dict:
-    lock_dict = json.loads(Path(lock_path).read_text(encoding="utf-8"))
-    lock = EvaluationLock.model_validate(lock_dict)
+    try:
+        lock = EvaluationLock.model_validate_json(Path(lock_path).read_text(encoding="utf-8"))
+    except ValidationError as exc:
+        raise ManifestError("invalid evaluation lock schema") from exc
+    _validate_evaluation_lock(lock)
     expected_test_sha = lock.manifest_hashes.get("manifest.test.jsonl")
     if expected_test_sha is None:
         raise ManifestError("evaluation lock is missing manifest.test.jsonl hash")
@@ -773,12 +879,21 @@ def run_heldout(
 
     freeze_dir = Path(freeze_dir)
     test_path = freeze_dir / "manifest.test.jsonl"
-    test_sha = hashlib.sha256(test_path.read_bytes()).hexdigest()
+    try:
+        test_bytes = test_path.read_bytes()
+    except Exception as exc:
+        record_test_result(ledger_path, run_id=run_id, status="failed", error=type(exc).__name__)
+        raise
+    test_sha = hashlib.sha256(test_bytes).hexdigest()
     if expected_test_sha != test_sha:
         err = f"manifest.test.jsonl sha256 mismatch against evaluation lock ({test_sha} vs {expected_test_sha})"
         record_test_result(ledger_path, run_id=run_id, status="failed", error=err)
         raise ManifestError(err)
-    test_records = list(read_manifest(test_path))
+    try:
+        test_records = list(read_manifest(test_path))
+    except Exception as exc:
+        record_test_result(ledger_path, run_id=run_id, status="failed", error=type(exc).__name__)
+        raise
 
     predictions_dir = Path(predictions_dir)
     predictions_dir.mkdir(parents=True, exist_ok=True)
@@ -789,13 +904,22 @@ def run_heldout(
         for seed_key, ckpt_info in lock.selected_checkpoints.items():
             judge_id = seed_key
             pred_file = predictions_dir / f"{judge_id}.jsonl"
-            if predict_fn is not None:
+            rows = _load_completed_predictions(
+                pred_file,
+                test_records,
+                judge_id,
+                model_id=BASE_MODEL,
+                adapter_id=ckpt_info["path"],
+                prompt_version=lock.prompt_version,
+                checkpoint_id=ckpt_info["checkpoint_id"],
+            )
+            if rows is None and predict_fn is not None:
                 rows = capture_predictions(
                     test_records, judge_id, lambda r, j=judge_id: predict_fn(j, r),
                     model_id=BASE_MODEL, prompt_version=lock.prompt_version,
                     adapter_id=ckpt_info["path"], checkpoint_id=ckpt_info["checkpoint_id"],
                 )
-            else:
+            elif rows is None:
                 judge_callable = finetuned_judge(image_loader or (lambda p: p), model=ckpt_info["model_id"])
                 rows = capture_predictions(
                     test_records, judge_id,
@@ -803,41 +927,62 @@ def run_heldout(
                     model_id=BASE_MODEL, prompt_version=lock.prompt_version,
                     adapter_id=ckpt_info["path"], checkpoint_id=ckpt_info["checkpoint_id"],
                 )
-            write_predictions(pred_file, rows)
+            if not pred_file.exists():
+                write_predictions(pred_file, rows)
             written_files.append(pred_file.name)
             results[judge_id] = rows
 
         pred_file = predictions_dir / "zero_shot_base.jsonl"
-        if predict_fn is not None:
+        rows = _load_completed_predictions(
+            pred_file,
+            test_records,
+            "zero_shot_base",
+            model_id=BASE_MODEL,
+            adapter_id=None,
+            prompt_version=lock.prompt_version,
+            checkpoint_id=None,
+        )
+        if rows is None and predict_fn is not None:
             rows = capture_predictions(
                 test_records, "zero_shot_base", lambda r: predict_fn("zero_shot_base", r),
                 model_id=BASE_MODEL, prompt_version=lock.prompt_version,
             )
-        else:
+        elif rows is None:
             judge_callable = zero_shot_base_judge(image_loader or (lambda p: p), model=BASE_MODEL)
             rows = capture_predictions(
                 test_records, "zero_shot_base",
                 judge_callable,
                 model_id=BASE_MODEL, prompt_version=lock.prompt_version,
             )
-        write_predictions(pred_file, rows)
+        if not pred_file.exists():
+            write_predictions(pred_file, rows)
         written_files.append(pred_file.name)
         results["zero_shot_base"] = rows
 
         pred_file = predictions_dir / "prompted_gemma.jsonl"
-        if predict_fn is not None:
+        rows = _load_completed_predictions(
+            pred_file,
+            test_records,
+            "prompted_gemma",
+            model_id=lock.vlm_judge_model,
+            adapter_id=None,
+            prompt_version=lock.prompt_version,
+            checkpoint_id=None,
+        )
+        if rows is None and predict_fn is not None:
             rows = capture_predictions(
                 test_records, "prompted_gemma", lambda r: predict_fn("prompted_gemma", r),
                 model_id=lock.vlm_judge_model, prompt_version=lock.prompt_version,
             )
-        else:
+        elif rows is None:
             judge_callable = prompted_gemma_judge(image_loader or (lambda p: p))
             rows = capture_predictions(
                 test_records, "prompted_gemma",
                 judge_callable,
                 model_id=lock.vlm_judge_model, prompt_version=lock.prompt_version,
             )
-        write_predictions(pred_file, rows)
+        if not pred_file.exists():
+            write_predictions(pred_file, rows)
         written_files.append(pred_file.name)
         results["prompted_gemma"] = rows
 
@@ -845,13 +990,23 @@ def run_heldout(
             if ctrl_name in lock.controls:
                 ctrl_threshold = lock.controls[ctrl_name]["threshold"]
                 pred_file = predictions_dir / f"{ctrl_name}.jsonl"
-                if predict_fn is not None:
+                rows = _load_completed_predictions(
+                    pred_file,
+                    test_records,
+                    ctrl_name,
+                    model_id=ctrl_name,
+                    adapter_id=None,
+                    prompt_version=lock.prompt_version,
+                    checkpoint_id=None,
+                    threshold_id=str(ctrl_threshold),
+                )
+                if rows is None and predict_fn is not None:
                     rows = capture_predictions(
                         test_records, ctrl_name, lambda r, c=ctrl_name: predict_fn(c, r),
                         model_id=ctrl_name, prompt_version=lock.prompt_version,
                         threshold_id=str(ctrl_threshold),
                     )
-                else:
+                elif rows is None:
                     judge_callable = embedding_control(ctrl_name, ctrl_threshold, image_loader or (lambda p: p))
                     rows = capture_predictions(
                         test_records, ctrl_name,
@@ -859,7 +1014,8 @@ def run_heldout(
                         model_id=ctrl_name, prompt_version=lock.prompt_version,
                         threshold_id=str(ctrl_threshold),
                     )
-                write_predictions(pred_file, rows)
+                if not pred_file.exists():
+                    write_predictions(pred_file, rows)
                 written_files.append(pred_file.name)
                 results[ctrl_name] = rows
 
@@ -873,7 +1029,7 @@ def run_heldout(
         )
         return {"run_id": run_id, "predictions": results, "written": written_files, "report": report}
     except Exception as exc:
-        record_test_result(ledger_path, run_id=run_id, status="failed", error=str(exc))
+        record_test_result(ledger_path, run_id=run_id, status="failed", error=type(exc).__name__)
         raise
 
 

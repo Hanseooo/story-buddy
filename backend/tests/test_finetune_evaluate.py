@@ -120,7 +120,13 @@ def val_records():
 
 
 @pytest.fixture
-def valid_lock():
+def valid_lock(tmp_path):
+    checkpoints = {}
+    for seed, step in ((0, 50), (1, 100), (2, 50)):
+        checkpoint = tmp_path / "runs" / f"seed-{seed}" / "output" / f"checkpoint-{step}"
+        checkpoint.mkdir(parents=True)
+        (checkpoint / "adapter_model.safetensors").write_bytes(f"seed-{seed}".encode())
+        checkpoints[seed] = checkpoint
     return {
         "schema_version": 1,
         "bootstrap_seed": 0,
@@ -133,32 +139,32 @@ def valid_lock():
         "selected_checkpoints": {
             "seed_0": {
                 "model_id": "seed0_checkpoint50",
-                "checkpoint_id": "checkpoint-050",
+                "checkpoint_id": "checkpoint-50",
                 "step": 50,
-                "path": "runs/seed-0/output/checkpoint-050",
-                "sha256": "a" * 64,
+                "path": str(checkpoints[0]),
+                "sha256": ev._hash_directory(checkpoints[0]),
                 "val_f1": 0.85,
             },
             "seed_1": {
                 "model_id": "seed1_checkpoint100",
                 "checkpoint_id": "checkpoint-100",
                 "step": 100,
-                "path": "runs/seed-1/output/checkpoint-100",
-                "sha256": "b" * 64,
+                "path": str(checkpoints[1]),
+                "sha256": ev._hash_directory(checkpoints[1]),
                 "val_f1": 0.82,
             },
             "seed_2": {
                 "model_id": "seed2_checkpoint50",
-                "checkpoint_id": "checkpoint-050",
+                "checkpoint_id": "checkpoint-50",
                 "step": 50,
-                "path": "runs/seed-2/output/checkpoint-050",
-                "sha256": "c" * 64,
+                "path": str(checkpoints[2]),
+                "sha256": ev._hash_directory(checkpoints[2]),
                 "val_f1": 0.80,
             },
         },
         "controls": {
-            "clip_cosine": {"threshold": 0.75, "val_f1": 0.65},
-            "dinov2_cosine": {"threshold": 0.80, "val_f1": 0.70},
+            "clip_cosine": {"threshold": 0.75, "val_f1": 0.65, "selected_on": "manifest.val.jsonl"},
+            "dinov2_cosine": {"threshold": 0.80, "val_f1": 0.70, "selected_on": "manifest.val.jsonl"},
         },
         "manifest_hashes": {
             "manifest.train.jsonl": "1" * 64,
@@ -201,6 +207,38 @@ def test_evaluation_lock_is_immutable_and_contains_all_required_pins(tmp_path, v
     ev.write_evaluation_lock(path, valid_lock)
     with pytest.raises(ManifestError, match="evaluation lock differs"):
         ev.write_evaluation_lock(path, {**valid_lock, "prompt_version": "5"})
+
+
+def test_concurrent_identical_lock_creation_returns_unambiguous_success(tmp_path, valid_lock):
+    from concurrent.futures import ThreadPoolExecutor
+
+    path = tmp_path / "evaluation_lock.json"
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: ev.write_evaluation_lock(path, valid_lock), range(2)))
+    assert results == [valid_lock, valid_lock]
+
+
+@pytest.mark.parametrize("field,value", [
+    ("schema_version", 2),
+    ("schema_version", "1"),
+    ("prompt_version", "   "),
+    ("vlm_judge_model", ""),
+])
+def test_evaluation_lock_rejects_invalid_registered_fields(tmp_path, valid_lock, field, value):
+    with pytest.raises(ManifestError):
+        ev.write_evaluation_lock(tmp_path / "lock.json", {**valid_lock, field: value})
+
+
+def test_evaluation_lock_rejects_malformed_digest(tmp_path, valid_lock):
+    valid_lock["manifest_hashes"]["manifest.test.jsonl"] = "A" * 64
+    with pytest.raises(ManifestError, match="SHA-256"):
+        ev.write_evaluation_lock(tmp_path / "lock.json", valid_lock)
+
+
+def test_evaluation_lock_rejects_checkpoint_identity_drift(tmp_path, valid_lock):
+    valid_lock["selected_checkpoints"]["seed_0"]["sha256"] = "a" * 64
+    with pytest.raises(ManifestError, match="checkpoint.*digest"):
+        ev.write_evaluation_lock(tmp_path / "lock.json", valid_lock)
 
 
 
@@ -350,6 +388,95 @@ def test_run_heldout_evaluates_only_test_manifest_and_records_ledger(tmp_path, v
             report_path=tmp_path / "report-2.json",
             predict_fn=mock_predict,
         )
+
+
+def test_heldout_reserves_before_manifest_parse(tmp_path, valid_lock, monkeypatch):
+    import hashlib
+
+    freeze_dir = tmp_path / "freeze"
+    freeze_dir.mkdir()
+    test_path = freeze_dir / "manifest.test.jsonl"
+    test_path.write_text(manifest_record("p_test", split="test").model_dump_json() + "\n", encoding="utf-8")
+    valid_lock["manifest_hashes"]["manifest.test.jsonl"] = hashlib.sha256(test_path.read_bytes()).hexdigest()
+    lock_path = tmp_path / "lock.json"
+    ev.write_evaluation_lock(lock_path, valid_lock)
+    signoff = tmp_path / "signoff.json"
+    write_signoff(signoff, lock_path)
+    ledger = tmp_path / "ledger.jsonl"
+    real_read_manifest = ev.read_manifest
+
+    def guarded_read(path):
+        assert ev._read_ledger(ledger)[0].status == "reserved"
+        return real_read_manifest(path)
+
+    monkeypatch.setattr(ev, "read_manifest", guarded_read)
+    ev.run_heldout(
+        freeze_dir, lock_path, signoff, ledger, run_id="run-1",
+        predictions_dir=tmp_path / "predictions", report_path=tmp_path / "report.json",
+        predict_fn=lambda judge, row: ev.JudgeObservation(prediction=False, latency_ms=1),
+    )
+
+
+def test_heldout_resume_reuses_hash_verified_predictions(tmp_path, valid_lock, monkeypatch):
+    import hashlib
+
+    freeze_dir = tmp_path / "freeze"
+    freeze_dir.mkdir()
+    record = manifest_record("p_test", split="test")
+    test_path = freeze_dir / "manifest.test.jsonl"
+    test_path.write_text(record.model_dump_json() + "\n", encoding="utf-8")
+    valid_lock["manifest_hashes"]["manifest.test.jsonl"] = hashlib.sha256(test_path.read_bytes()).hexdigest()
+    lock_path = tmp_path / "lock.json"
+    ev.write_evaluation_lock(lock_path, valid_lock)
+    signoff = tmp_path / "signoff.json"
+    write_signoff(signoff, lock_path)
+    ledger = tmp_path / "ledger.jsonl"
+    predictions_dir = tmp_path / "predictions"
+    calls = []
+
+    original_write = ev.write_predictions
+    writes = 0
+
+    def interrupt_after_first(path, rows):
+        nonlocal writes
+        original_write(path, rows)
+        writes += 1
+        if writes == 1:
+            raise RuntimeError("interrupted")
+
+    monkeypatch.setattr(ev, "write_predictions", interrupt_after_first)
+    with pytest.raises(RuntimeError, match="interrupted"):
+        ev.run_heldout(
+            freeze_dir, lock_path, signoff, ledger, run_id="run-1",
+            predictions_dir=predictions_dir, report_path=tmp_path / "report.json",
+            predict_fn=lambda judge, row: calls.append(judge) or ev.JudgeObservation(
+                prediction=False, latency_ms=1
+            ),
+        )
+
+    monkeypatch.setattr(ev, "write_predictions", original_write)
+    first_prediction = predictions_dir / "seed_0.jsonl"
+    original_bytes = first_prediction.read_bytes()
+    first_prediction.write_text("{}\n", encoding="utf-8")
+    with pytest.raises(ManifestError, match="prediction.*SHA-256"):
+        ev.run_heldout(
+            freeze_dir, lock_path, signoff, ledger, run_id="run-1",
+            predictions_dir=predictions_dir, report_path=tmp_path / "report.json",
+            predict_fn=lambda judge, row: pytest.fail("tampered evidence must fail before prediction"),
+        )
+    first_prediction.write_bytes(original_bytes)
+    calls.clear()
+    ev.run_heldout(
+        freeze_dir, lock_path, signoff, ledger, run_id="run-1",
+        predictions_dir=predictions_dir, report_path=tmp_path / "report.json",
+        predict_fn=lambda judge, row: calls.append(judge) or ev.JudgeObservation(
+            prediction=False, latency_ms=1
+        ),
+    )
+    assert "seed_0" not in calls
+    assert [event.status for event in ev._read_ledger(ledger)] == [
+        "reserved", "failed", "resumed", "failed", "resumed", "completed"
+    ]
 
 
 def test_build_report_computes_three_seeds_baselines_slices_and_deployment_rung(tmp_path, valid_lock):

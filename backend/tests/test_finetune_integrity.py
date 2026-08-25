@@ -80,6 +80,13 @@ def test_heldout_fails_closed_if_test_manifest_modified_after_lock(tmp_path):
     for split in ("train", "val"):
         (freeze_dir / f"manifest.{split}.jsonl").write_text("", encoding="utf-8")
 
+    checkpoints = {}
+    for seed in (0, 1, 2):
+        checkpoint = tmp_path / "runs" / f"seed-{seed}" / "output" / "checkpoint-50"
+        checkpoint.mkdir(parents=True)
+        (checkpoint / "adapter_model.safetensors").write_bytes(f"seed-{seed}".encode())
+        checkpoints[seed] = checkpoint
+
     valid_lock = {
         "schema_version": 1,
         "bootstrap_seed": 0,
@@ -92,17 +99,17 @@ def test_heldout_fails_closed_if_test_manifest_modified_after_lock(tmp_path):
         "selected_checkpoints": {
                 f"seed_{s}": {
                     "model_id": f"seed{s}_checkpoint50",
-                "checkpoint_id": "checkpoint-050",
-                "step": 50,
-                "path": f"runs/seed-{s}/output/checkpoint-050",
-                "sha256": "a" * 64,
+                    "checkpoint_id": "checkpoint-50",
+                    "step": 50,
+                    "path": str(checkpoints[s]),
+                    "sha256": ev._hash_directory(checkpoints[s]),
                 "val_f1": 0.85,
             }
             for s in (0, 1, 2)
         },
         "controls": {
-            "clip_cosine": {"threshold": 0.75, "val_f1": 0.65},
-            "dinov2_cosine": {"threshold": 0.80, "val_f1": 0.70},
+            "clip_cosine": {"threshold": 0.75, "val_f1": 0.65, "selected_on": "manifest.val.jsonl"},
+            "dinov2_cosine": {"threshold": 0.80, "val_f1": 0.70, "selected_on": "manifest.val.jsonl"},
         },
         "manifest_hashes": {
             "manifest.train.jsonl": "1" * 64,

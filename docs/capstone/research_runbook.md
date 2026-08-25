@@ -98,9 +98,14 @@ uv run python -m finetune.evaluate heldout --freeze ../data/judge/freezes/obj4-v
 ```
 
 `evaluation_signoff.json` is written by the approver, never by evaluation code. It contains exactly the
-SHA-256 of `evaluation_lock.json`, a nonblank `approved_by`, and a timezone-bearing `approved_at`. A second
-`heldout` invocation is legal only after a completed Rung-D report and additionally requires
-`--deviation <PATH>` with the preregistered report hash, defect, fix commit, train/validation-only evidence,
+SHA-256 of `evaluation_lock.json`, a nonblank `approved_by`, and a timezone-bearing `approved_at`.
+Prediction JSONL files and their `.sha256` sidecars are immutable run evidence. Reusing the same `--run-id`
+after interruption verifies and reuses each completed judge file, records a `resumed` event, and calls only
+the missing judges; a missing sidecar, changed file, or checkpoint path/digest drift stops before further
+held-out inference. The access ledger contains only run identifiers, hashes, lifecycle status and failure type,
+never story text or direct asset paths. A second `heldout` invocation is legal only after a completed Rung-D
+report and additionally requires `--deviation <PATH>` with the preregistered report hash, defect, fix commit,
+train/validation-only evidence,
 and approval timestamp. There is no third-read command and no automatic deployment.
 
 Steps 11 and 13 run in the qualified GPU environment whose exact PyTorch, CUDA, bitsandbytes and transformers

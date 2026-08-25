@@ -675,7 +675,13 @@ be signed off before test access and cannot be replaced in place.
 
 Held-out access is file-ledgered and fail-closed. The runner acquires an exclusive lock and reserves a read
 before opening `manifest.test.jsonl`. It evaluates all three selected fine-tunes and all four baselines in one
-run. A crashed run may resume only under the same run ID and identical hashes. A second run is accepted only
+run. The evaluation lock requires schema version 1, normalized SHA-256 values, nonblank registered identifiers,
+and all three selected checkpoint directories to still match their frozen paths and directory digests. Lock
+creation is exclusive and an existing byte-identical lock is the only idempotent success. Each completed judge
+prediction file has an immutable SHA-256 sidecar; a crashed run records `resumed`, verifies the file hash,
+alignment and frozen judge/checkpoint identity, and invokes only judges whose evidence is missing. The ledger
+records `reserved`, `resumed`, `completed` and `failed` without story text or asset paths. A crashed run may
+resume only under the same run ID and identical hashes. A second run is accepted only
 when the first completed report is Rung D and a dated deviation record binds the first report, defect, fix
 commit and train/validation-only debugging evidence. A third read is always rejected. The ledger is an
 auditable protocol control, not DRM; deleting it or copying the freeze is a reportable protocol violation.
