@@ -173,7 +173,8 @@ class StoryRun:
 
 def run_story(app_graph, story: IntakeRecord) -> StoryRun:
     config = {"configurable": {"thread_id": story.story_id}, "recursion_limit": RECURSION_LIMIT}
-    graph_input = _initial_state(story)
+    snapshot = app_graph.get_state(config) if hasattr(app_graph, "get_state") else None
+    graph_input = None if getattr(snapshot, "values", None) else _initial_state(story)
     values: dict = {}
     for _ in range(MAX_RESUMES + 1):
         interrupted = False
@@ -617,17 +618,17 @@ def build(
                 policy,
             )
         else:
-            billable_calls = max(campaign_spent, telemetry["attempted"])
-            remaining_usd = policy.authorized_usd - billable_calls * policy.conservative_call_usd
-            reserve_usd = story_draw_limit * policy.conservative_call_usd
-            if story_draw_limit <= 0 or reserve_usd > remaining_usd:
-                summary["halted"] = True
-                break
             story_telemetry = (
                 _persisted_telemetry(state_entry, policy, story_id)
                 if state_entry is not None
                 else Counter(attempted=0, completed=0, failed=0, uncertain=0)
             )
+            billable_calls = max(campaign_spent, telemetry["attempted"])
+            remaining_usd = policy.authorized_usd - billable_calls * policy.conservative_call_usd
+            reserve_usd = max(story_draw_limit - story_telemetry["attempted"], 0) * policy.conservative_call_usd
+            if story_draw_limit <= 0 or reserve_usd > remaining_usd:
+                summary["halted"] = True
+                break
 
             def record_fal_event(event: str) -> None:
                 if event == "attempted" and story_telemetry["attempted"] >= story_draw_limit:

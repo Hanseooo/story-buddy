@@ -141,6 +141,9 @@ state after validating the intake digest, telemetry and checkpoint. Uncertain bi
 `--acknowledge-uncertain-billing <story_id>` for the same story; acknowledgment records UTC time and preserves
 the uncertain attempt as fully spent. Neither option may decrement attempted calls, bypass the campaign
 reserve or modify a completed bundle.
+An ordinary validated checkpoint continues with `None` input so its checkpointed channels are not overwritten;
+only a fresh corpus thread receives its initial state. Recovery reserves only the story draw allowance remaining
+after persisted attempted calls, while those completed, failed and uncertain calls remain conservatively charged.
 
 ### 4.4 Queue materialization
 

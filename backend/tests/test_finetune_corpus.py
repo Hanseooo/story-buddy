@@ -15,11 +15,14 @@ from io import BytesIO
 from types import SimpleNamespace
 
 import pytest
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, START, StateGraph
+from langgraph.types import interrupt
 from PIL import Image
 
 from app.config import MAX_STORY_WORDS, MIN_STORY_WORDS, STYLE_PRESETS
 from app.length import clamp_story, word_count
-from contracts.story_memory import Character, Cost, Scene
+from contracts.story_memory import Character, Cost, Location, Scene, StoryObject, TimelineEvent
 from finetune import build_corpus
 from finetune.corpus_io import CorpusError, IntakeRecord, intake_sha256, load_completed_bundles
 
@@ -151,6 +154,7 @@ class RecoverableGraph(FakeGraph):
         return SimpleNamespace(values=build_corpus._initial_state(self.story).model_dump())
 
     def stream(self, graph_input, config, stream_mode=None):
+        graph_input = graph_input or build_corpus._initial_state(self.story)
         for mode, values in super().stream(graph_input, config, stream_mode):
             values["characters"] = [
                 Character(
@@ -314,6 +318,112 @@ def test_next_call_past_story_limit_is_blocked_before_submission(tmp_path, stori
     assert load_completed_bundles(tmp_path) == []
 
 
+def test_run_story_continues_an_ordinary_checkpoint_without_overwriting_its_channels():
+    story = intake_story()
+    checkpointed = build_corpus._initial_state(story).model_copy(
+        update={
+            "characters": [Character(char_id="c1", name="Moss")],
+            "locations": [Location(loc_id="l1", name="Garden")],
+            "objects": [StoryObject(obj_id="o1", name="Lantern")],
+            "timeline": [TimelineEvent(order=1, summary="Moss finds the lantern")],
+            "scenes": [Scene(scene_id="s1", text_excerpt="Moss finds the lantern.")],
+            "cost": Cost(image_count=1),
+        }
+    )
+    resumed = []
+
+    def reveal(state):
+        interrupt("confirm")
+        resumed.append(state.story_id)
+        return {}
+
+    builder = StateGraph(build_corpus.StoryMemory)
+    builder.add_node("reveal", reveal)
+    builder.add_edge(START, "reveal")
+    builder.add_edge("reveal", END)
+    graph = builder.compile(checkpointer=MemorySaver())
+    config = {"configurable": {"thread_id": story.story_id}}
+    list(graph.stream(checkpointed, config, stream_mode=["updates", "values"]))
+
+    run = build_corpus.run_story(graph, story)
+    memory = build_corpus.StoryMemory.model_validate(run.values)
+
+    assert run.outcome == "completed"
+    assert resumed == [story.story_id]
+    assert memory.characters == checkpointed.characters
+    assert memory.locations == checkpointed.locations
+    assert memory.objects == checkpointed.objects
+    assert memory.timeline == checkpointed.timeline
+    assert memory.scenes == checkpointed.scenes
+    assert memory.cost == checkpointed.cost
+
+
+@pytest.mark.parametrize("prior_terminal", ["completed", "failed", "uncertain"])
+def test_recovery_reserves_only_draws_not_already_attempted(tmp_path, prior_terminal):
+    story = intake_story()
+    policy = build_corpus.SpendPolicy(max_usd=Decimal("0.06"), price_per_megapixel=Decimal("0.03"))
+    state = {
+        story.story_id: {
+            "quarantined": "budget stopped",
+            "reason_code": "budget_stopped",
+            "intake_sha256": intake_sha256(story),
+            "conservative_call_usd": "0.03",
+            "telemetry": {"attempted": 1, "completed": 0, "failed": 0, "uncertain": 0},
+        }
+    }
+    state[story.story_id]["telemetry"][prior_terminal] = 1
+    (tmp_path / "build_state.json").write_text(json.dumps(state), encoding="utf-8")
+
+    summary = build_corpus.build(
+        [story],
+        RecoverableGraph(story, per_story_images=1),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=policy,
+        resume_quarantined=story.story_id,
+    )
+    [bundle] = load_completed_bundles(tmp_path)
+
+    assert summary["stories_run"] == 1
+    assert Decimal(summary["usd_high"]) == Decimal("0.06")
+    assert bundle.run_metadata["attempted_calls"] == 2
+    assert bundle.run_metadata[f"{prior_terminal}_calls"] == {
+        "completed": 2,
+        "failed": 1,
+        "uncertain": 1,
+    }[prior_terminal]
+
+
+def test_recovery_blocks_another_provider_attempt_at_the_prior_draw_limit(tmp_path):
+    story = intake_story()
+    policy = build_corpus.SpendPolicy(max_usd=Decimal("0.06"), price_per_megapixel=Decimal("0.03"))
+    state = {
+        story.story_id: {
+            "quarantined": "budget stopped",
+            "reason_code": "budget_stopped",
+            "intake_sha256": intake_sha256(story),
+            "conservative_call_usd": "0.03",
+            "telemetry": {"attempted": 2, "completed": 1, "failed": 1, "uncertain": 0},
+        }
+    }
+    (tmp_path / "build_state.json").write_text(json.dumps(state), encoding="utf-8")
+    graph = RecoverableGraph(story, per_story_images=1)
+
+    summary = build_corpus.build(
+        [story],
+        graph,
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=policy,
+        resume_quarantined=story.story_id,
+    )
+    saved = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
+
+    assert summary["halted"] is True
+    assert graph.consumed == 0
+    assert saved[story.story_id]["telemetry"] == state[story.story_id]["telemetry"]
+
+
 def test_resume_exhaustion_is_quarantined_without_a_bundle(tmp_path, stories):
     class InterruptGraph:
         calls = 0
@@ -372,9 +482,9 @@ def test_campaign_persists_failed_call_spend_before_restart(tmp_path, stories):
     summary = build_corpus.build(
         stories[:1], resumed_graph, out_dir=tmp_path, supabase=FakeSupabase(), policy=policy
     )
-    assert resumed_graph.calls == []
-    assert summary["halted"] is True
-    assert Decimal(summary["usd_high"]) == Decimal("0.035")
+    assert resumed_graph.calls == ["a"]
+    assert summary["halted"] is False
+    assert Decimal(summary["usd_high"]) == Decimal("0.070")
 
 
 def test_uncertain_billing_quarantines_and_stops_without_retry(tmp_path):
