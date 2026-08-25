@@ -82,7 +82,8 @@ def test_heldout_fails_closed_if_test_manifest_modified_after_lock(tmp_path):
         "deployment_seed": 0,
         "seeds": [0, 1, 2],
         "selected_checkpoints": {
-            f"seed_{s}": {
+                f"seed_{s}": {
+                    "model_id": f"seed{s}_checkpoint50",
                 "checkpoint_id": "checkpoint-050",
                 "step": 50,
                 "path": f"runs/seed-{s}/output/checkpoint-050",
@@ -107,6 +108,12 @@ def test_heldout_fails_closed_if_test_manifest_modified_after_lock(tmp_path):
     lock_path = tmp_path / "evaluation_lock.json"
     ev.write_evaluation_lock(lock_path, valid_lock)
     ledger_path = tmp_path / "access_ledger.json"
+    signoff_path = tmp_path / "evaluation_signoff.json"
+    signoff_path.write_text(json.dumps({
+        "evaluation_lock_sha256": hashlib.sha256(lock_path.read_bytes()).hexdigest(),
+        "approved_by": "Hanseooo",
+        "approved_at": "2026-08-25T12:00:00+08:00",
+    }), encoding="utf-8")
 
     # Modify test manifest after lock was created with a different valid record
     r_test_mod = r_test.model_copy(update={"pair_id": "p_test_2"})
@@ -114,13 +121,12 @@ def test_heldout_fails_closed_if_test_manifest_modified_after_lock(tmp_path):
 
     with pytest.raises(ManifestError, match="mismatch against evaluation lock"):
         ev.run_heldout(
-            freeze_dir=freeze_dir,
-            lock_path=lock_path,
-            ledger_path=ledger_path,
-            run_id="run-1",
-            approver="Hanseooo",
-            purpose="test",
-            predictions_dir=tmp_path / "preds",
+                freeze_dir=freeze_dir,
+                lock_path=lock_path,
+                signoff_path=signoff_path,
+                ledger_path=ledger_path,
+                run_id="run-1",
+                predictions_dir=tmp_path / "preds",
+                report_path=tmp_path / "report.json",
             predict_fn=lambda j, r: ev.JudgeObservation(prediction=True, confidence=0.9, latency_ms=10),
         )
-

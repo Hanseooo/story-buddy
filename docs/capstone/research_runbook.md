@@ -44,20 +44,21 @@
 Run all commands from `backend/`. Angle-bracket values (`<...>`) are operator inputs, not copy-ready literals.
 Before a paid run, record the official Fal price URL, lookup date, authorized USD, pinned `1024x768` size,
 raw maximum `0.786432` MP, Fal's `ceil(MP)` billing rule, and the resulting per-call ceiling. Supply the
-current highest applicable rate for the two configured image endpoints as `<current-usd-per-megapixel>`.
+current highest applicable rate for the two configured image endpoints as `<current-usd-per-megapixel>` and
+pass the source plus lookup date as `<official-price-url-and-date>`.
 
 ```powershell
 # 1. Zero-cost verification on temporary fixture directory
 uv run python -m finetune.build_corpus --fixture --limit 1 --out <temporary-fixture-directory>
 
 # 2. Paid synthetic smoke run (3 stories, conservative budget cap)
-uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --limit 3 --max-usd 1.50 --price-per-megapixel <current-usd-per-megapixel>
+uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --limit 3 --max-usd 1.50 --price-per-megapixel <current-usd-per-megapixel> --price-basis "<official-price-url-and-date>"
 
 # 3. Full synthetic generation (24 train + 6 val stories)
-uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --max-usd 25 --price-per-megapixel <same-current-usd-per-megapixel>
+uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --max-usd 25 --price-per-megapixel <same-current-usd-per-megapixel> --price-basis "<same-official-price-url-and-date>"
 
 # 4. Full donated generation (15 candidate stories: 10 primary + 5 backup)
-uv run python -m finetune.build_corpus --corpus ../data/judge/intake/donated.json --out ../data/judge/corpus --max-usd 25 --price-per-megapixel <same-current-usd-per-megapixel>
+uv run python -m finetune.build_corpus --corpus ../data/judge/intake/donated.json --out ../data/judge/corpus --max-usd 25 --price-per-megapixel <same-current-usd-per-megapixel> --price-basis "<same-official-price-url-and-date>"
 
 # 5. Read-only candidate inspection for hard negative selection
 uv run python -m finetune.build_dataset --candidate-report --data ../data/judge/corpus
@@ -70,7 +71,38 @@ uv run python -m finetune.build_dataset --reconcile-only
 
 # 8. Install immutable training dataset freeze
 uv run python -m finetune.build_dataset --freeze --data ../data/judge/corpus --donated-intake ../data/judge/intake/donated.json --selection ../data/judge/intake/dataset_selection.json --out ../data/judge/freezes/obj4-v1
+
+# 9. Install the exact training tool in the qualified GPU environment
+uv tool install "llamafactory @ git+https://github.com/hiyouga/LlamaFactory.git@7af909522a951e3ad9f022ea6f88b6755257eaa5"
+
+# 10. Verify pins and write immutable plans for seeds 0, 1 and 2 (zero-cost)
+uv run python -m finetune.train --freeze ../data/judge/freezes/obj4-v1 --run-root ../data/judge/runs/obj4-v1 --prepare
+
+# 11. After recording the qualified hardware and activating the external spend alarm, train all seeds
+uv run python -m finetune.train --freeze ../data/judge/freezes/obj4-v1 --run-root ../data/judge/runs/obj4-v1 --execute --spend-alarm-confirmed
+
+# 12. Inventory every checkpoint and obtain the exact generated vLLM command
+uv run python -m finetune.evaluate validation-inventory --runs ../data/judge/runs/obj4-v1 --out ../data/judge/evaluations/obj4-v1/validation_candidates.json
+
+# 13. Start the generated vllm_command, point JUDGE_BASE_URL/JUDGE_API_KEY at it, then capture validation evidence
+uv run python -m finetune.evaluate capture-validation --freeze ../data/judge/freezes/obj4-v1 --candidates ../data/judge/evaluations/obj4-v1/validation_candidates.json --predictions ../data/judge/evaluations/obj4-v1/validation
+
+# 14. Select checkpoints and cosine thresholds using validation only; write the immutable lock
+uv run python -m finetune.evaluate validate --freeze ../data/judge/freezes/obj4-v1 --candidates ../data/judge/evaluations/obj4-v1/validation_candidates.json --predictions ../data/judge/evaluations/obj4-v1/validation --out ../data/judge/evaluations/obj4-v1/evaluation_lock.json
+
+# 15. After an owner/adviser independently writes evaluation_signoff.json, run the one guarded evaluation
+uv run python -m finetune.evaluate heldout --freeze ../data/judge/freezes/obj4-v1 --lock ../data/judge/evaluations/obj4-v1/evaluation_lock.json --signoff ../data/judge/evaluations/obj4-v1/evaluation_signoff.json --ledger ../data/judge/evaluations/obj4-v1/test_access.jsonl --run-id obj4-heldout-1 --predictions ../data/judge/evaluations/obj4-v1/heldout-1/predictions --out ../data/judge/evaluations/obj4-v1/heldout-1/objective4_results.json
 ```
+
+`evaluation_signoff.json` is written by the approver, never by evaluation code. It contains exactly the
+SHA-256 of `evaluation_lock.json`, a nonblank `approved_by`, and a timezone-bearing `approved_at`. A second
+`heldout` invocation is legal only after a completed Rung-D report and additionally requires
+`--deviation <PATH>` with the preregistered report hash, defect, fix commit, train/validation-only evidence,
+and approval timestamp. There is no third-read command and no automatic deployment.
+
+Steps 11 and 13 run in the qualified GPU environment whose exact PyTorch, CUDA, bitsandbytes and transformers
+versions are recorded with the run evidence. Install those hardware-specific versions with `uv`, never bare
+`pip`; they deliberately remain outside the deployed backend dependency set.
 
 ### Operational invariants and integrity gates
 

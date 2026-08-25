@@ -8,9 +8,12 @@ The metric is F1 on `different_character` — the minority class, the class the 
 on, and the class where a miss ships a broken page to a child (§3.3). `ManifestRecord.label` is
 already that class; it is read, never re-derived (`build_dataset.py` owns the inversion).
 """
+import base64
 import hashlib
 import json
 import logging
+import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Literal, Sequence
@@ -46,6 +49,7 @@ PREDICTION_SCHEMA_VERSION = 1
 SEEDS = (0, 1, 2)
 
 Judge = Callable[[ManifestRecord], bool]      # record → predicted `different_character`
+Observer = Callable[[ManifestRecord], "JudgeObservation"]
 
 
 class JudgeObservation(BaseModel):
@@ -155,7 +159,7 @@ def select_threshold(
     candidates = [unique_scores[0] - 0.01, *unique_scores, unique_scores[-1] + 0.01]
     scored = []
     for t in candidates:
-        preds = [s < t for s in scores]
+        preds = [s > t for s in scores]
         f1 = prf1(labels, preds)[2]
         scored.append({"threshold": t, "val_f1": f1})
     scored.sort(key=lambda item: (-item["val_f1"], item["threshold"]))
@@ -210,14 +214,17 @@ def write_evaluation_lock(path: Path, payload: dict | EvaluationLock) -> dict:
             raise ManifestError(f"immutable evaluation lock differs at {path}")
         return json.loads(text)
 
-    tmp_path = path.with_suffix(f".tmp.{path.name}")
     try:
-        tmp_path.write_text(text, encoding="utf-8")
-        tmp_path.replace(path)
-    except Exception:
-        if tmp_path.exists():
-            tmp_path.unlink()
-        raise
+        descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        existing = path.read_text(encoding="utf-8")
+        if existing != text:
+            raise ManifestError(f"immutable prediction file differs at {path}")
+        return
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        handle.write(text)
+        handle.flush()
+        os.fsync(handle.fileno())
     return json.loads(text)
 
 
@@ -319,42 +326,60 @@ def score(records: Sequence[ManifestRecord], preds: Sequence[bool]) -> dict:
 
 # --- baselines ------------------------------------------------------------------------------
 
-def _vlm_judge(model: str, image_loader: Callable[[str], str]) -> Judge:
+def _vlm_observer(
+    model: str,
+    image_loader: Callable[[str], str],
+    *,
+    prompt: str,
+    schema: type[BaseModel],
+    route: Literal["judge", "openrouter"] = "judge",
+) -> Observer:
     """A prompted/fine-tuned VLM baseline. Every vendor call goes through `providers.py` (ADR-015).
 
     `model` is passed explicitly rather than read from `settings` because this harness runs three
     different models against the same pairs; the pipeline itself never does that.
     """
-    from providers import judge as provider_judge
+    from providers import judge_with_metadata
 
-    def predict(record: ManifestRecord) -> bool:
+    def predict(record: ManifestRecord) -> JudgeObservation:
         urls = [image_loader(path) for path in record.images]
-        try:
-            verdict = provider_judge(QUESTION, urls, VlmVerdict, model=model)
-        except Exception:
-            # §7.5's pre-registered malformed-output rule: an unparseable verdict is scored as a
-            # MISS on `different_character`, counted against the judge that produced it.
-            log.warning("evaluate: %s produced no parseable verdict for %s", model, record.pair_id)
-            return False
-        return not verdict.same_character
+        result = judge_with_metadata(prompt, urls, schema, model=model, route=route)
+        prediction = not result.verdict.same_character
+        score = None if result.confidence is None else (
+            result.confidence if prediction else 1.0 - result.confidence
+        )
+        return JudgeObservation(
+            prediction=prediction,
+            confidence=result.confidence,
+            score=score,
+            latency_ms=result.latency_ms,
+        )
 
     return predict
 
 
-def finetuned_judge(image_loader: Callable[[str], str], model: str = "judge") -> Judge:
+def finetuned_judge(image_loader: Callable[[str], str], model: str = "judge") -> Observer:
     """The fine-tuned adapter, served behind vLLM (§8) — `JUDGE_BASE_URL` points at it."""
-    return _vlm_judge(model, image_loader)
+    return _vlm_observer(model, image_loader, prompt=QUESTION, schema=VlmVerdict)
 
 
 def zero_shot_base_judge(image_loader: Callable[[str], str],
-                         model: str = "Qwen/Qwen2.5-VL-7B-Instruct") -> Judge:
+                         model: str = "Qwen/Qwen2.5-VL-7B-Instruct") -> Observer:
     """§7.1's PRIMARY comparator: same architecture, same weights, same prompt, no adapter."""
-    return _vlm_judge(model, image_loader)
+    return _vlm_observer(model, image_loader, prompt=QUESTION, schema=VlmVerdict)
 
 
-def prompted_gemma_judge(image_loader: Callable[[str], str]) -> Judge:
+def prompted_gemma_judge(image_loader: Callable[[str], str]) -> Observer:
     """§7.2's product gate: the incumbent the pipeline already ships. Model ID from `config.py`."""
-    return _vlm_judge(settings.vlm_judge_model, image_loader)
+    from pipeline.consistency_check import JUDGE_PROMPT, SceneVerdict
+
+    return _vlm_observer(
+        settings.vlm_judge_model,
+        image_loader,
+        prompt=JUDGE_PROMPT.format(name="the character"),
+        schema=SceneVerdict,
+        route="openrouter",
+    )
 
 
 EMBEDDING_CONTROLS = {
@@ -363,7 +388,7 @@ EMBEDDING_CONTROLS = {
 }
 
 
-def embedding_control(name: str, threshold: float, image_loader: Callable[[str], "object"]) -> Judge:
+def embedding_control(name: str, threshold: float, image_loader: Callable[[str], "object"]) -> Observer:
     """CLIP / DINOv2 cosine — §7.3's two scientific CONTROLS, not product candidates.
 
     They emit a scalar, and ADR-010's regeneration controller consumes `failure_reasons`; a cosine
@@ -376,7 +401,7 @@ def embedding_control(name: str, threshold: float, image_loader: Callable[[str],
     ponytail: `torch` and `transformers` are imported HERE, on demand, and are deliberately NOT
     backend dependencies. `pyproject.toml` documents at length that merely having transformers
     installed costs +244 MB resident and OOM-kills the 512 MB worker — so these two controls run
-    in the rented-GPU eval environment (`pip install torch transformers` there, alongside §6.4's
+    in the rented-GPU eval environment (`uv pip install torch transformers` there, alongside §6.4's
     llamafactory install), never in the deployed image. Calling this without them raises
     ImportError, which is the intended signal rather than a failure mode.
     """
@@ -394,11 +419,27 @@ def embedding_control(name: str, threshold: float, image_loader: Callable[[str],
                 else model(**inputs).last_hidden_state[:, 0]
         return torch.nn.functional.normalize(out, dim=-1)
 
-    def predict(record: ManifestRecord) -> bool:
+    def predict(record: ManifestRecord) -> JudgeObservation:
+        started = time.perf_counter_ns()
         ref, scene = (embed(path) for path in record.images)
-        return bool((ref @ scene.T).item() < threshold)   # below threshold ⇒ different_character
+        similarity = float((ref @ scene.T).item())
+        return _embedding_observation(
+            similarity,
+            threshold,
+            (time.perf_counter_ns() - started) // 1_000_000,
+        )
 
     return predict
+
+
+def _embedding_observation(similarity: float, threshold: float, latency_ms: int) -> JudgeObservation:
+    score = -similarity
+    return JudgeObservation(
+        prediction=score > threshold,
+        confidence=None,
+        score=score,
+        latency_ms=latency_ms,
+    )
 
 
 BASELINES: dict[str, str] = {
@@ -408,6 +449,47 @@ BASELINES: dict[str, str] = {
     "clip_cosine": "CLIP image-image cosine — scientific control (§7.3)",
     "dinov2_cosine": "DINOv2 cosine — scientific control (§7.3)",
 }
+
+
+def capture_validation(freeze_dir: Path, candidates_path: Path, predictions_dir: Path) -> list[str]:
+    freeze_dir = Path(freeze_dir)
+    records = list(read_manifest(freeze_dir / "manifest.val.jsonl"))
+    candidates = json.loads(Path(candidates_path).read_text(encoding="utf-8"))["candidates"]
+    predictions_dir = Path(predictions_dir)
+    predictions_dir.mkdir(parents=True, exist_ok=True)
+
+    def image_uri(relative_path: str) -> str:
+        path = freeze_dir / relative_path
+        suffix = path.suffix.lower()
+        mime = "image/png" if suffix == ".png" else "image/webp"
+        return f"data:{mime};base64," + base64.b64encode(path.read_bytes()).decode()
+
+    def pil_image(relative_path: str):
+        from PIL import Image
+
+        with Image.open(freeze_dir / relative_path) as image:
+            return image.convert("RGB").copy()
+
+    written = []
+    for candidate in candidates:
+        model_id = candidate["model_id"]
+        rows = capture_predictions(
+            records, model_id, finetuned_judge(image_uri, model=model_id),
+            model_id=BASE_MODEL, adapter_id=model_id, prompt_version="4",
+            checkpoint_id=candidate.get("checkpoint_id"),
+        )
+        filename = f"{model_id}.jsonl"
+        write_predictions(predictions_dir / filename, rows)
+        written.append(filename)
+    for control in ("clip_cosine", "dinov2_cosine"):
+        rows = capture_predictions(
+            records, control, embedding_control(control, 0.0, pil_image),
+            model_id=control, prompt_version="4",
+        )
+        filename = f"{control}.jsonl"
+        write_predictions(predictions_dir / filename, rows)
+        written.append(filename)
+    return written
 
 
 def validate_offline(
@@ -446,6 +528,7 @@ def validate_offline(
         best = select_checkpoint(ckpt_preds, val_records)
         cand_detail = next(c for c in candidates if c["seed"] == seed and c["checkpoint_id"] == best["checkpoint_id"])
         selected_checkpoints[f"seed_{seed}"] = {
+            "model_id": cand_detail["model_id"],
             "checkpoint_id": best["checkpoint_id"],
             "step": best["step"],
             "path": cand_detail["path"],
@@ -466,13 +549,17 @@ def validate_offline(
             threshold_res = select_threshold(scores, val_records)
             controls[ctrl_name] = threshold_res
         else:
-            controls[ctrl_name] = {"threshold": 0.5, "val_f1": 0.0, "selected_on": "manifest.val.jsonl"}
+            raise ManifestError(f"prediction file missing for mandatory control {ctrl_name} at {ctrl_pred_file}")
 
-    manifest_hashes = {}
-    for split_name in ("train", "val", "test"):
-        mf_path = freeze_dir / f"manifest.{split_name}.jsonl"
-        if mf_path.exists():
-            manifest_hashes[f"manifest.{split_name}.jsonl"] = hashlib.sha256(mf_path.read_bytes()).hexdigest()
+    freeze_report_path = freeze_dir / "freeze_report.json"
+    if not freeze_report_path.exists():
+        raise ManifestError(f"freeze report missing at {freeze_report_path}")
+    freeze_report = json.loads(freeze_report_path.read_text(encoding="utf-8"))
+    artifact_hashes = freeze_report.get("artifact_sha256", {})
+    required_manifests = {f"manifest.{split}.jsonl" for split in ("train", "val", "test")}
+    if not required_manifests.issubset(artifact_hashes):
+        raise ManifestError("freeze report is missing split manifest hashes")
+    manifest_hashes = {name: artifact_hashes[name] for name in sorted(required_manifests)}
 
     lock_payload = {
         "schema_version": PREDICTION_SCHEMA_VERSION,
@@ -492,53 +579,76 @@ def validate_offline(
     return write_evaluation_lock(out_path, lock_payload)
 
 
-class HeldOutLedgerEntry(BaseModel):
+class EvaluationSignoff(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    evaluation_lock_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    approved_by: str = Field(min_length=1)
+    approved_at: datetime
+
+
+class HeldOutDeviation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    first_report_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    defect: str = Field(min_length=1)
+    fix_commit: str = Field(pattern=r"^[0-9a-f]{40}$")
+    debug_evidence_sha256: list[str] = Field(min_length=1)
+    debug_splits: list[Literal["train", "val"]]
+    approved_at: datetime
+
+
+class HeldOutLedgerEvent(BaseModel):
     model_config = ConfigDict(extra="forbid")
     run_id: str
-    timestamp: str
-    approver: str
-    purpose: str
-    status: Literal["reserved", "running", "completed", "failed"]
-    lock_sha256: str
-    manifest_test_sha256: str
+    timestamp: datetime
+    status: Literal["reserved", "completed", "failed"]
+    ordinal: int = Field(ge=1, le=2)
+    lock_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    manifest_test_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    report_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    rung: Literal["A", "B", "C", "D"] | None = None
     error: str | None = None
-    predictions_written: list[str] = Field(default_factory=list)
 
 
-class HeldOutLedger(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    entries: list[HeldOutLedgerEntry] = Field(default_factory=list)
-
-
-def _read_ledger(path: Path) -> HeldOutLedger:
+def _read_ledger(path: Path) -> list[HeldOutLedgerEvent]:
     path = Path(path)
     if not path.exists():
-        return HeldOutLedger(entries=[])
-    return HeldOutLedger.model_validate(json.loads(path.read_text(encoding="utf-8")))
+        return []
+    return [
+        HeldOutLedgerEvent.model_validate_json(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
 
 
-def _write_ledger(path: Path, ledger: HeldOutLedger) -> None:
+def _append_ledger(path: Path, event: HeldOutLedgerEvent) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(ledger.model_dump(mode="json"), indent=2, sort_keys=True) + "\n"
-    tmp_path = path.with_suffix(f".tmp.{path.name}")
-    try:
-        tmp_path.write_text(text, encoding="utf-8")
-        tmp_path.replace(path)
-    except Exception:
-        if tmp_path.exists():
-            tmp_path.unlink()
-        raise
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(event.model_dump(mode="json"), sort_keys=True) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def _load_signoff(path: Path, lock_sha: str) -> EvaluationSignoff:
+    path = Path(path)
+    if not path.exists():
+        raise ManifestError(f"evaluation sign-off missing at {path}")
+    signoff = EvaluationSignoff.model_validate_json(path.read_text(encoding="utf-8"))
+    if signoff.approved_at.tzinfo is None:
+        raise ManifestError("evaluation sign-off timestamp requires a timezone")
+    if signoff.evaluation_lock_sha256 != lock_sha:
+        raise ManifestError("evaluation sign-off does not match evaluation lock")
+    return signoff
 
 
 def reserve_test_read(
     ledger_path: Path,
     lock_path: Path,
-    freeze_dir: Path,
+    signoff_path: Path,
     *,
     run_id: str,
-    approver: str,
-    purpose: str,
+    test_manifest_sha256: str,
+    deviation_path: Path | None = None,
 ) -> dict:
     lock_path = Path(lock_path)
     if not lock_path.exists():
@@ -546,95 +656,129 @@ def reserve_test_read(
     lock_dict = json.loads(lock_path.read_text(encoding="utf-8"))
     EvaluationLock.model_validate(lock_dict)
 
-    freeze_dir = Path(freeze_dir)
-    test_mf = freeze_dir / "manifest.test.jsonl"
-    if not test_mf.exists():
-        raise ManifestError(f"manifest.test.jsonl missing at {test_mf}")
-
     lock_sha = hashlib.sha256(lock_path.read_bytes()).hexdigest()
-    test_mf_sha = hashlib.sha256(test_mf.read_bytes()).hexdigest()
+    _load_signoff(signoff_path, lock_sha)
+    if len(test_manifest_sha256) != 64 or any(c not in "0123456789abcdef" for c in test_manifest_sha256):
+        raise ManifestError("manifest.test.jsonl sha256 must be 64 lowercase hex characters")
 
-    ledger = _read_ledger(ledger_path)
-    for entry in ledger.entries:
-        if entry.status in ("reserved", "running", "completed"):
-            if entry.run_id != run_id:
-                raise ManifestError(
-                    f"held-out test split has already been accessed (run {entry.run_id} status {entry.status})"
-                )
-            if entry.status == "completed":
+    ledger_path = Path(ledger_path)
+    lock_file = ledger_path.with_suffix(ledger_path.suffix + ".lock")
+    lock_file.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        descriptor = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError as exc:
+        raise ManifestError("held-out ledger is locked by another process") from exc
+    os.close(descriptor)
+    try:
+        events = _read_ledger(ledger_path)
+        same_run = [event for event in events if event.run_id == run_id]
+        if same_run:
+            first = same_run[0]
+            if first.lock_sha256 != lock_sha or first.manifest_test_sha256 != test_manifest_sha256:
+                raise ManifestError("same-run resume requires identical hashes")
+            if any(event.status == "completed" for event in same_run):
                 raise ManifestError(f"run {run_id} already completed")
-            return entry.model_dump(mode="json")
+            return first.model_dump(mode="json")
 
-    entry = HeldOutLedgerEntry(
-        run_id=run_id,
-        timestamp=datetime.now(timezone.utc).isoformat(),
-        approver=approver,
-        purpose=purpose,
-        status="reserved",
-        lock_sha256=lock_sha,
-        manifest_test_sha256=test_mf_sha,
-    )
-    ledger.entries.append(entry)
-    _write_ledger(ledger_path, ledger)
-    return entry.model_dump(mode="json")
+        reservations = [event for event in events if event.status == "reserved"]
+        completed = [event for event in events if event.status == "completed"]
+        if len(reservations) >= 2 or len(completed) >= 2:
+            raise ManifestError("third held-out read is always rejected")
+        if reservations and not completed:
+            raise ManifestError(f"held-out test split is reserved by run {reservations[-1].run_id}")
+
+        ordinal = 1
+        if completed:
+            first = completed[0]
+            if first.rung != "D" or not first.report_sha256:
+                raise ManifestError("second held-out read requires a completed Rung-D report")
+            if deviation_path is None:
+                raise ManifestError("second held-out read requires a deviation record")
+            deviation = HeldOutDeviation.model_validate_json(Path(deviation_path).read_text(encoding="utf-8"))
+            if deviation.approved_at.tzinfo is None or deviation.debug_splits != ["train", "val"]:
+                raise ManifestError("deviation requires timezone and train/val-only debugging evidence")
+            if any(len(value) != 64 for value in deviation.debug_evidence_sha256):
+                raise ManifestError("deviation evidence hashes must be SHA-256")
+            if deviation.first_report_sha256 != first.report_sha256:
+                raise ManifestError("deviation does not bind the first Rung-D report")
+            ordinal = 2
+
+        event = HeldOutLedgerEvent(
+            run_id=run_id,
+            timestamp=datetime.now(timezone.utc),
+            status="reserved",
+            ordinal=ordinal,
+            lock_sha256=lock_sha,
+            manifest_test_sha256=test_manifest_sha256,
+        )
+        _append_ledger(ledger_path, event)
+        return event.model_dump(mode="json")
+    finally:
+        lock_file.unlink(missing_ok=True)
 
 
 def record_test_result(
     ledger_path: Path,
     *,
     run_id: str,
-    status: Literal["running", "completed", "failed"],
+    status: Literal["completed", "failed"],
     error: str | None = None,
-    predictions_written: list[str] | None = None,
+    report_sha256: str | None = None,
+    rung: Literal["A", "B", "C", "D"] | None = None,
 ) -> dict:
-    ledger = _read_ledger(ledger_path)
-    target = None
-    for entry in ledger.entries:
-        if entry.run_id == run_id:
-            target = entry
-            break
-    if target is None:
+    events = _read_ledger(ledger_path)
+    reservations = [event for event in events if event.run_id == run_id and event.status == "reserved"]
+    if not reservations:
         raise ManifestError(f"run_id {run_id} not found in ledger")
-
-    target.status = status
-    if error is not None:
-        target.error = error
-    if predictions_written is not None:
-        target.predictions_written = sorted(set(target.predictions_written + predictions_written))
-
-    _write_ledger(ledger_path, ledger)
-    return target.model_dump(mode="json")
+    reservation = reservations[0]
+    if status == "completed" and (report_sha256 is None or rung is None):
+        raise ManifestError("completed held-out run requires report hash and rung")
+    event = HeldOutLedgerEvent(
+        run_id=run_id,
+        timestamp=datetime.now(timezone.utc),
+        status=status,
+        ordinal=reservation.ordinal,
+        lock_sha256=reservation.lock_sha256,
+        manifest_test_sha256=reservation.manifest_test_sha256,
+        report_sha256=report_sha256,
+        rung=rung,
+        error=error,
+    )
+    _append_ledger(ledger_path, event)
+    return event.model_dump(mode="json")
 
 
 def run_heldout(
     freeze_dir: Path,
     lock_path: Path,
+    signoff_path: Path,
     ledger_path: Path,
     *,
     run_id: str,
-    approver: str,
-    purpose: str,
     predictions_dir: Path,
+    report_path: Path,
+    deviation_path: Path | None = None,
     predict_fn: Callable[[str, ManifestRecord], JudgeObservation] | None = None,
     image_loader: Callable[[str], str] | None = None,
 ) -> dict:
-    reserve_test_read(
-        ledger_path, lock_path, freeze_dir,
-        run_id=run_id, approver=approver, purpose=purpose,
-    )
-    record_test_result(ledger_path, run_id=run_id, status="running")
-
     lock_dict = json.loads(Path(lock_path).read_text(encoding="utf-8"))
     lock = EvaluationLock.model_validate(lock_dict)
+    expected_test_sha = lock.manifest_hashes.get("manifest.test.jsonl")
+    if expected_test_sha is None:
+        raise ManifestError("evaluation lock is missing manifest.test.jsonl hash")
+    reserve_test_read(
+        ledger_path, lock_path, signoff_path,
+        run_id=run_id, test_manifest_sha256=expected_test_sha, deviation_path=deviation_path,
+    )
 
     freeze_dir = Path(freeze_dir)
-    test_records = list(read_manifest(freeze_dir / "manifest.test.jsonl"))
-
-    test_sha = hashlib.sha256((freeze_dir / "manifest.test.jsonl").read_bytes()).hexdigest()
-    if lock.manifest_hashes.get("manifest.test.jsonl") != test_sha:
-        err = f"manifest.test.jsonl sha256 mismatch against evaluation lock ({test_sha} vs {lock.manifest_hashes.get('manifest.test.jsonl')})"
+    test_path = freeze_dir / "manifest.test.jsonl"
+    test_sha = hashlib.sha256(test_path.read_bytes()).hexdigest()
+    if expected_test_sha != test_sha:
+        err = f"manifest.test.jsonl sha256 mismatch against evaluation lock ({test_sha} vs {expected_test_sha})"
         record_test_result(ledger_path, run_id=run_id, status="failed", error=err)
         raise ManifestError(err)
+    test_records = list(read_manifest(test_path))
 
     predictions_dir = Path(predictions_dir)
     predictions_dir.mkdir(parents=True, exist_ok=True)
@@ -652,10 +796,10 @@ def run_heldout(
                     adapter_id=ckpt_info["path"], checkpoint_id=ckpt_info["checkpoint_id"],
                 )
             else:
-                judge_callable = finetuned_judge(image_loader or (lambda p: p), model=ckpt_info["checkpoint_id"])
+                judge_callable = finetuned_judge(image_loader or (lambda p: p), model=ckpt_info["model_id"])
                 rows = capture_predictions(
                     test_records, judge_id,
-                    lambda r: JudgeObservation(prediction=judge_callable(r), confidence=None, score=None, latency_ms=0),
+                    judge_callable,
                     model_id=BASE_MODEL, prompt_version=lock.prompt_version,
                     adapter_id=ckpt_info["path"], checkpoint_id=ckpt_info["checkpoint_id"],
                 )
@@ -673,7 +817,7 @@ def run_heldout(
             judge_callable = zero_shot_base_judge(image_loader or (lambda p: p), model=BASE_MODEL)
             rows = capture_predictions(
                 test_records, "zero_shot_base",
-                lambda r: JudgeObservation(prediction=judge_callable(r), confidence=None, score=None, latency_ms=0),
+                judge_callable,
                 model_id=BASE_MODEL, prompt_version=lock.prompt_version,
             )
         write_predictions(pred_file, rows)
@@ -690,7 +834,7 @@ def run_heldout(
             judge_callable = prompted_gemma_judge(image_loader or (lambda p: p))
             rows = capture_predictions(
                 test_records, "prompted_gemma",
-                lambda r: JudgeObservation(prediction=judge_callable(r), confidence=None, score=None, latency_ms=0),
+                judge_callable,
                 model_id=lock.vlm_judge_model, prompt_version=lock.prompt_version,
             )
         write_predictions(pred_file, rows)
@@ -711,7 +855,7 @@ def run_heldout(
                     judge_callable = embedding_control(ctrl_name, ctrl_threshold, image_loader or (lambda p: p))
                     rows = capture_predictions(
                         test_records, ctrl_name,
-                        lambda r: JudgeObservation(prediction=judge_callable(r), confidence=None, score=None, latency_ms=0),
+                        judge_callable,
                         model_id=ctrl_name, prompt_version=lock.prompt_version,
                         threshold_id=str(ctrl_threshold),
                     )
@@ -719,8 +863,15 @@ def run_heldout(
                 written_files.append(pred_file.name)
                 results[ctrl_name] = rows
 
-        record_test_result(ledger_path, run_id=run_id, status="completed", predictions_written=written_files)
-        return {"run_id": run_id, "predictions": results, "written": written_files}
+        report = build_report(
+            freeze_dir, lock_path, predictions_dir, report_path, test_records=test_records,
+        )
+        report_sha = hashlib.sha256(Path(report_path).read_bytes()).hexdigest()
+        rung = report["deployment_decision"]["rung"]
+        record_test_result(
+            ledger_path, run_id=run_id, status="completed", report_sha256=report_sha, rung=rung,
+        )
+        return {"run_id": run_id, "predictions": results, "written": written_files, "report": report}
     except Exception as exc:
         record_test_result(ledger_path, run_id=run_id, status="failed", error=str(exc))
         raise
@@ -731,6 +882,8 @@ def build_report(
     lock_path: Path,
     predictions_dir: Path,
     out_path: Path | None = None,
+    *,
+    test_records: Sequence[ManifestRecord] | None = None,
 ) -> dict:
     freeze_dir = Path(freeze_dir)
     lock_path = Path(lock_path)
@@ -739,7 +892,9 @@ def build_report(
     lock_dict = json.loads(lock_path.read_text(encoding="utf-8"))
     lock = EvaluationLock.model_validate(lock_dict)
 
-    test_records = list(read_manifest(freeze_dir / "manifest.test.jsonl"))
+    if test_records is None:
+        raise ManifestError("held-out records must come from the guarded runner")
+    test_records = list(test_records)
     test_labels = [r.label for r in test_records]
     test_char_ids = [r.char_id for r in test_records]
 
@@ -827,9 +982,16 @@ def build_report(
     human_agreement = {}
     if agreement_file.exists():
         agr_lines = [json.loads(line) for line in agreement_file.read_text(encoding="utf-8").splitlines() if line.strip()]
-        a1_labels = [row["annotator1_different_character"] for row in agr_lines if "annotator1_different_character" in row]
-        a2_labels = [row["annotator2_different_character"] for row in agr_lines if "annotator2_different_character" in row]
-        if a1_labels and a2_labels and len(a1_labels) == len(a2_labels):
+        if agr_lines:
+            if any(
+                not isinstance(row.get("labels"), list)
+                or len(row["labels"]) != 2
+                or any(not isinstance(label, bool) for label in row["labels"])
+                for row in agr_lines
+            ):
+                raise ManifestError("annotation agreement rows require exactly two boolean labels")
+            a1_labels = [not row["labels"][0] for row in agr_lines]
+            a2_labels = [not row["labels"][1] for row in agr_lines]
             human_agreement = {
                 "n": len(a1_labels),
                 "cohen_kappa": cohen_kappa(a1_labels, a2_labels),
@@ -839,15 +1001,14 @@ def build_report(
     # Pre-registered Claim Ladder (§7.2 & §7.5)
     incumbent_f1 = baselines_report["prompted_gemma"]["f1"]
     incumbent_recall = baselines_report["prompted_gemma"]["recall"]
-    base_f1 = baselines_report["zero_shot_base"]["f1"]
     candidate_f1 = baselines_report[dep_key]["f1"]
     candidate_recall = baselines_report[dep_key]["recall"]
     delta_incumbent = candidate_f1 - incumbent_f1
 
     base_delta_lo, base_delta_hi = baselines_report["zero_shot_base"]["delta_f1_ci95_vs_deployment_seed"]
-    beats_base = base_delta_lo > 0 or candidate_f1 > base_f1
+    beats_base = base_delta_lo > 0
 
-    if beats_base and delta_incumbent > 0:
+    if beats_base and delta_incumbent > 0 and candidate_recall >= incumbent_recall:
         rung = "A"
         status = "pass"
     elif beats_base and delta_incumbent >= -0.03 and candidate_recall >= incumbent_recall:
@@ -907,56 +1068,41 @@ def cli() -> None:
     inv_p.add_argument("--runs", required=True, type=Path)
     inv_p.add_argument("--out", required=True, type=Path)
 
+    capture_p = subparsers.add_parser("capture-validation")
+    capture_p.add_argument("--freeze", required=True, type=Path)
+    capture_p.add_argument("--candidates", required=True, type=Path)
+    capture_p.add_argument("--predictions", required=True, type=Path)
+
     val_p = subparsers.add_parser("validate")
     val_p.add_argument("--freeze", required=True, type=Path)
     val_p.add_argument("--candidates", required=True, type=Path)
     val_p.add_argument("--predictions", required=True, type=Path)
     val_p.add_argument("--out", required=True, type=Path)
 
-    res_p = subparsers.add_parser("reserve-test")
-    res_p.add_argument("--ledger", required=True, type=Path)
-    res_p.add_argument("--lock", required=True, type=Path)
-    res_p.add_argument("--freeze", required=True, type=Path)
-    res_p.add_argument("--run-id", required=True, type=str)
-    res_p.add_argument("--approver", required=True, type=str)
-    res_p.add_argument("--purpose", required=True, type=str)
-
-    run_p = subparsers.add_parser("run-heldout")
+    run_p = subparsers.add_parser("heldout")
     run_p.add_argument("--freeze", required=True, type=Path)
     run_p.add_argument("--lock", required=True, type=Path)
+    run_p.add_argument("--signoff", required=True, type=Path)
     run_p.add_argument("--ledger", required=True, type=Path)
     run_p.add_argument("--run-id", required=True, type=str)
-    run_p.add_argument("--approver", required=True, type=str)
-    run_p.add_argument("--purpose", required=True, type=str)
     run_p.add_argument("--predictions", required=True, type=Path)
-
-    agg_p = subparsers.add_parser("aggregate")
-    agg_p.add_argument("--freeze", required=True, type=Path)
-    agg_p.add_argument("--lock", required=True, type=Path)
-    agg_p.add_argument("--predictions", required=True, type=Path)
-    agg_p.add_argument("--out", required=True, type=Path)
+    run_p.add_argument("--out", required=True, type=Path)
+    run_p.add_argument("--deviation", type=Path)
 
     args = parser.parse_args()
     if args.command == "validation-inventory":
         inventory_checkpoints(args.runs, args.out)
+    elif args.command == "capture-validation":
+        capture_validation(args.freeze, args.candidates, args.predictions)
     elif args.command == "validate":
         validate_offline(args.freeze, args.candidates, args.predictions, args.out)
-    elif args.command == "reserve-test":
-        reserve_test_read(
-            args.ledger, args.lock, args.freeze,
-            run_id=args.run_id, approver=args.approver, purpose=args.purpose,
-        )
-    elif args.command == "run-heldout":
+    elif args.command == "heldout":
         run_heldout(
-            freeze_dir=args.freeze, lock_path=args.lock, ledger_path=args.ledger,
-            run_id=args.run_id, approver=args.approver, purpose=args.purpose,
-            predictions_dir=args.predictions,
+            freeze_dir=args.freeze, lock_path=args.lock, signoff_path=args.signoff,
+            ledger_path=args.ledger, run_id=args.run_id, predictions_dir=args.predictions,
+            report_path=args.out, deviation_path=args.deviation,
         )
-    elif args.command == "aggregate":
-        build_report(args.freeze, args.lock, args.predictions, args.out)
 
 
 if __name__ == "__main__":
     cli()
-
-

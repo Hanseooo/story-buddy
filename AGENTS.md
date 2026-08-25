@@ -687,9 +687,8 @@ is not documentation of a good design; it is the blast radius, written down so t
   **That adds two checkboxes and two columns the `annotations` table does not have**, and §4 makes this the
   last free moment to add them. Pre-registration: `docs/product/PREREGISTRATION_OBJ4.md` (2026-08-14).
   ⚠️ **Nothing has been run.** No fal draw, no training run, no `llamafactory-cli` invocation;
-  `train_qlora.yaml` ships `model_revision: PIN_THE_EXACT_COMMIT_HASH` as a deliberate tripwire, so CC-7 is
-  unmet until a human fills it. `evaluate.py` omits McNemar's exact test (needs scipy) — the char-clustered
-  bootstrap CI is implemented. Deterministic evidence only.
+  `train_qlora.yaml` pins `model_revision: cc594898137f460bfe9f0759e9844b3ce807cfb5` (satisfying CC-7).
+  `evaluate.py` includes McNemar's exact test and the char-clustered bootstrap CI. Deterministic evidence only.
   **`annotation-surface`'s TABLE is built (2026-08-14) — neither route is.** `0014_annotations.sql` ships the
   `annotations` table `build_dataset.py` already reads, with the closed-taxonomy CHECK, the two GATING columns
   `anatomy_intact`/`text_free` (`judge-finetune.md` §5.2 amendment — the last free moment to add them per §4),
