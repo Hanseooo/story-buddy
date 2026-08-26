@@ -170,6 +170,17 @@ rejected. A restart identity persisted before its first checkpoint and before an
 that same identity again; it must not mint another identity or become terminally quarantined merely because the
 first checkpoint is absent.
 
+An `invalid_terminal` quarantine is deliberately not resumable or restartable: it means a human must review the
+story before it runs again. When that verdict was produced by a defect since fixed rather than by the story's
+data, `--readmit-quarantined <story_id>` with a mandatory `--readmit-reason "<why>"` re-adjudicates it. Readmission
+requires `reason_code == "invalid_terminal"`, a matching intake digest and a non-empty reason. It mints a fresh
+`<story_id>--readmit-<uuid4hex>` execution, records the superseded thread as `abandoned_execution_id`, carries the
+prior attempted count into `restart_attempted_baseline` so already-charged calls keep counting against the
+campaign ceiling, and stamps `readmitted_at` with the operator's reason into the immutable bundle metadata.
+It never resets telemetry, edits the prior verdict, or applies to another quarantine reason. Readmission is the
+only supported way to clear an `invalid_terminal` state: hand-editing `build_state.json` would erase the record of
+calls that were really paid for.
+
 ### 4.4 Queue materialization
 
 One idempotent command reads completed memories, uploads the exact corpus files to private Supabase Storage

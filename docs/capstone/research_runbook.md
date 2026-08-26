@@ -57,6 +57,11 @@ uv run python -m finetune.build_corpus --fixture --limit 1 --out <temporary-fixt
 # a roster mismatch found at packaging instead costs that story's entire image spend.
 uv run python -m finetune.build_corpus --check-rosters --corpus finetune/corpus_synthetic.json --limit 3
 
+# 1b. Re-adjudicate an invalid_terminal quarantine whose cause was a defect that is now fixed.
+# Not resumable or restartable by design; readmission is the only supported path, and it preserves
+# the telemetry, the abandoned thread and the stated reason in the bundle metadata.
+uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --limit 1 --max-usd <cap> --max-calls-per-story 25 --price-per-megapixel <current-usd-per-megapixel> --price-basis "<official-price-url-and-date>" --readmit-quarantined <story_id> --readmit-reason "<why the prior verdict no longer applies>"
+
 # 2. Fresh paid synthetic smoke (3 stories, 25 calls/story; USD 2.63 at USD 0.035/call)
 uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --limit 3 --max-usd 2.63 --max-calls-per-story 25 --price-per-megapixel <current-usd-per-megapixel> --price-basis "<official-price-url-and-date>"
 

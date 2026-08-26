@@ -1741,3 +1741,68 @@ def test_check_rosters_reports_a_lost_declared_character_without_any_image_call(
     assert summary["checked"] == 1
     assert [f["story_id"] for f in summary["failures"]] == ["fixture-story"]
     assert "declared roster does not reconcile" in summary["failures"][0]["error"]
+
+
+def test_readmit_clears_an_invalid_terminal_quarantine_into_a_fresh_isolated_execution(tmp_path):
+    """An invalid_terminal verdict rendered by a defect that has since been fixed must be
+    re-adjudicable without erasing the record of calls that were really paid for."""
+    story = intake_story(declared_characters=["c0"], declared_non_human=[])
+    entry = isolated_quarantine(story, reason_code="invalid_terminal")
+    (tmp_path / "build_state.json").write_text(json.dumps({story.story_id: entry}), encoding="utf-8")
+    graph = FakeGraph(per_story_images=2)
+
+    build_corpus.build(
+        [story],
+        graph,
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("30.00"), max_calls_per_story=20),
+        readmit_quarantined=story.story_id,
+        readmit_reason="cause fixed in 4f5fe44",
+    )
+    # the readmission is recorded in the immutable bundle, not left only in mutable build state
+    metadata = load_completed_bundles(tmp_path)[0].run_metadata
+
+    assert metadata["readmit_reason"] == "cause fixed in 4f5fe44"
+    assert "readmitted_at" in metadata
+    # the paid-call record survives the readmission rather than being reset
+    assert metadata["attempted_calls"] == 34 + graph.consumed
+    assert metadata["restart_attempted_baseline"] == 34
+    assert metadata["abandoned_execution_id"] == entry["execution_id"]
+    assert metadata["execution_id"].startswith(f"{story.story_id}--readmit-")
+
+
+def test_readmit_refuses_a_quarantine_that_is_not_invalid_terminal(tmp_path):
+    story = intake_story(declared_characters=["c0"], declared_non_human=[])
+    (tmp_path / "build_state.json").write_text(
+        json.dumps({story.story_id: isolated_quarantine(story)}), encoding="utf-8"
+    )
+
+    with pytest.raises(CorpusError, match="readmission requires invalid_terminal"):
+        build_corpus.build(
+            [story],
+            FakeGraph(per_story_images=2),
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+            policy=build_corpus.SpendPolicy(max_usd=Decimal("30.00"), max_calls_per_story=20),
+            readmit_quarantined=story.story_id,
+            readmit_reason="not applicable",
+        )
+
+
+def test_readmit_refuses_when_the_intake_digest_differs(tmp_path):
+    story = intake_story(declared_characters=["c0"], declared_non_human=[])
+    entry = isolated_quarantine(story, reason_code="invalid_terminal")
+    entry["intake_sha256"] = "0" * 64
+    (tmp_path / "build_state.json").write_text(json.dumps({story.story_id: entry}), encoding="utf-8")
+
+    with pytest.raises(CorpusError, match="intake digest differs"):
+        build_corpus.build(
+            [story],
+            FakeGraph(per_story_images=2),
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+            policy=build_corpus.SpendPolicy(max_usd=Decimal("30.00"), max_calls_per_story=20),
+            readmit_quarantined=story.story_id,
+            readmit_reason="cause fixed",
+        )

@@ -73,6 +73,8 @@ RESTART_METADATA_KEYS = (
     "restarted_at",
     "initial_max_calls_per_story",
     "cap_extended_at",
+    "readmitted_at",
+    "readmit_reason",
 )
 
 
@@ -488,24 +490,41 @@ def _restart_attempted_baseline(state_entry: dict | None, telemetry: Counter) ->
     return baseline
 
 
+# Both kinds of isolated execution and the timestamp each one must carry.
+EXECUTION_MARKERS = {"restart": "restarted_at", "readmit": "readmitted_at"}
+
+
 def _execution_id(story: IntakeRecord, state_entry: dict | None) -> str:
     if not isinstance(state_entry, dict) or "execution_id" not in state_entry:
         return story.story_id
     execution_id = state_entry["execution_id"]
-    prefix = f"{story.story_id}--restart-"
+    abandoned = state_entry.get("abandoned_execution_id")
+    marker = next(
+        (
+            name
+            for name in EXECUTION_MARKERS
+            if isinstance(execution_id, str)
+            and execution_id.startswith(f"{story.story_id}--{name}-")
+        ),
+        None,
+    )
     if (
-        not isinstance(execution_id, str)
+        marker is None
         or pathlib.Path(execution_id).name != execution_id
-        or not execution_id.startswith(prefix)
-        or state_entry.get("abandoned_execution_id") != story.story_id
+        # A readmission re-isolates an execution that was already isolated, so the thread it
+        # abandons may be a prior restart identity rather than the bare story id.
+        or not isinstance(abandoned, str)
+        or pathlib.Path(abandoned).name != abandoned
+        or not (abandoned == story.story_id or abandoned.startswith(f"{story.story_id}--"))
     ):
         raise CorpusError(f"invalid persisted execution identity: {story.story_id}")
+    prefix = f"{story.story_id}--{marker}-"
     try:
         if UUID(execution_id.removeprefix(prefix)).hex != execution_id.removeprefix(prefix):
-            raise ValueError("restart identity must use canonical UUID hex")
-        restarted_at = datetime.fromisoformat(state_entry["restarted_at"])
-        if restarted_at.utcoffset() is None:
-            raise ValueError("restart timestamp must include an offset")
+            raise ValueError("isolated identity must use canonical UUID hex")
+        stamped_at = datetime.fromisoformat(state_entry[EXECUTION_MARKERS[marker]])
+        if stamped_at.utcoffset() is None:
+            raise ValueError("isolation timestamp must include an offset")
     except (KeyError, TypeError, ValueError) as error:
         raise CorpusError(f"invalid persisted execution identity: {story.story_id}") from error
     return execution_id
@@ -623,6 +642,8 @@ def build(
     acknowledge_uncertain_billing: str | None = None,
     restart_quarantined: str | None = None,
     extend_story_call_cap: str | None = None,
+    readmit_quarantined: str | None = None,
+    readmit_reason: str | None = None,
 ) -> dict:
     """Run only incomplete stories; a completed run is the immutable bundle, never a count."""
     records = [_record(story) for story in stories]
@@ -699,7 +720,33 @@ def build(
             if "quarantined" in state_entry:
                 if fixture:
                     raise CorpusError(f"{state_entry['quarantined']} for {story_id}")
-                if restart_quarantined == story_id:
+                if readmit_quarantined == story_id:
+                    # An invalid_terminal verdict means a human must look before this runs again.
+                    # When the cause was a defect that has since been fixed, the reviewed verdict
+                    # still has to be recorded rather than erased: the telemetry, the abandoned
+                    # execution and the operator's stated reason all survive into the new entry,
+                    # so a readmission is auditable instead of being a hole in the ledger.
+                    if state_entry.get("reason_code") != "invalid_terminal":
+                        raise CorpusError(f"readmission requires invalid_terminal: {story_id}")
+                    if not (readmit_reason or "").strip():
+                        raise CorpusError(f"readmission requires a recorded reason: {story_id}")
+                    if state_entry.get("intake_sha256") != intake_sha256(story):
+                        raise CorpusError(f"intake digest differs for quarantined story: {story_id}")
+                    prior_telemetry = _persisted_telemetry(state_entry, policy, story_id)
+                    state_entry = {
+                        "in_progress": True,
+                        "intake_sha256": intake_sha256(story),
+                        **_budget_basis(policy),
+                        "telemetry": dict(prior_telemetry),
+                        "execution_id": f"{story_id}--readmit-{uuid4().hex}",
+                        "abandoned_execution_id": state_entry.get("execution_id", story_id),
+                        "restart_attempted_baseline": prior_telemetry["attempted"],
+                        "readmitted_at": datetime.now(timezone.utc).isoformat(),
+                        "readmit_reason": readmit_reason.strip(),
+                    }
+                    state[story_id] = state_entry
+                    _write_state(state_path, state)
+                elif restart_quarantined == story_id:
                     reason = state_entry.get("reason_code")
                     if reason not in RECOVERABLE_REASONS:
                         raise CorpusError(f"{state_entry['quarantined']} for {story_id}")
@@ -984,6 +1031,11 @@ def main(argv: list[str] | None = None) -> int:
     recovery = parser.add_mutually_exclusive_group()
     recovery.add_argument("--resume-quarantined", metavar="STORY_ID")
     recovery.add_argument("--restart-quarantined", metavar="STORY_ID")
+    recovery.add_argument("--readmit-quarantined", metavar="STORY_ID")
+    parser.add_argument(
+        "--readmit-reason",
+        help="why an invalid_terminal quarantine is being re-adjudicated; recorded in the bundle",
+    )
     parser.add_argument("--acknowledge-uncertain-billing", metavar="STORY_ID")
     parser.add_argument("--max-calls-per-story", type=int)
     parser.add_argument("--extend-story-call-cap", metavar="STORY_ID")
@@ -1006,6 +1058,7 @@ def main(argv: list[str] | None = None) -> int:
         or args.acknowledge_uncertain_billing is not None
         or args.max_calls_per_story is not None
         or args.extend_story_call_cap is not None
+        or args.readmit_quarantined is not None
     ):
         parser.error("--fixture cannot be combined with quarantine recovery options")
     if (
@@ -1019,6 +1072,10 @@ def main(argv: list[str] | None = None) -> int:
         and args.extend_story_call_cap != args.resume_quarantined
     ):
         parser.error("--extend-story-call-cap requires matching --resume-quarantined")
+    if args.readmit_quarantined is not None and not (args.readmit_reason or "").strip():
+        parser.error("--readmit-quarantined requires --readmit-reason")
+    if args.readmit_reason is not None and args.readmit_quarantined is None:
+        parser.error("--readmit-reason requires --readmit-quarantined")
     stories = load_intake(args.corpus)[: args.limit]
     try:
         if args.fixture:
@@ -1048,6 +1105,8 @@ def main(argv: list[str] | None = None) -> int:
                     acknowledge_uncertain_billing=args.acknowledge_uncertain_billing,
                     restart_quarantined=args.restart_quarantined,
                     extend_story_call_cap=args.extend_story_call_cap,
+                    readmit_quarantined=args.readmit_quarantined,
+                    readmit_reason=args.readmit_reason,
                 )
     except CorpusError as error:
         print(str(error), file=sys.stderr)
