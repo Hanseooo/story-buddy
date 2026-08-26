@@ -91,19 +91,35 @@ def write_bundle(root: Path, bundle: RunBundle) -> Path:
     return bundle_dir
 
 
+# `char_bible` mints canonical references for `state.characters[:2]` only. A declared character
+# ranked below that is drawn in scenes with no anchor, so the corpus would measure consistency
+# against a reference that was never produced.
+REFERENCED_CHARACTERS = 2
+
+
 def reconcile_declared_roster(
     declared_characters: list[str], declared_non_human: list[str], memory: StoryMemory
 ) -> None:
-    declared = Counter(name.casefold() for name in declared_characters)
-    declared_non_human_counts = Counter(name.casefold() for name in declared_non_human)
-    final = Counter(character.name.casefold() for character in memory.characters)
-    final_non_human = Counter(
-        character.name.casefold()
-        for character in memory.characters
-        if not character.description.is_humanoid
-    )
-    if declared != final or declared_non_human_counts != final_non_human:
+    """Every declared character must reach the reference slice, classified as declared.
+
+    Deliberately not roster equality. Whether a bit player has agency ("the goat", "the family",
+    "the other cranes") is a judgement the author and the model can read differently, and a probe
+    of all 30 synthetic stories disagreed both ways often enough that equality quarantined 22 of
+    them. Losing, renaming or reclassifying a character the author declared is a pipeline defect;
+    finding one more minor actor is not.
+    """
+    referenced = memory.characters[:REFERENCED_CHARACTERS]
+    names = Counter(character.name.casefold() for character in referenced)
+    if any(count > 1 for count in names.values()):
         raise CorpusError(f"declared roster does not reconcile for {memory.story_id}")
+    humanoid = {
+        character.name.casefold(): character.description.is_humanoid for character in referenced
+    }
+    non_human = {name.casefold() for name in declared_non_human}
+    for name in declared_characters:
+        key = name.casefold()
+        if key not in humanoid or humanoid[key] == (key in non_human):
+            raise CorpusError(f"declared roster does not reconcile for {memory.story_id}")
 
 
 def load_completed_bundles(root: Path) -> list[RunBundle]:

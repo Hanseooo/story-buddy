@@ -78,8 +78,14 @@ timestamp. Synthetic records must not fabricate those donated-only fields. `decl
 subset of `declared_characters`; names are fictional roster labels from the already-redacted story, not donor
 identities. The declared roster is reconciled case-insensitively with `StoryMemory.characters` as soon as `analyze`
 produces them — before the first reference draw, since the roster is knowable from the extraction call and
-checking it at packaging instead charges a whole story's images to learn what one text call already said. A missing, unexpected or differently classified character quarantines the story
-for manual review before pair materialization; it is never silently rewritten after seeing judge output.
+checking it at packaging instead charges a whole story's images to learn what one text call already said.
+Every declared character must appear in the reference slice `characters[:2]`, classified as declared: a declared
+character that is missing, renamed, differently classified, or ranked below the slice (and so never given a
+canonical reference) quarantines the story for manual review before pair materialization. An *additional*
+extracted character does not, because whether a bit player has agency is a judgement the author and the model
+can legitimately read differently; a probe of all 30 synthetic stories disagreed in both directions often enough
+that roster equality quarantined 22 of them. The declaration is never silently rewritten to match extraction —
+neither after seeing judge output, nor to make this check pass.
 
 ### 4.2 Style allocation and control
 

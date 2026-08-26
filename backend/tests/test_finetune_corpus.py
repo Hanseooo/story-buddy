@@ -24,7 +24,13 @@ from app.config import IMAGE_BUDGET, MAX_STORY_WORDS, MIN_STORY_WORDS, STYLE_PRE
 from app.length import clamp_story, word_count
 from contracts.story_memory import Character, Cost, Location, Scene, StoryObject, TimelineEvent
 from finetune import build_corpus
-from finetune.corpus_io import CorpusError, IntakeRecord, intake_sha256, load_completed_bundles
+from finetune.corpus_io import (
+    CorpusError,
+    IntakeRecord,
+    intake_sha256,
+    load_completed_bundles,
+    reconcile_declared_roster,
+)
 
 
 # --------------------------------------------------------------------------- corpus data
@@ -1637,3 +1643,44 @@ def test_run_story_quarantines_a_roster_mismatch_before_the_next_image():
         build_corpus.run_story(graph, story)
 
     assert graph.consumed == 1
+
+
+def _memory_with(names_and_humanoid):
+    return build_corpus.StoryMemory.model_validate(
+        build_corpus._initial_state(intake_story()).model_copy(
+            update={
+                "characters": [
+                    Character(
+                        char_id=f"c{i}",
+                        name=name,
+                        description={"is_humanoid": humanoid},
+                    )
+                    for i, (name, humanoid) in enumerate(names_and_humanoid)
+                ]
+            }
+        ).model_dump()
+    )
+
+
+def test_reconcile_tolerates_a_secondary_actor_the_declaration_did_not_list():
+    """Whether a bit player has agency is a judgement the author and the model can legitimately
+    read differently (`the goat`, `the family`). Equality made every such disagreement quarantine
+    the story; only losing a declared character is a pipeline defect."""
+    reconcile_declared_roster(["Moss"], ["Moss"], _memory_with([("Moss", False), ("the heron", False)]))
+
+
+def test_reconcile_rejects_a_declared_character_pushed_out_of_the_reference_slice():
+    """`char_bible` mints references for `characters[:2]` only, so a declared character ranked
+    third silently loses its canonical reference — the corpus would measure consistency against
+    an anchor that was never drawn."""
+    with pytest.raises(CorpusError, match="declared roster"):
+        reconcile_declared_roster(
+            ["Moss"],
+            ["Moss"],
+            _memory_with([("the heron", False), ("the crow", False), ("Moss", False)]),
+        )
+
+
+def test_reconcile_still_rejects_a_differently_classified_declared_character():
+    with pytest.raises(CorpusError, match="declared roster"):
+        reconcile_declared_roster(["Moss"], [], _memory_with([("Moss", False)]))
