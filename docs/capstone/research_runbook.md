@@ -51,8 +51,18 @@ pass the source plus lookup date as `<official-price-url-and-date>`.
 # 1. Zero-cost verification on temporary fixture directory
 uv run python -m finetune.build_corpus --fixture --limit 1 --out <temporary-fixture-directory>
 
-# 2. Paid synthetic smoke run (3 stories, conservative budget cap)
-uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --limit 3 --max-usd 1.50 --price-per-megapixel <current-usd-per-megapixel> --price-basis "<official-price-url-and-date>"
+# 2. Fresh paid synthetic smoke (3 stories, 20 calls/story; USD 2.10 at USD 0.035/call)
+uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --limit 3 --max-usd 2.10 --max-calls-per-story 20 --price-per-megapixel <current-usd-per-megapixel> --price-basis "<official-price-url-and-date>"
+
+# 2a. Current syn-001 isolated recovery only (14 prior calls + up to 60 fresh smoke calls;
+# USD 2.59 total campaign authorization at USD 0.035/call). Do not use after this incident closes.
+uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --limit 3 --max-usd 2.59 --max-calls-per-story 20 --price-per-megapixel 0.035 --price-basis "https://fal.ai/models/fal-ai/qwen-image + https://fal.ai/models/fal-ai/qwen-image-edit-2511 (verified 2026-08-26)" --restart-quarantined syn-001
+
+# 2b. If that isolated execution later stops for budget or resume exhaustion, retain the identical cap and basis.
+uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --limit 3 --max-usd 2.59 --max-calls-per-story 20 --price-per-megapixel 0.035 --price-basis "https://fal.ai/models/fal-ai/qwen-image + https://fal.ai/models/fal-ai/qwen-image-edit-2511 (verified 2026-08-26)" --resume-quarantined syn-001
+
+# 2c. If the stop is billing-uncertain, acknowledge that exact story while retaining the same cap and basis.
+uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --limit 3 --max-usd 2.59 --max-calls-per-story 20 --price-per-megapixel 0.035 --price-basis "https://fal.ai/models/fal-ai/qwen-image + https://fal.ai/models/fal-ai/qwen-image-edit-2511 (verified 2026-08-26)" --resume-quarantined syn-001 --acknowledge-uncertain-billing syn-001
 
 # 3. Full synthetic generation (24 train + 6 val stories)
 uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --max-usd 25 --price-per-megapixel <same-current-usd-per-megapixel> --price-basis "<same-official-price-url-and-date>"

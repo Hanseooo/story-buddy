@@ -145,6 +145,19 @@ An ordinary validated checkpoint continues with `None` input so its checkpointed
 only a fresh corpus thread receives its initial state. Recovery reserves only the story draw allowance remaining
 after persisted attempted calls, while those completed, failed and uncertain calls remain conservatively charged.
 
+When a checkpoint or its deterministic Storage prefix is known to be contaminated, the operator uses
+`--restart-quarantined <story_id>` with an explicit `--max-calls-per-story`. The runner retains the abandoned
+checkpoint and assets, records their logical execution identity and cumulative telemetry, and mints one persisted
+UUID-suffixed execution identity for both the replacement LangGraph thread and its Storage prefix. It does not
+delete or reuse the abandoned state. The replacement execution receives its own call allowance; abandoned calls
+remain fully charged against the campaign USD ceiling. On completion, only `StoryMemory.story_id` is restored to
+the frozen logical intake ID; exact asset paths retain the isolated execution prefix. A replacement that later
+stops must use ordinary `--resume-quarantined`, which resolves the persisted execution identity. A second isolated
+restart is rejected.
+The replacement's explicit call cap is persisted and must match every later resume command. A restart identity
+persisted before its first checkpoint and before any new attempted call may initialize that same identity again;
+it must not mint another identity or become terminally quarantined merely because the first checkpoint is absent.
+
 ### 4.4 Queue materialization
 
 One idempotent command reads completed memories, uploads the exact corpus files to private Supabase Storage
@@ -267,16 +280,17 @@ annotation and training. Filename extensions are not trusted; magic bytes and de
 
 - USD 25 is the working Fal allocation; USD 30 is the absolute campaign ceiling.
 - A zero-cost fixture run must pass first.
-- A three-story synthetic smoke run is capped at USD 1.50.
+- A fresh three-story synthetic smoke grants at most 20 calls per story. At the pinned USD 0.035 conservative
+  ceiling this authorizes USD 2.10; previously charged abandoned calls require additional campaign authorization.
 - Both Fal image routes pin `image_size={"width": 1024, "height": 768}` before dispatch. The maximum is
   `1024 * 768 / 1,000,000 = 0.786432` MP; Fal rounds fractional megapixels up, so each request reserves
   `ceil(0.786432) * <operator-recorded USD/MP>`.
 - Paid runs require `--price-per-megapixel` and `--price-basis`; the latter records the official source URL
   and lookup date used at campaign start. The JSON summary and immutable run metadata record that provenance,
   the size, raw and rounded megapixels, rate, per-call ceiling, and authorization.
-- For that smoke only, the affordable call count is divided evenly across the selected stories at the derived
-  conservative per-call ceiling. Reaching a story's reduced ceiling quarantines it for reconciliation rather than
-  breaching the smoke cap; campaign runs continue to reserve the full production image budget per story.
+- `--max-calls-per-story` explicitly caps each selected story or isolated replacement execution between one call
+  and the production `IMAGE_BUDGET`. Reaching that ceiling quarantines the story for reconciliation rather than
+  breaching the smoke cap; campaign runs without the option continue to use the existing derived/full allowance.
 - Before another story can start, the builder restores completed and unfinished attempted-call
   telemetry from disk and rejects missing, invalid or price-drifted billing state. Each Fal event is
   persisted atomically so a later process cannot reset the campaign total.

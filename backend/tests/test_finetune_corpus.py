@@ -20,7 +20,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 from PIL import Image
 
-from app.config import MAX_STORY_WORDS, MIN_STORY_WORDS, STYLE_PRESETS
+from app.config import IMAGE_BUDGET, MAX_STORY_WORDS, MIN_STORY_WORDS, STYLE_PRESETS
 from app.length import clamp_story, word_count
 from contracts.story_memory import Character, Cost, Location, Scene, StoryObject, TimelineEvent
 from finetune import build_corpus
@@ -285,6 +285,19 @@ def test_campaign_hard_cap_is_unconditionally_thirty_dollars():
     assert build_corpus.SpendPolicy(max_usd=Decimal("31.00")).authorized_usd == Decimal("30.00")
 
 
+def test_explicit_story_call_cap_overrides_the_smoke_budget_boundary():
+    policy = build_corpus.SpendPolicy(
+        max_usd=Decimal("2.59"),
+        max_calls_per_story=20,
+    )
+
+    assert policy.story_draw_limit(3) == 20
+    with pytest.raises(ValueError, match="max_calls_per_story"):
+        build_corpus.SpendPolicy(max_calls_per_story=0)
+    with pytest.raises(ValueError, match="max_calls_per_story"):
+        build_corpus.SpendPolicy(max_calls_per_story=IMAGE_BUDGET + 1)
+
+
 def test_exact_story_draw_limit_still_writes_a_completed_bundle(tmp_path, stories):
     graph = FakeGraph(per_story_images=2)
     policy = build_corpus.SpendPolicy(
@@ -422,6 +435,360 @@ def test_recovery_blocks_another_provider_attempt_at_the_prior_draw_limit(tmp_pa
     assert summary["halted"] is True
     assert graph.consumed == 0
     assert saved[story.story_id]["telemetry"] == state[story.story_id]["telemetry"]
+
+
+def test_isolated_restart_preserves_prior_spend_and_uses_fresh_checkpoint_and_asset_identity(
+    tmp_path,
+):
+    story = intake_story()
+    state = {
+        story.story_id: {
+            "quarantined": "budget stopped",
+            "reason_code": "budget_stopped",
+            "intake_sha256": intake_sha256(story),
+            "conservative_call_usd": "0.035",
+            "telemetry": {"attempted": 14, "completed": 13, "failed": 0, "uncertain": 1},
+            "billing_acknowledged_at": "2026-08-25T20:10:26+00:00",
+        }
+    }
+    (tmp_path / "build_state.json").write_text(json.dumps(state), encoding="utf-8")
+
+    class IsolatedGraph:
+        def __init__(self):
+            self.thread_ids = []
+            self.input_story_ids = []
+
+        def get_state(self, config):
+            self.thread_ids.append(config["configurable"]["thread_id"])
+            return SimpleNamespace(values={})
+
+        def stream(self, graph_input, config, stream_mode=None):
+            execution_id = graph_input.story_id
+            self.input_story_ids.append(execution_id)
+            sink = build_corpus._fal_event_sink.get()
+            sink("attempted")
+            sink("completed")
+            values = graph_input.model_dump()
+            values.update(
+                cost=Cost(image_count=1),
+                characters=[
+                    Character(
+                        char_id="c0",
+                        name="Moss",
+                        description={"is_humanoid": False},
+                        canonical_ref_image=f"{execution_id}/ref-c0-1.png",
+                    )
+                ],
+            )
+            yield "values", values
+
+    graph = IsolatedGraph()
+    build_corpus.build(
+        [story],
+        graph,
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("2.59"), max_calls_per_story=20),
+        restart_quarantined=story.story_id,
+    )
+    [bundle] = load_completed_bundles(tmp_path)
+
+    execution_id = graph.input_story_ids[0]
+    assert execution_id.startswith(f"{story.story_id}--restart-")
+    assert execution_id != story.story_id
+    assert graph.thread_ids == [execution_id]
+    assert bundle.memory.story_id == story.story_id
+    assert bundle.assets[0].storage_path.startswith(f"{execution_id}/")
+    assert bundle.run_metadata["attempted_calls"] == 15
+    assert bundle.run_metadata["uncertain_calls"] == 1
+    assert bundle.run_metadata["execution_id"] == execution_id
+    assert bundle.run_metadata["abandoned_execution_id"] == story.story_id
+    assert bundle.run_metadata["restart_attempted_baseline"] == 14
+    assert bundle.run_metadata["max_calls_per_story"] == 20
+
+
+def test_isolated_restart_call_cap_counts_new_execution_calls_not_abandoned_calls(tmp_path):
+    story = intake_story()
+    state = {
+        story.story_id: {
+            "quarantined": "budget stopped",
+            "reason_code": "budget_stopped",
+            "intake_sha256": intake_sha256(story),
+            "conservative_call_usd": "0.035",
+            "telemetry": {"attempted": 14, "completed": 13, "failed": 0, "uncertain": 1},
+        }
+    }
+    (tmp_path / "build_state.json").write_text(json.dumps(state), encoding="utf-8")
+    graph = FakeGraph(per_story_images=21)
+
+    summary = build_corpus.build(
+        [story],
+        graph,
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("30.00"), max_calls_per_story=20),
+        restart_quarantined=story.story_id,
+    )
+    saved = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
+
+    assert graph.consumed == 20
+    assert summary["halted"] is True
+    assert saved[story.story_id]["telemetry"]["attempted"] == 34
+    assert saved[story.story_id]["restart_attempted_baseline"] == 14
+    assert saved[story.story_id]["reason_code"] == "budget_stopped"
+
+
+def test_isolated_restart_requires_existing_quarantine_and_explicit_call_cap(tmp_path):
+    story = intake_story()
+
+    with pytest.raises(CorpusError, match="existing quarantine"):
+        build_corpus.build(
+            [story],
+            FakeGraph(1),
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+            policy=build_corpus.SpendPolicy(max_usd=Decimal("2.59"), max_calls_per_story=20),
+            restart_quarantined=story.story_id,
+        )
+
+    state = {
+        story.story_id: {
+            "quarantined": "budget stopped",
+            "reason_code": "budget_stopped",
+            "intake_sha256": intake_sha256(story),
+            "conservative_call_usd": "0.035",
+            "telemetry": {"attempted": 14, "completed": 13, "failed": 0, "uncertain": 1},
+        }
+    }
+    (tmp_path / "build_state.json").write_text(json.dumps(state), encoding="utf-8")
+
+    with pytest.raises(CorpusError, match="explicit max_calls_per_story"):
+        build_corpus.build(
+            [story],
+            FakeGraph(1),
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+            policy=build_corpus.SpendPolicy(max_usd=Decimal("2.59")),
+            restart_quarantined=story.story_id,
+        )
+
+
+def test_resume_after_isolated_restart_reuses_its_execution_checkpoint(tmp_path):
+    story = intake_story()
+    execution_id = f"{story.story_id}--restart-{'a' * 32}"
+    state = {
+        story.story_id: {
+            "quarantined": "budget stopped",
+            "reason_code": "budget_stopped",
+            "intake_sha256": intake_sha256(story),
+            "conservative_call_usd": "0.035",
+            "max_calls_per_story": 20,
+            "telemetry": {"attempted": 15, "completed": 14, "failed": 0, "uncertain": 1},
+            "execution_id": execution_id,
+            "abandoned_execution_id": story.story_id,
+            "restart_attempted_baseline": 14,
+            "restarted_at": "2026-08-26T00:00:00+00:00",
+        }
+    }
+    (tmp_path / "build_state.json").write_text(json.dumps(state), encoding="utf-8")
+
+    class ResumedIsolatedGraph(RecoverableGraph):
+        def get_state(self, config):
+            self.checked_thread_id = config["configurable"]["thread_id"]
+            execution_story = self.story.model_copy(update={"story_id": execution_id})
+            return SimpleNamespace(values=build_corpus._initial_state(execution_story).model_dump())
+
+    graph = ResumedIsolatedGraph(story, per_story_images=1)
+    build_corpus.build(
+        [story],
+        graph,
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("2.59"), max_calls_per_story=20),
+        resume_quarantined=story.story_id,
+    )
+
+    assert graph.checked_thread_id == execution_id
+    assert graph.calls == [execution_id]
+
+
+@pytest.mark.parametrize("resumed_cap", [None, 21])
+def test_resume_after_isolated_restart_rejects_call_cap_drift(tmp_path, resumed_cap):
+    story = intake_story()
+    execution_id = f"{story.story_id}--restart-{'a' * 32}"
+    state = {
+        story.story_id: {
+            "quarantined": "budget stopped",
+            "reason_code": "budget_stopped",
+            "intake_sha256": intake_sha256(story),
+            "conservative_call_usd": "0.035",
+            "max_calls_per_story": 20,
+            "telemetry": {"attempted": 15, "completed": 14, "failed": 0, "uncertain": 1},
+            "execution_id": execution_id,
+            "abandoned_execution_id": story.story_id,
+            "restart_attempted_baseline": 14,
+            "restarted_at": "2026-08-26T00:00:00+00:00",
+        }
+    }
+    (tmp_path / "build_state.json").write_text(json.dumps(state), encoding="utf-8")
+    graph = RecoverableGraph(story, per_story_images=1)
+
+    with pytest.raises(CorpusError, match="max_calls_per_story differs"):
+        build_corpus.build(
+            [story],
+            graph,
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+            policy=build_corpus.SpendPolicy(
+                max_usd=Decimal("2.59"), max_calls_per_story=resumed_cap
+            ),
+            resume_quarantined=story.story_id,
+        )
+    assert graph.calls == []
+
+
+def test_isolated_restart_without_a_first_checkpoint_can_retry_the_same_identity(tmp_path):
+    story = intake_story()
+    state = {
+        story.story_id: {
+            "quarantined": "budget stopped",
+            "reason_code": "budget_stopped",
+            "intake_sha256": intake_sha256(story),
+            "conservative_call_usd": "0.035",
+            "telemetry": {"attempted": 14, "completed": 13, "failed": 0, "uncertain": 1},
+        }
+    }
+    (tmp_path / "build_state.json").write_text(json.dumps(state), encoding="utf-8")
+    first = build_corpus.build(
+        [story],
+        FakeGraph(1),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("0.50"), max_calls_per_story=20),
+        restart_quarantined=story.story_id,
+    )
+    restart_state = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))[
+        story.story_id
+    ]
+
+    class FreshRestartGraph:
+        def __init__(self):
+            self.thread_ids = []
+
+        def get_state(self, config):
+            self.thread_ids.append(config["configurable"]["thread_id"])
+            return SimpleNamespace(values={})
+
+        def stream(self, graph_input, config, stream_mode=None):
+            sink = build_corpus._fal_event_sink.get()
+            sink("attempted")
+            sink("completed")
+            values = graph_input.model_dump()
+            values.update(
+                cost=Cost(image_count=1),
+                characters=[
+                    Character(
+                        char_id="c0",
+                        name="Moss",
+                        description={"is_humanoid": False},
+                        canonical_ref_image=f"{graph_input.story_id}/ref-c0-1.png",
+                    )
+                ],
+            )
+            yield "values", values
+
+    graph = FreshRestartGraph()
+    second = build_corpus.build(
+        [story],
+        graph,
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("2.59"), max_calls_per_story=20),
+    )
+
+    assert first["halted"] is True
+    assert second["stories_run"] == 1
+    assert graph.thread_ids == [restart_state["execution_id"], restart_state["execution_id"]]
+
+
+def test_prior_uncertain_call_does_not_reclassify_a_later_known_failure(tmp_path):
+    story = intake_story()
+    execution_id = f"{story.story_id}--restart-{'a' * 32}"
+    state = {
+        story.story_id: {
+            "in_progress": True,
+            "intake_sha256": intake_sha256(story),
+            "conservative_call_usd": "0.035",
+            "max_calls_per_story": 20,
+            "telemetry": {"attempted": 15, "completed": 14, "failed": 0, "uncertain": 1},
+            "execution_id": execution_id,
+            "abandoned_execution_id": story.story_id,
+            "restart_attempted_baseline": 14,
+            "restarted_at": "2026-08-26T00:00:00+00:00",
+        }
+    }
+    (tmp_path / "build_state.json").write_text(json.dumps(state), encoding="utf-8")
+
+    class KnownFailureGraph:
+        def get_state(self, config):
+            execution_story = story.model_copy(update={"story_id": execution_id})
+            return SimpleNamespace(values=build_corpus._initial_state(execution_story).model_dump())
+
+        def stream(self, graph_input, config, stream_mode=None):
+            raise RuntimeError("known local failure")
+            yield
+
+    with pytest.raises(RuntimeError, match="known local failure"):
+        build_corpus.build(
+            [story],
+            KnownFailureGraph(),
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+            policy=build_corpus.SpendPolicy(max_usd=Decimal("2.59"), max_calls_per_story=20),
+        )
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"execution_id": "../shared-prefix"},
+        {"execution_id": "fixture-story--restart-fixed"},
+        {"abandoned_execution_id": "another-story"},
+        {"restarted_at": "not-a-timestamp"},
+        {"restarted_at": "2026-08-26T00:00:00"},
+    ],
+)
+def test_resume_rejects_an_unsafe_persisted_execution_identity(tmp_path, changes):
+    story = intake_story()
+    execution_id = f"{story.story_id}--restart-{'a' * 32}"
+    state = {
+        story.story_id: {
+            "quarantined": "budget stopped",
+            "reason_code": "budget_stopped",
+            "intake_sha256": intake_sha256(story),
+            "conservative_call_usd": "0.035",
+            "max_calls_per_story": 20,
+            "telemetry": {"attempted": 15, "completed": 14, "failed": 0, "uncertain": 1},
+            "execution_id": execution_id,
+            "abandoned_execution_id": story.story_id,
+            "restart_attempted_baseline": 14,
+            "restarted_at": "2026-08-26T00:00:00+00:00",
+        }
+    }
+    state[story.story_id].update(changes)
+    (tmp_path / "build_state.json").write_text(json.dumps(state), encoding="utf-8")
+    graph = RecoverableGraph(story, per_story_images=1)
+
+    with pytest.raises(CorpusError, match="invalid persisted execution identity"):
+        build_corpus.build(
+            [story],
+            graph,
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+            policy=build_corpus.SpendPolicy(max_usd=Decimal("2.59"), max_calls_per_story=20),
+            resume_quarantined=story.story_id,
+        )
+    assert graph.calls == []
 
 
 def test_resume_exhaustion_is_quarantined_without_a_bundle(tmp_path, stories):
@@ -1060,6 +1427,29 @@ def test_build_quarantines_a_completion_with_extra_non_human_occurrences(tmp_pat
         ["--fixture", "--price-per-megapixel", "0.03"],
         ["--fixture", "--price-basis", "official price checked today"],
         ["--fixture", "--resume-quarantined", "fixture-story"],
+        ["--fixture", "--max-calls-per-story", "20"],
+        [
+            "--max-usd",
+            "2.59",
+            "--price-per-megapixel",
+            "0.035",
+            "--price-basis",
+            "checked",
+            "--resume-quarantined",
+            "fixture-story",
+            "--restart-quarantined",
+            "fixture-story",
+        ],
+        [
+            "--max-usd",
+            "2.59",
+            "--price-per-megapixel",
+            "0.035",
+            "--price-basis",
+            "checked",
+            "--max-calls-per-story",
+            "0",
+        ],
         ["--acknowledge-uncertain-billing", "fixture-story"],
         [
             "--resume-quarantined",

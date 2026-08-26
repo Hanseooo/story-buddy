@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from decimal import ROUND_CEILING, Decimal
 from io import BytesIO
 from typing import Literal
+from uuid import UUID, uuid4
 
 from langgraph.types import Command
 from PIL import Image, UnidentifiedImageError
@@ -65,6 +66,12 @@ BUCKET = "storybook-images"
 MAX_RESUMES = 4
 CONFIRM = {"action": "confirm"}
 TELEMETRY_KEYS = ("attempted", "completed", "failed", "uncertain")
+RESTART_METADATA_KEYS = (
+    "execution_id",
+    "abandoned_execution_id",
+    "restart_attempted_baseline",
+    "restarted_at",
+)
 
 
 def _code_commit() -> str:
@@ -85,6 +92,7 @@ class SpendPolicy:
     smoke_usd: Decimal = Decimal("1.50")
     price_per_megapixel: Decimal = Decimal("0.035")
     price_basis: str = "programmatic"
+    max_calls_per_story: int | None = None
 
     def __post_init__(self) -> None:
         if self.max_usd < 0 or self.hard_usd <= 0 or self.smoke_usd < 0:
@@ -93,6 +101,11 @@ class SpendPolicy:
             raise ValueError("price_per_megapixel must be positive")
         if not self.price_basis.strip():
             raise ValueError("price_basis must be non-empty")
+        if self.max_calls_per_story is not None and (
+            type(self.max_calls_per_story) is not int
+            or not 1 <= self.max_calls_per_story <= IMAGE_BUDGET
+        ):
+            raise ValueError(f"max_calls_per_story must be between 1 and {IMAGE_BUDGET}")
 
     @property
     def maximum_megapixels(self) -> Decimal:
@@ -115,13 +128,15 @@ class SpendPolicy:
     def story_draw_limit(self, story_count: int) -> int:
         if story_count <= 0:
             return 0
+        if self.max_calls_per_story is not None:
+            return self.max_calls_per_story
         if self.authorized_usd <= self.smoke_usd:
             return int(self.authorized_usd / self.conservative_call_usd) // story_count
         return IMAGE_BUDGET
 
 
 def _budget_basis(policy: SpendPolicy) -> dict:
-    return {
+    basis = {
         "image_size": f'{GENERATED_IMAGE_SIZE["width"]}x{GENERATED_IMAGE_SIZE["height"]}',
         "maximum_megapixels": str(policy.maximum_megapixels),
         "billable_megapixels": policy.billable_megapixels,
@@ -130,6 +145,9 @@ def _budget_basis(policy: SpendPolicy) -> dict:
         "authorized_usd": str(policy.authorized_usd),
         "conservative_call_usd": str(policy.conservative_call_usd),
     }
+    if policy.max_calls_per_story is not None:
+        basis["max_calls_per_story"] = policy.max_calls_per_story
+    return basis
 
 
 def load_corpus(path: pathlib.Path = CORPUS_PATH) -> list[dict]:
@@ -342,6 +360,7 @@ def _bundle(
     telemetry: Counter | None = None,
     policy: SpendPolicy = SpendPolicy(),
     billing_acknowledged_at: str | None = None,
+    restart_metadata: dict | None = None,
 ) -> RunBundle:
     if memory.story_id != story.story_id:
         raise CorpusError(f"completed story_id differs from intake: {story.story_id}")
@@ -381,6 +400,7 @@ def _bundle(
             "completed_calls": (telemetry or {}).get("completed", 0),
             "failed_calls": (telemetry or {}).get("failed", 0),
             "uncertain_calls": (telemetry or {}).get("uncertain", 0),
+            **(restart_metadata or {}),
             **(
                 {"billing_acknowledged_at": billing_acknowledged_at}
                 if billing_acknowledged_at is not None
@@ -422,14 +442,68 @@ def _persisted_telemetry(values: dict, policy: SpendPolicy, source: str) -> Coun
 RECOVERABLE_REASONS = {"budget_stopped", "resume_exhausted", "billing_uncertain"}
 
 
-def _validated_checkpoint(app_graph, story: IntakeRecord) -> StoryMemory:
-    snapshot = app_graph.get_state({"configurable": {"thread_id": story.story_id}})
+def _restart_metadata(state_entry: dict | None) -> dict:
+    if not isinstance(state_entry, dict):
+        return {}
+    return {key: state_entry[key] for key in RESTART_METADATA_KEYS if key in state_entry}
+
+
+def _restart_attempted_baseline(state_entry: dict | None, telemetry: Counter) -> int:
+    if not isinstance(state_entry, dict):
+        return 0
+    baseline = state_entry.get("restart_attempted_baseline", 0)
+    if type(baseline) is not int or not 0 <= baseline <= telemetry["attempted"]:
+        raise CorpusError("invalid persisted restart telemetry")
+    return baseline
+
+
+def _execution_id(story: IntakeRecord, state_entry: dict | None) -> str:
+    if not isinstance(state_entry, dict) or "execution_id" not in state_entry:
+        return story.story_id
+    execution_id = state_entry["execution_id"]
+    prefix = f"{story.story_id}--restart-"
+    if (
+        not isinstance(execution_id, str)
+        or pathlib.Path(execution_id).name != execution_id
+        or not execution_id.startswith(prefix)
+        or state_entry.get("abandoned_execution_id") != story.story_id
+    ):
+        raise CorpusError(f"invalid persisted execution identity: {story.story_id}")
+    try:
+        if UUID(execution_id.removeprefix(prefix)).hex != execution_id.removeprefix(prefix):
+            raise ValueError("restart identity must use canonical UUID hex")
+        restarted_at = datetime.fromisoformat(state_entry["restarted_at"])
+        if restarted_at.utcoffset() is None:
+            raise ValueError("restart timestamp must include an offset")
+    except (KeyError, TypeError, ValueError) as error:
+        raise CorpusError(f"invalid persisted execution identity: {story.story_id}") from error
+    return execution_id
+
+
+def _validate_restart_cap(story: IntakeRecord, state_entry: dict | None, policy: SpendPolicy) -> None:
+    if not isinstance(state_entry, dict) or "execution_id" not in state_entry:
+        return
+    stored_cap = state_entry.get("max_calls_per_story")
+    if type(stored_cap) is not int or policy.max_calls_per_story != stored_cap:
+        raise CorpusError(f"max_calls_per_story differs for isolated restart: {story.story_id}")
+
+
+def _validated_checkpoint(
+    app_graph,
+    story: IntakeRecord,
+    execution_id: str | None = None,
+    allow_missing: bool = False,
+) -> StoryMemory | None:
+    execution_id = execution_id or story.story_id
+    snapshot = app_graph.get_state({"configurable": {"thread_id": execution_id}})
+    if allow_missing and not getattr(snapshot, "values", None):
+        return None
     try:
         checkpoint = StoryMemory.model_validate(snapshot.values)
     except (AttributeError, ValidationError) as error:
         raise CorpusError(f"checkpoint is not resumable: {story.story_id}") from error
     if (
-        checkpoint.story_id != story.story_id
+        checkpoint.story_id != execution_id
         or checkpoint.input.raw_text != story.text
         or checkpoint.style.style_preset_id != story.style_preset_id
     ):
@@ -451,7 +525,7 @@ def _validate_recovery(
         raise CorpusError(f"intake digest differs for quarantined story: {story.story_id}")
     if reason == "billing_uncertain" and acknowledge_uncertain_billing != story.story_id:
         raise CorpusError(f"acknowledge uncertain billing before retry: {story.story_id}")
-    _validated_checkpoint(app_graph, story)
+    _validated_checkpoint(app_graph, story, _execution_id(story, state_entry))
     return (
         datetime.now(timezone.utc).isoformat()
         if reason == "billing_uncertain"
@@ -475,6 +549,7 @@ def _quarantine(
         "intake_sha256": intake_sha256(story),
         **_budget_basis(policy),
         "telemetry": dict(telemetry),
+        **_restart_metadata(previous),
         **(
             {"billing_acknowledged_at": previous["billing_acknowledged_at"]}
             if isinstance(previous, dict) and "billing_acknowledged_at" in previous
@@ -493,12 +568,27 @@ def build(
     policy: SpendPolicy = SpendPolicy(),
     resume_quarantined: str | None = None,
     acknowledge_uncertain_billing: str | None = None,
+    restart_quarantined: str | None = None,
 ) -> dict:
     """Run only incomplete stories; a completed run is the immutable bundle, never a count."""
     records = [_record(story) for story in stories]
+    if resume_quarantined is not None and restart_quarantined is not None:
+        raise CorpusError("choose either resume or isolated restart, not both")
     out_dir.mkdir(parents=True, exist_ok=True)
     state_path = out_dir / STATE_FILE
     state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+    if restart_quarantined is not None:
+        restart_entry = state.get(restart_quarantined)
+        if (
+            restart_quarantined not in {story.story_id for story in records}
+            or not isinstance(restart_entry, dict)
+            or "quarantined" not in restart_entry
+        ):
+            raise CorpusError(
+                f"isolated restart requires an existing quarantine: {restart_quarantined}"
+            )
+        if policy.max_calls_per_story is None:
+            raise CorpusError("isolated restart requires explicit max_calls_per_story")
     bundles = {bundle.memory.story_id: bundle for bundle in load_completed_bundles(out_dir)}
     campaign_spent = sum(bundle.memory.cost.image_count for bundle in bundles.values())
     invocation_spent = 0
@@ -531,19 +621,61 @@ def build(
                 raise CorpusError(
                     f"legacy build state quarantined for {story_id}; completed bundle required"
                 )
+            _execution_id(story, state_entry)
+            _validate_restart_cap(story, state_entry, policy)
             if "quarantined" in state_entry:
                 if fixture:
                     raise CorpusError(f"{state_entry['quarantined']} for {story_id}")
-                billing_acknowledged_at = _validate_recovery(
-                    app_graph,
-                    story,
-                    state_entry,
-                    resume_quarantined,
-                    acknowledge_uncertain_billing,
-                )
-                if billing_acknowledged_at is not None:
-                    state_entry["billing_acknowledged_at"] = billing_acknowledged_at
+                if restart_quarantined == story_id:
+                    reason = state_entry.get("reason_code")
+                    if reason not in RECOVERABLE_REASONS:
+                        raise CorpusError(f"{state_entry['quarantined']} for {story_id}")
+                    if state_entry.get("intake_sha256") != intake_sha256(story):
+                        raise CorpusError(f"intake digest differs for quarantined story: {story_id}")
+                    if "execution_id" in state_entry:
+                        raise CorpusError(
+                            f"isolated restart already exists for {story_id}; resume it instead"
+                        )
+                    if (
+                        reason == "billing_uncertain"
+                        and acknowledge_uncertain_billing != story_id
+                    ):
+                        raise CorpusError(f"acknowledge uncertain billing before retry: {story_id}")
+                    prior_telemetry = _persisted_telemetry(state_entry, policy, story_id)
+                    billing_acknowledged_at = (
+                        datetime.now(timezone.utc).isoformat()
+                        if reason == "billing_uncertain"
+                        else state_entry.get("billing_acknowledged_at")
+                    )
+                    restarted_at = datetime.now(timezone.utc).isoformat()
+                    state_entry = {
+                        "in_progress": True,
+                        "intake_sha256": intake_sha256(story),
+                        **_budget_basis(policy),
+                        "telemetry": dict(prior_telemetry),
+                        "execution_id": f"{story_id}--restart-{uuid4().hex}",
+                        "abandoned_execution_id": story_id,
+                        "restart_attempted_baseline": prior_telemetry["attempted"],
+                        "restarted_at": restarted_at,
+                        **(
+                            {"billing_acknowledged_at": billing_acknowledged_at}
+                            if billing_acknowledged_at is not None
+                            else {}
+                        ),
+                    }
+                    state[story_id] = state_entry
                     _write_state(state_path, state)
+                else:
+                    billing_acknowledged_at = _validate_recovery(
+                        app_graph,
+                        story,
+                        state_entry,
+                        resume_quarantined,
+                        acknowledge_uncertain_billing,
+                    )
+                    if billing_acknowledged_at is not None:
+                        state_entry["billing_acknowledged_at"] = billing_acknowledged_at
+                        _write_state(state_path, state)
             else:
                 state_telemetry = _persisted_telemetry(state_entry, policy, story_id)
                 if state_entry.get("intake_sha256") != intake_sha256(story):
@@ -558,7 +690,16 @@ def build(
                     )
                     raise CorpusError(f"intake digest differs for in-progress story: {story_id}")
                 try:
-                    _validated_checkpoint(app_graph, story)
+                    restart_baseline = _restart_attempted_baseline(state_entry, state_telemetry)
+                    _validated_checkpoint(
+                        app_graph,
+                        story,
+                        _execution_id(story, state_entry),
+                        allow_missing=(
+                            "execution_id" in state_entry
+                            and state_telemetry["attempted"] == restart_baseline
+                        ),
+                    )
                 except CorpusError as error:
                     _quarantine(
                         state,
@@ -623,15 +764,19 @@ def build(
                 if state_entry is not None
                 else Counter(attempted=0, completed=0, failed=0, uncertain=0)
             )
+            restart_metadata = _restart_metadata(state_entry)
+            restart_baseline = _restart_attempted_baseline(state_entry, story_telemetry)
+            execution_attempted = story_telemetry["attempted"] - restart_baseline
             billable_calls = max(campaign_spent, telemetry["attempted"])
             remaining_usd = policy.authorized_usd - billable_calls * policy.conservative_call_usd
-            reserve_usd = max(story_draw_limit - story_telemetry["attempted"], 0) * policy.conservative_call_usd
+            reserve_usd = max(story_draw_limit - execution_attempted, 0) * policy.conservative_call_usd
             if story_draw_limit <= 0 or reserve_usd > remaining_usd:
                 summary["halted"] = True
                 break
 
             def record_fal_event(event: str) -> None:
-                if event == "attempted" and story_telemetry["attempted"] >= story_draw_limit:
+                execution_attempted = story_telemetry["attempted"] - restart_baseline
+                if event == "attempted" and execution_attempted >= story_draw_limit:
                     raise StoryBudgetStopped
                 if event == "failed_uncertain":
                     key = "uncertain"
@@ -644,6 +789,7 @@ def build(
                     "intake_sha256": intake_sha256(story),
                     **_budget_basis(policy),
                     "telemetry": dict(story_telemetry),
+                    **restart_metadata,
                     **(
                         {"billing_acknowledged_at": billing_acknowledged_at}
                         if billing_acknowledged_at is not None
@@ -653,10 +799,13 @@ def build(
                 _write_state(state_path, state)
 
             token = _fal_event_sink.set(record_fal_event)
+            uncertain_before_run = story_telemetry["uncertain"]
             try:
-                run = run_story(app_graph, story)
+                execution_id = _execution_id(story, state_entry)
+                execution_story = story.model_copy(update={"story_id": execution_id})
+                run = run_story(app_graph, execution_story)
             except Exception as error:
-                if story_telemetry["uncertain"]:
+                if story_telemetry["uncertain"] > uncertain_before_run:
                     _quarantine(
                         state,
                         state_path,
@@ -689,6 +838,8 @@ def build(
 
             try:
                 memory = StoryMemory.model_validate(run.values)
+                if memory.story_id != story_id and memory.story_id == execution_id:
+                    memory = memory.model_copy(update={"story_id": story_id})
                 refs, scenes = download_images(memory, out_dir, supabase)
                 bundle = _bundle(
                     story,
@@ -698,6 +849,7 @@ def build(
                     story_telemetry,
                     policy,
                     billing_acknowledged_at=billing_acknowledged_at,
+                    restart_metadata=restart_metadata,
                 )
             except (CorpusError, ValidationError) as error:
                 _quarantine(
@@ -735,8 +887,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--corpus", type=pathlib.Path, default=CORPUS_PATH)
     parser.add_argument("--out", type=pathlib.Path, default=DATA_DIR)
     parser.add_argument("--limit", type=int, default=None, help="run only the first N stories")
-    parser.add_argument("--resume-quarantined", metavar="STORY_ID")
+    recovery = parser.add_mutually_exclusive_group()
+    recovery.add_argument("--resume-quarantined", metavar="STORY_ID")
+    recovery.add_argument("--restart-quarantined", metavar="STORY_ID")
     parser.add_argument("--acknowledge-uncertain-billing", metavar="STORY_ID")
+    parser.add_argument("--max-calls-per-story", type=int)
     args = parser.parse_args(argv)
     if args.fixture and args.price_per_megapixel is not None:
         parser.error("--fixture cannot be combined with --price-per-megapixel")
@@ -744,15 +899,21 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--fixture cannot be combined with --price-basis")
     if not args.fixture and (args.price_per_megapixel is None or args.price_basis is None):
         parser.error("paid runs require --price-per-megapixel and --price-basis")
+    if args.max_calls_per_story is not None and not 1 <= args.max_calls_per_story <= IMAGE_BUDGET:
+        parser.error(f"--max-calls-per-story must be between 1 and {IMAGE_BUDGET}")
     if args.fixture and (
-        args.resume_quarantined is not None or args.acknowledge_uncertain_billing is not None
+        args.resume_quarantined is not None
+        or args.restart_quarantined is not None
+        or args.acknowledge_uncertain_billing is not None
+        or args.max_calls_per_story is not None
     ):
         parser.error("--fixture cannot be combined with quarantine recovery options")
     if (
         args.acknowledge_uncertain_billing is not None
-        and args.acknowledge_uncertain_billing != args.resume_quarantined
+        and args.acknowledge_uncertain_billing
+        != (args.resume_quarantined or args.restart_quarantined)
     ):
-        parser.error("--acknowledge-uncertain-billing requires matching --resume-quarantined")
+        parser.error("billing acknowledgment requires a matching quarantine recovery target")
     stories = load_intake(args.corpus)[: args.limit]
     try:
         if args.fixture:
@@ -770,6 +931,7 @@ def main(argv: list[str] | None = None) -> int:
                     max_usd=args.max_usd if args.max_usd is not None else defaults.max_usd,
                     price_per_megapixel=args.price_per_megapixel,
                     price_basis=args.price_basis,
+                    max_calls_per_story=args.max_calls_per_story,
                 )
                 summary = build(
                     stories,
@@ -779,6 +941,7 @@ def main(argv: list[str] | None = None) -> int:
                     policy=policy,
                     resume_quarantined=args.resume_quarantined,
                     acknowledge_uncertain_billing=args.acknowledge_uncertain_billing,
+                    restart_quarantined=args.restart_quarantined,
                 )
     except CorpusError as error:
         print(str(error), file=sys.stderr)
