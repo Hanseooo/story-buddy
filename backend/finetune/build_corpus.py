@@ -47,7 +47,7 @@ from finetune.corpus_io import (
     write_bundle,
 )
 from finetune.manifest import local_image_path
-from pipeline.analyze import EXTRACTION_PROMPT_VERSION
+from pipeline.analyze import EXTRACTION_PROMPT_VERSION, analyze
 from pipeline.char_bible import JUDGE_PROMPT_VERSION as REFERENCE_JUDGE_PROMPT_VERSION
 from pipeline.consistency_check import (
     JUDGE_PROMPT_VERSION,
@@ -320,6 +320,28 @@ def _verify_bundle_assets(bundle: RunBundle, out_dir: pathlib.Path) -> None:
 
 def _reconcile_roster(story: IntakeRecord, memory: StoryMemory) -> None:
     reconcile_declared_roster(story.declared_characters, story.declared_non_human, memory)
+
+
+def check_rosters(stories: list[IntakeRecord]) -> dict:
+    """Text-only pre-flight: does each declared roster survive `analyze`?
+
+    One extraction call per story. No image call, no database, no writes. Runs the real node and
+    the real reconciliation rather than reimplementing either, so the gate cannot drift from what
+    the paid run will decide -- the whole point is that a verdict costing a fraction of a cent
+    predicts a verdict that otherwise costs a story's images to reach.
+    """
+    failures: list[dict] = []
+    for story in stories:
+        state = _initial_state(story)
+        try:
+            _reconcile_roster(
+                story, state.model_copy(update={"characters": analyze(state)["characters"]})
+            )
+        except Exception as error:
+            failures.append(
+                {"story_id": story.story_id, "error": f"{type(error).__name__}: {error}"}
+            )
+    return {"checked": len(stories), "failures": failures}
 
 
 def _fixture_memory(story: IntakeRecord) -> StoryMemory:
@@ -949,6 +971,11 @@ def main(argv: list[str] | None = None) -> int:
     paid_or_fixture = parser.add_mutually_exclusive_group()
     paid_or_fixture.add_argument("--max-usd", type=Decimal)
     paid_or_fixture.add_argument("--fixture", action="store_true")
+    paid_or_fixture.add_argument(
+        "--check-rosters",
+        action="store_true",
+        help="text-only roster pre-flight; no image call, no database, no writes",
+    )
     parser.add_argument("--price-per-megapixel", type=Decimal)
     parser.add_argument("--price-basis")
     parser.add_argument("--corpus", type=pathlib.Path, default=CORPUS_PATH)
@@ -961,6 +988,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-calls-per-story", type=int)
     parser.add_argument("--extend-story-call-cap", metavar="STORY_ID")
     args = parser.parse_args(argv)
+    if args.check_rosters:
+        summary = check_rosters(load_intake(args.corpus)[: args.limit])
+        print(json.dumps(summary, sort_keys=True))
+        return 1 if summary["failures"] else 0
     if args.fixture and args.price_per_megapixel is not None:
         parser.error("--fixture cannot be combined with --price-per-megapixel")
     if args.fixture and args.price_basis is not None:

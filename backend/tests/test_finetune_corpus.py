@@ -13,6 +13,7 @@ import json
 from decimal import Decimal
 from io import BytesIO
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 from langgraph.checkpoint.memory import MemorySaver
@@ -1684,3 +1685,59 @@ def test_reconcile_rejects_a_declared_character_pushed_out_of_the_reference_slic
 def test_reconcile_still_rejects_a_differently_classified_declared_character():
     with pytest.raises(CorpusError, match="declared roster"):
         reconcile_declared_roster(["Moss"], [], _memory_with([("Moss", False)]))
+
+
+def _extracted(name: str, humanoid: bool = True) -> dict:
+    return {
+        "name": name,
+        "description": {
+            "species": "girl" if humanoid else "toad",
+            "body_plan": "small upright body with two arms and two legs",
+            "face_or_interface": "round face with two bright eyes",
+            "is_humanoid": humanoid,
+            "colours": ["warm brown skin"],
+            "body_features": ["round face"],
+            "clothing": ["yellow shirt"] if humanoid else [],
+        },
+    }
+
+
+def _analysis_of(*names_and_humanoid):
+    from pipeline.analyze import StoryAnalysis
+
+    return StoryAnalysis.model_validate(
+        {
+            "characters": [_extracted(n, h) for n, h in names_and_humanoid],
+            "locations": [{"name": "the pond", "description": "a shallow green pond in a valley"}],
+            "objects": [{"name": "a flat rock", "description": "a wide grey rock", "owner_name": None}],
+            "timeline": [{"order": 0, "summary": "Something happens."}],
+        }
+    )
+
+
+def test_check_rosters_passes_a_declaration_the_extraction_covers(tmp_path):
+    story = intake_story(declared_characters=["Moss"], declared_non_human=["Moss"])
+
+    with patch(
+        "pipeline.analyze.extract_entities",
+        return_value=_analysis_of(("Moss", False), ("the heron", False)),
+    ):
+        summary = build_corpus.check_rosters([story])
+
+    assert summary["failures"] == []
+    assert summary["checked"] == 1
+
+
+def test_check_rosters_reports_a_lost_declared_character_without_any_image_call(tmp_path):
+    """The pre-flight must reach the same verdict as a paid run, for one text call."""
+    story = intake_story(declared_characters=["Moss"], declared_non_human=["Moss"])
+
+    with patch(
+        "pipeline.analyze.extract_entities",
+        return_value=_analysis_of(("the heron", False), ("the crow", False)),
+    ):
+        summary = build_corpus.check_rosters([story])
+
+    assert summary["checked"] == 1
+    assert [f["story_id"] for f in summary["failures"]] == ["fixture-story"]
+    assert "declared roster does not reconcile" in summary["failures"][0]["error"]

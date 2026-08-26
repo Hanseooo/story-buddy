@@ -51,6 +51,12 @@ pass the source plus lookup date as `<official-price-url-and-date>`.
 # 1. Zero-cost verification on temporary fixture directory
 uv run python -m finetune.build_corpus --fixture --limit 1 --out <temporary-fixture-directory>
 
+# 1a. Roster pre-flight (one text call per story; no image call, no database, no writes).
+# Runs the real `analyze` node and the real reconciliation, so it returns the verdict the paid run
+# would reach. Exits non-zero on any failure. A corpus that fails here must not reach step 2 --
+# a roster mismatch found at packaging instead costs that story's entire image spend.
+uv run python -m finetune.build_corpus --check-rosters --corpus finetune/corpus_synthetic.json --limit 3
+
 # 2. Fresh paid synthetic smoke (3 stories, 25 calls/story; USD 2.63 at USD 0.035/call)
 uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --limit 3 --max-usd 2.63 --max-calls-per-story 25 --price-per-megapixel <current-usd-per-megapixel> --price-basis "<official-price-url-and-date>"
 
