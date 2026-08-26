@@ -77,6 +77,18 @@ class ExtractedObject(BaseModel):
     description: str
     owner_name: str | None = None
 
+    @field_validator("owner_name", mode="before")
+    @classmethod
+    def normalize_owner_name(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            v_stripped = v.strip()
+            if not v_stripped or v_stripped.casefold() in {"null", "none", "nil", "unowned", "n/a"}:
+                return None
+            return v_stripped
+        return v
+
 
 _EXPLICIT_ALIAS = re.compile(r"\(([^()]*)\)\s*$")
 

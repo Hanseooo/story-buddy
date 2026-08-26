@@ -162,7 +162,7 @@ The extraction instruction states:
 
 Locations require a strict permanent description. The prompt instructs the model to preserve stated permanent facts and fill missing detail neutrally, excluding temporary conditions.
 
-Objects require a stable physical description and an optional `owner_name`. Initial ownership is mapped after the three-character cap: `owner_name` maps to `owner_char_id`. If an `owner_name` cannot be resolved against the capped character roster, node execution raises `ValueError`.
+Objects require a stable physical description and an optional `owner_name`. Initial ownership is mapped after the three-character cap: `owner_name` maps to `owner_char_id`. Provider placeholder strings for an unowned object (`null`, `none`, `nil`, `unowned`, `n/a`, or whitespace, case-insensitive) normalize to `None` at the structured-output boundary. Any other `owner_name` that cannot be resolved against the capped character roster raises `ValueError`.
 
 ### Edge cases
 
@@ -181,6 +181,7 @@ Objects require a stable physical description and an optional `owner_name`. Init
 | **Character vs object ambiguity** ("the robot (Leo)") | Guided by agency in the extraction prompt (actors decide/act; inert items are objects; aliases forbidden). `StoryAnalysis` drops exact character duplicates and drops a trailing parenthetical character alias in full before the object reaches the node. |
 | **Character with sparse or incomplete description** | Fresh extraction requires concrete `body_plan` and `face_or_interface`, folding them into `body_features` and validating against the visual discriminator floor and humanoid clothing rules. |
 | **Unknown object owner** | **Fails boundary** — mapping `owner_name` to `owner_char_id` raises `ValueError` if `owner_name` is not in the capped character roster. |
+| **String placeholder for no owner** | Normalize `null`, `none`, `nil`, `unowned`, `n/a`, or whitespace to `None`; keep the object unowned. |
 | **Empty `timeline[]`** | Valid. `segment` falls back to text order. |
 | **Very short input** ("I like dogs") | Valid. Extraction yields whatever it yields; a minimum-length gate is `length-guard`'s job (Phase 2), not this node's. |
 | **Input was truncated** (ADR-012) | No special handling. `analyze` sees the kept portion, which is correct — the book illustrates what was kept, and ADR-012 forbids summarizing the tail back in. |

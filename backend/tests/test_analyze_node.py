@@ -663,6 +663,25 @@ def test_analyze_keeps_an_object_whose_owner_was_capped_out_of_the_roster(caplog
     assert "capped out of the roster" in caplog.text
 
 
+@pytest.mark.parametrize("placeholder", ["null", "NULL", "none", "None", "nil", "unowned", "N/A", "  ", ""])
+def test_analyze_normalizes_placeholder_owner_names(placeholder):
+    analysis = _analysis(
+        characters=[_character("Ana")],
+        objects=[
+            {
+                "name": "wooden sword",
+                "description": "a short wooden sword with a red cord grip",
+                "owner_name": placeholder,
+            }
+        ],
+    )
+    with patch("pipeline.analyze.extract_entities", return_value=analysis):
+        result = analyze(_state())
+
+    assert result["objects"][0].owner_char_id is None
+    assert result["objects"][0].description == "a short wooden sword with a red cord grip"
+
+
 def test_narrative_notes_do_not_satisfy_the_discriminator_floor():
     """§6 test 4: `notes` is narrative metadata and never counts as a visual discriminator."""
     with pytest.raises(ValidationError):
