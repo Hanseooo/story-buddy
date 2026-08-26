@@ -358,7 +358,9 @@ def test_run_story_continues_an_ordinary_checkpoint_without_overwriting_its_chan
     story = intake_story()
     checkpointed = build_corpus._initial_state(story).model_copy(
         update={
-            "characters": [Character(char_id="c1", name="Moss")],
+            "characters": [
+                Character(char_id="c1", name="Moss", description={"is_humanoid": False})
+            ],
             "locations": [Location(loc_id="l1", name="Garden")],
             "objects": [StoryObject(obj_id="o1", name="Lantern")],
             "timeline": [TimelineEvent(order=1, summary="Moss finds the lantern")],
@@ -531,7 +533,7 @@ def test_isolated_restart_preserves_prior_spend_and_uses_fresh_checkpoint_and_as
 
 
 def test_isolated_restart_call_cap_counts_new_execution_calls_not_abandoned_calls(tmp_path):
-    story = intake_story()
+    story = intake_story(declared_characters=["c0"], declared_non_human=[])
     state = {
         story.story_id: {
             "quarantined": "budget stopped",
@@ -1623,3 +1625,15 @@ def test_build_quarantines_a_completion_with_extra_non_human_occurrences(tmp_pat
 def test_cli_rejects_unsafe_recovery_combinations(argv):
     with pytest.raises(SystemExit):
         build_corpus.main(argv)
+
+
+def test_run_story_quarantines_a_roster_mismatch_before_the_next_image():
+    """A declared-roster mismatch is knowable from `analyze` alone, so it must cost one text
+    call and not a whole story's image spend (syn-001 burned $1.33 discovering it at packaging)."""
+    graph = FakeGraph(per_story_images=4)
+    story = intake_story(declared_characters=["Moss"], declared_non_human=["Moss"])
+
+    with pytest.raises(CorpusError, match="declared roster"):
+        build_corpus.run_story(graph, story)
+
+    assert graph.consumed == 1

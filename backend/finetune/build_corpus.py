@@ -196,6 +196,10 @@ def run_story(app_graph, story: IntakeRecord) -> StoryRun:
     snapshot = app_graph.get_state(config) if hasattr(app_graph, "get_state") else None
     graph_input = None if getattr(snapshot, "values", None) else _initial_state(story)
     values: dict = {}
+    # The roster is knowable from `analyze`, which runs before the first reference draw, so the
+    # declaration is checked on the first state carrying characters rather than at packaging.
+    # Checking it late costs a whole story's images to learn what one text call already said.
+    reconciled = False
     for _ in range(MAX_RESUMES + 1):
         interrupted = False
         try:
@@ -203,6 +207,9 @@ def run_story(app_graph, story: IntakeRecord) -> StoryRun:
                 mode, payload = chunk[-2:]
                 if mode == "values":
                     values = payload
+                    if not reconciled and payload.get("characters"):
+                        reconciled = True
+                        _reconcile_roster(story, StoryMemory.model_validate(payload))
                 elif "__interrupt__" in payload:
                     interrupted = True
         except StoryBudgetStopped:
@@ -862,6 +869,20 @@ def build(
                         policy,
                     )
                     raise CorpusError(f"billing uncertain for {story_id}; reconcile before retry") from error
+                if isinstance(error, CorpusError):
+                    # `run_story` reconciles the declared roster as soon as `analyze` lands. The
+                    # quarantine and the re-raise match the packaging path below; only the timing
+                    # differs, so the same mismatch now costs one text call instead of the images.
+                    _quarantine(
+                        state,
+                        state_path,
+                        story,
+                        "invalid_terminal",
+                        f"invalid terminal state: {error}",
+                        story_telemetry,
+                        policy,
+                    )
+                    raise CorpusError(f"invalid terminal state for {story_id}: {error}") from error
                 raise
             finally:
                 _fal_event_sink.reset(token)

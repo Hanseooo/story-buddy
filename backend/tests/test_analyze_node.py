@@ -313,7 +313,7 @@ def test_extract_entities_logs_prompt_version(caplog):
         with patch("pipeline.analyze.structured_text", return_value=_analysis()):
             extract_entities("I went to the beach.")
 
-    assert "extraction_prompt_version=1" in caplog.text
+    assert "extraction_prompt_version=2" in caplog.text
 
 
 def _state(raw_text="A dog runs in a field.", redacted_text="A dog runs in a field.") -> StoryMemory:

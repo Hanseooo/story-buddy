@@ -76,8 +76,9 @@ Donated records additionally require affirmative `guardian_consent`, `child_asse
 `manual_pii_redaction` and `independent_redaction_review`, plus `withdrawal_state` and a selection-freeze
 timestamp. Synthetic records must not fabricate those donated-only fields. `declared_non_human` must be a
 subset of `declared_characters`; names are fictional roster labels from the already-redacted story, not donor
-identities. After generation, the declared roster is reconciled case-insensitively with the final
-`StoryMemory.characters`. A missing, unexpected or differently classified character quarantines the story
+identities. The declared roster is reconciled case-insensitively with `StoryMemory.characters` as soon as `analyze`
+produces them — before the first reference draw, since the roster is knowable from the extraction call and
+checking it at packaging instead charges a whole story's images to learn what one text call already said. A missing, unexpected or differently classified character quarantines the story
 for manual review before pair materialization; it is never silently rewritten after seeing judge output.
 
 ### 4.2 Style allocation and control

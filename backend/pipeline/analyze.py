@@ -118,7 +118,7 @@ class StoryAnalysis(BaseModel):
 
 log = logging.getLogger(__name__)
 
-EXTRACTION_PROMPT_VERSION = 1
+EXTRACTION_PROMPT_VERSION = 2
 
 # `analyze` reads REDACTED text, so any name reaching this prompt is already a pseudonym from
 # `providers._PSEUDONYM_POOL` — a story about "Jun" arrives as a story about "Ana". Using that
@@ -134,14 +134,27 @@ EXTRACTION_PROMPT_VERSION = 1
 #
 # The descriptive-label fallback stays for the common first-person case ("I went to the beach"),
 # where there is no name to use and `char_bible` still needs something to put in the prompt.
+#
+# v2 (2026-08-27): selection moved above description, because the agency rule was two lines in a
+# prompt whose other ~28 are about appearance and the model weighted the bulk — a corpus probe of
+# 30 stories put "the hill", "the river" and "the jar of pickles" in `characters[]`. Two rules were
+# added with it: do not pad the roster to 3 (27 of those 30 padded to exactly 3), and only a
+# first-person story gets a narrator character (the old line asserted first-person unconditionally
+# and minted "the narrator" for third-person text).
 EXTRACTION_PROMPT = """Extract the entities from this child's story.
 
-Characters: at most 3, most important first — the first one is the story's protagonist.
+Decide the cast before describing it. Classify by agency: a character speaks, decides, or moves
+on its own intent. An inert prop belongs only in objects, however much the story dwells on it; a
+place belongs only in locations; a group present only as scenery ("the crowd", "the other bats")
+is not a character. A personified object that acts on its own intent belongs only in characters,
+never both. An object name such as "the robot (Leo)" is an alias for character Leo and must not
+appear in objects.
+Characters: at most 3, most important first — the first one is the story's protagonist. Return
+fewer than 3 whenever fewer than 3 entities act; never pad the roster to reach 3.
 Use the name the story gives the character. If the story never names them, use a short
 descriptive label instead: "the narrator", "the younger sister", "the orange cat". Never emit a
-redaction placeholder like <PERSON_1>. The story is usually first-person, and the narrator is
-usually a character.
-Classify by agency: a character speaks, decides, moves intentionally, or performs an action. An inert prop belongs only in objects. A personified object belongs only in characters, never both. An object name such as "the robot (Leo)" is an alias for character Leo and must not appear in objects.
+redaction placeholder like <PERSON_1>. When the story is told in the first person its teller is a
+character; when it is told in the third person, do not add a narrator character.
 Species is the physical kind, never a job title or role: a human wizard is physically human.
 Treat every character name as an identifier only. Do not infer age, gender, ethnicity, body,
 face, clothing, or temperament from a name. Do not treat pronouns, speech, dialogue, jobs,
