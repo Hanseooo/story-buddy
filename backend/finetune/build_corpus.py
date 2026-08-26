@@ -71,6 +71,8 @@ RESTART_METADATA_KEYS = (
     "abandoned_execution_id",
     "restart_attempted_baseline",
     "restarted_at",
+    "initial_max_calls_per_story",
+    "cap_extended_at",
 )
 
 
@@ -488,6 +490,28 @@ def _validate_restart_cap(story: IntakeRecord, state_entry: dict | None, policy:
         raise CorpusError(f"max_calls_per_story differs for isolated restart: {story.story_id}")
 
 
+def _prepare_cap_extension(
+    story: IntakeRecord,
+    state_entry: dict,
+    policy: SpendPolicy,
+) -> dict:
+    if state_entry.get("reason_code") != "budget_stopped":
+        raise CorpusError(f"call-cap extension requires budget_stopped: {story.story_id}")
+    _execution_id(story, state_entry)
+    stored_cap = state_entry.get("max_calls_per_story")
+    new_cap = policy.max_calls_per_story
+    if type(stored_cap) is not int or new_cap is None or new_cap <= stored_cap:
+        raise CorpusError(f"extended max_calls_per_story must increase: {story.story_id}")
+    if "cap_extended_at" in state_entry:
+        raise CorpusError(f"call cap was already extended: {story.story_id}")
+    return {
+        **state_entry,
+        "max_calls_per_story": new_cap,
+        "initial_max_calls_per_story": stored_cap,
+        "cap_extended_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 def _validated_checkpoint(
     app_graph,
     story: IntakeRecord,
@@ -569,14 +593,29 @@ def build(
     resume_quarantined: str | None = None,
     acknowledge_uncertain_billing: str | None = None,
     restart_quarantined: str | None = None,
+    extend_story_call_cap: str | None = None,
 ) -> dict:
     """Run only incomplete stories; a completed run is the immutable bundle, never a count."""
     records = [_record(story) for story in stories]
     if resume_quarantined is not None and restart_quarantined is not None:
         raise CorpusError("choose either resume or isolated restart, not both")
+    if extend_story_call_cap is not None and extend_story_call_cap != resume_quarantined:
+        raise CorpusError("call-cap extension requires a matching resume target")
     out_dir.mkdir(parents=True, exist_ok=True)
     state_path = out_dir / STATE_FILE
     state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+    if extend_story_call_cap is not None:
+        extension_entry = state.get(extend_story_call_cap)
+        if (
+            extend_story_call_cap not in {story.story_id for story in records}
+            or not isinstance(extension_entry, dict)
+            or "quarantined" not in extension_entry
+            or "execution_id" not in extension_entry
+        ):
+            raise CorpusError(
+                f"call-cap extension requires an existing isolated quarantine: "
+                f"{extend_story_call_cap}"
+            )
     if restart_quarantined is not None:
         restart_entry = state.get(restart_quarantined)
         if (
@@ -614,6 +653,7 @@ def build(
         state_entry = state.get(story_id)
         expected_reference = {"bundle": f"runs/{story_id}"}
         billing_acknowledged_at = None
+        cap_extension_pending = False
         if state_entry is not None and state_entry != expected_reference:
             if not isinstance(state_entry, dict) or "telemetry" not in state_entry:
                 state[story_id] = {"quarantined": "legacy count-only state; completed bundle required"}
@@ -621,6 +661,10 @@ def build(
                 raise CorpusError(
                     f"legacy build state quarantined for {story_id}; completed bundle required"
                 )
+            if extend_story_call_cap == story_id:
+                state_entry = _prepare_cap_extension(story, state_entry, policy)
+                state[story_id] = state_entry
+                cap_extension_pending = True
             _execution_id(story, state_entry)
             _validate_restart_cap(story, state_entry, policy)
             if "quarantined" in state_entry:
@@ -773,6 +817,8 @@ def build(
             if story_draw_limit <= 0 or reserve_usd > remaining_usd:
                 summary["halted"] = True
                 break
+            if cap_extension_pending:
+                _write_state(state_path, state)
 
             def record_fal_event(event: str) -> None:
                 execution_attempted = story_telemetry["attempted"] - restart_baseline
@@ -892,6 +938,7 @@ def main(argv: list[str] | None = None) -> int:
     recovery.add_argument("--restart-quarantined", metavar="STORY_ID")
     parser.add_argument("--acknowledge-uncertain-billing", metavar="STORY_ID")
     parser.add_argument("--max-calls-per-story", type=int)
+    parser.add_argument("--extend-story-call-cap", metavar="STORY_ID")
     args = parser.parse_args(argv)
     if args.fixture and args.price_per_megapixel is not None:
         parser.error("--fixture cannot be combined with --price-per-megapixel")
@@ -906,6 +953,7 @@ def main(argv: list[str] | None = None) -> int:
         or args.restart_quarantined is not None
         or args.acknowledge_uncertain_billing is not None
         or args.max_calls_per_story is not None
+        or args.extend_story_call_cap is not None
     ):
         parser.error("--fixture cannot be combined with quarantine recovery options")
     if (
@@ -914,6 +962,11 @@ def main(argv: list[str] | None = None) -> int:
         != (args.resume_quarantined or args.restart_quarantined)
     ):
         parser.error("billing acknowledgment requires a matching quarantine recovery target")
+    if (
+        args.extend_story_call_cap is not None
+        and args.extend_story_call_cap != args.resume_quarantined
+    ):
+        parser.error("--extend-story-call-cap requires matching --resume-quarantined")
     stories = load_intake(args.corpus)[: args.limit]
     try:
         if args.fixture:
@@ -942,6 +995,7 @@ def main(argv: list[str] | None = None) -> int:
                     resume_quarantined=args.resume_quarantined,
                     acknowledge_uncertain_billing=args.acknowledge_uncertain_billing,
                     restart_quarantined=args.restart_quarantined,
+                    extend_story_call_cap=args.extend_story_call_cap,
                 )
     except CorpusError as error:
         print(str(error), file=sys.stderr)

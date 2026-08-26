@@ -154,9 +154,14 @@ remain fully charged against the campaign USD ceiling. On completion, only `Stor
 the frozen logical intake ID; exact asset paths retain the isolated execution prefix. A replacement that later
 stops must use ordinary `--resume-quarantined`, which resolves the persisted execution identity. A second isolated
 restart is rejected.
-The replacement's explicit call cap is persisted and must match every later resume command. A restart identity
-persisted before its first checkpoint and before any new attempted call may initialize that same identity again;
-it must not mint another identity or become terminally quarantined merely because the first checkpoint is absent.
+The replacement's explicit call cap is persisted and must match every later resume command. After an observed
+`budget_stopped`, one explicit `--extend-story-call-cap <story_id>` may monotonically increase that same isolated
+execution's cap, never beyond `IMAGE_BUDGET`. It requires matching `--resume-quarantined` and sufficient campaign
+reserve before the new cap is persisted; it records the initial cap and UTC extension time. It does not mint a
+thread, alter the Storage prefix, reset telemetry, or apply to another quarantine reason. A second extension is
+rejected. A restart identity persisted before its first checkpoint and before any new attempted call may initialize
+that same identity again; it must not mint another identity or become terminally quarantined merely because the
+first checkpoint is absent.
 
 ### 4.4 Queue materialization
 
@@ -280,8 +285,9 @@ annotation and training. Filename extensions are not trusted; magic bytes and de
 
 - USD 25 is the working Fal allocation; USD 30 is the absolute campaign ceiling.
 - A zero-cost fixture run must pass first.
-- A fresh three-story synthetic smoke grants at most 20 calls per story. At the pinned USD 0.035 conservative
-  ceiling this authorizes USD 2.10; previously charged abandoned calls require additional campaign authorization.
+- A fresh three-story synthetic smoke grants at most 25 calls per story. At the pinned USD 0.035 conservative
+  ceiling this authorizes USD 2.625, rounded up to USD 2.63; previously charged abandoned calls require additional
+  campaign authorization.
 - Both Fal image routes pin `image_size={"width": 1024, "height": 768}` before dispatch. The maximum is
   `1024 * 768 / 1,000,000 = 0.786432` MP; Fal rounds fractional megapixels up, so each request reserves
   `ceil(0.786432) * <operator-recorded USD/MP>`.

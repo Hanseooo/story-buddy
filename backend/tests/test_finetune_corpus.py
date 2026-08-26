@@ -168,6 +168,29 @@ class RecoverableGraph(FakeGraph):
             yield mode, values
 
 
+class IsolatedRecoverableGraph(RecoverableGraph):
+    def get_state(self, config):
+        execution_story = self.story.model_copy(
+            update={"story_id": config["configurable"]["thread_id"]}
+        )
+        return SimpleNamespace(values=build_corpus._initial_state(execution_story).model_dump())
+
+
+def isolated_quarantine(story, reason_code="budget_stopped"):
+    return {
+        "quarantined": reason_code.replace("_", " "),
+        "reason_code": reason_code,
+        "intake_sha256": intake_sha256(story),
+        "conservative_call_usd": "0.035",
+        "max_calls_per_story": 20,
+        "telemetry": {"attempted": 34, "completed": 33, "failed": 0, "uncertain": 1},
+        "execution_id": f"{story.story_id}--restart-{'a' * 32}",
+        "abandoned_execution_id": story.story_id,
+        "restart_attempted_baseline": 14,
+        "restarted_at": "2026-08-26T00:00:00+00:00",
+    }
+
+
 class FakeStorage:
     def __init__(self):
         self.downloads: list[str] = []
@@ -536,6 +559,131 @@ def test_isolated_restart_call_cap_counts_new_execution_calls_not_abandoned_call
     assert saved[story.story_id]["telemetry"]["attempted"] == 34
     assert saved[story.story_id]["restart_attempted_baseline"] == 14
     assert saved[story.story_id]["reason_code"] == "budget_stopped"
+
+
+def test_budget_stopped_isolated_execution_can_extend_its_cap_once(tmp_path):
+    story = intake_story()
+    state = {story.story_id: isolated_quarantine(story)}
+    (tmp_path / "build_state.json").write_text(json.dumps(state), encoding="utf-8")
+
+    class ExtendedGraph(RecoverableGraph):
+        def get_state(self, config):
+            self.checked_thread_id = config["configurable"]["thread_id"]
+            execution_story = self.story.model_copy(
+                update={"story_id": state[story.story_id]["execution_id"]}
+            )
+            return SimpleNamespace(values=build_corpus._initial_state(execution_story).model_dump())
+
+    graph = ExtendedGraph(story, per_story_images=1)
+    build_corpus.build(
+        [story],
+        graph,
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("3.12"), max_calls_per_story=25),
+        resume_quarantined=story.story_id,
+        extend_story_call_cap=story.story_id,
+    )
+    [bundle] = load_completed_bundles(tmp_path)
+
+    assert graph.checked_thread_id == state[story.story_id]["execution_id"]
+    assert graph.calls == [state[story.story_id]["execution_id"]]
+    assert bundle.run_metadata["initial_max_calls_per_story"] == 20
+    assert bundle.run_metadata["max_calls_per_story"] == 25
+    assert bundle.run_metadata["attempted_calls"] == 35
+    assert bundle.run_metadata["cap_extended_at"].endswith("+00:00")
+
+
+def test_extended_cap_allows_only_five_more_calls_before_submission(tmp_path):
+    story = intake_story()
+    state = {story.story_id: isolated_quarantine(story)}
+    (tmp_path / "build_state.json").write_text(json.dumps(state), encoding="utf-8")
+    graph = IsolatedRecoverableGraph(story, per_story_images=6)
+
+    summary = build_corpus.build(
+        [story],
+        graph,
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("3.12"), max_calls_per_story=25),
+        resume_quarantined=story.story_id,
+        extend_story_call_cap=story.story_id,
+    )
+    saved = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
+
+    assert graph.consumed == 5
+    assert summary["halted"] is True
+    assert saved[story.story_id]["telemetry"]["attempted"] == 39
+    assert saved[story.story_id]["max_calls_per_story"] == 25
+    assert saved[story.story_id]["initial_max_calls_per_story"] == 20
+
+
+def test_call_cap_extension_requires_more_budget_before_it_is_persisted(tmp_path):
+    story = intake_story()
+    state = {story.story_id: isolated_quarantine(story)}
+    (tmp_path / "build_state.json").write_text(json.dumps(state), encoding="utf-8")
+
+    summary = build_corpus.build(
+        [story],
+        IsolatedRecoverableGraph(story, per_story_images=1),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("1.20"), max_calls_per_story=25),
+        resume_quarantined=story.story_id,
+        extend_story_call_cap=story.story_id,
+    )
+    saved = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
+
+    assert summary["halted"] is True
+    assert saved == state
+
+
+def test_call_cap_extension_requires_an_existing_isolated_quarantine(tmp_path):
+    story = intake_story()
+    graph = RecoverableGraph(story, per_story_images=1)
+
+    with pytest.raises(CorpusError, match="existing isolated quarantine"):
+        build_corpus.build(
+            [story],
+            graph,
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+            policy=build_corpus.SpendPolicy(max_usd=Decimal("3.12"), max_calls_per_story=25),
+            resume_quarantined=story.story_id,
+            extend_story_call_cap=story.story_id,
+        )
+    assert graph.calls == []
+
+
+@pytest.mark.parametrize(
+    ("reason_code", "new_cap", "resume_id", "match"),
+    [
+        ("budget_stopped", 20, "fixture-story", "must increase"),
+        ("billing_uncertain", 25, "fixture-story", "requires budget_stopped"),
+        ("budget_stopped", 25, "different-story", "matching resume"),
+    ],
+)
+def test_call_cap_extension_rejects_unsafe_requests(
+    tmp_path, reason_code, new_cap, resume_id, match
+):
+    story = intake_story()
+    state = {story.story_id: isolated_quarantine(story, reason_code)}
+    (tmp_path / "build_state.json").write_text(json.dumps(state), encoding="utf-8")
+    graph = RecoverableGraph(story, per_story_images=1)
+
+    with pytest.raises(CorpusError, match=match):
+        build_corpus.build(
+            [story],
+            graph,
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+            policy=build_corpus.SpendPolicy(
+                max_usd=Decimal("3.12"), max_calls_per_story=new_cap
+            ),
+            resume_quarantined=resume_id,
+            extend_story_call_cap=story.story_id,
+        )
+    assert graph.calls == []
 
 
 def test_isolated_restart_requires_existing_quarantine_and_explicit_call_cap(tmp_path):
@@ -1428,6 +1576,7 @@ def test_build_quarantines_a_completion_with_extra_non_human_occurrences(tmp_pat
         ["--fixture", "--price-basis", "official price checked today"],
         ["--fixture", "--resume-quarantined", "fixture-story"],
         ["--fixture", "--max-calls-per-story", "20"],
+        ["--fixture", "--extend-story-call-cap", "fixture-story"],
         [
             "--max-usd",
             "2.59",
@@ -1451,6 +1600,18 @@ def test_build_quarantines_a_completion_with_extra_non_human_occurrences(tmp_pat
             "0",
         ],
         ["--acknowledge-uncertain-billing", "fixture-story"],
+        [
+            "--max-usd",
+            "3.12",
+            "--price-per-megapixel",
+            "0.035",
+            "--price-basis",
+            "checked",
+            "--resume-quarantined",
+            "fixture-story",
+            "--extend-story-call-cap",
+            "different-story",
+        ],
         [
             "--resume-quarantined",
             "fixture-story",
