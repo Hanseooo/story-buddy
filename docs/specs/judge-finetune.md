@@ -693,9 +693,10 @@ auditable protocol control, not DRM; deleting it or copying the freeze is a repo
 
 Pure standard-library helpers compute positive-class precision/recall/F1; 10,000-resample
 character-clustered F1 and paired ΔF1 percentile intervals; two-sided exact McNemar on discordant item
-decisions; tied-rank AUROC; and Cohen's κ. κ is reported for the two ordinary annotators and for each judge
-against adjudicated human truth, overall and on the frozen human/non-human slices. All three fine-tune seeds
-are reported individually plus mean and sample standard deviation.
+decisions; tied-rank AUROC; and Cohen's κ. κ is reported for the single rater's ordered rounds 1 and 2
+(test-retest) and for each judge against adjudicated human truth, overall and on the frozen human/non-human
+slices. Inter-rater agreement remains undefined for this one-rater dataset. All three fine-tune seeds are
+reported individually plus mean and sample standard deviation.
 
 Results also record latency, parse failures, label prevalence and prediction-rate drift. A fixed ten-bin
 reliability table and Brier score are exploratory calibration diagnostics, not new Objective-4 endpoints.
