@@ -78,7 +78,10 @@ timestamp. Synthetic records must not fabricate those donated-only fields. `decl
 subset of `declared_characters`; names are fictional roster labels from the already-redacted story, not donor
 identities. The declared roster is reconciled case-insensitively with `StoryMemory.characters` as soon as `analyze`
 produces them — before the first reference draw, since the roster is knowable from the extraction call and
-checking it at packaging instead charges a whole story's images to learn what one text call already said.
+checking it at packaging instead charges a whole story's images to learn what one text call already said. An
+*empty* extracted roster is adjudicated here too, not treated as evidence not yet arrived: guarding the check on
+a non-empty roster let the one story whose extraction returned nothing skip the gate entirely and pay for a full
+set of anchorless images before failing at packaging.
 Every declared character must appear in the reference slice `characters[:2]`, classified as declared: a declared
 character that is missing, renamed, differently classified, or ranked below the slice (and so never given a
 canonical reference) quarantines the story for manual review before pair materialization. An *additional*
@@ -148,6 +151,12 @@ state after validating the intake digest, telemetry and checkpoint. Uncertain bi
 `--acknowledge-uncertain-billing <story_id>` for the same story; acknowledgment records UTC time and preserves
 the uncertain attempt as fully spent. Neither option may decrement attempted calls, bypass the campaign
 reserve or modify a completed bundle.
+A story that has never had an execution identity persisted for it runs on a campaign thread,
+`<story_id>--campaign-<sha256(resolved --out)[:32]>`, and a restart or readmission records that thread as the
+`abandoned_execution_id` it supersedes. The graph thread is scoped to the output directory because the build
+ledger already is: on 2026-08-27 a fresh `--out` started a fresh ledger but resumed the bare `syn-001` thread an
+earlier campaign had abandoned with an empty roster, drew seven scenes with no character anchor and quarantined
+on characters that were never extracted. A fresh campaign directory must be a fresh run.
 An ordinary validated checkpoint continues with `None` input so its checkpointed channels are not overwritten;
 only a fresh corpus thread receives its initial state. Recovery reserves only the story draw allowance remaining
 after persisted attempted calls, while those completed, failed and uncertain calls remain conservatively charged.

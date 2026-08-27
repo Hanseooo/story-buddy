@@ -218,6 +218,11 @@ def run_story(app_graph, story: IntakeRecord) -> StoryRun:
     # declaration is checked on the first state carrying characters rather than at packaging.
     # Checking it late costs a whole story's images to learn what one text call already said.
     reconciled = False
+    # The gate above was guarded on a truthy roster alone, so a story whose extraction came back
+    # empty never tripped it and paid for a whole story's anchorless images before failing at
+    # packaging (corpus run 2026-08-27). Once `analyze` has reported, an empty roster is a roster
+    # failure and must be adjudicated as one.
+    analyzed = False
     for _ in range(MAX_RESUMES + 1):
         interrupted = False
         try:
@@ -225,11 +230,13 @@ def run_story(app_graph, story: IntakeRecord) -> StoryRun:
                 mode, payload = chunk[-2:]
                 if mode == "values":
                     values = payload
-                    if not reconciled and payload.get("characters"):
+                    if not reconciled and (analyzed or payload.get("characters")):
                         reconciled = True
                         _reconcile_roster(story, StoryMemory.model_validate(payload))
                 elif "__interrupt__" in payload:
                     interrupted = True
+                elif "analyze" in payload:
+                    analyzed = True
         except StoryBudgetStopped:
             return StoryRun(values, _image_count(values), "budget_stopped", "budget_stopped")
         if not interrupted:
@@ -525,9 +532,23 @@ def _restart_attempted_baseline(state_entry: dict | None, telemetry: Counter) ->
 EXECUTION_MARKERS = {"restart": "restarted_at", "readmit": "readmitted_at"}
 
 
-def _execution_id(story: IntakeRecord, state_entry: dict | None) -> str:
+def _campaign_thread_id(story_id: str, out_dir: pathlib.Path) -> str:
+    """The graph thread a story runs on when this campaign has minted no other identity.
+
+    Scoped to the output directory because the ledger already is, and on 2026-08-27 the two
+    disagreed: a fresh `--out` started a fresh ledger but resumed the bare `syn-001` Postgres
+    thread an earlier campaign had abandoned with `characters=[]`, drew seven anchorless scenes
+    against it and quarantined on a roster that was never extracted. Derived from the resolved
+    path rather than stored, so resuming the same campaign lands on the same thread without a
+    second source of truth to keep in step.
+    """
+    digest = hashlib.sha256(str(pathlib.Path(out_dir).resolve()).encode()).hexdigest()[:32]
+    return f"{story_id}--campaign-{digest}"
+
+
+def _execution_id(story: IntakeRecord, state_entry: dict | None, campaign: str | None = None) -> str:
     if not isinstance(state_entry, dict) or "execution_id" not in state_entry:
-        return story.story_id
+        return campaign or story.story_id
     execution_id = state_entry["execution_id"]
     abandoned = state_entry.get("abandoned_execution_id")
     marker = next(
@@ -620,6 +641,7 @@ def _validate_recovery(
     state_entry: dict,
     resume_quarantined: str | None,
     acknowledge_uncertain_billing: str | None,
+    campaign: str | None = None,
 ) -> str | None:
     reason = state_entry.get("reason_code")
     if resume_quarantined != story.story_id or reason not in RECOVERABLE_REASONS:
@@ -628,7 +650,7 @@ def _validate_recovery(
         raise CorpusError(f"intake digest differs for quarantined story: {story.story_id}")
     if reason == "billing_uncertain" and acknowledge_uncertain_billing != story.story_id:
         raise CorpusError(f"acknowledge uncertain billing before retry: {story.story_id}")
-    _validated_checkpoint(app_graph, story, _execution_id(story, state_entry))
+    _validated_checkpoint(app_graph, story, _execution_id(story, state_entry, campaign))
     return (
         datetime.now(timezone.utc).isoformat()
         if reason == "billing_uncertain"
@@ -740,6 +762,7 @@ def build(
     }
     for story in records:
         story_id = story.story_id
+        campaign_thread = _campaign_thread_id(story_id, out_dir)
         state_entry = state.get(story_id)
         expected_reference = {"bundle": f"runs/{story_id}"}
         billing_acknowledged_at = None
@@ -755,7 +778,7 @@ def build(
                 state_entry = _prepare_cap_extension(story, state_entry, policy)
                 state[story_id] = state_entry
                 cap_extension_pending = True
-            _execution_id(story, state_entry)
+            _execution_id(story, state_entry, campaign_thread)
             _validate_restart_cap(story, state_entry, policy)
             if "quarantined" in state_entry:
                 if fixture:
@@ -784,7 +807,7 @@ def build(
                         **_budget_basis(policy),
                         "telemetry": dict(prior_telemetry),
                         "execution_id": f"{story_id}--readmit-{uuid4().hex}",
-                        "abandoned_execution_id": state_entry.get("execution_id", story_id),
+                        "abandoned_execution_id": state_entry.get("execution_id", campaign_thread),
                         "restart_attempted_baseline": prior_telemetry["attempted"],
                         "readmitted_at": readmitted_at,
                         "readmit_reason": readmit_reason.strip(),
@@ -824,7 +847,7 @@ def build(
                         **_budget_basis(policy),
                         "telemetry": dict(prior_telemetry),
                         "execution_id": f"{story_id}--restart-{uuid4().hex}",
-                        "abandoned_execution_id": story_id,
+                        "abandoned_execution_id": campaign_thread,
                         "restart_attempted_baseline": prior_telemetry["attempted"],
                         "restarted_at": restarted_at,
                         **(
@@ -842,6 +865,7 @@ def build(
                         state_entry,
                         resume_quarantined,
                         acknowledge_uncertain_billing,
+                        campaign_thread,
                     )
                     if billing_acknowledged_at is not None:
                         state_entry["billing_acknowledged_at"] = billing_acknowledged_at
@@ -864,7 +888,7 @@ def build(
                     _validated_checkpoint(
                         app_graph,
                         story,
-                        _execution_id(story, state_entry),
+                        _execution_id(story, state_entry, campaign_thread),
                         allow_missing=(
                             "execution_id" in state_entry
                             and state_telemetry["attempted"] == restart_baseline
@@ -973,7 +997,7 @@ def build(
             token = _fal_event_sink.set(record_fal_event)
             uncertain_before_run = story_telemetry["uncertain"]
             try:
-                execution_id = _execution_id(story, state_entry)
+                execution_id = _execution_id(story, state_entry, campaign_thread)
                 execution_story = story.model_copy(update={"story_id": execution_id})
                 run = run_story(app_graph, execution_story)
             except Exception as error:

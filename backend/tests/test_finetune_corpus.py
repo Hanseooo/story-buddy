@@ -10,6 +10,7 @@ Every provider call is mocked. Nothing here draws an image.
 """
 import hashlib
 import json
+import pathlib
 from decimal import Decimal
 from io import BytesIO
 from types import SimpleNamespace
@@ -158,7 +159,13 @@ class RecoverableGraph(FakeGraph):
         self.story = story
 
     def get_state(self, config):
-        return SimpleNamespace(values=build_corpus._initial_state(self.story).model_dump())
+        # A checkpoint stored under a thread always carries that thread as its `story_id` --
+        # `_validated_checkpoint` rejects any other pairing -- and since threads became
+        # campaign-scoped the bare story id is no longer the thread anything runs on.
+        execution_story = self.story.model_copy(
+            update={"story_id": config["configurable"]["thread_id"]}
+        )
+        return SimpleNamespace(values=build_corpus._initial_state(execution_story).model_dump())
 
     def stream(self, graph_input, config, stream_mode=None):
         graph_input = graph_input or build_corpus._initial_state(self.story)
@@ -304,7 +311,7 @@ def test_smoke_divides_affordable_draws_and_quarantines_at_the_ceiling(tmp_path,
     )
 
     state = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
-    assert graph.calls == ["a"]
+    assert graph.calls == [build_corpus._campaign_thread_id("a", tmp_path)]
     assert graph.consumed == 14
     assert summary["images_spent"] == 14
     assert Decimal(summary["usd_high"]) == Decimal("0.490")
@@ -534,7 +541,9 @@ def test_isolated_restart_preserves_prior_spend_and_uses_fresh_checkpoint_and_as
     assert bundle.run_metadata["attempted_calls"] == 15
     assert bundle.run_metadata["uncertain_calls"] == 1
     assert bundle.run_metadata["execution_id"] == execution_id
-    assert bundle.run_metadata["abandoned_execution_id"] == story.story_id
+    assert bundle.run_metadata["abandoned_execution_id"] == build_corpus._campaign_thread_id(
+        story.story_id, tmp_path
+    )
     assert bundle.run_metadata["restart_attempted_baseline"] == 14
     assert bundle.run_metadata["max_calls_per_story"] == 20
 
@@ -1006,7 +1015,7 @@ def test_campaign_persists_failed_call_spend_before_restart(tmp_path, stories):
     summary = build_corpus.build(
         stories[:1], resumed_graph, out_dir=tmp_path, supabase=FakeSupabase(), policy=policy
     )
-    assert resumed_graph.calls == ["a"]
+    assert resumed_graph.calls == [build_corpus._campaign_thread_id("a", tmp_path)]
     assert summary["halted"] is False
     assert Decimal(summary["usd_high"]) == Decimal("0.070")
 
@@ -1326,7 +1335,7 @@ def test_a_completed_story_is_never_resubmitted(tmp_path, stories):
         stories, graph, out_dir=tmp_path, supabase=FakeSupabase()
     )
     assert first["stories_run"] == 3
-    assert graph.calls == ["a", "b", "c"]
+    assert graph.calls == [build_corpus._campaign_thread_id(s, tmp_path) for s in "abc"]
 
     resumed = FakeGraph(per_story_images=2)
     second = build_corpus.build(
@@ -1996,3 +2005,75 @@ def test_fixture_cli_run_honours_the_scene_attempt_cap(tmp_path, monkeypatch):
     build_corpus.main(["--fixture", "--scene-attempts", "1", "--out", str(tmp_path)])
 
     assert captured["policy"].scene_attempts == 1
+
+
+# ------------------------------------------------------- campaign-scoped graph identity
+
+
+def test_a_fresh_campaign_directory_never_resumes_another_campaigns_checkpoint(tmp_path, stories):
+    """Regression, corpus run 2026-08-27: a fresh `--out` was treated as a fresh run and it was
+    not. `run_story` keys the graph on `thread_id = story.story_id` in Postgres, so the new
+    campaign resumed the *original* abandoned `syn-001` thread — the one left with `characters=[]`
+    — drew seven scene images against it with every `char_id` skipped, and then quarantined on a
+    roster that had never been extracted. The ledger is scoped to the directory; the graph state
+    was not. Two campaigns over the same story must not share a thread."""
+    first, second = tmp_path / "one", tmp_path / "two"
+    graph_one, graph_two = FakeGraph(1), FakeGraph(1)
+
+    build_corpus.build(stories[:1], graph_one, out_dir=first, supabase=FakeSupabase())
+    build_corpus.build(stories[:1], graph_two, out_dir=second, supabase=FakeSupabase())
+
+    assert graph_one.calls != graph_two.calls
+    assert stories[0].story_id not in graph_one.calls + graph_two.calls
+
+
+def test_a_campaign_thread_is_stable_for_the_same_output_directory(tmp_path, stories):
+    """Scoping the thread must not cost resumption: the same campaign has to land on the same
+    thread every invocation, or a resumed story would silently start over and pay twice."""
+    story_id = stories[0].story_id
+    again = build_corpus._campaign_thread_id(story_id, tmp_path / "one")
+
+    assert build_corpus._campaign_thread_id(story_id, tmp_path / "one") == again
+    assert build_corpus._campaign_thread_id(story_id, tmp_path / "two") != again
+    # `_validated_checkpoint` compares the thread against `StoryMemory.story_id`, and the
+    # execution-identity checks reject anything with a path separator in it.
+    assert again.startswith(f"{story_id}--")
+    assert pathlib.Path(again).name == again
+
+
+def test_a_persisted_isolated_execution_identity_still_beats_the_campaign_thread(stories):
+    """A restart or readmission already owns the thread it minted. The campaign default applies
+    only where no execution identity was ever persisted."""
+    story = stories[0]
+    entry = isolated_quarantine(story)
+
+    assert build_corpus._execution_id(story, entry, campaign="ignored") == entry["execution_id"]
+
+
+# ------------------------------------------------------- the roster gate on an empty roster
+
+
+def test_run_story_quarantines_an_empty_extracted_roster_before_paying_for_images():
+    """The early gate was guarded on a truthy roster:
+
+        if not reconciled and payload.get("characters"):
+
+    so a story whose extraction came back empty never tripped it — the one check that exists to
+    catch a bad roster for a fraction of a cent silently switched itself off, and the failure
+    surfaced at packaging after a full story's images. That is exactly how the 2026-08-27 run
+    spent ~$0.245 on seven scenes drawn with no character anchor at all. An empty roster is a
+    roster failure, not an absence of evidence."""
+    class EmptyRosterGraph(FakeGraph):
+        def stream(self, graph_input, config, stream_mode=None):
+            self.calls.append(config["configurable"]["thread_id"])
+            yield "updates", {"analyze": {"characters": []}}
+            for mode, values in super().stream(graph_input, config, stream_mode):
+                values["characters"] = []
+                yield mode, values
+
+    graph = EmptyRosterGraph(per_story_images=4)
+
+    with pytest.raises(CorpusError, match="declared roster"):
+        build_corpus.run_story(graph, intake_story())
+
+    assert graph.consumed <= 1
