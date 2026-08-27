@@ -599,10 +599,10 @@ def test_build_report_computes_three_seeds_baselines_slices_and_deployment_rung(
     assert report["slices"]["human"]["seed_0"]["auroc"] == {
         "value": None, "reason": "AUROC requires both classes"
     }
-    assert "human_inter_rater_agreement" in report
-    assert report["human_inter_rater_agreement"]["percent_agreement"] == pytest.approx(1.0)
-    assert report["human_inter_rater_agreement"]["slices"]["human"]["n"] == 1
-    assert report["human_inter_rater_agreement"]["slices"]["non_human"]["n"] == 1
+    assert "intra_rater_agreement" in report
+    assert report["intra_rater_agreement"]["percent_agreement"] == pytest.approx(1.0)
+    assert report["intra_rater_agreement"]["slices"]["human"]["n"] == 1
+    assert report["intra_rater_agreement"]["slices"]["non_human"]["n"] == 1
     assert "deployment_decision" in report
     assert report["objective4"]["requirement_met"] is False
     assert report["deployment_decision"]["ship_candidate"] is False
@@ -707,8 +707,8 @@ def test_report_counts_parse_failures_and_aggregates_only_immutable_prediction_r
     assert metric["cold_start_latency_ms"] == {"value": 10, "reason": None}
     assert metric["calibration"]["status"] == "unavailable"
     assert report["prediction_rate_drift"]["seed_0_vs_zero_shot_base"] == 0.0
-    assert report["human_inter_rater_agreement"]["n"] == 2
-    assert report["human_inter_rater_agreement"]["slices"]["non_human"]["n"] == 1
+    assert report["intra_rater_agreement"]["n"] == 2
+    assert report["intra_rater_agreement"]["slices"]["non_human"]["n"] == 1
     assert "pair_id" not in json.dumps(report)
 
     invalid = dict(report)
@@ -882,8 +882,8 @@ def test_report_reads_frozen_ordered_agreement_labels(tmp_path, valid_lock):
         )
 
     report = ev.build_report(freeze_dir, lock_path, predictions_dir, test_records=records)
-    assert report["human_inter_rater_agreement"]["n"] == 2
-    assert report["human_inter_rater_agreement"]["percent_agreement"] == 0.5
+    assert report["intra_rater_agreement"]["n"] == 2
+    assert report["intra_rater_agreement"]["percent_agreement"] == 0.5
 
 
 def test_deployment_never_passes_when_base_ci_includes_zero_or_recall_regresses(

@@ -529,7 +529,7 @@ the prompted incumbent. Separate them and neither is hostage to a coin flip.
 
 > **What reaches the paper (ADR-008, revised 2026-07-25).** **Objective 4** is the fine-tuned judge's
 > *agreement with human-established reference labels* on the character-disjoint held-out set — precision,
-> recall, and F1, **F1 primary** — with inter-rater reliability on those labels reported and the held-out set
+> recall, and F1, **F1 primary** — with intra-rater test-retest agreement on those labels reported and the held-out set
 > **read once**. That absolute number is the reported result. An **optional secondary comparison** against
 > the zero-shot base model (§7.1) and the existing prompted Consistency Judge baseline (§7.2, §7.4) is
 > permitted on the same held-out pairs and human labels — not required to satisfy Objective 4, and not
@@ -707,7 +707,9 @@ AUROC, Cohen's κ versus adjudicated truth, exploratory calibration, warm-start 
 with the first cold-start observation reported separately,
 cost/call availability, parse-failure count/rate, label prevalence, and prediction rate. `slices.human` and
 `slices.non_human` repeat that schema without pair, character, story, or asset identifiers.
-`human_inter_rater_agreement` reports overall and slice-level κ and percent agreement. The report also
+`intra_rater_agreement` reports overall and slice-level κ and percent agreement for the dataset's single
+rater, where rounds 1 and 2 are the test-retest observations. Inter-rater agreement is permanently undefined
+for this one-rater dataset. The report also
 contains prediction-rate drift versus the validation-selected deployment seed, an `objective4` conclusion,
 and a separate `deployment_decision`. Missing evidence and undefined statistics remain explicit unavailable
 objects with reasons. Registered transfer, downstream, and validation-only endpoints remain visible with

@@ -203,7 +203,7 @@ class Objective4Report(BaseModel):
     seeds_f1_summary: SeedSummary
     judges: dict[str, JudgeMetrics]
     slices: dict[str, dict[str, JudgeMetrics] | UnavailableSlice]
-    human_inter_rater_agreement: HumanAgreement
+    intra_rater_agreement: HumanAgreement
     prediction_rate_drift: dict[str, float]
     registered_endpoints: dict[str, RegisteredEndpoint]
     objective4: ObjectiveConclusion
@@ -218,8 +218,8 @@ class Objective4Report(BaseModel):
         for value in self.slices.values():
             if isinstance(value, dict) and set(value) != set(REPORT_JUDGES):
                 raise ValueError("available slices must contain every registered judge")
-        if set(self.human_inter_rater_agreement.slices) != {"human", "non_human"}:
-            raise ValueError("inter-rater agreement must contain both character slices")
+        if set(self.intra_rater_agreement.slices) != {"human", "non_human"}:
+            raise ValueError("intra-rater agreement must contain both character slices")
         if set(self.registered_endpoints) != {
             "cost_per_call", "dreambench_transfer", "downstream_expert_feedback",
             "data_scaling_ablation",
@@ -1388,7 +1388,7 @@ def build_report(
             for judge_name in REPORT_JUDGES
         }
 
-    # Human inter-rater agreement
+    # One-rater test-retest agreement
     agreement_bytes = _read_frozen_report_artifact(
         freeze_dir, lock, "annotation_agreement.jsonl"
     )
@@ -1486,7 +1486,7 @@ def build_report(
         "seeds_f1_summary": seeds_summary,
         "judges": judges_report,
         "slices": slices_report,
-        "human_inter_rater_agreement": human_agreement,
+        "intra_rater_agreement": human_agreement,
         "prediction_rate_drift": {
             f"{dep_key}_vs_{name}": prediction_rates[dep_key] - rate
             for name, rate in prediction_rates.items() if name != dep_key
