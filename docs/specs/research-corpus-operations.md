@@ -134,6 +134,24 @@ The corpus runner has three explicit terminal outcomes:
 - `quarantined`: resume exhaustion, invalid terminal state, uncertain billing or inconsistent persisted
   state requires an explicit operator decision before another run.
 
+A failed declared-roster reconciliation quarantines that story `invalid_terminal` and the campaign
+*continues* to the next story. Reconciliation runs on the extraction roster, and the graph is wired
+`input_gate -> analyze -> segment -> char_bible` with `char_bible` the first node that draws, so the verdict
+costs one text call and no image spend; stopping the campaign for it charged every remaining story to learn
+nothing. syn-007 and syn-017 each declare two characters while the extractor can also surface a third genuine
+actor, so an unlucky ranking pushed a declared name out of the reference slice and ended a 30-story run at
+story seven with six paid bundles. The quarantine itself is unchanged: the story is still `invalid_terminal`
+and still requires `--readmit-quarantined` before it runs again. Only reconciliation is non-fatal; uncertain
+billing, provider failure and every other terminal `CorpusError` continue to stop the campaign, and uncertain
+billing is adjudicated first when both apply. A mismatch discovered at packaging rather than at extraction has
+already paid for that story's images and remains fatal.
+
+The summary reports `stories_quarantined` and `quarantined_story_ids` on every run, and the CLI names them on
+stderr and exits non-zero. A campaign that quarantined is not `halted` -- it ran every story it was asked to --
+but it is not a clean run either, so the two conditions are reported separately and share exit code 2. No
+mismatch threshold stops the campaign: quarantine-and-continue is the registered behaviour, and a systemic
+extraction failure is visible in the reported count rather than in a partial run.
+
 Reaching the exact draw allowance is not itself failure. The runner may finish non-paid graph work and write
 a valid terminal bundle, but the Fal provider seam must reject the next attempted paid call before submission.
 After the configured interrupt-resume limit, the runner quarantines the story; it never returns an unfinished
@@ -341,6 +359,23 @@ annotation and training. Filename extensions are not trusted; magic bytes and de
 - Resuming a budget-stopped or resume-exhausted story is explicit and retains its persisted call counters.
   Acknowledging uncertain billing retains that attempt at the conservative pinned price; reconciliation can
   never lower recorded campaign spend.
+- A campaign that stops on the reserve check exits non-zero and reports on stderr how many of the
+  requested stories ran, how many never started, cumulative campaign spend against the current
+  authorization, and the `--max-usd` that would have cleared the same reserve check. The JSON summary
+  keeps `halted` plus `halt_reason`, `stories_requested`, `stories_not_started` and `required_max_usd`
+  for programmatic callers. Silence is not a completion signal: every story before the stop has a valid
+  immutable bundle, so a run that reaches story 27 of 30 otherwise looks exactly like one that finished.
+- No `--max-usd` can guarantee an uncapped 30-story campaign: at the derived full allowance the reserve
+  is `IMAGE_BUDGET × USD 0.035 = USD 1.925` per story, so a guaranteed 30-story run needs USD 57.75 and
+  the hard ceiling is USD 30. Such a campaign halts once cumulative charged calls pass
+  `(30 − 1.925) / 0.035 = 802`. An uncapped full run is therefore expected to stop at least once and be
+  re-authorized, or to set `--max-calls-per-story` low enough that 30 reserves fit.
+- The ledger is the standing authorization: `authorized_usd` is already stamped into every in-progress
+  and quarantined entry and every completed bundle's run metadata. Cumulative spend across invocations
+  is charged against the current authorization, but raising `--max-usd` between runs of the same `--out`
+  is a campaign-level decision, so the builder reports `authorization_increased_from` in the summary and
+  announces the increase on stderr. It does not refuse the increase — the smoke → cap-extension → full-run
+  sequence in the runbook legitimately raises it — but the increase can no longer happen unremarked.
 - The USD 25–30 reserve is released only to finish a story or materially improve character coverage.
 - Spend stopping cannot silently change split rules, taxonomy or held-out membership.
 

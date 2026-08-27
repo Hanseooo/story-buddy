@@ -75,11 +75,23 @@ uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json -
 # 2c. If the stop is billing-uncertain, acknowledge that exact story while retaining the same cap and basis.
 uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --limit 3 --max-usd 3.12 --max-calls-per-story 25 --price-per-megapixel 0.035 --price-basis "https://fal.ai/models/fal-ai/qwen-image + https://fal.ai/models/fal-ai/qwen-image-edit-2511 (verified 2026-08-26)" --resume-quarantined syn-001 --acknowledge-uncertain-billing syn-001
 
-# 3. Full synthetic generation (24 train + 6 val stories)
-uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --max-usd 25 --price-per-megapixel <same-current-usd-per-megapixel> --price-basis "<same-official-price-url-and-date>"
+# 3. Full synthetic generation (24 train + 6 val stories).
+# --max-calls-per-story is MANDATORY here, not optional. Without it the per-story reserve is the
+# full IMAGE_BUDGET: 55 x USD 0.035 = USD 1.925, and a story starts only if its whole reserve fits
+# what is left. Thirty such reserves are 30 x 1.925 = USD 57.75 and steps 3 and 4 together are
+# 45 x 1.925 = USD 86.63, against a USD 30 hard ceiling that --max-usd is silently clamped to. An
+# uncapped run therefore cannot complete at any authorization: it halts once charged calls pass
+# (30 - 1.925) / 0.035 = 802, having already paid for everything before that.
+#
+# Steps 3 and 4 share one --out, so they are ONE campaign against one ceiling: 30 synthetic + 15
+# donated = 45 stories. The cap the USD 25 working allocation permits is
+# floor(25 / (45 x 0.035)) = 15 calls/story, whose worst case is 45 x 15 x 0.035 = USD 23.63 and
+# which leaves the USD 25-30 band intact for a cap extension on a story that needs one.
+uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --max-usd 25 --max-calls-per-story 15 --price-per-megapixel <same-current-usd-per-megapixel> --price-basis "<same-official-price-url-and-date>"
 
-# 4. Full donated generation (15 candidate stories: 10 primary + 5 backup)
-uv run python -m finetune.build_corpus --corpus ../data/judge/intake/donated.json --out ../data/judge/corpus --max-usd 25 --price-per-megapixel <same-current-usd-per-megapixel> --price-basis "<same-official-price-url-and-date>"
+# 4. Full donated generation (15 candidate stories: 10 primary + 5 backup). Same campaign
+# directory, same ceiling, same cap -- the arithmetic above already counts these 15 stories.
+uv run python -m finetune.build_corpus --corpus ../data/judge/intake/donated.json --out ../data/judge/corpus --max-usd 25 --max-calls-per-story 15 --price-per-megapixel <same-current-usd-per-megapixel> --price-basis "<same-official-price-url-and-date>"
 
 # 5. Read-only candidate inspection for hard negative selection
 uv run python -m finetune.build_dataset --candidate-report --data ../data/judge/corpus
@@ -117,6 +129,23 @@ uv run python -m finetune.evaluate validate --freeze ../data/judge/freezes/obj4-
 # 15. After an owner/adviser independently writes evaluation_signoff.json, run the one guarded evaluation
 uv run python -m finetune.evaluate heldout --freeze ../data/judge/freezes/obj4-v1 --lock ../data/judge/evaluations/obj4-v1/evaluation_lock.json --signoff ../data/judge/evaluations/obj4-v1/evaluation_signoff.json --ledger ../data/judge/evaluations/obj4-v1/test_access.jsonl --run-id obj4-heldout-1 --predictions ../data/judge/evaluations/obj4-v1/heldout-1/predictions --out ../data/judge/evaluations/obj4-v1/heldout-1/objective4_results.json
 ```
+
+**Before running step 3, read the smoke's per-story `attempted_calls`.** Fifteen calls per story is a
+*budget-derived* cap, not a measured one: no completed corpus story exists yet, and the only spend evidence
+on record is syn-001's 14 abandoned calls. At the production `--scene-attempts 3` a story's structural worst
+case is the full 55, so a cap of 15 stops an overrunning story at the seam and quarantines it for
+reconciliation rather than breaching the campaign ceiling — the intended trade in `research-corpus-operations.md`
+§6, but one that costs a story rather than money. If the smoke shows a completed story needing more than 15
+draws, the corpus must shed stories or `--scene-attempts` must drop; lowering it is not a free tuning knob,
+because bundles drawn under different caps are different sampling distributions and may not be mixed without
+recording it, so it would have to be applied uniformly and the already-drawn smoke bundles redrawn or excluded.
+Do not raise `--max-calls-per-story` instead: 45 stories at 20 calls is 45 x 20 x 0.035 = USD 31.50, past the
+hard ceiling.
+
+Steps 3 and 4 exit non-zero when the campaign halts or when any story quarantines, and name on stderr how many
+stories ran of how many were requested, which stories quarantined, and the `--max-usd` that would have cleared
+the reserve. A roster mismatch quarantines that one story and the run continues, so the expected shape of a
+completed step 3 is 30 bundles, or fewer bundles plus a named quarantine list — never a silent partial run.
 
 `evaluation_signoff.json` is written by the approver, never by evaluation code. It contains exactly the
 SHA-256 of `evaluation_lock.json`, a nonblank `approved_by`, and a timezone-bearing `approved_at`.

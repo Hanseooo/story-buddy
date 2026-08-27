@@ -343,8 +343,22 @@ def _verify_bundle_assets(bundle: RunBundle, out_dir: pathlib.Path) -> None:
             raise CorpusError(f"immutable bundle asset differs: {bundle.memory.story_id}")
 
 
+class RosterMismatch(CorpusError):
+    """A declared roster that did not survive extraction, told apart from every other stop.
+
+    `reconcile_declared_roster` raises a bare `CorpusError`, which is indistinguishable from a
+    missing asset, an unresumable checkpoint or a duplicate storage path -- and those must keep
+    stopping the campaign. Marking the one call site that performs reconciliation is the whole
+    discriminator; it stays a `CorpusError` subclass so every existing handler and every existing
+    `pytest.raises(CorpusError)` still sees what it saw before.
+    """
+
+
 def _reconcile_roster(story: IntakeRecord, memory: StoryMemory) -> None:
-    reconcile_declared_roster(story.declared_characters, story.declared_non_human, memory)
+    try:
+        reconcile_declared_roster(story.declared_characters, story.declared_non_human, memory)
+    except CorpusError as error:
+        raise RosterMismatch(str(error)) from error
 
 
 def check_rosters(stories: list[IntakeRecord]) -> dict:
@@ -684,6 +698,32 @@ def _quarantine(
     _write_state(state_path, state)
 
 
+def _recorded_authorization(bundles: dict, state: dict) -> Decimal | None:
+    """The largest campaign authorization this output directory has already been run under.
+
+    Cumulative spend is already charged against `authorized_usd` across invocations -- completed
+    bundles and unfinished ledger entries both restore into the reserve check below -- but the
+    number that spend is measured against is whatever the current `--max-usd` says. Two runs of
+    the same campaign at $1.50 and then $25.00 are therefore indistinguishable from one run at
+    $25.00 in every artifact the operator reads. No new state file is needed to see the
+    difference: `_budget_basis` already stamps `authorized_usd` into every in-progress and
+    quarantined entry and into every completed bundle's run metadata, so the ledger is the
+    standing authorization.
+    """
+    recorded: list[Decimal] = []
+    sources = [bundle.run_metadata for bundle in bundles.values()]
+    sources += [entry for entry in state.values() if isinstance(entry, dict)]
+    for values in sources:
+        authorized = values.get("authorized_usd")
+        if authorized is None:
+            continue
+        try:
+            recorded.append(Decimal(str(authorized)))
+        except (ArithmeticError, TypeError, ValueError) as error:
+            raise CorpusError("invalid persisted campaign authorization") from error
+    return max(recorded) if recorded else None
+
+
 def build(
     stories: list[IntakeRecord | dict],
     app_graph,
@@ -754,13 +794,19 @@ def build(
     summary = {
         "stories_run": 0,
         "stories_skipped": 0,
+        "stories_requested": len(records),
+        "stories_quarantined": 0,
+        "quarantined_story_ids": [],
         "characters": 0,
         "scenes": 0,
         "images_spent": 0,
         "halted": False,
         **_budget_basis(policy),
     }
-    for story in records:
+    recorded_authorization = _recorded_authorization(bundles, state)
+    if recorded_authorization is not None and policy.authorized_usd > recorded_authorization:
+        summary["authorization_increased_from"] = str(recorded_authorization)
+    for index, story in enumerate(records):
         story_id = story.story_id
         campaign_thread = _campaign_thread_id(story_id, out_dir)
         state_entry = state.get(story_id)
@@ -965,7 +1011,28 @@ def build(
             remaining_usd = policy.authorized_usd - billable_calls * policy.conservative_call_usd
             reserve_usd = max(story_draw_limit - execution_attempted, 0) * policy.conservative_call_usd
             if story_draw_limit <= 0 or reserve_usd > remaining_usd:
+                # A campaign that stops here is the failure mode most easily mistaken for
+                # success: the loop simply ends, every story before this one has a valid
+                # immutable bundle, and `halted` is one boolean in a JSON blob. Record what the
+                # operator needs to decide whether to authorize more -- how much of the run never
+                # started, and the authorization the same reserve check would have accepted.
+                not_started = [
+                    record for record in records[index:] if record.story_id not in bundles
+                ]
                 summary["halted"] = True
+                summary["stories_not_started"] = len(not_started)
+                if story_draw_limit <= 0:
+                    summary["halt_reason"] = "no_draw_allowance"
+                else:
+                    summary["halt_reason"] = "budget_reserve"
+                    # Rounded up to cents so the figure can be handed straight back as
+                    # `--max-usd`, matching the spec's USD 2.625 -> USD 2.63 convention.
+                    summary["required_max_usd"] = str(
+                        (
+                            billable_calls * policy.conservative_call_usd
+                            + len(not_started) * story_draw_limit * policy.conservative_call_usd
+                        ).quantize(Decimal("0.01"), rounding=ROUND_CEILING)
+                    )
                 break
             if cap_extension_pending:
                 _write_state(state_path, state)
@@ -1012,10 +1079,32 @@ def build(
                         policy,
                     )
                     raise CorpusError(f"billing uncertain for {story_id}; reconcile before retry") from error
+                if isinstance(error, RosterMismatch):
+                    # `run_story` reconciles as soon as the extraction roster lands, and the graph
+                    # is wired `input_gate -> analyze -> segment -> char_bible` with `char_bible`
+                    # the first node that draws -- so this verdict costs one text call and zero
+                    # image spend. Re-raising it stopped the whole campaign: syn-007 and syn-017
+                    # each declare two characters while the extractor can also surface a third
+                    # genuine actor ("the vendor", "lolo"), so an unlucky ranking pushed a
+                    # declared name out of the reference slice and ended a 30-story run at story
+                    # seven with six paid bundles. The story is still quarantined
+                    # `invalid_terminal` and still needs `--readmit-quarantined` before it runs
+                    # again; only the blast radius changes.
+                    _quarantine(
+                        state,
+                        state_path,
+                        story,
+                        "invalid_terminal",
+                        f"invalid terminal state: {error}",
+                        story_telemetry,
+                        policy,
+                    )
+                    summary["stories_quarantined"] += 1
+                    summary["quarantined_story_ids"].append(story_id)
+                    continue
                 if isinstance(error, CorpusError):
-                    # `run_story` reconciles the declared roster as soon as `analyze` lands. The
-                    # quarantine and the re-raise match the packaging path below; only the timing
-                    # differs, so the same mismatch now costs one text call instead of the images.
+                    # Every other `CorpusError` keeps its existing semantics. The quarantine and
+                    # the re-raise match the packaging path below.
                     _quarantine(
                         state,
                         state_path,
@@ -1044,6 +1133,7 @@ def build(
                     policy,
                 )
                 summary["halted"] = True
+                summary["halt_reason"] = reason
                 break
 
             try:
@@ -1085,6 +1175,41 @@ def build(
     )
     summary["telemetry"] = dict(telemetry)
     return summary
+
+
+# A campaign that stopped early, or finished but left stories owing an operator decision, is
+# distinguished from a `CorpusError` exit (1) so a wrapper can tell "this run needs attention"
+# from "this run refused to proceed". Both are unfinished work; neither is exit 0.
+ATTENTION_EXIT_CODE = 2
+
+
+def _halt_message(summary: dict) -> str:
+    """What the operator must read on stderr when a campaign stops before its last story.
+
+    Every story before the stop has a valid immutable bundle and the JSON summary still looks
+    like a successful run, so a 30-story campaign that reaches story 27 and stops is
+    indistinguishable from one that finished unless the counts are said out loud.
+    """
+    lines = [
+        f"campaign halted ({summary.get('halt_reason', 'unknown')}): "
+        f"{summary['stories_run']} of {summary['stories_requested']} requested stories ran in "
+        f"this invocation, {summary.get('stories_skipped', 0)} were already complete, "
+        f"{summary.get('stories_not_started', 0)} never started.",
+        f"campaign spend so far USD {summary.get('usd_high', 'unknown')} against an "
+        f"authorization of USD {summary.get('authorized_usd', 'unknown')}.",
+    ]
+    if "required_max_usd" in summary:
+        lines.append(
+            f"--max-usd {summary['required_max_usd']} would have covered the stories that never "
+            f"started at their worst-case per-story reserve; the USD 30 hard ceiling still caps "
+            f"whatever is authorized."
+        )
+    else:
+        lines.append(
+            "the halted story wrote no completed bundle; see build_state.json for its "
+            "quarantine reason and the matching recovery option."
+        )
+    return "\n".join(lines)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1199,8 +1324,30 @@ def main(argv: list[str] | None = None) -> int:
     except CorpusError as error:
         print(str(error), file=sys.stderr)
         return 1
+    if "authorization_increased_from" in summary:
+        print(
+            f"campaign authorization raised: this output directory was already run under USD "
+            f"{summary['authorization_increased_from']}, this run authorizes USD "
+            f"{summary.get('authorized_usd', 'unknown')}",
+            file=sys.stderr,
+        )
     print(json.dumps(summary, sort_keys=True))
-    return 0
+    needs_attention = False
+    if summary.get("halted"):
+        print(_halt_message(summary), file=sys.stderr)
+        needs_attention = True
+    if summary.get("stories_quarantined"):
+        # A campaign that quarantined is not halted -- it ran every story it was asked to -- but
+        # it is not a clean run either, and the ids are the operator's whole work queue.
+        print(
+            f"{summary['stories_quarantined']} of {summary['stories_requested']} stories "
+            f"quarantined and need an operator decision before they run again: "
+            f"{', '.join(summary.get('quarantined_story_ids', []))}. "
+            f"See build_state.json for each reason_code and the matching recovery option.",
+            file=sys.stderr,
+        )
+        needs_attention = True
+    return ATTENTION_EXIT_CODE if needs_attention else 0
 
 
 if __name__ == "__main__":

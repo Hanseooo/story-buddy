@@ -1522,13 +1522,17 @@ def test_build_revalidates_the_completed_graph_result(tmp_path):
 
 
 def test_build_quarantines_a_declared_roster_that_does_not_match_completion(tmp_path):
-    with pytest.raises(CorpusError, match="declared roster"):
-        build_corpus.build(
-            [intake_story(declared_characters=["Moss"], declared_non_human=["Moss"])],
-            FakeGraph(per_story_images=1),
-            out_dir=tmp_path,
-            supabase=FakeSupabase(),
-        )
+    summary = build_corpus.build(
+        [intake_story(declared_characters=["Moss"], declared_non_human=["Moss"])],
+        FakeGraph(per_story_images=1),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+    )
+    state = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
+
+    assert summary["quarantined_story_ids"] == ["fixture-story"]
+    assert state["fixture-story"]["reason_code"] == "invalid_terminal"
+    assert "declared roster" in state["fixture-story"]["quarantined"]
 
 
 def test_build_quarantines_a_completion_with_duplicate_character_names(tmp_path):
@@ -1544,13 +1548,17 @@ def test_build_quarantines_a_completion_with_duplicate_character_names(tmp_path)
             )
             yield "values", values
 
-    with pytest.raises(CorpusError, match="declared roster"):
-        build_corpus.build(
-            [intake_story(declared_non_human=[])],
-            DuplicateCharacterGraph(),
-            out_dir=tmp_path,
-            supabase=FakeSupabase(),
-        )
+    summary = build_corpus.build(
+        [intake_story(declared_non_human=[])],
+        DuplicateCharacterGraph(),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+    )
+    state = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
+
+    assert summary["quarantined_story_ids"] == ["fixture-story"]
+    assert state["fixture-story"]["reason_code"] == "invalid_terminal"
+    assert "declared roster" in state["fixture-story"]["quarantined"]
 
 
 def test_build_quarantines_a_completion_with_extra_non_human_occurrences(tmp_path):
@@ -1576,13 +1584,17 @@ def test_build_quarantines_a_completion_with_extra_non_human_occurrences(tmp_pat
             )
             yield "values", values
 
-    with pytest.raises(CorpusError, match="declared roster"):
-        build_corpus.build(
-            [intake_story(declared_characters=["Moss", "Moss"], declared_non_human=["Moss"])],
-            DuplicateNonHumanGraph(),
-            out_dir=tmp_path,
-            supabase=FakeSupabase(),
-        )
+    summary = build_corpus.build(
+        [intake_story(declared_characters=["Moss", "Moss"], declared_non_human=["Moss"])],
+        DuplicateNonHumanGraph(),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+    )
+    state = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
+
+    assert summary["quarantined_story_ids"] == ["fixture-story"]
+    assert state["fixture-story"]["reason_code"] == "invalid_terminal"
+    assert "declared roster" in state["fixture-story"]["quarantined"]
 
 
 @pytest.mark.parametrize(
@@ -2077,3 +2089,444 @@ def test_run_story_quarantines_an_empty_extracted_roster_before_paying_for_image
         build_corpus.run_story(graph, intake_story())
 
     assert graph.consumed <= 1
+
+
+# ------------------------------------------------- a halt the operator cannot miss
+
+
+def test_budget_halt_records_the_authorization_that_would_have_finished_the_campaign(tmp_path):
+    """A halted campaign is otherwise a single `true` in a JSON blob. The reserve check stops
+    before a story whose worst case does not fit, so the operator's own arithmetic ("30 stories,
+    $1.50 each") never explains the stop; the summary has to carry the counts and the figure."""
+    stories = [
+        IntakeRecord.model_validate(
+            {
+                "story_id": story_id,
+                "text": "t",
+                "declared_characters": ["c0"],
+                "declared_non_human": [],
+                "provenance": "synthetic",
+                "split": "train",
+                "candidate_role": "not_applicable",
+                "style_preset_id": "cel",
+            }
+        )
+        for story_id in "abcdef"
+    ]
+    policy = build_corpus.SpendPolicy(max_usd=Decimal("1.50"), max_calls_per_story=10)
+
+    summary = build_corpus.build(
+        stories, FakeGraph(10), out_dir=tmp_path, supabase=FakeSupabase(), policy=policy
+    )
+
+    assert summary["halted"] is True
+    assert summary["halt_reason"] == "budget_reserve"
+    assert summary["stories_requested"] == 6
+    assert summary["stories_run"] == 4
+    assert summary["stories_not_started"] == 2
+    # 40 calls already charged at $0.035 = $1.400, plus two untouched stories at their
+    # 10-draw worst case = $0.700.
+    assert summary["required_max_usd"] == "2.10"
+
+
+def test_a_completed_campaign_reports_no_halt_figures(tmp_path, stories):
+    summary = build_corpus.build(
+        stories[:1],
+        FakeGraph(1),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("1.95")),
+    )
+
+    assert summary["halted"] is False
+    assert summary["stories_requested"] == 1
+    assert "required_max_usd" not in summary
+    assert "halt_reason" not in summary
+
+
+def test_a_quarantine_halt_names_its_reason(tmp_path, stories):
+    graph = FakeGraph(per_story_images=3)
+    policy = build_corpus.SpendPolicy(max_usd=Decimal("0.06"), price_per_megapixel=Decimal("0.03"))
+
+    summary = build_corpus.build(
+        stories[:1], graph, out_dir=tmp_path, supabase=FakeSupabase(), policy=policy
+    )
+
+    assert summary["halted"] is True
+    assert summary["halt_reason"] == "budget_stopped"
+
+
+def test_cli_exits_nonzero_and_names_the_shortfall_when_a_campaign_halts(
+    monkeypatch, capsys, tmp_path
+):
+    monkeypatch.setattr(build_corpus, "load_intake", lambda path: [intake_story()])
+    monkeypatch.setattr(
+        build_corpus,
+        "build",
+        lambda *args, **kwargs: {
+            "halted": True,
+            "halt_reason": "budget_reserve",
+            "stories_requested": 30,
+            "stories_run": 26,
+            "stories_skipped": 0,
+            "stories_not_started": 4,
+            "required_max_usd": "34.72",
+            "usd_high": "25.000",
+            "authorized_usd": "25.00",
+        },
+    )
+
+    assert build_corpus.main(["--fixture", "--out", str(tmp_path)]) == 2
+    captured = capsys.readouterr()
+    assert "campaign halted" in captured.err
+    assert "26" in captured.err and "30" in captured.err
+    assert "--max-usd 34.72" in captured.err
+    # The machine-readable summary still reaches stdout for programmatic callers.
+    assert json.loads(captured.out)["halted"] is True
+
+
+def test_cli_exits_zero_when_the_campaign_completes(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(build_corpus, "load_intake", lambda path: [intake_story()])
+    monkeypatch.setattr(
+        build_corpus, "build", lambda *args, **kwargs: {"halted": False, "stories_requested": 1}
+    )
+
+    assert build_corpus.main(["--fixture", "--out", str(tmp_path)]) == 0
+    assert capsys.readouterr().err == ""
+
+
+# ------------------------------------------------- the standing campaign authorization
+
+
+def test_raising_the_campaign_authorization_between_invocations_is_reported(tmp_path):
+    """Cumulative spend is already charged against `authorized_usd` across invocations, but the
+    authorization itself is whatever the current command line says. The ledger already records
+    what each earlier run was authorized for, so an increase is detectable without a new file."""
+    stories = [
+        IntakeRecord.model_validate(
+            {
+                "story_id": story_id,
+                "text": "t",
+                "declared_characters": ["c0"],
+                "declared_non_human": [],
+                "provenance": "synthetic",
+                "split": "train",
+                "candidate_role": "not_applicable",
+                "style_preset_id": "cel",
+            }
+        )
+        for story_id in "abcdef"
+    ]
+    build_corpus.build(
+        stories,
+        FakeGraph(10),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("1.50"), max_calls_per_story=10),
+    )
+
+    summary = build_corpus.build(
+        stories,
+        FakeGraph(10),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("25.00"), max_calls_per_story=10),
+    )
+
+    assert summary["authorization_increased_from"] == "1.50"
+    assert summary["authorized_usd"] == "25.00"
+
+
+def test_an_unchanged_or_tightened_authorization_is_not_reported(tmp_path, stories):
+    policy = build_corpus.SpendPolicy(max_usd=Decimal("1.95"))
+    build_corpus.build(
+        stories[:1], FakeGraph(1), out_dir=tmp_path, supabase=FakeSupabase(), policy=policy
+    )
+
+    summary = build_corpus.build(
+        stories[:1],
+        FakeGraph(1),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("1.00")),
+    )
+
+    assert "authorization_increased_from" not in summary
+
+
+def test_cli_announces_a_raised_campaign_authorization_on_stderr(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(build_corpus, "load_intake", lambda path: [intake_story()])
+    monkeypatch.setattr(
+        build_corpus,
+        "build",
+        lambda *args, **kwargs: {
+            "halted": False,
+            "stories_requested": 1,
+            "authorized_usd": "25.00",
+            "authorization_increased_from": "1.50",
+        },
+    )
+
+    assert build_corpus.main(["--fixture", "--out", str(tmp_path)]) == 0
+    assert "authorization raised" in capsys.readouterr().err
+
+
+# ------------------------------------- a roster mismatch costs one story, not the campaign
+
+
+def _roster_stories(*story_ids):
+    return [
+        IntakeRecord.model_validate(
+            {
+                "story_id": story_id,
+                "text": "t",
+                "declared_characters": ["c0"],
+                "declared_non_human": [],
+                "provenance": "synthetic",
+                "split": "train",
+                "candidate_role": "not_applicable",
+                "style_preset_id": "cel",
+            }
+        )
+        for story_id in story_ids
+    ]
+
+
+def _extracted_character(name, ref=False):
+    return Character(
+        char_id="c0", name=name, canonical_ref_image="story/ref-c0-1.png" if ref else None
+    )
+
+
+class RosterGraph:
+    """Emits the extraction roster before drawing anything, the way the real graph does.
+
+    `build_graph` wires `input_gate -> analyze -> segment -> char_bible`, and `char_bible` is the
+    first node that calls Fal, so the reconciliation `run_story` performs on the first roster it
+    sees happens with zero image spend. A fake that drew first would prove the opposite of what
+    these tests claim.
+    """
+
+    def __init__(self, extracted=None, per_story_images=1, final_extracted=None):
+        self.extracted = extracted or {}
+        self.final_extracted = final_extracted or {}
+        self.per_story_images = per_story_images
+        self.calls: list[str] = []
+        self.consumed = 0
+
+    def stream(self, graph_input, config, stream_mode=None):
+        thread = config["configurable"]["thread_id"]
+        self.calls.append(thread)
+        story_id = thread.split("--")[0]
+        values = graph_input.model_dump()
+        values["characters"] = [_extracted_character(self.extracted.get(story_id, "c0"))]
+        yield "values", values
+        for n in range(1, self.per_story_images + 1):
+            sink = build_corpus._fal_event_sink.get()
+            sink("attempted")
+            self.consumed += 1
+            sink("completed")
+            values = dict(
+                values,
+                cost=Cost(image_count=n),
+                characters=[_extracted_character(self.extracted.get(story_id, "c0"), ref=True)],
+            )
+            yield "values", values
+        if story_id in self.final_extracted:
+            yield (
+                "values",
+                dict(
+                    values,
+                    characters=[_extracted_character(self.final_extracted[story_id], ref=True)],
+                ),
+            )
+
+
+def test_a_roster_mismatch_quarantines_its_story_and_the_campaign_continues(tmp_path):
+    """syn-007 and syn-017 declare two characters and have a third genuine actor the extractor
+    can surface. An unlucky ranking pushes a declared name out of the reference slice, and the
+    old behaviour re-raised -- stopping a 30-story campaign at story 7 with six paid bundles."""
+    stories = _roster_stories("a", "b", "c")
+    graph = RosterGraph(extracted={"b": "intruder"})
+
+    summary = build_corpus.build(
+        stories,
+        graph,
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("25.00")),
+    )
+    state = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
+
+    assert summary["stories_run"] == 2
+    assert summary["halted"] is False
+    assert "halt_reason" not in summary
+    assert summary["stories_quarantined"] == 1
+    assert summary["quarantined_story_ids"] == ["b"]
+    assert sorted(bundle.memory.story_id for bundle in load_completed_bundles(tmp_path)) == [
+        "a",
+        "c",
+    ]
+    assert state["b"]["reason_code"] == "invalid_terminal"
+    assert "declared roster does not reconcile" in state["b"]["quarantined"]
+
+
+def test_a_roster_mismatch_costs_no_image_call(tmp_path):
+    """The whole reason continuing is safe: reconciliation fires on the extraction roster, before
+    `char_bible` draws. A mismatch that had already paid for a story's images would be a
+    different decision."""
+    stories = _roster_stories("a")
+    graph = RosterGraph(extracted={"a": "intruder"})
+
+    summary = build_corpus.build(
+        stories,
+        graph,
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("25.00")),
+    )
+    state = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
+
+    assert graph.consumed == 0
+    assert state["a"]["telemetry"] == {"attempted": 0, "completed": 0, "failed": 0, "uncertain": 0}
+    assert summary["usd_high"] == "0.000"
+
+
+def test_a_non_roster_corpus_error_still_stops_the_campaign(tmp_path):
+    """Only the reconciliation path becomes non-fatal. A `CorpusError` raised for any other
+    reason keeps the semantics it has today."""
+
+    class BrokenGraph:
+        def stream(self, graph_input, config, stream_mode=None):
+            raise CorpusError("checkpoint is not resumable: a")
+            yield
+
+    stories = _roster_stories("a", "b")
+
+    with pytest.raises(CorpusError, match="invalid terminal state for a"):
+        build_corpus.build(
+            stories,
+            BrokenGraph(),
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+            policy=build_corpus.SpendPolicy(max_usd=Decimal("25.00")),
+        )
+
+    state = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
+    assert state["a"]["reason_code"] == "invalid_terminal"
+    assert "b" not in state
+
+
+def test_uncertain_billing_outranks_a_roster_mismatch(tmp_path):
+    """An unknown provider result stops the campaign for reconciliation even when the story would
+    also have failed its roster check -- the money question is decided first."""
+
+    class UncertainRosterGraph:
+        def stream(self, graph_input, config, stream_mode=None):
+            sink = build_corpus._fal_event_sink.get()
+            sink("attempted")
+            sink("failed_uncertain")
+            values = graph_input.model_dump()
+            values["characters"] = [_extracted_character("intruder")]
+            yield "values", values
+
+    stories = _roster_stories("a", "b")
+
+    with pytest.raises(CorpusError, match="billing uncertain for a"):
+        build_corpus.build(
+            stories,
+            UncertainRosterGraph(),
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+            policy=build_corpus.SpendPolicy(max_usd=Decimal("25.00")),
+        )
+
+    state = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
+    assert state["a"]["reason_code"] == "billing_uncertain"
+    assert "b" not in state
+
+
+def test_a_packaging_roster_mismatch_still_stops_the_campaign(tmp_path):
+    """Deliberate asymmetry. Continuing past a pre-draw mismatch is free; a mismatch discovered at
+    packaging has already paid for that story's images and is the expensive surprise the operator
+    must see immediately."""
+    stories = _roster_stories("a", "b")
+    graph = RosterGraph(final_extracted={"a": "intruder"})
+
+    with pytest.raises(CorpusError, match="invalid terminal state for a"):
+        build_corpus.build(
+            stories,
+            graph,
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+            policy=build_corpus.SpendPolicy(max_usd=Decimal("25.00")),
+        )
+
+    state = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
+    assert state["a"]["reason_code"] == "invalid_terminal"
+    assert "b" not in state
+
+
+def test_a_roster_quarantine_stays_readmittable_after_the_campaign_continues(tmp_path):
+    """The quarantine is not weakened by continuing: it is still `invalid_terminal`, so it still
+    demands the documented human decision before that story runs again."""
+    stories = _roster_stories("a")
+    build_corpus.build(
+        stories,
+        RosterGraph(extracted={"a": "intruder"}),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("25.00")),
+    )
+
+    summary = build_corpus.build(
+        stories,
+        RosterGraph(),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("25.00"), max_calls_per_story=20),
+        readmit_quarantined="a",
+        readmit_reason="extraction ranking fixed",
+    )
+
+    assert summary["stories_run"] == 1
+    assert summary["stories_quarantined"] == 0
+    [bundle] = load_completed_bundles(tmp_path)
+    assert bundle.run_metadata["readmit_reason"] == "extraction ranking fixed"
+
+
+def test_a_clean_campaign_reports_no_quarantines(tmp_path, stories):
+    summary = build_corpus.build(
+        stories[:1],
+        FakeGraph(1),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("1.95")),
+    )
+
+    assert summary["stories_quarantined"] == 0
+    assert summary["quarantined_story_ids"] == []
+
+
+def test_cli_exits_nonzero_and_names_the_quarantined_stories(monkeypatch, capsys, tmp_path):
+    """A run that quarantines is not halted, but it is not a clean run either, and the operator
+    must not have to open the ledger to learn which stories still owe a decision."""
+    monkeypatch.setattr(build_corpus, "load_intake", lambda path: [intake_story()])
+    monkeypatch.setattr(
+        build_corpus,
+        "build",
+        lambda *args, **kwargs: {
+            "halted": False,
+            "stories_requested": 30,
+            "stories_run": 29,
+            "stories_skipped": 0,
+            "stories_quarantined": 1,
+            "quarantined_story_ids": ["syn-007"],
+        },
+    )
+
+    assert build_corpus.main(["--fixture", "--out", str(tmp_path)]) == 2
+    captured = capsys.readouterr()
+    assert "1 of 30" in captured.err
+    assert "syn-007" in captured.err
+    assert json.loads(captured.out)["halted"] is False
