@@ -1025,20 +1025,25 @@ def test_structured_text_and_judge_both_send_temperature_zero():
         assert parse.call_args.kwargs["temperature"] == 0
 
 
-def test_text_providers_lists_only_providers_that_serve_the_model():
-    """`venice` was on this list and never served the model — OpenRouter serves
-    mistral-small-3.2-24b-instruct from DeepInfra, Parasail and Mistral only. A global slug that
-    the model has no endpoint for does not error; it is silently dropped, so the "two providers,
-    not one" fallback the comment claimed was really `["deepinfra"]` with MAX_RETRIES=2 behind it —
-    the exact single-point-of-failure the free-pool 429s in prod job beb4ebff argue against.
+def test_text_providers_lists_only_providers_this_account_can_actually_route_to():
+    """This list has now carried a dead slug twice. `venice` was on it and has no endpoint for the
+    model at all; `mistral` replaced it on 2026-08-27 because the public endpoints API advertises a
+    Mistral endpoint — and OpenRouter answers `only=["mistral"]` with a 404 naming the providers it
+    will actually route this account to: "deepinfra, parasail". A slug OpenRouter drops is not a
+    fallback, it is a comment that costs a 429, so the list states the one reachable provider and
+    the redundancy is bought elsewhere.
 
-    `parasail` stays off: prod row 558afb6d had it answer `analyze` with a malformed 200
-    (`species` leaking into its location/object siblings), which is why this list diverges from
-    VISION_PROVIDERS at all.
+    `parasail` stays off even though it is reachable: prod row 558afb6d had it answer `analyze`
+    with a malformed 200 (`species` leaking into its location/object siblings). That is
+    schema-valid corruption, so the re-ask in `_chat` cannot catch it — for a corpus the judge is
+    trained on, a 429 is recoverable and a silently wrong extraction is not.
+
+    Re-check with: curl .../api/v1/models/{id}/endpoints, then probe `only=[slug]` — the endpoints
+    API describes the model, not this account's routing, and the two disagreed here.
     """
-    served = {"deepinfra", "parasail", "mistral"}
+    routable = {"deepinfra", "parasail"}
     only = providers.TEXT_PROVIDERS["mistralai/mistral-small-3.2-24b-instruct"]
 
-    assert only == ["deepinfra", "mistral"]
-    assert not set(only) - served
+    assert only == ["deepinfra"]
+    assert not set(only) - routable
     assert "parasail" not in only

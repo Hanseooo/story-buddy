@@ -73,17 +73,23 @@ VISION_PROVIDERS: dict[str, list[str]] = {
 # per call site, which is the rule ADR-002 already states — this is the first case where the two
 # lists actually diverge, so the rule is now load-bearing rather than decorative.
 #
-# ponytail: two providers, not one. Dropping to `["deepinfra"]` would be the cautious read, but the
-# shared free pool 429s often enough to have killed prod job beb4ebff, and MAX_RETRIES is the only
-# tolerance there is. The second slot was `venice` until 2026-08-27 and bought nothing: OpenRouter
-# serves this model from DeepInfra, Parasail and Mistral only, and a global slug with no endpoint
-# for the model is silently dropped rather than rejected — so the claimed two-provider fallback had
-# always been `["deepinfra"]` alone. `mistral` is first-party for this model and declares
-# structured_outputs + response_format. It is unmeasured for fidelity rather than known-good — the
-# re-ask in `_chat` is what covers that, and it is why this list does not have to be right first
-# time. Re-check with: curl .../api/v1/models/{id}/endpoints
+# ponytail: one provider, deliberately. This list has carried a dead slug twice. `venice` sat here
+# until 2026-08-27 with no endpoint for the model at all; `mistral` replaced it the same day on the
+# strength of the public endpoints API, which advertises a Mistral endpoint. OpenRouter answers
+# `only=["mistral"]` from this account with a 404 naming what it will actually route: "deepinfra,
+# parasail". The endpoints API describes the MODEL, not the account's routing, and the two disagree
+# — so a slug is only real once probed. An unroutable slug is not a fallback, it is a comment that
+# costs a 429, and both times it left the claimed two-provider list as `["deepinfra"]` alone.
+#
+# `parasail` is reachable and still excluded: prod row 558afb6d had it answer `analyze` with a
+# malformed 200, `species` leaking into its location/object siblings. That is schema-valid
+# corruption, so the re-ask below cannot catch it. For a corpus the judge is trained on, a 429 is
+# recoverable and a silently wrong extraction is not — so the free-pool 429s (prod job beb4ebff,
+# and the corpus pre-flight on 2026-08-27) are answered with a BYOK provider key on the OpenRouter
+# account, not by widening this list. Re-check with: curl .../api/v1/models/{id}/endpoints, then
+# probe `only=[slug]` — the second step is the one that has twice been skipped.
 TEXT_PROVIDERS: dict[str, list[str]] = {
-    "mistralai/mistral-small-3.2-24b-instruct": ["deepinfra", "mistral"],
+    "mistralai/mistral-small-3.2-24b-instruct": ["deepinfra"],
 }
 
 # The only bound on a call's TOTAL duration. Prod job d83721d9 (2026-08-11) proved `timeout=60.0`
