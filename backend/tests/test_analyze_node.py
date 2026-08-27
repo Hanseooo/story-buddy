@@ -308,12 +308,27 @@ def test_extraction_prompt_separates_identity_from_appearance():
         assert phrase in prompt
 
 
+def test_extraction_prompt_gates_facelessness_on_the_story():
+    """A named kind keeps that kind's face unless the story says otherwise.
+
+    The faceless wording used to be ungated: it told the model how to phrase facelessness but
+    never when it applied, so "robot" alone was enough and the prompt's own example phrase landed
+    on a tin rooster. `char_bible` then minted a rooster-faced reference for a spec that said
+    "no visible face", and every scene failed `different_face` for the life of the story.
+    """
+    prompt = EXTRACTION_PROMPT
+    assert "Only when the story establishes" in prompt
+    assert "beak" in prompt
+    # The positive-wording guidance must survive the gate, not be replaced by it.
+    assert "smooth unbroken front surface" in prompt
+
+
 def test_extract_entities_logs_prompt_version(caplog):
     with caplog.at_level(logging.INFO, logger="pipeline.analyze"):
         with patch("pipeline.analyze.structured_text", return_value=_analysis()):
             extract_entities("I went to the beach.")
 
-    assert "extraction_prompt_version=2" in caplog.text
+    assert "extraction_prompt_version=3" in caplog.text
 
 
 def _state(raw_text="A dog runs in a field.", redacted_text="A dog runs in a field.") -> StoryMemory:

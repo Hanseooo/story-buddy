@@ -118,7 +118,7 @@ class StoryAnalysis(BaseModel):
 
 log = logging.getLogger(__name__)
 
-EXTRACTION_PROMPT_VERSION = 2
+EXTRACTION_PROMPT_VERSION = 3
 
 # `analyze` reads REDACTED text, so any name reaching this prompt is already a pseudonym from
 # `providers._PSEUDONYM_POOL` — a story about "Jun" arrives as a story about "Ana". Using that
@@ -141,6 +141,13 @@ EXTRACTION_PROMPT_VERSION = 2
 # added with it: do not pad the roster to 3 (27 of those 30 padded to exactly 3), and only a
 # first-person story gets a narrator character (the old line asserted first-person unconditionally
 # and minted "the narrator" for third-person text).
+#
+# v3 (2026-08-27): the faceless wording was ungated. It said how to phrase facelessness but never
+# when it applied, so "robot" alone triggered it and the prompt's own example phrase was copied
+# onto syn-001's tin rooster ("smooth unbroken front surface with no visible face"). `char_bible`
+# drew the species-appropriate rooster the neighbouring sentence demands, so the reference
+# contradicted its own spec and all 7 scenes failed `different_face`/`wrong_body_feature` to the
+# retry ceiling -- 25 image calls for 9 assets, and a bundle the consistency judge never passed.
 EXTRACTION_PROMPT = """Extract the entities from this child's story.
 
 Decide the cast before describing it. Classify by agency: a character speaks, decides, or moves
@@ -162,8 +169,11 @@ actions, or emotions as permanent appearance; "smiled" describes an expression i
 not a human mouth or human face. Copy every stated permanent physical fact without alteration.
 When the story is silent, choose one neutral, child-safe, drawable design once. Keep animals,
 robots, vehicles, objects, and other non-people species-appropriate unless the story explicitly
-anthropomorphizes them. Prefer positive visible morphology over a bare prohibition: use a positive
-faceless surface/interface such as "smooth unbroken front surface" rather than only "no face".
+anthropomorphizes them. A named kind keeps that kind's face: a tin rooster still has a beak and a
+comb, a robot dog still has a dog's muzzle. Only when the story establishes that the character has
+no face, prefer positive visible morphology over a bare prohibition: use a positive faceless
+surface/interface such as "smooth unbroken front surface" rather than only "no face".
+face_or_interface names a face or a faceless surface, never both in one value.
 Choose body_plan for the stable whole-subject silhouette and construction, and
 face_or_interface for the stable visible head, face, sensory interface, or positive faceless
 surface. Both are permanent facts, not pose, expression, damage, lighting, weather, style, or
