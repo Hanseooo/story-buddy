@@ -198,6 +198,13 @@ It is **not** independent, and it is not claimed to be. An adjudicated pair's la
 considered third judgment, and the honest reading of a high adjudication rate here is *"this rater
 found these pairs genuinely hard"*, not *"two people converged"*.
 
+**Adjudication route authorization.** Both `/adjudicate` server actions authenticate any `researcher`
+profile first, then authorize from server-read annotation state. Exactly two ordinary rows must exist.
+The allowed shapes are: the same ordinary researcher authored rounds 1 and 2 and now writes round 3,
+or a distinct `is_adjudicator = true` researcher authored neither ordinary row and writes the
+authoritative row. Mixed self/other ordinary rows, prior adjudication evidence, a fourth label, and
+malformed rounds fail closed. `/annotate` stays ordinary-only and still writes only rounds 1 and 2.
+
 **Inter-rater agreement is UNDEFINED for this dataset, by design.** Cohen's kappa between two
 annotators cannot be computed from one annotator's labels - not "not yet computed", not "pending a
 second rater": undefined, permanently. What `judge-finetune.md` §7 reports instead is **intra-rater
@@ -260,6 +267,8 @@ Models mocked (there are no model calls here). Assertions:
 - `annotate/` never writes round 3, and does not open round 2 until round 1 covers the whole queue.
 - `adjudicate/`'s query returns exactly the pairs with two `annotations` rows disagreeing on
   `same_character`, `failure_reasons`, `anatomy_intact`, or `text_free` — no false positives from pairs with only one label so far.
+  A solo ordinary researcher may see their own conflicting rounds 1 and 2; mixed self/other ordinary
+  rows and already-adjudicated pairs are skipped.
 - The pair-fetch query for `annotate/` never returns a pair the current annotator already has a row for.
 - `build_dataset.py` paginates the `annotations` read beyond Supabase's default 1,000-row response cap;
   the full dual-annotation campaign cannot be exported from a truncated first page.
@@ -326,8 +335,3 @@ its implied CSV-merge mechanism. `build_dataset.py` reads the `annotations` tabl
   is a scheduling decision for the labelling weekend, not a build decision here. **Resolved for the
   rounds themselves (§4.1):** round 2 cannot start until round 1 covers the whole queue, because
   `getNextPair` enforces it; the calendar gap between the two passes stays a scheduling obligation.
-- **`adjudicate/` still assumes two identities and cannot be driven by the solo rater.**
-  `_shared/actions.verifyResearchAuth` makes `is_adjudicator` mutually exclusive with annotating, and
-  `submitAdjudication` rejects a pair whose prior annotations are the caller's own. The backend
-  resolves a round-3 row correctly today, but no UI can write one. Relaxing that is an auth-semantics
-  change and is deliberately left undecided here rather than made silently.

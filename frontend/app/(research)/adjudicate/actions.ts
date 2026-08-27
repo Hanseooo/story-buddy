@@ -14,6 +14,14 @@ export type BlindAnnotation = {
   text_free: boolean;
 };
 
+type AnnotationRow = BlindAnnotation & {
+  annotator_id: string;
+  round: number | null;
+};
+
+const ADJUDICATION_ROUND = 3;
+const ORDINARY_ROUNDS = new Set([1, 2]);
+
 async function findAdjudicatorIds(
   adminClient: Awaited<ReturnType<typeof createAdminClient>>,
   userIds: string[],
@@ -26,10 +34,32 @@ async function findAdjudicatorIds(
   return { ids: new Set((data || []).map(profile => profile.id)), error };
 }
 
+function annotationRound(annotation: { round: number | null }) {
+  return annotation.round ?? 1;
+}
+
+function hasValidRound(annotation: { round: number | null }) {
+  const round = annotationRound(annotation);
+  return Number.isInteger(round) && round >= 1 && round <= ADJUDICATION_ROUND;
+}
+
+function isAdjudicationRow(annotation: AnnotationRow, adjudicatorIds: Set<string>) {
+  return annotationRound(annotation) >= ADJUDICATION_ROUND || adjudicatorIds.has(annotation.annotator_id);
+}
+
+function isSoloOrdinaryShape(ordinary: AnnotationRow[], userId: string) {
+  return (
+    ordinary.length === 2 &&
+    ordinary.every(annotation => annotation.annotator_id === userId) &&
+    ordinary.every(annotation => ORDINARY_ROUNDS.has(annotationRound(annotation))) &&
+    new Set(ordinary.map(annotationRound)).size === 2
+  );
+}
+
 export async function submitAdjudication(payload: SubmissionPayload) {
   const { pairId, failureReasons, sameCharacter, anatomyIntact, textFree } = payload;
   
-  const { error: authError, user } = await verifyResearchAuth(true);
+  const { error: authError, user, isAdjudicator } = await verifyResearchAuth("any");
   if (authError || !user) return { error: authError || "Unauthorized" };
 
   const { error: validationError } = validateSubmissionPayload(payload);
@@ -40,46 +70,68 @@ export async function submitAdjudication(payload: SubmissionPayload) {
   const adminClient = await createAdminClient();
 
   // Validate that the pair is still conflicted
-  const { data: pairInfo } = await adminClient
+  const { data: pairInfo, error: pairError } = await adminClient
     .from("research_pairs")
     .select("status")
     .eq("id", pairId)
     .single();
 
-  if (!pairInfo || pairInfo.status !== "conflicted") {
+  if (pairError || !pairInfo || pairInfo.status !== "conflicted") {
     return { error: "Pair is no longer conflicted" };
   }
 
-  const { data: existingAnnotations } = await adminClient
+  const { data: existingAnnotations, error: annotationsError } = await adminClient
     .from("annotations")
-    .select("annotator_id")
+    .select("annotator_id, round, same_character, failure_reasons, anatomy_intact, text_free")
     .eq("pair_id", pairId);
 
-  if (!existingAnnotations || (existingAnnotations.length !== 2 && existingAnnotations.length !== 3)) {
-    return { error: "Invalid pair state: requires exactly 2 prior annotations" };
+  if (annotationsError || !existingAnnotations) {
+    return { error: "Failed to verify prior annotations" };
   }
 
-  if (existingAnnotations.length === 3) {
-    if (!existingAnnotations.some(a => a.annotator_id === user.id)) {
-      return { error: "Pair already adjudicated by another adjudicator" };
-    }
+  if (existingAnnotations.some(annotation => !hasValidRound(annotation))) {
+    return { error: "Invalid pair state: malformed annotation round" };
   }
 
-  const priorAnnotations = existingAnnotations.filter(annotation => annotation.annotator_id !== user.id);
-  if (priorAnnotations.length !== 2) {
-    return { error: "Adjudicator cannot resolve their own annotations" };
-  }
-
-  const { ids: priorAdjudicators, error: profileError } = await findAdjudicatorIds(
+  const { ids: adjudicatorIds, error: profileError } = await findAdjudicatorIds(
     adminClient,
-    priorAnnotations.map(annotation => annotation.annotator_id),
+    [...new Set(existingAnnotations.map(annotation => annotation.annotator_id))],
   );
   if (profileError) return { error: "Failed to verify prior annotators" };
-  if (priorAdjudicators.size > 0) {
+
+  const rows = existingAnnotations as AnnotationRow[];
+  const ordinary = rows.filter(annotation => !isAdjudicationRow(annotation, adjudicatorIds));
+  const adjudications = rows.filter(annotation => isAdjudicationRow(annotation, adjudicatorIds));
+
+  if (adjudications.length > 1) {
+    return { error: "Invalid pair state: multiple adjudication rows" };
+  }
+
+  if (adjudications.length === 1 && rows.length === 2) {
     return { error: "Invalid pair state: prior annotations must be from ordinary annotators" };
   }
 
-  if (existingAnnotations.length === 3) {
+  if (ordinary.length !== 2) {
+    return { error: "Invalid pair state: requires exactly 2 prior annotations" };
+  }
+
+  const soloOrdinary = isSoloOrdinaryShape(ordinary, user.id);
+
+  if (!isAdjudicator && !soloOrdinary) {
+    if (ordinary.some(annotation => annotation.annotator_id === user.id)) {
+      return { error: "Ordinary researcher cannot adjudicate mixed self/other rows" };
+    }
+    return { error: "Ordinary researcher cannot adjudicate someone else's pair" };
+  }
+
+  if (isAdjudicator && ordinary.some(annotation => annotation.annotator_id === user.id)) {
+    return { error: "Adjudicator cannot resolve their own annotations" };
+  }
+
+  if (adjudications.length === 1) {
+    if (adjudications[0]?.annotator_id !== user.id) {
+      return { error: "Pair already adjudicated by another adjudicator" };
+    }
     const { error: updateError } = await adminClient
       .from("research_pairs")
       .update({ status: "adjudicated" })
@@ -98,6 +150,7 @@ export async function submitAdjudication(payload: SubmissionPayload) {
       anatomy_intact: anatomyIntact,
       text_free: textFree,
       failure_reasons: failureReasons,
+      round: ADJUDICATION_ROUND,
     });
 
   if (insertError) {
@@ -125,19 +178,23 @@ export async function submitAdjudication(payload: SubmissionPayload) {
 }
 
 export async function getConflictedPair() {
-  const { error: authError, user } = await verifyResearchAuth(true);
+  const { error: authError, user, isAdjudicator } = await verifyResearchAuth("any");
   if (authError || !user) return { error: authError || "Unauthorized" };
 
   const adminClient = await createAdminClient();
 
   const { data: userAnnotations, error: annotationsError } = await adminClient
     .from("annotations")
-    .select("pair_id")
+    .select("pair_id, round")
     .eq("annotator_id", user.id);
 
   if (annotationsError) return { error: "Failed to load adjudication queue" };
 
-  const annotatedPairIds = new Set((userAnnotations || []).map(a => a.pair_id));
+  const adjudicatedPairIds = new Set(
+    (userAnnotations || [])
+      .filter(annotation => isAdjudicator || annotationRound(annotation) >= ADJUDICATION_ROUND)
+      .map(a => a.pair_id)
+  );
 
   const { data: adjudicatorProfiles, error: profilesError } = await adminClient
     .from("profiles")
@@ -169,23 +226,29 @@ export async function getConflictedPair() {
     }
 
     for (const pair of pairs) {
-      if (annotatedPairIds.has(pair.id)) {
+      if (adjudicatedPairIds.has(pair.id)) {
         continue;
       }
 
       const { data: annotations, error: annotationsError } = await adminClient
         .from("annotations")
-        .select("annotator_id, same_character, failure_reasons, anatomy_intact, text_free")
+        .select("annotator_id, round, same_character, failure_reasons, anatomy_intact, text_free")
         .eq("pair_id", pair.id);
 
       if (annotationsError) return { error: "Failed to load adjudication queue" };
 
-      if (
-        annotations &&
-        annotations.length === 2 &&
-        !annotations.some(a => a.annotator_id === user.id || adjudicatorIds.has(a.annotator_id))
-      ) {
-        const [a1, a2] = annotations;
+      if (!annotations || annotations.some(annotation => !hasValidRound(annotation))) {
+        continue;
+      }
+
+      const rows = annotations as AnnotationRow[];
+      const ordinary = rows.filter(annotation => !isAdjudicationRow(annotation, adjudicatorIds));
+      const adjudications = rows.filter(annotation => isAdjudicationRow(annotation, adjudicatorIds));
+      const soloOrdinary = isSoloOrdinaryShape(ordinary, user.id);
+      const distinctAdjudicatorShape = isAdjudicator && ordinary.length === 2 && !ordinary.some(a => a.annotator_id === user.id);
+
+      if (adjudications.length === 0 && (soloOrdinary || distinctAdjudicatorShape)) {
+        const [a1, a2] = ordinary;
         
         if (isConsensus(a1, a2)) continue; // Not truly conflicted
 
