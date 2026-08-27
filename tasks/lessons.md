@@ -15,6 +15,16 @@
 - **Rule**: Never do X. Always do Y instead.
 -->
 
+### 2026-08-26 Corpus filesystem state does not prove checkpoint state
+- **What happened**: I treated a missing `data/judge/corpus/build_state.json` as a clean smoke-run
+  slate, but the next invocation deserialized an existing LangGraph checkpoint for the same
+  `story_id` from Postgres.
+- **Root cause**: I checked the corpus filesystem and did not account for the producer's second
+  durable state store: `PostgresSaver`, keyed by `thread_id = story_id`.
+- **Rule**: Before calling a corpus retry clean, inspect both the filesystem build state and the
+  LangGraph checkpoint state. An empty output directory proves only that no bundle/state file was
+  materialized; it does not prove that no partial graph execution exists.
+
 ### 2026-07-10 Ran `ruff format` on a repo that does not use it
 - **What happened**: After editing `spikes/phase_05.py` I ran `ruff format`, which rewrapped the
   whole file to its default 88-column width. A ~60-line change became 176 insertions of unrelated
@@ -68,3 +78,16 @@
 - **Rule**: For auth bugs, trace both the fresh-login and stale-session paths through middleware,
   server layouts, and role resolution; never use a student route as the unknown-profile fallback.
 # Inline implementation means the primary agent edits and verifies directly; do not substitute a subagent-driven workspace even when a referenced plan recommends one.
+
+### 2026-08-28 A zero-cost readiness gate can pass while the pipeline is broken
+- **What happened**: Ticket 06's readiness gate returned a clean go verdict and authorized the paid
+  three-story smoke. The smoke then produced 0 of 3 bundles, root-caused to two defects fixed later
+  in `fde50b0` (extraction prompt weighting) and `4f5fe44` (roster-equality reconciliation). The
+  gate's verdict was eventually vindicated — the smoke now stands at 3 of 3 — but it was not earned
+  at the time it was given.
+- **Root cause**: The gate exercised determinism, spend arithmetic and fixture plumbing, none of
+  which touch extraction quality or roster reconciliation. Those two are exactly what a paid run
+  spends money discovering, so they are what a pre-spend gate most needs to cover.
+- **Rule**: A go/no-go gate is only as good as the failure modes it can observe. State plainly which
+  failure classes it does NOT cover, and treat a clean gate as authorizing spend rather than as
+  evidence of correctness. Record this as a limitation of the instrument, not as a defect to hide.

@@ -26,8 +26,8 @@
   - [x] Copy and hash-verify `dataset_selection.json` inside the immutable freeze.
   - [x] Reconcile the runbook with the preregistered Rung-D second-read exception.
   - [x] Run focused and full verification, review, and commit only Batch 2 files.
-- [ ] Design and implement Batch 3 training/evaluation execution.
-- [ ] Finalize the existing research runbook as the sole operator guide.
+- [x] Design and implement Batch 3 training/evaluation execution.
+- [x] Finalize the existing research runbook as the sole operator guide.
 
 ## Success criteria
 
@@ -1113,3 +1113,207 @@ read real `test.json`, or mutate live research infrastructure.
 - Eight independently reviewable TDD tasks cover freeze evidence, pinned three-seed training, standard-library metrics, provider metadata, validation selection, held-out access, reporting, and operator closure.
 - Self-review reconciled the model-serving boundary with a generated checkpoint inventory/vLLM command, kept Gemma on the evaluation-only OpenRouter route, required spend-alarm confirmation and a separate evaluation-lock sign-off, and preserved the production `providers.judge()` contract.
 - Planning performed no training, provider calls, dataset reads, held-out access, live research mutations, or dependency installation.
+
+# Current Task: Objective-4 Batch 3 protocol corrections
+
+- [x] Add failing integration tests for frozen agreement rows and validation-only access.
+- [x] Add failing tests for mandatory control thresholds, unique adapter IDs, prompt parity, metadata, and deployment gates.
+- [x] Add failing tests for exclusive prediction writes and the signed held-out ledger lifecycle.
+- [x] Apply the smallest production fixes in the existing evaluation harness.
+- [x] Correct the canonical research runbook and delete the duplicate operator guide.
+- [x] Run focused tests, backend lint/full pytest, and document the outcome.
+
+## Success criteria
+
+Validation never opens the held-out projection; every mandatory baseline runs with its frozen prompt, model,
+threshold and metadata; one exclusive signed ledger governs first access, same-run resume, the sole documented
+Rung-D retry and report generation; frozen agreement evidence reaches the final report unchanged; and the
+canonical runbook contains commands that match the implemented CLIs. No real dataset, provider, training job,
+or live research system is accessed.
+
+## Outcome
+
+Validation now reads only `manifest.val.jsonl` and copies held-out hashes from the immutable freeze report;
+missing CLIP/DINOv2 evidence fails closed. Frozen two-label agreement rows reach the report directly. Real
+VLM evaluation uses `judge_with_metadata`, Gemma keeps the shipped prompt, malformed responses remain marked
+malformed, embedding scores and thresholds share one polarity, and selected checkpoints retain unique vLLM IDs.
+
+Held-out execution now requires a separately authored, hash-bound sign-off; uses an exclusive append-only
+ledger; permits only hash-identical same-run recovery and one report-bound Rung-D deviation; writes all seven
+prediction sets and the final report in one guarded command; and rejects a third read. The permissive reserve
+and aggregate CLIs were removed. The canonical research runbook now matches all implemented CLIs and the
+duplicate Objective-4 operator guide was deleted.
+
+Verification: targeted Objective-4/provider suite passed 146 tests; `uv run ruff check .` passed; full backend
+pytest passed 1178 with 80 intentional skips and 6 deselected smoke tests; frontend lint passed and Vitest
+passed 380 tests across 42 files. CLI `--help` output confirmed the documented training, freeze, validation,
+and held-out interfaces. No model call, held-out artifact, training job, paid service, or live research store
+was accessed.
+
+# Current Task: Enforce a megapixel-bound corpus generation budget
+
+- [x] Add failing tests for pinned image sizes on both Fal routes.
+- [x] Add failing tests for provider-rounded per-call reservation, exact-boundary completion, and pre-call rejection.
+- [x] Implement the minimum shared size pin and megapixel-derived spend policy.
+- [x] Align corpus metadata, the owning spec, and canonical operator commands.
+- [x] Run targeted and full verification, review the diff, and commit only this ticket.
+
+## Success criteria
+
+Every paid image request pins a known maximum size; the corpus runner reserves the rounded-up megapixel
+ceiling at an operator-supplied per-MP rate; exact authorization completes while an excess request stops
+before provider dispatch; fixture mode remains zero-call/zero-cost; and operator evidence records the full
+calculation.
+
+## Review / outcome
+
+Both Fal generation routes now pin `1024x768`. Corpus authorization derives each call's ceiling from
+`ceil(0.786432 MP) * operator-supplied USD/MP`, retains exact-boundary completion, and blocks the next excess
+attempt at the existing event seam. Summaries and immutable bundles record the size, raw/rounded MP, rate,
+per-call ceiling, and authorization; paid CLI runs require the rate.
+
+TDD evidence: five focused regressions failed before implementation and passed afterward. Verification:
+113 provider/corpus tests passed; `uv run ruff check .` passed; full backend pytest passed 1184 with 80
+intentional skips and 6 deselected provider smoke tests. The zero-cost fixture completed with zero attempted
+image calls and `usd_high="0.000"`. No paid provider, database, or secret was accessed.
+# Bind training to selected freeze (issue 03)
+
+- [x] Add failing training preflight tests for dataset binding, artifact integrity, toolchain pins, and hardware evidence.
+- [x] Implement the minimum freeze-bound command and fail-closed preflight.
+- [x] Declare the existing YAML parser directly through `uv` and align the training spec/runbook.
+- [x] Run targeted checks, backend lint/full tests, and review the diff against the ticket and repository standards.
+- [x] Commit the reviewed implementation on the current branch (`5071096`).
+
+## Review / outcome
+
+- Training commands now receive `dataset_dir` only from the selected `--freeze`; preflight verifies every
+  training artifact hash, exact uv-tool VCS provenance, frozen pins, and live hardware against an approved
+  qualification record before writing auditable plans or allocating GPU work.
+- TDD evidence: the new failure cases failed before implementation; 69 focused tests pass afterward.
+- Verification: `uv run ruff check .` passed; full `uv run pytest` passed 1205 with 80 intentional skips and
+  6 deselected smoke tests. Two-axis review found no remaining ticket issue; unrelated user changes were excluded.
+
+# Fail-closed evaluation lock and held-out resume (issue 04)
+
+- [x] Add failing tests for strict lock validation, checkpoint identity, and exclusive creation.
+- [x] Add failing tests for tamper-proof prediction reuse, partial resume, and ledger lifecycle events.
+- [x] Implement the minimum lock validator and prediction-resume path in the existing evaluator.
+- [x] Align the owning evaluation spec/runbook with the implemented evidence contract.
+- [x] Run focused checks, backend lint/full tests, two-axis review, and commit this ticket.
+
+## Success criteria
+
+Held-out access begins only after an immutable lock and checkpoint identity validate; reservation is recorded
+before test data is opened; existing prediction evidence is hash-verified and reused without provider calls;
+the ledger distinguishes initial reservation, resume, completion, and failure; all checks use synthetic files.
+
+## Review / outcome
+
+- Evaluation locks now validate exact schema/pins, normalized hashes, registered identifiers, and live
+  checkpoint path/digest identity before held-out reservation. Atomic publication makes identical concurrent
+  creation deterministic and never replaces a different lock.
+- Completed prediction JSONL files are bound to SHA-256 sidecars and frozen judge/checkpoint metadata. Same-run
+  recovery records `resumed`, reuses verified evidence, and invokes only missing judges; ledger failures expose
+  only exception types, never story content or asset paths.
+- TDD evidence: the focused regressions failed before implementation and 33 evaluator/integrity tests pass.
+  Final verification: `uv run ruff check .` passed; `uv run pytest` passed 1206, skipped 80 environment tests,
+  and deselected 6 provider smoke tests. Review found no hard standards violation; atomic-publication findings
+  were fixed before the final verification. No provider, GPU, real held-out, database, or secret was accessed.
+
+# Complete preregistered Objective-4 reporting (issue 05)
+
+- [x] Add golden failing tests for complete judge metrics, human/non-human slices, malformed outputs, latency, undefined metrics, deterministic schema output, and rungs A-D.
+- [x] Implement the minimum validated report schema and evidence-derived aggregation in the existing evaluator.
+- [x] Align the judge spec, frozen preregistration interpretation, and canonical runbook with the emitted report.
+- [x] Run focused checks, backend lint/full tests, two-axis review, and commit only issue 05.
+
+## Success criteria
+
+The held-out report exposes every registered metric and both frozen character slices without identifiers;
+derives all comparisons from immutable prediction rows; assigns Objective-4 status and deployment separately
+for all four frozen rungs; validates one documented schema; reproduces identical bytes from identical inputs;
+and passes golden deterministic tests plus the full repository checks.
+
+## Review / outcome
+
+The canonical schema now reports every registered judge overall and by frozen human/non-human slice, with
+identifier-free performance, agreement, calibration, parse, prevalence, prediction-rate, cost availability,
+and separate cold/warm latency fields. Signed-lock hashes bind slice/agreement evidence; prediction sidecars,
+judge identity, ordered IDs, and latency phases fail closed. The frozen ladder now keeps Objective-4 success
+separate from deployment, including Rung C as research-met/incumbent-kept.
+
+TDD evidence: reporting, ladder, integrity, latency, schema, and publication regressions failed before their
+fixes and 45 focused evaluator/integrity tests pass. Final backend verification passed Ruff and 1,216 tests,
+with 80 intentional environment skips and 6 provider smoke tests deselected. Frontend lint passed and all 380
+tests passed. Two-axis review findings were fixed and re-reviewed. No held-out data, provider, GPU, database,
+secret, or paid service was accessed.
+
+# Reconcile visual-direction cast omissions
+
+- [x] Add failing tests proving direction-named roster characters append after the model-listed cast in roster order without duplicates.
+- [x] Preserve the existing rule that excerpt-only/off-screen mentions do not add characters.
+- [x] Implement the minimum deterministic reconciliation and log it without provider retries.
+- [x] Update `scene-segmentation.md` so visible-cast behavior and deterministic tests match the code.
+- [x] Run focused tests, Ruff, the full backend suite, review the diff, and commit only the implementation files.
+
+## Success criteria
+
+A roster character explicitly named in the rendered `visual_direction` is included in the final
+`characters_present` list before image generation. Model-listed order remains unchanged; recovered characters
+append in roster order; excerpt-only mentions remain absent; unknown names and duplicate protections remain
+unchanged. No provider, checkpoint, database, or paid call is made.
+
+## Review / outcome
+
+The segment node now treats an explicitly direction-named roster character as visible and appends
+its id after the model-listed cast in roster order, logging each reconciliation. Excerpt-only
+mentions remain absent, and no retry or provider path was added. TDD red reproduced the former
+outside-cast failure; green passed all 104 segment tests. Independent verification passed Ruff and
+the full backend suite: 1,219 passed, 80 intentional skips, and 6 provider smoke tests deselected.
+Committed on `main` as `1ea981d`; the two-axis re-review found no remaining standards or spec findings.
+
+# Repair corpus checkpoint recovery after Ticket 7
+
+- [x] Add a failing real-checkpointer regression proving an existing corpus thread resumes without overwriting extracted state.
+- [x] Make fresh runs submit `_initial_state(story)` and existing ordinary checkpoints submit `None`; preserve `Command(resume=CONFIRM)` for reveal interrupts.
+- [x] Add a failing recovery-budget regression and reserve only the story's remaining attempts while retaining all prior attempts as spent.
+- [x] Update `research-corpus-operations.md` to state the recovery input and remaining-reserve rules.
+- [x] Run focused tests, Ruff, and the full backend suite; review and commit only scoped implementation/spec files.
+
+## Success criteria
+
+Recovery preserves checkpointed characters, locations, objects, timeline, scenes, and cost without replaying
+fresh initial channels. Prior attempted and uncertain calls remain fully charged, while the campaign reserve
+uses only the story's remaining permitted attempts. No provider, Storage, database, held-out, or secret access
+occurs. The contaminated `syn-001` state is preserved for a separate auditable recovery decision.
+
+## Review / outcome
+
+Committed on `main` as `0b04569`. Existing checkpoint continuation now supplies `None`, while fresh
+threads retain `_initial_state(story)` and reveal interrupts retain `Command(resume=CONFIRM)`. Recovery
+reserves only remaining attempts without reducing cumulative billing evidence. TDD recorded four expected
+failures before implementation and five focused passes afterward. Independent verification passed 59 corpus
+tests and Ruff; the full backend suite passed 1,224 tests with 80 intentional skips, 6 provider smoke tests
+deselected, and one existing Starlette deprecation warning. Task and two-axis final reviews found no issues.
+No provider, database, Storage, GPU, held-out, or secret access occurred; `syn-001` remains untouched.
+
+# Isolate the contaminated Ticket-7 corpus restart
+
+- [x] Add an isolated checkpoint and Storage execution identity without changing StoryMemory or pipeline modules.
+- [x] Preserve the abandoned 14-call audit evidence and charge it against the campaign ceiling.
+- [x] Add an explicit, persisted per-execution story call cap and reject resume drift.
+- [x] Close missing-first-checkpoint and prior-uncertainty recovery edge cases.
+- [x] Update the corpus operations spec and exact operator runbook commands.
+- [x] Run TDD, Ruff, the full backend suite, and independent spec/standards reviews.
+
+## Review / outcome
+
+Committed on `main` as `dfa6081`. A quarantined story can now restart once under a UUID-isolated
+LangGraph thread and Storage prefix while the completed bundle retains its frozen logical story ID.
+The abandoned checkpoint and assets remain untouched; cumulative billing evidence is preserved.
+The replacement receives the explicit 20-call cap, and later resumes must repeat that cap.
+
+TDD recorded the missing behavior before implementation. Final verification passed Ruff and the
+full backend suite: 1,241 passed, 80 intentional skips, 6 provider smoke tests deselected, and one
+existing Starlette deprecation warning. Both final review axes reported no remaining findings.
+No provider, database, Storage, GPU, held-out, or secret access occurred; no paid run was authorized.
