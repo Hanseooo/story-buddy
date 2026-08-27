@@ -118,7 +118,7 @@ class StoryAnalysis(BaseModel):
 
 log = logging.getLogger(__name__)
 
-EXTRACTION_PROMPT_VERSION = 3
+EXTRACTION_PROMPT_VERSION = 4
 
 # `analyze` reads REDACTED text, so any name reaching this prompt is already a pseudonym from
 # `providers._PSEUDONYM_POOL` — a story about "Jun" arrives as a story about "Ana". Using that
@@ -148,6 +148,12 @@ EXTRACTION_PROMPT_VERSION = 3
 # drew the species-appropriate rooster the neighbouring sentence demands, so the reference
 # contradicted its own spec and all 7 scenes failed `different_face`/`wrong_body_feature` to the
 # retry ceiling -- 25 image calls for 9 assets, and a bundle the consistency judge never passed.
+# v4 (2026-08-27): the prompt asked for the value it bans. "neutral" was both the instructed
+# design choice ("choose one neutral ... design", "fill missing detail once with neutral ...
+# features") and a banned placeholder two lines later, and `contracts.story_memory`
+# `_DESCRIPTION_PLACEHOLDERS` enforces the ban -- a model that obeyed the instruction emitted
+# body_plan="neutral", failed validation, spent the single re-ask and hard-failed the story after
+# two billed text calls. The two INSTRUCTIONAL uses now say "plain"; both bans are unchanged.
 EXTRACTION_PROMPT = """Extract the entities from this child's story.
 
 Decide the cast before describing it. Classify by agency: a character speaks, decides, or moves
@@ -167,7 +173,7 @@ Treat every character name as an identifier only. Do not infer age, gender, ethn
 face, clothing, or temperament from a name. Do not treat pronouns, speech, dialogue, jobs,
 actions, or emotions as permanent appearance; "smiled" describes an expression in that moment,
 not a human mouth or human face. Copy every stated permanent physical fact without alteration.
-When the story is silent, choose one neutral, child-safe, drawable design once. Keep animals,
+When the story is silent, choose one plain, child-safe, drawable design once. Keep animals,
 robots, vehicles, objects, and other non-people species-appropriate unless the story explicitly
 anthropomorphizes them. A named kind keeps that kind's face: a tin rooster still has a beak and a
 comb, a robot dog still has a dog's muzzle. Only when the story establishes that the character has
@@ -186,7 +192,7 @@ Return both body_plan and face_or_interface as trimmed, single-line, concrete va
 Fill only missing visual axes once with concrete, directly drawable, child-safe, non-stereotyped details that distinguish this character from the rest of the roster. Never use placeholder values such as neutral, none, unknown, or unspecified.
 Return at least three stable visual discriminators across at least two of colours, body_features, and clothing. Set is_humanoid accurately; every humanoid needs a non-empty clothing description.
 
-Locations and objects: whatever the story mentions. Describe each location by what is permanently there — not the weather, the lighting, the time of day, any damage, or what happens there. Copy every stated permanent fact without alteration. Fill missing detail once with neutral, child-safe features that make the place visually recognizable. For each object, provide a stable physical description and set owner_name to the character's name if owned by a character, or null if unowned.
+Locations and objects: whatever the story mentions. Describe each location by what is permanently there — not the weather, the lighting, the time of day, any damage, or what happens there. Copy every stated permanent fact without alteration. Fill missing detail once with plain, child-safe features that make the place visually recognizable. For each object, provide a stable physical description and set owner_name to the character's name if owned by a character, or null if unowned.
 
 Timeline: the story's events in the order they happen, one short summary each.
 

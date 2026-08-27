@@ -75,10 +75,15 @@ VISION_PROVIDERS: dict[str, list[str]] = {
 #
 # ponytail: two providers, not one. Dropping to `["deepinfra"]` would be the cautious read, but the
 # shared free pool 429s often enough to have killed prod job beb4ebff, and MAX_RETRIES is the only
-# tolerance there is. Venice is unmeasured for fidelity rather than known-good — the re-ask in
-# `_chat` is what covers that, and it is why this list does not have to be right first time.
+# tolerance there is. The second slot was `venice` until 2026-08-27 and bought nothing: OpenRouter
+# serves this model from DeepInfra, Parasail and Mistral only, and a global slug with no endpoint
+# for the model is silently dropped rather than rejected — so the claimed two-provider fallback had
+# always been `["deepinfra"]` alone. `mistral` is first-party for this model and declares
+# structured_outputs + response_format. It is unmeasured for fidelity rather than known-good — the
+# re-ask in `_chat` is what covers that, and it is why this list does not have to be right first
+# time. Re-check with: curl .../api/v1/models/{id}/endpoints
 TEXT_PROVIDERS: dict[str, list[str]] = {
-    "mistralai/mistral-small-3.2-24b-instruct": ["deepinfra", "venice"],
+    "mistralai/mistral-small-3.2-24b-instruct": ["deepinfra", "mistral"],
 }
 
 # The only bound on a call's TOTAL duration. Prod job d83721d9 (2026-08-11) proved `timeout=60.0`
@@ -298,7 +303,7 @@ def _chat(
 def _one_answer(client: OpenAI, model: str, content, schema: type[T], extra_body: dict) -> T:
     """One request, validated. Raises `ValueError` (or a `ValidationError`, which is one) whenever
     the provider returns something the declared grammar should have made unproducible."""
-    completion = _fetch_completion(client, model, content, schema, extra_body)
+    completion = _fetch_completion(client, model, content, schema, extra_body, temperature=0)
     message = completion.choices[0].message
     if message.parsed is None:
         raise ValueError(f"{model} returned no parsable structured output")

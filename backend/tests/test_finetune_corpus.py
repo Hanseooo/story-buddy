@@ -1687,6 +1687,42 @@ def test_reconcile_still_rejects_a_differently_classified_declared_character():
         reconcile_declared_roster(["Moss"], [], _memory_with([("Moss", False)]))
 
 
+def test_reconcile_rejects_an_empty_declared_roster():
+    """An empty declaration passes vacuously against any roster, so a typo that empties the
+    list silently disables the gate for that story."""
+    with pytest.raises(CorpusError, match="declared roster is empty"):
+        reconcile_declared_roster([], [], _memory_with([("Moss", False)]))
+
+
+def test_reconcile_tolerates_whitespace_padded_declared_names():
+    """Intake names are author-typed; a trailing space is not a roster defect."""
+    reconcile_declared_roster([" Moss "], [" Moss "], _memory_with([("Moss", False)]))
+
+
+def test_reconcile_failure_names_the_check_and_both_rosters():
+    """The message is what lands in the quarantine record, so a failure must be diagnosable
+    without re-running the graph."""
+    with pytest.raises(CorpusError) as missing:
+        reconcile_declared_roster(
+            ["Moss"], ["Moss"], _memory_with([("the heron", False), ("the crow", False)])
+        )
+    assert "not in the reference slice" in str(missing.value)
+    assert "declared=['Moss']" in str(missing.value)
+    assert "the heron" in str(missing.value) and "the crow" in str(missing.value)
+
+    with pytest.raises(CorpusError) as classified:
+        reconcile_declared_roster(["Moss"], [], _memory_with([("Moss", False)]))
+    assert "is_humanoid" in str(classified.value)
+    assert "extracted=" in str(classified.value)
+
+    with pytest.raises(CorpusError) as duplicate:
+        reconcile_declared_roster(
+            ["Moss"], ["Moss"], _memory_with([("Moss", False), ("Moss", False)])
+        )
+    assert "duplicate" in str(duplicate.value)
+    assert "extracted=" in str(duplicate.value)
+
+
 def _extracted(name: str, humanoid: bool = True) -> dict:
     return {
         "name": name,
@@ -1803,6 +1839,92 @@ def test_readmit_refuses_when_the_intake_digest_differs(tmp_path):
             out_dir=tmp_path,
             supabase=FakeSupabase(),
             policy=build_corpus.SpendPolicy(max_usd=Decimal("30.00"), max_calls_per_story=20),
+            readmit_quarantined=story.story_id,
+            readmit_reason="cause fixed",
+        )
+
+
+def test_initial_state_marks_synthetic_text_exempt_from_pseudonymization(tmp_path):
+    """`input_gate` renamed the declared cast of 16 of the 30 synthetic records.
+
+    Every node after the gate consumes `redacted_text`, so those stories would have been drawn,
+    bundled and labelled under pool pseudonyms while `declared_characters` still named the
+    author's cast -- scrambling the character identity the corpus is keyed on.
+    """
+    synthetic = intake_story(declared_characters=["c0"], declared_non_human=[])
+    assert synthetic.provenance == "synthetic"
+    assert build_corpus._initial_state(synthetic).input.synthetic_no_pii is True
+
+
+def test_check_rosters_analyzes_the_same_text_the_paid_run_will_analyze(tmp_path):
+    """The pre-flight used to read raw text while the graph always reads redacted text.
+
+    That is why it reported 30 of 30 passing and the very next paid run failed to reconcile: the
+    two were never looking at the same bytes. A gate that analyzes different input than the run
+    it predicts is not a gate.
+    """
+    donated = intake_story(declared_characters=["c0"], declared_non_human=[])
+    donated = donated.model_copy(update={"provenance": "donated", "split": "test"})
+    seen: list[str] = []
+
+    def fake_analyze(state):
+        seen.append(state.input.redacted_text or state.input.raw_text)
+        return {"characters": _extracted(["c0"], [False])}
+
+    with patch.object(build_corpus, "redact_pii", return_value="PSEUDONYMIZED") as mock_redact, \
+         patch.object(build_corpus, "analyze", side_effect=fake_analyze):
+        build_corpus.check_rosters([donated])
+
+    mock_redact.assert_called_once()
+    assert seen == ["PSEUDONYMIZED"]
+
+
+def test_readmit_refuses_a_second_readmission_of_the_same_story(tmp_path):
+    """Readmission grants a fresh full draw allowance, so an unbounded one is an unbounded spend.
+
+    It also keeps a single `readmit_reason` slot, so a second override erases the justification
+    for the first -- and the story never completed, so no bundle preserves it either.
+    """
+    story = intake_story(declared_characters=["c0"], declared_non_human=[])
+    entry = isolated_quarantine(story, reason_code="invalid_terminal")
+    entry["readmitted_at"] = "2026-08-26T00:00:00+00:00"
+    entry["readmit_reason"] = "the first override"
+    (tmp_path / "build_state.json").write_text(json.dumps({story.story_id: entry}), encoding="utf-8")
+
+    with pytest.raises(build_corpus.CorpusError, match="already readmitted"):
+        build_corpus.build(
+            [story],
+            FakeGraph(per_story_images=2),
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+            policy=build_corpus.SpendPolicy(max_usd=Decimal("30.00"), max_calls_per_story=20),
+            readmit_quarantined=story.story_id,
+            readmit_reason="the second override",
+        )
+
+
+def test_readmit_requires_an_explicit_call_cap(tmp_path):
+    """Readmitting without a cap wrote an `execution_id` that armed `_validate_restart_cap`.
+
+    That guard runs ahead of every recovery branch, so the next invocation was refused for a cap
+    mismatch while `--restart-quarantined` refused it for being `in_progress` rather than
+    quarantined. No flag combination could recover it short of hand-editing the audit ledger.
+    """
+    story = intake_story(declared_characters=["c0"], declared_non_human=[])
+    entry = isolated_quarantine(story, reason_code="invalid_terminal")
+    del entry["max_calls_per_story"]
+    del entry["execution_id"]
+    del entry["abandoned_execution_id"]
+    del entry["restarted_at"]
+    (tmp_path / "build_state.json").write_text(json.dumps({story.story_id: entry}), encoding="utf-8")
+
+    with pytest.raises(build_corpus.CorpusError, match="explicit max_calls_per_story"):
+        build_corpus.build(
+            [story],
+            FakeGraph(per_story_images=2),
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+            policy=build_corpus.SpendPolicy(max_usd=Decimal("30.00")),
             readmit_quarantined=story.story_id,
             readmit_reason="cause fixed",
         )

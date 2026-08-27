@@ -255,6 +255,18 @@ def test_extraction_prompt_requires_concrete_drawable_visual_values():
         assert placeholder in prompt
 
 
+def test_extraction_prompt_never_asks_for_a_value_it_also_bans():
+    """`contracts.story_memory._DESCRIPTION_PLACEHOLDERS` bans "neutral", so a prompt that also
+    ASKS for a neutral design invites body_plan="neutral": the model obeys, validation rejects
+    it, the single re-ask is spent, and the story hard-fails after two billed text calls."""
+    instructional = [
+        line
+        for line in EXTRACTION_PROMPT.splitlines()
+        if "neutral" in line.casefold() and "never use" not in line.casefold()
+    ]
+    assert instructional == []
+
+
 def test_extraction_prompt_prefers_the_name_the_story_gives():
     """A named character keeps their name; the descriptive label is the fallback, not the rule.
 
@@ -328,7 +340,7 @@ def test_extract_entities_logs_prompt_version(caplog):
         with patch("pipeline.analyze.structured_text", return_value=_analysis()):
             extract_entities("I went to the beach.")
 
-    assert "extraction_prompt_version=3" in caplog.text
+    assert "extraction_prompt_version=4" in caplog.text
 
 
 def _state(raw_text="A dog runs in a field.", redacted_text="A dog runs in a field.") -> StoryMemory:
@@ -507,7 +519,7 @@ def test_extraction_prompt_asks_for_permanent_location_detail():
     )
     # setting-consistency §4.1: preserve stated facts, fill missing detail once.
     assert "Copy every stated permanent fact without alteration." in EXTRACTION_PROMPT
-    assert "Fill missing detail once with neutral, child-safe features" in EXTRACTION_PROMPT
+    assert "Fill missing detail once with plain, child-safe features" in EXTRACTION_PROMPT
 
 
 def test_extracted_location_rejects_blank_description():

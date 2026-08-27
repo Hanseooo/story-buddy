@@ -994,3 +994,51 @@ def test_presidio_is_cached_across_calls():
         assert first is second
     finally:
         _presidio.cache_clear()
+
+
+# --- determinism: production calls must not sample ---
+
+
+def test_structured_text_and_judge_both_send_temperature_zero():
+    """A sampled verdict costs paid images. `judge` drives `consistency_check`, whose retries are
+    billed fal calls bounded by MAX_SCENE_ATTEMPTS, so a nondeterministic "not the same character"
+    on a good page buys a redraw of an image that was already correct. `structured_text` is the
+    extraction path — `analyze`/`segment`/`char_bible` — where sampling makes the same story
+    segment differently on a resumed job.
+
+    Only `judge_with_metadata` pinned temperature=0; `_chat`'s two callers left
+    `_fetch_completion`'s `temperature=None` default in place, which omits the kwarg entirely and
+    lets each provider sample at whatever its own default is.
+
+    DeepInfra, Parasail and Mistral all list `temperature` in `supported_parameters` alongside
+    `response_format`/`structured_outputs`, so `require_parameters` routing cannot shrink over this.
+    """
+    for call in (
+        lambda: providers.structured_text("prompt", _Caption),
+        lambda: providers.judge("compare", ["https://ref.png"], _Caption),
+    ):
+        with patch("providers.OpenAI") as mock_openai:
+            parse = mock_openai.return_value.chat.completions.parse
+            parse.return_value = _fake_completion(_Caption(caption="hi"))
+            call()
+
+        assert parse.call_args.kwargs["temperature"] == 0
+
+
+def test_text_providers_lists_only_providers_that_serve_the_model():
+    """`venice` was on this list and never served the model — OpenRouter serves
+    mistral-small-3.2-24b-instruct from DeepInfra, Parasail and Mistral only. A global slug that
+    the model has no endpoint for does not error; it is silently dropped, so the "two providers,
+    not one" fallback the comment claimed was really `["deepinfra"]` with MAX_RETRIES=2 behind it —
+    the exact single-point-of-failure the free-pool 429s in prod job beb4ebff argue against.
+
+    `parasail` stays off: prod row 558afb6d had it answer `analyze` with a malformed 200
+    (`species` leaking into its location/object siblings), which is why this list diverges from
+    VISION_PROVIDERS at all.
+    """
+    served = {"deepinfra", "parasail", "mistral"}
+    only = providers.TEXT_PROVIDERS["mistralai/mistral-small-3.2-24b-instruct"]
+
+    assert only == ["deepinfra", "mistral"]
+    assert not set(only) - served
+    assert "parasail" not in only

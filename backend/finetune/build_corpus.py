@@ -54,7 +54,7 @@ from pipeline.consistency_check import (
     SCENE_CONSTRAINT_PROMPT_VERSION,
 )
 from pipeline.prompt_optimizer import SCENE_PROMPT_VERSION
-from providers import GENERATED_IMAGE_SIZE, _fal_event_sink
+from providers import GENERATED_IMAGE_SIZE, _fal_event_sink, redact_pii
 
 CORPUS_PATH = pathlib.Path(__file__).with_name("corpus_synthetic.json")
 # `backend/finetune/build_corpus.py` -> repo root -> `data/judge/corpus` (gitignored).
@@ -75,6 +75,7 @@ RESTART_METADATA_KEYS = (
     "cap_extended_at",
     "readmitted_at",
     "readmit_reason",
+    "readmit_overrode",
 )
 
 
@@ -173,7 +174,15 @@ def _initial_state(story: IntakeRecord) -> StoryMemory:
         story_id=story.story_id,
         classroom_id="judge-corpus",
         profile_id="judge-corpus",
-        input=Input(raw_text=story.text, word_count=word_count(story.text), truncated=False),
+        input=Input(
+            raw_text=story.text,
+            word_count=word_count(story.text),
+            truncated=False,
+            # Authored fiction, so `input_gate` must not rename the declared cast (16 of the 30
+            # synthetic records lost a declared name to the pseudonymizer). Donated intake is not
+            # synthetic and keeps CC-2 redaction.
+            synthetic_no_pii=story.provenance == "synthetic",
+        ),
         style=Style(
             style_preset_id=story.style_preset_id,
             prompt_fragment=STYLE_PRESETS[story.style_preset_id],
@@ -335,6 +344,21 @@ def check_rosters(stories: list[IntakeRecord]) -> dict:
     failures: list[dict] = []
     for story in stories:
         state = _initial_state(story)
+        # `analyze` reads `redacted_text or raw_text`, but in the graph it never sees raw text --
+        # `input_gate` always runs first and writes `redacted_text`. Skipping that here made the
+        # pre-flight extract from different bytes than the paid run, so it passed 30 of 30 while
+        # the run failed. Reproduce the same substitution the graph would perform.
+        state = state.model_copy(
+            update={
+                "input": state.input.model_copy(
+                    update={
+                        "redacted_text": story.text
+                        if state.input.synthetic_no_pii
+                        else redact_pii(story.text)
+                    }
+                )
+            }
+        )
         try:
             _reconcile_roster(
                 story, state.model_copy(update={"characters": analyze(state)["characters"]})
@@ -678,6 +702,12 @@ def build(
             )
         if policy.max_calls_per_story is None:
             raise CorpusError("isolated restart requires explicit max_calls_per_story")
+    if readmit_quarantined is not None and policy.max_calls_per_story is None:
+        # A readmission writes an `execution_id`, which arms `_validate_restart_cap` for every
+        # later invocation. Without a cap recorded now, that guard refuses the next run for a
+        # mismatch while `--restart-quarantined` refuses it for being `in_progress` -- leaving
+        # the story recoverable only by hand-editing the ledger. Demand the cap up front.
+        raise CorpusError("readmission requires explicit max_calls_per_story")
     bundles = {bundle.memory.story_id: bundle for bundle in load_completed_bundles(out_dir)}
     campaign_spent = sum(bundle.memory.cost.image_count for bundle in bundles.values())
     invocation_spent = 0
@@ -726,6 +756,10 @@ def build(
                     # still has to be recorded rather than erased: the telemetry, the abandoned
                     # execution and the operator's stated reason all survive into the new entry,
                     # so a readmission is auditable instead of being a hole in the ledger.
+                    if state_entry.get("readmitted_at"):
+                        # Each readmission grants a fresh per-story draw allowance, so an
+                        # unbounded one is unbounded spend gated only by a non-empty string.
+                        raise CorpusError(f"quarantine was already readmitted: {story_id}")
                     if state_entry.get("reason_code") != "invalid_terminal":
                         raise CorpusError(f"readmission requires invalid_terminal: {story_id}")
                     if not (readmit_reason or "").strip():
@@ -733,6 +767,7 @@ def build(
                     if state_entry.get("intake_sha256") != intake_sha256(story):
                         raise CorpusError(f"intake digest differs for quarantined story: {story_id}")
                     prior_telemetry = _persisted_telemetry(state_entry, policy, story_id)
+                    readmitted_at = datetime.now(timezone.utc).isoformat()
                     state_entry = {
                         "in_progress": True,
                         "intake_sha256": intake_sha256(story),
@@ -741,8 +776,13 @@ def build(
                         "execution_id": f"{story_id}--readmit-{uuid4().hex}",
                         "abandoned_execution_id": state_entry.get("execution_id", story_id),
                         "restart_attempted_baseline": prior_telemetry["attempted"],
-                        "readmitted_at": datetime.now(timezone.utc).isoformat(),
+                        "readmitted_at": readmitted_at,
                         "readmit_reason": readmit_reason.strip(),
+                        # This rebuild erases the verdict being overridden, so it is copied
+                        # forward. A reviewer can then read what was overridden and why without
+                        # reconstructing it from an earlier state file. One scalar suffices
+                        # because a quarantine may now be readmitted only once.
+                        "readmit_overrode": state_entry["quarantined"],
                     }
                     state[story_id] = state_entry
                     _write_state(state_path, state)

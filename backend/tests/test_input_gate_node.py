@@ -233,3 +233,44 @@ def test_moderation_router_raises_ref_flagged_when_char_flagged():
     state = _moderation_router_state(passed=True, flagged_char=True, mod_retries=MAX_MOD_REDRAWS)
     with pytest.raises(RuntimeError, match="ref_flagged"):
         moderation_router(state)
+
+
+def test_synthetic_no_pii_keeps_the_authored_names_and_never_calls_redact():
+    """Synthetic research stories are authored fiction, so pseudonymizing them corrupts the corpus.
+
+    `redact_pii` rewrote a declared character name in 16 of the 30 synthetic records. Every node
+    after this one consumes `redacted_text`, so those stories were generated, bundled and would
+    have been labelled under pool pseudonyms while `declared_characters` still named the author's
+    cast -- scrambling the character identity the judge corpus is built on. Moderation is
+    deliberately unaffected; only the PII rewrite is skipped, and only when the caller declares
+    the text synthetic.
+    """
+    state = _state("Marisol found a sheep in the creek.")
+    state = state.model_copy(
+        update={"input": state.input.model_copy(update={"synthetic_no_pii": True})}
+    )
+    with patch("pipeline.input_gate.classify_text_primary", return_value=(True, [])), \
+         patch("pipeline.input_gate.classify_text_backstop", return_value=(True, [])), \
+         patch("pipeline.input_gate.redact_pii") as mock_redact:
+        from pipeline.input_gate import input_gate
+
+        result = input_gate(state)
+
+    mock_redact.assert_not_called()
+    assert result["input"].redacted_text == "Marisol found a sheep in the creek."
+    assert result["input"].moderation.passed is True
+
+
+def test_donated_text_is_still_redacted_by_default():
+    """The flag defaults False, so every existing caller keeps CC-2 redaction unchanged."""
+    state = _state("Marisol found a sheep in the creek.")
+    assert state.input.synthetic_no_pii is False
+    with patch("pipeline.input_gate.classify_text_primary", return_value=(True, [])), \
+         patch("pipeline.input_gate.classify_text_backstop", return_value=(True, [])), \
+         patch("pipeline.input_gate.redact_pii", return_value="Ana found a sheep in the creek.") as mock_redact:
+        from pipeline.input_gate import input_gate
+
+        result = input_gate(state)
+
+    mock_redact.assert_called_once()
+    assert result["input"].redacted_text == "Ana found a sheep in the creek."

@@ -97,6 +97,11 @@ def write_bundle(root: Path, bundle: RunBundle) -> Path:
 REFERENCED_CHARACTERS = 2
 
 
+def _roster_key(name: str) -> str:
+    """Declared names are author-typed at intake; padding whitespace is not a roster defect."""
+    return name.strip().casefold()
+
+
 def reconcile_declared_roster(
     declared_characters: list[str], declared_non_human: list[str], memory: StoryMemory
 ) -> None:
@@ -109,17 +114,32 @@ def reconcile_declared_roster(
     finding one more minor actor is not.
     """
     referenced = memory.characters[:REFERENCED_CHARACTERS]
-    names = Counter(character.name.casefold() for character in referenced)
-    if any(count > 1 for count in names.values()):
-        raise CorpusError(f"declared roster does not reconcile for {memory.story_id}")
+    seen = f"declared={declared_characters!r} extracted={[c.name for c in referenced]!r}"
+
+    def fail(detail: str) -> CorpusError:
+        return CorpusError(f"declared roster does not reconcile for {memory.story_id}: {detail}; {seen}")
+
+    # An empty declaration passes every check below vacuously, so a typo that empties the list
+    # would silently disable the gate for that story instead of quarantining it.
+    if not declared_characters:
+        raise fail("declared roster is empty")
+    names = Counter(_roster_key(character.name) for character in referenced)
+    duplicates = sorted(name for name, count in names.items() if count > 1)
+    if duplicates:
+        raise fail(f"duplicate extracted name in the reference slice: {duplicates!r}")
     humanoid = {
-        character.name.casefold(): character.description.is_humanoid for character in referenced
+        _roster_key(character.name): character.description.is_humanoid for character in referenced
     }
-    non_human = {name.casefold() for name in declared_non_human}
+    non_human = {_roster_key(name) for name in declared_non_human}
     for name in declared_characters:
-        key = name.casefold()
-        if key not in humanoid or humanoid[key] == (key in non_human):
-            raise CorpusError(f"declared roster does not reconcile for {memory.story_id}")
+        key = _roster_key(name)
+        if key not in humanoid:
+            raise fail(f"declared name {name!r} not in the reference slice")
+        if humanoid[key] == (key in non_human):
+            raise fail(
+                f"declared name {name!r} has is_humanoid={humanoid[key]!r} but was declared "
+                f"{'non-human' if key in non_human else 'humanoid'}"
+            )
 
 
 def load_completed_bundles(root: Path) -> list[RunBundle]:
