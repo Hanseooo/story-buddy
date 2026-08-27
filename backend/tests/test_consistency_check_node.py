@@ -20,6 +20,7 @@ from contracts.story_memory import (
     StoryMemory,
     VlmVerdict,
 )
+from app.config import settings
 from pipeline.consistency_check import (
     GATING_REASONS,
     SCENE_CONSTRAINT_PROMPT,
@@ -1305,3 +1306,21 @@ def test_consistency_check_logs_visual_direction(caplog):
         consistency_check(state)
 
     assert "visual_direction='Ana runs toward the trees.'" in caplog.text
+
+
+def test_a_lowered_scene_attempt_cap_finalizes_on_the_first_concrete_failure(monkeypatch):
+    """The corpus builder pays per draw, and at the ceiling the scene finalizes on its best-ranked
+    attempt whether or not it passed. On syn-002 that made 11 of 16 scene draws pure cost: a page
+    shipped either way. `research-corpus-operations` lets a build lower the cap so those draws are
+    never bought; production keeps the spec'd 3. This is the same story as
+    `test_node_defers_finalization_when_a_single_attempt_fails_the_gate`, with the cap at 1.
+    """
+    monkeypatch.setattr(settings, "max_scene_attempts", 1)
+    state = _state([_scene_with_attempt(characters_present=["c0"])], [_char("c0", "the dog")])
+
+    result = _run(state, [_verdict(False)])
+
+    finalized = result["scenes"][0]
+    assert finalized.final_image_ref is not None
+    assert len(finalized.attempts) == 1
+    assert finalized.attempts[-1].passed is False

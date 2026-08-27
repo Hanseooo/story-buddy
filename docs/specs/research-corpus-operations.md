@@ -315,6 +315,13 @@ annotation and training. Filename extensions are not trusted; magic bytes and de
 - `--max-calls-per-story` explicitly caps each selected story or isolated replacement execution between one call
   and the production `IMAGE_BUDGET`. Reaching that ceiling quarantines the story for reconciliation rather than
   breaching the smoke cap; campaign runs without the option continue to use the existing derived/full allowance.
+- `--scene-attempts` caps consistency-checked draws per scene between one and the production three. The
+  pipeline finalizes a scene on its best-ranked attempt once the cap is reached whether or not the attempt
+  passed, so on a corpus build the retries buy ranking, not a shipped page: run syn-002 (2026-08-26) paid for
+  11 of 16 scene draws that changed no output. Lowering the cap also stops the corpus skewing toward
+  same-character pairs, which the annotation queue needs balanced. Every bundle records the cap it was drawn
+  under; two bundles drawn under different caps are different sampling distributions and may not be mixed
+  without recording it. Production is unaffected and remains at three.
 - Before another story can start, the builder restores completed and unfinished attempted-call
   telemetry from disk and rejects missing, invalid or price-drifted billing state. Each Fal event is
   persisted atomically so a later process cannot reset the campaign total.

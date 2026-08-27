@@ -1928,3 +1928,55 @@ def test_readmit_requires_an_explicit_call_cap(tmp_path):
             readmit_quarantined=story.story_id,
             readmit_reason="cause fixed",
         )
+
+
+def test_scene_attempt_cap_is_recorded_in_every_bundle_budget_basis(
+    tmp_path, stories, monkeypatch
+):
+    """Two bundles drawn under different caps are not the same experiment: at 3 the kept page is
+    best-of-three, at 1 it is the only draw. That has to be readable off the bundle, or a corpus
+    silently mixes the two distributions."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "max_scene_attempts", 3)
+
+    summary = build_corpus.build(
+        stories,
+        FakeGraph(per_story_images=1),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(scene_attempts=1),
+    )
+
+    assert summary["scene_attempts"] == 1
+
+
+def test_build_applies_the_policy_scene_attempt_cap_to_the_running_pipeline(
+    tmp_path, stories, monkeypatch
+):
+    """`consistency_check` reads the cap off `settings` at call time, so setting the field on the
+    policy alone would be inert — the pipeline would keep paying for three draws while the bundle
+    claimed one."""
+    from app.config import settings
+
+    # `build` sets the field process-wide and does not restore it; monkeypatch is what keeps
+    # a 1-attempt build here from silently capping every later test in the session.
+    monkeypatch.setattr(settings, "max_scene_attempts", 3)
+
+    build_corpus.build(
+        stories,
+        FakeGraph(per_story_images=1),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(scene_attempts=1),
+    )
+
+    assert settings.max_scene_attempts == 1
+
+
+@pytest.mark.parametrize("attempts", [0, -1, 4, 1.0])
+def test_scene_attempt_cap_outside_the_graph_recursion_budget_is_rejected(attempts):
+    """ADR-024 sizes the graph recursion limit at `max_scenes × 7`, which is three attempts per
+    scene. A cap above that trades a paid GraphRecursionError for a config typo."""
+    with pytest.raises(ValueError, match="scene_attempts"):
+        build_corpus.SpendPolicy(scene_attempts=attempts)

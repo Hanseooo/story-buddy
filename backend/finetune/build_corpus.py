@@ -98,6 +98,10 @@ class SpendPolicy:
     price_per_megapixel: Decimal = Decimal("0.035")
     price_basis: str = "programmatic"
     max_calls_per_story: int | None = None
+    # Consistency-checked attempts per scene, applied to `settings.max_scene_attempts` for the
+    # duration of the build. Production is 3; a research build may buy fewer. See the field's
+    # comment in `app/config.py` for why the extra draws are near-free of value here.
+    scene_attempts: int = 3
 
     def __post_init__(self) -> None:
         if self.max_usd < 0 or self.hard_usd <= 0 or self.smoke_usd < 0:
@@ -111,6 +115,8 @@ class SpendPolicy:
             or not 1 <= self.max_calls_per_story <= IMAGE_BUDGET
         ):
             raise ValueError(f"max_calls_per_story must be between 1 and {IMAGE_BUDGET}")
+        if type(self.scene_attempts) is not int or not 1 <= self.scene_attempts <= 3:
+            raise ValueError("scene_attempts must be between 1 and 3")
 
     @property
     def maximum_megapixels(self) -> Decimal:
@@ -149,6 +155,7 @@ def _budget_basis(policy: SpendPolicy) -> dict:
         "price_basis": policy.price_basis,
         "authorized_usd": str(policy.authorized_usd),
         "conservative_call_usd": str(policy.conservative_call_usd),
+        "scene_attempts": policy.scene_attempts,
     }
     if policy.max_calls_per_story is not None:
         basis["max_calls_per_story"] = policy.max_calls_per_story
@@ -670,6 +677,9 @@ def build(
     readmit_reason: str | None = None,
 ) -> dict:
     """Run only incomplete stories; a completed run is the immutable bundle, never a count."""
+    # `consistency_check` reads this at call time, so it must be in place before the first
+    # story streams. Process-wide and not restored: this module is a CLI entrypoint.
+    settings.max_scene_attempts = policy.scene_attempts
     records = [_record(story) for story in stories]
     if resume_quarantined is not None and restart_quarantined is not None:
         raise CorpusError("choose either resume or isolated restart, not both")
@@ -1078,6 +1088,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--acknowledge-uncertain-billing", metavar="STORY_ID")
     parser.add_argument("--max-calls-per-story", type=int)
+    parser.add_argument(
+        "--scene-attempts",
+        type=int,
+        default=SpendPolicy().scene_attempts,
+        help="consistency-checked draws per scene (1-3); production is 3",
+    )
     parser.add_argument("--extend-story-call-cap", metavar="STORY_ID")
     args = parser.parse_args(argv)
     if args.check_rosters:
@@ -1134,6 +1150,7 @@ def main(argv: list[str] | None = None) -> int:
                     price_per_megapixel=args.price_per_megapixel,
                     price_basis=args.price_basis,
                     max_calls_per_story=args.max_calls_per_story,
+                    scene_attempts=args.scene_attempts,
                 )
                 summary = build(
                     stories,

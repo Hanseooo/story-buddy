@@ -69,6 +69,15 @@ class Settings(BaseSettings):
     # Reuses the same model as vlm_judge_model; separate field so the two can diverge.
     moderation_backstop_image_model: str = "google/gemma-3-27b-it"
 
+    # ADR-037: consistency-checked attempts per scene — the initial draw plus two corrected
+    # retries. Production is 3 and the specs are written against 3; this is a field rather than a
+    # constant so `finetune/build_corpus.py` can lower it for a research build, where the
+    # economics invert. `consistency_check` finalizes on the best-ranked attempt once the cap is
+    # reached whether or not it passed, so on corpus run syn-002 (2026-08-26) 11 of 16 scene draws
+    # were paid for and shipped nothing a 1-attempt run would not also have shipped. Read at call
+    # time, never bound at import, or the override lands after the reader already has its copy.
+    max_scene_attempts: int = 3
+
 
 settings = Settings()
 
@@ -165,11 +174,10 @@ MAX_STORY_WORDS = 300   # spend-and-retry-economics spec §4.1 (moved from 800)
 # prelude is bounded by MAX_MOD_REDRAWS and MAX_RETRY_TAPS, structurally, not by cost.
 # 4 paid draws per scene (1 initial + 2 consistency retries + 1 output moderation redraw).
 IMAGE_BUDGET = MAX_SCENES * 4 + 15   # 10 scenes × 4 + 15-image prelude = 55
-# ADR-037: consistency-checked attempts per scene — the initial draw plus two corrected retries.
-# The `* 4` above is this + 1 for output moderation's redraw; the `* 7` below is this × 2 + 1.
-# Both formulas keep their spec'd literal shape (spend-and-retry-economics §4.3) rather than
-# deriving from this name, so a reader checks the arithmetic against the spec without indirection.
-MAX_SCENE_ATTEMPTS = 3
+# The `* 4` above is `settings.max_scene_attempts` + 1 for output moderation's redraw; the `* 7`
+# below is that × 2 + 1. Both formulas keep their spec'd literal shape (spend-and-retry-economics
+# §4.3) rather than deriving from the setting, so a reader checks the arithmetic against the spec
+# without indirection — and so lowering the cap can only spend less than the budget allows for.
 
 
 def check_image_budget(image_count: int) -> None:
