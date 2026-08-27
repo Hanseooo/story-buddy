@@ -1980,3 +1980,19 @@ def test_scene_attempt_cap_outside_the_graph_recursion_budget_is_rejected(attemp
     scene. A cap above that trades a paid GraphRecursionError for a config typo."""
     with pytest.raises(ValueError, match="scene_attempts"):
         build_corpus.SpendPolicy(scene_attempts=attempts)
+
+
+def test_fixture_cli_run_honours_the_scene_attempt_cap(tmp_path, monkeypatch):
+    """The fixture run is the mandated zero-cost rehearsal for a paid one (spec §6), so it has to
+    rehearse the same cap. The first version of this flag reached only the paid branch, and the
+    fixture summary reported the production 3 back while the operator had asked for 1."""
+    captured = {}
+
+    def fake_build(*args, **kwargs):
+        captured["policy"] = kwargs["policy"]
+        return {}
+
+    monkeypatch.setattr(build_corpus, "build", fake_build)
+    build_corpus.main(["--fixture", "--scene-attempts", "1", "--out", str(tmp_path)])
+
+    assert captured["policy"].scene_attempts == 1

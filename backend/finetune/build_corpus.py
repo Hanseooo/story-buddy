@@ -1135,7 +1135,14 @@ def main(argv: list[str] | None = None) -> int:
     stories = load_intake(args.corpus)[: args.limit]
     try:
         if args.fixture:
-            summary = build(stories, None, args.out, None, fixture=True)
+            summary = build(
+                stories,
+                None,
+                args.out,
+                None,
+                fixture=True,
+                policy=SpendPolicy(scene_attempts=args.scene_attempts),
+            )
         else:
             from app.config import settings
             from app.db import get_supabase_client
