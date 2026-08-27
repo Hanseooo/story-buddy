@@ -19,6 +19,7 @@ from contracts.story_memory import (
     Character,
     CharacterDescription,
     Input,
+    RefVerdict,
     Scene,
     Style,
     StoryMemory,
@@ -547,6 +548,7 @@ def manifest_record(
     split: str = "train",
     provenance: str = "synthetic",
     pair_type: str = "pipeline",
+    ref_verdict_status: str = "unverified",
 ) -> bd.ManifestRecord:
     return bd.ManifestRecord(
         pair_id=pair_id,
@@ -559,6 +561,7 @@ def manifest_record(
         same_character=True,
         label=False,
         failure_reasons=[],
+        ref_verdict_status=ref_verdict_status,  # type: ignore[arg-type]
     )
 
 
@@ -1143,3 +1146,56 @@ def test_candidate_report_cli(tmp_path, capsys):
     assert isinstance(report, list)
     assert len(report) == 1
     assert report[0]["reference_char_id"] == "story-freeze:char-freeze"
+
+
+# --- reference verification status (ADR-028) -----------------------------------------------
+
+def test_build_records_stamps_the_reference_verification_status_on_every_pair():
+    """`char_bible` ships `ref_verdict=None` when the judge call itself fails. That anchor is
+    what every pair built on it is measured against, so the status travels with the pair."""
+    unchecked = memory()
+    pairs = bd.pairs_from_memory(unchecked)
+    keyed = {
+        pair.pair_id: bd.Consensus(
+            same_character=True, failure_reasons=[], anatomy_intact=True, text_free=True,
+        )
+        for pair in pairs
+    }
+    records = bd.build_records(unchecked, "train", "synthetic", keyed, set())
+    assert [r.ref_verdict_status for r in records] == ["unverified", "unverified"]
+
+    checked = memory()
+    checked.characters[0].ref_verdict = RefVerdict(
+        differences_observed="", matches_description=True, contradictions=[], text_free=True,
+    )
+    records = bd.build_records(checked, "train", "synthetic", keyed, set())
+    assert [r.ref_verdict_status for r in records] == ["passed", "passed"]
+
+
+def test_constructed_negatives_inherit_the_reference_characters_status():
+    """The constructed pair's anchor is the REFERENCE character's image, so it carries the
+    reference's status — not the target's, whose reference is never shown to the model."""
+    records = [
+        manifest_record("ref", "story-a:a", "ref/a.png", "scene/a.webp", ref_verdict_status="unverified"),
+        manifest_record("target", "story-b:b", "ref/b.png", "scene/b.webp", ref_verdict_status="passed"),
+    ]
+    made = bd.constructed_records(records, {"story-a:a": "story-b:b"})
+    assert [row.ref_verdict_status for row in made] == ["unverified"]
+
+
+def test_build_dataset_statistics_count_unverified_reference_anchors(tmp_path):
+    out = tmp_path / "manifest.jsonl"
+    mem = memory()
+    pairs = bd.pairs_from_memory(mem)
+    raw_annotations = [
+        {"pair_id": pair.pair_id, "annotator_id": annotator, "same_character": True, "failure_reasons": []}
+        for pair in pairs
+        for annotator in ("a1", "a2")
+    ]
+    with patch("finetune.build_dataset.fetch_annotations", return_value=raw_annotations), \
+         patch("finetune.build_dataset.fetch_adjudicator_ids", return_value=set()), \
+         patch("finetune.build_dataset.fetch_pilot_pairs", return_value=set()):
+        bd.build_dataset([(mem, "train", "synthetic")], out_path=out, add_constructed=False)
+
+    stats = json.loads((tmp_path / "dataset_manifest.json").read_text(encoding="utf-8"))
+    assert stats["reference_verification"] == {"unverified": 2}

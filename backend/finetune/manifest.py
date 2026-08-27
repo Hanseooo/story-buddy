@@ -9,7 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from contracts.story_memory import FailureReason
+from contracts.story_memory import Character, FailureReason
 
 Split = Literal["train", "val", "test"]
 PairType = Literal["pipeline", "constructed"]
@@ -18,6 +18,17 @@ PairType = Literal["pipeline", "constructed"]
 # guard below enforces that as an invariant rather than leaving it a comment, because a synthetic
 # character in the held-out set voids Objective 4 and nothing in the metrics would show it.
 Provenance = Literal["synthetic", "donated"]
+# ADR-028 made the canonical reference checked rather than assumed, but `char_bible.mint_reference`
+# has three exits and only one of them is a clean check: an accepted draw, a best-of draw whose
+# FAILING verdict is persisted, and — when the judge call itself raises — `ref_verdict=None`
+# ("accepting unchecked", char_bible.py:298). Until now that distinction died at the pipeline
+# boundary: nothing in `finetune/` read `ref_verdict`, so an unchecked anchor entered training with
+# no marker. It is not hypothetical — `data/judge/corpus-smoke-a` (2026-08-27) shipped 6 of its 7
+# characters with `ref_verdict=null` after judge timeouts. The reference is what every pair built on
+# it is measured against, so its status travels with the pair.
+# Three states, not a bool, because the remedies differ: `unverified` needs the judge re-run (no
+# paid image call); `failed` needs a re-draw (paid). Collapsing them would make that decision wrong.
+ReferenceStatus = Literal["passed", "failed", "unverified"]
 
 
 DATA_ROOT = Path("data/judge/corpus")
@@ -37,6 +48,18 @@ def local_image_path(storage_path: str, kind: ImageKind, root: Path | None = Non
     prefixed with `story_id`, and keeps it losslessly reversible.
     """
     return ((root or DATA_ROOT) / kind / storage_path.replace("/", "_")).as_posix()
+
+
+def reference_status(character: Character) -> ReferenceStatus:
+    """Mirror `char_bible.mint_reference`'s acceptance rule: no contradictions AND text-free.
+
+    Deliberately does NOT read `matches_description` — ADR-034 Decision 2 demoted it to an
+    observation and forbids branching on it; `contradictions` is the gate `char_bible` itself uses.
+    """
+    verdict = character.ref_verdict
+    if verdict is None:
+        return "unverified"
+    return "passed" if not verdict.contradictions and verdict.text_free else "failed"
 
 
 class ManifestError(ValueError):
@@ -62,6 +85,12 @@ class ManifestRecord(BaseModel):
     anatomy_intact: bool = True
     text_free: bool = True
     failure_reasons: list[FailureReason] = Field(default_factory=list)   # closed set (§4)
+
+    # Bookkeeping like `char_id` and `split` — never enters the training text (`to_llamafactory`
+    # selects fields explicitly). Derived by `reference_status` in `build_dataset.py`. Defaults to
+    # the pessimistic state on purpose: a construction site that forgets it reports an unchecked
+    # anchor, which is visible, rather than a clean one, which is a silent lie.
+    ref_verdict_status: ReferenceStatus = "unverified"
 
     # ponytail: `subjects_unique` and `style_match` are NOT annotated — they are the two
     # non-gating fields on `VlmVerdict`, so a human label on them buys nothing the loop acts on

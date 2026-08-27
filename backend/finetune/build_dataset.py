@@ -37,6 +37,7 @@ from finetune.manifest import (
     Provenance,
     Split,
     local_image_path,
+    reference_status,
     write_manifest,
 )
 
@@ -186,6 +187,7 @@ def build_records(
             anatomy_intact=agreed.anatomy_intact,
             text_free=agreed.text_free,
             failure_reasons=agreed.failure_reasons,
+            ref_verdict_status=reference_status(by_id[pair.char_id]),
         ))
     return records
 
@@ -213,6 +215,9 @@ def constructed_records(
 
         ref_image = by_char[ref_char_id][0].images[0]
         provenance = by_char[ref_char_id][0].provenance
+        # The constructed pair shows the REFERENCE character's anchor against a foreign scene, so
+        # it inherits the reference's status. The target's own reference is never shown.
+        ref_status = by_char[ref_char_id][0].ref_verdict_status
 
         for target_record in by_char[target_char_id]:
             scene_image = target_record.images[1]
@@ -232,6 +237,7 @@ def constructed_records(
                 same_character=False,
                 label=True,
                 failure_reasons=[FailureReason.different_face],
+                ref_verdict_status=ref_status,
             ))
     return made
 
@@ -292,6 +298,9 @@ def build_dataset(
             for r in records
             for reason in r.failure_reasons
         )),
+        # The audit surface for ADR-028's unchecked references. Reported, never excluded — an
+        # unverified anchor is the operator's call to make, not the build's.
+        "reference_verification": dict(Counter(r.ref_verdict_status for r in records)),
         "adjudication_rate": sum(1 for c in consensus.values() if getattr(c, "adjudicated", False)) / max(1, len(consensus)),
         "dataset_sha256": file_hash,
     }
