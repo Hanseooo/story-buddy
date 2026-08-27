@@ -7,8 +7,16 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { verifyResearchAuth } from "../_shared/actions";
 import { validateSubmissionPayload, type SubmissionPayload, isConsensus } from "../_shared/validation";
 
+// The two cold test-retest passes. Round 3 is the adjudication slot and belongs to
+// `adjudicate/`, never to this surface: letting the annotate route write it would turn
+// adjudication into a third bite at the same form (annotation-surface.md 4.1).
+const ORDINARY_ROUNDS = [1, 2];
+
+type QueuePair = { id: string; canonical_storage_path: string; scene_storage_path: string };
+
 export async function submitAnnotation(payload: SubmissionPayload) {
   const { pairId, failureReasons, sameCharacter, anatomyIntact, textFree } = payload;
+  const round = payload.round ?? 1;
   
   const { error: authError, user } = await verifyResearchAuth(false);
   if (authError || !user) {
@@ -18,6 +26,10 @@ export async function submitAnnotation(payload: SubmissionPayload) {
   const { error: validationError } = validateSubmissionPayload(payload);
   if (validationError) {
     return { error: validationError };
+  }
+
+  if (!ORDINARY_ROUNDS.includes(round)) {
+    return { error: "Invalid state: annotate accepts round 1 or 2 only" };
   }
 
   const supabase = await createSupabaseServerClient();
@@ -32,6 +44,7 @@ export async function submitAnnotation(payload: SubmissionPayload) {
       anatomy_intact: anatomyIntact,
       text_free: textFree,
       failure_reasons: failureReasons,
+      round,
     });
 
   if (insertError) {
@@ -104,46 +117,64 @@ export async function getNextPair() {
 
   const { data: userAnnotations, error: annotationsError } = await adminClient
     .from("annotations")
-    .select("pair_id")
+    .select("pair_id, round")
     .eq("annotator_id", user.id);
 
   if (annotationsError) {
     return { error: "Failed to load annotation queue" };
   }
 
-  const annotatedPairIds = new Set((userAnnotations || []).map(a => a.pair_id));
+  // Since 0018 a label's identity is (pair, round), not pair alone — the same pair is
+  // still owed a second cold pass after its first. Rows written before 0018 have no
+  // round and count as round 1, exactly as annotation_truth._round reads them.
+  const labelled = new Set((userAnnotations || []).map(a => `${a.pair_id}:${a.round ?? 1}`));
 
   const PAGE_SIZE = 50;
-  let page = 0;
-  const unannotatedPairs: Array<{ id: string; canonical_storage_path: string; scene_storage_path: string }> = [];
+  let unannotatedPairs: QueuePair[] = [];
+  let servedRound = ORDINARY_ROUNDS[0];
 
-  while (true) {
-    const from = page * PAGE_SIZE;
-    const to = (page + 1) * PAGE_SIZE - 1;
+  // Round 2 opens only once round 1 covers the WHOLE queue. That ordering is the only
+  // part of "cold" a server action can guarantee: every pair gets a full pass over the
+  // corpus between its two looks, and the rater is never handed the same image twice in
+  // a row. The calendar gap on top of that is process discipline, not a constraint
+  // (annotation-surface.md §4.1) — as is the held-out read-once rule beside it.
+  for (const round of ORDINARY_ROUNDS) {
+    const found: QueuePair[] = [];
+    let page = 0;
 
-    const { data: pairs, error: pairsError } = await adminClient
-      .from("research_pairs")
-      .select("id, canonical_storage_path, scene_storage_path")
-      .in("status", ["pending", "partially_annotated"])
-      .order("created_at", { ascending: true })
-      .range(from, to);
+    while (true) {
+      const from = page * PAGE_SIZE;
+      const to = (page + 1) * PAGE_SIZE - 1;
 
-    if (pairsError) {
-      return { error: "Failed to load annotation queue" };
+      const { data: pairs, error: pairsError } = await adminClient
+        .from("research_pairs")
+        .select("id, canonical_storage_path, scene_storage_path")
+        .in("status", ["pending", "partially_annotated"])
+        .order("created_at", { ascending: true })
+        .range(from, to);
+
+      if (pairsError) {
+        return { error: "Failed to load annotation queue" };
+      }
+
+      if (!pairs || pairs.length === 0) {
+        break;
+      }
+
+      found.push(...pairs.filter(p => !labelled.has(`${p.id}:${round}`)));
+
+      if (pairs.length < PAGE_SIZE) {
+        break;
+      }
+
+      page++;
     }
 
-    if (!pairs || pairs.length === 0) {
+    if (found.length > 0) {
+      unannotatedPairs = found;
+      servedRound = round;
       break;
     }
-
-    const available = pairs.filter(p => !annotatedPairIds.has(p.id));
-    unannotatedPairs.push(...available);
-
-    if (pairs.length < PAGE_SIZE) {
-      break;
-    }
-
-    page++;
   }
 
   if (unannotatedPairs.length === 0) {
@@ -179,11 +210,14 @@ export async function getNextPair() {
     return { error: "Failed to load annotation images" };
   }
 
+  // `round` rides OUTSIDE `pair`: `pair` is the blinded payload and §4's rule is that
+  // nothing but the two images crosses to the browser inside it.
   return {
     pair: {
       id: nextPair.id,
       canonical_signed_url: canonicalUrlData.signedUrl,
       scene_signed_url: sceneUrlData.signedUrl
-    }
+    },
+    round: servedRound
   };
 }

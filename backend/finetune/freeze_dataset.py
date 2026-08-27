@@ -12,6 +12,7 @@ from finetune.annotation_truth import (
     fetch_adjudicator_ids,
     fetch_annotations,
     fetch_pilot_pairs,
+    is_adjudication,
     resolve_annotations,
 )
 from finetune.corpus_io import (
@@ -181,10 +182,16 @@ def _write_evaluation_artifacts(
     for record in records:
         if record.pair_type != "pipeline":
             continue
-        ordinary = [
-            row for row in rows_by_pair.get(record.pair_id, [])
-            if row.get("annotator_id") not in adjudicator_ids
-        ]
+        # `is_adjudication` is the single classifier (annotation_truth.py): a distinct adjudicator
+        # profile OR the solo rater's round 3. Filtering on annotator_id alone counted a round-3
+        # adjudication as a third ordinary label and hard-failed every adjudicated pair.
+        ordinary = sorted(
+            (
+                row for row in rows_by_pair.get(record.pair_id, [])
+                if not is_adjudication(row, adjudicator_ids)
+            ),
+            key=lambda row: (int(row.get("round") or 1), row["annotator_id"]),
+        )
         if len(ordinary) != 2:
             raise ManifestError(f"{record.pair_id}: agreement evidence requires two ordinary labels")
         agreement.append({"pair_id": record.pair_id, "labels": [bool(row["same_character"]) for row in ordinary]})

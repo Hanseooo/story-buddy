@@ -9,6 +9,34 @@ from finetune.manifest import ManifestError
 ANNOTATIONS_TABLE = "annotations"
 PAIRS_TABLE = "research_pairs"
 
+# --- rounds (single-rater test-retest) -------------------------------------------------------
+# Settled 2026-07-29: this capstone has ONE rater, permanently. The annotations primary key was
+# (pair_id, annotator_id) until migration 0018, so one human could produce at most one ordinary
+# row per pair and `resolve_annotations` below could never be satisfied for a non-pilot pair --
+# the whole freeze -> train -> evaluate chain was unreachable. 0018 adds `round` and makes the key
+# (pair_id, annotator_id, round): the same person labels each pair twice, cold, and those two
+# rounds are the two ordinary labels. See annotation-surface.md 4.1.
+ORDINARY_ROUNDS = (1, 2)
+ADJUDICATION_ROUND = 3
+
+
+def _round(row: dict) -> int:
+    """Rows written before 0018 carry no `round` key; they are round 1 by definition."""
+    return int(row.get("round") or 1)
+
+
+def is_adjudication(row: dict, adjudicators: set[str]) -> bool:
+    """An adjudication is EITHER a distinct adjudicator profile's row OR the rater's round 3.
+
+    Both arms are load-bearing. The profile arm is the two-annotator design 0016 built and is kept
+    intact so a genuine third person still overrides if one ever exists. The round arm is what a
+    solo capstone actually has: with one human, "a third annotator adjudicates" can only mean the
+    same human looking a third time. That third look is a NEW row, never an edit of round 1 or 2 --
+    annotation-surface.md 4's forward-only rule holds, and rounds 1 and 2 survive untouched as the
+    only evidence the intra-rater agreement statistic is computed from.
+    """
+    return row["annotator_id"] in adjudicators or _round(row) >= ADJUDICATION_ROUND
+
 
 class Consensus(NamedTuple):
     same_character: bool
@@ -29,11 +57,14 @@ def _signature(row: dict) -> tuple:
 
 def _partition(pair_id: str, rows: list[dict], adjudicators: set[str]) -> tuple[list[dict], list[dict]]:
     labels = [row for row in rows if row.get("annotator_id") is not None]
-    ordinary = [row for row in labels if row["annotator_id"] not in adjudicators]
-    adjudications = [row for row in labels if row["annotator_id"] in adjudicators]
-    ordinary_ids = [row["annotator_id"] for row in ordinary]
+    ordinary = [row for row in labels if not is_adjudication(row, adjudicators)]
+    adjudications = [row for row in labels if is_adjudication(row, adjudicators)]
+    # Identity of an ordinary label is (annotator, round), not annotator alone: one rater's two
+    # rounds are two labels, but the same round submitted twice is still a duplicate.
+    ordinary_ids = [(row["annotator_id"], _round(row)) for row in ordinary]
     if len(ordinary_ids) != len(set(ordinary_ids)):
         raise ManifestError(f"Pair {pair_id} has duplicate annotator_ids for ordinary annotations.")
+    ordinary.sort(key=lambda row: (_round(row), row["annotator_id"]))
     if len(ordinary) > 2:
         raise ManifestError(f"Pair {pair_id} has >2 ordinary annotations.")
     if len(adjudications) > 1:
@@ -50,6 +81,7 @@ def fetch_annotations() -> list[dict]:
         .select("*")
         .order("pair_id")
         .order("annotator_id")
+        .order("round")
     )
     for start in itertools.count(0, page_size):
         page = query.range(start, start + page_size - 1).execute().data or []

@@ -64,5 +64,5 @@ export default async function AnnotatePage() {
     );
   }
 
-  return <AnnotationClient pair={pair} />;
+  return <AnnotationClient pair={pair} round={result?.round ?? 1} />;
 }

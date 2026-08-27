@@ -4,6 +4,10 @@ export type SubmissionPayload = {
   sameCharacter: boolean;
   anatomyIntact: boolean;
   textFree: boolean;
+  // Which test-retest pass this label is (migration 0018). 1 and 2 are the solo
+  // rater's two cold passes; 3 is the adjudication slot. Omitted means 1, which
+  // matches both the column default and how annotation_truth reads a pre-0018 row.
+  round?: number;
 };
 
 export function validateSubmissionPayload(payload: SubmissionPayload) {

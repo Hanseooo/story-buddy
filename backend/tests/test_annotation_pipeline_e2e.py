@@ -159,3 +159,79 @@ def test_fixture_c_unresolved_failure(tmp_path: Path) -> None:
             bd.build_dataset([(mem, "train", "synthetic")], out_path=manifest_out, add_constructed=False)
 
         assert not manifest_out.exists()
+
+
+def test_fixture_d_single_rater_two_rounds_agree(tmp_path: Path) -> None:
+    """Fixture D: ONE rater labels the pair twice, cold (rounds 1 and 2), and agrees.
+
+    This is the capstone's actual staffing (annotation-surface.md §4.1). The two
+    rounds are the two ordinary labels; no adjudication is needed or permitted.
+    """
+    mem = mock_memory()
+    pid = pair_id()
+
+    annotations = [
+        {"pair_id": pid, "annotator_id": "solo", "round": 1, "same_character": True, "failure_reasons": []},
+        {"pair_id": pid, "annotator_id": "solo", "round": 2, "same_character": True, "failure_reasons": []},
+    ]
+
+    with patch("finetune.build_dataset.fetch_annotations", return_value=annotations), \
+         patch("finetune.build_dataset.fetch_adjudicator_ids", return_value=set()), \
+         patch("finetune.build_dataset.fetch_pilot_pairs", return_value=set()):
+
+        records = bd.build_dataset(
+            [(mem, "train", "synthetic")], out_path=tmp_path / "manifest.jsonl", add_constructed=False
+        )
+
+        assert len(records) == 1
+        assert records[0].same_character is True
+        assert records[0].label is False
+
+        write_dataset(records, tmp_path)
+        assert_sharegpt_valid(tmp_path, expected_label=True)
+
+
+def test_fixture_e_single_rater_rounds_disagree_and_round_three_adjudicates(tmp_path: Path) -> None:
+    """Fixture E: the same rater's two cold passes disagree.
+
+    Round 3 — the same human, a third time, knowing the two passes conflicted — is
+    the adjudication, and its row is authoritative exactly as a third annotator's
+    would be. Without it the export hard-fails (fixture C's rule, unchanged).
+    """
+    mem = mock_memory()
+    pid = pair_id()
+
+    conflicting = [
+        {"pair_id": pid, "annotator_id": "solo", "round": 1, "same_character": True, "failure_reasons": []},
+        {"pair_id": pid, "annotator_id": "solo", "round": 2, "same_character": False,
+         "failure_reasons": ["wrong_clothing"]},
+    ]
+
+    with patch("finetune.build_dataset.fetch_annotations", return_value=conflicting), \
+         patch("finetune.build_dataset.fetch_adjudicator_ids", return_value=set()), \
+         patch("finetune.build_dataset.fetch_pilot_pairs", return_value=set()):
+        with pytest.raises(ManifestError, match="unresolved conflict"):
+            bd.build_dataset(
+                [(mem, "train", "synthetic")], out_path=tmp_path / "manifest.jsonl", add_constructed=False
+            )
+
+    adjudicated = conflicting + [
+        {"pair_id": pid, "annotator_id": "solo", "round": 3, "same_character": False,
+         "failure_reasons": ["wrong_colour"]},
+    ]
+
+    with patch("finetune.build_dataset.fetch_annotations", return_value=adjudicated), \
+         patch("finetune.build_dataset.fetch_adjudicator_ids", return_value=set()), \
+         patch("finetune.build_dataset.fetch_pilot_pairs", return_value=set()):
+
+        records = bd.build_dataset(
+            [(mem, "train", "synthetic")], out_path=tmp_path / "manifest.jsonl", add_constructed=False
+        )
+
+        assert len(records) == 1
+        assert records[0].same_character is False
+        assert records[0].label is True
+        assert records[0].failure_reasons == ["wrong_colour"]
+
+        write_dataset(records, tmp_path)
+        assert_sharegpt_valid(tmp_path, expected_label=False)

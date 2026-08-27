@@ -1199,3 +1199,154 @@ def test_build_dataset_statistics_count_unverified_reference_anchors(tmp_path):
 
     stats = json.loads((tmp_path / "dataset_manifest.json").read_text(encoding="utf-8"))
     assert stats["reference_verification"] == {"unverified": 2}
+
+
+# --- single-rater test-retest (rounds) ------------------------------------------------------
+# One human labels every pair twice, cold (annotation-surface.md §4.1, settled 2026-07-29:
+# this capstone has exactly one rater, permanently). The two rounds are the two ordinary
+# labels the consensus machinery already expects; a third round is the adjudication.
+
+
+def solo_rows(pair_id, *specs, annotator="solo"):
+    """Rows that all carry the SAME annotator_id and differ only by `round`."""
+    out = []
+    for i, spec in enumerate(specs):
+        row = {"pair_id": pair_id, "annotator_id": annotator, "round": i + 1,
+               "failure_reasons": [], "anatomy_intact": True, "text_free": True}
+        row.update(spec)
+        out.append(row)
+    return out
+
+
+def test_two_rounds_from_one_rater_are_the_two_ordinary_labels():
+    resolved = bd.resolve_annotations(
+        solo_rows("p1", {"same_character": True}, {"same_character": True}),
+        set(), set(),
+    )
+    assert resolved["p1"].same_character is True
+    assert resolved["p1"].adjudicated is False
+
+
+def test_round_three_by_the_same_rater_adjudicates_a_test_retest_disagreement():
+    with pytest.raises(ManifestError, match="unresolved conflict"):
+        bd.resolve_annotations(
+            solo_rows("p1", {"same_character": True}, {"same_character": False}),
+            set(), set(),
+        )
+
+    resolved = bd.resolve_annotations(
+        solo_rows(
+            "p1",
+            {"same_character": True},
+            {"same_character": False, "failure_reasons": ["wrong_clothing"]},
+            {"same_character": False, "failure_reasons": ["wrong_colour"]},
+        ),
+        set(), set(),
+    )
+    # The round-3 row is authoritative, exactly as a third annotator's row would be.
+    assert resolved["p1"].same_character is False
+    assert resolved["p1"].adjudicated is True
+    assert resolved["p1"].failure_reasons == ["wrong_colour"]
+
+
+def test_round_three_is_rejected_when_the_two_rounds_agreed():
+    with pytest.raises(ManifestError, match="ordinary annotators agreed, but adjudicator row exists"):
+        bd.resolve_annotations(
+            solo_rows(
+                "p1",
+                {"same_character": True},
+                {"same_character": True},
+                {"same_character": False},
+            ),
+            set(), set(),
+        )
+
+
+def test_the_same_round_twice_from_one_rater_is_a_duplicate_not_a_second_label():
+    with pytest.raises(ManifestError, match="duplicate"):
+        bd.resolve_annotations(
+            [
+                {"pair_id": "p1", "annotator_id": "solo", "round": 1, "same_character": True},
+                {"pair_id": "p1", "annotator_id": "solo", "round": 1, "same_character": True},
+            ],
+            set(), set(),
+        )
+
+
+def test_one_rater_one_round_is_still_an_incomplete_pair():
+    with pytest.raises(ManifestError, match="<2 ordinary annotations"):
+        bd.resolve_annotations(solo_rows("p1", {"same_character": True}), set(), set())
+
+
+def test_reconcile_pair_status_derives_every_state_from_rounds_of_one_rater():
+    annotation_rows = [
+        {"pair_id": "pending", "annotator_id": None},
+        *solo_rows("partial", {"same_character": True}),
+        *solo_rows("complete", {"same_character": True}, {"same_character": True}),
+        *solo_rows("conflicted", {"same_character": True}, {"same_character": False}),
+        *solo_rows(
+            "adjudicated",
+            {"same_character": True},
+            {"same_character": False},
+            {"same_character": False},
+        ),
+    ]
+    assert bd.reconcile_pair_status(annotation_rows, set()) == {
+        "pending": "pending",
+        "partial": "partially_annotated",
+        "complete": "complete",
+        "conflicted": "conflicted",
+        "adjudicated": "adjudicated",
+    }
+
+
+def test_a_distinct_adjudicator_profile_still_overrides_round_one_and_two():
+    """Two genuine annotators never materialized, but the mechanism must not be removed."""
+    resolved = bd.resolve_annotations(
+        [
+            {"pair_id": "p1", "annotator_id": "a1", "round": 1, "same_character": True},
+            {"pair_id": "p1", "annotator_id": "a2", "round": 1, "same_character": False},
+            {"pair_id": "p1", "annotator_id": "adj", "round": 1, "same_character": False,
+             "failure_reasons": ["wrong_species"]},
+        ],
+        {"adj"}, set(),
+    )
+    assert resolved["p1"].adjudicated is True
+    assert resolved["p1"].failure_reasons == ["wrong_species"]
+
+
+def test_rows_without_a_round_column_are_treated_as_round_one():
+    """Pre-0018 rows carry no `round` key; they must keep resolving unchanged."""
+    resolved = bd.resolve_annotations(
+        rows("p1", {"same_character": True}, {"same_character": True}), set(), set()
+    )
+    assert resolved["p1"].same_character is True
+
+
+def test_freeze_agreement_evidence_pairs_round_one_against_round_two(tmp_path):
+    """annotation_agreement.jsonl is the intra-rater statistic's only evidence: exactly the
+    two ordinary rounds, in round order, with the round-3 adjudication excluded."""
+    data_dir = tmp_path / "corpus"
+    run_bundle = freeze_bundle(data_dir)
+    pair_id = bd.pairs_from_memory(run_bundle.memory)[0].pair_id
+    annotations = solo_rows(
+        pair_id,
+        {"same_character": False, "failure_reasons": ["wrong_colour"]},
+        {"same_character": True},
+        {"same_character": True},
+    )
+    out_dir = tmp_path / "freeze"
+
+    with (
+        patch.object(fd, "fetch_annotations", return_value=annotations),
+        patch.object(fd, "fetch_adjudicator_ids", return_value=set()),
+        patch.object(fd, "fetch_pilot_pairs", return_value=set()),
+    ):
+        report = bd.freeze_dataset(data_dir, out_dir)
+
+    assert report.adjudication_rate == 1.0
+    [evidence] = [
+        json.loads(line)
+        for line in (out_dir / "annotation_agreement.jsonl").read_text().splitlines()
+    ]
+    assert evidence == {"pair_id": pair_id, "labels": [False, True]}
