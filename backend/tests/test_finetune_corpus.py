@@ -1278,10 +1278,9 @@ def test_billing_acknowledgment_survives_requarantine(tmp_path):
         ("invalid_terminal", True, "fixture-story"),
         ("intake_mismatch", True, "fixture-story"),
         ("budget_stopped", False, "fixture-story"),
-        ("budget_stopped", True, "different-story"),
     ],
 )
-def test_nonrecoverable_or_unbound_quarantine_cannot_resume(
+def test_invalid_quarantine_cannot_resume(
     tmp_path, reason_code, include_digest, resume_id
 ):
     story = intake_story()
@@ -2530,3 +2529,210 @@ def test_cli_exits_nonzero_and_names_the_quarantined_stories(monkeypatch, capsys
     assert "1 of 30" in captured.err
     assert "syn-007" in captured.err
     assert json.loads(captured.out)["halted"] is False
+
+
+# ------------------------------------- a pre-existing quarantine is "not this run", not a stop
+
+
+def _seed_quarantine(tmp_path, story, reason_code, **extra):
+    entry = {
+        "quarantined": reason_code.replace("_", " "),
+        "reason_code": reason_code,
+        "intake_sha256": intake_sha256(story),
+        "conservative_call_usd": "0.035",
+        "telemetry": {"attempted": 1, "completed": 1, "failed": 0, "uncertain": 0},
+        **extra,
+    }
+    (tmp_path / "build_state.json").write_text(
+        json.dumps({story.story_id: entry}), encoding="utf-8"
+    )
+
+
+def test_a_pre_existing_quarantine_is_skipped_and_counted_on_a_rerun(tmp_path):
+    """Run 1 leaves 2 bundles and a quarantine. Before this, run 2 died at the quarantined story
+    -- so a campaign that had to be rerun (a budget halt, a re-authorization) could never get
+    past its first bad story, which defeats the point of continuing past one in the first place.
+    """
+    first = _roster_stories("a", "b", "c")
+    build_corpus.build(
+        first,
+        RosterGraph(extracted={"b": "intruder"}),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("25.00")),
+    )
+
+    graph = RosterGraph()
+    summary = build_corpus.build(
+        _roster_stories("a", "b", "c", "d"),
+        graph,
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("25.00")),
+    )
+
+    assert summary["stories_requested"] == 4
+    assert summary["stories_run"] == 1
+    assert summary["stories_skipped"] == 2
+    assert summary["stories_quarantined"] == 1
+    assert summary["quarantined_story_ids"] == ["b"]
+    assert summary["halted"] is False
+    # Skipping is "not this run", not forgiveness: the story is never handed to the graph.
+    assert graph.calls == [build_corpus._campaign_thread_id("d", tmp_path)]
+    assert sorted(bundle.memory.story_id for bundle in load_completed_bundles(tmp_path)) == [
+        "a",
+        "c",
+        "d",
+    ]
+
+
+def test_the_quarantine_count_is_stable_across_reruns(tmp_path):
+    stories = _roster_stories("a", "b")
+    first = build_corpus.build(
+        stories,
+        RosterGraph(extracted={"b": "intruder"}),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("25.00")),
+    )
+    second = build_corpus.build(
+        stories,
+        RosterGraph(),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("25.00")),
+    )
+
+    assert first["stories_quarantined"] == second["stories_quarantined"] == 1
+    assert first["quarantined_story_ids"] == second["quarantined_story_ids"] == ["b"]
+
+
+def test_a_skipped_quarantine_still_needs_a_flag_and_still_fails_its_checks(tmp_path):
+    """Skipping the story when nothing targets it must not make the targeted path permissive."""
+    story = intake_story()
+    _seed_quarantine(tmp_path, story, "budget_stopped")
+
+    with pytest.raises(CorpusError, match="intake digest differs"):
+        build_corpus.build(
+            [intake_story(text="a different story entirely")],
+            RecoverableGraph(story, per_story_images=1),
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+            resume_quarantined=story.story_id,
+        )
+
+
+def test_an_unbound_resume_flag_skips_rather_than_stops(tmp_path):
+    """A resume naming a different story does not unlock this one -- it is skipped, not run."""
+    story = intake_story()
+    (tmp_path / "build_state.json").write_text(
+        json.dumps({story.story_id: isolated_quarantine(story)}), encoding="utf-8"
+    )
+
+    summary = build_corpus.build(
+        [story],
+        RecoverableGraph(story, per_story_images=1),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_calls_per_story=15),
+        resume_quarantined="different-story",
+    )
+
+    assert summary["quarantined_story_ids"] == [story.story_id]
+    assert summary["stories_run"] == 0
+    assert load_completed_bundles(tmp_path) == []
+
+
+def test_an_uncertain_billing_quarantine_still_stops_a_rerun(tmp_path):
+    """The one reason that is not a statement about a single story. Every other quarantine leaves
+    the campaign total exactly known; uncertain billing means real money moved with an unknown
+    outcome, so `usd_high` is a lower bound on a number nobody has. Spec section 10 stops before
+    spending when billing is uncertain, and spending more against a total known to be wrong is
+    what that forbids -- a line on stderr is not the same as refusing to spend."""
+    story = intake_story()
+    _seed_quarantine(
+        tmp_path,
+        story,
+        "billing_uncertain",
+        telemetry={"attempted": 2, "completed": 1, "failed": 0, "uncertain": 1},
+    )
+
+    with pytest.raises(CorpusError, match="billing uncertain"):
+        build_corpus.build(
+            [story],
+            RecoverableGraph(story, per_story_images=1),
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+        )
+
+
+def test_an_uncertain_billing_rerun_still_demands_acknowledgment(tmp_path):
+    story = intake_story()
+    _seed_quarantine(
+        tmp_path,
+        story,
+        "billing_uncertain",
+        telemetry={"attempted": 2, "completed": 1, "failed": 0, "uncertain": 1},
+    )
+
+    with pytest.raises(CorpusError, match="acknowledge uncertain billing"):
+        build_corpus.build(
+            [story],
+            RecoverableGraph(story, per_story_images=1),
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+            resume_quarantined=story.story_id,
+        )
+
+
+@pytest.mark.parametrize("reason_code", [None, "unknown_reason"])
+def test_a_malformed_quarantine_reason_still_stops_a_rerun(tmp_path, reason_code):
+    story = intake_story()
+    entry = {
+        "quarantined": "malformed quarantine",
+        "intake_sha256": intake_sha256(story),
+        "conservative_call_usd": "0.035",
+        "telemetry": {"attempted": 1, "completed": 1, "failed": 0, "uncertain": 0},
+    }
+    if reason_code is not None:
+        entry["reason_code"] = reason_code
+    (tmp_path / "build_state.json").write_text(
+        json.dumps({story.story_id: entry}), encoding="utf-8"
+    )
+
+    with pytest.raises(CorpusError, match="malformed quarantine"):
+        build_corpus.build(
+            [story],
+            RecoverableGraph(story, per_story_images=1),
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+        )
+
+
+def test_a_fixture_run_still_refuses_to_pass_a_quarantine(tmp_path):
+    """Fixture mode is the zero-cost rehearsal and has no recovery vocabulary at all, so a
+    quarantine there is an unrehearsable state rather than work deferred to a later run."""
+    story = intake_story()
+    _seed_quarantine(tmp_path, story, "budget_stopped")
+
+    with pytest.raises(CorpusError, match="budget stopped"):
+        build_corpus.build([story], None, out_dir=tmp_path, supabase=None, fixture=True)
+
+
+def test_a_rerun_that_only_skips_quarantines_still_exits_nonzero(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(build_corpus, "load_intake", lambda path: [intake_story()])
+    monkeypatch.setattr(
+        build_corpus,
+        "build",
+        lambda *args, **kwargs: {
+            "halted": False,
+            "stories_requested": 30,
+            "stories_run": 0,
+            "stories_skipped": 29,
+            "stories_quarantined": 1,
+            "quarantined_story_ids": ["syn-007"],
+        },
+    )
+
+    assert build_corpus.main(["--fixture", "--out", str(tmp_path)]) == 2
+    assert "syn-007" in capsys.readouterr().err

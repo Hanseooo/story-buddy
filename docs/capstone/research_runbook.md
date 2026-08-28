@@ -147,6 +147,12 @@ stories ran of how many were requested, which stories quarantined, and the `--ma
 the reserve. A roster mismatch quarantines that one story and the run continues, so the expected shape of a
 completed step 3 is 30 bundles, or fewer bundles plus a named quarantine list — never a silent partial run.
 
+On a later paid rerun, pre-existing story-local quarantines are counted and skipped unless the matching
+`--resume-quarantined`, `--restart-quarantined` or `--readmit-quarantined` option targets them; the CLI still
+exits 2 while any remain. A flag for another story does not unlock one, and a targeted recovery still performs
+all of its existing validation. `billing_uncertain` remains a hard stop until its matching acknowledgment, and
+fixture mode remains a hard stop for every pre-existing quarantine.
+
 `evaluation_signoff.json` is written by the approver, never by evaluation code. It contains exactly the
 SHA-256 of `evaluation_lock.json`, a nonblank `approved_by`, and a timezone-bearing `approved_at`.
 Prediction JSONL files and their `.sha256` sidecars are immutable run evidence. Reusing the same `--run-id`

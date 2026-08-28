@@ -825,6 +825,24 @@ def build(
                 state[story_id] = state_entry
                 cap_extension_pending = True
             _execution_id(story, state_entry, campaign_thread)
+            recovery_target = story_id in {
+                resume_quarantined,
+                restart_quarantined,
+                readmit_quarantined,
+            }
+            if (
+                "quarantined" in state_entry
+                and not recovery_target
+                and not fixture
+                and state_entry.get("reason_code")
+                in {"budget_stopped", "resume_exhausted", "invalid_terminal", "intake_mismatch"}
+            ):
+                # "Not this run", not forgiveness: the story remains visible until an explicit
+                # recovery targets it. Only targeted recovery validates its persisted call cap;
+                # fixture quarantines and uncertain billing remain fatal below.
+                summary["stories_quarantined"] += 1
+                summary["quarantined_story_ids"].append(story_id)
+                continue
             _validate_restart_cap(story, state_entry, policy)
             if "quarantined" in state_entry:
                 if fixture:

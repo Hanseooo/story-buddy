@@ -152,6 +152,13 @@ but it is not a clean run either, so the two conditions are reported separately 
 mismatch threshold stops the campaign: quarantine-and-continue is the registered behaviour, and a systemic
 extraction failure is visible in the reported count rather than in a partial run.
 
+On an ordinary non-fixture rerun, a pre-existing story-local quarantine other than `billing_uncertain` is
+counted and skipped when no recovery option targets that story. The quarantine is not forgiven or cleared:
+running it again still requires the matching `--resume-quarantined`, `--restart-quarantined` or
+`--readmit-quarantined` option and every validation attached to that recovery path. A flag naming another story
+does not unlock it. `billing_uncertain` remains campaign-fatal until explicitly acknowledged through its
+matching recovery path, and fixture mode continues to refuse every pre-existing quarantine.
+
 Reaching the exact draw allowance is not itself failure. The runner may finish non-paid graph work and write
 a valid terminal bundle, but the Fal provider seam must reject the next attempted paid call before submission.
 After the configured interrupt-resume limit, the runner quarantines the story; it never returns an unfinished
