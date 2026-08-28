@@ -379,8 +379,8 @@ moderation thresholds, failure copy, and narration voice are all calibrated to a
 **Write the analysis plan — hypotheses, baselines, metrics, and success criteria — before running anything.**
 
 For Objective 4, pre-registration is what makes the reported F1 trustworthy: the human labels carry
-reported inter-rater reliability, and the held-out set is **read once**, against an analysis plan fixed in
-advance — so the reported precision/recall/F1 figures are the ones committed to, whatever they turn out to
+reported test-retest (intra-rater) agreement, and the held-out set is **read once**, against an
+analysis plan fixed in advance — so the reported precision/recall/F1 figures are the ones committed to, whatever they turn out to
 be. The optional base/prompted comparison, if reported, follows the same discipline. The same rigor governs
 Objective 3: the five criteria and the content-analysis coding scheme are fixed before data collection, so
 a weak result is a finding, not a fudge.

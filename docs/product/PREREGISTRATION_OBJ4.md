@@ -603,3 +603,41 @@ gate. Rung B alone adds the registered no-recall-regression condition to the fix
 boundary. Rung C records Objective 4 as met while keeping the incumbent deployment. Only Rung D records the
 research requirement as unmet. The Objective-4 conclusion and engineering deployment decision are therefore
 separate schema fields.
+
+### 2026-08-29 — One rater, test-retest agreement, and what that costs the claim
+
+No held-out result had been seen and no pair had been annotated when this was written.
+
+This amendment supersedes three earlier passages that assumed two independent annotators plus a distinct
+adjudicator: §4's "Annotation procedure, fixed in advance" paragraph, and the 2026-08-25 amendment's
+"ordinary-label pairs for inter-rater κ" and "Inter-rater κ and percent agreement are reported overall and by
+the same slices." The superseded text stays where it is; it is not the operative procedure.
+
+**The operative procedure.** One rater labels every pair. That rater is the researcher, and there is no
+second. Each pair therefore receives two ordinary labels from the same person in two separate rounds
+(`round = 1`, `round = 2`), collected blind and apart; where those two rounds disagree on `same_character`,
+the same rater resolves the pair once in a third round (`round = 3`), which is insert-only and authoritative.
+The two-annotator schema, the RLS isolation and the distinct-adjudicator code path are all retained and
+tested, so a genuine second rater would work if one ever appeared. That is contingency, not a plan.
+
+**Inter-rater κ is undefined for this dataset — permanently, not pending.** Cohen's κ between two annotators
+cannot be computed from one annotator's labels. It is not deferred, not underpowered, not awaiting
+recruitment. Every earlier commitment to report it is withdrawn here rather than quietly left to fail at
+analysis time.
+
+**What is reported in its place.** **Intra-rater (test-retest) agreement**: the same κ arithmetic and percent
+agreement over round 1 versus round 2, reported overall and by the same frozen human/non-human slices, under
+the field name `intra_rater_agreement`. It is computed after labelling and never displayed during it. It is
+reported whatever it is.
+
+**The limitation this creates, stated before seeing the number.** Test-retest agreement measures the rater's
+self-consistency and bounds label noise. It is a strictly weaker claim than inter-rater agreement, because it
+cannot detect a bias the rater holds consistently across both rounds: a rater who is reliably wrong in the
+same direction scores high. Any sentence reporting this number must name it test-retest and must carry that
+limitation. It may not be described as, compared to, or substituted for inter-rater reliability.
+
+**What is unchanged.** Judge-versus-human κ (§1 endpoint 3, §5), its clustered interval (§5.1), the slice
+definitions (§5.2), the claim ladder (§6), and δ = 3 (§5) all stand exactly as registered. δ was already
+reasoned against *one* annotator's disagreement band and is fixed as of 2026-08-14; nothing here reopens it.
+The ground-truth labels the judge is scored against are the round-3-resolved labels where a resolution
+exists, and the agreed round-1/round-2 label otherwise.
