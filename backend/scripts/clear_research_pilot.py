@@ -47,7 +47,8 @@ def _pilot_pairs(supabase: Any, page_size: int) -> list[dict]:
 def _annotation_count(supabase: Any, pair_ids: tuple[str, ...], page_size: int) -> int:
     if not pair_ids:
         return 0
-    query = supabase.table("annotations").select("id").in_("pair_id", pair_ids)
+    # `annotations` has no surrogate key; its identity is (pair_id, annotator_id, round).
+    query = supabase.table("annotations").select("pair_id").in_("pair_id", pair_ids)
     count = 0
     for start in itertools.count(0, page_size):
         page = _response_data(query.range(start, start + page_size - 1).execute(), "pilot annotation query")
