@@ -1,3 +1,57 @@
+# Current Task: Safe continuation of interrupted Objective-4 work
+
+- [x] Reconstruct committed, uncommitted, and unrelated session state.
+- [x] Confirm the bounded design from the owner's prior decisions.
+- [x] Write the disposable TDD implementation plan.
+- [x] Finish and review the intra-rater report-key rename.
+- [x] Finish and review solo round-3 adjudication.
+- [x] Finish and review pre-existing-quarantine rerun behavior and documentation.
+- [x] Run full backend/frontend verification and independent scoped reviews.
+- [x] Record outcomes and remove the completed disposable plan.
+
+## Success criteria
+
+The Objective-4 report accurately names test-retest agreement; the solo researcher can add exactly one
+round-3 adjudication row without weakening ordinary annotation isolation or forward-only RLS; ordinary paid
+reruns skip and report pre-existing story-local quarantines while uncertain billing still stops; all owning
+specs match; full deterministic checks are green. Migration `0018` remains unapplied and all live-database,
+sampling-policy, pilot-selection, paid-provider, training, and held-out-evaluation work remains out of scope.
+
+## Outcome — 2026-08-28
+
+- Renamed the Objective-4 report field to `intra_rater_agreement`; the value remains the one rater's
+  round-1/round-2 test-retest agreement, and the owning spec explicitly says inter-rater agreement is
+  undefined.
+- Finished solo round-3 adjudication: any researcher may enter `/adjudicate`, while server actions authorize
+  only the solo `{1, 2}` row shape or a distinct adjudicator who authored neither ordinary row. Round 3 stays
+  insert-only. Existing and raced duplicate submissions are accepted only when stored values match exactly.
+- Ordinary paid corpus reruns now count and skip only the four known story-local quarantine reasons when no
+  recovery option targets that story. Targeted validation, malformed-state refusal, fixture refusal and the
+  `billing_uncertain` hard stop remain intact.
+- Independent task reviews found and closed the layout gate, duplicate-submit value race and malformed
+  quarantine-reason bypass. Scoped re-reviews were clean. Two additional consolidated-review agents did not
+  return and were interrupted; no verdict from them was used.
+
+Verification:
+- Backend: `uv run ruff check .` passed; `uv run pytest` reported **1,337 passed, 87 skipped, 6 deselected**.
+- Frontend: `pnpm lint` passed; `pnpm test` reported **398 passed across 42 files**; `pnpm build` compiled,
+  type-checked and generated all routes successfully.
+- Focused: corpus **137 passed**; adjudicate/annotate auth **61 passed**; scoped Ruff and `git diff --check`
+  passed.
+
+Not verified or intentionally deferred:
+- Migration `0018_annotation_rounds.sql` remains unapplied. The 25 annotation RLS tests were skipped with the
+  rest of the live-database suites, so no live round-2/round-3 write has been proven.
+- Two distinct adjudicator profiles can still race separate round-3 inserts because the key includes
+  `annotator_id`; the active protocol permanently has one rater. A future multi-adjudicator deployment needs
+  a separately approved database uniqueness/transaction decision first.
+- Ordinary researcher login still defaults to `/annotate`; `/adjudicate` is reachable directly but is not
+  automatically surfaced after round 2.
+- No paid/provider, training, held-out evaluation, sampling/cap-policy, pilot-selection or live-Storage work
+  ran. Existing Next.js middleware and Starlette/httpx deprecation warnings remain.
+
+---
+
 # Current Task: Objective-4 dataset readiness engineering
 
 - [x] Revalidate the earlier readiness audit against current HEAD.
