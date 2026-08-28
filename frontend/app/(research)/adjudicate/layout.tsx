@@ -16,7 +16,7 @@ export default async function AdjudicateLayout({ children }: { children: React.R
     .eq("id", user.id)
     .single();
 
-  if (profile?.role !== "researcher" || !profile?.is_adjudicator) {
+  if (profile?.role !== "researcher") {
     throw new Error("Unauthorized");
   }
 

@@ -228,6 +228,10 @@ query is the entire resume mechanism: closing the tab and returning later re-der
   upsert: an upsert would overwrite the submitted label, which is the self-revision this section's
   forward-only rule forbids, and it would need an RLS `update` grant `0014` deliberately withholds.
 - Annotator has no pairs left — a plain "you're done" state, not an error.
+- Two distinct adjudicator profiles could both insert round 3 for the same pair concurrently because the key
+  includes `annotator_id`. The active single-rater protocol never exercises that contingency; closing it
+  atomically would require a new database constraint or transaction decision, so it remains an accepted risk
+  unless a genuine second adjudicator is added.
 - If `annotate/` or `adjudicate/` fails at runtime, its generic error boundary keeps provider and
   database details out of the UI and offers retry, the research lab, and `POST /auth/signout` for
   stale-session recovery.

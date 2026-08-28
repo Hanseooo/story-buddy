@@ -167,6 +167,47 @@ describe("Adjudication Server Actions", () => {
       expect(res.error).toBe("Invalid pair state: requires exactly 2 prior annotations");
     });
 
+    it("rejects a malformed annotation round", async () => {
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: { status: "conflicted" } }) })
+      });
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockResolvedValue({
+          data: [
+            { annotator_id: "solo-rater", round: 0 },
+            { annotator_id: "solo-rater", round: 2 },
+          ],
+          error: null,
+        })
+      });
+
+      const res = await submitAdjudication({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
+      expect(res.error).toBe("Invalid pair state: malformed annotation round");
+      expect(mockAnnotationsUpsert).not.toHaveBeenCalled();
+    });
+
+    it("rejects duplicate round 1 ordinary rows for solo adjudication", async () => {
+      mockGetUser.mockResolvedValueOnce({ data: { user: { id: "solo-rater" } }, error: null });
+      mockProfilesSelect.mockResolvedValueOnce({ data: { role: "researcher", is_adjudicator: false }, error: null });
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: { status: "conflicted" } }) })
+      });
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockResolvedValue({
+          data: [
+            { annotator_id: "solo-rater", round: 1 },
+            { annotator_id: "solo-rater", round: 1 },
+          ],
+          error: null,
+        })
+      });
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null }));
+
+      const res = await submitAdjudication({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
+      expect(res.error).toBeTruthy();
+      expect(mockAnnotationsUpsert).not.toHaveBeenCalled();
+    });
+
     it("rejects an ordinary researcher trying to adjudicate someone else's pair", async () => {
       mockProfilesSelect.mockResolvedValueOnce({ data: { role: "researcher", is_adjudicator: false }, error: null });
       mockAdminSelect.mockReturnValueOnce({
@@ -237,9 +278,93 @@ describe("Adjudication Server Actions", () => {
         eq: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: { status: "conflicted" } }) })
       });
       mockAdminSelect.mockReturnValueOnce({
-        eq: vi.fn().mockResolvedValue({ data: [{ annotator_id: "other-1" }, { annotator_id: "other-2" }, { annotator_id: "adjudicator-1" }], error: null })
+        eq: vi.fn().mockResolvedValue({
+          data: [
+            { annotator_id: "other-1", round: 1, same_character: true, failure_reasons: [], anatomy_intact: true, text_free: true },
+            { annotator_id: "other-2", round: 1, same_character: false, failure_reasons: ["wrong_colour"], anatomy_intact: true, text_free: true },
+            { annotator_id: "adjudicator-1", round: 3, same_character: true, failure_reasons: [], anatomy_intact: true, text_free: true },
+          ],
+          error: null,
+        })
       });
       mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [{ id: "adjudicator-1" }], error: null }));
+      mockAdminUpdate.mockResolvedValue({ error: null });
+
+      const res = await submitAdjudication({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
+      expect(res.success).toBe(true);
+      expect(mockAdminUpdate).toHaveBeenCalledWith("research_pairs", { status: "adjudicated" }, "id", "pair-1");
+    });
+
+    it("rejects idempotent status repair when the submitted values differ from the stored round 3 row", async () => {
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: { status: "conflicted" } }) })
+      });
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockResolvedValue({
+          data: [
+            { annotator_id: "other-1", round: 1, same_character: true, failure_reasons: [], anatomy_intact: true, text_free: true },
+            { annotator_id: "other-2", round: 1, same_character: false, failure_reasons: ["wrong_colour"], anatomy_intact: true, text_free: true },
+            { annotator_id: "adjudicator-1", round: 3, same_character: false, failure_reasons: ["wrong_colour"], anatomy_intact: true, text_free: true },
+          ],
+          error: null,
+        })
+      });
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [{ id: "adjudicator-1" }], error: null }));
+
+      const res = await submitAdjudication({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
+      expect(res.error).toBe("Pair already adjudicated with different values");
+      expect(mockAdminUpdate).not.toHaveBeenCalled();
+    });
+
+    it("rejects status repair after a 23505 race when the stored round 3 values differ", async () => {
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: { status: "conflicted" } }) })
+      });
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockResolvedValue({
+          data: [
+            { annotator_id: "other-1", round: 1, same_character: true, failure_reasons: [], anatomy_intact: true, text_free: true },
+            { annotator_id: "other-2", round: 1, same_character: false, failure_reasons: ["wrong_colour"], anatomy_intact: true, text_free: true },
+          ],
+          error: null,
+        })
+      });
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({
+        data: [
+          { annotator_id: "adjudicator-1", round: 3, same_character: false, failure_reasons: ["wrong_colour"], anatomy_intact: true, text_free: true },
+        ],
+        error: null,
+      }));
+      mockAnnotationsUpsert.mockResolvedValueOnce({ error: { code: "23505" } });
+      mockAdminUpdate.mockResolvedValue({ error: null });
+
+      const res = await submitAdjudication({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
+      expect(res.error).toBe("Pair already adjudicated with different values");
+      expect(mockAdminUpdate).not.toHaveBeenCalled();
+    });
+
+    it("repairs status after a 23505 race when the stored round 3 values match", async () => {
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: { status: "conflicted" } }) })
+      });
+      mockAdminSelect.mockReturnValueOnce({
+        eq: vi.fn().mockResolvedValue({
+          data: [
+            { annotator_id: "other-1", round: 1, same_character: true, failure_reasons: [], anatomy_intact: true, text_free: true },
+            { annotator_id: "other-2", round: 1, same_character: false, failure_reasons: ["wrong_colour"], anatomy_intact: true, text_free: true },
+          ],
+          error: null,
+        })
+      });
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({
+        data: [
+          { annotator_id: "adjudicator-1", round: 3, same_character: true, failure_reasons: [], anatomy_intact: true, text_free: true },
+        ],
+        error: null,
+      }));
+      mockAnnotationsUpsert.mockResolvedValueOnce({ error: { code: "23505" } });
       mockAdminUpdate.mockResolvedValue({ error: null });
 
       const res = await submitAdjudication({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });

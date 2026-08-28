@@ -65,6 +65,13 @@ export async function submitAdjudication(payload: SubmissionPayload) {
   const { error: validationError } = validateSubmissionPayload(payload);
   if (validationError) return { error: validationError };
 
+  const submittedAnnotation: BlindAnnotation = {
+    same_character: sameCharacter,
+    failure_reasons: failureReasons,
+    anatomy_intact: anatomyIntact,
+    text_free: textFree,
+  };
+
   const supabase = await createSupabaseServerClient();
 
   const adminClient = await createAdminClient();
@@ -132,6 +139,9 @@ export async function submitAdjudication(payload: SubmissionPayload) {
     if (adjudications[0]?.annotator_id !== user.id) {
       return { error: "Pair already adjudicated by another adjudicator" };
     }
+    if (!isConsensus(adjudications[0], submittedAnnotation)) {
+      return { error: "Pair already adjudicated with different values" };
+    }
     const { error: updateError } = await adminClient
       .from("research_pairs")
       .update({ status: "adjudicated" })
@@ -155,7 +165,18 @@ export async function submitAdjudication(payload: SubmissionPayload) {
 
   if (insertError) {
     if (insertError.code === "23505") {
-      console.log("Adjudication already exists for pair", pairId);
+      const { data: savedAnnotations, error: savedError } = await adminClient
+        .from("annotations")
+        .select("annotator_id, round, same_character, failure_reasons, anatomy_intact, text_free")
+        .eq("pair_id", pairId)
+        .eq("annotator_id", user.id)
+        .eq("round", ADJUDICATION_ROUND);
+      if (savedError || savedAnnotations?.length !== 1) {
+        return { error: "Failed to verify saved adjudication" };
+      }
+      if (!isConsensus(savedAnnotations[0] as AnnotationRow, submittedAnnotation)) {
+        return { error: "Pair already adjudicated with different values" };
+      }
     } else {
       console.error("Failed to insert adjudication:", insertError);
       return { error: "Failed to save adjudication" };
