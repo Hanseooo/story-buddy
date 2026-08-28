@@ -77,7 +77,7 @@ def read_verified_asset(asset: AssetRecord, root: Path) -> bytes:
     return contents
 
 
-def _validate_bundle(bundle: RunBundle, root: Path) -> list[tuple[_Asset, _Asset, dict]]:
+def _validate_bundle(bundle: RunBundle, root: Path, pilot: bool = False) -> list[tuple[_Asset, _Asset, dict]]:
     if (bundle.provenance == "synthetic" and bundle.split == "test") or (
         bundle.provenance == "donated" and bundle.split != "test"
     ):
@@ -111,7 +111,7 @@ def _validate_bundle(bundle: RunBundle, root: Path) -> list[tuple[_Asset, _Asset
             "char_id": pair.char_id,
             "split": bundle.split,
             "is_constructed_negative": False,
-            "is_pilot": False,
+            "is_pilot": pilot,
         }
         pairs.append((
             _Asset(row["canonical_storage_path"], reference[1], reference[0].mime_type),
@@ -121,11 +121,13 @@ def _validate_bundle(bundle: RunBundle, root: Path) -> list[tuple[_Asset, _Asset
     return pairs
 
 
-def _preflight(bundles: Sequence[RunBundle], root: Path) -> tuple[dict[str, _Asset], dict[str, dict]]:
+def _preflight(
+    bundles: Sequence[RunBundle], root: Path, pilot: bool = False
+) -> tuple[dict[str, _Asset], dict[str, dict]]:
     targets: dict[str, _Asset] = {}
     rows: dict[str, dict] = {}
     for bundle in bundles:
-        for reference, scene, row in _validate_bundle(bundle, root):
+        for reference, scene, row in _validate_bundle(bundle, root, pilot):
             for target in (reference, scene):
                 existing = targets.get(target.path)
                 if existing is not None and existing.contents != target.contents:
@@ -160,8 +162,10 @@ def _is_not_found(error: Exception) -> bool:
     return isinstance(error, FileNotFoundError) or "404" in str(error) or "not found" in str(error).lower()
 
 
-def _materialize(bundles: Sequence[RunBundle], supabase: Any, bucket: str, root: Path) -> MaterializeSummary:
-    targets, rows = _preflight(bundles, root)
+def _materialize(
+    bundles: Sequence[RunBundle], supabase: Any, bucket: str, root: Path, *, pilot: bool = False
+) -> MaterializeSummary:
+    targets, rows = _preflight(bundles, root, pilot)
     existing_rows = _fetch_pairs(supabase)
     for pair_id, row in rows.items():
         existing = existing_rows.get(pair_id)
@@ -210,8 +214,10 @@ def _materialize(bundles: Sequence[RunBundle], supabase: Any, bucket: str, root:
     return MaterializeSummary(uploaded=len(uploaded), skipped=skipped, pairs_inserted=len(pending))
 
 
-def materialize(bundles: Sequence[RunBundle], supabase: Any, bucket: str = BUCKET) -> MaterializeSummary:
-    return _materialize(bundles, supabase, bucket, DATA_DIR)
+def materialize(
+    bundles: Sequence[RunBundle], supabase: Any, bucket: str = BUCKET, *, pilot: bool = False
+) -> MaterializeSummary:
+    return _materialize(bundles, supabase, bucket, DATA_DIR, pilot=pilot)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -219,13 +225,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--data", type=Path, default=DATA_DIR)
     parser.add_argument("--donated-intake", type=Path, default=None)
     parser.add_argument("--selection", type=Path, default=None)
+    parser.add_argument(
+        "--pilot",
+        action="store_true",
+        help="seed the queue as pilot pairs, permanently excluded from the training dataset",
+    )
     args = parser.parse_args(argv)
     try:
+        if args.pilot and (args.donated_intake or args.selection):
+            # Dataset selection decides what enters training; pilot pairs never do. Accepting
+            # both would leave the operator guessing which one governed the run.
+            raise ManifestError("--pilot cannot be combined with --donated-intake or --selection")
         bundles = load_completed_bundles(args.data)
-        selected, _, _ = prepare_dataset_bundles(
+        selected = bundles if args.pilot else prepare_dataset_bundles(
             bundles, args.donated_intake, args.selection
+        )[0]
+        summary = _materialize(
+            selected, get_supabase_client(), BUCKET, args.data, pilot=args.pilot
         )
-        summary = _materialize(selected, get_supabase_client(), BUCKET, args.data)
     except (CorpusError, ManifestError) as error:
         print(str(error), file=sys.stderr)
         return 1

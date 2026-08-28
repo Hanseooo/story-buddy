@@ -99,6 +99,14 @@ uv run python -m finetune.build_dataset --candidate-report --data ../data/judge/
 # 6. Upload immutable assets and seed research pair queue
 uv run python -m finetune.materialize_pairs --data ../data/judge/corpus --donated-intake ../data/judge/intake/donated.json --selection ../data/judge/intake/dataset_selection.json
 
+# 6a. Annotation dress rehearsal only. `--pilot` seeds the queue from every completed bundle in
+# --data with `is_pilot = true`, so the pairs are permanently excluded from the training dataset
+# and never reach a freeze. It bypasses dataset selection because selection decides what enters
+# training and pilot pairs never do; it therefore refuses --donated-intake and --selection.
+# Point --data at a throwaway campaign directory, never at the production corpus: a pair id
+# already seeded as production data will hard-fail with `pair conflict` rather than be reflagged.
+uv run python -m finetune.materialize_pairs --data ../data/judge/corpus-smoke-a --pilot
+
 # 7. Check annotation progress / reconcile pair queue
 uv run python -m finetune.build_dataset --reconcile-only
 
