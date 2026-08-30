@@ -1,0 +1,1744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StoryBuddy — Objective 4 Master Plan & Execution Runbook</title>
+  <style>
+    /* ==========================================================================
+       CSS RESET & DESIGN SYSTEM VARIABLES (COBALT PLAYROOM THEME)
+       ========================================================================== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --primary: #1e3a8a;          /* Deep Cobalt Blue */
+      --primary-light: #3b82f6;    /* Bright Accent Blue */
+      --primary-dark: #0f172a;     /* Deep Slate / Charcoal */
+      --accent-cyan: #0284c7;      /* Vivid Cyan */
+      --accent-emerald: #059669;   /* Emerald Green */
+      --accent-amber: #d97706;     /* Warm Amber */
+      --accent-rose: #e11d48;      /* Rose Crimson */
+      --accent-purple: #7c3aed;    /* Royal Violet */
+      --bg-body: #f8fafc;          /* Light Slate Base */
+      --bg-card: #ffffff;          /* Pure White */
+      --text-main: #0f172a;        /* High-contrast dark */
+      --text-muted: #334155;       /* Medium slate */
+      --text-light: #64748b;       /* Muted gray */
+      --border-color: #e2e8f0;     /* Border gray */
+      --border-focus: #94a3b8;
+      --code-bg: #0f172a;          /* Deep navy editor */
+      --code-text: #f8fafc;
+      --highlight-bg: #eff6ff;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--text-main);
+      background-color: var(--bg-body);
+      line-height: 1.65;
+      font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* ==========================================================================
+       CONTAINER & STRUCTURAL LAYOUT
+       ========================================================================== */
+    .container {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 36px 24px;
+    }
+
+    /* ==========================================================================
+       HEADER BANNER & METADATA PILLS
+       ========================================================================== */
+    .header-banner {
+      background: linear-gradient(135deg, #1e3a8a 0%, #1e293b 50%, #0f172a 100%);
+      color: #ffffff;
+      padding: 40px 36px;
+      border-radius: 18px;
+      margin-bottom: 32px;
+      box-shadow: 0 12px 30px -6px rgba(15, 23, 42, 0.25);
+      position: relative;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .header-title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    .header-title-group h1 {
+      font-size: 30px;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      margin-bottom: 8px;
+      color: #ffffff;
+      line-height: 1.2;
+    }
+
+    .header-title-group p {
+      font-size: 15px;
+      color: #93c5fd;
+      max-width: 820px;
+      line-height: 1.5;
+    }
+
+    .print-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background-color: #3b82f6;
+      color: #ffffff;
+      padding: 12px 22px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 14px;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(59, 130, 246, 0.35);
+      transition: background-color 0.2s ease, transform 0.1s ease;
+    }
+
+    .print-btn:hover {
+      background-color: #2563eb;
+      transform: translateY(-1px);
+    }
+
+    .meta-pills-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 28px;
+      padding-top: 22px;
+      border-top: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    .meta-pill {
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(10px);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #e2e8f0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+    }
+
+    .meta-pill strong {
+      color: #ffffff;
+    }
+
+    .meta-pill.status-active {
+      background: rgba(16, 185, 129, 0.22);
+      border-color: #10b981;
+      color: #a7f3d0;
+    }
+
+    /* ==========================================================================
+       STICKY QUICK NAVIGATION
+       ========================================================================== */
+    .quick-nav {
+      background: var(--bg-card);
+      padding: 14px 20px;
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      margin-bottom: 32px;
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      overflow-x: auto;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+      position: sticky;
+      top: 16px;
+      z-index: 100;
+      backdrop-filter: blur(12px);
+    }
+
+    .quick-nav-label {
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-light);
+      white-space: nowrap;
+    }
+
+    .quick-nav-links {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .quick-nav-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 5px 12px;
+      border-radius: 6px;
+      transition: all 0.15s ease;
+      background: #f1f5f9;
+      white-space: nowrap;
+    }
+
+    .quick-nav-links a:hover {
+      color: var(--primary);
+      background: var(--highlight-bg);
+    }
+
+    .quick-nav-links a.active-link {
+      background: #dbeafe;
+      color: var(--primary);
+    }
+
+    /* ==========================================================================
+       SECTION HEADERS & CONTENT CARDS
+       ========================================================================== */
+    .section-container {
+      margin-bottom: 40px;
+    }
+
+    .section-title {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--primary-dark);
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 2px solid var(--border-color);
+      padding-bottom: 10px;
+      letter-spacing: -0.015em;
+    }
+
+    .section-title .section-number {
+      background: var(--primary);
+      color: #ffffff;
+      font-size: 13px;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-weight: 800;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border-radius: 14px;
+      border: 1px solid var(--border-color);
+      padding: 26px;
+      margin-bottom: 22px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+    }
+
+    .card-title {
+      font-size: 17px;
+      font-weight: 800;
+      color: var(--primary);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    /* ==========================================================================
+       ALERT & CALLOUT BOXES
+       ========================================================================== */
+    .callout {
+      padding: 16px 20px;
+      border-radius: 10px;
+      margin: 18px 0;
+      font-size: 13.5px;
+      border-left: 5px solid;
+      line-height: 1.6;
+    }
+
+    .callout-title {
+      font-weight: 800;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+    }
+
+    .callout-info {
+      background-color: #eff6ff;
+      border-left-color: #3b82f6;
+      color: #1e40af;
+    }
+
+    .callout-warning {
+      background-color: #fffbeb;
+      border-left-color: #d97706;
+      color: #92400e;
+    }
+
+    .callout-danger {
+      background-color: #fef2f2;
+      border-left-color: #e11d48;
+      color: #9f1239;
+    }
+
+    .callout-success {
+      background-color: #ecfdf5;
+      border-left-color: #059669;
+      color: #065f46;
+    }
+
+    .callout-purple {
+      background-color: #f5f3ff;
+      border-left-color: #7c3aed;
+      color: #5b21b6;
+    }
+
+    /* ==========================================================================
+       TABLES
+       ========================================================================== */
+    .table-container {
+      overflow-x: auto;
+      margin: 18px 0;
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+      background: #ffffff;
+    }
+
+    th {
+      background: #f8fafc;
+      color: var(--text-main);
+      font-weight: 700;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--border-color);
+      border-right: 1px solid var(--border-color);
+    }
+
+    th:last-child {
+      border-right: none;
+    }
+
+    td {
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--border-color);
+      border-right: 1px solid var(--border-color);
+      vertical-align: top;
+      color: var(--text-muted);
+    }
+
+    td:last-child {
+      border-right: none;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background-color: #f8fafc;
+    }
+
+    /* ==========================================================================
+       CODE & SYNTAX HIGHLIGHTING
+       ========================================================================== */
+    pre {
+      background: var(--code-bg);
+      color: var(--code-text);
+      padding: 18px;
+      border-radius: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 12.5px;
+      line-height: 1.55;
+      overflow-x: auto;
+      margin: 16px 0;
+      border: 1px solid #334155;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 12.5px;
+      background: #f1f5f9;
+      color: #b91c1c;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+
+    pre code {
+      background: transparent;
+      color: inherit;
+      padding: 0;
+      font-weight: normal;
+    }
+
+    /* ==========================================================================
+       STEP TIMELINE
+       ========================================================================== */
+    .step-timeline {
+      position: relative;
+      margin: 22px 0;
+      padding-left: 36px;
+    }
+
+    .step-timeline::before {
+      content: '';
+      position: absolute;
+      left: 12px;
+      top: 8px;
+      bottom: 8px;
+      width: 2px;
+      background: var(--border-color);
+    }
+
+    .step-item {
+      position: relative;
+      margin-bottom: 26px;
+    }
+
+    .step-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .step-node {
+      position: absolute;
+      left: -36px;
+      top: 0;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 2px solid var(--primary-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--primary);
+    }
+
+    .step-node.completed {
+      background: var(--accent-emerald);
+      border-color: var(--accent-emerald);
+      color: #ffffff;
+    }
+
+    .step-node.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #ffffff;
+      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.22);
+    }
+
+    .step-content h4 {
+      font-size: 15.5px;
+      font-weight: 800;
+      color: var(--text-main);
+      margin-bottom: 6px;
+    }
+
+    .step-content p {
+      color: var(--text-muted);
+      font-size: 13.5px;
+      margin-bottom: 8px;
+    }
+
+    /* ==========================================================================
+       GRIDS & METRICS
+       ========================================================================== */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 22px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 18px;
+    }
+
+    .metric-card {
+      background: #f8fafc;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 18px;
+      text-align: center;
+    }
+
+    .metric-value {
+      font-size: 26px;
+      font-weight: 800;
+      color: var(--primary);
+      line-height: 1.2;
+      margin-bottom: 4px;
+    }
+
+    .metric-label {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-light);
+    }
+
+    .metric-sub {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* ==========================================================================
+       BADGES
+       ========================================================================== */
+    .badge {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .badge-primary { background: #dbeafe; color: #1e40af; }
+    .badge-success { background: #d1fae5; color: #065f46; }
+    .badge-warning { background: #fef3c7; color: #92400e; }
+    .badge-danger { background: #ffe4e6; color: #9f1239; }
+    .badge-purple { background: #ede9fe; color: #5b21b6; }
+    .badge-gray { background: #f1f5f9; color: #475569; }
+
+    /* ==========================================================================
+       SVG DIAGRAM CONTAINERS
+       ========================================================================== */
+    .diagram-container {
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 22px;
+      margin: 20px 0;
+      display: flex;
+      justify-content: center;
+      overflow-x: auto;
+    }
+
+    svg.pipeline-svg {
+      max-width: 100%;
+      height: auto;
+    }
+
+    /* ==========================================================================
+       PRINT OPTIMIZATION (@media print)
+       ========================================================================== */
+    @media print {
+      @page {
+        size: A4;
+        margin: 1.2cm;
+      }
+
+      body {
+        background-color: #ffffff;
+        color: #000000;
+        font-size: 10.5pt;
+        line-height: 1.35;
+      }
+
+      .container {
+        max-width: 100%;
+        padding: 0;
+      }
+
+      .header-banner {
+        background: #1e293b !important;
+        color: #ffffff !important;
+        padding: 20px !important;
+        border-radius: 6px !important;
+        box-shadow: none !important;
+        margin-bottom: 20px !important;
+        page-break-after: avoid;
+      }
+
+      .print-btn, .quick-nav {
+        display: none !important;
+      }
+
+      .card {
+        border: 1px solid #94a3b8 !important;
+        box-shadow: none !important;
+        padding: 14px !important;
+        margin-bottom: 14px !important;
+        page-break-inside: avoid;
+      }
+
+      .section-container {
+        page-break-inside: avoid;
+        margin-bottom: 22px;
+      }
+
+      .section-title {
+        page-break-after: avoid;
+        border-bottom: 1.5px solid #000000;
+        color: #000000;
+      }
+
+      .table-container {
+        page-break-inside: avoid;
+        border: 1px solid #94a3b8;
+      }
+
+      table {
+        font-size: 9pt;
+      }
+
+      th {
+        background: #f1f5f9 !important;
+        color: #000000 !important;
+        font-weight: 700;
+      }
+
+      td {
+        color: #000000 !important;
+      }
+
+      pre {
+        background: #f8fafc !important;
+        color: #0f172a !important;
+        border: 1px solid #94a3b8 !important;
+        page-break-inside: avoid;
+        font-size: 8.5pt;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+
+      code {
+        background: #f1f5f9 !important;
+        color: #000000 !important;
+      }
+
+      .callout {
+        border-left-width: 3px !important;
+        page-break-inside: avoid;
+        padding: 10px;
+      }
+
+      .callout-info { background: #f0f9ff !important; color: #0369a1 !important; border-color: #0284c7 !important; }
+      .callout-warning { background: #fffbeb !important; color: #b45309 !important; border-color: #d97706 !important; }
+      .callout-danger { background: #fff1f2 !important; color: #be123c !important; border-color: #e11d48 !important; }
+      .callout-success { background: #f0fdf4 !important; color: #15803d !important; border-color: #16a34a !important; }
+      
+      .diagram-container {
+        page-break-inside: avoid;
+        border: 1px solid #cbd5e1;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- ==================== HEADER BANNER ==================== -->
+  <header class="header-banner">
+    <div class="header-title-row">
+      <div class="header-title-group">
+        <h1>StoryBuddy — Objective 4 Master Plan & Execution Runbook</h1>
+        <p>Comprehensive End-to-End Operational Blueprint: Synthetic & Donated Dataset Generation, Blinded Human Visual Annotation, QLoRA Adapter Fine-Tuning (Local GPU & Cloud Fallback), and Fail-Closed Pre-Registered Evaluation for the Consistency Judge.</p>
+      </div>
+      <button class="print-btn" onclick="window.print()">
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+        Print / Save to PDF (Ctrl+P)
+      </button>
+    </div>
+
+    <div class="meta-pills-row">
+      <div class="meta-pill status-active">
+        <span>●</span> Current State: <strong>Ticket 07 (Paid 3-Story Synthetic Smoke)</strong>
+      </div>
+      <div class="meta-pill">
+        Base VLM: <strong>Qwen2.5-VL-7B-Instruct (cc594898)</strong>
+      </div>
+      <div class="meta-pill">
+        Incumbent Comparator: <strong>Prompted Gemma-3-27B-IT</strong>
+      </div>
+      <div class="meta-pill">
+        Non-Inferiority Margin: <strong>&delta; = 3.0 F1 points (Fixed)</strong>
+      </div>
+      <div class="meta-pill">
+        Image Gen Substrate: <strong>fal-ai/qwen-image-edit-2511</strong>
+      </div>
+      <div class="meta-pill">
+        Campaign Spend Cap: <strong>$30.00 USD Hard Limit</strong>
+      </div>
+      <div class="meta-pill">
+        LLaMA-Factory Pin: <strong>v0.9.5 (7af90952)</strong>
+      </div>
+      <div class="meta-pill">
+        Pre-Registration Lock: <strong>2026-08-14 (Frozen)</strong>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== QUICK NAV ==================== -->
+  <nav class="quick-nav">
+    <div class="quick-nav-label">Jump to Section:</div>
+    <div class="quick-nav-links">
+      <a href="#overview">0. Architecture & Overview</a>
+      <a href="#ticket07" class="active-link">1. Ticket 07 Smoke (Current)</a>
+      <a href="#cost">2. Economics & Budget</a>
+      <a href="#phase-breakdown">3. 9-Phase Deep Dive</a>
+      <a href="#hardware">4. Local & Cloud Compute</a>
+      <a href="#invariants">5. Invariants & Rules</a>
+      <a href="#schemas">6. Schemas & Contracts</a>
+      <a href="#commands">7. Command Reference</a>
+    </div>
+  </nav>
+
+  <!-- ==================== SECTION 0: ARCHITECTURE & HIGH-LEVEL FLOW ==================== -->
+  <section id="overview" class="section-container">
+    <h2 class="section-title">
+      <span class="section-number">§ 0</span> Executive Summary & System Architecture
+    </h2>
+
+    <div class="card">
+      <div class="card-title">
+        <span>The Research Problem & The Role of the Consistency Judge</span>
+        <span class="badge badge-purple">ADR-004 · ADR-018 · PREREGISTRATION_OBJ4</span>
+      </div>
+      <p>
+        In automated digital picture book generation for children, character identity drift across sequential scene illustrations is the critical failure mode. StoryBuddy employs a <strong>closed-loop control architecture</strong> where a Vision-Language Model (VLM) Judge evaluates character instance consistency between a generated scene and a canonical reference image. If inconsistent, the pipeline triggers a targeted regeneration loop.
+      </p>
+      <p style="margin-top: 10px;">
+        <strong>Objective 4</strong> evaluates whether fine-tuning an open-weight 7B parameter VLM (<code>Qwen2.5-VL-7B-Instruct</code>) using QLoRA can match or exceed the performance of a zero-shot 27B model (<code>gemma-3-27b-it</code>) on human pairwise consistency judgments of stylized, non-human, and child-authored characters, while reducing latency and operating at zero marginal inference cost.
+      </p>
+
+      <div class="diagram-container">
+        <svg class="pipeline-svg" width="980" height="240" viewBox="0 0 980 240" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#2563eb" />
+              <stop offset="100%" stop-color="#1d4ed8" />
+            </linearGradient>
+            <linearGradient id="emeraldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#059669" />
+              <stop offset="100%" stop-color="#047857" />
+            </linearGradient>
+            <linearGradient id="amberGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#d97706" />
+              <stop offset="100%" stop-color="#b45309" />
+            </linearGradient>
+            <linearGradient id="purpleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#7c3aed" />
+              <stop offset="100%" stop-color="#6d28d9" />
+            </linearGradient>
+            <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%" filterUnits="userSpaceOnUse">
+              <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.1"/>
+            </filter>
+          </defs>
+
+          <!-- STAGE 1: Intake & Generation -->
+          <g transform="translate(10, 20)">
+            <rect width="170" height="190" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" filter="url(#shadow)"/>
+            <rect width="170" height="34" rx="10" fill="url(#blueGrad)"/>
+            <text x="85" y="22" fill="#ffffff" font-size="12" font-weight="700" text-anchor="middle">1. Corpus Generation</text>
+            
+            <rect x="12" y="48" width="146" height="40" rx="6" fill="#ffffff" stroke="#e2e8f0"/>
+            <text x="85" y="64" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">30 Synthetic Stories</text>
+            <text x="85" y="78" fill="#64748b" font-size="9.5" text-anchor="middle">24 Train + 6 Val (Frozen)</text>
+
+            <rect x="12" y="94" width="146" height="40" rx="6" fill="#ffffff" stroke="#e2e8f0"/>
+            <text x="85" y="110" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">15 Donated Stories</text>
+            <text x="85" y="124" fill="#64748b" font-size="9.5" text-anchor="middle">10 Primary + 5 Backup (Test)</text>
+
+            <rect x="12" y="142" width="146" height="34" rx="6" fill="#eff6ff" stroke="#bfdbfe"/>
+            <text x="85" y="163" fill="#1e40af" font-size="10" font-weight="700" text-anchor="middle">fal.ai Qwen-Image-Edit</text>
+          </g>
+
+          <!-- Arrow 1 -->
+          <path d="M 185 115 L 215 115" stroke="#94a3b8" stroke-width="2.5" />
+
+          <!-- STAGE 2: Annotation & Queue -->
+          <g transform="translate(220, 20)">
+            <rect width="170" height="190" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" filter="url(#shadow)"/>
+            <rect width="170" height="34" rx="10" fill="url(#amberGrad)"/>
+            <text x="85" y="22" fill="#ffffff" font-size="12" font-weight="700" text-anchor="middle">2. Blinded Labeling</text>
+
+            <rect x="12" y="48" width="146" height="40" rx="6" fill="#ffffff" stroke="#e2e8f0"/>
+            <text x="85" y="64" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">Materialize Queue</text>
+            <text x="85" y="78" fill="#64748b" font-size="9.5" text-anchor="middle">Supabase `research_pairs`</text>
+
+            <rect x="12" y="94" width="146" height="40" rx="6" fill="#ffffff" stroke="#e2e8f0"/>
+            <text x="85" y="110" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">Dual Independent</text>
+            <text x="85" y="124" fill="#64748b" font-size="9.5" text-anchor="middle">2 Annotators + Adjudicator</text>
+
+            <rect x="12" y="142" width="146" height="34" rx="6" fill="#fef3c7" stroke="#fde68a"/>
+            <text x="85" y="163" fill="#92400e" font-size="10" font-weight="700" text-anchor="middle">Visual Rubric & 7 Taxa</text>
+          </g>
+
+          <!-- Arrow 2 -->
+          <path d="M 395 115 L 425 115" stroke="#94a3b8" stroke-width="2.5" />
+
+          <!-- STAGE 3: Freeze & Conversion -->
+          <g transform="translate(430, 20)">
+            <rect width="170" height="190" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" filter="url(#shadow)"/>
+            <rect width="170" height="34" rx="10" fill="url(#purpleGrad)"/>
+            <text x="85" y="22" fill="#ffffff" font-size="12" font-weight="700" text-anchor="middle">3. Dataset Freeze</text>
+
+            <rect x="12" y="48" width="146" height="40" rx="6" fill="#ffffff" stroke="#e2e8f0"/>
+            <text x="85" y="64" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">Hard Negatives</text>
+            <text x="85" y="78" fill="#64748b" font-size="9.5" text-anchor="middle">Cross-Char Match (Train)</text>
+
+            <rect x="12" y="94" width="146" height="40" rx="6" fill="#ffffff" stroke="#e2e8f0"/>
+            <text x="85" y="110" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">LLaMA-Factory Build</text>
+            <text x="85" y="124" fill="#64748b" font-size="9.5" text-anchor="middle">ShareGPT json + Projections</text>
+
+            <rect x="12" y="142" width="146" height="34" rx="6" fill="#f5f3ff" stroke="#ddd6fe"/>
+            <text x="85" y="163" fill="#5b21b6" font-size="10" font-weight="700" text-anchor="middle">Immutable SHA-256 Lock</text>
+          </g>
+
+          <!-- Arrow 3 -->
+          <path d="M 605 115 L 635 115" stroke="#94a3b8" stroke-width="2.5" />
+
+          <!-- STAGE 4: Training & Checkpoint -->
+          <g transform="translate(640, 20)">
+            <rect width="155" height="190" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" filter="url(#shadow)"/>
+            <rect width="155" height="34" rx="10" fill="url(#blueGrad)"/>
+            <text x="77.5" y="22" fill="#ffffff" font-size="12" font-weight="700" text-anchor="middle">4. QLoRA Training</text>
+
+            <rect x="10" y="48" width="135" height="40" rx="6" fill="#ffffff" stroke="#e2e8f0"/>
+            <text x="77.5" y="64" fill="#0f172a" font-size="10.5" font-weight="600" text-anchor="middle">3 Seeds: 0, 1, 2</text>
+            <text x="77.5" y="78" fill="#64748b" font-size="9" text-anchor="middle">QLoRA 4-bit (Rank 16/32)</text>
+
+            <rect x="10" y="94" width="135" height="40" rx="6" fill="#ffffff" stroke="#e2e8f0"/>
+            <text x="77.5" y="110" fill="#0f172a" font-size="10.5" font-weight="600" text-anchor="middle">Validation Selection</text>
+            <text x="77.5" y="124" fill="#64748b" font-size="9" text-anchor="middle">Max Diff-Char F1</text>
+
+            <rect x="10" y="142" width="135" height="34" rx="6" fill="#eff6ff" stroke="#bfdbfe"/>
+            <text x="77.5" y="163" fill="#1e40af" font-size="9.5" font-weight="700" text-anchor="middle">Signed Eval Lock</text>
+          </g>
+
+          <!-- Arrow 4 -->
+          <path d="M 800 115 L 820 115" stroke="#94a3b8" stroke-width="2.5" />
+
+          <!-- STAGE 5: Guarded Evaluation -->
+          <g transform="translate(825, 20)">
+            <rect width="145" height="190" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" filter="url(#shadow)"/>
+            <rect width="145" height="34" rx="10" fill="url(#emeraldGrad)"/>
+            <text x="72.5" y="22" fill="#ffffff" font-size="12" font-weight="700" text-anchor="middle">5. Held-Out Eval</text>
+
+            <rect x="8" y="48" width="129" height="40" rx="6" fill="#ffffff" stroke="#e2e8f0"/>
+            <text x="72.5" y="64" fill="#0f172a" font-size="10.5" font-weight="600" text-anchor="middle">Read Once Policy</text>
+            <text x="72.5" y="78" fill="#64748b" font-size="9" text-anchor="middle">Donated Test Split Only</text>
+
+            <rect x="8" y="94" width="129" height="40" rx="6" fill="#ffffff" stroke="#e2e8f0"/>
+            <text x="72.5" y="110" fill="#0f172a" font-size="10.5" font-weight="600" text-anchor="middle">Clustered Bootstrap</text>
+            <text x="72.5" y="124" fill="#64748b" font-size="9" text-anchor="middle">10,000 resamples by char</text>
+
+            <rect x="8" y="142" width="129" height="34" rx="6" fill="#ecfdf5" stroke="#a7f3d0"/>
+            <text x="72.5" y="163" fill="#065f46" font-size="9.5" font-weight="700" text-anchor="middle">Ladder A / B / C / D</text>
+          </g>
+        </svg>
+      </div>
+
+      <div class="grid-3" style="margin-top: 20px;">
+        <div class="metric-card">
+          <div class="metric-value">45 Stories</div>
+          <div class="metric-label">Total Corpus Target</div>
+          <div class="metric-sub">30 Synthetic (24T/6V) + 15 Donated (10P/5B)</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value">~1,000 Pairs</div>
+          <div class="metric-label">Dataset Pairs</div>
+          <div class="metric-sub">Natural Scenes + Constructed Hard Negatives</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value">&le; $30.00</div>
+          <div class="metric-label">Total fal.ai Draw Budget</div>
+          <div class="metric-sub">$0.035 / image call (1024x768 capped)</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== SECTION 1: TICKET 07 EXECUTION ==================== -->
+  <section id="ticket07" class="section-container">
+    <h2 class="section-title">
+      <span class="section-number">§ 1</span> Current Step: Ticket 07 Paid 3-Story Synthetic Smoke
+    </h2>
+
+    <div class="card" style="border-left: 5px solid var(--accent-emerald);">
+      <div class="card-title">
+        <span>Execution Guide for Ticket 07: Paid Three-Story Synthetic Smoke</span>
+        <span class="badge badge-success">READY FOR OPERATOR RUN</span>
+      </div>
+      
+      <p>
+        <strong>Objective:</strong> Run an operator-authorized execution of exactly <strong>three synthetic stories</strong> (<code>syn-001</code>, <code>syn-002</code>, <code>syn-003</code>) through the canonical Phase-1 LangGraph pipeline under pinned megapixel and dollar limits to verify live image generation, WebP conversion, asset hashing, spend telemetry, and error recovery before unlocking full dataset generation.
+      </p>
+
+      <div class="callout callout-warning">
+        <div class="callout-title">⚠️ Mandatory Pre-Flight Verification Checklist (Completed Tickets 01–06)</div>
+        <ul style="padding-left: 20px; font-size: 13px;">
+          <li><strong>Ticket 01:</strong> Megapixel-bound budget enforced. Width 1024 &times; Height 768 = 0.786432 MP &rarr; Rounded to <strong>1 MP</strong> billable &times; $0.035/MP = <strong>$0.035 per call ceiling</strong>.</li>
+          <li><strong>Ticket 02:</strong> Batch 3 baseline reconciled; runbook and evaluation fixtures unified.</li>
+          <li><strong>Ticket 03:</strong> Training bound to immutable freeze directories; placeholder hardware entries rejected.</li>
+          <li><strong>Ticket 04:</strong> Evaluation locking and resume fail closed.</li>
+          <li><strong>Ticket 05:</strong> Preregistered reporting schema and claim assignment ladder verified.</li>
+          <li><strong>Ticket 06:</strong> Synthetic readiness gate passed: zero-cost fixture completes with 0 spend and 0 remote calls. Deterministic pytest & ruff pass cleanly.</li>
+        </ul>
+      </div>
+
+      <h4 style="margin: 18px 0 8px 0; color: var(--primary);">Exact Shell Command to Execute</h4>
+      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">Run directly from the <code>backend/</code> directory in PowerShell:</p>
+
+      <pre><code># Ensure working directory is backend
+cd backend
+
+# Execute Ticket 07 Paid Smoke Run (Capped at $1.50 USD)
+uv run python -m finetune.build_corpus `
+  --corpus finetune/corpus_synthetic.json `
+  --out ../data/judge/corpus `
+  --limit 3 `
+  --max-usd 1.50 `
+  --price-per-megapixel 0.035 `
+  --price-basis "https://fal.ai/models/fal-ai/qwen-image-edit-2511-2026-08-25"</code></pre>
+
+      <h4 style="margin: 22px 0 8px 0; color: var(--primary);">Step-by-Step Operator Behavior & Safety Enforcements</h4>
+      
+      <div class="step-timeline">
+        <div class="step-item">
+          <div class="step-node completed">✓</div>
+          <div class="step-content">
+            <h4>1. Parameter Validation & Budget Reservation</h4>
+            <p>
+              <code>build_corpus.py</code> loads the first 3 records from <code>corpus_synthetic.json</code>. It computes the per-story draw budget: with <code>--max-usd 1.50</code>, total affordable calls = <code>floor(1.50 / 0.035) = 42 calls</code>. Divided across 3 stories, each story receives an exact ceiling of <strong>14 image draws</strong>.
+            </p>
+          </div>
+        </div>
+
+        <div class="step-item">
+          <div class="step-node active">2</div>
+          <div class="step-content">
+            <h4>2. Graph Invocation & Image Asset Persistence</h4>
+            <p>
+              For each story, the LangGraph deterministic graph executes: <code>input_gate &rarr; analyze &rarr; segment &rarr; char_bible &rarr; char_ref_mod &rarr; reveal &rarr; generate_scene &rarr; consistency_check &rarr; [regenerate] &rarr; output_mod &rarr; compose</code>.
+            </p>
+            <p>
+              Canonical references are saved locally as <strong>PNG</strong>. Scene illustrations are downloaded and transcoded exactly once to <strong>WebP (Quality &approx; 82)</strong>. Assets are validated with MIME magic byte checks and SHA-256 hashed.
+            </p>
+          </div>
+        </div>
+
+        <div class="step-item">
+          <div class="step-node">3</div>
+          <div class="step-content">
+            <h4>3. Immutable Run Bundle Creation</h4>
+            <p>
+              Upon completion, the run writes <code>data/judge/corpus/runs/syn-001/bundle.json</code> containing the full validated <code>StoryMemory</code>, intake SHA-256 digest, code commit, pinned model IDs, prompt versions, asset records, and billing telemetry (<code>attempted</code>, <code>completed</code>, <code>failed</code>, <code>uncertain</code>).
+            </p>
+          </div>
+        </div>
+
+        <div class="step-item">
+          <div class="step-node">4</div>
+          <div class="step-content">
+            <h4>4. Go / No-Go Exit Criteria for Full Synthetic Generation</h4>
+            <p>
+              The run halts immediately if any error occurs. Full generation (Ticket 08) is authorized ONLY if:
+            </p>
+            <ul style="padding-left: 20px; font-size: 13px; color: var(--text-muted);">
+              <li>All 3 stories finish with outcome <code>completed</code>.</li>
+              <li>Observed spend &le; $1.50 (typically &approx; $0.40 &ndash; $0.65 for 3 stories).</li>
+              <li>Zero unhandled rate-limits, zero corrupted WebP files, and zero schema validation failures.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout callout-danger">
+        <div class="callout-title">🚨 Handling Interruptions & Quarantine Recovery</div>
+        <p>
+          If a story is interrupted, exceeds budget, or encounters network timeout during billing:
+        </p>
+        <ul style="padding-left: 20px; font-size: 13px; margin-top: 4px;">
+          <li><strong>Budget Stopped:</strong> Story is quarantined in <code>build_state.json</code>. Resume with <code>--resume-quarantined &lt;story_id&gt;</code> after expanding budget.</li>
+          <li><strong>Billing Uncertain:</strong> Provider request was dispatched but response timed out. The system refuses blind retry. Operator must inspect fal.ai dashboard and execute:
+            <br><code>uv run python -m finetune.build_corpus ... --resume-quarantined syn-001 --acknowledge-uncertain-billing syn-001</code>
+          </li>
+          <li><strong>Intake Digest Mismatch:</strong> If <code>corpus_synthetic.json</code> was edited after starting, the run halts permanently to protect scientific provenance.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== SECTION 2: ECONOMICS & BUDGET ==================== -->
+  <section id="cost" class="section-container">
+    <h2 class="section-title">
+      <span class="section-number">§ 2</span> Spend Policy, Pricing Model & Lifecycle Economics
+    </h2>
+
+    <div class="card">
+      <div class="card-title">
+        <span>Defensible Upper Spend Bound & Cost Calculations</span>
+        <span class="badge badge-primary">CC-3 · CC-7 · ADR-027</span>
+      </div>
+
+      <p>
+        StoryBuddy enforces deterministic cost bounds before remote HTTP dispatches occur. Image generation and editing via fal.ai is priced on a per-megapixel basis. Fractional megapixels are rounded up by the provider.
+      </p>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Pipeline Phase / Operation</th>
+              <th>Unit Count</th>
+              <th>Unit Formula & Pricing</th>
+              <th>Conservative Spend Ceiling</th>
+              <th>Target / Expected Spend</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Paid Synthetic Smoke (Ticket 07)</strong></td>
+              <td>3 Stories</td>
+              <td>14 draws max / story &times; $0.035 / call</td>
+              <td>$1.50 USD</td>
+              <td>$0.42 &ndash; $0.63 USD</td>
+            </tr>
+            <tr>
+              <td><strong>Full Synthetic Generation (Phase 2)</strong></td>
+              <td>30 Stories (24 Train, 6 Val)</td>
+              <td>~6 scenes/story + ~1.5 refs + retries</td>
+              <td>$25.00 USD Cap</td>
+              <td>$6.30 &ndash; $9.45 USD</td>
+            </tr>
+            <tr>
+              <td><strong>Donated Stories Generation (Phase 2)</strong></td>
+              <td>15 Stories (10 Primary, 5 Backup)</td>
+              <td>~6 scenes/story + ~1.5 refs + retries</td>
+              <td>$25.00 USD Cap</td>
+              <td>$3.15 &ndash; $4.75 USD</td>
+            </tr>
+            <tr>
+              <td><strong>Text & VLM Incumbent OpenRouter</strong></td>
+              <td>45 Stories Pipeline + Eval</td>
+              <td>Mistral Small / Gemma 3 27B tokens</td>
+              <td>$5.00 USD</td>
+              <td>$1.50 &ndash; $2.50 USD</td>
+            </tr>
+            <tr>
+              <td><strong>GPU Training Compute (Local / Cloud)</strong></td>
+              <td>3 Seeds &times; ~1.5 hrs on RTX 4090 / A100</td>
+              <td>$0.00 (Local) or $0.40 &ndash; $1.10 / GPU-hour</td>
+              <td>$10.00 USD</td>
+              <td>$0.00 (Local) / $2.50 &ndash; $5.00 (Cloud)</td>
+            </tr>
+            <tr>
+              <td><strong>Supabase Storage & Database</strong></td>
+              <td>~1,000 images, ~100 MB WebP</td>
+              <td>Free tier / Included bandwidth</td>
+              <td>$0.00 USD</td>
+              <td>$0.00 USD</td>
+            </tr>
+            <tr style="background-color: #f1f5f9; font-weight: 700;">
+              <td><strong>TOTAL OBJECTIVE 4 LIFECYCLE</strong></td>
+              <td>End-to-End Objective 4</td>
+              <td>All phases + evaluation + baselines</td>
+              <td><strong>$66.50 USD Maximum</strong></td>
+              <td><strong>$11.37 &ndash; $22.33 USD</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout callout-info">
+        <div class="callout-title">💡 The Image Megapixel Rounding Formula</div>
+        <p>
+          Each call sends explicit dimensions <code>width=1024, height=768</code>.
+          <br>
+          $$\text{Raw Megapixels} = \frac{1024 \times 768}{1,000,000} = 0.786432\text{ MP}$$
+          $$\text{Billable Megapixels} = \lceil 0.786432 \rceil = 1\text{ MP}$$
+          $$\text{Conservative Call Cost} = 1\text{ MP} \times \$0.035/\text{MP} = \$0.035\text{ USD}$$
+          If fal.ai rates change, the operator specifies <code>--price-per-megapixel &lt;rate&gt;</code> and records the verified pricing URL in <code>--price-basis</code>.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== SECTION 3: 9-PHASE DEEP DIVE ==================== -->
+  <section id="phase-breakdown" class="section-container">
+    <h2 class="section-title">
+      <span class="section-number">§ 3</span> Nine-Phase Operational Blueprint
+    </h2>
+
+    <!-- Phase 1 -->
+    <div class="card">
+      <div class="card-title">
+        <span>Phase 1: Governance, Consent, Sanitized Intake & Style Allocation</span>
+        <span class="badge badge-primary">PHASE 1</span>
+      </div>
+      <p>
+        Donated stories originate from child authors (Grade 5–6). Strict ethical guidelines govern intake before any text is parsed or rendered.
+      </p>
+      
+      <div class="grid-2" style="margin-top: 12px;">
+        <div>
+          <h4 style="color: var(--primary-dark); font-size: 14px; margin-bottom: 6px;">1.1 Ethics & Redaction Seam</h4>
+          <ul style="padding-left: 18px; font-size: 13px; color: var(--text-muted);">
+            <li><strong>Consent/Assent:</strong> Affirmative guardian consent and child assent recorded outside repository.</li>
+            <li><strong>Random Receipt Ledger:</strong> Contact & identity mapping stored in an encrypted offline store. Never in repository, DB, or logs.</li>
+            <li><strong>Two-Person PII Redaction:</strong> Manual PII redaction followed by an independent reviewer confirmation. Presidio Filipino recognizers provide backend backstop.</li>
+          </ul>
+        </div>
+        <div>
+          <h4 style="color: var(--primary-dark); font-size: 14px; margin-bottom: 6px;">1.2 Frozen Style Allocation (ADR-042 Amendment)</h4>
+          <ul style="padding-left: 18px; font-size: 13px; color: var(--text-muted);">
+            <li><strong>Synthetic (30):</strong> 24 Train (8 Cel, 8 Gouache, 8 Cut-Paper) + 6 Val (2 Cel, 2 Gouache, 2 Cut-Paper).</li>
+            <li><strong>Donated (15):</strong> 10 Primary (4 Gouache, 3 Cel, 3 Cut-Paper) + 5 Backup (1 Gouache, 2 Cel, 2 Cut-Paper).</li>
+            <li><strong>Fail-Closed Replacement:</strong> If a primary donor withdraws, replacement MUST be an unused backup of the <em>exact same art style</em>. Otherwise freeze fails closed.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Phase 2 -->
+    <div class="card">
+      <div class="card-title">
+        <span>Phase 2: Corpus Generation & Asset Encoding</span>
+        <span class="badge badge-primary">PHASE 2</span>
+      </div>
+      <p>
+        The canonical Phase-1 LangGraph state machine generates all story bundles. <code>finetune.build_corpus</code> is the sole fal.ai caller.
+      </p>
+      
+      <div class="callout callout-info">
+        <div class="callout-title">Handling Pipeline Regenerations & Rejected Images</div>
+        <p>
+          During production graph execution, when <code>consistency_check</code> flags an inconsistent scene, the node triggers <code>regenerate</code> (ADR-010). 
+          <strong>Crucial Fact:</strong> The rejected (inconsistent) intermediate images are tracked in <code>StoryMemory.cost</code> and run provenance, but they are <strong>NOT</strong> uploaded to the annotation queue or stored in the dataset freeze. Only the finalized scenes (and their canonical references) form the natural positive pairs.
+        </p>
+      </div>
+
+      <div class="grid-2">
+        <div>
+          <h4 style="color: var(--primary-dark); font-size: 14px; margin-bottom: 6px;">2.1 Asset Format Invariants (ADR-027)</h4>
+          <ul style="padding-left: 18px; font-size: 13px; color: var(--text-muted);">
+            <li><strong>Canonical References:</strong> Stored as uncompressed <strong>PNG</strong> to preserve reference fidelity.</li>
+            <li><strong>Scenes:</strong> Transcoded once to <strong>WebP (Quality &approx; 82)</strong>. Re-encoding is forbidden.</li>
+            <li><strong>Integrity:</strong> Decoded width, height, MIME magic bytes, and SHA-256 hashes recorded in <code>AssetRecord</code>.</li>
+          </ul>
+        </div>
+        <div>
+          <h4 style="color: var(--primary-dark); font-size: 14px; margin-bottom: 6px;">2.2 Generation Execution Commands</h4>
+          <pre><code># 1. Full Synthetic Run (30 stories)
+uv run python -m finetune.build_corpus `
+  --corpus finetune/corpus_synthetic.json `
+  --out ../data/judge/corpus --max-usd 25.00 `
+  --price-per-megapixel 0.035 `
+  --price-basis "https://fal.ai/..."
+
+# 2. Donated Stories Run (15 stories)
+uv run python -m finetune.build_corpus `
+  --corpus ../data/judge/intake/donated.json `
+  --out ../data/judge/corpus --max-usd 25.00 `
+  --price-per-megapixel 0.035 `
+  --price-basis "https://fal.ai/..."</code></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- Phase 3 -->
+    <div class="card">
+      <div class="card-title">
+        <span>Phase 3: Hard Negative Synthesis & Queue Materialization</span>
+        <span class="badge badge-primary">PHASE 3</span>
+      </div>
+      <p>
+        A balanced training dataset requires negative pairs (inconsistent characters). Natural generation yields ~85% positive pairs. To create high-quality negatives without paying for additional image generation, StoryBuddy constructs cross-character hard negatives.
+      </p>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Pair Type</th>
+              <th>Allowed Split</th>
+              <th>How It Is Formed</th>
+              <th>Annotation Requirement</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Natural Pipeline Pairs</strong></td>
+              <td>Train, Val, Test</td>
+              <td>Canonical Reference $C_i$ paired with Scene $S_i$ from the same story. Mostly positive (consistent).</td>
+              <td>Dual independent human annotation + adjudication on disagreement.</td>
+            </tr>
+            <tr>
+              <td><strong>Constructed Hard Negatives</strong></td>
+              <td><strong>Train Only</strong> (Strictly forbidden in Val & Test)</td>
+              <td>Canonical Reference $C_a$ paired with Scene $S_b$ of a visually similar target character $C_b$ (same species & style).</td>
+              <td>Pre-frozen in <code>dataset_selection.json</code>. Automatic ground truth: <code>same_character = False</code>.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4 style="margin: 14px 0 6px 0; color: var(--primary);">Candidate Hard Negative Inspection & Freeze Process</h4>
+      <ol style="padding-left: 20px; font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+        <li>Run candidate report: <code>uv run python -m finetune.build_dataset --candidate-report --data ../data/judge/corpus</code></li>
+        <li>Researcher visually inspects reference pairs across 5 dimensions: <strong>body shape/silhouette, key colors, facial features, clothing/accessories, and art style</strong>.</li>
+        <li>Record the closest matching target in <code>data/judge/intake/dataset_selection.json</code> and lock <code>hard_negatives_frozen_at</code> timestamp.</li>
+        <li>Materialize pairs to Supabase:
+          <br><code>uv run python -m finetune.materialize_pairs --data ../data/judge/corpus --donated-intake ../data/judge/intake/donated.json --selection ../data/judge/intake/dataset_selection.json</code>
+        </li>
+      </ol>
+    </div>
+
+    <!-- Phase 4 -->
+    <div class="card">
+      <div class="card-title">
+        <span>Phase 4: Human Visual Annotation & Adjudication Protocol</span>
+        <span class="badge badge-primary">PHASE 4</span>
+      </div>
+      <p>
+        Human annotation establishes the gold ground-truth reference labels. The annotation interface runs at <code>(research)/annotate/</code> in the frontend.
+      </p>
+
+      <div class="grid-2" style="margin-top: 10px;">
+        <div>
+          <h4 style="color: var(--primary-dark); font-size: 14px; margin-bottom: 6px;">4.1 Annotation Protocol & Blinding</h4>
+          <ul style="padding-left: 18px; font-size: 13px; color: var(--text-muted);">
+            <li><strong>Blinded Presentation:</strong> Annotators see short-lived signed URLs, randomized presentation order, and opaque filenames. No provenance or split exposed.</li>
+            <li><strong>Dual Labeling:</strong> Exactly two independent ordinary annotators label every natural pair.</li>
+            <li><strong>Adjudication:</strong> If Annotator 1 and Annotator 2 disagree on <code>same_character</code>, a designated third researcher (Adjudicator) reviews and casts the binding tie-breaker.</li>
+            <li><strong>Inter-Rater Agreement:</strong> Cohen's $\kappa$ computed post-labeling; drift checks evaluated midway.</li>
+          </ul>
+        </div>
+        <div>
+          <h4 style="color: var(--primary-dark); font-size: 14px; margin-bottom: 6px;">4.2 Frozen Visual Rubric & Gating Taxonomy</h4>
+          <ul style="padding-left: 18px; font-size: 13px; color: var(--text-muted);">
+            <li><code>same_character</code> (Bool): Radio [Different / Same]. Primary label.</li>
+            <li><code>anatomy_intact</code> (Bool): Checkbox for missing/extra limbs or body distortion.</li>
+            <li><code>text_free</code> (Bool): Checkbox confirming no unwanted lettering or text.</li>
+            <li><code>failure_reasons</code> (7 closed checkboxes):
+              <br><code>wrong_color</code>, <code>missing_core_attribute</code>, <code>wrong_species</code>, <code>clothing_drift</code>, <code>face_hair_drift</code>, <code>wrong_style</code>, <code>unwanted_artifacts</code>.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="callout callout-warning" style="margin-top: 14px;">
+        <div class="callout-title">⚠️ Label Polarity Conversion (Stated Once to Prevent Inversion)</div>
+        <p>
+          In the database table <code>annotations</code>, <code>same_character = True</code> means the character is consistent. In the capstone manuscript and evaluation metrics, the positive class is <strong>Class 1 = Different Character (Inconsistent)</strong>. 
+          <br>
+          The conversion <code>label = not same_character</code> is applied strictly in <code>build_dataset.py</code> and nowhere else.
+        </p>
+      </div>
+    </div>
+
+    <!-- Phase 5 -->
+    <div class="card">
+      <div class="card-title">
+        <span>Phase 5: Dataset Freeze & Manifest Generation</span>
+        <span class="badge badge-primary">PHASE 5</span>
+      </div>
+      <p>
+        The freeze command converts raw corpus runs and Supabase consensus labels into an immutable directory ready for training.
+      </p>
+
+      <pre><code># Check and reconcile status cache
+uv run python -m finetune.build_dataset --reconcile-only
+
+# Generate Immutable Freeze Directory (e.g., obj4-v1)
+uv run python -m finetune.build_dataset --freeze `
+  --data ../data/judge/corpus `
+  --donated-intake ../data/judge/intake/donated.json `
+  --selection ../data/judge/intake/dataset_selection.json `
+  --out ../data/judge/freezes/obj4-v1</code></pre>
+
+      <h4 style="margin: 12px 0 6px 0; color: var(--primary);">Generated Freeze Directory Contents</h4>
+      <ul style="padding-left: 20px; font-size: 13px; color: var(--text-muted);">
+        <li><code>manifest.jsonl</code>: Canonical dataset file (one JSONL line per pair). SHA-256 hashed.</li>
+        <li><code>manifest.train.jsonl</code> & <code>manifest.val.jsonl</code>: Deterministic split projections parsed during training.</li>
+        <li><code>manifest.test.jsonl</code>: Donated held-out test split. <em>Never opened before final guarded evaluation!</em></li>
+        <li><code>train.json</code> & <code>val.json</code>: LLaMA-Factory ShareGPT formatted datasets.</li>
+        <li><code>dataset_info.json</code>: LLaMA-Factory dataset registry.</li>
+        <li><code>character_slices.json</code>: Maps character IDs to <code>human</code> or <code>non_human</code> slices.</li>
+        <li><code>annotation_agreement.jsonl</code>: De-identified dual labels for inter-rater $\kappa$ computation.</li>
+        <li><code>freeze_report.json</code>: Audit manifest recording counts, exclusions, hashes, and pinned prompt versions.</li>
+      </ul>
+    </div>
+
+    <!-- Phase 6 -->
+    <div class="card">
+      <div class="card-title">
+        <span>Phase 6: Toolchain Qualification & QLoRA Fine-Tuning</span>
+        <span class="badge badge-primary">PHASE 6</span>
+      </div>
+      <p>
+        Training fine-tunes <code>Qwen2.5-VL-7B-Instruct</code> using 4-bit QLoRA over <strong>3 fixed random seeds: 0, 1, 2</strong>.
+      </p>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Hyperparameter / Pin</th>
+              <th>Frozen Value</th>
+              <th>Rationale / Specification</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Base Model & Revision</strong></td>
+              <td><code>Qwen/Qwen2.5-VL-7B-Instruct</code> @ <code>cc594898137f460bfe9f0759e9844b3ce807cfb5</code></td>
+              <td>Apache-2.0 open weight VLM with native multi-image support (ADR-018).</td>
+            </tr>
+            <tr>
+              <td><strong>Toolchain Commit</strong></td>
+              <td>LLaMA-Factory <code>v0.9.5</code> @ <code>7af909522a951e3ad9f022ea6f88b6755257eaa5</code></td>
+              <td>Pinned commit installed via <code>uv tool</code>.</td>
+            </tr>
+            <tr>
+              <td><strong>Quantization & Method</strong></td>
+              <td>4-bit bitsandbytes (<code>bnb</code>), QLoRA</td>
+              <td>Fits in 24 GB VRAM (RTX 3090/4090 or A100/H100).</td>
+            </tr>
+            <tr>
+              <td><strong>LoRA Rank / Alpha / Target</strong></td>
+              <td>$r=16, \alpha=32$, <code>lora_target: all</code></td>
+              <td>Targets all linear layers for maximum vision-language alignment.</td>
+            </tr>
+            <tr>
+              <td><strong>Resolution & Context</strong></td>
+              <td><code>image_max_pixels: 262144</code> (512&times;512), <code>cutoff_len: 2048</code></td>
+              <td>Normalized resolution for paired reference + scene input.</td>
+            </tr>
+            <tr>
+              <td><strong>Batch & Accumulation</strong></td>
+              <td>Batch size 1, Gradient Accumulation 8 (Effective Batch = 8)</td>
+              <td>Low memory footprint with stable gradient estimation.</td>
+            </tr>
+            <tr>
+              <td><strong>Optimizer & Schedule</strong></td>
+              <td>Cosine schedule, LR $1.0\times 10^{-4}$, Warmup 10%, 3.0 Epochs</td>
+              <td>Standard robust multimodal fine-tuning convergence.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <pre><code># Step 1: Install exact LLaMA-Factory tool
+uv tool install "llamafactory @ git+https://github.com/hiyouga/LlamaFactory.git@7af909522a951e3ad9f022ea6f88b6755257eaa5"
+
+# Step 2: Prepare & Validate Training Qualification (Zero-cost dry run)
+uv run python -m finetune.train `
+  --freeze ../data/judge/freezes/obj4-v1 `
+  --qualification ../data/judge/training_qualification.json `
+  --run-root ../data/judge/runs/obj4-v1 `
+  --prepare
+
+# Step 3: Execute Training Across All 3 Seeds Sequentially
+uv run python -m finetune.train `
+  --freeze ../data/judge/freezes/obj4-v1 `
+  --qualification ../data/judge/training_qualification.json `
+  --run-root ../data/judge/runs/obj4-v1 `
+  --execute --spend-alarm-confirmed</code></pre>
+    </div>
+
+    <!-- Phase 7 -->
+    <div class="card">
+      <div class="card-title">
+        <span>Phase 7: Validation Checkpoint Selection & Evaluation Locking</span>
+        <span class="badge badge-primary">PHASE 7</span>
+      </div>
+      <p>
+        To prevent test set contamination, checkpoint selection and control baseline threshold tuning occur <strong>exclusively on the validation split</strong> (<code>val.json</code>).
+      </p>
+
+      <ol style="padding-left: 20px; font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+        <li><strong>Inventory Checkpoints:</strong> <code>uv run python -m finetune.evaluate validation-inventory --runs ../data/judge/runs/obj4-v1 --out ../data/judge/evaluations/obj4-v1/validation_candidates.json</code></li>
+        <li><strong>Launch vLLM Server:</strong> Start local vLLM instance serving the Qwen base + candidate LoRA adapters.</li>
+        <li><strong>Capture Validation Predictions:</strong> <code>uv run python -m finetune.evaluate capture-validation --freeze ../data/judge/freezes/obj4-v1 --candidates ../data/judge/evaluations/obj4-v1/validation_candidates.json --predictions ../data/judge/evaluations/obj4-v1/validation</code></li>
+        <li><strong>Select Best Checkpoint per Seed & Fit Cosine Baselines:</strong> Checkpoint is selected by maximizing F1 on the minority class (<code>different_character</code>). Thresholds for CLIP and DINOv2 controls are fitted on validation.</li>
+        <li><strong>Emit Evaluation Lock:</strong> <code>uv run python -m finetune.evaluate validate ... --out ../data/judge/evaluations/obj4-v1/evaluation_lock.json</code></li>
+        <li><strong>Independent Sign-Off:</strong> Adviser/lead signs <code>evaluation_signoff.json</code> containing the SHA-256 hash of the lock file.</li>
+      </ol>
+    </div>
+
+    <!-- Phase 8 -->
+    <div class="card">
+      <div class="card-title">
+        <span>Phase 8: Guarded One-Time Held-Out Evaluation</span>
+        <span class="badge badge-primary">PHASE 8</span>
+      </div>
+      <p>
+        The held-out test split (10 primary donated child stories) is opened <strong>exactly once</strong> under fail-closed cryptographic ledgering.
+      </p>
+
+      <pre><code># Execute the One-Time Guarded Held-Out Evaluation
+uv run python -m finetune.evaluate heldout `
+  --freeze ../data/judge/freezes/obj4-v1 `
+  --lock ../data/judge/evaluations/obj4-v1/evaluation_lock.json `
+  --signoff ../data/judge/evaluations/obj4-v1/evaluation_signoff.json `
+  --ledger ../data/judge/evaluations/obj4-v1/test_access.jsonl `
+  --run-id obj4-heldout-1 `
+  --predictions ../data/judge/evaluations/obj4-v1/heldout-1/predictions `
+  --out ../data/judge/evaluations/obj4-v1/heldout-1/objective4_results.json</code></pre>
+
+      <div class="grid-2" style="margin-top: 14px;">
+        <div>
+          <h4 style="color: var(--primary-dark); font-size: 14px; margin-bottom: 6px;">8.1 Statistical Protocol (PREREGISTRATION_OBJ4 §5)</h4>
+          <ul style="padding-left: 18px; font-size: 13px; color: var(--text-muted);">
+            <li><strong>Clustered Bootstrap CI:</strong> 10,000 resamples clustered by <code>char_id</code> (resampling whole characters, not individual pairs, to account for intra-character error correlation).</li>
+            <li><strong>Significance Testing:</strong> McNemar's exact test on paired decisions.</li>
+            <li><strong>Metrics:</strong> Precision, Recall, F1 (primary), AUROC, Cohen's $\kappa$ vs humans, Brier score calibration.</li>
+            <li><strong>Transfer Benchmark:</strong> DreamBench++ evaluation (150 subjects, binarized at $\ge 3.0$ human rating).</li>
+          </ul>
+        </div>
+        <div>
+          <h4 style="color: var(--primary-dark); font-size: 14px; margin-bottom: 6px;">8.2 Cold-Start vs Warm-Start Latency</h4>
+          <ul style="padding-left: 18px; font-size: 13px; color: var(--text-muted);">
+            <li>The very first inference call per judge is isolated as the <strong>cold-start observation</strong>.</li>
+            <li>Warm-start latency reports mean &plusmn; sample SD excluding the cold start.</li>
+            <li>Dollars per call benchmarked against OpenRouter live rates at measurement date.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Phase 9 -->
+    <div class="card">
+      <div class="card-title">
+        <span>Phase 9: Claim Assignment, Manuscript Reporting & Deployment</span>
+        <span class="badge badge-primary">PHASE 9</span>
+      </div>
+      <p>
+        The final evaluation script automatically assigns the result to the pre-registered claim ladder.
+      </p>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Ladder Rung</th>
+              <th>Pre-Registered Empirical Condition</th>
+              <th>Research Conclusion</th>
+              <th>Engineering Deployment Decision</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="background-color: #ecfdf5;">
+              <td><strong style="color: #065f46;">Rung A</strong></td>
+              <td>Beats base ($95\%\text{ CI on }\Delta\text{F1} > 0$) <strong>AND</strong> beats prompted Gemma ($\text{F1}_{\text{LoRA}} > \text{F1}_{\text{Gemma}}$)</td>
+              <td><span class="badge badge-success">Objective 4 Succeeded</span></td>
+              <td><strong>Ship LoRA to Production</strong> (Swap via vLLM endpoint env vars).</td>
+            </tr>
+            <tr style="background-color: #eff6ff;">
+              <td><strong style="color: #1e40af;">Rung B</strong></td>
+              <td>Beats base; within $\delta = 3.0\text{ F1}$ of Gemma; <strong>no recall regression</strong></td>
+              <td><span class="badge badge-success">Objective 4 Succeeded</span></td>
+              <td><strong>Ship LoRA to Production</strong> (Non-inferiority satisfied, zero marginal cost).</td>
+            </tr>
+            <tr style="background-color: #fffbeb;">
+              <td><strong style="color: #92400e;">Rung C</strong></td>
+              <td>Beats base; loses to Gemma by $> 3.0\text{ F1}$ points</td>
+              <td><span class="badge badge-success">Objective 4 Succeeded</span></td>
+              <td><strong>Keep Prompted Gemma-3-27B Incumbent</strong> (LoRA worked, but capacity gap remains).</td>
+            </tr>
+            <tr style="background-color: #fef2f2;">
+              <td><strong style="color: #9f1239;">Rung D</strong></td>
+              <td>Does <strong>NOT</strong> beat zero-shot base ($95\%\text{ CI on }\Delta\text{F1}$ includes zero)</td>
+              <td><span class="badge badge-danger">Objective 4 Failed (Bug)</span></td>
+              <td><strong>Do Not Ship</strong> &rarr; Trigger Rung-D Defect Investigation Exception (§7).</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout callout-purple">
+        <div class="callout-title">🔬 The Pre-Registered Rung-D Defect Exception (Read-Once Guard)</div>
+        <p>
+          If Rung D lands, it signifies an engineering bug (e.g. tokenizer mismatch, broken image normalization, corrupted target JSON). 
+          <strong>The Pre-Registered Protocol permits exactly ONE (1) second held-out evaluation</strong>, strictly after:
+          <br>
+          1. The defect is investigated and fixed <em>exclusively on train and validation data</em>.
+          <br>
+          2. The operator submits <code>--deviation &lt;PATH&gt;</code> documenting the bug commit, validation evidence, and adviser sign-off.
+          <br>
+          3. Both evaluation readings and the defect description are reported in full in the manuscript. A third read is unconditionally forbidden.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== SECTION 4: HARDWARE & COMPUTE (LOCAL VS CLOUD) ==================== -->
+  <section id="hardware" class="section-container">
+    <h2 class="section-title">
+      <span class="section-number">§ 4</span> Local Hardware vs. Cloud Fallback Compute Runbook
+    </h2>
+
+    <div class="card">
+      <div class="card-title">
+        <span>Hardware Qualification & Environment Strategy</span>
+        <span class="badge badge-primary">LOCAL FIRST · RUNPOD / VAST FALLBACK</span>
+      </div>
+
+      <p>
+        As per study design, training uses <strong>local consumer/workstation GPU hardware as the primary preference</strong>, with a pre-declared cloud container fallback (RunPod / Vast.ai / Lambda Labs) if local VRAM is constrained or driver compatibility fails preflight.
+      </p>
+
+      <div class="grid-2" style="margin-top: 14px;">
+        <div style="border: 1px solid var(--border-color); border-radius: 10px; padding: 18px; background: #ffffff;">
+          <h4 style="color: var(--accent-emerald); font-size: 15px; margin-bottom: 8px;">Option A: Local Hardware (Preferred)</h4>
+          <ul style="padding-left: 18px; font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+            <li><strong>Minimum Specs:</strong> NVIDIA GPU with $\ge 24\text{ GB VRAM}$ (RTX 3090, RTX 4090, RTX 6000 Ada, or workstation A5000/A6000).</li>
+            <li><strong>Software Prerequisites:</strong> Python 3.12, CUDA 12.1+, PyTorch 2.4+ (with CUDA support), <code>bitsandbytes &gt;= 0.43.0</code>.</li>
+            <li><strong>Qualification Command:</strong> Run preflight inventory to generate <code>training_qualification.json</code>:
+              <br><code>uv run python -c "from finetune.train import hardware_inventory; import json; print(json.dumps(hardware_inventory(), indent=2))" > ../data/judge/training_qualification.json</code>
+            </li>
+            <li><strong>Cost:</strong> $0.00 marginal compute.</li>
+          </ul>
+        </div>
+
+        <div style="border: 1px solid var(--border-color); border-radius: 10px; padding: 18px; background: #ffffff;">
+          <h4 style="color: var(--accent-cyan); font-size: 15px; margin-bottom: 8px;">Option B: Cloud Container Fallback (RunPod / Vast.ai)</h4>
+          <ul style="padding-left: 18px; font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+            <li><strong>Target Instance:</strong> 1 &times; RTX 4090 (24 GB) or 1 &times; A100 (40 GB/80 GB SXM) on PyTorch 2.4 / CUDA 12.4 template.</li>
+            <li><strong>Hourly Rate:</strong> ~$0.35 &ndash; $0.45 / hr (RTX 4090) or ~$1.10 / hr (A100).</li>
+            <li><strong>Spend Alarm Requirement:</strong> Activate an external billing alarm capped at $10.00 USD before launching.</li>
+            <li><strong>Command Flag:</strong> Pass <code>--spend-alarm-confirmed</code> to <code>finetune.train --execute</code>.</li>
+            <li><strong>Execution Time:</strong> ~2.5 &ndash; 3.0 hours total across all 3 seeds (0, 1, 2). Total spend: ~$2.50 &ndash; $5.00 USD.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="callout callout-info" style="margin-top: 16px;">
+        <div class="callout-title">📋 Strict Toolchain Reproducibility Invariant (CC-7)</div>
+        <p>
+          Whether executing on local hardware or cloud containers, the fine-tuning process <strong>must use the identical pinned commit of LLaMA-Factory and base model revision</strong>:
+          <br>
+          • <strong>Base Model Revision:</strong> <code>Qwen/Qwen2.5-VL-7B-Instruct</code> @ <code>cc594898137f460bfe9f0759e9844b3ce807cfb5</code>
+          <br>
+          • <strong>LLaMA-Factory Version:</strong> <code>v0.9.5</code> @ <code>7af909522a951e3ad9f022ea6f88b6755257eaa5</code>
+          <br>
+          • <strong>Installation:</strong> Always installed via <code>uv tool install</code> (never bare <code>pip install</code>).
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== SECTION 5: INVARIANTS & DECISION RULES ==================== -->
+  <section id="invariants" class="section-container">
+    <h2 class="section-title">
+      <span class="section-number">§ 5</span> Binding Invariants & Pre-Registered Decision Rules
+    </h2>
+
+    <div class="card">
+      <div class="grid-2">
+        <div style="border-right: 1px solid var(--border-color); padding-right: 16px;">
+          <h4 style="color: var(--primary); margin-bottom: 8px;">Non-Negotiable Research Invariants</h4>
+          <ul style="padding-left: 18px; font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+            <li><strong>Character-Disjoint Splits (ADR-018):</strong> All images of a character lineage belong to exactly ONE split (Train, Val, or Test). Splitting by pair is strictly forbidden.</li>
+            <li><strong>Test Set Purity:</strong> Held-out test split consists 100% of donated child stories. Zero synthetic stories and zero constructed negatives may enter test.</li>
+            <li><strong>Constructed Negatives Train-Only:</strong> Hard negatives matching species & style are restricted exclusively to the training split.</li>
+            <li><strong>Open-Weight Models Only (ADR-015):</strong> All pipeline and fine-tune models are open-weight (Qwen, Gemma, Mistral). No closed API models.</li>
+            <li><strong>Judge is a Control Signal, Not an Outcome:</strong> The fine-tuned judge acts inside the pipeline control loop; it is never used to score Objective 3 expert validation.</li>
+          </ul>
+        </div>
+        <div style="padding-left: 8px;">
+          <h4 style="color: var(--primary); margin-bottom: 8px;">Data & Safety Protections</h4>
+          <ul style="padding-left: 18px; font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+            <li><strong>Fine-Tuned Judge Never On Safety Path:</strong> Safety moderation runs on prompted Gemma with its own rubric. Consistency has best-of retry; safety has none.</li>
+            <li><strong>PII Redaction (Presidio):</strong> Only already-redacted text is hashed or persisted. No student identity enters training prompts.</li>
+            <li><strong>Fail-Closed Test Access:</strong> Access to <code>manifest.test.jsonl</code> is cryptographically locked and recorded in <code>test_access.jsonl</code>.</li>
+            <li><strong>Malformed Output Handling:</strong> Any unparseable JSON emitted by a judge baseline is scored as an explicit miss on <code>different_character</code> charged to that model.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== SECTION 6: SCHEMAS & CODE CONTRACTS ==================== -->
+  <section id="schemas" class="section-container">
+    <h2 class="section-title">
+      <span class="section-number">§ 6</span> Schemas, Data Contracts & Manifest Structures
+    </h2>
+
+    <div class="card">
+      <div class="card-title">
+        <span>Story Intake Record & Dataset Manifest Schemas</span>
+        <span class="badge badge-gray">backend/finetune/corpus_io.py & manifest.py</span>
+      </div>
+
+      <div class="grid-2">
+        <div>
+          <h4 style="font-size: 13px; color: var(--primary); margin-bottom: 4px;">Story Intake Contract (<code>IntakeRecord</code>)</h4>
+          <pre><code>{
+  "story_id": "syn-001",
+  "text": "De-identified story text...",
+  "declared_characters": ["Quill", "Bok-Bok"],
+  "declared_non_human": ["Quill", "Bok-Bok"],
+  "provenance": "synthetic", // or "donated"
+  "split": "train",          // "train", "val", "test"
+  "candidate_role": "not_applicable", // "primary", "backup"
+  "style_preset_id": "cel",  // "cel", "gouache", "cut_paper"
+  "guardian_consent": true,  // donated only
+  "child_assent": true,      // donated only
+  "manual_pii_redaction": true,
+  "independent_redaction_review": true
+}</code></pre>
+        </div>
+        <div>
+          <h4 style="font-size: 13px; color: var(--primary); margin-bottom: 4px;">Manifest Line Item (<code>ManifestRecord</code>)</h4>
+          <pre><code>{
+  "pair_id": "syn-001:c0:scene-1",
+  "char_id": "syn-001:c0",
+  "story_id": "syn-001",
+  "reference_image": "assets/syn-001/ref-c0.png",
+  "scene_image": "assets/syn-001/scene-1.webp",
+  "char_name": "Quill",
+  "char_description": "A small blue hedgehog...",
+  "label": 0,                // 0 = Same, 1 = Different
+  "failure_reasons": [],
+  "anatomy_intact": true,
+  "text_free": true,
+  "pair_type": "pipeline",   // "pipeline", "constructed"
+  "split": "train",          // "train", "val", "test"
+  "provenance": "synthetic", // "synthetic", "donated"
+  "style_preset_id": "cel"
+}</code></pre>
+        </div>
+      </div>
+
+      <h4 style="margin: 16px 0 4px 0; font-size: 13px; color: var(--primary);">VLM Judge Structured Output Target (<code>VlmVerdict</code> in <code>story_memory.py</code>)</h4>
+      <p style="font-size: 12.5px; color: var(--text-muted); margin-bottom: 6px;">The model is trained to emit JSON strictly following this schema (reason-then-score pattern, ADR-004):</p>
+      <pre><code>{
+  "differences_observed": "The character in the scene matches the reference hedgehog in quill shape, blue hue, and green scarf.",
+  "same_character": true,
+  "attributes_present": ["blue quills", "green scarf", "round nose"],
+  "style_match": true,
+  "anatomy_intact": true,
+  "subjects_unique": true,
+  "text_free": true,
+  "failure_reasons": []
+}</code></pre>
+    </div>
+  </section>
+
+  <!-- ==================== SECTION 7: COMMAND REFERENCE ==================== -->
+  <section id="commands" class="section-container">
+    <h2 class="section-title">
+      <span class="section-number">§ 7</span> Complete Operational Command Reference
+    </h2>
+
+    <div class="card">
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Step</th>
+              <th>Phase / Action</th>
+              <th>Exact Command (Executed from <code>backend/</code>)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>0</strong></td>
+              <td>Preflight Unit & Lint Checks</td>
+              <td><code>uv run ruff check . && uv run pytest</code></td>
+            </tr>
+            <tr style="background-color: #ecfdf5;">
+              <td><strong>1</strong></td>
+              <td><strong>Ticket 07 Paid Smoke</strong></td>
+              <td><code>uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --limit 3 --max-usd 1.50 --price-per-megapixel 0.035 --price-basis "&lt;FAL_URL_DATE&gt;"</code></td>
+            </tr>
+            <tr>
+              <td><strong>2</strong></td>
+              <td>Full Synthetic Generation</td>
+              <td><code>uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --max-usd 25.00 --price-per-megapixel 0.035 --price-basis "&lt;FAL_URL_DATE&gt;"</code></td>
+            </tr>
+            <tr>
+              <td><strong>3</strong></td>
+              <td>Donated Intake Generation</td>
+              <td><code>uv run python -m finetune.build_corpus --corpus ../data/judge/intake/donated.json --out ../data/judge/corpus --max-usd 25.00 --price-per-megapixel 0.035 --price-basis "&lt;FAL_URL_DATE&gt;"</code></td>
+            </tr>
+            <tr>
+              <td><strong>4</strong></td>
+              <td>Hard Negative Inspection</td>
+              <td><code>uv run python -m finetune.build_dataset --candidate-report --data ../data/judge/corpus</code></td>
+            </tr>
+            <tr>
+              <td><strong>5</strong></td>
+              <td>Materialize Pair Queue</td>
+              <td><code>uv run python -m finetune.materialize_pairs --data ../data/judge/corpus --donated-intake ../data/judge/intake/donated.json --selection ../data/judge/intake/dataset_selection.json</code></td>
+            </tr>
+            <tr>
+              <td><strong>6</strong></td>
+              <td>Status Reconciliation</td>
+              <td><code>uv run python -m finetune.build_dataset --reconcile-only</code></td>
+            </tr>
+            <tr>
+              <td><strong>7</strong></td>
+              <td>Freeze Dataset Release</td>
+              <td><code>uv run python -m finetune.build_dataset --freeze --data ../data/judge/corpus --donated-intake ../data/judge/intake/donated.json --selection ../data/judge/intake/dataset_selection.json --out ../data/judge/freezes/obj4-v1</code></td>
+            </tr>
+            <tr>
+              <td><strong>8</strong></td>
+              <td>Install LLaMA-Factory</td>
+              <td><code>uv tool install "llamafactory @ git+https://github.com/hiyouga/LlamaFactory.git@7af909522a951e3ad9f022ea6f88b6755257eaa5"</code></td>
+            </tr>
+            <tr>
+              <td><strong>9</strong></td>
+              <td>Training Preflight Plan</td>
+              <td><code>uv run python -m finetune.train --freeze ../data/judge/freezes/obj4-v1 --qualification ../data/judge/training_qualification.json --run-root ../data/judge/runs/obj4-v1 --prepare</code></td>
+            </tr>
+            <tr>
+              <td><strong>10</strong></td>
+              <td>Train 3 QLoRA Seeds</td>
+              <td><code>uv run python -m finetune.train --freeze ../data/judge/freezes/obj4-v1 --qualification ../data/judge/training_qualification.json --run-root ../data/judge/runs/obj4-v1 --execute --spend-alarm-confirmed</code></td>
+            </tr>
+            <tr>
+              <td><strong>11</strong></td>
+              <td>Validation Selection & Lock</td>
+              <td><code>uv run python -m finetune.evaluate validate --freeze ../data/judge/freezes/obj4-v1 --candidates ../data/judge/evaluations/obj4-v1/validation_candidates.json --predictions ../data/judge/evaluations/obj4-v1/validation --out ../data/judge/evaluations/obj4-v1/evaluation_lock.json</code></td>
+            </tr>
+            <tr>
+              <td><strong>12</strong></td>
+              <td>Guarded Held-Out Evaluation</td>
+              <td><code>uv run python -m finetune.evaluate heldout --freeze ../data/judge/freezes/obj4-v1 --lock ../data/judge/evaluations/obj4-v1/evaluation_lock.json --signoff ../data/judge/evaluations/obj4-v1/evaluation_signoff.json --ledger ../data/judge/evaluations/obj4-v1/test_access.jsonl --run-id obj4-heldout-1 --predictions ../data/judge/evaluations/obj4-v1/heldout-1/predictions --out ../data/judge/evaluations/obj4-v1/heldout-1/objective4_results.json</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== FOOTER ==================== -->
+  <footer style="margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border-color); text-align: center; color: var(--text-light); font-size: 12px;">
+    <p><strong>StoryBuddy Research Artifact</strong> · Objective 4 Consistency Judge LoRA Execution Runbook</p>
+    <p style="margin-top: 4px;">Sources of Truth: <code>docs/specs/judge-finetune.md</code> · <code>docs/product/PREREGISTRATION_OBJ4.md</code> · <code>docs/specs/research-corpus-operations.md</code></p>
+  </footer>
+
+</div>
+
+</body>
+</html>

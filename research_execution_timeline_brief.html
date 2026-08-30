@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="StoryBuddy evidence-led execution plan from 24 August 2026 to the October technical defense."
+    />
+    <title>StoryBuddy October Technical Defense — Execution Decision Brief</title>
+    <style>
+      :root {
+        --paper: #fffdf7;
+        --ink: #17213f;
+        --muted: #596276;
+        --cobalt: #3155d9;
+        --cobalt-deep: #213c9a;
+        --cobalt-pale: #e8edff;
+        --sun: #f2c85f;
+        --sun-pale: #fff5ce;
+        --coral: #ec6a51;
+        --coral-pale: #fff0eb;
+        --green: #36785a;
+        --green-pale: #e8f3ec;
+        --red: #a8394d;
+        --red-pale: #fbecef;
+        --line: #d9d4c9;
+        --white: #ffffff;
+        --display: Georgia, "Times New Roman", serif;
+        --body: "Aptos", "Trebuchet MS", sans-serif;
+        --mono: "Cascadia Code", Consolas, monospace;
+      }
+
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; scroll-padding-top: 1rem; }
+      body {
+        margin: 0;
+        color: var(--ink);
+        background:
+          linear-gradient(rgba(49, 85, 217, 0.035) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(49, 85, 217, 0.035) 1px, transparent 1px),
+          var(--paper);
+        background-size: 32px 32px;
+        font-family: var(--body);
+        font-size: 16px;
+        line-height: 1.62;
+      }
+
+      a { color: var(--cobalt-deep); text-underline-offset: 0.16em; }
+      a:focus-visible, button:focus-visible { outline: 4px solid var(--sun); outline-offset: 3px; }
+      p, li { max-width: 82ch; }
+      h1, h2, h3 { font-family: var(--display); text-wrap: balance; }
+      h2 { margin: 0; font-size: clamp(2rem, 4vw, 3.4rem); font-weight: 500; line-height: 1.04; }
+      h3 { margin: 1.6rem 0 0.55rem; font-size: 1.35rem; }
+
+      .skip-link {
+        position: fixed;
+        z-index: 10;
+        top: 0.7rem;
+        left: 0.7rem;
+        transform: translateY(-180%);
+        padding: 0.65rem 0.9rem;
+        border-radius: 999px;
+        color: var(--white);
+        background: var(--cobalt-deep);
+      }
+      .skip-link:focus { transform: none; }
+
+      .shell {
+        display: grid;
+        grid-template-columns: minmax(220px, 275px) minmax(0, 1fr);
+        gap: clamp(1.2rem, 3vw, 3rem);
+        width: min(1480px, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: 1.5rem 0 4rem;
+      }
+
+      nav {
+        position: sticky;
+        top: 1.5rem;
+        align-self: start;
+        max-height: calc(100vh - 3rem);
+        overflow: auto;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(255, 253, 247, 0.96);
+        box-shadow: 0 10px 32px rgba(23, 33, 63, 0.08);
+      }
+      .nav-head { padding: 1.15rem; color: var(--white); background: var(--cobalt-deep); border-radius: 18px 18px 0 0; }
+      .nav-head strong { display: block; font-family: var(--display); font-size: 1.25rem; }
+      nav ol { margin: 0; padding: 0.75rem; list-style: none; }
+      nav a { display: grid; grid-template-columns: 1.8rem 1fr; gap: 0.45rem; padding: 0.5rem; border-radius: 7px; color: var(--muted); font-size: 0.84rem; line-height: 1.25; text-decoration: none; }
+      nav a::before { content: attr(data-n); color: var(--cobalt); font: 800 0.7rem var(--mono); }
+      nav a:hover { color: var(--ink); background: var(--cobalt-pale); }
+      .print-button { width: calc(100% - 1.5rem); margin: 0 0.75rem 0.75rem; padding: 0.7rem; border: 0; border-radius: 9px; color: var(--white); background: var(--cobalt); font: 800 0.82rem var(--body); cursor: pointer; }
+
+      .hero {
+        position: relative;
+        overflow: hidden;
+        padding: clamp(2rem, 6vw, 5rem);
+        border-radius: 30px;
+        color: var(--white);
+        background: var(--cobalt-deep);
+        box-shadow: 0 18px 52px rgba(28, 43, 94, 0.13);
+      }
+      .hero::after { position: absolute; right: -4rem; bottom: -5rem; width: 18rem; height: 18rem; border: 2.5rem solid rgba(242, 200, 95, 0.92); border-radius: 50%; content: ""; }
+      .hero > * { position: relative; z-index: 1; }
+      .kicker, .label, .week, .status { font: 800 0.7rem/1.2 var(--mono); letter-spacing: 0.075em; text-transform: uppercase; }
+      .hero .kicker { color: var(--sun); }
+      h1 { max-width: 950px; margin: 1rem 0 1.3rem; font-size: clamp(3rem, 7vw, 6.2rem); font-weight: 500; letter-spacing: -0.055em; line-height: 0.94; }
+      .lede { max-width: 820px; color: #e7ecff; font-size: 1.2rem; }
+      .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.5rem; }
+      .chip { padding: 0.45rem 0.65rem; border: 1px solid rgba(255,255,255,.3); border-radius: 999px; background: rgba(255,255,255,.08); font: 800 0.68rem var(--mono); text-transform: uppercase; }
+
+      .section { margin-top: 1.25rem; padding: clamp(1.5rem, 4vw, 3.6rem); border: 1px solid var(--line); border-radius: 28px; background: rgba(255, 253, 247, 0.97); box-shadow: 0 12px 38px rgba(23,33,63,.055); }
+      .section-head { display: grid; grid-template-columns: 4rem 1fr; gap: 1rem; align-items: start; margin-bottom: 1.8rem; }
+      .index { display: grid; place-items: center; width: 3.8rem; height: 3.8rem; border: 1px solid var(--cobalt); border-radius: 50%; color: var(--cobalt); background: var(--cobalt-pale); font: 850 0.78rem var(--mono); }
+      .intro { margin: 0.7rem 0 0; color: var(--muted); font-size: 1.02rem; }
+
+      .verdict { display: grid; grid-template-columns: .72fr 1.28fr; gap: 1rem; }
+      .verdict-stamp { display: flex; flex-direction: column; justify-content: space-between; min-height: 260px; padding: 1.5rem; border-radius: 18px; color: var(--white); background: var(--red); }
+      .verdict-stamp strong { display: block; margin-top: 1rem; font-family: var(--display); font-size: clamp(2.5rem, 5vw, 4.7rem); font-weight: 500; line-height: .93; }
+      .verdict-stamp p { color: #ffedf1; }
+      .panel { padding: 1.4rem; border: 1px solid #bdc9ff; border-radius: 18px; background: var(--cobalt-pale); }
+      .panel h3 { margin-top: 0; }
+
+      .callout { margin: 1.15rem 0; padding: 1.1rem 1.2rem; border: 1px solid var(--line); border-left-width: 8px; border-radius: 12px; background: var(--white); }
+      .callout strong { display: block; margin-bottom: 0.3rem; }
+      .callout p { margin: 0; }
+      .callout.good { border-left-color: var(--green); background: var(--green-pale); }
+      .callout.warn { border-left-color: var(--sun); background: var(--sun-pale); }
+      .callout.stop { border-left-color: var(--red); background: var(--red-pale); }
+
+      .snapshot { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.85rem; }
+      .snapshot article { padding: 1.2rem; border: 1px solid var(--line); border-top: 7px solid var(--cobalt); border-radius: 15px; background: var(--white); }
+      .snapshot article:nth-child(2) { border-top-color: var(--sun); }
+      .snapshot article:nth-child(3) { border-top-color: var(--red); }
+      .snapshot h3 { margin: 0.4rem 0; }
+      .snapshot ul { margin-bottom: 0; padding-left: 1.1rem; }
+
+      .dependency { display: grid; grid-template-columns: repeat(6, minmax(130px, 1fr)); gap: 0.6rem; overflow-x: auto; padding: 0.25rem 0 0.75rem; }
+      .node { position: relative; min-height: 145px; padding: 1rem; border: 1px solid var(--line); border-radius: 12px; background: var(--white); }
+      .node::after { position: absolute; top: 50%; right: -0.52rem; z-index: 2; color: var(--cobalt); content: "→"; font-weight: 900; transform: translateY(-50%); }
+      .node:last-child::after { content: ""; }
+      .node strong { display: block; margin: 0.35rem 0; font-family: var(--display); }
+      .node p { margin: 0; color: var(--muted); font-size: 0.82rem; }
+
+      .branches { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+      .branch { padding: 1.35rem; border: 1px solid var(--line); border-radius: 18px; background: var(--white); }
+      .branch.final { border-top: 9px solid var(--coral); }
+      .branch.progress { border-top: 9px solid var(--green); }
+      .branch h3 { margin-top: 0.35rem; }
+
+      table { width: 100%; margin: 1.2rem 0; border-collapse: collapse; font-size: 0.88rem; }
+      th, td { padding: 0.75rem; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+      th { color: var(--white); background: var(--cobalt-deep); }
+      tr:nth-child(even) td { background: rgba(232,237,255,.35); }
+
+      .timeline { display: grid; gap: 0.75rem; }
+      .phase { display: grid; grid-template-columns: 9.5rem 1fr; gap: 1rem; padding: 1.15rem; border: 1px solid var(--line); border-radius: 14px; background: var(--white); }
+      .phase .week { color: var(--cobalt); }
+      .phase h3 { margin: 0.25rem 0 0.4rem; font-size: 1.25rem; }
+      .phase ul { margin: 0; padding-left: 1.1rem; }
+      .phase.gate { border: 2px solid var(--sun); background: var(--sun-pale); }
+
+      .cut-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.8rem; }
+      .cut-card { padding: 1.15rem; border: 1px solid var(--line); border-radius: 14px; background: var(--white); }
+      .cut-card.keep { border-top: 7px solid var(--green); }
+      .cut-card.amend { border-top: 7px solid var(--sun); }
+      .cut-card.cut { border-top: 7px solid var(--red); }
+      .cut-card h3 { margin-top: 0.35rem; }
+
+      .source-list { display: grid; gap: 0.65rem; margin: 0; padding: 0; list-style: none; }
+      .source-list li { max-width: none; padding: 0.9rem; border: 1px solid var(--line); border-radius: 10px; background: var(--white); }
+      .source-list strong { display: block; }
+      .source-list code { color: var(--cobalt-deep); font-family: var(--mono); font-size: 0.78rem; }
+      footer { margin-top: 1.2rem; padding: 1.5rem; border-radius: 20px; color: #dce2f2; background: var(--ink); }
+      footer p { margin: 0; }
+
+      @media (max-width: 1050px) {
+        .shell { grid-template-columns: 1fr; }
+        nav { position: static; max-height: none; }
+        nav ol { display: grid; grid-template-columns: repeat(3, 1fr); }
+        .snapshot, .cut-grid { grid-template-columns: 1fr; }
+      }
+      @media (max-width: 700px) {
+        .shell { width: min(100% - 1rem, 760px); }
+        nav ol, .verdict, .branches, .section-head, .phase { grid-template-columns: 1fr; }
+        .index { width: 3rem; height: 3rem; }
+        .dependency { grid-template-columns: 1fr; overflow: visible; }
+        .node::after { top: auto; right: 50%; bottom: -0.85rem; transform: rotate(90deg) translateY(-50%); }
+      }
+
+      @media print {
+        @page { size: A4; margin: 12mm; }
+        * { print-color-adjust: exact !important; -webkit-print-color-adjust: exact !important; }
+        body { color: #0f172a; background: #ffffff !important; font-size: 9pt; line-height: 1.42; }
+        nav, .skip-link { display: none !important; }
+        .shell { display: block; width: 100%; padding: 0; }
+        .hero { margin: 0 0 5mm; padding: 8mm; border: 1.5px solid #1e3a8a; border-radius: 0; color: #0f172a !important; background: #ffffff !important; box-shadow: none; break-after: page; }
+        .hero::after { display: none; }
+        .hero .kicker { color: #1e40af !important; }
+        h1 { margin: 3mm 0; color: #0f172a !important; font-size: 25pt; }
+        .lede { color: #334155 !important; font-size: 10pt; }
+        .chip { color: #0f172a !important; border-color: #94a3b8; background: #f1f5f9 !important; }
+        .section { margin: 0 0 5mm; padding: 5mm 6mm; border-radius: 0; box-shadow: none; break-inside: auto; }
+        .section-head { grid-template-columns: 2.5rem 1fr; gap: 2mm; margin-bottom: 3mm; break-after: avoid; }
+        .index { width: 2.2rem; height: 2.2rem; font-size: 7pt; }
+        h2 { font-size: 14pt; }
+        h3 { margin-top: 3mm; font-size: 10pt; }
+        .intro, p, li { font-size: 7.8pt; }
+        .verdict { grid-template-columns: .72fr 1.28fr; gap: 3mm; break-inside: avoid; }
+        .verdict-stamp, .panel { min-height: auto; padding: 3mm; border-radius: 3px; }
+        .verdict-stamp { background: #b91c1c !important; }
+        .verdict-stamp strong { font-size: 16pt; }
+        .snapshot { grid-template-columns: repeat(3, 1fr); gap: 2.5mm; }
+        .snapshot article, .branch, .cut-card, .phase, .node, .callout { padding: 2.5mm; border-radius: 3px; break-inside: avoid; }
+        .snapshot h3, .branch h3, .cut-card h3, .phase h3 { font-size: 9pt; }
+        .dependency { grid-template-columns: repeat(6, 1fr); gap: 1.5mm; overflow: visible; }
+        .node { min-height: 34mm; }
+        .node p { font-size: 6.7pt; }
+        .branches { grid-template-columns: 1fr 1fr; gap: 3mm; }
+        table { margin: 3mm 0; font-size: 6.7pt; }
+        th, td { padding: 1.5mm; }
+        .timeline { gap: 2mm; }
+        .phase { grid-template-columns: 28mm 1fr; gap: 2mm; }
+        .cut-grid { grid-template-columns: repeat(3, 1fr); gap: 2mm; }
+        .source-list li { padding: 2mm; border-radius: 2px; break-inside: avoid; }
+        footer { margin-top: 3mm; padding: 3mm; border-radius: 0; color: #0f172a; background: #f1f5f9 !important; }
+        a { color: #1e40af !important; text-decoration: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to execution brief</a>
+    <div class="shell">
+      <nav aria-label="Document navigation">
+        <div class="nav-head"><span class="kicker">Decision document</span><strong>October execution brief</strong></div>
+        <ol>
+          <li><a href="#decision" data-n="01">Decision</a></li>
+          <li><a href="#readiness" data-n="02">Readiness</a></li>
+          <li><a href="#critical-path" data-n="03">Critical path</a></li>
+          <li><a href="#defense-branches" data-n="04">Defense branches</a></li>
+          <li><a href="#timeline" data-n="05">Timeline</a></li>
+          <li><a href="#gates" data-n="06">Go / no-go gates</a></li>
+          <li><a href="#scope" data-n="07">Scope control</a></li>
+          <li><a href="#risks" data-n="08">Risks</a></li>
+          <li><a href="#defense-package" data-n="09">Defense package</a></li>
+          <li><a href="#sources" data-n="10">Evidence</a></li>
+        </ol>
+        <button class="print-button" type="button" onclick="window.print()">Print / save as PDF</button>
+      </nav>
+
+      <main id="main">
+        <header class="hero">
+          <div class="kicker">StoryBuddy capstone · execution decision brief · 24 August 2026</div>
+          <h1>Training is not the first emergency.</h1>
+          <p class="lede">
+            The October technical-defense date and evidence requirement are not yet known. This brief plans
+            against the conservative 1 October boundary, separates a final-results defense from a
+            technical-progress defense, and protects the study from rushing into invalid training.
+          </p>
+          <div class="chips">
+            <span class="chip">Exact date unknown</span>
+            <span class="chip">Defense type unknown</span>
+            <span class="chip">No empirical dataset yet</span>
+            <span class="chip">Governance before generation</span>
+          </div>
+        </header>
+
+        <section class="section" id="decision" aria-labelledby="decision-title">
+          <div class="section-head"><div class="index">01</div><div><h2 id="decision-title">The decision now</h2><p class="intro">Treat the next adviser contact as a scope gate, not a routine update.</p></div></div>
+          <div class="verdict">
+            <div class="verdict-stamp">
+              <span class="label">Current schedule posture</span>
+              <strong>High risk, still recoverable.</strong>
+              <p>Recoverable only if governance is resolved immediately and all non-research expansion stops.</p>
+            </div>
+            <div class="panel">
+              <h3>What the team should ask this week</h3>
+              <ol>
+                <li><strong>What is the exact October date?</strong> Plan against 1 October until answered.</li>
+                <li><strong>Is this a final empirical defense or a technical-progress defense?</strong> Those require different evidence packages.</li>
+                <li><strong>Is Ethics Stage 1 approved, submitted, or not started?</strong> Donated-story results cannot be scheduled honestly without that status.</li>
+                <li><strong>Will the adviser approve the QUAN-dominant mixed-methods framing?</strong> The current “quantitative-developmental” label omits Objective 3's qualitative strand.</li>
+                <li><strong>Which pre-registered secondary analyses remain mandatory?</strong> Any cut must be approved and dated before labels are collected.</li>
+              </ol>
+            </div>
+          </div>
+          <div class="callout stop"><strong>Do not solve uncertainty by inventing results.</strong><p>If October permits only a technical-progress defense, present a verified pilot as a pilot. If final results are required and governance cannot clear in time, negotiate a formal rescope. Synthetic or fixture evidence must never be presented as the donated held-out result.</p></div>
+        </section>
+
+        <section class="section" id="readiness" aria-labelledby="readiness-title">
+          <div class="section-head"><div class="index">02</div><div><h2 id="readiness-title">Readiness: code is ahead of evidence</h2><p class="intro">The producer machinery exists. The empirical artifacts that make Objective 4 a research finding do not.</p></div></div>
+          <div class="snapshot">
+            <article><span class="status">Verified built</span><h3>Research machinery</h3><ul><li>Corpus producer and resumable run state</li><li>Pair materialization and blinded queue</li><li>Annotation and adjudication routes</li><li>Dataset reconciliation and freeze path</li><li>LLaMA-Factory conversion and training config</li><li>Deterministic integrity guards</li></ul></article>
+            <article><span class="status">Partially complete</span><h3>Evaluation and operations</h3><ul><li>PRF1 and clustered bootstrap implemented</li><li>Some pre-registered analyses still absent</li><li>Functional-verification Tool A specified but script absent</li><li>Migrations exist but live application is unverified</li><li>Tool B remains a draft pending review</li><li>ISO questionnaire details remain adviser gates</li></ul></article>
+            <article><span class="status">Not evidenced</span><h3>Empirical study</h3><ul><li>No generated corpus bundle found</li><li>No frozen pair dataset or manifest found</li><li>No human labels or adjudication results found</li><li>No completed training run or adapter found</li><li>No held-out evaluation table found</li><li>No completed expert or ISO session found</li></ul></article>
+          </div>
+          <div class="callout good"><strong>Focused deterministic check</strong><p>The research-infrastructure subset returned <strong>125 passed, 25 skipped</strong>. Seven skips were caused by absent <code>data/judge</code> artifacts; eighteen RLS cases skipped because the database was unreachable. This supports code readiness, not empirical completion.</p></div>
+          <div class="callout warn"><strong>Status documents contain drift.</strong><p>Several files still call annotation routes blocked or say CI is absent, while the routes, resolving migrations, and CI workflow exist. Use code and fresh checks for readiness; use ADRs and the approved manuscript for study authority.</p></div>
+        </section>
+
+        <section class="section" id="critical-path" aria-labelledby="critical-title">
+          <div class="section-head"><div class="index">03</div><div><h2 id="critical-title">The actual critical path</h2><p class="intro">GPU training is near the end. Every preceding step determines whether its output is scientifically usable.</p></div></div>
+          <div class="dependency" aria-label="Research dependency chain">
+            <article class="node"><span class="label">Gate 1</span><strong>Approvals</strong><p>Adviser, ethics, school, consent/assent, retention, adult participants.</p></article>
+            <article class="node"><span class="label">Gate 2</span><strong>Corpus</strong><p>Sanitized stories, two-person redaction review, frozen roles and styles.</p></article>
+            <article class="node"><span class="label">Gate 3</span><strong>Images</strong><p>Run the existing graph, hash exact assets, quarantine failures.</p></article>
+            <article class="node"><span class="label">Gate 4</span><strong>Labels</strong><p>Two blinded annotators, calibration, disagreements adjudicated.</p></article>
+            <article class="node"><span class="label">Gate 5</span><strong>Freeze</strong><p>Disjoint splits, immutable manifest, hashes and version pins.</p></article>
+            <article class="node"><span class="label">Gate 6</span><strong>Train + test</strong><p>Three seeds, validation-only selection, one held-out reading.</p></article>
+          </div>
+          <div class="callout stop"><strong>Why training now would be wrong</strong><p>Without human-confirmed labels and a character-disjoint frozen manifest, the adapter can learn “a reference image was used” rather than “this is the same character.” Without version pins and immutable image bytes, the reported model cannot be reproduced. A quick run would consume time while producing evidence the paper should not use.</p></div>
+          <table>
+            <thead><tr><th>Step</th><th>Main time risk</th><th>What proves completion</th><th>Can it be compressed?</th></tr></thead>
+            <tbody>
+              <tr><td>Governance</td><td>External institutional latency</td><td>Recorded approvals and final participant documents</td><td>No ethical shortcut</td></tr>
+              <tr><td>Corpus preparation</td><td>Recruitment, redaction, story suitability</td><td>Frozen 10 primary + 5 backup candidate record</td><td>Only through approved fallback</td></tr>
+              <tr><td>Paid generation</td><td>Provider failures and quarantined stories</td><td>Completed StoryMemory bundles and asset hashes</td><td>Resume; do not bypass gates</td></tr>
+              <tr><td>Annotation</td><td>Human availability and disagreement</td><td>Two labels per pair plus required adjudications</td><td>Add scheduling, not auto-labels</td></tr>
+              <tr><td>Training</td><td>Configuration defects</td><td>Three pinned adapters and validation results</td><td>Yes; hours, not weeks</td></tr>
+              <tr><td>Held-out evaluation</td><td>One-read integrity</td><td>Frozen metrics table and analysis log</td><td>No repeated peeking</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="section" id="defense-branches" aria-labelledby="branches-title">
+          <div class="section-head"><div class="index">04</div><div><h2 id="branches-title">Two legitimate October branches</h2><p class="intro">Use the branch the institution confirms. Do not quietly blend them.</p></div></div>
+          <div class="branches">
+            <article class="branch final"><span class="status">Branch A · Final empirical defense</span><h3>Completed findings are expected</h3><p><strong>Required minimum:</strong> approved participant procedures; final donated held-out corpus; dual labels and adjudication; frozen dataset; trained model; Objective-4 PRF1 with clustered uncertainty and label reliability; completed Tool B and Tool C sessions if Objectives 3 and 5 remain in the manuscript.</p><p><strong>Feasibility:</strong> high risk. It remains plausible only if approval and participant access clear immediately and the team works exclusively on the research path.</p><p><strong>Failure response:</strong> formally amend scope or move the defense. Do not relabel pilot evidence as final.</p></article>
+            <article class="branch progress"><span class="status">Branch B · Technical-progress defense</span><h3>Verified implementation and pilot evidence are accepted</h3><p><strong>Required minimum:</strong> live end-to-end fixture demonstration; Tool A functional matrix; research-integrity tests; three-story paid smoke; annotation workflow demonstration with clearly marked pilot rows; frozen methodology and pre-registration; honest readiness and risk report.</p><p><strong>Feasibility:</strong> realistic even if donated-story approval is delayed.</p><p><strong>Claim boundary:</strong> demonstrates technical readiness and study feasibility only. It does not satisfy final Objective 3, 4, or 5 findings.</p></article>
+          </div>
+          <table>
+            <thead><tr><th>Evidence</th><th>Branch A</th><th>Branch B</th><th>What must be said aloud</th></tr></thead>
+            <tbody>
+              <tr><td>Fixtures</td><td>Engineering support only</td><td>Primary demonstration substrate</td><td>Fixtures are not participant results</td></tr>
+              <tr><td>Synthetic corpus</td><td>Train/validation only</td><td>Pilot operations</td><td>Not the donated held-out test</td></tr>
+              <tr><td>Donated corpus</td><td>Required for current Objective 4 test</td><td>May remain pending</td><td>State ethics status exactly</td></tr>
+              <tr><td>Fine-tuned adapter</td><td>Required by Objective 4</td><td>Optional pilot if legitimately trained</td><td>No performance claim without frozen test</td></tr>
+              <tr><td>Expert/ISO sessions</td><td>Required if Objectives 3/5 are final</td><td>Instrument/readiness demonstration</td><td>Draft review is not administration</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="section" id="timeline" aria-labelledby="timeline-title">
+          <div class="section-head"><div class="index">05</div><div><h2 id="timeline-title">Conservative timeline to October</h2><p class="intro">Dates are planning gates, not promises. Recalculate immediately when the exact defense date and approval status are known.</p></div></div>
+          <div class="timeline">
+            <article class="phase gate"><div><span class="week">24–29 August</span><h3>Scope and governance gate</h3></div><ul><li>Obtain the exact defense date and evidence requirement.</li><li>Confirm adviser decisions: study label, Tool B, Tool C, evaluator pools, Objective-4 corpus provenance, and required baselines.</li><li>Complete or submit Ethics Stage 1, adult-participant protocol, school approval, consent/assent, retention, withdrawal, and translation requirements.</li><li>Verify live application of research migrations and remove/quarantine pilot rows.</li><li><strong>Output:</strong> a dated go/no-go record for Branch A versus Branch B.</li></ul></article>
+            <article class="phase"><div><span class="week">30 August–6 September</span><h3>Operational proof</h3></div><ul><li>Implement the minimal offline Tool A functional-verification script already specified.</li><li>Run one fixture through the complete research flow.</li><li>Run the smallest three-story paid smoke and correct operational failures only.</li><li>Pin current production model/prompt/config versions for corpus generation.</li><li><strong>Output:</strong> verified pilot bundle, functional matrix, cost/latency trace, and readiness decision.</li></ul></article>
+            <article class="phase"><div><span class="week">7–14 September</span><h3>Generate controlled corpora</h3></div><ul><li>Only after governance permits: freeze donated candidate roles and styles before outcomes are observed.</li><li>Generate synthetic train/validation stories and approved donated test candidates through the existing production graph.</li><li>Quarantine roster, asset, or terminal pipeline failures under the recorded replacement rule.</li><li>Materialize exact blinded reference/scene pairs and verify hashes.</li><li><strong>Output:</strong> completed StoryMemory bundles, asset inventory, and blinded pair queue.</li></ul></article>
+            <article class="phase"><div><span class="week">15–21 September</span><h3>Human reference labels</h3></div><ul><li>Calibrate two ordinary annotators on pilot items that cannot enter the frozen study dataset.</li><li>Run independent blinded annotation; monitor missing images and fatigue without exposing agreement.</li><li>Adjudicate every disagreement across the complete label fields.</li><li>Reconcile pair statuses from annotation truth and clear pilot contamination.</li><li><strong>Output:</strong> complete human labels, agreement statistics, adjudication rate, and deviation log.</li></ul></article>
+            <article class="phase"><div><span class="week">22–28 September</span><h3>Freeze and train</h3></div><ul><li>Freeze character-disjoint train/validation/test splits and immutable asset bytes.</li><li>Record dataset hash, model revision, LLaMA-Factory version, prompt version, seeds, and image limits.</li><li>Train seeds 0, 1, and 2; choose checkpoints using validation only.</li><li>Debug only against train/validation before opening the held-out test.</li><li><strong>Output:</strong> three adapter artifacts, validation table, frozen analysis inputs.</li></ul></article>
+            <article class="phase gate"><div><span class="week">29 September–5 October</span><h3>One-time evaluation gate</h3></div><ul><li>Open the held-out donated test once after all choices are frozen.</li><li>Compute precision, recall, F1, character-clustered confidence intervals, malformed-output counts, and required paired controls.</li><li>Apply the pre-registered deployment ladder separately from the reported Objective-4 result.</li><li>Do not deploy the adapter merely to improve the defense narrative.</li><li><strong>Output:</strong> immutable Objective-4 results table and interpretation.</li></ul></article>
+            <article class="phase"><div><span class="week">October · before defense</span><h3>Human evaluation and defense package</h3></div><ul><li>Administer the approved Tool B and Tool C only under the confirmed adult-participant protocol.</li><li>Code Tool B meaning units, double-code the predeclared subset, and retain disagreement.</li><li>Create the mixed-methods joint display without a composite score.</li><li>Rehearse evidence, limitations, non-claims, live fallback, and exact status.</li><li><strong>Output:</strong> defense deck, reproducibility appendix, limitations slide, and live demo backup.</li></ul></article>
+          </div>
+          <div class="callout warn"><strong>If approvals are not clear by early September</strong><p>Branch A becomes increasingly unlikely. Freeze further paid/full-corpus work and prepare Branch B unless the adviser formally approves a changed corpus or schedule. This is a planning judgment, not an institutional deadline.</p></div>
+        </section>
+
+        <section class="section" id="gates" aria-labelledby="gates-title">
+          <div class="section-head"><div class="index">06</div><div><h2 id="gates-title">Go / no-go rules</h2><p class="intro">A date cannot override a validity or safety gate.</p></div></div>
+          <table>
+            <thead><tr><th>Gate</th><th>Go only when</th><th>Stop when</th><th>Fallback</th></tr></thead>
+            <tbody>
+              <tr><td>Participant contact</td><td>Final institutional and school approvals are recorded</td><td>Consent, assent, retention, withdrawal, translation, or adult protocol remains draft</td><td>Fixture/synthetic technical pilot only</td></tr>
+              <tr><td>Donated intake</td><td>PII is manually redacted and independently reviewed</td><td>Identity, contact, receipt code, or raw submission would enter research systems</td><td>Return to restricted intake process</td></tr>
+              <tr><td>Paid corpus run</td><td>Three-story smoke passes and spend breaker is verified</td><td>Model/version drift, live migration uncertainty, or repeated provider failure</td><td>Quarantine; do not silently regenerate</td></tr>
+              <tr><td>Real annotation</td><td>Taxonomy, UI fields, queue blinding, roles, and pilot cleanup are frozen</td><td>Annotators can see provenance/agreement or pilot rows can mix with study rows</td><td>Fix before first real label</td></tr>
+              <tr><td>Training</td><td>Manifest, splits, labels, bytes, and version pins are frozen</td><td>Character leakage, unresolved disagreement, or missing hash</td><td>Rebuild from frozen sources</td></tr>
+              <tr><td>Held-out read</td><td>Training/checkpoint/threshold decisions are complete</td><td>Any choice is still being tuned</td><td>Use validation; preserve test</td></tr>
+              <tr><td>Final claims</td><td>Correct respondent/data source and completed analysis support the claim</td><td>Pilot, fixture, synthetic, or skipped evidence is being presented as final</td><td>Relabel as feasibility/progress</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="section" id="scope" aria-labelledby="scope-title">
+          <div class="section-head"><div class="index">07</div><div><h2 id="scope-title">What to keep, amend, and stop</h2><p class="intro">Scope control protects the research; it is not a reduction in rigor.</p></div></div>
+          <div class="cut-grid">
+            <article class="cut-card keep"><span class="status">Keep</span><h3>Evidence that carries the objectives</h3><ul><li>Ethics and participant protection</li><li>Character-disjoint frozen dataset</li><li>Two annotators plus adjudication</li><li>Precision, recall, F1 and clustered uncertainty</li><li>Human-label reliability</li><li>Approved Tool B and Tool C if final</li><li>Reproducibility pins and deviation log</li></ul></article>
+            <article class="cut-card amend"><span class="status">Amend before labels</span><h3>Only with adviser approval</h3><ul><li>Corpus provenance or donated-only test rule</li><li>Required baseline/control set</li><li>DreamBench++ transfer</li><li>Data-scaling ablation</li><li>Downstream post-swap expert comparison</li><li>Study-design label and integration procedure</li><li>Any Objective 3 numeric redesign</li></ul></article>
+            <article class="cut-card cut"><span class="status">Stop now</span><h3>Work the defense does not need</h3><ul><li>New product features</li><li>Further artifact styling after print verification</li><li>Modal/vLLM deployment before results</li><li>Dashboards for offline analysis</li><li>Serving the LoRA merely because it exists</li><li>Unrequested pipeline refactors</li><li>Optional export unless formally retained</li></ul></article>
+          </div>
+          <div class="callout stop"><strong>Frozen does not mean impossible to change.</strong><p>It means changes must be dated, justified, approved, and made before observing the affected labels/results. CLIP, DINOv2, zero-shot, and prompted controls are described as non-negotiable in the frozen pre-registration even though other documents call comparisons optional. Reconcile that contradiction formally; do not silently choose the easier wording.</p></div>
+        </section>
+
+        <section class="section" id="risks" aria-labelledby="risks-title">
+          <div class="section-head"><div class="index">08</div><div><h2 id="risks-title">Risks the defense panel can find</h2><p class="intro">Name them first and show the control or honest limitation.</p></div></div>
+          <table>
+            <thead><tr><th>Risk</th><th>Why it matters</th><th>Control</th><th>Residual limitation</th></tr></thead>
+            <tbody>
+              <tr><td>Ethics latency</td><td>Every donated-story result depends on prior approval</td><td>Separate technical pilot; no retroactive consent</td><td>October may contain progress, not final findings</td></tr>
+              <tr><td>Few held-out characters</td><td>Pairs from one character are not independent</td><td>Split and bootstrap by character; report achieved count</td><td>Wide uncertainty and limited generalization</td></tr>
+              <tr><td>Three expert validators</td><td>Cannot estimate a population acceptance rate</td><td>Purposive role-specific qualitative interpretation</td><td>Panel-perceived acceptability only</td></tr>
+              <tr><td>Model self-grading</td><td>Runtime judge influenced selected outputs</td><td>Independent human Tool B and held-out labels</td><td>Judge remains a product control signal</td></tr>
+              <tr><td>Shortcut learning</td><td>Adapter may learn reference use/style rather than identity</td><td>Human-confirm positives, style control, constructed negatives train-only</td><td>Domain remains one generator and three styles</td></tr>
+              <tr><td>Test-set leakage</td><td>Repeated tuning invalidates performance</td><td>Freeze choices; read test once; log the predeclared exception</td><td>Small validation set may make selection noisy</td></tr>
+              <tr><td>Document drift</td><td>Panel can find mutually inconsistent status claims</td><td>Bounded grep and authority hierarchy</td><td>Repository prose is not self-updating</td></tr>
+              <tr><td>Live infrastructure unverified</td><td>Code tests do not prove migrations or provider reachability</td><td>Live migration/RLS check and paid smoke before study</td><td>External services can still fail during defense</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="section" id="defense-package" aria-labelledby="package-title">
+          <div class="section-head"><div class="index">09</div><div><h2 id="package-title">What to bring to the technical defense</h2><p class="intro">Package evidence so the panel can distinguish implementation, pilot evidence, and final findings at a glance.</p></div></div>
+          <div class="snapshot">
+            <article><span class="status">System</span><h3>Technical evidence</h3><ul><li>Architecture and locked ADR map</li><li>Moderation and privacy ordering</li><li>Functional-verification matrix</li><li>Deterministic test summary</li><li>Live or recorded happy-path demo</li><li>Failure/offline fallback</li></ul></article>
+            <article><span class="status">Research</span><h3>Method evidence</h3><ul><li>Five objectives and instrument map</li><li>QUAN-dominant mixed-methods rationale</li><li>Approved Tool B and Tool C versions</li><li>Pre-registration and amendments</li><li>Corpus provenance and split diagram</li><li>Non-circularity explanation</li></ul></article>
+            <article><span class="status">Results</span><h3>Claim evidence</h3><ul><li>Clearly labelled pilot versus final tables</li><li>PRF1, uncertainty and IRR</li><li>Expert themes with short evidence excerpts</li><li>ISO characteristic results</li><li>Mixed-methods joint display</li><li>Limitations and non-claims slide</li></ul></article>
+          </div>
+          <h3>One-sentence defense posture</h3>
+          <div class="callout good"><strong>If final evidence is complete</strong><p>“We developed a safety-gated picture-book pipeline and evaluated it through independent expert interpretation, human-referenced judge classification, and perceived software quality; each result is reported only for the sample and construct its instrument supports.”</p></div>
+          <div class="callout warn"><strong>If October is a progress defense</strong><p>“The implementation and research apparatus are verified at pilot scale; participant-dependent findings remain pending prior approvals, and we do not present fixture or synthetic results as final capstone outcomes.”</p></div>
+        </section>
+
+        <section class="section" id="sources" aria-labelledby="sources-title">
+          <div class="section-head"><div class="index">10</div><div><h2 id="sources-title">Evidence and authority map</h2><p class="intro">Line references reflect the repository reviewed on 24 August 2026.</p></div></div>
+          <ul class="source-list">
+            <li><strong>Accepted evaluation scope</strong><code>docs/product/adr/ADR-008-evaluation-three-objective-evaluation-expert-validation.md:20–52</code><span>Objectives 3–5, respondent roles, open-ended Tool B, judge PRF1, and ISO Tool C.</span></li>
+            <li><strong>Current design label and analysis</strong><code>docs/capstone/methodology.md:24–28, 380–397, 477–524</code><span>“Quantitative-developmental” label plus the qualitative and quantitative procedures it incompletely describes.</span></li>
+            <li><strong>Instrument definitions</strong><code>docs/capstone/research_instruments.md:22–53, 55–81, 83–140</code><span>Tool B content analysis, Objective-4 classification metrics, Tool C, and validation requirements.</span></li>
+            <li><strong>Objective-4 frozen decisions</strong><code>docs/product/PREREGISTRATION_OBJ4.md:57–86, 219–283, 390–493</code><span>Reported result, controls, clustered inference, claim ladder, malformed outputs, seeds, and reproducibility pins.</span></li>
+            <li><strong>Governance stop gate</strong><code>docs/capstone/research_runbook.md:3–45</code><span>Approval, sanitized intake, withdrawal, stop rules, and evidence retention.</span></li>
+            <li><strong>Corpus operations</strong><code>docs/specs/research-corpus-operations.md:8–39, 100–159</code><span>Traceable flow from approved stories through generation, queue materialization, annotation, and freeze.</span></li>
+            <li><strong>Training and evaluation recipe</strong><code>docs/specs/judge-finetune.md:418–585</code><span>Three seeds, checkpoint selection, primary endpoint, controls, and held-out policy.</span></li>
+            <li><strong>Mixed-methods definition</strong><a href="https://obssr.od.nih.gov/research-resources/mixed-methods-research">NIH Office of Behavioral and Social Sciences Research — Best Practices for Mixed Methods Research</a><span>Intentional qualitative/quantitative integration distinguishes mixed methods from parallel collection.</span></li>
+            <li><strong>Verified code locations</strong><code>backend/finetune/ · frontend/app/(research)/annotate/ · frontend/app/(research)/adjudicate/ · supabase/migrations/0014, 0016, 0017</code><span>Producer, labeling, adjudication, and database machinery observed in the repository.</span></li>
+          </ul>
+        </section>
+
+        <footer><p><strong>Decision rule:</strong> protect validity first, produce the smallest honest evidence package second, and add deployment or optional analyses only after the defense-critical objectives are safe.</p></footer>
+      </main>
+    </div>
+  </body>
+</html>

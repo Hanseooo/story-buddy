@@ -586,6 +586,164 @@
         text-align: center;
       }
 
+      .study-verdict {
+        display: grid;
+        grid-template-columns: minmax(230px, 0.72fr) minmax(0, 1.28fr);
+        gap: 1rem;
+        margin-bottom: 1.2rem;
+      }
+
+      .study-label {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        min-height: 250px;
+        padding: 1.5rem;
+        border-radius: var(--radius-md);
+        color: var(--white);
+        background: var(--cobalt-deep);
+      }
+
+      .study-label strong {
+        display: block;
+        margin-top: 1rem;
+        font-family: var(--display);
+        font-size: clamp(2rem, 4vw, 3.6rem);
+        font-weight: 500;
+        letter-spacing: -0.04em;
+        line-height: 0.98;
+      }
+
+      .study-label p {
+        margin: 1rem 0 0;
+        color: #e5eaff;
+        font-size: 0.92rem;
+      }
+
+      .definition-panel {
+        padding: 1.5rem;
+        border: 1px solid #bdc9ff;
+        border-radius: var(--radius-md);
+        background: var(--cobalt-pale);
+      }
+
+      .definition-panel h3 {
+        margin-top: 0;
+      }
+
+      .evidence-snippet {
+        margin: 0.85rem 0;
+        padding: 1rem 1.1rem;
+        border-left: 5px solid var(--cobalt);
+        border-radius: 0 10px 10px 0;
+        background: var(--white);
+      }
+
+      .evidence-snippet blockquote {
+        margin: 0;
+        color: var(--ink);
+        font-family: var(--display);
+        font-size: 1.05rem;
+        line-height: 1.45;
+      }
+
+      .evidence-snippet cite {
+        display: block;
+        margin-top: 0.55rem;
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        font-style: normal;
+      }
+
+      .method-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.85rem;
+        margin: 1.2rem 0;
+      }
+
+      .method-card {
+        padding: 1.25rem;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: var(--white);
+      }
+
+      .method-card.qual { border-top: 7px solid var(--coral); }
+      .method-card.quant { border-top: 7px solid var(--cobalt); }
+      .method-card.integrate { border-top: 7px solid var(--green); }
+
+      .method-card h3 {
+        margin: 0.45rem 0 0.65rem;
+        font-size: 1.35rem;
+      }
+
+      .method-card p,
+      .method-card li {
+        font-size: 0.9rem;
+      }
+
+      .method-card ul {
+        margin-bottom: 0;
+        padding-left: 1.15rem;
+      }
+
+      .option-stack {
+        display: grid;
+        gap: 0.9rem;
+        margin-top: 1.2rem;
+      }
+
+      .study-option {
+        display: grid;
+        grid-template-columns: minmax(180px, 0.65fr) minmax(0, 1.35fr);
+        gap: 1rem;
+        padding: 1.25rem;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: var(--white);
+      }
+
+      .study-option.recommended {
+        border: 2px solid var(--green);
+        background: var(--green-pale);
+      }
+
+      .study-option h3 {
+        margin: 0.35rem 0;
+        font-size: 1.35rem;
+      }
+
+      .study-option ul {
+        margin: 0;
+        padding-left: 1.15rem;
+      }
+
+      .study-option li + li {
+        margin-top: 0.35rem;
+      }
+
+      .tradeoff-table {
+        width: 100%;
+        margin-top: 1.2rem;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+      }
+
+      .tradeoff-table th,
+      .tradeoff-table td {
+        padding: 0.8rem;
+        border: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .tradeoff-table th {
+        color: var(--white);
+        background: var(--cobalt-deep);
+      }
+
       .pipeline-context {
         display: grid;
         grid-template-columns: 1fr auto 1fr auto 1fr;
@@ -1407,6 +1565,15 @@
           grid-template-columns: repeat(3, minmax(170px, 1fr));
         }
 
+        .study-verdict,
+        .study-option {
+          grid-template-columns: 1fr;
+        }
+
+        .method-grid {
+          grid-template-columns: 1fr;
+        }
+
         .pipeline-node:nth-child(3)::after,
         .pipeline-node:nth-child(6)::after {
           content: "";
@@ -1519,19 +1686,42 @@
       @media print {
         @page {
           size: A4;
-          margin: 13mm 12mm 15mm;
+          margin: 12mm 12mm 14mm;
         }
 
         :root {
           --paper: #ffffff;
-          --paper-deep: #f4f4f4;
-          --line: #b9b9b9;
+          --paper-deep: #f8fafc;
+          --ink: #0f172a;
+          --muted: #475569;
+          --cobalt: #1e40af;
+          --cobalt-deep: #1e3a8a;
+          --cobalt-pale: #eff6ff;
+          --sun: #ca8a04;
+          --sun-pale: #fef9c3;
+          --coral: #c2410c;
+          --coral-pale: #ffedd5;
+          --green: #15803d;
+          --green-pale: #f0fdf4;
+          --red: #b91c1c;
+          --red-pale: #fef2f2;
+          --line: #cbd5e1;
+          --line-dark: #94a3b8;
+          --white: #ffffff;
+        }
+
+        *,
+        *::before,
+        *::after {
+          print-color-adjust: exact !important;
+          -webkit-print-color-adjust: exact !important;
         }
 
         body {
-          color: #000000;
-          background: #ffffff;
-          font-size: 10.5pt;
+          color: #0f172a !important;
+          background: #ffffff !important;
+          font-size: 9pt;
+          line-height: 1.45;
         }
 
         .reading-progress,
@@ -1542,130 +1732,1354 @@
         }
 
         .print-only {
-          display: block;
+          display: block !important;
         }
 
         .page-shell {
           display: block;
           width: 100%;
           padding: 0;
+          margin: 0;
         }
 
-        .hero,
-        .content-section,
-        footer {
-          margin: 0 0 8mm;
-          padding: 9mm;
-          border: 1px solid #777777;
-          border-radius: 0;
-          box-shadow: none;
+        main {
+          width: 100%;
+          min-width: 0;
         }
 
+        /* --- HERO SECTION --- */
         .hero {
-          min-height: 245mm;
-          color: #000000;
-          background: #ffffff;
+          position: relative;
+          min-height: auto;
+          margin: 0 0 6mm;
+          padding: 7mm 8mm;
+          border: 1.5px solid #1e293b;
+          border-radius: 0;
+          background: #ffffff !important;
+          box-shadow: none;
+          color: #0f172a !important;
           break-after: page;
+          break-inside: avoid;
         }
 
         .hero::before,
         .hero::after {
-          display: none;
+          display: none !important;
         }
 
-        .hero .eyebrow,
-        .hero-lede,
-        .hero-meta,
-        .decision-mini p {
-          color: #000000;
+        .hero .eyebrow {
+          color: #1e40af !important;
+          font-size: 8pt;
+          font-weight: 800;
+        }
+
+        .hero h1 {
+          max-width: 100%;
+          margin: 4mm 0 3.5mm;
+          font-size: 23pt !important;
+          font-weight: 600;
+          letter-spacing: -0.025em;
+          line-height: 1.15;
+          color: #0f172a !important;
+        }
+
+        .hero-lede {
+          max-width: 100%;
+          margin: 0;
+          color: #334155 !important;
+          font-size: 10.5pt !important;
+          line-height: 1.48;
+        }
+
+        .hero-meta {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 2.5mm;
+          margin-top: 4.5mm;
+        }
+
+        .status-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 1.5mm;
+          padding: 1.2mm 2.8mm;
+          border: 1px solid #94a3b8 !important;
+          border-radius: 999px;
+          color: #0f172a !important;
+          background: #f1f5f9 !important;
+          font-size: 7.2pt;
+          font-weight: 800;
+        }
+
+        .status-chip::before {
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+          background: #2563eb !important;
+          content: "";
+        }
+
+        .decision-strip {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 3mm;
+          margin-top: 5mm;
         }
 
         .decision-mini {
-          border-color: #777777;
-          background: #ffffff;
+          min-height: auto;
+          padding: 2.8mm 3.2mm;
+          border: 1px solid #94a3b8 !important;
+          border-radius: 4px;
+          background: #ffffff !important;
+          color: #0f172a !important;
         }
 
+        .decision-mini .tiny-label {
+          color: #1e40af !important;
+          font-size: 6.8pt;
+          font-weight: 800;
+        }
+
+        .decision-mini strong {
+          display: block;
+          margin: 1.2mm 0 1mm;
+          font-size: 10.5pt;
+          color: #0f172a !important;
+        }
+
+        .decision-mini p {
+          margin: 0;
+          color: #334155 !important;
+          font-size: 8pt;
+          line-height: 1.35;
+        }
+
+        /* --- CONTENT SECTIONS --- */
         .content-section {
-          break-before: page;
-        }
-
-        a {
-          color: #000000;
-          text-decoration: none;
-        }
-
-        a[href^="http"]::after {
-          color: #555555;
-          content: " <" attr(href) ">";
-          font-family: var(--mono);
-          font-size: 7.5pt;
-          overflow-wrap: anywhere;
-        }
-
-        .objective-map,
-        .evidence-grid,
-        .edge-grid,
-        .approval-grid,
-        .validity-gates,
-        .coding-guide,
-        .field-grid,
-        .formula-demo,
-        .fact-row {
-          grid-template-columns: repeat(2, 1fr);
-        }
-
-        .objective,
-        .evidence-card,
-        .edge-card,
-        .approval-card,
-        details,
-        .question-block,
-        .codebook,
-        .frame-card {
-          break-inside: avoid;
+          margin: 0 0 5.5mm;
+          padding: 5.5mm 6.5mm;
+          border: 1px solid #cbd5e1;
+          border-radius: 0;
+          background: #ffffff !important;
           box-shadow: none;
+          break-inside: avoid;
+          break-before: auto;
         }
 
-        details > * {
-          display: block !important;
+        .section-head {
+          display: grid;
+          grid-template-columns: 2.5rem 1fr;
+          gap: 2.8mm;
+          align-items: center;
+          margin-bottom: 3.5mm;
+          break-after: avoid;
         }
 
-        summary::after {
-          display: none;
+        .section-index {
+          width: 2.3rem;
+          height: 2.3rem;
+          border: 1.5px solid #3b82f6 !important;
+          border-radius: 50%;
+          color: #1e40af !important;
+          background: #eff6ff !important;
+          font-size: 7.8pt;
+          font-weight: 800;
+          display: grid;
+          place-items: center;
         }
 
-        .instrument {
-          border-color: #000000;
-          border-radius: 0;
+        h2 {
+          margin: 0;
+          font-size: 14pt !important;
+          font-weight: 600;
+          letter-spacing: -0.02em;
+          line-height: 1.2;
+          color: #0f172a !important;
+          break-after: avoid;
         }
 
-        .instrument-cover {
-          color: #000000;
-          background: #ffffff;
-          border-bottom: 3px solid #000000;
-          border-radius: 0;
-          break-after: page;
+        .section-intro {
+          max-width: 100%;
+          margin: 1mm 0 0;
+          color: #475569 !important;
+          font-size: 8.8pt !important;
+          line-height: 1.4;
         }
 
-        .instrument-cover h2,
-        .instrument-cover p {
-          color: #000000;
+        h3 {
+          margin: 3.5mm 0 1.8mm;
+          font-size: 11pt !important;
+          font-weight: 600;
+          color: #0f172a !important;
+          break-after: avoid;
         }
 
-        .question-block {
-          break-before: page;
+        h4 {
+          margin: 0 0 1.2mm;
+          font-size: 9.2pt !important;
+          font-weight: 700;
+          color: #0f172a !important;
+          break-after: avoid;
         }
 
-        .writing-space {
-          min-height: 120mm;
+        p,
+        li {
+          max-width: 100%;
+          font-size: 8.6pt;
+          line-height: 1.45;
+          color: #1e293b !important;
+        }
+
+        /* --- BIG ANSWER & WHY PANEL --- */
+        .big-answer {
+          display: grid;
+          grid-template-columns: 0.8fr 1.2fr;
+          gap: 3mm;
+          align-items: stretch;
+          margin-bottom: 3mm;
+          break-inside: avoid;
+        }
+
+        .answer-stamp {
+          min-height: auto;
+          padding: 3.5mm 4mm;
+          border: 2px solid #16a34a !important;
+          border-radius: 5px;
+          color: #0f172a !important;
+          background: #f0fdf4 !important;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+        }
+
+        .answer-stamp .tiny-label {
+          color: #15803d !important;
+          font-size: 7pt;
+          font-weight: 800;
+        }
+
+        .answer-stamp .stamp-word {
+          font-size: 19pt !important;
+          line-height: 0.95;
+          color: #14532d !important;
+          margin: 2mm 0;
+        }
+
+        .answer-stamp p {
+          margin: 1.5mm 0 0;
+          color: #166534 !important;
+          font-size: 8.2pt !important;
+          font-weight: 600;
+        }
+
+        .why-panel {
+          padding: 3.2mm 3.8mm;
+          border: 1px solid #cbd5e1 !important;
+          border-radius: 5px;
+          background: #f8fafc !important;
+        }
+
+        .why-panel h3 {
+          margin-top: 0;
+          font-size: 10.2pt;
+          color: #0f172a !important;
+        }
+
+        .why-panel ul,
+        .plain-list {
+          margin: 0;
+          padding-left: 3.8mm;
+        }
+
+        .why-panel li + li,
+        .plain-list li + li {
+          margin-top: 1.2mm;
+        }
+
+        /* --- CALLOUTS --- */
+        .callout {
+          position: relative;
+          margin: 3mm 0;
+          padding: 2.8mm 3.2mm 2.8mm 10.5mm;
+          border: 1px solid #cbd5e1 !important;
+          border-radius: 5px;
+          background: #f8fafc !important;
+          color: #0f172a !important;
+          break-inside: avoid;
+          font-size: 8.4pt;
+        }
+
+        .callout::before {
+          position: absolute;
+          top: 2.4mm;
+          left: 2.4mm;
+          width: 1.7rem;
+          height: 1.7rem;
+          border-radius: 50%;
+          border: 1px solid currentColor;
+          font-size: 0.95rem;
+          font-weight: 700;
+          display: grid;
+          place-items: center;
+        }
+
+        .callout strong {
+          display: block;
+          margin-bottom: 0.8mm;
+          font-size: 8.6pt;
+          color: #0f172a !important;
+        }
+
+        .callout p {
+          margin: 0;
+          color: #334155 !important;
+        }
+
+        .callout.caution {
+          border-color: #fde047 !important;
+          background: #fffbeb !important;
+        }
+
+        .callout.caution::before {
+          color: #713f12 !important;
+          background: #fde047 !important;
+          border-color: #ca8a04 !important;
+          content: "!";
+        }
+
+        .callout.stop {
+          border-color: #fca5a5 !important;
+          background: #fef2f2 !important;
+        }
+
+        .callout.stop::before {
+          color: #ffffff !important;
+          background: #dc2626 !important;
+          border-color: #b91c1c !important;
+          content: "×";
+        }
+
+        .callout.good {
+          border-color: #86efac !important;
+          background: #f0fdf4 !important;
+        }
+
+        .callout.good::before {
+          color: #ffffff !important;
+          background: #16a34a !important;
+          border-color: #15803d !important;
+          content: "✓";
+        }
+
+        /* --- OBJECTIVES & MAPS --- */
+        .objective-map {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 3mm;
+          margin-bottom: 3mm;
+        }
+
+        .study-verdict {
+          display: grid;
+          grid-template-columns: 0.72fr 1.28fr;
+          gap: 3mm;
+          margin-bottom: 3mm;
+          break-inside: avoid;
+        }
+
+        .study-label,
+        .definition-panel,
+        .method-card,
+        .study-option {
+          padding: 3mm;
+          border-radius: 4px;
+          break-inside: avoid;
+        }
+
+        .study-label {
+          min-height: auto;
+          color: #ffffff !important;
+          background: #1e3a8a !important;
+        }
+
+        .study-label strong {
+          margin-top: 2mm;
+          color: #ffffff !important;
+          font-size: 14pt;
+        }
+
+        .study-label p {
+          color: #e2e8f0 !important;
+          font-size: 7.6pt;
+        }
+
+        .definition-panel {
+          background: #eff6ff !important;
+        }
+
+        .definition-panel h3,
+        .method-card h3,
+        .study-option h3 {
+          margin: 0 0 1.2mm;
+          font-size: 9.5pt;
+        }
+
+        .definition-panel p,
+        .method-card p,
+        .method-card li,
+        .study-option p,
+        .study-option li {
+          font-size: 7.4pt;
+        }
+
+        .evidence-snippet {
+          margin: 2mm 0;
+          padding: 2mm 2.5mm;
+          break-inside: avoid;
+        }
+
+        .evidence-snippet blockquote {
+          font-size: 8.2pt;
+        }
+
+        .method-grid {
+          grid-template-columns: repeat(3, 1fr);
+          gap: 2.5mm;
+          margin: 2.5mm 0;
+        }
+
+        .study-option {
+          grid-template-columns: 0.62fr 1.38fr;
+          gap: 2.5mm;
+        }
+
+        .tradeoff-table {
+          margin-top: 2.5mm;
+          font-size: 7pt;
+        }
+
+        .tradeoff-table th,
+        .tradeoff-table td {
+          padding: 1.6mm;
+        }
+
+        .objective {
+          padding: 2.8mm 3.2mm;
+          border: 1px solid #cbd5e1 !important;
+          border-top: 4.5px solid #2563eb !important;
+          border-radius: 4px;
+          background: #ffffff !important;
+          break-inside: avoid;
+        }
+
+        .objective:nth-child(2) {
+          border-top-color: #ea580c !important;
+        }
+
+        .objective:nth-child(3) {
+          border-top-color: #16a34a !important;
+        }
+
+        .objective .number {
+          color: #475569 !important;
+          font-size: 6.6pt;
+          font-weight: 800;
+        }
+
+        .objective h3 {
+          margin: 1.2mm 0 0.8mm;
+          font-size: 10.2pt;
+          color: #0f172a !important;
+        }
+
+        .objective p {
+          margin: 0;
+          font-size: 7.8pt;
+          color: #334155 !important;
+        }
+
+        .do-not-mix {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 2.2mm;
+          margin-top: 2.5mm;
+          break-inside: avoid;
+        }
+
+        .do-not-mix div {
+          padding: 1.8mm 2mm;
+          border: 1px dashed #94a3b8 !important;
+          border-radius: 4px;
+          color: #334155 !important;
+          background: #f8fafc !important;
+          font-size: 7.6pt;
+          text-align: center;
+          font-weight: 600;
+        }
+
+        /* --- PIPELINE & FLOWCHARTS --- */
+        .pipeline-context {
+          display: grid;
+          grid-template-columns: 1fr auto 1fr auto 1fr;
+          gap: 2mm;
+          align-items: center;
+          margin-bottom: 2.5mm;
+          break-inside: avoid;
+        }
+
+        .context-box {
+          padding: 1.8mm 2.2mm;
+          border: 1px solid #cbd5e1 !important;
+          border-radius: 4px;
+          background: #f8fafc !important;
+          font-size: 7.8pt;
+          text-align: center;
+          color: #0f172a !important;
+        }
+
+        .context-box strong {
+          display: block;
+          font-size: 8.2pt;
+          margin-bottom: 0.4mm;
+        }
+
+        .arrow {
+          color: #2563eb !important;
+          font-size: 11pt;
+          font-weight: 900;
+        }
+
+        .pipeline {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 2.2mm;
+          overflow: visible;
+          padding: 0;
+          margin-top: 2mm;
+        }
+
+        .pipeline-node {
+          min-height: auto;
+          padding: 2.2mm 2.6mm;
+          border: 1px solid #cbd5e1 !important;
+          border-radius: 4px;
+          background: #ffffff !important;
+          break-inside: avoid;
+        }
+
+        .pipeline-node .node-id {
+          color: #1e40af !important;
+          font-size: 6.6pt;
+          font-weight: 800;
+        }
+
+        .pipeline-node strong {
+          display: block;
+          margin: 0.8mm 0 0.4mm;
+          font-size: 8.8pt;
+          color: #0f172a !important;
+        }
+
+        .pipeline-node p {
+          margin: 0;
+          color: #475569 !important;
+          font-size: 7.4pt;
+          line-height: 1.3;
+        }
+
+        .pipeline-node::after {
+          display: none !important;
+        }
+
+        .loop-band {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 2.2mm;
+          margin-top: 2.2mm;
+          padding: 2.2mm;
+          border: 1.5px solid #3b82f6 !important;
+          border-radius: 5px;
+          background: #eff6ff !important;
+          break-inside: avoid;
+        }
+
+        .loop-band .pipeline-node {
+          background: #ffffff !important;
+          border-color: #bfdbfe !important;
+        }
+
+        .loop-band .pipeline-node::after {
+          display: none !important;
+        }
+
+        .loop-label {
+          grid-column: 1 / -1;
+          color: #1e40af !important;
+          font-size: 7pt;
+          font-weight: 800;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          margin-bottom: 0.8mm;
+        }
+
+        .fact-row {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 1.8mm;
+          margin-top: 2.5mm;
+          break-inside: avoid;
+        }
+
+        .fact {
+          padding: 1.8mm 2.2mm;
+          border: 1px solid #cbd5e1 !important;
+          border-radius: 4px;
+          background: #f8fafc !important;
+        }
+
+        .fact strong {
+          display: block;
+          color: #1e3a8a !important;
+          font-size: 9pt;
+        }
+
+        .fact span {
+          display: block;
+          margin-top: 0.4mm;
+          color: #475569 !important;
+          font-size: 7pt;
+          line-height: 1.25;
+        }
+
+        /* --- VALIDITY GATES & EQUATIONS --- */
+        .validity-gates {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 2.8mm;
+        }
+
+        .validity-gate {
+          min-height: auto;
+          padding: 2.6mm 3mm;
+          border: 1px solid #cbd5e1 !important;
+          border-radius: 4px;
+          background: #ffffff !important;
+          break-inside: avoid;
+        }
+
+        .validity-gate::before {
+          width: 1.7rem;
+          height: 1.7rem;
+          margin-bottom: 1.8mm;
+          border-radius: 50%;
+          color: #ffffff !important;
+          background: #2563eb !important;
+          border: 1px solid #1d4ed8 !important;
+          font-size: 6.8pt;
+          font-weight: 800;
+          display: grid;
+          place-items: center;
+        }
+
+        .validity-gate h4 {
+          font-size: 8.8pt;
+          color: #0f172a !important;
+          margin-bottom: 0.8mm;
+        }
+
+        .validity-gate p {
+          margin: 0;
+          color: #475569 !important;
+          font-size: 7.8pt;
+          line-height: 1.32;
+        }
+
+        .equation {
+          display: grid;
+          grid-template-columns: 1fr auto 1fr;
+          gap: 2.2mm;
+          align-items: center;
+          margin: 2.5mm 0;
+          padding: 2.2mm 2.8mm;
+          border: 1px solid #fde047 !important;
+          border-radius: 4px;
+          background: #fffbeb !important;
+          break-inside: avoid;
+        }
+
+        .equation .symbol {
+          color: #a16207 !important;
+          font-size: 16pt;
+          text-align: center;
+          font-weight: 900;
+        }
+
+        .equation-block {
+          text-align: center;
+        }
+
+        .equation-block strong {
+          display: block;
+          font-size: 9pt;
+          color: #0f172a !important;
+          font-family: var(--mono);
+        }
+
+        .equation-block span {
+          color: #475569 !important;
+          font-size: 7.2pt;
+        }
+
+        /* --- EVIDENCE CARDS & MATRICES --- */
+        .evidence-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 3mm;
+        }
+
+        .evidence-card {
+          min-height: auto;
+          padding: 3mm 3.5mm;
+          border: 1px solid #cbd5e1 !important;
+          border-radius: 4px;
+          background: #ffffff !important;
+          break-inside: avoid;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .evidence-top {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 1.2mm;
+          align-items: center;
+          margin-bottom: 1.8mm;
+        }
+
+        .badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 0.8mm 2.2mm;
+          border-radius: 999px;
+          color: #1e40af !important;
+          background: #eff6ff !important;
+          border: 1px solid #93c5fd !important;
+          font-size: 6.6pt;
+          font-weight: 800;
+          min-height: auto;
+        }
+
+        .badge.verified {
+          color: #14532d !important;
+          background: #f0fdf4 !important;
+          border-color: #86efac !important;
+        }
+
+        .badge.limit {
+          color: #713f12 !important;
+          background: #fffbeb !important;
+          border-color: #fde047 !important;
+        }
+
+        .badge.reject {
+          color: #7f1d1d !important;
+          background: #fef2f2 !important;
+          border-color: #fca5a5 !important;
+        }
+
+        .evidence-card h3 {
+          margin: 0 0 0.8mm;
+          font-size: 10.5pt;
+          color: #0f172a !important;
+        }
+
+        .evidence-card p {
+          color: #475569 !important;
+          font-size: 8pt;
+          margin: 0 0 1.8mm;
+        }
+
+        .evidence-card dl {
+          display: grid;
+          grid-template-columns: 5.2rem 1fr;
+          gap: 1.2mm 2.2mm;
+          margin: 0;
+          font-size: 7.8pt;
+        }
+
+        .evidence-card dt {
+          color: #64748b !important;
+          font-size: 6.6pt;
+          font-weight: 800;
+          text-transform: uppercase;
+        }
+
+        .evidence-card dd {
+          margin: 0;
+          color: #1e293b !important;
+        }
+
+        .evidence-card .source-link {
+          margin-top: 2.2mm;
+          padding-top: 1.2mm;
+          font-size: 7.2pt;
+          font-weight: 700;
+          color: #1e40af !important;
+          text-decoration: none;
         }
 
         .matrix-wrap {
           overflow: visible;
+          border: 1px solid #cbd5e1 !important;
+          border-radius: 4px;
+          background: #ffffff !important;
+          margin: 2.2mm 0;
+          break-inside: avoid;
         }
 
         table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 7.8pt;
+        }
+
+        th {
+          padding: 1.8mm 2.2mm;
+          border: 1px solid #94a3b8 !important;
+          text-align: left;
+          vertical-align: top;
+          color: #0f172a !important;
+          background: #f1f5f9 !important;
+          font-size: 7pt;
+          font-weight: 800;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+
+        td {
+          padding: 1.8mm 2.2mm;
+          border: 1px solid #cbd5e1 !important;
+          text-align: left;
+          vertical-align: top;
+          color: #1e293b !important;
+          font-size: 7.8pt;
+          line-height: 1.32;
+        }
+
+        .decision-pill {
+          display: inline-block;
+          min-width: 3.8rem;
+          padding: 0.6mm 1.8mm;
+          border-radius: 999px;
+          color: #14532d !important;
+          background: #f0fdf4 !important;
+          border: 1px solid #86efac !important;
+          font-size: 6.4pt;
+          font-weight: 800;
+          text-align: center;
+          text-transform: uppercase;
+        }
+
+        .decision-pill.adapt {
+          color: #713f12 !important;
+          background: #fffbeb !important;
+          border-color: #fde047 !important;
+        }
+
+        .decision-pill.reject {
+          color: #7f1d1d !important;
+          background: #fef2f2 !important;
+          border-color: #fca5a5 !important;
+        }
+
+        .formula-demo {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 2.5mm;
+          break-inside: avoid;
+        }
+
+        .frame-card {
+          padding: 2.2mm 2.6mm;
+          border: 1px solid #cbd5e1 !important;
+          border-radius: 4px;
+          background: #ffffff !important;
+        }
+
+        .prop-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 1.2mm;
+          margin-top: 1.8mm;
+        }
+
+        .prop {
+          display: grid;
+          place-items: center;
+          width: 2rem;
+          height: 2rem;
+          border: 1.5px solid #2563eb !important;
+          border-radius: 4px;
+          color: #1e40af !important;
+          background: #eff6ff !important;
+          font-size: 6.2pt;
+          font-weight: 800;
+        }
+
+        .prop.lost {
+          border-style: dashed !important;
+          border-color: #94a3b8 !important;
+          color: #64748b !important;
+          background: #f8fafc !important;
+          opacity: 0.65;
+        }
+
+        /* --- ACCORDIONS / DETAILS --- */
+        details {
+          display: block !important;
+          border: 1px solid #cbd5e1 !important;
+          border-radius: 4px;
+          background: #ffffff !important;
+          margin: 1.8mm 0;
+          break-inside: avoid;
+        }
+
+        details + details {
+          margin-top: 1.8mm;
+        }
+
+        summary {
+          position: relative;
+          padding: 1.8mm 2.6mm;
+          list-style: none;
+          cursor: default;
+          font-weight: 800;
           font-size: 8.5pt;
+          color: #0f172a !important;
+          background: #f8fafc !important;
+          border-bottom: 1px solid #e2e8f0;
+        }
+
+        summary::after {
+          display: none !important;
+        }
+
+        .details-body {
+          display: block !important;
+          padding: 2.2mm 2.8mm;
+          color: #334155 !important;
+          font-size: 8pt;
+          line-height: 1.4;
+        }
+
+        /* --- EDGE CASES & PROCEDURES --- */
+        .edge-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 2.2mm;
+        }
+
+        .edge-card {
+          padding: 2.2mm 2.8mm;
+          border: 1px solid #cbd5e1 !important;
+          border-radius: 4px;
+          background: #ffffff !important;
+          break-inside: avoid;
+        }
+
+        .edge-card .edge-number {
+          color: #ea580c !important;
+          font-size: 6.6pt;
+          font-weight: 800;
+        }
+
+        .edge-card h3 {
+          margin: 0.8mm 0 1.2mm;
+          font-size: 9.2pt;
+          color: #0f172a !important;
+        }
+
+        .edge-card p {
+          color: #475569 !important;
+          font-size: 7.8pt;
+          margin: 0;
+        }
+
+        .edge-rule {
+          margin-top: 1.2mm;
+          padding-top: 1.2mm;
+          border-top: 1px solid #e2e8f0;
+          color: #475569 !important;
+          font-size: 7.6pt;
+        }
+
+        .edge-rule strong {
+          color: #0f172a !important;
+        }
+
+        .procedure {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+          counter-reset: steps;
+        }
+
+        .procedure::before {
+          top: 0.8rem;
+          bottom: 0.8rem;
+          left: 0.85rem;
+          width: 1.5px;
+          background: #cbd5e1;
+        }
+
+        .procedure li {
+          min-height: auto;
+          padding: 0 0 2.2mm 2.6rem;
+          break-inside: avoid;
+        }
+
+        .procedure li::before {
+          width: 1.8rem;
+          height: 1.8rem;
+          border-radius: 50%;
+          color: #ffffff !important;
+          background: #2563eb !important;
+          border: 1px solid #1d4ed8 !important;
+          font-size: 6.6pt;
+          font-weight: 800;
+          display: grid;
+          place-items: center;
+        }
+
+        .procedure strong {
+          display: block;
+          margin-bottom: 0.4mm;
+          font-size: 8.8pt;
+          color: #0f172a !important;
+        }
+
+        .procedure span {
+          color: #475569 !important;
+          font-size: 7.8pt;
+          line-height: 1.32;
+        }
+
+        /* --- TOOL B PRINTABLE INSTRUMENT --- */
+        .instrument {
+          border: 1.5px solid #0f172a !important;
+          border-radius: 0;
+          background: #ffffff !important;
+          break-inside: avoid;
+        }
+
+        .instrument-cover {
+          padding: 4.5mm 5.5mm;
+          color: #0f172a !important;
+          background: #f8fafc !important;
+          border-bottom: 2px solid #0f172a !important;
+          border-radius: 0;
+          break-after: avoid;
+        }
+
+        .draft-banner {
+          display: inline-block;
+          padding: 0.8mm 2.2mm;
+          border-radius: 999px;
+          color: #713f12 !important;
+          background: #fffbeb !important;
+          border: 1px solid #fde047 !important;
+          font-size: 6.6pt;
+          font-weight: 800;
+          text-transform: uppercase;
+        }
+
+        .instrument-cover h2 {
+          margin: 1.8mm 0 1.2mm;
+          color: #0f172a !important;
+          font-size: 15pt !important;
+        }
+
+        .instrument-cover p {
+          color: #334155 !important;
+          font-size: 8.5pt;
+          margin: 0;
+        }
+
+        .instrument-body {
+          padding: 4.5mm 5.5mm;
+        }
+
+        .field-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 1.8mm 3.5mm;
+          margin-bottom: 2.5mm;
+        }
+
+        .field {
+          min-height: 1.8rem;
+          padding-top: 0.4rem;
+          border-bottom: 1px solid #0f172a;
+        }
+
+        .field span {
+          color: #475569 !important;
+          font-size: 6.6pt;
+          font-weight: 800;
+          text-transform: uppercase;
+        }
+
+        .instructions {
+          margin: 2.5mm 0;
+          padding: 2.5mm 3mm;
+          border: 1px solid #bfdbfe !important;
+          border-radius: 4px;
+          background: #eff6ff !important;
+          break-inside: avoid;
+        }
+
+        .instructions h3 {
+          margin-top: 0;
+          font-size: 9.2pt;
+          color: #1e40af !important;
+        }
+
+        .instructions ol {
+          margin: 0;
+          padding-left: 3.5mm;
+          font-size: 7.8pt;
+          color: #1e3a8a !important;
+        }
+
+        .instructions li + li {
+          margin-top: 0.8mm;
+        }
+
+        .question-block {
+          margin: 3.5mm 0;
+          break-inside: avoid;
+          break-before: auto;
+        }
+
+        .question-kicker {
+          color: #2563eb !important;
+          font-size: 7pt;
+          font-weight: 800;
+          text-transform: uppercase;
+        }
+
+        .question-block h3 {
+          margin: 1.2mm 0 1.2mm;
+          font-size: 10pt !important;
+          color: #0f172a !important;
+        }
+
+        .probe-note {
+          padding: 1.2mm 2.2mm;
+          border-left: 3px solid #f59e0b !important;
+          color: #475569 !important;
+          background: #fffbeb !important;
+          font-size: 7.6pt;
+          line-height: 1.32;
+        }
+
+        .probe-note strong {
+          color: #713f12 !important;
+        }
+
+        .evidence-fields {
+          display: grid;
+          grid-template-columns: 1fr 2fr;
+          gap: 1.8mm;
+          margin-top: 1.8mm;
+        }
+
+        .mini-field {
+          min-height: 1.8rem;
+          padding: 1.2mm 1.8mm;
+          border: 1px solid #94a3b8 !important;
+          border-radius: 4px;
+        }
+
+        .mini-field span {
+          color: #64748b !important;
+          font-size: 6.4pt;
+          font-weight: 800;
+          text-transform: uppercase;
+        }
+
+        .writing-space {
+          min-height: 28mm !important;
+          margin-top: 1.8mm;
+          border: 1px solid #94a3b8 !important;
+          border-radius: 4px;
+          background: repeating-linear-gradient(
+            to bottom,
+            transparent 0,
+            transparent 23px,
+            #cbd5e1 24px
+          ) !important;
+        }
+
+        /* --- CODING GUIDE & APPROVAL GATES --- */
+        .coding-guide {
+          display: grid;
+          grid-template-columns: 0.9fr 1.1fr;
+          gap: 2.5mm;
+          margin-top: 2.5mm;
+          break-inside: avoid;
+        }
+
+        .codebook {
+          padding: 2.5mm 3mm;
+          border: 1px solid #cbd5e1 !important;
+          border-radius: 4px;
+          background: #f8fafc !important;
+          break-inside: avoid;
+        }
+
+        .codebook h3 {
+          margin-top: 0;
+          font-size: 9.6pt;
+          color: #0f172a !important;
+        }
+
+        .orientation-list {
+          display: grid;
+          gap: 1.2mm;
+          margin-top: 1.8mm;
+        }
+
+        .orientation {
+          padding: 1.8mm;
+          border-radius: 4px;
+          background: #ffffff !important;
+          border: 1px solid #e2e8f0 !important;
+          font-size: 7.6pt;
+          color: #334155 !important;
+        }
+
+        .orientation strong {
+          display: block;
+          font-size: 7.8pt;
+          color: #0f172a !important;
+        }
+
+        .approval-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 2.5mm;
+        }
+
+        .approval-card {
+          padding: 2.5mm 3mm;
+          border: 1px solid #cbd5e1 !important;
+          border-radius: 4px;
+          background: #ffffff !important;
+          break-inside: avoid;
+        }
+
+        .approval-card.safe {
+          border-top: 4px solid #16a34a !important;
+        }
+
+        .approval-card.approve {
+          border-top: 4px solid #eab308 !important;
+        }
+
+        .approval-card.adr {
+          border-top: 4px solid #dc2626 !important;
+        }
+
+        .approval-card .tiny-label {
+          font-size: 6.6pt;
+          font-weight: 800;
+          color: #475569 !important;
+        }
+
+        .approval-card h3 {
+          margin: 0.8mm 0 1.2mm;
+          font-size: 10pt;
+          color: #0f172a !important;
+        }
+
+        .approval-card ul {
+          padding-left: 3.2mm;
+          margin: 0;
+          font-size: 7.6pt;
+          color: #334155 !important;
+        }
+
+        /* --- REFERENCES & FOOTER --- */
+        .source-list {
+          display: grid;
+          gap: 1.8mm;
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .source-list li {
+          display: grid;
+          grid-template-columns: 2.2rem 1fr;
+          gap: 2mm;
+          max-width: none;
+          padding: 2mm 2.5mm;
+          border: 1px solid #cbd5e1 !important;
+          border-radius: 4px;
+          background: #ffffff !important;
+          break-inside: avoid;
+          font-size: 7.6pt;
+        }
+
+        .source-number {
+          color: #1e40af !important;
+          font-size: 7pt;
+          font-weight: 900;
+        }
+
+        .source-list cite {
+          display: block;
+          font-style: normal;
+          font-weight: 700;
+          color: #0f172a !important;
+          font-size: 7.8pt;
+        }
+
+        .source-list a {
+          color: #1e40af !important;
+          text-decoration: none;
+          word-break: break-all;
+        }
+
+        .source-list small {
+          display: block;
+          margin-top: 0.8mm;
+          color: #475569 !important;
+          font-size: 7pt;
+        }
+
+        footer {
+          margin: 3.5mm 0 0;
+          padding: 3mm 3.5mm;
+          border-radius: 0;
+          border: 1px solid #94a3b8 !important;
+          color: #0f172a !important;
+          background: #f8fafc !important;
+          break-inside: avoid;
+        }
+
+        footer p {
+          margin: 0;
+          color: #0f172a !important;
+          font-size: 8.2pt !important;
+          line-height: 1.38;
+        }
+
+        a {
+          color: #1e40af !important;
+          text-decoration: none;
         }
       }
     </style>
@@ -1682,18 +3096,19 @@
         </div>
         <ol>
           <li><a href="#decision" data-number="01">Decision</a></li>
-          <li><a href="#objectives" data-number="02">Evaluation legs</a></li>
-          <li><a href="#pipeline" data-number="03">Pipeline</a></li>
-          <li><a href="#exact-questionnaire" data-number="04">Exact questionnaire</a></li>
-          <li><a href="#evidence" data-number="05">Evidence ledger</a></li>
-          <li><a href="#canvas" data-number="06">CANVAS review</a></li>
-          <li><a href="#matrix" data-number="07">Use / adapt / reject</a></li>
-          <li><a href="#edge-cases" data-number="08">Edge cases</a></li>
-          <li><a href="#procedure" data-number="09">Procedure</a></li>
-          <li><a href="#tool-b" data-number="10">Draft Tool B</a></li>
-          <li><a href="#coding" data-number="11">Coding guide</a></li>
-          <li><a href="#actions" data-number="12">Next actions</a></li>
-          <li><a href="#references" data-number="13">References</a></li>
+          <li><a href="#study-design" data-number="02">Nature of the study</a></li>
+          <li><a href="#objectives" data-number="03">Evaluation legs</a></li>
+          <li><a href="#pipeline" data-number="04">Pipeline</a></li>
+          <li><a href="#exact-questionnaire" data-number="05">Exact questionnaire</a></li>
+          <li><a href="#evidence" data-number="06">Evidence ledger</a></li>
+          <li><a href="#canvas" data-number="07">CANVAS review</a></li>
+          <li><a href="#matrix" data-number="08">Use / adapt / reject</a></li>
+          <li><a href="#edge-cases" data-number="09">Edge cases</a></li>
+          <li><a href="#procedure" data-number="10">Procedure</a></li>
+          <li><a href="#tool-b" data-number="11">Draft Tool B</a></li>
+          <li><a href="#coding" data-number="12">Coding guide</a></li>
+          <li><a href="#actions" data-number="13">Next actions</a></li>
+          <li><a href="#references" data-number="14">References</a></li>
         </ol>
         <div class="toc-actions">
           <button class="print-button" type="button" onclick="window.print()">Print / save as PDF</button>
@@ -1786,13 +3201,261 @@
           </div>
         </section>
 
-        <section class="content-section" id="objectives" aria-labelledby="objectives-title">
+        <section class="content-section" id="study-design" aria-labelledby="study-design-title">
           <div class="section-head">
             <div class="section-index">02</div>
             <div>
-              <h2 id="objectives-title">Three instruments. Three different claims.</h2>
+              <h2 id="study-design-title">What kind of study is StoryBuddy?</h2>
               <p class="section-intro">
-                Separating the objects of evaluation is the study's main defense against overstated results.
+                The present label, “quantitative-developmental,” describes only part of the evidence. The
+                study develops a software artifact and evaluates it through one qualitative and two quantitative
+                strands. The label should tell the truth about all three.
+              </p>
+            </div>
+          </div>
+
+          <div class="study-verdict">
+            <div class="study-label">
+              <span class="tiny-label">Recommended classification</span>
+              <strong>Developmental R&amp;D with a QUAN-dominant mixed-methods evaluation</strong>
+              <p>
+                “QUAN-dominant” preserves the team's quantitative emphasis. “Mixed-methods” acknowledges
+                Objective 3's qualitative evidence. “Developmental R&amp;D” names the building and iterative
+                refinement of the system under study.
+              </p>
+            </div>
+            <div class="definition-panel">
+              <h3>The decisive issue is not whether opinions are subjective</h3>
+              <p>
+                Subjective judgments can produce quantitative data when people answer fixed numeric items,
+                as in Tool C's 5-point Likert scale. Conversely, a technically expert opinion remains
+                qualitative when it is collected as open prose and interpreted through content analysis, as in
+                Tool B. The data form, analysis, and intended inference determine the method—not whether a
+                human judgment is involved.
+              </p>
+              <div class="evidence-snippet">
+                <blockquote>
+                  “The study employs a quantitative-developmental research design” and evaluates the system
+                  through expert validation, judge classification, and ISO/IEC 25010 software quality.
+                </blockquote>
+                <cite>Current wording · docs/capstone/methodology.md:24–28</cite>
+              </div>
+              <p>
+                That opening sentence is incomplete because the same methodology later defines Objective 3
+                as open-ended expert responses analysed through content analysis. Calling the whole evaluation
+                purely quantitative would hide a real data strand rather than simplify it.
+              </p>
+            </div>
+          </div>
+
+          <h3>The five objectives that determine the design</h3>
+          <p>
+            The manuscript—not this artifact—is authoritative. Its verbs reveal the evidence structure:
+            Objectives 1–2 establish the built artifact through functional verification; Objectives 3–5
+            evaluate three different objects with three different forms of evidence.
+          </p>
+          <table class="tradeoff-table">
+            <thead><tr><th>Objective</th><th>Manuscript-aligned excerpt</th><th>Evidence type</th><th>Method implication</th></tr></thead>
+            <tbody>
+              <tr><td>1 · Implement</td><td>Implement an orchestrated AI pipeline as StoryBuddy's core processing framework.</td><td>Tool A functional pass/fail records and technical verification</td><td>Quantitative/descriptive engineering evidence</td></tr>
+              <tr><td>2 · Produce</td><td>Produce digital picture books from child-written stories through the implemented pipeline.</td><td>Completed outputs, valid stage records, traces</td><td>Quantitative/descriptive engineering evidence</td></tr>
+              <tr><td>3 · Determine</td><td>Determine generated-book acceptability in presentation quality and classroom suitability through expert validation.</td><td>Open-ended expert responses</td><td>Qualitative content analysis</td></tr>
+              <tr><td>4 · Evaluate</td><td>Evaluate fine-tuned judge classification against human labels using precision, recall, and F1.</td><td>Binary predictions and human reference labels</td><td>Quantitative classification evaluation</td></tr>
+              <tr><td>5 · Evaluate</td><td>Evaluate software quality using applicable ISO/IEC 25010 characteristics.</td><td>Structured 5-point questionnaire</td><td>Quantitative descriptive survey evidence</td></tr>
+            </tbody>
+          </table>
+          <div class="evidence-snippet">
+            <blockquote>
+              “Implement → Produce → Determine → Evaluate → Evaluate.” Objectives 3, 4, and 5 are the three
+              evaluation legs; Objectives 1–2 establish the built artifact.
+            </blockquote>
+            <cite>Objective contract · docs/capstone/research_direction_and_goals.md:69–86</cite>
+          </div>
+
+          <h3>Why a purely quantitative label is not defensible under the current objectives</h3>
+          <div class="method-grid">
+            <article class="method-card qual">
+              <span class="tiny-label">QUAL · Objective 03</span>
+              <h3>Expert meaning, not a scale score</h3>
+              <p>
+                Three purposively selected Arts and Education validators answer open-ended questions. Their
+                responses are segmented into meaning units and coded by criterion and orientation. Counts may
+                summarize the coding, but counting themes does not turn the underlying interpretive evidence
+                into a population survey.
+              </p>
+              <ul>
+                <li>No ordinal response scale</li>
+                <li>No aggregate acceptability score</li>
+                <li>No population estimate from n = 3</li>
+                <li>No causal or comparative inference</li>
+              </ul>
+            </article>
+            <article class="method-card quant">
+              <span class="tiny-label">QUAN · Objective 04</span>
+              <h3>Classification performance</h3>
+              <p>
+                The fine-tuned judge produces binary predictions on a character-disjoint held-out set. Human
+                labels establish the reference outcome; precision, recall, F1, confidence intervals, and
+                inter-annotator agreement produce quantitative evidence.
+              </p>
+              <ul>
+                <li>F1 is the primary reported metric</li>
+                <li>Bootstrap resamples by character</li>
+                <li>Held-out test is read once</li>
+                <li>Deployment gate is separate from the finding</li>
+              </ul>
+            </article>
+            <article class="method-card quant">
+              <span class="tiny-label">QUAN · Objective 05</span>
+              <h3>Perceived software quality</h3>
+              <p>
+                A separate evaluator group answers structured 5-point items derived from applicable ISO/IEC
+                25010 characteristics. Weighted means and standard deviations summarize perceived software
+                quality—not generated-book acceptability and not model accuracy.
+              </p>
+              <ul>
+                <li>Numeric Likert responses</li>
+                <li>Five separate quality characteristics</li>
+                <li>Local questionnaire still needs validation</li>
+                <li>Separate respondents from Tool B</li>
+              </ul>
+            </article>
+          </div>
+
+          <div class="callout caution">
+            <strong>Small samples are not automatically qualitative—but they limit the claims numbers can support.</strong>
+            <p>
+              The three-person expert panel is appropriate for purposive, role-specific expert interpretation.
+              It is not a defensible basis for percentages generalized to teachers, artists, schools, or
+              learners. “Two of three validators” may be reported descriptively; it must not become “67% of
+              experts” or an inferred population acceptance rate.
+            </p>
+          </div>
+
+          <h3>Why mixed methods should be used—and what must be added</h3>
+          <div class="method-grid">
+            <article class="method-card qual">
+              <span class="tiny-label">Explain</span>
+              <h3>QUAL answers “what and why?”</h3>
+              <p>
+                Tool B can identify which page, transition, visual feature, or classroom concern experts found
+                successful or problematic, including disagreements that a single score would erase.
+              </p>
+            </article>
+            <article class="method-card quant">
+              <span class="tiny-label">Measure</span>
+              <h3>QUAN answers “how much?”</h3>
+              <p>
+                Objective 4 measures classifier performance; Objective 5 summarizes perceived system quality.
+                These numbers are reproducible within their defined samples and instruments.
+              </p>
+            </article>
+            <article class="method-card integrate">
+              <span class="tiny-label">Integrate</span>
+              <h3>Together answers “what does it mean?”</h3>
+              <p>
+                A final joint display should place expert themes, judge error patterns, and software-quality
+                results beside one another by claim. Agreement and disagreement are interpreted explicitly;
+                the strands are never collapsed into one composite score.
+              </p>
+            </article>
+          </div>
+
+          <div class="callout good">
+            <strong>Integration is the missing step.</strong>
+            <p>
+              Collecting qualitative and quantitative evidence in one project is not sufficient by itself.
+              NIH mixed-methods guidance requires intentional integration. StoryBuddy can satisfy that
+              requirement with a predeclared joint display and an interpretation section that explains how the
+              strands complement, contradict, or qualify one another. Integration must preserve the
+              non-circularity rule: the runtime judge never scores Objective 3.
+            </p>
+          </div>
+
+          <h3>Three defensible design choices</h3>
+          <div class="option-stack">
+            <article class="study-option recommended">
+              <div>
+                <span class="badge verified">Recommended</span>
+                <h3>Option 1 · QUAN-dominant mixed methods</h3>
+                <p>Developmental R&amp;D with an integrated evaluation and quantitative emphasis.</p>
+              </div>
+              <div>
+                <ul>
+                  <li><strong>Why:</strong> matches all five accepted objectives without pretending Tool B is numeric.</li>
+                  <li><strong>Keep:</strong> open-ended Tool B, F1 evaluation, ISO questionnaire, and strict separation of claims.</li>
+                  <li><strong>Add:</strong> one explicit integration question, joint display, and interpretation procedure.</li>
+                  <li><strong>Benefit:</strong> smallest defensible change and richest explanation at defense.</li>
+                  <li><strong>Cost:</strong> requires disciplined qualitative coding and a second coder for a predeclared subset.</li>
+                </ul>
+              </div>
+            </article>
+            <article class="study-option">
+              <div>
+                <span class="badge limit">Acceptable</span>
+                <h3>Option 2 · Multi-method developmental evaluation</h3>
+                <p>Keep qualitative and quantitative legs separate and do not claim mixed-methods integration.</p>
+              </div>
+              <div>
+                <ul>
+                  <li><strong>Why:</strong> accurately describes the current documents before an integration procedure exists.</li>
+                  <li><strong>Benefit:</strong> minimal methodological editing and clear objective-by-objective reporting.</li>
+                  <li><strong>Cost:</strong> weaker synthesis; a panel may ask why the evidence streams never inform one another.</li>
+                  <li><strong>Use when:</strong> the adviser rejects mixed-methods framing but retains Tool B unchanged.</li>
+                </ul>
+              </div>
+            </article>
+            <article class="study-option">
+              <div>
+                <span class="badge reject">Not recommended now</span>
+                <h3>Option 3 · Pure quantitative redesign</h3>
+                <p>Replace or demote Tool B and make every reported outcome numeric.</p>
+              </div>
+              <div>
+                <ul>
+                  <li><strong>Why someone may choose it:</strong> institutional preference for a single quantitative label.</li>
+                  <li><strong>Required change:</strong> a scored expert instrument, defensible score interpretation, revised Objective 3, new ADR, manuscript reconciliation, and likely a larger or differently composed sample.</li>
+                  <li><strong>Benefit:</strong> simpler design label and easier tabular summary.</li>
+                  <li><strong>Cost:</strong> discards explanatory evidence, creates validation work, and is the highest schedule risk before October.</li>
+                </ul>
+              </div>
+            </article>
+          </div>
+
+          <table class="tradeoff-table">
+            <thead>
+              <tr><th>Decision test</th><th>Option 1 · Mixed</th><th>Option 2 · Multi-method</th><th>Option 3 · Quantitative</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Matches current Objective 3</td><td>Yes</td><td>Yes</td><td>No—must revise it</td></tr>
+              <tr><td>Preserves quantitative emphasis</td><td>Yes, explicitly QUAN-dominant</td><td>Yes, but without integration</td><td>Yes</td></tr>
+              <tr><td>Needs new instrument validation</td><td>No new scored instrument</td><td>No new scored instrument</td><td>Yes</td></tr>
+              <tr><td>Explains why experts judged a book poorly</td><td>Strong</td><td>Strong but separate</td><td>Weak unless prose is retained</td></tr>
+              <tr><td>October schedule risk</td><td>Moderate</td><td>Lowest</td><td>Highest</td></tr>
+              <tr><td>Primary danger</td><td>Claiming “mixed” without integration</td><td>Fragmented conclusions</td><td>Pseudo-precision from three experts</td></tr>
+            </tbody>
+          </table>
+
+          <div class="callout stop">
+            <strong>The artifact cannot change the study contract by itself.</strong>
+            <p>
+              ADR-008 and the approved manuscript remain authoritative. This section is a research-team
+              recommendation. Changing the formal design label, integration procedure, Objective 3, headline
+              criteria, respondent roles, or score interpretation requires adviser approval and the project's
+              documented ADR/amendment process before data collection.
+            </p>
+          </div>
+        </section>
+
+        <section class="content-section" id="objectives" aria-labelledby="objectives-title">
+          <div class="section-head">
+            <div class="section-index">03</div>
+            <div>
+              <h2 id="objectives-title">Three evaluation legs. Three different claims.</h2>
+              <p class="section-intro">
+                Tool A supports Objectives 1–2, while Objective 3 uses Tool B, Objective 4 uses labelled
+                image pairs, and Objective 5 uses Tool C. Separating these objects of evaluation is the
+                study's main defense against overstated results.
               </p>
             </div>
           </div>
@@ -1841,7 +3504,7 @@
 
         <section class="content-section" id="pipeline" aria-labelledby="pipeline-title">
           <div class="section-head">
-            <div class="section-index">03</div>
+            <div class="section-index">04</div>
             <div>
               <h2 id="pipeline-title">How StoryBuddy works</h2>
               <p class="section-intro">
@@ -1947,7 +3610,7 @@
 
         <section class="content-section" id="exact-questionnaire" aria-labelledby="exact-title">
           <div class="section-head">
-            <div class="section-index">04</div>
+            <div class="section-index">05</div>
             <div>
               <h2 id="exact-title">“Can we use an exact questionnaire for validity?”</h2>
               <p class="section-intro">
@@ -2009,7 +3672,7 @@
 
         <section class="content-section" id="evidence" aria-labelledby="evidence-title">
           <div class="section-head">
-            <div class="section-index">05</div>
+            <div class="section-index">06</div>
             <div>
               <h2 id="evidence-title">Evidence ledger</h2>
               <p class="section-intro">
@@ -2149,7 +3812,7 @@
 
         <section class="content-section" id="canvas" aria-labelledby="canvas-title">
           <div class="section-head">
-            <div class="section-index">06</div>
+            <div class="section-index">07</div>
             <div>
               <h2 id="canvas-title">CANVAS: what transfers and what breaks</h2>
               <p class="section-intro">
@@ -2227,7 +3890,7 @@
 
         <section class="content-section" id="matrix" aria-labelledby="matrix-title">
           <div class="section-head">
-            <div class="section-index">07</div>
+            <div class="section-index">08</div>
             <div>
               <h2 id="matrix-title">Use / adapt / reject</h2>
               <p class="section-intro">A compact decision record researchers can defend source by source.</p>
@@ -2254,7 +3917,7 @@
 
         <section class="content-section" id="edge-cases" aria-labelledby="edge-title">
           <div class="section-head">
-            <div class="section-index">08</div>
+            <div class="section-index">09</div>
             <div>
               <h2 id="edge-title">Edge-case laboratory</h2>
               <p class="section-intro">
@@ -2286,7 +3949,7 @@
 
         <section class="content-section" id="procedure" aria-labelledby="procedure-title">
           <div class="section-head">
-            <div class="section-index">09</div>
+            <div class="section-index">10</div>
             <div>
               <h2 id="procedure-title">Recommended evaluation procedure</h2>
               <p class="section-intro">A reproducible path from adviser approval to defensible reporting.</p>
@@ -2309,7 +3972,7 @@
 
         <section class="content-section" id="tool-b" aria-labelledby="tool-b-title">
           <div class="section-head screen-only">
-            <div class="section-index">10</div>
+            <div class="section-index">11</div>
             <div>
               <h2 id="tool-b-title">Printable Tool B draft</h2>
               <p class="section-intro">
@@ -2399,7 +4062,7 @@
               </article>
 
               <article class="question-block">
-                <div class="question-kicker">Closing question · Priorities</div>
+                <div class="question-kicker">Optional non-criterion closing question · Priorities</div>
                 <h3>If the research team could make only three improvements to this book or process, what should be addressed first, and why?</h3>
                 <div class="writing-space" aria-label="Response space for priority improvements"></div>
               </article>
@@ -2414,7 +4077,7 @@
 
         <section class="content-section" id="coding" aria-labelledby="coding-title">
           <div class="section-head">
-            <div class="section-index">11</div>
+            <div class="section-index">12</div>
             <div>
               <h2 id="coding-title">Researcher coding guide</h2>
               <p class="section-intro">The trustworthiness of open-ended evidence depends on what counts as a unit and how decisions are recorded.</p>
@@ -2479,7 +4142,7 @@
 
         <section class="content-section" id="actions" aria-labelledby="actions-title">
           <div class="section-head">
-            <div class="section-index">12</div>
+            <div class="section-index">13</div>
             <div>
               <h2 id="actions-title">Approval gates and next actions</h2>
               <p class="section-intro">The literature review informs a decision; it does not authorize a silent methodology change.</p>
@@ -2536,7 +4199,7 @@
 
         <section class="content-section" id="references" aria-labelledby="references-title">
           <div class="section-head">
-            <div class="section-index">13</div>
+            <div class="section-index">14</div>
             <div>
               <h2 id="references-title">References and evidence notes</h2>
               <p class="section-intro">Direct sources are provided so researchers can verify the claims before manuscript submission.</p>
@@ -2554,6 +4217,7 @@
             <li><span class="source-number">[08]</span><div><cite>Peng, Y. et al. (2024). DreamBench++: A Human-Aligned Benchmark for Personalized Image Generation.</cite><a href="https://arxiv.org/abs/2406.16855">https://arxiv.org/abs/2406.16855</a><small>Complementary identity-preservation benchmark; not Tool B.</small></div></li>
             <li><span class="source-number">[09]</span><div><cite>Zhuang, C. et al. (2025). ViStoryBench: Comprehensive Benchmark Suite for Story Visualization.</cite><a href="https://arxiv.org/abs/2505.24862">https://arxiv.org/abs/2505.24862</a><small>Complementary story-visualization benchmark; not a complete expert questionnaire.</small></div></li>
             <li><span class="source-number">[10]</span><div><cite>Hu, Y. et al. (2023). TIFA: Accurate and Interpretable Text-to-Image Faithfulness Evaluation with Question Answering.</cite><a href="https://arxiv.org/abs/2303.11897">https://arxiv.org/abs/2303.11897</a><small>Complementary image-faithfulness decomposition; not classroom suitability or whole-book acceptability.</small></div></li>
+            <li><span class="source-number">[11]</span><div><cite>Creswell, J. W., Klassen, A. C., Plano Clark, V. L., &amp; Smith, K. C. (2011). Best Practices for Mixed Methods Research in the Health Sciences.</cite><a href="https://obssr.od.nih.gov/research-resources/mixed-methods-research">NIH Office of Behavioral and Social Sciences Research</a><small>Method source for the defining requirement that qualitative and quantitative strands be intentionally integrated, not merely collected in the same project.</small></div></li>
           </ol>
 
           <div class="callout caution">
@@ -2609,6 +4273,21 @@
         update();
         window.addEventListener("scroll", update, { passive: true });
         window.addEventListener("resize", update);
+
+        window.addEventListener("beforeprint", () => {
+          document.querySelectorAll("details").forEach((d) => {
+            d.dataset.wasOpen = d.open ? "true" : "false";
+            d.open = true;
+          });
+        });
+
+        window.addEventListener("afterprint", () => {
+          document.querySelectorAll("details").forEach((d) => {
+            if (d.dataset.wasOpen === "false") {
+              d.open = false;
+            }
+          });
+        });
       })();
     </script>
   </body>
