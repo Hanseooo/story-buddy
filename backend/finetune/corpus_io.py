@@ -236,6 +236,20 @@ class IntakeRecord(BaseModel):
             raise ValueError("selection_frozen_at must be a completed timestamp")
         return self
 
+    @property
+    def pii_already_handled(self) -> bool:
+        """Whether this text still needs the automated pseudonymizer.
+
+        Synthetic text is authored for the corpus and carries no real PII. Donated text is
+        hand-redacted and independently reviewed before intake -- the approval check above
+        refuses to load the record otherwise -- so it arrives already sanitized. Neither needs
+        a second pass, and both are damaged by one: `redact_pii` rewrites PERSON spans to pool
+        names, renaming the cast `declared_characters` is keyed on.
+        """
+        return self.provenance == "synthetic" or bool(
+            self.manual_pii_redaction and self.independent_redaction_review
+        )
+
 
 IMMUTABLE_INTAKE_FIELDS = {
     "story_id",

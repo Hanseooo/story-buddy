@@ -1883,20 +1883,21 @@ def test_check_rosters_analyzes_the_same_text_the_paid_run_will_analyze(tmp_path
     two were never looking at the same bytes. A gate that analyzes different input than the run
     it predicts is not a gate.
     """
-    donated = intake_story(declared_characters=["c0"], declared_non_human=[])
-    donated = donated.model_copy(update={"provenance": "donated", "split": "test"})
+    donated = donated_intake_story(declared_characters=["c0"], declared_non_human=[])
     seen: list[str] = []
 
     def fake_analyze(state):
         seen.append(state.input.redacted_text or state.input.raw_text)
         return {"characters": _extracted(["c0"], [False])}
 
-    with patch.object(build_corpus, "redact_pii", return_value="PSEUDONYMIZED") as mock_redact, \
+    with patch.object(build_corpus, "redact_pii") as mock_redact, \
          patch.object(build_corpus, "analyze", side_effect=fake_analyze):
         build_corpus.check_rosters([donated])
 
-    mock_redact.assert_called_once()
-    assert seen == ["PSEUDONYMIZED"]
+    # Both sides now read the intake text verbatim: donated records are hand-redacted before
+    # intake, so neither the pre-flight nor the graph runs the pseudonymizer over them.
+    mock_redact.assert_not_called()
+    assert seen == [donated.text]
 
 
 def test_readmit_refuses_a_second_readmission_of_the_same_story(tmp_path):
@@ -2736,3 +2737,43 @@ def test_a_rerun_that_only_skips_quarantines_still_exits_nonzero(monkeypatch, ca
 
     assert build_corpus.main(["--fixture", "--out", str(tmp_path)]) == 2
     assert "syn-007" in capsys.readouterr().err
+
+
+def donated_intake_story(**changes):
+    """A donated record with the approvals `IntakeRecord` requires before it will load."""
+    record = {
+        "provenance": "donated",
+        "split": "test",
+        "candidate_role": "primary",
+        "guardian_consent": True,
+        "child_assent": True,
+        "manual_pii_redaction": True,
+        "independent_redaction_review": True,
+        "withdrawal_state": "active",
+        "selection_frozen_at": "2026-01-01T00:00:00+00:00",
+    }
+    record.update(changes)
+    return intake_story(**record)
+
+
+def test_donated_intake_counts_as_pii_already_handled():
+    """`IntakeRecord` refuses to load a donated record unless both redaction attestations are
+    true, so a record that exists at all has been hand-redacted and independently reviewed."""
+    assert donated_intake_story().pii_already_handled is True
+    assert intake_story().pii_already_handled is True
+
+
+def test_initial_state_never_pseudonymizes_a_hand_redacted_donated_story():
+    """Presidio pseudonymizes PERSON spans, renaming the cast `declared_characters` is keyed on.
+
+    It cost 16 of the 30 synthetic records a declared name before `synthetic_no_pii` was added.
+    Donated stories are hand-redacted and independently reviewed before intake, so a second
+    automated pass buys nothing and does the same damage -- to real children's writing, whose
+    declared roster the operator cannot restate under pool pseudonyms they cannot predict.
+    """
+    state = build_corpus._initial_state(donated_intake_story(declared_characters=["Marisol"],
+                                                             declared_non_human=[]))
+
+    assert state.input.synthetic_no_pii is True
+
+

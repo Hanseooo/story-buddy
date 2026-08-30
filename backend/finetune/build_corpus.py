@@ -185,10 +185,13 @@ def _initial_state(story: IntakeRecord) -> StoryMemory:
             raw_text=story.text,
             word_count=word_count(story.text),
             truncated=False,
-            # Authored fiction, so `input_gate` must not rename the declared cast (16 of the 30
-            # synthetic records lost a declared name to the pseudonymizer). Donated intake is not
-            # synthetic and keeps CC-2 redaction.
-            synthetic_no_pii=story.provenance == "synthetic",
+            # `input_gate` must not rename the declared cast: 16 of the 30 synthetic records lost
+            # a declared name to the pseudonymizer. Donated intake reaches here only after manual
+            # redaction and independent review, so it is already sanitized and would take the same
+            # damage -- worse, since the operator cannot restate `declared_characters` under pool
+            # pseudonyms they cannot predict. Moderation is unaffected; only the rewrite is
+            # skipped. See `IntakeRecord.pii_already_handled`.
+            synthetic_no_pii=story.pii_already_handled,
         ),
         style=Style(
             style_preset_id=story.style_preset_id,
