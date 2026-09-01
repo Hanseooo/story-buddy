@@ -157,7 +157,7 @@ def test_scene_constraint_verdict_is_reason_then_structured_contradictions():
         "differences_observed",
         "contradictions",
     ]
-    assert SCENE_CONSTRAINT_PROMPT_VERSION == 3
+    assert SCENE_CONSTRAINT_PROMPT_VERSION == 4
 
 
 def test_scene_constraint_prompt_gates_permanent_setting_features_only():
@@ -533,12 +533,22 @@ def test_no_reference_scene_passes_on_clean_composition_alone():
     assert result["scenes"][0].final_image_ref == attempt.image_ref
 
 
-def test_scene_contradictions_persist_verbatim_and_buy_one_retry():
+def test_scene_contradictions_persist_and_buy_one_retry():
+    """ADR-049 changed the judge's shape, not this behaviour: a real contradiction still lands on
+    the attempt and still costs one retry. It now persists as the RENDERED string rather than a
+    verbatim judge line, because the contract field stays `list[str]` (Decision 2)."""
+    from pipeline.consistency_check import Contradiction
+
     state = _state_with_attempt()
-    contradictions = ["Shadow Wizard faces Ana instead of fleeing away from her."]
     composition = SceneConstraintVerdict(
         differences_observed="The wizard faces the wrong direction.",
-        contradictions=contradictions,
+        contradictions=[
+            Contradiction(
+                subject="Shadow Wizard",
+                required="fleeing away from Ana",
+                observed="facing Ana",
+            ),
+        ],
     )
     with patch(
         "pipeline.consistency_check.judge_attempt",
@@ -547,7 +557,9 @@ def test_scene_contradictions_persist_verbatim_and_buy_one_retry():
         result = consistency_check(state)
 
     attempt = result["scenes"][0].attempts[-1]
-    assert attempt.scene_contradictions == contradictions
+    assert attempt.scene_contradictions == [
+        "Shadow Wizard: facing Ana, but the constraints require fleeing away from Ana"
+    ]
     assert attempt.passed is False
     assert result["scenes"][0].final_image_ref is None
 
@@ -1356,3 +1368,31 @@ def test_the_constraint_judge_is_given_the_original_scene_prompt_not_the_correct
         consistency_check(state)
 
     assert spy.call_args.args[2] == "A dog runs past a house."
+
+
+def test_a_structured_contradiction_renders_to_one_contract_string():
+    """ADR-049. The judge returns `Contradiction(subject, required, observed)`; the frozen contract
+    field `Attempt.scene_contradictions` stays `list[str]`, so each object renders on the way in.
+
+    The shape is the enforcement: a bare axis label like "Quill - framing: medium shot" — which the
+    2026-09-02 syn-001 smoke run produced 5 times on attempts whose identity verdict was completely
+    clean — cannot be expressed, because it has no `observed` to set against a `required`.
+    """
+    from pipeline.consistency_check import Contradiction
+
+    composition = SceneConstraintVerdict(
+        differences_observed="Bok-Bok has a face.",
+        contradictions=[
+            Contradiction(subject="Bok-Bok", required="no face", observed="has a face"),
+        ],
+    )
+    state = _state_with_attempt()
+
+    with patch("pipeline.consistency_check.judge_attempt", return_value=(None, composition)):
+        result = consistency_check(state)
+
+    attempt = result["scenes"][0].attempts[-1]
+    assert attempt.scene_contradictions == [
+        "Bok-Bok: has a face, but the constraints require no face"
+    ]
+    assert attempt.passed is False

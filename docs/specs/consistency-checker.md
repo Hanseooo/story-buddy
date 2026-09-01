@@ -91,10 +91,22 @@ class SceneVerdict(BaseModel):
     text_free: bool = True                       # lettering-suppression §4.1 — asked after uniqueness, BEFORE failure_reasons
     failure_reasons: list[FailureReason] = []    # LAST — the closed 7 (ADR-028)
 
+class Contradiction(BaseModel):                  # ADR-049
+    subject: str                                 # who or what is wrong
+    required: str                                # what the constraints state
+    observed: str                                # what the page shows instead — LAST
+
 class SceneConstraintVerdict(BaseModel):
     differences_observed: str
-    contradictions: list[str] = []
+    contradictions: list[Contradiction] = []
 ```
+
+**ADR-049 — the shape is the enforcement.** v3 asked in prose for "the subject and the violated
+requirement" and got bare axis labels back (`Quill - framing: medium shot`), which
+`concrete_failure` cannot distinguish from a real violation. A label has no `observed` to set
+against a `required`, so it cannot be expressed here at all. `Attempt.scene_contradictions` stays a
+frozen `list[str]`: `render_contradiction` turns each object into one string on the way into Story
+Memory, phrased as an instruction because `correct_prompt` reuses it as a correction clause.
 
 Field order mirrors `VlmVerdict` exactly, then appends. `providers._assert_field_order` enforces
 it on the wire; mapping to `VlmVerdict` is a field-subset copy. `FailureReason` is imported from
