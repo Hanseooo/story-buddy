@@ -101,6 +101,15 @@ char_bible(state) -> dict                                      # pure: select, m
    `state.reference_retry` is set, `char_bible` takes a second, earlier branch (`kid-flow-pause-lifecycle.md`
    §4.5) that overwrites the named character's `canonical_ref_image` unconditionally, whether or not
    it already has one. Invariant 6's skip is for the first-pass path only.
+
+   **Then drop any character no scene contains (ADR-048).** `segment` runs before this node, so
+   `Scene.characters_present` is already populated; a character absent from every scene is never
+   drawn into a page and never judged, so its reference would be bought and never read. This filter
+   is applied **last**, after the cap, for the same reason as invariant 6's — it can only shrink the
+   selection, never slide the window. When the union of `characters_present` is empty across every
+   scene it is **not** applied: an empty union cannot be distinguished from a segmenter that left
+   the field unpopulated, and filtering on it would strip every reference in the book and skip the
+   reveal.
 2. `style_fragment = state.style.prompt_fragment or settings.default_style_fragment`.
 3. For each selected character, `mint_reference(...)` → `(path, verdict, draws)`; accumulate `draws`.
 4. Build the **full** `characters` list: modified entries via `model_copy(update=...)`, everything

@@ -391,6 +391,16 @@ def char_bible(state: StoryMemory) -> dict:
     # filtering first slides the 2-slot window onto c2 when c0 is already referenced, producing
     # three canonical references and breaking the cap.
     selected = [c for c in state.characters[:2] if c.canonical_ref_image is None]
+
+    # ADR-048: `segment` runs before this node, so a character no scene contains is never drawn
+    # into a page and never judged — its reference is bought and never read. Applied AFTER the cap
+    # for the reason above: it can only shrink `selected`, never slide the window.
+    # An empty union is indistinguishable from a segmenter that left the field unpopulated, so it
+    # falls back to the whole capped roster rather than stripping every reference in the book.
+    present = {char_id for scene in state.scenes for char_id in scene.characters_present}
+    if present:
+        selected = [c for c in selected if c.char_id in present]
+
     if not selected:
         return {}
 

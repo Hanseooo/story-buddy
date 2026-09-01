@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.config import STYLE_PRESETS
-from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, CharacterDescription, Cost, Input, RefVerdict, StoryMemory, Style
+from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, CharacterDescription, Cost, Input, RefVerdict, Scene, StoryMemory, Style
 from pipeline.char_bible import (
     HUMANOID_CLOTHING_CLAUSE,
     NON_HUMAN_NEGATIVE,
@@ -1343,3 +1343,44 @@ def test_a_flag_on_one_character_bumps_the_counter_even_when_another_is_a_fresh_
 
     assert result["cost"].ref_mod_retry_count == 1
     assert {call.kwargs["n"] for call in mint.call_args_list} == {2}
+
+
+def _scene(scene_id: str, present: list[str]) -> Scene:
+    return Scene(scene_id=scene_id, text_excerpt="The dog ran.", characters_present=present)
+
+
+def test_char_bible_skips_a_character_no_scene_contains():
+    """ADR-048. `segment` runs before this node, so `characters_present` is already known. A
+    character in no scene is never drawn into a page and never identity-judged, so its canonical
+    reference is provably unused — `syn-003` paid for "the gardener", whose whole appearance in
+    the story is "the gardener never figured out what happened", and it reached zero scenes.
+
+    The filter is applied AFTER the ADR-004 cap, so it only ever shrinks the selection and cannot
+    slide the 2-slot window onto c2.
+    """
+    state = _state([_char("c0", "the dog"), _char("c1", "the gardener")]).model_copy(
+        update={"scenes": [_scene("s0", ["c0"]), _scene("s1", ["c0"])]}
+    )
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()) as mint:
+        result = char_bible(state)
+
+    assert mint.call_count == 1
+    assert [call.args[4] for call in mint.call_args_list] == ["c0"]
+    assert result["characters"][1].canonical_ref_image is None
+
+
+def test_char_bible_references_the_whole_roster_when_no_scene_names_anyone():
+    """The fallback. `characters_present` defaults to an empty list and `segment` never forces it
+    non-empty, so an empty union cannot be distinguished from a segmenter that failed to populate
+    the field. Filtering on it there would strip every reference and silently drop the reveal
+    screen, so the empty union falls back to the pre-ADR-048 behaviour instead.
+    """
+    state = _state([_char("c0", "the dog"), _char("c1", "the cat")]).model_copy(
+        update={"scenes": [_scene("s0", []), _scene("s1", [])]}
+    )
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()) as mint:
+        char_bible(state)
+
+    assert mint.call_count == 2
