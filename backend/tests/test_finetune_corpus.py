@@ -24,7 +24,16 @@ from PIL import Image
 
 from app.config import IMAGE_BUDGET, MAX_STORY_WORDS, MIN_STORY_WORDS, STYLE_PRESETS
 from app.length import clamp_story, word_count
-from contracts.story_memory import Character, Cost, Location, Scene, StoryObject, TimelineEvent
+from contracts.story_memory import (
+    Character,
+    Cost,
+    Location,
+    RefVerdict,
+    Scene,
+    StoryMemory,
+    StoryObject,
+    TimelineEvent,
+)
 from finetune import build_corpus
 from finetune.corpus_io import (
     CorpusError,
@@ -1400,6 +1409,29 @@ def test_initial_state_uses_the_storys_frozen_style_preset():
     assert state.style.prompt_fragment == STYLE_PRESETS["cut_paper"]
 
 
+def test_unchecked_references_counts_a_reference_that_shipped_without_a_verdict():
+    """ADR-050 Decision 4. `ref_verdict: null` is reachable through exactly one path — the judge
+    raised and `char_bible` accepted the draw unchecked — and on 2026-09-02 BOTH of `syn-001`'s
+    references took it. The bundle recorded `ref_retry_count: 0`, which reads as "clean on draw
+    one", and the defect was only found by opening PNGs by hand. A character with no reference at
+    all (ADR-048 skips it) was never gated and is not a dropped check."""
+    memory = StoryMemory(
+        schema_version=1,
+        story_id="s",
+        profile_id="p",
+        classroom_id="c",
+        input={"raw_text": "a story"},
+        characters=[
+            Character(char_id="c0", name="Judged", canonical_ref_image="s/ref-c0-1.png",
+                      ref_verdict=RefVerdict(differences_observed="", matches_description=True)),
+            Character(char_id="c1", name="Unchecked", canonical_ref_image="s/ref-c1-1.png"),
+            Character(char_id="c2", name="Unreferenced"),
+        ],
+    )
+
+    assert build_corpus._unchecked_references(memory) == 1
+
+
 def test_fixture_build_writes_a_complete_zero_cost_bundle_without_external_calls(tmp_path):
     graph = FakeGraph(per_story_images=4)
     supabase = FakeSupabase()
@@ -1436,6 +1468,7 @@ def test_fixture_build_writes_a_complete_zero_cost_bundle_without_external_calls
         "scene_constraint_prompt_version",
         "image_budget",
         "recursion_limit",
+        "unchecked_references",   # ADR-050 Decision 4
     } <= bundle.run_metadata.keys()
     assert {asset.kind for asset in bundle.assets} == {"ref", "scene"}
     assert first["images_spent"] == second["images_spent"] == 0

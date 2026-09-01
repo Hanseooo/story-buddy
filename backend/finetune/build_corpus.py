@@ -146,6 +146,28 @@ class SpendPolicy:
         return IMAGE_BUDGET
 
 
+def _unchecked_references(memory: StoryMemory) -> int:
+    """ADR-050 Decision 4. How many canonical references shipped with no verdict at all.
+
+    Pure read over Story Memory; adds no call. `ref_verdict is None` is reachable through exactly
+    one path — `char_bible`'s judge raised and the draw was accepted unchecked (ADR-025) — and
+    `char_bible` is documented as keeping `None` distinguishable from a FAILING verdict precisely
+    so someone can count it. Nobody did: on 2026-09-02 both of `syn-001`'s references took that
+    path, the bundle recorded `ref_retry_count: 0` (which reads as "clean on draw one"), all 7
+    scenes then failed against a reference that contradicts four of its own stated attributes,
+    and the cause was found by opening PNGs by hand.
+
+    Gated on `canonical_ref_image` so a character that was never referenced at all (ADR-048 skips
+    any character no scene contains) is not counted as a dropped check. Reported, not enforced —
+    a hard gate needs a rate first.
+    """
+    return sum(
+        1
+        for character in memory.characters
+        if character.canonical_ref_image is not None and character.ref_verdict is None
+    )
+
+
 def _budget_basis(policy: SpendPolicy) -> dict:
     basis = {
         "image_size": f'{GENERATED_IMAGE_SIZE["width"]}x{GENERATED_IMAGE_SIZE["height"]}',
@@ -482,6 +504,7 @@ def _bundle(
             "scene_constraint_prompt_version": SCENE_CONSTRAINT_PROMPT_VERSION,
             "image_budget": IMAGE_BUDGET,
             "recursion_limit": RECURSION_LIMIT,
+            "unchecked_references": _unchecked_references(memory),
             "fixture": "true" if fixture else "false",
             **_budget_basis(policy),
             "attempted_calls": (telemetry or {}).get("attempted", 0),

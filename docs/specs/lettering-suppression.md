@@ -223,6 +223,19 @@ clause is what makes it a **correction** rather than the pure re-roll ADR-010 re
    `regenerate` already raises on `IMAGE_BUDGET` (ADR-025 D4). **The fallback, if the rate is bad:
    demote `text_free` to rank-only, the shape `subjects_unique` already sits in.** That is a
    two-line reversal, not a redesign.
+
+   **Measured 2026-09-02 (`data/judge/corpus-smoke-b`, `syn-001`, 21 attempts) — this risk landed.**
+   16 of 21 attempts were judged `text_free=False`. Reading the seven persisted pages: **one true
+   positive** ("Bok" lettered on the s0 weathervane) and **five false positives** with no text
+   anywhere. On those five the judge's own `differences_observed` describes rust mottling on the
+   tin rooster and hatch-mark quills on the hedgehog and never describes lettering — exactly the
+   texture confusion predicted above. One story is not a rate.
+
+   The fallback has **not** been taken, for a reason unrelated to precision: counting attempts that
+   would pass with the gate removed entirely gives **0 of 21**. `text_free` was never once the sole
+   blocker on that run, so demoting it was measured to change nothing. Two levers remain open —
+   the two-line demotion above, or making the judge **quote the text it saw** so a mottle cannot be
+   expressed (ADR-049's shape-over-prose lesson applied here). See ADR-050's escape hatch.
 3. **The judge is not measured on this axis.** Nobody knows its recall for small lettering in a
    corner of a 1024² page. The first real number arrives from the telemetry this spec adds — the
    same bootstrap `subjects_unique` is on.

@@ -244,6 +244,35 @@ def _upload(image: bytes, story_id: str, char_id: str, n: int) -> str:
     return path
 
 
+def _judge_reference(
+    judge_prompt: str, image: bytes, char_id: str, draw: int
+) -> RefVerdict | None:
+    """ADR-050 Decision 1. Two attempts at the SAME already-paid image, then `None`.
+
+    The retry draws nothing — `image` is in hand and already billed, and a judge call is a
+    text/vision request bounded by `providers.CALL_TIMEOUT_SECONDS`. Abandoning the pipeline's
+    highest-leverage gate on one transient stall bought nothing: on 2026-09-02
+    `google/gemma-3-27b-it` stalled on BOTH of `syn-001`'s references, `corpus-smoke-b` shipped
+    two `ref_verdict: null` references nobody looked at, and every page then inherited a rooster
+    with the face its own spec says it does not have.
+
+    ADR-025's asymmetry is untouched: `None` still means accept-unchecked, it is just reached
+    less often. Scoped here and NOT to `consistency_check.judge_attempt` — a bad scene is one
+    page, a bad reference is every page, the same asymmetry `MAX_DRAWS` already encodes against
+    ADR-010's single scene retry.
+    """
+    image_uri = _data_uri(image)
+    for attempt in (1, 2):
+        try:
+            return judge(judge_prompt, [image_uri], RefVerdict)
+        except Exception:
+            log.warning(
+                "char_bible: %s judge raised on draw %d, attempt %d/2",
+                char_id, draw, attempt, exc_info=True,
+            )
+    return None
+
+
 def mint_reference(
     description: CharacterDescription,
     name: str,
@@ -288,15 +317,14 @@ def mint_reference(
         # exists, so there is nothing to ship and no node-level retry.
         image = text_to_image(prompt, negative_extra=negative_extra)
         draws += 1
-        try:
-            verdict = judge(judge_prompt, [_data_uri(image)], RefVerdict)
-        except Exception:
+        verdict = _judge_reference(judge_prompt, image, char_id, draws)
+        if verdict is None:
             # DIFFERENT policy from text_to_image above, deliberately (§4). The artifact exists
             # and is paid for; only the CHECK failed. `None` stays honest and is distinguishable
             # from a FAILED verdict (a non-empty `contradictions`). Do not "fix" this asymmetry.
             log.warning(
                 "char_bible: %s judge failed on draw %d — accepting unchecked, ref_verdict=None",
-                char_id, draws, exc_info=True,
+                char_id, draws,
             )
             return _upload(image, story_id, char_id, n), None, draws
 

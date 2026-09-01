@@ -123,9 +123,8 @@ candidates = []
 for _ in range(MAX_DRAWS):              # 3
     image = text_to_image(prompt)       # hard failure → raises (ADR-025)
     draws += 1
-    try:
-        verdict = judge([_data_uri(image)], RefVerdict)
-    except Exception:                   # the artifact exists; the CHECK failed — see below
+    verdict = _judge_reference(...)     # ADR-050: two attempts at the SAME paid image
+    if verdict is None:                 # the artifact exists; the CHECK failed — see below
         return _upload(image), None, draws
     if not verdict.contradictions and verdict.text_free:  # ADR-034 + lettering-suppression §4.2
         return _upload(image), verdict, draws
@@ -166,11 +165,26 @@ Stated loudly so nobody "fixes" the inconsistency later:
 | Call | Failure | Why |
 |---|---|---|
 | `text_to_image` | **Raises** → job `failed`, `provider_error` | No artifact. There is nothing to ship, so ADR-025 Decision 1 applies as written. |
-| `judge` | **Degrades** → accept the draw, `ref_verdict = None` | The artifact exists and is paid for. The *check* failed. An unchecked reference is precisely what ADR-007 shipped before ADR-028 amended it — it is not a placeholder and not a broken page, so ADR-010's "always something shippable" governs and ADR-025's "never a partial book" rationale does not bite. |
+| `judge` | **Retries once, then degrades** → accept the draw, `ref_verdict = None` | The artifact exists and is paid for. The *check* failed. An unchecked reference is precisely what ADR-007 shipped before ADR-028 amended it — it is not a placeholder and not a broken page, so ADR-010's "always something shippable" governs and ADR-025's "never a partial book" rationale does not bite. |
 
 `ref_verdict = None` stays honest and is distinguishable from a *failed* verdict
 (a non-empty `contradictions`). The cost is real and recorded: for that book, ADR-028's stated
 Phase-1 measurement — the reference generator's true hit rate — silently reverts to unmeasured.
+
+**ADR-050 — the degrade is reached less often, and it is now counted.** `_judge_reference` makes
+**two** attempts at the same already-paid image before returning `None`. The retry draws nothing:
+the image is in hand, a judge call is a text/vision request bounded by
+`providers.CALL_TIMEOUT_SECONDS`, and abandoning this gate on one transient stall bought nothing.
+On 2026-09-02 `google/gemma-3-27b-it` stalled on **both** of `syn-001`'s references, the whole book
+inherited two references nobody had looked at, and all 7 scenes failed against a rooster whose
+canonical image contradicts four of its own stated attributes. ADR-025's asymmetry is unchanged —
+the terminal behaviour above is identical, only rarer — and the retry is scoped to this node, never
+to `consistency_check.judge_attempt`: a bad scene is one page, a bad reference is every page.
+
+Because the degrade is silent by design, `build_corpus._unchecked_references` counts it into each
+bundle's `run_metadata` as `unchecked_references` (characters holding a `canonical_ref_image` with
+no `ref_verdict`). Reported, not enforced. Runs recorded before ADR-050 carry no such field, and
+its absence is not zero.
 
 ### No seed, by necessity
 

@@ -629,14 +629,33 @@ def test_mint_reference_never_draws_more_than_three_times():
     assert draws == 3
 
 
+def test_mint_reference_retries_the_judge_once_on_the_image_it_already_paid_for():
+    """ADR-050 Decision 1. `gemma-3-27b-it` stalled on BOTH references of the 2026-09-02 smoke run
+    and `corpus-smoke-b` shipped two `ref_verdict: null` references nobody looked at; every page
+    then inherited a rooster with a face the spec says it does not have. The image is already
+    drawn and paid for, so a second judge call draws nothing — one transient raise must not cost
+    the whole gate."""
+    passing = _verdict(True, ["dog", "orange"])
+    (_, verdict, draws), t2i, judge_mock, _ = _mint([RuntimeError("openrouter 500"), passing])
+
+    assert verdict is passing
+    assert judge_mock.call_count == 2
+    assert t2i.call_count == 1, "the retry judges the image in hand — it must not redraw"
+    assert draws == 1
+
+
 def test_mint_reference_degrades_to_a_null_verdict_when_the_judge_fails():
     """Spec §4 two-policies table: the artifact exists and is paid for, only the CHECK failed.
-    Accept the draw, return None, and STOP re-rolling — exactly one text_to_image call."""
-    (path, verdict, draws), t2i, _, supabase = _mint(RuntimeError("openrouter 500"))
+    Accept the draw, return None, and STOP re-rolling — exactly one text_to_image call.
+
+    ADR-050 Decision 2 leaves this terminal behaviour alone and only makes it rarer: the draw
+    still ships unchecked once the retry has also raised."""
+    (path, verdict, draws), t2i, judge_mock, supabase = _mint(RuntimeError("openrouter 500"))
 
     assert verdict is None
     assert draws == 1
     assert t2i.call_count == 1
+    assert judge_mock.call_count == 2
     assert path == "story-1/ref-c0-1.png"
     assert _uploaded_bytes(supabase) == b"draw-1-bytes"
 
