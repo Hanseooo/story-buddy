@@ -5,13 +5,14 @@ import tempfile
 from collections import Counter
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.config import SELECTABLE_STYLE_PRESET_IDS
 from finetune.annotation_truth import (
     fetch_adjudicator_ids,
     fetch_annotations,
     fetch_pilot_pairs,
+    is_adjudication,
     resolve_annotations,
 )
 from finetune.corpus_io import (
@@ -19,6 +20,11 @@ from finetune.corpus_io import (
     RunBundle,
     load_completed_bundles,
     reconcile_declared_roster,
+)
+from finetune.dataset_selection import (
+    SYNTHETIC_INTAKE,
+    prepare_dataset_bundles,
+    validate_hard_negative_matches,
 )
 from finetune.manifest import ManifestError, ManifestRecord, local_image_path
 
@@ -32,11 +38,18 @@ PINNED_METADATA_KEYS = {
 
 
 class FreezeReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     dataset_sha256: str
     counts: dict[str, dict[str, int]]
     adjudication_rate: float
     exclusions: list[str]
     pinned_versions: dict[str, str]
+    selected_donated_stories: list[str] = Field(default_factory=list)
+    excluded_donated_stories: list[str] = Field(default_factory=list)
+    replacement_reasons: dict[str, str] = Field(default_factory=dict)
+    selection_sha256: str | None = None
+    artifact_sha256: dict[str, str] = Field(default_factory=dict)
 
 
 def _pinned_versions(bundles: list[RunBundle]) -> dict[str, str]:
@@ -106,10 +119,7 @@ def _validate_bundles(
     donated = Counter(
         bundle.memory.style.style_preset_id for bundle in bundles if bundle.provenance == "donated"
     )
-    if synthetic != expected_synthetic or donated not in (
-        Counter({"gouache": 4, "cel": 3, "cut_paper": 3}),
-        Counter({style: 5 for style in SELECTABLE_STYLE_PRESET_IDS}),
-    ):
+    if synthetic != expected_synthetic or donated != Counter({"gouache": 4, "cel": 3, "cut_paper": 3}):
         raise ManifestError("style allocation drift in production bundles")
     return pair_to_story, char_to_story
 
@@ -137,8 +147,89 @@ def _same_directory(left: Path, right: Path) -> bool:
     )
 
 
-def freeze_dataset(data_dir: Path, out_dir: Path) -> FreezeReport:
-    from finetune.build_dataset import build_dataset, lineage_id
+EVALUATION_ARTIFACTS = (
+    "manifest.train.jsonl",
+    "manifest.val.jsonl",
+    "manifest.test.jsonl",
+    "annotation_agreement.jsonl",
+    "character_slices.json",
+)
+TRAINING_ARTIFACTS = ("train.json", "val.json", "dataset_info.json", "dataset_manifest.json")
+
+
+def _write_evaluation_artifacts(
+    staged: Path,
+    records: list[ManifestRecord],
+    bundles: list[RunBundle],
+    annotations: list[dict],
+    adjudicator_ids: set[str],
+    ignored_pair_ids: set[str],
+) -> dict[str, str]:
+    from finetune.build_dataset import lineage_id
+    from finetune.manifest import write_manifest
+
+    for split in ("train", "val", "test"):
+        write_manifest(staged / f"manifest.{split}.jsonl", [r for r in records if r.split == split])
+    projected = b"".join((staged / f"manifest.{split}.jsonl").read_bytes() for split in ("train", "val", "test"))
+    if projected != (staged / "manifest.jsonl").read_bytes():
+        raise ManifestError("split manifest projections differ from combined manifest order")
+
+    rows_by_pair: dict[str, list[dict]] = {}
+    for row in annotations:
+        if row["pair_id"] not in ignored_pair_ids:
+            rows_by_pair.setdefault(row["pair_id"], []).append(row)
+    agreement = []
+    for record in records:
+        if record.pair_type != "pipeline":
+            continue
+        # `is_adjudication` is the single classifier (annotation_truth.py): a distinct adjudicator
+        # profile OR the solo rater's round 3. Filtering on annotator_id alone counted a round-3
+        # adjudication as a third ordinary label and hard-failed every adjudicated pair.
+        ordinary = sorted(
+            (
+                row for row in rows_by_pair.get(record.pair_id, [])
+                if not is_adjudication(row, adjudicator_ids)
+            ),
+            key=lambda row: (int(row.get("round") or 1), row["annotator_id"]),
+        )
+        if len(ordinary) != 2:
+            raise ManifestError(f"{record.pair_id}: agreement evidence requires two ordinary labels")
+        agreement.append({"pair_id": record.pair_id, "labels": [bool(row["same_character"]) for row in ordinary]})
+    (staged / "annotation_agreement.jsonl").write_text(
+        "".join(json.dumps(row, sort_keys=True) + "\n" for row in agreement), encoding="utf-8"
+    )
+
+    manifest_chars = {record.char_id for record in records}
+    slices = {}
+    for bundle in bundles:
+        non_human = {name.casefold() for name in bundle.declared_non_human or []}
+        for character in bundle.memory.characters:
+            qid = lineage_id(bundle.memory.story_id, character.char_id)
+            if qid in manifest_chars:
+                slices[qid] = (
+                    "non_human" if character.name.casefold() in non_human else "human"
+                )
+    if set(slices) != manifest_chars:
+        raise ManifestError("character slice keys differ from manifest characters")
+    (staged / "character_slices.json").write_text(
+        json.dumps(dict(sorted(slices.items())), indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+    return {
+        name: hashlib.sha256((staged / name).read_bytes()).hexdigest()
+        for name in EVALUATION_ARTIFACTS + TRAINING_ARTIFACTS
+    }
+
+
+def freeze_dataset(
+    data_dir: Path,
+    out_dir: Path,
+    *,
+    donated_intake_path: Path | None = None,
+    selection_path: Path | None = None,
+    synthetic_intake_path: Path = SYNTHETIC_INTAKE,
+) -> FreezeReport:
+    from finetune.build_dataset import build_dataset, pairs_from_memory
     from finetune.materialize_pairs import read_verified_asset
     from finetune.to_llamafactory import write_dataset
 
@@ -146,25 +237,51 @@ def freeze_dataset(data_dir: Path, out_dir: Path) -> FreezeReport:
     bundles = load_completed_bundles(data_dir)
     if not bundles:
         raise ManifestError("no completed run bundles")
-    pair_to_story, char_to_story = _validate_bundles(bundles, data_dir)
+
+    selected_bundles, selection, audit = prepare_dataset_bundles(
+        bundles,
+        donated_intake_path,
+        selection_path,
+        synthetic_intake_path=synthetic_intake_path,
+    )
+
+    pair_to_story, char_to_story = _validate_bundles(selected_bundles, data_dir)
     annotations, adjudicators, pilot_pairs = (
         fetch_annotations(), fetch_adjudicator_ids(), fetch_pilot_pairs()
     )
-    declared_exclusions = {pair_id for bundle in bundles for pair_id in bundle.exclusions}
+    declared_exclusions = {pair_id for bundle in selected_bundles for pair_id in bundle.exclusions}
     unknown_exclusions = declared_exclusions - pair_to_story.keys()
     if unknown_exclusions:
         raise ManifestError(f"unknown exclusions: {sorted(unknown_exclusions)}")
     exclusions = declared_exclusions | (pilot_pairs & pair_to_story.keys())
     ignored_pairs = declared_exclusions | pilot_pairs
-    unknown = {row["pair_id"] for row in annotations} - pair_to_story.keys() - pilot_pairs
+
+    all_loaded_pairs = {p.pair_id for b in bundles for p in pairs_from_memory(b.memory)}
+    unknown = {row["pair_id"] for row in annotations} - all_loaded_pairs - pilot_pairs
     if unknown:
         raise ManifestError(f"pair/memory mismatch: {sorted(unknown)}")
+
+    relevant_annotations = [
+        row for row in annotations
+        if row.get("pair_id") in pair_to_story or row.get("pair_id") in pilot_pairs
+    ]
+
+    matches = {} if selection is None else validate_hard_negative_matches(
+        selected_bundles, selection, annotations, pilot_pairs
+    )
 
     out_dir.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=f".{out_dir.name}.", dir=out_dir.parent) as temporary:
         staged = Path(temporary) / out_dir.name
         staged.mkdir()
-        for bundle in bundles:
+        if selection is not None:
+            if selection_path is None:
+                raise ManifestError("selection path missing during production freeze")
+            frozen_selection = staged / "dataset_selection.json"
+            frozen_selection.write_bytes(selection_path.read_bytes())
+            if hashlib.sha256(frozen_selection.read_bytes()).hexdigest() != audit.selection_sha256:
+                raise ManifestError("selection artifact changed during freeze")
+        for bundle in selected_bundles:
             for asset in bundle.assets:
                 target = Path(local_image_path(asset.storage_path, asset.kind, root=Path("assets")))
                 output = staged / target
@@ -174,26 +291,35 @@ def freeze_dataset(data_dir: Path, out_dir: Path) -> FreezeReport:
                     raise ManifestError(f"frozen asset path conflict: {target.as_posix()}")
                 output.write_bytes(contents)
         records = build_dataset(
-            [(bundle.memory, bundle.split, bundle.provenance) for bundle in bundles],
+            [(bundle.memory, bundle.split, bundle.provenance) for bundle in selected_bundles],
             out_path=staged / "manifest.jsonl",
-            annotation_rows=annotations,
+            annotation_rows=relevant_annotations,
             adjudicator_ids=adjudicators,
             pilot_pair_ids=ignored_pairs,
             image_root=Path("assets"),
-            styles_by_char={
-                lineage_id(bundle.memory.story_id, character.char_id):
-                    bundle.memory.style.style_preset_id
-                for bundle in bundles for character in bundle.memory.characters
-            },
+            hard_negative_matches=matches,
         )
         write_dataset(records, staged)
-        consensus = resolve_annotations(annotations, adjudicators, ignored_pairs)
+        artifact_hashes = _write_evaluation_artifacts(
+            staged,
+            records,
+            selected_bundles,
+            relevant_annotations,
+            adjudicators,
+            ignored_pairs,
+        )
+        consensus = resolve_annotations(relevant_annotations, adjudicators, ignored_pairs)
         report = FreezeReport(
             dataset_sha256=hashlib.sha256((staged / "manifest.jsonl").read_bytes()).hexdigest(),
             counts=_freeze_counts(records, pair_to_story, char_to_story),
             adjudication_rate=sum(item.adjudicated for item in consensus.values()) / max(1, len(consensus)),
             exclusions=sorted(exclusions),
-            pinned_versions=_pinned_versions(bundles),
+            pinned_versions=_pinned_versions(selected_bundles),
+            selected_donated_stories=audit.selected_donated_stories,
+            excluded_donated_stories=audit.excluded_donated_stories,
+            replacement_reasons=audit.replacement_reasons,
+            selection_sha256=audit.selection_sha256,
+            artifact_sha256=artifact_hashes,
         )
         (staged / "freeze_report.json").write_text(
             json.dumps(report.model_dump(mode="json"), indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -204,3 +330,4 @@ def freeze_dataset(data_dir: Path, out_dir: Path) -> FreezeReport:
         else:
             staged.replace(out_dir)
     return report
+

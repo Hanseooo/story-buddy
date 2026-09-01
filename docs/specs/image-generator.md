@@ -27,6 +27,7 @@ the reference — actually fires; today it does not, because the node still call
      Never a placeholder, never a partial book.
   3. `providers.edit_image` is used whenever at least one present character has a
      `canonical_ref_image`; `providers.text_to_image` **only** when there are none.
+     Both shared provider routes pin Fal `image_size` to `1024x768`, including reference-conditioned edits.
   4. `cost.image_count` is bumped **only when fal was actually paid**. A Storage-skip bumps nothing.
   5. A newly appended `Attempt` carries `passed=False`. Only `consistency_check` may write `True`.
   6. `cost` has no reducer — copy and bump, never rebuild from zero (same rule as `char_bible`).

@@ -599,13 +599,18 @@ is not documentation of a good design; it is the blast radius, written down so t
   survives). Job `483056e0` lost the dragon on `s1`/`s2` — `refs=0`, so both drew via
   `text_to_image` **and** then filed unchecked. Those two failures compound and this closes both at
   the source.
-  ⚠️ **(A) was REVERSED on 2026-08-14 by `visual-continuity` §4.3** — the unconditional recovery is
-  gone, because a name in an excerpt does not prove the character should be *visible*, and
-  over-recovery was drawing merely-mentioned characters onto the page. `characters_present` is now
-  the sole cast authority; the regex survives as `_names_character`, rejecting a `visual_direction`
-  that names a character outside the cast. The unchecked-page half of the original failure is now
-  covered instead by §4.6's scene-constraint judge, which runs on every attempt including
-  reference-free ones. See `scene-segmentation.md` → "Name recovery — removed".
+  ⚠️ **(A) was REVERSED on 2026-08-14 by `visual-continuity` §4.3** — the unconditional excerpt
+  recovery is gone, because a name in an excerpt does not prove the character should be *visible*,
+  and over-recovery was drawing merely-mentioned characters onto the page. At that point,
+  `characters_present` was the sole cast authority and `_names_character` rejected a
+  `visual_direction` that named a character outside the cast. The unchecked-page half of the
+  original failure was covered instead by §4.6's scene-constraint judge, which runs on every
+  attempt including reference-free ones. **As of 2026-08-26**, explicit roster names in rendered
+  `visual_direction` that are omitted from `characters_present` are reconciled by appending them in
+  roster order; excerpt-only mentions remain absent, and pronoun/alias residuals go to the scene
+  judge. `_names_character` now detects those explicit direction names for reconciliation; it does
+  not reject them. See `scene-segmentation.md` → "Name recovery — excerpt recovery remains removed;
+  direction reconciliation is retained".
   **(B) `GATING_REASONS`** (`consistency-checker.md`): `passed` gains
   `and not (GATING_REASONS & failure_reasons)` where the set is `{wrong_colour, wrong_body_feature}`.
   Job `483056e0` shipped `s3` and `s4` `passed=True` carrying those exact reasons — a green dragon
@@ -687,9 +692,8 @@ is not documentation of a good design; it is the blast radius, written down so t
   **That adds two checkboxes and two columns the `annotations` table does not have**, and §4 makes this the
   last free moment to add them. Pre-registration: `docs/product/PREREGISTRATION_OBJ4.md` (2026-08-14).
   ⚠️ **Nothing has been run.** No fal draw, no training run, no `llamafactory-cli` invocation;
-  `train_qlora.yaml` ships `model_revision: PIN_THE_EXACT_COMMIT_HASH` as a deliberate tripwire, so CC-7 is
-  unmet until a human fills it. `evaluate.py` omits McNemar's exact test (needs scipy) — the char-clustered
-  bootstrap CI is implemented. Deterministic evidence only.
+  `train_qlora.yaml` pins `model_revision: cc594898137f460bfe9f0759e9844b3ce807cfb5` (satisfying CC-7).
+  `evaluate.py` includes McNemar's exact test and the char-clustered bootstrap CI. Deterministic evidence only.
   **`annotation-surface`'s TABLE is built (2026-08-14) — neither route is.** `0014_annotations.sql` ships the
   `annotations` table `build_dataset.py` already reads, with the closed-taxonomy CHECK, the two GATING columns
   `anatomy_intact`/`text_free` (`judge-finetune.md` §5.2 amendment — the last free moment to add them per §4),

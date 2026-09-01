@@ -52,15 +52,14 @@ export default async function AdjudicatePage() {
           <p className="text-sm text-foreground/70 leading-relaxed max-w-[40ch]">
             No conflicted pairs pending adjudication found.
           </p>
-          <div className="pt-2">
-            <Link
-              href="/research"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-surface font-semibold text-sm hover:bg-primary-deep transition-all neo-shadow-xs"
+          <form action="/auth/signout" method="post" className="pt-2">
+            <button
+              type="submit"
+              className="inline-flex min-h-11 items-center justify-center px-5 py-2.5 rounded-xl bg-primary text-surface font-semibold text-sm hover:bg-primary-deep active:scale-[0.98] transition-all neo-shadow-xs focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
             >
-              <ArrowLeft weight="bold" className="size-4" />
-              Back to Research Lab
-            </Link>
-          </div>
+              Log out
+            </button>
+          </form>
         </div>
       </div>
     );

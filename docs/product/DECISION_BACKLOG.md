@@ -8,8 +8,8 @@ spec edit). Per `CLAUDE.md §1`, architectural decisions are made in their own s
 inline while building a module. When a row is decided: write the ADR, delete the row from
 this file (git keeps the history), and update the affected spec in the same change.
 
-**ADR numbering.** ADRs are append-only sequential; the last assigned number is **ADR-042**, so the
-next free number is **ADR-043**. Numbers are assigned *when the ADR is written*, not reserved here —
+**ADR numbering.** ADRs are append-only sequential; the last assigned number is **ADR-044**, so the
+next free number is **ADR-045**. Numbers are assigned *when the ADR is written*, not reserved here —
 the items below use stable `D-*` ids instead, because the write order can shift.
 
 **Two non-decisions, recorded so they don't get reopened by reflex:**
@@ -87,12 +87,6 @@ ADR-025 Decision 4 (breaker bound). Adds `awaiting_confirm` to `jobs.status` (a 
 precede the reveal, so the node, migration and endpoint land together with it. `character-bible` §5 and
 `story-memory-contract` are corrected in the same change.)*
 
----
-
-## Tier 2d — opened by the bookshelf failure-card pass (2026-08-12)
-
-- **D-J · Child-initiated job deletion.** The shelf shows every failed job forever
-  (`auth-routes-and-account-ux` §7.2 accepted this as "permanent debris"). It is now *collapsed*
 the items below use stable `D-*` ids instead, because the write order can shift.
 
 **Two non-decisions, recorded so they don't get reopened by reflex:**
@@ -169,23 +163,6 @@ ADR-025 Decision 4 (breaker bound). Adds `awaiting_confirm` to `jobs.status` (a 
 `POST /jobs/{id}/confirm`. **Nothing is built in Phase 1:** CC-1 requires the Phase-2 char-ref moderation gate to
 precede the reveal, so the node, migration and endpoint land together with it. `character-bible` §5 and
 `story-memory-contract` are corrected in the same change.)*
-
----
-
-## Tier 2d — opened by the bookshelf failure-card pass (2026-08-12)
-
-- **D-J · Child-initiated job deletion.** The shelf shows every failed job forever
-  (`auth-routes-and-account-ux` §7.2 accepted this as "permanent debris"). It is now *collapsed*
-  behind a `Didn't finish (n)` `<details>`, which needs no decision — but an actual delete control
-  does, on three counts. **(1)** S3 §4.1 grants students `SELECT` on `jobs` and nothing else; a
-  delete needs either a new `DELETE` policy or a service-role `DELETE /jobs/{id}` — an
-  authorization-surface change. **(2)** `0013_jobs_research_metrics.sql` puts `usd_estimate`,
-  `scenes_*` and `langfuse_trace_url` on the row, so a hard delete destroys Objective-4 data;
-  soft-delete is a schema change with the same gate. **(3)** Deletion interacts with the teacher's
-  *Didn't finish* section (`teacher-review-and-approval` §4.8) — does a child's delete hide the row
-  from their teacher? Decide as one ADR, or close it as "collapsed is enough".
-
----
 
 ## Tier 2e — opened by `annotation-surface` (2026-08-14) — **closed**
 
@@ -571,7 +548,7 @@ now fully specified.
 3. **`rate-limiting`** — must not silently slip past any public deployment.
 
 **No open decision blocks Phase 1 or Phase 2 entry.** Tiers 1, 2, 2b, 2c, and 3 are all resolved. D-I closed
-2026-07-31 → ADR-029; it builds in Phase 2 behind the moderation gate (now live). **Open rows: D-J** (Tier 2d,
-non-blocking), **D-K + D-L** (Tier 2e, 2026-08-14 — these two *do* block, jointly, the two
+2026-07-31 → ADR-029; it builds in Phase 2 behind the moderation gate (now live). **D-J is resolved by ADR-044.**
+**Open rows:** D-K + D-L (Tier 2e, 2026-08-14 — these two *do* block, jointly, the two
 `annotation-surface` frontend routes and therefore the Phase 2.5 labelling weekend), and **D-N**
 (moderation replacement consistency). D-O was resolved by ADR-042 (2026-08-17).

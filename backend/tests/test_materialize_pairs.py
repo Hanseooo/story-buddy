@@ -1,12 +1,16 @@
 import hashlib
 from io import BytesIO
+from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from PIL import Image
 
 from contracts.story_memory import Attempt, Character, Input, Scene, StoryMemory
+from finetune import materialize_pairs as mp
 from finetune.build_dataset import mint_pair_id
 from finetune.corpus_io import AssetRecord, CorpusError, RunBundle
+from finetune.manifest import ManifestError
 from finetune.materialize_pairs import materialize
 
 
@@ -364,3 +368,100 @@ def test_database_failure_removes_only_objects_uploaded_by_this_invocation(tmp_p
 
     assert supabase.bucket.objects[row["canonical_storage_path"]] == existing_reference
     assert supabase.bucket.removals == [[row["scene_storage_path"]]]
+
+
+def test_materialize_cli_filters_bundles_before_remote_call(tmp_path):
+    b1 = bundle(tmp_path)
+    b2 = bundle(tmp_path)
+    b2 = b2.model_copy(update={"memory": b2.memory.model_copy(update={"story_id": "story-2"})})
+
+    fake_supabase = FakeSupabase()
+    donated_path = Path("intake/donated.json")
+    selection_path = Path("intake/selection.json")
+
+    with (
+        patch("finetune.materialize_pairs.load_completed_bundles", return_value=[b1, b2]),
+        patch("finetune.materialize_pairs.prepare_dataset_bundles", return_value=([b1], None, None)) as mock_prep,
+        patch("finetune.materialize_pairs.get_supabase_client", return_value=fake_supabase) as mock_get_client,
+        patch("finetune.materialize_pairs._materialize", return_value=mp.MaterializeSummary(1, 0, 1)) as mock_mat,
+    ):
+        ret = mp.main([
+            "--data", str(tmp_path),
+            "--donated-intake", str(donated_path),
+            "--selection", str(selection_path),
+        ])
+
+    assert ret == 0
+    mock_prep.assert_called_once_with([b1, b2], donated_path, selection_path)
+    mock_get_client.assert_called_once()
+    mock_mat.assert_called_once_with([b1], fake_supabase, mp.BUCKET, tmp_path, pilot=False)
+
+
+def test_materialize_cli_fails_before_supabase_when_preparation_fails(tmp_path):
+    with (
+        patch("finetune.materialize_pairs.load_completed_bundles", return_value=[]),
+        patch("finetune.materialize_pairs.prepare_dataset_bundles", side_effect=ManifestError("preparation failed")),
+        patch("finetune.materialize_pairs.get_supabase_client") as mock_get_client,
+    ):
+        ret = mp.main([
+            "--data", str(tmp_path),
+            "--donated-intake", "donated.json",
+            "--selection", "selection.json",
+        ])
+
+    assert ret == 1
+    mock_get_client.assert_not_called()
+
+
+def test_pilot_materialization_marks_every_row_as_pilot(tmp_path):
+    supabase = FakeSupabase()
+
+    summary = mp.materialize([bundle(tmp_path)], supabase, pilot=True)
+
+    assert summary.pairs_inserted == 1
+    assert supabase.pairs.inserted[0][0]["is_pilot"] is True
+
+
+def test_pilot_materialization_cannot_reflag_an_existing_production_pair(tmp_path):
+    run_bundle = bundle(tmp_path)
+    supabase = FakeSupabase()
+    mp.materialize([run_bundle], supabase)
+    supabase.pairs.rows = list(supabase.pairs.inserted[0])
+
+    # A pair id that already exists as production data must not be silently reclassified as
+    # pilot: `is_pilot` decides whether the pair reaches training, so flipping it after the
+    # fact would either leak pilot labels into the dataset or delete real ones from it.
+    with pytest.raises(CorpusError, match="pair conflict"):
+        mp.materialize([run_bundle], supabase, pilot=True)
+
+
+def test_pilot_cli_bypasses_dataset_selection_and_flags_the_rows(tmp_path):
+    b1 = bundle(tmp_path)
+    b2 = bundle(tmp_path)
+    b2 = b2.model_copy(update={"memory": b2.memory.model_copy(update={"story_id": "story-2"})})
+    fake_supabase = FakeSupabase()
+
+    with (
+        patch("finetune.materialize_pairs.load_completed_bundles", return_value=[b1, b2]),
+        patch("finetune.materialize_pairs.prepare_dataset_bundles") as mock_prep,
+        patch("finetune.materialize_pairs.get_supabase_client", return_value=fake_supabase),
+        patch("finetune.materialize_pairs._materialize", return_value=mp.MaterializeSummary(2, 0, 2)) as mock_mat,
+    ):
+        ret = mp.main(["--data", str(tmp_path), "--pilot"])
+
+    assert ret == 0
+    mock_prep.assert_not_called()
+    mock_mat.assert_called_once_with([b1, b2], fake_supabase, mp.BUCKET, tmp_path, pilot=True)
+
+
+@pytest.mark.parametrize("flag", ["--donated-intake", "--selection"])
+def test_pilot_cli_refuses_production_selection_arguments(tmp_path, flag):
+    with (
+        patch("finetune.materialize_pairs.load_completed_bundles") as mock_load,
+        patch("finetune.materialize_pairs.get_supabase_client") as mock_get_client,
+    ):
+        ret = mp.main(["--data", str(tmp_path), "--pilot", flag, "selection.json"])
+
+    assert ret == 1
+    mock_load.assert_not_called()
+    mock_get_client.assert_not_called()

@@ -6,7 +6,9 @@
 """
 import hashlib
 import json
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,15 +19,21 @@ from contracts.story_memory import (
     Character,
     CharacterDescription,
     Input,
+    RefVerdict,
     Scene,
     Style,
     StoryMemory,
 )
 from finetune import build_dataset as bd
 from finetune import annotation_truth as at
-from finetune import evaluate as ev
 from finetune import freeze_dataset as fd
 from finetune.corpus_io import AssetRecord, CorpusError, RunBundle, write_bundle
+
+from finetune.dataset_selection import (
+    DatasetSelection,
+    DatasetSelectionAudit,
+    validate_hard_negative_matches,
+)
 from finetune.manifest import ManifestError
 
 
@@ -413,7 +421,12 @@ def test_cli_exposes_reconcile_and_freeze_modes(tmp_path):
         assert bd.main(
             ["--freeze", "--data", str(tmp_path / "data"), "--out", str(tmp_path / "frozen")]
         ) == 0
-    freeze.assert_called_once_with(tmp_path / "data", tmp_path / "frozen")
+    freeze.assert_called_once_with(
+        tmp_path / "data",
+        tmp_path / "frozen",
+        donated_intake_path=None,
+        selection_path=None,
+    )
 
 
 # --- polarity ------------------------------------------------------------------------------
@@ -461,7 +474,7 @@ def test_build_records_carries_the_gating_booleans_and_the_split_metadata():
     assert rec1.failure_reasons == ["wrong_colour"]
     # Local dataset paths, NOT the raw Storage paths — LLaMA-Factory resolves `images` against
     # the filesystem and `build_corpus` writes the flattened name (manifest.local_image_path).
-    assert rec1.images == ["data/judge/ref/story_1_ref-quill.png", "data/judge/scene/story_1_s1-2.png"]
+    assert rec1.images == ["data/judge/corpus/ref/story_1_ref-quill.png", "data/judge/corpus/scene/story_1_s1-2.png"]
     assert rec2.same_character is True
     assert rec2.label is False
 
@@ -526,62 +539,82 @@ def test_negative_with_no_ticked_reason_still_renders_prose():
     assert bd.render_rationale(False, [], []).strip()
 
 
+def manifest_record(
+    pair_id: str,
+    char_id: str,
+    ref_image: str,
+    scene_image: str,
+    *,
+    split: str = "train",
+    provenance: str = "synthetic",
+    pair_type: str = "pipeline",
+    ref_verdict_status: str = "unverified",
+) -> bd.ManifestRecord:
+    return bd.ManifestRecord(
+        pair_id=pair_id,
+        char_id=char_id,
+        split=split,  # type: ignore[arg-type]
+        provenance=provenance,  # type: ignore[arg-type]
+        pair_type=pair_type,  # type: ignore[arg-type]
+        images=[ref_image, scene_image],
+        differences_observed="ok",
+        same_character=True,
+        label=False,
+        failure_reasons=[],
+        ref_verdict_status=ref_verdict_status,  # type: ignore[arg-type]
+    )
+
+
 # --- constructed negatives -----------------------------------------------------------------
 
-def test_constructed_negatives_are_train_only_cross_character_and_labelled_different():
-    pipeline_records = [
-        bd.ManifestRecord(
-            pair_id=f"p{i}", char_id=cid, split="train", provenance="synthetic", pair_type="pipeline",
-            images=[f"ref/{cid}.png", f"scene/{cid}.png"], differences_observed="ok",
-            same_character=True, label=False, failure_reasons=[],
-        )
-        for i, cid in enumerate(["a", "b", "c"])
+def test_constructed_negatives_use_every_natural_target_scene():
+    records = [
+        manifest_record("ref", "story-a:a", "ref/a.png", "scene/a.webp"),
+        manifest_record("target-1", "story-b:b", "ref/b.png", "scene/b-1.webp"),
+        manifest_record("target-2", "story-b:b", "ref/b.png", "scene/b-2.webp"),
     ]
-    made = bd.constructed_records(pipeline_records)
-    assert made
-    for rec in made:
-        assert rec.split == "train" and rec.pair_type == "constructed"
-        assert rec.same_character is False and rec.label is True
-        assert rec.char_id in rec.images[0]          # the reference decides the split owner
-        assert rec.char_id not in rec.images[1]      # the scene came from a different character
+    made = bd.constructed_records(records, {"story-a:a": "story-b:b"})
+    assert [row.images for row in made] == [
+        ["ref/a.png", "scene/b-1.webp"],
+        ["ref/a.png", "scene/b-2.webp"],
+    ]
+    for row in made:
+        assert row.split == "train"
+        assert row.pair_type == "constructed"
+        assert row.same_character is False
+        assert row.label is True
+        assert row.char_id == "story-a:a"
 
 
 def test_constructed_negatives_ignore_val_and_test_records():
-    recs = [
-        bd.ManifestRecord(
-            pair_id=f"p{i}", char_id=cid, split=split, provenance=prov, pair_type="pipeline",
-            images=[f"ref/{cid}.png", f"scene/{cid}.png"], differences_observed="ok",
-            same_character=True, label=False, failure_reasons=[],
-        )
-        for i, (cid, split, prov) in enumerate([("a", "val", "synthetic"), ("b", "test", "donated")])
-    ]
-    assert bd.constructed_records(recs) == []
-
-
-def test_constructed_negatives_never_cross_style_presets():
     records = [
-        bd.ManifestRecord(
-            pair_id=f"p-{char_id}",
-            char_id=char_id,
-            split="train",
-            provenance="synthetic",
-            pair_type="pipeline",
-            images=[f"ref/{char_id}.png", f"scene/{char_id}.webp"],
-            differences_observed="ok",
-            same_character=True,
-            label=False,
-        )
-        for char_id in ("cel-a", "cel-b", "gouache-a")
+        manifest_record("ref", "story-a:a", "ref/a.png", "scene/a.webp", split="val"),
+        manifest_record("target", "story-b:b", "ref/b.png", "scene/b.webp", split="test"),
     ]
+    with pytest.raises(ManifestError, match="natural training records"):
+        bd.constructed_records(records, {"story-a:a": "story-b:b"})
 
-    made = bd.constructed_records(
-        records,
-        {"cel-a": "cel", "cel-b": "cel", "gouache-a": "gouache"},
-    )
 
-    assert len(made) == 1
-    assert made[0].char_id == "cel-a"
-    assert "cel-b" in made[0].images[1]
+def test_constructed_negatives_rejects_missing_reference_or_target():
+    records = [
+        manifest_record("ref", "story-a:a", "ref/a.png", "scene/a.webp"),
+    ]
+    with pytest.raises(ManifestError, match="target character"):
+        bd.constructed_records(records, {"story-a:a": "story-b:b"})
+
+
+def test_build_dataset_requires_hard_negative_matches_when_constructed_enabled():
+    with pytest.raises(ManifestError, match="hard-negative selection is required"):
+        bd.build_dataset(
+            [],
+            out_path=Path("tmp.jsonl"),
+            add_constructed=True,
+            annotation_rows=[],
+            adjudicator_ids=set(),
+            pilot_pair_ids=set(),
+            hard_negative_matches=None,
+        )
+
 
 
 # --- the supabase seam ---------------------------------------------------------------------
@@ -612,31 +645,8 @@ def test_fetch_pilot_pairs_reads_research_pairs_table():
     client.table.assert_called_with("research_pairs")
 
 
-# --- evaluate.py metrics -------------------------------------------------------------------
-
-def test_prf1_scores_the_different_character_class():
-    #                 labels                     predictions
-    labels = [True, True, True, False, False]
-    preds = [True, True, False, True, False]
-    p, r, f1 = ev.prf1(labels, preds)
-    assert p == pytest.approx(2 / 3)
-    assert r == pytest.approx(2 / 3)
-    assert f1 == pytest.approx(2 / 3)
-
-
-def test_prf1_is_zero_rather_than_undefined_when_nothing_is_predicted_positive():
-    assert ev.prf1([True, False], [False, False]) == (0.0, 0.0, 0.0)
-
-
-def test_bootstrap_resamples_by_char_id_not_by_pair():
-    labels = [True] * 4 + [False] * 4
-    preds = [True] * 4 + [False] * 4
-    char_ids = ["a", "a", "a", "a", "b", "b", "b", "b"]
-    lo, hi = ev.bootstrap_f1_ci(labels, preds, char_ids, resamples=50, seed=0)
-    assert 0.0 <= lo <= hi <= 1.0
-
-
 # --- build_dataset manifest & stats --------------------------------------------------------
+
 
 def test_build_dataset_creates_manifest_and_stats(tmp_path):
     import json
@@ -703,10 +713,55 @@ def test_freeze_dataset_writes_complete_immutable_artifacts_from_annotation_trut
         "test.json",
         "dataset_info.json",
         "freeze_report.json",
+        "manifest.train.jsonl",
+        "manifest.val.jsonl",
+        "manifest.test.jsonl",
+        "annotation_agreement.jsonl",
+        "character_slices.json",
     } <= {path.name for path in out_dir.iterdir()}
     assert json.loads((out_dir / "freeze_report.json").read_text(encoding="utf-8")) == first.model_dump(
         mode="json"
     )
+
+
+def test_freeze_writes_hashed_evaluation_projections_without_identity_fields(tmp_path):
+    data_dir = tmp_path / "corpus"
+    bundle = freeze_bundle(data_dir)
+    pair_id = bd.pairs_from_memory(bundle.memory)[0].pair_id
+    annotations = rows(
+        pair_id,
+        {"same_character": True},
+        {"same_character": False},
+        {"same_character": True, "annotator_id": "adjudicator"},
+    )
+    out_dir = tmp_path / "freeze"
+
+    with (
+        patch.object(fd, "fetch_annotations", return_value=annotations),
+        patch.object(fd, "fetch_adjudicator_ids", return_value={"adjudicator"}),
+        patch.object(fd, "fetch_pilot_pairs", return_value=set()),
+    ):
+        report = fd.freeze_dataset(data_dir, out_dir)
+
+    combined = (out_dir / "manifest.jsonl").read_bytes()
+    assert (out_dir / "manifest.train.jsonl").read_bytes() == combined
+    assert (out_dir / "manifest.val.jsonl").read_bytes() == b""
+    assert (out_dir / "manifest.test.jsonl").read_bytes() == b""
+    agreement = [json.loads(line) for line in (out_dir / "annotation_agreement.jsonl").read_text().splitlines()]
+    assert agreement == [{"pair_id": pair_id, "labels": [True, False]}]
+    assert "annotator_id" not in (out_dir / "annotation_agreement.jsonl").read_text()
+    assert json.loads((out_dir / "character_slices.json").read_text()) == {
+        "story-freeze:char-freeze": "human"
+    }
+    for name in (
+        "manifest.train.jsonl",
+        "manifest.val.jsonl",
+        "manifest.test.jsonl",
+        "annotation_agreement.jsonl",
+        "character_slices.json",
+    ):
+        assert report.artifact_sha256[name] == hashlib.sha256((out_dir / name).read_bytes()).hexdigest()
+
 
 
 def test_freeze_dataset_rejects_bundle_without_declared_roster(tmp_path):
@@ -763,6 +818,150 @@ def test_freeze_dataset_ignores_pilot_annotations_outside_the_corpus(tmp_path):
 
     assert report.adjudication_rate == 0.0
     assert report.exclusions == []
+
+
+def test_freeze_dataset_checks_hard_negative_timestamp_against_excluded_annotations(tmp_path):
+    data_dir = tmp_path / "corpus"
+    selected = freeze_bundle(data_dir)
+    excluded_memory = selected.memory.model_copy(
+        update={
+            "story_id": "excluded-story",
+            "scenes": [
+                selected.memory.scenes[0].model_copy(
+                    update={"final_image_ref": "excluded-story/scene.webp"}
+                )
+            ],
+        }
+    )
+    excluded = selected.model_copy(update={"memory": excluded_memory})
+    selected_pair = bd.pairs_from_memory(selected.memory)[0].pair_id
+    excluded_pair = bd.pairs_from_memory(excluded.memory)[0].pair_id
+    frozen_at = datetime.now(timezone.utc) - timedelta(hours=1)
+    selection = DatasetSelection(
+        hard_negatives_frozen_at=frozen_at,
+        hard_negative_matches=[],
+        donated_replacements=[],
+    )
+    selected_annotations = [
+        {
+            **row,
+            "created_at": (frozen_at + timedelta(minutes=1)).isoformat(),
+        }
+        for row in rows(selected_pair, {"same_character": True}, {"same_character": True})
+    ]
+    annotations = [
+        *selected_annotations,
+        {
+            **rows(excluded_pair, {"same_character": True})[0],
+            "created_at": (frozen_at - timedelta(minutes=1)).isoformat(),
+        },
+    ]
+
+    def validate_timestamp(_bundles, current_selection, annotation_rows, pilot_pair_ids):
+        return validate_hard_negative_matches(
+            [], current_selection, annotation_rows, pilot_pair_ids
+        )
+
+    with (
+        patch.object(
+            fd,
+            "prepare_dataset_bundles",
+            return_value=([selected], selection, DatasetSelectionAudit([], [], {}, "hash")),
+        ),
+        patch.object(fd, "load_completed_bundles", return_value=[selected, excluded]),
+        patch.object(fd, "fetch_annotations", return_value=annotations),
+        patch.object(fd, "fetch_adjudicator_ids", return_value=set()),
+        patch.object(fd, "fetch_pilot_pairs", return_value=set()),
+        patch.object(fd, "validate_hard_negative_matches", side_effect=validate_timestamp),
+        pytest.raises(ManifestError, match="must precede all non-pilot annotations"),
+    ):
+        bd.freeze_dataset(data_dir, tmp_path / "freeze")
+
+
+def test_freeze_dataset_snapshots_exact_selection_artifact(tmp_path):
+    data_dir = tmp_path / "corpus"
+    selected = freeze_bundle(data_dir)
+    pair_id = bd.pairs_from_memory(selected.memory)[0].pair_id
+    selection_path = tmp_path / "dataset_selection.json"
+    selection_bytes = b'{"controlled": true}\r\n'
+    selection_path.write_bytes(selection_bytes)
+    selection_hash = hashlib.sha256(selection_bytes).hexdigest()
+    selection = DatasetSelection(
+        hard_negatives_frozen_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        hard_negative_matches=[],
+        donated_replacements=[],
+    )
+    out_dir = tmp_path / "freeze"
+
+    with (
+        patch.object(
+            fd,
+            "prepare_dataset_bundles",
+            return_value=(
+                [selected],
+                selection,
+                DatasetSelectionAudit([], [], {}, selection_hash),
+            ),
+        ),
+        patch.object(
+            fd,
+            "fetch_annotations",
+            return_value=rows(pair_id, {"same_character": True}, {"same_character": True}),
+        ),
+        patch.object(fd, "fetch_adjudicator_ids", return_value=set()),
+        patch.object(fd, "fetch_pilot_pairs", return_value=set()),
+        patch.object(fd, "validate_hard_negative_matches", return_value={}),
+    ):
+        report = bd.freeze_dataset(
+            data_dir,
+            out_dir,
+            selection_path=selection_path,
+        )
+
+    assert (out_dir / "dataset_selection.json").read_bytes() == selection_bytes
+    assert report.selection_sha256 == selection_hash
+
+
+def test_freeze_dataset_rejects_selection_snapshot_hash_mismatch(tmp_path):
+    data_dir = tmp_path / "corpus"
+    selected = freeze_bundle(data_dir)
+    pair_id = bd.pairs_from_memory(selected.memory)[0].pair_id
+    selection_path = tmp_path / "dataset_selection.json"
+    selection_path.write_bytes(b'{"changed": true}\n')
+    selection = DatasetSelection(
+        hard_negatives_frozen_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        hard_negative_matches=[],
+        donated_replacements=[],
+    )
+    out_dir = tmp_path / "freeze"
+
+    with (
+        patch.object(
+            fd,
+            "prepare_dataset_bundles",
+            return_value=(
+                [selected],
+                selection,
+                DatasetSelectionAudit([], [], {}, "validated-before-change"),
+            ),
+        ),
+        patch.object(
+            fd,
+            "fetch_annotations",
+            return_value=rows(pair_id, {"same_character": True}, {"same_character": True}),
+        ),
+        patch.object(fd, "fetch_adjudicator_ids", return_value=set()),
+        patch.object(fd, "fetch_pilot_pairs", return_value=set()),
+        patch.object(fd, "validate_hard_negative_matches", return_value={}),
+        pytest.raises(ManifestError, match="selection artifact changed during freeze"),
+    ):
+        bd.freeze_dataset(
+            data_dir,
+            out_dir,
+            selection_path=selection_path,
+        )
+
+    assert not out_dir.exists()
 
 
 def test_freeze_dataset_rejects_changed_existing_output(tmp_path):
@@ -860,11 +1059,42 @@ def test_freeze_dataset_revalidates_local_asset_inventory(tmp_path, drift):
         bd.freeze_dataset(data_dir, tmp_path / "freeze")
 
 
-def test_freeze_dataset_rejects_production_style_allocation_drift(tmp_path):
+def test_freeze_dataset_rejects_production_without_controlled_inputs(tmp_path):
     data_dir = tmp_path / "corpus"
     freeze_bundle(data_dir, fixture=False)
-    with pytest.raises(ManifestError, match="style allocation drift"):
+    with pytest.raises(ManifestError, match="production dataset preparation requires"):
         bd.freeze_dataset(data_dir, tmp_path / "freeze")
+
+
+def test_freeze_dataset_cli_passes_controlled_inputs(tmp_path):
+    report = fd.FreezeReport(
+        dataset_sha256="hash123",
+        counts={},
+        adjudication_rate=0.0,
+        exclusions=[],
+        pinned_versions={},
+        selected_donated_stories=["don-001"],
+        excluded_donated_stories=["don-011"],
+        replacement_reasons={"don-001": "withdrawal"},
+        selection_sha256="sel-sha",
+    )
+    with patch("finetune.build_dataset.freeze_dataset", return_value=report) as mock_freeze:
+        ret = bd.main([
+            "--freeze",
+            "--data", str(tmp_path / "corpus"),
+            "--out", str(tmp_path / "freeze"),
+            "--donated-intake", "donated.json",
+            "--selection", "selection.json",
+        ])
+
+    assert ret == 0
+    mock_freeze.assert_called_once_with(
+        tmp_path / "corpus",
+        tmp_path / "freeze",
+        donated_intake_path=Path("donated.json"),
+        selection_path=Path("selection.json"),
+    )
+
 def test_build_dataset_computes_accurate_statistics(tmp_path):
     import json
     out = tmp_path / "manifest.jsonl"
@@ -898,3 +1128,225 @@ def test_build_dataset_computes_accurate_statistics(tmp_path):
     assert stats["failure_reasons"] == {"wrong_colour": 1}
     assert stats["adjudication_rate"] == 0.5
     assert len(stats["dataset_sha256"]) == 64
+
+
+def test_candidate_report_cli(tmp_path, capsys):
+    data_dir = tmp_path / "corpus"
+    freeze_bundle(data_dir, fixture=True)
+    with (
+        patch("finetune.build_dataset.get_supabase_client", side_effect=RuntimeError("remote not allowed")),
+        patch("finetune.build_dataset.fetch_annotations", side_effect=RuntimeError("remote not allowed")),
+        patch("finetune.build_dataset.freeze_dataset", side_effect=RuntimeError("freeze not allowed")),
+    ):
+        ret = bd.main(["--candidate-report", "--data", str(data_dir)])
+
+    assert ret == 0
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+    assert isinstance(report, list)
+    assert len(report) == 1
+    assert report[0]["reference_char_id"] == "story-freeze:char-freeze"
+
+
+# --- reference verification status (ADR-028) -----------------------------------------------
+
+def test_build_records_stamps_the_reference_verification_status_on_every_pair():
+    """`char_bible` ships `ref_verdict=None` when the judge call itself fails. That anchor is
+    what every pair built on it is measured against, so the status travels with the pair."""
+    unchecked = memory()
+    pairs = bd.pairs_from_memory(unchecked)
+    keyed = {
+        pair.pair_id: bd.Consensus(
+            same_character=True, failure_reasons=[], anatomy_intact=True, text_free=True,
+        )
+        for pair in pairs
+    }
+    records = bd.build_records(unchecked, "train", "synthetic", keyed, set())
+    assert [r.ref_verdict_status for r in records] == ["unverified", "unverified"]
+
+    checked = memory()
+    checked.characters[0].ref_verdict = RefVerdict(
+        differences_observed="", matches_description=True, contradictions=[], text_free=True,
+    )
+    records = bd.build_records(checked, "train", "synthetic", keyed, set())
+    assert [r.ref_verdict_status for r in records] == ["passed", "passed"]
+
+
+def test_constructed_negatives_inherit_the_reference_characters_status():
+    """The constructed pair's anchor is the REFERENCE character's image, so it carries the
+    reference's status — not the target's, whose reference is never shown to the model."""
+    records = [
+        manifest_record("ref", "story-a:a", "ref/a.png", "scene/a.webp", ref_verdict_status="unverified"),
+        manifest_record("target", "story-b:b", "ref/b.png", "scene/b.webp", ref_verdict_status="passed"),
+    ]
+    made = bd.constructed_records(records, {"story-a:a": "story-b:b"})
+    assert [row.ref_verdict_status for row in made] == ["unverified"]
+
+
+def test_build_dataset_statistics_count_unverified_reference_anchors(tmp_path):
+    out = tmp_path / "manifest.jsonl"
+    mem = memory()
+    pairs = bd.pairs_from_memory(mem)
+    raw_annotations = [
+        {"pair_id": pair.pair_id, "annotator_id": annotator, "same_character": True, "failure_reasons": []}
+        for pair in pairs
+        for annotator in ("a1", "a2")
+    ]
+    with patch("finetune.build_dataset.fetch_annotations", return_value=raw_annotations), \
+         patch("finetune.build_dataset.fetch_adjudicator_ids", return_value=set()), \
+         patch("finetune.build_dataset.fetch_pilot_pairs", return_value=set()):
+        bd.build_dataset([(mem, "train", "synthetic")], out_path=out, add_constructed=False)
+
+    stats = json.loads((tmp_path / "dataset_manifest.json").read_text(encoding="utf-8"))
+    assert stats["reference_verification"] == {"unverified": 2}
+
+
+# --- single-rater test-retest (rounds) ------------------------------------------------------
+# One human labels every pair twice, cold (annotation-surface.md §4.1, settled 2026-07-29:
+# this capstone has exactly one rater, permanently). The two rounds are the two ordinary
+# labels the consensus machinery already expects; a third round is the adjudication.
+
+
+def solo_rows(pair_id, *specs, annotator="solo"):
+    """Rows that all carry the SAME annotator_id and differ only by `round`."""
+    out = []
+    for i, spec in enumerate(specs):
+        row = {"pair_id": pair_id, "annotator_id": annotator, "round": i + 1,
+               "failure_reasons": [], "anatomy_intact": True, "text_free": True}
+        row.update(spec)
+        out.append(row)
+    return out
+
+
+def test_two_rounds_from_one_rater_are_the_two_ordinary_labels():
+    resolved = bd.resolve_annotations(
+        solo_rows("p1", {"same_character": True}, {"same_character": True}),
+        set(), set(),
+    )
+    assert resolved["p1"].same_character is True
+    assert resolved["p1"].adjudicated is False
+
+
+def test_round_three_by_the_same_rater_adjudicates_a_test_retest_disagreement():
+    with pytest.raises(ManifestError, match="unresolved conflict"):
+        bd.resolve_annotations(
+            solo_rows("p1", {"same_character": True}, {"same_character": False}),
+            set(), set(),
+        )
+
+    resolved = bd.resolve_annotations(
+        solo_rows(
+            "p1",
+            {"same_character": True},
+            {"same_character": False, "failure_reasons": ["wrong_clothing"]},
+            {"same_character": False, "failure_reasons": ["wrong_colour"]},
+        ),
+        set(), set(),
+    )
+    # The round-3 row is authoritative, exactly as a third annotator's row would be.
+    assert resolved["p1"].same_character is False
+    assert resolved["p1"].adjudicated is True
+    assert resolved["p1"].failure_reasons == ["wrong_colour"]
+
+
+def test_round_three_is_rejected_when_the_two_rounds_agreed():
+    with pytest.raises(ManifestError, match="ordinary annotators agreed, but adjudicator row exists"):
+        bd.resolve_annotations(
+            solo_rows(
+                "p1",
+                {"same_character": True},
+                {"same_character": True},
+                {"same_character": False},
+            ),
+            set(), set(),
+        )
+
+
+def test_the_same_round_twice_from_one_rater_is_a_duplicate_not_a_second_label():
+    with pytest.raises(ManifestError, match="duplicate"):
+        bd.resolve_annotations(
+            [
+                {"pair_id": "p1", "annotator_id": "solo", "round": 1, "same_character": True},
+                {"pair_id": "p1", "annotator_id": "solo", "round": 1, "same_character": True},
+            ],
+            set(), set(),
+        )
+
+
+def test_one_rater_one_round_is_still_an_incomplete_pair():
+    with pytest.raises(ManifestError, match="<2 ordinary annotations"):
+        bd.resolve_annotations(solo_rows("p1", {"same_character": True}), set(), set())
+
+
+def test_reconcile_pair_status_derives_every_state_from_rounds_of_one_rater():
+    annotation_rows = [
+        {"pair_id": "pending", "annotator_id": None},
+        *solo_rows("partial", {"same_character": True}),
+        *solo_rows("complete", {"same_character": True}, {"same_character": True}),
+        *solo_rows("conflicted", {"same_character": True}, {"same_character": False}),
+        *solo_rows(
+            "adjudicated",
+            {"same_character": True},
+            {"same_character": False},
+            {"same_character": False},
+        ),
+    ]
+    assert bd.reconcile_pair_status(annotation_rows, set()) == {
+        "pending": "pending",
+        "partial": "partially_annotated",
+        "complete": "complete",
+        "conflicted": "conflicted",
+        "adjudicated": "adjudicated",
+    }
+
+
+def test_a_distinct_adjudicator_profile_still_overrides_round_one_and_two():
+    """Two genuine annotators never materialized, but the mechanism must not be removed."""
+    resolved = bd.resolve_annotations(
+        [
+            {"pair_id": "p1", "annotator_id": "a1", "round": 1, "same_character": True},
+            {"pair_id": "p1", "annotator_id": "a2", "round": 1, "same_character": False},
+            {"pair_id": "p1", "annotator_id": "adj", "round": 1, "same_character": False,
+             "failure_reasons": ["wrong_species"]},
+        ],
+        {"adj"}, set(),
+    )
+    assert resolved["p1"].adjudicated is True
+    assert resolved["p1"].failure_reasons == ["wrong_species"]
+
+
+def test_rows_without_a_round_column_are_treated_as_round_one():
+    """Pre-0018 rows carry no `round` key; they must keep resolving unchanged."""
+    resolved = bd.resolve_annotations(
+        rows("p1", {"same_character": True}, {"same_character": True}), set(), set()
+    )
+    assert resolved["p1"].same_character is True
+
+
+def test_freeze_agreement_evidence_pairs_round_one_against_round_two(tmp_path):
+    """annotation_agreement.jsonl is the intra-rater statistic's only evidence: exactly the
+    two ordinary rounds, in round order, with the round-3 adjudication excluded."""
+    data_dir = tmp_path / "corpus"
+    run_bundle = freeze_bundle(data_dir)
+    pair_id = bd.pairs_from_memory(run_bundle.memory)[0].pair_id
+    annotations = solo_rows(
+        pair_id,
+        {"same_character": False, "failure_reasons": ["wrong_colour"]},
+        {"same_character": True},
+        {"same_character": True},
+    )
+    out_dir = tmp_path / "freeze"
+
+    with (
+        patch.object(fd, "fetch_annotations", return_value=annotations),
+        patch.object(fd, "fetch_adjudicator_ids", return_value=set()),
+        patch.object(fd, "fetch_pilot_pairs", return_value=set()),
+    ):
+        report = bd.freeze_dataset(data_dir, out_dir)
+
+    assert report.adjudication_rate == 1.0
+    [evidence] = [
+        json.loads(line)
+        for line in (out_dir / "annotation_agreement.jsonl").read_text().splitlines()
+    ]
+    assert evidence == {"pair_id": pair_id, "labels": [False, True]}

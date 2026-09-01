@@ -757,15 +757,15 @@ def test_segment_rejects_an_unknown_visible_character():
             segment(_state(raw="Someone crossed the room."))
 
 
-def test_segment_rejects_direction_naming_a_roster_character_outside_the_cast():
+def test_segment_reconciles_direction_characters_in_roster_order(caplog):
     raw = SceneSegmentation(
         scenes=[
             ExtractedScene(
                 start=0,
                 end=0,
-                characters_present=["Ana"],
+                characters_present=["Maya"],
                 visual_direction=_direction(
-                    key_action="Ana watches the Shadow Wizard flee away from her.",
+                    key_action="Shadow Wizard and Ana greet Maya.",
                     viewpoint="wide view",
                     framing="wide shot",
                 ),
@@ -774,11 +774,19 @@ def test_segment_rejects_direction_naming_a_roster_character_outside_the_cast():
     )
     state = _state(
         raw="Ana watched him flee.",
-        characters=[Character(char_id="c0", name="Ana"), Character(char_id="c1", name="Shadow Wizard")],
+        characters=[
+            Character(char_id="c0", name="Ana"),
+            Character(char_id="c1", name="Shadow Wizard"),
+            Character(char_id="c2", name="Maya"),
+        ],
     )
-    with patch("pipeline.segment.segment_scenes", return_value=raw):
-        with pytest.raises(ValueError, match="outside visible cast"):
-            segment(state)
+    with patch("pipeline.segment.segment_scenes", return_value=raw), caplog.at_level(logging.INFO):
+        scene = segment(state)["scenes"][0]
+
+    assert scene.characters_present == ["c2", "c0", "c1"]
+    assert len(scene.characters_present) == len(set(scene.characters_present))
+    assert "reconciled visual_direction character 'Ana'" in caplog.text
+    assert "reconciled visual_direction character 'Shadow Wizard'" in caplog.text
 
 
 SWORD = StoryObject(
@@ -1112,6 +1120,19 @@ def test_the_prompt_asks_for_pronoun_only_beats():
         segment_scenes(units, [_char("c0", "the dragon")], [], [], [])
 
     assert "he, she, it or they" in mock_provider.call_args.args[0]
+
+
+def test_segment_prompt_enforces_visible_cast_and_direction_alignment():
+    units = ["Quill looked for lost things.", "He found Bok-Bok."]
+    stub = SceneSegmentation(scenes=[_r(0, 1, chars=[])])
+    with patch("pipeline.segment.structured_text", return_value=stub) as mock_provider:
+        segment_scenes(units, [_char("c0", "Quill"), _char("c1", "Bok-Bok")], [], [], [])
+
+    prompt = mock_provider.call_args.args[0]
+    assert "complete intended-visible cast" in prompt
+    assert "Every roster character named or depicted anywhere in visual_direction" in prompt
+    assert "must be listed in characters_present using its exact roster name" in prompt
+    assert "If a character is remembered, mentioned, or off-screen, do not name or depict that character in visual_direction" in prompt
 
 
 def test_segmentation_prompt_names_the_shared_scene_ceiling():

@@ -146,6 +146,7 @@ describe("Tier 2: Server Action Unit Tests", () => {
           anatomy_intact: true,
           text_free: true,
           failure_reasons: [],
+          round: 1,
         }
       );
     });
@@ -166,6 +167,7 @@ describe("Tier 2: Server Action Unit Tests", () => {
           anatomy_intact: false,
           text_free: true,
           failure_reasons: ["wrong_clothing", "wrong_style"],
+          round: 1,
         }
       );
     });
@@ -426,6 +428,100 @@ describe("Tier 2: Server Action Unit Tests", () => {
 
       const res = await getNextPair();
       expect(res).toEqual({ error: "Failed to load annotation queue" });
+    });
+  });
+
+  // The capstone has ONE rater, permanently (settled 2026-07-29). Round 2 is the
+  // same person's second cold pass and supplies the second ordinary label that
+  // annotation_truth.resolve_annotations requires. See annotation-surface.md 4.1.
+  describe("Test-retest rounds", () => {
+    it("writes the served round on the annotation row", async () => {
+      mockAdminSelect.mockReturnValue({
+        eq: vi.fn().mockResolvedValue({ count: 2, error: null }),
+      });
+
+      await submitAnnotation({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true, round: 2 });
+      expect(mockAnnotationsUpsert).toHaveBeenCalledWith(
+        expect.objectContaining({ pair_id: "pair-1", round: 2 })
+      );
+    });
+
+    it("defaults to round 1 when the caller omits the round", async () => {
+      mockAdminSelect.mockReturnValue({
+        eq: vi.fn().mockResolvedValue({ count: 1, error: null }),
+      });
+
+      await submitAnnotation({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true });
+      expect(mockAnnotationsUpsert).toHaveBeenCalledWith(
+        expect.objectContaining({ round: 1 })
+      );
+    });
+
+    it("refuses to write the adjudication round from the annotate surface", async () => {
+      const res = await submitAnnotation({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true, round: 3 });
+      expect(res.error).toBe("Invalid state: annotate accepts round 1 or 2 only");
+      expect(mockAnnotationsUpsert).not.toHaveBeenCalled();
+    });
+
+    it("serves round 1 and reports it while any pair lacks a first pass", async () => {
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({
+        data: [{ id: "pair-1", canonical_storage_path: "c.png", scene_storage_path: "s.png" }],
+        error: null,
+      }));
+      mockAdminCreateSignedUrl
+        .mockResolvedValueOnce({ data: { signedUrl: "https://signed.url/c" }, error: null })
+        .mockResolvedValueOnce({ data: { signedUrl: "https://signed.url/s" }, error: null });
+
+      const res = await getNextPair();
+      expect(res.round).toBe(1);
+      expect(res.pair?.id).toBe("pair-1");
+    });
+
+    it("opens round 2 only after round 1 covers the entire queue", async () => {
+      const queuePage = [
+        { id: "pair-1", canonical_storage_path: "c1.png", scene_storage_path: "s1.png" },
+        { id: "pair-2", canonical_storage_path: "c2.png", scene_storage_path: "s2.png" },
+      ];
+      // pair-1 has its first pass; pair-2 does not, so round 1 is NOT exhausted.
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [{ pair_id: "pair-1", round: 1 }], error: null }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: queuePage, error: null }));
+      mockAdminCreateSignedUrl
+        .mockResolvedValue({ data: { signedUrl: "https://signed.url/x" }, error: null });
+
+      const firstPass = await getNextPair();
+      expect(firstPass.round).toBe(1);
+      expect(firstPass.pair?.id).toBe("pair-2");
+
+      vi.clearAllMocks();
+      mockAdminCreateSignedUrl.mockResolvedValue({ data: { signedUrl: "https://signed.url/x" }, error: null });
+      mockGetUser.mockResolvedValue({ data: { user: { id: "user-researcher-1" } }, error: null });
+      mockProfilesSelect.mockResolvedValue({ data: { role: "researcher", is_adjudicator: false }, error: null });
+
+      // Now both pairs have a first pass. Round 1 is exhausted; round 2 opens.
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({
+        data: [{ pair_id: "pair-1", round: 1 }, { pair_id: "pair-2", round: 1 }],
+        error: null,
+      }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: queuePage, error: null }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: queuePage, error: null }));
+
+      const secondPass = await getNextPair();
+      expect(secondPass.round).toBe(2);
+      expect(["pair-1", "pair-2"]).toContain(secondPass.pair?.id);
+    });
+
+    it("reports queue complete once both rounds cover every pair", async () => {
+      const queuePage = [{ id: "pair-1", canonical_storage_path: "c1.png", scene_storage_path: "s1.png" }];
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({
+        data: [{ pair_id: "pair-1", round: 1 }, { pair_id: "pair-1", round: 2 }],
+        error: null,
+      }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: queuePage, error: null }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: queuePage, error: null }));
+
+      const res = await getNextPair();
+      expect(res.pair).toBeNull();
     });
   });
 });

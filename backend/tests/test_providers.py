@@ -90,6 +90,41 @@ def test_chat_accepts_fields_in_schema_order():
     assert verdict.same_character is True
 
 
+def test_judge_with_metadata_returns_verdict_confidence_and_latency_without_changing_judge():
+    import math
+    parsed = _Verdict(differences_observed="none", same_character=True)
+    completion = _fake_completion(parsed, '{"differences_observed":"none","same_character":true}')
+    completion.choices[0].logprobs = MagicMock()
+    completion.choices[0].logprobs.content = [
+        MagicMock(token='"same_character"', logprob=-0.01),
+        MagicMock(token="true", logprob=math.log(0.8)),
+    ]
+    with patch("providers.OpenAI") as mock_openai:
+        mock_openai.return_value.chat.completions.parse.return_value = completion
+        rich = providers.judge_with_metadata("compare", ["https://ref", "https://scene"], _Verdict)
+        plain = providers.judge("compare", ["https://ref", "https://scene"], _Verdict)
+
+    assert rich.verdict == parsed
+    assert rich.confidence == pytest.approx(0.8)
+    assert rich.latency_ms >= 0
+    assert plain == parsed
+
+
+def test_judge_with_metadata_passes_logprobs_and_temperature_zero():
+    parsed = _Verdict(differences_observed="none", same_character=True)
+    completion = _fake_completion(parsed, '{"differences_observed":"none","same_character":true}')
+    completion.choices[0].logprobs = None
+    with patch("providers.OpenAI") as mock_openai:
+        mock_openai.return_value.chat.completions.parse.return_value = completion
+        rich = providers.judge_with_metadata("compare", ["https://ref"], _Verdict)
+        kwargs = mock_openai.return_value.chat.completions.parse.call_args.kwargs
+        assert kwargs["temperature"] == 0
+        assert kwargs["logprobs"] is True
+        assert kwargs["top_logprobs"] == 5
+        assert rich.confidence is None
+
+
+
 class _Verdict3(BaseModel):
     differences_observed: str
     failure_reason: str
@@ -225,6 +260,7 @@ def test_edit_image_passes_references_and_seed_and_returns_bytes():
         "negative_prompt": providers.NEGATIVE_PROMPT,
         "prompt": "a fox",
         "image_urls": ["https://ref/1.png"],
+        "image_size": {"width": 1024, "height": 768},
         "seed": 7,
     }
     mock_get.assert_called_once()
@@ -298,6 +334,52 @@ def test_text_to_image_omits_seed_when_not_given():
     # The canonical reference suppresses lettering too — it is drawn on the t2i path, and a
     # reference with text in it teaches every scene the same habit.
     assert arguments["negative_prompt"] == providers.NEGATIVE_PROMPT
+
+
+def test_text_to_image_pins_corpus_generation_size():
+    fal = MagicMock()
+    fal.subscribe.return_value = {"images": [{"url": "https://fal.example/x.png"}]}
+
+    with patch("providers._fal", return_value=fal), \
+         patch("providers.httpx.get", return_value=MagicMock(content=b"png")):
+        providers.text_to_image("a fox")
+
+    assert fal.subscribe.call_args.kwargs["arguments"]["image_size"] == {
+        "width": 1024,
+        "height": 768,
+    }
+
+
+def test_edit_image_pins_corpus_generation_size():
+    fal = MagicMock()
+    fal.subscribe.return_value = {"images": [{"url": "https://fal.example/x.png"}]}
+
+    with patch("providers._fal", return_value=fal), \
+         patch("providers.httpx.get", return_value=MagicMock(content=b"png")):
+        providers.edit_image("a fox", ["https://ref/1.png"])
+
+    assert fal.subscribe.call_args.kwargs["arguments"]["image_size"] == {
+        "width": 1024,
+        "height": 768,
+    }
+
+
+def test_budget_rejection_happens_before_real_fal_submission():
+    fal = MagicMock()
+    token = providers._fal_event_sink.set(
+        lambda event: (_ for _ in ()).throw(RuntimeError("budget stopped"))
+        if event == "attempted"
+        else None
+    )
+    try:
+        with patch("providers._fal", return_value=fal), pytest.raises(
+            RuntimeError, match="budget stopped"
+        ):
+            providers.text_to_image("a fox")
+    finally:
+        providers._fal_event_sink.reset(token)
+
+    fal.subscribe.assert_not_called()
 
 
 def test_text_to_image_appends_negative_extra_without_dropping_the_shared_terms():
@@ -912,3 +994,56 @@ def test_presidio_is_cached_across_calls():
         assert first is second
     finally:
         _presidio.cache_clear()
+
+
+# --- determinism: production calls must not sample ---
+
+
+def test_structured_text_and_judge_both_send_temperature_zero():
+    """A sampled verdict costs paid images. `judge` drives `consistency_check`, whose retries are
+    billed fal calls bounded by MAX_SCENE_ATTEMPTS, so a nondeterministic "not the same character"
+    on a good page buys a redraw of an image that was already correct. `structured_text` is the
+    extraction path — `analyze`/`segment`/`char_bible` — where sampling makes the same story
+    segment differently on a resumed job.
+
+    Only `judge_with_metadata` pinned temperature=0; `_chat`'s two callers left
+    `_fetch_completion`'s `temperature=None` default in place, which omits the kwarg entirely and
+    lets each provider sample at whatever its own default is.
+
+    DeepInfra, Parasail and Mistral all list `temperature` in `supported_parameters` alongside
+    `response_format`/`structured_outputs`, so `require_parameters` routing cannot shrink over this.
+    """
+    for call in (
+        lambda: providers.structured_text("prompt", _Caption),
+        lambda: providers.judge("compare", ["https://ref.png"], _Caption),
+    ):
+        with patch("providers.OpenAI") as mock_openai:
+            parse = mock_openai.return_value.chat.completions.parse
+            parse.return_value = _fake_completion(_Caption(caption="hi"))
+            call()
+
+        assert parse.call_args.kwargs["temperature"] == 0
+
+
+def test_text_providers_lists_only_providers_this_account_can_actually_route_to():
+    """This list has now carried a dead slug twice. `venice` was on it and has no endpoint for the
+    model at all; `mistral` replaced it on 2026-08-27 because the public endpoints API advertises a
+    Mistral endpoint — and OpenRouter answers `only=["mistral"]` with a 404 naming the providers it
+    will actually route this account to: "deepinfra, parasail". A slug OpenRouter drops is not a
+    fallback, it is a comment that costs a 429, so the list states the one reachable provider and
+    the redundancy is bought elsewhere.
+
+    `parasail` stays off even though it is reachable: prod row 558afb6d had it answer `analyze`
+    with a malformed 200 (`species` leaking into its location/object siblings). That is
+    schema-valid corruption, so the re-ask in `_chat` cannot catch it — for a corpus the judge is
+    trained on, a 429 is recoverable and a silently wrong extraction is not.
+
+    Re-check with: curl .../api/v1/models/{id}/endpoints, then probe `only=[slug]` — the endpoints
+    API describes the model, not this account's routing, and the two disagreed here.
+    """
+    routable = {"deepinfra", "parasail"}
+    only = providers.TEXT_PROVIDERS["mistralai/mistral-small-3.2-24b-instruct"]
+
+    assert only == ["deepinfra"]
+    assert not set(only) - routable
+    assert "parasail" not in only

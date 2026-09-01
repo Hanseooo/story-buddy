@@ -9,11 +9,14 @@ log = logging.getLogger(__name__)
 
 def input_gate(state: StoryMemory) -> dict:
     text = state.input.raw_text
+    # Moderation is unconditional; only the PII rewrite is skippable, and only for text the
+    # caller declares synthetic. See `Input.synthetic_no_pii`.
+    skip_redaction = state.input.synthetic_no_pii
 
     # Steps 1 & 2 are independent — run concurrently (spec §4a).
     with ThreadPoolExecutor(max_workers=2) as pool:
         primary_fut = pool.submit(classify_text_primary, text)
-        redact_fut = pool.submit(redact_pii, text)
+        redact_fut = None if skip_redaction else pool.submit(redact_pii, text)
 
         try:
             primary_safe, categories = primary_fut.result()
@@ -23,7 +26,7 @@ def input_gate(state: StoryMemory) -> dict:
             primary_safe = None  # None = primary errored, not "passed"
             categories = []
 
-        redacted_text = redact_fut.result()
+        redacted_text = text if skip_redaction else redact_fut.result()
 
     def result(passed: bool, categories: list[str] | None = None) -> dict:
         """The ONLY way this node writes `input`. `input` has no reducer, so the return

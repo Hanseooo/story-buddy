@@ -39,6 +39,167 @@
 - [ ] Stop before spending or advancing if an approval is missing, redaction is uncertain, a candidate is
       withdrawn, the selection is not frozen, or the approved retention/translation wording is incomplete.
 
+## Execution pipeline sequence
+
+Run all commands from `backend/`. Angle-bracket values (`<...>`) are operator inputs, not copy-ready literals.
+Before a paid run, record the official Fal price URL, lookup date, authorized USD, pinned `1024x768` size,
+raw maximum `0.786432` MP, Fal's `ceil(MP)` billing rule, and the resulting per-call ceiling. Supply the
+current highest applicable rate for the two configured image endpoints as `<current-usd-per-megapixel>` and
+pass the source plus lookup date as `<official-price-url-and-date>`.
+
+```powershell
+# 1. Zero-cost verification on temporary fixture directory
+uv run python -m finetune.build_corpus --fixture --limit 1 --out <temporary-fixture-directory>
+
+# 1a. Roster pre-flight (one text call per story; no image call, no database, no writes).
+# Runs the real `analyze` node and the real reconciliation, so it returns the verdict the paid run
+# would reach. Exits non-zero on any failure. A corpus that fails here must not reach step 2 --
+# a roster mismatch found at packaging instead costs that story's entire image spend.
+uv run python -m finetune.build_corpus --check-rosters --corpus finetune/corpus_synthetic.json --limit 3
+
+# 1b. Re-adjudicate an invalid_terminal quarantine whose cause was a defect that is now fixed.
+# Not resumable or restartable by design; readmission is the only supported path, and it preserves
+# the telemetry, the abandoned thread and the stated reason in the bundle metadata.
+uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --limit 1 --max-usd <cap> --max-calls-per-story 25 --price-per-megapixel <current-usd-per-megapixel> --price-basis "<official-price-url-and-date>" --readmit-quarantined <story_id> --readmit-reason "<why the prior verdict no longer applies>"
+
+# 2. Fresh paid synthetic smoke (3 stories, 25 calls/story; USD 2.63 at USD 0.035/call)
+uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --limit 3 --max-usd 2.63 --max-calls-per-story 25 --price-per-megapixel <current-usd-per-megapixel> --price-basis "<official-price-url-and-date>"
+
+# 2a. Current syn-001 one-time cap extension (14 abandoned calls + 25 calls for each smoke story;
+# USD 3.12 total campaign authorization at USD 0.035/call). Do not use after this incident closes.
+uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --limit 3 --max-usd 3.12 --max-calls-per-story 25 --price-per-megapixel 0.035 --price-basis "https://fal.ai/models/fal-ai/qwen-image + https://fal.ai/models/fal-ai/qwen-image-edit-2511 (verified 2026-08-26)" --resume-quarantined syn-001 --extend-story-call-cap syn-001
+
+# 2b. If that isolated execution later stops for resume exhaustion, retain the identical cap and basis.
+uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --limit 3 --max-usd 3.12 --max-calls-per-story 25 --price-per-megapixel 0.035 --price-basis "https://fal.ai/models/fal-ai/qwen-image + https://fal.ai/models/fal-ai/qwen-image-edit-2511 (verified 2026-08-26)" --resume-quarantined syn-001
+
+# 2c. If the stop is billing-uncertain, acknowledge that exact story while retaining the same cap and basis.
+uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --limit 3 --max-usd 3.12 --max-calls-per-story 25 --price-per-megapixel 0.035 --price-basis "https://fal.ai/models/fal-ai/qwen-image + https://fal.ai/models/fal-ai/qwen-image-edit-2511 (verified 2026-08-26)" --resume-quarantined syn-001 --acknowledge-uncertain-billing syn-001
+
+# 3. Full synthetic generation (24 train + 6 val stories).
+# --max-calls-per-story is MANDATORY here, not optional. Without it the per-story reserve is the
+# full IMAGE_BUDGET: 55 x USD 0.035 = USD 1.925, and a story starts only if its whole reserve fits
+# what is left. Thirty such reserves are 30 x 1.925 = USD 57.75 and steps 3 and 4 together are
+# 45 x 1.925 = USD 86.63, against a USD 30 hard ceiling that --max-usd is silently clamped to. An
+# uncapped run therefore cannot complete at any authorization: it halts once charged calls pass
+# (30 - 1.925) / 0.035 = 802, having already paid for everything before that.
+#
+# Steps 3 and 4 share one --out, so they are ONE campaign against one ceiling: 30 synthetic + 15
+# donated = 45 stories. The cap the USD 25 working allocation permits is
+# floor(25 / (45 x 0.035)) = 15 calls/story, whose worst case is 45 x 15 x 0.035 = USD 23.63 and
+# which leaves the USD 25-30 band intact for a cap extension on a story that needs one.
+uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --max-usd 25 --max-calls-per-story 15 --price-per-megapixel <same-current-usd-per-megapixel> --price-basis "<same-official-price-url-and-date>"
+
+# 4. Full donated generation (15 candidate stories: 10 primary + 5 backup). Same campaign
+# directory, same ceiling, same cap -- the arithmetic above already counts these 15 stories.
+uv run python -m finetune.build_corpus --corpus ../data/judge/intake/donated.json --out ../data/judge/corpus --max-usd 25 --max-calls-per-story 15 --price-per-megapixel <same-current-usd-per-megapixel> --price-basis "<same-official-price-url-and-date>"
+
+# 5. Read-only candidate inspection for hard negative selection
+uv run python -m finetune.build_dataset --candidate-report --data ../data/judge/corpus
+
+# 6. Upload immutable assets and seed research pair queue
+uv run python -m finetune.materialize_pairs --data ../data/judge/corpus --donated-intake ../data/judge/intake/donated.json --selection ../data/judge/intake/dataset_selection.json
+
+# 6a. Annotation dress rehearsal only. `--pilot` seeds the queue from every completed bundle in
+# --data with `is_pilot = true`, so the pairs are permanently excluded from the training dataset
+# and never reach a freeze. It bypasses dataset selection because selection decides what enters
+# training and pilot pairs never do; it therefore refuses --donated-intake and --selection.
+# Point --data at a throwaway campaign directory, never at the production corpus: a pair id
+# already seeded as production data will hard-fail with `pair conflict` rather than be reflagged.
+uv run python -m finetune.materialize_pairs --data ../data/judge/corpus-smoke-a --pilot
+
+# 7. Check annotation progress / reconcile pair queue
+uv run python -m finetune.build_dataset --reconcile-only
+
+# 8. Install immutable training dataset freeze
+uv run python -m finetune.build_dataset --freeze --data ../data/judge/corpus --donated-intake ../data/judge/intake/donated.json --selection ../data/judge/intake/dataset_selection.json --out ../data/judge/freezes/obj4-v1
+
+# 9. Install the exact training tool in the qualified GPU environment
+uv tool install "llamafactory @ git+https://github.com/hiyouga/LlamaFactory.git@7af909522a951e3ad9f022ea6f88b6755257eaa5"
+
+# 10. On the qualified host, have the operator record the approved base/tool pins and exact
+# hardware_inventory() output in ../data/judge/training_qualification.json. Verify that record and
+# installed uv-tool commit provenance, and every training artifact hash; then print/write immutable
+# plans for seeds 0, 1 and 2 (zero-cost).
+uv run python -m finetune.train --freeze ../data/judge/freezes/obj4-v1 --qualification ../data/judge/training_qualification.json --run-root ../data/judge/runs/obj4-v1 --prepare
+
+# 11. After recording the qualified hardware and activating the external spend alarm, train all seeds
+uv run python -m finetune.train --freeze ../data/judge/freezes/obj4-v1 --qualification ../data/judge/training_qualification.json --run-root ../data/judge/runs/obj4-v1 --execute --spend-alarm-confirmed
+
+# 12. Inventory every checkpoint and obtain the exact generated vLLM command
+uv run python -m finetune.evaluate validation-inventory --runs ../data/judge/runs/obj4-v1 --out ../data/judge/evaluations/obj4-v1/validation_candidates.json
+
+# 13. Start the generated vllm_command, point JUDGE_BASE_URL/JUDGE_API_KEY at it, then capture validation evidence
+uv run python -m finetune.evaluate capture-validation --freeze ../data/judge/freezes/obj4-v1 --candidates ../data/judge/evaluations/obj4-v1/validation_candidates.json --predictions ../data/judge/evaluations/obj4-v1/validation
+
+# 14. Select checkpoints and cosine thresholds using validation only; write the immutable lock
+uv run python -m finetune.evaluate validate --freeze ../data/judge/freezes/obj4-v1 --candidates ../data/judge/evaluations/obj4-v1/validation_candidates.json --predictions ../data/judge/evaluations/obj4-v1/validation --out ../data/judge/evaluations/obj4-v1/evaluation_lock.json
+
+# 15. After an owner/adviser independently writes evaluation_signoff.json, run the one guarded evaluation
+uv run python -m finetune.evaluate heldout --freeze ../data/judge/freezes/obj4-v1 --lock ../data/judge/evaluations/obj4-v1/evaluation_lock.json --signoff ../data/judge/evaluations/obj4-v1/evaluation_signoff.json --ledger ../data/judge/evaluations/obj4-v1/test_access.jsonl --run-id obj4-heldout-1 --predictions ../data/judge/evaluations/obj4-v1/heldout-1/predictions --out ../data/judge/evaluations/obj4-v1/heldout-1/objective4_results.json
+```
+
+**Before running step 3, read the smoke's per-story `attempted_calls`.** Fifteen calls per story is a
+*budget-derived* cap, not a measured one: no completed corpus story exists yet, and the only spend evidence
+on record is syn-001's 14 abandoned calls. At the production `--scene-attempts 3` a story's structural worst
+case is the full 55, so a cap of 15 stops an overrunning story at the seam and quarantines it for
+reconciliation rather than breaching the campaign ceiling — the intended trade in `research-corpus-operations.md`
+§6, but one that costs a story rather than money. If the smoke shows a completed story needing more than 15
+draws, the corpus must shed stories or `--scene-attempts` must drop; lowering it is not a free tuning knob,
+because bundles drawn under different caps are different sampling distributions and may not be mixed without
+recording it, so it would have to be applied uniformly and the already-drawn smoke bundles redrawn or excluded.
+Do not raise `--max-calls-per-story` instead: 45 stories at 20 calls is 45 x 20 x 0.035 = USD 31.50, past the
+hard ceiling.
+
+Steps 3 and 4 exit non-zero when the campaign halts or when any story quarantines, and name on stderr how many
+stories ran of how many were requested, which stories quarantined, and the `--max-usd` that would have cleared
+the reserve. A roster mismatch quarantines that one story and the run continues, so the expected shape of a
+completed step 3 is 30 bundles, or fewer bundles plus a named quarantine list — never a silent partial run.
+
+On a later paid rerun, pre-existing story-local quarantines are counted and skipped unless the matching
+`--resume-quarantined`, `--restart-quarantined` or `--readmit-quarantined` option targets them; the CLI still
+exits 2 while any remain. A flag for another story does not unlock one, and a targeted recovery still performs
+all of its existing validation. `billing_uncertain` remains a hard stop until its matching acknowledgment, and
+fixture mode remains a hard stop for every pre-existing quarantine.
+
+`evaluation_signoff.json` is written by the approver, never by evaluation code. It contains exactly the
+SHA-256 of `evaluation_lock.json`, a nonblank `approved_by`, and a timezone-bearing `approved_at`.
+Prediction JSONL files and their `.sha256` sidecars are immutable run evidence. Reusing the same `--run-id`
+after interruption verifies and reuses each completed judge file, records a `resumed` event, and calls only
+the missing judges; a missing sidecar, changed file, or checkpoint path/digest drift stops before further
+held-out inference. The access ledger contains only run identifiers, hashes, lifecycle status and failure type,
+never story text or direct asset paths. A second `heldout` invocation is legal only after a completed Rung-D
+report and additionally requires `--deviation <PATH>` with the preregistered report hash, defect, fix commit,
+train/validation-only evidence,
+and approval timestamp. There is no third-read command and no automatic deployment.
+
+The held-out command validates and writes the canonical `Objective4Report` schema documented in
+`docs/specs/judge-finetune.md` §7.7. Preserve `objective4_results.json` with its prediction JSONL files and
+sidecars. Re-running the same guarded evidence produces byte-identical sorted JSON. Read
+`objective4.requirement_met` as the research conclusion and `deployment_decision.ship_candidate` as the
+separate product decision; Rung C is a met research requirement that keeps the incumbent, while only Rung D
+marks Objective 4 unmet.
+The command verifies `character_slices.json` and `annotation_agreement.jsonl` against
+`freeze_report.json`, requires complete held-out coverage, and publishes the report exclusively: an
+identical existing report is the only idempotent success, while different bytes stop the run.
+Those two artifact hashes are copied into the signed evaluation lock, which is their immutable trust anchor;
+agreement pair IDs must also match held-out order exactly. Prediction schema version 2 marks each judge's
+first observation as cold-start, excludes it from headline warm latency, and reports it separately.
+
+Steps 11 and 13 run in the qualified GPU environment whose exact PyTorch, CUDA, bitsandbytes and transformers
+versions are recorded with the run evidence. Install those hardware-specific versions with `uv`, never bare
+`pip`; they deliberately remain outside the deployed backend dependency set.
+
+### Operational invariants and integrity gates
+
+- **Visual comparison dimensions:** Hard negative candidate inspection evaluates five dimensions: body shape/structure, key colours, prominent facial/body features, clothing/accessories, and rendered art style.
+- **Hard negative freeze-before-annotation gate:** All cross-character hard negative matches in `dataset_selection.json` must be frozen with a timestamp preceding all non-pilot annotations in Supabase.
+- **Replacement evidence rule:** Any primary donor withdrawal/failure replacement requires documented evidence in `dataset_selection.json` satisfying the exact same style preset and leaving exactly 10 primaries (4 Gouache, 3 Cel, 3 Cut-paper).
+- **Immutable freeze directories:** `data/judge/freezes/obj4-v1` is strictly immutable. Any legitimate pre-training modification must produce a new named directory (e.g. `obj4-v2`); `finetune.train --freeze` is the sole dataset-directory selection and is injected into every generated command after hash preflight.
+- **Qualified training host:** `training_qualification.json` records the approved base revision, exact LLaMA-Factory commit/version, and full hardware inventory. Preparation and execution fail unless the live host matches it exactly.
+- **Test-unopened rule:** The test split (`test.json` in the freeze) is held-out and must never be inspected, browsed, or evaluated during model development.
+- **Three-seed validation-only development:** Checkpoint selection and hyperparameter exploration use only `train.json` and `val.json` over 3 random seeds (0, 1, 2).
+- **Held-out evaluation:** The final selected model checkpoint is evaluated once on the held-out test split at study conclusion. Only preregistration §7's Rung-D defect exception permits exactly one second read after debugging exclusively on train/validation; both readings and the deviation must then be reported, and no third read is allowed.
+
 ## Evidence to retain outside intake data
 
 Record approval references, finalized consent/assent version, selection-freeze timestamp, withdrawal actions

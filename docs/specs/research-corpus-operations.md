@@ -32,11 +32,12 @@ paid draw or upload; and cumulative Fal spend cannot exceed USD 30.
 |---|---|---|
 | Identity/consent ledger | Ethics-approved restricted store, outside StoryBuddy | Contact record ↔ random receipt code; consent/assent evidence |
 | Story intake | Checked-in synthetic JSON or de-identified controlled donated JSON | Opaque `story_id`, text, declared roster, provenance/split/role, frozen style, and donated-only approvals |
-| Corpus run | `data/judge/` (gitignored) | Completed `StoryMemory`, split/provenance, run metadata, telemetry and asset hashes |
+| Dataset selection | `data/judge/intake/dataset_selection.json` (gitignored) | Outcome-blind hard-negative matches, approved donated replacements and selection hash input |
+| Corpus run | `data/judge/corpus/` (gitignored) | Completed `StoryMemory`, split/provenance, run metadata, telemetry and asset hashes |
 | Research assets | Private Supabase Storage | PNG canonical references and WebP q≈82 scenes per ADR-027 |
 | Pair queue | `research_pairs` | Opaque deterministic pair ID and two private Storage paths; no provenance exposed to annotators |
 | Labels | `annotations` | Two independent ordinary labels and adjudicator label only on disagreement |
-| Frozen dataset | `data/judge/` plus controlled snapshot | Manifest, split files, statistics, hashes, exclusions and pinned run configuration |
+| Frozen dataset | `data/judge/freezes/<freeze-id>/` plus controlled snapshot | Manifest, split files, statistics, hashes, exclusions and pinned run configuration |
 
 ## 4. End-to-end flow
 
@@ -75,9 +76,19 @@ Donated records additionally require affirmative `guardian_consent`, `child_asse
 `manual_pii_redaction` and `independent_redaction_review`, plus `withdrawal_state` and a selection-freeze
 timestamp. Synthetic records must not fabricate those donated-only fields. `declared_non_human` must be a
 subset of `declared_characters`; names are fictional roster labels from the already-redacted story, not donor
-identities. After generation, the declared roster is reconciled case-insensitively with the final
-`StoryMemory.characters`. A missing, unexpected or differently classified character quarantines the story
-for manual review before pair materialization; it is never silently rewritten after seeing judge output.
+identities. The declared roster is reconciled case-insensitively with `StoryMemory.characters` as soon as `analyze`
+produces them — before the first reference draw, since the roster is knowable from the extraction call and
+checking it at packaging instead charges a whole story's images to learn what one text call already said. An
+*empty* extracted roster is adjudicated here too, not treated as evidence not yet arrived: guarding the check on
+a non-empty roster let the one story whose extraction returned nothing skip the gate entirely and pay for a full
+set of anchorless images before failing at packaging.
+Every declared character must appear in the reference slice `characters[:2]`, classified as declared: a declared
+character that is missing, renamed, differently classified, or ranked below the slice (and so never given a
+canonical reference) quarantines the story for manual review before pair materialization. An *additional*
+extracted character does not, because whether a bit player has agency is a judgement the author and the model
+can legitimately read differently; a probe of all 30 synthetic stories disagreed in both directions often enough
+that roster equality quarantined 22 of them. The declaration is never silently rewritten to match extraction —
+neither after seeing judge output, nor to make this check pass.
 
 ### 4.2 Style allocation and control
 
@@ -89,9 +100,9 @@ response to generated quality or judge behavior.
 The 15 donated candidates are assigned five per style before generation. The 10 primary slots are allocated
 4 Gouache, 3 Cel and 3 Cut-paper; the five backups are 1 Gouache, 2 Cel and 2 Cut-paper. Gouache receives the
 extra primary slot because it is the product default (ADR-042), not because of generated outcomes.
-A replacement fills the same style slot when an eligible backup exists. If it cannot, report the achieved
-imbalance; do not restyle an already generated character or select by outcome. If all backups are admitted to
-increase held-out power before labeling, the resulting 15-story candidate set is 5/5/5.
+A replacement fills the same style slot when an eligible backup exists. If no same-style backup is eligible,
+the freeze stops; it does not restyle a character, admit all backups, change the registered 4/3/3 allocation
+or select by outcome.
 
 Constructed negatives must match `style_preset_id`. Overall held-out performance remains primary. Per-style
 metrics are pre-declared exploratory diagnostics because the held-out character count is too small for strong
@@ -114,6 +125,96 @@ A story is complete only when memory, inventory and files reconcile. Completed s
 free to resume. Partial stories resume from their LangGraph checkpoint. Untrustworthy checkpoint state is
 quarantined rather than silently regenerated or pooled.
 
+The corpus runner has three explicit terminal outcomes:
+
+- `completed`: the graph reached its terminal state, the final `StoryMemory` validates, and the bundle and
+  assets reconcile;
+- `budget_stopped`: the next Fal attempt would exceed the story or campaign allowance; no provider call is
+  made, no completed bundle is written, and the recoverable stop is persisted in quarantine state;
+- `quarantined`: resume exhaustion, invalid terminal state, uncertain billing or inconsistent persisted
+  state requires an explicit operator decision before another run.
+
+A failed declared-roster reconciliation quarantines that story `invalid_terminal` and the campaign
+*continues* to the next story. Reconciliation runs on the extraction roster, and the graph is wired
+`input_gate -> analyze -> segment -> char_bible` with `char_bible` the first node that draws, so the verdict
+costs one text call and no image spend; stopping the campaign for it charged every remaining story to learn
+nothing. syn-007 and syn-017 each declare two characters while the extractor can also surface a third genuine
+actor, so an unlucky ranking pushed a declared name out of the reference slice and ended a 30-story run at
+story seven with six paid bundles. The quarantine itself is unchanged: the story is still `invalid_terminal`
+and still requires `--readmit-quarantined` before it runs again. Only reconciliation is non-fatal; uncertain
+billing, provider failure and every other terminal `CorpusError` continue to stop the campaign, and uncertain
+billing is adjudicated first when both apply. A mismatch discovered at packaging rather than at extraction has
+already paid for that story's images and remains fatal.
+
+The summary reports `stories_quarantined` and `quarantined_story_ids` on every run, and the CLI names them on
+stderr and exits non-zero. A campaign that quarantined is not `halted` -- it ran every story it was asked to --
+but it is not a clean run either, so the two conditions are reported separately and share exit code 2. No
+mismatch threshold stops the campaign: quarantine-and-continue is the registered behaviour, and a systemic
+extraction failure is visible in the reported count rather than in a partial run.
+
+On an ordinary non-fixture rerun, a pre-existing story-local quarantine other than `billing_uncertain` is
+counted and skipped when no recovery option targets that story. The quarantine is not forgiven or cleared:
+running it again still requires the matching `--resume-quarantined`, `--restart-quarantined` or
+`--readmit-quarantined` option and every validation attached to that recovery path. A flag naming another story
+does not unlock it. `billing_uncertain` remains campaign-fatal until explicitly acknowledged through its
+matching recovery path, and fixture mode continues to refuse every pre-existing quarantine.
+
+Reaching the exact draw allowance is not itself failure. The runner may finish non-paid graph work and write
+a valid terminal bundle, but the Fal provider seam must reject the next attempted paid call before submission.
+After the configured interrupt-resume limit, the runner quarantines the story; it never returns an unfinished
+state as completed.
+
+Every bundle records `intake_sha256`, computed from canonical JSON for the immutable intake fields: `story_id`,
+redacted `text`, declared rosters, provenance, split, candidate role, style, donated approval flags and
+`selection_frozen_at`. `withdrawal_state` is excluded because it is the one mutable stop flag. Reusing or
+resuming a bundle requires the digest to match the current intake; a mismatch is quarantined before any paid
+call, upload or dataset operation.
+
+Recovery reuses `finetune.build_corpus`; it does not add another state store or generation path.
+`--resume-quarantined <story_id>` may resume only `budget_stopped`, resume-exhausted or uncertain-billing
+state after validating the intake digest, telemetry and checkpoint. Uncertain billing additionally requires
+`--acknowledge-uncertain-billing <story_id>` for the same story; acknowledgment records UTC time and preserves
+the uncertain attempt as fully spent. Neither option may decrement attempted calls, bypass the campaign
+reserve or modify a completed bundle.
+A story that has never had an execution identity persisted for it runs on a campaign thread,
+`<story_id>--campaign-<sha256(resolved --out)[:32]>`, and a restart or readmission records that thread as the
+`abandoned_execution_id` it supersedes. The graph thread is scoped to the output directory because the build
+ledger already is: on 2026-08-27 a fresh `--out` started a fresh ledger but resumed the bare `syn-001` thread an
+earlier campaign had abandoned with an empty roster, drew seven scenes with no character anchor and quarantined
+on characters that were never extracted. A fresh campaign directory must be a fresh run.
+An ordinary validated checkpoint continues with `None` input so its checkpointed channels are not overwritten;
+only a fresh corpus thread receives its initial state. Recovery reserves only the story draw allowance remaining
+after persisted attempted calls, while those completed, failed and uncertain calls remain conservatively charged.
+
+When a checkpoint or its deterministic Storage prefix is known to be contaminated, the operator uses
+`--restart-quarantined <story_id>` with an explicit `--max-calls-per-story`. The runner retains the abandoned
+checkpoint and assets, records their logical execution identity and cumulative telemetry, and mints one persisted
+UUID-suffixed execution identity for both the replacement LangGraph thread and its Storage prefix. It does not
+delete or reuse the abandoned state. The replacement execution receives its own call allowance; abandoned calls
+remain fully charged against the campaign USD ceiling. On completion, only `StoryMemory.story_id` is restored to
+the frozen logical intake ID; exact asset paths retain the isolated execution prefix. A replacement that later
+stops must use ordinary `--resume-quarantined`, which resolves the persisted execution identity. A second isolated
+restart is rejected.
+The replacement's explicit call cap is persisted and must match every later resume command. After an observed
+`budget_stopped`, one explicit `--extend-story-call-cap <story_id>` may monotonically increase that same isolated
+execution's cap, never beyond `IMAGE_BUDGET`. It requires matching `--resume-quarantined` and sufficient campaign
+reserve before the new cap is persisted; it records the initial cap and UTC extension time. It does not mint a
+thread, alter the Storage prefix, reset telemetry, or apply to another quarantine reason. A second extension is
+rejected. A restart identity persisted before its first checkpoint and before any new attempted call may initialize
+that same identity again; it must not mint another identity or become terminally quarantined merely because the
+first checkpoint is absent.
+
+An `invalid_terminal` quarantine is deliberately not resumable or restartable: it means a human must review the
+story before it runs again. When that verdict was produced by a defect since fixed rather than by the story's
+data, `--readmit-quarantined <story_id>` with a mandatory `--readmit-reason "<why>"` re-adjudicates it. Readmission
+requires `reason_code == "invalid_terminal"`, a matching intake digest and a non-empty reason. It mints a fresh
+`<story_id>--readmit-<uuid4hex>` execution, records the superseded thread as `abandoned_execution_id`, carries the
+prior attempted count into `restart_attempted_baseline` so already-charged calls keep counting against the
+campaign ceiling, and stamps `readmitted_at` with the operator's reason into the immutable bundle metadata.
+It never resets telemetry, edits the prior verdict, or applies to another quarantine reason. Readmission is the
+only supported way to clear an `invalid_terminal` state: hand-editing `build_state.json` would erase the record of
+calls that were really paid for.
+
 ### 4.4 Queue materialization
 
 One idempotent command reads completed memories, uploads the exact corpus files to private Supabase Storage
@@ -133,10 +234,54 @@ export derives truth from annotation rows and a reconciliation command repairs s
 
 ### 4.6 Freeze and conversion
 
-One export command loads completed memories, derives consensus, creates train-only constructed negatives,
-runs manifest guards, verifies every local asset hash and produces a self-contained LLaMA-Factory directory
-containing the exact verified image bytes. Manifest image paths resolve inside that immutable directory. It
-fails on:
+Before annotation, a read-only candidate-report mode lists every reference-bearing synthetic training character, its canonical
+reference path and all same-species, same-style candidate characters. It reads completed corpus bundles only;
+it does not contact Supabase, create labels or inspect judge outcomes. A researcher compares canonical
+references using dominant colour, body configuration, silhouette, clothing/accessories and facial structure,
+then records exactly one visually closest target for each training reference in the controlled selection
+file. Dataset construction pairs that reference with every natural training scene belonging to the selected
+target. The selection is therefore one manual decision per character lineage rather than one decision per
+constructed image pair.
+
+The controlled selection file has this strict shape; all identifiers are opaque and `evidence_ref` points to
+the restricted study record rather than containing identity, consent or withdrawal evidence:
+
+```json
+{
+  "hard_negatives_frozen_at": "2026-08-24T10:00:00+08:00",
+  "hard_negative_matches": [
+    {"reference_char_id": "syn-001:c0", "target_char_id": "syn-007:c0"}
+  ],
+  "donated_replacements": [
+    {
+      "primary_story_id": "don-001",
+      "backup_story_id": "don-011",
+      "reason": "withdrawal",
+      "approved_at": "2026-08-25T10:00:00+08:00",
+      "evidence_ref": "restricted-record-017"
+    }
+  ]
+}
+```
+
+Replacement reasons are closed to `withdrawal`, `deidentification_failure`,
+`terminal_pipeline_failure` and `inadequate_character_yield`. The default held-out membership is the ten
+preselected primaries. A listed backup replaces one primary only, must preserve its style slot, cannot be
+reused and requires a completed approval timestamp plus a nonblank opaque evidence reference. The hard-negative
+mapping becomes immutable at `hard_negatives_frozen_at`, before non-pilot annotation; later donated withdrawals
+may append a replacement without reopening that mapping. The resulting held-out set remains exactly ten stories
+with the frozen 4 Gouache / 3 Cel / 3 Cut-paper allocation.
+
+Generation intake rejects withdrawn donated records. Freeze-audit intake accepts them only so a completed
+bundle can be located and excluded. The immutable intake digest deliberately excludes `withdrawal_state`, so
+freeze can both prove that every other intake field is unchanged and honor the current withdrawal state.
+Withdrawn and unselected backup bundles, their assets, labels and records are excluded before materialization.
+
+One export command loads completed memories, the current donated intake and the controlled selection file;
+derives consensus; creates train-only constructed negatives; runs manifest guards; verifies every local asset
+hash; and produces a self-contained LLaMA-Factory directory containing the exact verified image bytes.
+Production freeze requires both controlled inputs. Fixture freeze may omit them. Manifest image paths resolve
+inside that immutable directory. It fails on:
 
 - missing, duplicate or excess ordinary labels;
 - unresolved, unnecessary or multiple adjudications;
@@ -147,6 +292,12 @@ fails on:
 - absent/unknown style IDs, reference/scene style disagreement, allocation drift or a constructed negative
   whose two characters have different styles;
 - unresolved declared-roster versus `StoryMemory.characters` reconciliation.
+- a missing, future-dated or post-annotation hard-negative freeze timestamp;
+- a missing or changed intake digest, or a withdrawn story that remains selected;
+- donated role drift, backup reuse, cross-style replacement, unknown replacement reason, invalid approval time
+  or missing evidence;
+- a hard-negative mapping that is missing, duplicated, self-paired, outside synthetic training, different in
+  species or style, or points to a character with no natural training scene.
 
 Because production `StoryMemory.char_id` values are story-local (`c0`, `c1`, …), export qualifies the
 manifest lineage key as `<opaque story_id>:<char_id>` before corpus-wide split and style checks.
@@ -155,9 +306,26 @@ Any deliberate pair exclusion is recorded in its immutable run bundle before fre
 pilot pairs are the only external exclusions. The freeze rejects unknown exclusions and reports the exact
 excluded pair IDs.
 
-The freeze report records dataset SHA-256, counts by story/character/split/class/reason, adjudication rate,
-exclusions and all pinned software/model/prompt versions. A constructed negative belongs to the story that
-owns its reference character for story-level counts.
+The immutable directory contains the exact controlled `dataset_selection.json` bytes and the freeze rejects
+any change between selection validation and snapshot installation. The freeze report records dataset SHA-256,
+counts by story/character/split/class/reason, adjudication rate, selected and excluded donated stories,
+replacement reasons, the selection-file SHA-256, exclusions and all pinned software/model/prompt versions. A
+constructed negative belongs to the story that owns its reference character for story-level counts.
+
+For held-out isolation and reproducible agreement reporting, freeze also emits deterministic, hash-recorded
+projections without changing the combined `manifest.jsonl` source of truth:
+
+- `manifest.train.jsonl`, `manifest.val.jsonl` and `manifest.test.jsonl`, preserving combined-manifest order;
+- `annotation_agreement.jsonl`, containing only `pair_id` and the two ordinary binary labels, with no
+  annotator or adjudicator identifiers;
+- `character_slices.json`, mapping every qualified `char_id` to the intake-declared `human` or `non_human`
+  slice after roster reconciliation.
+
+Training and validation may parse only the train/validation projections. They may hash the combined manifest
+as bytes but must not parse it, because filtering after parsing would expose donated test records. Only the
+guarded held-out command may open `manifest.test.jsonl`. Freeze rejects projections whose concatenation
+differs from the combined manifest, agreement rows that do not cover natural annotated pairs, or slice keys
+that do not exactly cover every manifest character.
 
 ## 5. Encoding and storage
 
@@ -169,16 +337,52 @@ annotation and training. Filename extensions are not trusted; magic bytes and de
 
 - USD 25 is the working Fal allocation; USD 30 is the absolute campaign ceiling.
 - A zero-cost fixture run must pass first.
-- A three-story synthetic smoke run is capped at USD 1.50.
-- For that smoke only, the affordable call count is divided evenly across the selected stories at the pinned
-  conservative price. Reaching a story's reduced ceiling quarantines it for reconciliation rather than
-  breaching the smoke cap; campaign runs continue to reserve the full production image budget per story.
-- Pricing is pinned at campaign start and budgeting uses the conservative per-call price.
+- A fresh three-story synthetic smoke grants at most 25 calls per story. At the pinned USD 0.035 conservative
+  ceiling this authorizes USD 2.625, rounded up to USD 2.63; previously charged abandoned calls require additional
+  campaign authorization.
+- Both Fal image routes pin `image_size={"width": 1024, "height": 768}` before dispatch. The maximum is
+  `1024 * 768 / 1,000,000 = 0.786432` MP; Fal rounds fractional megapixels up, so each request reserves
+  `ceil(0.786432) * <operator-recorded USD/MP>`.
+- Paid runs require `--price-per-megapixel` and `--price-basis`; the latter records the official source URL
+  and lookup date used at campaign start. The JSON summary and immutable run metadata record that provenance,
+  the size, raw and rounded megapixels, rate, per-call ceiling, and authorization.
+- `--max-calls-per-story` explicitly caps each selected story or isolated replacement execution between one call
+  and the production `IMAGE_BUDGET`. Reaching that ceiling quarantines the story for reconciliation rather than
+  breaching the smoke cap; campaign runs without the option continue to use the existing derived/full allowance.
+- `--scene-attempts` caps consistency-checked draws per scene between one and the production three. The
+  pipeline finalizes a scene on its best-ranked attempt once the cap is reached whether or not the attempt
+  passed, so on a corpus build the retries buy ranking, not a shipped page: run syn-002 (2026-08-26) paid for
+  11 of 16 scene draws that changed no output. Lowering the cap also stops the corpus skewing toward
+  same-character pairs, which the annotation queue needs balanced. Every bundle records the cap it was drawn
+  under; two bundles drawn under different caps are different sampling distributions and may not be mixed
+  without recording it. Production is unaffected and remains at three.
 - Before another story can start, the builder restores completed and unfinished attempted-call
   telemetry from disk and rejects missing, invalid or price-drifted billing state. Each Fal event is
   persisted atomically so a later process cannot reset the campaign total.
 - A story starts only if its maximum permitted draws fit the remaining reserve.
+- The per-story allowance is enforced at the shared Fal-call seam before submission. Reaching the allowance
+  may not prevent already-paid output from completing the remaining non-paid graph nodes.
 - A timeout or uncertain billing result stops the campaign for reconciliation; it is not blindly retried.
+- Resuming a budget-stopped or resume-exhausted story is explicit and retains its persisted call counters.
+  Acknowledging uncertain billing retains that attempt at the conservative pinned price; reconciliation can
+  never lower recorded campaign spend.
+- A campaign that stops on the reserve check exits non-zero and reports on stderr how many of the
+  requested stories ran, how many never started, cumulative campaign spend against the current
+  authorization, and the `--max-usd` that would have cleared the same reserve check. The JSON summary
+  keeps `halted` plus `halt_reason`, `stories_requested`, `stories_not_started` and `required_max_usd`
+  for programmatic callers. Silence is not a completion signal: every story before the stop has a valid
+  immutable bundle, so a run that reaches story 27 of 30 otherwise looks exactly like one that finished.
+- No `--max-usd` can guarantee an uncapped 30-story campaign: at the derived full allowance the reserve
+  is `IMAGE_BUDGET × USD 0.035 = USD 1.925` per story, so a guaranteed 30-story run needs USD 57.75 and
+  the hard ceiling is USD 30. Such a campaign halts once cumulative charged calls pass
+  `(30 − 1.925) / 0.035 = 802`. An uncapped full run is therefore expected to stop at least once and be
+  re-authorized, or to set `--max-calls-per-story` low enough that 30 reserves fit.
+- The ledger is the standing authorization: `authorized_usd` is already stamped into every in-progress
+  and quarantined entry and every completed bundle's run metadata. Cumulative spend across invocations
+  is charged against the current authorization, but raising `--max-usd` between runs of the same `--out`
+  is a campaign-level decision, so the builder reports `authorization_increased_from` in the summary and
+  announces the increase on stderr. It does not refuse the increase — the smoke → cap-extension → full-run
+  sequence in the runbook legitimately raises it — but the increase can no longer happen unremarked.
 - The USD 25–30 reserve is released only to finish a story or materially improve character coverage.
 - Spend stopping cannot silently change split rules, taxonomy or held-out membership.
 
@@ -203,8 +407,9 @@ controlled rerun. Deployment remains a separate decision and is not required for
 
 1. Governance: approve consent/assent and receipt process; freeze story/split/style assignments; build and
    verify the bounded pilot cleanup before clearing pilot data.
-2. Zero-cost engineering: ADR-027 encoding, corpus persistence, intake validation, queue materialization,
-   status reconciliation and freeze CLI pass end-to-end on fixtures.
+2. Zero-cost engineering: ADR-027 encoding, corpus persistence, intake validation, exact-boundary completion,
+   quarantine recovery, queue materialization, status reconciliation and freeze CLI pass end-to-end on
+   fixtures.
 3. Intake: recontact donors; redact, independently review and freeze 10 primary + 5 backup candidates.
 4. Paid smoke: three synthetic stories; measure cost, failures, bytes, latency and signed delivery.
 5. Generation: synthetic train/validation, then donated held-out test, within the USD 30 ceiling.
@@ -215,6 +420,15 @@ controlled rerun. Deployment remains a separate decision and is not required for
 
 No phase advances while its gate is unresolved.
 
+The canonical working corpus is `data/judge/corpus/`; controlled de-identified inputs are under
+`data/judge/intake/`; and immutable exports are written to a new `data/judge/freezes/<freeze-id>/` directory.
+Training and evaluation consume only one named freeze directory, never the mutable corpus tree. Split values
+are assigned in intake before generation and propagated into the manifest; there is no post-generation random
+80/10/10 split. The frozen preregistration's earlier seeded-assignment wording requires a dated amendment
+before real dataset construction. The same amendment records that freeze now stops when a vacated primary has
+no eligible same-style backup, superseding the earlier instruction to report an imbalanced held-out set. It
+preserves both superseded passages and states that no held-out result was seen.
+
 ## 10. Stop conditions and residual risks
 
 Stop before spending or advancing when consent language lacks approval, a story cannot be confidently
@@ -224,3 +438,12 @@ safely finish a started story, or held-out character yield is inadequate for the
 Residual risks to report rather than hide: WebP and cost projections are not measurements until the paid
 smoke; donated character yield is unknown before generation; rare failure reasons may be underpowered; and
 school hardware may force the predeclared cloud fallback.
+
+## 11. Cross-cutting concerns
+
+- CC-2 PII redaction: only already-redacted intake text is hashed or persisted.
+- CC-3 cost control: allowances stop paid calls before submission and restored telemetry never decreases.
+- CC-4 security: recovery adds no public asset or database path.
+- CC-5 observability: outcome, quarantine reason and billing acknowledgment remain auditable.
+- CC-7 reproducibility: canonical intake hashes bind bundles to their frozen inputs.
+- CC-10 resumability: only validated checkpoints resume; terminal bundles remain immutable.

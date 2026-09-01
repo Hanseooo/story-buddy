@@ -26,6 +26,10 @@ describe("AdjudicatePage", () => {
     expect(
       screen.getByText("No conflicted pairs pending adjudication found.")
     ).toBeInTheDocument();
+    const logoutButton = screen.getByRole("button", { name: /log out/i });
+    expect(logoutButton.closest("form")).toHaveAttribute("action", "/auth/signout");
+    expect(logoutButton.closest("form")).toHaveAttribute("method", "post");
+    expect(screen.queryByRole("link", { name: /back to research lab/i })).not.toBeInTheDocument();
     expect(screen.queryByTestId("adjudicate-client")).not.toBeInTheDocument();
   });
 

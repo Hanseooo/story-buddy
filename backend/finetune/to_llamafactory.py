@@ -83,7 +83,10 @@ def write_dataset(records: list[ManifestRecord], out_dir: Path) -> None:
     (out_dir / "dataset_info.json").write_text(json.dumps(DATASET_INFO, indent=2), encoding="utf-8")
 
 
-def main(manifest: Path = Path("data/judge/manifest.jsonl"), out_dir: Path = Path("data/judge")) -> None:
+def main(
+    manifest: Path = Path("data/judge/freezes/obj4-v1/manifest.jsonl"),
+    out_dir: Path = Path("data/judge/freezes/obj4-v1"),
+) -> None:
     write_dataset(read_manifest(manifest), out_dir)   # read_manifest runs the §3.2 guard
 
 

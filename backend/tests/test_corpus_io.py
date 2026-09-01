@@ -13,6 +13,7 @@ from finetune.corpus_io import (
     CorpusError,
     IntakeRecord,
     RunBundle,
+    intake_sha256,
     load_completed_bundles,
     load_intake,
     write_bundle,
@@ -62,6 +63,15 @@ def donated_record(**changes):
     }
     record.update(changes)
     return record
+
+
+def test_intake_sha256_is_stable_and_excludes_only_withdrawal_state():
+    active = IntakeRecord.model_validate(donated_record())
+    withdrawn = active.model_copy(update={"withdrawal_state": "withdrawn"})
+
+    assert intake_sha256(active) == intake_sha256(withdrawn)
+    assert intake_sha256(active) != intake_sha256(active.model_copy(update={"text": "Changed"}))
+    assert len(intake_sha256(active)) == 64
 
 
 def write_intake(tmp_path, records):
@@ -211,6 +221,21 @@ def test_load_intake_rejects_a_donated_batch_with_primary_allocation_drift(tmp_p
 
     with pytest.raises(ValueError, match="donated allocation"):
         load_intake(write_intake(tmp_path, records))
+
+
+def test_generation_intake_still_rejects_withdrawn_donor(tmp_path):
+    records = donated_candidates()
+    records[-1]["withdrawal_state"] = "withdrawn"
+    with pytest.raises(ValueError, match="cannot enter generation"):
+        load_intake(write_intake(tmp_path, records))
+
+
+def test_freeze_audit_accepts_withdrawn_donor_without_weakening_batch_rules(tmp_path):
+    records = donated_candidates()
+    records[-1]["withdrawal_state"] = "withdrawn"
+    loaded = load_intake(write_intake(tmp_path, records), mode="freeze_audit")
+    assert loaded[-1].withdrawal_state == "withdrawn"
+    assert len(loaded) == 15
 
 
 def run_bundle(**changes):

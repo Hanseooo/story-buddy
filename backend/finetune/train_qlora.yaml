@@ -8,7 +8,7 @@
 
 ### model
 model_name_or_path: Qwen/Qwen2.5-VL-7B-Instruct
-model_revision: PIN_THE_EXACT_COMMIT_HASH   # CC-7. Not "main" — grab it from the model card (§13).
+model_revision: cc594898137f460bfe9f0759e9844b3ce807cfb5
 image_max_pixels: 262144                    # 512 x 512
 trust_remote_code: true
 
@@ -26,13 +26,13 @@ quantization_method: bnb
 # Registered by `to_llamafactory.DATASET_INFO`; regenerate, never hand-edit (§5.3).
 dataset: storybuddy_judge_train
 eval_dataset: storybuddy_judge_val          # character-disjoint, synthetic corpus. §3.2
-dataset_dir: data/judge
+dataset_dir: __SELECTED_FREEZE__               # overridden from finetune.train --freeze
 template: qwen2_vl
 cutoff_len: 2048
 
 ### output
 output_dir: saves/judge-lora-seed0
-report_to: wandb
+report_to: none
 run_name: judge-qlora-seed0
 plot_loss: true
 

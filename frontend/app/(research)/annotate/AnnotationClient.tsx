@@ -12,7 +12,7 @@ import { ImageCards } from "../_shared/components/ImageCards";
 import { VerdictBar } from "../_shared/components/VerdictBar";
 import { TaxonomyControls } from "../_shared/components/TaxonomyControls";
 
-export default function AnnotationClient({ pair }: { pair: ResearchPair }) {
+export default function AnnotationClient({ pair, round = 1 }: { pair: ResearchPair; round?: number }) {
   const router = useRouter();
   const [isSameCharacterSelected, setIsSameCharacterSelected] = useState(false);
   const [explicitSameCharacter, setExplicitSameCharacter] = useState(false);
@@ -55,7 +55,8 @@ export default function AnnotationClient({ pair }: { pair: ResearchPair }) {
         failureReasons,
         sameCharacter: explicitSameCharacter,
         anatomyIntact: !brokenAnatomy,
-        textFree: !textVisible
+        textFree: !textVisible,
+        round
       });
 
       if (result.error) {
@@ -80,6 +81,7 @@ export default function AnnotationClient({ pair }: { pair: ResearchPair }) {
     explicitSameCharacter,
     brokenAnatomy,
     textVisible,
+    round,
     router,
   ]);
 
@@ -180,7 +182,7 @@ export default function AnnotationClient({ pair }: { pair: ResearchPair }) {
                 Pairwise Consistency
               </span>
               <span className="px-2 py-0.5 rounded-md bg-admin/10 text-admin text-xs font-mono font-semibold uppercase tracking-wider">
-                Double-Blind
+                Blinded · Round {round}
               </span>
             </div>
           </div>

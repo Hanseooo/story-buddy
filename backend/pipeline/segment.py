@@ -83,8 +83,10 @@ Rules:
 - At most {max_scenes} scenes.
 - Each scene captures a distinct moment or plot point.
 - start and end are inclusive sentence indices.
-- characters_present lists character names exactly as given above.
+- characters_present lists character names exactly as given above and is the complete intended-visible cast.
 - List a character in characters_present only when they are intended to be visible in this scene frame. List them even when the sentences refer to them only as he, she, it or they.
+- Every roster character named or depicted anywhere in visual_direction—including one referred to by a pronoun—must be listed in characters_present using its exact roster name.
+- If a character is remembered, mentioned, or off-screen, do not name or depict that character in visual_direction; describe only what is visibly present in the selected frame.
 - location_name is where the scene happens, named exactly as given above. Leave it null if the \
 story does not say.
 - objects_present lists object names exactly as given above, but only when the object should be visible in the selected still frame. Treat this roster as a reference list, not a visibility list.
@@ -239,19 +241,14 @@ def merge_thin(scenes: list[ExtractedScene], units: list[str]) -> list[Extracted
     return merged
 
 
-# visual-continuity §4.3 REVERSED this regex's job. It used to be the omitted-character backstop,
-# recovering a roster name from the excerpt and appending it to `characters_present`; that
-# unconditional recovery is now removed, because a name appearing in an excerpt does not prove the
-# character should be VISIBLE (the motivating job drew characters who were only mentioned). The
-# structured `characters_present` decision is the sole authority on the visible cast.
-#
-# What the match is used for now is the opposite check: `visual_direction` must not name a roster
-# character outside that cast, which fails the job before any fal image is purchased (§4.8).
+# visual-continuity §4.3: this regex only reconciles an explicitly named roster character from the
+# rendered direction into the visible cast. It deliberately does not inspect the excerpt: a name
+# appearing in story text does not prove the character should be VISIBLE.
 #
 # Leading article stripped so a roster "the dragon" matches "a huge red dragon"; word boundaries so
 # "the star" does not match "stars", which names no character (`prompt_optimizer.REFERENCE_CLAUSE`
 # carves out the same case). Blind to pronouns, which is acceptable here: a direction that says only
-# "he flees" names no one outside the cast and correctly does not trip the check.
+# "he flees" names no roster character and correctly does not trigger reconciliation.
 _ARTICLE = re.compile(r"^(the|a|an)\s+", re.IGNORECASE)
 
 
@@ -299,13 +296,10 @@ def segment(state: StoryMemory) -> dict:
         char_ids = list(dict.fromkeys(char_ids))
 
         rendered_base = render_visual_direction(r.visual_direction)
-        outside_cast = [
-            name
-            for name, char_id in name_to_id.items()
-            if char_id not in char_ids and _names_character(rendered_base, name)
-        ]
-        if outside_cast:
-            raise ValueError(f"segment: visual_direction names character outside visible cast: {outside_cast}")
+        for name, char_id in name_to_id.items():
+            if char_id not in char_ids and _names_character(rendered_base, name):
+                char_ids.append(char_id)
+                log.info("segment: reconciled visual_direction character %r into visible cast for s%d", name, i)
 
         visible_objects: list[str] = []
         for name in r.objects_present:

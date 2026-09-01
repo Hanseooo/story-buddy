@@ -229,14 +229,18 @@ training-target/production-schema round-trip already requires. If a model wrote 
 ```
 backend/finetune/
   corpus_synthetic.json  # 30 strict JSON records: 24 train + 6 val, 10 stories/style; checked in
-  build_corpus.py        # corpus_synthetic.json -> paid fal draws -> data/judge/. Spend-capped.
+  build_corpus.py        # corpus_synthetic.json -> paid fal draws -> data/judge/corpus/. Spend-capped.
   manifest.py            # Pydantic record above + the guards (CI-tested) + `local_image_path`
   build_dataset.py       # pipeline output + the `annotations` table -> manifest.jsonl
   to_llamafactory.py     # manifest.jsonl -> sharegpt JSON + dataset_info.json
+  train.py               # zero-cost preflight + three pinned LLaMA-Factory invocations
   train_qlora.yaml       # the training config (§6.3)
-  evaluate.py            # the four baselines (§7)
-data/judge/              # gitignored — images + manifest.jsonl live here
-  ref/    scene/    manifest.jsonl    build_state.json
+  evaluation_metrics.py  # pure stdlib metrics and statistics (§7)
+  evaluate.py            # prediction evidence, access ledger and four baselines (§7)
+data/judge/              # gitignored
+  intake/                # controlled donated input + dataset selection
+  corpus/                # mutable run bundles, assets, quarantine and build state
+  freezes/<freeze-id>/   # immutable manifest, split JSON, verified assets and freeze report
 ```
 
 The input is a JSON list, not a Python list edited into `build_corpus.py`. Every record declares `story_id`,
@@ -256,12 +260,12 @@ rosters must reconcile before any pair is materialized.
 > `true` for *same*, so the manuscript's positive class is `label = not same_character` — converted once, in
 > `build_dataset.py`, and nowhere else.
 
-**One naming rule, in one place — `manifest.local_image_path`.** `build_corpus` writes each image to
-`data/judge/{kind}/{storage_path with / → _}`; the manifest's `images` must carry **that** on-disk name, not
-the Storage path, because LLaMA-Factory resolves `images` against the filesystem and **reports nothing useful
-when a path is wrong — it trains on what it managed to load.** Both sides import the rule; neither
-re-implements it. (Built 2026-08-14 by two agents that disagreed on exactly this and produced a manifest
-pointing at files that did not exist. The shared function and its test are what closed it.)
+**One naming rule, in one place — `manifest.local_image_path`.** The immutable freeze copies verified bytes
+under `assets/{kind}/{storage_path with / → _}`; the manifest's `images` must carry **that** freeze-relative
+name, not the Storage path, because LLaMA-Factory resolves `images` against the dataset directory and
+**reports nothing useful when a path is wrong — it trains on what it managed to load.** Both sides import
+the rule; neither re-implements it. (Built 2026-08-14 by two agents that disagreed on exactly this and
+produced a manifest pointing at files that did not exist. The shared function and its test are what closed it.)
 
 The manifest is the source of truth. The LLaMA-Factory JSON is a **build artifact** — regenerate it, never
 edit it. That is why `char_id` and `split` live in the manifest and not in the training file: they are
@@ -273,6 +277,13 @@ The live corpus allocation, encoding, spend limits, source order, and stop condi
 [`research-corpus-operations.md`](research-corpus-operations.md). Synthetic stories supply train and
 validation, consented donated stories supply held-out test only, and character lineage never crosses a
 split. Do not derive operational counts or costs from examples in this judge-training spec.
+
+Constructed negatives use the outcome-blind manual selection protocol in `research-corpus-operations.md`
+§4.6. Before annotation, a researcher selects the visually closest valid same-species, same-style target
+character for each synthetic training reference using §3.1's five visual dimensions. Dataset construction
+then pairs that reference with every natural training scene belonging to the selected target. The controlled
+selection file and its hash are frozen with the dataset; an unmapped or ineligible training character is a
+hard failure, not an automatic fallback to an easier negative.
 
 > **Reuse the labelling instrument for step 3.** The same interface that shows a human a reference and a scene
 > and asks "same character?" produces both the human reference labels and the training labels. One instrument,
@@ -345,7 +356,7 @@ and the one thing that will silently corrupt a run:
 [{"conversations": [
     {"from": "human",  "value": "<image><image>Identify the differences that correspond to the allowed failure taxonomy. Then output the required JSON object."},
     {"from": "gpt",    "value": "{\"differences_observed\": \"...\", \"same_character\": false, \"failure_reasons\": [\"wrong_clothing\"]}"}],
-  "images": ["data/judge/ref/quill_007.png", "data/judge/scene/quill_007_s03_a1.png"]}]
+  "images": ["assets/ref/quill_007.png", "assets/scene/quill_007_s03_a1.png"]}]
 ```
 
 The `gpt` turn is the verdict **serialized exactly as the Pydantic schema serializes it**. Import the schema;
@@ -372,7 +383,7 @@ fumbling. **Set a spend alarm before you start** — an idle pod bills all night
 ```yaml
 ### model
 model_name_or_path: Qwen/Qwen2.5-VL-7B-Instruct
-model_revision: <pin the exact commit hash>   # CC-7. Not "main".
+model_revision: cc594898137f460bfe9f0759e9844b3ce807cfb5   # CC-7. Never "main".
 image_max_pixels: 262144                      # 512 x 512
 trust_remote_code: true
 
@@ -394,7 +405,7 @@ cutoff_len: 2048
 
 ### output
 output_dir: saves/judge-lora-seed0
-report_to: wandb
+report_to: none
 run_name: judge-qlora-seed0
 plot_loss: true
 
@@ -418,12 +429,21 @@ load_best_model_at_end: true                  # early stopping on the disjoint v
 ### 6.4 Run it
 
 ```bash
-pip install "llamafactory[torch,metrics,bitsandbytes]"
-llamafactory-cli train backend/finetune/train_qlora.yaml
+uv tool install "llamafactory @ git+https://github.com/hiyouga/LlamaFactory.git@7af909522a951e3ad9f022ea6f88b6755257eaa5"
+uv run python -m finetune.train --freeze data/judge/freezes/obj4-v1 --qualification data/judge/training_qualification.json --run-root data/judge/runs/obj4-v1 --prepare
 ```
 
-Watch the eval loss in [Weights & Biases](https://wandb.ai) (free academic tier). Rising eval loss while
-train loss falls means it is memorising 975 examples — stop it, that is what `load_best_model_at_end` is for.
+The command runs in a separate GPU environment, never by adding Torch, Transformers or LLaMA-Factory to
+the production backend. `finetune.train` first validates the immutable freeze and required pins, then records
+the three exact invocations, including a `dataset_dir` override resolved from that same `--freeze`. The checked-in
+YAML contains only the `__SELECTED_FREEZE__` sentinel, so another hardcoded dataset directory fails preflight.
+`--execute` is the explicit boundary that starts GPU work. LLaMA-Factory supports
+command-line overrides after the YAML path; the runner varies only `seed`, `output_dir`, `run_name` and
+`report_to`, leaving one checked-in YAML as the scientific source of truth.
+
+Weights & Biases is optional. The canonical evidence is the local immutable run directory: resolved command,
+config and manifest hashes, stdout/stderr log, tool versions, hardware description, checkpoints and adapter
+paths. W&B may mirror those artifacts, but it is never the only copy or required for reproduction.
 
 **Checkpoint selection (pre-registered 2026-07-13).** Early stopping stays on eval loss, but the
 **reported** checkpoint per seed is selected by `different_character` F1 on the validation split —
@@ -438,12 +458,64 @@ who has trained a model will know that. Report mean ± std. Cost: three times a 
 
 `saves/judge-lora-seed0/` — a **LoRA adapter**, tens of megabytes. Not a model. It is a small patch that
 sits on top of the frozen base weights, which is why training is cheap and why the base model stays
-swappable. Commit the config and the manifest hash; the adapter goes to Storage or the W&B artifact registry.
+swappable. Commit the config and manifest hash; keep the adapter in the immutable local run directory, with
+an optional controlled Storage or W&B mirror.
 
 ### 6.6 Pin these or the paper cannot claim reproducibility (CC-7)
 
 Base model **revision hash** · LoRA rank + alpha · seed(s) · the exact `manifest.jsonl` (hash it) ·
 `image_max_pixels` · LLaMA-Factory version. Evaluation runs at temperature 0.
+
+The Batch-3 pins fixed on 2026-08-25, before any fine-tune or held-out result, are:
+
+- base model `Qwen/Qwen2.5-VL-7B-Instruct` at
+  `cc594898137f460bfe9f0759e9844b3ce807cfb5`;
+- LLaMA-Factory `v0.9.5` at `7af909522a951e3ad9f022ea6f88b6755257eaa5`;
+- seeds `0`, `1`, `2`; bootstrap RNG seed `0`;
+- local immutable run evidence as the source of truth, with W&B optional.
+
+The manifest hash, generator IDs/date, prompt version, hardware description and adapter locations do not yet
+exist. `finetune.train` and the evaluation lock reject blanks, placeholder text and unhashed artifacts rather
+than inventing them.
+
+PyTorch/CUDA and bitsandbytes builds are hardware-specific. Their exact versions are selected only after the
+school-or-cloud hardware qualification and declared in `training_qualification.json` with `base_model`,
+`base_revision`, `llamafactory_version`, `llamafactory_commit`, and the exact `hardware` inventory emitted by
+the target host. Both `--prepare` and `--execute` require that file, reject pin drift, and require the live
+inventory to equal its approved record. Preflight also reads the uv tool environment's installed
+`direct_url.json` and requires its VCS commit to equal the frozen LLaMA-Factory commit. Changing hardware
+requires a new qualification and run directory.
+This is an explicit sequencing rule, not permission to use an unpinned package.
+
+The approved record has this exact shape (values under `hardware` must equal
+`finetune.train.hardware_inventory()` on the qualified host):
+
+```json
+{
+  "base_model": "Qwen/Qwen2.5-VL-7B-Instruct",
+  "base_revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
+  "llamafactory_version": "v0.9.5",
+  "llamafactory_commit": "7af909522a951e3ad9f022ea6f88b6755257eaa5",
+  "hardware": {"os": "...", "python": "...", "gpu": "...", "torch": "...", "cuda": "...", "bitsandbytes": "..."}
+}
+```
+
+### 6.7 Batch-3 training runner
+
+`finetune.train` has two modes. `--prepare` is zero-cost: it verifies the recorded hashes of `manifest.jsonl`,
+`manifest.train.jsonl`, `manifest.val.jsonl`, `train.json`, `val.json`, `dataset_info.json`, and
+`dataset_manifest.json`; rejects a test
+dataset referenced by the training config; validates the fixed scientific settings; records the current git
+commit and the approved hardware/tool inventory; and prints the three resolved command plans while creating
+one run directory per seed. It never opens test data. `--execute` repeats the preflight
+and invokes the pinned `llamafactory-cli` once per seed. A non-zero child process stops the sequence without
+deleting completed evidence.
+
+Every seed uses the same checked-in YAML. Only `seed`, `output_dir`, `run_name` and `report_to` may differ.
+The runner records those resolved overrides and refuses to reuse a non-identical output directory. Checkpoint
+selection evaluates every saved checkpoint on `manifest.val.jsonl` and chooses the highest
+`different_character` F1; ties choose the earlier training step. All three selected checkpoints and their
+validation scores are retained and reported. A deployment seed, if needed, is chosen by validation F1 only.
 
 ---
 
@@ -457,7 +529,7 @@ the prompted incumbent. Separate them and neither is hostage to a coin flip.
 
 > **What reaches the paper (ADR-008, revised 2026-07-25).** **Objective 4** is the fine-tuned judge's
 > *agreement with human-established reference labels* on the character-disjoint held-out set — precision,
-> recall, and F1, **F1 primary** — with inter-rater reliability on those labels reported and the held-out set
+> recall, and F1, **F1 primary** — with intra-rater test-retest agreement on those labels reported and the held-out set
 > **read once**. That absolute number is the reported result. An **optional secondary comparison** against
 > the zero-shot base model (§7.1) and the existing prompted Consistency Judge baseline (§7.2, §7.4) is
 > permitted on the same held-out pairs and human labels — not required to satisfy Objective 4, and not
@@ -584,6 +656,69 @@ fine-tune alike).** Every judge runs under constrained decoding where the servin
 as a **miss on `different_character`** — counted against the judge that produced it. Deciding this
 after seeing which baseline emits broken JSON would be a degree of freedom; it is closed here.
 
+### 7.6 Batch-3 evaluation evidence and access control
+
+Predictions use schema version 2 and are immutable JSONL rows keyed by `pair_id`, `char_id`, split and judge ID. Each row records the
+binary prediction, verdict-token confidence when supplied, latency, parse status, model and adapter IDs,
+prompt version and threshold ID. The first row per judge is explicitly `cold`; all later rows are `warm`.
+Malformed calls keep latency unavailable rather than fabricating zero milliseconds. Every judge must cover
+the same ordered pair IDs. A duplicate, missing,
+reordered or unknown pair aborts the report. Missing confidence makes AUROC unavailable for that judge with a
+recorded reason; it never becomes a fabricated probability.
+
+The production `providers.judge()` signature stays unchanged. An additive evaluation-only provider function
+returns the parsed verdict plus logprob/latency metadata, keeping all remote calls in `providers.py`. The
+offline evaluator consumes that richer result. CI calls neither function against a real model.
+
+Validation is repeatable and uses only `manifest.val.jsonl`. It selects each seed's checkpoint and the
+CLIP/DINOv2 thresholds, then writes `evaluation_lock.json` containing every checkpoint/hash, threshold,
+prompt/model/tool pin, manifest-projection hash, bootstrap seed and prediction-schema version. The lock must
+be signed off before test access and cannot be replaced in place.
+
+Held-out access is file-ledgered and fail-closed. The runner acquires an exclusive lock and reserves a read
+before opening `manifest.test.jsonl`. It evaluates all three selected fine-tunes and all four baselines in one
+run. The evaluation lock requires prediction schema version 2, normalized SHA-256 values, nonblank registered identifiers,
+the frozen hashes for `character_slices.json` and `annotation_agreement.jsonl`, and all three selected
+checkpoint directories to still match their frozen paths and directory digests. Lock
+creation is exclusive and an existing byte-identical lock is the only idempotent success. Each completed judge
+prediction file has an immutable SHA-256 sidecar; a crashed run records `resumed`, verifies the file hash,
+alignment and frozen judge/checkpoint identity, and invokes only judges whose evidence is missing. The ledger
+records `reserved`, `resumed`, `completed` and `failed` without story text or asset paths. A crashed run may
+resume only under the same run ID and identical hashes. A second run is accepted only
+when the first completed report is Rung D and a dated deviation record binds the first report, defect, fix
+commit and train/validation-only debugging evidence. A third read is always rejected. The ledger is an
+auditable protocol control, not DRM; deleting it or copying the freeze is a reportable protocol violation.
+
+### 7.7 Batch-3 statistics
+
+Pure standard-library helpers compute positive-class precision/recall/F1; 10,000-resample
+character-clustered F1 and paired ΔF1 percentile intervals; two-sided exact McNemar on discordant item
+decisions; tied-rank AUROC; and Cohen's κ. κ is reported for the single rater's ordered rounds 1 and 2
+(test-retest) and for each judge against adjudicated human truth, overall and on the frozen human/non-human
+slices. Inter-rater agreement remains undefined for this one-rater dataset. All three fine-tune seeds are
+reported individually plus mean and sample standard deviation.
+
+Results also record latency, parse failures, label prevalence and prediction-rate drift. A fixed ten-bin
+reliability table and Brier score are exploratory calibration diagnostics, not new Objective-4 endpoints.
+Empty slices, one-class AUROC inputs and zero-variance κ are reported as unavailable with their reason.
+
+`Objective4Report` in `backend/finetune/evaluate.py` is the one emitted report schema (schema version 1).
+For every registered judge, `judges` records `n`, precision, recall, F1 and its clustered 95% interval,
+AUROC, Cohen's κ versus adjudicated truth, exploratory calibration, warm-start latency count/mean/sample SD
+with the first cold-start observation reported separately,
+cost/call availability, parse-failure count/rate, label prevalence, and prediction rate. `slices.human` and
+`slices.non_human` repeat that schema without pair, character, story, or asset identifiers.
+`intra_rater_agreement` reports overall and slice-level κ and percent agreement for the dataset's single
+rater, where rounds 1 and 2 are the test-retest observations. Inter-rater agreement is permanently undefined
+for this one-rater dataset. The report also
+contains prediction-rate drift versus the validation-selected deployment seed, an `objective4` conclusion,
+and a separate `deployment_decision`. Missing evidence and undefined statistics remain explicit unavailable
+objects with reasons. Registered transfer, downstream, and validation-only endpoints remain visible with
+their collection status rather than disappearing from the report. Before aggregation, the writer verifies
+prediction sidecars plus the freeze-report hashes for slice and agreement evidence. It validates the nested
+schema and publishes the sorted JSON exclusively/idempotently, so the same immutable inputs regenerate
+byte-identical report bytes and a different report can never replace ledgered evidence.
+
 ---
 
 ## 8. Then what? — serving the thing you trained
@@ -642,6 +777,13 @@ Models mocked. Never assert on generated content.
 - **`to_llamafactory.py` emits exactly as many `<image>` tokens as entries in `images`** (§6.1), and its `gpt`
   turn round-trips through the production verdict schema.
 - `pair_type == "constructed"` never appears in the `val` or `test` splits (§3.3).
+- Freeze projections reproduce the combined manifest exactly; validation tests fail if code attempts to open
+  `manifest.test.jsonl`.
+- Known examples cover exact McNemar, tied-rank AUROC, κ, clustered paired ΔF1 and degenerate inputs.
+- Training preflight rejects placeholder/mismatched pins and any seed config drift beyond the four allowed
+  overrides.
+- Held-out fixtures cover an ordinary first read, same-run crash resume, a documented Rung-D second read and
+  unconditional rejection of a third read.
 - **`test_research_integrity.py` executes the cross-cutting research integrity suite:** character-disjoint splits across train/val/test, test set purity (100% donated, 0 constructed negatives), constructed negatives restricted to train, manifest reconciliation against `dataset_manifest.json`, and strict ShareGPT prompt/output blinding (no leaked identifiers or split tokens).
 
 

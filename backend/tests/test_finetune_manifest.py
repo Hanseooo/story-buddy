@@ -10,10 +10,12 @@ import pytest
 from PIL import Image
 from pydantic import ValidationError
 
+from contracts.story_memory import Character, RefVerdict
 from finetune.manifest import (
     ManifestError,
     ManifestRecord,
     read_manifest,
+    reference_status,
     validate_manifest,
     write_manifest,
 )
@@ -36,6 +38,15 @@ def record(**overrides) -> ManifestRecord:
     )
     base.update(overrides)
     return ManifestRecord(**base)
+
+
+def character(**verdict) -> Character:
+    """A minted character; `ref_verdict` stays None unless verdict fields are supplied."""
+    if not verdict:
+        return Character(char_id="quill_007", name="Quill")
+    verdict.setdefault("differences_observed", "")
+    verdict.setdefault("matches_description", True)
+    return Character(char_id="quill_007", name="Quill", ref_verdict=RefVerdict(**verdict))
 
 
 def test_images_must_be_exactly_two():
@@ -141,6 +152,34 @@ def test_local_image_path_matches_build_corpus_layout(tmp_path):
 
 
 def test_local_image_path_is_posix_and_rooted_at_the_dataset_dir():
+    from finetune import build_corpus, materialize_pairs
     from finetune.manifest import local_image_path
 
-    assert local_image_path("judge-01/ref-c0-1.png", "ref") == "data/judge/ref/judge-01_ref-c0-1.png"
+    assert build_corpus.DATA_DIR.as_posix().endswith("data/judge/corpus")
+    assert materialize_pairs.DATA_DIR == build_corpus.DATA_DIR
+    assert local_image_path("judge-01/ref-c0-1.png", "ref") == "data/judge/corpus/ref/judge-01_ref-c0-1.png"
+
+
+# --- reference verification status (ADR-028) -----------------------------------------------
+
+def test_record_defaults_to_unverified_so_a_missing_status_is_never_read_as_checked():
+    assert record().ref_verdict_status == "unverified"
+
+
+def test_reference_status_reports_a_missing_verdict_as_unverified():
+    # `char_bible.mint_reference` ships `ref_verdict=None` when the judge call itself fails
+    # ("accepting unchecked"). data/judge/corpus-smoke-a (2026-08-27) shipped 6 of 7 characters
+    # that way, and nothing in `finetune/` could tell.
+    assert reference_status(character()) == "unverified"
+
+
+def test_reference_status_reports_a_contradicted_verdict_as_failed():
+    assert reference_status(character(contradictions=["wrong species"])) == "failed"
+
+
+def test_reference_status_reports_a_lettered_reference_as_failed():
+    assert reference_status(character(text_free=False)) == "failed"
+
+
+def test_reference_status_reports_a_clean_verdict_as_passed():
+    assert reference_status(character(matches_description=True)) == "passed"

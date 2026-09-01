@@ -41,6 +41,7 @@ dependencies = [
     "Pillow>=10.0",
     "langfuse>=2.0",
     "langchain>=0.3",
+    "pyyaml>=6.0",
 ]
 
 [dependency-groups]

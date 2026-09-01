@@ -125,6 +125,10 @@ class ModerationResult(BaseModel):  # minimal; refined by `moderation-stack` Pha
 class Input(BaseModel):
     raw_text: str
     redacted_text: Optional[str] = None   # CC-2: redacted_text is what downstream nodes consume
+    # Opt-in, and only the research corpus builder sets it. Authored synthetic stories carry no
+    # real PII, and pseudonymizing them renames the declared cast the corpus is keyed on. Named
+    # rather than inferred from a pre-set `redacted_text`, so a bypass has to be asked for.
+    synthetic_no_pii: bool = False
     word_count: int = 0
     truncated: bool = False
     moderation: Optional[ModerationResult] = None

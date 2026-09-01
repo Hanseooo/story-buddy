@@ -215,7 +215,7 @@ ignorable. Numbers and controls: `PHASE_05_RESULTS.md` Probe 3 follow-up.
 
 | Case | Behavior |
 |---|---|
-| **No `characters_present`, or none carry a reference** | `judge_attempt` returns `[]` → unchecked, finalized, logged as `unchecked=no_subjects`. This is exactly `generate_scene`'s `text_to_image` branch; there is no reference to judge identity against, so a retry here would be the uncorrected resample ADR-010 rejects. The *upstream* fix is `scene-segmentation` §4.6 name recovery; the residual case is ADR-004's ≤2 reference cap leaving a third character unreferenced. |
+| **No `characters_present`, or none carry a reference** | `judge_attempt` returns `[]` → unchecked, finalized, logged as `unchecked=no_subjects`. This is exactly `generate_scene`'s `text_to_image` branch; there is no reference to judge identity against, so a retry here would be the uncorrected resample ADR-010 rejects. The upstream protection is `scene-segmentation` §4.6's explicit direction-name reconciliation; residuals are pronoun/alias omissions that cannot be identified there, plus ADR-004's ≤2 reference cap leaving a third character unreferenced. |
 | **`char_id` present but absent from `state.characters`** | Skipped, logged. Same posture as `generate_scene` and `build_prompt` — this node may not extend the roster. |
 | **A `judge` call raises after ADR-025 retries** | Unchecked, finalized, `WARNING` with `exc_info`. `char_bible`'s deliberate asymmetry: the artifact exists and is paid for, only the *check* failed. Never a job failure. |
 | **Storage download of the scene or a reference raises** | Same as above. Failing a job over a check would violate ADR-010's shippable-page rule for a reason unrelated to the page. |

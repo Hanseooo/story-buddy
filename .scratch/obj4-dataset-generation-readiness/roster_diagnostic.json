@@ -1,0 +1,551 @@
+[
+  {
+    "story_id": "syn-001",
+    "status": "OK",
+    "declared": [
+      "Quill",
+      "Bok-Bok"
+    ],
+    "extracted": [
+      "Quill",
+      "Bok-Bok"
+    ],
+    "declared_non_human": [
+      "Quill",
+      "Bok-Bok"
+    ],
+    "extracted_non_human": [
+      "Quill",
+      "Bok-Bok"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-002",
+    "status": "OK",
+    "declared": [
+      "Marisol",
+      "Mopsi"
+    ],
+    "extracted": [
+      "Marisol",
+      "Mopsi"
+    ],
+    "declared_non_human": [
+      "Mopsi"
+    ],
+    "extracted_non_human": [
+      "Mopsi"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-003",
+    "status": "MISMATCH",
+    "declared": [
+      "Grindle"
+    ],
+    "extracted": [
+      "Grindle",
+      "the pigeons"
+    ],
+    "declared_non_human": [
+      "Grindle"
+    ],
+    "extracted_non_human": [
+      "Grindle",
+      "the pigeons"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-004",
+    "status": "MISMATCH",
+    "declared": [
+      "Tuko"
+    ],
+    "extracted": [
+      "Tuko",
+      "the kid"
+    ],
+    "declared_non_human": [
+      "Tuko"
+    ],
+    "extracted_non_human": [
+      "Tuko"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-005",
+    "status": "MISMATCH",
+    "declared": [
+      "Pipit"
+    ],
+    "extracted": [
+      "Pipit",
+      "the girl",
+      "the boy"
+    ],
+    "declared_non_human": [
+      "Pipit"
+    ],
+    "extracted_non_human": [
+      "Pipit"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-006",
+    "status": "MISMATCH",
+    "declared": [
+      "Sardo"
+    ],
+    "extracted": [
+      "Sardo",
+      "the family"
+    ],
+    "declared_non_human": [
+      "Sardo"
+    ],
+    "extracted_non_human": [
+      "Sardo"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-007",
+    "status": "MISMATCH",
+    "declared": [
+      "Danilo",
+      "Halo"
+    ],
+    "extracted": [
+      "Danilo",
+      "Halo",
+      "the vendor"
+    ],
+    "declared_non_human": [
+      "Halo"
+    ],
+    "extracted_non_human": [
+      "Halo"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-008",
+    "status": "MISMATCH",
+    "declared": [
+      "Mister Kettle"
+    ],
+    "extracted": [
+      "Mister Kettle",
+      "the grandmother",
+      "the grandfather"
+    ],
+    "declared_non_human": [
+      "Mister Kettle"
+    ],
+    "extracted_non_human": [
+      "Mister Kettle"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-009",
+    "status": "MISMATCH",
+    "declared": [
+      "Ngiwi"
+    ],
+    "extracted": [
+      "Ngiwi",
+      "the fat cat"
+    ],
+    "declared_non_human": [
+      "Ngiwi"
+    ],
+    "extracted_non_human": [
+      "Ngiwi",
+      "the fat cat"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-010",
+    "status": "MISMATCH",
+    "declared": [
+      "Bramblefoot"
+    ],
+    "extracted": [
+      "Bramblefoot",
+      "the deer"
+    ],
+    "declared_non_human": [
+      "Bramblefoot"
+    ],
+    "extracted_non_human": [
+      "Bramblefoot",
+      "the deer"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-011",
+    "status": "OK",
+    "declared": [
+      "Tarsi"
+    ],
+    "extracted": [
+      "Tarsi"
+    ],
+    "declared_non_human": [
+      "Tarsi"
+    ],
+    "extracted_non_human": [
+      "Tarsi"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-012",
+    "status": "OK",
+    "declared": [
+      "Ate Rina",
+      "Cog"
+    ],
+    "extracted": [
+      "Ate Rina",
+      "Cog"
+    ],
+    "declared_non_human": [
+      "Cog"
+    ],
+    "extracted_non_human": [
+      "Cog"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-013",
+    "status": "MISMATCH",
+    "declared": [
+      "Puddleback"
+    ],
+    "extracted": [
+      "Puddleback",
+      "the heron"
+    ],
+    "declared_non_human": [
+      "Puddleback"
+    ],
+    "extracted_non_human": [
+      "Puddleback",
+      "the heron"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-014",
+    "status": "MISMATCH",
+    "declared": [
+      "Nimbus Nine"
+    ],
+    "extracted": [
+      "Nimbus Nine",
+      "the goat"
+    ],
+    "declared_non_human": [
+      "Nimbus Nine"
+    ],
+    "extracted_non_human": [
+      "Nimbus Nine",
+      "the goat"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-015",
+    "status": "MISMATCH",
+    "declared": [
+      "Sablefin"
+    ],
+    "extracted": [
+      "Sablefin",
+      "the shrimp"
+    ],
+    "declared_non_human": [
+      "Sablefin"
+    ],
+    "extracted_non_human": [
+      "Sablefin",
+      "the shrimp"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-016",
+    "status": "MISMATCH",
+    "declared": [
+      "General Lint"
+    ],
+    "extracted": [
+      "General Lint",
+      "the vacuum"
+    ],
+    "declared_non_human": [
+      "General Lint"
+    ],
+    "extracted_non_human": [
+      "General Lint",
+      "the vacuum"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-017",
+    "status": "MISMATCH",
+    "declared": [
+      "Nonoy",
+      "Bakal"
+    ],
+    "extracted": [
+      "Nonoy",
+      "Bakal",
+      "lolo"
+    ],
+    "declared_non_human": [
+      "Bakal"
+    ],
+    "extracted_non_human": [
+      "Bakal"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-018",
+    "status": "MISMATCH",
+    "declared": [
+      "Mango"
+    ],
+    "extracted": [
+      "Mango",
+      "the other bats"
+    ],
+    "declared_non_human": [
+      "Mango"
+    ],
+    "extracted_non_human": [
+      "Mango",
+      "the other bats"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-019",
+    "status": "MISMATCH",
+    "declared": [
+      "Snorkel"
+    ],
+    "extracted": [
+      "Snorkel",
+      "the baby",
+      "the person (unidentified)"
+    ],
+    "declared_non_human": [
+      "Snorkel"
+    ],
+    "extracted_non_human": [
+      "Snorkel"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-020",
+    "status": "MISMATCH",
+    "declared": [
+      "Pebble"
+    ],
+    "extracted": [
+      "Pebble",
+      "the other tortoises"
+    ],
+    "declared_non_human": [
+      "Pebble"
+    ],
+    "extracted_non_human": [
+      "Pebble",
+      "the other tortoises"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-021",
+    "status": "OK",
+    "declared": [
+      "Lala",
+      "Ashwing"
+    ],
+    "extracted": [
+      "Lala",
+      "Ashwing"
+    ],
+    "declared_non_human": [
+      "Ashwing"
+    ],
+    "extracted_non_human": [
+      "Ashwing"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-022",
+    "status": "MISMATCH",
+    "declared": [
+      "Bantay"
+    ],
+    "extracted": [
+      "Bantay",
+      "the man"
+    ],
+    "declared_non_human": [
+      "Bantay"
+    ],
+    "extracted_non_human": [
+      "Bantay"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-023",
+    "status": "MISMATCH",
+    "declared": [
+      "Marmalade"
+    ],
+    "extracted": [
+      "Marmalade",
+      "the diver"
+    ],
+    "declared_non_human": [
+      "Marmalade"
+    ],
+    "extracted_non_human": [
+      "Marmalade"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-024",
+    "status": "MISMATCH",
+    "declared": [
+      "Wobblejaw"
+    ],
+    "extracted": [
+      "Wobblejaw",
+      "the rice thief"
+    ],
+    "declared_non_human": [
+      "Wobblejaw"
+    ],
+    "extracted_non_human": [
+      "Wobblejaw"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-025",
+    "status": "OK",
+    "declared": [
+      "Tito Ben",
+      "Sunny-Side"
+    ],
+    "extracted": [
+      "Tito Ben",
+      "Sunny-Side"
+    ],
+    "declared_non_human": [
+      "Sunny-Side"
+    ],
+    "extracted_non_human": [
+      "Sunny-Side"
+    ],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-026",
+    "status": "OK",
+    "declared": [
+      "Perla",
+      "Aling Cora"
+    ],
+    "extracted": [
+      "Perla",
+      "Aling Cora"
+    ],
+    "declared_non_human": [],
+    "extracted_non_human": [],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-027",
+    "status": "MISMATCH",
+    "declared": [
+      "Jomar"
+    ],
+    "extracted": [
+      "Jomar",
+      "the teacher"
+    ],
+    "declared_non_human": [],
+    "extracted_non_human": [],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-028",
+    "status": "MISMATCH",
+    "declared": [
+      "Aya"
+    ],
+    "extracted": [
+      "Aya",
+      "the other girl"
+    ],
+    "declared_non_human": [],
+    "extracted_non_human": [],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-029",
+    "status": "MISMATCH",
+    "declared": [
+      "Kiko"
+    ],
+    "extracted": [
+      "Kiko",
+      "the little sister",
+      "the cousins"
+    ],
+    "declared_non_human": [],
+    "extracted_non_human": [],
+    "over_extracted": false
+  },
+  {
+    "story_id": "syn-030",
+    "status": "OK",
+    "declared": [
+      "Basti",
+      "Mudlark"
+    ],
+    "extracted": [
+      "Basti",
+      "Mudlark"
+    ],
+    "declared_non_human": [
+      "Mudlark"
+    ],
+    "extracted_non_human": [
+      "Mudlark"
+    ],
+    "over_extracted": false
+  }
+]

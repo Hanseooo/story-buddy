@@ -113,7 +113,8 @@ describe("Tier 1: AnnotationClient Component Tests", () => {
         failureReasons: [],
         sameCharacter: true,
         anatomyIntact: true, // (!brokenAnatomy)
-        textFree: true       // (!textVisible)
+        textFree: true,      // (!textVisible)
+        round: 1
       });
       expect(mockRefresh).toHaveBeenCalled();
     });
@@ -186,8 +187,48 @@ describe("Tier 1: AnnotationClient Component Tests", () => {
         failureReasons: ["wrong_colour"],
         sameCharacter: false, // Explicit same character is false when different character is selected
         anatomyIntact: false, // anatomy_intact is false because brokenAnatomy is true
-        textFree: false       // text_free is false because textVisible is true
+        textFree: false,      // text_free is false because textVisible is true
+        round: 1
       });
     });
+  });
+});
+
+describe("Test-retest rounds (annotation-surface.md §4.1)", () => {
+  const mockPair = {
+    id: "pair-123",
+    canonical_signed_url: "https://example.com/canonical-test-url.png",
+    scene_signed_url: "https://example.com/scene-test-url.png",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("tells the rater which pass they are on", () => {
+    render(<AnnotationClient pair={mockPair} round={2} />);
+    expect(screen.getByText(/Round 2/i)).toBeDefined();
+  });
+
+  it("submits the served round with the label", async () => {
+    render(<AnnotationClient pair={mockPair} round={2} />);
+    fireEvent.click(screen.getByRole("radio", { name: /Same Character/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Submit/i }));
+
+    await waitFor(() => {
+      expect(actions.submitAnnotation).toHaveBeenCalledWith(
+        expect.objectContaining({ pairId: "pair-123", round: 2 })
+      );
+    });
+  });
+
+  it("shows no trace of a previous round's answer", () => {
+    const { container } = render(<AnnotationClient pair={mockPair} round={2} />);
+    const sameChar = screen.getByRole("radio", { name: /Same Character/i }) as HTMLInputElement;
+    const diffChar = screen.getByRole("radio", { name: /Different Character/i }) as HTMLInputElement;
+    expect(sameChar.checked).toBe(false);
+    expect(diffChar.checked).toBe(false);
+    expect(container.innerHTML).not.toContain("round_1");
+    expect(container.innerHTML).not.toContain("previous");
   });
 });

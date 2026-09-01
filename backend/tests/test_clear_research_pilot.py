@@ -19,7 +19,14 @@ class Query:
         self.window = (0, 999)
         self.operation = "select"
 
-    def select(self, _columns):
+    def select(self, columns):
+        # PostgREST rejects an unknown column with 42703 rather than ignoring it. The fake used to
+        # accept any name, so `annotations.id` -- a column that never existed, since the key is
+        # (pair_id, annotator_id, round) -- passed every test and failed against the live schema.
+        known = {column for row in self.client.rows[self.table] for column in row}
+        unknown = {c.strip() for c in columns.split(",")} - known
+        if known and unknown:
+            raise RuntimeError(f"column {self.table}.{sorted(unknown)[0]} does not exist")
         return self
 
     def eq(self, column, value):
@@ -49,7 +56,10 @@ class Query:
             )
         ]
         if self.operation == "delete":
-            self.client.mutations.append((self.table, tuple(row["id"] for row in matches)))
+            # `annotations` rows are identified by pair_id; only `research_pairs` has `id`.
+            self.client.mutations.append(
+                (self.table, tuple(row.get("id", row.get("pair_id")) for row in matches))
+            )
             if self.client.fail_table == f"{self.table}_raise":
                 raise RuntimeError("connection lost")
             if self.client.fail_table == self.table:
@@ -112,8 +122,8 @@ class FakeSupabase:
                 },
             ],
             "annotations": [
-                {"id": "annotation-1", "pair_id": "pilot-1"},
-                {"id": "annotation-2", "pair_id": "study-1"},
+                {"pair_id": "pilot-1", "annotator_id": "rater-1", "round": 1},
+                {"pair_id": "study-1", "annotator_id": "rater-1", "round": 1},
             ],
         }
         self.objects = {
@@ -156,7 +166,9 @@ def test_execute_cleanup_deletes_only_pilot_data_in_required_order():
         "research_pairs",
         "storage",
     ]
-    assert supabase.rows["annotations"] == [{"id": "annotation-2", "pair_id": "study-1"}]
+    assert supabase.rows["annotations"] == [
+        {"pair_id": "study-1", "annotator_id": "rater-1", "round": 1}
+    ]
     assert supabase.rows["research_pairs"][0]["id"] == "study-1"
     assert supabase.objects == {"research/corpus/study-1/a.png"}
 

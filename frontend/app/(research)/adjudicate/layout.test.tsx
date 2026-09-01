@@ -51,13 +51,16 @@ describe("AdjudicateLayout", () => {
     ).rejects.toThrow("Unauthorized");
   });
 
-  it("redirects to / if researcher is not an adjudicator (is_adjudicator=false)", async () => {
+  it("renders children for an ordinary researcher so solo adjudication can authorize by pair state", async () => {
     mockGetUser.mockResolvedValueOnce({ data: { user: { id: "user-1" } } });
     mockProfilesSelect.mockResolvedValueOnce({ data: { role: "researcher", is_adjudicator: false }, error: null });
 
-    await expect(
-      AdjudicateLayout({ children: <div>Child Content</div> })
-    ).rejects.toThrow("Unauthorized");
+    const jsx = await AdjudicateLayout({
+      children: <div>Child Content</div>,
+    });
+    render(jsx);
+
+    expect(screen.getByText("Child Content")).toBeInTheDocument();
   });
 
   it("renders children for authorized adjudicator (researcher with is_adjudicator=true)", async () => {

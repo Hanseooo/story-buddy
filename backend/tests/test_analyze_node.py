@@ -255,6 +255,18 @@ def test_extraction_prompt_requires_concrete_drawable_visual_values():
         assert placeholder in prompt
 
 
+def test_extraction_prompt_never_asks_for_a_value_it_also_bans():
+    """`contracts.story_memory._DESCRIPTION_PLACEHOLDERS` bans "neutral", so a prompt that also
+    ASKS for a neutral design invites body_plan="neutral": the model obeys, validation rejects
+    it, the single re-ask is spent, and the story hard-fails after two billed text calls."""
+    instructional = [
+        line
+        for line in EXTRACTION_PROMPT.splitlines()
+        if "neutral" in line.casefold() and "never use" not in line.casefold()
+    ]
+    assert instructional == []
+
+
 def test_extraction_prompt_prefers_the_name_the_story_gives():
     """A named character keeps their name; the descriptive label is the fallback, not the rule.
 
@@ -308,12 +320,27 @@ def test_extraction_prompt_separates_identity_from_appearance():
         assert phrase in prompt
 
 
+def test_extraction_prompt_gates_facelessness_on_the_story():
+    """A named kind keeps that kind's face unless the story says otherwise.
+
+    The faceless wording used to be ungated: it told the model how to phrase facelessness but
+    never when it applied, so "robot" alone was enough and the prompt's own example phrase landed
+    on a tin rooster. `char_bible` then minted a rooster-faced reference for a spec that said
+    "no visible face", and every scene failed `different_face` for the life of the story.
+    """
+    prompt = EXTRACTION_PROMPT
+    assert "Only when the story establishes" in prompt
+    assert "beak" in prompt
+    # The positive-wording guidance must survive the gate, not be replaced by it.
+    assert "smooth unbroken front surface" in prompt
+
+
 def test_extract_entities_logs_prompt_version(caplog):
     with caplog.at_level(logging.INFO, logger="pipeline.analyze"):
         with patch("pipeline.analyze.structured_text", return_value=_analysis()):
             extract_entities("I went to the beach.")
 
-    assert "extraction_prompt_version=1" in caplog.text
+    assert "extraction_prompt_version=4" in caplog.text
 
 
 def _state(raw_text="A dog runs in a field.", redacted_text="A dog runs in a field.") -> StoryMemory:
@@ -492,7 +519,7 @@ def test_extraction_prompt_asks_for_permanent_location_detail():
     )
     # setting-consistency §4.1: preserve stated facts, fill missing detail once.
     assert "Copy every stated permanent fact without alteration." in EXTRACTION_PROMPT
-    assert "Fill missing detail once with neutral, child-safe features" in EXTRACTION_PROMPT
+    assert "Fill missing detail once with plain, child-safe features" in EXTRACTION_PROMPT
 
 
 def test_extracted_location_rejects_blank_description():
@@ -661,6 +688,25 @@ def test_analyze_keeps_an_object_whose_owner_was_capped_out_of_the_roster(caplog
     assert result["objects"][0].owner_char_id is None
     assert result["objects"][0].description == "a short wooden sword with a red cord grip"
     assert "capped out of the roster" in caplog.text
+
+
+@pytest.mark.parametrize("placeholder", ["null", "NULL", "none", "None", "nil", "unowned", "N/A", "  ", ""])
+def test_analyze_normalizes_placeholder_owner_names(placeholder):
+    analysis = _analysis(
+        characters=[_character("Ana")],
+        objects=[
+            {
+                "name": "wooden sword",
+                "description": "a short wooden sword with a red cord grip",
+                "owner_name": placeholder,
+            }
+        ],
+    )
+    with patch("pipeline.analyze.extract_entities", return_value=analysis):
+        result = analyze(_state())
+
+    assert result["objects"][0].owner_char_id is None
+    assert result["objects"][0].description == "a short wooden sword with a red cord grip"
 
 
 def test_narrative_notes_do_not_satisfy_the_discriminator_floor():

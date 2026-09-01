@@ -24,16 +24,19 @@ the redacted input text, so `char_bible` has a stable roster to draw canonical r
 
 **Invariants** (each guarded by a test in §6):
 
-1. `len(characters) <= 3`, prominence-ordered — index `0` is the protagonist.
+1. `len(characters) <= 3`, prominence-ordered — index `0` is the protagonist. The cap is a ceiling,
+   not a target: the prompt asks for fewer than 3 whenever fewer than 3 entities act, because a
+   model reading `at most 3` as a quota pads the roster with whatever the story mentions next.
 2. Ids are `c{i}` / `loc{i}` / `obj{i}`, zero-based, **minted node-side by list position** after
    parsing (`story-memory-contract` §2.1, D-G). The LLM schema carries no id field.
 3. `Character.name` is **the name the story gives**, falling back to a short descriptive label when
    the story names nobody. Never a redaction placeholder. Names are identifiers only, not physical appearance.
+   A first-person teller is a character; a third-person story gets no narrator character.
 4. `timeline[].order` is **re-assigned by the node** from list index: zero-based and dense. It is
    not trusted from the model. A model that returns `1, 2, 5` or a duplicate `order` validates
    fine against Pydantic and would silently corrupt the only ordering `segment` receives.
 5. Every emitted `Character` has a complete visual profile: at least three discriminators across at least two of `colours`, `body_features`, and `clothing`. Required transient `body_plan` and `face_or_interface` are validated as trimmed, single-line, non-placeholder text under 120 Unicode code points, folded into `body_features` in declared order (with first-seen deduplication), and stripped along with `is_humanoid` before persistence. Humanoids carry a required `clothing` description. Exact blank/placeholder values are scrubbed from every downstream prompt projection.
-6. `characters[]` and `objects[]` are mutually exclusive by agency: actors perform actions and decide; inert items belong in `objects[]`. Exact character duplicates are dropped, and an explicit parenthetical alias (e.g. `the robot (Leo)` matching character `Leo`) is dropped in full before the object reaches the node.
+6. `characters[]` and `objects[]` are mutually exclusive by agency: actors perform actions and decide; inert items belong in `objects[]`, a place belongs in `locations[]`, and a group present only as scenery is not a character. Exact character duplicates are dropped, and an explicit parenthetical alias (e.g. `the robot (Leo)` matching character `Leo`) is dropped in full before the object reaches the node.
 7. Every `ExtractedObject` requires a stable physical `description`. `owner_name` is mapped to `owner_char_id` after character capping; an unknown owner fails boundary validation.
 
 ## 3. Position in the system map
@@ -162,7 +165,7 @@ The extraction instruction states:
 
 Locations require a strict permanent description. The prompt instructs the model to preserve stated permanent facts and fill missing detail neutrally, excluding temporary conditions.
 
-Objects require a stable physical description and an optional `owner_name`. Initial ownership is mapped after the three-character cap: `owner_name` maps to `owner_char_id`. If an `owner_name` cannot be resolved against the capped character roster, node execution raises `ValueError`.
+Objects require a stable physical description and an optional `owner_name`. Initial ownership is mapped after the three-character cap: `owner_name` maps to `owner_char_id`. Provider placeholder strings for an unowned object (`null`, `none`, `nil`, `unowned`, `n/a`, or whitespace, case-insensitive) normalize to `None` at the structured-output boundary. Any other `owner_name` that cannot be resolved against the capped character roster raises `ValueError`.
 
 ### Edge cases
 
@@ -181,6 +184,7 @@ Objects require a stable physical description and an optional `owner_name`. Init
 | **Character vs object ambiguity** ("the robot (Leo)") | Guided by agency in the extraction prompt (actors decide/act; inert items are objects; aliases forbidden). `StoryAnalysis` drops exact character duplicates and drops a trailing parenthetical character alias in full before the object reaches the node. |
 | **Character with sparse or incomplete description** | Fresh extraction requires concrete `body_plan` and `face_or_interface`, folding them into `body_features` and validating against the visual discriminator floor and humanoid clothing rules. |
 | **Unknown object owner** | **Fails boundary** — mapping `owner_name` to `owner_char_id` raises `ValueError` if `owner_name` is not in the capped character roster. |
+| **String placeholder for no owner** | Normalize `null`, `none`, `nil`, `unowned`, `n/a`, or whitespace to `None`; keep the object unowned. |
 | **Empty `timeline[]`** | Valid. `segment` falls back to text order. |
 | **Very short input** ("I like dogs") | Valid. Extraction yields whatever it yields; a minimum-length gate is `length-guard`'s job (Phase 2), not this node's. |
 | **Input was truncated** (ADR-012) | No special handling. `analyze` sees the kept portion, which is correct — the book illustrates what was kept, and ADR-012 forbids summarizing the tail back in. |

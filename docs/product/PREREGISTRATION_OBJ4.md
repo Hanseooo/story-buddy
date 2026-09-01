@@ -476,7 +476,7 @@ document's timestamp.
 | Pin | Value | Status |
 |---|---|---|
 | Base model | `Qwen/Qwen2.5-VL-7B-Instruct` | Fixed (ADR-018) |
-| Base model **revision hash** | `________________________` | ⬜ **To be filled at training time.** Pin the exact commit; never `main`. |
+| Base model **revision hash** | `cc594898137f460bfe9f0759e9844b3ce807cfb5` | ✅ Fixed 2026-08-25 before training or held-out access. |
 | LoRA rank / alpha | **16 / 32** | Fixed (`train_qlora.yaml`, §6.3) |
 | `lora_target` | `all` | Fixed |
 | Quantization | 4-bit, `bnb` (QLoRA) | Fixed |
@@ -486,12 +486,12 @@ document's timestamp.
 | Epochs / LR / scheduler | 3.0 / 1.0e-4 / cosine, warmup 0.1 | Fixed |
 | Batch × grad-accum | 1 × 8 | Fixed |
 | **`manifest.jsonl` hash** | `________________________` | ⬜ **To be filled when the dataset is built.** This hash is what proves the splits did not move (§3). |
-| **LLaMA-Factory version** | `________________________` | ⬜ **To be filled at training time** (exact release or commit). |
+| **LLaMA-Factory version** | `v0.9.5` / `7af909522a951e3ad9f022ea6f88b6755257eaa5` | ✅ Fixed 2026-08-25 before training or held-out access. |
 | Evaluation decoding | **temperature 0** | Fixed |
 | `consistency_check.JUDGE_PROMPT_VERSION` at eval | `______` | ⬜ **To be filled at evaluation time.** Verdict rates are only comparable within one prompt version — an unrecorded reword once forced a whole prior series to be discarded (`story_memory.py`, `ref_verdict_prompt_version`). |
 | Image generator that produced the pairs | `fal_image_model` / `fal_image_edit_model` as configured at generation time | ⬜ **Record the exact model IDs and the date.** ADR-018's distribution-shift warning: a judge trained on one generator's drift is matched to that generator. |
-| Adapter artifact location | W&B artifact registry or Storage | ⬜ To be filled |
-| Bootstrap RNG seed | `______` | ⬜ **To be filled at analysis time**, and reported. |
+| Adapter artifact location | Local immutable run directory; optional W&B mirror or controlled Storage copy | ⬜ Exact locations filled after training. |
+| Bootstrap RNG seed | `0` | ✅ Fixed 2026-08-25 before analysis. |
 
 ---
 
@@ -548,3 +548,96 @@ Story input is a validated JSON list, not Python source. The checked-in syntheti
 gitignored donated file share the strict record contract in `research-corpus-operations.md` §4.1. Declared
 fictional character/non-human rosters are reconciled with final `StoryMemory` before pair materialization.
 This amendment changes neither the primary endpoint nor the one-time held-out-test rule.
+
+### 2026-08-24 — Intake-assigned splits and fail-closed backup replacement
+
+**State when amended:** zero held-out results had been seen; donated stories had not entered the corpus;
+no study labels had been collected; no fine-tune had been trained.
+
+This amendment explicitly supersedes:
+- the earlier statement in §3.2 item 5 describing split assignment by `build_dataset.py` from a seeded assignment;
+- the 2026-08-22 amendment instruction allowing an achieved style imbalance to be reported without replacement.
+
+Implemented rules:
+- **Intake-assigned propagated splits:** synthetic stories carry `split="train"` (24 stories) or `split="val"` (6 stories) in `corpus_synthetic.json`; donated stories carry `split="test"` in `donated.json`. Splits are validated during intake loading and propagated strictly through `RunBundle` into `ManifestRecord`.
+- **Fail-closed backup replacement:** 10 primary donated stories are fixed at candidate intake (4 Gouache, 3 Cel, 3 Cut-paper). If a primary story is withdrawn or fails, it must be replaced by an approved, unused backup of the exact same style preset from `donated.json` documented in `dataset_selection.json`. If an approved same-style backup is not available, the dataset freeze fails closed (`ManifestError`) rather than admitting style drift or post-hoc allocation changes.
+- **Frozen manual hard negatives:** cross-character constructed negative pairs in the training split are selected and frozen in `dataset_selection.json` before non-pilot annotations begin, matching character species and art style.
+
+### 2026-08-25 — Batch-3 execution pins and exploratory diagnostics
+
+**State when amended:** zero held-out results had been seen; donated stories had not entered the corpus;
+no study labels had been collected; no fine-tune had been trained.
+
+This amendment fills reproducibility values at the moment they were selected: base revision
+`cc594898137f460bfe9f0759e9844b3ce807cfb5`, LLaMA-Factory `v0.9.5` at
+`7af909522a951e3ad9f022ea6f88b6755257eaa5`, and bootstrap RNG seed `0`. Local immutable run evidence is
+canonical; W&B is an optional mirror, not a required research service.
+
+The combined manifest remains the hashed source of truth, but deterministic split projections prevent
+validation code from parsing donated test records before the guarded held-out run. The freeze also preserves
+de-identified ordinary-label pairs for inter-rater κ and the intake-declared human/non-human character slice.
+The one-read rule and Rung-D-only second-read exception are unchanged.
+
+A fixed ten-bin reliability table and Brier score are added only as **exploratory calibration diagnostics**.
+They do not replace, gate, or modify any endpoint in §1 or §5 and must be labelled exploratory in reporting.
+
+### 2026-08-25 implementation interpretation — before held-out evaluation
+
+No held-out result had been seen. The canonical schema reports every judge overall and on both frozen
+human/non-human slices: sample count, precision, recall, F1 with the registered clustered interval, AUROC,
+judge-versus-human κ, exploratory calibration, latency count/mean/sample SD, parse-failure count/rate,
+cost/call availability, label prevalence, and prediction rate. Inter-rater κ and percent agreement are reported overall and by the
+same slices. Only aggregate statistics are emitted; story, character, pair, and asset identifiers remain in
+immutable evidence and never enter the report.
+
+The first recorded call per judge is the cold-start observation. It is reported separately and excluded from
+the warm-start latency mean and sample SD, preserving §9.6's measurement condition.
+
+DreamBench++ transfer, downstream expert feedback, and the validation-only data-scaling ablation stay
+explicit in the schema with their collection status when they are not inputs to the one guarded held-out
+runner. “Unavailable” is not silently converted into a number and does not change a gate.
+
+For §6, “beats base” remains exactly the registered paired clustered ΔF1 interval excluding zero. Rung A
+uses that result plus positive F1 difference versus prompted Gemma; it does not add recall as an undeclared
+gate. Rung B alone adds the registered no-recall-regression condition to the fixed δ = 3 non-inferiority
+boundary. Rung C records Objective 4 as met while keeping the incumbent deployment. Only Rung D records the
+research requirement as unmet. The Objective-4 conclusion and engineering deployment decision are therefore
+separate schema fields.
+
+### 2026-08-29 — One rater, test-retest agreement, and what that costs the claim
+
+No held-out result had been seen and no pair had been annotated when this was written.
+
+This amendment supersedes three earlier passages that assumed two independent annotators plus a distinct
+adjudicator: §4's "Annotation procedure, fixed in advance" paragraph, and the 2026-08-25 amendment's
+"ordinary-label pairs for inter-rater κ" and "Inter-rater κ and percent agreement are reported overall and by
+the same slices." The superseded text stays where it is; it is not the operative procedure.
+
+**The operative procedure.** One rater labels every pair. That rater is the researcher, and there is no
+second. Each pair therefore receives two ordinary labels from the same person in two separate rounds
+(`round = 1`, `round = 2`), collected blind and apart; where those two rounds disagree on `same_character`,
+the same rater resolves the pair once in a third round (`round = 3`), which is insert-only and authoritative.
+The two-annotator schema, the RLS isolation and the distinct-adjudicator code path are all retained and
+tested, so a genuine second rater would work if one ever appeared. That is contingency, not a plan.
+
+**Inter-rater κ is undefined for this dataset — permanently, not pending.** Cohen's κ between two annotators
+cannot be computed from one annotator's labels. It is not deferred, not underpowered, not awaiting
+recruitment. Every earlier commitment to report it is withdrawn here rather than quietly left to fail at
+analysis time.
+
+**What is reported in its place.** **Intra-rater (test-retest) agreement**: the same κ arithmetic and percent
+agreement over round 1 versus round 2, reported overall and by the same frozen human/non-human slices, under
+the field name `intra_rater_agreement`. It is computed after labelling and never displayed during it. It is
+reported whatever it is.
+
+**The limitation this creates, stated before seeing the number.** Test-retest agreement measures the rater's
+self-consistency and bounds label noise. It is a strictly weaker claim than inter-rater agreement, because it
+cannot detect a bias the rater holds consistently across both rounds: a rater who is reliably wrong in the
+same direction scores high. Any sentence reporting this number must name it test-retest and must carry that
+limitation. It may not be described as, compared to, or substituted for inter-rater reliability.
+
+**What is unchanged.** Judge-versus-human κ (§1 endpoint 3, §5), its clustered interval (§5.1), the slice
+definitions (§5.2), the claim ladder (§6), and δ = 3 (§5) all stand exactly as registered. δ was already
+reasoned against *one* annotator's disagreement band and is fixed as of 2026-08-14; nothing here reopens it.
+The ground-truth labels the judge is scored against are the round-3-resolved labels where a resolution
+exists, and the agreed round-1/round-2 label otherwise.

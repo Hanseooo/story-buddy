@@ -6,13 +6,16 @@ Deterministic tests mock these functions; nothing here runs in CI (MASTER_SPEC �
 import hashlib
 import json
 import logging
+import math
 import random
 import re
+import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import ContextVar
+from dataclasses import dataclass
 from functools import lru_cache
-from typing import Callable, TypeVar
+from typing import Callable, Generic, Literal, TypeVar
 
 import fal_client
 import httpx
@@ -70,12 +73,23 @@ VISION_PROVIDERS: dict[str, list[str]] = {
 # per call site, which is the rule ADR-002 already states — this is the first case where the two
 # lists actually diverge, so the rule is now load-bearing rather than decorative.
 #
-# ponytail: two providers, not one. Dropping to `["deepinfra"]` would be the cautious read, but the
-# shared free pool 429s often enough to have killed prod job beb4ebff, and MAX_RETRIES is the only
-# tolerance there is. Venice is unmeasured for fidelity rather than known-good — the re-ask in
-# `_chat` is what covers that, and it is why this list does not have to be right first time.
+# ponytail: one provider, deliberately. This list has carried a dead slug twice. `venice` sat here
+# until 2026-08-27 with no endpoint for the model at all; `mistral` replaced it the same day on the
+# strength of the public endpoints API, which advertises a Mistral endpoint. OpenRouter answers
+# `only=["mistral"]` from this account with a 404 naming what it will actually route: "deepinfra,
+# parasail". The endpoints API describes the MODEL, not the account's routing, and the two disagree
+# — so a slug is only real once probed. An unroutable slug is not a fallback, it is a comment that
+# costs a 429, and both times it left the claimed two-provider list as `["deepinfra"]` alone.
+#
+# `parasail` is reachable and still excluded: prod row 558afb6d had it answer `analyze` with a
+# malformed 200, `species` leaking into its location/object siblings. That is schema-valid
+# corruption, so the re-ask below cannot catch it. For a corpus the judge is trained on, a 429 is
+# recoverable and a silently wrong extraction is not — so the free-pool 429s (prod job beb4ebff,
+# and the corpus pre-flight on 2026-08-27) are answered with a BYOK provider key on the OpenRouter
+# account, not by widening this list. Re-check with: curl .../api/v1/models/{id}/endpoints, then
+# probe `only=[slug]` — the second step is the one that has twice been skipped.
 TEXT_PROVIDERS: dict[str, list[str]] = {
-    "mistralai/mistral-small-3.2-24b-instruct": ["deepinfra", "venice"],
+    "mistralai/mistral-small-3.2-24b-instruct": ["deepinfra"],
 }
 
 # The only bound on a call's TOTAL duration. Prod job d83721d9 (2026-08-11) proved `timeout=60.0`
@@ -94,6 +108,24 @@ TEXT_PROVIDERS: dict[str, list[str]] = {
 CALL_TIMEOUT_SECONDS = 120.0
 
 T = TypeVar("T", bound=BaseModel)
+
+
+@dataclass(frozen=True)
+class EvaluationJudgeResult(Generic[T]):
+    verdict: T
+    confidence: float | None
+    latency_ms: int
+
+
+def _same_character_confidence(completion) -> float | None:
+    content = getattr(getattr(completion.choices[0], "logprobs", None), "content", None)
+    seen_field = False
+    for item in content or []:
+        token = item.token.strip().lower()
+        seen_field = seen_field or "same_character" in token
+        if seen_field and ("true" in token or "false" in token):
+            return math.exp(item.logprob)
+    return None
 
 
 def _bounded(model: str, call):
@@ -162,6 +194,87 @@ def judge(prompt: str, image_urls: list[str], schema: type[T], model: str | None
     )
 
 
+def judge_with_metadata(
+    prompt: str,
+    image_urls: list[str],
+    schema: type[T],
+    model: str | None = None,
+    *,
+    route: Literal["judge", "openrouter"] = "judge",
+) -> EvaluationJudgeResult[T]:
+    """Additive evaluation-only judge call returning verdict, emitted confidence, and latency."""
+    if route == "judge":
+        base_url = settings.judge_base_url
+        api_key = settings.judge_api_key or settings.openrouter_api_key
+        resolved = model or settings.vlm_judge_model
+        providers_list = VISION_PROVIDERS.get(resolved)
+    elif route == "openrouter":
+        base_url = OPENROUTER_BASE_URL
+        api_key = settings.openrouter_api_key
+        resolved = model or settings.vlm_judge_model
+        providers_list = VISION_PROVIDERS.get(resolved)
+    else:
+        raise ValueError(f"unknown route: {route!r}")
+
+    prefs = {"require_parameters": True}
+    if providers_list:
+        prefs["only"] = providers_list
+    extra_body = {"provider": prefs} if base_url == OPENROUTER_BASE_URL else {}
+    client = OpenAI(base_url=base_url, api_key=api_key, timeout=60.0, max_retries=MAX_RETRIES)
+
+    content = [{"type": "text", "text": prompt}]
+    content += [{"type": "image_url", "image_url": {"url": url}} for url in image_urls]
+
+    t0 = time.perf_counter_ns()
+    try:
+        completion = _fetch_completion(
+            client, resolved, content, schema, extra_body,
+            temperature=0, include_logprobs=True,
+        )
+        message = completion.choices[0].message
+        if message.parsed is None:
+            raise ValueError(f"{resolved} returned no parsable structured output")
+        _assert_field_order(message.content or "", schema, resolved)
+    except ValueError as exc:
+        _log.warning("%s broke its own response schema; re-asking once. %s", resolved, exc)
+        completion = _fetch_completion(
+            client, resolved, content, schema, extra_body,
+            temperature=0, include_logprobs=True,
+        )
+        message = completion.choices[0].message
+        if message.parsed is None:
+            raise ValueError(f"{resolved} returned no parsable structured output")
+        _assert_field_order(message.content or "", schema, resolved)
+
+    elapsed_ms = int(round((time.perf_counter_ns() - t0) / 1_000_000))
+    confidence = _same_character_confidence(completion)
+    return EvaluationJudgeResult(verdict=message.parsed, confidence=confidence, latency_ms=elapsed_ms)
+
+
+def _fetch_completion(
+    client: OpenAI,
+    model: str,
+    content,
+    schema: type[T],
+    extra_body: dict,
+    *,
+    temperature: float | None = None,
+    include_logprobs: bool = False,
+):
+    kwargs = {
+        "model": model,
+        "messages": [{"role": "user", "content": content}],
+        "response_format": schema,
+        "extra_body": extra_body,
+    }
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+    if include_logprobs:
+        kwargs["logprobs"] = True
+        kwargs["top_logprobs"] = 5
+    return _bounded(model, lambda: client.chat.completions.parse(**kwargs))
+
+
 def _chat(
     base_url: str, api_key: str, model: str, content, schema: type[T],
     providers: list[str] | None = None,
@@ -196,20 +309,13 @@ def _chat(
 def _one_answer(client: OpenAI, model: str, content, schema: type[T], extra_body: dict) -> T:
     """One request, validated. Raises `ValueError` (or a `ValidationError`, which is one) whenever
     the provider returns something the declared grammar should have made unproducible."""
-    completion = _bounded(
-        model,
-        lambda: client.chat.completions.parse(
-            model=model,
-            messages=[{"role": "user", "content": content}],
-            response_format=schema,
-            extra_body=extra_body,
-        ),
-    )
+    completion = _fetch_completion(client, model, content, schema, extra_body, temperature=0)
     message = completion.choices[0].message
     if message.parsed is None:
         raise ValueError(f"{model} returned no parsable structured output")
     _assert_field_order(message.content or "", schema, model)
     return message.parsed
+
 
 
 def _assert_field_order(raw: str, schema: type[BaseModel], model: str) -> None:
@@ -232,6 +338,9 @@ def _assert_field_order(raw: str, schema: type[BaseModel], model: str) -> None:
         )
 
 
+GENERATED_IMAGE_SIZE = {"width": 1024, "height": 768}
+
+
 def text_to_image(prompt: str, seed: int | None = None, negative_extra: str = "") -> bytes:
     """Standalone image — the canonical character reference (ADR-001), and `generate_scene`'s
     no-reference fallback.
@@ -241,7 +350,11 @@ def text_to_image(prompt: str, seed: int | None = None, negative_extra: str = ""
     replacement — the lettering terms apply to every image this project draws.
     """
     negative = f"{NEGATIVE_PROMPT}, {negative_extra}" if negative_extra else NEGATIVE_PROMPT
-    return _run_fal(settings.fal_image_model, {"prompt": prompt, "negative_prompt": negative}, seed)
+    return _run_fal(
+        settings.fal_image_model,
+        {"prompt": prompt, "negative_prompt": negative, "image_size": GENERATED_IMAGE_SIZE},
+        seed,
+    )
 
 
 # fal endpoints disagree on what the reference-image field is called, and fal **silently ignores
@@ -266,7 +379,11 @@ def edit_image(prompt: str, image_urls: list[str], seed: int | None = None) -> b
             "checking fal's openapi. Failing loudly is deliberate — an unrecognised key is dropped "
             "silently, so the alternative is every scene quietly ignoring its character reference."
         )
-    return _run_fal(endpoint, {"prompt": prompt, REFERENCE_FIELD[endpoint]: image_urls}, seed)
+    return _run_fal(
+        endpoint,
+        {"prompt": prompt, REFERENCE_FIELD[endpoint]: image_urls, "image_size": GENERATED_IMAGE_SIZE},
+        seed,
+    )
 
 
 def upload_reference(image_bytes: bytes) -> str:

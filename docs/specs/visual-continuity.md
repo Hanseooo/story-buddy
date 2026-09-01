@@ -174,14 +174,15 @@ visual_direction: str
 ```
 
 `objects_present` carries roster names at the LLM boundary and is mapped to ids by the node. It is
-the complete visible-object list for the selected still frame. Unknown names, an empty direction,
-or a direction that names a character outside the visible cast fails before `char_bible`, so no fal
-image has been purchased.
+the complete visible-object list for the selected still frame. Unknown names in
+`characters_present`, or an empty direction, fail before `char_bible`, so no fal image has been
+purchased. A roster name omitted from `characters_present` but explicitly present in
+`visual_direction` is reconciled before `char_bible` in roster order.
 
-The current unconditional exact-name recovery is removed: a name appearing in an excerpt does not
-prove that the character should be visible. The structured `characters_present` decision is the
-authority. All `ExtractedScene` repair and merge paths preserve the explicit object list and
-structured direction.
+Excerpt recovery remains removed: a name appearing only in an excerpt does not prove that the
+character should be visible. Pronoun or alias references that are not explicit roster names remain
+the residual omission case. All `ExtractedScene` repair and merge paths preserve the explicit object
+list and structured direction.
 
 `visual_direction` is short and literal, not prose improvement. For the motivating final beat it
 must say the equivalent of:

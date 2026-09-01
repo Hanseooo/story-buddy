@@ -30,8 +30,12 @@ TAXONOMY = [
 # false positive §6 names. Lives here rather than in a route because
 # `adjudicate/` cannot be built until D-K and D-L are decided; the route lifts
 # this string when it is.
+# `round <= 2` restricts the grouping to the two ordinary test-retest passes
+# (0018): a round-3 adjudication is the resolution, so counting it would keep an
+# already-resolved pair in the queue forever.
 DISAGREEMENT_SQL = """
     SELECT pair_id FROM annotations
+    WHERE round <= 2
     GROUP BY pair_id
     HAVING count(DISTINCT same_character) > 1
     ORDER BY pair_id
@@ -102,12 +106,12 @@ def _student(conn) -> uuid.UUID:
     return uid
 
 
-def _annotate(conn, pair_id: str, annotator_id: uuid.UUID, same: bool, reasons=()):
+def _annotate(conn, pair_id: str, annotator_id: uuid.UUID, same: bool, reasons=(), round_=1):
     """Superuser insert — sets up state without going through the policies."""
     conn.execute(
-        "INSERT INTO annotations (pair_id, annotator_id, same_character, failure_reasons)"
-        " VALUES (%s, %s, %s, %s)",
-        (pair_id, annotator_id, same, list(reasons)),
+        "INSERT INTO annotations (pair_id, annotator_id, same_character, failure_reasons, round)"
+        " VALUES (%s, %s, %s, %s, %s)",
+        (pair_id, annotator_id, same, list(reasons), round_),
     )
 
 
@@ -267,6 +271,59 @@ def test_resubmission_is_not_a_second_row(conn):
             (a,),
         )
     assert conn.execute("SELECT count(*) FROM annotations").fetchone() == (1,)
+
+
+def test_one_rater_may_label_the_same_pair_once_per_round(conn):
+    """0018's whole point: the key is (pair_id, annotator_id, round), so the solo
+    rater's second, cold pass is a second row rather than a primary-key conflict."""
+    a = _researcher(conn, "A")
+    _annotate(conn, "pair-1", a, True, round_=1)
+    _annotate(conn, "pair-1", a, False, round_=2)
+    _annotate(conn, "pair-1", a, False, round_=3)
+    assert conn.execute("SELECT count(*) FROM annotations").fetchone() == (3,)
+
+
+def test_resubmitting_the_same_round_is_still_first_write_wins(conn):
+    a = _researcher(conn, "A")
+    _as_user(conn, a)
+    for same in (True, False):
+        conn.execute(
+            "INSERT INTO annotations (pair_id, annotator_id, same_character, round)"
+            " VALUES ('pair-1', %s, %s, 2) ON CONFLICT DO NOTHING",
+            (a, same),
+        )
+    assert conn.execute(
+        "SELECT count(*), bool_and(same_character) FROM annotations"
+    ).fetchone() == (1, True)
+
+
+def test_round_defaults_to_one_for_a_client_that_omits_it(conn):
+    a = _researcher(conn, "A")
+    _as_user(conn, a)
+    conn.execute(
+        "INSERT INTO annotations (pair_id, annotator_id, same_character) VALUES ('pair-1', %s, true)",
+        (a,),
+    )
+    assert conn.execute("SELECT round FROM annotations").fetchone() == (1,)
+
+
+@pytest.mark.parametrize("bad_round", [0, 4, -1])
+def test_round_outside_the_closed_range_is_rejected(conn, bad_round):
+    """Rounds 1-2 are the test-retest passes and 3 is adjudication; a 4th round
+    would be a self-revision path §4 forbids."""
+    a = _researcher(conn, "A")
+    with pytest.raises(psycopg.errors.CheckViolation):
+        _annotate(conn, "pair-1", a, True, round_=bad_round)
+
+
+def test_a_second_round_cannot_be_written_as_an_update_of_the_first(conn):
+    """Round 2 is a new observation, not a back button — there is no update grant."""
+    a = _researcher(conn, "A")
+    _annotate(conn, "pair-1", a, True, round_=1)
+    _as_user(conn, a)
+    conn.execute("UPDATE annotations SET same_character = false WHERE pair_id = 'pair-1'")
+    _reset_role(conn)
+    assert conn.execute("SELECT same_character FROM annotations").fetchall() == [(True,)]
 
 
 def test_two_annotators_may_label_the_same_pair(conn):

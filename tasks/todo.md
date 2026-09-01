@@ -1,3 +1,269 @@
+# Current Task: Safe continuation of interrupted Objective-4 work
+
+- [x] Reconstruct committed, uncommitted, and unrelated session state.
+- [x] Confirm the bounded design from the owner's prior decisions.
+- [x] Write the disposable TDD implementation plan.
+- [x] Finish and review the intra-rater report-key rename.
+- [x] Finish and review solo round-3 adjudication.
+- [x] Finish and review pre-existing-quarantine rerun behavior and documentation.
+- [x] Run full backend/frontend verification and independent scoped reviews.
+- [x] Record outcomes and remove the completed disposable plan.
+
+## Success criteria
+
+The Objective-4 report accurately names test-retest agreement; the solo researcher can add exactly one
+round-3 adjudication row without weakening ordinary annotation isolation or forward-only RLS; ordinary paid
+reruns skip and report pre-existing story-local quarantines while uncertain billing still stops; all owning
+specs match; full deterministic checks are green. Migration `0018` remains unapplied and all live-database,
+sampling-policy, pilot-selection, paid-provider, training, and held-out-evaluation work remains out of scope.
+
+## Outcome — 2026-08-28
+
+- Renamed the Objective-4 report field to `intra_rater_agreement`; the value remains the one rater's
+  round-1/round-2 test-retest agreement, and the owning spec explicitly says inter-rater agreement is
+  undefined.
+- Finished solo round-3 adjudication: any researcher may enter `/adjudicate`, while server actions authorize
+  only the solo `{1, 2}` row shape or a distinct adjudicator who authored neither ordinary row. Round 3 stays
+  insert-only. Existing and raced duplicate submissions are accepted only when stored values match exactly.
+- Ordinary paid corpus reruns now count and skip only the four known story-local quarantine reasons when no
+  recovery option targets that story. Targeted validation, malformed-state refusal, fixture refusal and the
+  `billing_uncertain` hard stop remain intact.
+- Independent task reviews found and closed the layout gate, duplicate-submit value race and malformed
+  quarantine-reason bypass. Scoped re-reviews were clean. Two additional consolidated-review agents did not
+  return and were interrupted; no verdict from them was used.
+
+Verification:
+- Backend: `uv run ruff check .` passed; `uv run pytest` reported **1,337 passed, 87 skipped, 6 deselected**.
+- Frontend: `pnpm lint` passed; `pnpm test` reported **398 passed across 42 files**; `pnpm build` compiled,
+  type-checked and generated all routes successfully.
+- Focused: corpus **137 passed**; adjudicate/annotate auth **61 passed**; scoped Ruff and `git diff --check`
+  passed.
+
+Not verified or intentionally deferred:
+- Migration `0018_annotation_rounds.sql` remains unapplied. The 25 annotation RLS tests were skipped with the
+  rest of the live-database suites, so no live round-2/round-3 write has been proven.
+- Two distinct adjudicator profiles can still race separate round-3 inserts because the key includes
+  `annotator_id`; the active protocol permanently has one rater. A future multi-adjudicator deployment needs
+  a separately approved database uniqueness/transaction decision first.
+- Ordinary researcher login still defaults to `/annotate`; `/adjudicate` is reachable directly but is not
+  automatically surfaced after round 2.
+- No paid/provider, training, held-out evaluation, sampling/cap-policy, pilot-selection or live-Storage work
+  ran. Existing Next.js middleware and Starlette/httpx deprecation warnings remain.
+
+---
+
+# Current Task: Objective-4 dataset readiness engineering
+
+- [x] Revalidate the earlier readiness audit against current HEAD.
+- [x] Separate external governance gates from engineering readiness work.
+- [x] Compare staged, combined and documentation-first approaches; obtain approval for staged delivery.
+- [x] Record and self-review the Batch 1 corpus-integrity design.
+- [x] Obtain owner review of the written Batch 1 design.
+- [x] Write and self-review the disposable TDD implementation plan for Batch 1.
+- [x] Execute and verify Batch 1 in a separate implementation cycle.
+- [x] Design and implement Batch 2 dataset-validity safeguards.
+  - [x] Revalidate hard-negative, withdrawal, role, split and path blockers against current HEAD.
+  - [x] Approve the full canonical-dataset boundary and manual frozen hard-negative mapping.
+  - [x] Approve the controlled selection artifact, fail-closed validation and canonical path flow.
+  - [x] Record and self-review the Batch 2 design in the owning research specs.
+  - [x] Obtain owner review of the written Batch 2 spec.
+  - [x] Write the disposable TDD implementation plan.
+  - [x] Implement and verify Batch 2.
+- [x] Close verified Batch 2 review findings.
+  - [x] Bind copied bundle metadata to its current intake record.
+  - [x] Apply the hard-negative freeze timestamp gate to all non-pilot annotations.
+  - [x] Reject withdrawal replacements for active primaries.
+  - [x] Clarify that hard-negative selection covers reference-bearing characters.
+  - [x] Run focused tests, backend lint, and the full backend suite.
+- [x] Close the final Batch 2 reproducibility findings.
+  - [x] Add a failing regression for freezing the exact selection artifact.
+  - [x] Copy and hash-verify `dataset_selection.json` inside the immutable freeze.
+  - [x] Reconcile the runbook with the preregistered Rung-D second-read exception.
+  - [x] Run focused and full verification, review, and commit only Batch 2 files.
+- [x] Design and implement Batch 3 training/evaluation execution.
+- [x] Finalize the existing research runbook as the sole operator guide.
+
+## Success criteria
+
+Zero-cost fixture work proves exact-boundary completion, fail-closed quarantine and auditable recovery without
+resetting spend; immutable intake bytes bind every corpus bundle; dataset freeze enforces the preregistered
+negative/selection rules; training and evaluation fail closed on missing pins or premature test access; and
+the canonical runbook contains the complete executable sequence without duplicating another permanent guide.
+
+## Batch 2 Outcome — Dataset Validity Safeguards
+
+Implemented and verified in Tasks 1–5:
+- **Strict selection artifact & fail-closed donor replacement:** `DatasetSelection` (`dataset_selection.json`) controls primary donors (4 Gouache, 3 Cel, 3 Cut-paper) and documented backup replacements with matching art styles and valid non-blank justifications.
+- **Intake mode separation:** `corpus_io.load_intake` supports `mode="generation"` (rejecting withdrawn stories) vs `mode="freeze_audit"` (accepting them to locate and audit exclusions).
+- **Frozen manual hard negatives:** Cross-character train-split pairs validated for same species, same style, >=1 finalized target scene, and `hard_negatives_frozen_at` preceding all non-pilot annotations.
+- **Pre-materialization bundle filtering:** `prepare_dataset_bundles()` filters and validates bundles before any Supabase client initialization or remote network calls in `materialize_pairs.py` and `freeze_dataset.py`.
+- **Immutable freeze reporting:** `FreezeReport` captures `selected_donated_stories`, `excluded_donated_stories`, `replacement_reasons`, and `selection_sha256`.
+- **Self-contained selection audit:** The immutable freeze snapshots the exact `dataset_selection.json` bytes, verifies their SHA-256 against the validated selection, and rejects annotation timestamps that do not strictly follow the hard-negative freeze.
+- **Canonical workspace paths:** Root `data/judge` references separated into `data/judge/corpus`, `data/judge/intake`, and `data/judge/freezes/obj4-v1`.
+- **Preregistration amendment & runbook:** Added 2026-08-24 dated amendment to `PREREGISTRATION_OBJ4.md` §12 superseding earlier seeded assignment/imbalance clauses; updated `research_runbook.md` with the 8-step pipeline.
+
+Verification:
+- Focused tests: 218 passed, 7 skipped in `test_corpus_io.py`, `test_dataset_selection.py`, `test_finetune_corpus.py`, `test_materialize_pairs.py`, `test_finetune_dataset.py`, `test_finetune_manifest.py`, `test_finetune_llamafactory.py`, `test_research_integrity.py`.
+- Full backend suite: 1,139 passed, 80 skipped (RLS/remote DB), 6 deselected smoke tests, 0 failed (`uv run pytest`).
+- Backend lint: `uv run ruff check .` passed with 0 errors.
+- Frontend suite: 380 passed across 42 files (`pnpm lint && pnpm test`).
+- Zero-cost fixture: 1 story completed, 0 paid images spent, `usd_high="0.000"`, valid candidate report JSON, fixture freeze passed without production files.
+- Final senior code review: 0 Critical and 0 Important issues; ready to merge after the strict timestamp-boundary regression was added.
+- Review follow-up: bundle metadata now matches intake fields, timestamp gating sees every non-pilot annotation,
+  active primaries cannot cite withdrawal, the exact selection artifact is frozen and hash-verified, the Rung-D
+  exception is explicit, and the owning spec names reference-bearing characters explicitly.
+- Confirmed no live provider, paid Fal call, real donor intake, live database/Storage mutation, or `.env` access occurred.
+
+## Batch 1 Outcome — Research Corpus Integrity
+
+Implemented and verified in Tasks 1–3:
+- **Intake binding:** `intake_sha256()` computes canonical SHA-256 over immutable intake fields (excluding mutable `withdrawal_state`), persisted in `run_metadata` and re-verified on bundle load and resume.
+- **Paid-call boundary & quarantine:** The shared `_fal_event_sink` rejects attempts past the draw limit before submission (`StoryBudgetStopped`), and `run_story()` explicitly outputs `completed`, `budget_stopped`, or `quarantined` (`resume_exhausted`, `billing_uncertain`, `invalid_terminal`, `intake_mismatch`).
+- **Quarantine recovery:** `--resume-quarantined <story_id>` and `--acknowledge-uncertain-billing <story_id>` validate checkpoint state and intake digest, record UTC acknowledgment timestamp, and preserve all attempted spend at the pinned conservative price.
+
+Verification:
+- Focused tests: 76 passed (36 in `test_corpus_io.py`, 40 in `test_finetune_corpus.py`).
+- Full backend suite: 1,084 passed, 80 intentionally skipped (RLS/remote DB tests requiring live credentials), 6 deselected smoke tests, 1 pre-existing Starlette deprecation warning.
+- Backend lint: `uv run ruff check .` passed with 0 errors.
+- Zero-cost CLI fixture: 1 story completed, 0 images spent, `usd_high="0.000"`, and valid bundle reference in `build_state.json`.
+- Confirmed no live provider, paid Fal call, live database mutation, or `.env` access occurred.
+- Remaining blockers: Batch 2 dataset-validity safeguards (construct train negatives, split lineage guards, freeze report) and Batch 3 training/eval execution.
+
+---
+
+# Current Task: Storybook deletion implementation planning
+
+- [x] Explore storybook ownership, UI surfaces, job/worker lifecycle, database relationships, checkpoints, Storage objects, telemetry, and governing decisions.
+- [x] Resolve who may delete which storybooks and whether deletion is hard, soft, or staged.
+- [x] Compare safe deletion designs and obtain owner approval for the selected data lifecycle.
+- [x] Record the approved architecture in ADR-044 and reconcile D-J's decision surfaces.
+- [x] Write and self-review the durable feature spec.
+- [ ] Write and self-review the TDD-first implementation plan under `docs/specs/plans/`.
+
+## Success criteria
+
+The approved plan names every affected persistence layer and user surface; prevents cross-classroom deletion,
+worker resurrection, orphaned Storage/checkpoint data, and silent loss of required research/audit evidence; and
+provides exact red-green tests plus live Supabase verification without changing runtime code or external data.
+
+## ADR review / outcome
+
+ADR-044 selects child-owned hard deletion for quiescent `complete`, `failed`, and `awaiting_confirm` jobs.
+Deletion stays behind authenticated FastAPI, uses `worker_finished_at` as the no-producer barrier, moves the row
+to `deleting`, and delegates idempotent Storage/checkpoint/Langfuse/row cleanup to existing RQ. Direct browser
+DELETE policies, teacher per-book deletion, soft-delete metrics retention, and in-flight cancellation are out.
+
+ADR verification passed: required sections and escape hatch are present; ADR numbering is unique through 044;
+the index target resolves; D-J has no open backlog row; placeholder, runtime-change, and targeted diff checks are
+clean. No application tests ran because this session changed decision documentation only. The feature spec and
+implementation plan remain pending and must be authored in a fresh session per the architecture-session gate.
+
+## Feature-spec outcome — 2026-08-24
+
+Drafted `docs/specs/storybook-deletion.md` from accepted ADR-044. It fixes the per-book boundary,
+quiescence/CAS rules, immediate RLS revocation, four-store cleanup order, retry semantics, UI states,
+deterministic tests, live Supabase proof, and explicit retention limits. Owner review is pending;
+the implementation plan remains blocked until the spec is approved.
+
+---
+
+# Current Task: ISO/IEC 25010 readiness audit and remediation guide
+
+- [x] Re-verify promised product and capstone scope, especially narration and PDF export.
+- [x] Write a comprehensive, evidence-backed, AI-agent-friendly readiness audit.
+- [x] Separate confirmed blockers, conditional scope gaps, evidence gaps, and rejected findings.
+- [x] Create one sanitized public GitHub umbrella issue without disclosing sensitive mechanics.
+- [x] Verify document links, issue content, diff hygiene, and record the outcome.
+
+## Success criteria
+
+The audit uses the ISO/IEC 25010:2023 nine-characteristic model, distinguishes implementation defects from
+unproven evaluation claims and optional scope, gives agents exact constraints and verification gates, and
+publishes only a sanitized public issue. Narration and export are classified from canonical project sources
+rather than assumed to be universal ISO requirements.
+
+## Review / outcome
+
+Created `docs/capstone/iso_iec_25010_readiness_audit.md`, a commit-pinned ISO/IEC 25010:2023 readiness report with
+system/study context, nine-characteristic matrix, scope gates, public/private finding groups, rejected findings,
+remediation workstreams, an Objective-5 instrument gate, an agent ticket contract, and evidence limitations.
+Narration and PDF export are both required but undemonstrated under current accepted sources; PDF is eligible for
+formal de-scope only through a new superseding ADR and full promise/instrument reconciliation.
+
+Created public umbrella issue `#68` (`ISO/IEC 25010:2023 readiness program and evidence gates`) with the
+`documentation` label. A disclosure review replaced sensitive mechanics with opaque private work IDs; the public
+document and issue retain only safe classifications and exit criteria. Verification confirmed all 11 local
+Markdown links resolve, forbidden sensitive-mechanics patterns are absent, issue #68 is open with corrected ADR
+wording, and `git diff --check` reports no patch errors. Application tests were not rerun for this docs-only change;
+the audit records the earlier green deterministic baseline and explicitly states that raw logs/live integration
+evidence were not retained or run in this step.
+
+---
+
+# Current Task: Expert-evaluation decision brief HTML artifact
+
+- [x] Explore the existing research artifact, Cobalt Playroom design language, canonical evaluation docs, and recent changes.
+- [x] Clarify whether the artifact is a researcher decision brief, an administration-ready instrument, or both: include both, with the instrument marked pending adviser approval.
+- [x] Compare artifact approaches and obtain approval for the recommended structure and visual direction.
+- [x] Write and self-review the approved design document.
+- [x] Follow the owner's instruction to implement immediately without another planning round.
+- [x] Build and verify the standalone HTML artifact.
+
+## Success criteria
+
+Researchers can understand StoryBuddy's current evaluation design, the implemented pipeline, what CANVAS /
+ContinuityEval can and cannot support, the evidence and limitations behind that judgment, the recommended
+next actions, and any decisions requiring adviser approval. The artifact must remain honest about unresolved
+methodological and documentation gaps and must not silently change a frozen ADR or research instrument.
+
+## Review / outcome
+
+Created the standalone root artifact `expert_evaluation_decision_brief.html`. It combines the research decision,
+implemented StoryBuddy pipeline, exact-questionnaire transfer test, source-by-source evidence ledger, CANVAS /
+ContinuityEval review, use/adapt/reject recommendations, edge cases, procedure, printable Tool B draft, coding guide,
+approval gates, and linked references. Tool B is explicitly marked pending adviser/content review; the artifact does
+not change the accepted methodology, a frozen ADR, or pipeline behavior.
+
+Verification confirmed all nine required content landmarks, 28 unique IDs, 14 valid internal fragment links, one
+`h1`, zero external asset dependencies, zero placeholder markers, and valid inline JavaScript syntax. Headless Chrome
+rendered the artifact successfully at 1440 px and 500 px widths; both renders were visually inspected. `git diff
+--check -- expert_evaluation_decision_brief.html` reported no whitespace errors. Application tests were not run
+because this is an isolated documentation artifact with no application-code or dependency changes.
+
+---
+
+# Current Task: Expert-evaluation literature and pipeline-context review
+
+- [x] Map the capstone objectives, methodology, expert-evaluation instruments, and implemented pipeline.
+- [x] Delegate a read-only review of ContinuityEval and related expert-evaluation literature.
+- [x] Compare the paper's constructs and prompts with StoryBuddy's research questions and outputs.
+- [x] Report citation/adaptation guidance, instrument recommendations, and pipeline implications.
+
+## Success criteria
+
+The report accurately traces the current code and canonical capstone documents, distinguishes product
+control signals from research outcome measures, assesses whether and how ContinuityEval may be cited or
+adapted, and proposes the smallest defensible expert-evaluation design without changing code or frozen ADRs.
+
+## Review / outcome
+
+ContinuityEval is a useful cited source for continuity vocabulary and optional open-ended probes, but it is
+not a drop-in expert-validation instrument: it is a VLM autorater for storyboard frame transitions. Its
+hair/body rubric is human-centric, its prop denominator can conceal disappearances, and its validation prose
+and Table 14 disagree on whether 100 or 50 transitions were sampled. StoryBuddy's accepted Objective-3 design
+remains a three-validator, five-criterion open-ended interview analysed by content analysis; the repository
+currently describes that instrument but contains no administerable question form.
+
+Recommended minimum: operationalize one open-ended question per existing criterion, borrowing ContinuityEval's
+visible-evidence, viewpoint/occlusion, recurring-character, recurring-prop and recurring-setting concepts without
+adding a numeric score. Keep the runtime judge out of the outcome measure. No pipeline change is justified by
+this literature review; cross-frame runtime checks would require a separate ADR/design session if expert evidence
+later shows a repeated failure. Verification was read-only apart from this tracker update: canonical docs, graph,
+contract and judge prompts were traced; arXiv metadata, CC BY 4.0 license, formulas and validation figures were
+checked against arXiv. No application tests or paid/provider calls were run.
+
+---
+
 # Current Task: Research corpus review fixes
 
 - [x] Verify the spend-cap and retry-asset findings against code, tests, specs, and issues.
@@ -792,3 +1058,316 @@ Verification: `git diff --check` passed; the added JSON example parsed; `researc
 its tags balanced; changed-line placeholder scan was empty; repository scan found no live `paper_cut`,
 single-style, or obsolete 50-story claim in the owning corpus documents. Application tests were not run
 because no runtime, data, schema, or UI behavior changed.
+# Current Task: Research corpus integrity code review
+
+- [x] Pin `290bc6e...HEAD` and verify the four-commit diff is non-empty.
+- [x] Run independent Standards review against repository rules and smell baseline.
+- [x] Run independent Spec review against `docs/specs/research-corpus-operations.md`.
+- [x] Validate findings against the diff and record the review outcome.
+
+## Success criteria
+
+Report Standards and Spec findings separately with actionable file/line references, preserving the
+existing working tree and making no implementation changes.
+
+## Review / outcome
+
+Standards review found no hard violations and one advisory Divergent Change concern in the 693-line
+corpus runner. Spec review found three recovery defects: unresolved attempted calls can restart without
+uncertain-billing acknowledgment, checkpoint contents are not bound to intake, and a billing
+acknowledgment is lost after re-quarantine. Focused verification passed 76 tests; these three crash and
+recovery cases are not covered by that suite.
+# Current Task: Verify corpus recovery review findings
+
+- [x] Trace persisted telemetry, checkpoint validation, and acknowledgment state end to end.
+- [x] Add one failing regression test for each confirmed recovery defect.
+- [x] Apply the smallest fail-closed fixes; leave the advisory file split alone.
+- [x] Run focused tests, backend Ruff, and record the outcome.
+
+## Success criteria
+
+Crash-window attempts require uncertain-billing acknowledgment, recovered checkpoints match immutable
+intake fields, and billing acknowledgments survive re-quarantine without refactoring unrelated runner code.
+
+## Review / outcome
+
+All three Spec findings reproduced with focused tests and were fixed in the existing runner. In-progress
+state now carries the intake digest; unmatched attempted-call telemetry becomes `billing_uncertain` before
+restart; checkpoint story/text/style must match intake; and billing acknowledgment survives subsequent
+state writes and quarantine. The advisory module split was deliberately left alone as unrelated refactoring.
+
+Verification: all four regressions failed before their fixes and passed afterward; `uv run ruff check .`
+passed; full backend pytest passed 1088, skipped 80 environment-dependent
+tests, and deselected 6 provider smoke tests. No paid provider or remote database call ran.
+
+# Current Task: Close Objective-4 corpus integrity Batch 1
+
+- [x] Add failing regressions for malformed persisted telemetry and untrusted in-progress restarts.
+- [x] Reject malformed telemetry and mismatched intake/checkpoints before any graph or provider call.
+- [x] Run focused tests, full backend verification, and a zero-cost fixture.
+- [x] Review and commit only the Batch 1 implementation, tests, and task outcome.
+
+## Success criteria
+
+Malformed persisted billing counters fail closed through the supported corpus error path; all existing
+recovery safeguards remain green; the zero-cost fixture completes without paid calls; and the complete
+Batch 1 change is committed without touching unrelated working-tree files.
+
+## Review / outcome
+
+Batch 1 now fails closed on non-integer or missing persisted billing counters, crash-window attempts without
+a terminal billing event, changed intake bytes, and stale or invalid LangGraph checkpoints. Uncertain-billing
+acknowledgments remain auditable across re-quarantine. The approved smoke policy remains unchanged: a story
+that exhausts its assigned allowance halts the smoke before another paid call.
+
+TDD evidence: each new malformed-state and restart regression failed before its fix and passed afterward.
+Final verification: 84 focused corpus tests passed; `uv run ruff check .` passed; full backend pytest passed
+1092, skipped 80 environment-dependent tests, and deselected 6 provider smoke tests. The zero-cost fixture
+completed one story with zero paid attempts and `usd_high="0.000"`. Independent re-review found no remaining
+Critical or Important findings. No provider call, paid draw, live database mutation, or `.env` access occurred.
+
+# Current Task: Objective-4 dataset validity Batch 2
+
+- [x] Revalidate hard-negative, withdrawal, candidate-role, preregistration, and path blockers.
+- [x] Approve the full canonical-dataset boundary and manual same-species/same-style mapping.
+- [x] Approve the controlled selection artifact, fail-closed replacement rules, and canonical paths.
+- [x] Record and self-review the durable design in the two owning specs.
+- [x] Obtain owner approval of the written Batch 2 specification.
+- [x] Write and self-review the disposable TDD implementation plan.
+- [x] Execute the plan inline, verify it, review it, and delete it after completion.
+
+## Success criteria
+
+Production materialization and freeze consume the current donated intake plus one strict selection artifact;
+withdrawn and unselected donated bundles cannot enter the dataset; every synthetic training reference uses
+one manually frozen same-species/same-style target and all of that target's eligible natural train scenes;
+mutable and immutable paths are distinct; the frozen preregistration is amended visibly; and all deterministic
+checks pass without paid calls, real donor data, held-out evaluation, or live research mutations.
+
+# Current Task: Objective-4 training and evaluation Batch 3 planning
+
+- [x] Re-read the governing Objective-4 specs, preregistration, runbook, current trainer config, evaluator, and tests.
+- [x] Confirm the Batch 3 scope boundary with the owner.
+- [x] Present minimal implementation approaches and recommend one.
+- [x] Write and self-review the approved durable Batch 3 design in the owning spec.
+- [x] Obtain owner approval of the written design.
+- [x] Write and self-review the disposable TDD implementation plan under `docs/specs/plans/`.
+
+## Success criteria
+
+The plan pins every training input and tool version, runs seeds 0/1/2 without touching held-out data,
+selects checkpoints and thresholds on validation only, implements every preregistered statistic without a
+new backend dependency, makes held-out access auditable and fail-closed, and gives operators exact dry-run,
+training, selection, and one-time evaluation commands. Planning must not train a model, call a provider,
+read real `test.json`, or mutate live research infrastructure.
+
+## Planning outcome
+
+- Written plan: `docs/specs/plans/2026-08-25-objective-4-training-evaluation.md`.
+- Eight independently reviewable TDD tasks cover freeze evidence, pinned three-seed training, standard-library metrics, provider metadata, validation selection, held-out access, reporting, and operator closure.
+- Self-review reconciled the model-serving boundary with a generated checkpoint inventory/vLLM command, kept Gemma on the evaluation-only OpenRouter route, required spend-alarm confirmation and a separate evaluation-lock sign-off, and preserved the production `providers.judge()` contract.
+- Planning performed no training, provider calls, dataset reads, held-out access, live research mutations, or dependency installation.
+
+# Current Task: Objective-4 Batch 3 protocol corrections
+
+- [x] Add failing integration tests for frozen agreement rows and validation-only access.
+- [x] Add failing tests for mandatory control thresholds, unique adapter IDs, prompt parity, metadata, and deployment gates.
+- [x] Add failing tests for exclusive prediction writes and the signed held-out ledger lifecycle.
+- [x] Apply the smallest production fixes in the existing evaluation harness.
+- [x] Correct the canonical research runbook and delete the duplicate operator guide.
+- [x] Run focused tests, backend lint/full pytest, and document the outcome.
+
+## Success criteria
+
+Validation never opens the held-out projection; every mandatory baseline runs with its frozen prompt, model,
+threshold and metadata; one exclusive signed ledger governs first access, same-run resume, the sole documented
+Rung-D retry and report generation; frozen agreement evidence reaches the final report unchanged; and the
+canonical runbook contains commands that match the implemented CLIs. No real dataset, provider, training job,
+or live research system is accessed.
+
+## Outcome
+
+Validation now reads only `manifest.val.jsonl` and copies held-out hashes from the immutable freeze report;
+missing CLIP/DINOv2 evidence fails closed. Frozen two-label agreement rows reach the report directly. Real
+VLM evaluation uses `judge_with_metadata`, Gemma keeps the shipped prompt, malformed responses remain marked
+malformed, embedding scores and thresholds share one polarity, and selected checkpoints retain unique vLLM IDs.
+
+Held-out execution now requires a separately authored, hash-bound sign-off; uses an exclusive append-only
+ledger; permits only hash-identical same-run recovery and one report-bound Rung-D deviation; writes all seven
+prediction sets and the final report in one guarded command; and rejects a third read. The permissive reserve
+and aggregate CLIs were removed. The canonical research runbook now matches all implemented CLIs and the
+duplicate Objective-4 operator guide was deleted.
+
+Verification: targeted Objective-4/provider suite passed 146 tests; `uv run ruff check .` passed; full backend
+pytest passed 1178 with 80 intentional skips and 6 deselected smoke tests; frontend lint passed and Vitest
+passed 380 tests across 42 files. CLI `--help` output confirmed the documented training, freeze, validation,
+and held-out interfaces. No model call, held-out artifact, training job, paid service, or live research store
+was accessed.
+
+# Current Task: Enforce a megapixel-bound corpus generation budget
+
+- [x] Add failing tests for pinned image sizes on both Fal routes.
+- [x] Add failing tests for provider-rounded per-call reservation, exact-boundary completion, and pre-call rejection.
+- [x] Implement the minimum shared size pin and megapixel-derived spend policy.
+- [x] Align corpus metadata, the owning spec, and canonical operator commands.
+- [x] Run targeted and full verification, review the diff, and commit only this ticket.
+
+## Success criteria
+
+Every paid image request pins a known maximum size; the corpus runner reserves the rounded-up megapixel
+ceiling at an operator-supplied per-MP rate; exact authorization completes while an excess request stops
+before provider dispatch; fixture mode remains zero-call/zero-cost; and operator evidence records the full
+calculation.
+
+## Review / outcome
+
+Both Fal generation routes now pin `1024x768`. Corpus authorization derives each call's ceiling from
+`ceil(0.786432 MP) * operator-supplied USD/MP`, retains exact-boundary completion, and blocks the next excess
+attempt at the existing event seam. Summaries and immutable bundles record the size, raw/rounded MP, rate,
+per-call ceiling, and authorization; paid CLI runs require the rate.
+
+TDD evidence: five focused regressions failed before implementation and passed afterward. Verification:
+113 provider/corpus tests passed; `uv run ruff check .` passed; full backend pytest passed 1184 with 80
+intentional skips and 6 deselected provider smoke tests. The zero-cost fixture completed with zero attempted
+image calls and `usd_high="0.000"`. No paid provider, database, or secret was accessed.
+# Bind training to selected freeze (issue 03)
+
+- [x] Add failing training preflight tests for dataset binding, artifact integrity, toolchain pins, and hardware evidence.
+- [x] Implement the minimum freeze-bound command and fail-closed preflight.
+- [x] Declare the existing YAML parser directly through `uv` and align the training spec/runbook.
+- [x] Run targeted checks, backend lint/full tests, and review the diff against the ticket and repository standards.
+- [x] Commit the reviewed implementation on the current branch (`5071096`).
+
+## Review / outcome
+
+- Training commands now receive `dataset_dir` only from the selected `--freeze`; preflight verifies every
+  training artifact hash, exact uv-tool VCS provenance, frozen pins, and live hardware against an approved
+  qualification record before writing auditable plans or allocating GPU work.
+- TDD evidence: the new failure cases failed before implementation; 69 focused tests pass afterward.
+- Verification: `uv run ruff check .` passed; full `uv run pytest` passed 1205 with 80 intentional skips and
+  6 deselected smoke tests. Two-axis review found no remaining ticket issue; unrelated user changes were excluded.
+
+# Fail-closed evaluation lock and held-out resume (issue 04)
+
+- [x] Add failing tests for strict lock validation, checkpoint identity, and exclusive creation.
+- [x] Add failing tests for tamper-proof prediction reuse, partial resume, and ledger lifecycle events.
+- [x] Implement the minimum lock validator and prediction-resume path in the existing evaluator.
+- [x] Align the owning evaluation spec/runbook with the implemented evidence contract.
+- [x] Run focused checks, backend lint/full tests, two-axis review, and commit this ticket.
+
+## Success criteria
+
+Held-out access begins only after an immutable lock and checkpoint identity validate; reservation is recorded
+before test data is opened; existing prediction evidence is hash-verified and reused without provider calls;
+the ledger distinguishes initial reservation, resume, completion, and failure; all checks use synthetic files.
+
+## Review / outcome
+
+- Evaluation locks now validate exact schema/pins, normalized hashes, registered identifiers, and live
+  checkpoint path/digest identity before held-out reservation. Atomic publication makes identical concurrent
+  creation deterministic and never replaces a different lock.
+- Completed prediction JSONL files are bound to SHA-256 sidecars and frozen judge/checkpoint metadata. Same-run
+  recovery records `resumed`, reuses verified evidence, and invokes only missing judges; ledger failures expose
+  only exception types, never story content or asset paths.
+- TDD evidence: the focused regressions failed before implementation and 33 evaluator/integrity tests pass.
+  Final verification: `uv run ruff check .` passed; `uv run pytest` passed 1206, skipped 80 environment tests,
+  and deselected 6 provider smoke tests. Review found no hard standards violation; atomic-publication findings
+  were fixed before the final verification. No provider, GPU, real held-out, database, or secret was accessed.
+
+# Complete preregistered Objective-4 reporting (issue 05)
+
+- [x] Add golden failing tests for complete judge metrics, human/non-human slices, malformed outputs, latency, undefined metrics, deterministic schema output, and rungs A-D.
+- [x] Implement the minimum validated report schema and evidence-derived aggregation in the existing evaluator.
+- [x] Align the judge spec, frozen preregistration interpretation, and canonical runbook with the emitted report.
+- [x] Run focused checks, backend lint/full tests, two-axis review, and commit only issue 05.
+
+## Success criteria
+
+The held-out report exposes every registered metric and both frozen character slices without identifiers;
+derives all comparisons from immutable prediction rows; assigns Objective-4 status and deployment separately
+for all four frozen rungs; validates one documented schema; reproduces identical bytes from identical inputs;
+and passes golden deterministic tests plus the full repository checks.
+
+## Review / outcome
+
+The canonical schema now reports every registered judge overall and by frozen human/non-human slice, with
+identifier-free performance, agreement, calibration, parse, prevalence, prediction-rate, cost availability,
+and separate cold/warm latency fields. Signed-lock hashes bind slice/agreement evidence; prediction sidecars,
+judge identity, ordered IDs, and latency phases fail closed. The frozen ladder now keeps Objective-4 success
+separate from deployment, including Rung C as research-met/incumbent-kept.
+
+TDD evidence: reporting, ladder, integrity, latency, schema, and publication regressions failed before their
+fixes and 45 focused evaluator/integrity tests pass. Final backend verification passed Ruff and 1,216 tests,
+with 80 intentional environment skips and 6 provider smoke tests deselected. Frontend lint passed and all 380
+tests passed. Two-axis review findings were fixed and re-reviewed. No held-out data, provider, GPU, database,
+secret, or paid service was accessed.
+
+# Reconcile visual-direction cast omissions
+
+- [x] Add failing tests proving direction-named roster characters append after the model-listed cast in roster order without duplicates.
+- [x] Preserve the existing rule that excerpt-only/off-screen mentions do not add characters.
+- [x] Implement the minimum deterministic reconciliation and log it without provider retries.
+- [x] Update `scene-segmentation.md` so visible-cast behavior and deterministic tests match the code.
+- [x] Run focused tests, Ruff, the full backend suite, review the diff, and commit only the implementation files.
+
+## Success criteria
+
+A roster character explicitly named in the rendered `visual_direction` is included in the final
+`characters_present` list before image generation. Model-listed order remains unchanged; recovered characters
+append in roster order; excerpt-only mentions remain absent; unknown names and duplicate protections remain
+unchanged. No provider, checkpoint, database, or paid call is made.
+
+## Review / outcome
+
+The segment node now treats an explicitly direction-named roster character as visible and appends
+its id after the model-listed cast in roster order, logging each reconciliation. Excerpt-only
+mentions remain absent, and no retry or provider path was added. TDD red reproduced the former
+outside-cast failure; green passed all 104 segment tests. Independent verification passed Ruff and
+the full backend suite: 1,219 passed, 80 intentional skips, and 6 provider smoke tests deselected.
+Committed on `main` as `1ea981d`; the two-axis re-review found no remaining standards or spec findings.
+
+# Repair corpus checkpoint recovery after Ticket 7
+
+- [x] Add a failing real-checkpointer regression proving an existing corpus thread resumes without overwriting extracted state.
+- [x] Make fresh runs submit `_initial_state(story)` and existing ordinary checkpoints submit `None`; preserve `Command(resume=CONFIRM)` for reveal interrupts.
+- [x] Add a failing recovery-budget regression and reserve only the story's remaining attempts while retaining all prior attempts as spent.
+- [x] Update `research-corpus-operations.md` to state the recovery input and remaining-reserve rules.
+- [x] Run focused tests, Ruff, and the full backend suite; review and commit only scoped implementation/spec files.
+
+## Success criteria
+
+Recovery preserves checkpointed characters, locations, objects, timeline, scenes, and cost without replaying
+fresh initial channels. Prior attempted and uncertain calls remain fully charged, while the campaign reserve
+uses only the story's remaining permitted attempts. No provider, Storage, database, held-out, or secret access
+occurs. The contaminated `syn-001` state is preserved for a separate auditable recovery decision.
+
+## Review / outcome
+
+Committed on `main` as `0b04569`. Existing checkpoint continuation now supplies `None`, while fresh
+threads retain `_initial_state(story)` and reveal interrupts retain `Command(resume=CONFIRM)`. Recovery
+reserves only remaining attempts without reducing cumulative billing evidence. TDD recorded four expected
+failures before implementation and five focused passes afterward. Independent verification passed 59 corpus
+tests and Ruff; the full backend suite passed 1,224 tests with 80 intentional skips, 6 provider smoke tests
+deselected, and one existing Starlette deprecation warning. Task and two-axis final reviews found no issues.
+No provider, database, Storage, GPU, held-out, or secret access occurred; `syn-001` remains untouched.
+
+# Isolate the contaminated Ticket-7 corpus restart
+
+- [x] Add an isolated checkpoint and Storage execution identity without changing StoryMemory or pipeline modules.
+- [x] Preserve the abandoned 14-call audit evidence and charge it against the campaign ceiling.
+- [x] Add an explicit, persisted per-execution story call cap and reject resume drift.
+- [x] Close missing-first-checkpoint and prior-uncertainty recovery edge cases.
+- [x] Update the corpus operations spec and exact operator runbook commands.
+- [x] Run TDD, Ruff, the full backend suite, and independent spec/standards reviews.
+
+## Review / outcome
+
+Committed on `main` as `dfa6081`. A quarantined story can now restart once under a UUID-isolated
+LangGraph thread and Storage prefix while the completed bundle retains its frozen logical story ID.
+The abandoned checkpoint and assets remain untouched; cumulative billing evidence is preserved.
+The replacement receives the explicit 20-call cap, and later resumes must repeat that cap.
+
+TDD recorded the missing behavior before implementation. Final verification passed Ruff and the
+full backend suite: 1,241 passed, 80 intentional skips, 6 provider smoke tests deselected, and one
+existing Starlette deprecation warning. Both final review axes reported no remaining findings.
+No provider, database, Storage, GPU, held-out, or secret access occurred; no paid run was authorized.
