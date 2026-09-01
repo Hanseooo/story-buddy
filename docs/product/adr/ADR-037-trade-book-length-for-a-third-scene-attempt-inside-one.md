@@ -3,7 +3,9 @@
 **Status:** Accepted (2026-08-15; owner approved the design and the written spec) · **amends
 ADR-010** (one corrected scene retry → two) · **amends ADR-012** (500–800 words → 300) · **amends
 ADR-025 Decision 4** (the paid-image coefficient includes output moderation) · **does not amend
-ADR-003, ADR-004, ADR-024, ADR-028, or ADR-029** · no contract or schema change
+ADR-003, ADR-004, ADR-024, ADR-028, or ADR-029** · **Decision 3 (corrections accumulate) is
+superseded by [ADR-046](./ADR-046-clean-base-retry-is-ratified-and-adr-037-decision-3-is-superseded.md);
+retries derive from the immutable `Scene.prompt`** · no contract or schema change
 
 **Context:** S5 of `pipeline-consistency-docket.md` couples three numbers that cannot be chosen
 independently: book length, page count, and corrected scene attempts. The owner accepts a shorter

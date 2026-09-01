@@ -1324,3 +1324,35 @@ def test_a_lowered_scene_attempt_cap_finalizes_on_the_first_concrete_failure(mon
     assert finalized.final_image_ref is not None
     assert len(finalized.attempts) == 1
     assert finalized.attempts[-1].passed is False
+
+
+def test_the_constraint_judge_is_given_the_original_scene_prompt_not_the_corrected_one():
+    """ADR-047: correction clauses must not become checkable scene constraints.
+
+    On a corrected retry `attempt.prompt` is `scene.prompt` plus clauses appended by
+    `correct_prompt` — including `TEXT_CLAUSE` ("every surface in the picture is blank and
+    unmarked"). Feeding that back in as the constraint list makes the judge check the page
+    against the correction, so a house's windows and doors get reported as contradictions and
+    the retry fails on the instruction that was meant to save it.
+    """
+    scene = Scene(
+        scene_id="s0",
+        text_excerpt="The dog ran past the house.",
+        prompt="A dog runs past a house.",
+        characters_present=["c0"],
+        attempts=[
+            Attempt(image_ref="job-1/s0-1.png", prompt="A dog runs past a house.", passed=False),
+            Attempt(
+                image_ref="job-1/s0-2.png",
+                prompt="A dog runs past a house. every surface in the picture is blank and unmarked",
+                passed=False,
+            ),
+        ],
+    )
+    state = _state([scene], [_char("c0", "Ana", "job-1/ref-c0.png")])
+    clean = SceneConstraintVerdict(differences_observed="none", contradictions=[])
+
+    with patch("pipeline.consistency_check.judge_attempt", return_value=(None, clean)) as spy:
+        consistency_check(state)
+
+    assert spy.call_args.args[2] == "A dog runs past a house."

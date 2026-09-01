@@ -275,7 +275,7 @@ def consistency_check(state: StoryMemory) -> dict:
             subjects.append((character.name, character.canonical_ref_image))
 
     identity_verdicts, composition = judge_attempt(
-        attempt.image_ref, subjects, attempt.prompt or scene.prompt or ""
+        attempt.image_ref, subjects, scene.prompt or attempt.prompt or ""
     )
 
     verdict: VlmVerdict | None = None

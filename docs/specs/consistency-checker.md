@@ -132,7 +132,10 @@ nodes at once, not a hotfix here.
    (`generate_scene` either appended one or raised), so this is a guard, not a path.
 3. Build subjects: each `char_id` in `characters_present` that resolves to a `Character` carrying a
    `canonical_ref_image`, as `(name, canonical_ref_image)`.
-4. `judge_attempt(attempt.image_ref, subjects, constraint_prompt)`.
+4. `judge_attempt(attempt.image_ref, subjects, constraint_prompt)`. The caller passes
+   `scene.prompt or attempt.prompt or ""` (`pipeline/consistency_check.py`) — the **immutable**
+   scene prompt, never a corrected attempt's. ADR-047: correction clauses are instructions to
+   the image model, not facts about the scene, so they must not become checkable constraints.
 5. **Fold identity verdicts, worst-wins** (`None` or empty subjects → `vlm_verdict=None`):
    - `same_character`, `anatomy_intact`, `style_match`, `subjects_unique`, `text_free` → `all(...)`
    - `attributes_present`, `failure_reasons` → union, deduped; `failure_reasons` emitted in
