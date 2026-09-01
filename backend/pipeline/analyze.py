@@ -120,17 +120,17 @@ log = logging.getLogger(__name__)
 
 EXTRACTION_PROMPT_VERSION = 4
 
-# `analyze` reads REDACTED text, so any name reaching this prompt is already a pseudonym from
-# `providers._PSEUDONYM_POOL` — a story about "Jun" arrives as a story about "Ana". Using that
-# name is the entire point of pseudonymizing rather than hard-redacting ("so the story survives
-# with a protagonist an illustrator can draw"). Until 2026-08-11 this prompt forbade proper nouns
-# outright, so it discarded the pseudonym and every protagonist the pipeline ever produced was
-# called "the narrator" — two mechanisms, the second negating the first.
+# `analyze` reads REDACTED text, and this prompt is allowed to use the names in it. Until
+# 2026-08-11 it forbade proper nouns outright, so every protagonist the pipeline ever produced was
+# called "the narrator" — the prompt was discarding the one thing upstream redaction had worked to
+# preserve.
 #
-# Stated plainly: the child's real name still never appears in their storybook, because CC-2 is
-# `redact_pii`'s job upstream and not this prompt's. What was given up is a SECOND layer — the
-# old label rule also neutralised a spaCy NER miss, and `en_core_web_sm` is not reliable on
-# Filipino names ("Kuya Jun", "Ate Mimi"). That residue is accepted, not overlooked.
+# ADR-045 (2026-09-01) changed what "redacted" means here: names arriving in this prompt are now
+# the child's OWN words, not pool pseudonyms, because person pseudonymization is off by default.
+# The prompt is unchanged — it wanted a usable name and it still gets one — but the privacy claim
+# that used to sit here does not survive, and is not restated. CC-2 now covers structured
+# identifiers only; a first name reaching this prompt reaches the storybook. That is ADR-045's
+# accepted cost, argued there and in `docs/capstone/ethics_and_safety.md` §1, not a gap here.
 #
 # The descriptive-label fallback stays for the common first-person case ("I went to the beach"),
 # where there is no name to use and `char_bible` still needs something to put in the prompt.

@@ -34,6 +34,10 @@ and "proprietary" were never the axis — vendor diversity was, and it is achiev
    `Barangay`/`Purok`/`Sitio` address structure and `+63 9xx` mobile formats match no built-in pattern.
    *"Ako si Juan dela Cruz, taga Purok 3, Barangay San Isidro"* is the case this ADR calls expected, and
    the stock configuration leaks it. **Custom Filipino recognizers are a Phase-2 deliverable, not a polish item.**
+   **Amended 2026-09-01 by ADR-045:** this mechanism now covers **structured identifiers only** —
+   `Purok 3, Barangay San Isidro` is still removed, `Juan dela Cruz` is not. Person pseudonymization
+   is off by default (`PII_PSEUDONYMIZE_PERSONS`) because it was the sole source of every recorded
+   redaction failure. The recognizers still fire and are still counted; only the rewrite is declined.
 3. **Output images** — on **every** image, **including the canonical reference before the reveal**:
    - **`qwen/qwen3-vl-32b-instruct`** (ViT-base, 86M, Apache-2.0) — a specialist sexual-content gate, runs on the OpenRouter in milliseconds. No new service.
    - **`google/gemma-3-27b-it`** with a safety rubric via OpenRouter — covers violence, gore, and dangerous content, which the NSFW ViT does **not**. Open-weight (Gemma license, not OSI). A separate call with a separate concern — **never the fine-tuned judge** (ADR-004 amendment b).

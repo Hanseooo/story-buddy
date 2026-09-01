@@ -178,6 +178,15 @@ the marker rule, which has the grammatical context the bare list lacks.
 
 ### 4c. `redact_pii` — consistent pseudonyms for persons
 
+> **Superseded 2026-09-01 by ADR-045 — persons are no longer rewritten by default.** Everything
+> in this section still describes the code, which is intact and reachable by setting
+> `PII_PSEUDONYMIZE_PERSONS=true`, but it is not the shipped default. The section's core argument
+> — that redaction output *is* the narrative, so a placeholder mints a roster of artifacts —
+> survived contact with production and won harder than written: pseudonyms damaged the narrative
+> too (16 of 30 corpus records lost a declared name; `Grace` split into two characters; `bush`
+> became `Cielo`; ADR-041's `Leo` drew a robot with a human face). The **identifier** half below
+> is unconditional and has no flag.
+
 `analyze.py:105` and `segment.py:141` both build the story from `redacted_text`. Redaction output
 **is** the narrative. Replacing a protagonist with `<PH_PERSON>` mints a character roster of
 placeholders and captions that read as redaction artifacts — and it cuts against ADR-012's own

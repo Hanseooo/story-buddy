@@ -640,25 +640,38 @@ def _pseudonymizer(text: str, names: list[str]):
 
 
 def redact_pii(text: str) -> str:
-    """Presidio PII redaction (CC-2). Persons pseudonymized so the story survives with a
-    protagonist an illustrator can draw; structured identifiers hard-redact (spec §4c).
-    en_core_web_sm must be downloaded before first call."""
+    """Presidio PII redaction (CC-2). Structured identifiers hard-redact (spec §4c),
+    unconditionally. Persons pseudonymize only when `pii_pseudonymize_persons` is set — ADR-045
+    turned that half off by default, because renaming the cast is the one thing this function has
+    reliably broken. en_core_web_sm must be downloaded before first call."""
     from presidio_anonymizer.entities import OperatorConfig
+
+    # ADR-045 Decision 3: the identifier set is not behind the flag and has no way to be turned
+    # off. A phone number is not narrative, so hard-redacting it cannot corrupt a story.
+    pseudonymize = settings.pii_pseudonymize_persons
+    acted_on = _REDACTED_ENTITIES if pseudonymize else _IDENTIFIER_ENTITIES
 
     analyzer, anonymizer = _presidio()
     detected = analyzer.analyze(text=text, language="en")
     results = [
         r for r in detected
-        if r.entity_type in _REDACTED_ENTITIES
+        if r.entity_type in acted_on
         and not (r.entity_type in _PERSON_ENTITIES and _after_determiner(text, r.start))
     ]
     # CC-5: log entity-type counts only — never the detected values (ADR-025 D5). `ignored` is
     # the tuning knob for _REDACTED_ENTITIES: a real identifier showing up there is a bug.
+    # ADR-045 Decision 6: `persons_detected` keeps counting the spans the flag is now declining to
+    # rewrite, so the cost of that decision stays measurable instead of going dark.
     _log.info(
-        "pii_redaction entity_counts=%s ignored=%s",
+        "pii_redaction pseudonymize=%s entity_counts=%s persons_detected=%d ignored=%s",
+        "on" if pseudonymize else "off",
         dict(Counter(r.entity_type for r in results)),
+        sum(1 for r in detected if r.entity_type in _PERSON_ENTITIES),
         dict(Counter(r.entity_type for r in detected if r.entity_type not in _REDACTED_ENTITIES)),
     )
+
+    if not pseudonymize:
+        return anonymizer.anonymize(text=text, analyzer_results=results).text
 
     # Reading order matters twice over: the anonymizer calls the operator right-to-left (to avoid
     # offset shifts), and the pool is handed out first-come-first-served.

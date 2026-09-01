@@ -2,7 +2,7 @@
 
 ## Metadata
 - Owner: Hanseooo (solo build)
-- Last reviewed: 2026-07-27
+- Last reviewed: 2026-09-01
 - Review cadence: monthly, or whenever an ADR is added
 
 ---
@@ -204,8 +204,9 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
   Realtime, RLS everywhere), Redis (RQ broker). **Models** — open-weight only (ADR-015):
   `mistralai/mistral-small-3.2-24b-instruct` (text — replaced `qwen/qwen3-32b` on 2026-08-11,
   which passed Probe 3 but emitted prose instead of structured output in production, prod job
-  `af068baf`) + `google/gemma-3-27b-it` (VLM judge) via OpenRouter; Qwen-Image-Edit
-  (image gen) via fal.ai. All vendor calls live in `backend/providers.py`.
+  `af068baf`) + `google/gemma-3-27b-it` (VLM judge) via OpenRouter;
+  `fal-ai/qwen-image` (text-to-image) and `fal-ai/qwen-image-edit-2511` (reference-conditioned edit)
+  via fal.ai (`app/config.py:34-35`). All vendor calls live in `backend/providers.py`.
   **`backend/app/config.py` is the only source of truth for model IDs** — docs drift, and a
   wrong ID here is invisible to CI (every test mocks `providers.py`). Verify with
   `uv run pytest -m smoke` before deploying a model change.
@@ -260,6 +261,11 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
   - Visual styling / UI/UX decisions → `DESIGN.md` (Cobalt Playroom theme reference)
   - Product rationale / why a decision was made → `docs/product/ADRs.md` (frozen — see
     "Architecture is locked" above before touching anything it governs)
+    ⚠️ **The index runs to ADR-044; the build log further down this file stops citing ADRs at 037.**
+    ADR-038 (failure taxonomy), 039/040/041 (narrative notes and names are not canonical visual
+    identity), 042 (`comic` retired, `gouache` default, `cut_paper` promoted), 043 (`is_humanoid`
+    conditional negative prompting) and 044 (hard-delete cleanup job) all landed after it and several
+    amend decisions quoted above. **`ADRs.md` is the current status of a decision; this file is not.**
   - What the product is / user flow → `docs/product/PRD_v2.md`
   - Build order / what phase we're in → `docs/product/ROADMAP.md`
   - Day-to-day "what tool, what size" → `docs/WORKFLOW.md`
@@ -274,8 +280,19 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
     §7.3's product gate. Swapping it to fix a bad verdict is a moved goalpost by the
     pre-registration's own definition. The judge is a control signal, never an outcome measure
     (ADR-004).
+  - Running or changing the Objective-4 corpus / annotation / fine-tune chain →
+    `backend/finetune/` holds it — corpus (`build_corpus.py`, `corpus_io.py`), pairs
+    (`materialize_pairs.py`), human labels (`/annotate` + `/adjudicate` → `annotation_truth.py`),
+    dataset (`build_dataset.py`, `freeze_dataset.py`, `dataset_selection.py`, `manifest.py`,
+    `to_llamafactory.py`), and the run itself (`train.py`, `train_qlora.yaml`, `evaluate.py`,
+    `evaluation_metrics.py`). The stage order is the specs', not this file's: read
+    `docs/specs/judge-finetune.md` + `docs/specs/annotation-surface.md`, and
+    `docs/product/PREREGISTRATION_OBJ4.md` before changing anything the pre-registration binds.
   - Frontend-specific framework notes → `frontend/AGENTS.md` (Next.js version-delta notes,
     auto-generated — not a project doc)
+  - ⚠️ `.worktrees/pipeline-hardening/` is a git worktree holding a **second full copy** of this repo,
+    `AGENTS.md` and `DESIGN.md` included. Every repo-wide `grep` hits both. Read and edit the copy at
+    the repo root; a hit under `.worktrees/` is another branch's state, not this one's.
   - DB schema work → `supabase/migrations/`
 - Fallback: if a module has no spec yet, don't guess its contract slice — write the spec first.
 
@@ -292,7 +309,10 @@ Two independent projects, no shared root tooling — run commands from the named
 - Dev server: `pnpm dev`
 
 ### Backend (`backend/`)
-- Install: `uv sync` (evidence: `backend/uv.lock`)
+- Install: `uv sync --frozen` (evidence: `backend/uv.lock`, `.github/workflows/ci.yml:47`)
+  `--frozen` is not optional. Bare `uv sync` re-resolves and rewrites `uv.lock` in place and exits 0,
+  so a drifted lockfile passes locally and fails the Northflank build with "Commit could not be built".
+  Same flag in CI and in `backend/Dockerfile`.
 - Lint: `uv run ruff check .` (evidence: `backend/pyproject.toml` dev deps + `[tool.ruff]`)
   Note: `ruff format` is **not** adopted — see the comment in `backend/pyproject.toml` for why.
 - Unit tests: `uv run pytest` (evidence: `pyproject.toml` `[tool.pytest.ini_options]`,
@@ -305,7 +325,9 @@ Two independent projects, no shared root tooling — run commands from the named
 
 ### Pre-merge verify
 `.github/workflows/ci.yml` runs both on PRs to `main` and pushes to `main`. Run them locally first:
-- Frontend (from `frontend/`): `pnpm lint && pnpm test`
+- Frontend (from `frontend/`): `pnpm lint && pnpm build && pnpm test`
+  `pnpm build` is the type check and **CI runs it between lint and test** (`ci.yml:27`). Skipping it
+  locally is how a type error reaches CI green-on-your-machine.
 - Backend (from `backend/`): `uv run ruff check . && uv run pytest`
 
 ### Granular Testing
@@ -326,8 +348,8 @@ Two independent projects, no shared root tooling — run commands from the named
   per `pyproject.toml`). Never install globally.
 
 ## Testing Contract
-- What "passing" means: `pnpm lint && pnpm test` green (frontend) + `uv run ruff check . &&
-  uv run pytest` green (backend).
+- What "passing" means: `pnpm lint && pnpm build && pnpm test` green (frontend) + `uv run ruff check . &&
+  uv run pytest` green (backend). All four frontend/backend steps are what CI runs, in that order.
 - Enforced by CI (`.github/workflows/ci.yml`) on PRs to `main` and pushes to `main`. Branch
   protection is not configured, so the check reports but does not block merge.
 - Deterministic tests mock every `providers.py` call. Never assert on generated content quality;
@@ -347,6 +369,13 @@ Two independent projects, no shared root tooling — run commands from the named
   licenses do not override the restrictive base.
 - Provider SDKs, endpoints, and keys are named in `backend/providers.py` and nowhere else; model IDs
   are env-overridable settings in `backend/app/config.py`.
+- **Every length, page-count and spend bound is a named constant in `backend/app/config.py`** — never
+  a literal at a call site. Current: `MAX_SCENES = 10`, `MIN_SCENES = 3`, `MIN_SCENE_WORDS = 12`,
+  `MIN_STORY_WORDS = 5`, `MAX_STORY_WORDS = 300`, `IMAGE_BUDGET = MAX_SCENES * 4 + 15 = 55`,
+  `SUPER_STEP_PRELUDE = 17`, `RECURSION_LIMIT = MAX_SCENES * 7 + 17 = 87`. `max_scene_attempts` (3) is a
+  **Settings field, not a constant** — `finetune/build_corpus.py` lowers it for research builds, so read
+  it at call time and never bind it at import. Every paid fal site calls `check_image_budget()` first
+  (ADR-025 D4).
 - LangGraph nodes are deterministic; conditional edges exist only at moderation pass/fail and
   consistency pass/fail (ADR-003).
 - One pipeline module = one file in `backend/pipeline/`.
@@ -427,6 +456,12 @@ is not documentation of a good design; it is the blast radius, written down so t
 - A gate with **N criteria has 2^N outcomes.** Pre-registered branch tables must enumerate all of
   them, or say which they're ignoring. Probe 1's table wrote 2 of 4 and the project landed on one of
   the missing two (identity held, separation failed) with no pre-committed action.
+- **The table above is the PRODUCT status surface. The research track has its own, and it is not
+  being merged in** — `docs/product/PREREGISTRATION_OBJ4.md` (frozen), `RESEARCH_PROTOCOL.md`,
+  `docs/specs/annotation-surface.md`, and `docs/capstone/research_runbook.md` assert Objective-4
+  state. Same two rules apply there: point, don't copy, and don't add a tenth. A finding that moves
+  both tracks (a model ID, an ADR number, a phase name) is grepped across **both** surfaces or it is
+  not done.
 
 ---
 
@@ -657,6 +692,12 @@ is not documentation of a good design; it is the blast radius, written down so t
   Unmeasured. **Drift fixed in passing:** the whole 2026-08-13 framing and `REFERENCE_NEGATIVE`
   design existed only in code comments and tests — `character-bible.md` §4 now carries it, including
   the positive/negative division of labour and the ordered list of measured phrasings.
+  ➡️ **SUPERSEDED by ADR-042 (2026-08-17, amended 2026-08-22): `comic` is RETIRED.** `gouache` is the
+  default and `cut_paper` is promoted — `SELECTABLE_STYLE_PRESET_IDS = {cel, gouache, cut_paper}`
+  (`app/config.py:146`; `comic` stays in `STYLE_PRESETS` because Probe 1 ran on it, and
+  `0015`'s CHECK constraint still accepts it so existing rows stay valid). The paragraph below is kept as the record of why the
+  halftone was scoped rather than deleted, and of what Probe 1's gating substrate was. Do not act on
+  it as current policy.
   **`comic`'s halftone is scoped to backgrounds and shadows (2026-08-14):** one clause in
   `STYLE_PRESETS`, no migration, no ADR, no contract change. The picker sample
   `frontend/public/style-presets/comic.png` is the evidence — the screen lands on the character's own
@@ -702,11 +743,20 @@ is not documentation of a good design; it is the blast radius, written down so t
   `on conflict do nothing`, not an upsert. `backend/tests/test_annotations_rls.py` is 16 `skipif`-gated cases.
   `contracts/` untouched — `FailureReason` stays frozen at 7 and the `label = not same_character` inversion
   stays in `build_dataset.build_records` alone.
-  ⚠️ **`annotate/` and `adjudicate/` are BLOCKED, not skipped** — two schema questions the spec does not
-  answer, logged as **D-K** (nothing maps `pair_id` → the two Storage paths; the pairs live only in the
-  LangGraph checkpoint blob) and **D-L** (§2.1's "adjudicator flag" has no column) in `DECISION_BACKLOG.md`
-  Tier 2e. ⚠️ **The RLS suite has not been run against any database** — `SUPABASE_DB_URL` is set but
-  unreachable from the build host, so all 16 skipped.
+  **D-K and D-L are resolved and both routes are built (2026-08-15 → 2026-08-26).**
+  `0016_research_pairs_and_adjudicator.sql` answers both — a `research_pairs` table mapping `id` to the
+  two Storage paths and its status (D-K), and `profiles.is_adjudicator` (D-L); `DECISION_BACKLOG.md:169`.
+  `0017_research_pair_blinding.sql` then **drops the researcher SELECT policy on `research_pairs`**,
+  swaps the persisted URLs for storage paths so the annotator only ever sees signed URLs, and adds
+  `is_pilot`. `frontend/app/(research)/annotate/` and `adjudicate/` exist with tests, alongside
+  `(research)/metrics/`.
+  ⚠️ **One rater, permanently** (settled 2026-07-29). `0018_annotation_rounds.sql` re-keys `annotations`
+  on `round`: the same human labels every pair twice, cold, with a gap, and round 3 is the adjudication
+  slot. The statistic is **intra-rater test–retest agreement**; inter-rater kappa is **undefined for this
+  dataset and stays undefined** — a stated limitation, not pending work. Round 2 is not a second
+  annotator; do not design, document, or prompt as if it were.
+  ⚠️ **The RLS suites have not been run against any database** — `SUPABASE_DB_URL` is set but
+  unreachable from the build host, so all 16 annotation cases skip.
   **`pose-viewpoint-composition` is built (2026-08-15) — prompt/ranking semantics only, no new
   code path.** The docket's S3. `contracts/` untouched — **no** new field, no `schema_version` bump,
   no node, no edge, no reference, no extra judge or draw call; `Scene.visual_direction` stays the
@@ -752,8 +802,8 @@ is not documentation of a good design; it is the blast radius, written down so t
   `MAX_MOD_REDRAWS`, `MAX_RETRY_TAPS` untouched. Judge/classifier calls remain absent from `Cost`
   **by decision** — they do not weaken the paid-image breaker. ⚠️ **No evidence a third attempt
   improves consistency** (BC-1); this is product policy, not a measurement.
-  **Phase 2 is in progress. Next: D-K + D-L, then the two routes.** Next free migration is
-  **`0016`** — ⚠️ `0015` is the highest on disk (`0015_add_cut_paper_style_preset.sql`) and **`0009` is used twice**
+  **Phase 2 is in progress.** Next free migration is
+  **`0019`** — ⚠️ `0018` is the highest on disk (`0018_annotation_rounds.sql`) and **`0009` is used twice**
   (`0009_avatar_id.sql`, `0009_teacher_identity.sql`). That collision is **left alone deliberately**: both
   were hand-run under those names and this directory records what a human executed, so renaming them would
   trade a visible collision for an invisible lie (rationale in `0014`'s header). Do not add a third.

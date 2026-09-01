@@ -27,7 +27,7 @@ Updated 30 Aug 2026 | Defense: Oct 2026 | Budget: $25 working / $30 hard | Spent
 >
 > **So: if you generate the synthetic half now and the donated half after collecting 11 more stories, every commit you land in between breaks the freeze.** You'd have to freeze the whole repo for however many weeks that collection takes.
 >
-> The fix is just sequencing — collect the donated stories *first*, then run both halves back to back. That's why steps 1–4 below are all paperwork and no scripts.
+> The fix is just sequencing — collect the donated stories *first*, then run both halves back to back. That's why steps 1–4 below are all paperwork and no scripts. (Step 4 was previously listed as including `dataset_selection.json`; it cannot be — see step 04.)
 
 > **MANDATORY FLAG**
 >
@@ -107,11 +107,39 @@ Substitute identifiers rather than deleting them — real names, school, town, t
 
 > **Gate:** I'll write only what you attest to on the consent and redaction fields. Style and role slots are frozen *before* generation and can't be reshuffled afterwards.
 
-### 04 · Write `dataset_selection.json` and settle the amendments
+### 04 · Settle the amendments (and read this about `dataset_selection.json`)
 
 ***You + me***
 
-Needed by both `materialize_pairs` and the freeze. Resolve the §2 contradiction (blocker 3) in the same dated amendment.
+Resolve the §2 contradiction (blocker 3) in a dated amendment. That part is paperwork and belongs here.
+
+> **`dataset_selection.json` CANNOT be written in Phase A.** Its `hard_negative_matches` are keyed by
+> `lineage_id(story_id, char_id)`, and `char_id` does not exist until the pipeline has generated the
+> characters. `validate_hard_negative_matches` then requires **exactly one match for every synthetic
+> training character that has a canonical reference** — `set(matches) != set(train_characters)` is a
+> hard fail — so the file cannot even be stubbed with an empty list.
+>
+> It is needed at **step 09** (`materialize_pairs`) and again at step 13 (the freeze), both of which
+> run after generation. Write it between step 08 and step 09, off the candidate report.
+
+**Authoring it at step 09**, after `--candidate-report` prints the eligible pairings:
+
+| Field | What goes in it |
+|---|---|
+| `hard_negatives_frozen_at` | UTC, timezone-aware, and already past. Stamp it when you finish choosing, not before. |
+| `hard_negative_matches` | One `{reference_char_id, target_char_id}` per synthetic **train** character with a canonical ref. Both ids are `lineage_id` values (`<story_id>:<char_id>`). |
+| `donated_replacements` | Empty list unless a primary donated story failed and a backup took its slot. Each entry needs `primary_story_id`, `backup_story_id`, `reason`, a past `approved_at`, and a non-blank `evidence_ref`. |
+
+`reason` is a closed set — `withdrawal`, `deidentification_failure`, `terminal_pipeline_failure`,
+`inadequate_character_yield`. Anything else fails to load.
+
+The validator will reject, before it costs you anything: a self-pair, a duplicate `reference_char_id`,
+a reused `backup_story_id`, a target that is not a synthetic training character, a species mismatch, a
+style mismatch, a target with no finalized natural scenes, or a future timestamp. The candidate report
+exists precisely so you pick from pairings that already satisfy the species/style/scene rules.
+
+> **Gate:** `extra="forbid"` on every model in `dataset_selection.py` — an unrecognized key is a load
+> failure, not a warning. There is no partial-credit path here.
 
 ---
 
