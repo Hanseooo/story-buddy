@@ -61,8 +61,16 @@ calls succeeded in the same run: repeated draws from a pool, not a property of r
 
 **Falsified along the way** (each tested directly, all negative): payload size (a call with
 *two* images succeeded while a smaller one-image call timed out); vision vs text (a call
-with **no image** also hit the full bound); the `RefVerdict` schema; the reference prompt;
+with **no image** also hit the full bound); the `RefVerdict` schema; ~~the reference prompt;~~
 and determinism (byte-identical calls gave opposite outcomes).
+
+> **Amended 2026-09-02 (later the same day).** *The reference prompt was NOT falsified.* Every
+> call in this section ran against the unpinned pool, where DeepInfra timed out 5 of 5 whatever
+> was sent -- the test had no signal and could not have detected a prompt effect. Re-measured
+> after ADR-051's pin, the production prompt failed 7 of 7 while the same prompt minus one
+> sentence passed 9 of 9, with length controlled. The stall is caused by v6's "Take the stated
+> attributes one at a time ... do not skip any", fixed at prompt v7. Section 4's separate
+> conclusion -- that pinning does not fix the gate's *correctness* -- is unaffected and holds.
 
 ## 4. Pinning a provider does NOT fix the gate
 
@@ -119,6 +127,11 @@ gemma and only weakly indicated for the other two.
    must not be described as fixing the reference gate. Needs an ADR (ADR-002 territory).
    Parasail's 1-in-4 stall rate and its recorded corruption incident (prod row `558afb6d`)
    both argue against pinning it alone.
+   **Done 2026-09-02 (ADR-051), and it did not deliver the counter it predicted:**
+   `unchecked_references` stayed at **2** in `corpus-smoke-e`. Both references died on the prompt
+   stall, not on routing, and the pin is what made that measurable. Availability fix stands;
+   the gate came back only at prompt v7.
+
 3. **`syn-001` may not be representative.** Every conclusion from the last two sessions
    rests on one story that `--limit 1` picked because it is index 0. A faceless rusty tin
    rooster is close to the hardest subject available. `--check-rosters` across all 30

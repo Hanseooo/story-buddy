@@ -736,7 +736,7 @@ def test_the_judge_is_asked_about_text_last_and_the_version_is_bumped():
     """
     from pipeline.char_bible import JUDGE_PROMPT, JUDGE_PROMPT_VERSION
 
-    assert JUDGE_PROMPT_VERSION == 6
+    assert JUDGE_PROMPT_VERSION == 7
 
     prompt = JUDGE_PROMPT.format(subject="the orange dog, dog, orange")
     assert "free of any text" in prompt
@@ -746,14 +746,23 @@ def test_the_judge_is_asked_about_text_last_and_the_version_is_bumped():
 def test_reference_judge_prompt_binds_the_prose_to_the_contradiction_list():
     """visual-continuity §4.9. Job 3cc05c4b's judge described the mismatch in prose and returned
     an empty list; ADR-034 derives acceptance from the list, so the prose alone changed nothing.
-    The prompt has to say the two must agree, and has to ask for a per-attribute walk."""
+    The prompt has to say the two must agree, and has to ask for a per-attribute walk.
+
+    v7 (2026-09-02): the walk survives, its v5 phrasing does not. "Take the stated attributes one
+    at a time and check each one against the image; do not skip any" stalled `gemma-3-27b-it` past
+    `providers.CALL_TIMEOUT_SECONDS` on 7 of 7 calls, against 9 of 9 successes for the identical
+    prompt with that one sentence removed -- length controlled, same image, same pinned provider.
+    Both references in `corpus-smoke-e` shipped `ref_verdict=None` because of it. The replacement
+    asks the same thing without the enumerate-everything framing and answers in under 10s.
+    """
     from pipeline.char_bible import JUDGE_PROMPT
 
     prompt = JUDGE_PROMPT.format(subject="the shadow wizard, wizard, dark, imposing")
-    assert "one at a time" in prompt
+    assert "Check each stated attribute against the image" in prompt
+    assert "one at a time" not in prompt  # the v5 phrasing is what stalled the judge
     assert "must appear in that list" in prompt
     # Still reason-then-score (ADR-004): the walk is asked before the list, never after.
-    assert prompt.index("one at a time") < prompt.index("list the contradictions")
+    assert prompt.index("Check each stated attribute") < prompt.index("list the contradictions")
 
 
 def test_mint_reference_reports_a_draw_count_equal_to_the_provider_calls():

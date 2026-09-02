@@ -60,7 +60,20 @@ BUCKET = "storybook-images"
 # 6 (canonical-character-consistency §4.2): removes character names from the fresh
 # canonical-reference draw and judge subject projections. Assessed subject changed, so the
 # series must be segmented even though the acceptance predicate did not.
-JUDGE_PROMPT_VERSION = 6
+# 7 (2026-09-02): v5's walk is rephrased because its wording stalled the judge. "Take the stated
+#   attributes one at a time and check each one against the image; do not skip any" timed out
+#   `gemma-3-27b-it` past `providers.CALL_TIMEOUT_SECONDS` on 7 of 7 calls; the identical prompt
+#   with only that sentence removed answered 9 of 9 in under 10s. Length was controlled (1045 vs
+#   1053 chars), and the image, schema and pinned provider were the same, so it is the phrasing,
+#   not the length or the route. ADR-051 pinned the provider expecting `unchecked_references` to
+#   reach 0; it stayed at 2 in `corpus-smoke-e` because BOTH references died here instead.
+#   visual-continuity §4.9 still requires the per-attribute walk and still gets it; "Consider
+#   every stated attribute" also cleared, so it is the enumerate-everything framing that costs
+#   the call, not exhaustiveness. The acceptance predicate is untouched (ADR-034), but the
+#   assessed prompt changed, so the series segments. NOT a correctness fix: no variant named the
+#   yellow beak or the red comb, and `matches_description` still flips on identical calls --
+#   that is ADR-018's problem, measured on one image and one description only.
+JUDGE_PROMPT_VERSION = 7
 
 JUDGE_PROMPT = """\
 This image is meant to be a character reference drawn from the description below.
@@ -70,7 +83,7 @@ Description: {subject}
 The description lists only what the story stated. The image will necessarily show details it \
 does not mention — hair, clothing, background — and those are NOT differences.
 
-Take the stated attributes one at a time and check each one against the image; do not skip any. \
+Check each stated attribute against the image. \
 First describe any way the image CONTRADICTS a stated attribute. Then list the contradictions: \
 one entry for each stated attribute the image contradicts, naming the attribute and what the \
 image shows instead. Everything you described as contradicted must appear in that list. If the \

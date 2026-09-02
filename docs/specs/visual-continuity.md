@@ -300,6 +300,15 @@ terminal failure instead of reveal after three bad references, that is a separat
 
 - Clarify the character-reference prompt to check every frozen visual detail and increment its
   version from 4 to 5.
+- **Amended 2026-09-02 (prompt v7).** The requirement above stands; the v5 wording that delivered
+  it does not. "Take the stated attributes one at a time and check each one against the image; do
+  not skip any" stalled `gemma-3-27b-it` past `providers.CALL_TIMEOUT_SECONDS` on 7 of 7 calls,
+  against 9 of 9 successes for the identical prompt with only that sentence removed (length
+  controlled at 1045 vs 1053 chars; same image, schema and pinned provider). Both references in
+  `corpus-smoke-e` shipped `ref_verdict=None` as a result. The walk is now asked as "Check each
+  stated attribute against the image.", which cleared 3 of 3 in under 10s. Exhaustiveness is not
+  what costs the call -- "Consider every stated attribute" also cleared -- the enumerate-everything
+  framing is. Measured on one image and one description (`syn-001` c1); not shown to generalise.
 - Keep the existing per-reference identity prompt at version 3 unless its wording changes. Add a
   separate scene-constraint prompt at version 1.
 - Log roster ids, visible cast, visible object ids, visual direction, scene contradictions, judge

@@ -90,9 +90,19 @@ scope here. Full record: `docs/capstone/reference_judge_investigation_2026-09-02
 - ADR-018's `prompted_gemma` baseline, the ADR-011 image backstop, and the pipeline reference and
   scene judges are all fixed by the one entry, because all four resolve through `VISION_PROVIDERS`.
   Verified, not assumed: `providers.py:193` (`judge`) and `:215` (`judge_with_metadata`, `route="openrouter"`).
-- Reference draws stop being spent on redraws triggered by a judge that timed out. `corpus-smoke-c`
+- ~~Reference draws stop being spent on redraws triggered by a judge that timed out. `corpus-smoke-c`
   wrote `unchecked_references: 2` on a two-character book; that number should go to 0, and if it
-  does not, the cause is no longer routing.
+  does not, the cause is no longer routing.~~
+  **Amended 2026-09-02, same day: this prediction resolved FALSE, and its second clause resolved
+  TRUE.** `corpus-smoke-e` ran with the pin in place and still wrote `unchecked_references: 2` --
+  worse than `corpus-smoke-c`, where at least one reference got a failing verdict and a second
+  draw. Here both judges died on attempt 1 and 2, so `MAX_DRAWS` never engaged. The cause was
+  indeed not routing: the v6 reference prompt's "Take the stated attributes one at a time ... do
+  not skip any" stalled `gemma-3-27b-it` past `CALL_TIMEOUT_SECONDS` on 7 of 7 pinned calls,
+  against 9 of 9 successes for the same prompt minus that one sentence, length controlled. Fixed
+  at `char_bible.JUDGE_PROMPT_VERSION` 7, outside this ADR -- no judge model, gate predicate or
+  provider decision changed. **The pin is what made the prompt measurable**, which is Decision 4's
+  stated purpose; it is not vindicated as a fix for the counter it named here.
 - **A pin is a dated measurement, not a durable property.** ADR-002 says a probe result carries its
   provider with it; `providers.py:76` records `venice` sitting in a list with no endpoint for the
   model at all until 2026-08-27. Re-measure before trusting this table in a later phase.
