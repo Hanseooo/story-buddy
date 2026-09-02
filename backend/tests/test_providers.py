@@ -210,9 +210,16 @@ def test_text_calls_route_around_the_provider_that_ignored_the_schema():
 
 
 def test_only_models_that_need_pinning_are_pinned():
-    """The allowlist is per-model on purpose. gemma-3-27b-it serves the image backstop AND the
-    consistency judge across five providers, none of them Venice — pinning it would buy nothing
-    and make 429s likelier by shrinking its pool.
+    """The allowlist is per-model on purpose.
+
+    ~~gemma-3-27b-it serves the image backstop AND the consistency judge across five providers,
+    none of them Venice — pinning it would buy nothing and make 429s likelier by shrinking its
+    pool.~~ **Amended 2026-09-02 by ADR-051.** Measured false: the pool holds a dead endpoint that
+    OpenRouter prefers. Unpinned reference-judge calls failed 5 of 5; pinned directly, DeepInfra
+    timed out 5 of 5 and Novita 404s on `require_parameters`. The nominal pool shrinks 4 → 2 and
+    the *usable* pool does not, so the 429 argument above inverted. This asserts availability, not
+    correctness — the two survivors are anti-correlated with ground truth in opposite directions
+    and the reference gate is not fixed by this pin.
 
     ~~And mistral-small-3.2 is also `text_model`, where Venice is a perfectly good route: the pin
     belongs to the call that sends an image, not to the model name.~~ **Amended 2026-08-12.** The
@@ -234,7 +241,13 @@ def test_only_models_that_need_pinning_are_pinned():
         providers.structured_text("prompt", _Caption, model="mistralai/mistral-small-3.2-24b-instruct")
         text_only = parse.call_args.kwargs["extra_body"]["provider"]["only"]
 
-    assert gemma_body == {"provider": {"require_parameters": True}}
+    # ADR-051: pinned for availability. `judge_with_metadata` reads the same dict, which is how
+    # this reaches ADR-018's prompted-gemma incumbent baseline.
+    assert gemma_body == {
+        "provider": {"require_parameters": True, "only": ["nebius", "parasail"]}
+    }
+    assert "deepinfra" not in gemma_body["provider"]["only"]  # 5 of 5 timeouts
+    assert "novita" not in gemma_body["provider"]["only"]     # 404 on require_parameters
     assert vision_only != text_only
     assert "parasail" in vision_only and "parasail" not in text_only
 

@@ -54,11 +54,19 @@ MAX_RETRIES = 2
 #
 # Allowlist rather than an `ignore: ["venice"]` blocklist: this is the safety path, so a provider
 # added later should be excluded until someone checks it serves images. Keyed per model and read
-# only by `judge` — mistral-small-3.2 is also `text_model`, where Venice is a fine route, and
-# gemma-3-27b-it serves five providers (none of them Venice), so pinning it would shrink its pool
-# for nothing. Re-check with: curl .../api/v1/models/{id}/endpoints
+# only by `judge` — mistral-small-3.2 is also `text_model`, where Venice is a fine route.
+# Re-check with: curl .../api/v1/models/{id}/endpoints
+#
+# ~~gemma-3-27b-it serves five providers (none of them Venice), so pinning it would shrink its pool
+# for nothing.~~ ADR-051 (2026-09-02) — measured false. The pool holds a DEAD endpoint and
+# OpenRouter prefers it: unpinned reference-judge calls failed 5 of 5, and DeepInfra timed out 5 of
+# 5 when pinned directly. Novita 404s on `require_parameters`. Availability only — the two survivors
+# are anti-correlated with ground truth in opposite directions and this pin does NOT fix the
+# reference gate; it makes ADR-018's prompted-gemma incumbent baseline measurable at all. The dict
+# is read by `judge_with_metadata` too, which is how the pin reaches that baseline.
 VISION_PROVIDERS: dict[str, list[str]] = {
     "mistralai/mistral-small-3.2-24b-instruct": ["deepinfra", "parasail"],
+    "google/gemma-3-27b-it": ["nebius", "parasail"],  # ADR-051
 }
 
 # The same mechanism for the OTHER axis `require_parameters` does not cover: whether the provider
