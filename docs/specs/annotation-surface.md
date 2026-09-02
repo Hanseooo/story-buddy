@@ -40,9 +40,13 @@ a new table, not the pipeline's contract.
 
 > **⚠️ Amended 2026-08-14 — this shape gained two columns, and `build_dataset.py` is now the
 > authority.** The DDL below is what migration `0014_annotations.sql` ships. The two additions are
-> `anatomy_intact` and `text_free`: `VlmVerdict` declares them, **both gate `Attempt.passed`** in
-> `pipeline/consistency_check.py`, and a judge trained to emit `true` for them unconditionally would
+> `anatomy_intact` and `text_free`: `VlmVerdict` declares them, ~~**both gate `Attempt.passed`**~~
+> in `pipeline/consistency_check.py`, and a judge trained to emit `true` for them unconditionally would
 > break the control loop while scoring well (`judge-finetune.md` §5.2, amended the same day).
+> **Amended 2026-09-02:** `anatomy_intact` gates; `text_free` is **rank-only** since
+> `lettering-suppression.md` §4.6 risk 2 was taken. Both columns stay and both are still
+> human-annotated — a judge that emits `true` for `text_free` unconditionally no longer breaks the
+> retry loop, but it still corrupts best-of page selection, which is why the label is still needed.
 > `subjects_unique` and `style_match` are **not** annotated — non-gating, so a human label on them buys
 > nothing the loop acts on. `judge-finetune.md` §4's *"extend before annotation begins, never during"*
 > makes this the last free moment; the taxonomy itself is untouched and stays frozen at 7 (ADR-028).
@@ -54,7 +58,7 @@ create table annotations (
   same_character  boolean not null,          -- true = Same Character. Maps to manuscript label 0.
                                              -- false = Different Character = manuscript label 1 = POSITIVE class.
   anatomy_intact  boolean not null default true,   -- GATES passed(); human-annotated (§2.1 amendment)
-  text_free       boolean not null default true,   -- GATES passed(); human-annotated (§2.1 amendment)
+  text_free       boolean not null default true,   -- ranks best-of (gated passed() until 2026-09-02); human-annotated (§2.1)
   failure_reasons text[] not null default '{}',
   round           integer not null default 1,       -- 1|2 = test-retest passes, 3 = adjudication (4.1)
   created_at      timestamptz not null default now(),

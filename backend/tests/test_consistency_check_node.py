@@ -422,14 +422,22 @@ def test_a_lettered_verdict_from_any_character_folds_the_page_to_not_text_free()
     assert result["scenes"][0].attempts[-1].vlm_verdict.text_free is False
 
 
-def test_lettering_alone_flips_passed_to_false():
-    """§6 test 10 / §4.3 — the gate. Everything else on this verdict is clean: same character,
-    anatomy intact, unique subjects, matching style. Only the door has a word on it.
+def test_lettering_alone_no_longer_flips_passed_to_false():
+    """lettering-suppression §4.6 risk 2, taken 2026-09-02: `text_free` is rank-only, the shape
+    `subjects_unique` already sits in. Everything else on this verdict is clean and the page passes.
 
-    This is deliberately UNLIKE subjects_unique (which records and ranks but does not gate):
-    that decision was blocked on an unmeasured duplicate rate, whereas at least 3 of the 6
-    burrow-door draws in the 2026-08-13 probe came back lettered, and a word on a page in a book
-    for a six-year-old is not a judgement call (CC-6).
+    §4.6 pre-registered this demotion and DECLINED it on `corpus-smoke-b`, where removing the gate
+    changed 0 of 21 attempts. That basis went stale. Replayed over every bundle on disk -- 9
+    bundles, 128 draws, all of project history -- demoting `text_free` takes passes from 7 to 20,
+    and the entire gain sits in the three post-ADR-045/049/050 bundles (smoke-c 2->4, smoke-e 1->8,
+    smoke-f 2->6). 111 of the 121 failed draws were `text_free=False`, against 6 for
+    `same_character` and 0 for `anatomy_intact`; two shipped smoke-f pages judged lettered
+    (`s1-2`, `s4-3`) have no text anywhere, and §4.6's own read of smoke-b found 1 true positive
+    against 5 false. The judge is reading rust mottling and hatch-mark quills as writing.
+
+    It still RECORDS and still RANKS, so a genuinely lettered page loses best-of to a clean one --
+    that is what makes this a demotion and not a removal. `NEGATIVE_PROMPT` remains the channel
+    that suppresses lettering, unchanged.
     """
     scene = _scene_with_attempt(characters_present=["c0"])
     state = _state([scene], [_char("c0", "the dog")])
@@ -437,20 +445,19 @@ def test_lettering_alone_flips_passed_to_false():
     result = _run(state, [_verdict(True, anatomy=True, unique=True, style=True, text_free=False)])
 
     attempt = result["scenes"][0].attempts[-1]
-    assert attempt.vlm_verdict.same_character is True
-    assert attempt.vlm_verdict.anatomy_intact is True
-    assert attempt.passed is False
+    assert attempt.vlm_verdict.text_free is False   # still recorded
+    assert attempt.passed is True
 
 
-def test_a_lettered_page_is_not_finalized_and_buys_the_one_retry():
-    """§4.3 + ADR-010: a real verdict saying *fail* buys the retry, and only the first time.
-    An unfinalized scene is what routes control to `regenerate`."""
+def test_a_lettered_page_is_finalized_and_buys_no_retry():
+    """The point of the demotion: a page whose ONLY fault is `text_free` no longer buys a paid
+    redraw (~$0.024 and ~40s each). A finalized scene is what routes control past `regenerate`."""
     scene = _scene_with_attempt(characters_present=["c0"])
     state = _state([scene], [_char("c0", "the dog")])
 
     result = _run(state, [_verdict(True, text_free=False)])
 
-    assert result["scenes"][0].final_image_ref is None
+    assert result["scenes"][0].final_image_ref is not None
 
 
 def test_text_free_is_declared_after_subjects_unique_and_before_the_failure_reasons():

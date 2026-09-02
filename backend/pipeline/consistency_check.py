@@ -338,7 +338,15 @@ def consistency_check(state: StoryMemory) -> dict:
         verdict is not None
         and verdict.same_character
         and verdict.anatomy_intact
-        and verdict.text_free
+        # `text_free` was here until 2026-09-02. It RECORDS and RANKS, it does not gate --
+        # lettering-suppression §4.6 risk 2's own pre-registered fallback, the shape
+        # `subjects_unique` sits in. §4.6 declined it on `corpus-smoke-b` (0 of 21 changed);
+        # replayed over all 9 bundles / 128 draws that basis is stale: passes go 7 -> 20, all of
+        # the gain in the three post-ADR-045/049/050 bundles. 111 of 121 failed draws were
+        # `text_free=False` against 6 for `same_character` and 0 for `anatomy_intact`, and the
+        # audited pages have no text on them -- the judge reads rust mottling and hatch-mark
+        # quills as writing. `NEGATIVE_PROMPT` still suppresses lettering; this only stops a
+        # false positive from buying a paid redraw.
         and not (GATING_REASONS & set(reasons))
     )
     scene_contradictions = (

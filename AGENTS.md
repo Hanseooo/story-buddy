@@ -592,10 +592,17 @@ is not documentation of a good design; it is the blast radius, written down so t
   fields — `RefVerdict.text_free` and `VlmVerdict.text_free` (both defaulted `True`, both declared
   LAST, no `schema_version` bump). Both judge prompts gain one question asked in schema order, and
   both version constants bump: `char_bible.JUDGE_PROMPT_VERSION` 3→**4**,
-  `consistency_check.JUDGE_PROMPT_VERSION` 2→**3**. Unlike `subjects_unique`, this one **gates**:
-  reference acceptance is `not contradictions and text_free`, scene `passed` is
-  `same_character and anatomy_intact and text_free`, and best-of ranks
-  `same_character → anatomy_intact → text_free → subjects_unique → style_match`.
+  `consistency_check.JUDGE_PROMPT_VERSION` 2→**3**. ~~Unlike `subjects_unique`, this one **gates**:~~
+  reference acceptance is `not contradictions and text_free` (**unchanged** — that gate is in
+  `char_bible`), ~~scene `passed` is `same_character and anatomy_intact and text_free`~~, and
+  best-of ranks `same_character → anatomy_intact → text_free → subjects_unique → style_match`.
+  **Amended 2026-09-02:** scene `passed` is `same_character and anatomy_intact and not
+  (GATING_REASONS & failure_reasons)`. `text_free` was demoted to rank-only — it still records,
+  still folds worst-wins and still ranks, it no longer buys a redraw. Measured over all 9 bundles
+  on disk (128 draws): `text_free=False` was 111 of the 121 failed draws, demoting it moves passes
+  7 → 20, and audited pages judged lettered have no text on them. This is
+  `lettering-suppression.md` §4.6 risk 2's own pre-registered fallback; the spec had declined it on
+  `corpus-smoke-b` (0 of 21) and that basis went stale.
   `prompt_optimizer.TEXT_CLAUSE` ("every surface in the picture is blank and unmarked") is appended
   by `correct_prompt` on a `text_free=False` keyword — a boolean, **not** an 8th `FailureReason`
   (ADR-028, still frozen at 7) — and deliberately names none of `NEGATIVE_PROMPT`'s terms.
@@ -704,8 +711,9 @@ is not documentation of a good design; it is the blast radius, written down so t
   body and tail, with thin limbs collapsed to solid black on a green character while one arm stayed
   outlined green. Two gates that landed 2026-08-13 both read that surface: `wrong_colour` is in
   `GATING_REASONS` and a halftone tints by dot density (one fill, two colours across reference and
-  page scale), and `text_free` gates while `lettering-suppression.md:216` names halftone dots as the
-  expected judge false positive. `comic` was the only preset feeding either.
+  page scale), and ~~`text_free` gates~~ `text_free` used to gate (rank-only since 2026-09-02)
+  while `lettering-suppression.md` §4.6 risk 2 names halftone dots as the expected judge false
+  positive — which is precisely the false positive that got it demoted. `comic` was the only preset feeding either.
   **The halftone is scoped, NOT removed** — ADR-022 makes `comic` the *gating primary* substrate
   because it is "textured enough (halftone) that the no-reference baseline can't fake the separation
   gate" (`docs/product/adr/ADR-022-selectable-art-style-presets-three-prompt-fragment.md`,

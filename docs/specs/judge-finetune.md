@@ -188,9 +188,12 @@ One JSONL manifest and a folder of PNGs. One line = one training example:
 > `VlmVerdict` now declares, in order: `differences_observed, same_character, attributes_present,
 > style_match, anatomy_intact, subjects_unique, text_free`. §6.1 requires the training target to be
 > byte-identical to the production serialization, so the gap is not cosmetic.
-> - **`anatomy_intact` and `text_free` are human-annotated** — both gate `passed` in
+> - **`anatomy_intact` and `text_free` are human-annotated** — ~~both gate `passed`~~ in
 >   `consistency_check.py` (ADR-028; `lettering-suppression` §2). A judge trained to emit `True`
 >   unconditionally for either would break the control loop while scoring well.
+>   **Amended 2026-09-02:** `anatomy_intact` gates; `text_free` ranks only
+>   (`lettering-suppression` §4.6 risk 2, taken). Both stay annotated — an unconditional `True` on
+>   `text_free` now corrupts best-of selection rather than the retry loop.
 > - **`subjects_unique`, `style_match` and `attributes_present` take schema defaults** — non-gating.
 >   Promote one to annotated only by amending this spec *before* annotation begins (§4's rule).
 >
