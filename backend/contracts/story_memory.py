@@ -15,7 +15,13 @@ from pydantic import BaseModel, Field
 
 CURRENT_SCHEMA_VERSION = 1
 
-_DESCRIPTION_PLACEHOLDERS = frozenset({"none", "unknown", "unspecified", "neutral"})
+# The null family is here because `analyze._normalize_owner` already treats `null`/`nil`/`n/a` as
+# "the model had nothing to say", and this set did not — so a JSON null written as the WORD reached
+# the page verbatim (`Lola, human, null, ...`). `unowned` stays out: it answers "who owns this",
+# not "what does this look like".
+_DESCRIPTION_PLACEHOLDERS = frozenset({
+    "none", "unknown", "unspecified", "neutral", "null", "nil", "n/a",
+})
 
 
 def _is_description_placeholder(value: str) -> bool:

@@ -441,13 +441,17 @@ def test_build_prompt_keeps_a_multi_word_species_the_name_only_partly_carries():
 
 
 def test_build_prompt_does_not_repeat_placeholder_character_axes():
+    """The null family belongs here too. `analyze.py` already normalizes `null`, `nil`, `n/a` on
+    the `owner_name` path, but `_DESCRIPTION_PLACEHOLDERS` did not carry them, so a text-only
+    character reached the page as `Lola, human, null, human, human face, plain clothes` — the
+    literal word, and her only colour, which left the generator nothing to draw her from."""
     character = _char(
         "c0",
         "Andres",
         species="human",
-        colours=["unspecified"],
-        body_features=[" NONE "],
-        clothing=["unknown"],
+        colours=["unspecified", "null"],
+        body_features=[" NONE ", "N/A"],
+        clothing=["unknown", "nil"],
     )
 
     prompt = build_prompt(["c0"], [character], FRAG)
@@ -455,6 +459,9 @@ def test_build_prompt_does_not_repeat_placeholder_character_axes():
     assert "unspecified" not in prompt.lower()
     assert "none" not in prompt.lower()
     assert "unknown" not in prompt.lower()
+    assert "null" not in prompt.lower()
+    assert "n/a" not in prompt.lower()
+    assert "nil" not in prompt.lower()
 
 
 def test_a_scene_uses_commas_for_the_shared_character_axes():

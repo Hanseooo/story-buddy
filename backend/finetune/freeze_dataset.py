@@ -33,7 +33,8 @@ PINNED_METADATA_KEYS = {
     "judge_model", "moderation_primary_model", "moderation_primary_image_model",
     "moderation_backstop_model", "moderation_backstop_image_model",
     "extraction_prompt_version", "reference_judge_prompt_version", "scene_prompt_version",
-    "judge_prompt_version", "scene_constraint_prompt_version", "image_budget", "recursion_limit",
+    "judge_prompt_version", "scene_constraint_prompt_version", "segment_prompt_version",
+    "image_budget", "recursion_limit",
 }
 
 

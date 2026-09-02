@@ -54,6 +54,7 @@ from pipeline.consistency_check import (
     SCENE_CONSTRAINT_PROMPT_VERSION,
 )
 from pipeline.prompt_optimizer import SCENE_PROMPT_VERSION
+from pipeline.segment import SEGMENT_PROMPT_VERSION
 from providers import GENERATED_IMAGE_SIZE, _fal_event_sink, redact_pii
 
 CORPUS_PATH = pathlib.Path(__file__).with_name("corpus_synthetic.json")
@@ -502,6 +503,7 @@ def _bundle(
             "scene_prompt_version": SCENE_PROMPT_VERSION,
             "judge_prompt_version": JUDGE_PROMPT_VERSION,
             "scene_constraint_prompt_version": SCENE_CONSTRAINT_PROMPT_VERSION,
+            "segment_prompt_version": SEGMENT_PROMPT_VERSION,
             "image_budget": IMAGE_BUDGET,
             "recursion_limit": RECURSION_LIMIT,
             "unchecked_references": _unchecked_references(memory),

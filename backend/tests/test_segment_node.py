@@ -377,6 +377,11 @@ def test_segment_prompt_makes_object_visibility_explicit_per_selected_frame():
         "Do not list an object merely because a character owns it",
         "Do not carry an object forward from an earlier scene",
         "Do not infer holding, carrying, or transfer relations",
+        # ADR-054 D1. Two characters plus a hold-verb rendered two objects; a count clause
+        # in the scene prompt did not fix it (0 of 8) and resolving the holder did (4 of 4).
+        "key_action must resolve who holds it",
+        "state that they share the one object",
+        "never write an action that implies a copy per character",
     ):
         assert rule in prompt
 

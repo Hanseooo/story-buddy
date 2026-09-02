@@ -1466,6 +1466,7 @@ def test_fixture_build_writes_a_complete_zero_cost_bundle_without_external_calls
         "scene_prompt_version",
         "judge_prompt_version",
         "scene_constraint_prompt_version",
+        "segment_prompt_version",   # ADR-054 D2
         "image_budget",
         "recursion_limit",
         "unchecked_references",   # ADR-050 Decision 4
