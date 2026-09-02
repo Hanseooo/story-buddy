@@ -11,6 +11,7 @@ from contracts.story_memory import (
     StoryObject,
     TimelineEvent,
     _DESCRIPTION_PLACEHOLDERS,
+    _is_description_placeholder,
 )
 from providers import structured_text
 
@@ -72,9 +73,68 @@ class ExtractedLocation(BaseModel):
         return v
 
 
+_AXIS_STOPWORDS = frozenset({
+    "a", "an", "and", "the", "of", "with", "in", "on", "at", "to", "it", "its",
+    "is", "was", "were", "be", "been", "by", "for", "into", "that", "this", "then", "later",
+})
+
+
+def _stem(word: str) -> str:
+    """Crude suffix strip — `painted`/`paint`, `flowers`/`flower`, `dusty`/`dust`. The drop rule
+    below was measured with exactly this, over all 66 axis entries the four probe arms produced;
+    a real stemmer is a dependency the measurement does not ask for."""
+    for suffix in ("ing", "ed", "es", "s", "y"):
+        if word.endswith(suffix) and len(word) - len(suffix) >= 3:
+            return word[: -len(suffix)]
+    return word
+
+
+def _stems(text: str | None) -> set[str]:
+    return {
+        _stem(word)
+        for word in re.findall(r"[a-z0-9]+", (text or "").lower())
+        if word not in _AXIS_STOPWORDS
+    }
+
+
+def _permanent_atoms(entries: list[str], changed: set[str]) -> list[str]:
+    """ADR-053 D3. Split, clean, bound, then drop what the object's own `changes_during_story`
+    already says. The model emits `'bamboo, paint'` as ONE entry, so an axis is atomised on commas
+    before anything is judged.
+
+    Self-consistency, not a list of English words: the model states the change itself, so the leak
+    is removable by comparing the axis against that statement. Two shared stemmed content words,
+    never one — over the probe's 66 entries a threshold of two drops exactly the two leaked entries
+    and a threshold of one also destroys `tail that spins`, a genuine permanent feature of the
+    weathervane whose tail is what changes.
+    """
+    kept: list[str] = []
+    for entry in entries:
+        for atom in entry.split(","):
+            atom = atom.strip()
+            if _is_description_placeholder(atom):
+                continue
+            if "\n" in atom or "\r" in atom or len(atom) > 120:
+                continue
+            if len(_stems(atom) & changed) >= 2:
+                continue
+            kept.append(atom)
+    return kept
+
+
 class ExtractedObject(BaseModel):
     name: str
-    description: str
+    # ADR-053 D1/D2: axes, not prose. Three arms over the same stories moved clean visual fields
+    # from 4/14 (one `description: str`) to 15/16 (these three, no prose slot).
+    materials: list[str]
+    colours: list[str]
+    form_features: list[str]
+    # Boundary-only (D2). Removing the prose slot left one residue — the axes still leaked on the
+    # object that genuinely changes — and this is where the model puts the change instead. It is
+    # NOT persisted to `StoryObject` and never reaches a prompt; `segment` remains the sole author
+    # of per-scene state (ADR-052 D3). Its only other job is to be what the axes are checked
+    # against below.
+    changes_during_story: str | None = None
     owner_name: str | None = None
 
     @field_validator("owner_name", mode="before")
@@ -88,6 +148,24 @@ class ExtractedObject(BaseModel):
                 return None
             return v_stripped
         return v
+
+    @model_validator(mode="after")
+    def axes_hold_only_permanent_appearance(self) -> "ExtractedObject":
+        """ADR-053 D3 — a NORMALIZING validator, never a rejecting one.
+
+        `providers.py:300-315` grants exactly one blind re-ask on a `ValidationError`: the same
+        prompt, at `temperature=0`, with no feedback about what failed. At the measured 34-in-41
+        violation rate that is a corpus-wide quarantine, not a fix. So every rule here drops the
+        offending atom and returns; nothing raises.
+
+        The single-line, 120-code-point bound is the one `morphology_is_concrete` already imposes
+        on the character axes, applied per atom.
+        """
+        changed = _stems(self.changes_during_story)
+        self.materials = _permanent_atoms(self.materials, changed)
+        self.colours = _permanent_atoms(self.colours, changed)
+        self.form_features = _permanent_atoms(self.form_features, changed)
+        return self
 
 
 _EXPLICIT_ALIAS = re.compile(r"\(([^()]*)\)\s*$")
@@ -118,7 +196,7 @@ class StoryAnalysis(BaseModel):
 
 log = logging.getLogger(__name__)
 
-EXTRACTION_PROMPT_VERSION = 5   # v5: ADR-052 D1 — objects get the permanence rule locations already had
+EXTRACTION_PROMPT_VERSION = 6   # v6: ADR-053 D1/D2 — an object is described on axes, not in prose
 
 # `analyze` reads REDACTED text, and this prompt is allowed to use the names in it. Until
 # 2026-08-11 it forbade proper nouns outright, so every protagonist the pipeline ever produced was
@@ -192,7 +270,7 @@ Return both body_plan and face_or_interface as trimmed, single-line, concrete va
 Fill only missing visual axes once with concrete, directly drawable, child-safe, non-stereotyped details that distinguish this character from the rest of the roster. Never use placeholder values such as neutral, none, unknown, or unspecified.
 Return at least three stable visual discriminators across at least two of colours, body_features, and clothing. Set is_humanoid accurately; every humanoid needs a non-empty clothing description.
 
-Locations and objects: whatever the story mentions. Describe each location by what is permanently there — not the weather, the lighting, the time of day, any damage, or what happens there. Copy every stated permanent fact without alteration. Fill missing detail once with plain, child-safe features that make the place visually recognizable. For each object, provide a stable physical description of what the object permanently is — not the weather, the lighting, the time of day, any damage, its use, or what happens to it during the story. Copy every stated permanent physical fact without alteration. Set owner_name to the character's name if owned by a character, or null if unowned.
+Locations and objects: whatever the story mentions. Describe each location by what is permanently there — not the weather, the lighting, the time of day, any damage, or what happens there. Copy every stated permanent fact without alteration. Fill missing detail once with plain, child-safe features that make the place visually recognizable. Describe each object on three axes instead of in prose: materials is what it is made of, colours is its colours, form_features is its shape and its permanent visible parts. Every axis entry is one short phrase that is true of the object in EVERY picture of the story, never a sentence and never several phrases joined by commas. Copy every stated permanent physical fact without alteration. Put anything that happens to the object during the story — painted, broken, eaten, opened, dirtied, mended — in changes_during_story instead, and leave it out of the axes; set changes_during_story to null when nothing about the object changes. Set owner_name to the character's name if owned by a character, or null if unowned.
 
 Timeline: the story's events in the order they happen, one short summary each.
 
@@ -277,7 +355,9 @@ def analyze(state: StoryMemory) -> dict:
             StoryObject(
                 obj_id=f"obj{i}",
                 name=extracted.name,
-                description=extracted.description,
+                materials=extracted.materials,
+                colours=extracted.colours,
+                form_features=extracted.form_features,
                 owner_char_id=owner_char_id,
             )
         )

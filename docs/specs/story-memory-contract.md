@@ -80,7 +80,9 @@ class Location(BaseModel):     # minimal; refined by `story-analyzer` (§8, addi
 class StoryObject(BaseModel):  # minimal; refined by `story-analyzer` (§8, additive)
     obj_id: str
     name: str
-    description: Optional[str] = None
+    materials: list[str] = Field(default_factory=list)      # ADR-053 D1: axes, not prose. There is
+    colours: list[str] = Field(default_factory=list)        # deliberately no `description` beside
+    form_features: list[str] = Field(default_factory=list)  # them — two sources of appearance truth
     owner_char_id: Optional[str] = None       # ordinary/initial holder, not immutable current ownership
 
 class TimelineEvent(BaseModel):  # minimal; refined by `story-analyzer` (§8, additive)
@@ -146,7 +148,7 @@ class Scene(BaseModel):
     moderation_status: Optional[str] = None
     objects_present: list[str] = Field(default_factory=list)      # visible obj_ids with no duplicates
     visual_direction: Optional[str] = None                       # None=legacy/unplanned state, non-empty on new segmentation
-    object_states: dict[str, str] = Field(default_factory=dict)   # ADR-052: obj_id -> this scene's departure from the object's permanent description
+    object_states: dict[str, str] = Field(default_factory=dict)   # ADR-052: obj_id -> this scene's departure from the object's permanent axes
 
 # --- LangGraph reducer (ADR-024): upsert-by-scene_id, replace-matching, keep-others ---
 # SCENE LIST ORDER IS THE CONTRACT: dict semantics keep an upserted scene in its original

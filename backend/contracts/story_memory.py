@@ -105,9 +105,16 @@ class Location(BaseModel):     # minimal; refined by `story-analyzer` (§8, addi
 
 
 class StoryObject(BaseModel):  # minimal; refined by `story-analyzer` (§8, additive)
+    # ADR-053 D1. `description` was one free-prose slot and it carried the plot into every page of
+    # the book: 34 of the 41 descriptions on disk state a change, a use or damage. Axes, the shape
+    # `CharacterDescription` has always had, moved the violation rate 71% -> 6% in a measured
+    # three-arm probe. There is deliberately NO prose field beside them — two sources of appearance
+    # truth is the rejected alternative, for the same reason `Scene` has no `order`.
     obj_id: str
     name: str
-    description: Optional[str] = None
+    materials: list[str] = Field(default_factory=list)
+    colours: list[str] = Field(default_factory=list)
+    form_features: list[str] = Field(default_factory=list)
     owner_char_id: Optional[str] = None
 
 
@@ -193,7 +200,7 @@ class Scene(BaseModel):
     visual_direction: Optional[str] = None
     object_states: dict[str, str] = Field(default_factory=dict)  # ADR-052: obj_id -> that object's
                                        # appearance IN THIS SCENE where it departs from the
-                                       # permanent `StoryObject.description`. Written by `segment`
+                                       # object's permanent axes (ADR-053 D1). Written by `segment`
                                        # on the scene the change happens AND on every later scene
                                        # that still shows it — a state, not a change event.
                                        # Declared LAST and defaulted, so every existing checkpoint

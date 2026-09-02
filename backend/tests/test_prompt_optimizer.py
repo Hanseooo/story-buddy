@@ -35,7 +35,7 @@ def test_build_prompt_signature_has_no_text_excerpt_parameter():
         "visual_direction",
         "object_states",
     ]
-    assert SCENE_PROMPT_VERSION == 3
+    assert SCENE_PROMPT_VERSION == 4
 
 
 def test_visual_continuity_prompt_blocks_are_in_contract_order():
@@ -63,7 +63,9 @@ def test_visual_continuity_prompt_blocks_are_in_contract_order():
     sword = StoryObject(
         obj_id="obj0",
         name="wooden sword",
-        description="a short wooden sword with a red cord grip",
+        materials=["wood"],
+        colours=["red cord grip"],
+        form_features=["short blade"],
         owner_char_id="c0",
     )
     prompt = build_prompt(
@@ -87,7 +89,7 @@ def test_visual_continuity_prompt_blocks_are_in_contract_order():
     ]
     positions = [prompt.index(marker) for marker in markers]
     assert positions == sorted(positions)
-    assert "wooden sword, a short wooden sword with a red cord grip" in prompt
+    assert "wooden sword, wood, red cord grip, short blade" in prompt
     assert "reference images define appearance, not pose, crop, expression or viewing angle" in prompt
 
 
@@ -118,7 +120,9 @@ def test_build_prompt_populated_axes_block_order_and_no_excerpt_or_notes():
     sword = StoryObject(
         obj_id="obj0",
         name="wooden sword",
-        description="a short wooden sword with a red cord grip",
+        materials=["wood"],
+        colours=["red cord grip"],
+        form_features=["short blade"],
         owner_char_id="c0",
     )
     location = Location(loc_id="loc0", name="forest", description="tall pine trees")
@@ -140,7 +144,7 @@ def test_build_prompt_populated_axes_block_order_and_no_excerpt_or_notes():
         "Use them only as references",
         "Maya, human, black hair, oval face, blue dress",
         "This illustration contains exactly 2 characters: Ana and Maya.",
-        "Visible objects:\nwooden sword, a short wooden sword with a red cord grip",
+        "Visible objects:\nwooden sword, wood, red cord grip, short blade",
         f"Visual direction: {direction}",
         "Setting: forest - tall pine trees",
         style,
@@ -183,12 +187,14 @@ def test_build_prompt_skips_unknown_object_ids_and_deduplicates_in_first_seen_or
     sword = StoryObject(
         obj_id="obj0",
         name="wooden sword",
-        description="a short wooden sword",
+        materials=["wood"],
+        form_features=["short blade"],
     )
     shield = StoryObject(
         obj_id="obj1",
         name="iron shield",
-        description="a round shield",
+        materials=["iron"],
+        form_features=["round"],
     )
     prompt = build_prompt(
         [],
@@ -199,15 +205,16 @@ def test_build_prompt_skips_unknown_object_ids_and_deduplicates_in_first_seen_or
         visual_direction="Ana stands in the center.",
     )
 
-    assert "Visible objects:\nwooden sword, a short wooden sword\niron shield, a round shield" in prompt
+    assert "Visible objects:\nwooden sword, wood, short blade\niron shield, iron, round" in prompt
     assert "unknown_obj" not in prompt
 
 
-def test_build_prompt_filters_style_forbidden_words_from_object_description_not_name():
+def test_build_prompt_filters_style_forbidden_words_from_the_object_axes_not_the_name():
     sword = StoryObject(
         obj_id="obj0",
         name="glowing sword",
-        description="a glowing magic sword",
+        materials=["glowing steel"],
+        form_features=["magic blade"],
     )
     prompt = build_prompt(
         [],
@@ -218,11 +225,18 @@ def test_build_prompt_filters_style_forbidden_words_from_object_description_not_
         visual_direction="Ana holds the sword.",
     )
 
-    assert "glowing sword, a magic sword" in prompt
+    assert "glowing sword, steel, magic blade" in prompt
 
 
-def test_build_prompt_renders_the_style_filtered_scene_state_after_the_permanent_description():
-    fan = StoryObject(obj_id="obj0", name="bamboo fan", description="a plain brown bamboo fan")
+def test_build_prompt_renders_the_style_filtered_scene_state_after_the_axes():
+    """ADR-053 D4 replaces ADR-052 D4's render shape: `name, <axes joined>, <state>`."""
+    fan = StoryObject(
+        obj_id="obj0",
+        name="bamboo fan",
+        materials=["bamboo"],
+        colours=["brown"],
+        form_features=["round", "flat handle"],
+    )
     prompt = build_prompt(
         [],
         [],
@@ -234,13 +248,35 @@ def test_build_prompt_renders_the_style_filtered_scene_state_after_the_permanent
     )
 
     assert (
-        "Visible objects:\nbamboo fan, a plain brown bamboo fan, painted with white sampaguita flowers"
+        "Visible objects:\nbamboo fan, bamboo, brown, round, flat handle, "
+        "painted with white sampaguita flowers"
         in prompt
     )
 
 
+def test_build_prompt_falls_back_to_the_object_name_when_no_axis_survives_the_style_filter():
+    """ADR-053 D4. The branch already existed for an object with no description; it now also
+    catches an object whose every axis atom is a term the active style fragment forbids."""
+    lantern = StoryObject(obj_id="obj0", name="lantern", materials=["glowing"], colours=["glow"])
+    prompt = build_prompt(
+        [],
+        [],
+        "flat cel illustration, no glow",
+        objects_present=["obj0"],
+        objects=[lantern],
+        visual_direction="Ana holds the lantern.",
+    )
+
+    assert "Visible objects:\nlantern\n\n" in prompt
+
+
 def test_build_prompt_renders_nothing_for_a_state_that_is_empty_placeholder_filtered_away_or_unseen(caplog):
-    fan = StoryObject(obj_id="obj0", name="bamboo fan", description="a plain brown bamboo fan")
+    fan = StoryObject(
+        obj_id="obj0",
+        name="bamboo fan",
+        materials=["bamboo"],
+        colours=["brown"],
+    )
 
     def render(states):
         return build_prompt(

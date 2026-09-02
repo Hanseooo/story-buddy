@@ -72,20 +72,21 @@ the full unfiltered roster; `correct_prompt` needs `style_fragment` to restate i
 
 ### `style_prohibitions` / `filtered_description` / `filtered_location` / `filtered_object` / `permitted_words` (ADR-035)
 
-Helpers exported because pipeline nodes share them. `filtered_object` applies the same style-prohibition word filtering to `StoryObject.description` — and, per ADR-052, to the scene's `object_states` entry joined onto it — while leaving `obj.name` untouched. The state is filtered together with the description, never separately: an unfiltered overlay would be a hole straight through the style prohibitions.
+Helpers exported because pipeline nodes share them. `filtered_object` applies the same style-prohibition word filtering to `StoryObject`'s three axes — the way `filtered_description` filters the character axes — and, per ADR-052, to the scene's `object_states` entry appended last, while leaving `obj.name` untouched. It returns the surviving parts, because ADR-053 leaves `StoryObject` no prose slot to write a joined string back into. The state is filtered like the axes, never left unfiltered: an unfiltered overlay would be a hole straight through the style prohibitions.
 
 ### Block Ordering and Invariants
 
-`build_prompt` emits prompt blocks in the exact contract order (`SCENE_PROMPT_VERSION = 3`):
+`build_prompt` emits prompt blocks in the exact contract order (`SCENE_PROMPT_VERSION = 4`):
 1. Reference roll (`Image N is...`) with extended `REFERENCE_CLAUSE`:
    > `"The reference images define appearance, not pose, crop, expression or viewing angle; the Visual direction controls those scene properties."`
 2. Text-only character descriptions (unreferenced present characters, appearance axes only)
 3. Exact visible cast count and non-human clause (`SUBJECT_COUNT_CLAUSE`, `NON_HUMAN_CLAUSE`)
-4. Visible objects block. Per ADR-052 the description is the object's *permanent* appearance;
-   `Scene.object_states[obj_id]`, when present, renders after it as that page's state:
+4. Visible objects block. Per ADR-053 the three axes are the object's *permanent* appearance;
+   `Scene.object_states[obj_id]`, when present, renders after them as that page's state, and the
+   line falls back to the name alone when no axis atom survives the style filter:
    ```text
    Visible objects:
-   <name>, <description>[, <state>]
+   <name>[, <axes joined>][, <state>]
    ```
    A state whose `obj_id` is not in that scene's `objects_present` is dropped with a warning,
    mirroring the missing-`obj_id` path — an unattached state is the contamination ADR-052 removes.

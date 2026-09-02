@@ -1798,7 +1798,7 @@ def _analysis_of(*names_and_humanoid):
         {
             "characters": [_extracted(n, h) for n, h in names_and_humanoid],
             "locations": [{"name": "the pond", "description": "a shallow green pond in a valley"}],
-            "objects": [{"name": "a flat rock", "description": "a wide grey rock", "owner_name": None}],
+            "objects": [{"name": "a flat rock", "materials": ["stone"], "colours": ["grey"], "form_features": ["wide flat slab"], "owner_name": None}],
             "timeline": [{"order": 0, "summary": "Something happens."}],
         }
     )

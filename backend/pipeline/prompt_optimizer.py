@@ -20,7 +20,7 @@ from contracts.story_memory import (
 
 log = logging.getLogger(__name__)
 
-SCENE_PROMPT_VERSION = 3   # v3: ADR-052 D4 — the per-scene object state renders after the description
+SCENE_PROMPT_VERSION = 4   # v4: ADR-053 D4 — an object renders as name, axes, then scene state
 
 
 # ADR-035. Every preset states its own prohibitions in its own fragment text ("no gradients,
@@ -141,23 +141,23 @@ def filtered_location(location: Location | None, style_fragment: str | None) -> 
 
 def filtered_object(
     obj: StoryObject, style_fragment: str | None, state: str | None = None
-) -> StoryObject:
-    """Pure, transient. Returns the object with its rendered description: the permanent one, then
-    ADR-052's per-scene state, joined and word-filtered TOGETHER.
+) -> list[str]:
+    """Pure, transient. The object's rendered parts in order: the three permanent axes (ADR-053
+    D1) word-filtered the way `filtered_description` filters the character axes, then ADR-052 D4's
+    per-scene state LAST. Returns the surviving parts rather than an object, because ADR-053 left
+    `StoryObject` no prose slot to put a joined string back into — and two sources of appearance
+    truth is the alternative that ADR rejects.
 
-    The state passes the same filter for the same reason the description does (ADR-035 surface 5):
-    an unfiltered overlay is a hole straight through the style prohibitions, and it is the half of
-    the line most likely to carry a rendering property, since it describes what just happened to
-    the object. Blank and placeholder states are absent, not empty text, so a scene with nothing
-    to add renders byte-identically to one with no state at all.
+    The state passes the same filter for the same reason the axes do (ADR-035 surface 5): an
+    unfiltered overlay is a hole straight through the style prohibitions, and it is the part most
+    likely to carry a rendering property, since it describes what just happened to the object.
+    Blank and placeholder states are absent, not empty text, so a scene with nothing to add
+    renders byte-identically to one with no state at all.
     """
     if state is not None and _is_description_placeholder(state):
         state = None
-    parts = [part for part in (obj.description, state) if part]
-    if not parts:
-        return obj
-    kept = _filter_axis(parts, style_prohibitions(style_fragment))
-    return obj.model_copy(update={"description": ", ".join(kept) or None})
+    parts = [*obj.materials, *obj.colours, *obj.form_features, *([state] if state else [])]
+    return _filter_axis(parts, style_prohibitions(style_fragment))
 
 
 def _describe(description: CharacterDescription, name: str) -> str:
@@ -323,7 +323,7 @@ def build_prompt(
 
     by_object_id = {obj.obj_id: obj for obj in objects or []}
     states = object_states or {}
-    visible_objects: list[StoryObject] = []
+    object_lines: list[str] = []
     rendered_states: set[str] = set()
     for obj_id in dict.fromkeys(objects_present or []):
         obj = by_object_id.get(obj_id)
@@ -332,7 +332,10 @@ def build_prompt(
             continue
         if obj_id in states:
             rendered_states.add(obj_id)
-        visible_objects.append(filtered_object(obj, style, states.get(obj_id)))
+        # ADR-053 D4: name alone when nothing survives — the branch that already existed for an
+        # object with no description, now also reached when the style filter empties every axis.
+        parts = filtered_object(obj, style, states.get(obj_id))
+        object_lines.append(f"{obj.name}, {', '.join(parts)}" if parts else obj.name)
 
     # ADR-052 D4. A state whose object this page does not show has nothing to attach to, and an
     # unattached state is exactly the contamination this ADR exists to remove — so it is dropped
@@ -343,13 +346,7 @@ def build_prompt(
         if obj_id not in rendered_states:
             log.warning("build_prompt: obj_id %s has a scene state but is not a visible object, skipping", obj_id)
 
-    object_block = [
-        "Visible objects:\n"
-        + "\n".join(
-            f"{obj.name}, {obj.description}" if obj.description else obj.name
-            for obj in visible_objects
-        )
-    ] if visible_objects else []
+    object_block = ["Visible objects:\n" + "\n".join(object_lines)] if object_lines else []
 
     direction = [f"Visual direction: {visual_direction}"] if visual_direction else []
 

@@ -323,7 +323,8 @@ def test_segment_scenes_passes_the_object_roster_and_new_schema_to_provider():
         StoryObject(
             obj_id="obj0",
             name="wooden sword",
-            description="a short wooden sword with a red cord grip",
+            materials=["wood"],
+            form_features=["short blade"],
             owner_char_id="c0",
         )
     ]
@@ -792,7 +793,8 @@ def test_segment_reconciles_direction_characters_in_roster_order(caplog):
 SWORD = StoryObject(
     obj_id="obj0",
     name="wooden sword",
-    description="a short wooden sword with a red cord grip",
+    materials=["wood"],
+    form_features=["short blade"],
     owner_char_id="c0",
 )
 
@@ -881,7 +883,8 @@ def test_unowned_object_explicitly_visible_in_scene_1_and_absent_in_scene_2():
     unowned_sword = StoryObject(
         obj_id="obj1",
         name="magic key",
-        description="a golden key",
+        materials=["gold"],
+        form_features=["small key"],
         owner_char_id=None,
     )
     raw = SceneSegmentation(
@@ -909,9 +912,9 @@ def test_jamie_bolt_contract_keeps_objects_explicit_to_the_selected_frame():
         "Jamie and Bolt walk together through the quiet garden under the trees."
     )
     objects = [
-        StoryObject(obj_id="obj-toy", name="favorite toy", description="a small yellow toy", owner_char_id="c0"),
-        StoryObject(obj_id="obj-fridge", name="refrigerator", description="a tall white refrigerator"),
-        StoryObject(obj_id="obj-carpet", name="carpet", description="a soft blue carpet"),
+        StoryObject(obj_id="obj-toy", name="favorite toy", colours=["yellow"], form_features=["small toy"], owner_char_id="c0"),
+        StoryObject(obj_id="obj-fridge", name="refrigerator", colours=["white"], form_features=["tall door"]),
+        StoryObject(obj_id="obj-carpet", name="carpet", colours=["blue"], form_features=["soft weave"]),
     ]
     raw_segmentation = SceneSegmentation(
         scenes=[

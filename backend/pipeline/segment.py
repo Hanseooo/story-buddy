@@ -70,8 +70,9 @@ class ExtractedScene(BaseModel):
         """ADR-052 D1/D2: the state field exists to hold appearance, not the plot. Bounded on the
         same three axes `analyze.morphology_is_concrete` bounds morphology — trimmed, single-line,
         <=120 code points — because unbounded prose here is the narrative contamination the ADR
-        moved OUT of `StoryObject.description`. A model that answers "none" for an unchanged object
-        is not malformed, it is saying nothing: that entry is dropped, not rejected."""
+        moved OUT of the object's permanent axes (ADR-053 D1). A model that answers "none" for an
+        unchanged object is not malformed, it is saying nothing: that entry is dropped, not
+        rejected."""
         cleaned: dict[str, str] = {}
         for name, state in value.items():
             if not isinstance(state, str):
@@ -122,7 +123,7 @@ Rules:
 story does not say.
 - objects_present lists object names exactly as given above, but only when the object should be visible in the selected still frame. Treat this roster as a reference list, not a visibility list.
 - Do not list an object merely because a character owns it, because it appeared in an earlier scene, or because it is mentioned outside the selected moment.
-- object_states maps an object name from the list above to how that object looks in THIS scene, and only when its appearance departs from the permanent description above — after it is painted, broken, opened, or otherwise changed. Write the state the object is in, never the event that changed it: repeat the same state on every later scene where the object is still listed in objects_present and still looks that way. Omit an object whose appearance never departs from its permanent description. Each value is one short phrase, one line, under 120 characters.
+- object_states maps an object name from the list above to how that object looks in THIS scene, and only when its appearance departs from the object's permanent appearance — after it is painted, broken, opened, or otherwise changed. Write the state the object is in, never the event that changed it: repeat the same state on every later scene where the object is still listed in objects_present and still looks that way. Omit an object whose appearance never departs from its permanent appearance. Each value is one short phrase, one line, under 120 characters.
 - Do not carry an object forward from an earlier scene. Do not infer holding, carrying, or transfer relations from ownership, earlier scenes, or adjacent actions. When physical interaction matters, state it directly in key_action or pose_expression and list the object for this frame.
 - visual_direction captures exactly one drawable still-frame moment: key_action (one visible action with subject and target), pose_expression (visible pose or facial expression, or null), viewpoint (one camera angle relative to the action: front, profile, rear, three-quarter, overhead, occluded, etc. — choose story-appropriate angle such as rear view when running away), and framing (shot scale: close-up, medium shot, wide shot, etc.). Describe visible-only facts in one still frame. Convert speech into visible gesture or reaction. Never include written words, dialogue, speech bubbles, captions, labels, or readable signage. Never use quotes or newlines.
 - Keep sequential or non-simultaneous actions in the caption instead of creating a montage, split panel, duplicate character, or impossible pose.

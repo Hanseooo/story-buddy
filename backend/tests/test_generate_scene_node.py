@@ -433,7 +433,7 @@ def test_generate_scene_log_names_configured_image_model_and_prompt_version(capl
             generate_scene(state)
 
     assert settings.fal_image_model in caplog.text
-    assert "scene_prompt_version=3" in caplog.text
+    assert "scene_prompt_version=4" in caplog.text
     assert "prompt_len=" in caplog.text
 
 

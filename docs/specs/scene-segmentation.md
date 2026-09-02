@@ -132,7 +132,7 @@ class SceneSegmentation(BaseModel):
      names are removed while preserving order.
    - Unknown object raises `ValueError`; unknown location logs warning and carries forward.
    - `object_states` (ADR-052) maps an object name to how that object looks in THIS scene, and only
-     where its appearance departs from the permanent `StoryObject.description`. It records the state
+     where its appearance departs from the object's permanent axes (ADR-053 D1). It records the state
      the object is in, never the event that changed it, so the same state repeats on every later
      scene where the object still looks that way. Names map through the same roster dict as
      `objects_present` with the same unknown-name `ValueError`. Values are trimmed, single-line, and

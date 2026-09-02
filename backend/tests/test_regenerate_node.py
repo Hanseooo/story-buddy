@@ -425,7 +425,7 @@ def test_raises_when_scene_prompt_is_none():
 
 def test_regenerate_preserves_visual_direction_and_objects_in_rebuilt_prompt():
     ana = Character(char_id="c0", name="Ana", description=CharacterDescription(species="girl"))
-    sword = StoryObject(obj_id="obj0", name="wooden sword", description="a wooden sword")
+    sword = StoryObject(obj_id="obj0", name="wooden sword", materials=["wood"], form_features=["short blade"])
     prompt = build_prompt(
         ["c0"],
         [ana],
@@ -460,7 +460,7 @@ def test_regenerate_preserves_visual_direction_and_objects_in_rebuilt_prompt():
         regenerate(state)
 
     mock_correct.assert_called_once()
-    assert "Visible objects:\nwooden sword, a wooden sword" in mock_correct.call_args.args[0]
+    assert "Visible objects:\nwooden sword, wood, short blade" in mock_correct.call_args.args[0]
     assert "Visual direction: Ana runs right holding the wooden sword." in mock_correct.call_args.args[0]
 
 
