@@ -820,6 +820,33 @@ def test_segment_keeps_objects_explicit_to_each_scene():
     assert all("is held by" not in scene.visual_direction for scene in scenes)
 
 
+def test_segment_maps_object_state_names_to_obj_ids_on_every_scene_that_still_shows_the_state():
+    """ADR-052 D2/D3: the value is the object's state IN that scene, not the change event, so the
+    painting scene and every later scene that still shows it both carry it."""
+    raw = SceneSegmentation(
+        scenes=[
+            _r(0, 0, chars=["Ana"], objects_present=["wooden sword"], visual_direction="Ana lifts the sword."),
+            _r(1, 1, chars=["Ana"], objects_present=["wooden sword"],
+               object_states={"wooden sword": "painted with white sampaguita flowers"},
+               visual_direction="Ana paints the sword."),
+            _r(2, 2, chars=["Ana"], objects_present=["wooden sword"],
+               object_states={"wooden sword": "painted with white sampaguita flowers"},
+               visual_direction="Ana waves the sword."),
+        ]
+    )
+    scenes = _segment_objects(raw)
+    assert [scene.object_states for scene in scenes] == [
+        {},
+        {"obj0": "painted with white sampaguita flowers"},
+        {"obj0": "painted with white sampaguita flowers"},
+    ]
+
+
+def test_extracted_scene_rejects_an_object_state_longer_than_one_short_phrase():
+    with pytest.raises(ValidationError):
+        _r(0, 0, objects_present=["wooden sword"], object_states={"wooden sword": "x" * 121})
+
+
 def test_segment_does_not_infer_object_visibility_or_holder_from_owner():
     raw = SceneSegmentation(
         scenes=[

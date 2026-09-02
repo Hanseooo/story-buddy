@@ -33,8 +33,9 @@ def test_build_prompt_signature_has_no_text_excerpt_parameter():
         "objects_present",
         "objects",
         "visual_direction",
+        "object_states",
     ]
-    assert SCENE_PROMPT_VERSION == 2
+    assert SCENE_PROMPT_VERSION == 3
 
 
 def test_visual_continuity_prompt_blocks_are_in_contract_order():
@@ -218,6 +219,45 @@ def test_build_prompt_filters_style_forbidden_words_from_object_description_not_
     )
 
     assert "glowing sword, a magic sword" in prompt
+
+
+def test_build_prompt_renders_the_style_filtered_scene_state_after_the_permanent_description():
+    fan = StoryObject(obj_id="obj0", name="bamboo fan", description="a plain brown bamboo fan")
+    prompt = build_prompt(
+        [],
+        [],
+        "flat cel illustration, no glow",
+        objects_present=["obj0"],
+        objects=[fan],
+        visual_direction="Mila fans Lola.",
+        object_states={"obj0": "painted with glowing white sampaguita flowers"},
+    )
+
+    assert (
+        "Visible objects:\nbamboo fan, a plain brown bamboo fan, painted with white sampaguita flowers"
+        in prompt
+    )
+
+
+def test_build_prompt_renders_nothing_for_a_state_that_is_empty_placeholder_filtered_away_or_unseen(caplog):
+    fan = StoryObject(obj_id="obj0", name="bamboo fan", description="a plain brown bamboo fan")
+
+    def render(states):
+        return build_prompt(
+            [],
+            [],
+            "flat cel illustration, no glow",
+            objects_present=["obj0"],
+            objects=[fan],
+            visual_direction="Mila fans Lola.",
+            object_states=states,
+        )
+
+    baseline = render(None)
+    with caplog.at_level(logging.WARNING, logger="pipeline.prompt_optimizer"):
+        for states in ({"obj0": "   "}, {"obj0": "unspecified"}, {"obj0": "glowing"}, {"obj1": "cracked in half"}):
+            assert render(states) == baseline
+    assert "obj1" in caplog.text
 
 
 def _char(char_id: str, name: str, **description_kwargs) -> Character:

@@ -191,6 +191,15 @@ class Scene(BaseModel):
     moderation_status: Optional[str] = None
     objects_present: list[str] = Field(default_factory=list)
     visual_direction: Optional[str] = None
+    object_states: dict[str, str] = Field(default_factory=dict)  # ADR-052: obj_id -> that object's
+                                       # appearance IN THIS SCENE where it departs from the
+                                       # permanent `StoryObject.description`. Written by `segment`
+                                       # on the scene the change happens AND on every later scene
+                                       # that still shows it — a state, not a change event.
+                                       # Declared LAST and defaulted, so every existing checkpoint
+                                       # and persisted memory loads unchanged (no schema_version
+                                       # bump). Not a second source of scene order: it is keyed by
+                                       # obj_id inside one Scene, never across them.
 
 
 # --- LangGraph reducer (ADR-024): upsert-by-scene_id, replace-matching, keep-others ---

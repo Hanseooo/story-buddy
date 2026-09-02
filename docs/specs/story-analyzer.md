@@ -161,7 +161,7 @@ The extraction instruction states:
 - Derive `is_humanoid` from the resolved body plan; speech, walking, or emotion are insufficient; a name or pronoun alone never makes it true.
 - Preserve explicit human-faced robots and anthropomorphic animals.
 - If two characters are not stated to be identical, use distinct missing visual details where possible; never invent differences for stated twins.
-- Observability: `EXTRACTION_PROMPT_VERSION = 1` is logged upon completion without logging story text, prompts, or child PII.
+- Observability: `EXTRACTION_PROMPT_VERSION = 5` (ADR-052 gave objects the permanence rule locations already had) is logged upon completion without logging story text, prompts, or child PII.
 
 Locations require a strict permanent description. The prompt instructs the model to preserve stated permanent facts and fill missing detail neutrally, excluding temporary conditions.
 
@@ -210,7 +210,7 @@ Objects require a stable physical description and an optional `owner_name`. Init
   reference cap are different numbers; a third character simply gets no reference. This
   node writes no `cost` fields; its own text-token spend is untracked in `cost.usd_estimate`
   (noise against image cost — ADR-001).
-- [x] **CC-5 Observability** — logs `EXTRACTION_PROMPT_VERSION = 1`, extracted counts, and the minted ids,
+- [x] **CC-5 Observability** — logs `EXTRACTION_PROMPT_VERSION` (1 when this item landed; 5 as of ADR-052), extracted counts, and the minted ids,
   so a wrong reference downstream traces back to a specific roster entry.
 - [x] **CC-9 Failure states** — an empty roster is **not** a failure and must never fail the job;
   only a provider failure does, through the ADR-025 `failure_reason` enum.

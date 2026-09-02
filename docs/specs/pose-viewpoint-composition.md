@@ -80,7 +80,7 @@ segment → generate_scene → consistency_check
 
 ### 5.1 Composition authority
 
-`Scene.visual_direction` is authored during segmentation (from the transient structured direction rendered into a single string) and persisted as a single required string field. `build_prompt` emits prompt blocks in the visual-only contract order (`SCENE_PROMPT_VERSION = 2`, ADR-040):
+`Scene.visual_direction` is authored during segmentation (from the transient structured direction rendered into a single string) and persisted as a single required string field. `build_prompt` emits prompt blocks in the visual-only contract order (`SCENE_PROMPT_VERSION = 3`, ADR-040, ADR-052):
 
 1. reference roll and `REFERENCE_CLAUSE`;
 2. text-only character descriptions (appearance axes only);

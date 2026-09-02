@@ -13,7 +13,7 @@
 
 Build the text prompt `generate_scene` sends to the image model: present characters' appearance
 descriptions + visible objects + rendered visual direction + location setting + the frozen style
-fragment (`SCENE_PROMPT_VERSION = 2`). Per ADR-040, narrative text excerpt and character notes are
+fragment (`SCENE_PROMPT_VERSION = 3`). Per ADR-040, narrative text excerpt and character notes are
 excluded from positive scene prompt construction. Separately, build the ADR-010 corrected prompt a
 future targeted-retry node uses after a failed consistency check, by turning the judge's
 `failure_reasons` into emphasis clauses.
@@ -72,20 +72,23 @@ the full unfiltered roster; `correct_prompt` needs `style_fragment` to restate i
 
 ### `style_prohibitions` / `filtered_description` / `filtered_location` / `filtered_object` / `permitted_words` (ADR-035)
 
-Helpers exported because pipeline nodes share them. `filtered_object` applies the same style-prohibition word filtering to `StoryObject.description` while leaving `obj.name` untouched.
+Helpers exported because pipeline nodes share them. `filtered_object` applies the same style-prohibition word filtering to `StoryObject.description` — and, per ADR-052, to the scene's `object_states` entry joined onto it — while leaving `obj.name` untouched. The state is filtered together with the description, never separately: an unfiltered overlay would be a hole straight through the style prohibitions.
 
 ### Block Ordering and Invariants
 
-`build_prompt` emits prompt blocks in the exact contract order (`SCENE_PROMPT_VERSION = 2`):
+`build_prompt` emits prompt blocks in the exact contract order (`SCENE_PROMPT_VERSION = 3`):
 1. Reference roll (`Image N is...`) with extended `REFERENCE_CLAUSE`:
    > `"The reference images define appearance, not pose, crop, expression or viewing angle; the Visual direction controls those scene properties."`
 2. Text-only character descriptions (unreferenced present characters, appearance axes only)
 3. Exact visible cast count and non-human clause (`SUBJECT_COUNT_CLAUSE`, `NON_HUMAN_CLAUSE`)
-4. Visible objects block:
+4. Visible objects block. Per ADR-052 the description is the object's *permanent* appearance;
+   `Scene.object_states[obj_id]`, when present, renders after it as that page's state:
    ```text
    Visible objects:
-   <name>, <description>
+   <name>, <description>[, <state>]
    ```
+   A state whose `obj_id` is not in that scene's `objects_present` is dropped with a warning,
+   mirroring the missing-`obj_id` path — an unattached state is the contamination ADR-052 removes.
 5. Visual direction block:
    ```text
    Visual direction: <visual_direction>
@@ -93,7 +96,7 @@ Helpers exported because pipeline nodes share them. `filtered_object` applies th
 6. Setting line (`Setting: <name> - <description>`)
 7. Style fragment (`style`)
 
-`generate_scene` requires a non-empty `scene.visual_direction` and logs `image_model=settings.fal_image_model` alongside attempt metrics and `scene_prompt_version=2`.
+`generate_scene` requires a non-empty `scene.visual_direction` and logs `image_model=settings.fal_image_model` alongside attempt metrics and `scene_prompt_version=3`.
 
 `referenced_characters` deduplicates `characters_present` order-preservingly, so a checkpoint
 written before `segment`'s own dedup cannot send one reference image as two subjects on resume.

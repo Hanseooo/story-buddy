@@ -118,7 +118,7 @@ class StoryAnalysis(BaseModel):
 
 log = logging.getLogger(__name__)
 
-EXTRACTION_PROMPT_VERSION = 4
+EXTRACTION_PROMPT_VERSION = 5   # v5: ADR-052 D1 — objects get the permanence rule locations already had
 
 # `analyze` reads REDACTED text, and this prompt is allowed to use the names in it. Until
 # 2026-08-11 it forbade proper nouns outright, so every protagonist the pipeline ever produced was
@@ -192,7 +192,7 @@ Return both body_plan and face_or_interface as trimmed, single-line, concrete va
 Fill only missing visual axes once with concrete, directly drawable, child-safe, non-stereotyped details that distinguish this character from the rest of the roster. Never use placeholder values such as neutral, none, unknown, or unspecified.
 Return at least three stable visual discriminators across at least two of colours, body_features, and clothing. Set is_humanoid accurately; every humanoid needs a non-empty clothing description.
 
-Locations and objects: whatever the story mentions. Describe each location by what is permanently there — not the weather, the lighting, the time of day, any damage, or what happens there. Copy every stated permanent fact without alteration. Fill missing detail once with plain, child-safe features that make the place visually recognizable. For each object, provide a stable physical description and set owner_name to the character's name if owned by a character, or null if unowned.
+Locations and objects: whatever the story mentions. Describe each location by what is permanently there — not the weather, the lighting, the time of day, any damage, or what happens there. Copy every stated permanent fact without alteration. Fill missing detail once with plain, child-safe features that make the place visually recognizable. For each object, provide a stable physical description of what the object permanently is — not the weather, the lighting, the time of day, any damage, its use, or what happens to it during the story. Copy every stated permanent physical fact without alteration. Set owner_name to the character's name if owned by a character, or null if unowned.
 
 Timeline: the story's events in the order they happen, one short summary each.
 
