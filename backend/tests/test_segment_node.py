@@ -1238,3 +1238,32 @@ def test_dialogue_remains_in_caption_and_absent_from_rendered_direction():
     assert "Hello world" not in scene.visual_direction
     assert "We did it" not in scene.visual_direction
     assert "Leo stands awake and raises one hand in greeting." in scene.visual_direction
+
+
+def test_a_shared_object_direction_gains_the_holder_clause():
+    """ADR-055 D5. Prompting stopped moving "Mila and Tala fan Lola with the decorated bamboo fan"
+    at 48 percent, so the resolution is deterministic. The clause never picks a single holder:
+    only the shared form is derivable from the text."""
+    scene = _r(
+        0, 0,
+        chars=["Mila", "Tala"],
+        objects_present=["bamboo fan"],
+        visual_direction="Mila and Tala fan Lola with the decorated bamboo fan",
+    )
+    assert scene.visual_direction.key_action == (
+        "Mila and Tala fan Lola with the decorated bamboo fan, "
+        "holding the one bamboo fan between them"
+    )
+
+
+def test_a_direction_that_already_names_a_holder_is_left_alone():
+    """The clause would contradict the direction: Mila holds it, Tala paints."""
+    scene = _r(
+        0, 0,
+        chars=["Mila", "Tala"],
+        objects_present=["bamboo fan"],
+        visual_direction="Tala paints a flower on the bamboo fan while Mila holds it",
+    )
+    assert scene.visual_direction.key_action == (
+        "Tala paints a flower on the bamboo fan while Mila holds it"
+    )

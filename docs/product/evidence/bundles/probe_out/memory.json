@@ -1,0 +1,592 @@
+{
+  "characters": [
+    {
+      "canonical_ref_image": "syn-901--campaign-065dd514ffb059233d04e1c35317228f/ref-c0-1.png",
+      "char_id": "c0",
+      "description": {
+        "body_features": [
+          "human child body",
+          "human face with short hair"
+        ],
+        "clothing": [
+          "plain clothes"
+        ],
+        "colours": [
+          "short hair"
+        ],
+        "is_humanoid": true,
+        "notes": "Protagonist, one of the two cousins.",
+        "species": "human"
+      },
+      "name": "Mila",
+      "ref_moderation_status": "passed",
+      "ref_verdict": {
+        "attributes_present": [
+          "human",
+          "short hair",
+          "human child body",
+          "human face with short hair",
+          "plain clothes"
+        ],
+        "contradictions": [],
+        "differences_observed": "The image does not contradict any of the stated attributes.",
+        "matches_description": true,
+        "text_free": true
+      },
+      "ref_verdict_prompt_version": 7
+    },
+    {
+      "canonical_ref_image": "syn-901--campaign-065dd514ffb059233d04e1c35317228f/ref-c1-1.png",
+      "char_id": "c1",
+      "description": {
+        "body_features": [
+          "human child body",
+          "human face with red hair tie"
+        ],
+        "clothing": [
+          "plain clothes"
+        ],
+        "colours": [
+          "red hair tie"
+        ],
+        "is_humanoid": true,
+        "notes": "One of the two cousins, wears a red hair tie.",
+        "species": "human"
+      },
+      "name": "Tala",
+      "ref_moderation_status": "passed",
+      "ref_verdict": {
+        "attributes_present": [
+          "human",
+          "red hair tie",
+          "human child body",
+          "human face",
+          "red hair tie",
+          "plain clothes"
+        ],
+        "contradictions": [
+          "red hair tie: the image shows a red bow",
+          "plain clothes: the image shows a t-shirt"
+        ],
+        "differences_observed": "The description states a 'red hair tie', but the image shows a red *bow* in the hair. The description states 'plain clothes', but the image shows a t-shirt.",
+        "matches_description": true,
+        "text_free": true
+      },
+      "ref_verdict_prompt_version": 7
+    },
+    {
+      "canonical_ref_image": null,
+      "char_id": "c2",
+      "description": {
+        "body_features": [
+          "human adult body",
+          "human face"
+        ],
+        "clothing": [
+          "plain clothes"
+        ],
+        "colours": [],
+        "is_humanoid": true,
+        "notes": "The adult in the kitchen, owner of the fan.",
+        "species": "human"
+      },
+      "name": "Lola",
+      "ref_moderation_status": "passed",
+      "ref_verdict": null,
+      "ref_verdict_prompt_version": null
+    }
+  ],
+  "classroom_id": "judge-corpus",
+  "cost": {
+    "image_count": 14,
+    "ref_mod_retry_count": 0,
+    "ref_retry_count": 0,
+    "regen_count": 5,
+    "usd_estimate": 0.0
+  },
+  "eval": {
+    "seed": null
+  },
+  "input": {
+    "moderation": {
+      "categories": [],
+      "passed": true
+    },
+    "raw_text": "Mila and Tala were cousins and they were both eleven. Mila had short hair and Tala always wore a red hair tie. One rainy afternoon they were bored in Lola's kitchen and Tala found an old bamboo fan behind the rice bin. It was plain and brown and a little dusty. They ran out to the yard to shake the dust off it but the rain was still falling so they came back inside. Lola said the fan belonged to her mother and nobody had used it in years. Mila got the paints from the cabinet and they painted white sampaguita flowers all over the fan, one flower each, taking turns. Tala got paint on her red hair tie and Mila laughed at her. When it dried they fanned Lola with it at the kitchen table. Lola said it was prettier now than when it was new.",
+    "redacted_text": "Mila and Tala were cousins and they were both eleven. Mila had short hair and Tala always wore a red hair tie. One rainy afternoon they were bored in Lola's kitchen and Tala found an old bamboo fan behind the rice bin. It was plain and brown and a little dusty. They ran out to the yard to shake the dust off it but the rain was still falling so they came back inside. Lola said the fan belonged to her mother and nobody had used it in years. Mila got the paints from the cabinet and they painted white sampaguita flowers all over the fan, one flower each, taking turns. Tala got paint on her red hair tie and Mila laughed at her. When it dried they fanned Lola with it at the kitchen table. Lola said it was prettier now than when it was new.",
+    "synthetic_no_pii": true,
+    "truncated": false,
+    "word_count": 147
+  },
+  "locations": [
+    {
+      "description": "A kitchen with a rice bin, a cabinet, and a table. Contains a bamboo fan.",
+      "loc_id": "loc0",
+      "name": "Lola's kitchen"
+    },
+    {
+      "description": "An outdoor space where it is raining.",
+      "loc_id": "loc1",
+      "name": "the yard"
+    }
+  ],
+  "narration": [],
+  "objects": [
+    {
+      "description": "Plain, brown, dusty, later painted with white sampaguita flowers.",
+      "name": "bamboo fan",
+      "obj_id": "obj0",
+      "owner_char_id": "c2"
+    },
+    {
+      "description": "Used to decorate the fan.",
+      "name": "paints",
+      "obj_id": "obj1",
+      "owner_char_id": null
+    }
+  ],
+  "profile_id": "judge-corpus",
+  "reference_retry": null,
+  "scenes": [
+    {
+      "attempts": [
+        {
+          "failure_reasons": [
+            "wrong_body_feature",
+            "different_face"
+          ],
+          "image_ref": "syn-901--campaign-065dd514ffb059233d04e1c35317228f/s0-1.png",
+          "passed": false,
+          "prompt": "Image 1 is Mila, human, short hair, human child body, human face with short hair, plain clothes. Image 2 is Tala, human, red hair tie, human child body, human face with red hair tie, plain clothes. Use them only as references for what each character looks like. Draw one new illustration of the scene described below \u2014 do not copy, inset, mirror or repeat the reference images inside it, and draw each character exactly once. When the text below names one of these characters, it is referring to that character itself, not to a second thing of the same name. The reference images define appearance, not pose, crop, expression or viewing angle; the Visual direction controls those scene properties.\n\nThis illustration contains exactly 2 characters: Mila and Tala.\n\nVisual direction: Tala reaches behind the rice bin and pulls out an old bamboo fan Mila looks curious, Tala holds the fan with a dusty expression Viewpoint: three-quarter. Framing: medium shot.\n\nSetting: Lola's kitchen - A kitchen with a rice bin, a cabinet, and a table. Contains a bamboo fan.\n\nflat cel-shaded cartoon, thick clean black outlines, bright solid colour fills, two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing",
+          "scene_contradictions": [],
+          "vlm_verdict": {
+            "anatomy_intact": true,
+            "attributes_present": [
+              "black hair",
+              "short hair",
+              "oval face",
+              "large eyes",
+              "small nose",
+              "white t-shirt",
+              "red hair",
+              "hair ribbon",
+              "fair skin",
+              "white shirt"
+            ],
+            "differences_observed": "Mila: The Mila in the second image is depicted with a slightly more defined jawline and a more pronounced nose than in the reference. The shading on the face is also a bit more detailed in the second image. The second image shows Mila holding a fan and wearing dark pants, which are not present in the reference. The second image also includes another character, a girl with red hair, who is not present in the reference.\nTala: The Tala in the second image has a more detailed face, with more defined eyes, nose, and mouth. The shading on the face is also more pronounced. The hair ribbon is slightly different in shape and size. The line work in the second image is thicker and more detailed than in the reference. The second image shows Tala holding a fan, which is not present in the reference. The second image also includes another character, which is not present in the reference.",
+            "same_character": true,
+            "style_match": true,
+            "subjects_unique": true,
+            "text_free": false
+          }
+        },
+        {
+          "failure_reasons": [
+            "wrong_body_feature",
+            "different_face"
+          ],
+          "image_ref": "syn-901--campaign-065dd514ffb059233d04e1c35317228f/s0-2.png",
+          "passed": false,
+          "prompt": "Image 1 is Mila, human, short hair, human child body, human face with short hair, plain clothes. Image 2 is Tala, human, red hair tie, human child body, human face with red hair tie, plain clothes. Use them only as references for what each character looks like. Draw one new illustration of the scene described below \u2014 do not copy, inset, mirror or repeat the reference images inside it, and draw each character exactly once. When the text below names one of these characters, it is referring to that character itself, not to a second thing of the same name. The reference images define appearance, not pose, crop, expression or viewing angle; the Visual direction controls those scene properties.\n\nThis illustration contains exactly 2 characters: Mila and Tala.\n\nVisual direction: Tala reaches behind the rice bin and pulls out an old bamboo fan Mila looks curious, Tala holds the fan with a dusty expression Viewpoint: three-quarter. Framing: medium shot.\n\nSetting: Lola's kitchen - A kitchen with a rice bin, a cabinet, and a table. Contains a bamboo fan.\n\nflat cel-shaded cartoon, thick clean black outlines, bright solid colour fills, two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing\nmatch these body features exactly: human child body, human face with short hair, human child body, human face with red hair tie, human adult body, human face\nmatch the reference character's face exactly\nevery surface in the picture is blank and unmarked\nPreserve the Visual direction exactly: do not change the requested action, movement direction, pose, crop, expression, or viewing angle.",
+          "scene_contradictions": [],
+          "vlm_verdict": {
+            "anatomy_intact": true,
+            "attributes_present": [
+              "black hair",
+              "short hair",
+              "oval face",
+              "large eyes",
+              "small nose",
+              "white shirt",
+              "red hair",
+              "hair tied with a red ribbon",
+              "white t-shirt",
+              "general face shape",
+              "eye shape"
+            ],
+            "differences_observed": "Mila: The character on the page is depicted with another character, while the reference image shows Mila alone. The character on the page is holding a fan and interacting with a bucket of rice, which are not present in the reference. The character on the page is wearing dark blue shorts, while the reference shows a plain white shirt. The character on the page is in a more dynamic pose, reaching towards a bucket, while the reference is a static, frontal portrait. The character on the page has more detailed shading on the face and clothing.\nTala: The Tala in the second image has a more detailed and textured rendering of the hair and clothing. The line work is thicker and more defined, with more visible shading. The face is more expressive, with a visible mouth and more detailed eyes. The second image also includes another character, and a detailed background with objects like a bucket, fans, and kitchen cabinets, which are absent in the reference image. The skin tone is also slightly different, appearing more peach-toned in the second image.",
+            "same_character": true,
+            "style_match": false,
+            "subjects_unique": true,
+            "text_free": false
+          }
+        },
+        {
+          "failure_reasons": [
+            "wrong_clothing",
+            "different_face"
+          ],
+          "image_ref": "syn-901--campaign-065dd514ffb059233d04e1c35317228f/s0-3.png",
+          "passed": true,
+          "prompt": "Image 1 is Mila, human, short hair, human child body, human face with short hair, plain clothes. Image 2 is Tala, human, red hair tie, human child body, human face with red hair tie, plain clothes. Use them only as references for what each character looks like. Draw one new illustration of the scene described below \u2014 do not copy, inset, mirror or repeat the reference images inside it, and draw each character exactly once. When the text below names one of these characters, it is referring to that character itself, not to a second thing of the same name. The reference images define appearance, not pose, crop, expression or viewing angle; the Visual direction controls those scene properties.\n\nThis illustration contains exactly 2 characters: Mila and Tala.\n\nVisual direction: Tala reaches behind the rice bin and pulls out an old bamboo fan Mila looks curious, Tala holds the fan with a dusty expression Viewpoint: three-quarter. Framing: medium shot.\n\nSetting: Lola's kitchen - A kitchen with a rice bin, a cabinet, and a table. Contains a bamboo fan.\n\nflat cel-shaded cartoon, thick clean black outlines, bright solid colour fills, two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing\nmatch these body features exactly: human child body, human face with short hair, human child body, human face with red hair tie, human adult body, human face\nmatch the reference character's face exactly\nevery surface in the picture is blank and unmarked\nPreserve the Visual direction exactly: do not change the requested action, movement direction, pose, crop, expression, or viewing angle.",
+          "scene_contradictions": [],
+          "vlm_verdict": {
+            "anatomy_intact": true,
+            "attributes_present": [
+              "Black hair",
+              "Short hair",
+              "Round face",
+              "Large eyes",
+              "Small nose",
+              "Similar facial structure",
+              "red hair",
+              "hair tied with a red ribbon",
+              "fair skin",
+              "white t-shirt"
+            ],
+            "differences_observed": "Mila: The character on the page is depicted with another character, while the reference image shows Mila alone. The character on the page is wearing a dark skirt and white socks, while the reference shows a white t-shirt. The character on the page is holding a fan and is positioned near a rice cooker, which are not present in the reference image. The character on the page has a more expressive facial expression, with wider eyes and an open mouth, compared to the neutral expression in the reference.\nTala: The Tala on the page has a more detailed face, with more defined eyes, nose, and mouth. The shading on the page is more extensive, with more gradients and highlights. The line work on the page is thicker and more varied in weight. The page depicts Tala wearing a white t-shirt and a dark skirt, while the reference shows her wearing a white t-shirt only. The page shows Tala holding a fan and standing next to another character, while the reference shows her alone.",
+            "same_character": true,
+            "style_match": false,
+            "subjects_unique": true,
+            "text_free": false
+          }
+        }
+      ],
+      "caption": "Mila and Tala were cousins and they were both eleven. Mila had short hair and Tala always wore a red hair tie. One rainy afternoon they were bored in Lola's kitchen and Tala found an old bamboo fan behind the rice bin.",
+      "characters_present": [
+        "c0",
+        "c1"
+      ],
+      "final_image_ref": "syn-901--campaign-065dd514ffb059233d04e1c35317228f/s0-3.png",
+      "location_id": "loc0",
+      "moderation_status": "passed",
+      "objects_present": [],
+      "prompt": "Image 1 is Mila, human, short hair, human child body, human face with short hair, plain clothes. Image 2 is Tala, human, red hair tie, human child body, human face with red hair tie, plain clothes. Use them only as references for what each character looks like. Draw one new illustration of the scene described below \u2014 do not copy, inset, mirror or repeat the reference images inside it, and draw each character exactly once. When the text below names one of these characters, it is referring to that character itself, not to a second thing of the same name. The reference images define appearance, not pose, crop, expression or viewing angle; the Visual direction controls those scene properties.\n\nThis illustration contains exactly 2 characters: Mila and Tala.\n\nVisual direction: Tala reaches behind the rice bin and pulls out an old bamboo fan Mila looks curious, Tala holds the fan with a dusty expression Viewpoint: three-quarter. Framing: medium shot.\n\nSetting: Lola's kitchen - A kitchen with a rice bin, a cabinet, and a table. Contains a bamboo fan.\n\nflat cel-shaded cartoon, thick clean black outlines, bright solid colour fills, two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing",
+      "regeneration_count": 0,
+      "scene_id": "s0",
+      "text_excerpt": "Mila and Tala were cousins and they were both eleven. Mila had short hair and Tala always wore a red hair tie. One rainy afternoon they were bored in Lola's kitchen and Tala found an old bamboo fan behind the rice bin.",
+      "visual_direction": "Tala reaches behind the rice bin and pulls out an old bamboo fan Mila looks curious, Tala holds the fan with a dusty expression Viewpoint: three-quarter. Framing: medium shot."
+    },
+    {
+      "attempts": [
+        {
+          "failure_reasons": [
+            "wrong_body_feature",
+            "different_face"
+          ],
+          "image_ref": "syn-901--campaign-065dd514ffb059233d04e1c35317228f/s1-1.png",
+          "passed": false,
+          "prompt": "Image 1 is Mila, human, short hair, human child body, human face with short hair, plain clothes. Image 2 is Tala, human, red hair tie, human child body, human face with red hair tie, plain clothes. Use them only as references for what each character looks like. Draw one new illustration of the scene described below \u2014 do not copy, inset, mirror or repeat the reference images inside it, and draw each character exactly once. When the text below names one of these characters, it is referring to that character itself, not to a second thing of the same name. The reference images define appearance, not pose, crop, expression or viewing angle; the Visual direction controls those scene properties.\n\nThis illustration contains exactly 2 characters: Mila and Tala.\n\nVisible objects:\nbamboo fan, Plain, brown, dusty, later painted with white sampaguita flowers.\n\nVisual direction: Mila and Tala shake the bamboo fan outside in the rain both look at the falling rain, then turn back inside Viewpoint: profile. Framing: wide shot.\n\nSetting: the yard - An outdoor space where it is raining.\n\nflat cel-shaded cartoon, thick clean black outlines, bright solid colour fills, two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing",
+          "scene_contradictions": [
+            "number of characters: There are 3 characters: Mila, Tala, and a third child in the background., but the constraints require exactly 2 characters: Mila and Tala",
+            "action: Mila and Tala are holding the bamboo fan and looking at it, not shaking it, and are not looking at the falling rain., but the constraints require Mila and Tala shake the bamboo fan outside in the rain both look at the falling rain, then turn back inside"
+          ],
+          "vlm_verdict": {
+            "anatomy_intact": true,
+            "attributes_present": [
+              "human",
+              "short hair",
+              "large eyes",
+              "simple clothing",
+              "child",
+              "red hair",
+              "hair tied with a bow",
+              "fair skin",
+              "simple facial features",
+              "white shirt"
+            ],
+            "differences_observed": "Mila: The character on the page has red hair instead of black. The character on the page is wearing a red ribbon on their head, which is absent in the reference. The character on the page is depicted in a scene with other characters and a background, while the reference is a simple portrait. The character on the page is holding a fan, which is not present in the reference.\nTala: The Tala in the second image has a slightly different facial expression, appearing more neutral than the reference. The bow in her hair is positioned slightly differently. The second image shows Tala in a full body view, while the reference is a head and shoulders shot. The second image shows Tala holding a fan and interacting with other characters, while the reference is a standalone portrait. The shading in the second image is more detailed, with visible rain and shadows.",
+            "same_character": false,
+            "style_match": true,
+            "subjects_unique": true,
+            "text_free": false
+          }
+        },
+        {
+          "failure_reasons": [
+            "different_face"
+          ],
+          "image_ref": "syn-901--campaign-065dd514ffb059233d04e1c35317228f/s1-2.png",
+          "passed": false,
+          "prompt": "Image 1 is Mila, human, short hair, human child body, human face with short hair, plain clothes. Image 2 is Tala, human, red hair tie, human child body, human face with red hair tie, plain clothes. Use them only as references for what each character looks like. Draw one new illustration of the scene described below \u2014 do not copy, inset, mirror or repeat the reference images inside it, and draw each character exactly once. When the text below names one of these characters, it is referring to that character itself, not to a second thing of the same name. The reference images define appearance, not pose, crop, expression or viewing angle; the Visual direction controls those scene properties.\n\nThis illustration contains exactly 2 characters: Mila and Tala.\n\nVisible objects:\nbamboo fan, Plain, brown, dusty, later painted with white sampaguita flowers.\n\nVisual direction: Mila and Tala shake the bamboo fan outside in the rain both look at the falling rain, then turn back inside Viewpoint: profile. Framing: wide shot.\n\nSetting: the yard - An outdoor space where it is raining.\n\nflat cel-shaded cartoon, thick clean black outlines, bright solid colour fills, two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing\nmatch these body features exactly: human child body, human face with short hair, human child body, human face with red hair tie, human adult body, human face\nmatch the reference character's face exactly\nevery surface in the picture is blank and unmarked\nCorrect this scene contradiction: number of characters: There are 3 characters: Mila, Tala, and a third child in the background., but the constraints require exactly 2 characters: Mila and Tala\nCorrect this scene contradiction: action: Mila and Tala are holding the bamboo fan and looking at it, not shaking it, and are not looking at the falling rain., but the constraints require Mila and Tala shake the bamboo fan outside in the rain both look at the falling rain, then turn back inside\nPreserve the Visual direction exactly: do not change the requested action, movement direction, pose, crop, expression, or viewing angle.",
+          "scene_contradictions": [
+            "number of characters: The illustration contains 3 characters: Mila, Tala, and a third boy., but the constraints require exactly 2 characters: Mila and Tala"
+          ],
+          "vlm_verdict": {
+            "anatomy_intact": true,
+            "attributes_present": [
+              "short black hair",
+              "pale skin",
+              "simple white t-shirt",
+              "large eyes",
+              "small nose",
+              "small mouth",
+              "red hair",
+              "hair tied with a red ribbon",
+              "fair skin",
+              "round face",
+              "dark eyes",
+              "simple clothing"
+            ],
+            "differences_observed": "Mila: The character on the page has a more rounded face and larger eyes than the reference. The hair is less detailed and lacks the subtle shading of the reference. The character on the page is holding a large, circular object with flowers, which is not present in the reference. The character on the page is standing with another character, while the reference is a solo portrait. The character on the page is depicted in a rainy outdoor scene, while the reference has a plain background.\nTala: The most noticeable difference is the presence of another character standing next to Tala in the second image. Tala's clothing appears slightly different; the shirt in the second image has visible sleeves, while the reference shows a sleeveless shirt. The second image shows Tala in a wider shot, with more of the environment visible. The second image also depicts Tala holding a large fishing net.",
+            "same_character": true,
+            "style_match": true,
+            "subjects_unique": true,
+            "text_free": false
+          }
+        },
+        {
+          "failure_reasons": [
+            "wrong_body_feature",
+            "different_face"
+          ],
+          "image_ref": "syn-901--campaign-065dd514ffb059233d04e1c35317228f/s1-3.png",
+          "passed": false,
+          "prompt": "Image 1 is Mila, human, short hair, human child body, human face with short hair, plain clothes. Image 2 is Tala, human, red hair tie, human child body, human face with red hair tie, plain clothes. Use them only as references for what each character looks like. Draw one new illustration of the scene described below \u2014 do not copy, inset, mirror or repeat the reference images inside it, and draw each character exactly once. When the text below names one of these characters, it is referring to that character itself, not to a second thing of the same name. The reference images define appearance, not pose, crop, expression or viewing angle; the Visual direction controls those scene properties.\n\nThis illustration contains exactly 2 characters: Mila and Tala.\n\nVisible objects:\nbamboo fan, Plain, brown, dusty, later painted with white sampaguita flowers.\n\nVisual direction: Mila and Tala shake the bamboo fan outside in the rain both look at the falling rain, then turn back inside Viewpoint: profile. Framing: wide shot.\n\nSetting: the yard - An outdoor space where it is raining.\n\nflat cel-shaded cartoon, thick clean black outlines, bright solid colour fills, two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing\nmatch the reference character's face exactly\nevery surface in the picture is blank and unmarked\nCorrect this scene contradiction: number of characters: The illustration contains 3 characters: Mila, Tala, and a third boy., but the constraints require exactly 2 characters: Mila and Tala\nPreserve the Visual direction exactly: do not change the requested action, movement direction, pose, crop, expression, or viewing angle.",
+          "scene_contradictions": [
+            "characters: 3 characters are present: Mila, Tala, and an additional boy., but the constraints require exactly 2 characters: Mila and Tala"
+          ],
+          "vlm_verdict": {
+            "anatomy_intact": true,
+            "attributes_present": [
+              "black hair",
+              "short hair",
+              "white t-shirt",
+              "similar face shape",
+              "large eyes",
+              "red hair",
+              "hair tied with a red ribbon",
+              "fair skin"
+            ],
+            "differences_observed": "Mila: The character on the page has a different hairstyle, with longer bangs and a more defined shape. The eyes are larger and more expressive. The face is slightly more rounded. The character is holding a large fan with flowers attached. There is another character with red hair standing next to Mila. There is a third character in the background. The background is a rainy outdoor scene, while the reference has a solid color background.\nTala: The most noticeable difference is the art style. The reference image has simpler, cleaner lines and flat coloring, while the page image has more detailed linework, shading, and a more illustrative style. The page image also shows Tala in a full body view, while the reference is a head and shoulders shot. Tala is holding a fan in the page image, which is not present in the reference. The page image also includes other characters and a detailed background, which are absent in the reference.",
+            "same_character": true,
+            "style_match": false,
+            "subjects_unique": true,
+            "text_free": false
+          }
+        }
+      ],
+      "caption": "It was plain and brown and a little dusty. They ran out to the yard to shake the dust off it but the rain was still falling so they came back inside.",
+      "characters_present": [
+        "c0",
+        "c1"
+      ],
+      "final_image_ref": "syn-901--campaign-065dd514ffb059233d04e1c35317228f/s1-2.png",
+      "location_id": "loc1",
+      "moderation_status": "passed",
+      "objects_present": [
+        "obj0"
+      ],
+      "prompt": "Image 1 is Mila, human, short hair, human child body, human face with short hair, plain clothes. Image 2 is Tala, human, red hair tie, human child body, human face with red hair tie, plain clothes. Use them only as references for what each character looks like. Draw one new illustration of the scene described below \u2014 do not copy, inset, mirror or repeat the reference images inside it, and draw each character exactly once. When the text below names one of these characters, it is referring to that character itself, not to a second thing of the same name. The reference images define appearance, not pose, crop, expression or viewing angle; the Visual direction controls those scene properties.\n\nThis illustration contains exactly 2 characters: Mila and Tala.\n\nVisible objects:\nbamboo fan, Plain, brown, dusty, later painted with white sampaguita flowers.\n\nVisual direction: Mila and Tala shake the bamboo fan outside in the rain both look at the falling rain, then turn back inside Viewpoint: profile. Framing: wide shot.\n\nSetting: the yard - An outdoor space where it is raining.\n\nflat cel-shaded cartoon, thick clean black outlines, bright solid colour fills, two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing",
+      "regeneration_count": 0,
+      "scene_id": "s1",
+      "text_excerpt": "It was plain and brown and a little dusty. They ran out to the yard to shake the dust off it but the rain was still falling so they came back inside.",
+      "visual_direction": "Mila and Tala shake the bamboo fan outside in the rain both look at the falling rain, then turn back inside Viewpoint: profile. Framing: wide shot."
+    },
+    {
+      "attempts": [
+        {
+          "failure_reasons": [
+            "wrong_style",
+            "different_face"
+          ],
+          "image_ref": "syn-901--campaign-065dd514ffb059233d04e1c35317228f/s2-1.png",
+          "passed": true,
+          "prompt": "Image 1 is Mila, human, short hair, human child body, human face with short hair, plain clothes. Image 2 is Tala, human, red hair tie, human child body, human face with red hair tie, plain clothes. Use them only as references for what each character looks like. Draw one new illustration of the scene described below \u2014 do not copy, inset, mirror or repeat the reference images inside it, and draw each character exactly once. When the text below names one of these characters, it is referring to that character itself, not to a second thing of the same name. The reference images define appearance, not pose, crop, expression or viewing angle; the Visual direction controls those scene properties.\n\nLola, human, human adult body, human face, plain clothes\n\nThis illustration contains exactly 3 characters: Mila, Tala and Lola.\n\nVisible objects:\nbamboo fan, Plain, brown, dusty, later painted with white sampaguita flowers.\n\nVisual direction: Lola points at the bamboo fan while Mila and Tala listen Lola speaks with a nostalgic smile, cousins look interested Viewpoint: front. Framing: medium shot.\n\nSetting: Lola's kitchen - A kitchen with a rice bin, a cabinet, and a table. Contains a bamboo fan.\n\nflat cel-shaded cartoon, thick clean black outlines, bright solid colour fills, two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing",
+          "scene_contradictions": [],
+          "vlm_verdict": {
+            "anatomy_intact": true,
+            "attributes_present": [
+              "Black hair",
+              "Bob haircut",
+              "Round face",
+              "Large eyes",
+              "White t-shirt",
+              "red hair",
+              "hair tied with a red ribbon",
+              "fair skin",
+              "short hair",
+              "rounded face",
+              "dark eyes"
+            ],
+            "differences_observed": "Mila: The Mila in the second image has more defined lines around the eyes and mouth. The shading is more pronounced, with darker areas under the eyes and on the sides of the face. The hair is less smooth and has more visible strands. The second image's Mila is also smaller in proportion to the other characters in the scene, while the reference image is a close-up of Mila alone.\nTala: The Tala in the second image has more detailed shading and highlights, particularly on the face and hair. The line work is thicker and more defined in the second image. The eyes are larger and more expressive in the second image. The second image depicts Tala with a more rounded face shape compared to the reference. The second image shows Tala wearing a white t-shirt, while the reference does not specify clothing. The second image shows Tala in a scene with other characters and objects, while the reference is a simple portrait.",
+            "same_character": true,
+            "style_match": false,
+            "subjects_unique": true,
+            "text_free": false
+          }
+        }
+      ],
+      "caption": "Lola said the fan belonged to her mother and nobody had used it in years.",
+      "characters_present": [
+        "c0",
+        "c1",
+        "c2"
+      ],
+      "final_image_ref": "syn-901--campaign-065dd514ffb059233d04e1c35317228f/s2-1.png",
+      "location_id": "loc0",
+      "moderation_status": "passed",
+      "objects_present": [
+        "obj0"
+      ],
+      "prompt": "Image 1 is Mila, human, short hair, human child body, human face with short hair, plain clothes. Image 2 is Tala, human, red hair tie, human child body, human face with red hair tie, plain clothes. Use them only as references for what each character looks like. Draw one new illustration of the scene described below \u2014 do not copy, inset, mirror or repeat the reference images inside it, and draw each character exactly once. When the text below names one of these characters, it is referring to that character itself, not to a second thing of the same name. The reference images define appearance, not pose, crop, expression or viewing angle; the Visual direction controls those scene properties.\n\nLola, human, human adult body, human face, plain clothes\n\nThis illustration contains exactly 3 characters: Mila, Tala and Lola.\n\nVisible objects:\nbamboo fan, Plain, brown, dusty, later painted with white sampaguita flowers.\n\nVisual direction: Lola points at the bamboo fan while Mila and Tala listen Lola speaks with a nostalgic smile, cousins look interested Viewpoint: front. Framing: medium shot.\n\nSetting: Lola's kitchen - A kitchen with a rice bin, a cabinet, and a table. Contains a bamboo fan.\n\nflat cel-shaded cartoon, thick clean black outlines, bright solid colour fills, two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing",
+      "regeneration_count": 0,
+      "scene_id": "s2",
+      "text_excerpt": "Lola said the fan belonged to her mother and nobody had used it in years.",
+      "visual_direction": "Lola points at the bamboo fan while Mila and Tala listen Lola speaks with a nostalgic smile, cousins look interested Viewpoint: front. Framing: medium shot."
+    },
+    {
+      "attempts": [
+        {
+          "failure_reasons": [
+            "wrong_body_feature",
+            "different_face"
+          ],
+          "image_ref": "syn-901--campaign-065dd514ffb059233d04e1c35317228f/s3-1.png",
+          "passed": false,
+          "prompt": "Image 1 is Mila, human, short hair, human child body, human face with short hair, plain clothes. Image 2 is Tala, human, red hair tie, human child body, human face with red hair tie, plain clothes. Use them only as references for what each character looks like. Draw one new illustration of the scene described below \u2014 do not copy, inset, mirror or repeat the reference images inside it, and draw each character exactly once. When the text below names one of these characters, it is referring to that character itself, not to a second thing of the same name. The reference images define appearance, not pose, crop, expression or viewing angle; the Visual direction controls those scene properties.\n\nThis illustration contains exactly 2 characters: Mila and Tala.\n\nVisible objects:\nbamboo fan, Plain, brown, dusty, later painted with white sampaguita flowers.\npaints, Used to decorate the fan.\n\nVisual direction: Mila and Tala take turns painting white sampaguita flowers on the fan Mila laughs as Tala notices paint on her red hair tie Viewpoint: three-quarter. Framing: medium shot.\n\nSetting: Lola's kitchen - A kitchen with a rice bin, a cabinet, and a table. Contains a bamboo fan.\n\nflat cel-shaded cartoon, thick clean black outlines, bright solid colour fills, two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing",
+          "scene_contradictions": [],
+          "vlm_verdict": {
+            "anatomy_intact": true,
+            "attributes_present": [
+              "black hair",
+              "short hair",
+              "general face shape",
+              "eye shape",
+              "eye colour",
+              "red hair",
+              "hair tied with a red ribbon",
+              "fair skin",
+              "white t-shirt",
+              "rounded face shape"
+            ],
+            "differences_observed": "Mila: The Mila in the second image has a more pronounced and cheerful expression, with an open mouth and visible teeth, compared to the neutral expression in the reference. The line work in the second image is thicker and more defined. The shading is simpler, with fewer gradients and a more flat colour application. The second image shows Mila wearing a yellow shirt, while the reference shows a white shirt. The second image also depicts Mila with hands and arms, which are not visible in the reference.\nTala: The page depicts Tala with a more pronounced and wider smile than the reference. The shading on the page is more extensive, with more areas of darker tone, particularly on the face and clothing. The line work on the page is thicker and more defined than in the reference. The page shows Tala in a full body view, while the reference is a head and shoulders shot. The page shows Tala interacting with another character and objects, while the reference is a standalone portrait.",
+            "same_character": true,
+            "style_match": false,
+            "subjects_unique": true,
+            "text_free": false
+          }
+        },
+        {
+          "failure_reasons": [
+            "wrong_style",
+            "different_face"
+          ],
+          "image_ref": "syn-901--campaign-065dd514ffb059233d04e1c35317228f/s3-2.png",
+          "passed": true,
+          "prompt": "Image 1 is Mila, human, short hair, human child body, human face with short hair, plain clothes. Image 2 is Tala, human, red hair tie, human child body, human face with red hair tie, plain clothes. Use them only as references for what each character looks like. Draw one new illustration of the scene described below \u2014 do not copy, inset, mirror or repeat the reference images inside it, and draw each character exactly once. When the text below names one of these characters, it is referring to that character itself, not to a second thing of the same name. The reference images define appearance, not pose, crop, expression or viewing angle; the Visual direction controls those scene properties.\n\nThis illustration contains exactly 2 characters: Mila and Tala.\n\nVisible objects:\nbamboo fan, Plain, brown, dusty, later painted with white sampaguita flowers.\npaints, Used to decorate the fan.\n\nVisual direction: Mila and Tala take turns painting white sampaguita flowers on the fan Mila laughs as Tala notices paint on her red hair tie Viewpoint: three-quarter. Framing: medium shot.\n\nSetting: Lola's kitchen - A kitchen with a rice bin, a cabinet, and a table. Contains a bamboo fan.\n\nflat cel-shaded cartoon, thick clean black outlines, bright solid colour fills, two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing\nmatch these body features exactly: human child body, human face with short hair, human child body, human face with red hair tie, human adult body, human face\nmatch the reference character's face exactly\nevery surface in the picture is blank and unmarked\nPreserve the Visual direction exactly: do not change the requested action, movement direction, pose, crop, expression, or viewing angle.",
+          "scene_contradictions": [],
+          "vlm_verdict": {
+            "anatomy_intact": true,
+            "attributes_present": [
+              "black hair",
+              "short hair",
+              "fair skin",
+              "white t-shirt",
+              "general face shape",
+              "red hair",
+              "hair tied with a red ribbon",
+              "round face"
+            ],
+            "differences_observed": "Mila: The Mila in the second image has a more defined nose and chin than the reference. The eyes are also slightly larger and more expressive, with visible pupils and highlights. The line work in the second image is thicker and more pronounced. The shading is also more detailed, with more visible gradients and highlights. The second image also depicts Mila with hands, which are not visible in the reference.\nTala: The Tala in the second image has a more detailed and expressive face, with more defined eyes, eyebrows, and mouth. The shading on the face is also more pronounced. The line work in the second image is thicker and more varied than in the reference. The second image shows Tala with hands, which are not visible in the reference. The second image shows Tala wearing a t-shirt, while the reference does not show the full shirt. The second image shows Tala in a dynamic pose, while the reference shows a more static pose.",
+            "same_character": true,
+            "style_match": false,
+            "subjects_unique": true,
+            "text_free": false
+          }
+        }
+      ],
+      "caption": "Mila got the paints from the cabinet and they painted white sampaguita flowers all over the fan, one flower each, taking turns. Tala got paint on her red hair tie and Mila laughed at her.",
+      "characters_present": [
+        "c0",
+        "c1"
+      ],
+      "final_image_ref": "syn-901--campaign-065dd514ffb059233d04e1c35317228f/s3-2.png",
+      "location_id": "loc0",
+      "moderation_status": "passed",
+      "objects_present": [
+        "obj0",
+        "obj1"
+      ],
+      "prompt": "Image 1 is Mila, human, short hair, human child body, human face with short hair, plain clothes. Image 2 is Tala, human, red hair tie, human child body, human face with red hair tie, plain clothes. Use them only as references for what each character looks like. Draw one new illustration of the scene described below \u2014 do not copy, inset, mirror or repeat the reference images inside it, and draw each character exactly once. When the text below names one of these characters, it is referring to that character itself, not to a second thing of the same name. The reference images define appearance, not pose, crop, expression or viewing angle; the Visual direction controls those scene properties.\n\nThis illustration contains exactly 2 characters: Mila and Tala.\n\nVisible objects:\nbamboo fan, Plain, brown, dusty, later painted with white sampaguita flowers.\npaints, Used to decorate the fan.\n\nVisual direction: Mila and Tala take turns painting white sampaguita flowers on the fan Mila laughs as Tala notices paint on her red hair tie Viewpoint: three-quarter. Framing: medium shot.\n\nSetting: Lola's kitchen - A kitchen with a rice bin, a cabinet, and a table. Contains a bamboo fan.\n\nflat cel-shaded cartoon, thick clean black outlines, bright solid colour fills, two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing",
+      "regeneration_count": 0,
+      "scene_id": "s3",
+      "text_excerpt": "Mila got the paints from the cabinet and they painted white sampaguita flowers all over the fan, one flower each, taking turns. Tala got paint on her red hair tie and Mila laughed at her.",
+      "visual_direction": "Mila and Tala take turns painting white sampaguita flowers on the fan Mila laughs as Tala notices paint on her red hair tie Viewpoint: three-quarter. Framing: medium shot."
+    },
+    {
+      "attempts": [
+        {
+          "failure_reasons": [
+            "different_face"
+          ],
+          "image_ref": "syn-901--campaign-065dd514ffb059233d04e1c35317228f/s4-1.png",
+          "passed": true,
+          "prompt": "Image 1 is Mila, human, short hair, human child body, human face with short hair, plain clothes. Image 2 is Tala, human, red hair tie, human child body, human face with red hair tie, plain clothes. Use them only as references for what each character looks like. Draw one new illustration of the scene described below \u2014 do not copy, inset, mirror or repeat the reference images inside it, and draw each character exactly once. When the text below names one of these characters, it is referring to that character itself, not to a second thing of the same name. The reference images define appearance, not pose, crop, expression or viewing angle; the Visual direction controls those scene properties.\n\nLola, human, human adult body, human face, plain clothes\n\nThis illustration contains exactly 3 characters: Mila, Tala and Lola.\n\nVisible objects:\nbamboo fan, Plain, brown, dusty, later painted with white sampaguita flowers.\n\nVisual direction: Mila and Tala fan Lola with the decorated bamboo fan Lola smiles warmly, cousins look proud Viewpoint: front. Framing: medium shot.\n\nSetting: Lola's kitchen - A kitchen with a rice bin, a cabinet, and a table. Contains a bamboo fan.\n\nflat cel-shaded cartoon, thick clean black outlines, bright solid colour fills, two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing",
+          "scene_contradictions": [],
+          "vlm_verdict": {
+            "anatomy_intact": true,
+            "attributes_present": [
+              "Black hair",
+              "Bob haircut",
+              "Round face",
+              "Large eyes",
+              "Small nose",
+              "White t-shirt",
+              "red hair",
+              "hair tied with a red ribbon",
+              "fair skin",
+              "white t-shirt",
+              "rounded face",
+              "short hair"
+            ],
+            "differences_observed": "Mila: The Mila in the second image is smaller in proportion to the other characters than in the reference. The line work in the second image is thicker and more defined. The shading is simpler, with less variation in tone. The second image includes other characters and objects not present in the reference.\nTala: The Tala in the second image has more detailed shading and highlights, particularly on the face and hair. The line work is thicker and more defined. The eyes are larger and more expressive, with visible pupils and highlights. The overall style is more illustrative and less minimalist than the reference. The second image shows Tala holding a fan, and is in a group with two other people. The second image has a more detailed background.",
+            "same_character": true,
+            "style_match": false,
+            "subjects_unique": true,
+            "text_free": false
+          }
+        }
+      ],
+      "caption": "When it dried they fanned Lola with it at the kitchen table. Lola said it was prettier now than when it was new.",
+      "characters_present": [
+        "c0",
+        "c1",
+        "c2"
+      ],
+      "final_image_ref": "syn-901--campaign-065dd514ffb059233d04e1c35317228f/s4-1.png",
+      "location_id": "loc0",
+      "moderation_status": "passed",
+      "objects_present": [
+        "obj0"
+      ],
+      "prompt": "Image 1 is Mila, human, short hair, human child body, human face with short hair, plain clothes. Image 2 is Tala, human, red hair tie, human child body, human face with red hair tie, plain clothes. Use them only as references for what each character looks like. Draw one new illustration of the scene described below \u2014 do not copy, inset, mirror or repeat the reference images inside it, and draw each character exactly once. When the text below names one of these characters, it is referring to that character itself, not to a second thing of the same name. The reference images define appearance, not pose, crop, expression or viewing angle; the Visual direction controls those scene properties.\n\nLola, human, human adult body, human face, plain clothes\n\nThis illustration contains exactly 3 characters: Mila, Tala and Lola.\n\nVisible objects:\nbamboo fan, Plain, brown, dusty, later painted with white sampaguita flowers.\n\nVisual direction: Mila and Tala fan Lola with the decorated bamboo fan Lola smiles warmly, cousins look proud Viewpoint: front. Framing: medium shot.\n\nSetting: Lola's kitchen - A kitchen with a rice bin, a cabinet, and a table. Contains a bamboo fan.\n\nflat cel-shaded cartoon, thick clean black outlines, bright solid colour fills, two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing",
+      "regeneration_count": 0,
+      "scene_id": "s4",
+      "text_excerpt": "When it dried they fanned Lola with it at the kitchen table. Lola said it was prettier now than when it was new.",
+      "visual_direction": "Mila and Tala fan Lola with the decorated bamboo fan Lola smiles warmly, cousins look proud Viewpoint: front. Framing: medium shot."
+    }
+  ],
+  "schema_version": 1,
+  "sharing": {
+    "in_gallery": false,
+    "teacher_approved": false
+  },
+  "story_id": "syn-901",
+  "style": {
+    "prompt_fragment": "flat cel-shaded cartoon, thick clean black outlines, bright solid colour fills, two flat shadow tones, limited palette, no gradients, no glossy highlights, no airbrushing",
+    "style_preset_id": "cel"
+  },
+  "timeline": [
+    {
+      "order": 0,
+      "summary": "Mila and Tala, two eleven-year-old cousins, are bored in Lola's kitchen on a rainy afternoon."
+    },
+    {
+      "order": 1,
+      "summary": "Tala finds an old bamboo fan behind the rice bin, and they take it outside to shake off the dust but return because of the rain."
+    },
+    {
+      "order": 2,
+      "summary": "Lola tells them the fan belonged to her mother and hasn't been used in years."
+    },
+    {
+      "order": 3,
+      "summary": "Mila and Tala paint white sampaguita flowers on the fan, taking turns, and Tala gets paint on her red hair tie."
+    },
+    {
+      "order": 4,
+      "summary": "After the paint dries, they fan Lola with the decorated fan, and she says it is prettier now."
+    }
+  ]
+}

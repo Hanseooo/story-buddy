@@ -81,14 +81,19 @@ RESTART_METADATA_KEYS = (
 
 
 def _code_commit() -> str:
-    result = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=pathlib.Path(__file__).resolve().parents[2],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.strip()
+    # A bare rev-parse names code that may never have existed: an uncommitted edit ships under the
+    # last commit's id, and every number reported from that bundle then traces to the wrong source.
+    # The suffix keeps the record honest and makes the bundle unfreezable on its own, since
+    # `freeze_dataset` requires every bundle to agree on `code_commit`.
+    root = pathlib.Path(__file__).resolve().parents[2]
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ["git", *args], cwd=root, check=True, capture_output=True, text=True
+        ).stdout.strip()
+
+    commit = git("rev-parse", "HEAD")
+    return f"{commit}-dirty" if git("status", "--porcelain") else commit
 
 
 @dataclass(frozen=True)

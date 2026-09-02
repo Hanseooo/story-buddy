@@ -143,7 +143,7 @@ def freeze_bundle(
             "scene_prompt_version": 2,
             "judge_prompt_version": 4,
             "scene_constraint_prompt_version": 3,
-            "segment_prompt_version": 2,
+            "segment_prompt_version": 3,
             "image_budget": 55,
             "recursion_limit": 87,
         },

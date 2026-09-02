@@ -1,7 +1,7 @@
 import logging
 import re
 
-from pydantic import BaseModel, Field, PrivateAttr, field_validator
+from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
 
 from app.config import MAX_SCENES, MIN_SCENE_WORDS, MIN_SCENES
 from contracts.story_memory import (
@@ -55,6 +55,16 @@ def render_visual_direction(direction: ExtractedVisualDirection) -> str:
     return f"{' '.join(base_parts)} Viewpoint: {direction.viewpoint}. Framing: {direction.framing}."
 
 
+# ADR-055 D5. A direction that puts several characters on one object without saying who holds it
+# is drawn as one object per character. Two prompt wordings were measured (5/24 with no rule,
+# 9/31 as a bullet, 14/29 inside the key_action definition) and none closes it, so the remainder
+# is resolved here. Only the shared form is derivable from the text, so this never picks a single
+# holder and never rejects a scene.
+_HOLDER_RESOLVED = re.compile(
+    r"\b(hold|holds|holding|held|together|between them|shares?|sharing|turns)\b", re.I
+)
+
+
 class ExtractedScene(BaseModel):
     start: int                        # inclusive index into the numbered units
     end: int                          # inclusive
@@ -63,6 +73,26 @@ class ExtractedScene(BaseModel):
     objects_present: list[str] = Field(default_factory=list)
     object_states: dict[str, str] = Field(default_factory=dict)  # StoryObject.name -> state in THIS scene
     visual_direction: ExtractedVisualDirection
+
+    @model_validator(mode="after")
+    def a_shared_object_names_its_holders(self) -> "ExtractedScene":
+        """ADR-055 D5. The trigger is a COMPOUND SUBJECT — "X and Y <verb> the object" — because
+        that is the symmetric shape that duplicates: both characters doing the same thing to one
+        object. A directional action between two characters ("Ana hands the wooden sword to Maya")
+        already fixes who holds it, and the clause would contradict it. Several objects in one
+        action is left alone: no phrasing stays correct without guessing which one is shared."""
+        action = self.visual_direction.key_action
+        if _HOLDER_RESOLVED.search(action):
+            return self
+        names = "|".join(re.escape(n) for n in self.characters_present)
+        if not names or not re.match(rf"\s*({names})\s+and\s+({names})\b", action):
+            return self
+        objects = [n for n in self.objects_present if re.search(rf"\b{re.escape(n)}\b", action, re.I)]
+        if len(objects) != 1:
+            return self
+        trimmed = action.rstrip(". ")
+        self.visual_direction.key_action = f"{trimmed}, holding the one {objects[0]} between them"
+        return self
 
     @field_validator("object_states", mode="after")
     @classmethod
@@ -98,8 +128,10 @@ class SceneSegmentation(BaseModel):
 # ADR-054 D2. `segment`'s prompt was the one prompt in the pipeline with no recorded version,
 # so a change to every scene's direction was invisible to the corpus manifest. Starts at 1
 # rather than 2: no earlier value was ever recorded, and runs predating ADR-054 are
-# distinguished only by `code_commit`. Bump on any change to SEGMENTATION_PROMPT.
-SEGMENT_PROMPT_VERSION = 2
+# distinguished only by `code_commit`. Bump on any change to the DIRECTION this node emits,
+# not only to SEGMENTATION_PROMPT: version 3 is the ADR-055 D5 normalizer, which rewrites
+# key_action without touching the prompt and would otherwise be invisible to the manifest.
+SEGMENT_PROMPT_VERSION = 3
 
 SEGMENTATION_PROMPT = """\
 Split this story into picture-book pages (scenes). Return index ranges — do not copy or \

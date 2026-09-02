@@ -1409,6 +1409,28 @@ def test_initial_state_uses_the_storys_frozen_style_preset():
     assert state.style.prompt_fragment == STYLE_PRESETS["cut_paper"]
 
 
+def test_code_commit_marks_a_dirty_working_tree():
+    """A bare `git rev-parse HEAD` names code that may never have existed: an uncommitted edit
+    ships under the last commit's id, and every number reported from that bundle traces to the
+    wrong source. The suffix also makes the bundle unfreezable, since `freeze_dataset` requires
+    every bundle to agree on `code_commit`."""
+    def fake_run(cmd, **kwargs):
+        out = "abc123\n" if cmd[1] == "rev-parse" else " M backend/pipeline/segment.py\n"
+        return SimpleNamespace(stdout=out, stderr="", returncode=0)
+
+    with patch("finetune.build_corpus.subprocess.run", side_effect=fake_run):
+        assert build_corpus._code_commit() == "abc123-dirty"
+
+
+def test_code_commit_is_bare_when_the_tree_is_clean():
+    def fake_run(cmd, **kwargs):
+        stdout = "abc123\n" if cmd[1] == "rev-parse" else ""
+        return SimpleNamespace(stdout=stdout, stderr="", returncode=0)
+
+    with patch("finetune.build_corpus.subprocess.run", side_effect=fake_run):
+        assert build_corpus._code_commit() == "abc123"
+
+
 def test_unchecked_references_counts_a_reference_that_shipped_without_a_verdict():
     """ADR-050 Decision 4. `ref_verdict: null` is reachable through exactly one path — the judge
     raised and `char_bible` accepted the draw unchecked — and on 2026-09-02 BOTH of `syn-001`'s
