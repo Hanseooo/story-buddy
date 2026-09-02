@@ -99,7 +99,7 @@ class SceneSegmentation(BaseModel):
 # so a change to every scene's direction was invisible to the corpus manifest. Starts at 1
 # rather than 2: no earlier value was ever recorded, and runs predating ADR-054 are
 # distinguished only by `code_commit`. Bump on any change to SEGMENTATION_PROMPT.
-SEGMENT_PROMPT_VERSION = 1
+SEGMENT_PROMPT_VERSION = 2
 
 SEGMENTATION_PROMPT = """\
 Split this story into picture-book pages (scenes). Return index ranges — do not copy or \
@@ -131,8 +131,7 @@ story does not say.
 - Do not list an object merely because a character owns it, because it appeared in an earlier scene, or because it is mentioned outside the selected moment.
 - object_states maps an object name from the list above to how that object looks in THIS scene, and only when its appearance departs from the object's permanent appearance — after it is painted, broken, opened, or otherwise changed. Write the state the object is in, never the event that changed it: repeat the same state on every later scene where the object is still listed in objects_present and still looks that way. Omit an object whose appearance never departs from its permanent appearance. Each value is one short phrase, one line, under 120 characters.
 - Do not carry an object forward from an earlier scene. Do not infer holding, carrying, or transfer relations from ownership, earlier scenes, or adjacent actions. When physical interaction matters, state it directly in key_action or pose_expression and list the object for this frame.
-- When more than one character in characters_present acts on the same object, key_action must resolve who holds it: name the single character who holds it, or state that they share the one object. There is only one of each listed object, so never write an action that implies a copy per character.
-- visual_direction captures exactly one drawable still-frame moment: key_action (one visible action with subject and target), pose_expression (visible pose or facial expression, or null), viewpoint (one camera angle relative to the action: front, profile, rear, three-quarter, overhead, occluded, etc. — choose story-appropriate angle such as rear view when running away), and framing (shot scale: close-up, medium shot, wide shot, etc.). Describe visible-only facts in one still frame. Convert speech into visible gesture or reaction. Never include written words, dialogue, speech bubbles, captions, labels, or readable signage. Never use quotes or newlines.
+- visual_direction captures exactly one drawable still-frame moment: key_action (one visible action with subject and target; if two or more characters act on the same object, the action must name which single character holds it, or say they hold the one object between them — never phrase it so each character would need their own copy), pose_expression (visible pose or facial expression, or null), viewpoint (one camera angle relative to the action: front, profile, rear, three-quarter, overhead, occluded, etc. — choose story-appropriate angle such as rear view when running away), and framing (shot scale: close-up, medium shot, wide shot, etc.). Describe visible-only facts in one still frame. Convert speech into visible gesture or reaction. Never include written words, dialogue, speech bubbles, captions, labels, or readable signage. Never use quotes or newlines.
 - Keep sequential or non-simultaneous actions in the caption instead of creating a montage, split panel, duplicate character, or impossible pose.
 - Together the scenes must cover every sentence."""
 

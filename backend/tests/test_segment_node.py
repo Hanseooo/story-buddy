@@ -377,11 +377,12 @@ def test_segment_prompt_makes_object_visibility_explicit_per_selected_frame():
         "Do not list an object merely because a character owns it",
         "Do not carry an object forward from an earlier scene",
         "Do not infer holding, carrying, or transfer relations",
-        # ADR-054 D1. Two characters plus a hold-verb rendered two objects; a count clause
-        # in the scene prompt did not fix it (0 of 8) and resolving the holder did (4 of 4).
-        "key_action must resolve who holds it",
-        "state that they share the one object",
-        "never write an action that implies a copy per character",
+        # ADR-054 D1. Lives inside the key_action definition, not as a bullet of its own:
+        # measured over 8 segmentations, a standalone bullet resolved the holder in 9 of 31
+        # multi-character directions against 5 of 24 with no rule, and this placement 14 of 29.
+        "the action must name which single character holds it",
+        "say they hold the one object between them",
+        "never phrase it so each character would need their own copy",
     ):
         assert rule in prompt
 
