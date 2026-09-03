@@ -78,6 +78,19 @@ Three proposed fixes died here: the `fal_image_model` swap, relying on `MAX_DRAW
 count-specific judge prompt. A fourth assumption died with them — ADR-018's fine-tune targets the
 *consistency* judge and does not cover the *reference* judge's spec compliance.
 
+## Phase C rehearsal (2026-09-03)
+
+Free — no provider calls, no database writes. `rehearse_selection.py` loads the real
+`corpus-smoke-h` bundles and asks whether a valid `dataset_selection.json` can exist at all.
+
+| Script | Arm | Result |
+|---|---|---|
+| `rehearse_selection.py` | best possible hard-negative pairing over the real bundles | **0 legal pairings / 4 characters**; `ManifestError` from `validate_hard_negative_matches` |
+
+Projected to the full corpus: 26 of 30 synthetic train characters have no eligible partner.
+Written up in `phase-c-rehearsal-2026-09-03.md`, which also records what the rehearsal did *not*
+reach — `freeze_dataset` and `to_llamafactory` sit downstream of the blocker.
+
 ## Running them again
 
 These are a record, not a suite. Each script hardcodes an absolute path to `backend/` and reads

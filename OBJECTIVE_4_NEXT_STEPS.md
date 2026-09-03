@@ -103,7 +103,29 @@ This isn't only a code gate. Donated stories are your **entire held-out test set
 
 The preregistration flags it plainly: the Stage-1 consent clause must state that donated stories may be used to build and evaluate an AI model, plus the data-lock date, and **"there is no retroactive fix."** If the consent forms you're collecting under don't say that, stories gathered now can't be used later. Confirm the wording before you gather the remaining 11, not after.
 
-### 3 · A preregistration contradiction nobody has resolved
+### 3 · The corpus cannot supply the hard negatives the freeze demands
+
+**Rehearsed 2026-09-03 for $0 against the real `corpus-smoke-h` bundles. This is fatal at steps 09
+and 13, both of which run after the ~$25 is spent.** Full write-up:
+`docs/product/evidence/phase-c-rehearsal-2026-09-03.md`.
+
+`validate_hard_negative_matches` (`dataset_selection.py:361`) hard-fails unless **every** synthetic
+train character with a canonical reference has exactly one match, and a match requires the same
+species (`:372`, exact casefold equality) and the same art style (`:379`).
+
+On the two real bundles: **0 legal pairings for 4 characters.** Projected across all 24 synthetic
+train stories, **26 of 30 characters have no eligible partner** — only humans repeat within a style,
+and cel has one. The corpus was authored with a distinctive creature per story, which is right for
+consistency testing and incompatible with a rule that needs species collisions.
+
+`dataset_selection.json` therefore cannot be authored as specified, and there is no way to discover
+this later that does not cost the campaign.
+
+> **Decide before step 08, not after.** Needs an ADR and a preregistration amendment —
+> `PREREGISTRATION_OBJ4.md:564` commits to the species+style rule. Options are in the write-up;
+> relaxing the *matching* rule is already measured to be insufficient.
+
+### 4 · A preregistration contradiction nobody has resolved
 
 Section 2 contradicts itself and you'll want it settled before the freeze. The split table says **Validation = Synthetic corpus**. Four paragraphs down the prose says the rule is applied "at full strength, with **zero** synthetic characters in validation or test." Both cannot hold — the 6 val stories are synthetic. Resolve it with a dated amendment; the preregistration is append-only, so never edit it in place.
 
@@ -141,7 +163,12 @@ Substitute identifiers rather than deleting them — real names, school, town, t
 
 ***You + me***
 
-Resolve the §2 contradiction (blocker 3) in a dated amendment. That part is paperwork and belongs here.
+Resolve the §2 contradiction (blocker 4) in a dated amendment. That part is paperwork and belongs here.
+
+> **Blocker 3 lands here too.** As specified, `dataset_selection.json` cannot be authored at all:
+> 26 of 30 synthetic train characters have no legal hard-negative partner. Settling that is an ADR
+> plus a preregistration amendment, and it belongs in this step with the other paperwork — *before*
+> step 08 spends the campaign budget on a corpus whose selection artifact cannot be written.
 
 > **`dataset_selection.json` CANNOT be written in Phase A.** Its `hard_negative_matches` are keyed by
 > `lineage_id(story_id, char_id)`, and `char_id` does not exist until the pipeline has generated the
@@ -296,9 +323,18 @@ uv run python -m finetune.build_corpus \
 > is discovered *after* the money is spent, when the repair may be a code change the freeze itself
 > forbids (`code_commit` is pinned — see "Known gotchas").
 >
-> **Rehearse this phase before step 08, not after.** `--pilot` exists for exactly that and cannot
-> contaminate the real dataset: pilot pairs are permanently excluded from training. Point it at a
-> throwaway directory, never at the production corpus.
+> **Partly rehearsed 2026-09-03, and it failed.** `--candidate-report` runs clean on real bundles
+> but returns zero candidates, and the selection validator hard-fails: see blocker 3 above and
+> `docs/product/evidence/phase-c-rehearsal-2026-09-03.md`. Everything downstream of
+> `dataset_selection.json` — `freeze_dataset`, `to_llamafactory` — is still unrehearsed, because the
+> blocker sits upstream of it.
+>
+> The module unit tests do pass (143 across the five Phase C test files). What was missing was the
+> chain against real generated data, which is where this surfaced.
+>
+> **Finish rehearsing before step 08, not after.** `--pilot` cannot contaminate the real dataset:
+> pilot pairs are permanently excluded from training. Point it at a throwaway directory, never at
+> the production corpus.
 
 ### 09 · Inspect candidates, then seed the queue
 
