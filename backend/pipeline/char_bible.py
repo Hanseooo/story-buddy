@@ -6,8 +6,14 @@ plus its verdict. ADR-028 falsified ADR-007's assumption that a reference is cor
 it was generated from the description; this node is the gate that makes that failure visible.
 
 It does NOT fix the rate — 3 draws still ship an off-spec reference often, now with the verdict
-persisted instead of silently. The fix for the rate is swapping `fal_image_model` (ADR-001's
-named seam), not anything in this file.
+persisted instead of silently.
+
+ADR-056 narrows what used to be written here. This file used to claim the fix for the rate is
+swapping `fal_image_model` (ADR-001's named seam). That is FALSE as a blanket claim and was
+measured: on a stated "three eyes" the current model hits 3/6, on a stated "six legs" it hits
+0/6. The swap survives only for a count far off the subject's canonical body plan, and no
+candidate model has been tested. `fal_image_model` is a pinned freeze key — a swap needs its own
+ADR and its own measurement. Do not re-propose it from this docstring alone.
 
 ADR-028's "roughly 42%" is deliberately not quoted here any more: it was measured against a gate
 that accepted whatever the judge's boolean said, and prod job b9506307 showed that boolean going

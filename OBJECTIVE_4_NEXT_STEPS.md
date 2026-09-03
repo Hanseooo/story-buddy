@@ -43,6 +43,11 @@ Updated 30 Aug 2026 | Defense: Oct 2026 | Budget: $25 working / $30 hard | Spent
 > | syn-003 | 15 | **budget_stopped** |
 > | syn-001 | 18 (range 18–26 over five runs) | needs cap 30 |
 >
+> **19 itself has never executed.** The measured runs used 15, 25 and 30; 19 is derived from the
+> reserve arithmetic above, not observed. The derivation is sound and the failure mode is benign — a
+> story stops with `budget_stopped` and the extension flag recovers it — but do not read 19 as a
+> validated number.
+>
 > Expect a handful of stories to stop at 19. That is what `--extend-story-call-cap <story_id>` is
 > for, and it is allowed **once per story, ever** (`_prepare_cap_extension`, `:640`). Run the
 > extension pass *after* the main pass, when actual spend is known and the remaining headroom can
@@ -282,6 +287,19 @@ uv run python -m finetune.build_corpus \
 
 ## Phase C — Label and freeze
 
+> **Nothing in this phase has ever been executed.** As of 2026-09-03 the generation half is tested
+> end to end (2 stories at `a723126`: cap behaviour, split invocations, resume-skip, cumulative
+> budget accounting), and `materialize_pairs`, `build_dataset`, `dataset_selection`, `freeze_dataset`
+> and `to_llamafactory` have not run against real bundles even once.
+>
+> That ordering is the risk: the campaign is a single indivisible ~$25 event, and a Phase C failure
+> is discovered *after* the money is spent, when the repair may be a code change the freeze itself
+> forbids (`code_commit` is pinned — see "Known gotchas").
+>
+> **Rehearse this phase before step 08, not after.** `--pilot` exists for exactly that and cannot
+> contaminate the real dataset: pilot pairs are permanently excluded from training. Point it at a
+> throwaway directory, never at the production corpus.
+
 ### 09 · Inspect candidates, then seed the queue
 
 ***Me***
@@ -367,4 +385,6 @@ uv run python -m finetune.build_dataset --freeze \
 
 **Immediate next action:** confirm the Stage-1 consent wording, then collect the remaining 11 donated stories. Nothing downstream can start without them, and starting the synthetic half early costs you the ability to commit code for weeks.
 
-Session spend so far today: ~$0.04, all of it roster preflight. Sunk from earlier runs: ~$5.31, archived and unusable.
+Spend as of 2026-09-03: **$2.52** on the paid smoke (step 07, authorized $2.63) plus **$0.19** on
+the attribute-fidelity count probe. Sunk from earlier runs: ~$5.31, archived and unusable.
+Remaining Fal credits: **~$1.87** — the campaign needs roughly $23 more.

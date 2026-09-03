@@ -47,17 +47,25 @@ The cardinality signal is close to uninformative, not merely weak.
 2. **"Let `MAX_DRAWS = 3` find a good draw."** Dead. The redraw loop only helps if the gate can
    recognise a good draw; this one rejects correct references about two thirds of the time.
    Likely mechanism for syn-001's two-eyed Quill: at a 50% hit rate three consecutive misses have
-   probability 0.125, so a correct draw was probably made, wrongly failed, and lost the best-of
-   tiebreak — `best_draw` ranks on `attributes_present` length, which is not count-aware.
-   Unverified, but consistent with what shipped.
+   probability 0.125, so a correct draw was probably made and wrongly failed. The best-of fallback
+   does not rescue it: `best_draw` (`char_bible.py:213-240`) ranks lexicographically on
+   `-len(contradictions)` FIRST, and that list comes from the same judge that flagged 5 of 6 Quills
+   regardless of ground truth, so a correct draw with one spurious contradiction loses to a wrong
+   draw with none. `attributes_present` is only its third key and ADR-034 already calls it noise.
+   Unverified on the actual draws, which were not retained, but consistent with what shipped.
 3. **"A count-specific judge prompt."** Dead, measured above. Two arms is where ADR-055 D5 says
    guessing stops. Do not try a third wording.
 4. **"ADR-018's fine-tune covers it."** It does not. ADR-018 fine-tunes the CONSISTENCY judge, whose
-   primary endpoint is ΔF1 on `different_character` and whose labels are `same_character` plus a
-   failure taxonomy with **no cardinality category** (`finetune/annotation_truth.py:42-43`). This
-   defect is in the REFERENCE judge (`char_bible._judge_reference` → `RefVerdict.contradictions`),
-   a text-spec-against-image task with its own prompt version. Different judge, different task, not
-   in the training data, and no metric in the plan would reveal it.
+   primary endpoint is ΔF1 on `different_character`. **The taxonomy is not the reason.** An earlier
+   version of this note claimed the labels had no cardinality category; that was wrong.
+   `wrong_body_feature` is exactly that axis — it gates (`consistency_check.py:175`), it has a
+   repair clause (`prompt_optimizer.py:384`), and visual-pilot case 08 is literally "2 eyes vs 4
+   eyes" (`scripts/generate_visual_pilot.py:385`). The reason is what the task COMPARES: the
+   consistency judge's ground truth is the reference image, and Mopsi is four-legged in the
+   reference and four-legged on every page, so the pairs are consistent and a perfect fine-tune
+   still passes them all. This defect is in the REFERENCE judge
+   (`char_bible._judge_reference` → `RefVerdict.contradictions`), which compares an image against
+   TEXT — a comparison no pair in ADR-018's dataset expresses.
 
 ## Standing conclusion
 
