@@ -31,7 +31,32 @@ Updated 30 Aug 2026 | Defense: Oct 2026 | Budget: $25 working / $30 hard | Spent
 
 > **MANDATORY FLAG**
 >
-> `--max-calls-per-story 15` is **required** on every paid run, not optional. Without it each story reserves the full image budget (55 × $0.035 = $1.93), so 45 stories reserve $86.63 against a $30 hard ceiling. The run cannot complete at any authorization — it halts after burning through everything up to that point.
+> `--max-calls-per-story` is **required** on every paid run, not optional. Without it each story reserves the full image budget (55 × $0.035 = $1.93), so a story late in the run cannot clear the reserve check against what is left of a $30 ceiling. The run halts after burning through everything up to that point.
+>
+> **The value is 19, not 15.** The reserve check (`build_corpus.py:1060-1064`) compares *this story's* remaining cap against the authorization not yet spent, so the binding case is every story consuming its full cap: 45 × 19 × $0.035 = **$29.93**, just inside the ceiling. 20 does not fit ($31.50).
+>
+> **15 was never measured and does not work.** Measured on 2026-09-03 at `a723126`:
+>
+> | story | images | outcome at cap 15 |
+> |---|---|---|
+> | syn-002 | 14 | completed, 1 image of headroom |
+> | syn-003 | 15 | **budget_stopped** |
+> | syn-001 | 18 (range 18–26 over five runs) | needs cap 30 |
+>
+> Expect a handful of stories to stop at 19. That is what `--extend-story-call-cap <story_id>` is
+> for, and it is allowed **once per story, ever** (`_prepare_cap_extension`, `:640`). Run the
+> extension pass *after* the main pass, when actual spend is known and the remaining headroom can
+> cover a raised reserve.
+>
+> Caps are **not** a pinned freeze key (`max_calls_per_story` is absent from `PINNED_METADATA_KEYS`;
+> `image_budget` pins the constant 55). Separate invocations may use different caps and still freeze
+> as one campaign — verified live on 2026-09-03: a completed story's state entry equals
+> `{"bundle": "runs/<id>"}`, which skips the restart block entirely (`:849`), so no cap conflict
+> arises.
+>
+> **Cumulative spend in an output directory is charged against the *current* `--max-usd`**
+> (`_recorded_authorization`, `:735`). A second invocation into the same `--out` does not get a
+> fresh budget. Both step 08 invocations share `--out`, so `--max-usd 25` is the total across both.
 
 ---
 
@@ -174,20 +199,37 @@ uv run python -m finetune.build_corpus --check-rosters \
 
 ### 07 · Paid smoke — 3 stories
 
-***Me · needs your $ authorization***
+***DONE - 2026-09-03, `a723126`, $2.52 spent of a $2.63 authorization.***
 
-Into a throwaway directory, so nothing lands in the real ledger. This is the only unverified thing left: real Fal generation, reference judging and consistency checking outside fixtures.
+Ran in three invocations into `../data/judge/corpus-smoke-g` and `-h`. What it bought:
 
-```bash
-uv run python -m finetune.build_corpus \
-  --corpus finetune/corpus_synthetic.json \
-  --out ../data/judge/corpus-smoke-b \
-  --limit 3 --max-usd 2.63 --max-calls-per-story 25 \
-  --price-per-megapixel 0.035 \
-  --price-basis "<official price URL + date verified>"
-```
+| invocation | settings | result |
+|---|---|---|
+| smoke-g | `--limit 3 --max-usd 2.63 --max-calls-per-story 25` | **exit 2, $0.875, zero bundles.** syn-001 consumed all 25 calls and wrote nothing. All 25 provider calls succeeded. |
+| smoke-h | `--limit 1 --max-usd 1.05 --max-calls-per-story 30` | **exit 0, $0.630.** syn-001 completed in 18 images, `regen_count` 6. |
+| smoke-h | `--limit 3 --max-usd 1.68 --max-calls-per-story 15` | **exit 0, $1.015.** syn-001 skipped cleanly; syn-002 completed in 14; syn-003 `budget_stopped` at 15. |
 
-> **Cost:** $2.63 ceiling. Optional — skipping it means the 45-story campaign is the first real run, which is recoverable but you'd find out at $24 instead of $3.
+What it settled, all of it folded into the MANDATORY FLAG block above:
+
+- **cap 15 does not work** - it is why the first invocation returned zero bundles;
+- **caps may differ between invocations** into one directory, so the campaign can be split;
+- **cumulative spend is charged against the current `--max-usd`**, which is why the third
+  invocation needed 1.68 rather than 1.05.
+
+The smoke is spent. Do not re-run it - step 08 is the next paid action.
+
+> **Quality findings are not budget findings.** The pages were scored against the expert
+> instrument and two defects reproduce across stories. **Numeric attribute fidelity fails:**
+> Quill's three eyes drawn as two, Mopsi's six legs drawn as four - with `"six legs"` stated
+> *twice* in the description that fed the generator. **The reference judge does not catch it:**
+> on syn-002 it listed `"six legs"` in `attributes_present` for a four-legged sheep and recorded
+> `contradictions: []`. Neither is a code bug; neither is fixed by prompting. Related: ADR-028
+> (reference failure made visible), ADR-018 (the planned judge fine-tune).
+> **Both are unresolved going into the campaign.**
+>
+> Character consistency across pages *passes* on both stories - the ADR-007 reference-conditioning
+> mechanism works. The instrument items at risk are B3/B4 and Question 4, not the recurring-character
+> ones.
 
 ### 08 · The campaign — 45 stories, two commands, one ceiling
 
@@ -200,7 +242,7 @@ Same `--out`, same cap, same price basis on both. They are one campaign against 
 uv run python -m finetune.build_corpus \
   --corpus finetune/corpus_synthetic.json \
   --out ../data/judge/corpus \
-  --max-usd 25 --max-calls-per-story 15 \
+  --max-usd 25 --max-calls-per-story 19 \
   --price-per-megapixel 0.035 \
   --price-basis "<official price URL + date verified>"
 
@@ -208,12 +250,31 @@ uv run python -m finetune.build_corpus \
 uv run python -m finetune.build_corpus \
   --corpus ../data/judge/intake/donated.json \
   --out ../data/judge/corpus \
-  --max-usd 25 --max-calls-per-story 15 \
+  --max-usd 25 --max-calls-per-story 19 \
   --price-per-megapixel 0.035 \
   --price-basis "<official price URL + date verified>"
 ```
 
-> **Budget:** 45 × 15 × $0.035 = **$23.63** worst case, inside the $25 working allocation and leaving the $25–30 band for a cap extension on a story that needs one. `--max-usd` is silently clamped to the $30 hard ceiling.
+> **Budget:** 45 × 19 × $0.035 = **$29.93** absolute worst case, which is why `--max-usd 25` on
+> both invocations is the working allocation and not the ceiling: it is the *shared* cumulative
+> total across both, so a run that trends expensive halts at $25 with the $25–30 band still held in
+> reserve for the extension pass. Expected actual is far lower — measured consumption is 14–18
+> images per story, so ~45 × 16 × $0.035 ≈ **$25**. `--max-usd` is silently clamped to the $30 hard
+> ceiling.
+>
+> If the main pass halts on budget rather than finishing, that is the design working: raise
+> `--max-usd` toward 30 and re-invoke into the same `--out`. Completed stories are skipped, and
+> cumulative spend carries over.
+
+> **About the $0.035.** It is a deliberate over-reserve, not the price. Fal's published rates are
+> **$0.03/MP** for scene edits (`qwen-image-edit-2511`) and **$0.02/MP** for references
+> (`qwen-image`), both verified 2026-09-01 and recorded in every bundle's `price_basis`.
+> `--price-per-megapixel` takes one scalar and it reserves the budget, so it carries the higher
+> number: under-reserving overspends, over-reserving only halts early. The consequence is that
+> **every cost this campaign reports is an upper bound, roughly 17% above what Fal actually bills** —
+> say so wherever the figure is reported, and read the Fal dashboard for the real total.
+> The `$0.02–0.035/image` in ADR-001 and PRD_v2 §15 is a **per-image** figure from a different
+> provider comparison. It is not this flag's unit; do not reconcile the two.
 
 ---
 
