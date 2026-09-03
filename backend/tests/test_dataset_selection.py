@@ -614,12 +614,12 @@ def test_validate_hard_negative_matches_success():
     }
 
 
-def test_validate_hard_negative_matches_rejects_missing_or_excess_reference():
+def test_validate_hard_negative_matches_allows_partial_coverage():
+    # ADR-057: coverage is best-effort. syn-002:c2 carries no hard negative and that is legal.
     bundles = [
         make_bundle("syn-001", "c1", species="fox", style="cel", split="train"),
         make_bundle("syn-002", "c2", species="fox", style="cel", split="train"),
     ]
-    # Missing syn-002:c2
     selection = DatasetSelection(
         hard_negatives_frozen_at=datetime.now(timezone.utc),
         hard_negative_matches=[
@@ -627,7 +627,27 @@ def test_validate_hard_negative_matches_rejects_missing_or_excess_reference():
         ],
         donated_replacements=[],
     )
-    with pytest.raises(ManifestError, match="synthetic training reference"):
+    matches = validate_hard_negative_matches(bundles, selection, [], set())
+    assert matches == {"syn-001:c1": "syn-002:c2"}
+
+
+def test_validate_hard_negative_matches_rejects_excess_reference():
+    # ADR-057: the membership check is the only guard on a reference outside the train split.
+    bundles = [
+        make_bundle("syn-001", "c1", species="fox", style="cel", split="train"),
+        make_bundle("syn-002", "c2", species="fox", style="cel", split="train"),
+        make_bundle("syn-003", "c3", species="fox", style="cel", split="val"),
+    ]
+    selection = DatasetSelection(
+        hard_negatives_frozen_at=datetime.now(timezone.utc),
+        hard_negative_matches=[
+            HardNegativeMatch(reference_char_id="syn-001:c1", target_char_id="syn-002:c2"),
+            HardNegativeMatch(reference_char_id="syn-002:c2", target_char_id="syn-001:c1"),
+            HardNegativeMatch(reference_char_id="syn-003:c3", target_char_id="syn-001:c1"),
+        ],
+        donated_replacements=[],
+    )
+    with pytest.raises(ManifestError, match="reference character syn-003:c3"):
         validate_hard_negative_matches(bundles, selection, [], set())
 
 

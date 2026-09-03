@@ -358,10 +358,13 @@ def validate_hard_negative_matches(
         for item in selection.hard_negative_matches
     }
 
-    if set(matches.keys()) != set(train_characters.keys()):
-        raise ManifestError("every synthetic training reference requires exactly one hard-negative match")
-
     for ref_id, target_id in matches.items():
+        # ADR-057: coverage is best-effort, so membership replaces completeness. A train character
+        # with no same-species/same-style partner simply carries no constructed negative; a
+        # reference that is not a synthetic train character at all is still a broken selection,
+        # and this is the only guard on it (the check below guards targets, not references).
+        if ref_id not in train_characters:
+            raise ManifestError(f"reference character {ref_id} is not a synthetic training character")
         if target_id not in train_characters:
             raise ManifestError(f"target character {target_id} is not a synthetic training character")
         if ref_id == target_id:

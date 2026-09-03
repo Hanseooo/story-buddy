@@ -641,3 +641,41 @@ definitions (§5.2), the claim ladder (§6), and δ = 3 (§5) all stand exactly 
 reasoned against *one* annotator's disagreement band and is fixed as of 2026-08-14; nothing here reopens it.
 The ground-truth labels the judge is scored against are the round-3-resolved labels where a resolution
 exists, and the agreed round-1/round-2 label otherwise.
+
+### 2026-09-03 — Hard-negative coverage is best-effort; the match rules are unchanged
+
+**State when amended:** zero held-out results had been seen; donated stories had not entered the corpus;
+no study labels had been collected; no fine-tune had been trained. No non-pilot annotation exists, so
+`hard_negatives_frozen_at` is still unconstrained by any collected row.
+
+The 2026-08-24 amendment registered frozen manual hard negatives "matching character species and art
+style". `finetune/dataset_selection.py` additionally required that **every** synthetic training
+character be the reference of exactly one match. That completeness requirement was code, not
+registration: it appears in neither this document nor ADR-018, and it was added in `3ababcd` alongside
+the rules that were registered.
+
+A pre-campaign rehearsal against real generated bundles (`docs/product/evidence/phase-c-rehearsal-2026-09-03.md`,
+USD 0, no provider calls or database writes) showed the corpus cannot satisfy it: 0 legal pairings for
+4 characters on the two completed bundles, and a projected 26 of 30 synthetic training characters with
+no same-species, same-style partner. The synthetic stories were authored with deliberately distinctive
+characters, which is what makes a consistency failure legible; hard negatives require species
+collisions. The two requirements were decided at different times and are incompatible at this corpus size.
+
+Resolved by ADR-057:
+
+- **Coverage is best-effort.** A synthetic training character with no eligible partner carries no
+  constructed negative. A partial hard-negative mapping is a valid frozen selection.
+- **The registered match rules are unchanged.** Constructed negatives still match character species and
+  art style exactly, still exclude self-pairs, still require the target to have at least one finalized
+  natural scene, and are still frozen in `dataset_selection.json` before non-pilot annotations begin.
+  Relaxing species or style matching to recover coverage is out of bounds under this registration.
+- **The achieved constructed-pair count is reported, not targeted.** No threshold attaches to it,
+  nothing fails on it, and no selection decision may be made after seeing it — the same rule the
+  2026-08-22 amendment applies to achieved style imbalance.
+- **If training negatives prove thin, the remedy is the already-registered one:** deliberately induced
+  drift to harvest natural negatives, train split only (§3.3 item 3). Validation and test keep the
+  deployment distribution.
+
+This amendment changes neither the primary endpoint, the δ = 3 F1-point ladder, the one-time
+held-out-test rule, nor the §3.2 character-level split discipline. Constructed negatives remain
+train-only (§3.3 item 2), so no change here can reach the held-out measurement.
