@@ -62,6 +62,22 @@ variable, counting multi-character directions that name the fan and resolve who 
 `probe_intake.json` is `syn-901`, the single story every measurement above runs on. It is a
 reliable reproducer, not a sample: none of these rates estimates a corpus rate.
 
+## Attribute fidelity (2026-09-03)
+
+A separate line of measurement from the object-duplication ADRs above, on a different defect:
+a description states a NUMBER and the image shows a different one. Written up in
+`attribute-fidelity-2026-09-03.md`, which carries the hand-made counts — the images are not
+committed and the counts are not recoverable without them.
+
+| Script | Arm | Result |
+|---|---|---|
+| `count_probe.py` | `fal-ai/qwen-image`, 6 fixed seeds x 2 subjects, no judge | Quill three eyes **3/6**; Mopsi six legs **0/6** |
+| `judge_count_eval.py` | shipping `JUDGE_PROMPT` vs the same plus a cardinality sentence | caught 6/9 both arms; false alarms 2/3 then **3/3** |
+
+Three proposed fixes died here: the `fal_image_model` swap, relying on `MAX_DRAWS`, and a
+count-specific judge prompt. A fourth assumption died with them — ADR-018's fine-tune targets the
+*consistency* judge and does not cover the *reference* judge's spec compliance.
+
 ## Running them again
 
 These are a record, not a suite. Each script hardcodes an absolute path to `backend/` and reads
