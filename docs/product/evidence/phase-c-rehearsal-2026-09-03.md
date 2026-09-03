@@ -97,3 +97,23 @@ Not decided here, and it needs an ADR plus a preregistration amendment because
    and the corpus is a hashed input (`intake_sha256`).
 
 Option 2 is measured to be insufficient. 1 and 3 are real choices with different costs.
+
+## Resolved the same day — ADR-057
+
+**Option 1, accepted 2026-09-03**, with a preregistration amendment appended to §12. Everything above
+is the pre-ADR state and is left exactly as it was measured; this section is the only thing added.
+
+The reframing that decided it: **the completeness rule was never preregistered.**
+`PREREGISTRATION_OBJ4.md:564` commits to *frozen before annotation* and *matched on species and
+style*, and nothing else. The every-character requirement entered in `3ababcd` with a one-line commit
+message and no spec citation. So option 1 removes a rule the code invented and keeps both rules that
+were registered, rather than amending a commitment.
+
+Option 2 was rejected for a second reason beyond being insufficient: without species equality a
+constructed pair is a hedgehog reference against a tin-rooster scene, which teaches *"different
+species implies different character"* — a shortcut that cannot transfer to the donated held-out
+split, where the failures are drift **within** one character.
+
+**Re-running this script now prints `PASS -- a valid selection exists`** on an empty mapping. That is
+the correct outcome, not a contradiction of the run above: the corpus still has 0 legal pairings, and
+carrying none is now legal. The measured numbers in this file are unchanged and still stand.

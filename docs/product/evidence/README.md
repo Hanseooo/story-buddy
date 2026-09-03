@@ -85,11 +85,17 @@ Free — no provider calls, no database writes. `rehearse_selection.py` loads th
 
 | Script | Arm | Result |
 |---|---|---|
-| `rehearse_selection.py` | best possible hard-negative pairing over the real bundles | **0 legal pairings / 4 characters**; `ManifestError` from `validate_hard_negative_matches` |
+| `rehearse_selection.py` | best possible hard-negative pairing over the real bundles | **0 legal pairings / 4 characters**; `ManifestError` from `validate_hard_negative_matches` (pre-ADR-057) |
 
 Projected to the full corpus: 26 of 30 synthetic train characters have no eligible partner.
 Written up in `phase-c-rehearsal-2026-09-03.md`, which also records what the rehearsal did *not*
 reach — `freeze_dataset` and `to_llamafactory` sit downstream of the blocker.
+
+**This arm no longer reproduces, by design.** ADR-057 (accepted the same day) removed the
+completeness rule the `ManifestError` came from, so a re-run now prints
+`PASS -- a valid selection exists`. The 0-legal-pairings count is unchanged and still true — carrying
+no hard negative is simply legal now. The row above is the pre-ADR state, kept because ADR-057 cites
+its verbatim output.
 
 ## Running them again
 

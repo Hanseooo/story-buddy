@@ -103,27 +103,41 @@ This isn't only a code gate. Donated stories are your **entire held-out test set
 
 The preregistration flags it plainly: the Stage-1 consent clause must state that donated stories may be used to build and evaluate an AI model, plus the data-lock date, and **"there is no retroactive fix."** If the consent forms you're collecting under don't say that, stories gathered now can't be used later. Confirm the wording before you gather the remaining 11, not after.
 
-### 3 · The corpus cannot supply the hard negatives the freeze demands
+### 3 · The corpus could not supply the hard negatives the freeze demanded — **RESOLVED 2026-09-03**
 
-**Rehearsed 2026-09-03 for $0 against the real `corpus-smoke-h` bundles. This is fatal at steps 09
-and 13, both of which run after the ~$25 is spent.** Full write-up:
+**Resolved by ADR-057 (Accepted), with a preregistration amendment appended the same day. The code
+change has landed and the rehearsal now passes.** Kept here because the finding explains why the
+achieved constructed-pair count will be far below what the design reads like.
+
+**Found by rehearsing for $0 against the real `corpus-smoke-h` bundles**, before the ~$25 was spent.
+It would have been fatal at steps 09 and 13, both of which run after the money. Full write-up:
 `docs/product/evidence/phase-c-rehearsal-2026-09-03.md`.
 
-`validate_hard_negative_matches` (`dataset_selection.py:361`) hard-fails unless **every** synthetic
-train character with a canonical reference has exactly one match, and a match requires the same
-species (`:372`, exact casefold equality) and the same art style (`:379`).
+`validate_hard_negative_matches` (`dataset_selection.py:361-362`) hard-failed unless **every**
+synthetic train character with a canonical reference had exactly one match, and a match requires the
+same species (`:372`, casefold equality) and the same art style (`:379`, raw string, no casefold).
 
 On the two real bundles: **0 legal pairings for 4 characters.** Projected across all 24 synthetic
 train stories, **26 of 30 characters have no eligible partner** — only humans repeat within a style,
 and cel has one. The corpus was authored with a distinctive creature per story, which is right for
 consistency testing and incompatible with a rule that needs species collisions.
 
-`dataset_selection.json` therefore cannot be authored as specified, and there is no way to discover
-this later that does not cost the campaign.
+`dataset_selection.json` therefore could not be authored as specified, and there was no way to
+discover this later that did not cost the campaign.
 
-> **Decide before step 08, not after.** Needs an ADR and a preregistration amendment —
-> `PREREGISTRATION_OBJ4.md:564` commits to the species+style rule. Options are in the write-up;
-> relaxing the *matching* rule is already measured to be insufficient.
+**How it was resolved.** The completeness rule was never preregistered — `PREREGISTRATION_OBJ4.md:564`
+commits only to *frozen before annotation* and *matched on species and style*, and the
+every-character requirement entered in `3ababcd` with no spec citation. ADR-057 replaced it with a
+membership check: a reference must be a synthetic train character, but a character with no eligible
+partner carries no hard negative. **Both match rules are unchanged and relaxing them is now
+explicitly out of bounds** — dropping species equality would teach the judge "different species
+implies different character", a shortcut that cannot transfer to the donated held-out split.
+
+> **What this costs.** Constructed training pairs drop from roughly 135 to roughly 18. It cannot
+> reach the primary endpoint — constructed pairs are train-only, enforced by
+> `manifest.py:validate_manifest`. If the training negatives prove too thin, the remedy is induced
+> drift, already pre-committed at `PREREGISTRATION_OBJ4.md` §3.3 item 3. **Do not recover coverage by
+> relaxing the match.**
 
 ### 4 · A preregistration contradiction nobody has resolved
 
@@ -323,14 +337,18 @@ uv run python -m finetune.build_corpus \
 > is discovered *after* the money is spent, when the repair may be a code change the freeze itself
 > forbids (`code_commit` is pinned — see "Known gotchas").
 >
-> **Partly rehearsed 2026-09-03, and it failed.** `--candidate-report` runs clean on real bundles
-> but returns zero candidates, and the selection validator hard-fails: see blocker 3 above and
-> `docs/product/evidence/phase-c-rehearsal-2026-09-03.md`. Everything downstream of
-> `dataset_selection.json` — `freeze_dataset`, `to_llamafactory` — is still unrehearsed, because the
-> blocker sits upstream of it.
+> **Partly rehearsed 2026-09-03. It failed, and the blocker is now fixed.** `--candidate-report` runs
+> clean on real bundles but returns zero candidates, and the selection validator hard-failed: see
+> blocker 3 above and `docs/product/evidence/phase-c-rehearsal-2026-09-03.md`. ADR-057 resolved it,
+> and the rehearsal now reports `PASS -- a valid selection exists` on an empty mapping, which is the
+> correct outcome for this corpus.
 >
-> The module unit tests do pass (143 across the five Phase C test files). What was missing was the
-> chain against real generated data, which is where this surfaced.
+> **Still unrehearsed: everything downstream of `dataset_selection.json`** — `freeze_dataset` and
+> `to_llamafactory` — because the blocker sat upstream of them and the rehearsal stopped there.
+> Finishing that is still free and still belongs before step 08.
+>
+> The module unit tests pass (144 across the five Phase C test files). What was missing was the chain
+> against real generated data, which is where this surfaced.
 >
 > **Finish rehearsing before step 08, not after.** `--pilot` cannot contaminate the real dataset:
 > pilot pairs are permanently excluded from training. Point it at a throwaway directory, never at
