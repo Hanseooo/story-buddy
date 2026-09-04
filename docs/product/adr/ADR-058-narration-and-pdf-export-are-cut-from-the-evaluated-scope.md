@@ -50,7 +50,8 @@ one.
 1. **PDF export is cut**, invoking `ROADMAP.md:372` rung 3. This retires **only the export half**
    of ADR-013. ADR-013's caption decision — the child's verbatim post-redaction text, never
    LLM-rewritten — is an independent decision on the same page and **survives untouched**.
-   ADR-013 is not edited in place.
+   ADR-013's decision text is not rewritten; only a supersession pointer is added to its Status line,
+   which is the ADR-037 → ADR-046 precedent for a partially-superseded record.
 2. **Narration is cut.** ADR-020 is superseded in full: no Chatterbox, no Kokoro fallback, no
    `providers.narrate()`, no audio in Storage.
 3. **CC-6 (Accessibility) is narrowed, not retired.** It becomes *"large targets; minimal text"*.

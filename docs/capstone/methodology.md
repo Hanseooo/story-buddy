@@ -71,7 +71,7 @@ directly to the four core quadrants of Boehm's Spiral Model:
 |---|---|---|---|
 | **0** & **0.5** | **Loop 1: Risk resolution** | Scaffolding and open-weight spike to resolve the substrate risk cheaply | A real slideshow renders. Reference conditioning retains identity on ≥ 80% of items **and** exceeds unconditioned by ≥ 30 points. ✅ Phase 0 done. ✅ Phase 0.5 closed 2026-07-29 — see `PHASE_05_RESULTS.md`. |
 | **1** | **Loop 2: Core pipeline** | The consistency loop is real, on clean stories | A story produces a consistent book; a case exists where the judge caught a drifted image and the retry fixed it. ✅ **Complete (2026-08-02)** — all ten Phase-1 specs built, from the `StoryMemory` contract through `compose`. |
-| **2** & **2.5** | **Loop 3: Integration & tuning** | Safe for a real child, survives messy input. An honestly evaluated specialized judge | The Filipino/Taglish moderation probe passes in **both** directions. A results table exists and the held-out set was read exactly once. **Phase 2 in progress (2026-08-04):** the moderation stack, input-gate hardening, and the kid-facing flow (book persistence, the ADR-029 reveal, failure semantics, reader/wait states) are built; auth + classroom RLS, teacher review, narration, export and data deletion remain. |
+| **2** & **2.5** | **Loop 3: Integration & tuning** | Safe for a real child, survives messy input. An honestly evaluated specialized judge | The Filipino/Taglish moderation probe passes in **both** directions. A results table exists and the held-out set was read exactly once. **Phase 2 in progress (2026-08-04):** the moderation stack, input-gate hardening, and the kid-facing flow (book persistence, the ADR-029 reveal, failure semantics, reader/wait states) are built; auth + classroom RLS, teacher review and data deletion remain; narration and export are cut (ADR-058). |
 | **3** | **Loop 4: Evaluation** | Expert validation (Obj 3), judge classification (Obj 4), and ISO/IEC 25010 software quality (Obj 5) | Expert-validation responses collected and content-analysed; the judge held-out classification table read exactly once; ISO/IEC 25010 questionnaire administered |
 
 Phase 0.5's kill criterion is the sharpest instance of the method. **It ran on 2026-07-29 and split its
@@ -138,7 +138,7 @@ A deterministic pipeline of **ten logical modules**, in order:
 | 7 | Prompt Optimizer | Scene + character bible + style preset + story memory → structured prompt |
 | 8 | AI Scene Generation | Reference-conditioned image edit — the pipeline's single generation mode |
 | 9 | Consistency Judge & Targeted Regeneration | Vision-language judge (emits `differences_observed` **before** `same_character`); one targeted, prompt-corrected retry; best-of fallback; capped |
-| 10 | Picture Book Composition | Slide composer with expressive TTS narration; PDF export |
+| 10 | Picture Book Composition | Slide composer (in-app reader). Narration and PDF export are cut — ADR-058 |
 
 > **Logical vs. implemented.** These are the manuscript's ten logical modules. In the implementation graph
 > (`docs/MASTER_SPEC.md` §2, ADR-003) some are realized as cross-cutting concerns rather than discrete graph
@@ -149,8 +149,7 @@ A deterministic pipeline of **ten logical modules**, in order:
 **Models.** Text analysis: `mistralai/mistral-small-3.2-24b-instruct` (Apache-2.0; `qwen/qwen3-32b` until
 2026-08-11, replaced after it returned schema-violating structured output in production — ADR-002
 amendment). Image generation: `Qwen-Image-Edit` (Apache-2.0). Consistency
-judge: prompted `gemma-3-27b-it`. Narration: `Chatterbox` (MIT), served via hosted inference, with
-`Kokoro-82M` retained as a CPU fallback (ADR-020, revised). All open-weight. No proprietary vendor model
+judge: prompted `gemma-3-27b-it`. All open-weight. No proprietary vendor model
 appears anywhere in the pipeline — a constraint that makes the system self-hostable and the equity claim a
 property of the design rather than an aspiration. Model identifiers, versions, and provider routing are
 pinned and reported.
@@ -407,13 +406,20 @@ that produced it; its validity rests on the calibration and reliability discipli
 
 **Confirm the evaluator profile with your adviser before administering this.**
 
+> ⚠️ **Pending adviser approval (raised 2026-09-04).** The functional-suitability item read
+> *"analyze, segment, illustrate, narrate, export"*. Narration and PDF export are **cut** (ADR-058)
+> and were never built, so the item asked evaluators to rate two capabilities that do not exist. The
+> wording below is corrected to what ships. **This is an instrument change and it must be signed off
+> before administration** — it cannot be relabelled after collection.
+
+
 The software artifact is evaluated with a structured questionnaire administered to the designated
 software-quality evaluators, following **ISO/IEC 25010** software product quality characteristics. Five
 applicable characteristics are assessed on a **5-point Likert scale (1 = Poor to 5 = Excellent)**:
 
 | Characteristic | What is asked about |
 |---|---|
-| Functional Suitability | Does the system do what it claims — analyze, segment, illustrate, narrate, export? |
+| Functional Suitability | Does the system do what it claims — analyze, segment, illustrate, and assemble a book? |
 | Performance Efficiency | Is generation time acceptable in a classroom period? |
 | Usability | Can a Grade 5–6 student and a teacher operate it without instruction? |
 | Reliability | Does it recover from a stalled or failed generation without losing work? |
@@ -536,7 +542,7 @@ children.
 - **No unmoderated generated image ever reaches a child** — including the canonical character reference before
   it is revealed. Moderation runs in a fixed order: input text, then the character reference, then every output
   image.
-- **Personally-identifiable information is redacted before storage, captioning, or export.** A child narrating
+- **Personally-identifiable information is redacted before storage or captioning.** A child narrating
   real life is the *expected* case, not the exception. Stock redaction tooling leaks Filipino names and address
   structures (`Barangay`, `Purok`, `Sitio`) and `+63 9xx` mobile formats, so custom recognizers are built for
   them.

@@ -1,6 +1,10 @@
 # ADR-020 — Narration: expressive open-weight TTS (Chatterbox) via hosted inference; Kokoro-82M as CPU fallback
 
-**Status:** Accepted (2026-07-10) · **revised 2026-07-17** — expressive narration supersedes the Kokoro-only
+**Status:** ⛔ **Superseded in full by
+[ADR-058](./ADR-058-narration-and-pdf-export-are-cut-from-the-evaluated-scope.md)** (2026-09-04) — narration
+is cut: no Chatterbox, no Kokoro fallback, no `providers.narrate()`, no audio in Storage. Nothing below was
+ever built. The record is kept because ADR-058's accessibility trade only makes sense against it. ·
+Previously: Accepted (2026-07-10) · **revised 2026-07-17** — expressive narration supersedes the Kokoro-only
 decision. Kokoro is retained as the fallback, not deleted, so nothing about the mandate or the fallback path
 is lost. · **amends ADR-002's read-aloud consequence, ADR-009's worker-RAM budget, and PRD §15/§17**
 

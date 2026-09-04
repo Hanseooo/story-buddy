@@ -1,6 +1,9 @@
 # ADR-013 — Caption source and PDF export
 
-**Status:** Accepted · **revised 2026-07-21** — PDF renderer resolved to WeasyPrint (D-2)
+**Status:** Accepted · **revised 2026-07-21** — PDF renderer resolved to WeasyPrint (D-2) · **the export
+half is retired by [ADR-058](./ADR-058-narration-and-pdf-export-are-cut-from-the-evaluated-scope.md)**
+(2026-09-04): PDF export is cut and WeasyPrint never shipped. **The caption decision below — the child's
+verbatim post-redaction text, never LLM-rewritten — is untouched and remains live.**
 
 **Context:** Captions can be the child's words or LLM-rewritten; each generated surface adds a moderation surface and a fidelity risk. Export needs a PDF renderer.
 
