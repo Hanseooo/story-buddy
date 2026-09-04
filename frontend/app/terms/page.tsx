@@ -26,7 +26,7 @@ export default function TermsOfService() {
           <section>
             <h2 className="font-display text-2xl font-bold text-primary mb-4">2. Teacher Responsibilities</h2>
             <ul className="list-disc pl-5 space-y-3">
-              <li><strong>The Gatekeeper Role:</strong> Teachers must manually review and approve every completed storybook. A book cannot enter the classroom gallery or be exported as a PDF until the teacher says it is okay.</li>
+              <li><strong>The Gatekeeper Role:</strong> Teachers must manually review and approve every completed storybook. A book cannot enter the classroom gallery until the teacher says it is okay.</li>
               <li><strong>Account Management:</strong> Teachers manage student nicknames and passwords and are responsible for deleting student accounts upon guardian request.</li>
             </ul>
           </section>
@@ -41,8 +41,8 @@ export default function TermsOfService() {
           </section>
 
           <section>
-            <h2 className="font-display text-2xl font-bold text-primary mb-4">4. Ownership and Export</h2>
-            <p>Students own their original stories. Once a storybook is approved, it can be downloaded as a PDF so the child can share their specific story with family, rather than sharing access to the platform itself.</p>
+            <h2 className="font-display text-2xl font-bold text-primary mb-4">4. Ownership</h2>
+            <p>Students own their original stories. Once a teacher approves a storybook, it appears in the classroom gallery for the child and their classmates to read. There is no public sharing mode.</p>
           </section>
         </div>
       </div>
