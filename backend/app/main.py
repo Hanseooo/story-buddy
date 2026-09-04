@@ -119,7 +119,14 @@ def create_storybook(
         }
     ).execute()
     queue = get_queue()
-    queue.enqueue("worker.run_job.run_storybook_job", job_id, job_timeout=JOB_TIMEOUT_SECONDS)
+    try:
+        queue.enqueue("worker.run_job.run_storybook_job", job_id, job_timeout=JOB_TIMEOUT_SECONDS)
+    except Exception:
+        # The row is already 'queued'; a Redis outage here would strand the book with no worker
+        # coming and no job_id ever returned to retry against. Undo the one write — nothing else
+        # ran, and the child has not seen this book. Same compensation as confirm_job below.
+        supabase.table("jobs").delete().eq("id", job_id).execute()
+        raise HTTPException(503, "could not start — try again")
     return CreateStorybookResponse(job_id=job_id)
 
 

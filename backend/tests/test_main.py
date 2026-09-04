@@ -46,6 +46,21 @@ def test_create_storybook_inserts_job_and_enqueues():
     fake_queue.enqueue.assert_called_once_with("worker.run_job.run_storybook_job", job_id, job_timeout=JOB_TIMEOUT_SECONDS)
 
 
+def test_create_storybook_deletes_the_job_row_and_returns_503_when_enqueue_raises():
+    """A Redis outage after the insert must not strand a 'queued' row with no worker.
+
+    Mirrors confirm_job's compensation: nothing else ran, so undo the one write.
+    """
+    fake_supabase = MagicMock()
+    fake_queue = MagicMock()
+    fake_queue.enqueue.side_effect = RuntimeError("redis down")
+
+    with patch("app.main.get_supabase_client", return_value=fake_supabase),          patch("app.main.get_queue", return_value=fake_queue):
+        response = client.post("/storybooks", json={"text": "A dog runs in a field."})
+
+    assert response.status_code == 503
+    fake_supabase.table.return_value.delete.assert_called_once()
+
 # --- style-presets spec: API validation (tests 3–5) ---
 
 def test_create_storybook_rejects_comic_style_preset_with_422():
