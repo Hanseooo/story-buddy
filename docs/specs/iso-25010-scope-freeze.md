@@ -39,7 +39,7 @@ Four things, in dependency order.
 | 1 | Public policy pages assert unshipped features | §6 Group E | `terms/page.tsx:45` and `privacy/page.tsx:30,32` state PDF download and Chatterbox narration as fact. Neither exists in the codebase. Legal surface, child-facing product. |
 | 2 | Narration and PDF export scope | §4, work group 1 | Promised across the PRD, roadmap, master spec, policy pages, methodology, and Tool A; implemented nowhere. Blocks the Objective 5 instrument. |
 | 3 | `PRIVATE-25010-01..04` + the dependency advisory | §6 Group A | Child-data confidentiality, retention, diagnostics leakage, deployed access-control state. Adjacent to Ethics Stage 1. |
-| 4 | B1–B5 correctness gaps | §6 Group B | Ordinary defects with ordinary fixes. |
+| 4 | B1–B4 correctness gaps | §6 Group B | Ordinary defects with ordinary fixes. B5 is dropped — §5.1. |
 
 Group E's Objective 5 instrument/model mismatch is folded into item 2: the questionnaire's
 functional-suitability item cannot be finalised until scope is frozen, because it names the cut
@@ -173,17 +173,34 @@ vocabulary ("Usability" → "Interaction capability"), fix the functional-suitab
 lands, and obtain adviser sign-off on the applicable profile and the item bank. Gates CVI, pilot,
 and administration. Links `action_checklist.md` B4, B8, B9. **Depends on B.**
 
-**E — Correctness batch (B1–B5).** Separate narrow tickets:
+**E — Correctness batch.** Separate narrow tickets. Each defect below was re-verified present at
+`5dafe70` on 2026-09-04; the audit snapshot is 84 commits old and its findings were not assumed.
 
-| Ref | Fix | Note |
-|---|---|---|
-| B2 | Enqueue-failure compensation in the request/enqueue flow | Atomic fail with a stable code, or an idempotent re-enqueue path |
-| B3 | Job-load error taxonomy in `useJob` | Preserve missing / unauthorized / transient / terminal |
-| B4 | Teacher mutation HTTP handling | Use the existing request pattern; no new abstraction |
-| B5 | Atomic annotation claim | Database boundary; needs a migration, therefore its own ADR |
-| B1 | Final-asset assurance provenance | Route corrected output back through the check, or redefine the verdict and document residual risk |
+| Issue | Audit ref | Site | Fix |
+|---|---|---|---|
+| E1 | B2 | `backend/app/main.py:122` | Enqueue-failure compensation. The pattern already exists at `main.py:164-171` on the resume path; apply it. |
+| E2 | B3 | `frontend/lib/useJob.ts:51-57` | `loadRow` discards `error`, so every failure becomes `classify(null)` → `"not-found"`. Preserve missing / unauthorized / transient / terminal. |
+| E3 | B4 | `frontend/app/classroom/[classroomId]/settings/page.tsx:49,69` | PATCH and DELETE discard the response. Check `Response.ok`; use the existing request pattern, no new abstraction for two call sites. |
+| E4 | B1 | pipeline | Final-asset assurance provenance. **Investigation first** — ADR-046/047/049/050 landed after the snapshot and may already close it. Trace, then fix or record. |
 
 Each starts with a failing deterministic test and updates its spec in the same change.
+
+### 5.1 B5 (atomic annotation claim) is dropped
+
+The audit's B5 asks for an atomic claim at the database boundary because "the annotation queue's
+claim behavior is vulnerable to concurrent workers selecting the same work." It rates the effort
+**L** — the largest item in the batch — and it requires a migration and therefore its own ADR.
+
+**The race cannot occur.** `PREREGISTRATION_OBJ4.md:616`: "One rater labels every pair. That rater
+is the researcher, and there is no second annotator." Inter-rater κ is "undefined for this dataset
+— permanently, not pending" (`:623`); the design reports intra-rater test-retest agreement
+instead, where round 2 is the same person again. There is one annotator, one queue, one session.
+
+Concurrency hardening for a single-rater instrument is speculative work on a pre-registered
+design that forbids the second rater. Dropped under ponytail rung 1.
+
+**Reopen when:** a second annotator is ever added — which would require a preregistration
+amendment, since it changes the reported agreement statistic from test-retest back to inter-rater.
 
 **Private.** `PRIVATE-25010-01..04` go to the restricted record. No source locations,
 identifiers, reproduction steps, or production links enter the public repository.
@@ -208,7 +225,8 @@ This document is the only new spec. The sub-issues produce no further spec files
 - B's durable artifact is **ADR-058**; this design is its input.
 - D changes `methodology.md` and `research_instruments.md` — those *are* the instruments.
 - E updates the existing affected specs in place, per "behavior change → update the spec in the
-  same change". B5 additionally needs its own ADR for the migration.
+  same change".
 - A and C need no spec.
 
-Expected new ADRs: **ADR-058** (this scope cut) and one for **B5**'s migration.
+Expected new ADRs: **ADR-058** (this scope cut). E4 may add one if its investigation finds a
+routing change is needed; no other ticket in the set touches an ADR-gated decision.
