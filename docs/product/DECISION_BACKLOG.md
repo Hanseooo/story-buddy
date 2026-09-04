@@ -26,7 +26,7 @@ the items below use stable `D-*` ids instead, because the write order can shift.
 
 - ~~**D-1 · Moderation backstop routing**~~ → **ADR-011 (revised 2026-07-21c):** primary meta-llama/llama-guard-4-12b
   on the OpenRouter, backstop routed to `gpt-oss-safeguard-20b` on OpenRouter.
-- ~~**D-2 · PDF renderer**~~ → **ADR-013 (revised 2026-07-21):** WeasyPrint.
+- ~~**D-2 · PDF renderer**~~ → **ADR-013 (revised 2026-07-21):** WeasyPrint. *(Moot — PDF export is cut, ADR-058; the renderer was never installed.)*
 - ~~**D-B · LangGraph node & edge conventions**~~ → **ADR-024 (2026-07-22):** partial-return node signature;
   sequential per-scene loop (position from `final_image_ref is None`, no cursor); upsert-by-`scene_id` reducer
   on `scenes[]` only; two pure routers (moderation, consistency). Amends ADR-003, ADR-023.
@@ -103,7 +103,7 @@ the items below use stable `D-*` ids instead, because the write order can shift.
 
 - ~~**D-1 · Moderation backstop routing**~~ → **ADR-011 (revised 2026-07-21c):** primary meta-llama/llama-guard-4-12b
   on the OpenRouter, backstop routed to `gpt-oss-safeguard-20b` on OpenRouter.
-- ~~**D-2 · PDF renderer**~~ → **ADR-013 (revised 2026-07-21):** WeasyPrint.
+- ~~**D-2 · PDF renderer**~~ → **ADR-013 (revised 2026-07-21):** WeasyPrint. *(Moot — PDF export is cut, ADR-058; the renderer was never installed.)*
 - ~~**D-B · LangGraph node & edge conventions**~~ → **ADR-024 (2026-07-22):** partial-return node signature;
   sequential per-scene loop (position from `final_image_ref is None`, no cursor); upsert-by-`scene_id` reducer
   on `scenes[]` only; two pure routers (moderation, consistency). Amends ADR-003, ADR-023.
