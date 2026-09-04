@@ -98,7 +98,7 @@ and cutting it returns the judge to OpenRouter with an env-var change):
         ^                                          ^
         |                                    checkpoint / status
         |                                          |
-        +----------- final images/PDF -----  [RQ worker / Northflank] --runs--> LangGraph pipeline
+        +----------- final images ---------  [RQ worker / Northflank] --runs--> LangGraph pipeline
                      (Supabase Storage)              ^
                                                   [Redis broker]
 ```
@@ -116,8 +116,8 @@ Explicit nodes; conditional edges only at moderation, consistency, and the chara
 not an orchestrator).
 Each node ↔ one module ↔ one file in `backend/pipeline/`. **The spec mapping is not 1:1** and §7's index
 is not phase-aligned with this table: `style-presets` and `prompt-optimizer` are Phase-1 specs covering
-node *inputs* rather than nodes of their own, and the `input_gate` / output-moderation / `export` nodes
-are specced in Phase 2 (`moderation-stack`, `length-guard`, `export-pdf`). Read §7 for what to write; read
+node *inputs* rather than nodes of their own, and the `input_gate` / output-moderation nodes
+are specced in Phase 2 (`moderation-stack`, `length-guard`). Read §7 for what to write; read
 this table for what runs.
 
 ```
@@ -223,14 +223,12 @@ Product/architecture choices are in the ADRs; this is the working reference, **i
 | Data / auth / storage / realtime | Supabase (Postgres + Auth + Storage + Realtime + RLS). **Classroom-scoped** | ADR-006, ADR-017 |
 | Structured extraction | `json_schema` (strict) + `require_parameters` (OpenRouter only) + Pydantic | §12, §3, ADR-002 |
 | Moderation | **meta-llama/llama-guard-4-12b** (OpenRouter) **+ gpt-oss-safeguard-20b** (OpenRouter backstop) (text) + Presidio **+ Filipino recognizers** (structured identifiers only — persons off by default, ADR-045) + **mistral-small-3.2-24b** (NSFW gate via OpenRouter) & **gemma-3-27b-it** safety rubric (image) | ADR-011, ADR-032, ADR-045, ADR-002 (amended) |
-| Narration | **Chatterbox** (MIT, expressive) via hosted inference, pre-rendered per page onto Storage; **Kokoro-82M** CPU fallback | ADR-020 (revised) |
 | Fine-tuning | **The consistency judge only.** Identity = reference conditioning; style = ADR-007 constant; safety = never | ADR-018 (supersedes ADR-016) |
 | Observability | **Langfuse** (tracing, ADR-030 — supersedes LangSmith/ADR-014) + Sentry (errors) | ADR-030, §16 |
 | Rate limiting | ⚙️`slowapi` + cost circuit-breaker; **per-classroom** daily cap deferred to Phase 2 (ADR-025) | §14,§15, ADR-025 |
-| Export | HTML template → PDF via **WeasyPrint** (D-2 resolved, ADR-013) | ADR-013, §8 |
 | **Testing — FE unit** | **vitest** | mock model calls; component + logic |
 | **Testing — BE unit** | **pytest** | mock every `providers.py` call (via the node helper — §6 seam); node logic, contracts, RLS, routing |
-| **Testing — e2e** | ⚙️**Playwright + Playwright CLI** | happy path, auth/RLS isolation, processing→slideshow, export |
+| **Testing — e2e** | ⚙️**Playwright + Playwright CLI** | happy path, auth/RLS isolation, processing→slideshow |
 | **Eval harness** | offline scripts + tracing exports | real models, story corpus; **not CI** (§6) |
 
 ### Frontend rendering strategy
@@ -257,11 +255,11 @@ Concerns that touch many modules. **Every feature spec ticks the ones it affects
 | # | Concern | What a spec must show | ADR/§ |
 |---|---|---|---|
 | CC-1 | **Moderation ordering** | input text → char-ref → **reveal** → output image; no image reaches a kid unmoderated. The reveal is the surface the char-ref gate exists for, so it ships behind it (ADR-029) | ADR-011, ADR-029 / §13 |
-| CC-2 | **PII redaction** | Presidio before storage/caption/export; redacted text is what's persisted. **Structured identifiers only** — person pseudonymization is off by default (ADR-045, `PII_PSEUDONYMIZE_PERSONS`) | ADR-011, ADR-045 / §14 |
+| CC-2 | **PII redaction** | Presidio before storage/caption; redacted text is what's persisted. **Structured identifiers only** — person pseudonymization is off by default (ADR-045, `PII_PSEUDONYMIZE_PERSONS`) | ADR-011, ADR-045 / §14 |
 | CC-3 | **Cost control** | count-based per-book breaker on `cost.image_count`, bound `IMAGE_BUDGET = MAX_SCENES * 4 + 15` = 55 (trips → job `failed`); `RECURSION_LIMIT = MAX_SCENES * 7 + 17` = 87 | ADR-025, ADR-029, ADR-037 |
 | CC-4 | **Security (RLS + signed URLs)** | **classroom**-scoped DB isolation; no public assets | ADR-006, ADR-017 / §14 |
 | CC-5 | **Observability** | emits traces/metrics (gen time, regen count, cost, VLM score) | §16 |
-| CC-6 | **Accessibility** | Expressive TTS narration per page (Chatterbox, hosted); large targets; minimal text | §17, ADR-020 |
+| CC-6 | **Accessibility** | Large targets; minimal text. **Narration is cut** — ADR-058 supersedes ADR-020 and narrows this concern; it is not retired | PRD §17, ADR-058 |
 | CC-7 | **Reproducibility** | honors `eval.seed`; deterministic where the model allows | §20, ADR-010 |
 | CC-8 | **Student vs teacher design language** | Cobalt Playroom: playful/Nunito (student flow) vs calm/Inter (teacher) | §9 |
 | CC-9 | **Failure states = success states** | moderation/failure screens get equal design care; kid-legible; UI branches on `jobs.failure_reason` enum, never raw `error` | ADR-025, §9,§13 |
@@ -289,7 +287,7 @@ Everything with one right answer, **with every `providers.py` call mocked**:
 - RLS isolation (one classroom cannot read another classroom's data — ADR-017); signed-URL access.
   ✅ **Built (CC-4):** Migrations `0007` and `0008` enforce classroom-scoped RLS on `jobs`, `profiles`,
   `classrooms`, and `storage.objects`. Tested via 39 isolation tests in `backend/tests/test_rls_isolation.py`.
-- e2e happy path + processing→slideshow via Realtime + PDF export (Playwright ⚙️).
+- e2e happy path + processing→slideshow via Realtime (Playwright ⚙️).
 - **Never assert on generated content.** "Is the character consistent?" is Tier B.
 
 **Tier B — Eval harness (offline, real models, on demand — never CI).**
@@ -341,7 +339,7 @@ mark done. Behavior change later → update the spec in the same change (CLAUDE.
 | Phase | Specs to write |
 |---|---|
 | 1 (core) | `story-memory-contract`, `story-analyzer`, `scene-segmentation`, `character-bible`, `style-presets`, `prompt-optimizer`, `image-generator`, `consistency-checker`, `regeneration-controller`, `compose` |
-| 2 (safety/classroom) | `moderation-stack`, `input-gate-hardening` (absorbed `filipino-pii-recognizers` + `length-guard`), `self-refusal-fallback`, `repeated-failure-offramp` (split out of it 2026-08-02 — counts across job submissions, needs a cross-run counter), `auth-identity-and-classroom-schema` (S1), `auth-session-model` (S2), `auth-authorization-surface` (S3), `auth-routes-and-account-ux` (S4) (the former `auth-and-classroom` row, decomposed by docket `docs/specs/auth-and-classroom-docket.md` — all four specced and built 2026-08-05/06; S3's 33-test isolation suite in `backend/tests/test_rls_isolation.py`), `teacher-dashboard`, ✅ `classroom-sharing` *(built 2026-08-09)* (display-only gallery — no `peer-reflection`/`story-map`, both cut per ADR-021), `narration`, `export-pdf`, `rate-limiting`, `storybook-deletion` *(draft 2026-08-24; ADR-044 per-book slice)*, `data-deletion` *(account/classroom deletion and abandoned-pause retention)*, `kid-flow-book-persistence` (S1), `kid-flow-pause-lifecycle` (S2), `kid-flow-failure-semantics` (S3), `kid-flow-reader-and-wait-states` (S4), ✅ `visual-continuity` *(S1/S2 replacement)*, ✅ `pose-viewpoint-composition` (S3), ✅ `setting-consistency` (S4), ✅ `spend-and-retry-economics` (S5) *(docket `docs/specs/pipeline-consistency-docket.md` — DONE 2026-08-15; S1 and S2 WAIVED, S3–S5 specced and built)* |
+| 2 (safety/classroom) | `moderation-stack`, `input-gate-hardening` (absorbed `filipino-pii-recognizers` + `length-guard`), `self-refusal-fallback`, `repeated-failure-offramp` (split out of it 2026-08-02 — counts across job submissions, needs a cross-run counter), `auth-identity-and-classroom-schema` (S1), `auth-session-model` (S2), `auth-authorization-surface` (S3), `auth-routes-and-account-ux` (S4) (the former `auth-and-classroom` row, decomposed by docket `docs/specs/auth-and-classroom-docket.md` — all four specced and built 2026-08-05/06; S3's 33-test isolation suite in `backend/tests/test_rls_isolation.py`), `teacher-dashboard`, ✅ `classroom-sharing` *(built 2026-08-09)* (display-only gallery — no `peer-reflection`/`story-map`, both cut per ADR-021), ~~`narration`~~ and ~~`export-pdf`~~ *(both cut — ADR-058)*, `rate-limiting`, `storybook-deletion` *(draft 2026-08-24; ADR-044 per-book slice)*, `data-deletion` *(account/classroom deletion and abandoned-pause retention)*, `kid-flow-book-persistence` (S1), `kid-flow-pause-lifecycle` (S2), `kid-flow-failure-semantics` (S3), `kid-flow-reader-and-wait-states` (S4), ✅ `visual-continuity` *(S1/S2 replacement)*, ✅ `pose-viewpoint-composition` (S3), ✅ `setting-consistency` (S4), ✅ `spend-and-retry-economics` (S5) *(docket `docs/specs/pipeline-consistency-docket.md` — DONE 2026-08-15; S1 and S2 WAIVED, S3–S5 specced and built)* |
 | 2.5 (fine-tune) | ✅ `judge-finetune` *(written)*, `annotation-surface` (ADR-026) |
 | 3 (eval) | `functional-verification-matrix` (Tool A), `metrics-export` |
 
@@ -385,7 +383,7 @@ Phase-2.5 annotators. Design it once, in Phase 1, or invalidate every label coll
 
 **Verify at build time (do not guess):**
 - **Modal cold-start budget** for a study session (ADR-019). Measure.
-- **Worker RAM** — Presidio+spaCy (`en_core_web_sm`) is resident (~211 MB; ADR-032 moved all moderation models to OpenRouter APIs to prevent OOM on 512 MB worker instances; torch/transformers excluded); narration is a hosted TTS call (ADR-020, revised).
+- **Worker RAM** — Presidio+spaCy (`en_core_web_sm`) is resident (~211 MB; ADR-032 moved all moderation models to OpenRouter APIs to prevent OOM on 512 MB worker instances; torch/transformers excluded).
 
 **Deferred by design:**
 - **The failure-reason taxonomy** — extend it in Phase 1, never during Phase 2.5 annotation.
@@ -396,8 +394,8 @@ Phase-2.5 annotators. Design it once, in Phase 1, or invalidate every label coll
 - ~~Moderation backstop routing (D-1)~~ → **ADR-011c:** primary `meta-llama/llama-guard-4-12b` on the OpenRouter,
   backstop routed to `gpt-oss-safeguard-20b` on OpenRouter (the ADR-011b pair is not routable). One
   backstop call per story; no new privacy surface (input already leaves to OpenRouter, ADR-002).
-- ~~ADR-013 PDF renderer (D-2)~~ → **WeasyPrint** — static paged-media template; lighter than Playwright's
-  Chromium on a RAM-constrained worker.
+- ~~ADR-013 PDF renderer (D-2)~~ → **WeasyPrint** was chosen, then **retired unbuilt by ADR-058**: PDF
+  export is cut, so no renderer ships. Recorded because the choice was made, not because it is live.
 - ~~DreamBench++ image licensing beyond evaluation~~ → **evaluate only, never train on it, never
   redistribute it** (`docs/specs/judge-finetune.md` §5.6, §12). Evaluation is the benchmark's
   intended use; no correspondence with the authors is required.

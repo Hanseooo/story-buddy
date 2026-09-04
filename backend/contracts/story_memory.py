@@ -228,11 +228,6 @@ def upsert_scenes(current: list["Scene"], update: list["Scene"]) -> list["Scene"
 
 
 # --- Accessory blocks ---
-class NarrationEntry(BaseModel):
-    scene_id: str
-    audio_ref: Optional[str] = None    # durable path
-
-
 class Sharing(BaseModel):
     teacher_approved: bool = False
     in_gallery: bool = False
@@ -264,7 +259,6 @@ class StoryMemory(BaseModel):
     timeline: list[TimelineEvent] = Field(default_factory=list)
     style: Style = Field(default_factory=Style)
     scenes: Annotated[list[Scene], upsert_scenes] = Field(default_factory=list)  # upsert-by-scene_id reducer (ADR-024, §8)
-    narration: list[NarrationEntry] = Field(default_factory=list)
     sharing: Sharing = Field(default_factory=Sharing)
     cost: Cost = Field(default_factory=Cost)
     eval: Eval = Field(default_factory=Eval)

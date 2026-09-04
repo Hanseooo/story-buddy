@@ -162,10 +162,6 @@ def upsert_scenes(current: list["Scene"], update: list["Scene"]) -> list["Scene"
     return list(by_id.values())
 
 # --- Accessory blocks ---
-class NarrationEntry(BaseModel):
-    scene_id: str
-    audio_ref: Optional[str] = None    # durable path
-
 class Sharing(BaseModel):
     teacher_approved: bool = False
     in_gallery: bool = False
@@ -198,7 +194,6 @@ class StoryMemory(BaseModel):
     timeline: list[TimelineEvent] = Field(default_factory=list)
     style: Style = Field(default_factory=Style)
     scenes: Annotated[list[Scene], upsert_scenes] = Field(default_factory=list)  # upsert-by-scene_id reducer (ADR-024, §8)
-    narration: list[NarrationEntry] = Field(default_factory=list)
     sharing: Sharing = Field(default_factory=Sharing)
     cost: Cost = Field(default_factory=Cost)
     eval: Eval = Field(default_factory=Eval)
@@ -373,8 +368,13 @@ N/A — the contract produces no generated content.
   `VlmVerdict.text_free`, declared LAST on both models so ADR-004's wire order is untouched. Defaulted `True` so
   unchecked reads clean and pre-change checkpoints resume without re-judging. Rank order widens to
   `same_character → anatomy_intact → text_free → subjects_unique → style_match`.
-- **Deferred:** `pdf_ref` / composed-book reference for the export leg (MASTER_SPEC §2). Nothing in Phase 1
-  writes it; `export-pdf` (Phase 2) adds it additively.
+- ~~**Deferred:** `pdf_ref` / composed-book reference for the export leg.~~ → **Cancelled 2026-09-04
+  (ADR-058 D1):** PDF export is cut, so the field is never added.
+- **Removed 2026-09-04 (no `schema_version` bump) → ADR-058 D5:** `NarrationEntry` and
+  `StoryMemory.narration`. Narration is cut. Verified before removal: the field was declared and read or
+  written **nowhere** in `backend/` — an orphan, not a live contract slice. Removal is non-breaking because
+  the model does not set `extra="forbid"`, so a persisted checkpoint carrying `"narration": []` still
+  deserializes; §3's restart path is not entered and no migration runs.
 - **Removed 2026-07-22:** `Scene.consistency_check_status` — an untyped `Optional[str]` with no owner spec and
   no defined value set, while `Attempt.passed` and `final_image_ref` already answer the question. Left in, a
   Phase-1 consumer would invent values for it.
