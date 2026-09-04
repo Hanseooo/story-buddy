@@ -1,6 +1,8 @@
-# pnpm 12 requires an explicit decision per package with a build script. These three keep the
-# false they already had as `ignoredBuiltDependencies` -- their prebuilt binaries are what the
-# working tree has always used; nothing here is a new grant.
+# pnpm 12 requires an explicit decision per package with a build script, so `pnpm install` now
+# hard-errors without this block. Every entry is `false`: `sharp` and `unrs-resolver` already had
+# that state via `ignoredBuiltDependencies`, and `@sentry/cli` was newly surfaced by pnpm 12 --
+# denying it keeps the behaviour the working tree has always had, since its postinstall has never
+# run here. Nothing here grants a build script that was previously running.
 allowBuilds:
   '@sentry/cli': false
   sharp: false

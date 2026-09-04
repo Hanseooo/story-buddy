@@ -49,9 +49,6 @@
           <mxGeometry x="1100" y="530" width="180" height="60" as="geometry" />
         </mxCell>
 
-        <mxCell id="export" value="export" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
-          <mxGeometry x="830" y="530" width="180" height="60" as="geometry" />
-        </mxCell>
 
         <mxCell id="e1" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" source="input_gate" target="analyze" parent="1">
           <mxGeometry relative="1" as="geometry" />
@@ -98,9 +95,6 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
 
-        <mxCell id="e11" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" source="compose" target="export" parent="1">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
 
       </root>
     </mxGraphModel>

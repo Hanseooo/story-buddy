@@ -42,7 +42,7 @@ self-hosted vLLM (the fine-tuned judge, post-Phase 2.5) rejects the field.
 | **Northflank** (Singapore region) | Backend: FastAPI web + RQ worker + Redis, 3 services | Phase 0 | Render, Fly.io, DO droplet — ADR-031 |
 | **Supabase — Postgres** | App data + LangGraph checkpoints (`langgraph-checkpoint-postgres`). ⚠️ **Reached on the direct connection, port 5432 — not the transaction pooler on 6543** (ADR-033) | Phase 0 | Roll-your-own Postgres — more ops, no gain — ADR-006 |
 | **Supabase — Auth** | Classroom-scoped accounts: teacher/BEED-student issuer, child/student rows | Phase 0 (built), Phase 2 (real RLS) | Firebase — less Postgres/RLS-native — ADR-006. **Clerk** — rejected ADR-027: its self-serve/email product is what ADR-017 forbids, and it splits the JWT issuer from the Postgres enforcing RLS |
-| **Supabase — Storage** | Generated images + audio via signed URLs; no public buckets. **PDFs are generated on demand, not stored** (ADR-027) | Phase 0 | **Cloudflare R2 / S3** — rejected ADR-027: compression removes the need, and neither can mint signed URLs client-side, so both force asset authz out of RLS into app code |
+| **Supabase — Storage** | Generated images via signed URLs; no public buckets. No audio and no PDFs — both cut, ADR-058 (ADR-027's on-demand-PDF rule is moot, not reversed) | Phase 0 | **Cloudflare R2 / S3** — rejected ADR-027: compression removes the need, and neither can mint signed URLs client-side, so both force asset authz out of RLS into app code |
 | **Supabase — Realtime** | Frontend watches job-row progress | Phase 0 | Websockets — more work, same result — ADR-005 |
 | **Redis** | RQ broker for the async job queue | Phase 0 | Postgres-backed queue (viable simplification, revisit if Redis feels like overhead) — ADR-005 |
 | **Modal** | Scale-to-zero GPU container serving the fine-tuned judge behind vLLM (OpenAI-compatible) | Phase 2.5 / Phase 3, **first item on the de-scope ladder** | RunPod Serverless, Baseten (drop-in equivalents); HF Inference Endpoints (thinner VLM LoRA support) — ADR-019 |
@@ -88,7 +88,7 @@ it speculatively; run the fal check first.
 
 | Package | Pinned version | Role |
 |---|---|---|
-| `next` | 16.2.10 | App Router, SSR |
+| `next` | 16.2.11 | App Router, SSR |
 | `react` / `react-dom` | 19.2.4 | UI |
 | `@supabase/supabase-js` | ^2.110.1 | Supabase client (Realtime job-progress watch, Storage signed URLs) |
 | `@sentry/nextjs` | ^10.64.0 | Error tracking |

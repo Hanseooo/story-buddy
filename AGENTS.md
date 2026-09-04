@@ -198,7 +198,7 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
 ---
 
 ## Project Context
-- Stack: **Frontend** — Next.js 16.2.10 (App Router) + React 19 + Tailwind 4, pnpm-managed,
+- Stack: **Frontend** — Next.js 16.2.11 (App Router) + React 19 + Tailwind 4, pnpm-managed,
   Vitest unit tests, Sentry. **Backend** — FastAPI + RQ worker + LangGraph (deterministic graph)
   on Python 3.12, uv-managed, pytest + ruff. **Data** — Supabase (Postgres + Auth + Storage +
   Realtime, RLS everywhere), Redis (RQ broker). **Models** — open-weight only (ADR-015):

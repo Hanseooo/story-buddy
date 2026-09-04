@@ -153,7 +153,7 @@ Not "we called an image API." The contribution is an **AI Storyboarding Pipeline
   messaging must be age-appropriate throughout.
 - **Account issuer + reviewer: the teacher or BEED (education) student** — owns the classroom, issues each
   student account (nickname + teacher-set password), and reviews every generated book (manual
-  approve/reject) before it enters the classroom gallery or is exported. *(ADR-017 — supersedes ADR-006's
+  approve/reject) before it enters the classroom gallery. *(ADR-017 — supersedes ADR-006's
   role model.)*
 - **Parent/guardian: consent-giver, not an operator.** Guardian consent and child assent are required by
   the PH Data Privacy Act — a child-held account with a password and peer-visible typed content raises the
@@ -395,7 +395,7 @@ use only, not any evaluation leg.
 
 ## 11. Open Decisions — RESOLVED
 
-1. **Teacher approval gate before a book enters the gallery or is exported** → **manual, always** (human backstop over auto-moderation; no auto-approve bypass — deferred to Future Work behind an ethics re-review). *Was "parent approval gate" — ADR-017.*
+1. **Teacher approval gate before a book enters the gallery** → **manual, always** (human backstop over auto-moderation; no auto-approve bypass — deferred to Future Work behind an ethics re-review). *Was "parent approval gate" — ADR-017.*
 2. **Regeneration cap** → **1 targeted, prompt-corrected retry** (2 attempts total); if still failing, keep the higher-scoring image (best-of), never a broken/placeholder page. ADR-010.
 3. **Story length limit** → **hard word cap (~500–800 words, tunable)** with a gentle "let's make a book of the first part" truncation at a scene boundary. **No silent AI summarization** (it would illustrate the summary, not the child's story). ADR-012.
 4. **Repeated moderation-failure off-ramp** → after **N=3** failed revisions of the same story, suggest starting a fresh story rather than an unbounded retry loop.
@@ -478,7 +478,7 @@ Ordering matters: input gate (step 5) → char-ref moderation (before step 7) �
 ## 14. Security & Data Protection
 
 - **RLS everywhere.** Teachers read only their own classroom's data; children read only their own account's data; enforced at the DB layer, not just the app.
-- **Signed URLs** for all kid-generated images/PDFs; no public buckets.
+- **Signed URLs** for all kid-generated images; no public buckets.
 - **Data retention & deletion path.** Define what's stored (account, stories, images, logs), for how long,
   and give the teacher a one-action **delete-a-student's-data** path, actionable on a guardian's request.
   Required posture under the PH Data Privacy Act.

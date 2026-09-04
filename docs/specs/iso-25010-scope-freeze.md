@@ -168,6 +168,22 @@ registry from the authoring environment, so the audit's finding is unverified at
 refuted. Then upgrade to a patched compatible release, run the full frontend suite, and
 regression-test the middleware/auth boundary.
 
+**Outcome, 2026-09-04.** The finding was confirmed open, not refuted: `pnpm audit --prod
+--audit-level high` reached the registry and reported it against the pinned `next` 16.2.10.
+Resolved by `next` 16.2.11 — a patch release, no major-version migration. Re-running the audit
+after the upgrade reports **no advisory against any direct production dependency**, which is what
+#73's first acceptance clause asks for. `frontend/middleware.ts` is the only auth gate (AGENTS.md),
+so its suite was run on its own as well as inside `pnpm test`: 20/20. Advisory mechanics stay in
+the restricted record.
+
+**The residual is transitive and is not closed here.** The same run still reports 15 high
+advisories, every one of them reached only through `next` or `@sentry/nextjs`
+(`browserslist`, `nanoid`, `postcss`, `sharp`, `fast-uri`, `brace-expansion`). None is a direct
+dependency, none is introduced by this branch, and none has a fix this branch could apply without
+an upstream release. They are named here so the audit number is not read as zero, and they need
+their own triage — either a later upgrade or a formal risk acceptance in the restricted record.
+That decision is not made in this change.
+
 **D — Objective 5 evaluation profile.** Reconcile the five characteristic labels to 2023
 vocabulary ("Usability" → "Interaction capability"), fix the functional-suitability item after B
 lands, and obtain adviser sign-off on the applicable profile and the item bank. Gates CVI, pilot,
