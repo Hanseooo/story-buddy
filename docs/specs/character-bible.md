@@ -573,7 +573,7 @@ fragment to exist.
 - [ ] **CC-7 Reproducibility** — **not satisfied, and unsatisfiable as designed.** A fixed seed makes
   the three draws identical and the re-roll a no-op (§4). Two runs of the same story produce different
   references. Same family as `story-analyzer`'s unseeded extraction; recorded here, not closed here.
-- [ ] CC-6, CC-8 — N/A. This node renders no UI and produces no narration.
+- [ ] CC-6, CC-8 — N/A. This node renders no UI.
 
 ## 6. Deterministic tests (CI — MASTER_SPEC §6 Tier A)
 

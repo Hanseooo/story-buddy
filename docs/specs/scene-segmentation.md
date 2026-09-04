@@ -358,7 +358,7 @@ MASTER_SPEC §2 node-I/O table, §6 test seam · PRD §8, §10, §11.6, §15 · 
 - ⚠️ **A redaction placeholder can appear in the printed book.** ADR-013 makes the caption the
   child's *post-redaction* verbatim text, so a story naming a real person yields a page reading
   `[PERSON_1] and I went to the beach`. That is ADR-013 working as specified, but it is
-  product-visible in the exported PDF and the slideshow. **Not resolvable here** — this node has no
+  product-visible in the slideshow. **Not resolvable here** — this node has no
   basis to rewrite text ADR-013 forbids it to rewrite, and the placeholder *format* is
   `moderation-stack`'s (Phase 2), which is also when redaction first actually runs. Recorded as that
   spec's problem, deliberately **not** a `DECISION_BACKLOG` row, because it is a display decision

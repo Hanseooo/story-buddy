@@ -174,7 +174,7 @@ The cleanup owns these current copies:
 | Langfuse | prompts, model outputs, spans, published trace |
 
 It deliberately does not touch `research_pairs`, `annotations`, or `private_assets/research/`.
-Narration/export features may not ship storybook-owned assets until this table and cleanup sequence
+Any future storybook-owned asset (narration and export are cut — ADR-058) may not ship until this table and cleanup sequence
 are amended to cover their storage locations.
 
 ## 6. Authorization and RLS

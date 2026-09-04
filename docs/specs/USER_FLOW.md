@@ -91,7 +91,7 @@ Whenever a table or list is empty, display a friendly placeholder:
 7. **The Storybook Slideshow (Final Output):**
    - Immersive, full-screen reader. Orientation: no lock — portrait stacks image over caption via CSS media query. A device locked to portrait in system settings can always read the book.
    - **Layout:** Image on top/left, verbatim text caption below/right.
-   - **Controls:** Giant Next/Prev tap zones (left 30% and right 30% of screen). Play button for **expressive TTS narration** (Chatterbox; ADR-020).
+   - **Controls:** Giant Next/Prev tap zones (left 30% and right 30% of screen). No play button — narration is cut (ADR-058).
 8. **Teacher review:** the book waits for manual teacher approval before it enters the classroom gallery
    or can be exported (§3.4).
 

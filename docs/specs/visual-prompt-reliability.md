@@ -417,7 +417,7 @@ evidence and ADR; it is not bundled into prompt cleanup.
 - [ ] **CC-1 Moderation ordering** — unchanged. D-N, not this spec, owns consistency-checking a safe
   moderation replacement.
 - [ ] **CC-4 Security** — no new asset, URL, table, or policy.
-- [ ] **CC-6 Accessibility** — captions remain complete; narration is unaffected.
+- [ ] **CC-6 Accessibility** — captions remain complete.
 - [ ] **CC-8 Kid vs teacher design** — no UI.
 - [ ] **CC-9 Failure states** — existing job failure semantics remain.
 
