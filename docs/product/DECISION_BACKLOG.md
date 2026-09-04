@@ -379,16 +379,16 @@ roadmap order. Source: MASTER_SPEC §7.
     Revokes `0009`'s column grant and drops `0008`'s approval policy — S3-7 now holds with zero exceptions.
     Migration `0011` ADR-flagged.)*
 - [x] `classroom-sharing`   *(**built 2026-08-09** — gallery page + StudentTabBar; `/s/[profileId]/gallery` live; tab bar covers Bookshelf / Gallery / Profile; logout moved to settings)*
-- [ ] `narration`   *(ADR-020; `providers.narrate()` not yet implemented. The book reader ships in S4 without a play button. TTS narration is `narration`'s deliverable.)*
-- [ ] `export-pdf`   *(D-2 decided → ADR-013: WeasyPrint)*
+- ~~[ ] `narration`~~ **CUT 2026-09-04 (ADR-058)** — `providers.narrate()` was never written. The book reader ships without a play button, permanently.
+- ~~[ ] `export-pdf`~~ **CUT 2026-09-04 (ADR-058)** — invoked ROADMAP rung 3. WeasyPrint was chosen (D-2) and never installed.
 - [ ] `rate-limiting`
 - [ ] `data-deletion`   *(must own ADR-029's ⚠️: a job can sit in `awaiting_confirm` forever. The sweep is one
       line over the existing `jobs.updated_at`; must name the swept-pause status value — S4 maps it to `asleep` FailureScreen kind. Until named, unknown status falls to `retry`. See `kid-flow-reader-and-wait-states.md` §4.4.4.)*
 - [x] `kid-flow-ui` → **decomposed into four specs, all built** *(docket `docs/specs/kid-flow-ui-docket.md`,
       DONE 2026-08-04; MASTER_SPEC §7 carries the four rows). The **multi-page persistence gap** `compose`
       flagged is **closed**: `run_job.py`'s `_finish` is the only writer of `pages`/`reveal`, and
-      `/book/[jobId]` reads the ordered `jobs.pages` array. `export-pdf` is the second reader of that
-      same shape.*
+      `/book/[jobId]` reads the ordered `jobs.pages` array. (`export-pdf` was to be the second reader of
+      that shape; it is cut — ADR-058, so the reader is the only one.)*
   - [x] `kid-flow-book-persistence` (S1)   *(**built 2026-08-02** — `docs/specs/kid-flow-book-persistence.md`;
         `supabase/migrations/0004_jobs_pages.sql` adds the ordered JSONB `{scene_id, caption, image_path}`
         array, durable Storage paths only. One writer, one write, atomic with `status='complete'`;
@@ -437,11 +437,11 @@ for a session until that condition is real. Rows are listed above as normal; thi
 | `rate-limiting` | ⚠️ **Judgement call, flagged not decided.** ADR-025 D4's per-book cost breaker is already live, and ADR-017 means no self-serve signup — every account is teacher-issued, so the abuse surface is a known classroom, not the internet. That is *mitigation*, not absence of risk. | Any public or self-serve path appears, **or** a measured cost overrun. Do **not** defer this silently past a public deployment (`CLAUDE.md §7`). |
 
 **Considered and rejected as deferrals** — recorded so the next session does not re-derive them:
-- **`narration`** — tempting (ADR-020 itself says it is *"not a research variable"*), **but it is inside a
-  measured category**: `functional-verification-matrix.md:65` scores "assembled + **narrated** + exported"
-  as a Tool A row, and MASTER_SPEC CC-6 names it as the accessibility mechanism. Deferring it narrows a
-  reported evaluation row and drops an accessibility claim — a documented cost, not a free win. Defer only
-  as a deliberate trade, with the Tool A row narrowed in the same change.
+- ~~**`narration`**~~ — this row set the terms and **they were met on 2026-09-04**. It refused a silent
+  deferral because narration sat inside a measured Tool A category and carried CC-6, and it permitted a cut
+  only "as a deliberate trade, with the Tool A row narrowed in the same change." ADR-058 is that trade: the
+  Tool A row narrowed in the same change (D4), CC-6 narrowed rather than retired (D3), and the accessibility
+  cost is recorded in the ADR. Not deferred — **cut**.
 - **`auth-and-classroom`** — MASTER_SPEC §6 already flags the missing RLS as *"a **child-facing** gap, not a
   paperwork one"*. Not deferrable.
 - **`data-deletion`** — Data Privacy Act (RA 10173) + ethics clearance. Not deferrable.
@@ -541,10 +541,8 @@ now fully specified.
 
 1. **`data-deletion`** — non-deferrable (RA 10173 + ethics clearance), but doesn't unblock anything else.
    Owns ADR-029's ⚠️: the `awaiting_confirm` sweep and the `asleep` status value S4 is waiting for.
-2. **`narration` + `export-pdf`** — both independent; can run in parallel sessions. Together they satisfy
-   the Tool A evaluation row ("assembled + narrated + exported"). Deferring narration narrows a reported
-   Objective row and drops an accessibility claim — defer only as a deliberate trade with the row narrowed
-   in the same change.
+2. ~~**`narration` + `export-pdf`**~~ — **cut 2026-09-04 (ADR-058)**, not sequenced. The Tool A row they
+   were to satisfy was narrowed to `Compose` in the same change, so nothing downstream is left waiting.
 3. **`rate-limiting`** — must not silently slip past any public deployment.
 
 **No open decision blocks Phase 1 or Phase 2 entry.** Tiers 1, 2, 2b, 2c, and 3 are all resolved. D-I closed

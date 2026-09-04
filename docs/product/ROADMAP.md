@@ -182,18 +182,18 @@ fallback means Phase 1 wobbles rather than collapses.
   (classroom isolation). Signed URLs. *(ADR-017 — supersedes ADR-006's role model.)* Add the **`researcher`
   role** here, while the role model is open: it is one enum value now, and a reopened auth decision in
   Phase 2.5 otherwise (ADR-026).
-- **Teacher dashboard/library** + **teacher review gate** before a book enters the gallery or is exported.
+- **Teacher dashboard/library** + **teacher review gate** before a book enters the gallery.
 - **Classroom sharing** — teacher-curated, display-only gallery of approved storybooks (ADR-021).
 - **Story Map** — read-only page over Story Memory. No new models.
-- **Narration** — expressive TTS (Chatterbox, hosted on fal.ai) pre-rendered per page onto Storage; Kokoro-82M CPU fallback (ADR-020, revised).
-- **Export** — HTML template → PDF (Playwright/WeasyPrint).
+- ~~**Narration**~~ and ~~**Export**~~ — **both cut, ADR-058.** Neither was ever built; export invoked
+  rung 3 of the ladder below. The accessibility cost of dropping narration is recorded in ADR-058, not here.
 - **Rate limiting** (`slowapi`) + per-profile daily cap + cost circuit-breaker.
 - **Data deletion path** for the teacher/owner.
 - **Kid-flow polish** — cartoon-pop components, Lottie wait states, kid-appropriate failure states.
 
 **Exit criteria:** A stranger's child could use the happy path safely; messy/short/over-length/mild-peril
 stories all degrade gracefully; a teacher can sign up, see only their own classroom, approve a book into
-the gallery, export a PDF, and delete data. Probe 4 (Filipino moderation) is green.
+the gallery and delete data. Probe 4 (Filipino moderation) is green.
 
 **⚠️ Worker RAM.** Presidio+spaCy, the NSFW ViT, and the CPU text gate are resident in one
 container (~2–3 GB). Check the plan tier at the *start* of this phase, not the end.
@@ -369,7 +369,7 @@ Two edges nobody draws, and they are the two likeliest ways the schedule dies:
 |---|---|---|
 | 1 | "What happens next?" continuation | Nothing the research needs |
 | 2 | Story Map | An author-facing mirror |
-| 3 | PDF export | The out-of-container escape hatch; slideshow still works |
+| 3 | ~~PDF export~~ — **taken 2026-09-04 (ADR-058)** | The out-of-container escape hatch; slideshow still works |
 | 4 | **Fine-tuned judge *ships*** → evaluate it offline instead | The "faster, cheaper product" claim. **Objective 4 survives** — the judge is still evaluated against human labels, just not served in production. Modal disappears (ADR-019) |
 | **Never** | Phase 0.5, Objective 4's judge evaluation, the moderation stack | The project — the judge evaluation is Objective 4's classification-performance leg and the moderation stack is non-negotiable. (Objective 4 is a formal reported objective — precision/recall/F1 against human labels, F1 primary, with an optional secondary comparison — not a build-gate-only or descriptive-only measure; ADR-008, revised 2026-07-25.) |
 
@@ -391,6 +391,6 @@ Two edges nobody draws, and they are the two likeliest ways the schedule dies:
 - **Seed determinism** fails silently at Phase 3, months after provider choice. Probed in Phase 0.5.
 - **Image moderation carries more weight than it used to.** No built-in filter, no proprietary backstop.
   Under-scoping it is a safety bug, not a polish item.
-- **Phase 2 is much larger than the old "week 4."** Classroom auth, sharing, teacher gate, Filipino PII,
-  and narration all landed in it.
+- **Phase 2 is much larger than the old "week 4."** Classroom auth, sharing, teacher gate, and Filipino PII
+  all landed in it. Narration and export did too, until ADR-058 cut both.
 - **At 3 months, the de-scope ladder is not optional.** At 6 months it is insurance.
