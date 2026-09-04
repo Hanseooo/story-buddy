@@ -99,6 +99,23 @@ describe("useJob", () => {
     expect(result.current.bucket).toBe("in-flight");
   });
 
+  it("a transient SELECT error is retry, not not-found (#76)", async () => {
+    // Network blip / 5xx: PostgREST returns an error with no PGRST116 code. The old code
+    // destructured only `data`, so this read as a missing book and the child was told their
+    // story does not exist.
+    mockSingle.mockResolvedValue({ data: null, error: { code: "08006", message: "network" } });
+    const { result } = renderHook(() => useJob("j1"));
+    await waitFor(() => expect(result.current.bucket).not.toBe("in-flight"));
+    expect(result.current.bucket).toBe("terminal-failure");
+  });
+
+  it("PGRST116 (no rows) is still not-found", async () => {
+    mockSingle.mockResolvedValue({ data: null, error: { code: "PGRST116", message: "no rows" } });
+    const { result } = renderHook(() => useJob("j1"));
+    await waitFor(() => expect(result.current.bucket).not.toBe("in-flight"));
+    expect(result.current.bucket).toBe("not-found");
+  });
+
   it("live UPDATE is applied regardless", async () => {
     mockSingle.mockResolvedValue({ data: null });
     const { result } = renderHook(() => useJob("j1"));
