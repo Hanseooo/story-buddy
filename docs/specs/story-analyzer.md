@@ -37,7 +37,7 @@ the redacted input text, so `char_bible` has a stable roster to draw canonical r
    fine against Pydantic and would silently corrupt the only ordering `segment` receives.
 5. Every emitted `Character` has a complete visual profile: at least three discriminators across at least two of `colours`, `body_features`, and `clothing`. Required transient `body_plan` and `face_or_interface` are validated as trimmed, single-line, non-placeholder text under 120 Unicode code points, folded into `body_features` in declared order (with first-seen deduplication), and stripped along with `is_humanoid` before persistence. Humanoids carry a required `clothing` description. Exact blank/placeholder values are scrubbed from every downstream prompt projection.
 6. `characters[]` and `objects[]` are mutually exclusive by agency: actors perform actions and decide; inert items belong in `objects[]`, a place belongs in `locations[]`, and a group present only as scenery is not a character. Exact character duplicates are dropped, and an explicit parenthetical alias (e.g. `the robot (Leo)` matching character `Leo`) is dropped in full before the object reaches the node.
-7. Every `ExtractedObject` requires a stable physical `description`. `owner_name` is mapped to `owner_char_id` after character capping; an unknown owner fails boundary validation.
+7. Every `ExtractedObject` requires the three appearance axes `materials` / `colours` / `form_features` (ADR-053 D1) — there is no prose slot. A normalizing `mode="after"` validator splits comma-joined entries into atoms, drops blanks and placeholders, bounds each atom to trimmed single-line text under 120 code points, and drops any atom sharing two or more stemmed content words with that object's own `changes_during_story`. It never raises (ADR-053 D3): `providers.py:300-315` grants one blind re-ask, so a rejecting validator quarantines the corpus rather than repairing it. `owner_name` is mapped to `owner_char_id` after character capping; an unknown owner fails boundary validation.
 
 ## 3. Position in the system map
 
@@ -107,7 +107,10 @@ class ExtractedLocation(BaseModel):
 
 class ExtractedObject(BaseModel):
     name: str
-    description: str
+    materials: list[str]         # ADR-053 D1/D2. Every axis entry must be true of the object in
+    colours: list[str]           # EVERY picture of the story.
+    form_features: list[str]
+    changes_during_story: str | None = None   # boundary-only: never persisted, never in a prompt
     owner_name: str | None = None
 
 _EXPLICIT_ALIAS = re.compile(r"\(([^()]*)\)\s*$")
@@ -161,11 +164,11 @@ The extraction instruction states:
 - Derive `is_humanoid` from the resolved body plan; speech, walking, or emotion are insufficient; a name or pronoun alone never makes it true.
 - Preserve explicit human-faced robots and anthropomorphic animals.
 - If two characters are not stated to be identical, use distinct missing visual details where possible; never invent differences for stated twins.
-- Observability: `EXTRACTION_PROMPT_VERSION = 1` is logged upon completion without logging story text, prompts, or child PII.
+- Observability: `EXTRACTION_PROMPT_VERSION = 5` (ADR-052 gave objects the permanence rule locations already had) is logged upon completion without logging story text, prompts, or child PII.
 
 Locations require a strict permanent description. The prompt instructs the model to preserve stated permanent facts and fill missing detail neutrally, excluding temporary conditions.
 
-Objects require a stable physical description and an optional `owner_name`. Initial ownership is mapped after the three-character cap: `owner_name` maps to `owner_char_id`. Provider placeholder strings for an unowned object (`null`, `none`, `nil`, `unowned`, `n/a`, or whitespace, case-insensitive) normalize to `None` at the structured-output boundary. Any other `owner_name` that cannot be resolved against the capped character roster raises `ValueError`.
+Objects are described on three axes and never in prose, with an optional `changes_during_story` and `owner_name`. `changes_during_story` is boundary-only: it is what the axes are checked against, and it is neither persisted to `StoryObject` nor rendered into any prompt — `segment` remains the sole author of per-scene state (ADR-052 D3). Initial ownership is mapped after the three-character cap: `owner_name` maps to `owner_char_id`. Provider placeholder strings for an unowned object (`null`, `none`, `nil`, `unowned`, `n/a`, or whitespace, case-insensitive) normalize to `None` at the structured-output boundary. Any other `owner_name` that cannot be resolved against the capped character roster raises `ValueError`.
 
 ### Edge cases
 
@@ -210,7 +213,7 @@ Objects require a stable physical description and an optional `owner_name`. Init
   reference cap are different numbers; a third character simply gets no reference. This
   node writes no `cost` fields; its own text-token spend is untracked in `cost.usd_estimate`
   (noise against image cost — ADR-001).
-- [x] **CC-5 Observability** — logs `EXTRACTION_PROMPT_VERSION = 1`, extracted counts, and the minted ids,
+- [x] **CC-5 Observability** — logs `EXTRACTION_PROMPT_VERSION` (1 when this item landed; 5 as of ADR-052), extracted counts, and the minted ids,
   so a wrong reference downstream traces back to a specific roster entry.
 - [x] **CC-9 Failure states** — an empty roster is **not** a failure and must never fail the job;
   only a provider failure does, through the ADR-025 `failure_reason` enum.

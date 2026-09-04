@@ -157,18 +157,6 @@ describe("BookPage — reader (terminal-success)", () => {
     expect(buttons[1].getAttribute("aria-label")).toBe("Scroll View");
   });
 
-  it("discloses the name swap in both reading modes (ethics_and_safety.md §1)", async () => {
-    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
-    mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
-
-    // Default mode is pages; a child who never touches the toggle must still see it.
-    await renderPage(makeParams("j1"));
-    await waitFor(() => expect(screen.getByText(/change some names to keep you safe/i)).toBeDefined());
-
-    fireEvent.click(screen.getByLabelText("Scroll View"));
-    expect(screen.getByText(/change some names to keep you safe/i)).toBeDefined();
-  });
-
   it("image alt = caption; visible caption is aria-hidden (spec §4.3 double-read fix)", async () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
     mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });

@@ -1,0 +1,196 @@
+{
+ "syn-001": {
+  "objects": [
+   {
+    "name": "weathervane (Bok-Bok)",
+    "materials": [
+     "tin"
+    ],
+    "colours": [
+     "rusty red",
+     "silver"
+    ],
+    "form_features": [
+     "rooster-shaped, long neck, curved beak, tail that spins"
+    ],
+    "changes_during_story": "tail was bent, then straightened with a rock",
+    "owner_name": null
+   },
+   {
+    "name": "rock",
+    "materials": [
+     "stone"
+    ],
+    "colours": [
+     "gray"
+    ],
+    "form_features": [
+     "small, smooth, round"
+    ],
+    "changes_during_story": null,
+    "owner_name": null
+   }
+  ],
+  "locations": [
+   {
+    "name": "barn",
+    "permanent_features": [
+     "wooden walls, slanted roof, hay inside"
+    ],
+    "changes_during_story": null
+   },
+   {
+    "name": "fence",
+    "permanent_features": [
+     "wooden, low, near the barn"
+    ],
+    "changes_during_story": null
+   },
+   {
+    "name": "pond",
+    "permanent_features": [
+     "small, surrounded by grass"
+    ],
+    "changes_during_story": null
+   }
+  ]
+ },
+ "syn-002": {
+  "objects": [
+   {
+    "name": "bucket",
+    "materials": [
+     "plastic"
+    ],
+    "colours": [
+     "blue"
+    ],
+    "form_features": [
+     "round shape",
+     "handle",
+     "water inside"
+    ],
+    "changes_during_story": null,
+    "owner_name": "Marisol"
+   },
+   {
+    "name": "eraser",
+    "materials": [
+     "rubber"
+    ],
+    "colours": [
+     "pink"
+    ],
+    "form_features": [
+     "small rectangular shape",
+     "slightly worn"
+    ],
+    "changes_during_story": "eaten by Mopsi",
+    "owner_name": "Marisol"
+   },
+   {
+    "name": "library book",
+    "materials": [
+     "paper",
+     "cardboard"
+    ],
+    "colours": [
+     "various"
+    ],
+    "form_features": [
+     "rectangular shape",
+     "pages",
+     "cover illustration"
+    ],
+    "changes_during_story": "half-eaten by Mopsi",
+    "owner_name": "school"
+   }
+  ],
+  "locations": [
+   {
+    "name": "creek",
+    "permanent_features": [
+     "shallow water",
+     "smooth stones",
+     "tall grass"
+    ],
+    "changes_during_story": null
+   },
+   {
+    "name": "Marisol's house",
+    "permanent_features": [
+     "wooden fence",
+     "backyard",
+     "small garden"
+    ],
+    "changes_during_story": null
+   },
+   {
+    "name": "school",
+    "permanent_features": [
+     "brick building",
+     "stairs",
+     "library"
+    ],
+    "changes_during_story": null
+   },
+   {
+    "name": "wet shady pen",
+    "permanent_features": [
+     "wooden fence",
+     "shady trees",
+     "soft grass"
+    ],
+    "changes_during_story": null
+   }
+  ]
+ },
+ "syn-901": {
+  "objects": [
+   {
+    "name": "bamboo fan",
+    "materials": [
+     "bamboo, paint"
+    ],
+    "colours": [
+     "brown, white (painted flowers)"
+    ],
+    "form_features": [
+     "round, flat, handle, dusty initially, painted with sampaguita flowers"
+    ],
+    "changes_during_story": "Painted with white sampaguita flowers, dust removed",
+    "owner_name": "Lola"
+   },
+   {
+    "name": "rice bin",
+    "materials": [
+     "wood or plastic"
+    ],
+    "colours": [
+     "neutral"
+    ],
+    "form_features": [
+     "rectangular, storage container"
+    ],
+    "changes_during_story": null,
+    "owner_name": "Lola"
+   }
+  ],
+  "locations": [
+   {
+    "name": "Lola's kitchen",
+    "permanent_features": [
+     "wooden cabinets, tiled floor, kitchen table"
+    ],
+    "changes_during_story": null
+   },
+   {
+    "name": "the yard",
+    "permanent_features": [
+     "grass, trees, open space"
+    ],
+    "changes_during_story": null
+   }
+  ]
+ }
+}

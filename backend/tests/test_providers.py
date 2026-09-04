@@ -210,9 +210,16 @@ def test_text_calls_route_around_the_provider_that_ignored_the_schema():
 
 
 def test_only_models_that_need_pinning_are_pinned():
-    """The allowlist is per-model on purpose. gemma-3-27b-it serves the image backstop AND the
-    consistency judge across five providers, none of them Venice — pinning it would buy nothing
-    and make 429s likelier by shrinking its pool.
+    """The allowlist is per-model on purpose.
+
+    ~~gemma-3-27b-it serves the image backstop AND the consistency judge across five providers,
+    none of them Venice — pinning it would buy nothing and make 429s likelier by shrinking its
+    pool.~~ **Amended 2026-09-02 by ADR-051.** Measured false: the pool holds a dead endpoint that
+    OpenRouter prefers. Unpinned reference-judge calls failed 5 of 5; pinned directly, DeepInfra
+    timed out 5 of 5 and Novita 404s on `require_parameters`. The nominal pool shrinks 4 → 2 and
+    the *usable* pool does not, so the 429 argument above inverted. This asserts availability, not
+    correctness — the two survivors are anti-correlated with ground truth in opposite directions
+    and the reference gate is not fixed by this pin.
 
     ~~And mistral-small-3.2 is also `text_model`, where Venice is a perfectly good route: the pin
     belongs to the call that sends an image, not to the model name.~~ **Amended 2026-08-12.** The
@@ -234,7 +241,13 @@ def test_only_models_that_need_pinning_are_pinned():
         providers.structured_text("prompt", _Caption, model="mistralai/mistral-small-3.2-24b-instruct")
         text_only = parse.call_args.kwargs["extra_body"]["provider"]["only"]
 
-    assert gemma_body == {"provider": {"require_parameters": True}}
+    # ADR-051: pinned for availability. `judge_with_metadata` reads the same dict, which is how
+    # this reaches ADR-018's prompted-gemma incumbent baseline.
+    assert gemma_body == {
+        "provider": {"require_parameters": True, "only": ["nebius", "parasail"]}
+    }
+    assert "deepinfra" not in gemma_body["provider"]["only"]  # 5 of 5 timeouts
+    assert "novita" not in gemma_body["provider"]["only"]     # 404 on require_parameters
     assert vision_only != text_only
     assert "parasail" in vision_only and "parasail" not in text_only
 
@@ -756,6 +769,13 @@ def _fake_presidio(results):
     return analyzer, AnonymizerEngine()
 
 
+def _pseudonymizing():
+    """ADR-045 put person pseudonymization behind `pii_pseudonymize_persons`, default off. Every
+    test below asserts on the flagged-ON path, so it turns the flag on explicitly."""
+    from app.config import settings
+    return patch.object(settings, "pii_pseudonymize_persons", True)
+
+
 def test_redact_pii_pseudonymizes_repeated_name_consistently():
     text = "Si Maria ay pumunta sa bukid. Tinawag ni Maria si Juan."
     first_maria = text.index("Maria")
@@ -766,7 +786,7 @@ def test_redact_pii_pseudonymizes_repeated_name_consistently():
         RecognizerResult(entity_type="PH_PERSON", start=second_maria, end=second_maria + 5, score=0.85),
         RecognizerResult(entity_type="PH_PERSON", start=juan, end=juan + 4, score=0.85),
     ]
-    with patch("providers._presidio", return_value=_fake_presidio(results)):
+    with patch("providers._presidio", return_value=_fake_presidio(results)), _pseudonymizing():
         from providers import redact_pii
         result = redact_pii(text)
 
@@ -788,7 +808,7 @@ def test_redact_pii_different_names_get_different_stand_ins():
         RecognizerResult(entity_type="PH_PERSON", start=pedro, end=pedro + 5, score=0.85),
         RecognizerResult(entity_type="PH_PERSON", start=rosario, end=rosario + 7, score=0.85),
     ]
-    with patch("providers._presidio", return_value=_fake_presidio(results)):
+    with patch("providers._presidio", return_value=_fake_presidio(results)), _pseudonymizing():
         from providers import redact_pii
         result = redact_pii(text)
 
@@ -804,7 +824,7 @@ def test_redact_pii_two_calls_do_not_share_a_mapping():
     text = "Si Marcos ang pangalan niya."
     marcos = text.index("Marcos")
     results = [RecognizerResult(entity_type="PH_PERSON", start=marcos, end=marcos + 6, score=0.85)]
-    with patch("providers._presidio", return_value=_fake_presidio(results)):
+    with patch("providers._presidio", return_value=_fake_presidio(results)), _pseudonymizing():
         from providers import redact_pii
         first_result = redact_pii(text)
         second_result = redact_pii(text)
@@ -851,8 +871,12 @@ def _person(text, *names, entity="PERSON"):
     ]
 
 
-def _redact(text, results):
-    with patch("providers._presidio", return_value=_fake_presidio(results)):
+def _redact(text, results, pseudonymize=False):
+    from contextlib import ExitStack
+    with ExitStack() as stack:
+        stack.enter_context(patch("providers._presidio", return_value=_fake_presidio(results)))
+        if pseudonymize:
+            stack.enter_context(_pseudonymizing())
         from providers import redact_pii
         return redact_pii(text)
 
@@ -864,13 +888,13 @@ def _pool(gender):
 
 def test_redact_pii_matches_feminine_pronoun():
     text = "A girl named Mia went for a walk. She saw a big house."
-    result = _redact(text, _person(text, "Mia"))
+    result = _redact(text, _person(text, "Mia"), pseudonymize=True)
     assert result.split()[3] in _pool("feminine")
 
 
 def test_redact_pii_matches_masculine_pronoun():
     text = "Jack was feeling sad. He wanted some grape juice."
-    result = _redact(text, _person(text, "Jack"))
+    result = _redact(text, _person(text, "Jack"), pseudonymize=True)
     assert result.split()[0] in _pool("masculine")
 
 
@@ -878,7 +902,7 @@ def test_redact_pii_falls_back_to_neutral_when_only_plural_pronouns():
     """`they/them/their` is not gender evidence — the antecedent may be several characters
     (prod sample "Joe and Grace ... They were always playing together")."""
     text = "Joe and Grace were best friends. They were always playing together."
-    result = _redact(text, _person(text, "Joe", "Grace"))
+    result = _redact(text, _person(text, "Joe", "Grace"), pseudonymize=True)
     joe, grace = result.split()[0], result.split()[2]
     assert {joe, grace} <= _pool("neutral")
     assert joe != grace
@@ -886,7 +910,7 @@ def test_redact_pii_falls_back_to_neutral_when_only_plural_pronouns():
 
 def test_redact_pii_falls_back_to_neutral_on_conflicting_pronouns():
     text = "Alexis was there. He waved. Alexis smiled and she laughed."
-    result = _redact(text, _person(text, "Alexis"))
+    result = _redact(text, _person(text, "Alexis"), pseudonymize=True)
     assert result.split()[0] in _pool("neutral")
 
 
@@ -894,14 +918,14 @@ def test_redact_pii_replaces_every_occurrence_of_a_detected_name():
     """spaCy tagged "Grace" PERSON at one span and ORGANIZATION at another in prod sample
     "Joe and Grace", so half the mentions survived and the book gained a third character."""
     text = "Grace held the nails. Later Grace agreed. Grace smiled."
-    result = _redact(text, _person(text, "Grace"))  # only the FIRST span is detected
+    result = _redact(text, _person(text, "Grace"), pseudonymize=True)  # only the FIRST span is detected
     assert "Grace" not in result
     assert result.count(result.split()[0]) == 3
 
 
 def test_redact_pii_never_reuses_a_name_the_story_already_uses():
     text = "Maria waved at Alex."
-    result = _redact(text, _person(text, "Maria", "Alex"))
+    result = _redact(text, _person(text, "Maria", "Alex"), pseudonymize=True)
     maria, alex = result.split()[0], result.split()[3].rstrip(".")
     assert "Alex" not in result  # the real character's name is not handed to anyone else
     assert maria != alex
@@ -913,7 +937,7 @@ def test_redact_pii_gives_every_character_a_distinct_name_past_pool_size():
     for a class-sized cast, and it silently rewrites who did what."""
     names = [f"Name{i:02d}" for i in range(20)]
     text = " ".join(f"{n} was there." for n in names)
-    result = _redact(text, _person(text, *names))
+    result = _redact(text, _person(text, *names), pseudonymize=True)
     for n in names:
         assert n not in result
     # One pseudonym per character, no merges.
@@ -924,7 +948,7 @@ def test_redact_pii_skips_person_spans_after_a_determiner():
     """spaCy tagged "bush" PERSON at 0.85 in prod sample "Max the Dog", turning "behind a bush"
     into "behind a Cielo". A first name is never preceded by an article."""
     text = "He heard a cry from behind a bush."
-    assert _redact(text, _person(text, "bush")) == text
+    assert _redact(text, _person(text, "bush"), pseudonymize=True) == text
 
 
 def test_redact_pii_varies_the_stand_in_across_stories():
@@ -932,7 +956,7 @@ def test_redact_pii_varies_the_stand_in_across_stories():
     seen = set()
     for i in range(12):
         text = f"Story number {i}. Mia went for a walk. She saw a house."
-        seen.add(_redact(text, _person(text, "Mia")).split("Story number")[1].split()[1])
+        seen.add(_redact(text, _person(text, "Mia"), pseudonymize=True).split("Story number")[1].split()[1])
     assert len(seen) > 1
 
 
@@ -941,7 +965,7 @@ def test_redact_pii_is_stable_for_the_same_story():
     already in storage (`run_job.py:219` resumes a durable checkpoint; `graph.py:127` falls back
     to an in-memory one that does not survive the process)."""
     text = "Mia went for a walk. She saw a house."
-    assert _redact(text, _person(text, "Mia")) == _redact(text, _person(text, "Mia"))
+    assert _redact(text, _person(text, "Mia"), pseudonymize=True) == _redact(text, _person(text, "Mia"), pseudonymize=True)
 
 
 def test_redact_pii_seed_survives_process_hash_randomization():
@@ -949,7 +973,7 @@ def test_redact_pii_seed_survives_process_hash_randomization():
     per worker process and still pass every other test in this file. Pinning one output catches
     that substitution. Update deliberately if the pools change."""
     text = "Mia went for a walk. She saw a house."
-    assert _redact(text, _person(text, "Mia")) == "Lucy went for a walk. She saw a house."
+    assert _redact(text, _person(text, "Mia"), pseudonymize=True) == "Lucy went for a walk. She saw a house."
 
 
 def test_redact_pii_never_puts_prefix_colliding_names_in_one_story():
@@ -957,7 +981,7 @@ def test_redact_pii_never_puts_prefix_colliding_names_in_one_story():
     pair; a shuffle can, and character binding matches characters by name."""
     for i in range(60):
         text = f"Tale {i}. Ana and Ben and Cielo were friends. They played."
-        result = _redact(text, _person(text, "Ana", "Ben", "Cielo"))
+        result = _redact(text, _person(text, "Ana", "Ben", "Cielo"), pseudonymize=True)
         assigned = [w.strip(".") for w in result.split() if w.strip(".") not in text.split()]
         for a in assigned:
             others = [o.casefold() for o in assigned if o != a]
@@ -967,7 +991,7 @@ def test_redact_pii_never_puts_prefix_colliding_names_in_one_story():
 def test_redact_pii_avoids_stand_ins_similar_to_a_real_character():
     """A story about Analyn must not get a character called Ana."""
     text = "Analyn waved. She smiled."
-    assert "Ana " not in _redact(text, _person(text, "Analyn"))
+    assert "Ana " not in _redact(text, _person(text, "Analyn"), pseudonymize=True)
 
 
 def test_determiner_guard_does_not_apply_to_identifiers():
@@ -1047,3 +1071,22 @@ def test_text_providers_lists_only_providers_this_account_can_actually_route_to(
     assert only == ["deepinfra"]
     assert not set(only) - routable
     assert "parasail" not in only
+
+
+# --- ADR-045: person pseudonymization is off by default ---
+
+
+def test_redact_pii_leaves_person_names_alone_by_default():
+    """ADR-045 Decision 2. Renaming the cast is what broke 16 of 30 corpus records, split
+    "Grace" into two characters, and gave a robot a human face (ADR-041). Default is off."""
+    text = "Grace held the nails and Juan smiled."
+    assert _redact(text, _person(text, "Grace", "Juan")) == text
+
+
+def test_redact_pii_still_hard_redacts_identifiers_when_pseudonymization_is_off():
+    """ADR-045 Decision 3. The identifier half is unconditional — it has no flag."""
+    text = "Tumawag ka sa 09171234567 para sa tulong."
+    results = [RecognizerResult(entity_type="PH_MOBILE", start=text.index("09171234567"), end=text.index("09171234567") + 11, score=1.0)]
+    result = _redact(text, results)
+    assert "09171234567" not in result
+    assert "PH_MOBILE" in result

@@ -157,7 +157,7 @@ def test_scene_constraint_verdict_is_reason_then_structured_contradictions():
         "differences_observed",
         "contradictions",
     ]
-    assert SCENE_CONSTRAINT_PROMPT_VERSION == 3
+    assert SCENE_CONSTRAINT_PROMPT_VERSION == 4
 
 
 def test_scene_constraint_prompt_gates_permanent_setting_features_only():
@@ -422,14 +422,22 @@ def test_a_lettered_verdict_from_any_character_folds_the_page_to_not_text_free()
     assert result["scenes"][0].attempts[-1].vlm_verdict.text_free is False
 
 
-def test_lettering_alone_flips_passed_to_false():
-    """§6 test 10 / §4.3 — the gate. Everything else on this verdict is clean: same character,
-    anatomy intact, unique subjects, matching style. Only the door has a word on it.
+def test_lettering_alone_no_longer_flips_passed_to_false():
+    """lettering-suppression §4.6 risk 2, taken 2026-09-02: `text_free` is rank-only, the shape
+    `subjects_unique` already sits in. Everything else on this verdict is clean and the page passes.
 
-    This is deliberately UNLIKE subjects_unique (which records and ranks but does not gate):
-    that decision was blocked on an unmeasured duplicate rate, whereas at least 3 of the 6
-    burrow-door draws in the 2026-08-13 probe came back lettered, and a word on a page in a book
-    for a six-year-old is not a judgement call (CC-6).
+    §4.6 pre-registered this demotion and DECLINED it on `corpus-smoke-b`, where removing the gate
+    changed 0 of 21 attempts. That basis went stale. Replayed over every bundle on disk -- 9
+    bundles, 128 draws, all of project history -- demoting `text_free` takes passes from 7 to 20,
+    and the entire gain sits in the three post-ADR-045/049/050 bundles (smoke-c 2->4, smoke-e 1->8,
+    smoke-f 2->6). 111 of the 121 failed draws were `text_free=False`, against 6 for
+    `same_character` and 0 for `anatomy_intact`; two shipped smoke-f pages judged lettered
+    (`s1-2`, `s4-3`) have no text anywhere, and §4.6's own read of smoke-b found 1 true positive
+    against 5 false. The judge is reading rust mottling and hatch-mark quills as writing.
+
+    It still RECORDS and still RANKS, so a genuinely lettered page loses best-of to a clean one --
+    that is what makes this a demotion and not a removal. `NEGATIVE_PROMPT` remains the channel
+    that suppresses lettering, unchanged.
     """
     scene = _scene_with_attempt(characters_present=["c0"])
     state = _state([scene], [_char("c0", "the dog")])
@@ -437,20 +445,19 @@ def test_lettering_alone_flips_passed_to_false():
     result = _run(state, [_verdict(True, anatomy=True, unique=True, style=True, text_free=False)])
 
     attempt = result["scenes"][0].attempts[-1]
-    assert attempt.vlm_verdict.same_character is True
-    assert attempt.vlm_verdict.anatomy_intact is True
-    assert attempt.passed is False
+    assert attempt.vlm_verdict.text_free is False   # still recorded
+    assert attempt.passed is True
 
 
-def test_a_lettered_page_is_not_finalized_and_buys_the_one_retry():
-    """§4.3 + ADR-010: a real verdict saying *fail* buys the retry, and only the first time.
-    An unfinalized scene is what routes control to `regenerate`."""
+def test_a_lettered_page_is_finalized_and_buys_no_retry():
+    """The point of the demotion: a page whose ONLY fault is `text_free` no longer buys a paid
+    redraw (~$0.024 and ~40s each). A finalized scene is what routes control past `regenerate`."""
     scene = _scene_with_attempt(characters_present=["c0"])
     state = _state([scene], [_char("c0", "the dog")])
 
     result = _run(state, [_verdict(True, text_free=False)])
 
-    assert result["scenes"][0].final_image_ref is None
+    assert result["scenes"][0].final_image_ref is not None
 
 
 def test_text_free_is_declared_after_subjects_unique_and_before_the_failure_reasons():
@@ -533,12 +540,22 @@ def test_no_reference_scene_passes_on_clean_composition_alone():
     assert result["scenes"][0].final_image_ref == attempt.image_ref
 
 
-def test_scene_contradictions_persist_verbatim_and_buy_one_retry():
+def test_scene_contradictions_persist_and_buy_one_retry():
+    """ADR-049 changed the judge's shape, not this behaviour: a real contradiction still lands on
+    the attempt and still costs one retry. It now persists as the RENDERED string rather than a
+    verbatim judge line, because the contract field stays `list[str]` (Decision 2)."""
+    from pipeline.consistency_check import Contradiction
+
     state = _state_with_attempt()
-    contradictions = ["Shadow Wizard faces Ana instead of fleeing away from her."]
     composition = SceneConstraintVerdict(
         differences_observed="The wizard faces the wrong direction.",
-        contradictions=contradictions,
+        contradictions=[
+            Contradiction(
+                subject="Shadow Wizard",
+                required="fleeing away from Ana",
+                observed="facing Ana",
+            ),
+        ],
     )
     with patch(
         "pipeline.consistency_check.judge_attempt",
@@ -547,7 +564,9 @@ def test_scene_contradictions_persist_verbatim_and_buy_one_retry():
         result = consistency_check(state)
 
     attempt = result["scenes"][0].attempts[-1]
-    assert attempt.scene_contradictions == contradictions
+    assert attempt.scene_contradictions == [
+        "Shadow Wizard: facing Ana, but the constraints require fleeing away from Ana"
+    ]
     assert attempt.passed is False
     assert result["scenes"][0].final_image_ref is None
 
@@ -1324,3 +1343,63 @@ def test_a_lowered_scene_attempt_cap_finalizes_on_the_first_concrete_failure(mon
     assert finalized.final_image_ref is not None
     assert len(finalized.attempts) == 1
     assert finalized.attempts[-1].passed is False
+
+
+def test_the_constraint_judge_is_given_the_original_scene_prompt_not_the_corrected_one():
+    """ADR-047: correction clauses must not become checkable scene constraints.
+
+    On a corrected retry `attempt.prompt` is `scene.prompt` plus clauses appended by
+    `correct_prompt` — including `TEXT_CLAUSE` ("every surface in the picture is blank and
+    unmarked"). Feeding that back in as the constraint list makes the judge check the page
+    against the correction, so a house's windows and doors get reported as contradictions and
+    the retry fails on the instruction that was meant to save it.
+    """
+    scene = Scene(
+        scene_id="s0",
+        text_excerpt="The dog ran past the house.",
+        prompt="A dog runs past a house.",
+        characters_present=["c0"],
+        attempts=[
+            Attempt(image_ref="job-1/s0-1.png", prompt="A dog runs past a house.", passed=False),
+            Attempt(
+                image_ref="job-1/s0-2.png",
+                prompt="A dog runs past a house. every surface in the picture is blank and unmarked",
+                passed=False,
+            ),
+        ],
+    )
+    state = _state([scene], [_char("c0", "Ana", "job-1/ref-c0.png")])
+    clean = SceneConstraintVerdict(differences_observed="none", contradictions=[])
+
+    with patch("pipeline.consistency_check.judge_attempt", return_value=(None, clean)) as spy:
+        consistency_check(state)
+
+    assert spy.call_args.args[2] == "A dog runs past a house."
+
+
+def test_a_structured_contradiction_renders_to_one_contract_string():
+    """ADR-049. The judge returns `Contradiction(subject, required, observed)`; the frozen contract
+    field `Attempt.scene_contradictions` stays `list[str]`, so each object renders on the way in.
+
+    The shape is the enforcement: a bare axis label like "Quill - framing: medium shot" — which the
+    2026-09-02 syn-001 smoke run produced 5 times on attempts whose identity verdict was completely
+    clean — cannot be expressed, because it has no `observed` to set against a `required`.
+    """
+    from pipeline.consistency_check import Contradiction
+
+    composition = SceneConstraintVerdict(
+        differences_observed="Bok-Bok has a face.",
+        contradictions=[
+            Contradiction(subject="Bok-Bok", required="no face", observed="has a face"),
+        ],
+    )
+    state = _state_with_attempt()
+
+    with patch("pipeline.consistency_check.judge_attempt", return_value=(None, composition)):
+        result = consistency_check(state)
+
+    attempt = result["scenes"][0].attempts[-1]
+    assert attempt.scene_contradictions == [
+        "Bok-Bok: has a face, but the constraints require no face"
+    ]
+    assert attempt.passed is False

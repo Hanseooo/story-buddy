@@ -235,7 +235,7 @@ happened to be identical; the next edit to the rule would have desynced them sil
 plausible wrong image rather than an exception. Pinned by
 `test_ref_paths_agree_with_the_image_roll_the_corrected_prompt_carries`.
 
-**Clean-base retry.** Retries derive from immutable `Scene.prompt` and only the latest attempt's verdict
+**Clean-base retry** (ratified by ADR-046, superseding ADR-037 Decision 3)**.** Retries derive from immutable `Scene.prompt` and only the latest attempt's verdict
 (`Attempt.scene_contradictions`, `failure_reasons`, and boolean flags). Prior corrections are intentionally
 not accumulated; exact duplicate contradiction strings are deduplicated in first-seen order. Missing
 `Scene.prompt` raises before any spend.

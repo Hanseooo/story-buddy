@@ -6,8 +6,14 @@ plus its verdict. ADR-028 falsified ADR-007's assumption that a reference is cor
 it was generated from the description; this node is the gate that makes that failure visible.
 
 It does NOT fix the rate — 3 draws still ship an off-spec reference often, now with the verdict
-persisted instead of silently. The fix for the rate is swapping `fal_image_model` (ADR-001's
-named seam), not anything in this file.
+persisted instead of silently.
+
+ADR-056 narrows what used to be written here. This file used to claim the fix for the rate is
+swapping `fal_image_model` (ADR-001's named seam). That is FALSE as a blanket claim and was
+measured: on a stated "three eyes" the current model hits 3/6, on a stated "six legs" it hits
+0/6. The swap survives only for a count far off the subject's canonical body plan, and no
+candidate model has been tested. `fal_image_model` is a pinned freeze key — a swap needs its own
+ADR and its own measurement. Do not re-propose it from this docstring alone.
 
 ADR-028's "roughly 42%" is deliberately not quoted here any more: it was measured against a gate
 that accepted whatever the judge's boolean said, and prod job b9506307 showed that boolean going
@@ -60,7 +66,20 @@ BUCKET = "storybook-images"
 # 6 (canonical-character-consistency §4.2): removes character names from the fresh
 # canonical-reference draw and judge subject projections. Assessed subject changed, so the
 # series must be segmented even though the acceptance predicate did not.
-JUDGE_PROMPT_VERSION = 6
+# 7 (2026-09-02): v5's walk is rephrased because its wording stalled the judge. "Take the stated
+#   attributes one at a time and check each one against the image; do not skip any" timed out
+#   `gemma-3-27b-it` past `providers.CALL_TIMEOUT_SECONDS` on 7 of 7 calls; the identical prompt
+#   with only that sentence removed answered 9 of 9 in under 10s. Length was controlled (1045 vs
+#   1053 chars), and the image, schema and pinned provider were the same, so it is the phrasing,
+#   not the length or the route. ADR-051 pinned the provider expecting `unchecked_references` to
+#   reach 0; it stayed at 2 in `corpus-smoke-e` because BOTH references died here instead.
+#   visual-continuity §4.9 still requires the per-attribute walk and still gets it; "Consider
+#   every stated attribute" also cleared, so it is the enumerate-everything framing that costs
+#   the call, not exhaustiveness. The acceptance predicate is untouched (ADR-034), but the
+#   assessed prompt changed, so the series segments. NOT a correctness fix: no variant named the
+#   yellow beak or the red comb, and `matches_description` still flips on identical calls --
+#   that is ADR-018's problem, measured on one image and one description only.
+JUDGE_PROMPT_VERSION = 7
 
 JUDGE_PROMPT = """\
 This image is meant to be a character reference drawn from the description below.
@@ -70,7 +89,7 @@ Description: {subject}
 The description lists only what the story stated. The image will necessarily show details it \
 does not mention — hair, clothing, background — and those are NOT differences.
 
-Take the stated attributes one at a time and check each one against the image; do not skip any. \
+Check each stated attribute against the image. \
 First describe any way the image CONTRADICTS a stated attribute. Then list the contradictions: \
 one entry for each stated attribute the image contradicts, naming the attribute and what the \
 image shows instead. Everything you described as contradicted must appear in that list. If the \
@@ -244,6 +263,35 @@ def _upload(image: bytes, story_id: str, char_id: str, n: int) -> str:
     return path
 
 
+def _judge_reference(
+    judge_prompt: str, image: bytes, char_id: str, draw: int
+) -> RefVerdict | None:
+    """ADR-050 Decision 1. Two attempts at the SAME already-paid image, then `None`.
+
+    The retry draws nothing — `image` is in hand and already billed, and a judge call is a
+    text/vision request bounded by `providers.CALL_TIMEOUT_SECONDS`. Abandoning the pipeline's
+    highest-leverage gate on one transient stall bought nothing: on 2026-09-02
+    `google/gemma-3-27b-it` stalled on BOTH of `syn-001`'s references, `corpus-smoke-b` shipped
+    two `ref_verdict: null` references nobody looked at, and every page then inherited a rooster
+    with the face its own spec says it does not have.
+
+    ADR-025's asymmetry is untouched: `None` still means accept-unchecked, it is just reached
+    less often. Scoped here and NOT to `consistency_check.judge_attempt` — a bad scene is one
+    page, a bad reference is every page, the same asymmetry `MAX_DRAWS` already encodes against
+    ADR-010's single scene retry.
+    """
+    image_uri = _data_uri(image)
+    for attempt in (1, 2):
+        try:
+            return judge(judge_prompt, [image_uri], RefVerdict)
+        except Exception:
+            log.warning(
+                "char_bible: %s judge raised on draw %d, attempt %d/2",
+                char_id, draw, attempt, exc_info=True,
+            )
+    return None
+
+
 def mint_reference(
     description: CharacterDescription,
     name: str,
@@ -288,15 +336,14 @@ def mint_reference(
         # exists, so there is nothing to ship and no node-level retry.
         image = text_to_image(prompt, negative_extra=negative_extra)
         draws += 1
-        try:
-            verdict = judge(judge_prompt, [_data_uri(image)], RefVerdict)
-        except Exception:
+        verdict = _judge_reference(judge_prompt, image, char_id, draws)
+        if verdict is None:
             # DIFFERENT policy from text_to_image above, deliberately (§4). The artifact exists
             # and is paid for; only the CHECK failed. `None` stays honest and is distinguishable
             # from a FAILED verdict (a non-empty `contradictions`). Do not "fix" this asymmetry.
             log.warning(
                 "char_bible: %s judge failed on draw %d — accepting unchecked, ref_verdict=None",
-                char_id, draws, exc_info=True,
+                char_id, draws,
             )
             return _upload(image, story_id, char_id, n), None, draws
 
@@ -391,6 +438,16 @@ def char_bible(state: StoryMemory) -> dict:
     # filtering first slides the 2-slot window onto c2 when c0 is already referenced, producing
     # three canonical references and breaking the cap.
     selected = [c for c in state.characters[:2] if c.canonical_ref_image is None]
+
+    # ADR-048: `segment` runs before this node, so a character no scene contains is never drawn
+    # into a page and never judged — its reference is bought and never read. Applied AFTER the cap
+    # for the reason above: it can only shrink `selected`, never slide the window.
+    # An empty union is indistinguishable from a segmenter that left the field unpopulated, so it
+    # falls back to the whole capped roster rather than stripping every reference in the book.
+    present = {char_id for scene in state.scenes for char_id in scene.characters_present}
+    if present:
+        selected = [c for c in selected if c.char_id in present]
+
     if not selected:
         return {}
 

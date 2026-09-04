@@ -328,6 +328,8 @@ requires for scene prompts.
 
 ### 4.4 Clean-base corrected retries
 
+Ratified by ADR-046, which supersedes ADR-037 Decision 3.
+
 `regenerate` always sets:
 
 ```text

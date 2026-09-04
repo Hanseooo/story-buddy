@@ -28,7 +28,7 @@ pivot are reframed against the current Objectives.
 | **R3** | Objective 4 (the fine-tuned judge) is load-bearing but the most timeline-fragile piece, several hops past the ethics gate | High | Ethics Stage 1 submission (now) | **OPEN** — Ethics Stage-1 submission is the pacing item; October is a fixture-pilot, full corpus lands after. |
 | **R4** | Novelty/gap claim has a thin related-work moat; one sub-claim was falsifiable | Medium | Before final defense | Partially fixed |
 | **R5** | Unverified arXiv citations + gap-claim overstatement in *frozen* docs | Medium | Before any Word export | Action list ready |
-| **R6** | Presidio redacts *fictional* character names → breaks captions and narration | Medium | Before Phase-2 PII/moderation specs | **Owner-accepted (context-gated redaction, 2026-07-13)** |
+| **R6** | Presidio redacts *fictional* character names → breaks captions and narration | Medium | Before Phase-2 PII/moderation specs | **Closed (ADR-045, 2026-09-01) — person redaction off by default; identifiers unconditional.** Two earlier resolutions did not hold |
 | m1–m2 | Minor: seed cross-endpoint caveat (Phase-0.5) · annotator-agreement guide-revision risk for the judge's image-pair labels | Low | Before final defense | Noted |
 | m3–m6 | Minor: judge test-set access policy · checkpoint-selection rule · DreamBench++ binarization (if the optional baseline comparison runs) · adult-participant ethics + withdrawal cutoff | Low | Pre-registration / Stage-1 submission | Drafted, need sign-off |
 
@@ -184,13 +184,38 @@ before storage/captioning/export (CC-2), so a false positive cascades: placehold
 verbatim captions (violating ADR-012/013's fidelity argument), spoken aloud by Kokoro, and a
 protagonist that may not survive entity extraction.
 
-**Decision status:** `OWNER-ACCEPTED (2026-07-13)` — **context-gated redaction**: redact PERSON
-entities only when they co-occur with real-world anchors (address structures, phone patterns,
-"my name is / ako si" framings); fictional names in narrative stay. Benign-fiction cases are now in
-the probe-4 test set and must be in the Phase-2 PII test set. Escalation path if the leak rate
-demands it: add a teacher-confirmation queue for ambiguous names. Lands in the
-`filipino-pii-recognizers` and `moderation-stack` specs (Phase 2); the corpus-intake manual
-redaction protocol (`RESEARCH_PROTOCOL.md` §8) applies the same fiction-vs-real rule by hand.
+**Decision status:** `CLOSED (ADR-045, 2026-09-01)`. This risk was called correctly in July and
+took two failed resolutions to settle. It is worth recording all three, because the sequence is
+the argument.
+
+1. **`OWNER-ACCEPTED (2026-07-13)` — context-gated redaction.** Redact PERSON entities only when
+   they co-occur with real-world anchors (address structures, phone patterns, "my name is / ako si"
+   framings); fictional names in narrative stay. **Never built.** `input-gate-hardening.md` §4c
+   showed the gate cannot work: Presidio cannot tell *"my name is Mia"* from a character called
+   Mia, and the classifier fails in the unsafe direction — one missed disclosure sends a real name
+   downstream anyway, so the cost is paid without the benefit.
+2. **`SUPERSEDED (2026-08-13)` — pseudonymize instead of placeholder.** Replace each detected name
+   with a stable, pronoun-matched stand-in, on the reasoning that a wrong name is a cheaper false
+   positive than a hole in a child's book. This addressed the *caption* half of R6 and left the
+   *extraction* half — "a protagonist that may not survive entity extraction" — standing. It then
+   failed on exactly that half: 16 of the 30 synthetic corpus records lost a declared character
+   name, spaCy split `Grace` into two characters in one story, the common noun `bush` became a
+   character called `Cielo`, and ADR-041 traced a robot drawn with a human face to the human-coded
+   pseudonym `Leo` standing in for `Bolt`. Three containment mechanisms were built for this and
+   the failures continued past all three.
+3. **`CLOSED (2026-09-01)` — ADR-045 separates the two halves.** Person pseudonymization is off by
+   default (`PII_PSEUDONYMIZE_PERSONS`); structured identifiers hard-redact unconditionally and
+   have no flag. R6 as written is resolved: no fictional name is rewritten, so captions, narration,
+   and entity extraction all see the child's own text.
+
+**The residual risk, restated honestly.** R6 was about over-redaction; closing it re-opens the
+under-redaction case R6 was never about. A child who writes their own real first name now has it
+reach the analyzer, the image providers, the captions, and the exported PDF. ADR-045 accepts this
+and argues it: a first name rarely identifies a child on its own, whereas the identifiers that do —
+a mobile number, a barangay address, a TIN — are still removed unconditionally. The escalation path
+if this proves wrong is unchanged from 2026-07-13: a teacher-confirmation queue for ambiguous names,
+which is a product feature and not a recognizer tuning problem. The corpus-intake manual redaction
+protocol (`RESEARCH_PROTOCOL.md` §8) is unaffected and remains the only gate on donated stories.
 
 ---
 

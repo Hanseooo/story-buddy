@@ -69,6 +69,13 @@ class Settings(BaseSettings):
     # Reuses the same model as vlm_judge_model; separate field so the two can diverge.
     moderation_backstop_image_model: str = "google/gemma-3-27b-it"
 
+    # ADR-045: person pseudonymization off by default; structured identifiers redact regardless
+    # and have no flag. Every recorded redaction failure was a PERSON failure — 16 of 30 corpus
+    # records lost a declared name, "Grace" split into two characters, "bush" became "Cielo",
+    # and ADR-041's robot drew a human face off the pseudonym "Leo". None was an identifier
+    # failure. Set true to restore the pre-ADR-045 behaviour; that is the whole revert.
+    pii_pseudonymize_persons: bool = False
+
     # ADR-037: consistency-checked attempts per scene — the initial draw plus two corrected
     # retries. Production is 3 and the specs are written against 3; this is a field rather than a
     # constant so `finetune/build_corpus.py` can lower it for a research build, where the

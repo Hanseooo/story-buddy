@@ -1,0 +1,104 @@
+# Measurement evidence for ADR-052 … ADR-055
+
+The object-description and object-duplication ADRs are decided on measurement rather than
+argument, and every one of them cites a path under a session scratch directory that does not
+survive the session. This directory is that evidence, committed.
+
+**ADR-053 and ADR-054 are Accepted and therefore frozen — their Evidence sections still name the
+scratch paths and are not edited.** The crosswalk below is how those citations resolve.
+
+## Crosswalk
+
+| Cited as | Now at |
+|---|---|
+| `scratchpad/probe_out/runs/syn-901/` | `bundles/probe_out/` |
+| `scratchpad/probe_out2/runs/syn-901/` | `bundles/probe_out2/` |
+| `scratchpad/probe_out3/runs/syn-901/` | `bundles/probe_out3/` |
+| `scratchpad/probe_out4/` | `bundles/probe_out4/` |
+| `scratchpad/<name>.py` | `scripts/<name>.py` |
+| `scratchpad/dupprobe/` (16 PNGs) | **not committed** — see below |
+| `scratchpad/probe_out*/scene/`, `…/ref/` | **not committed** — see below |
+
+## What is not here
+
+The generated images. Each bundle's `memory.json` carries the prompts, the extracted axes, the
+directions and the per-scene verdicts — everything the ADRs reason over — while the PNGs are only
+the thing a human looked at. The page counts recorded in the ADRs (two fans on `s1`, three
+distinct characters on `s4`) were read by eye and are not recoverable from these files. Re-running
+a probe costs about USD 0.21 for seven images.
+
+## Bundles
+
+| Bundle | `code_commit` | Cost | What it shows |
+|---|---|---|---|
+| `probe_out` | pre-ADR-052 | — | the before-image: one object description, contradictory states |
+| `probe_out2` | `8f9b79e` | USD 0.39, 13 images | ADR-052 landed; `s0` and `s1` still draw two fans |
+| `probe_out3` | `11485e7` | USD 0.21, 7 images | ADR-053 landed; axes clean, no page asserts two states; `s1` and `s4` draw two fans and Lola renders as a second Tala |
+| `probe_out4` | `2a87044` | USD 0.21, 7 images | ADR-054 landed; Lola distinct and no `null` in any prompt, but the directions are byte-identical to `probe_out3` and `s0` draws two fans from a single-actor direction |
+
+## Scripts
+
+Image arms — each holds the seed and varies only the prompt, which is what makes them evidence:
+
+| Script | Arms | Result |
+|---|---|---|
+| `slot_experiment.py`, `arm_d.py` (+ `arm_d.json`) | ADR-053 A/B/C/D | arm D chosen |
+| `strip_probe.py`, `strip_probe2.py` | clause-stripper over all 41 stored descriptions | — |
+| `drop_rule.py` | drop rule over all 66 axis entries | — |
+| `dup_probe.py` | control vs `Draw each object named above exactly once.` | 2 fans / 2 fans |
+| `dup_probe2.py` | `This illustration contains exactly one bamboo fan.` | 2 fans / 2 fans |
+| `dup_probe3.py` | `key_action` rewritten to name a holder, or to share | 1 fan / 1 fan |
+
+Text arms — free, and the default under ADR-055 D3. Same inputs, `SEGMENTATION_PROMPT` the only
+variable, counting multi-character directions that name the fan and resolve who holds it:
+
+| Script | Arm | Resolved |
+|---|---|---|
+| `seg_ab.py` | no rule (control) | 5 / 24 |
+| `seg_ab.py` | ADR-054 D1 as a standalone bullet | 9 / 31 |
+| `seg_ab2.py`, `seg_ab3.py` | the same sentence inside the `key_action` definition | 14 / 29 |
+| `seg_verify.py` | the above plus the ADR-055 D5 normalizer | 25 / 25 |
+
+`probe_intake.json` is `syn-901`, the single story every measurement above runs on. It is a
+reliable reproducer, not a sample: none of these rates estimates a corpus rate.
+
+## Attribute fidelity (2026-09-03)
+
+A separate line of measurement from the object-duplication ADRs above, on a different defect:
+a description states a NUMBER and the image shows a different one. Written up in
+`attribute-fidelity-2026-09-03.md`, which carries the hand-made counts — the images are not
+committed and the counts are not recoverable without them.
+
+| Script | Arm | Result |
+|---|---|---|
+| `count_probe.py` | `fal-ai/qwen-image`, 6 fixed seeds x 2 subjects, no judge | Quill three eyes **3/6**; Mopsi six legs **0/6** |
+| `judge_count_eval.py` | shipping `JUDGE_PROMPT` vs the same plus a cardinality sentence | caught 6/9 both arms; false alarms 2/3 then **3/3** |
+
+Three proposed fixes died here: the `fal_image_model` swap, relying on `MAX_DRAWS`, and a
+count-specific judge prompt. A fourth assumption died with them — ADR-018's fine-tune targets the
+*consistency* judge and does not cover the *reference* judge's spec compliance.
+
+## Phase C rehearsal (2026-09-03)
+
+Free — no provider calls, no database writes. `rehearse_selection.py` loads the real
+`corpus-smoke-h` bundles and asks whether a valid `dataset_selection.json` can exist at all.
+
+| Script | Arm | Result |
+|---|---|---|
+| `rehearse_selection.py` | best possible hard-negative pairing over the real bundles | **0 legal pairings / 4 characters**; `ManifestError` from `validate_hard_negative_matches` (pre-ADR-057) |
+
+Projected to the full corpus: 26 of 30 synthetic train characters have no eligible partner.
+Written up in `phase-c-rehearsal-2026-09-03.md`, which also records what the rehearsal did *not*
+reach — `freeze_dataset` and `to_llamafactory` sit downstream of the blocker.
+
+**This arm no longer reproduces, by design.** ADR-057 (accepted the same day) removed the
+completeness rule the `ManifestError` came from, so a re-run now prints
+`PASS -- a valid selection exists`. The 0-legal-pairings count is unchanged and still true — carrying
+no hard negative is simply legal now. The row above is the pre-ADR state, kept because ADR-057 cites
+its verbatim output.
+
+## Running them again
+
+These are a record, not a suite. Each script hardcodes an absolute path to `backend/` and reads
+its inputs from a bundle directory, so a re-run means fixing both paths first. The image arms
+spend money. Nothing here is wired into CI, and it should not be.

@@ -1,10 +1,18 @@
 import logging
 import re
 
-from pydantic import BaseModel, Field, PrivateAttr, field_validator
+from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
 
 from app.config import MAX_SCENES, MIN_SCENE_WORDS, MIN_SCENES
-from contracts.story_memory import Character, Location, Scene, StoryMemory, StoryObject, TimelineEvent
+from contracts.story_memory import (
+    Character,
+    Location,
+    Scene,
+    StoryMemory,
+    StoryObject,
+    TimelineEvent,
+    _is_description_placeholder,
+)
 from providers import structured_text
 
 log = logging.getLogger(__name__)
@@ -47,13 +55,67 @@ def render_visual_direction(direction: ExtractedVisualDirection) -> str:
     return f"{' '.join(base_parts)} Viewpoint: {direction.viewpoint}. Framing: {direction.framing}."
 
 
+# ADR-055 D5. A direction that puts several characters on one object without saying who holds it
+# is drawn as one object per character. Two prompt wordings were measured (5/24 with no rule,
+# 9/31 as a bullet, 14/29 inside the key_action definition) and none closes it, so the remainder
+# is resolved here. Only the shared form is derivable from the text, so this never picks a single
+# holder and never rejects a scene.
+_HOLDER_RESOLVED = re.compile(
+    r"\b(hold|holds|holding|held|together|between them|shares?|sharing|turns)\b", re.I
+)
+
+
 class ExtractedScene(BaseModel):
     start: int                        # inclusive index into the numbered units
     end: int                          # inclusive
     characters_present: list[str]     # Character.name values — node maps to char_ids
     location_name: str | None = None  # Location.name value — node maps to a loc_id, null → inherit
     objects_present: list[str] = Field(default_factory=list)
+    object_states: dict[str, str] = Field(default_factory=dict)  # StoryObject.name -> state in THIS scene
     visual_direction: ExtractedVisualDirection
+
+    @model_validator(mode="after")
+    def a_shared_object_names_its_holders(self) -> "ExtractedScene":
+        """ADR-055 D5. The trigger is a COMPOUND SUBJECT — "X and Y <verb> the object" — because
+        that is the symmetric shape that duplicates: both characters doing the same thing to one
+        object. A directional action between two characters ("Ana hands the wooden sword to Maya")
+        already fixes who holds it, and the clause would contradict it. Several objects in one
+        action is left alone: no phrasing stays correct without guessing which one is shared."""
+        action = self.visual_direction.key_action
+        if _HOLDER_RESOLVED.search(action):
+            return self
+        names = "|".join(re.escape(n) for n in self.characters_present)
+        if not names or not re.match(rf"\s*({names})\s+and\s+({names})\b", action):
+            return self
+        objects = [n for n in self.objects_present if re.search(rf"\b{re.escape(n)}\b", action, re.I)]
+        if len(objects) != 1:
+            return self
+        trimmed = action.rstrip(". ")
+        self.visual_direction.key_action = f"{trimmed}, holding the one {objects[0]} between them"
+        return self
+
+    @field_validator("object_states", mode="after")
+    @classmethod
+    def state_is_a_short_phrase(cls, value: dict[str, str]) -> dict[str, str]:
+        """ADR-052 D1/D2: the state field exists to hold appearance, not the plot. Bounded on the
+        same three axes `analyze.morphology_is_concrete` bounds morphology — trimmed, single-line,
+        <=120 code points — because unbounded prose here is the narrative contamination the ADR
+        moved OUT of the object's permanent axes (ADR-053 D1). A model that answers "none" for an
+        unchanged object is not malformed, it is saying nothing: that entry is dropped, not
+        rejected."""
+        cleaned: dict[str, str] = {}
+        for name, state in value.items():
+            if not isinstance(state, str):
+                raise ValueError("object state must be text")
+            if _is_description_placeholder(state):
+                continue
+            trimmed = state.strip()
+            if "\n" in trimmed or "\r" in trimmed:
+                raise ValueError("object state must be single-line")
+            if len(trimmed) > 120:
+                raise ValueError("object state must be at most 120 characters")
+            cleaned[name] = trimmed
+        return cleaned
 
     # ponytail: log-only provenance attribute; intentionally not part of the schema or persisted contract
     _direction_source: str = PrivateAttr(default="unmerged")
@@ -62,6 +124,14 @@ class ExtractedScene(BaseModel):
 class SceneSegmentation(BaseModel):
     scenes: list[ExtractedScene]
 
+
+# ADR-054 D2. `segment`'s prompt was the one prompt in the pipeline with no recorded version,
+# so a change to every scene's direction was invisible to the corpus manifest. Starts at 1
+# rather than 2: no earlier value was ever recorded, and runs predating ADR-054 are
+# distinguished only by `code_commit`. Bump on any change to the DIRECTION this node emits,
+# not only to SEGMENTATION_PROMPT: version 3 is the ADR-055 D5 normalizer, which rewrites
+# key_action without touching the prompt and would otherwise be invisible to the manifest.
+SEGMENT_PROMPT_VERSION = 3
 
 SEGMENTATION_PROMPT = """\
 Split this story into picture-book pages (scenes). Return index ranges — do not copy or \
@@ -91,8 +161,9 @@ Rules:
 story does not say.
 - objects_present lists object names exactly as given above, but only when the object should be visible in the selected still frame. Treat this roster as a reference list, not a visibility list.
 - Do not list an object merely because a character owns it, because it appeared in an earlier scene, or because it is mentioned outside the selected moment.
+- object_states maps an object name from the list above to how that object looks in THIS scene, and only when its appearance departs from the object's permanent appearance — after it is painted, broken, opened, or otherwise changed. Write the state the object is in, never the event that changed it: repeat the same state on every later scene where the object is still listed in objects_present and still looks that way. Omit an object whose appearance never departs from its permanent appearance. Each value is one short phrase, one line, under 120 characters.
 - Do not carry an object forward from an earlier scene. Do not infer holding, carrying, or transfer relations from ownership, earlier scenes, or adjacent actions. When physical interaction matters, state it directly in key_action or pose_expression and list the object for this frame.
-- visual_direction captures exactly one drawable still-frame moment: key_action (one visible action with subject and target), pose_expression (visible pose or facial expression, or null), viewpoint (one camera angle relative to the action: front, profile, rear, three-quarter, overhead, occluded, etc. — choose story-appropriate angle such as rear view when running away), and framing (shot scale: close-up, medium shot, wide shot, etc.). Describe visible-only facts in one still frame. Convert speech into visible gesture or reaction. Never include written words, dialogue, speech bubbles, captions, labels, or readable signage. Never use quotes or newlines.
+- visual_direction captures exactly one drawable still-frame moment: key_action (one visible action with subject and target; if two or more characters act on the same object, the action must name which single character holds it, or say they hold the one object between them — never phrase it so each character would need their own copy), pose_expression (visible pose or facial expression, or null), viewpoint (one camera angle relative to the action: front, profile, rear, three-quarter, overhead, occluded, etc. — choose story-appropriate angle such as rear view when running away), and framing (shot scale: close-up, medium shot, wide shot, etc.). Describe visible-only facts in one still frame. Convert speech into visible gesture or reaction. Never include written words, dialogue, speech bubbles, captions, labels, or readable signage. Never use quotes or newlines.
 - Keep sequential or non-simultaneous actions in the caption instead of creating a montage, split panel, duplicate character, or impossible pose.
 - Together the scenes must cover every sentence."""
 
@@ -126,6 +197,7 @@ def _merge_extracted(a: ExtractedScene, b: ExtractedScene) -> ExtractedScene:
         characters_present=b.characters_present,
         location_name=b.location_name or a.location_name,
         objects_present=b.objects_present,
+        object_states=b.object_states,
         visual_direction=b.visual_direction,
     )
     merged._direction_source = "retained-later-merge"
@@ -309,6 +381,19 @@ def segment(state: StoryMemory) -> dict:
             visible_objects.append(obj.obj_id)
 
         visible_objects = list(dict.fromkeys(visible_objects))
+
+        # ADR-052 D3. Same roster dict, same unknown-name posture as objects_present above: a name
+        # the model invented is a contract violation, not a state. Duplicate roster names collapse
+        # in `object_by_name` exactly as they do for objects_present, so both paths agree on which
+        # obj_id a repeated name means. A state for an object this scene does not show is kept here
+        # and dropped at render (D4) — `segment` owns the scene, not the prompt.
+        object_states: dict[str, str] = {}
+        for name, state in r.object_states.items():
+            obj = object_by_name.get(name)
+            if obj is None:
+                raise ValueError(f"segment: unknown object {name!r}")
+            object_states[obj.obj_id] = state
+
         visual_direction = rendered_base
 
         loc_id = name_to_loc.get(r.location_name) if r.location_name else None
@@ -326,12 +411,14 @@ def segment(state: StoryMemory) -> dict:
             location_id=loc_id,
             objects_present=visible_objects,
             visual_direction=visual_direction,
+            object_states=object_states,
         ))
         log.info(
-            "segment: s%d chars=%s objs=%s key_action=%r viewpoint=%r framing=%r source=%s",
+            "segment: s%d chars=%s objs=%s states=%s key_action=%r viewpoint=%r framing=%r source=%s",
             i,
             char_ids,
             visible_objects,
+            object_states,
             r.visual_direction.key_action,
             r.visual_direction.viewpoint,
             r.visual_direction.framing,

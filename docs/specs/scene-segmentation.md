@@ -105,6 +105,7 @@ class ExtractedScene(BaseModel):
     characters_present: list[str]   # Character.name values — the node maps them to char_ids
     location_name: str | None = None  # Location.name value — node maps to a loc_id, null → inherit
     objects_present: list[str] = Field(default_factory=list)
+    object_states: dict[str, str] = Field(default_factory=dict)  # ADR-052: StoryObject.name -> state in THIS scene
     visual_direction: ExtractedVisualDirection  # Required structured direction
 
     _direction_source: str = PrivateAttr(default="unmerged")
@@ -130,6 +131,14 @@ class SceneSegmentation(BaseModel):
    - `objects_present` maps only the object names explicitly listed for that selected frame; duplicate
      names are removed while preserving order.
    - Unknown object raises `ValueError`; unknown location logs warning and carries forward.
+   - `object_states` (ADR-052) maps an object name to how that object looks in THIS scene, and only
+     where its appearance departs from the object's permanent axes (ADR-053 D1). It records the state
+     the object is in, never the event that changed it, so the same state repeats on every later
+     scene where the object still looks that way. Names map through the same roster dict as
+     `objects_present` with the same unknown-name `ValueError`. Values are trimmed, single-line, and
+     at most 120 code points; placeholder values (`none`, `unknown`, `unspecified`, `neutral`) are
+     dropped rather than rejected. A state for an object this scene does not show is kept on the
+     `Scene` and dropped at render time — `segment` owns the scene, `build_prompt` owns the page.
 6. Mint `s{i}`, join units into `text_excerpt`, copy it into `caption`, map names → `char_id`s.
 7. Partial-return `{"scenes": [...]}` (ADR-024 — never mutate `state`).
 
@@ -275,8 +284,8 @@ definition.
   output range — guards invariant 2 directly
 - empty input → one whole-story range (the floor)
 - out-of-bounds indices clamp into `[0, n-1]`
-- 18 ranges → 15, still dense and ordered, with the later scene's `characters_present` and
-  `objects_present` retained at each merge
+- 18 ranges → 15, still dense and ordered, with the later scene's `characters_present`,
+  `objects_present`, and `object_states` retained at each merge
 
 **Provider seam** — patch `pipeline.segment.structured_text`:
 - `segment_scenes` passes the numbered units and the `SceneSegmentation` schema to the provider

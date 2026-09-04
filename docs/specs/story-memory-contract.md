@@ -80,7 +80,9 @@ class Location(BaseModel):     # minimal; refined by `story-analyzer` (§8, addi
 class StoryObject(BaseModel):  # minimal; refined by `story-analyzer` (§8, additive)
     obj_id: str
     name: str
-    description: Optional[str] = None
+    materials: list[str] = Field(default_factory=list)      # ADR-053 D1: axes, not prose. There is
+    colours: list[str] = Field(default_factory=list)        # deliberately no `description` beside
+    form_features: list[str] = Field(default_factory=list)  # them — two sources of appearance truth
     owner_char_id: Optional[str] = None       # ordinary/initial holder, not immutable current ownership
 
 class TimelineEvent(BaseModel):  # minimal; refined by `story-analyzer` (§8, additive)
@@ -146,6 +148,7 @@ class Scene(BaseModel):
     moderation_status: Optional[str] = None
     objects_present: list[str] = Field(default_factory=list)      # visible obj_ids with no duplicates
     visual_direction: Optional[str] = None                       # None=legacy/unplanned state, non-empty on new segmentation
+    object_states: dict[str, str] = Field(default_factory=dict)   # ADR-052: obj_id -> this scene's departure from the object's permanent axes
 
 # --- LangGraph reducer (ADR-024): upsert-by-scene_id, replace-matching, keep-others ---
 # SCENE LIST ORDER IS THE CONTRACT: dict semantics keep an upserted scene in its original
@@ -314,8 +317,8 @@ Models mocked (there are no model calls here — this is pure schema). Assertion
 - Assets: no field is asserted to be a URL — a plain path validates. *(Guards against signed-URL storage by
   convention; documented, not type-enforced.)*
 - **Visual continuity fields default for old checkpoints & stay declared last (additive, no schema_version bump):**
-  - Old checkpoints deserialize with `owner_char_id is None`, `objects_present == []`, `visual_direction is None`, and `Attempt.scene_contradictions is None`.
-  - New fields round-trip and remain declared last (`StoryObject.owner_char_id`, `Attempt.scene_contradictions`, `Scene.visual_direction`).
+  - Old checkpoints deserialize with `owner_char_id is None`, `objects_present == []`, `visual_direction is None`, `object_states == {}`, and `Attempt.scene_contradictions is None`.
+  - New fields round-trip and remain declared last (`StoryObject.owner_char_id`, `Attempt.scene_contradictions`, `Scene.visual_direction`, `Scene.object_states`).
   - `CURRENT_SCHEMA_VERSION` remains 1 and `FailureReason` remains unchanged.
 
 ## 7. Eval / quality checks

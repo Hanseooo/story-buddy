@@ -79,6 +79,7 @@ def generate_scene(state: StoryMemory) -> dict:
         scene.objects_present,
         state.objects,
         scene.visual_direction,
+        object_states=scene.object_states,
     )
 
     # Same list `build_prompt` numbered the image roll off, so "Image 2 is X" always names

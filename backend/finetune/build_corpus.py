@@ -54,6 +54,7 @@ from pipeline.consistency_check import (
     SCENE_CONSTRAINT_PROMPT_VERSION,
 )
 from pipeline.prompt_optimizer import SCENE_PROMPT_VERSION
+from pipeline.segment import SEGMENT_PROMPT_VERSION
 from providers import GENERATED_IMAGE_SIZE, _fal_event_sink, redact_pii
 
 CORPUS_PATH = pathlib.Path(__file__).with_name("corpus_synthetic.json")
@@ -80,14 +81,19 @@ RESTART_METADATA_KEYS = (
 
 
 def _code_commit() -> str:
-    result = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=pathlib.Path(__file__).resolve().parents[2],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.strip()
+    # A bare rev-parse names code that may never have existed: an uncommitted edit ships under the
+    # last commit's id, and every number reported from that bundle then traces to the wrong source.
+    # The suffix keeps the record honest and makes the bundle unfreezable on its own, since
+    # `freeze_dataset` requires every bundle to agree on `code_commit`.
+    root = pathlib.Path(__file__).resolve().parents[2]
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ["git", *args], cwd=root, check=True, capture_output=True, text=True
+        ).stdout.strip()
+
+    commit = git("rev-parse", "HEAD")
+    return f"{commit}-dirty" if git("status", "--porcelain") else commit
 
 
 @dataclass(frozen=True)
@@ -144,6 +150,28 @@ class SpendPolicy:
         if self.authorized_usd <= self.smoke_usd:
             return int(self.authorized_usd / self.conservative_call_usd) // story_count
         return IMAGE_BUDGET
+
+
+def _unchecked_references(memory: StoryMemory) -> int:
+    """ADR-050 Decision 4. How many canonical references shipped with no verdict at all.
+
+    Pure read over Story Memory; adds no call. `ref_verdict is None` is reachable through exactly
+    one path — `char_bible`'s judge raised and the draw was accepted unchecked (ADR-025) — and
+    `char_bible` is documented as keeping `None` distinguishable from a FAILING verdict precisely
+    so someone can count it. Nobody did: on 2026-09-02 both of `syn-001`'s references took that
+    path, the bundle recorded `ref_retry_count: 0` (which reads as "clean on draw one"), all 7
+    scenes then failed against a reference that contradicts four of its own stated attributes,
+    and the cause was found by opening PNGs by hand.
+
+    Gated on `canonical_ref_image` so a character that was never referenced at all (ADR-048 skips
+    any character no scene contains) is not counted as a dropped check. Reported, not enforced —
+    a hard gate needs a rate first.
+    """
+    return sum(
+        1
+        for character in memory.characters
+        if character.canonical_ref_image is not None and character.ref_verdict is None
+    )
 
 
 def _budget_basis(policy: SpendPolicy) -> dict:
@@ -480,8 +508,10 @@ def _bundle(
             "scene_prompt_version": SCENE_PROMPT_VERSION,
             "judge_prompt_version": JUDGE_PROMPT_VERSION,
             "scene_constraint_prompt_version": SCENE_CONSTRAINT_PROMPT_VERSION,
+            "segment_prompt_version": SEGMENT_PROMPT_VERSION,
             "image_budget": IMAGE_BUDGET,
             "recursion_limit": RECURSION_LIMIT,
+            "unchecked_references": _unchecked_references(memory),
             "fixture": "true" if fixture else "false",
             **_budget_basis(policy),
             "attempted_calls": (telemetry or {}).get("attempted", 0),

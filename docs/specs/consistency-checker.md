@@ -91,10 +91,22 @@ class SceneVerdict(BaseModel):
     text_free: bool = True                       # lettering-suppression §4.1 — asked after uniqueness, BEFORE failure_reasons
     failure_reasons: list[FailureReason] = []    # LAST — the closed 7 (ADR-028)
 
+class Contradiction(BaseModel):                  # ADR-049
+    subject: str                                 # who or what is wrong
+    required: str                                # what the constraints state
+    observed: str                                # what the page shows instead — LAST
+
 class SceneConstraintVerdict(BaseModel):
     differences_observed: str
-    contradictions: list[str] = []
+    contradictions: list[Contradiction] = []
 ```
+
+**ADR-049 — the shape is the enforcement.** v3 asked in prose for "the subject and the violated
+requirement" and got bare axis labels back (`Quill - framing: medium shot`), which
+`concrete_failure` cannot distinguish from a real violation. A label has no `observed` to set
+against a `required`, so it cannot be expressed here at all. `Attempt.scene_contradictions` stays a
+frozen `list[str]`: `render_contradiction` turns each object into one string on the way into Story
+Memory, phrased as an instruction because `correct_prompt` reuses it as a correction clause.
 
 Field order mirrors `VlmVerdict` exactly, then appends. `providers._assert_field_order` enforces
 it on the wire; mapping to `VlmVerdict` is a field-subset copy. `FailureReason` is imported from
@@ -132,7 +144,10 @@ nodes at once, not a hotfix here.
    (`generate_scene` either appended one or raised), so this is a guard, not a path.
 3. Build subjects: each `char_id` in `characters_present` that resolves to a `Character` carrying a
    `canonical_ref_image`, as `(name, canonical_ref_image)`.
-4. `judge_attempt(attempt.image_ref, subjects, constraint_prompt)`.
+4. `judge_attempt(attempt.image_ref, subjects, constraint_prompt)`. The caller passes
+   `scene.prompt or attempt.prompt or ""` (`pipeline/consistency_check.py`) — the **immutable**
+   scene prompt, never a corrected attempt's. ADR-047: correction clauses are instructions to
+   the image model, not facts about the scene, so they must not become checkable constraints.
 5. **Fold identity verdicts, worst-wins** (`None` or empty subjects → `vlm_verdict=None`):
    - `same_character`, `anatomy_intact`, `style_match`, `subjects_unique`, `text_free` → `all(...)`
    - `attributes_present`, `failure_reasons` → union, deduped; `failure_reasons` emitted in
@@ -152,11 +167,13 @@ book whose reference happened to be off-spec — punishing the scenes for the re
 
 ### The pass rule
 
-`same_character and anatomy_intact and text_free and not (GATING_REASONS & failure_reasons)`. These
-are the four failures a child notices: wrong character, three arms, a word on the page they cannot
-read and the app never speaks (CC-6), or a character whose colour and build changed between pages.
-`style_match` and `subjects_unique` are recorded, folded, and available to `regeneration-controller`'s
-ranking, but do **not** gate (ADR-007, §4.4).
+~~`same_character and anatomy_intact and text_free and not (GATING_REASONS & failure_reasons)`.~~
+**Amended 2026-09-02:** `same_character and anatomy_intact and not (GATING_REASONS & failure_reasons)`.
+These are the failures a child notices: wrong character, three arms, or a character whose colour and
+build changed between pages. `style_match`, `subjects_unique` **and now `text_free`** are recorded,
+folded, and available to `regeneration-controller`'s ranking, but do **not** gate (ADR-007, §4.4;
+`text_free` per `lettering-suppression.md` §4.6 risk 2 — see the amendment there for the
+measurement).
 
 The scene-constraint judge checks the `Setting:` line (if present) against the page, reporting only concrete violations of stated permanent features as contradictions. Temporary differences supported by the excerpt (weather, lighting) are ignored. This is enforced by `SCENE_CONSTRAINT_PROMPT_VERSION = 3`.
 
@@ -194,11 +211,17 @@ full legal maximum; prod job `483056e0` spent 13 on 9 pages under the old 45).
 them to rank-only — the shape `subjects_unique` and `style_match` already sit in. The `_rank` term
 stays either way.
 
-**Why gate on `text_free` here when `subjects_unique` did not (§4.3):** the duplicate rate was unmeasured,
+~~**Why gate on `text_free` here when `subjects_unique` did not (§4.3):** the duplicate rate was unmeasured,
 whereas lettering on door/page draws is known non-zero, the artifact is unambiguous, and latency cost is
-bounded by ADR-010's existing one-retry cap. **Fallback note (`lettering-suppression.md` §4.6.2):** if the
+bounded by ADR-010's existing one-retry cap.~~ **Fallback note (`lettering-suppression.md` §4.6.2):** if the
 false-positive rate on texture is bad, demote `text_free` to rank-only — the shape `subjects_unique` already
 sits in.
+
+**Fallback TAKEN 2026-09-02.** The premise above was that the artifact is unambiguous. Measured, it
+is not: the judge reads rust mottling and hatch-mark quills as writing. Across all 9 bundles on
+disk (128 draws) `text_free=False` accounts for **111 of the 121 failed draws**, against 6 for
+`same_character` and 0 for `anatomy_intact`, and demoting it takes passes from **7 to 20**. Two
+audited smoke-f pages judged lettered have no text anywhere. `text_free` is now rank-only.
 
 ⚠️ **The style question must name what to ignore** (issue #24, 2026-08-11). Asked unscoped —
 "whether the art style matches the reference" — the field read `False` on **7 of 7** scenes of prod
@@ -303,8 +326,9 @@ not) deserves its own issue.
 - Two subjects, one failing → folded booleans are `False`; `attributes_present` and
   `failure_reasons` are unioned and deduped; `differences_observed` contains both names.
 - `failure_reasons` is emitted in `FailureReason` declaration order regardless of subject order.
-- `passed` is `True` only when `same_character and anatomy_intact and text_free` and no
-  `GATING_REASONS` reason is present; a `style_match is False` verdict still passes.
+- `passed` is `True` only when `same_character and anatomy_intact` and no `GATING_REASONS` reason
+  is present; a `style_match is False` verdict still passes, and **since 2026-09-02 so does a
+  `text_free is False` one** (rank-only — it still loses best-of to a clean attempt).
 - **Gate (2026-08-13):** `wrong_colour` alone fails and leaves the scene unfinalized (so it buys
   the retry); `wrong_body_feature` alone fails; `wrong_clothing` alone passes; `wrong_style` alone
   passes; a gating reason contributed by **either** subject fails the whole scene; a second attempt

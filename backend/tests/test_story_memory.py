@@ -264,14 +264,44 @@ def test_visual_continuity_fields_default_for_old_checkpoint_shapes():
     assert obj.owner_char_id is None
     assert scene.objects_present == []
     assert scene.visual_direction is None
+    assert scene.object_states == {}
     assert scene.attempts[0].scene_contradictions is None
+
+
+def test_story_object_carries_axes_and_silently_drops_a_legacy_prose_description():
+    """ADR-053 D1: three axis lists replace `description`, mirroring `CharacterDescription`.
+
+    A pre-ADR `memory.json` still deserializes — `StoryObject` declares no `model_config`, so
+    Pydantic's default `extra="ignore"` discards the prose. Those bundles are finished artifacts,
+    so the loss is accepted rather than migrated (ADR-053 Consequences)."""
+    obj = StoryObject.model_validate(
+        {
+            "obj_id": "obj0",
+            "name": "bamboo fan",
+            "description": "A plain brown bamboo fan. It is later painted with sampaguita flowers.",
+            "owner_char_id": "c2",
+        }
+    )
+
+    assert not hasattr(obj, "description")
+    assert (obj.materials, obj.colours, obj.form_features) == ([], [], [])
+    assert list(StoryObject.model_fields) == [
+        "obj_id",
+        "name",
+        "materials",
+        "colours",
+        "form_features",
+        "owner_char_id",
+    ]
 
 
 def test_visual_continuity_fields_round_trip_and_stay_last():
     obj = StoryObject(
         obj_id="obj0",
         name="wooden sword",
-        description="a short wooden sword with a red cord grip",
+        materials=["wood"],
+        colours=["red cord grip"],
+        form_features=["short blade"],
         owner_char_id="c0",
     )
     attempt = Attempt(
@@ -289,7 +319,7 @@ def test_visual_continuity_fields_round_trip_and_stay_last():
     assert StoryObject.model_validate(obj.model_dump()) == obj
     assert Scene.model_validate(scene.model_dump()) == scene
     assert list(StoryObject.model_fields)[-1] == "owner_char_id"
-    assert list(Scene.model_fields)[-2:] == ["objects_present", "visual_direction"]
+    assert list(Scene.model_fields)[-3:] == ["objects_present", "visual_direction", "object_states"]
     assert list(Attempt.model_fields)[-1] == "scene_contradictions"
     assert CURRENT_SCHEMA_VERSION == 1
     assert [reason.value for reason in FailureReason] == [

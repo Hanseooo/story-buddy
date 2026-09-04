@@ -238,10 +238,16 @@ Before annotation, a read-only candidate-report mode lists every reference-beari
 reference path and all same-species, same-style candidate characters. It reads completed corpus bundles only;
 it does not contact Supabase, create labels or inspect judge outcomes. A researcher compares canonical
 references using dominant colour, body configuration, silhouette, clothing/accessories and facial structure,
-then records exactly one visually closest target for each training reference in the controlled selection
-file. Dataset construction pairs that reference with every natural training scene belonging to the selected
-target. The selection is therefore one manual decision per character lineage rather than one decision per
-constructed image pair.
+then records exactly one visually closest target for each training reference **that has an eligible
+candidate**. Dataset construction pairs that reference with every natural training scene belonging to the
+selected target. The selection is therefore one manual decision per character lineage rather than one
+decision per constructed image pair.
+
+**Coverage is best-effort (ADR-057).** A training reference with no same-species, same-style candidate
+carries no constructed negative, and the report's empty `candidates` list is the record of that. This
+sentence previously read "for each training reference", which stated a completeness requirement the
+corpus cannot meet — 26 of 30 synthetic training characters have no eligible partner. The species and
+style match rules are unchanged.
 
 The controlled selection file has this strict shape; all identifiers are opaque and `evidence_ref` points to
 the restricted study record rather than containing identity, consent or withdrawal evidence:

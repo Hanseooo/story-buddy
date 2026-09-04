@@ -323,7 +323,8 @@ def test_segment_scenes_passes_the_object_roster_and_new_schema_to_provider():
         StoryObject(
             obj_id="obj0",
             name="wooden sword",
-            description="a short wooden sword with a red cord grip",
+            materials=["wood"],
+            form_features=["short blade"],
             owner_char_id="c0",
         )
     ]
@@ -376,6 +377,12 @@ def test_segment_prompt_makes_object_visibility_explicit_per_selected_frame():
         "Do not list an object merely because a character owns it",
         "Do not carry an object forward from an earlier scene",
         "Do not infer holding, carrying, or transfer relations",
+        # ADR-054 D1. Lives inside the key_action definition, not as a bullet of its own:
+        # measured over 8 segmentations, a standalone bullet resolved the holder in 9 of 31
+        # multi-character directions against 5 of 24 with no rule, and this placement 14 of 29.
+        "the action must name which single character holds it",
+        "say they hold the one object between them",
+        "never phrase it so each character would need their own copy",
     ):
         assert rule in prompt
 
@@ -792,7 +799,8 @@ def test_segment_reconciles_direction_characters_in_roster_order(caplog):
 SWORD = StoryObject(
     obj_id="obj0",
     name="wooden sword",
-    description="a short wooden sword with a red cord grip",
+    materials=["wood"],
+    form_features=["short blade"],
     owner_char_id="c0",
 )
 
@@ -818,6 +826,33 @@ def test_segment_keeps_objects_explicit_to_each_scene():
     scenes = _segment_objects(raw)
     assert [scene.objects_present for scene in scenes] == [["obj0"], [], ["obj0"]]
     assert all("is held by" not in scene.visual_direction for scene in scenes)
+
+
+def test_segment_maps_object_state_names_to_obj_ids_on_every_scene_that_still_shows_the_state():
+    """ADR-052 D2/D3: the value is the object's state IN that scene, not the change event, so the
+    painting scene and every later scene that still shows it both carry it."""
+    raw = SceneSegmentation(
+        scenes=[
+            _r(0, 0, chars=["Ana"], objects_present=["wooden sword"], visual_direction="Ana lifts the sword."),
+            _r(1, 1, chars=["Ana"], objects_present=["wooden sword"],
+               object_states={"wooden sword": "painted with white sampaguita flowers"},
+               visual_direction="Ana paints the sword."),
+            _r(2, 2, chars=["Ana"], objects_present=["wooden sword"],
+               object_states={"wooden sword": "painted with white sampaguita flowers"},
+               visual_direction="Ana waves the sword."),
+        ]
+    )
+    scenes = _segment_objects(raw)
+    assert [scene.object_states for scene in scenes] == [
+        {},
+        {"obj0": "painted with white sampaguita flowers"},
+        {"obj0": "painted with white sampaguita flowers"},
+    ]
+
+
+def test_extracted_scene_rejects_an_object_state_longer_than_one_short_phrase():
+    with pytest.raises(ValidationError):
+        _r(0, 0, objects_present=["wooden sword"], object_states={"wooden sword": "x" * 121})
 
 
 def test_segment_does_not_infer_object_visibility_or_holder_from_owner():
@@ -854,7 +889,8 @@ def test_unowned_object_explicitly_visible_in_scene_1_and_absent_in_scene_2():
     unowned_sword = StoryObject(
         obj_id="obj1",
         name="magic key",
-        description="a golden key",
+        materials=["gold"],
+        form_features=["small key"],
         owner_char_id=None,
     )
     raw = SceneSegmentation(
@@ -882,9 +918,9 @@ def test_jamie_bolt_contract_keeps_objects_explicit_to_the_selected_frame():
         "Jamie and Bolt walk together through the quiet garden under the trees."
     )
     objects = [
-        StoryObject(obj_id="obj-toy", name="favorite toy", description="a small yellow toy", owner_char_id="c0"),
-        StoryObject(obj_id="obj-fridge", name="refrigerator", description="a tall white refrigerator"),
-        StoryObject(obj_id="obj-carpet", name="carpet", description="a soft blue carpet"),
+        StoryObject(obj_id="obj-toy", name="favorite toy", colours=["yellow"], form_features=["small toy"], owner_char_id="c0"),
+        StoryObject(obj_id="obj-fridge", name="refrigerator", colours=["white"], form_features=["tall door"]),
+        StoryObject(obj_id="obj-carpet", name="carpet", colours=["blue"], form_features=["soft weave"]),
     ]
     raw_segmentation = SceneSegmentation(
         scenes=[
@@ -1202,3 +1238,32 @@ def test_dialogue_remains_in_caption_and_absent_from_rendered_direction():
     assert "Hello world" not in scene.visual_direction
     assert "We did it" not in scene.visual_direction
     assert "Leo stands awake and raises one hand in greeting." in scene.visual_direction
+
+
+def test_a_shared_object_direction_gains_the_holder_clause():
+    """ADR-055 D5. Prompting stopped moving "Mila and Tala fan Lola with the decorated bamboo fan"
+    at 48 percent, so the resolution is deterministic. The clause never picks a single holder:
+    only the shared form is derivable from the text."""
+    scene = _r(
+        0, 0,
+        chars=["Mila", "Tala"],
+        objects_present=["bamboo fan"],
+        visual_direction="Mila and Tala fan Lola with the decorated bamboo fan",
+    )
+    assert scene.visual_direction.key_action == (
+        "Mila and Tala fan Lola with the decorated bamboo fan, "
+        "holding the one bamboo fan between them"
+    )
+
+
+def test_a_direction_that_already_names_a_holder_is_left_alone():
+    """The clause would contradict the direction: Mila holds it, Tala paints."""
+    scene = _r(
+        0, 0,
+        chars=["Mila", "Tala"],
+        objects_present=["bamboo fan"],
+        visual_direction="Tala paints a flower on the bamboo fan while Mila holds it",
+    )
+    assert scene.visual_direction.key_action == (
+        "Tala paints a flower on the bamboo fan while Mila holds it"
+    )

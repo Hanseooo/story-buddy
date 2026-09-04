@@ -27,7 +27,7 @@ export default function PrivacyPolicy() {
           <section>
             <h2 className="font-display text-2xl font-bold text-primary mb-4">2. How We Protect and Process Data</h2>
             <ul className="list-disc pl-5 space-y-3">
-              <li><strong>Strict Privacy by Design:</strong> A child narrating their real life is expected. We automatically scrub personal identifiable information (PII) like names and Filipino addresses from the text before any story is saved, narrated, or exported.</li>
+              <li><strong>Strict Privacy by Design:</strong> Sensitive identity details—phone numbers, addresses, email addresses, credit card numbers, and Philippine ID numbers—are automatically removed from stories before they&apos;re saved, narrated, or exported. A child&apos;s first name stays in their story. This keeps their personal information safe while preserving what they wrote.</li>
               <li><strong>Classroom Isolation:</strong> Student data is locked to their specific classroom and account using strict database rules. Only the student and their teacher can see their work. There is absolutely no public sharing mode.</li>
               <li><strong>AI Processing:</strong> To turn stories into picture books, the redacted text is processed securely by our AI partners (OpenRouter, fal.ai) to generate images and narration (via Chatterbox). All infrastructure is hosted securely in the Singapore region.</li>
             </ul>

@@ -73,15 +73,21 @@ def test_presidio_registers_ph_recognizers():
     _presidio.cache_clear()
 
 
-def test_redact_pii_never_leaks_the_original_value():
-    """§2's totality invariant: end-to-end against real Presidio + real ph_recognizers."""
+def test_redact_pii_never_leaks_a_structured_identifier():
+    """§2's totality invariant, narrowed to identifiers by ADR-045: end-to-end against real
+    Presidio + real ph_recognizers.
+
+    The name survives now, and that is the decision, not a regression. ADR-045 turned person
+    pseudonymization off by default because renaming the cast broke 16 of 30 corpus records and
+    gave ADR-041's robot a human face. `PH_PERSON` still fires and is still counted in the
+    `persons_detected` log field; only the rewrite is declined. The address half is
+    unconditional and has no flag."""
     from providers import _presidio, redact_pii
     _presidio.cache_clear()
     text = "Ako si Juan dela Cruz, taga Purok 3, Barangay San Isidro."
     result = redact_pii(text)
-    assert "Juan" not in result
-    assert "Cruz" not in result
     assert "Purok 3" not in result
+    assert "Juan dela Cruz" in result  # ADR-045: the accepted cost, asserted so it stays visible
     _presidio.cache_clear()
 
 
@@ -106,7 +112,7 @@ def test_redact_pii_leaves_narrative_entities_alone():
     assert "<LOCATION>" not in result
     assert "The Lost Little Star" in result
     assert "Manila" in result
-    assert "Mia" not in result  # persons are still pseudonymized
+    assert "Mia" in result  # ADR-045: persons are no longer pseudonymized by default
     _presidio.cache_clear()
 
 

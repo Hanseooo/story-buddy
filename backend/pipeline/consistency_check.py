@@ -91,7 +91,14 @@ class SceneVerdict(BaseModel):
 # — so each one buys a paid redraw of a page that was fine. v1 contradiction counts are not
 # comparable: they measure the judge's appetite for unstated detail, not the generator.
 # 3 (setting-consistency §4.3, 2026-08-15): adds the setting check clause.
-SCENE_CONSTRAINT_PROMPT_VERSION = 3
+# 4 (ADR-049, 2026-09-02): contradictions become structured. v3 asked in prose for "the subject and
+# the violated requirement" and the 2026-09-02 syn-001 smoke run shows the judge ignoring it — of
+# 89 emitted contradictions, entries like "Quill - Viewpoint: three-quarter" and "Quill - framing:
+# medium shot" name a checked axis and assert no violation at all. `concrete_failure` reads
+# `bool(scene_contradictions)`, so each one bought a paid retry; 5 of 21 attempts were failed that
+# way with a COMPLETELY clean identity verdict. v3 and v4 contradiction counts are not comparable:
+# v3 counts mix findings with checklist echoes.
+SCENE_CONSTRAINT_PROMPT_VERSION = 4
 
 SCENE_CONSTRAINT_PROMPT = """\
 The image is one page of a children's picture book. Check it only against the exact scene \
@@ -109,16 +116,44 @@ only concrete violations of stated permanent features as contradictions. Do not 
 lighting, time, damage, or other temporary differences when the later excerpt supports them.
 
 First describe every observed difference from those constraints. Then list each contradiction \
-separately. Every contradiction must name the subject and the violated requirement. Check that \
-every expected visible character appears exactly once, no unrequested character appears, every \
-text-only character matches its frozen profile, each visible object matches its frozen appearance \
-and current holder, and the action, movement direction and viewpoint match Visual direction. \
-Leave contradictions empty only when every check is clean."""
+separately. Check that every expected visible character appears exactly once, no unrequested \
+character appears, every text-only character matches its frozen profile, each visible object \
+matches its frozen appearance and current holder, and the action, movement direction and viewpoint \
+match Visual direction.
+
+Each contradiction has three parts: `subject` is who or what is wrong; `required` is what the \
+constraints state, quoted or closely paraphrased; `observed` is what the page actually shows \
+instead. `required` and `observed` must differ — if the page shows what the constraints require, \
+that check passed and is not a contradiction. Never list an axis you merely inspected: naming a \
+check and its expected value is not a contradiction, and belongs in the difference description or \
+nowhere. Leave contradictions empty when every check is clean."""
+
+
+class Contradiction(BaseModel):
+    """ADR-049. The shape IS the enforcement: v3 asked in prose for "the subject and the violated
+    requirement" and got bare axis labels back ("Quill - framing: medium shot"), which
+    `concrete_failure` could not distinguish from a real violation and which bought paid retries on
+    pages the identity judge had already found clean. A label cannot be expressed here — it has no
+    `observed` to set against a `required`. Node-local per ADR-023's D-F rule, like the two
+    verdicts below."""
+
+    subject: str
+    required: str
+    observed: str      # LAST — the requirement is stated before the page is judged against it
+
+
+def render_contradiction(contradiction: Contradiction) -> str:
+    """`Attempt.scene_contradictions` is a frozen `list[str]` (ADR-049 Decision 2), and this string
+    also becomes a correction clause in `correct_prompt`, so it reads as an instruction."""
+    return (
+        f"{contradiction.subject}: {contradiction.observed}, "
+        f"but the constraints require {contradiction.required}"
+    )
 
 
 class SceneConstraintVerdict(BaseModel):
     differences_observed: str
-    contradictions: list[str] = Field(default_factory=list)
+    contradictions: list[Contradiction] = Field(default_factory=list)
 
 
 # The two identity-bearing attribute reasons. Both GATE (2026-08-13); the other five do not.
@@ -275,7 +310,7 @@ def consistency_check(state: StoryMemory) -> dict:
             subjects.append((character.name, character.canonical_ref_image))
 
     identity_verdicts, composition = judge_attempt(
-        attempt.image_ref, subjects, attempt.prompt or scene.prompt or ""
+        attempt.image_ref, subjects, scene.prompt or attempt.prompt or ""
     )
 
     verdict: VlmVerdict | None = None
@@ -303,10 +338,21 @@ def consistency_check(state: StoryMemory) -> dict:
         verdict is not None
         and verdict.same_character
         and verdict.anatomy_intact
-        and verdict.text_free
+        # `text_free` was here until 2026-09-02. It RECORDS and RANKS, it does not gate --
+        # lettering-suppression §4.6 risk 2's own pre-registered fallback, the shape
+        # `subjects_unique` sits in. §4.6 declined it on `corpus-smoke-b` (0 of 21 changed);
+        # replayed over all 9 bundles / 128 draws that basis is stale: passes go 7 -> 20, all of
+        # the gain in the three post-ADR-045/049/050 bundles. 111 of 121 failed draws were
+        # `text_free=False` against 6 for `same_character` and 0 for `anatomy_intact`, and the
+        # audited pages have no text on them -- the judge reads rust mottling and hatch-mark
+        # quills as writing. `NEGATIVE_PROMPT` still suppresses lettering; this only stops a
+        # false positive from buying a paid redraw.
         and not (GATING_REASONS & set(reasons))
     )
-    scene_contradictions = None if composition is None else composition.contradictions
+    scene_contradictions = (
+        None if composition is None
+        else [render_contradiction(c) for c in composition.contradictions]
+    )
     composition_clean = scene_contradictions == []
 
     passed = identity_available and identity_clean and composition_clean

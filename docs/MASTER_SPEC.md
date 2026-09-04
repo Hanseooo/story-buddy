@@ -222,7 +222,7 @@ Product/architecture choices are in the ADRs; this is the working reference, **i
 | Model access layer | `backend/providers.py` — thin functions, one impl each. **The only file naming a *provider*** (model *ids* are env vars read in `app/config.py` — ADR-015: "swapping a model is an env var; swapping a provider is one file") | ADR-015 |
 | Data / auth / storage / realtime | Supabase (Postgres + Auth + Storage + Realtime + RLS). **Classroom-scoped** | ADR-006, ADR-017 |
 | Structured extraction | `json_schema` (strict) + `require_parameters` (OpenRouter only) + Pydantic | §12, §3, ADR-002 |
-| Moderation | **meta-llama/llama-guard-4-12b** (OpenRouter) **+ gpt-oss-safeguard-20b** (OpenRouter backstop) (text) + Presidio **+ Filipino recognizers** (PII) + **mistral-small-3.2-24b** (NSFW gate via OpenRouter) & **gemma-3-27b-it** safety rubric (image) | ADR-011, ADR-032, ADR-002 (amended) |
+| Moderation | **meta-llama/llama-guard-4-12b** (OpenRouter) **+ gpt-oss-safeguard-20b** (OpenRouter backstop) (text) + Presidio **+ Filipino recognizers** (structured identifiers only — persons off by default, ADR-045) + **mistral-small-3.2-24b** (NSFW gate via OpenRouter) & **gemma-3-27b-it** safety rubric (image) | ADR-011, ADR-032, ADR-045, ADR-002 (amended) |
 | Narration | **Chatterbox** (MIT, expressive) via hosted inference, pre-rendered per page onto Storage; **Kokoro-82M** CPU fallback | ADR-020 (revised) |
 | Fine-tuning | **The consistency judge only.** Identity = reference conditioning; style = ADR-007 constant; safety = never | ADR-018 (supersedes ADR-016) |
 | Observability | **Langfuse** (tracing, ADR-030 — supersedes LangSmith/ADR-014) + Sentry (errors) | ADR-030, §16 |
@@ -257,7 +257,7 @@ Concerns that touch many modules. **Every feature spec ticks the ones it affects
 | # | Concern | What a spec must show | ADR/§ |
 |---|---|---|---|
 | CC-1 | **Moderation ordering** | input text → char-ref → **reveal** → output image; no image reaches a kid unmoderated. The reveal is the surface the char-ref gate exists for, so it ships behind it (ADR-029) | ADR-011, ADR-029 / §13 |
-| CC-2 | **PII redaction** | Presidio before storage/caption/export; redacted text is what's persisted | ADR-011 / §14 |
+| CC-2 | **PII redaction** | Presidio before storage/caption/export; redacted text is what's persisted. **Structured identifiers only** — person pseudonymization is off by default (ADR-045, `PII_PSEUDONYMIZE_PERSONS`) | ADR-011, ADR-045 / §14 |
 | CC-3 | **Cost control** | count-based per-book breaker on `cost.image_count`, bound `IMAGE_BUDGET = MAX_SCENES * 4 + 15` = 55 (trips → job `failed`); `RECURSION_LIMIT = MAX_SCENES * 7 + 17` = 87 | ADR-025, ADR-029, ADR-037 |
 | CC-4 | **Security (RLS + signed URLs)** | **classroom**-scoped DB isolation; no public assets | ADR-006, ADR-017 / §14 |
 | CC-5 | **Observability** | emits traces/metrics (gen time, regen count, cost, VLM score) | §16 |

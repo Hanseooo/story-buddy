@@ -217,7 +217,7 @@ def test_generate_scene_is_a_no_op_when_every_scene_has_an_image():
 def test_generate_scene_calls_build_prompt_with_the_scenes_roster_and_style():
     """Spec §6: generate_scene calls build_prompt with (scene.characters_present,
     state.characters, state.style.prompt_fragment, location, scene.objects_present,
-    state.objects, scene.visual_direction)."""
+    state.objects, scene.visual_direction, object_states=scene.object_states)."""
     dog = Character(char_id="c0", name="the dog", description=CharacterDescription(species="dog"))
     state = _state(
         [Scene(scene_id="s0", text_excerpt="The dog ran.", characters_present=["c0"], visual_direction="The dog runs.")],
@@ -230,7 +230,7 @@ def test_generate_scene_calls_build_prompt_with_the_scenes_roster_and_style():
         generate_scene(state)
 
     build.assert_called_once_with(
-        ["c0"], [dog], "flat gouache storybook", None, [], [], "The dog runs."
+        ["c0"], [dog], "flat gouache storybook", None, [], [], "The dog runs.", object_states={}
     )
 
 
@@ -433,7 +433,7 @@ def test_generate_scene_log_names_configured_image_model_and_prompt_version(capl
             generate_scene(state)
 
     assert settings.fal_image_model in caplog.text
-    assert "scene_prompt_version=2" in caplog.text
+    assert "scene_prompt_version=4" in caplog.text
     assert "prompt_len=" in caplog.text
 
 

@@ -54,11 +54,19 @@ MAX_RETRIES = 2
 #
 # Allowlist rather than an `ignore: ["venice"]` blocklist: this is the safety path, so a provider
 # added later should be excluded until someone checks it serves images. Keyed per model and read
-# only by `judge` — mistral-small-3.2 is also `text_model`, where Venice is a fine route, and
-# gemma-3-27b-it serves five providers (none of them Venice), so pinning it would shrink its pool
-# for nothing. Re-check with: curl .../api/v1/models/{id}/endpoints
+# only by `judge` — mistral-small-3.2 is also `text_model`, where Venice is a fine route.
+# Re-check with: curl .../api/v1/models/{id}/endpoints
+#
+# ~~gemma-3-27b-it serves five providers (none of them Venice), so pinning it would shrink its pool
+# for nothing.~~ ADR-051 (2026-09-02) — measured false. The pool holds a DEAD endpoint and
+# OpenRouter prefers it: unpinned reference-judge calls failed 5 of 5, and DeepInfra timed out 5 of
+# 5 when pinned directly. Novita 404s on `require_parameters`. Availability only — the two survivors
+# are anti-correlated with ground truth in opposite directions and this pin does NOT fix the
+# reference gate; it makes ADR-018's prompted-gemma incumbent baseline measurable at all. The dict
+# is read by `judge_with_metadata` too, which is how the pin reaches that baseline.
 VISION_PROVIDERS: dict[str, list[str]] = {
     "mistralai/mistral-small-3.2-24b-instruct": ["deepinfra", "parasail"],
+    "google/gemma-3-27b-it": ["nebius", "parasail"],  # ADR-051
 }
 
 # The same mechanism for the OTHER axis `require_parameters` does not cover: whether the provider
@@ -640,25 +648,38 @@ def _pseudonymizer(text: str, names: list[str]):
 
 
 def redact_pii(text: str) -> str:
-    """Presidio PII redaction (CC-2). Persons pseudonymized so the story survives with a
-    protagonist an illustrator can draw; structured identifiers hard-redact (spec §4c).
-    en_core_web_sm must be downloaded before first call."""
+    """Presidio PII redaction (CC-2). Structured identifiers hard-redact (spec §4c),
+    unconditionally. Persons pseudonymize only when `pii_pseudonymize_persons` is set — ADR-045
+    turned that half off by default, because renaming the cast is the one thing this function has
+    reliably broken. en_core_web_sm must be downloaded before first call."""
     from presidio_anonymizer.entities import OperatorConfig
+
+    # ADR-045 Decision 3: the identifier set is not behind the flag and has no way to be turned
+    # off. A phone number is not narrative, so hard-redacting it cannot corrupt a story.
+    pseudonymize = settings.pii_pseudonymize_persons
+    acted_on = _REDACTED_ENTITIES if pseudonymize else _IDENTIFIER_ENTITIES
 
     analyzer, anonymizer = _presidio()
     detected = analyzer.analyze(text=text, language="en")
     results = [
         r for r in detected
-        if r.entity_type in _REDACTED_ENTITIES
+        if r.entity_type in acted_on
         and not (r.entity_type in _PERSON_ENTITIES and _after_determiner(text, r.start))
     ]
     # CC-5: log entity-type counts only — never the detected values (ADR-025 D5). `ignored` is
     # the tuning knob for _REDACTED_ENTITIES: a real identifier showing up there is a bug.
+    # ADR-045 Decision 6: `persons_detected` keeps counting the spans the flag is now declining to
+    # rewrite, so the cost of that decision stays measurable instead of going dark.
     _log.info(
-        "pii_redaction entity_counts=%s ignored=%s",
+        "pii_redaction pseudonymize=%s entity_counts=%s persons_detected=%d ignored=%s",
+        "on" if pseudonymize else "off",
         dict(Counter(r.entity_type for r in results)),
+        sum(1 for r in detected if r.entity_type in _PERSON_ENTITIES),
         dict(Counter(r.entity_type for r in detected if r.entity_type not in _REDACTED_ENTITIES)),
     )
+
+    if not pseudonymize:
+        return anonymizer.anonymize(text=text, analyzer_results=results).text
 
     # Reading order matters twice over: the anonymizer calls the operator right-to-left (to avoid
     # offset shifts), and the pool is handed out first-come-first-served.

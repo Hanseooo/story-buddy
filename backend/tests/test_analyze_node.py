@@ -22,6 +22,7 @@ from pipeline.analyze import (
     analyze,
     extract_entities,
 )
+from pipeline.prompt_optimizer import build_prompt
 
 
 def test_extracted_description_requires_species():
@@ -175,7 +176,7 @@ def test_story_analysis_accepts_the_four_collections():
                 }
             ],
             "locations": [{"name": "the beach", "description": "a sunny sandy beach with palm trees"}],
-            "objects": [{"name": "a red bucket", "description": "a small red plastic bucket"}],
+            "objects": [{"name": "a red bucket", "materials": ["plastic"], "colours": ["red"], "form_features": ["round pail with a handle"]}],
             "timeline": [{"order": 0, "summary": "They go to the beach."}],
         }
     )
@@ -190,7 +191,7 @@ def _analysis(**overrides) -> StoryAnalysis:
         {
             "characters": [_character("the narrator")],
             "locations": [{"name": "the beach", "description": "a sunny sandy beach with palm trees"}],
-            "objects": [{"name": "a red bucket", "description": "a small red plastic bucket"}],
+            "objects": [{"name": "a red bucket", "materials": ["plastic"], "colours": ["red"], "form_features": ["round pail with a handle"]}],
             "timeline": [{"order": 0, "summary": "They go to the beach."}],
             **overrides,
         }
@@ -340,7 +341,7 @@ def test_extract_entities_logs_prompt_version(caplog):
         with patch("pipeline.analyze.structured_text", return_value=_analysis()):
             extract_entities("I went to the beach.")
 
-    assert "extraction_prompt_version=4" in caplog.text
+    assert "extraction_prompt_version=6" in caplog.text
 
 
 def _state(raw_text="A dog runs in a field.", redacted_text="A dog runs in a field.") -> StoryMemory:
@@ -410,7 +411,7 @@ def test_analyze_mints_ids_by_list_position():
             {"name": "the beach", "description": "sandy beach"},
             {"name": "the car", "description": "red sedan"},
         ],
-        objects=[{"name": "a red bucket", "description": "a small red plastic bucket"}],
+        objects=[{"name": "a red bucket", "materials": ["plastic"], "colours": ["red"], "form_features": ["round pail with a handle"]}],
     )
     with patch("pipeline.analyze.extract_entities", return_value=analysis):
         result = analyze(_state())
@@ -568,9 +569,96 @@ def test_analyze_leaves_locations_uncapped():
     assert extract.call_count == 1
 
 
-def test_extracted_object_requires_a_stable_physical_description():
+def test_extracted_object_requires_the_three_appearance_axes():
+    """ADR-053 D1: the axes replace `description`, so they are what the boundary asks for."""
     with pytest.raises(ValidationError):
         ExtractedObject.model_validate({"name": "wooden sword", "owner_name": "Ana"})
+
+
+def test_object_axes_drop_only_the_atoms_the_change_field_already_states():
+    """ADR-053 D3, on the arm-D probe's fan verbatim. Comma-joined entries are split into atoms
+    and an atom sharing two or more stemmed content words with `changes_during_story` is dropped.
+    Exactly the two leaked entries go. `paint` (one shared word) and `dusty initially` stay —
+    the ADR's stated, measured residue; tightening the threshold costs `tail that spins`."""
+    obj = ExtractedObject.model_validate(
+        {
+            "name": "bamboo fan",
+            "materials": ["bamboo, paint"],
+            "colours": ["brown, white (painted flowers)"],
+            "form_features": ["round, flat, handle, dusty initially, painted with sampaguita flowers"],
+            "changes_during_story": "Painted with white sampaguita flowers, dust removed",
+        }
+    )
+
+    assert obj.materials == ["bamboo", "paint"]
+    assert obj.colours == ["brown"]
+    assert obj.form_features == ["round", "flat", "handle", "dusty initially"]
+
+
+def test_object_axes_keep_a_permanent_feature_sharing_one_word_with_the_change():
+    """The threshold is two, not one: the weathervane's tail is both a permanent feature and the
+    thing that changes, and a threshold of one destroys `tail that spins`."""
+    obj = ExtractedObject.model_validate(
+        {
+            "name": "weathervane",
+            "materials": ["metal"],
+            "colours": ["black"],
+            "form_features": ["tail that spins"],
+            "changes_during_story": "tail was bent, then straightened with a rock",
+        }
+    )
+
+    assert obj.form_features == ["tail that spins"]
+
+
+@pytest.mark.parametrize(
+    "atom", ["   ", "unspecified", "NONE", "x" * 121, "two\nlines", " , "]
+)
+def test_object_axis_normalizer_drops_rather_than_raises(atom):
+    """ADR-053 D3's hard constraint. `providers.py:300-315` grants exactly ONE blind re-ask, same
+    prompt, `temperature=0`, no feedback — so at the measured 34-in-41 violation rate a REJECTING
+    validator quarantines the corpus instead of repairing it. `mode="after"`, normalize, never
+    raise."""
+    obj = ExtractedObject.model_validate(
+        {
+            "name": "kettle",
+            "materials": [atom],
+            "colours": [],
+            "form_features": [],
+            "changes_during_story": None,
+        }
+    )
+
+    assert obj.materials == []
+
+
+def test_changes_during_story_is_boundary_only_and_cannot_reach_a_scene_prompt():
+    """ADR-053 D2. The slot exists so the model has somewhere to put the change instead of the
+    axes; `segment` stays the sole author of per-scene state (ADR-052 D3). It is never persisted
+    to `StoryObject`, so it cannot reach the text `generate_scene` writes to `Scene.prompt`."""
+    analysis = _analysis(
+        objects=[
+            {
+                "name": "bamboo fan",
+                "materials": ["bamboo"],
+                "colours": ["brown"],
+                "form_features": ["round"],
+                "changes_during_story": "painted with sampaguita blossoms",
+                "owner_name": None,
+            }
+        ]
+    )
+    with patch("pipeline.analyze.extract_entities", return_value=analysis):
+        objects = analyze(_state())["objects"]
+
+    assert "changes_during_story" not in objects[0].model_dump()
+    assert "sampaguita" not in str(objects[0].model_dump())
+
+    prompt = build_prompt(
+        [], [], "flat cel illustration", None, ["obj0"], objects, "Mila fans Lola.",
+    )
+    assert "bamboo fan, bamboo, brown, round" in prompt
+    assert "sampaguita" not in prompt
 
 
 def test_story_analysis_drops_an_exact_character_duplicate_object():
@@ -579,7 +667,9 @@ def test_story_analysis_drops_an_exact_character_duplicate_object():
         objects=[
             {
                 "name": "talking kettle",
-                "description": "a copper kettle with a black handle",
+                "materials": ["copper"],
+                "colours": ["copper"],
+                "form_features": ["black handle"],
                 "owner_name": None,
             }
         ],
@@ -594,7 +684,9 @@ def test_entity_rosters_alias_dropped_entirely():
         objects=[
             {
                 "name": "the robot (Leo)",
-                "description": "a small toy robot made of tin",
+                "materials": ["tin"],
+                "colours": ["grey"],
+                "form_features": ["boxy body"],
                 "owner_name": None,
             }
         ],
@@ -609,7 +701,9 @@ def test_story_analysis_drops_parenthetical_alias_with_casefold_and_whitespace()
         objects=[
             {
                 "name": "the robot ( Leo )",
-                "description": "a small toy robot made of tin",
+                "materials": ["tin"],
+                "colours": ["grey"],
+                "form_features": ["boxy body"],
                 "owner_name": None,
             }
         ],
@@ -625,7 +719,9 @@ def test_story_analysis_accepts_valid_inert_objects_that_are_not_aliases(object_
         objects=[
             {
                 "name": object_name,
-                "description": "a box of robot parts and gears",
+                "materials": ["cardboard"],
+                "colours": ["brown"],
+                "form_features": ["open box of gears"],
                 "owner_name": None,
             }
         ],
@@ -639,7 +735,9 @@ def test_analyze_maps_owner_name_to_the_capped_character_id():
         objects=[
             {
                 "name": "wooden sword",
-                "description": "a short wooden sword with a red cord grip",
+                "materials": ["wood"],
+                "colours": ["red cord grip"],
+                "form_features": ["short blade"],
                 "owner_name": "Ana",
             }
         ],
@@ -648,7 +746,7 @@ def test_analyze_maps_owner_name_to_the_capped_character_id():
         obj = analyze(_state())["objects"][0]
 
     assert obj.owner_char_id == "c0"
-    assert obj.description == "a short wooden sword with a red cord grip"
+    assert (obj.materials, obj.colours, obj.form_features) == (["wood"], ["red cord grip"], ["short blade"])
 
 
 def test_analyze_rejects_an_owner_outside_the_persisted_roster():
@@ -657,7 +755,9 @@ def test_analyze_rejects_an_owner_outside_the_persisted_roster():
         objects=[
             {
                 "name": "wooden sword",
-                "description": "a short wooden sword with a red cord grip",
+                "materials": ["wood"],
+                "colours": ["red cord grip"],
+                "form_features": ["short blade"],
                 "owner_name": "Maya",
             }
         ],
@@ -675,7 +775,9 @@ def test_analyze_keeps_an_object_whose_owner_was_capped_out_of_the_roster(caplog
         objects=[
             {
                 "name": "wooden sword",
-                "description": "a short wooden sword with a red cord grip",
+                "materials": ["wood"],
+                "colours": ["red cord grip"],
+                "form_features": ["short blade"],
                 "owner_name": "Dov",
             }
         ],
@@ -686,7 +788,7 @@ def test_analyze_keeps_an_object_whose_owner_was_capped_out_of_the_roster(caplog
 
     assert [c.char_id for c in result["characters"]] == ["c0", "c1", "c2"]
     assert result["objects"][0].owner_char_id is None
-    assert result["objects"][0].description == "a short wooden sword with a red cord grip"
+    assert result["objects"][0].form_features == ["short blade"]
     assert "capped out of the roster" in caplog.text
 
 
@@ -697,7 +799,9 @@ def test_analyze_normalizes_placeholder_owner_names(placeholder):
         objects=[
             {
                 "name": "wooden sword",
-                "description": "a short wooden sword with a red cord grip",
+                "materials": ["wood"],
+                "colours": ["red cord grip"],
+                "form_features": ["short blade"],
                 "owner_name": placeholder,
             }
         ],
@@ -706,7 +810,7 @@ def test_analyze_normalizes_placeholder_owner_names(placeholder):
         result = analyze(_state())
 
     assert result["objects"][0].owner_char_id is None
-    assert result["objects"][0].description == "a short wooden sword with a red cord grip"
+    assert result["objects"][0].form_features == ["short blade"]
 
 
 def test_narrative_notes_do_not_satisfy_the_discriminator_floor():
@@ -732,7 +836,8 @@ def test_extraction_prompt_distinguishes_actors_from_props_and_requests_owners()
     assert "inert prop" in prompt
     assert "personified object" in prompt
     assert "owner_name" in prompt
-    assert "physical description" in prompt
+    assert "changes_during_story" in prompt
+    assert "form_features" in prompt
 
 
 def test_analyze_persists_is_humanoid_on_character_description():

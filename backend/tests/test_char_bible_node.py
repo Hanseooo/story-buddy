@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.config import STYLE_PRESETS
-from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, CharacterDescription, Cost, Input, RefVerdict, StoryMemory, Style
+from contracts.story_memory import CURRENT_SCHEMA_VERSION, Character, CharacterDescription, Cost, Input, RefVerdict, Scene, StoryMemory, Style
 from pipeline.char_bible import (
     HUMANOID_CLOTHING_CLAUSE,
     NON_HUMAN_NEGATIVE,
@@ -629,14 +629,33 @@ def test_mint_reference_never_draws_more_than_three_times():
     assert draws == 3
 
 
+def test_mint_reference_retries_the_judge_once_on_the_image_it_already_paid_for():
+    """ADR-050 Decision 1. `gemma-3-27b-it` stalled on BOTH references of the 2026-09-02 smoke run
+    and `corpus-smoke-b` shipped two `ref_verdict: null` references nobody looked at; every page
+    then inherited a rooster with a face the spec says it does not have. The image is already
+    drawn and paid for, so a second judge call draws nothing — one transient raise must not cost
+    the whole gate."""
+    passing = _verdict(True, ["dog", "orange"])
+    (_, verdict, draws), t2i, judge_mock, _ = _mint([RuntimeError("openrouter 500"), passing])
+
+    assert verdict is passing
+    assert judge_mock.call_count == 2
+    assert t2i.call_count == 1, "the retry judges the image in hand — it must not redraw"
+    assert draws == 1
+
+
 def test_mint_reference_degrades_to_a_null_verdict_when_the_judge_fails():
     """Spec §4 two-policies table: the artifact exists and is paid for, only the CHECK failed.
-    Accept the draw, return None, and STOP re-rolling — exactly one text_to_image call."""
-    (path, verdict, draws), t2i, _, supabase = _mint(RuntimeError("openrouter 500"))
+    Accept the draw, return None, and STOP re-rolling — exactly one text_to_image call.
+
+    ADR-050 Decision 2 leaves this terminal behaviour alone and only makes it rarer: the draw
+    still ships unchecked once the retry has also raised."""
+    (path, verdict, draws), t2i, judge_mock, supabase = _mint(RuntimeError("openrouter 500"))
 
     assert verdict is None
     assert draws == 1
     assert t2i.call_count == 1
+    assert judge_mock.call_count == 2
     assert path == "story-1/ref-c0-1.png"
     assert _uploaded_bytes(supabase) == b"draw-1-bytes"
 
@@ -717,7 +736,7 @@ def test_the_judge_is_asked_about_text_last_and_the_version_is_bumped():
     """
     from pipeline.char_bible import JUDGE_PROMPT, JUDGE_PROMPT_VERSION
 
-    assert JUDGE_PROMPT_VERSION == 6
+    assert JUDGE_PROMPT_VERSION == 7
 
     prompt = JUDGE_PROMPT.format(subject="the orange dog, dog, orange")
     assert "free of any text" in prompt
@@ -727,14 +746,23 @@ def test_the_judge_is_asked_about_text_last_and_the_version_is_bumped():
 def test_reference_judge_prompt_binds_the_prose_to_the_contradiction_list():
     """visual-continuity §4.9. Job 3cc05c4b's judge described the mismatch in prose and returned
     an empty list; ADR-034 derives acceptance from the list, so the prose alone changed nothing.
-    The prompt has to say the two must agree, and has to ask for a per-attribute walk."""
+    The prompt has to say the two must agree, and has to ask for a per-attribute walk.
+
+    v7 (2026-09-02): the walk survives, its v5 phrasing does not. "Take the stated attributes one
+    at a time and check each one against the image; do not skip any" stalled `gemma-3-27b-it` past
+    `providers.CALL_TIMEOUT_SECONDS` on 7 of 7 calls, against 9 of 9 successes for the identical
+    prompt with that one sentence removed -- length controlled, same image, same pinned provider.
+    Both references in `corpus-smoke-e` shipped `ref_verdict=None` because of it. The replacement
+    asks the same thing without the enumerate-everything framing and answers in under 10s.
+    """
     from pipeline.char_bible import JUDGE_PROMPT
 
     prompt = JUDGE_PROMPT.format(subject="the shadow wizard, wizard, dark, imposing")
-    assert "one at a time" in prompt
+    assert "Check each stated attribute against the image" in prompt
+    assert "one at a time" not in prompt  # the v5 phrasing is what stalled the judge
     assert "must appear in that list" in prompt
     # Still reason-then-score (ADR-004): the walk is asked before the list, never after.
-    assert prompt.index("one at a time") < prompt.index("list the contradictions")
+    assert prompt.index("Check each stated attribute") < prompt.index("list the contradictions")
 
 
 def test_mint_reference_reports_a_draw_count_equal_to_the_provider_calls():
@@ -1343,3 +1371,44 @@ def test_a_flag_on_one_character_bumps_the_counter_even_when_another_is_a_fresh_
 
     assert result["cost"].ref_mod_retry_count == 1
     assert {call.kwargs["n"] for call in mint.call_args_list} == {2}
+
+
+def _scene(scene_id: str, present: list[str]) -> Scene:
+    return Scene(scene_id=scene_id, text_excerpt="The dog ran.", characters_present=present)
+
+
+def test_char_bible_skips_a_character_no_scene_contains():
+    """ADR-048. `segment` runs before this node, so `characters_present` is already known. A
+    character in no scene is never drawn into a page and never identity-judged, so its canonical
+    reference is provably unused — `syn-003` paid for "the gardener", whose whole appearance in
+    the story is "the gardener never figured out what happened", and it reached zero scenes.
+
+    The filter is applied AFTER the ADR-004 cap, so it only ever shrinks the selection and cannot
+    slide the 2-slot window onto c2.
+    """
+    state = _state([_char("c0", "the dog"), _char("c1", "the gardener")]).model_copy(
+        update={"scenes": [_scene("s0", ["c0"]), _scene("s1", ["c0"])]}
+    )
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()) as mint:
+        result = char_bible(state)
+
+    assert mint.call_count == 1
+    assert [call.args[4] for call in mint.call_args_list] == ["c0"]
+    assert result["characters"][1].canonical_ref_image is None
+
+
+def test_char_bible_references_the_whole_roster_when_no_scene_names_anyone():
+    """The fallback. `characters_present` defaults to an empty list and `segment` never forces it
+    non-empty, so an empty union cannot be distinguished from a segmenter that failed to populate
+    the field. Filtering on it there would strip every reference and silently drop the reveal
+    screen, so the empty union falls back to the pre-ADR-048 behaviour instead.
+    """
+    state = _state([_char("c0", "the dog"), _char("c1", "the cat")]).model_copy(
+        update={"scenes": [_scene("s0", []), _scene("s1", [])]}
+    )
+
+    with patch("pipeline.char_bible.mint_reference", return_value=_minted()) as mint:
+        char_bible(state)
+
+    assert mint.call_count == 2

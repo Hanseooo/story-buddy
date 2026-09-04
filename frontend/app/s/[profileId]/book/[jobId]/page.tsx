@@ -271,15 +271,6 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
         </div>
       </div>
 
-      {/* Presidio pseudonymizes every detected person name, so a child who wrote "Mia" reads a
-          book about "Ana" and has no way to know why. Nothing persists WHETHER a swap happened —
-          `redact_pii` only logs entity counts — hence "may", which is true either way and costs
-          no contract, schema or migration change. Rendered once outside the viewMode branch so
-          both reading modes get it. See docs/capstone/ethics_and_safety.md §1. */}
-      <p className="fixed bottom-3 left-1/2 -translate-x-1/2 z-30 px-3 text-center font-kid text-xs text-foreground/50 pointer-events-none">
-        We may change some names to keep you safe.
-      </p>
-
       {viewMode === "pages" ? (
         <>
           <div className="flex-1 flex w-full items-center justify-between relative px-2 sm:px-4 lg:px-8 py-4 sm:py-6">

@@ -38,8 +38,10 @@ subtracts a tendency; it cannot outvote a word sitting in the positive prompt, a
 summons it.** Attempts 1 and 2 named it. Attempt 3 is the honest use of the channel and still
 leaks, because the model draws letters absent any instruction at all.
 
-So this spec does not add another prohibition. It adds the missing **detection channel**, gates on
-it, and corrects with a clause that asserts blankness without ever naming what it is suppressing.
+So this spec does not add another prohibition. It adds the missing **detection channel**, ~~gates on
+it,~~ and corrects with a clause that asserts blankness without ever naming what it is suppressing.
+(**Amended 2026-09-02:** the detection channel and the correction clause stand; the gate does not —
+see §4.6 risk 2. `text_free` is rank-only.)
 
 **In scope:** any visible text — letters, numbers, writing — anywhere in a reference draw or a
 scene page. Not only gibberish: a crisply spelled shop sign is equally a defect in a book whose
@@ -156,22 +158,27 @@ Above `attributes_present` because that key is documented as noisy (ADR-034).
 ### 4.3 The scene gate and ranking
 
 - fold: `text_free=all(v.text_free for v in verdicts)` — worst-wins, like every other boolean
-- `passed = verdict is not None and verdict.same_character and verdict.anatomy_intact and verdict.text_free`
+- ~~`passed = verdict is not None and verdict.same_character and verdict.anatomy_intact and verdict.text_free`~~
+  **Amended 2026-09-02 (§4.6 risk 2 taken):** `text_free` is dropped from `passed` and kept in
+  `_rank`. The fold, the log line and the ranking position below are all unchanged.
 - `_rank` gains one position:
   `(1, same_character, anatomy_intact, text_free, subjects_unique, style_match)`, and the unchecked
   tuple widens to `(0, 0, 0, 0, 0, 0)`
 - the existing per-scene `log.info` gains `text_free=%s`
 
 Ordering rationale: **after** `anatomy_intact`, because a merged limb is a worse picture than a
-lettered door; **ahead of** `subjects_unique` and `style_match`, because those two deliberately do
-not gate and this one does.
+lettered door; **ahead of** `subjects_unique` and `style_match`, ~~because those two deliberately do
+not gate and this one does~~ — since 2026-09-02 none of the three gate, and the position now says
+only that a lettered page is worse than a duplicated or off-style one when best-of has to choose.
 
-**Why gate here at all**, when `scene-setting-and-subject-binding.md` §4.4 declined to gate
+~~**Why gate here at all**, when `scene-setting-and-subject-binding.md` §4.4 declined to gate
 `subjects_unique` on latency grounds (issue #26): the two are not comparable. That decision was
 blocked on an unmeasured duplicate rate. Here the rate is not zero and not unknown — at least 3 of
 the 6 burrow-door draws in the probe came back lettered — and the artifact is unambiguous rather
 than a judgement call about
-whether "the stars" in a night sky counts as a second character. Latency cost is bounded by the
+whether "the stars" in a night sky counts as a second character.~~ **Retired 2026-09-02:** the
+argument rested on the artifact being unambiguous. Measured over 128 draws it is not — the judge
+reads texture as writing — so `text_free` now sits exactly where `subjects_unique` does. Latency cost is bounded by the
 same one-retry cap ADR-010 already imposes; a scene still draws at most twice.
 
 ### 4.4 The correction
@@ -223,6 +230,43 @@ clause is what makes it a **correction** rather than the pure re-roll ADR-010 re
    `regenerate` already raises on `IMAGE_BUDGET` (ADR-025 D4). **The fallback, if the rate is bad:
    demote `text_free` to rank-only, the shape `subjects_unique` already sits in.** That is a
    two-line reversal, not a redesign.
+
+   **Measured 2026-09-02 (`data/judge/corpus-smoke-b`, `syn-001`, 21 attempts) — this risk landed.**
+   16 of 21 attempts were judged `text_free=False`. Reading the seven persisted pages: **one true
+   positive** ("Bok" lettered on the s0 weathervane) and **five false positives** with no text
+   anywhere. On those five the judge's own `differences_observed` describes rust mottling on the
+   tin rooster and hatch-mark quills on the hedgehog and never describes lettering — exactly the
+   texture confusion predicted above. One story is not a rate.
+
+   ~~The fallback has **not** been taken, for a reason unrelated to precision: counting attempts that
+   would pass with the gate removed entirely gives **0 of 21**. `text_free` was never once the sole
+   blocker on that run, so demoting it was measured to change nothing.~~ Two levers remain open —
+   the two-line demotion above, or making the judge **quote the text it saw** so a mottle cannot be
+   expressed (ADR-049's shape-over-prose lesson applied here). See ADR-050's escape hatch.
+
+   **FALLBACK TAKEN 2026-09-02.** The 0-of-21 basis above was correct for `corpus-smoke-b` and is
+   now stale. Replayed over **every bundle on disk** — 9 bundles, `syn-001`/`syn-002`/`syn-003`,
+   128 scene draws, all of project history — demoting `text_free` takes passes from **7 to 20**,
+   and the entire gain sits in the three bundles drawn after ADR-045/049/050 landed (`smoke-c`
+   2→4, `smoke-e` 1→8, `smoke-f` 2→6); the older bundles still gain nothing, which is exactly why
+   smoke-b read zero. The pipeline improved elsewhere and `text_free` became the binding
+   constraint. Failure causes on the 121 failed draws: **`text_free=False` 111**,
+   `wrong_body_feature` 69, contradictions 87, `same_character=False` **6**,
+   `anatomy_intact=False` **0**.
+
+   Precision evidence beyond the smoke-b read above: `corpus-smoke-f`'s `s1-2` and `s4-3` were both
+   judged `text_free=False` and both have **no text anywhere** — s1-2 is a clean barn scene, s4-3 a
+   fence scene — putting the audited count at roughly 18 of 21 pages where the gate fired on
+   texture. Both are also textbook `cel`, which incidentally kills a separate hypothesis: across
+   the same 128 draws, **style-only failures number 0** and ignoring style contradictions entirely
+   moves passes 7 → 7.
+
+   What changed in code is the two lines this risk named: `text_free` leaves
+   `consistency_check.identity_clean` and stays in `_rank`, so it is still recorded, still folded
+   worst-wins, and still loses best-of to a clean attempt. `NEGATIVE_PROMPT` is untouched and
+   remains the channel that suppresses lettering (§4.6 risk 4). The second lever — making the judge
+   **quote the text it saw** — is NOT taken and stays open; it is the thing that would let the gate
+   come back with precision.
 3. **The judge is not measured on this axis.** Nobody knows its recall for small lettering in a
    corner of a 1024² page. The first real number arrives from the telemetry this spec adds — the
    same bootstrap `subjects_unique` is on.

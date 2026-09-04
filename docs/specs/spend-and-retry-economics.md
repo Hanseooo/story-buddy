@@ -122,7 +122,7 @@ three attempts and continues to make the newest corrected attempt win an exact t
 or new failure reason is added.
 
 `regenerate` uses the immutable `Scene.prompt` as the clean base for both retries (amended by
-visual-prompt-reliability). Attempt 3 therefore contains the clean base prompt plus only the
+visual-prompt-reliability, ratified by ADR-046 which supersedes ADR-037 Decision 3). Attempt 3 therefore contains the clean base prompt plus only the
 correction derived from attempt 2's verdict, avoiding prompt accumulation and contradictory
 instruction growth while exact duplicate contradictions are deduplicated in first-seen order.
 
