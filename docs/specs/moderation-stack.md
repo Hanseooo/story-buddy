@@ -164,6 +164,26 @@ route an unmoderated image straight to a child. **Anything that adds a third wri
 5. Still flagged after retry → `scene.moderation_status = "failed"` → job `failed` with
    `failure_reason = "output_moderation_failed"`. No partial book (ADR-025).
 
+⚠️ **The step-4 retry image ships without a consistency verdict (#78, traced 2026-09-04).**
+`route_next_scene` sends a scene onward once it has a `final_image_ref` and a `moderation_status`
+— it never routes back to `consistency_check` — so the softened redraw is delivered having been
+moderated but never judged for character consistency. The regenerate loop, ADR-046's clean-base
+retry and the `generate_scene` correction path all re-enter `consistency_check` and are **not**
+affected; ADR-046/047/049/050 do not close this one, because none of them touch `output_mod`.
+
+The trace found one thing that was outright wrong and one that is a standing decision:
+
+- **Fixed here.** The retry attempt was recorded `Attempt(..., passed=True)`. `passed` is the
+  consistency verdict — it sits beside `vlm_verdict` — and `compose.outcome()` reads it first, so
+  an unjudged page was reported **`passed`** in the CC-5 provenance record. It is now `passed=False`
+  with no verdict, which `outcome()` already classifies as **`unchecked`**: the category that exists
+  for exactly this.
+- **Open, and an ADR decision, not an inline one.** Whether an unjudged image should be delivered at
+  all is a routing change — it would have to preserve ADR-003 deterministic routing, the bounded
+  retry budget, `check_image_budget()` accounting (ADR-025 D4), the per-scene moderation order, and
+  AGENTS.md's `RECURSION_LIMIT` arithmetic. Not decided here. The residual is now visible in the
+  record instead of hidden behind a verdict that was never issued.
+
 ⚠️ **Step 0, added 2026-08-13: this node runs once per finalized scene, not once per book.** It
 skips any scene already `"passed"`, and `route_next_scene` sends a freshly-finalized, unscreened
 scene here before `generate_scene` draws the next one. Granularity resolved — see §8.
