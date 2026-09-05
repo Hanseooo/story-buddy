@@ -46,7 +46,7 @@ export default function ClassroomSettingsPage() {
     setSaving(true);
     try {
       const tok = await getToken();
-      await fetch(
+      const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_BASE_URL}/classrooms/${classroomId}`,
         {
           method: "PATCH",
@@ -57,6 +57,10 @@ export default function ClassroomSettingsPage() {
           body: JSON.stringify({ name: newName.trim() }),
         }
       );
+      if (!res.ok) {
+        setToast("Could not rename — try again");
+        return;
+      }
       setClassroom((c) => c && { ...c, name: newName.trim() });
       setToast("Classroom renamed");
     } finally {
@@ -66,13 +70,18 @@ export default function ClassroomSettingsPage() {
 
   async function handleDelete() {
     const tok = await getToken();
-    await fetch(
+    const res = await fetch(
       `${process.env.NEXT_PUBLIC_API_BASE_URL}/classrooms/${classroomId}`,
       {
         method: "DELETE",
         headers: { Authorization: `Bearer ${tok}` },
       }
     );
+    if (!res.ok) {
+      // Navigating away here would show the teacher a classroom list that still has it.
+      setToast("Could not delete — try again");
+      return;
+    }
     router.replace("/classroom");
   }
 

@@ -128,7 +128,14 @@ def output_mod(state: StoryMemory) -> dict:
             updated_scenes.append(scene.model_copy(update={
                 "final_image_ref": retry_path,
                 "moderation_status": "passed",
-                "attempts": [*scene.attempts, Attempt(image_ref=retry_path, prompt=softened, passed=True)],
+                # passed=False, not True: `passed` is the CONSISTENCY verdict (it sits beside
+                # `vlm_verdict`), and no judge ran on this image — `route_next_scene` sends a
+                # moderated scene onward, never back to `consistency_check`. With no verdict
+                # either way, `compose.outcome()` reports this page `unchecked`, which is what
+                # it is. Whether an unjudged image should ship at all is a routing question and
+                # an ADR decision (#78); this line only stops the record from claiming a
+                # verdict that was never issued.
+                "attempts": [*scene.attempts, Attempt(image_ref=retry_path, prompt=softened, passed=False)],
             }))
         else:
             log.error(

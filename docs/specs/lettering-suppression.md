@@ -217,7 +217,7 @@ clause is what makes it a **correction** rather than the pure re-roll ADR-010 re
 | All 3 reference draws letter | `best_draw` picks the least-bad and persists a FAILING verdict, as it already does for contradictions. A lettered reference can still ship |
 | Scene fails only on `text_free` | corrected retries with `TEXT_CLAUSE`; if the last attempt also letters, `finalize` on `len(attempts) >= MAX_SCENE_ATTEMPTS` (3 with ADR-037; was 2) and best-of picks among the lettered images |
 | Old checkpoint resumed | both fields default `True`; a pre-change attempt reads as clean and is never re-judged |
-| Text that is part of the child's story ("a sign that said HOME") | judged as a defect and redrawn. Accepted: the excerpt is read aloud in the app, and pseudo-lettering has never once come back spelling what was asked |
+| Text that is part of the child's story ("a sign that said HOME") | judged as a defect and redrawn. Accepted: the excerpt is shown verbatim as the caption, and pseudo-lettering has never once come back spelling what was asked |
 
 ### 4.6 Risks carried, stated not solved
 

@@ -89,9 +89,13 @@ five applicable characteristics below. This is the operator-facing *software* le
 instrument from expert validation (defense-panel note 11): Objective 3 judges the artifacts the system
 produces; this questionnaire judges the system itself.
 
+**Pending adviser approval (2026-09-04):** the functional-suitability item below was corrected — it named
+`narrate` and `export`, both **cut** (ADR-058) and never built. An instrument change needs sign-off before
+administration; it cannot be relabelled after collection.
+
 | Characteristic | What the items ask about |
 |---|---|
-| Functional suitability | Does the system do what it claims — analyze, segment, illustrate, narrate, export? |
+| Functional suitability | Does the system do what it claims — analyze, segment, illustrate, and assemble a book? |
 | Performance efficiency | Is generation time acceptable within a classroom period? |
 | Usability | Can a Grade 5–6 student and a teacher operate it without instruction? |
 | Reliability | Does it recover from a stalled or failed generation without losing work? |

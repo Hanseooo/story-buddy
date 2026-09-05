@@ -42,7 +42,7 @@ The process is modeled as a directed graph with explicit nodes:
 3. **Character Bible:** Generates canonical reference images for the identified characters.
 4. **Generate Scene:** Conditionally edits the canonical references to fit the scene narrative and art style.
 5. **Consistency Check & Regenerate:** A Vision-Language Model (VLM) evaluates the generated scene for character consistency. If it fails, the pipeline performs one targeted regeneration using the VLM's extracted failure reasons, eventually falling back to the "best-of" attempt.
-6. **Compose & Export:** Assembles the approved scenes, renders the final HTML template, and exports to PDF.
+6. **Compose:** Assembles the approved scenes into the in-app book. PDF export is cut (ADR-058).
 
 **Manuscript's ten logical modules ↔ implementation nodes:** the capstone manuscript describes the pipeline
 as ten logical modules. They reconcile with the six flow groups above (and the frozen node graph in
@@ -59,7 +59,7 @@ as ten logical modules. They reconcile with the six flow groups above (and the f
 | Prompt Optimizer | folded into `generate_scene`'s prompt construction — a node input, not a separate node |
 | AI Scene Generation | `generate_scene` node |
 | Consistency Judge & Targeted Regeneration | `consistency_check` + `regenerate` nodes |
-| Picture Book Composition | `compose` / `export` nodes |
+| Picture Book Composition | `compose` node (no `export` node — ADR-058) |
 
 **Why Not Autonomous Agents?**
 Autonomous orchestrator agents introduce non-determinism, unpredictable loops, and high costs. A fixed LangGraph state machine ensures debuggability, bounds worst-case generation costs, and keeps the pipeline's behavior reproducible for the eval harness (Objectives 3–5).
@@ -73,7 +73,7 @@ Supabase acts as the infrastructural backbone for application state and security
 
 - **Database (Postgres):** Stores application metadata, user profiles, and LangGraph job checkpoints. 
 - **Authentication & RLS:** Employs a **teacher-issued account** model (ADR-017). A teacher creates the classroom and issues each student account — nickname plus an initial password — and the child then logs in and operates the app directly, authoring their own story. There is **no self-serve signup, no email on a student account, and no code that works outside a teacher-created classroom**; password reset is teacher-initiated only. Because the child enters free text, their input routes through input moderation and PII redaction on the same path as any other text (ADR-011) — the account carries no PII, but the *story* may, and redaction rather than non-collection is what handles it. Every generated book is manually reviewed by the teacher before it becomes visible to peers. Strict Row-Level Security ensures data isolation—teachers and students can only access data within their designated classroom.
-- **Storage:** Securely hosts generated images, final PDF storybooks, and pre-rendered narration audio (expressive open-weight TTS MP3s — `Chatterbox`, ADR-020) via signed URLs.
+- **Storage:** Securely hosts generated images via signed URLs. No PDFs and no audio — both are cut (ADR-058).
 - **Realtime:** Pushes state changes from the Postgres job rows directly to the frontend to drive progress bars.
 
 ## 6. Rationale Behind Key Architectural Choices

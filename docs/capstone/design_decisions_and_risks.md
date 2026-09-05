@@ -28,7 +28,7 @@ pivot are reframed against the current Objectives.
 | **R3** | Objective 4 (the fine-tuned judge) is load-bearing but the most timeline-fragile piece, several hops past the ethics gate | High | Ethics Stage 1 submission (now) | **OPEN** — Ethics Stage-1 submission is the pacing item; October is a fixture-pilot, full corpus lands after. |
 | **R4** | Novelty/gap claim has a thin related-work moat; one sub-claim was falsifiable | Medium | Before final defense | Partially fixed |
 | **R5** | Unverified arXiv citations + gap-claim overstatement in *frozen* docs | Medium | Before any Word export | Action list ready |
-| **R6** | Presidio redacts *fictional* character names → breaks captions and narration | Medium | Before Phase-2 PII/moderation specs | **Closed (ADR-045, 2026-09-01) — person redaction off by default; identifiers unconditional.** Two earlier resolutions did not hold |
+| **R6** | Presidio redacts *fictional* character names → breaks captions | Medium | Before Phase-2 PII/moderation specs | **Closed (ADR-045, 2026-09-01) — person redaction off by default; identifiers unconditional.** Two earlier resolutions did not hold |
 | m1–m2 | Minor: seed cross-endpoint caveat (Phase-0.5) · annotator-agreement guide-revision risk for the judge's image-pair labels | Low | Before final defense | Noted |
 | m3–m6 | Minor: judge test-set access policy · checkpoint-selection rule · DreamBench++ binarization (if the optional baseline comparison runs) · adult-participant ethics + withdrawal cutoff | Low | Pre-registration / Stage-1 submission | Drafted, need sign-off |
 
@@ -175,13 +175,13 @@ alignment outstanding.
 
 ---
 
-## R6 — PII redaction will redact fictional character names, breaking captions and narration
+## R6 — PII redaction will redact fictional character names, breaking captions
 
 **The problem.** Every PII discussion treats the risk as under-redaction; the inverse error is
 unexamined. A PERSON recognizer cannot distinguish the hero "Juan" from a real Juan — and the
 mandated Filipino-name recognizers will fire on fictional Filipino names *more*. Redaction runs
-before storage/captioning/export (CC-2), so a false positive cascades: placeholder tokens in the
-verbatim captions (violating ADR-012/013's fidelity argument), spoken aloud by Kokoro, and a
+before storage/captioning (CC-2), so a false positive cascades: placeholder tokens in the
+verbatim captions (violating ADR-012/013's fidelity argument), carried into the caption, and a
 protagonist that may not survive entity extraction.
 
 **Decision status:** `CLOSED (ADR-045, 2026-09-01)`. This risk was called correctly in July and
@@ -205,12 +205,12 @@ the argument.
    the failures continued past all three.
 3. **`CLOSED (2026-09-01)` — ADR-045 separates the two halves.** Person pseudonymization is off by
    default (`PII_PSEUDONYMIZE_PERSONS`); structured identifiers hard-redact unconditionally and
-   have no flag. R6 as written is resolved: no fictional name is rewritten, so captions, narration,
+   have no flag. R6 as written is resolved: no fictional name is rewritten, so captions,
    and entity extraction all see the child's own text.
 
 **The residual risk, restated honestly.** R6 was about over-redaction; closing it re-opens the
 under-redaction case R6 was never about. A child who writes their own real first name now has it
-reach the analyzer, the image providers, the captions, and the exported PDF. ADR-045 accepts this
+reach the analyzer, the image providers, and the captions. ADR-045 accepts this
 and argues it: a first name rarely identifies a child on its own, whereas the identifiers that do —
 a mobile number, a barangay address, a TIN — are still removed unconditionally. The escalation path
 if this proves wrong is unchanged from 2026-07-13: a teacher-confirmation queue for ambiguous names,
@@ -285,5 +285,5 @@ moot post-pivot). Solve none of them yet. The plan is the deliverable.
 > `graph.py`), input-gate hardening (ADR-012 length clamp + Filipino PII recognizers), and the kid-facing
 > flow (`jobs.pages` persistence, the ADR-029 reveal + `POST /jobs/{id}/confirm`, failure semantics, and
 > the reader/wait-state surfaces) are built. Open: `auth-and-classroom` (the classroom RLS gap),
-> `teacher-dashboard`, `narration`, `export-pdf`, `rate-limiting`, `data-deletion`. Probe 4
+> `teacher-dashboard`, ~~`narration`~~, ~~`export-pdf`~~ *(both cut — ADR-058)*, `rate-limiting`, `data-deletion`. Probe 4
 > (Filipino/Taglish moderation) is still un-run and remains a Phase-2 *release* gate.

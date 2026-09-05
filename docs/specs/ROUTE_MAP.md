@@ -50,7 +50,7 @@ by the child), just not the Supabase Auth session teachers use — session is es
 | `/s/[profileId]` | Student home (Bookshelf) | Client | Past stories as book covers + "Write a New Story!" CTA |
 | `/s/[profileId]/write` | Story editor + style picker | Client | Full-screen flow. Large textarea, live word count, inline style preset cards |
 | `/s/[profileId]/process/[jobId]` | Processing view | Client | Full-screen. Staged progress via Supabase Realtime; inline character reveal |
-| `/s/[profileId]/book/[jobId]` | Storybook reader | Client | Immersive full-screen. Image + caption + narration. Next/prev |
+| `/s/[profileId]/book/[jobId]` | Storybook reader | Client | Immersive full-screen. Image + caption. Next/prev |
 | `/s/[profileId]/gallery` | Classroom gallery | Server | Browse & read classmates' approved books. Display-only — no reflection surface |
 | `/s/[profileId]/settings` | Student account settings | Client | Change password. No email, no self-serve recovery — reset otherwise is teacher-initiated |
 
@@ -127,7 +127,7 @@ app/
 | Breakpoint | Nav component | Position | Items |
 |---|---|---|---|
 | All | `GhostBackButton` (conditional) | Top-left, absolute, semi-transparent | Single ← button. Only shown on write and process pages. Hidden on book reader (uses in-content controls) |
-| All (book reader only) | `ReaderControls` | Overlay on tap / bottom fixed | Next/prev tap zones (left/right 30%), page indicator, play/pause narration, close (×) |
+| All (book reader only) | `ReaderControls` | Overlay on tap / bottom fixed | Next/prev tap zones (left/right 30%), page indicator, close (×) |
 
 ---
 
@@ -329,8 +329,8 @@ Each route group also gets an `error.tsx`:
 
 ## Appendix B: Cross-cutting checklist (MASTER_SPEC §5)
 
-- [x] **CC-4 Security (RLS + signed URLs)** — Every student route is profile-scoped via RLS. Gallery reads are classroom-scoped + teacher-approved only. No book leaves the container except as a PDF export (ADR-017).
-- [x] **CC-6 Accessibility** — Large touch targets (44×44px min) in student nav. Text labels on all tab bar icons. Narration play button prominently placed in reader controls.
+- [x] **CC-4 Security (RLS + signed URLs)** — Every student route is profile-scoped via RLS. Gallery reads are classroom-scoped + teacher-approved only. No book leaves the container at all — PDF export is cut (ADR-017, ADR-058).
+- [x] **CC-6 Accessibility** — Large touch targets (44×44px min) in student nav. Text labels on all tab bar icons. No narration — ADR-058 narrows CC-6 to targets and text.
 - [x] **CC-8 Kid vs teacher design language** — Two distinct layout shells with different typography (Nunito vs Inter), density, and component libraries.
 - [x] **CC-9 Failure states = success states** — Every route group has a designed `error.tsx` with age-appropriate messaging. Processing stalls get a friendly checkpoint message, not a raw error.
 - [ ] CC-1 Moderation ordering — N/A (routing layer; moderation is pipeline-side)

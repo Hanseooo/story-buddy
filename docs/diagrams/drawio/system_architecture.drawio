@@ -73,7 +73,7 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
 
-        <mxCell id="e8" value="final images/PDF" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" source="rq" target="storage" parent="1">
+        <mxCell id="e8" value="final images" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" source="rq" target="storage" parent="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
 

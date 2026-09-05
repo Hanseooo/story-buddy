@@ -40,13 +40,13 @@ columns. This spec gives a book a durable, readable shape and names who may read
   beside the `upsert_scenes` ordering contract, which already guarantees segmentation order
   survives the JSON round-trip.
 - **`scene_id` is carried even though the reader ignores it.** It is the join key back to
-  `scenes[].attempts` and its verdicts, for `export-pdf` and for CC-5 tracing. It is not dead.
+  `scenes[].attempts` and its verdicts, for CC-5 tracing. It is not dead. (`export-pdf` was the other
+  named reader; it is cut — ADR-058.)
 
 ## 3. Position in the system map
 
 ```
 compose (pure, returns {})  ->  run_job.py  ->  jobs.pages  ->  /book/[jobId]      (this spec)
-                                                            ->  export-pdf        (later reader)
 ```
 
 `compose` stays pure. It performs no I/O by design (MASTER_SPEC §6 rule 1) and continues to return
@@ -279,8 +279,9 @@ are unaffected.
 
 ## 12. Second reader
 
-`export-pdf` reads the same `pages` column server-side with the service-role key — no signing
-policy, no different shape, no per-page query. Designed for two readers, built for one.
+**There is no second reader.** `export-pdf` was to read the same `pages` column server-side with the
+service-role key — no signing policy, no different shape, no per-page query. It is **cut** (ADR-058).
+The shape designed for two readers is used by one, which costs nothing and is left as designed.
 
 ## 13. Linked decisions & open questions
 

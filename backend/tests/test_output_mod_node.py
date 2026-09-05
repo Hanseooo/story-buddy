@@ -71,6 +71,27 @@ def test_first_check_fails_soften_retry_triggers_and_passes():
     mock_gen.assert_called_once()
 
 
+def test_the_soften_retry_image_is_recorded_unchecked_not_passed():
+    """#78: the retry image is delivered without ever seeing the consistency judge.
+
+    `output_mod` recorded it `passed=True`, which is the consistency verdict field
+    (it sits beside `vlm_verdict`). `compose.outcome()` reads `passed` first, so an
+    unjudged page reported as 'passed' in the CC-5 provenance record. Moderation
+    cleared it; the consistency judge never saw it. 'unchecked' is what that is.
+    """
+    from pipeline.compose import outcome
+
+    primary_iter = iter([False, True])
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"),          patch("pipeline.output_mod.classify_image_primary", side_effect=primary_iter),          patch("pipeline.output_mod.classify_image_backstop", return_value=True),          patch("pipeline.output_mod.generate_and_store", return_value=("job-1/s0-2.png", True)):
+        from pipeline.output_mod import output_mod
+        scene = output_mod(_state([_scene("s0")]))["scenes"][0]
+
+    winner = next(a for a in scene.attempts if a.image_ref == scene.final_image_ref)
+    assert winner.vlm_verdict is None, "no judge ran on the retry image"
+    assert winner.passed is False, "an unjudged image must not claim the consistency verdict"
+    assert outcome(scene) == "unchecked"
+
+
 def test_retry_uses_softened_prompt():
     """Spec §4c: soften-and-retry modifies the prompt before regenerating."""
     original_prompt = "A scary monster attacks."

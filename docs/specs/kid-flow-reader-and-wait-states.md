@@ -4,7 +4,7 @@
 `frontend/components/FailureScreen.tsx`, plus one loop in `backend/worker/run_job.py`
 **Derived from:** `docs/specs/kid-flow-ui-docket.md` S4 · **Rationale:** ADR-029 (the reveal),
 ADR-025 (never partial, terminal posture), ADR-013 (verbatim caption), ADR-006 (signed URLs),
-ADR-020 (narration — deliberately *not* here), `DESIGN.md`, `USER_FLOW.md` §4/§6,
+ADR-058 (narration cut — there is no play button to spec), `DESIGN.md`, `USER_FLOW.md` §4/§6,
 `ROUTE_MAP.md` §1/§6/§8, S1 (`kid-flow-book-persistence.md`), S2 (`kid-flow-pause-lifecycle.md`),
 S3 (`kid-flow-failure-semantics.md`)
 
@@ -56,7 +56,7 @@ S4 cluster names.
 
 | Not here | Owner |
 |---|---|
-| TTS narration / the reader's play button | `narration` (ADR-020; `providers.narrate()` unbuilt) |
+| TTS narration / the reader's play button | ~~`narration`~~ — **cut, ADR-058.** Nobody owns it; it does not ship |
 | The style-preset picker (`/write/style`) | a pre-job authoring step, not a job state |
 | Bookshelf / home / gallery | needs a per-child list query, which S1 constraint 4's capability-link model cannot express — `auth-and-classroom` |
 | The `failure_reason` enum itself | `job-failure-reason`, migration `0006` (§3.2 removes the build-order dependency) |
@@ -533,8 +533,8 @@ Frontend, Vitest, every Supabase call mocked (`AGENTS.md` testing bright line).
   (§4.2, §4.4.4).
 - [x] **CC-6 Accessibility** — 44×44px minimums; arrow-key paging beside the tap zones; the
   double-read alt-text bug fixed (§4.3); `role="alert"` on inline errors; `aria-live` on the stepper;
-  `prefers-reduced-motion` honoured per `DESIGN.md` §3.5. **Narration is `narration`'s** (ADR-020),
-  so CC-6's TTS leg is not closed by this spec.
+  `prefers-reduced-motion` honoured per `DESIGN.md` §3.5. **CC-6 has no TTS leg** — ADR-058 cut
+  narration and narrowed the concern to targets and text, which this spec closes in full.
 - [x] **CC-4 Security** — no new endpoint, no new policy surface, still exactly two (§6). The
   `failure_reason` value selects a screen and is never rendered.
 - [x] **CC-8 Kid vs teacher design** — this is the kid register throughout: Nunito 18/20px, oversized
@@ -588,7 +588,7 @@ leaving during the stall window, the threshold is the first thing to move.
 | `docs/specs/USER_FLOW.md` | §4.6's stepper and §4.7's reader gain the orientation decision; §6's stall copy is pinned to a threshold |
 | `docs/specs/kid-flow-ui-docket.md` | S4 → DONE with its constraints; the roster note fires |
 | `docs/MASTER_SPEC.md` §7, `docs/product/DECISION_BACKLOG.md` | The `kid-flow-ui` row becomes four specs — the docket's roster note says to do this only once the docket is DONE throughout, which S4 completes |
-| `docs/product/DECISION_BACKLOG.md` | `data-deletion` gains §4.4.4's naming requirement; `narration` records that the reader ships without a play button |
+| `docs/product/DECISION_BACKLOG.md` | `data-deletion` gains §4.4.4's naming requirement; the `narration` row is cut (ADR-058) and the reader ships without a play button, permanently |
 
 **Not touched:** `backend/contracts/`, `backend/pipeline/`, `backend/app/main.py`,
 `supabase/migrations/`.
@@ -618,7 +618,6 @@ on `job-failure-reason` (§3.2 — S4 no longer waits on `0006`).
 | Owner | What |
 |---|---|
 | `data-deletion` | Name the swept-pause status value; S4 maps it to the `asleep` kind (§4.4.4). Until then it renders machine copy |
-| `narration` | The reader's play button and its states. §2.1 |
 | `auth-and-classroom` | The bookshelf, the gallery, and the `/s/[profileId]` move — a directory rename against these files |
 | `rate-limiting` | §6's press-loop, now with actual buttons attached |
 | `repeated-failure-offramp` | §4.5's counter is the client-side version; `jobs.parent_job_id` is still the durable upgrade path |

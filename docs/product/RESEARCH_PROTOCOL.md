@@ -341,14 +341,13 @@ objectives, not chosen for convenience, and each boundary is load-bearing:
   substantive enough for expert validators to judge coherence and faithfulness against.
   *(This boundary originally rested on in-app peer comprehension, which is cut — §7, ADR-021. It survives
   on authoring fluency, not on the cut instrument.)*
-- **English is the medium of instruction** from Grade 4 (DepEd) → one language, one moderation regime, one
-  TTS voice.
+- **English is the medium of instruction** from Grade 4 (DepEd) → one language, one moderation regime.
 - They are **pre-adolescent** → age-appropriate content and interaction design throughout.
 
 At a 15-story corpus the study cannot stratify by age, and age is one of the largest sources of variance in
 children's writing. Broadening the band would add variance, not generality. **A tight population is a
 delimitation, not an apology** — and "anyone can use it" was never true anyway: word cap, reading level,
-moderation thresholds, failure copy, and narration voice are all calibrated to a band.
+moderation thresholds, and failure copy are all calibrated to a band.
 
 ---
 

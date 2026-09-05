@@ -25,8 +25,6 @@ or an SDK call at a call site, stop and read §5 first.
 | Output-image NSFW gate (primary image guard) | `mistralai/mistral-small-3.2-24b-instruct` | Apache-2.0 | OpenRouter | `settings.moderation_primary_image_model` | ADR-011, ADR-032, ADR-002 (amended 2026-08-11) | Phase 2 |
 | ~~Output-image NSFW gate~~ (superseded 2026-08-11) | ~~`qwen/qwen3-vl-32b-instruct`~~ | Apache-2.0 | OpenRouter | — | ADR-011, ADR-032 | Served by Alibaba Cloud it emitted `is_safe` before `safety_reasoning`; `providers._assert_field_order` rejects that under ADR-004 reason-then-score and hard-failed the job at `char_ref_mod`. Same class as the `text_model` failure one row up — the *provider*, not the model, decides structured-output fidelity. |
 | Output-image safety rubric (violence/gore) | `google/gemma-3-27b-it` (separate call, separate concern from the judge) | Gemma license | OpenRouter | `settings.moderation_backstop_image_model` — **never the fine-tuned judge** | ADR-011, ADR-004 amendment (b), ADR-032 | Phase 2 |
-| Narration (primary) | `Chatterbox` (Resemble AI) | MIT | fal.ai | not yet in `config.py` | ADR-020 | Phase 2 |
-| Narration (CPU fallback) | `Kokoro-82M` | Apache-2.0 | OpenRouter | not yet in `config.py` | ADR-020 | Phase 2 |
 | PII redaction | Presidio + spaCy + Filipino recognizers | MIT / MIT | Worker (local CPU) | `providers._presidio` | ADR-011, `input-gate-hardening` | Phase 2 |
 
 **Not a model, but a required call param:** every OpenRouter structured-output call must send
@@ -44,13 +42,13 @@ self-hosted vLLM (the fine-tuned judge, post-Phase 2.5) rejects the field.
 | **Northflank** (Singapore region) | Backend: FastAPI web + RQ worker + Redis, 3 services | Phase 0 | Render, Fly.io, DO droplet — ADR-031 |
 | **Supabase — Postgres** | App data + LangGraph checkpoints (`langgraph-checkpoint-postgres`). ⚠️ **Reached on the direct connection, port 5432 — not the transaction pooler on 6543** (ADR-033) | Phase 0 | Roll-your-own Postgres — more ops, no gain — ADR-006 |
 | **Supabase — Auth** | Classroom-scoped accounts: teacher/BEED-student issuer, child/student rows | Phase 0 (built), Phase 2 (real RLS) | Firebase — less Postgres/RLS-native — ADR-006. **Clerk** — rejected ADR-027: its self-serve/email product is what ADR-017 forbids, and it splits the JWT issuer from the Postgres enforcing RLS |
-| **Supabase — Storage** | Generated images + audio via signed URLs; no public buckets. **PDFs are generated on demand, not stored** (ADR-027) | Phase 0 | **Cloudflare R2 / S3** — rejected ADR-027: compression removes the need, and neither can mint signed URLs client-side, so both force asset authz out of RLS into app code |
+| **Supabase — Storage** | Generated images via signed URLs; no public buckets. No audio and no PDFs — both cut, ADR-058 (ADR-027's on-demand-PDF rule is moot, not reversed) | Phase 0 | **Cloudflare R2 / S3** — rejected ADR-027: compression removes the need, and neither can mint signed URLs client-side, so both force asset authz out of RLS into app code |
 | **Supabase — Realtime** | Frontend watches job-row progress | Phase 0 | Websockets — more work, same result — ADR-005 |
 | **Redis** | RQ broker for the async job queue | Phase 0 | Postgres-backed queue (viable simplification, revisit if Redis feels like overhead) — ADR-005 |
 | **Modal** | Scale-to-zero GPU container serving the fine-tuned judge behind vLLM (OpenAI-compatible) | Phase 2.5 / Phase 3, **first item on the de-scope ladder** | RunPod Serverless, Baseten (drop-in equivalents); HF Inference Endpoints (thinner VLM LoRA support) — ADR-019 |
 | **Langfuse** | Pipeline tracing + per-model USD cost from a built-in pricing table — a `CallbackHandler` per job (`LANGFUSE_SECRET_KEY`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_HOST`) | Phase 0 (from first commit) | LangSmith — zero-code env-var wiring but reports tokens only, no USD costs — ADR-014, switched by ADR-030 |
 | **Sentry** | Error tracking, frontend + backend | Phase 0 | — |
-| **fal.ai** | Hosted inference: image generation (both models) + narration (Chatterbox) | Phase 0/1 (images), Phase 2 (narration) | Novita, Replicate — named drop-in alternates for images (ADR-001) |
+| **fal.ai** | Hosted inference: image generation (both models) | Phase 0/1 | Novita, Replicate — named drop-in alternates for images (ADR-001) |
 | **OpenRouter** | Hosted inference: text pipeline, prompted judge, moderation backstop | Phase 0/1 | — (aggregator chosen specifically so a model swap is a config change, ADR-002) |
 
 ---
@@ -69,7 +67,7 @@ self-hosted vLLM (the fine-tuned judge, post-Phase 2.5) rejects the field.
 | `langgraph-checkpoint-postgres` | >=2.0.1 | Per-super-step checkpointing to Supabase Postgres (ADR-005, ADR-024). `PostgresSaver.from_conn_string` hardcodes `prepare_threshold=0` — "prepare every query", not "no prepared statements" — which is why `SUPABASE_DB_URL` must name **5432**, not the 6543 pooler (ADR-033) |
 | `psycopg[binary]` | >=3.2 | Postgres driver |
 | `openai` | >=1.99 | OpenAI-compatible client — points at OpenRouter *or* vLLM/Modal (ADR-019); not an OpenAI-model dependency |
-| `fal-client` | >=0.7 | fal.ai SDK (images, narration) |
+| `fal-client` | >=0.7 | fal.ai SDK (images) |
 | `httpx` | >=0.27 | Direct HTTP (image download from fal result URL) |
 | `supabase` | >=2.9.1 | Supabase Python client |
 | `redis` | >=5.2 | RQ broker client |
@@ -90,7 +88,7 @@ it speculatively; run the fal check first.
 
 | Package | Pinned version | Role |
 |---|---|---|
-| `next` | 16.2.10 | App Router, SSR |
+| `next` | 16.2.11 | App Router, SSR |
 | `react` / `react-dom` | 19.2.4 | UI |
 | `@supabase/supabase-js` | ^2.110.1 | Supabase client (Realtime job-progress watch, Storage signed URLs) |
 | `@sentry/nextjs` | ^10.64.0 | Error tracking |
@@ -217,7 +215,6 @@ the one-file, not one-env-var, case.
 |---|---|---|
 | Image generation | ~$0.02–0.035/image | ADR-001 |
 | Per book (images) | ~$0.30–0.65/book | ADR-001 |
-| Narration | ~cents/book (metered fal.ai Chatterbox, per page) | ADR-020 |
 | Whole stack, monthly | ~$60–110/month at 200 books/month, dominated by image generation | ADR-015, PRD §15 |
 | Judge fine-tune (one-time) | ~$5–15, a few hours on a rented RTX 4090 (~$0.45–0.49/hr) or A100 (~$1.50/hr) | ADR-016, ADR-018 |
 | Judge serving (Modal, if kept warm) | ~$1/hr to keep one container warm during study sessions (cold start ~30–90s otherwise) | ADR-019 |

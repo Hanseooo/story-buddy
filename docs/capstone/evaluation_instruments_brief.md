@@ -88,7 +88,7 @@ clearance** and is valid October-defense material.
 | Scene structuring | Scene Segmentation, Story Memory | Story converted to sequential scenes, Story Memory still schema-valid | per story |
 | Visual planning | Character Bible, Style Preset, Prompt Optimizer | Character refs + style + structured prompt produced, all schema-valid | per scene |
 | Scene generation & refinement | Image Generator, Consistency Judge, Regeneration | **Consistency loop ran to a terminal state and a shippable page was produced** (incl. best-of fallback) | per scene |
-| Picture book production | Compose, TTS narration, Export | Scenes assembled + narrated + exported as a complete book | per book |
+| Picture book production | Compose | Scenes assembled as a complete book | per book |
 
 **Two things we must get right in the write-up:**
 

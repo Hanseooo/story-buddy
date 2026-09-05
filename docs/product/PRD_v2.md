@@ -69,6 +69,8 @@ The updated capstone manuscript is now authoritative for the study design (ADR-0
   `omni-moderation` → **`gpt-oss-safeguard-20b`** (Apache-2.0 open weights, via OpenRouter — Granite
   Guardian was the ADR-011b pick but is not routable there; ADR-011c), and ElevenLabs → an **open expressive TTS**
   (**Chatterbox**, MIT, hosted inference; Kokoro-82M CPU fallback — ADR-020, revised 2026-07-17).
+  *(Narration was later cut outright — ADR-058. The mandate point stands: it was never satisfied by a
+  proprietary vendor.)*
   **meta-llama/llama-guard-4-12b** (119 languages) replaces Llama Guard and closes the Taglish hole.
 - **Two new safety findings**, neither previously in any ADR: Presidio leaks Filipino PII by default, and
   the text gate's Filipino/Taglish performance was never measured. Both are now Phase-0.5/Phase-2 work.
@@ -151,7 +153,7 @@ Not "we called an image API." The contribution is an **AI Storyboarding Pipeline
   messaging must be age-appropriate throughout.
 - **Account issuer + reviewer: the teacher or BEED (education) student** — owns the classroom, issues each
   student account (nickname + teacher-set password), and reviews every generated book (manual
-  approve/reject) before it enters the classroom gallery or is exported. *(ADR-017 — supersedes ADR-006's
+  approve/reject) before it enters the classroom gallery. *(ADR-017 — supersedes ADR-006's
   role model.)*
 - **Parent/guardian: consent-giver, not an operator.** Guardian consent and child assent are required by
   the PH Data Privacy Act — a child-held account with a password and peer-visible typed content raises the
@@ -179,7 +181,7 @@ ten-year-olds (ADR-017).
 5. Prompt Optimization Engine
 6. Image Generation Engine (reference-conditioned, Qwen-Image-Edit)
 7. Consistency Checker (VLM-as-judge; triggers one targeted regeneration). **Fine-tuned in Phase 2.5** — ADR-018
-8. Slide Composer / Export (PDF + library) + **expressive TTS narration** (Chatterbox, hosted) per page — ADR-020
+8. Slide Composer + classroom library. *(PDF export and TTS narration are **cut** — ADR-058.)*
 9. **Teacher/BEED-student account + classroom + teacher-issued student accounts** (Supabase Auth for
    teacher; classroom-scoped nickname+password auth for students; RLS) — ADR-017
 10. Moderation & Safety Stack (input text, PII incl. **Filipino recognizers**, output image, self-refusal fallback)
@@ -214,7 +216,6 @@ it is the long pole and cannot be compressed by coding faster (§10, §18, RESEA
 | Auth model | **Teacher-issued classroom account**: child gets nickname + teacher-set password (no email, no self-serve signup); teacher-initiated reset only | Keeps the child off self-serve/social-network surfaces while letting them author and own their story; RLS isolates by classroom (and by child within it). **ADR-017** |
 | Sharing | **Classroom-scoped, teacher-gated, display-only gallery.** No public mode, ever. No reflection/comment surface — the storybook is the only peer-visible artifact. | Peer-visible child content without a gatekeeper is a social network for ten-year-olds. ADR-017, ADR-021 |
 | **Fine-tuning** | **The consistency judge** (`Qwen2.5-VL-7B`, QLoRA), served on vLLM | Identity and style are the wrong targets (ADR-016's reasoning survives); the judge is the documented weakest link with a known prompting ceiling. **ADR-018, ADR-019** |
-| Narration | **Chatterbox** (MIT, expressive) via hosted inference, pre-rendered per page; **Kokoro-82M** CPU fallback | Expressive, emotional read-aloud; open-weight so the mandate holds; small metered cost. **ADR-020** (revised) |
 | Design language | Cartoon-pop (student flow); calmer/denser variant (teacher screens) | Matches storybook tone; density fits the teacher dashboard. |
 | Moderation | Two independent **open** classifiers per path + PII + image gate + self-refusal fallback | Non-negotiable for child users. Proprietary backstop removed and replaced, not abandoned. §13, ADR-011 |
 | Captions | Kid's **verbatim** text excerpt (not LLM-rewritten) | Preserves story fidelity; no extra generation/moderation surface. |
@@ -235,14 +236,15 @@ it is the long pole and cannot be compressed by coding faster (§10, §18, RESEA
 7. **Character/Style reveal + confirm** — show the **moderated** canonical character reference(s) before full generation; lightweight confirm / "try again." *(Character reference is moderated before the child sees it — see §13.)*
 8. **Full scene generation** — all scenes generated using the confirmed reference(s).
 9. **Output moderation + consistency pass** — before the kid sees results; failed scenes get one targeted regeneration, then best-of fallback (§10, §13).
-10. **Storybook slideshow** — image + verbatim caption + page number; next/prev; **narration** (ADR-020).
+10. **Storybook slideshow** — image + verbatim caption + page number; next/prev. No narration (ADR-058).
 11. **Teacher review gate** — every book is manually approved or rejected by the teacher before it enters
-    the classroom gallery or is exported. There is no auto-approve toggle (deferred to Future Work — an
+    the classroom gallery. There is no auto-approve toggle (deferred to Future Work — an
     ethics re-review is required before that can ship). ADR-017.
-12. **Classroom gallery** — classmates read/listen to approved books. Display-only: no reflection prompt,
+12. **Classroom gallery** — classmates read approved books. Display-only: no reflection prompt,
     comment, or scoring surface. ADR-021.
-13. **Export** — PDF download and/or save to the classroom library (Supabase Storage, signed URLs).
-    The PDF is the only way a book leaves the container; the child shares the artifact, not the platform.
+
+*(An earlier step 13, PDF export, is **cut** — ADR-058. A book is read inside the classroom gallery; it does
+not leave the container.)*
 
 ---
 
@@ -263,8 +265,6 @@ it is the long pole and cannot be compressed by coding faster (§10, §18, RESEA
 - Teacher/BEED-student account + classroom + teacher-issued student accounts (Supabase Auth for the
   teacher; classroom-scoped nickname+password auth for students) + RLS — ADR-017
 - Teacher library/dashboard of classroom storybooks — ADR-017
-- Export (PDF; shareable link optional)
-- Read-aloud (TTS) for captions — **strongly recommended in MVP** given target age (§17)
 
 ### Stretch / Future Work
 Kid-uploaded reference; selectable art styles; multi-language; auto-approve toggle (deferred behind an
@@ -395,7 +395,7 @@ use only, not any evaluation leg.
 
 ## 11. Open Decisions — RESOLVED
 
-1. **Teacher approval gate before a book enters the gallery or is exported** → **manual, always** (human backstop over auto-moderation; no auto-approve bypass — deferred to Future Work behind an ethics re-review). *Was "parent approval gate" — ADR-017.*
+1. **Teacher approval gate before a book enters the gallery** → **manual, always** (human backstop over auto-moderation; no auto-approve bypass — deferred to Future Work behind an ethics re-review). *Was "parent approval gate" — ADR-017.*
 2. **Regeneration cap** → **1 targeted, prompt-corrected retry** (2 attempts total); if still failing, keep the higher-scoring image (best-of), never a broken/placeholder page. ADR-010.
 3. **Story length limit** → **hard word cap (~500–800 words, tunable)** with a gentle "let's make a book of the first part" truncation at a scene boundary. **No silent AI summarization** (it would illustrate the summary, not the child's story). ADR-012.
 4. **Repeated moderation-failure off-ramp** → after **N=3** failed revisions of the same story, suggest starting a fresh story rather than an unbounded retry loop.
@@ -426,13 +426,11 @@ use only, not any evaluation leg.
 
 **Pipeline engine:** **LangGraph as a deterministic state machine** (explicit nodes; conditional edges only at moderation pass/fail and consistency pass/fail). LangChain omitted unless a concrete need appears. Model APIs called directly through `backend/providers.py` — the only file that names a vendor (ADR-003, ADR-015).
 
-**State/persistence:** Supabase Postgres (app data + LangGraph checkpoints via `langgraph-checkpoint-postgres`); Supabase Auth (teacher) + classroom-scoped student auth + RLS; Supabase Storage (images + PDFs, signed URLs); Supabase Realtime (job progress). ADR-006.
+**State/persistence:** Supabase Postgres (app data + LangGraph checkpoints via `langgraph-checkpoint-postgres`); Supabase Auth (teacher) + classroom-scoped student auth + RLS; Supabase Storage (images, signed URLs); Supabase Realtime (job progress). ADR-006.
 
 **Structured extraction:** strict `json_schema` structured output + `provider.require_parameters: true` + Pydantic validation on every LLM boundary. The Story Memory schema is the contract between modules. ADR-002.
 
-**Export:** HTML storybook template → PDF via Playwright/WeasyPrint (server-side) — decide at build (ADR-013).
-
-**Flow:** `POST /storybooks` creates a job row, returns `job_id` immediately → worker runs the LangGraph pipeline, checkpointing after each scene, updating job status → frontend subscribes to the job row via Realtime → on completion, images/PDF in Storage, book in library.
+**Flow:** `POST /storybooks` creates a job row, returns `job_id` immediately → worker runs the LangGraph pipeline, checkpointing after each scene, updating job status → frontend subscribes to the job row via Realtime → on completion, images in Storage, book in library.
 
 ---
 
@@ -448,7 +446,7 @@ an independent backstop; either one flagging fails the content** (ADR-011).
    supplies the vendor independence the removed OpenAI backstop used to. **Both open.**
    *(Granite Guardian was the ADR-011b backstop; it is **not routable on OpenRouter** — verified 2026-07-13,
    D-1 resolved in ADR-011 revision c.)*
-2. **PII detection/redaction** — Presidio (open-source) on input. A child narrating real life ("my name is… I live at…") is the *expected* case; redact before storage/captioning/export. This is separate from toxicity moderation.
+2. **PII detection/redaction** — Presidio (open-source) on input. A child narrating real life ("my name is… I live at…") is the *expected* case; redact before storage/captioning. This is separate from toxicity moderation.
    ⚠️ **Presidio's defaults leak Filipino PII.** spaCy NER misses Filipino names; `Barangay`/`Purok`/`Sitio`
    address structure and `+63 9xx` formats match no built-in pattern. Custom recognizers are a **Phase-2
    deliverable**, not a polish item (ADR-011).
@@ -480,7 +478,7 @@ Ordering matters: input gate (step 5) → char-ref moderation (before step 7) �
 ## 14. Security & Data Protection
 
 - **RLS everywhere.** Teachers read only their own classroom's data; children read only their own account's data; enforced at the DB layer, not just the app.
-- **Signed URLs** for all kid-generated images/PDFs; no public buckets.
+- **Signed URLs** for all kid-generated images; no public buckets.
 - **Data retention & deletion path.** Define what's stored (account, stories, images, logs), for how long,
   and give the teacher a one-action **delete-a-student's-data** path, actionable on a guardian's request.
   Required posture under the PH Data Privacy Act.
@@ -514,8 +512,6 @@ image generation:
 - **Serving the judge *lowers* running cost**: ~2,000 calls/month at ~3 s each is ~100 GPU-minutes on a
   scale-to-zero container, cheaper than 2,000 Gemma-27B API calls (ADR-019). Keep-warm during a study
   session is ~$1/hr.
-- **Narration is a small metered cost** — ~cents/book of hosted expressive TTS (Chatterbox on fal.ai),
-  minor beside image generation; the Kokoro CPU fallback is $0 if the metered path is dropped (ADR-020, revised).
 
 ---
 
@@ -527,20 +523,16 @@ Instrument the pipeline with **Langfuse** (LangGraph tracing via a per-job `Call
 
 ## 17. Accessibility
 
-The primary user is a Grade 5–6 student. They read and type, but reading a story aloud is still a
-comprehension aid, and it is what makes a *picture book* feel like a book.
+The primary user is a Grade 5–6 student.
 
-**Narration: `Chatterbox`** (MIT, expressive open-weight TTS) — served via **hosted inference on fal.ai**; the
-worker pre-renders one MP3 per page onto Supabase Storage during generation and the frontend is an `<audio>`
-tag (ADR-020, revised). Emotion-intensity is tuned once to a warm storyteller register. **`Kokoro-82M`**
-(Apache-2.0, CPU) is the zero-cost fallback. Narration reads the child's **verbatim redacted text**, so it adds
-no moderation surface — but note it now travels to the TTS host (same trust boundary as the image/text calls;
-ADR-015 claims no privacy guarantee).
+**There is no read-aloud narration. It is cut — ADR-058 supersedes ADR-020 in full.** No Chatterbox, no
+Kokoro fallback, no audio in Storage. This is a **real cost**, not a neutral simplification: a child reading
+below grade level loses the comprehension aid, and reading aloud is part of what makes a picture book feel
+like a book. `DECISION_BACKLOG.md:440` refused to treat the cut as free, and ADR-058 records the trade.
 
-- **Word-level highlighting is deliberately dropped.** It needs character-level timestamps (the one thing
-  ElevenLabs sells) and it is a fluency aid for *emergent* readers. This age band reads. Add it if a teacher asks.
-- ⚠️ **English-only, still.** No open expressive TTS supports Tagalog/Taglish; sentences are read with English
-  phonology. A recorded limitation — not a regression from Kokoro.
+Browser-native `speechSynthesis` was weighed as a zero-cost, zero-dependency substitute and **rejected by
+the owner on 2026-09-04** in favour of a clean cut. See ADR-058 §Alternatives before re-proposing it.
+
 - **Speech-to-text for story input** (`SpeechRecognition`) remains a possible enhancement, not MVP.
 
 Large touch targets, high contrast, and minimal on-screen text throughout the student flow.
@@ -595,7 +587,6 @@ Large touch targets, high contrast, and minimal on-screen text throughout the st
       "moderation_status": ""
     }
   ],
-  "narration": [{ "scene_id": "", "audio_ref": "" }],
   "sharing": { "teacher_approved": false, "in_gallery": false },
   "cost": { "image_count": 0, "regen_count": 0, "usd_estimate": 0 },
   "eval": { "seed": null }

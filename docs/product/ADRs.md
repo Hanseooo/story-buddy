@@ -18,14 +18,14 @@ Each ADR now lives in its own file under `docs/product/adr/`; this page is only 
 | [ADR-010](./adr/ADR-010-regeneration-policy-one-targeted-retry-best-of-fallback.md) | Regeneration policy: one targeted retry, best-of fallback | Accepted |
 | [ADR-011](./adr/ADR-011-moderation-safety-stack-four-mechanisms.md) | Moderation & safety stack (four mechanisms) | Accepted · revised 2026-07-10b |
 | [ADR-012](./adr/ADR-012-story-length-hard-cap-truncate-at-boundary-no.md) | Story length: hard cap + truncate-at-boundary (no summarization) | Accepted |
-| [ADR-013](./adr/ADR-013-caption-source-and-pdf-export.md) | Caption source and PDF export | Accepted · revised 2026-07-21 |
+| [ADR-013](./adr/ADR-013-caption-source-and-pdf-export.md) | Caption source and PDF export | Accepted · revised 2026-07-21 · **export half retired by ADR-058**; the caption decision stands |
 | [ADR-014](./adr/ADR-014-observability-provider-langsmith.md) | Observability provider: LangSmith | Accepted · amended by ADR-030 (Langfuse) |
 | [ADR-015](./adr/ADR-015-open-weight-model-mandate-what-open-source-means-here.md) | Open-weight model mandate: what "open source" means here | Accepted · hardened 2026-07-10b |
 | [ADR-016](./adr/ADR-016-no-fine-tuning-in-v1.md) | No fine-tuning in v1 | Superseded by ADR-018 |
 | [ADR-017](./adr/ADR-017-setting-teacher-managed-classroom-child-holds-an-issued.md) | Setting: teacher-managed classroom; child holds an issued account and operates the app; teacher reviews manually (auto-approve deferred) | Accepted · revised 2026-07-20 |
 | [ADR-018](./adr/ADR-018-fine-tune-the-consistency-judge-qwen2-5-vl-7b-qlora.md) | Fine-tune the consistency judge (Qwen2.5-VL-7B, QLoRA) | Accepted · supersedes ADR-016 |
 | [ADR-019](./adr/ADR-019-serving-the-fine-tuned-judge-vllm-scale-to-zero-openai.md) | Serving the fine-tuned judge: vLLM, scale-to-zero, OpenAI-compatible | Accepted · amends ADR-009 |
-| [ADR-020](./adr/ADR-020-narration-expressive-open-weight-tts-chatterbox-via.md) | Narration: expressive open-weight TTS (Chatterbox) via hosted inference; Kokoro-82M as CPU fallback | Accepted · revised 2026-07-17 |
+| [ADR-020](./adr/ADR-020-narration-expressive-open-weight-tts-chatterbox-via.md) | Narration: expressive open-weight TTS (Chatterbox) via hosted inference; Kokoro-82M as CPU fallback | ⛔ **Superseded by ADR-058** (2026-09-04) — narration cut, never built |
 | [ADR-021](./adr/ADR-021-classroom-sharing-teacher-curated-display-only-gallery.md) | Classroom sharing: teacher-curated, display-only gallery of approved storybooks | Accepted · revised 2026-07-20 |
 | [ADR-022](./adr/ADR-022-selectable-art-style-presets-three-prompt-fragment.md) | Selectable art-style presets (three, prompt-fragment based) | Accepted · amends ADR-007 |
 | [ADR-023](./adr/ADR-023-story-memory-is-the-langgraph-state-single-int.md) | Story Memory is the LangGraph state; single-int versioning; status lives in the job row | Accepted (2026-07-22) · resolves D-A |
@@ -63,3 +63,4 @@ Each ADR now lives in its own file under `docs/product/adr/`; this page is only 
 | [ADR-055](./adr/ADR-055-a-prompt-change-is-measured-by-rate-not-read-off-a-page.md) | A prompt change is measured by rate, not read off a page | Accepted (2026-09-03) · amends ADR-054 D1 and retires its Verification; extends ADR-048 (`SEGMENT_PROMPT_VERSION` 1 → 3) |
 | [ADR-056](./adr/ADR-056-numeric-attribute-fidelity-is-a-documented-limitation-not-a-pre-campaign-fix.md) | Numeric attribute fidelity is a documented limitation, not a pre-campaign fix | Accepted (2026-09-03) · narrows ADR-028's stated remedy; clarifies ADR-018 scope; extends ADR-055 D5 and D3 to the reference judge |
 | [ADR-057](./adr/ADR-057-hard-negative-coverage-is-best-effort-the-species-and-style-match-is-not.md) | Hard-negative coverage is best-effort; the species and style match is not | Accepted (2026-09-03) · removes an unpreregistered rule from `validate_hard_negative_matches`; requires a preregistration amendment |
+| [ADR-058](./adr/ADR-058-narration-and-pdf-export-are-cut-from-the-evaluated-scope.md) | Narration and PDF export are cut from the evaluated scope | Accepted (2026-09-04) · supersedes ADR-020; retires the export half of ADR-013; narrows CC-6 and the Tool A "Picture book production" row |

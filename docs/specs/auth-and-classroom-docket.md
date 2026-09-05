@@ -138,8 +138,8 @@ Already frozen. Listed so no session re-decides them.
   stands; only ADR-006's parent→kid *role model* is superseded (by ADR-017).
 - **ADR-026: a third role, `researcher`, is added here.** The `annotations` table, its RLS, and the
   `(research)/` route group are Phase 2.5 and belong to `annotation-surface`, not to this docket.
-- **ADR-013: publishing outside the container is the PDF export.** The child shares the artifact, not
-  the platform. `export-pdf` owns it.
+- ~~**ADR-013: publishing outside the container is the PDF export.**~~ **Cut — ADR-058.** Nothing
+  publishes outside the container; the classroom gallery is the whole sharing surface.
 - **`contracts/` is frozen.** `StoryMemory` already carries `classroom_id` and `profile_id`. A session
   that believes it needs a Story Memory change stops and says so (AGENTS.md "Architecture is locked");
   it does not write one.

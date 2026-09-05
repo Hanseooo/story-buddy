@@ -62,7 +62,13 @@ traces, then for each of the six functional categories below count `Successful �
 | Scene structuring | Scene Segmentation, Story Memory | Story converted to sequential scenes, Story Memory still schema-valid | per story |
 | Visual planning | Character Bible, Style Preset, Prompt Optimizer | Character refs + style + structured prompt produced, all schema-valid | per scene |
 | Scene generation & refinement | Image Generator, Consistency Judge, Regeneration | **Consistency loop ran to a terminal state and a shippable page was produced** (incl. best-of fallback) | per scene |
-| Picture book production | Compose, TTS narration, Export | Scenes assembled + narrated + exported as a complete book | per book |
+| Picture book production | Compose | Scenes assembled as a complete book | per book |
+
+**"Picture book production" narrowed 2026-09-04 (ADR-058 D4).** It read `Compose, TTS narration, Export`
+against "assembled + narrated + exported". Narration and PDF export are cut and were never built, so a rate
+reported against the old criterion would measure a product that does not exist. The category is narrowed,
+not deleted — `Compose` is real and still verified. This lands **before** any Tool A run, per
+`DECISION_BACKLOG.md:440`, which permitted the cut only with this row narrowed in the same change.
 
 **Formula:** `Success Rate = Successful ÷ Total × 100`. *(An earlier draft had this inverted, which would
 produce ≥100% — the script must not repeat that.)*

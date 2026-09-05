@@ -288,6 +288,25 @@ The teacher-facing surface is a different question with a different answer, and 
 | Child reloads the failure screen five times | Counter unchanged — presses are counted, not renders (§4.5). |
 | Two devices on the same failed job | Both offer the same action; each has its own counter. Independent presses make independent jobs, which is already true of the editor. |
 
+### 4.12 Redis is down when the book is created
+
+`POST /storybooks` writes the `queued` row first, then enqueues. If the enqueue raises, the row is
+already there and no worker is coming — the child would hold a `job_id` that never moves and never
+fails, because `run_job.py` is the only writer of `status='failed'` (§1) and it never ran.
+
+**The row is deleted and the endpoint returns `503`.** This is the same compensation as the pause
+side (`kid-flow-pause-lifecycle.md:330`): undo the one write this request made, then refuse. The two
+differ only in what that write was — an INSERT here, a CAS `UPDATE` there — so undoing it means
+removing the row rather than restoring a prior status.
+
+Deleting rather than failing the row is deliberate. A `failed` row would need a `failure_reason` from
+the ADR-038 taxonomy for a book that was never attempted, and it would surface on the bookshelf as a
+story the child could `retry` — but `retry` starts a *new* job (§4.4), so the stranded row would
+never be reused, only accumulated. The child has not seen this book, no `job_id` was returned, and
+nothing downstream ran. There is nothing to preserve.
+
+The client sees a non-success response instead of an unusable `job_id`.
+
 ## 5. Invariants
 
 1. **Three verbs, and only three.** `redraw` never leaves its job; `revise` and `retry` never touch an

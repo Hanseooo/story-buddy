@@ -257,6 +257,6 @@ Out of this row's scope (AGENTS.md *Surgical Changes*), surfaced rather than sil
   new decision, not a reinterpretation.
 - **`teacher-review-and-approval.md` §4.10** — no rejection signal, no absence badge, no
   "why isn't mine here" (§4.5). Binding.
-- **`narration`** — the gallery reader ships without a play button. TTS is that row's deliverable.
+- ~~**`narration`**~~ — **cut (ADR-058)**. The gallery reader ships without a play button, permanently.
 - **Open:** none. Pagination past 60 and any peer-reader chrome are deliberate deferrals, not
   unresolved questions.

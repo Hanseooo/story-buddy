@@ -284,7 +284,7 @@ the displayed character name.
   old sparse descriptions remain readable.
 - [ ] **CC-1 Moderation ordering** — unchanged.
 - [ ] **CC-4 Security** — no new asset, URL, table, or policy.
-- [ ] **CC-6 Accessibility** — captions/narration unchanged.
+- [ ] **CC-6 Accessibility** — captions unchanged. (Narration is cut — ADR-058.)
 - [ ] **CC-7 Reproducibility** — still unsatisfied because Fal remains unseeded. Tier-B records
   prompt versions and every attempt without claiming deterministic causality.
 - [x] **CC-8 Kid vs teacher design** — the reveal display name remains, folded morphology becomes

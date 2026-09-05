@@ -46,16 +46,23 @@ export function useJob(jobId: string): {
 } {
   // undefined = hook not yet initialized; null = SELECT returned no row
   const [row, setRow] = useState<JobRow | null | undefined>(undefined);
+  // true = the read itself failed, as opposed to succeeding with no row
+  const [readFailed, setReadFailed] = useState(false);
   const liveArrived = useRef(false);
 
   async function loadRow(force = false) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("jobs")
       .select("id, status, current_stage, failure_reason, input_text, style_preset_id, pages, reveal")
       .eq("id", jobId)
       .single();
     if (force || !liveArrived.current) {
       liveArrived.current = true;
+      // PGRST116 is `.single()` matching zero rows — the book is genuinely absent, or RLS hid it
+      // (indistinguishable by design, and both are "not yours to read"). Any other error is the
+      // read failing: a blip, a 5xx, an expired session. Telling a child their story does not
+      // exist because the network hiccuped is the bug this distinguishes.
+      setReadFailed(Boolean(error) && error?.code !== "PGRST116");
       setRow(data as JobRow | null);
     }
   }
@@ -70,6 +77,7 @@ export function useJob(jobId: string): {
         { event: "UPDATE", schema: "public", table: "jobs", filter: `id=eq.${jobId}` },
         (payload: { new: JobRow }) => {
           liveArrived.current = true;
+          setReadFailed(false);
           const newRow = payload.new;
           setRow(newRow);
           const b = classify(newRow);
@@ -89,7 +97,8 @@ export function useJob(jobId: string): {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
-  const bucket: JobBucket = row === undefined ? "in-flight" : classify(row);
+  const bucket: JobBucket =
+    row === undefined ? "in-flight" : readFailed ? "terminal-failure" : classify(row);
 
   return {
     bucket,
