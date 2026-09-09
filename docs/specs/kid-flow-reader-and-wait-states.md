@@ -330,13 +330,21 @@ The kind is selected by `failure_reason` (or the 8-value safe taxonomy in ADR-03
 
 #### 4.4.1 `child_text` (revise) — the child's own text was rejected
 
-Selected when `failure_reason` equals `child_text`. *"Some words need changing before we can make this book."* Button: **Change my words**.
+Selected when `failure_reason` equals `child_text`.
+
+The exact heading, explanation and action for every reason are
+[story failure recovery](story-failure-recovery-ux.md) §3's, implemented as
+`frontend/lib/failureCopy.ts`. This spec keeps the *selection* rule — which reason picks which
+screen — not the words. Unknown values, `machine`, and `null` fail-safe to `system_error`.
 
 Pressing it stashes `jobs.input_text` and navigates to `/write` (§4.5).
 
 #### 4.4.2 Safe retry kinds (`character_safety`, `scene_safety`, `service_busy`, `worker_stopped`, `system_error`)
 
-Renders approved reassure-and-retry copy per reason (e.g. *"One of the pictures we made couldn’t be used."*, *"The story-making service is busy right now."*, *"The story maker stopped before it finished."*, or *"Something interrupted your story."*). Button: **Make the story again** or **Try again**. Unknown values, `machine`, and `null` fail-safe to `system_error`.
+The exact heading, explanation and action for every reason are
+[story failure recovery](story-failure-recovery-ux.md) §3's, implemented as
+`frontend/lib/failureCopy.ts`. This spec keeps the *selection* rule — which reason picks which
+screen — not the words. Unknown values, `machine`, and `null` fail-safe to `system_error`.
 
 Pressing it posts `input_text` verbatim to `POST /storybooks` and navigates to the new
 `/process/[jobId]`. The button disables on press — required by `DESIGN.md` §5 anyway, and it
@@ -344,7 +352,10 @@ incidentally covers S3 §4.11's double-press case without a dedupe mechanism.
 
 #### 4.4.3 Safe limit kinds (`service_limit`, `book_limit`)
 
-Renders allowance/budget limit copy (*"The story-making allowance has run out."* or *"This book reached its picture-making limit."*) and subtext *"Ask a teacher to help."*. Omits the paid retry button and directs the child to show a teacher.
+The exact heading, explanation and action for every reason are
+[story failure recovery](story-failure-recovery-ux.md) §3's, implemented as
+`frontend/lib/failureCopy.ts`. This spec keeps the *selection* rule — which reason picks which
+screen — not the words. Unknown values, `machine`, and `null` fail-safe to `system_error`.
 
 #### 4.4.4 `not-found` — no row
 
