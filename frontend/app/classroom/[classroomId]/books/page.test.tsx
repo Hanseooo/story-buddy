@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { jobState, type Job } from "@/lib/types/jobs";
 import { FailedBookRow } from "./page";
+import BookCard from "@/components/BookCard";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -14,6 +15,7 @@ function makeJob(overrides: Partial<Job> = {}): Job {
     rejected_at: null,
     created_at: new Date().toISOString(),
     input_text: "A story",
+    title: null,
     style_preset_id: null,
     pages: [{ scene_id: "s1", caption: "Page 1", image_path: "job-1/s1.png" }],
     profile_id: "profile-1",
@@ -132,7 +134,12 @@ describe("failure_reason rendering", () => {
     render(<FailedBookRow job={makeJob({ status: "failed" })} />);
     fireEvent.click(screen.getByLabelText("Copy story reference ID"));
 
-    await waitFor(() => expect(screen.getByText("Couldn’t copy")).toBeDefined());
+    // The button's `aria-label` is its accessible name in every state, so the result has to live
+    // in a region of its own to be announced at all (spec §4).
+    await waitFor(() => {
+      const message = screen.getByText("Couldn’t copy");
+      expect(message.getAttribute("role")).toBe("status");
+    });
     expect(screen.queryByText("Copied!")).toBeNull();
     vi.unstubAllGlobals();
   });
@@ -144,6 +151,31 @@ describe("failure_reason rendering", () => {
     for (const leak of ["output_moderation_failed", "openai", "fal.ai", "sexual", "self-harm", "Traceback"]) {
       expect(container.textContent?.toLowerCase()).not.toContain(leak.toLowerCase());
     }
+  });
+
+  it("shows the book title on a pending review card", () => {
+    render(
+      <BookCard
+        job={makeJob({ title: "My Dragon Book" })}
+        thumbnailUrl={null}
+        onOpen={vi.fn()}
+      />
+    );
+    expect(screen.getByText("My Dragon Book")).toBeDefined();
+  });
+
+  it("shows the book title in a failed-book row alongside the reference", () => {
+    render(
+      <FailedBookRow
+        job={makeJob({
+          title: "My Dragon Book",
+          status: "failed",
+          failure_reason: "child_text",
+        })}
+      />
+    );
+    expect(screen.getByText("My Dragon Book")).toBeDefined();
+    expect(screen.getByText(/Ref:/)).toBeDefined();
   });
 });
 

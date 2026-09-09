@@ -1,5 +1,6 @@
 import { Job, jobState } from "@/lib/types/jobs";
 import { Avatar } from "@/components/Avatar";
+import { displayTitle } from "@/lib/displayTitle";
 
 type Props = {
   job: Job;
@@ -43,6 +44,7 @@ export default function BookCard({ job, thumbnailUrl, onOpen }: Props) {
         <Avatar avatarId={job.profiles?.avatar_id ?? null} displayNickname={name} size={32} />
         <div>
           <p className="font-bold text-foreground text-sm truncate">{name}</p>
+          <p className="text-xs text-foreground/60 truncate">{displayTitle(job.title, job.input_text)}</p>
           <p className="text-xs text-foreground/50 mt-0.5">{date}</p>
         </div>
       </div>

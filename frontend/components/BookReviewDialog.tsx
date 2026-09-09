@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { Job, ReviewDecision, jobState } from "@/lib/types/jobs";
 import { StateBadge } from "./BookCard";
 import { Avatar } from "@/components/Avatar";
+import { displayTitle } from "@/lib/displayTitle";
 
 type Props = {
   job: Job | null;
@@ -59,6 +60,9 @@ export default function BookReviewDialog({
               <Avatar avatarId={job?.profiles?.avatar_id ?? null} displayNickname={name} size={36} />
               <div>
                 <p className="font-bold text-foreground">{name}</p>
+                <p className="text-sm text-foreground/70 truncate max-w-[24ch]">
+                  {displayTitle(job.title, job.input_text)}
+                </p>
                 <p className="text-xs text-foreground/50">
                   {new Date(job.created_at).toLocaleDateString(undefined, {
                     weekday: "short",

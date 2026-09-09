@@ -9,6 +9,7 @@ import BookReviewDialog from "@/components/BookReviewDialog";
 import { StaggerGrid, StaggerItem } from "@/components/StaggerGrid";
 import { Job, ReviewDecision, jobState } from "@/lib/types/jobs";
 import { signPaths } from "@/lib/signedUrls";
+import { displayTitle } from "@/lib/displayTitle";
 
 type Tab = "pending" | "approved" | "rejected";
 
@@ -38,7 +39,7 @@ export default function BooksPage() {
     const { data } = await supabase
       .from("jobs")
       .select(
-        "id, status, failure_reason, approved_at, rejected_at, created_at, input_text, pages, profile_id, profiles(display_nickname, avatar_id)"
+        "id, status, failure_reason, approved_at, rejected_at, created_at, input_text, title, pages, profile_id, profiles(display_nickname, avatar_id)"
       )
       .eq("classroom_id", classroomId)
       .order("created_at", { ascending: false });
@@ -318,6 +319,9 @@ export default function BooksPage() {
                     Student
                   </th>
                   <th className="text-left px-6 py-3 font-bold text-foreground/60 text-xs uppercase tracking-wider">
+                    Title
+                  </th>
+                  <th className="text-left px-6 py-3 font-bold text-foreground/60 text-xs uppercase tracking-wider">
                     Submitted
                   </th>
                   <th className="text-left px-6 py-3 font-bold text-foreground/60 text-xs uppercase tracking-wider">
@@ -443,6 +447,9 @@ function BookTableRow({
           <span className="font-bold">{name}</span>
         </div>
       </td>
+      <td className="px-6 py-3 text-foreground/70 max-w-[24ch] truncate">
+        {displayTitle(job.title, job.input_text)}
+      </td>
       <td className="px-6 py-3 text-foreground/60">{date}</td>
       <td className="px-6 py-3">
         <StateBadge state={state} />
@@ -504,7 +511,10 @@ export function FailedBookRow({ job }: { job: Job }) {
   return (
     <div className="bg-surface border border-primary/10 rounded-2xl p-4">
       <div className="flex items-center justify-between gap-2 mb-2">
-        <p className="font-bold text-sm text-foreground">{name}</p>
+        <div>
+          <p className="font-bold text-sm text-foreground">{name}</p>
+          <p className="text-xs text-foreground/60">{displayTitle(job.title, job.input_text)}</p>
+        </div>
         <div className="flex items-center gap-2">
           <div className="inline-flex items-center gap-1 font-mono text-xs text-foreground/60 bg-muted/30 px-2 py-0.5 rounded">
             <span>Ref: {job.id.slice(0, 8)}</span>
@@ -514,9 +524,17 @@ export function FailedBookRow({ job }: { job: Job }) {
               onClick={handleCopy}
               className="ml-1 inline-flex items-center justify-center min-h-[44px] min-w-[44px] text-primary font-bold hover:underline"
             >
-              {copyState === "copied" ? "Copied!" : copyState === "failed" ? "Couldn’t copy" : "Copy"}
+              Copy
             </button>
           </div>
+          {/* The button's `aria-label` is its accessible name in every state, so a result swapped in
+              as its content is never announced. It goes in a region present from first render. */}
+          <p
+            role="status"
+            className={`text-xs ${copyState === "failed" ? "text-destructive" : "text-emerald-700"}`}
+          >
+            {copyState === "copied" ? "Copied!" : copyState === "failed" ? "Couldn’t copy" : ""}
+          </p>
           <p className="text-xs text-foreground/50">{date}</p>
         </div>
       </div>
