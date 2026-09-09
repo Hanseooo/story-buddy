@@ -200,6 +200,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   const selectedControlWasFocused = useRef(false);
   const lastSelectedCharId = useRef<string | null>(null);
   const submissionsDisabled = submissionState !== "idle";
+  const isRetryingCharacterChoices = submissionState === "reconciling";
 
   function toggleTrait(charId: string, attribute: string) {
     setSelectedTrait((current) => {
@@ -324,9 +325,9 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
 
   useEffect(() => {
     if (bucket !== "paused" || !row?.reveal?.characters.length) return;
+    // Initialize the per-image read state when the paused reveal becomes authoritative.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadCharacterImages(row.reveal.characters);
-    // The reveal row is the only trigger; the function is page-local and intentionally not a dependency.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bucket, row?.reveal]);
 
   // Push to /book on terminal-success. The bridge needs no teardown here: `isRedrawing` is read
@@ -624,7 +625,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                 <button
                   type="button"
                   onClick={() => void retryCharacterChoices()}
-                  disabled={submissionState === "reconciling"}
+                  disabled={isRetryingCharacterChoices}
                   className="min-h-[44px] rounded-xl bg-[var(--color-surface)] px-4 py-2 font-bold text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary disabled:opacity-50"
                 >
                   Load character choices again

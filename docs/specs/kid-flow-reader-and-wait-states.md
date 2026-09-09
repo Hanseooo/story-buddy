@@ -253,40 +253,14 @@ taps_left}` is rendered **as-is**. The screen signs `image_path` at read time an
 chips, recompute `taps_left`, or read graph state. At most two characters exist (ADR-004): side by
 side in landscape and on desktop, stacked in portrait.
 
-Per character: the reference image, the name (*"Meet Luna!"*), and its chips as tappable pills.
+Per character: the reference image, the name, and the worker-provided chips. The interaction,
+copy, selection, shared allowance, image-read recovery, pending, stale, keyboard, and focus rules
+are amended by [Understandable character redraws](character-review-ux.md). That spec keeps this
+document's route, projection, endpoint, server cap, moderation order, and `refetch()` mechanics.
 
-**A chip tap submits immediately.** `POST /jobs/{id}/confirm {action:"try_again", char_id,
-attribute}` fires on tap — no selection state, no second confirm step. One tap, one thing happens,
-which is the model a Grade-5 reader can hold. The cost is real and is accepted: an accidental tap
-spends one of three draws and there is no undo.
-
-**One confirm button, one label: *"Use this one!"*** The docket requires that label at
-`taps_left == 0` so the button never dead-ends. Nothing requires a different label above zero, and
-using it always deletes a branch from the screen that can least afford one. It sends
-`{action:"confirm"}` (`main.py:53-56`).
-
-**At `taps_left == 0` the chips are not rendered at all** — not disabled. A disabled chip is a
-dead-end button wearing a hint.
-
-**The redraw must not bounce through the stepper.** The CAS in `confirm_job` flips `status` to
-`queued`, so the bucket becomes `in-flight` and the four-step stepper would replace the reveal for
-the duration of one redraw, then hand back. A `justConfirmed` ref is set on press and cleared when
-the status returns to `awaiting_confirm` or goes terminal; while it is set, `in-flight` renders a
-reveal-local *"Drawing it again…"* state instead of the stepper. A page reload during the redraw
-loses the ref and shows the stepper — acceptable and honest, because the job really is running.
-
-**Every confirm response calls `refetch()`** before the screen re-renders (§3.3).
-
-**A `200` carrying a status other than `queued`** — S2 constraint 11's duplicate / late / swept /
-finished path — is not an error and shows no error. The row is refetched and the bucket re-classified;
-whatever the job actually is now, that is what renders.
-
-**A reveal image that will not sign.** Re-sign once. If the second attempt also fails, render the
-reveal **without images**, with the character names and the single *"Use this one!"* button. This is
-deliberately *not* a failure screen: the job is not failed, the pause is live, and offering `retry`
-would abandon a resumable job to the sweeper and bill a whole new book. A bare confirm costs nothing,
-un-sticks the job, and gets the child a book. S3 §4.7's re-sign rule was scoped to the reader; this
-extends the same posture to the pause.
+Every confirm response still calls `refetch()` (§3.3). A `200` carrying a status other than
+`queued` remains a successful idempotent response: the refreshed row is authoritative and the
+screen follows its current bucket.
 
 ### 4.3 `terminal-success` — the reader (`/book/[jobId]`)
 
@@ -520,11 +494,11 @@ Frontend, Vitest, every Supabase call mocked (`AGENTS.md` testing bright line).
 **This spec's own additions:**
 
 - A paused row at `/process/[jobId]` with no subsequent UPDATE renders the reveal from the seed.
-- A chip tap POSTs `{action:"try_again", char_id, attribute}` and calls `refetch()`.
-- At `taps_left == 0` no chip is rendered and *"Use this one!"* posts `{action:"confirm"}`.
-- A confirm returning `200` with a non-`queued` status shows no error.
-- While `justConfirmed` is set, an `in-flight` row renders *"Drawing it again…"*, not the stepper.
-- A reveal whose paths fail to sign twice still renders the confirm button.
+- Character review follows `character-review-ux.md` §7; selecting is local, explicit redraw and
+  continue preserve the S2 confirm payloads, and every submission reconciles through `refetch()`.
+- A confirm returning `200` with a non-`queued` status shows no error and follows the refreshed row.
+- During an accepted redraw, local context names the character; after refresh, generic progress is used.
+- Reveal image signing/loading failure follows the inline read-retry rules in `character-review-ux.md` §4.
 - `current_stage = "generate_scene:3/8"` highlights step 3 and reads *Drawing picture 3 of 8*; an
   unrecognised value highlights nothing and does not throw.
 - The stall line appears after the threshold and disappears on the next UPDATE.
@@ -646,18 +620,15 @@ on `job-failure-reason` (§3.2 — S4 no longer waits on `0006`).
 - **Portrait reading gives the image less room** than the forced-landscape reader `USER_FLOW.md` §4.7
   imagined (§4.3). Accepted in exchange for a reader that has no unreachable state. If child testing
   shows portrait reading is genuinely worse, the fix is a *dismissible* rotate hint, never a wall.
-- **An accidental chip tap costs one of three draws with no undo** (§4.2). Accepted for the one-tap
-  mental model. If testing shows accidental taps are common, the fix is a select-then-confirm step,
-  which is additive.
-
 ## 13. Definition of done
 
 1. `classify` exists as a pure exported function and its table test covers every branch in §3.4.
 2. `/process/[jobId]` and `/book/[jobId]` both seed-then-subscribe and both render all four buckets.
 3. Both of S3 §7's regression tests are green: `failed` at `/book` is not a wait state, and `failed`
    at `/process` with no further UPDATE is not a blank screen.
-4. The reveal renders S2's projection, taps submit, `taps_left == 0` renders no chips and a working
-   *"Use this one!"*, and every confirm refetches.
+4. The reveal renders S2's projection and satisfies `character-review-ux.md`: selection is free,
+   redraw is explicit, the allowance is book-wide, continue preserves its payload, image failures
+   are recoverable, and stale local state never overrides the refreshed row.
 5. The stepper advances through all four steps on a real multi-scene run, with a real `k / N`.
 6. `_run_with_progress` is proven to hand `_finish` the same result `invoke()` did, on both paths.
 7. `pnpm lint && pnpm test` green, `uv run ruff check . && uv run pytest` green.
