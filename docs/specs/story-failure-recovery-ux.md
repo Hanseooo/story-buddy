@@ -1,7 +1,8 @@
 # Feature Spec — Specific, safe story failure recovery
 
-**Status:** §3's copy table implemented 2026-09-09 with story-only wording; §4, §5 and §6 are
-unchanged as written. Product direction approved 2026-09-09.
+**Status:** §3 (child copy and the whole-book consequence) and §6 (announcements, focus, copy
+honesty) implemented 2026-09-09; §4's image-read recovery and §5 are unchanged as written.
+Product direction approved 2026-09-09.
 **Owner:** existing child failure screens and teacher failed-book cards.
 **Derived from:** [failure diagnostics](failure-diagnostics.md),
 [failure semantics](kid-flow-failure-semantics.md),
