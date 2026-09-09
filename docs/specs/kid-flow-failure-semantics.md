@@ -70,7 +70,7 @@ Every state a child can observe that is not a success, and the one action each o
 | **Worker stopped / timed out (`worker_stopped`)** | `failed`, RQ process crash or job deadline | `retry` | yes |
 | **Unclassified system error (`system_error`)** | `failed`, unknown exception, legacy, or null | `retry` | yes |
 | A swept pause | the terminal value `data-deletion` picks — **not** `failed` | `retry`, distinct copy (S2 constraint 15) | no |
-| A complete book whose images will not sign | `complete` | **re-sign**; second failure → `retry` (§4.7) | no |
+| A complete book whose images will not sign | `complete` | **re-sign**; second failure → read-failure screen, whose action is another re-sign (§4.7) | no |
 | Unknown or stale job UUID | no row — the read `404`s | **none** — no text to resubmit; navigate out | no |
 
 **Never reaches the child**, named so S4 does not design screens for them:
@@ -224,8 +224,11 @@ is the correct-cost fix, because signing failures are transient — an expired U
 network blip, a Storage hiccup — and the book already exists. Offering `retry` here would redraw an
 entire N-page book to repair an expired link, which is real money against ADR-025's cost posture.
 
-**If the re-sign also fails, fall through to the machine screen** and its `retry`. At that point the
-objects are plausibly gone rather than unsigned, and a rebuild is the only remaining answer.
+**If the re-sign also fails, the child gets the read-failure screen, whose action is another
+re-sign.** The objects may be gone rather than unsigned, but a rebuild is a paid answer to a read
+question and the book on disk is real, so the screen names the read problem and offers the free
+retry plus the route back to the bookshelf
+([story failure recovery](story-failure-recovery-ux.md) §4).
 
 The re-sign is a third action that sits outside the two-verb vocabulary. That is deliberate and
 bounded: it applies to exactly one state, it costs nothing, and it never creates a job. Whether it is

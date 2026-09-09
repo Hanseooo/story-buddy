@@ -316,9 +316,11 @@ is the verbatim story text (ADR-013), so it is the correct accessible name for t
 fails the whole read (S1 constraint 7, ADR-025 — no page-shaped holes). **The failure is retried once
 automatically, with no button.** A signing failure is transient by nature — an expired URL, a network
 blip — and S3 §4.7 forbids offering `retry` here, because redrawing an N-page book to repair an
-expired link is real money. If the second attempt also fails, fall through to the machine failure
-screen, and **that press does not increment the chain counter** (§4.5): a signing failure is not a
-failed story.
+expired link is real money. If the second attempt also fails, the reader shows the **read-failure screen**
+(`FailureScreen kind="read-failed"`): it names the read problem, offers a third re-sign as its
+primary action, and creates no job. A rebuild is never offered here — it would redraw an N-page
+book to repair an expired link ([story failure recovery](story-failure-recovery-ux.md) §4).
+Nothing on this screen increments the chain counter (§4.5): a signing failure is not a failed story.
 
 ### 4.4 `terminal-failure` and `not-found` — the failure screens
 

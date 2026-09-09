@@ -283,6 +283,11 @@ story was stopped must not be invisible to the adult responsible for them, which
 | `book_limit` | The job reached its paid-image circuit breaker. | Nothing |
 | `system_error` (**or null, legacy `machine`, or unknown**) | The job ended because of an unclassified system error. | Nothing |
 
+The child-facing wording for these same reasons is
+[story failure recovery](story-failure-recovery-ux.md) §3's, implemented as
+`frontend/lib/failureCopy.ts`. The teacher label changes only when `story-titles.md` ships
+(that spec's §5), and there is no title column yet.
+
 **The fail-safe default is preserved across the audience change.** `system_error` is the fallback label for any unclassified or unknown failure reason. A new enum value can never accidentally tell a teacher that a child wrote something wrong. CC-8's "the teacher-facing view is deliberately a different answer" means *more* than the child is told, not *differently safe*.
 
 **Never rendered:** a moderation category, a flagged span, or `jobs.error`. This is not only policy —
