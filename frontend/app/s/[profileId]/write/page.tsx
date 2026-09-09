@@ -60,7 +60,6 @@ export default function WriteStoryPage() {
     if (prefill !== null) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setText(prefill.text);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTitle(prefill.title);
       try {
         setChainCount(Number(sessionStorage.getItem(CHAIN_KEY) ?? 0));
