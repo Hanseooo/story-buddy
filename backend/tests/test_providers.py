@@ -625,6 +625,61 @@ def test_a_call_that_answers_is_untouched_by_the_bound():
 
 # --- redact_pii ---
 
+def test_check_text_safe_no_redaction_needed():
+    with patch("providers.classify_text_primary", return_value=(True, [])), \
+         patch("providers.classify_text_backstop", return_value=(True, [])), \
+         patch("providers.redact_pii", return_value="My Dragon Book"):
+        safe, categories, redacted = providers.check_text("My Dragon Book")
+    assert safe is True
+    assert categories == []
+    assert redacted == "My Dragon Book"
+
+
+def test_check_text_primary_flagged_skips_backstop():
+    with patch("providers.classify_text_primary", return_value=(False, ["violence"])) as primary, \
+         patch("providers.classify_text_backstop") as backstop, \
+         patch("providers.redact_pii", return_value="text"):
+        safe, categories, redacted = providers.check_text("text")
+    assert safe is False
+    assert categories == ["violence"]
+    primary.assert_called_once()
+    backstop.assert_not_called()
+
+
+def test_check_text_primary_errors_falls_back_to_backstop():
+    with patch("providers.classify_text_primary", side_effect=RuntimeError("oom")), \
+         patch("providers.classify_text_backstop", return_value=(True, [])), \
+         patch("providers.redact_pii", return_value="text"):
+        safe, categories, redacted = providers.check_text("text")
+    assert safe is True
+    assert categories == []
+
+
+def test_check_text_backstop_flagged():
+    with patch("providers.classify_text_primary", return_value=(True, [])), \
+         patch("providers.classify_text_backstop", return_value=(False, ["self_harm"])), \
+         patch("providers.redact_pii", return_value="text"):
+        safe, categories, redacted = providers.check_text("text")
+    assert safe is False
+    assert categories == ["self_harm"]
+
+
+def test_check_text_backstop_errors_hard_fails():
+    with patch("providers.classify_text_primary", return_value=(True, [])), \
+         patch("providers.classify_text_backstop", side_effect=RuntimeError("down")), \
+         patch("providers.redact_pii", return_value="text"):
+        safe, categories, redacted = providers.check_text("text")
+    assert safe is False
+    assert categories == ["moderation_error"]
+
+
+def test_check_text_returns_redacted_text_even_when_safe():
+    with patch("providers.classify_text_primary", return_value=(True, [])), \
+         patch("providers.classify_text_backstop", return_value=(True, [])), \
+         patch("providers.redact_pii", return_value="call me at <PH_MOBILE>"):
+        safe, categories, redacted = providers.check_text("call me at 09171234567")
+    assert redacted == "call me at <PH_MOBILE>"
+
 def test_redact_pii_returns_string():
     """Smoke test: redact_pii returns a string (real Presidio is an integration concern)."""
     with patch("providers._presidio", return_value=(MagicMock(analyze=lambda **kw: []), MagicMock(anonymize=lambda **kw: MagicMock(text="clean text")))):

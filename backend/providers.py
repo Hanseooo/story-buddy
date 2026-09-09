@@ -695,6 +695,45 @@ def redact_pii(text: str) -> str:
     ).text
 
 
+def check_text(text: str) -> tuple[bool, list[str], str]:
+    """Primary-then-backstop moderation plus PII redaction, on any text.
+
+    This is the sequential, short-text variant of the input gate used for synchronous
+    submission checks. It returns the redacted text on every path so callers can explain
+    privacy replacements before persistence.
+    """
+    try:
+        primary_safe, categories = classify_text_primary(text)
+    except Exception as exc:
+        _log.warning(
+            "check_text: primary classifier failed (%s) — falling back to backstop",
+            type(exc).__name__,
+        )
+        primary_safe = None
+        categories = []
+
+    redacted = redact_pii(text)
+
+    if primary_safe is False:
+        _log.info("check_text: primary flagged (categories=%s)", categories)
+        return False, categories, redacted
+
+    try:
+        backstop_safe, backstop_categories = classify_text_backstop(text)
+    except Exception as exc:
+        _log.error(
+            "check_text: backstop error — hard fail per ADR-025 (%s)",
+            type(exc).__name__,
+        )
+        return False, ["moderation_error"], redacted
+
+    if not backstop_safe:
+        _log.info("check_text: backstop flagged (categories=%s)", backstop_categories)
+        return False, backstop_categories, redacted
+
+    return True, [], redacted
+
+
 # ADR-032: Local Qwen3Guard removed to prevent OOM.
 
 
