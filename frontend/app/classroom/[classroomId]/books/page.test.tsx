@@ -125,6 +125,18 @@ describe("failure_reason rendering", () => {
     vi.unstubAllGlobals();
   });
 
+  it("says so when the copy fails, and never claims success", async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error("denied"));
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+
+    render(<FailedBookRow job={makeJob({ status: "failed" })} />);
+    fireEvent.click(screen.getByLabelText("Copy story reference ID"));
+
+    await waitFor(() => expect(screen.getByText("Couldn’t copy")).toBeDefined());
+    expect(screen.queryByText("Copied!")).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
   it("never leaks a raw diagnostic, provider name, or moderation category", () => {
     const { container } = render(
       <FailedBookRow job={makeJob({ status: "failed", failure_reason: "scene_safety" })} />

@@ -460,7 +460,7 @@ function BookTableRow({
 }
 
 export function FailedBookRow({ job }: { job: Job }) {
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const name = job.profiles?.display_nickname ?? "Unknown";
   const date = new Date(job.created_at).toLocaleDateString(undefined, {
     month: "short",
@@ -488,12 +488,17 @@ export function FailedBookRow({ job }: { job: Job }) {
     }
   };
 
-  const handleCopy = () => {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(job.id);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+  // Awaited: an unawaited write reported success for a denied clipboard permission, and the
+  // reference is the teacher's only handle on a failed job (story-failure-recovery-ux §4).
+  const handleCopy = async () => {
+    try {
+      if (typeof navigator === "undefined" || !navigator.clipboard) throw new Error("clipboard unavailable");
+      await navigator.clipboard.writeText(job.id);
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
     }
+    window.setTimeout(() => setCopyState("idle"), 4000);
   };
 
   return (
@@ -509,7 +514,7 @@ export function FailedBookRow({ job }: { job: Job }) {
               onClick={handleCopy}
               className="ml-1 inline-flex items-center justify-center min-h-[44px] min-w-[44px] text-primary font-bold hover:underline"
             >
-              {copied ? "Copied!" : "Copy"}
+              {copyState === "copied" ? "Copied!" : copyState === "failed" ? "Couldn’t copy" : "Copy"}
             </button>
           </div>
           <p className="text-xs text-foreground/50">{date}</p>
