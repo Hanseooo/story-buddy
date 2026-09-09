@@ -43,7 +43,7 @@ export function classify(row: JobRow | null): JobBucket {
 export function useJob(jobId: string): {
   bucket: JobBucket;
   row: JobRow | null;
-  refetch: () => Promise<void>;
+  refetch: () => Promise<boolean>;
 } {
   // undefined = hook not yet initialized; null = SELECT returned no row
   const [row, setRow] = useState<JobRow | null | undefined>(undefined);
@@ -51,12 +51,14 @@ export function useJob(jobId: string): {
   const [readFailed, setReadFailed] = useState(false);
   const liveArrived = useRef(false);
 
-  async function loadRow(force = false) {
+  async function loadRow(force = false): Promise<boolean> {
     const { data, error } = await supabase
       .from("jobs")
       .select("id, status, current_stage, failure_reason, input_text, title, style_preset_id, pages, reveal")
       .eq("id", jobId)
       .single();
+    const hasRow = data !== null && data !== undefined;
+    if (force && (error || !hasRow)) return false;
     if (force || !liveArrived.current) {
       liveArrived.current = true;
       // PGRST116 is `.single()` matching zero rows — the book is genuinely absent, or RLS hid it
@@ -66,6 +68,7 @@ export function useJob(jobId: string): {
       setReadFailed(Boolean(error) && error?.code !== "PGRST116");
       setRow(data as JobRow | null);
     }
+    return !error && hasRow;
   }
 
   useEffect(() => {

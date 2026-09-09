@@ -173,4 +173,51 @@ describe("useJob", () => {
 
     expect(result.current.bucket).toBe("terminal-success");
   });
+
+  it("refetch returns true after a successful forced row read", async () => {
+    const paused = {
+      ...RUNNING,
+      status: "awaiting_confirm",
+      current_stage: "reveal",
+      reveal: {
+        characters: [{ char_id: "c0", name: "Kiko", image_path: "j1/ref-c0.png", chips: ["orange sock"] }],
+        taps_left: 2,
+      },
+    } satisfies JobRow;
+    mockSingle
+      .mockResolvedValueOnce({ data: RUNNING, error: null })
+      .mockResolvedValueOnce({ data: paused, error: null });
+    const { result } = renderHook(() => useJob("j1"));
+    await waitFor(() => expect(result.current.row).toEqual(RUNNING));
+
+    let refreshed = false;
+    await act(async () => { refreshed = await result.current.refetch(); });
+
+    expect(refreshed).toBe(true);
+    expect(result.current.row).toEqual(paused);
+  });
+
+  it("refetch returns false after a failed forced row read", async () => {
+    const paused = {
+      ...RUNNING,
+      status: "awaiting_confirm",
+      current_stage: "reveal",
+      reveal: {
+        characters: [{ char_id: "c0", name: "Kiko", image_path: "j1/ref-c0.png", chips: ["orange sock"] }],
+        taps_left: 2,
+      },
+    } satisfies JobRow;
+    mockSingle
+      .mockResolvedValueOnce({ data: paused, error: null })
+      .mockResolvedValueOnce({ data: null, error: { code: "503", message: "unavailable" } });
+    const { result } = renderHook(() => useJob("j1"));
+    await waitFor(() => expect(result.current.bucket).toBe("paused"));
+
+    let refreshed = true;
+    await act(async () => { refreshed = await result.current.refetch(); });
+
+    expect(refreshed).toBe(false);
+    expect(result.current.bucket).toBe("paused");
+    expect(result.current.row).toEqual(paused);
+  });
 });
