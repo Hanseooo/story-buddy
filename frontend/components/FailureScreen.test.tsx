@@ -136,7 +136,7 @@ describe("FailureScreen — kind=revise", () => {
     fireEvent.click(screen.getByRole("button", { name: /change my words/i }));
     expect(JSON.parse(sessionStorage.getItem("sb.prefill") as string)).toEqual({
       text: "A story about a dog.",
-      title: null,
+      title: "A story about a dog.",
     });
     expect(pushMock).toHaveBeenCalledWith("/s/prof-123/write");
   });
@@ -266,6 +266,27 @@ describe("FailureScreen — kind=retry", () => {
       text: "Once upon a time",
       title: "My Dragon Book",
     });
+  });
+
+  it("prefills the legacy excerpt as an editable title suggestion", () => {
+    render(
+      <FailureScreen
+        kind="revise"
+        jobId="j1"
+        inputText="A brave knight went on an adventure"
+        title={null}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /change my words/i }));
+    const stored = JSON.parse(sessionStorage.getItem("sb.prefill") as string);
+    expect(stored.title).toBe("A brave knight went on an adventure");
+  });
+
+  it("keeps an empty legacy title blank instead of prefilling Untitled", () => {
+    render(<FailureScreen kind="revise" inputText="" title={null} />);
+    fireEvent.click(screen.getByRole("button", { name: /change my words/i }));
+    const stored = JSON.parse(sessionStorage.getItem("sb.prefill") as string);
+    expect(stored.title).toBe("");
   });
 });
 

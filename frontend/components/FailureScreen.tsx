@@ -381,8 +381,11 @@ export default function FailureScreen({
   const handleRevise = () => {
     const count = countable ? bumpChain() : chainCount;
     console.log("sb:action", { action: "revise", kind, chain_count: count });
+    const suggestedTitle = title && title.trim() !== ""
+      ? title
+      : inputText.split("\n")[0].slice(0, 60);
     try {
-      sessionStorage.setItem(PREFILL_KEY, JSON.stringify({ text: inputText, title }));
+      sessionStorage.setItem(PREFILL_KEY, JSON.stringify({ text: inputText, title: suggestedTitle }));
     } catch { /* unavailable */ }
     router.push(profileId ? `/s/${profileId}/write` : "/write");
   };
