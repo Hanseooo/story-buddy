@@ -22,6 +22,7 @@ const SWEPT_STATUS = "__swept__";
 type StepperStep = 1 | 2 | 3 | 4;
 type SelectedTrait = { charId: string; attribute: string } | null;
 type SubmissionState = "idle" | "sending" | "reconciling" | "unknown";
+type CharacterImageState = "signing" | "loading" | "loaded" | "error";
 
 function getStep(stage: string | null): StepperStep | null {
   if (!stage) return null;
@@ -249,26 +250,54 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
     };
   }, [bucket, row?.current_stage]);
 
-  // Reveal character image signing
+  // Reveal character image signing and browser-read state
   const [signedCharUrls, setSignedCharUrls] = useState<Record<string, string>>({});
+  const [characterImageState, setCharacterImageState] = useState<Record<string, CharacterImageState>>({});
+
+  async function loadCharacterImages(characters: NonNullable<JobRow["reveal"]>["characters"]) {
+    setSignedCharUrls((current) => {
+      const next = { ...current };
+      characters.forEach((character) => delete next[character.char_id]);
+      return next;
+    });
+    setCharacterImageState((current) => ({
+      ...current,
+      ...Object.fromEntries(characters.map((character) => [character.char_id, "signing"])),
+    }));
+
+    const paths = characters.map((character) => character.image_path);
+    let signed: Record<string, string> = {};
+    for (let attempt = 0; attempt < 2 && Object.keys(signed).length === 0; attempt += 1) {
+      try {
+        signed = await signPaths(paths);
+      } catch {
+        signed = {};
+      }
+    }
+
+    const urls: Record<string, string> = {};
+    const states: Record<string, CharacterImageState> = {};
+    for (const character of characters) {
+      const url = signed[character.image_path];
+      if (url) urls[character.char_id] = url;
+      states[character.char_id] = url ? "loading" : "error";
+    }
+    setSignedCharUrls((current) => {
+      const next = { ...current };
+      characters.forEach((character) => {
+        if (urls[character.char_id]) next[character.char_id] = urls[character.char_id];
+        else delete next[character.char_id];
+      });
+      return next;
+    });
+    setCharacterImageState((current) => ({ ...current, ...states }));
+  }
+
   useEffect(() => {
     if (bucket !== "paused" || !row?.reveal?.characters.length) return;
-    const characters = row.reveal.characters;
-    const paths = characters.map(c => c.image_path);
-    function sign(attempt: number) {
-      signPaths(paths).then((signed) => {
-        const map: Record<string, string> = {};
-        characters.forEach((c) => {
-          if (signed[c.image_path]) map[c.char_id] = signed[c.image_path];
-        });
-        if (Object.keys(map).length === 0) {
-          if (attempt < 2) sign(attempt + 1);
-          return; // render without images (spec §4.2)
-        }
-        setSignedCharUrls(map);
-      });
-    }
-    sign(1);
+    void loadCharacterImages(row.reveal.characters);
+    // The reveal row is the only trigger; the function is page-local and intentionally not a dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bucket, row?.reveal]);
 
   // Push to /book on terminal-success. The bridge needs no teardown here: `isRedrawing` is read
@@ -371,6 +400,9 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
 
   if (bucket === "paused" && row?.reveal) {
     const { characters, taps_left } = row.reveal;
+    const allRequiredImagesLoaded = characters.length > 0 && characters.every(
+      (character) => characterImageState[character.char_id] === "loaded"
+    );
     return (
       <div className="w-full flex-1 min-h-[calc(100dvh-5rem)] flex flex-col justify-center items-center p-6 max-w-5xl mx-auto">
         <div className="w-full flex justify-start mb-4 z-20">
@@ -441,16 +473,35 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
               }}
               className="flex flex-col items-center gap-4 neo-border bg-[var(--color-surface)] rounded-[24px] p-5 shadow-[0_10px_28px_rgba(49,85,217,0.12)] hover:-translate-y-1 transition-transform max-w-xs w-full"
             >
-              {signedCharUrls[c.char_id] ? (
+              {characterImageState[c.char_id] === "error" ? (
+                <div role="alert" className="flex aspect-square w-full flex-col items-center justify-center gap-3 rounded-[16px] bg-[var(--color-muted)] p-4 text-center font-kid">
+                  <p>We couldn&apos;t load {c.name}&apos;s picture.</p>
+                  <button
+                    type="button"
+                    className="min-h-[44px] rounded-xl bg-[var(--color-surface)] px-4 py-2 font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary"
+                    onClick={() => void loadCharacterImages([c])}
+                  >
+                    Try loading {c.name}&apos;s picture again
+                  </button>
+                </div>
+              ) : signedCharUrls[c.char_id] ? (
                 <img
                   src={signedCharUrls[c.char_id]}
                   alt={c.name}
                   className="w-full aspect-square object-cover rounded-[16px] bg-[var(--color-muted)]"
+                  onLoad={() => setCharacterImageState((current) => ({ ...current, [c.char_id]: "loaded" }))}
+                  onError={() => setCharacterImageState((current) => ({ ...current, [c.char_id]: "error" }))}
                 />
               ) : (
                 <div className="w-full aspect-square rounded-[16px] bg-[var(--color-muted)] animate-pulse" />
               )}
               <p className="font-display text-2xl text-foreground mt-2">{c.name}</p>
+
+              {c.chips.length === 0 && (
+                <p className="w-full text-center font-kid text-sm text-foreground/70">
+                  No suggested changes are available for this character.
+                </p>
+              )}
               
               <div className="flex flex-wrap justify-center gap-2 mt-2 w-full">
                 {taps_left > 0 && c.chips.map(chip => {
@@ -460,7 +511,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                       key={chip}
                       type="button"
                       aria-pressed={selected}
-                      disabled={submissionsDisabled}
+                      disabled={submissionsDisabled || characterImageState[c.char_id] !== "loaded"}
                       onClick={() => toggleTrait(c.char_id, chip)}
                       className={`min-h-[44px] max-w-full rounded-full border px-4 py-2 font-kid text-sm text-foreground transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary disabled:opacity-50 ${
                         selected
@@ -483,7 +534,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"
-                      disabled={submissionsDisabled}
+                      disabled={submissionsDisabled || characterImageState[c.char_id] !== "loaded"}
                       onClick={() => {
                         setPendingRedrawName(c.name);
                         void handleConfirm("try_again", c.char_id, selectedTrait.attribute);
@@ -511,7 +562,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
           <p className="font-kid text-sm text-foreground/70">Continue with the pictures shown.</p>
           <button
             type="button"
-            disabled={submissionsDisabled}
+            disabled={submissionsDisabled || !allRequiredImagesLoaded}
             onClick={() => {
               setSelectedTrait(null);
               setPendingRedrawName(null);

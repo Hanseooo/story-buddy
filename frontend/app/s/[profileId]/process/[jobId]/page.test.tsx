@@ -47,7 +47,10 @@ beforeEach(() => {
   replaceMock.mockClear();
   mockUseJob.mockReset();
   mockCreateSignedUrls.mockReset();
-  mockCreateSignedUrls.mockResolvedValue({ data: null, error: null });
+  mockCreateSignedUrls.mockImplementation(async (paths: string[]) => ({
+    data: paths.map((path) => ({ path, signedUrl: `http://example.com/${path.split("/").pop()}` })),
+    error: null,
+  }));
   global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 }) as unknown as typeof fetch;
 });
 
@@ -73,6 +76,19 @@ async function renderPage(paramsPromise: Promise<{ profileId: string; jobId: str
     res = render(<ProcessingPage params={paramsPromise} />);
   });
   return res!;
+}
+
+async function loadVisibleImages() {
+  const images = await screen.findAllByRole("img");
+  await act(async () => {
+    images.forEach((image) => fireEvent.load(image));
+  });
+}
+
+async function renderPausedPage(paramsPromise = makeParams("j1")) {
+  const view = await renderPage(paramsPromise);
+  await loadVisibleImages();
+  return view;
 }
 
 const RUNNING_ROW = {
@@ -195,7 +211,7 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
       reveal: { ...PAUSED_ROW.reveal!, taps_left: 0 },
     };
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: zeroTaps }));
-    await renderPage(makeParams("j1"));
+    await renderPausedPage();
     await waitFor(() => expect(screen.getByRole("button", { name: "Use these characters" })).toBeDefined());
     expect(screen.queryByText("orange sock")).toBeNull();
   });
@@ -209,7 +225,7 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
       bucket: "paused",
       row: { ...PAUSED_ROW, reveal: { ...PAUSED_ROW.reveal!, taps_left: tapsLeft } },
     }));
-    await renderPage(makeParams("j1"));
+    await renderPausedPage();
 
     expect(screen.getByText(copy)).toBeDefined();
     expect(screen.getByText("Shared by all your characters.")).toBeDefined();
@@ -220,7 +236,7 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
       bucket: "paused",
       row: { ...PAUSED_ROW, reveal: { ...PAUSED_ROW.reveal!, taps_left: 0 } },
     }));
-    await renderPage(makeParams("j1"));
+    await renderPausedPage();
 
     expect(screen.getByText(
       "No redraws left for this book. You can use these characters or go back to your bookshelf."
@@ -236,7 +252,7 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
       new Promise<Response>((resolve) => { resolveFetch = resolve; })
     ) as unknown as typeof fetch;
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
-    await renderPage(makeParams("j1"));
+    await renderPausedPage();
 
     const trait = await screen.findByRole("button", { name: "orange sock" });
     fireEvent.click(trait);
@@ -277,7 +293,7 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
       },
     };
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: twoCharacters }));
-    await renderPage(makeParams("j1"));
+    await renderPausedPage();
 
     const sock = screen.getByRole("button", { name: "orange sock" });
     const hat = screen.getByRole("button", { name: "blue hat" });
@@ -302,7 +318,7 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
 
   it("Use these characters POSTs confirm action and calls refetch", async () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
-    await renderPage(makeParams("j1"));
+    await renderPausedPage();
     await waitFor(() => expect(screen.getByRole("button", { name: "Use these characters" })).toBeDefined());
 
     await act(async () => {
@@ -322,7 +338,7 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     // was stranded on the pause screen with no way forward. /storybooks, /me/avatar, /classrooms
     // and /jobs/{id}/review all attach the session token; this call was the only one that didn't.
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
-    await renderPage(makeParams("j1"));
+    await renderPausedPage();
     await waitFor(() => expect(screen.getByRole("button", { name: "Use these characters" })).toBeDefined());
 
     await act(async () => {
@@ -345,7 +361,7 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
 
     const paramsPromise = makeParams("j1");
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
-    const view = await renderPage(paramsPromise);
+    const view = await renderPausedPage(paramsPromise);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Use these characters" })).toBeDefined());
 
@@ -380,7 +396,7 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
 
     const paramsPromise = makeParams("j1");
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
-    const view = await renderPage(paramsPromise);
+    const view = await renderPausedPage(paramsPromise);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Use these characters" })).toBeDefined());
     fireEvent.click(screen.getByRole("button", { name: "orange sock" }));
@@ -403,7 +419,7 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
   it("confirm returning 200 with non-queued status shows no error — refetch reclassifies", async () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 }) as unknown as typeof fetch;
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
-    await renderPage(makeParams("j1"));
+    await renderPausedPage();
     await waitFor(() => expect(screen.getByRole("button", { name: "Use these characters" })).toBeDefined());
 
     await act(async () => {
@@ -417,7 +433,7 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
   it("clears selection when the authoritative reveal changes", async () => {
     const paramsPromise = makeParams("j1");
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
-    const view = await renderPage(paramsPromise);
+    const view = await renderPausedPage(paramsPromise);
     fireEvent.click(await screen.findByRole("button", { name: "orange sock" }));
 
     const updated = {
@@ -446,7 +462,7 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     });
     mockUseJob.mockImplementation(() => ({ ...current, refetch: reconcile }));
     global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 409 }) as unknown as typeof fetch;
-    const view = await renderPage(paramsPromise);
+    const view = await renderPausedPage(paramsPromise);
 
     fireEvent.click(await screen.findByRole("button", { name: "orange sock" }));
     fireEvent.click(screen.getByRole("button", { name: "Redraw Kiko" }));
@@ -462,7 +478,7 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     const reconcile = vi.fn().mockResolvedValue(false);
     mockUseJob.mockReturnValue({ ...jobState({ bucket: "paused", row: PAUSED_ROW }), refetch: reconcile });
     global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 503 }) as unknown as typeof fetch;
-    await renderPage(makeParams("j1"));
+    await renderPausedPage();
 
     fireEvent.click(await screen.findByRole("button", { name: "orange sock" }));
     fireEvent.click(screen.getByRole("button", { name: "Redraw Kiko" }));
@@ -476,14 +492,54 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("reveal signing fails twice — still renders Use these characters (spec §7, not a failure screen)", async () => {
-    mockCreateSignedUrls.mockResolvedValue({ data: null, error: new Error("net") });
+  it("blocks continue after signing failure and retries the read without posting", async () => {
+    mockCreateSignedUrls
+      .mockResolvedValueOnce({ data: null, error: new Error("net") })
+      .mockResolvedValueOnce({ data: null, error: new Error("net") })
+      .mockResolvedValueOnce({ data: [{ path: "j1/ref-c0.png", signedUrl: "http://example.com/c0.png" }], error: null });
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
     await renderPage(makeParams("j1"));
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Use these characters" })).toBeDefined());
-    expect(screen.getByText(/Kiko/)).toBeDefined();
-    expect(screen.queryByTestId("failure-screen")).toBeNull();
+    expect(await screen.findByRole("alert")).toHaveTextContent("We couldn't load Kiko's picture.");
+    expect(screen.getByRole("button", { name: "Use these characters" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Try loading Kiko's picture again" }));
+
+    const image = await screen.findByRole("img", { name: "Kiko" });
+    fireEvent.load(image);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Use these characters" })).toBeEnabled());
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("turns an img load error into an inline read retry", async () => {
+    mockCreateSignedUrls.mockResolvedValue({
+      data: [{ path: "j1/ref-c0.png", signedUrl: "http://example.com/c0.png" }],
+      error: null,
+    });
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
+    await renderPage(makeParams("j1"));
+
+    const image = await screen.findByRole("img", { name: "Kiko" });
+    fireEvent.error(image);
+
+    expect(screen.getByRole("alert")).toHaveTextContent("We couldn't load Kiko's picture.");
+    expect(screen.getByRole("button", { name: "Use these characters" })).toBeDisabled();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("explains an empty chip list without inventing a redraw choice", async () => {
+    const emptyChips = {
+      ...PAUSED_ROW,
+      reveal: {
+        ...PAUSED_ROW.reveal!,
+        characters: [{ ...PAUSED_ROW.reveal!.characters[0], chips: [] }],
+      },
+    };
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: emptyChips }));
+    await renderPage(makeParams("j1"));
+
+    expect(screen.getByText("No suggested changes are available for this character.")).toBeDefined();
+    expect(screen.queryByRole("button", { name: /Redraw Kiko/ })).toBeNull();
+    expect(screen.getByRole("link", { name: /bookshelf/i })).toBeDefined();
   });
 });
 
@@ -533,7 +589,7 @@ describe("ProcessingPage — exit navigation", () => {
 
   it("paused reveal shows top Bookshelf exit link", async () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
-    await renderPage(makeParams("j1"));
+    await renderPausedPage();
     const bookshelfLink = screen.getByRole("link", { name: /bookshelf/i });
     expect(bookshelfLink).toHaveAttribute("href", "/s/p1");
   });
