@@ -5,6 +5,7 @@
 import { use, useEffect, useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence, useScroll } from "framer-motion";
 import { useJob } from "@/lib/useJob";
+import { displayTitle } from "@/lib/displayTitle";
 import FailureScreen, { resetFailChain } from "@/components/FailureScreen";
 import { signPaths } from "@/lib/signedUrls";
 import Link from "next/link";
@@ -245,6 +246,10 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
           <ArrowLeft size={20} weight="bold" />
           <span>Bookshelf</span>
         </Link>
+
+        <h1 className="font-display text-lg sm:text-xl font-extrabold text-foreground text-center flex-1 min-w-0 mx-3 truncate sm:whitespace-normal sm:break-words">
+          {displayTitle(row?.title, row?.input_text ?? "")}
+        </h1>
 
         <div 
           role="group"

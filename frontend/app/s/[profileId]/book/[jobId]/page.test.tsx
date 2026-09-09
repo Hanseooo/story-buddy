@@ -67,7 +67,7 @@ const PAGES = [
 
 const COMPLETE_ROW = {
   id: "j1", status: "complete", current_stage: "compose",
-  failure_reason: null, input_text: "x", style_preset_id: null, pages: PAGES, reveal: null,
+  failure_reason: null, input_text: "x", title: "A Very Long Title That Keeps Going And Going", style_preset_id: null, pages: PAGES, reveal: null,
 };
 
 const SIGNED = PAGES.map((p, i) => ({ signedUrl: `https://cdn/${i}.png`, error: null }));
@@ -143,6 +143,17 @@ describe("BookPage — reader (terminal-success)", () => {
     await waitFor(() => expect(screen.getByLabelText("Back to bookshelf")).toBeDefined());
     const backBtn = screen.getByLabelText("Back to bookshelf");
     expect(backBtn.getAttribute("href")).toBe("/s/p1");
+  });
+
+  it("renders the full book title as the reader heading", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
+    mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
+
+    await renderPage(makeParams("j1"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /A Very Long Title That Keeps Going And Going/ })).toBeDefined();
+    });
   });
 
   it("renders Pages view button before Scroll view button in toggle pill", async () => {
