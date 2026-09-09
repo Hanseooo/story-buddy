@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, ReactNode } from "react";
+import { useState, useId, ReactNode } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Wrench, Gear, MagnifyingGlass, PencilSimple, BookOpen, Copy, Check } from "@phosphor-icons/react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import { FailureReason } from "@/lib/types/jobs";
-import { resolveFailureCopy } from "@/lib/failureCopy";
+import { resolveFailureCopy, RETRY_CONSEQUENCE } from "@/lib/failureCopy";
 
 export type FailureKind = "revise" | "retry" | "not-found" | "asleep";
 
@@ -90,6 +90,7 @@ function FailureCard({
   error,
   jobId,
   profileId,
+  retryNote = false,
 }: {
   icon: ReactNode;
   title: string;
@@ -101,7 +102,10 @@ function FailureCard({
   error?: boolean;
   jobId?: string;
   profileId?: string;
+  retryNote?: boolean;
 }) {
+  const noteId = useId();
+
   return (
     <div
       role="alert"
@@ -141,13 +145,24 @@ function FailureCard({
         {/* Actions */}
         <div className="flex flex-col items-center w-full max-w-sm gap-5 mt-8 md:mt-10">
           {buttonLabel && onAction && (
-            <button
-              className="w-full bg-[var(--color-primary)] text-[var(--color-surface)] rounded-2xl min-h-[56px] px-8 py-4 font-kid font-extrabold text-lg shadow-sm hover:bg-[var(--color-primary-deep)] active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed focus-visible:outline-[var(--color-secondary)] focus-visible:outline-3 focus-visible:outline-offset-3"
-              onClick={onAction}
-              disabled={submitting}
-            >
-              {buttonLabel}
-            </button>
+            <>
+              {retryNote && (
+                <p
+                  id={noteId}
+                  className="font-kid text-base text-[var(--foreground)]/70 max-w-[36ch] leading-snug"
+                >
+                  {RETRY_CONSEQUENCE}
+                </p>
+              )}
+              <button
+                className="w-full bg-[var(--color-primary)] text-[var(--color-surface)] rounded-2xl min-h-[56px] px-8 py-4 font-kid font-extrabold text-lg shadow-sm hover:bg-[var(--color-primary-deep)] active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed focus-visible:outline-[var(--color-secondary)] focus-visible:outline-3 focus-visible:outline-offset-3"
+                onClick={onAction}
+                disabled={submitting}
+                aria-describedby={retryNote ? noteId : undefined}
+              >
+                {buttonLabel}
+              </button>
+            </>
           )}
           {secondaryAction}
           {profileId && (
@@ -364,6 +379,7 @@ export default function FailureScreen({
         error={isRetry ? retryFailed : undefined}
         jobId={jobId}
         profileId={profileId}
+        retryNote={isRetry}
       />
     );
   }

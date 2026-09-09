@@ -309,3 +309,26 @@ describe("resetFailChain", () => {
     expect(sessionStorage.getItem("sb.failChain")).toBeNull();
   });
 });
+
+describe("FailureScreen — whole-book retry consequence (spec §3)", () => {
+  const NOTE = "This starts the whole book again. The pictures may look different.";
+
+  it.each(["character_safety", "scene_safety", "service_busy", "worker_stopped", "system_error"])(
+    "%s shows the consequence and describes the button with it",
+    (reason) => {
+      render(<FailureScreen reason={reason} jobId="12345678-abcd" />);
+      const note = screen.getByText(NOTE);
+      const button = screen.getByRole("button", { name: "Make the story again" });
+      expect(note.id.length).toBeGreaterThan(0);
+      expect(button.getAttribute("aria-describedby")).toBe(note.id);
+    }
+  );
+
+  it("does not offer the consequence where no new job is created", () => {
+    for (const reason of ["child_text", "service_limit", "book_limit"]) {
+      const { unmount } = render(<FailureScreen reason={reason} jobId="12345678-abcd" />);
+      expect(screen.queryByText(NOTE)).toBeNull();
+      unmount();
+    }
+  });
+});
