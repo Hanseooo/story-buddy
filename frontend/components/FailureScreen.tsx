@@ -8,6 +8,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import { FailureReason } from "@/lib/types/jobs";
 import { resolveFailureCopy, RETRY_CONSEQUENCE } from "@/lib/failureCopy";
+import { displayTitle } from "@/lib/displayTitle";
 
 export type FailureKind = "revise" | "retry" | "not-found" | "asleep" | "read-failed";
 
@@ -107,6 +108,8 @@ function FailureCard({
   submitting,
   secondaryAction,
   error,
+  errorMessage,
+  contextTitle,
   jobId,
   profileId,
   retryNote = false,
@@ -119,6 +122,8 @@ function FailureCard({
   submitting: boolean;
   secondaryAction?: ReactNode;
   error?: boolean;
+  errorMessage?: string;
+  contextTitle?: string;
   jobId?: string;
   profileId?: string;
   retryNote?: boolean;
@@ -154,6 +159,11 @@ function FailureCard({
 
         {/* Copy */}
         <div className="flex flex-col gap-4">
+          {contextTitle && (
+            <p className="font-kid text-sm font-bold uppercase tracking-wider text-[var(--foreground)]/50 truncate max-w-[40ch] mx-auto">
+              {contextTitle}
+            </p>
+          )}
           <h2
             ref={headingRef}
             tabIndex={-1}
@@ -218,7 +228,7 @@ function FailureCard({
                 role="alert"
                 className="font-kid text-base text-[var(--color-destructive)] bg-[var(--color-destructive)]/10 px-5 py-3 rounded-xl leading-snug"
               >
-                That didn&apos;t work either. You can try once more, or write something new.
+                {errorMessage ?? "That didn't work either. You can try once more, or write something new."}
               </motion.p>
             )}
           </AnimatePresence>
@@ -327,9 +337,17 @@ export default function FailureScreen({
   const profileId = (params as { profileId?: string })?.profileId;
   const [submitting, setSubmitting] = useState(false);
   const [retryFailed, setRetryFailed] = useState(false);
+  const [transferFailed, setTransferFailed] = useState(false);
   const chainCount = getChainCount();
+  const contextTitle = title?.trim() || inputText.trim()
+    ? displayTitle(title, inputText)
+    : undefined;
 
   async function submitRetry() {
+    if (!title || title.trim() === "") {
+      stashPrefillAndOpenWrite();
+      return;
+    }
     setSubmitting(true);
     setRetryFailed(false);
     try {
@@ -358,6 +376,27 @@ export default function FailureScreen({
     }
   }
 
+  function stashPrefillAndOpenWrite() {
+    const suggestedTitle = title && title.trim() !== ""
+      ? title
+      : inputText.split("\n")[0].slice(0, 60);
+    setTransferFailed(false);
+    try {
+      sessionStorage.setItem(
+        PREFILL_KEY,
+        JSON.stringify({
+          text: inputText,
+          title: suggestedTitle,
+          ...(stylePresetId ? { style_preset_id: stylePresetId } : {}),
+        })
+      );
+    } catch {
+      setTransferFailed(true);
+      return;
+    }
+    router.push(profileId ? `/s/${profileId}/write` : "/write");
+  }
+
   const writeSomethingNew = (
     <button
       className="w-full rounded-2xl min-h-[56px] px-8 py-4 font-kid font-extrabold text-lg border-2 border-[var(--color-primary)]/25 text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5 active:scale-[0.98] transition-all duration-150 disabled:opacity-50 focus-visible:outline-[var(--color-secondary)] focus-visible:outline-3 focus-visible:outline-offset-3"
@@ -381,13 +420,7 @@ export default function FailureScreen({
   const handleRevise = () => {
     const count = countable ? bumpChain() : chainCount;
     console.log("sb:action", { action: "revise", kind, chain_count: count });
-    const suggestedTitle = title && title.trim() !== ""
-      ? title
-      : inputText.split("\n")[0].slice(0, 60);
-    try {
-      sessionStorage.setItem(PREFILL_KEY, JSON.stringify({ text: inputText, title: suggestedTitle }));
-    } catch { /* unavailable */ }
-    router.push(profileId ? `/s/${profileId}/write` : "/write");
+    stashPrefillAndOpenWrite();
   };
 
   // A machine failure is never the child's fault, so both ways out are offered side by side from
@@ -416,7 +449,11 @@ export default function FailureScreen({
         submitting={submitting}
         onAction={isRevise ? handleRevise : isRetry ? handleRetry : undefined}
         secondaryAction={isRevise ? tryDifferent : writeSomethingNew}
-        error={isRetry ? retryFailed : undefined}
+        error={isRevise ? transferFailed : isRetry ? retryFailed || transferFailed : undefined}
+        errorMessage={
+          transferFailed ? "We couldn't carry your story to the editor. Try again, or write something new." : undefined
+        }
+        contextTitle={contextTitle}
         jobId={jobId}
         profileId={profileId}
         retryNote={isRetry}
@@ -435,6 +472,9 @@ export default function FailureScreen({
         submitting={submitting}
         onAction={handleRevise}
         secondaryAction={tryDifferent}
+        error={transferFailed}
+        errorMessage={transferFailed ? "We couldn't carry your story to the editor. Try again, or write something new." : undefined}
+        contextTitle={contextTitle}
         jobId={jobId}
         profileId={profileId}
       />
@@ -454,6 +494,7 @@ export default function FailureScreen({
         buttonLabel="Try opening it again"
         onAction={onReload}
         submitting={false}
+        contextTitle={contextTitle}
         jobId={jobId}
         profileId={profileId}
       />
@@ -484,7 +525,9 @@ export default function FailureScreen({
         submitting={submitting}
         onAction={submitRetry}
         secondaryAction={writeSomethingNew}
-        error={retryFailed}
+        error={retryFailed || transferFailed}
+        errorMessage={transferFailed ? "We couldn't carry your story to the editor. Try again, or write something new." : undefined}
+        contextTitle={contextTitle}
         jobId={jobId}
         profileId={profileId}
         retryNote
@@ -502,7 +545,9 @@ export default function FailureScreen({
       submitting={submitting}
       onAction={handleRetry}
       secondaryAction={writeSomethingNew}
-      error={retryFailed}
+      error={retryFailed || transferFailed}
+      errorMessage={transferFailed ? "We couldn't carry your story to the editor. Try again, or write something new." : undefined}
+      contextTitle={contextTitle}
       jobId={jobId}
       profileId={profileId}
       retryNote

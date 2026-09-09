@@ -28,6 +28,17 @@ beforeEach(() => {
 describe("FailureScreen — safe reason taxonomy", () => {
   const REASONS = Object.keys(FAILURE_COPY) as SafeReason[];
 
+  it("shows the checked title as failure context", () => {
+    render(
+      <FailureScreen
+        reason="service_busy"
+        inputText="A dragon finds a friend."
+        title="My Dragon Book"
+      />
+    );
+    expect(screen.getByText("My Dragon Book")).toBeDefined();
+  });
+
   it.each(REASONS)("%s shows its heading, its separate explanation, and its action", (reason) => {
     const copy = FAILURE_COPY[reason];
     render(<FailureScreen reason={reason} jobId="12345678-abcd" />);
@@ -93,6 +104,7 @@ describe("FailureScreen — safe reason taxonomy", () => {
       <FailureScreen
         reason="service_busy"
         inputText="A dog runs."
+        title="A Dog Runs"
         stylePresetId="gouache"
         jobId="12345678-abcd"
       />
@@ -117,7 +129,7 @@ describe("FailureScreen — safe reason taxonomy", () => {
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/storybooks"),
       expect.objectContaining({
-        body: JSON.stringify({ text: "A dog runs.", title: null, style_preset_id: "gouache" }),
+        body: JSON.stringify({ text: "A dog runs.", title: "A Dog Runs", style_preset_id: "gouache" }),
       })
     );
   });
@@ -165,17 +177,17 @@ describe("FailureScreen — kind=retry", () => {
   });
 
   it("retry POSTs inputText verbatim to /storybooks and navigates to new process page", async () => {
-    render(<FailureScreen kind="retry" inputText="A dog runs." />);
+    render(<FailureScreen kind="retry" inputText="A dog runs." title="A Dog Runs" />);
     fireEvent.click(screen.getByRole("button", { name: /make this story again/i }));
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/s/prof-123/process/new-job"));
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/storybooks"),
-       expect.objectContaining({ body: JSON.stringify({ text: "A dog runs.", title: null, style_preset_id: "cel" }) })
+       expect.objectContaining({ body: JSON.stringify({ text: "A dog runs.", title: "A Dog Runs", style_preset_id: "cel" }) })
     );
   });
 
   it("retry sends the Bearer token", async () => {
-    render(<FailureScreen kind="retry" inputText="A dog runs." />);
+    render(<FailureScreen kind="retry" inputText="A dog runs." title="A Dog Runs" />);
     fireEvent.click(screen.getByRole("button", { name: /make this story again/i }));
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/storybooks"),
@@ -186,19 +198,19 @@ describe("FailureScreen — kind=retry", () => {
   });
 
   it("retry carries the original style preset so the redo is not silently re-styled", async () => {
-    render(<FailureScreen kind="retry" inputText="A dog runs." stylePresetId="gouache" />);
+    render(<FailureScreen kind="retry" inputText="A dog runs." title="A Dog Runs" stylePresetId="gouache" />);
     fireEvent.click(screen.getByRole("button", { name: /make this story again/i }));
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/storybooks"),
       expect.objectContaining({
-        body: JSON.stringify({ text: "A dog runs.", title: null, style_preset_id: "gouache" }),
+        body: JSON.stringify({ text: "A dog runs.", title: "A Dog Runs", style_preset_id: "gouache" }),
       })
     ));
   });
 
   it("a failed retry says so instead of silently doing nothing", async () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500 }) as unknown as typeof fetch;
-    render(<FailureScreen kind="retry" inputText="x" />);
+    render(<FailureScreen kind="retry" inputText="x" title="Retry this story" />);
     fireEvent.click(screen.getByRole("button", { name: /make this story again/i }));
     await waitFor(() => expect(screen.getByRole("alert")).toBeDefined());
     expect(pushMock).not.toHaveBeenCalled();
@@ -206,7 +218,7 @@ describe("FailureScreen — kind=retry", () => {
   });
 
   it("write something new goes to /write without POSTing", () => {
-    render(<FailureScreen kind="retry" inputText="x" />);
+    render(<FailureScreen kind="retry" inputText="x" title="Retry this story" />);
     fireEvent.click(screen.getByRole("button", { name: /write something new/i }));
     expect(pushMock).toHaveBeenCalledWith("/s/prof-123/write");
     expect(global.fetch).not.toHaveBeenCalled();
@@ -214,7 +226,7 @@ describe("FailureScreen — kind=retry", () => {
 
   it("retry increments sb.failChain counter", async () => {
     sessionStorage.setItem("sb.failChain", "1");
-    render(<FailureScreen kind="retry" inputText="x" />);
+    render(<FailureScreen kind="retry" inputText="x" title="Retry this story" />);
     fireEvent.click(screen.getByRole("button", { name: /make this story again/i }));
     await waitFor(() => expect(pushMock).toHaveBeenCalled());
     expect(sessionStorage.getItem("sb.failChain")).toBe("2");
@@ -226,7 +238,7 @@ describe("FailureScreen — kind=retry", () => {
       new Promise<Response>(r => { resolvePost = r; })
     ) as unknown as typeof fetch;
 
-    render(<FailureScreen kind="retry" inputText="x" />);
+    render(<FailureScreen kind="retry" inputText="x" title="Retry this story" />);
     const btn = screen.getByRole("button", { name: /make this story again/i });
     fireEvent.click(btn);
     expect((btn as HTMLButtonElement).disabled).toBe(true);
@@ -252,6 +264,42 @@ describe("FailureScreen — kind=retry", () => {
     expect(body.title).toBe("My Dragon Book");
   });
 
+  it("opens the write form for a legacy retry so a title is required before POST", async () => {
+    render(
+      <FailureScreen
+        kind="retry"
+        inputText="A brave knight went on an adventure"
+        title={null}
+        stylePresetId="gouache"
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /make this story again/i }));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/s/prof-123/write"));
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(JSON.parse(sessionStorage.getItem("sb.prefill") as string)).toEqual({
+      text: "A brave knight went on an adventure",
+      title: "A brave knight went on an adventure",
+      style_preset_id: "gouache",
+    });
+  });
+
+  it("keeps the source screen when revision transfer storage is unavailable", () => {
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("storage unavailable");
+    });
+    render(
+      <FailureScreen
+        kind="revise"
+        inputText="A brave knight went on an adventure"
+        title="My Dragon Book"
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /change my words/i }));
+    expect(pushMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent(/couldn.t carry your story/i);
+    setItem.mockRestore();
+  });
+
   it("writes title and text together into sb.prefill on revise", () => {
     render(
       <FailureScreen
@@ -265,6 +313,23 @@ describe("FailureScreen — kind=retry", () => {
     expect(JSON.parse(sessionStorage.getItem("sb.prefill") as string)).toEqual({
       text: "Once upon a time",
       title: "My Dragon Book",
+    });
+  });
+
+  it("preserves the selected style in the revise prefill", () => {
+    render(
+      <FailureScreen
+        kind="revise"
+        inputText="Once upon a time"
+        title="My Dragon Book"
+        stylePresetId="cut_paper"
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /change my words/i }));
+    expect(JSON.parse(sessionStorage.getItem("sb.prefill") as string)).toEqual({
+      text: "Once upon a time",
+      title: "My Dragon Book",
+      style_preset_id: "cut_paper",
     });
   });
 
@@ -314,14 +379,14 @@ describe("FailureScreen — kind=not-found", () => {
 
 describe("FailureScreen — kind=asleep", () => {
   it("shows asleep copy and Make it again button", () => {
-    render(<FailureScreen kind="asleep" inputText="A story." />);
+    render(<FailureScreen kind="asleep" inputText="A story." title="A Story" />);
     expect(screen.getByText(/went to sleep/i)).toBeDefined();
     expect(screen.getByRole("button", { name: /make it again/i })).toBeDefined();
   });
 
   it("asleep POSTs inputText and navigates, counter does NOT increment", async () => {
     sessionStorage.setItem("sb.failChain", "2");
-    render(<FailureScreen kind="asleep" inputText="A story." />);
+    render(<FailureScreen kind="asleep" inputText="A story." title="A Story" />);
     fireEvent.click(screen.getByRole("button", { name: /make it again/i }));
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/s/prof-123/process/new-job"));
     expect(sessionStorage.getItem("sb.failChain")).toBe("2");
@@ -341,14 +406,14 @@ describe("FailureScreen — chain counter & third offer", () => {
   });
 
   it("retry offers the escape at count 0 — the second choice supersedes the §4.5 gate", () => {
-    render(<FailureScreen kind="retry" inputText="x" />);
+    render(<FailureScreen kind="retry" inputText="x" title="Retry this story" />);
     expect(screen.getByRole("button", { name: /write something new/i })).toBeDefined();
     expect(screen.queryByText(/try a different story/i)).toBeNull();
   });
 
   it("fourth press still works — counter never gates (spec invariant 7)", async () => {
     sessionStorage.setItem("sb.failChain", "4");
-    render(<FailureScreen kind="retry" inputText="x" />);
+    render(<FailureScreen kind="retry" inputText="x" title="Retry this story" />);
     const btn = screen.getByRole("button", { name: /make this story again/i });
     expect((btn as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(btn);
@@ -421,7 +486,7 @@ describe("FailureScreen — announcements (spec §6)", () => {
 
   it("announces a failed retry exactly once", async () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500 }) as unknown as typeof fetch;
-    render(<FailureScreen reason="service_busy" inputText="x" jobId="12345678-abcd" />);
+    render(<FailureScreen reason="service_busy" inputText="x" title="Retry this story" jobId="12345678-abcd" />);
     fireEvent.click(screen.getByRole("button", { name: "Make the story again" }));
     await waitFor(() => expect(screen.getAllByRole("alert")).toHaveLength(1));
   });
@@ -432,7 +497,7 @@ describe("FailureScreen — announcements (spec §6)", () => {
       new Promise<Response>(r => { resolvePost = r; })
     ) as unknown as typeof fetch;
 
-    render(<FailureScreen reason="service_busy" inputText="x" jobId="12345678-abcd" />);
+    render(<FailureScreen reason="service_busy" inputText="x" title="Retry this story" jobId="12345678-abcd" />);
     fireEvent.click(screen.getByRole("button", { name: "Make the story again" }));
 
     // The story reference has a status region of its own, so match this one by its message.

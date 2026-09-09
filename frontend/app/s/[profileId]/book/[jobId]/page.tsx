@@ -187,6 +187,8 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
       <FailureScreen
         kind="read-failed"
         jobId={jobId}
+        inputText={row?.input_text}
+        title={row?.title}
         countable={false}
         onReload={() => {
           setSignFailed(false);

@@ -302,7 +302,7 @@ function BookCard({
         {/* Spine/Title area */}
         <div className="p-4 sm:p-5 bg-surface relative z-10 border-t-2 border-primary/5">
           <p className="font-extrabold text-sm sm:text-base text-foreground line-clamp-2 leading-snug">
-            {card.title || "Untitled"}
+            {card.title}
           </p>
         </div>
       </Link>

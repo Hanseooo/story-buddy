@@ -95,7 +95,7 @@ describe("tab filters", () => {
 // `getTeacherLabel` and asserted against that, so it passed no matter what the teacher saw.
 describe("failure_reason rendering", () => {
   const LABELS: [string | null, string][] = [
-    ["child_text", "The submitted story did not pass the input safety check."],
+    ["child_text", "The submitted title or story did not pass the input safety check."],
     ["character_safety", "A generated character reference did not pass the image safety check."],
     ["scene_safety", "A generated scene did not pass the image safety check."],
     ["service_busy", "A required story-making service was temporarily unavailable."],
@@ -162,6 +162,21 @@ describe("failure_reason rendering", () => {
       />
     );
     expect(screen.getByText("My Dragon Book")).toBeDefined();
+  });
+
+  it("keeps the full title in the review card accessible name", () => {
+    render(
+      <BookCard
+        job={makeJob({ title: "A Very Long Dragon Book Title" })}
+        thumbnailUrl={null}
+        onOpen={vi.fn()}
+      />
+    );
+    expect(
+      screen.getByRole("button", {
+        name: "Review story by Alex: A Very Long Dragon Book Title",
+      })
+    ).toBeDefined();
   });
 
   it("shows the book title in a failed-book row alongside the reference", () => {

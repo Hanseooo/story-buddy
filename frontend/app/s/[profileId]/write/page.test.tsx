@@ -141,6 +141,15 @@ describe("WriteStoryPage — prefill and chain counter", () => {
     expect(sessionStorage.getItem("sb.prefill")).toBeNull();
   });
 
+  it("restores the selected style from sb.prefill", () => {
+    sessionStorage.setItem(
+      "sb.prefill",
+      JSON.stringify({ text: "My story about a cat.", title: "Cat Book", style_preset_id: "cut_paper" })
+    );
+    render(<WriteStoryPage />);
+    expect(screen.getByLabelText("Paper Cutout")).toBeChecked();
+  });
+
   it("calls resetFailChain on mount when no sb.prefill is present", () => {
     sessionStorage.setItem("sb.failChain", "3");
     render(<WriteStoryPage />);

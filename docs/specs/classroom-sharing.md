@@ -96,12 +96,12 @@ throwing if one does.
 
 ### 4.3 The card
 
-Cover image + **`by {display_nickname}`**. Nothing else.
+Cover image + the checked **`jobs.title`** (with the shared legacy fallback) +
+**`by {display_nickname}`**. The title is rendered as text and stays display-only.
 
-**`jobs.input_text` is never selected on this surface.** It is the raw, pre-Presidio column — a child
-who wrote *"my tita Rosa in Purok 3"* has that text on a classmate's screen if it is used as a title.
-The bookshelf uses it as a title for the child's *own* book, which is their own writing; the gallery
-is the first surface where it would cross a child boundary, and it does not.
+For a legacy row with no stored title, the first-line excerpt is computed only from `input_text`
+already authorized for the classroom viewer under the existing RLS policy. New rows always carry
+the synchronously checked title, so they do not depend on the excerpt fallback.
 
 Captions were considered as a title source and rejected: ADR-013 froze `caption = text_excerpt`, so a
 caption is a scene line, not a book name.

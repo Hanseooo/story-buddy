@@ -10,20 +10,26 @@ export type FailureCopy = {
 };
 
 /**
+ * The eight ADR-038 reasons that carry copy. `null` and legacy `machine` are excluded because
+ * spec §2 routes them to the fallback — keying the table on this makes a ninth reason added to
+ * `FailureReason` a compile error instead of a screen that silently says "something went wrong".
+ */
+export type SafeReason = Exclude<FailureReason, null | "machine">;
+
+/**
  * Child-facing copy for the eight ADR-038 safe reasons
  * (`docs/specs/story-failure-recovery-ux.md` §3, which owns this table).
  *
  * It is data, not a branch per reason, so the screen test can walk it instead of
  * restating it — a test that mirrors a switch passes no matter what the child sees.
  *
- * `child_text` carries the story-only sentence: there is no `jobs.title` column yet.
- * `story-titles.md` owns swapping in the "title or story" wording atomically with its
- * validation path. Never claim which field was blocked — the safe reason cannot tell them apart.
+ * `child_text` names both title and story because the safe reason cannot distinguish which field
+ * was blocked. Never claim which field was blocked — the safe reason cannot tell them apart.
  */
-export const FAILURE_COPY: Record<string, FailureCopy> = {
+export const FAILURE_COPY: Record<SafeReason, FailureCopy> = {
   child_text: {
     heading: "Some words need changing.",
-    explanation: "Your story didn’t pass our safety check. You can change your words and try again.",
+    explanation: "The submitted title or story didn’t pass the input safety check. You can change your title or words and try again.",
     action: "revise",
     actionLabel: "Change my words",
   },
@@ -83,7 +89,8 @@ export function resolveFailureCopy(
   reason: FailureReason | string | null | undefined
 ): FailureCopy {
   if (typeof reason === "string" && Object.hasOwn(FAILURE_COPY, reason)) {
-    return FAILURE_COPY[reason];
+    // `hasOwn` does not narrow a `string`, and the guard is what makes the cast sound.
+    return FAILURE_COPY[reason as SafeReason];
   }
   return FAILURE_COPY.system_error;
 }

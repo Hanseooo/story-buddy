@@ -18,6 +18,7 @@ const STYLE_PRESETS = [
   { id: "gouache", label: "Painted" },
   { id: "cut_paper", label: "Paper Cutout" },
 ] as const;
+type StylePresetId = (typeof STYLE_PRESETS)[number]["id"];
 
 function countWords(text: string): number {
   const trimmed = text.trim();
@@ -32,13 +33,14 @@ export default function WriteStoryPage() {
   const [submitting, setSubmitting] = useState(false);
   const [postError, setPostError] = useState(false);
   const [chainCount, setChainCount] = useState(0);
+  const [stylePresetId, setStylePresetId] = useState<StylePresetId>("gouache");
   const titleInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const router = useRouter();
   const { profileId } = useParams() as { profileId: string };
 
   useEffect(() => {
-    let prefill: { text: string; title: string } | null = null;
+    let prefill: { text: string; title: string; stylePresetId?: StylePresetId } | null = null;
     try {
       const raw = sessionStorage.getItem(PREFILL_KEY);
       if (raw !== null) {
@@ -52,7 +54,18 @@ export default function WriteStoryPage() {
           typeof parsed.text === "string" &&
           typeof parsed.title === "string"
         ) {
-          prefill = { text: parsed.text, title: parsed.title };
+          const storedStyle =
+            "style_preset_id" in parsed && typeof parsed.style_preset_id === "string"
+              ? parsed.style_preset_id
+              : null;
+          const stylePresetId = STYLE_PRESETS.some(({ id }) => id === storedStyle)
+            ? (storedStyle as StylePresetId)
+            : undefined;
+          prefill = {
+            text: parsed.text,
+            title: parsed.title,
+            ...(stylePresetId !== undefined ? { stylePresetId } : {}),
+          };
         }
       }
     } catch { /* storage unavailable or malformed */ }
@@ -61,6 +74,7 @@ export default function WriteStoryPage() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setText(prefill.text);
       setTitle(prefill.title);
+      if (prefill.stylePresetId !== undefined) setStylePresetId(prefill.stylePresetId);
       try {
         setChainCount(Number(sessionStorage.getItem(CHAIN_KEY) ?? 0));
       } catch { /* unavailable */ }
@@ -78,9 +92,6 @@ export default function WriteStoryPage() {
   }
 
   async function postStorybook(titleAck?: string) {
-    const stylePresetId = document.querySelector<HTMLInputElement>(
-      'input[name="style_preset_id"]:checked'
-    )?.value;
     const {
       data: { session },
     } = await supabase.auth.getSession();
@@ -135,7 +146,6 @@ export default function WriteStoryPage() {
     }
     if (wordCount < MIN_STORY_WORDS) return;
 
-    // ponytail: the radios are uncontrolled — FormData reads the choice, no useState needed.
     setSubmitting(true);
     setPostError(false);
     setPendingRedactedTitle(null);
@@ -232,7 +242,8 @@ export default function WriteStoryPage() {
                 type="radio"
                 name="style_preset_id"
                 value={id}
-                defaultChecked={id === "gouache"}
+                checked={stylePresetId === id}
+                onChange={() => setStylePresetId(id)}
                 className="sr-only peer"
               />
               <div className="relative rounded-2xl overflow-hidden bg-surface border border-primary/20 transition-all hover:-translate-y-0.5 hover:shadow-sm peer-checked:border-primary peer-checked:ring-2 peer-checked:ring-primary peer-checked:shadow-sm peer-focus-visible:ring-[3px] peer-focus-visible:ring-secondary peer-focus-visible:ring-offset-[3px] peer-focus-visible:ring-offset-background">

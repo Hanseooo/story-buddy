@@ -477,7 +477,7 @@ export function FailedBookRow({ job }: { job: Job }) {
   const getTeacherLabel = (reason: string | null) => {
     switch (reason) {
       case "child_text":
-        return "The submitted story did not pass the input safety check.";
+        return "The submitted title or story did not pass the input safety check.";
       case "character_safety":
         return "A generated character reference did not pass the image safety check.";
       case "scene_safety":

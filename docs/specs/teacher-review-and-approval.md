@@ -274,7 +274,7 @@ story was stopped must not be invisible to the adult responsible for them, which
 
 | `failure_reason` | Teacher-facing label | Also shown |
 |---|---|---|
-| `child_text` | The submitted story did not pass the input safety check. | The child's own `input_text` |
+| `child_text` | The submitted title or story did not pass the input safety check. | The child's own `input_text` |
 | `character_safety` | A generated character reference did not pass the image safety check. | Nothing |
 | `scene_safety` | A generated scene did not pass the image safety check. | Nothing |
 | `service_busy` | A required story-making service was temporarily unavailable. | Nothing |
@@ -285,8 +285,8 @@ story was stopped must not be invisible to the adult responsible for them, which
 
 The child-facing wording for these same reasons is
 [story failure recovery](story-failure-recovery-ux.md) §3's, implemented as
-`frontend/lib/failureCopy.ts`. The teacher label changes only when `story-titles.md` ships
-(that spec's §5), and there is no title column yet.
+`frontend/lib/failureCopy.ts`. The teacher review surfaces now render the checked title
+per [story titles](story-titles.md) §5, with the existing excerpt fallback for legacy rows.
 
 **The fail-safe default is preserved across the audience change.** `system_error` is the fallback label for any unclassified or unknown failure reason. A new enum value can never accidentally tell a teacher that a child wrote something wrong. CC-8's "the teacher-facing view is deliberately a different answer" means *more* than the child is told, not *differently safe*.
 

@@ -84,8 +84,8 @@ The existing full-screen failure card keeps the Cobalt Playroom visual language 
 **The child-facing heading, explanation and primary action for each reason live in
 [story failure recovery](story-failure-recovery-ux.md) §3, implemented as
 `frontend/lib/failureCopy.ts`.** This spec keeps the reason contract; it no longer keeps a
-second copy of the copy. Until `story-titles.md` ships, `child_text` uses the story-only
-sentence named there.
+second copy of the copy. The title-aware `child_text` wording follows
+[story titles](story-titles.md) §4.
 
 The existing explicit-submit rule remains: a retry creates and pays for a new job only after the
 child presses the action. Persistent `service_limit` and `book_limit` failures omit the paid retry
@@ -97,7 +97,7 @@ The existing failed-book section displays the story reference and one exact safe
 
 | Reason | Teacher-facing label |
 |---|---|
-| `child_text` | The submitted story did not pass the input safety check. |
+| `child_text` | The submitted title or story did not pass the input safety check. |
 | `character_safety` | A generated character reference did not pass the image safety check. |
 | `scene_safety` | A generated scene did not pass the image safety check. |
 | `service_busy` | A required story-making service was temporarily unavailable. |

@@ -1,7 +1,7 @@
 # Feature Spec — Specific, safe story failure recovery
 
-**Status:** implemented 2026-09-09 with story-only copy; the title-dependent sentences in §3 and
-§5 remain pending `story-titles.md`. Product direction approved 2026-09-09.
+**Status:** implemented 2026-09-10, including the title-aware copy and recovery behavior in
+`story-titles.md`. Product direction approved 2026-09-09.
 **Owner:** existing child failure screens and teacher failed-book cards.
 **Derived from:** [failure diagnostics](failure-diagnostics.md),
 [failure semantics](kid-flow-failure-semantics.md),
@@ -16,9 +16,9 @@ honest next action. Do not blame the child for a generated picture or imply that
 retrying repairs only the failed stage.
 
 This is a presentation/recovery amendment to `failure-diagnostics.md`, not another
-taxonomy or classifier. Its accepted reason contract remains authoritative. On
-approval, this spec owns the revised copy/action rules below. The diagnostics spec
-must point here when implementation lands instead of maintaining a second copy table.
+taxonomy or classifier. Its accepted reason contract remains authoritative. This spec owns the
+revised copy/action rules below, and the diagnostics spec points here instead of maintaining a
+second copy table.
 
 Out: moderation categories/flagged spans, raw errors, provider names, partial books,
 automatic paid retries, new support tools, heartbeats, or inferred crash detection.
@@ -45,11 +45,11 @@ prose. A separately evidenced classifier fix must retain ADR-038's contract.
 
 Each failure screen has a cause heading, short explanation, primary action when
 available, **Back to bookshelf**, and the existing copyable story reference.
-The checked book title is context once [story titles](story-titles.md) ships.
+The checked book title is rendered as context per [story titles](story-titles.md) §5.
 
 | Reason | Heading / explanation | Primary action |
 |---|---|---|
-| `child_text` | “Some words need changing.” / “Your title or story didn't pass our safety check. You can change your words and try again.” | Change my words |
+| `child_text` | “Some words need changing.” / “The submitted title or story didn’t pass the input safety check. You can change your title or words and try again.” | Change my words |
 | `character_safety` | “We couldn't use a character picture.” / “A character picture we made didn't pass our safety check. Your story's words passed.” | Make the story again |
 | `scene_safety` | “We couldn't use a story picture.” / “A picture we made for your story didn't pass our safety check. Your story's words passed.” | Make the story again |
 | `service_busy` | “The story maker couldn't finish right now.” / “A service we need was busy or unavailable. You can try making your book again.” | Make the story again |
@@ -58,10 +58,9 @@ The checked book title is context once [story titles](story-titles.md) ships.
 | `book_limit` | “This book reached its picture-making limit.” / “Show your teacher this story reference for help.” | No paid retry; teacher guidance |
 | `system_error` | “Something went wrong while making your book.” / “We couldn't finish it this time. You can try making it again.” | Make the story again |
 
-Until titles ship, `child_text` says “Your story didn't pass our safety check.” The
-title release changes that sentence atomically with its validation path. Do not claim
-which field was blocked when the safe reason cannot distinguish them. Form-level
-validation may identify a title field only when its trusted result actually does so.
+`child_text` now says the submitted title or story did not pass the input safety check. Do not
+claim which field was blocked when the safe reason cannot distinguish them. Form-level validation
+may identify a title field only when its trusted result actually does so.
 
 The image-safety reassurance states that story text passed the input check, not that
 it is universally safe or that the image checker is infallible. Never show the blocked
@@ -97,8 +96,8 @@ Teacher-help text is guidance, not a button that pretends to contact a teacher.
 Keep the existing safe teacher cause mapping and story reference. Show the same
 distinction between submitted text, generated character image, generated scene image,
 temporary service failure, worker stop, allowance, book budget, and unknown system
-failure. For input rejection after titles ship, use “The submitted title or story did
-not pass the input safety check.” Do not add teacher retry controls or moderation
+failure. For input rejection, use “The submitted title or story did not pass the input safety
+check.” Do not add teacher retry controls or moderation
 details. Title display follows the title spec, including legacy fallback.
 
 ## 6. Accessibility and cross-cutting checklist
@@ -138,5 +137,5 @@ taxonomy, and CI requires `pnpm build` even though the diagnostics spec omits it
 
 Run from `frontend/`: `pnpm lint`, `pnpm build`, `pnpm test`. If an evidenced backend
 fix is included, also run from `backend/`: `uv run ruff check .`, `uv run pytest`.
-Report skipped checks. This spec can ship independently with story-only copy, then
-consume titles when their architecture and implementation are accepted.
+Report skipped checks. Title-aware copy and recovery now ship through the linked
+`story-titles.md` contract.
