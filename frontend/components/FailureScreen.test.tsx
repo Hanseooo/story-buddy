@@ -398,3 +398,36 @@ describe("FailureScreen — story reference copy honesty (spec §4)", () => {
     expect(screen.queryByText("12345678-full-uuid-here")).toBeNull();
   });
 });
+
+describe("FailureScreen — kind=read-failed (spec §4)", () => {
+  it("names the read problem and never says the book failed to be made", () => {
+    render(<FailureScreen kind="read-failed" jobId="12345678-abcd" onReload={vi.fn()} />);
+    expect(screen.getByRole("heading", { name: "We couldn’t open your book." })).toBeDefined();
+    expect(
+      screen.getByText("Your book is finished — we just couldn’t load its pictures. Try opening it again.")
+    ).toBeDefined();
+    expect(screen.queryByText(/starts the whole book again/i)).toBeNull();
+  });
+
+  it("its action reloads the read and never POSTs a new book", () => {
+    const onReload = vi.fn();
+    render(<FailureScreen kind="read-failed" jobId="12345678-abcd" onReload={onReload} />);
+    fireEvent.click(screen.getByRole("button", { name: "Try opening it again" }));
+    expect(onReload).toHaveBeenCalledTimes(1);
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it("offers no route that spends money, only the way back", () => {
+    render(<FailureScreen kind="read-failed" jobId="12345678-abcd" onReload={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: /make (the|this) story again/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /try again/i })).toBeNull();
+    expect(screen.getByRole("link", { name: /back to bookshelf/i })).toBeDefined();
+  });
+
+  it("keeps the story reference copyable", () => {
+    render(<FailureScreen kind="read-failed" jobId="12345678-abcd" onReload={vi.fn()} />);
+    expect(screen.getByText("12345678")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Copy story reference ID" })).toBeDefined();
+  });
+});

@@ -9,7 +9,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { FailureReason } from "@/lib/types/jobs";
 import { resolveFailureCopy, RETRY_CONSEQUENCE } from "@/lib/failureCopy";
 
-export type FailureKind = "revise" | "retry" | "not-found" | "asleep";
+export type FailureKind = "revise" | "retry" | "not-found" | "asleep" | "read-failed";
 
 const CHAIN_KEY = "sb.failChain";
 const PREFILL_KEY = "sb.prefill";
@@ -38,6 +38,7 @@ type Props = {
   inputText?: string;
   stylePresetId?: string | null;
   countable?: boolean;
+  onReload?: () => void;
 };
 
 function StoryReference({ jobId }: { jobId: string }) {
@@ -309,6 +310,7 @@ export default function FailureScreen({
   inputText = "",
   stylePresetId = null,
   countable = true,
+  onReload,
 }: Props) {
   const router = useRouter();
   const params = useParams();
@@ -418,6 +420,25 @@ export default function FailureScreen({
         submitting={submitting}
         onAction={handleRevise}
         secondaryAction={tryDifferent}
+        jobId={jobId}
+        profileId={profileId}
+      />
+    );
+  }
+
+  // A finished book whose pictures will not sign. The row is `complete`, the pages are real, and
+  // there is no failure_reason — the job never failed (kid-flow-failure-semantics §4.7). Re-signing
+  // is the correct-cost fix; offering a rebuild here would redraw an N-page book to repair an
+  // expired link (spec §4). No `reason` reaches this screen, so nothing routes to the taxonomy.
+  if (kind === "read-failed") {
+    return (
+      <FailureCard
+        icon={<RetryVignette />}
+        title="We couldn’t open your book."
+        subtext="Your book is finished — we just couldn’t load its pictures. Try opening it again."
+        buttonLabel="Try opening it again"
+        onAction={onReload}
+        submitting={false}
         jobId={jobId}
         profileId={profileId}
       />
