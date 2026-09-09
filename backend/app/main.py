@@ -7,7 +7,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 
-from app.config import MIN_STORY_WORDS, SELECTABLE_STYLE_PRESET_IDS, settings
+from app.config import MAX_TITLE_CHARS, MIN_STORY_WORDS, SELECTABLE_STYLE_PRESET_IDS, settings
 from app.length import clamp_story, word_count
 from app.db import get_supabase_client
 from app.queue import get_queue
@@ -48,7 +48,10 @@ app.include_router(teacher_router)
 
 class CreateStorybookRequest(BaseModel):
     text: str
+    title: str
     style_preset_id: str | None = None
+    # Set only on a resubmission after a 409 asked the child to confirm a redacted title.
+    title_ack: str | None = None
 
     @field_validator("text")
     @classmethod
@@ -56,6 +59,19 @@ class CreateStorybookRequest(BaseModel):
         if word_count(v) < MIN_STORY_WORDS:
             raise ValueError(f"Story text must be at least {MIN_STORY_WORDS} words")
         return v
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, v: str) -> str:
+        # Reject before trimming: an embedded newline is invalid regardless of outer whitespace.
+        if "\n" in v or "\r" in v:
+            raise ValueError("Title must be a single line")
+        trimmed = v.strip()
+        if len(trimmed) < 1:
+            raise ValueError("Give your story a title.")
+        if len(trimmed) > MAX_TITLE_CHARS:
+            raise ValueError(f"Keep your title to {MAX_TITLE_CHARS} characters.")
+        return trimmed
 
     @field_validator("style_preset_id")
     @classmethod
