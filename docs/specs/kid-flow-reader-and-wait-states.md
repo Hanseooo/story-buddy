@@ -406,7 +406,7 @@ done quietly.
 | 4th tap arrives anyway (stale tab) | `route_reveal` converts it to a confirm (S2 constraint 12); the refetch shows the job running. No error, no failure screen |
 | Confirm returns `200` with `complete` | Refetch reclassifies to `terminal-success`; push to `/book` |
 | Confirm returns `503` (Redis down, S2's rollback) | The pause is intact and un-consumed. Inline *"That didn't work — try once more"*; the button re-enables |
-| Reveal image fails to sign twice | Names + *"Use this one!"*, no images, no failure screen (§4.2) |
+| Reveal image signing/loading fails | Names + inline read retry; continue stays disabled until required pictures load (§4.2, `character-review-ux.md` §4) |
 | Book signs on the second attempt | Renders normally. Nothing recorded, no job created, counter unmoved |
 | Book fails to sign twice | Machine failure screen; the counter does **not** move (§4.3) |
 | `current_stage` is a value the stepper does not know | Heading only, no step highlighted. Never crashes |
@@ -444,8 +444,8 @@ done quietly.
 9. **No child-facing action spends money unless the child pressed `revise` or `retry`.** A re-sign, a
    reload, a bare confirm, and a `404` all cost nothing (S3 invariant 6).
 10. **The chain counter suggests and never gates** (S3 invariant 7).
-11. **The tap cap is not a failure.** A spent budget renders *"Use this one!"* and never reaches the
-    failure vocabulary (S3 invariant 8).
+11. **The tap cap is not a failure.** A spent budget renders no redraw controls, keeps continue and
+    exit available, and never reaches the failure vocabulary (S3 invariant 8).
 
 ## 6. Access & the trust boundary
 
@@ -530,9 +530,9 @@ Frontend, Vitest, every Supabase call mocked (`AGENTS.md` testing bright line).
   actions are: one line per `revise` / `retry` / re-sign, carrying the `failure_reason` that selected
   the screen and the chain count at press time. It is the only evidence that will ever exist for
   whether PRD §11.4's N=3 is the right number.
-- [x] **CC-3 Cost control** — a re-sign never rebuilds a book (§4.3); a signing failure at the reveal
-  confirms rather than retries (§4.2); the retry button disables on press; the press-loop stays named
-  for `rate-limiting` (§6).
+- [x] **CC-3 Cost control** — a re-sign never rebuilds a book (§4.3); a signing/loading failure at the
+  reveal uses inline read-retry and never spends a redraw (§4.2, `character-review-ux.md` §4); the
+  retry button disables on press; the press-loop stays named for `rate-limiting` (§6).
 - [ ] CC-1 Moderation ordering — N/A. No render path shortcuts the pipeline.
 - [ ] CC-2 PII redaction — flagged, not clean: the `revise` prefill re-serves the un-redacted
   `jobs.input_text` (S3 §4.3). Unchanged by this spec and unfixable without a schema change; carried
