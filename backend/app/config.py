@@ -174,6 +174,8 @@ MIN_SCENE_WORDS = 12
 MIN_SCENES = 3
 # Spec `docs/specs/input-gate-hardening.md` §4a: the API-boundary length guard.
 MIN_STORY_WORDS = 5     # a book needs at least one scene's worth of text
+# docs/specs/story-titles.md §1/§3: fixed length independent of story word count.
+MAX_TITLE_CHARS = 80
 MAX_STORY_WORDS = 300   # spend-and-retry-economics spec §4.1 (moved from 800)
 # 15-image prelude: 6 (2 refs × 3 draws) + 3 (ADR-029 taps) + 6 (one moderation redraw cycle,
 # which re-mints every flagged ref at 3 draws each — `reference-moderation-retry.md` §4.5).

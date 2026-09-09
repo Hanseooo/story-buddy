@@ -168,6 +168,12 @@ def test_min_story_words_is_five():
     assert MIN_STORY_WORDS == 5
 
 
+def test_max_title_chars_is_80():
+    from app.config import MAX_TITLE_CHARS
+
+    assert MAX_TITLE_CHARS == 80
+
+
 def test_max_story_words_is_three_hundred():
     assert MAX_STORY_WORDS == 300
 
