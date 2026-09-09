@@ -284,6 +284,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
         reason={row?.failure_reason}
         jobId={jobId}
         inputText={row?.input_text}
+        title={row?.title}
         stylePresetId={row?.style_preset_id}
       />
     );

@@ -161,7 +161,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
   if (bucket === "terminal-failure") {
     // Signing failure while book was complete: machine screen, counter NOT bumped
     if (signFailed) {
-      return <FailureScreen kind="retry" reason={row?.failure_reason} jobId={jobId} inputText={row?.input_text} stylePresetId={row?.style_preset_id} countable={false} />;
+      return <FailureScreen kind="retry" reason={row?.failure_reason} jobId={jobId} inputText={row?.input_text} title={row?.title} stylePresetId={row?.style_preset_id} countable={false} />;
     }
     const kind =
       row?.failure_reason === "child_text"
@@ -169,7 +169,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
         : row?.status === SWEPT_STATUS
         ? "asleep"
         : "retry";
-    return <FailureScreen kind={kind} reason={row?.failure_reason} jobId={jobId} inputText={row?.input_text} stylePresetId={row?.style_preset_id} />;
+    return <FailureScreen kind={kind} reason={row?.failure_reason} jobId={jobId} inputText={row?.input_text} title={row?.title} stylePresetId={row?.style_preset_id} />;
   }
 
   if (bucket === "in-flight" || bucket === "paused") {

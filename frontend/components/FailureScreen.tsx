@@ -36,6 +36,7 @@ type Props = {
   reason?: FailureReason | string | null;
   jobId?: string;
   inputText?: string;
+  title?: string | null;
   stylePresetId?: string | null;
   countable?: boolean;
   onReload?: () => void;
@@ -71,20 +72,28 @@ function StoryReference({ jobId }: { jobId: string }) {
           className="ml-2 inline-flex items-center gap-1 min-h-[44px] min-w-[44px] px-2.5 py-1 text-xs font-kid font-bold text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 rounded-lg transition-colors focus-visible:outline-[var(--color-secondary)] focus-visible:outline-2"
         >
           {copyState === "copied" ? (
-            <>
-              <Check size={16} weight="bold" className="text-emerald-600" />
-              <span className="text-emerald-700">Copied!</span>
-            </>
-          ) : copyState === "failed" ? (
-            <span className="text-[var(--color-destructive)]">Couldn’t copy — write the reference down.</span>
+            <Check size={16} weight="bold" className="text-emerald-600" />
           ) : (
-            <>
-              <Copy size={16} weight="bold" />
-              <span>Copy full ID</span>
-            </>
+            <Copy size={16} weight="bold" />
           )}
+          <span>Copy full ID</span>
         </button>
       </div>
+      {/* The `aria-label` above is the button’s accessible name in every state, so a result swapped
+          in as its content is never announced — the one thing a child cannot check for themselves.
+          It goes in a region that exists from first render instead (spec §4, DESIGN.md §11). */}
+      <p
+        role="status"
+        className={`font-kid text-sm min-h-[1.25rem] max-w-[36ch] leading-snug ${
+          copyState === "failed" ? "text-[var(--color-destructive)]" : "text-emerald-700"
+        }`}
+      >
+        {copyState === "copied"
+          ? "Copied!"
+          : copyState === "failed"
+          ? "Couldn’t copy — write the reference down."
+          : ""}
+      </p>
     </div>
   );
 }
@@ -308,6 +317,7 @@ export default function FailureScreen({
   reason,
   jobId,
   inputText = "",
+  title = null,
   stylePresetId = null,
   countable = true,
   onReload,
@@ -333,7 +343,7 @@ export default function FailureScreen({
         },
         // The redo is a brand-new job, so the style has to be re-sent or a legacy row with null style
         // would fall back to the new "gouache" default and the child's book would be silently re-styled.
-        body: JSON.stringify({ text: inputText, style_preset_id: stylePresetId ?? "cel" }),
+        body: JSON.stringify({ text: inputText, title, style_preset_id: stylePresetId ?? "cel" }),
       });
       if (!res.ok) {
         setRetryFailed(true);
@@ -371,7 +381,9 @@ export default function FailureScreen({
   const handleRevise = () => {
     const count = countable ? bumpChain() : chainCount;
     console.log("sb:action", { action: "revise", kind, chain_count: count });
-    try { sessionStorage.setItem(PREFILL_KEY, inputText); } catch { /* unavailable */ }
+    try {
+      sessionStorage.setItem(PREFILL_KEY, JSON.stringify({ text: inputText, title }));
+    } catch { /* unavailable */ }
     router.push(profileId ? `/s/${profileId}/write` : "/write");
   };
 
@@ -472,6 +484,7 @@ export default function FailureScreen({
         error={retryFailed}
         jobId={jobId}
         profileId={profileId}
+        retryNote
       />
     );
   }
@@ -489,6 +502,7 @@ export default function FailureScreen({
       error={retryFailed}
       jobId={jobId}
       profileId={profileId}
+      retryNote
     />
   );
 }
