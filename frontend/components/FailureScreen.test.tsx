@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import FailureScreen, { resetFailChain } from "./FailureScreen";
+import { FAILURE_COPY } from "@/lib/failureCopy";
 import { act } from "react";
 
 const pushMock = vi.fn();
@@ -25,74 +26,94 @@ beforeEach(() => {
 });
 
 describe("FailureScreen — safe reason taxonomy", () => {
-  it("renders child_text", () => {
-    render(<FailureScreen reason="child_text" />);
-    expect(screen.getByText("Some words need changing before we can make this book.")).toBeDefined();
-    expect(screen.getByRole("button", { name: "Change my words" })).toBeDefined();
+  const REASONS = Object.keys(FAILURE_COPY);
+
+  it.each(REASONS)("%s shows its heading, its separate explanation, and its action", (reason) => {
+    const copy = FAILURE_COPY[reason];
+    render(<FailureScreen reason={reason} jobId="12345678-abcd" />);
+    expect(screen.getByRole("heading", { name: copy.heading })).toBeDefined();
+    expect(screen.getByText(copy.explanation)).toBeDefined();
+    if (copy.actionLabel) {
+      expect(screen.getByRole("button", { name: copy.actionLabel })).toBeDefined();
+    }
+    // Spec §3: every failure screen keeps a route out.
+    expect(screen.getByRole("link", { name: /back to bookshelf/i })).toBeDefined();
   });
 
-  it("renders character_safety", () => {
-    render(<FailureScreen reason="character_safety" />);
-    expect(screen.getByText("We couldn’t safely use the character picture we made. Your words aren’t in trouble.")).toBeDefined();
-    expect(screen.getByRole("button", { name: "Make the story again" })).toBeDefined();
-  });
-
-  it("renders scene_safety", () => {
-    render(<FailureScreen reason="scene_safety" />);
-    expect(screen.getByText("One of the pictures we made couldn’t be used.")).toBeDefined();
-    expect(screen.getByRole("button", { name: "Make the story again" })).toBeDefined();
-  });
-
-  it("renders service_busy", () => {
-    render(<FailureScreen reason="service_busy" />);
-    expect(screen.getByText("The story-making service is busy right now.")).toBeDefined();
-    expect(screen.getByRole("button", { name: "Try again" })).toBeDefined();
-  });
-
-  it("renders worker_stopped", () => {
-    render(<FailureScreen reason="worker_stopped" />);
-    expect(screen.getByText("The story maker stopped before it finished.")).toBeDefined();
-    expect(screen.getByRole("button", { name: "Try again" })).toBeDefined();
-  });
-
-  it("renders service_limit with no retry control and shows story ref", () => {
-    render(<FailureScreen reason="service_limit" jobId="12345678-abcd-efgh-1234" />);
-    expect(screen.getByText("The story-making allowance has run out.")).toBeDefined();
-    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Make the story again" })).toBeNull();
+  it.each(["service_limit", "book_limit"])("%s offers no paid retry, only the story reference", (reason) => {
+    render(<FailureScreen reason={reason} jobId="12345678-abcd" />);
+    expect(screen.queryByRole("button", { name: /make the story again/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /try again/i })).toBeNull();
     expect(screen.getByText("12345678")).toBeDefined();
   });
 
-  it("renders book_limit with no retry control", () => {
-    render(<FailureScreen reason="book_limit" jobId="87654321-abcd" />);
-    expect(screen.getByText("This book reached its picture-making limit.")).toBeDefined();
-    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
-    expect(screen.getByText("87654321")).toBeDefined();
+  it.each([null, "machine", "unknown_garbage", "toString"])(
+    "%s falls back to system_error and never blames the child",
+    (reason) => {
+      render(<FailureScreen reason={reason as string | null} />);
+      expect(screen.getByRole("heading", { name: FAILURE_COPY.system_error.heading })).toBeDefined();
+      expect(screen.queryByRole("button", { name: /change my words/i })).toBeNull();
+    }
+  );
+
+  it("never renders a raw sentinel, provider name, or moderation category", () => {
+    for (const reason of REASONS) {
+      const { container, unmount } = render(<FailureScreen reason={reason} jobId="12345678-abcd" />);
+      const text = (container.textContent ?? "").toLowerCase();
+      for (const leak of ["output_moderation_failed", "openai", "fal.ai", "sexual", "self-harm", "traceback", reason]) {
+        expect(text).not.toContain(leak.toLowerCase());
+      }
+      unmount();
+    }
   });
 
-  it("renders system_error for unknown values", () => {
-    render(<FailureScreen reason="unknown_garbage" />);
-    expect(screen.getByText("Something interrupted your story.")).toBeDefined();
-    expect(screen.getByRole("button", { name: "Try again" })).toBeDefined();
-  });
-
-  it("renders system_error for legacy machine reason", () => {
-    render(<FailureScreen reason="machine" />);
-    expect(screen.getByText("Something interrupted your story.")).toBeDefined();
-  });
-
-  it("copies full story reference ID to clipboard when copy button clicked", async () => {
-    const writeTextMock = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, {
-      clipboard: { writeText: writeTextMock },
-    });
+  it("copies the full story reference ID to the clipboard", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
 
     render(<FailureScreen reason="service_busy" jobId="12345678-full-uuid-here" />);
-    const copyBtn = screen.getByRole("button", { name: "Copy story reference ID" });
-    fireEvent.click(copyBtn);
+    fireEvent.click(screen.getByRole("button", { name: "Copy story reference ID" }));
 
-    expect(writeTextMock).toHaveBeenCalledWith("12345678-full-uuid-here");
+    expect(writeText).toHaveBeenCalledWith("12345678-full-uuid-here");
     await waitFor(() => expect(screen.getByText("Copied!")).toBeDefined());
+  });
+
+  // Spec §7 names this the critical failure path: the retry itself fails over HTTP, the child
+  // stays on the screen, and the second press resends the same story and style — never a replay
+  // the child did not ask for, never a silently re-styled book.
+  it("a failed retry keeps the story and style, and the next press resends them", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500 }) as unknown as typeof fetch;
+    render(
+      <FailureScreen
+        reason="service_busy"
+        inputText="A dog runs."
+        stylePresetId="gouache"
+        jobId="12345678-abcd"
+      />
+    );
+
+    const press = () => fireEvent.click(screen.getByRole("button", { name: "Make the story again" }));
+
+    press();
+    // Match the message, not the alert role: until Part 2 the card itself is still an alert,
+    // so `getByRole("alert")` would find two nodes and throw.
+    await waitFor(() => expect(screen.getByText(/didn.t work either/i)).toBeDefined());
+    expect(pushMock).not.toHaveBeenCalled();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ job_id: "second" }),
+    }) as unknown as typeof fetch;
+
+    press();
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/s/prof-123/process/second"));
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/storybooks"),
+      expect.objectContaining({
+        body: JSON.stringify({ text: "A dog runs.", style_preset_id: "gouache" }),
+      })
+    );
   });
 });
 

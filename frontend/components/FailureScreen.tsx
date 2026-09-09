@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import { FailureReason } from "@/lib/types/jobs";
+import { resolveFailureCopy } from "@/lib/failureCopy";
 
 export type FailureKind = "revise" | "retry" | "not-found" | "asleep";
 
@@ -348,118 +349,19 @@ export default function FailureScreen({
   // spec §3 requires old, null, and unrecognized values to render as `system_error`, so only an
   // omitted prop (a frontend-side failure with no job row behind it) falls through to `kind`.
   if (reason !== undefined) {
-    if (reason === "child_text") {
-      return (
-        <FailureCard
-          icon={<ReviseVignette />}
-          title="Some words need changing before we can make this book."
-          buttonLabel="Change my words"
-          submitting={submitting}
-          onAction={handleRevise}
-          secondaryAction={tryDifferent}
-          jobId={jobId}
-          profileId={profileId}
-        />
-      );
-    }
-    if (reason === "character_safety") {
-      return (
-        <FailureCard
-          icon={<RetryVignette />}
-          title="We couldn’t safely use the character picture we made. Your words aren’t in trouble."
-          buttonLabel={submitting ? "Starting…" : "Make the story again"}
-          submitting={submitting}
-          onAction={handleRetry}
-          secondaryAction={writeSomethingNew}
-          error={retryFailed}
-          jobId={jobId}
-          profileId={profileId}
-        />
-      );
-    }
-    if (reason === "scene_safety") {
-      return (
-        <FailureCard
-          icon={<RetryVignette />}
-          title="One of the pictures we made couldn’t be used."
-          buttonLabel={submitting ? "Starting…" : "Make the story again"}
-          submitting={submitting}
-          onAction={handleRetry}
-          secondaryAction={writeSomethingNew}
-          error={retryFailed}
-          jobId={jobId}
-          profileId={profileId}
-        />
-      );
-    }
-    if (reason === "service_busy") {
-      return (
-        <FailureCard
-          icon={<RetryVignette />}
-          title="The story-making service is busy right now."
-          buttonLabel={submitting ? "Starting…" : "Try again"}
-          submitting={submitting}
-          onAction={handleRetry}
-          secondaryAction={writeSomethingNew}
-          error={retryFailed}
-          jobId={jobId}
-          profileId={profileId}
-        />
-      );
-    }
-    if (reason === "worker_stopped") {
-      return (
-        <FailureCard
-          icon={<RetryVignette />}
-          title="The story maker stopped before it finished."
-          buttonLabel={submitting ? "Starting…" : "Try again"}
-          submitting={submitting}
-          onAction={handleRetry}
-          secondaryAction={writeSomethingNew}
-          error={retryFailed}
-          jobId={jobId}
-          profileId={profileId}
-        />
-      );
-    }
-    if (reason === "service_limit") {
-      return (
-        <FailureCard
-          icon={<RetryVignette />}
-          title="The story-making allowance has run out."
-          subtext="Ask a teacher to help."
-          buttonLabel={null}
-          submitting={submitting}
-          secondaryAction={writeSomethingNew}
-          jobId={jobId}
-          profileId={profileId}
-        />
-      );
-    }
-    if (reason === "book_limit") {
-      return (
-        <FailureCard
-          icon={<RetryVignette />}
-          title="This book reached its picture-making limit."
-          subtext="Ask a teacher to help."
-          buttonLabel={null}
-          submitting={submitting}
-          secondaryAction={writeSomethingNew}
-          jobId={jobId}
-          profileId={profileId}
-        />
-      );
-    }
-    // Fallback: system_error and unknown/legacy values ("machine", null, etc.)
+    const copy = resolveFailureCopy(reason);
+    const isRevise = copy.action === "revise";
+    const isRetry = copy.action === "retry";
     return (
       <FailureCard
-        icon={<RetryVignette />}
-        title="Something interrupted your story."
-        buttonLabel={submitting ? "Starting…" : "Try again"}
+        icon={isRevise ? <ReviseVignette /> : <RetryVignette />}
+        title={copy.heading}
+        subtext={copy.explanation}
+        buttonLabel={submitting && isRetry ? "Starting…" : copy.actionLabel}
         submitting={submitting}
-        onAction={handleRetry}
-        secondaryAction={writeSomethingNew}
-        error={retryFailed}
+        onAction={isRevise ? handleRevise : isRetry ? handleRetry : undefined}
+        secondaryAction={isRevise ? tryDifferent : writeSomethingNew}
+        error={isRetry ? retryFailed : undefined}
         jobId={jobId}
         profileId={profileId}
       />
