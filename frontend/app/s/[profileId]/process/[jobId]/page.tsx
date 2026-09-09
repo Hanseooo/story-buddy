@@ -195,14 +195,22 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   const [selectedTrait, setSelectedTrait] = useState<SelectedTrait>(null);
   const [pendingRedrawName, setPendingRedrawName] = useState<string | null>(null);
   const submissionInFlight = useRef(false);
+  const characterHeadingRefs = useRef<Record<string, HTMLHeadingElement | null>>({});
+  const characterCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const selectedControlWasFocused = useRef(false);
+  const lastSelectedCharId = useRef<string | null>(null);
   const submissionsDisabled = submissionState !== "idle";
 
   function toggleTrait(charId: string, attribute: string) {
-    setSelectedTrait((current) =>
-      current?.charId === charId && current.attribute === attribute
-        ? null
-        : { charId, attribute }
-    );
+    setSelectedTrait((current) => {
+      if (current?.charId === charId && current.attribute === attribute) {
+        selectedControlWasFocused.current = false;
+        return null;
+      }
+      lastSelectedCharId.current = charId;
+      selectedControlWasFocused.current = characterCardRefs.current[charId]?.contains(document.activeElement) ?? false;
+      return { charId, attribute };
+    });
   }
 
   const revealFingerprint = row?.reveal
@@ -231,6 +239,10 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
     const revealChanged = previous !== null && previous !== revealFingerprint;
 
     if (selectedTrait && (!selectionStillOffered || revealChanged)) {
+      lastSelectedCharId.current = selectedTrait.charId;
+      if (!selectedControlWasFocused.current) {
+        selectedControlWasFocused.current = characterCardRefs.current[selectedTrait.charId]?.contains(document.activeElement) ?? false;
+      }
       setSelectedTrait(null);
       setPendingRedrawName(null);
       setChoiceUpdated(true);
@@ -238,6 +250,23 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
 
     previousRevealFingerprint.current = revealFingerprint;
   }, [bucket, revealFingerprint, row?.reveal, selectedTrait]);
+
+  useEffect(() => {
+    if (!selectedTrait || submissionsDisabled) return;
+    function clearSelection(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      selectedControlWasFocused.current = false;
+      setSelectedTrait(null);
+    }
+    window.addEventListener("keydown", clearSelection);
+    return () => window.removeEventListener("keydown", clearSelection);
+  }, [selectedTrait, submissionsDisabled]);
+
+  useEffect(() => {
+    if (!choiceUpdated || !selectedControlWasFocused.current || !lastSelectedCharId.current) return;
+    characterHeadingRefs.current[lastSelectedCharId.current]?.focus();
+    selectedControlWasFocused.current = false;
+  }, [choiceUpdated, revealFingerprint]);
 
   // Stall line: show after STALL_MS of no stage change
   const [stalling, setStalling] = useState(false);
@@ -467,6 +496,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
           {characters.map(c => (
             <motion.div 
               key={c.char_id} 
+              ref={(node) => { characterCardRefs.current[c.char_id] = node; }}
               variants={{
                 hidden: { opacity: 0, y: 40, scale: 0.8 },
                 show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring", bounce: 0.4 } }
@@ -495,7 +525,13 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
               ) : (
                 <div className="w-full aspect-square rounded-[16px] bg-[var(--color-muted)] animate-pulse" />
               )}
-              <p className="font-display text-2xl text-foreground mt-2">{c.name}</p>
+              <h2
+                ref={(node) => { characterHeadingRefs.current[c.char_id] = node; }}
+                tabIndex={-1}
+                className="font-display text-2xl text-foreground mt-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary"
+              >
+                {c.name}
+              </h2>
 
               {c.chips.length === 0 && (
                 <p className="w-full text-center font-kid text-sm text-foreground/70">

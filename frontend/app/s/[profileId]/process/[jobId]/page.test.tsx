@@ -541,6 +541,43 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     expect(screen.queryByRole("button", { name: /Redraw Kiko/ })).toBeNull();
     expect(screen.getByRole("link", { name: /bookshelf/i })).toBeDefined();
   });
+
+  it("Escape clears an unsubmitted selection without sending a request", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
+    await renderPausedPage();
+    const trait = await screen.findByRole("button", { name: "orange sock" });
+    trait.focus();
+    fireEvent.click(trait);
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(trait).toHaveAttribute("aria-pressed", "false");
+    expect(document.activeElement).toBe(trait);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("focuses the updated character heading when the selected control disappears", async () => {
+    const paramsPromise = makeParams("j1");
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
+    const view = await renderPausedPage(paramsPromise);
+    const trait = await screen.findByRole("button", { name: "orange sock" });
+    trait.focus();
+    fireEvent.click(trait);
+
+    mockUseJob.mockReturnValue(jobState({
+      bucket: "paused",
+      row: {
+        ...PAUSED_ROW,
+        reveal: {
+          characters: [{ char_id: "c0", name: "Kiko", image_path: "j1/ref-c0-v2.png", chips: ["green scarf"] }],
+          taps_left: 1,
+        },
+      },
+    }));
+    await act(async () => view.rerender(<ProcessingPage params={paramsPromise} />));
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Kiko" })).toHaveFocus());
+  });
 });
 
 describe("ProcessingPage — stall timer (spec §4.1)", () => {
