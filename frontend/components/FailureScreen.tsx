@@ -41,14 +41,21 @@ type Props = {
 };
 
 function StoryReference({ jobId }: { jobId: string }) {
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
 
-  const handleCopy = () => {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(jobId);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+  // The write is a promise: an unawaited call showed "Copied!" for a denied clipboard permission
+  // or an insecure context — the one thing a child cannot check for themselves (spec §4).
+  const handleCopy = async () => {
+    try {
+      if (typeof navigator === "undefined" || !navigator.clipboard) {
+        throw new Error("clipboard unavailable");
+      }
+      await navigator.clipboard.writeText(jobId);
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
     }
+    window.setTimeout(() => setCopyState("idle"), 4000);
   };
 
   return (
@@ -62,11 +69,13 @@ function StoryReference({ jobId }: { jobId: string }) {
           onClick={handleCopy}
           className="ml-2 inline-flex items-center gap-1 min-h-[44px] min-w-[44px] px-2.5 py-1 text-xs font-kid font-bold text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 rounded-lg transition-colors focus-visible:outline-[var(--color-secondary)] focus-visible:outline-2"
         >
-          {copied ? (
+          {copyState === "copied" ? (
             <>
               <Check size={16} weight="bold" className="text-emerald-600" />
               <span className="text-emerald-700">Copied!</span>
             </>
+          ) : copyState === "failed" ? (
+            <span className="text-[var(--color-destructive)]">Couldn’t copy — write the reference down.</span>
           ) : (
             <>
               <Copy size={16} weight="bold" />

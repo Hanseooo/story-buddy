@@ -375,3 +375,26 @@ describe("FailureScreen — announcements (spec §6)", () => {
     });
   });
 });
+
+describe("FailureScreen — story reference copy honesty (spec §4)", () => {
+  it("says so when the copy fails, and never claims success", async () => {
+    Object.assign(navigator, {
+      clipboard: { writeText: vi.fn().mockRejectedValue(new Error("denied")) },
+    });
+
+    render(<FailureScreen reason="service_limit" jobId="12345678-full-uuid-here" />);
+    fireEvent.click(screen.getByRole("button", { name: "Copy story reference ID" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("Couldn’t copy — write the reference down.")).toBeDefined()
+    );
+    expect(screen.queryByText("Copied!")).toBeNull();
+  });
+
+  it("keeps the full ID out of the visible reference", () => {
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+    render(<FailureScreen reason="service_limit" jobId="12345678-full-uuid-here" />);
+    expect(screen.getByText("12345678")).toBeDefined();
+    expect(screen.queryByText("12345678-full-uuid-here")).toBeNull();
+  });
+});
