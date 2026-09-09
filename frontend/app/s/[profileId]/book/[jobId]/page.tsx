@@ -178,10 +178,21 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
 
   // terminal-success — wait for signing
   if (signFailed) {
-    // No `reason`: the job succeeded and the row's `failure_reason` is null. Signing is a browser-side
-    // failure with no safe reason behind it, so it keeps the legacy machine copy (spec §3 maps a null
-    // reason to `system_error`, which would be a lie about a book that generated fine).
-    return <FailureScreen kind="retry" jobId={jobId} inputText={row?.input_text} stylePresetId={row?.style_preset_id} countable={false} />;
+    // The job succeeded: the row is `complete`, the pages are real, and `failure_reason` is null.
+    // Signing is a browser-side read failure, so the honest fix is re-signing the same paths —
+    // not a new paid generation (spec §4, kid-flow-failure-semantics §4.7). Passing no `reason`
+    // keeps this off the safe taxonomy, which would claim a finished book failed to be made.
+    return (
+      <FailureScreen
+        kind="read-failed"
+        jobId={jobId}
+        countable={false}
+        onReload={() => {
+          setSignFailed(false);
+          signPages(1);
+        }}
+      />
+    );
   }
 
   if (!signedPages) {

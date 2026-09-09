@@ -15,8 +15,10 @@ vi.mock("@/lib/useJob", () => ({
 }));
 
 vi.mock("@/components/FailureScreen", () => ({
-  default: ({ kind, countable }: { kind: string; countable?: boolean }) => (
-    <div data-testid="failure-screen" data-kind={kind} data-countable={String(countable ?? true)} />
+  default: ({ kind, countable, onReload }: { kind: string; countable?: boolean; onReload?: () => void }) => (
+    <div data-testid="failure-screen" data-kind={kind} data-countable={String(countable ?? true)}>
+      {onReload && <button onClick={onReload}>reload</button>}
+    </div>
   ),
   resetFailChain: vi.fn(),
 }));
@@ -244,14 +246,14 @@ describe("BookPage — reader (terminal-success)", () => {
     expect(mockCreateSignedUrls).toHaveBeenCalledTimes(2);
   });
 
-  it("signing fails twice → machine FailureScreen with countable=false (spec §4.3, §4.5)", async () => {
+  it("signing fails twice → read-failure FailureScreen with countable=false (spec §4.3, §4.5)", async () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
     mockCreateSignedUrls.mockResolvedValue({ data: null, error: new Error("network") });
 
     await renderPage(makeParams("j1"));
 
     await waitFor(() => expect(screen.getByTestId("failure-screen")).toBeDefined());
-    expect(screen.getByTestId("failure-screen").getAttribute("data-kind")).toBe("retry");
+    expect(screen.getByTestId("failure-screen").getAttribute("data-kind")).toBe("read-failed");
     // countable=false prevents bumpChain() on press — signing failure is not a failed story
     expect(screen.getByTestId("failure-screen").getAttribute("data-countable")).toBe("false");
   });
@@ -269,5 +271,37 @@ describe("BookPage — reader (terminal-success)", () => {
     }));
     await renderPage(makeParams("j1"));
     expect(screen.queryByText("SENTINEL_MODERATION_DETAIL")).toBeNull();
+  });
+});
+
+describe("BookPage — a finished book whose pictures will not load (spec §4)", () => {
+  it("offers re-reading, not a new paid book, and does not count against the chain", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
+    mockCreateSignedUrls.mockResolvedValue({ data: [], error: null });
+
+    await renderPage(makeParams("j1"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("failure-screen").getAttribute("data-kind")).toBe("read-failed")
+    );
+    expect(screen.getByTestId("failure-screen").getAttribute("data-countable")).toBe("false");
+    // Two attempts: the automatic re-sign already in signPages, and nothing more.
+    expect(mockCreateSignedUrls).toHaveBeenCalledTimes(2);
+  });
+
+  it("reloading re-signs the same paths and renders the book", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
+    mockCreateSignedUrls.mockResolvedValue({ data: [], error: null });
+
+    await renderPage(makeParams("j1"));
+    await waitFor(() => expect(screen.getByTestId("failure-screen")).toBeDefined());
+
+    mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "reload" }));
+    });
+
+    await waitFor(() => expect(screen.queryByTestId("failure-screen")).toBeNull());
+    expect(mockCreateSignedUrls).toHaveBeenCalledTimes(3);
   });
 });
