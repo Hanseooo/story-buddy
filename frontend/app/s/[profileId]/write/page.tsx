@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { resetFailChain } from "@/components/FailureScreen";
 import { supabase } from "@/lib/supabaseClient";
@@ -8,6 +8,7 @@ import { motion } from "framer-motion";
 
 const MIN_STORY_WORDS = 5;
 const MAX_STORY_WORDS = 300;
+const MAX_TITLE_CHARS = 80;
 
 const PREFILL_KEY = "sb.prefill";
 const CHAIN_KEY = "sb.failChain";
@@ -25,24 +26,42 @@ function countWords(text: string): number {
 
 export default function WriteStoryPage() {
   const [text, setText] = useState("");
+  const [title, setTitle] = useState("");
+  const [titleError, setTitleError] = useState<string | null>(null);
+  const [pendingRedactedTitle, setPendingRedactedTitle] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [postError, setPostError] = useState(false);
   const [chainCount, setChainCount] = useState(0);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const router = useRouter();
   const { profileId } = useParams() as { profileId: string };
 
   useEffect(() => {
-    let prefill: string | null = null;
+    let prefill: { text: string; title: string } | null = null;
     try {
-      prefill = sessionStorage.getItem(PREFILL_KEY);
-      if (prefill !== null) {
+      const raw = sessionStorage.getItem(PREFILL_KEY);
+      if (raw !== null) {
         sessionStorage.removeItem(PREFILL_KEY);
+        const parsed: unknown = JSON.parse(raw);
+        if (
+          typeof parsed === "object" &&
+          parsed !== null &&
+          "text" in parsed &&
+          "title" in parsed &&
+          typeof parsed.text === "string" &&
+          typeof parsed.title === "string"
+        ) {
+          prefill = { text: parsed.text, title: parsed.title };
+        }
       }
-    } catch { /* storage unavailable */ }
+    } catch { /* storage unavailable or malformed */ }
 
     if (prefill !== null) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setText(prefill);
+      setText(prefill.text);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTitle(prefill.title);
       try {
         setChainCount(Number(sessionStorage.getItem(CHAIN_KEY) ?? 0));
       } catch { /* unavailable */ }
@@ -55,43 +74,139 @@ export default function WriteStoryPage() {
   const overCap = wordCount > MAX_STORY_WORDS;
   const progress = Math.min((wordCount / MIN_STORY_WORDS) * 100, 100);
 
+  function focusTitle() {
+    titleInputRef.current?.focus();
+  }
+
+  async function postStorybook(titleAck?: string) {
+    const stylePresetId = document.querySelector<HTMLInputElement>(
+      'input[name="style_preset_id"]:checked'
+    )?.value;
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    return fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/storybooks`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session?.access_token}`,
+      },
+      body: JSON.stringify({
+        text,
+        title: title.trim(),
+        style_preset_id: stylePresetId,
+        ...(titleAck !== undefined ? { title_ack: titleAck } : {}),
+      }),
+    });
+  }
+
+  async function afterSubmit(res: Response) {
+    if (res.status === 409) {
+      const data = await res.json();
+      const checkedTitle = data?.detail?.checked_title;
+      if (typeof checkedTitle === "string") {
+        setPendingRedactedTitle(checkedTitle);
+      } else {
+        setPostError(true);
+      }
+      return;
+    }
+    if (!res.ok) {
+      setPostError(true);
+      return;
+    }
+    const data = await res.json();
+    router.push(`/s/${profileId}/process/${data.job_id}`);
+  }
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (submitting) return;
+    const trimmedTitle = title.trim();
+    setTitleError(null);
+    if (trimmedTitle.length === 0) {
+      setTitleError("Give your story a title.");
+      focusTitle();
+      return;
+    }
+    if (Array.from(trimmedTitle).length > MAX_TITLE_CHARS) {
+      setTitleError("Keep your title to 80 characters.");
+      focusTitle();
+      return;
+    }
     if (wordCount < MIN_STORY_WORDS) return;
 
     // ponytail: the radios are uncontrolled — FormData reads the choice, no useState needed.
-    const stylePresetId = new FormData(e.currentTarget).get("style_preset_id");
-
     setSubmitting(true);
     setPostError(false);
+    setPendingRedactedTitle(null);
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/storybooks`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session?.access_token}`,
-        },
-        body: JSON.stringify({ text, style_preset_id: stylePresetId }),
-      });
-      if (!res.ok) {
-        setPostError(true);
-        return;
-      }
-      const data = await res.json();
-      router.push(`/s/${profileId}/process/${data.job_id}`);
+      const res = await postStorybook();
+      await afterSubmit(res);
+    } catch {
+      setPostError(true);
     } finally {
       setSubmitting(false);
     }
   }
 
+  async function confirmRedactedTitle() {
+    if (pendingRedactedTitle === null || submitting) return;
+    setSubmitting(true);
+    setPostError(false);
+    try {
+      const res = await postStorybook(pendingRedactedTitle);
+      await afterSubmit(res);
+    } catch {
+      setPostError(true);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function handleTitleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      textareaRef.current?.focus();
+    }
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="min-h-[calc(100dvh-76px)] sm:min-h-[calc(100dvh-85px)] flex flex-col py-4 sm:py-6 lg:py-8 px-4 sm:px-8 max-w-5xl mx-auto w-full relative">
+    <form aria-label="Write your story" onSubmit={handleSubmit} className="min-h-[calc(100dvh-76px)] sm:min-h-[calc(100dvh-85px)] flex flex-col py-4 sm:py-6 lg:py-8 px-4 sm:px-8 max-w-5xl mx-auto w-full relative">
+
+      {/* Title — story-titles spec §3 */}
+      <div className="mb-3 shrink-0">
+        <label htmlFor="story-title" className="block text-xs font-display font-extrabold tracking-wider uppercase text-foreground/60 mb-1">
+          Story title
+        </label>
+        <input
+          id="story-title"
+          ref={titleInputRef}
+          type="text"
+          value={title}
+          onChange={(e) => { setTitle(e.target.value); setTitleError(null); }}
+          onKeyDown={handleTitleKeyDown}
+          placeholder="Name your book"
+          aria-label="Story title"
+          aria-invalid={titleError !== null}
+          aria-describedby="title-count title-error"
+          className="w-full bg-transparent font-kid font-bold text-xl sm:text-2xl text-foreground placeholder-foreground/35 focus:outline-none caret-primary border-b-2 border-primary/10 focus:border-primary pb-1"
+        />
+        <div className="flex items-center justify-between mt-1">
+          <span id="title-count" className="text-xs font-bold text-foreground/50">
+            {Array.from(title).length} / {MAX_TITLE_CHARS}
+          </span>
+          {titleError && (
+            <span id="title-error" role="alert" className="text-xs font-bold text-destructive">
+              {titleError}
+            </span>
+          )}
+        </div>
+      </div>
       
       {/* The Magic Canvas Textarea */}
       <motion.textarea
+        ref={textareaRef}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: "easeOut" }}
@@ -178,7 +293,7 @@ export default function WriteStoryPage() {
             <button
               type="button"
               className="text-sm font-extrabold text-primary hover:text-primary-deep hover:underline px-2 transition-colors"
-              onClick={() => setText("")}
+              onClick={() => { setText(""); setTitle(""); setTitleError(null); }}
             >
               Start over
             </button>
@@ -203,6 +318,32 @@ export default function WriteStoryPage() {
           )}
         </div>
       </motion.div>
+
+      {pendingRedactedTitle !== null && (
+        <div role="alertdialog" aria-label="Title changed for privacy" className="mt-3 shrink-0 bg-secondary/10 border border-secondary/30 rounded-2xl p-4">
+          <p className="font-kid text-sm text-foreground/80">
+            We changed your title to keep it private: <strong>{pendingRedactedTitle}</strong>
+          </p>
+          <div className="mt-3 flex gap-3">
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={confirmRedactedTitle}
+              className="min-h-[44px] px-4 rounded-xl bg-primary text-on-primary font-bold disabled:opacity-50"
+            >
+              Use this title
+            </button>
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={() => setPendingRedactedTitle(null)}
+              className="min-h-[44px] px-4 rounded-xl border border-primary/20 text-primary font-bold disabled:opacity-50"
+            >
+              Change it
+            </button>
+          </div>
+        </div>
+      )}
     </form>
   );
 }

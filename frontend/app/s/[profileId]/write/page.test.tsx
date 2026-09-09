@@ -32,6 +32,9 @@ describe("WriteStoryPage", () => {
 
   it("submits the story text and redirects to the processing page", async () => {
     render(<WriteStoryPage />);
+    fireEvent.change(screen.getByLabelText("Story title"), {
+      target: { value: "My Book" },
+    });
     fireEvent.change(screen.getByLabelText("story text"), {
       target: { value: "A dog runs in a field." },
     });
@@ -43,13 +46,20 @@ describe("WriteStoryPage", () => {
       expect.stringContaining("/storybooks"),
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ text: "A dog runs in a field.", style_preset_id: "gouache" }),
+        body: JSON.stringify({
+          text: "A dog runs in a field.",
+          title: "My Book",
+          style_preset_id: "gouache",
+        }),
       })
     );
   });
 
   it("sends the selected style_preset_id (ADR-022), defaulting to gouache (ADR-042)", async () => {
     render(<WriteStoryPage />);
+    fireEvent.change(screen.getByLabelText("Story title"), {
+      target: { value: "My Book" },
+    });
     expect(screen.queryByText("Comic")).toBeNull();
     expect(screen.getByText("Paper Cutout")).toBeDefined();
     fireEvent.change(screen.getByLabelText("story text"), {
@@ -68,6 +78,9 @@ describe("WriteStoryPage", () => {
 
   it("sends the session bearer token — POST /storybooks is auth-guarded", async () => {
     render(<WriteStoryPage />);
+    fireEvent.change(screen.getByLabelText("Story title"), {
+      target: { value: "My Book" },
+    });
     fireEvent.change(screen.getByLabelText("story text"), {
       target: { value: "A dog runs in a field." },
     });
@@ -117,10 +130,14 @@ describe("WriteStoryPage — prefill and chain counter", () => {
   });
 
   it("prefills the textarea from sb.prefill on mount and deletes the key", () => {
-    sessionStorage.setItem("sb.prefill", "My story about a cat.");
+    sessionStorage.setItem(
+      "sb.prefill",
+      JSON.stringify({ text: "My story about a cat.", title: "Cat Book" })
+    );
     render(<WriteStoryPage />);
     const textarea = screen.getByLabelText("story text") as HTMLTextAreaElement;
     expect(textarea.value).toBe("My story about a cat.");
+    expect((screen.getByLabelText("Story title") as HTMLInputElement).value).toBe("Cat Book");
     expect(sessionStorage.getItem("sb.prefill")).toBeNull();
   });
 
@@ -133,21 +150,21 @@ describe("WriteStoryPage — prefill and chain counter", () => {
 
   it("does NOT call resetFailChain when sb.prefill is present (child is still in a chain)", () => {
     sessionStorage.setItem("sb.failChain", "2");
-    sessionStorage.setItem("sb.prefill", "A story.");
+    sessionStorage.setItem("sb.prefill", JSON.stringify({ text: "A story.", title: "Book" }));
     render(<WriteStoryPage />);
     expect(sessionStorage.getItem("sb.failChain")).toBe("2");
   });
 
   it("shows try-a-different-story offer at chain count 3", () => {
     sessionStorage.setItem("sb.failChain", "3");
-    sessionStorage.setItem("sb.prefill", "A story.");
+    sessionStorage.setItem("sb.prefill", JSON.stringify({ text: "A story.", title: "Book" }));
     render(<WriteStoryPage />);
     expect(screen.getByText(/start over/i)).toBeDefined();
   });
 
   it("try-a-different-story clears the textarea", () => {
     sessionStorage.setItem("sb.failChain", "3");
-    sessionStorage.setItem("sb.prefill", "A story.");
+    sessionStorage.setItem("sb.prefill", JSON.stringify({ text: "A story.", title: "Book" }));
     render(<WriteStoryPage />);
     fireEvent.click(screen.getByText(/start over/i));
     const textarea = screen.getByLabelText("story text") as HTMLTextAreaElement;
@@ -161,6 +178,9 @@ describe("WriteStoryPage — prefill and chain counter", () => {
     }) as unknown as typeof fetch;
 
     render(<WriteStoryPage />);
+    fireEvent.change(screen.getByLabelText("Story title"), {
+      target: { value: "My Book" },
+    });
     fireEvent.change(screen.getByLabelText("story text"), {
       target: { value: "A story about a dog running around." },
     });
@@ -214,5 +234,96 @@ describe("WriteStoryPage — the 300-word cap", () => {
 
     expect(global.fetch).not.toHaveBeenCalled();
     expect(pushMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("WriteStoryPage title field", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ job_id: "job-1" }),
+    }) as unknown as typeof fetch;
+  });
+
+  it("shows a title input with an n/80 counter separate from the word counter", () => {
+    render(<WriteStoryPage />);
+    const titleInput = screen.getByLabelText("Story title");
+    fireEvent.change(titleInput, { target: { value: "My Book" } });
+    expect(screen.getByText("7 / 80")).toBeInTheDocument();
+  });
+
+  it("blocks submit and shows the empty-title message", async () => {
+    render(<WriteStoryPage />);
+    fireEvent.change(screen.getByLabelText("story text"), {
+      target: { value: "one two three four five" },
+    });
+    fireEvent.submit(screen.getByRole("form", { name: "Write your story" }));
+    expect(await screen.findByText("Give your story a title.")).toBeInTheDocument();
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Story title")).toHaveFocus();
+  });
+
+  it("blocks submit and shows the 81-character message without truncating input", async () => {
+    render(<WriteStoryPage />);
+    fireEvent.change(screen.getByLabelText("story text"), {
+      target: { value: "one two three four five" },
+    });
+    const titleInput = screen.getByLabelText("Story title") as HTMLInputElement;
+    const longTitle = "x".repeat(81);
+    fireEvent.change(titleInput, { target: { value: longTitle } });
+    fireEvent.submit(screen.getByRole("form", { name: "Write your story" }));
+    expect(await screen.findByText("Keep your title to 80 characters.")).toBeInTheDocument();
+    expect(titleInput.value).toBe(longTitle);
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(titleInput).toHaveFocus();
+  });
+
+  it("submits title and text together on valid input", async () => {
+    render(<WriteStoryPage />);
+    fireEvent.change(screen.getByLabelText("story text"), {
+      target: { value: "one two three four five" },
+    });
+    fireEvent.change(screen.getByLabelText("Story title"), { target: { value: "My Book" } });
+    fireEvent.submit(screen.getByRole("form", { name: "Write your story" }));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    const body = JSON.parse((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
+    expect(body.title).toBe("My Book");
+    expect(body.text).toBe("one two three four five");
+  });
+
+  it("shows a checked title on 409 and resubmits with title_ack when accepted", async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        json: async () => ({ detail: { checked_title: "call me at <PH_MOBILE>" } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ job_id: "job-2" }),
+      }) as unknown as typeof fetch;
+    render(<WriteStoryPage />);
+    fireEvent.change(screen.getByLabelText("story text"), {
+      target: { value: "one two three four five" },
+    });
+    fireEvent.change(screen.getByLabelText("Story title"), {
+      target: { value: "call me at 09171234567" },
+    });
+    fireEvent.submit(screen.getByRole("form", { name: "Write your story" }));
+    expect(await screen.findByText(/call me at <PH_MOBILE>/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /use this title/i }));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
+    const secondBody = JSON.parse((global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][1].body);
+    expect(secondBody.title_ack).toBe("call me at <PH_MOBILE>");
+    expect(secondBody.title).toBe("call me at 09171234567");
+  });
+
+  it("Enter in the title moves focus to the story without submitting", () => {
+    render(<WriteStoryPage />);
+    fireEvent.keyDown(screen.getByLabelText("Story title"), { key: "Enter", code: "Enter" });
+    expect(screen.getByLabelText("story text")).toHaveFocus();
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });
