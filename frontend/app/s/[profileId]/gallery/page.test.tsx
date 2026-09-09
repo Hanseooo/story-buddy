@@ -66,6 +66,8 @@ function makeJob(overrides: Record<string, unknown> = {}) {
         image_path: "covers/job-1.jpg",
       },
     ],
+    title: null,
+    input_text: "Once upon a time",
     profile_id: "author-1",
     profiles: { display_nickname: "Kai" },
     ...overrides,
@@ -115,11 +117,19 @@ describe("GalleryPage", () => {
     expect(mockLimit).toHaveBeenCalledWith(200);
   });
 
-  it("does not select input_text", async () => {
+  it("selects input_text for the legacy title fallback", async () => {
     const { default: GalleryPage } = await import("./page");
     await GalleryPage({ params });
     const selectArg: string = mockSelect.mock.calls[0][0];
-    expect(selectArg).not.toContain("input_text");
+    expect(selectArg).toContain("input_text");
+  });
+
+  it("shows the book title next to the author on a gallery card", async () => {
+    mockLimit.mockResolvedValue({ data: [makeJob({ title: "My Dragon Book" })] });
+    const { default: GalleryPage } = await import("./page");
+    const jsx = await GalleryPage({ params });
+    const { getByText } = render(jsx);
+    getByText("My Dragon Book");
   });
 
   it("links each card to the book reader at the correct URL", async () => {
