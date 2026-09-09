@@ -107,6 +107,15 @@ describe("ProcessingPage — bucket routing", () => {
     expect(screen.getByText(/making your book/i)).toBeDefined();
   });
 
+  it("in-flight shows the stored title as context", async () => {
+    mockUseJob.mockReturnValue(jobState({
+      bucket: "in-flight",
+      row: { ...RUNNING_ROW, title: "My Dragon Book" },
+    }));
+    await renderPage(makeParams("j1"));
+    expect(screen.getByText("My Dragon Book")).toBeDefined();
+  });
+
   it("in-flight: analyze stage highlights step 1 with Reading your story", async () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "in-flight", row: RUNNING_ROW }));
     await renderPage(makeParams("j1"));

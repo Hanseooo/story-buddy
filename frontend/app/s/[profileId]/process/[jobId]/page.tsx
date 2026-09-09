@@ -6,6 +6,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useJob } from "@/lib/useJob";
+import { displayTitle } from "@/lib/displayTitle";
 import FailureScreen from "@/components/FailureScreen";
 import { supabase } from "@/lib/supabaseClient";
 import { signPaths } from "@/lib/signedUrls";
@@ -308,6 +309,11 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
           transition={{ duration: 0.5, ease: "easeOut" }}
           className="flex flex-col items-center gap-4 text-center mb-12"
         >
+          {row && (
+            <p className="text-sm font-bold text-foreground/50 uppercase tracking-wider">
+              {displayTitle(row.title, row.input_text)}
+            </p>
+          )}
           <h1 className="font-display text-4xl md:text-5xl text-foreground tracking-tight text-center">
             <KineticText text="Meet your cast!" />
           </h1>
@@ -424,6 +430,11 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
          <div className="w-[600px] h-[600px] bg-[var(--color-secondary)]/20 rounded-full blur-[100px]" />
       </div>
 
+      {row && (
+        <p className="z-10 -mb-8 text-sm font-bold text-foreground/50 uppercase tracking-wider">
+          {displayTitle(row.title, row.input_text)}
+        </p>
+      )}
       <h1 className="z-10 mb-16 h-20 flex items-center justify-center font-display text-5xl md:text-6xl text-foreground tracking-tighter">
         <KineticText text="Making your book!" />
       </h1>

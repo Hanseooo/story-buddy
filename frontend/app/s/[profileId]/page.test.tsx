@@ -33,6 +33,7 @@ const makeJob = (overrides: Partial<{
   status: string;
   profile_id: string;
   input_text: string;
+  title: string | null;
   pages: { scene_id: string; caption: string; image_path: string }[];
 }> = {}) => ({
   id: "job-1",
@@ -40,6 +41,7 @@ const makeJob = (overrides: Partial<{
   current_stage: null,
   failure_reason: null,
   input_text: "My story",
+  title: null,
   style_preset_id: null,
   pages: [{ scene_id: "s1", caption: "cap", image_path: "pages/img.jpg" }],
   reveal: null,
@@ -60,6 +62,20 @@ describe("Bookshelf — §9.11–12", () => {
     await waitFor(() => expect(screen.getByText("My story")).toBeDefined());
     // Three links: desktop write CTA, the book card, and mobile write CTA
     expect(screen.getAllByRole("link")).toHaveLength(3);
+  });
+
+  it("shows the stored title on a bookshelf card", async () => {
+    mockSelect.mockResolvedValueOnce({ data: [makeJob({ title: "My Dragon Book" })] });
+    render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
+    await waitFor(() => expect(screen.getByText("My Dragon Book")).toBeDefined());
+  });
+
+  it("falls back to the first-line excerpt when the stored title is null", async () => {
+    mockSelect.mockResolvedValueOnce({
+      data: [makeJob({ title: null, input_text: "A brave knight\nthe rest of the story" })],
+    });
+    render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
+    await waitFor(() => expect(screen.getByText("A brave knight")).toBeDefined());
   });
 
   it("§9.12 — terminal-success card links to /book/[jobId]", async () => {

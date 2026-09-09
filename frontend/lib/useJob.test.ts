@@ -9,6 +9,7 @@ const BASE: JobRow = {
   current_stage: null,
   failure_reason: null,
   input_text: "x",
+  title: null,
   style_preset_id: null,
   pages: [],
   reveal: null,
@@ -52,14 +53,18 @@ describe("classify", () => {
 
 // ---- Supabase mock ----
 const mockSingle = vi.fn();
+const mockSelectColumns = vi.fn();
 let capturedCallback: ((payload: { new: JobRow }) => void) | null = null;
 
 vi.mock("@/lib/supabaseClient", () => ({
   supabase: {
     from: () => ({
-      select: () => ({
+      select: (columns: string) => {
+        mockSelectColumns(columns);
+        return {
         eq: () => ({ single: () => mockSingle() }),
-      }),
+        };
+      },
     }),
     channel: () => ({
       on: (_event: string, _filter: unknown, cb: (payload: { new: JobRow }) => void) => {
@@ -73,12 +78,20 @@ vi.mock("@/lib/supabaseClient", () => ({
 
 beforeEach(() => {
   mockSingle.mockReset();
+  mockSelectColumns.mockReset();
   capturedCallback = null;
+});
+
+it("select string includes title", async () => {
+  mockSingle.mockResolvedValue({ data: null, error: { code: "PGRST116" } });
+  renderHook(() => useJob("j1"));
+  await waitFor(() => expect(mockSelectColumns).toHaveBeenCalled());
+  expect(mockSelectColumns.mock.calls[0][0]).toContain("title");
 });
 
 const RUNNING: JobRow = {
   id: "j1", status: "running", current_stage: "analyze",
-  failure_reason: null, input_text: "x", style_preset_id: null, pages: [], reveal: null,
+  failure_reason: null, input_text: "x", title: null, style_preset_id: null, pages: [], reveal: null,
 };
 const COMPLETE: JobRow = {
   ...RUNNING, status: "complete",

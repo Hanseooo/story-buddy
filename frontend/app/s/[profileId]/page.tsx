@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import { classify, type JobRow, type JobBucket } from "@/lib/useJob";
+import { displayTitle } from "@/lib/displayTitle";
 import { signPaths } from "@/lib/signedUrls";
 import { motion } from "framer-motion";
 import { MagicWand, Users, FileDashed, Books, PencilSimple } from "@phosphor-icons/react";
@@ -58,7 +59,7 @@ export default function BookshelfPage({
     (async () => {
       const { data: jobs } = await supabase
         .from("jobs")
-        .select("id, status, current_stage, failure_reason, input_text, pages, reveal")
+        .select("id, status, current_stage, failure_reason, input_text, title, pages, reveal")
         // ponytail: explicit filter required — RLS also grants classmates' approved jobs (spec §7.2)
         .eq("profile_id", profileId)
         .order("created_at", { ascending: false });
@@ -79,7 +80,7 @@ export default function BookshelfPage({
         (jobs as JobRow[]).map((j) => ({
           id: j.id,
           bucket: classify(j),
-          title: (j.input_text ?? "").split("\n")[0].slice(0, 60) || "Untitled",
+          title: displayTitle(j.title, j.input_text),
           coverUrl: j.pages?.[0]?.image_path
             ? (signedMap[j.pages[0].image_path] ?? null)
             : null,
