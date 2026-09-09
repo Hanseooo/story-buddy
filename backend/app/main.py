@@ -15,6 +15,7 @@ from app.auth import get_current_user, teacher_router
 import app.classrooms  # noqa: F401 — registers routes on teacher_router as side-effect
 import app.review  # noqa: F401 — registers routes on teacher_router as side-effect
 from app.avatar import AvatarRequest, patch_avatar
+from providers import check_text
 
 if settings.sentry_dsn_backend:
     sentry_sdk.init(dsn=settings.sentry_dsn_backend, traces_sample_rate=0.1)
@@ -109,6 +110,18 @@ def health() -> dict:
 def create_storybook(
     payload: CreateStorybookRequest, user=Depends(get_current_user)
 ) -> CreateStorybookResponse:
+    # ADR-059: checked synchronously, before any write, and never via input_gate/StoryMemory —
+    # the title is job metadata, not pipeline input.
+    title_safe, _title_categories, checked_title = check_text(payload.title)
+    if not title_safe:
+        raise HTTPException(422, "that title isn't allowed")
+    if len(checked_title) < 1 or len(checked_title) > MAX_TITLE_CHARS:
+        raise HTTPException(422, "give your story a different title")
+    if checked_title != payload.title and payload.title_ack != checked_title:
+        # Redaction changed the title and the child hasn't confirmed this exact string yet
+        # (ADR-059 Decision 4) — nothing written, no silent post-submit rename.
+        raise HTTPException(409, {"checked_title": checked_title})
+
     job_id = str(uuid.uuid4())
     before = word_count(payload.text)
     text, truncated = clamp_story(payload.text)
@@ -128,6 +141,7 @@ def create_storybook(
             "status": "queued",
             "current_stage": "queued",
             "input_text": text,
+            "title": checked_title,
             "truncated": truncated,
             "style_preset_id": payload.style_preset_id or "gouache",
             "profile_id": user.id,
