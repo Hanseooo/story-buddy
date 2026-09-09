@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useJob } from "@/lib/useJob";
@@ -20,6 +20,7 @@ const STALL_MS = 90_000;
 const SWEPT_STATUS = "__swept__";
 
 type StepperStep = 1 | 2 | 3 | 4;
+type SelectedTrait = { charId: string; attribute: string } | null;
 
 function getStep(stage: string | null): StepperStep | null {
   if (!stage) return null;
@@ -189,6 +190,17 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   const [bridgeStage, setBridgeStage] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState(false);
+  const [selectedTrait, setSelectedTrait] = useState<SelectedTrait>(null);
+  const [pendingRedrawName, setPendingRedrawName] = useState<string | null>(null);
+  const submissionInFlight = useRef(false);
+
+  function toggleTrait(charId: string, attribute: string) {
+    setSelectedTrait((current) =>
+      current?.charId === charId && current.attribute === attribute
+        ? null
+        : { charId, attribute }
+    );
+  }
 
   // Stall line: show after STALL_MS of no stage change
   const [stalling, setStalling] = useState(false);
@@ -239,6 +251,9 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
     char_id?: string,
     attribute?: string
   ) {
+    if (confirming) return;
+    if (submissionInFlight.current) return;
+    submissionInFlight.current = true;
     setBridgeStage(row?.current_stage ?? null);
     setConfirming(true);
     setConfirmError(false);
@@ -262,8 +277,9 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
       setBridgeStage(null);
       setConfirmError(true);
     } finally {
-      setConfirming(false);
       await refetch();
+      submissionInFlight.current = false;
+      setConfirming(false);
     }
   }
 
@@ -318,9 +334,24 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
             <KineticText text="Meet your cast!" />
           </h1>
           <p className="font-kid text-lg text-foreground/70 max-w-md">
-            Make sure they look right! Tap a word to fix it, or let&apos;s start drawing.
+            Choose a detail you want us to try drawing again.
           </p>
         </motion.div>
+
+        <div className="mb-6 text-center font-kid text-foreground">
+          {taps_left > 0 ? (
+            <>
+              <p className="font-bold">
+                {taps_left} {taps_left === 1 ? "redraw" : "redraws"} left for this book
+              </p>
+              <p className="text-sm text-foreground/70">Shared by all your characters.</p>
+            </>
+          ) : (
+            <p className="max-w-lg">
+              No redraws left for this book. You can use these characters or go back to your bookshelf.
+            </p>
+          )}
+        </div>
 
         <motion.div 
           className="flex flex-wrap justify-center gap-8 w-full"
@@ -355,28 +386,73 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
               <p className="font-display text-2xl text-foreground mt-2">{c.name}</p>
               
               <div className="flex flex-wrap justify-center gap-2 mt-2 w-full">
-                {taps_left > 0 && c.chips.map(chip => (
-                  <button
-                    key={chip}
-                    disabled={confirming}
-                    onClick={() => handleConfirm("try_again", c.char_id, chip)}
-                    className="rounded-full border border-[var(--color-primary)]/20 bg-background hover:bg-[var(--color-primary)]/5 min-h-[44px] px-4 font-kid text-sm disabled:opacity-50 transition-colors text-foreground"
-                  >
-                    {chip}
-                  </button>
-                ))}
+                {taps_left > 0 && c.chips.map(chip => {
+                  const selected = selectedTrait?.charId === c.char_id && selectedTrait.attribute === chip;
+                  return (
+                    <button
+                      key={chip}
+                      type="button"
+                      aria-pressed={selected}
+                      disabled={confirming}
+                      onClick={() => toggleTrait(c.char_id, chip)}
+                      className={`min-h-[44px] max-w-full rounded-full border px-4 py-2 font-kid text-sm text-foreground transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary disabled:opacity-50 ${
+                        selected
+                          ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10 font-bold"
+                          : "border-[var(--color-primary)]/20 bg-background hover:bg-[var(--color-primary)]/5"
+                      }`}
+                    >
+                      {chip}
+                      {selected && <span className="sr-only"> selected</span>}
+                    </button>
+                  );
+                })}
               </div>
+
+              {selectedTrait?.charId === c.char_id && (
+                <div className="w-full rounded-[16px] bg-[var(--color-primary)]/5 p-4 text-left">
+                  <p className="font-kid text-sm leading-relaxed text-foreground">
+                    We&apos;ll draw a new picture, paying extra attention to {selectedTrait.attribute}. Other details may change.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={confirming}
+                      onClick={() => {
+                        setPendingRedrawName(c.name);
+                        void handleConfirm("try_again", c.char_id, selectedTrait.attribute);
+                      }}
+                      className="min-h-[44px] rounded-xl bg-[var(--color-primary)] px-4 py-2 font-kid font-bold text-[var(--color-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary disabled:opacity-50"
+                    >
+                      Redraw {c.name}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={confirming}
+                      onClick={() => setSelectedTrait(null)}
+                      className="min-h-[44px] rounded-xl px-4 py-2 font-kid font-bold text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </motion.div>
           ))}
         </motion.div>
 
-        <div className="mt-12 w-full flex justify-center">
+        <div className="mt-12 w-full flex flex-col items-center justify-center gap-3">
+          <p className="font-kid text-sm text-foreground/70">Continue with the pictures shown.</p>
           <button
+            type="button"
             disabled={confirming}
-            onClick={() => handleConfirm("confirm")}
-            className="rounded-[16px] bg-[var(--color-primary)] text-[var(--color-surface)] min-h-[56px] px-12 font-kid text-xl disabled:opacity-50 hover:brightness-105 active:scale-[0.98] transition-all font-bold shadow-[0_10px_28px_rgba(49,85,217,0.12)]"
+            onClick={() => {
+              setSelectedTrait(null);
+              setPendingRedrawName(null);
+              void handleConfirm("confirm");
+            }}
+            className="rounded-[16px] bg-[var(--color-primary)] text-[var(--color-surface)] min-h-[56px] px-12 font-kid text-xl disabled:opacity-50 hover:brightness-105 active:scale-[0.98] transition-all font-bold shadow-[0_10px_28px_rgba(49,85,217,0.12)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary"
           >
-            They look great! Let&apos;s go!
+            Use these characters
           </button>
         </div>
         
@@ -484,12 +560,14 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
               initial={{ opacity: 0, scale: 0.8, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.8, y: -10 }}
+              aria-live="polite"
               className="flex flex-col items-center gap-6"
             >
                <DrawingVignette />
                <h2 className="font-display text-3xl md:text-4xl text-foreground tracking-tight">
-                 Drawing it again…
+                 {pendingRedrawName ? `Redrawing ${pendingRedrawName}…` : "Redrawing your character…"}
                </h2>
+               <p className="font-kid text-sm text-foreground/70">The picture shown before was the previous picture.</p>
             </motion.div>
           ) : (
             <motion.div

@@ -178,10 +178,10 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     expect(screen.getByText("orange sock")).toBeDefined();
   });
 
-  it("paused: shows Use this one! button regardless of taps_left", async () => {
+  it("paused: shows Use these characters button regardless of taps_left", async () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
     await renderPage(makeParams("j1"));
-    await waitFor(() => expect(screen.getByRole("button", { name: /they look great|use this one/i })).toBeDefined());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Use these characters" })).toBeDefined());
   });
 
   it("paused: chips not rendered when taps_left == 0", async () => {
@@ -191,35 +191,117 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     };
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: zeroTaps }));
     await renderPage(makeParams("j1"));
-    await waitFor(() => expect(screen.getByRole("button", { name: /they look great|use this one/i })).toBeDefined());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Use these characters" })).toBeDefined());
     expect(screen.queryByText("orange sock")).toBeNull();
   });
 
-  it("chip tap POSTs try_again action and calls refetch", async () => {
+  it.each([
+    [3, "3 redraws left for this book"],
+    [2, "2 redraws left for this book"],
+    [1, "1 redraw left for this book"],
+  ])("shows the server allowance as shared book-wide copy", async (tapsLeft, copy) => {
+    mockUseJob.mockReturnValue(jobState({
+      bucket: "paused",
+      row: { ...PAUSED_ROW, reveal: { ...PAUSED_ROW.reveal!, taps_left: tapsLeft } },
+    }));
+    await renderPage(makeParams("j1"));
+
+    expect(screen.getByText(copy)).toBeDefined();
+    expect(screen.getByText("Shared by all your characters.")).toBeDefined();
+  });
+
+  it("explains a spent allowance and leaves continue and exit available", async () => {
+    mockUseJob.mockReturnValue(jobState({
+      bucket: "paused",
+      row: { ...PAUSED_ROW, reveal: { ...PAUSED_ROW.reveal!, taps_left: 0 } },
+    }));
+    await renderPage(makeParams("j1"));
+
+    expect(screen.getByText(
+      "No redraws left for this book. You can use these characters or go back to your bookshelf."
+    )).toBeDefined();
+    expect(screen.queryByRole("button", { name: "orange sock" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Use these characters" })).toBeEnabled();
+    expect(screen.getByRole("link", { name: /bookshelf/i })).toBeDefined();
+  });
+
+  it("selecting is free and explicit redraw sends the selected trait once", async () => {
+    let resolveFetch!: (value: Response) => void;
+    global.fetch = vi.fn().mockReturnValue(
+      new Promise<Response>((resolve) => { resolveFetch = resolve; })
+    ) as unknown as typeof fetch;
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
     await renderPage(makeParams("j1"));
-    await waitFor(() => expect(screen.getByText("orange sock")).toBeDefined());
 
-    await act(async () => {
-      fireEvent.click(screen.getByText("orange sock"));
-    });
+    const trait = await screen.findByRole("button", { name: "orange sock" });
+    fireEvent.click(trait);
 
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(trait).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(
+      "We'll draw a new picture, paying extra attention to orange sock. Other details may change."
+    )).toBeDefined();
+
+    const redraw = screen.getByRole("button", { name: "Redraw Kiko" });
+    fireEvent.click(redraw);
+    fireEvent.click(redraw);
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/jobs/j1/confirm"),
       expect.objectContaining({
         body: JSON.stringify({ action: "try_again", char_id: "c0", attribute: "orange sock" }),
       })
     ));
-    await waitFor(() => expect(REFETCH).toHaveBeenCalled());
+    expect(trait).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Use these characters" })).toBeDisabled();
+
+    resolveFetch({ ok: true, status: 200 } as Response);
+    await waitFor(() => expect(REFETCH).toHaveBeenCalledTimes(1));
   });
 
-  it("Use this one! POSTs confirm action and calls refetch", async () => {
+  it("keeps one selection across the screen and Cancel clears it", async () => {
+    const twoCharacters = {
+      ...PAUSED_ROW,
+      reveal: {
+        ...PAUSED_ROW.reveal!,
+        characters: [
+          ...PAUSED_ROW.reveal!.characters,
+          { char_id: "c1", name: "Maya", image_path: "j1/ref-c1.png", chips: ["blue hat"] },
+        ],
+      },
+    };
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: twoCharacters }));
+    await renderPage(makeParams("j1"));
+
+    const sock = screen.getByRole("button", { name: "orange sock" });
+    const hat = screen.getByRole("button", { name: "blue hat" });
+    fireEvent.click(sock);
+    fireEvent.click(hat);
+
+    expect(sock).toHaveAttribute("aria-pressed", "false");
+    expect(hat).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: "Redraw Kiko" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Redraw Maya" })).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(hat).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByRole("button", { name: /Redraw/ })).toBeNull();
+    expect(global.fetch).not.toHaveBeenCalled();
+
+    fireEvent.click(sock);
+    fireEvent.click(sock);
+    expect(sock).toHaveAttribute("aria-pressed", "false");
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("Use these characters POSTs confirm action and calls refetch", async () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
     await renderPage(makeParams("j1"));
-    await waitFor(() => expect(screen.getByRole("button", { name: /they look great|use this one/i })).toBeDefined());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Use these characters" })).toBeDefined());
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /they look great|use this one/i }));
+      fireEvent.click(screen.getByRole("button", { name: "Use these characters" }));
     });
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
@@ -231,15 +313,15 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
 
   it("confirm sends the Bearer token", async () => {
     // Regression, prod job 4cb31620 (2026-08-11): the reveal shipped without an Authorization
-    // header, so every "Use this one!" tap returned 401 {"detail":"missing token"} and the child
+    // header, so every "Use these characters" tap returned 401 {"detail":"missing token"} and the child
     // was stranded on the pause screen with no way forward. /storybooks, /me/avatar, /classrooms
     // and /jobs/{id}/review all attach the session token; this call was the only one that didn't.
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
     await renderPage(makeParams("j1"));
-    await waitFor(() => expect(screen.getByRole("button", { name: /they look great|use this one/i })).toBeDefined());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Use these characters" })).toBeDefined());
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /they look great|use this one/i }));
+      fireEvent.click(screen.getByRole("button", { name: "Use these characters" }));
     });
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
@@ -250,7 +332,7 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     ));
   });
 
-  it("while the stage has not moved off the reveal, in-flight shows Drawing it again… not the stepper", async () => {
+  it("while the stage has not moved off the reveal, in-flight shows the named redraw state", async () => {
     let fetchResolve!: () => void;
     global.fetch = vi.fn().mockReturnValue(
       new Promise<Response>(r => { fetchResolve = () => r({ ok: true, status: 200 } as Response); })
@@ -260,9 +342,10 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
     const view = await renderPage(paramsPromise);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: /they look great|use this one/i })).toBeDefined());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Use these characters" })).toBeDefined());
 
-    act(() => { fireEvent.click(screen.getByRole("button", { name: /they look great|use this one/i })); });
+    fireEvent.click(screen.getByRole("button", { name: "orange sock" }));
+    fireEvent.click(screen.getByRole("button", { name: "Redraw Kiko" }));
 
     // Status flips to running before the graph advances — stage is still the reveal it paused on.
     mockUseJob.mockReturnValue(jobState({
@@ -273,16 +356,16 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
       view.rerender(<ProcessingPage params={paramsPromise} />);
     });
 
-    // Should show the redraw placeholder, not the stepper
-    expect(screen.getByText(/drawing it again/i)).toBeDefined();
+    // Should show the named redraw placeholder, not the stepper
+    expect(screen.getByText("Redrawing Kiko…")).toBeDefined();
+    expect(screen.getByText("Redrawing Kiko…").closest("[aria-live='polite']")).not.toBeNull();
 
     fetchResolve();
   });
 
   it("the redraw bridge lifts as soon as the stage moves — live progress is not hidden behind it", async () => {
-    // Regression: `justConfirmed` was a ref cleared only on terminal states and on
-    // in-flight→paused, never on confirm→in-flight. So after "They look great!" the page was
-    // pinned to "Drawing it again…" for the whole run: every `generate_scene:n/8` UPDATE arrived
+    // Regression: the redraw bridge must lift as soon as the stage changes, rather than
+    // pinned to the redraw state for the whole run: every `generate_scene:n/8` UPDATE arrived
     // and re-rendered behind the placeholder, and the child saw the real progress only by
     // reloading, which reset the ref.
     let fetchResolve!: () => void;
@@ -294,8 +377,9 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
     const view = await renderPage(paramsPromise);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: /they look great|use this one/i })).toBeDefined());
-    act(() => { fireEvent.click(screen.getByRole("button", { name: /they look great|use this one/i })); });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Use these characters" })).toBeDefined());
+    fireEvent.click(screen.getByRole("button", { name: "orange sock" }));
+    fireEvent.click(screen.getByRole("button", { name: "Redraw Kiko" }));
 
     mockUseJob.mockReturnValue(jobState({
       bucket: "in-flight",
@@ -315,22 +399,22 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 }) as unknown as typeof fetch;
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
     await renderPage(makeParams("j1"));
-    await waitFor(() => expect(screen.getByRole("button", { name: /they look great|use this one/i })).toBeDefined());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Use these characters" })).toBeDefined());
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /they look great|use this one/i }));
+      fireEvent.click(screen.getByRole("button", { name: "Use these characters" }));
     });
 
     await waitFor(() => expect(REFETCH).toHaveBeenCalled());
     expect(screen.queryByTestId("failure-screen")).toBeNull();
   });
 
-  it("reveal signing fails twice — still renders Use this one! (spec §7, not a failure screen)", async () => {
+  it("reveal signing fails twice — still renders Use these characters (spec §7, not a failure screen)", async () => {
     mockCreateSignedUrls.mockResolvedValue({ data: null, error: new Error("net") });
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
     await renderPage(makeParams("j1"));
 
-    await waitFor(() => expect(screen.getByRole("button", { name: /they look great|use this one/i })).toBeDefined());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Use these characters" })).toBeDefined());
     expect(screen.getByText(/Kiko/)).toBeDefined();
     expect(screen.queryByTestId("failure-screen")).toBeNull();
   });
