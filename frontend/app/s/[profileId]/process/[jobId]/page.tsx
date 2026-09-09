@@ -5,7 +5,7 @@
 import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useJob } from "@/lib/useJob";
+import { useJob, type JobRow } from "@/lib/useJob";
 import { displayTitle } from "@/lib/displayTitle";
 import FailureScreen from "@/components/FailureScreen";
 import { supabase } from "@/lib/supabaseClient";
@@ -21,6 +21,7 @@ const SWEPT_STATUS = "__swept__";
 
 type StepperStep = 1 | 2 | 3 | 4;
 type SelectedTrait = { charId: string; attribute: string } | null;
+type SubmissionState = "idle" | "sending" | "reconciling" | "unknown";
 
 function getStep(stage: string | null): StepperStep | null {
   if (!stage) return null;
@@ -188,11 +189,12 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   // It must be state, not a ref: a ref cannot re-render the thing that reads it, so the bridge
   // would only ever lift on some *other* render.
   const [bridgeStage, setBridgeStage] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState(false);
+  const [submissionState, setSubmissionState] = useState<SubmissionState>("idle");
   const [confirmError, setConfirmError] = useState(false);
   const [selectedTrait, setSelectedTrait] = useState<SelectedTrait>(null);
   const [pendingRedrawName, setPendingRedrawName] = useState<string | null>(null);
   const submissionInFlight = useRef(false);
+  const submissionsDisabled = submissionState !== "idle";
 
   function toggleTrait(charId: string, attribute: string) {
     setSelectedTrait((current) =>
@@ -201,6 +203,40 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
         : { charId, attribute }
     );
   }
+
+  const revealFingerprint = row?.reveal
+    ? JSON.stringify({
+        tapsLeft: row.reveal.taps_left,
+        characters: row.reveal.characters.map(({ char_id, image_path, chips }) => ({
+          charId: char_id,
+          imagePath: image_path,
+          chips,
+        })),
+      })
+    : null;
+  const previousRevealFingerprint = useRef<string | null>(null);
+  const [choiceUpdated, setChoiceUpdated] = useState(false);
+
+  useEffect(() => {
+    if (bucket !== "paused" || !row?.reveal || !revealFingerprint) {
+      previousRevealFingerprint.current = null;
+      return;
+    }
+
+    const previous = previousRevealFingerprint.current;
+    const selectionStillOffered = selectedTrait === null || row.reveal.characters.some(
+      (character) => character.char_id === selectedTrait.charId && character.chips.includes(selectedTrait.attribute)
+    );
+    const revealChanged = previous !== null && previous !== revealFingerprint;
+
+    if (selectedTrait && (!selectionStillOffered || revealChanged)) {
+      setSelectedTrait(null);
+      setPendingRedrawName(null);
+      setChoiceUpdated(true);
+    }
+
+    previousRevealFingerprint.current = revealFingerprint;
+  }, [bucket, revealFingerprint, row?.reveal, selectedTrait]);
 
   // Stall line: show after STALL_MS of no stage change
   const [stalling, setStalling] = useState(false);
@@ -251,12 +287,12 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
     char_id?: string,
     attribute?: string
   ) {
-    if (confirming) return;
-    if (submissionInFlight.current) return;
+    if (submissionInFlight.current || submissionsDisabled) return;
     submissionInFlight.current = true;
     setBridgeStage(row?.current_stage ?? null);
-    setConfirming(true);
+    setSubmissionState("sending");
     setConfirmError(false);
+    let requestFailed = false;
     try {
       const {
         data: { session },
@@ -269,18 +305,44 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
         },
         body: JSON.stringify({ action, char_id: char_id ?? null, attribute: attribute ?? null }),
       });
-      if (!res.ok) {
-        setBridgeStage(null);
-        setConfirmError(true);
-      }
+      requestFailed = !res.ok;
     } catch {
-      setBridgeStage(null);
-      setConfirmError(true);
-    } finally {
-      await refetch();
-      submissionInFlight.current = false;
-      setConfirming(false);
+      requestFailed = true;
     }
+
+    setSubmissionState("reconciling");
+    let refreshed = false;
+    try {
+      refreshed = await refetch();
+    } catch {
+      refreshed = false;
+    }
+    if (!refreshed) {
+      setBridgeStage(null);
+      setSubmissionState("unknown");
+      return;
+    }
+
+    if (requestFailed) setConfirmError(true);
+    setSubmissionState("idle");
+    submissionInFlight.current = false;
+  }
+
+  async function retryCharacterChoices() {
+    if (submissionState !== "unknown") return;
+    setSubmissionState("reconciling");
+    let refreshed = false;
+    try {
+      refreshed = await refetch();
+    } catch {
+      refreshed = false;
+    }
+    if (refreshed) {
+      submissionInFlight.current = false;
+      setSubmissionState("idle");
+      return;
+    }
+    setSubmissionState("unknown");
   }
 
   // Derive FailureScreen kind from row state
@@ -336,6 +398,11 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
           <p className="font-kid text-lg text-foreground/70 max-w-md">
             Choose a detail you want us to try drawing again.
           </p>
+          {choiceUpdated && (
+            <p aria-live="polite" className="sr-only">
+              The character choices were updated.
+            </p>
+          )}
         </motion.div>
 
         <div className="mb-6 text-center font-kid text-foreground">
@@ -393,7 +460,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                       key={chip}
                       type="button"
                       aria-pressed={selected}
-                      disabled={confirming}
+                      disabled={submissionsDisabled}
                       onClick={() => toggleTrait(c.char_id, chip)}
                       className={`min-h-[44px] max-w-full rounded-full border px-4 py-2 font-kid text-sm text-foreground transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary disabled:opacity-50 ${
                         selected
@@ -416,7 +483,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"
-                      disabled={confirming}
+                      disabled={submissionsDisabled}
                       onClick={() => {
                         setPendingRedrawName(c.name);
                         void handleConfirm("try_again", c.char_id, selectedTrait.attribute);
@@ -427,7 +494,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                     </button>
                     <button
                       type="button"
-                      disabled={confirming}
+                      disabled={submissionsDisabled}
                       onClick={() => setSelectedTrait(null)}
                       className="min-h-[44px] rounded-xl px-4 py-2 font-kid font-bold text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary disabled:opacity-50"
                     >
@@ -444,7 +511,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
           <p className="font-kid text-sm text-foreground/70">Continue with the pictures shown.</p>
           <button
             type="button"
-            disabled={confirming}
+            disabled={submissionsDisabled}
             onClick={() => {
               setSelectedTrait(null);
               setPendingRedrawName(null);
@@ -458,7 +525,25 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
         
         <div className="h-16 mt-8 flex items-center justify-center">
           <AnimatePresence>
-            {confirmError && (
+            {submissionState === "unknown" ? (
+              <motion.div
+                initial={{ opacity: 0, height: 0, scale: 0.9 }}
+                animate={{ opacity: 1, height: "auto", scale: 1 }}
+                exit={{ opacity: 0, height: 0, scale: 0.9 }}
+                role="alert"
+                className="flex flex-wrap items-center justify-center gap-3 rounded-xl bg-[var(--color-destructive)]/10 px-6 py-3 font-kid text-base text-[var(--color-destructive)]"
+              >
+                <p>We couldn&apos;t refresh your character choices. Try loading them again.</p>
+                <button
+                  type="button"
+                  onClick={() => void retryCharacterChoices()}
+                  disabled={submissionState === "reconciling"}
+                  className="min-h-[44px] rounded-xl bg-[var(--color-surface)] px-4 py-2 font-bold text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary disabled:opacity-50"
+                >
+                  Load character choices again
+                </button>
+              </motion.div>
+            ) : confirmError && (
               <motion.p 
                 initial={{ opacity: 0, height: 0, scale: 0.9 }}
                 animate={{ opacity: 1, height: "auto", scale: 1 }}
@@ -466,7 +551,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                 role="alert" 
                 className="font-kid text-base text-[var(--color-destructive)] bg-[var(--color-destructive)]/10 px-6 py-3 rounded-xl"
               >
-                That didn&apos;t work — try once more.
+                We couldn&apos;t send that choice. Please try again.
               </motion.p>
             )}
           </AnimatePresence>

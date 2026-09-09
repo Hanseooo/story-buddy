@@ -53,6 +53,11 @@ beforeEach(() => {
 
 const REFETCH = vi.fn();
 
+beforeEach(() => {
+  REFETCH.mockReset();
+  REFETCH.mockResolvedValue(true);
+});
+
 function jobState(overrides: Partial<ReturnType<typeof mockUseJob>>) {
   return {
     bucket: "in-flight" as const,
@@ -407,6 +412,68 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
 
     await waitFor(() => expect(REFETCH).toHaveBeenCalled());
     expect(screen.queryByTestId("failure-screen")).toBeNull();
+  });
+
+  it("clears selection when the authoritative reveal changes", async () => {
+    const paramsPromise = makeParams("j1");
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
+    const view = await renderPage(paramsPromise);
+    fireEvent.click(await screen.findByRole("button", { name: "orange sock" }));
+
+    const updated = {
+      ...PAUSED_ROW,
+      reveal: {
+        characters: [
+          { char_id: "c0", name: "Kiko", image_path: "j1/ref-c0-v2.png", chips: ["green scarf"] },
+        ],
+        taps_left: 1,
+      },
+    };
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: updated }));
+    await act(async () => view.rerender(<ProcessingPage params={paramsPromise} />));
+
+    expect(screen.queryByRole("button", { name: "Redraw Kiko" })).toBeNull();
+    expect(screen.getByText("1 redraw left for this book")).toBeDefined();
+    expect(screen.getByText("The character choices were updated.")).toBeDefined();
+  });
+
+  it("does not re-enable redraw after a failed request reveals a consumed pause", async () => {
+    const paramsPromise = makeParams("j1");
+    let current = jobState({ bucket: "paused", row: PAUSED_ROW });
+    const reconcile = vi.fn(async () => {
+      current = jobState({ bucket: "in-flight", row: { ...PAUSED_ROW, status: "running", reveal: null } });
+      return true;
+    });
+    mockUseJob.mockImplementation(() => ({ ...current, refetch: reconcile }));
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 409 }) as unknown as typeof fetch;
+    const view = await renderPage(paramsPromise);
+
+    fireEvent.click(await screen.findByRole("button", { name: "orange sock" }));
+    fireEvent.click(screen.getByRole("button", { name: "Redraw Kiko" }));
+    await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(1));
+    await act(async () => view.rerender(<ProcessingPage params={paramsPromise} />));
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Redraw Kiko" })).toBeNull();
+    expect(screen.queryByText("We couldn't send that choice. Please try again.")).toBeNull();
+  });
+
+  it("keeps submissions locked when both dispatch and reconciliation fail", async () => {
+    const reconcile = vi.fn().mockResolvedValue(false);
+    mockUseJob.mockReturnValue({ ...jobState({ bucket: "paused", row: PAUSED_ROW }), refetch: reconcile });
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 503 }) as unknown as typeof fetch;
+    await renderPage(makeParams("j1"));
+
+    fireEvent.click(await screen.findByRole("button", { name: "orange sock" }));
+    fireEvent.click(screen.getByRole("button", { name: "Redraw Kiko" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "We couldn't refresh your character choices. Try loading them again."
+    );
+    expect(screen.getByRole("button", { name: "Use these characters" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Load character choices again" })).toBeDefined();
+    expect(screen.getByRole("link", { name: /bookshelf/i })).toBeDefined();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
   it("reveal signing fails twice — still renders Use these characters (spec §7, not a failure screen)", async () => {
