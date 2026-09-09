@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useId, ReactNode } from "react";
+import { useState, useId, useEffect, useRef, ReactNode } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Wrench, Gear, MagnifyingGlass, PencilSimple, BookOpen, Copy, Check } from "@phosphor-icons/react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -105,10 +105,16 @@ function FailureCard({
   retryNote?: boolean;
 }) {
   const noteId = useId();
+  // Arrival is announced by focusing the cause heading, not by wrapping the whole screen in an
+  // alert. The process page swaps this screen in with no route change, and an alert around the
+  // card made the retry-failure message a second, nested alert (spec §6: announce errors once).
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
 
   return (
     <div
-      role="alert"
       className="w-full flex-1 min-h-[calc(100dvh-5rem)] bg-[var(--background)] flex flex-col items-center justify-center px-6 py-8 text-center overflow-x-hidden selection:bg-[var(--color-primary)] selection:text-[var(--color-surface)]"
     >
       <motion.div 
@@ -129,7 +135,11 @@ function FailureCard({
 
         {/* Copy */}
         <div className="flex flex-col gap-4">
-          <h2 className="font-display text-4xl md:text-5xl font-extrabold text-[var(--foreground)] tracking-tight leading-tight">
+          <h2
+            ref={headingRef}
+            tabIndex={-1}
+            className="font-display text-4xl md:text-5xl font-extrabold text-[var(--foreground)] tracking-tight leading-tight outline-none"
+          >
             {title}
           </h2>
           {subtext && (
@@ -174,6 +184,10 @@ function FailureCard({
             </Link>
           )}
         </div>
+
+        <p role="status" className="sr-only">
+          {submitting ? "Starting your book again…" : ""}
+        </p>
 
         <div className="mt-6 min-h-[56px] flex items-start justify-center w-full max-w-sm">
           <AnimatePresence>

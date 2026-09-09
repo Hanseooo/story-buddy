@@ -332,3 +332,46 @@ describe("FailureScreen — whole-book retry consequence (spec §3)", () => {
     }
   });
 });
+
+describe("FailureScreen — announcements (spec §6)", () => {
+  it("has no alert until something actually fails", () => {
+    render(<FailureScreen reason="service_busy" jobId="12345678-abcd" />);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("moves focus to the cause heading on arrival", () => {
+    render(<FailureScreen reason="service_busy" jobId="12345678-abcd" />);
+    const heading = screen.getByRole("heading", {
+      name: "The story maker couldn’t finish right now.",
+    });
+    expect(document.activeElement).toBe(heading);
+  });
+
+  it("announces a failed retry exactly once", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500 }) as unknown as typeof fetch;
+    render(<FailureScreen reason="service_busy" inputText="x" jobId="12345678-abcd" />);
+    fireEvent.click(screen.getByRole("button", { name: "Make the story again" }));
+    await waitFor(() => expect(screen.getAllByRole("alert")).toHaveLength(1));
+  });
+
+  it("announces the pending submission politely and disables the competing control", async () => {
+    let resolvePost!: (v: Response) => void;
+    global.fetch = vi.fn().mockReturnValue(
+      new Promise<Response>(r => { resolvePost = r; })
+    ) as unknown as typeof fetch;
+
+    render(<FailureScreen reason="service_busy" inputText="x" jobId="12345678-abcd" />);
+    fireEvent.click(screen.getByRole("button", { name: "Make the story again" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toBe("Starting your book again…")
+    );
+    expect(
+      (screen.getByRole("button", { name: /write something new/i }) as HTMLButtonElement).disabled
+    ).toBe(true);
+
+    await act(async () => {
+      resolvePost({ ok: true, json: async () => ({ job_id: "new" }) } as Response);
+    });
+  });
+});
