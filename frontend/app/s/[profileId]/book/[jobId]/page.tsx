@@ -8,6 +8,7 @@ import { useJob } from "@/lib/useJob";
 import { displayTitle } from "@/lib/displayTitle";
 import FailureScreen, { resetFailChain } from "@/components/FailureScreen";
 import { signPaths } from "@/lib/signedUrls";
+import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { CaretLeft, CaretRight, BookOpen, Rows, ArrowLeft } from "@phosphor-icons/react";
@@ -102,6 +103,21 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
   const [hasInteracted, setHasInteracted] = useState(false);
   const [viewMode, setViewMode] = useState<"pages" | "scroll">("pages");
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
+  // Who is reading, not whose URL this is. `profileId` above is a route segment anyone can type,
+  // and RLS hands a classmate an approved peer row whole — `input_text` included — so the excerpt
+  // fallback has to be gated on the identity the policy itself uses: `profile_id = auth.uid()`
+  // (0008_authorization_surface). Null until the session resolves, which suppresses the excerpt.
+  const [viewerId, setViewerId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void supabase.auth.getSession().then(({ data }) => {
+      if (active) setViewerId(data.session?.user?.id ?? null);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const signPages = useCallback(async (attempt: number) => {
     if (!row?.pages.length) return;
@@ -250,7 +266,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
         </Link>
 
         <h1 className="font-display text-lg sm:text-xl font-extrabold text-foreground text-center flex-1 min-w-0 mx-3 break-words">
-          {displayTitle(row?.title, row?.profile_id === profileId ? row?.input_text : null)}
+          {displayTitle(row?.title, viewerId && row?.profile_id === viewerId ? row?.input_text : null)}
         </h1>
 
         <div 
