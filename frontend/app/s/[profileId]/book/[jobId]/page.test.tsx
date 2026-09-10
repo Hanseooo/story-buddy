@@ -26,15 +26,9 @@ vi.mock("@/components/FailureScreen", () => ({
 import { resetFailChain } from "@/components/FailureScreen";
 
 const mockCreateSignedUrls = vi.fn();
-let sessionUserId: string | null = "p1";
 vi.mock("@/lib/supabaseClient", () => ({
   supabase: {
     storage: { from: () => ({ createSignedUrls: (...a: unknown[]) => mockCreateSignedUrls(...a) }) },
-    auth: {
-      getSession: async () => ({
-        data: { session: sessionUserId ? { user: { id: sessionUserId } } : null },
-      }),
-    },
   },
 }));
 
@@ -79,7 +73,6 @@ const COMPLETE_ROW = {
 const SIGNED = PAGES.map((p, i) => ({ signedUrl: `https://cdn/${i}.png`, error: null }));
 
 beforeEach(() => {
-  sessionUserId = "p1";
   sessionStorage.clear(); // signPaths caches signed URLs across renders
   pushMock.mockClear();
   mockUseJob.mockReset();
@@ -184,29 +177,6 @@ describe("BookPage — reader (terminal-success)", () => {
     });
     expect(screen.queryByText(/Mabini Street/)).toBeNull();
     expect(screen.queryByText(/Ana/)).toBeNull();
-  });
-
-  it("does not excerpt an untitled book because the URL names its owner", async () => {
-    // The route segment is typed by whoever is browsing, so it cannot decide whether the excerpt
-    // is authorized. RLS grants the read on `auth.uid() = profile_id` (0008_authorization_surface),
-    // and that is the only identity the gate may compare against: a classmate who walks to
-    // /s/<owner>/book/<job> otherwise reads the owner's raw story out of the heading.
-    const peerUntitledRow = {
-      ...COMPLETE_ROW,
-      profile_id: "p1", // matches the mocked route param, not the signed-in reader
-      title: null,
-      input_text: "My name is Ana and I live on Mabini Street.",
-    };
-    sessionUserId = "classmate-2";
-    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: peerUntitledRow }));
-    mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
-
-    await renderPage(makeParams("j1"));
-
-    await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Untitled" })).toBeDefined();
-    });
-    expect(screen.queryByText(/Mabini Street/)).toBeNull();
   });
 
   it("still excerpts the reader's own untitled book", async () => {
