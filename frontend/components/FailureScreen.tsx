@@ -73,7 +73,7 @@ function StoryReference({ jobId }: { jobId: string }) {
           className="ml-2 inline-flex items-center gap-1 min-h-[44px] min-w-[44px] px-2.5 py-1 text-xs font-kid font-bold text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 rounded-lg transition-colors focus-visible:outline-[var(--color-secondary)] focus-visible:outline-2"
         >
           {copyState === "copied" ? (
-            <Check size={16} weight="bold" className="text-emerald-600" />
+            <Check size={16} weight="bold" className="text-[var(--color-success)]" />
           ) : (
             <Copy size={16} weight="bold" />
           )}
@@ -86,7 +86,7 @@ function StoryReference({ jobId }: { jobId: string }) {
       <p
         role="status"
         className={`font-kid text-sm min-h-[1.25rem] max-w-[36ch] leading-snug ${
-          copyState === "failed" ? "text-[var(--color-destructive)]" : "text-emerald-700"
+          copyState === "failed" ? "text-[var(--color-destructive)]" : "text-[var(--color-success)]"
         }`}
       >
         {copyState === "copied"
@@ -160,7 +160,7 @@ function FailureCard({
         {/* Copy */}
         <div className="flex flex-col gap-4">
           {contextTitle && (
-            <p className="font-kid text-sm font-bold uppercase tracking-wider text-[var(--foreground)]/50 truncate max-w-[40ch] mx-auto">
+            <p className="font-kid text-sm font-bold tracking-wide text-[var(--foreground)]/50 truncate max-w-[40ch] mx-auto">
               {contextTitle}
             </p>
           )}
@@ -339,7 +339,7 @@ export default function FailureScreen({
   const [retryFailed, setRetryFailed] = useState(false);
   const [transferFailed, setTransferFailed] = useState(false);
   const chainCount = getChainCount();
-  const contextTitle = title?.trim() || inputText.trim()
+  const contextTitle = (title?.trim() || inputText.trim())
     ? displayTitle(title, inputText)
     : undefined;
 
@@ -440,6 +440,11 @@ export default function FailureScreen({
     const copy = resolveFailureCopy(reason);
     const isRevise = copy.action === "revise";
     const isRetry = copy.action === "retry";
+    // `action: "none"` is the two limit reasons. `failure-diagnostics.md` CC-3: "persistent limit
+    // reasons cannot start another paid run from the error screen" — and a link to the write form
+    // is a paid run with one extra click, so the screen keeps only the reference and the way out.
+    // Spec §4's "Write something new remains available under existing rules" is that rule.
+    const startsAPaidRun = copy.action !== "none";
     return (
       <FailureCard
         icon={isRevise ? <ReviseVignette /> : <RetryVignette />}
@@ -448,7 +453,7 @@ export default function FailureScreen({
         buttonLabel={submitting && isRetry ? "Starting…" : copy.actionLabel}
         submitting={submitting}
         onAction={isRevise ? handleRevise : isRetry ? handleRetry : undefined}
-        secondaryAction={isRevise ? tryDifferent : writeSomethingNew}
+        secondaryAction={isRevise ? tryDifferent : startsAPaidRun ? writeSomethingNew : undefined}
         error={isRevise ? transferFailed : isRetry ? retryFailed || transferFailed : undefined}
         errorMessage={
           transferFailed ? "We couldn't carry your story to the editor. Try again, or write something new." : undefined

@@ -114,7 +114,9 @@ The fallback is presentation only, never a migration or inferred authored title.
 For legacy shared books, compute the excerpt only from text already authorized for
 that viewer and permitted by existing privacy policy; do not broaden access to raw
 story text merely to populate a card. Resolve unsafe legacy data in the architecture
-session rather than assuming old rows were redacted.
+session rather than assuming old rows were redacted. The shared classroom gallery spans every
+classmate's approved book, so no excerpt is authorized there: it selects `title` alone and a
+legacy untitled book reads `Untitled`. Do not re-add `input_text` to that query.
 
 | Surface | Required display |
 |---|---|
@@ -172,6 +174,5 @@ title rules. Run from `frontend/`: `pnpm lint`, `pnpm build`, `pnpm test`; from
 `backend/`: `uv run ruff check .`, `uv run pytest`. Apply and verify the accepted
 migration explicitly in the intended environment; migration files are not self-applying.
 
-**Next gate:** apply and verify the accepted backend migration in the intended Supabase
-environment; migration files are not self-applying. Manual frontend QA remains in the checklist
-above for mobile/zoom, keyboard flow, duplicate titles, and legacy shared books.
+**Next gate:** manual frontend QA — mobile/zoom, keyboard flow, duplicate titles, and legacy
+shared books. `0019_jobs_title.sql` was applied to the Supabase environment on 2026-09-10.

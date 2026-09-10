@@ -36,6 +36,7 @@ export default function WriteStoryPage() {
   const [stylePresetId, setStylePresetId] = useState<StylePresetId>("gouache");
   const titleInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const redactionPanelRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const { profileId } = useParams() as { profileId: string };
 
@@ -87,8 +88,19 @@ export default function WriteStoryPage() {
   const overCap = wordCount > MAX_STORY_WORDS;
   const progress = Math.min((wordCount / MIN_STORY_WORDS) * 100, 100);
 
+  // The panel blocks a paid submission, so focus has to land on it (CC-6) — announcing it in a
+  // live region is not enough when the next action is inside it.
+  useEffect(() => {
+    if (pendingRedactedTitle !== null) redactionPanelRef.current?.focus();
+  }, [pendingRedactedTitle]);
+
   function focusTitle() {
     titleInputRef.current?.focus();
+  }
+
+  function dismissRedactedTitle() {
+    setPendingRedactedTitle(null);
+    focusTitle();
   }
 
   async function postStorybook(titleAck?: string) {
@@ -122,6 +134,17 @@ export default function WriteStoryPage() {
       return;
     }
     if (!res.ok) {
+      // A checked title the server refused is not a transport failure (spec §3): inviting a retry
+      // of the same title would just spend another submission on the same rejection. Ask for a
+      // different title and keep the story (spec §4). A pydantic 422 carries a list, not a string,
+      // and stays a generic error so no request value is echoed at the child.
+      const detail = await res.json().then((body) => body?.detail).catch(() => null);
+      if (res.status === 422 && typeof detail === "string") {
+        setPendingRedactedTitle(null);
+        setTitleError("Try a different title.");
+        focusTitle();
+        return;
+      }
       setPostError(true);
       return;
     }
@@ -140,7 +163,7 @@ export default function WriteStoryPage() {
       return;
     }
     if (Array.from(trimmedTitle).length > MAX_TITLE_CHARS) {
-      setTitleError("Keep your title to 80 characters.");
+      setTitleError(`Keep your title to ${MAX_TITLE_CHARS} characters.`);
       focusTitle();
       return;
     }
@@ -198,12 +221,12 @@ export default function WriteStoryPage() {
           placeholder="Name your book"
           aria-label="Story title"
           aria-invalid={titleError !== null}
-          aria-describedby="title-count title-error"
+          aria-describedby={titleError !== null ? "title-count title-error" : "title-count"}
           className="w-full bg-transparent font-kid font-bold text-xl sm:text-2xl text-foreground placeholder-foreground/35 focus:outline-none caret-primary border-b-2 border-primary/10 focus:border-primary pb-1"
         />
         <div className="flex items-center justify-between mt-1">
           <span id="title-count" className="text-xs font-bold text-foreground/50">
-            {Array.from(title).length} / {MAX_TITLE_CHARS}
+            {Array.from(title.trim()).length} / {MAX_TITLE_CHARS}
           </span>
           {titleError && (
             <span id="title-error" role="alert" className="text-xs font-bold text-destructive">
@@ -329,8 +352,21 @@ export default function WriteStoryPage() {
         </div>
       </motion.div>
 
+      {/* Not a dialog: an inline panel with no modality or focus trap, so it announces its own
+          text and Escape leaves it the same way "Change it" does. */}
       {pendingRedactedTitle !== null && (
-        <div role="alertdialog" aria-label="Title changed for privacy" className="mt-3 shrink-0 bg-secondary/10 border border-secondary/30 rounded-2xl p-4">
+        <div
+          ref={redactionPanelRef}
+          role="alert"
+          tabIndex={-1}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.stopPropagation();
+              dismissRedactedTitle();
+            }
+          }}
+          className="mt-3 shrink-0 bg-secondary/10 border border-secondary/30 rounded-2xl p-4 focus:outline-none focus:ring-[3px] focus:ring-secondary focus:ring-offset-[3px] focus:ring-offset-background"
+        >
           <p className="font-kid text-sm text-foreground/80">
             We changed your title to keep it private: <strong>{pendingRedactedTitle}</strong>
           </p>
@@ -346,7 +382,7 @@ export default function WriteStoryPage() {
             <button
               type="button"
               disabled={submitting}
-              onClick={() => setPendingRedactedTitle(null)}
+              onClick={dismissRedactedTitle}
               className="min-h-[44px] px-4 rounded-xl border border-primary/20 text-primary font-bold disabled:opacity-50"
             >
               Change it

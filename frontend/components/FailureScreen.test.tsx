@@ -61,6 +61,9 @@ describe("FailureScreen — safe reason taxonomy", () => {
     });
 
     expect(global.fetch).not.toHaveBeenCalled();
+    // A route to the write form is a paid retry with an extra click, not an absence of one:
+    // spec §3 gives these two reasons teacher guidance and no new-book action at all.
+    expect(pushMock).not.toHaveBeenCalled();
     expect(screen.getByText("12345678")).toBeDefined();
   });
 

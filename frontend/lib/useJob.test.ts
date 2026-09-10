@@ -197,6 +197,21 @@ describe("useJob", () => {
     expect(result.current.row).toEqual(paused);
   });
 
+  it("a forced refetch reclassifies to not-found when the row is gone", async () => {
+    // A job deleted (or unshared) while the child sat on the pause: PGRST116 is the answer,
+    // not a read failure, so the forced read must still apply it rather than stranding the
+    // page on a stale row behind a retry that can never succeed.
+    mockSingle
+      .mockResolvedValueOnce({ data: RUNNING, error: null })
+      .mockResolvedValueOnce({ data: null, error: { code: "PGRST116", message: "no rows" } });
+    const { result } = renderHook(() => useJob("j1"));
+    await waitFor(() => expect(result.current.bucket).toBe("in-flight"));
+
+    await act(async () => { await result.current.refetch(); });
+
+    expect(result.current.bucket).toBe("not-found");
+  });
+
   it("refetch returns false after a failed forced row read", async () => {
     const paused = {
       ...RUNNING,

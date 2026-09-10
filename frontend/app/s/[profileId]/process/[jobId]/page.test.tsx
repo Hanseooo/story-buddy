@@ -368,6 +368,13 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     fireEvent.click(screen.getByRole("button", { name: "orange sock" }));
     fireEvent.click(screen.getByRole("button", { name: "Redraw Kiko" }));
 
+    // Spec §3.5 wants the dispatch announced. That happens here, on the reveal screen, in a live
+    // region that was already mounted and holding other text — the only kind that announces. The
+    // in-flight screen below states the same thing visually, and asserting `aria-live` on it was
+    // asserting nothing: a region mounted together with its text is silent.
+    const announcement = screen.getByText("Redrawing Kiko…");
+    expect(announcement.closest("[aria-live='polite']")).not.toBeNull();
+
     // Status flips to running before the graph advances — stage is still the reveal it paused on.
     mockUseJob.mockReturnValue(jobState({
       bucket: "in-flight",
@@ -378,8 +385,7 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     });
 
     // Should show the named redraw placeholder, not the stepper
-    expect(screen.getByText("Redrawing Kiko…")).toBeDefined();
-    expect(screen.getByText("Redrawing Kiko…").closest("[aria-live='polite']")).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "Redrawing Kiko…" })).toBeDefined();
 
     fetchResolve();
   });
@@ -411,7 +417,7 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     });
 
     expect(screen.getByText(/drawing picture 5 of 8/i)).toBeDefined();
-    expect(screen.queryByText(/drawing it again/i)).toBeNull();
+    expect(screen.queryByText("Redrawing Kiko…")).toBeNull();
 
     fetchResolve();
   });
@@ -427,7 +433,8 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     });
 
     await waitFor(() => expect(REFETCH).toHaveBeenCalled());
-    expect(screen.queryByTestId("failure-screen")).toBeNull();
+    expect(screen.queryByText("We couldn't send that choice. Please try again.")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("clears selection when the authoritative reveal changes", async () => {
@@ -453,6 +460,113 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     expect(screen.getByText("The character choices were updated.")).toBeDefined();
   });
 
+  it("clears selection after a redraw round-trip that still suggests the same trait", async () => {
+    // The reveal fingerprint is only compared while paused. Leaving the pause used to forget it,
+    // so a redraw whose replacement kept the same suggestion came back with the child's spent
+    // selection and its "we'll draw a new picture" panel still on screen.
+    const paramsPromise = makeParams("j1");
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
+    const view = await renderPausedPage(paramsPromise);
+
+    fireEvent.click(await screen.findByRole("button", { name: "orange sock" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Redraw Kiko" }));
+    });
+
+    mockUseJob.mockReturnValue(jobState({
+      bucket: "in-flight",
+      row: { ...PAUSED_ROW, status: "running", reveal: null },
+    }));
+    await act(async () => view.rerender(<ProcessingPage params={paramsPromise} />));
+
+    const redrawn = {
+      ...PAUSED_ROW,
+      reveal: {
+        characters: [
+          { char_id: "c0", name: "Kiko", image_path: "j1/ref-c0-v2.png", chips: ["orange sock"] },
+        ],
+        taps_left: 1,
+      },
+    };
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: redrawn }));
+    await act(async () => view.rerender(<ProcessingPage params={paramsPromise} />));
+
+    expect(screen.queryByRole("button", { name: "Redraw Kiko" })).toBeNull();
+    expect(screen.getByText("1 redraw left for this book")).toBeDefined();
+  });
+
+  it("announces the pending redraw before the job row moves off the pause", async () => {
+    let fetchResolve!: () => void;
+    global.fetch = vi.fn().mockReturnValue(
+      new Promise<Response>(r => { fetchResolve = () => r({ ok: true, status: 200 } as Response); })
+    ) as unknown as typeof fetch;
+
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
+    await renderPausedPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "orange sock" }));
+    fireEvent.click(screen.getByRole("button", { name: "Redraw Kiko" }));
+
+    const pending = screen.getByText("Redrawing Kiko…");
+    expect(pending.closest("[aria-live='polite']")).not.toBeNull();
+
+    fetchResolve();
+  });
+
+  it("continuing never claims a redraw is happening", async () => {
+    const paramsPromise = makeParams("j1");
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
+    const view = await renderPausedPage(paramsPromise);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Use these characters" }));
+    });
+
+    mockUseJob.mockReturnValue(jobState({
+      bucket: "in-flight",
+      row: { ...PAUSED_ROW, status: "running", reveal: null },
+    }));
+    await act(async () => view.rerender(<ProcessingPage params={paramsPromise} />));
+
+    expect(screen.queryByText(/Redrawing/)).toBeNull();
+    expect(screen.queryByText(/previous picture/i)).toBeNull();
+  });
+
+  it("stops announcing an updated choice once the child picks again", async () => {
+    const paramsPromise = makeParams("j1");
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
+    const view = await renderPausedPage(paramsPromise);
+    fireEvent.click(await screen.findByRole("button", { name: "orange sock" }));
+
+    const updated = {
+      ...PAUSED_ROW,
+      reveal: {
+        characters: [
+          { char_id: "c0", name: "Kiko", image_path: "j1/ref-c0-v2.png", chips: ["green scarf"] },
+        ],
+        taps_left: 1,
+      },
+    };
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: updated }));
+    await act(async () => view.rerender(<ProcessingPage params={paramsPromise} />));
+    expect(screen.getByText("The character choices were updated.")).toBeDefined();
+
+    await loadVisibleImages();
+    fireEvent.click(screen.getByRole("button", { name: "green scarf" }));
+
+    expect(screen.queryByText("The character choices were updated.")).toBeNull();
+  });
+
+  it("a reveal with no characters still lets the child move on", async () => {
+    mockUseJob.mockReturnValue(jobState({
+      bucket: "paused",
+      row: { ...PAUSED_ROW, reveal: { characters: [], taps_left: 2 } },
+    }));
+    await renderPage(makeParams("j1"));
+
+    expect(screen.getByRole("button", { name: "Use these characters" })).not.toBeDisabled();
+  });
+
   it("does not re-enable redraw after a failed request reveals a consumed pause", async () => {
     const paramsPromise = makeParams("j1");
     let current = jobState({ bucket: "paused", row: PAUSED_ROW });
@@ -472,6 +586,24 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: "Redraw Kiko" })).toBeNull();
     expect(screen.queryByText("We couldn't send that choice. Please try again.")).toBeNull();
+  });
+
+  it("says the choice could not be sent when dispatch fails into a still-valid pause", async () => {
+    // Spec §4: "Show 'We couldn't send that choice. Please try again.' Refresh the row before
+    // enabling another submission; retain selection only if it is still offered in the same pause."
+    const reconcile = vi.fn().mockResolvedValue(true);
+    mockUseJob.mockReturnValue({ ...jobState({ bucket: "paused", row: PAUSED_ROW }), refetch: reconcile });
+    global.fetch = vi.fn().mockRejectedValue(new Error("network down")) as unknown as typeof fetch;
+    await renderPausedPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "orange sock" }));
+    fireEvent.click(screen.getByRole("button", { name: "Redraw Kiko" }));
+
+    expect(await screen.findByText("We couldn't send that choice. Please try again.")).toBeDefined();
+    await waitFor(() => expect(reconcile).toHaveBeenCalled());
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    // The pause is unchanged, so the trait is still offered and still chosen.
+    expect(screen.getByRole("button", { name: /orange sock/ })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("keeps submissions locked when both dispatch and reconciliation fail", async () => {
@@ -577,6 +709,62 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     await act(async () => view.rerender(<ProcessingPage params={paramsPromise} />));
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Kiko" })).toHaveFocus());
+  });
+
+  it("leaves focus alone when the child has tabbed away from the character card", async () => {
+    // Spec §5: focus the updated heading "when focus would otherwise be lost; do not steal focus
+    // from a child actively navigating elsewhere." Selecting a trait and then tabbing to another
+    // control is the second case, not the first.
+    const paramsPromise = makeParams("j1");
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
+    const view = await renderPausedPage(paramsPromise);
+    const trait = await screen.findByRole("button", { name: "orange sock" });
+    trait.focus();
+    fireEvent.click(trait);
+
+    const continueButton = screen.getByRole("button", { name: /Use these characters/i });
+    continueButton.focus();
+
+    mockUseJob.mockReturnValue(jobState({
+      bucket: "paused",
+      row: {
+        ...PAUSED_ROW,
+        reveal: {
+          characters: [{ char_id: "c0", name: "Kiko", image_path: "j1/ref-c0-v2.png", chips: ["green scarf"] }],
+          taps_left: 1,
+        },
+      },
+    }));
+    await act(async () => view.rerender(<ProcessingPage params={paramsPromise} />));
+
+    await waitFor(() => expect(screen.getByText("green scarf")).toBeDefined());
+    expect(screen.getByRole("heading", { name: "Kiko" })).not.toHaveFocus();
+  });
+
+  it("explains a changed reveal visibly, not only to a screen reader", async () => {
+    // Spec §4: "explain that the character choices updated when needed" — an `sr-only` live
+    // region announces it to one child and tells a sighted child nothing.
+    const paramsPromise = makeParams("j1");
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
+    const view = await renderPausedPage(paramsPromise);
+    fireEvent.click(await screen.findByRole("button", { name: "orange sock" }));
+
+    mockUseJob.mockReturnValue(jobState({
+      bucket: "paused",
+      row: {
+        ...PAUSED_ROW,
+        reveal: {
+          characters: [{ char_id: "c0", name: "Kiko", image_path: "j1/ref-c0-v2.png", chips: ["green scarf"] }],
+          taps_left: 1,
+        },
+      },
+    }));
+    await act(async () => view.rerender(<ProcessingPage params={paramsPromise} />));
+
+    await waitFor(() => {
+      const notices = screen.getAllByText("The character choices were updated.");
+      expect(notices.some((node) => !node.closest(".sr-only"))).toBe(true);
+    });
   });
 });
 

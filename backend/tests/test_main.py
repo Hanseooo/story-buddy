@@ -233,6 +233,33 @@ def test_create_storybook_accepts_title_at_exactly_80_chars():
     assert response.status_code == 200
 
 
+# spec §3: "Count Unicode code points consistently in client and server, not UTF-16 units."
+# The dragon is one code point and two UTF-16 units, so a server counting UTF-16 would reject
+# the 80 the client's Array.from counter told the child was fine.
+def test_create_storybook_accepts_80_astral_code_points():
+    title = "🐉" * 80
+    fake_supabase = MagicMock()
+    fake_queue = MagicMock()
+    with patch("app.main.get_supabase_client", return_value=fake_supabase),          patch("app.main.get_queue", return_value=fake_queue),          patch("app.main.check_text", return_value=(True, [], title)):
+        response = client.post(
+            "/storybooks",
+            json={"text": "A dog runs in a field.", "title": title},
+        )
+    assert response.status_code == 200
+
+
+def test_create_storybook_rejects_81_astral_code_points():
+    fake_supabase = MagicMock()
+    fake_queue = MagicMock()
+    with patch("app.main.get_supabase_client", return_value=fake_supabase),          patch("app.main.get_queue", return_value=fake_queue):
+        response = client.post(
+            "/storybooks",
+            json={"text": "A dog runs in a field.", "title": "🐉" * 81},
+        )
+    assert response.status_code == 422
+    fake_supabase.table.return_value.insert.assert_not_called()
+
+
 def test_create_storybook_rejects_title_with_embedded_newline():
     fake_supabase = MagicMock()
     fake_queue = MagicMock()
@@ -289,6 +316,22 @@ def test_create_storybook_rejects_unsafe_title_without_persisting():
     assert response.status_code == 422
     fake_supabase.table.return_value.insert.assert_not_called()
     assert "My Violent Book" not in response.text
+
+
+def test_request_validation_error_does_not_echo_the_submitted_title():
+    """CC-5 / story-titles §4: an unchecked title must not reach logs or traces, and a 422
+    body is both. The unsafe-title path already withholds it; the pydantic path is the one
+    that used to hand the raw value straight back."""
+    unchecked = "call me at 09171234567 " + "x" * 70
+    response = client.post(
+        "/storybooks",
+        json={"text": "A dog runs in a field.", "title": unchecked},
+    )
+    assert response.status_code == 422
+    assert "09171234567" not in response.text
+    assert unchecked not in response.text
+    # The field and its message still reach the client — only the value is withheld.
+    assert "title" in response.text
 
 
 def test_create_storybook_returns_409_when_redaction_changes_title_unconfirmed():

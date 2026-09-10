@@ -50,13 +50,13 @@ The checked book title is rendered as context per [story titles](story-titles.md
 | Reason | Heading / explanation | Primary action |
 |---|---|---|
 | `child_text` | “Some words need changing.” / “The submitted title or story didn’t pass the input safety check. You can change your title or words and try again.” | Change my words |
-| `character_safety` | “We couldn't use a character picture.” / “A character picture we made didn't pass our safety check. Your story's words passed.” | Make the story again |
-| `scene_safety` | “We couldn't use a story picture.” / “A picture we made for your story didn't pass our safety check. Your story's words passed.” | Make the story again |
-| `service_busy` | “The story maker couldn't finish right now.” / “A service we need was busy or unavailable. You can try making your book again.” | Make the story again |
+| `character_safety` | “We couldn’t use a character picture.” / “A character picture we made didn’t pass our safety check. Your story’s words passed.” | Make the story again |
+| `scene_safety` | “We couldn’t use a story picture.” / “A picture we made for your story didn’t pass our safety check. Your story’s words passed.” | Make the story again |
+| `service_busy` | “The story maker couldn’t finish right now.” / “A service we need was busy or unavailable. You can try making your book again.” | Make the story again |
 | `worker_stopped` | “The story maker stopped before finishing.” / “You can try making your book again.” | Make the story again |
 | `service_limit` | “The story-making allowance has run out.” / “Show your teacher this story reference for help.” | No paid retry; teacher guidance |
 | `book_limit` | “This book reached its picture-making limit.” / “Show your teacher this story reference for help.” | No paid retry; teacher guidance |
-| `system_error` | “Something went wrong while making your book.” / “We couldn't finish it this time. You can try making it again.” | Make the story again |
+| `system_error` | “Something went wrong while making your book.” / “We couldn’t finish it this time. You can try making it again.” | Make the story again |
 
 `child_text` now says the submitted title or story did not pass the input safety check. Do not
 claim which field was blocked when the safe reason cannot distinguish them. Form-level validation

@@ -531,7 +531,7 @@ export function FailedBookRow({ job }: { job: Job }) {
               as its content is never announced. It goes in a region present from first render. */}
           <p
             role="status"
-            className={`text-xs ${copyState === "failed" ? "text-destructive" : "text-emerald-700"}`}
+            className={`text-xs ${copyState === "failed" ? "text-destructive" : "text-[var(--color-success)]"}`}
           >
             {copyState === "copied" ? "Copied!" : copyState === "failed" ? "Couldn’t copy" : ""}
           </p>
@@ -541,11 +541,6 @@ export function FailedBookRow({ job }: { job: Job }) {
       <p className="text-sm text-foreground/70 mb-2">
         {getTeacherLabel(job.failure_reason)}
       </p>
-      {job.failure_reason === "child_text" && job.input_text && (
-        <blockquote className="text-sm text-foreground/60 italic border-l-2 border-primary/20 pl-3 mt-1">
-          {job.input_text}
-        </blockquote>
-      )}
     </div>
   );
 }

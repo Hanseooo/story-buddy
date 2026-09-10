@@ -249,8 +249,8 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
           <span>Bookshelf</span>
         </Link>
 
-        <h1 className="font-display text-lg sm:text-xl font-extrabold text-foreground text-center flex-1 min-w-0 mx-3 truncate sm:whitespace-normal sm:break-words">
-          {displayTitle(row?.title, row?.input_text ?? "")}
+        <h1 className="font-display text-lg sm:text-xl font-extrabold text-foreground text-center flex-1 min-w-0 mx-3 break-words">
+          {displayTitle(row?.title, row?.profile_id === profileId ? row?.input_text : null)}
         </h1>
 
         <div 

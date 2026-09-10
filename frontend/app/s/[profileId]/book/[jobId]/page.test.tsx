@@ -66,7 +66,7 @@ const PAGES = [
 ];
 
 const COMPLETE_ROW = {
-  id: "j1", status: "complete", current_stage: "compose",
+  id: "j1", status: "complete", current_stage: "compose", profile_id: "p1",
   failure_reason: null, input_text: "x", title: "A Very Long Title That Keeps Going And Going", style_preset_id: null, pages: PAGES, reveal: null,
 };
 
@@ -153,6 +153,41 @@ describe("BookPage — reader (terminal-success)", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: /A Very Long Title That Keeps Going And Going/ })).toBeDefined();
+    });
+  });
+
+  it("does not excerpt a classmate's story into the heading of their untitled book", async () => {
+    // story-titles §5: the excerpt fallback is computed "only from text already authorized for
+    // that viewer". `jobs.input_text` is the raw pre-redaction story, and RLS hands the whole row
+    // to any classmate who opens an approved book from the shared gallery — so on someone else's
+    // legacy untitled book the excerpt is not ours to render.
+    const peerUntitledRow = {
+      ...COMPLETE_ROW,
+      profile_id: "someone-else",
+      title: null,
+      input_text: "My name is Ana and I live on Mabini Street.",
+    };
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: peerUntitledRow }));
+    mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
+
+    await renderPage(makeParams("j1"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Untitled" })).toBeDefined();
+    });
+    expect(screen.queryByText(/Mabini Street/)).toBeNull();
+    expect(screen.queryByText(/Ana/)).toBeNull();
+  });
+
+  it("still excerpts the reader's own untitled book", async () => {
+    const ownUntitledRow = { ...COMPLETE_ROW, title: null, input_text: "The dog ran far away." };
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: ownUntitledRow }));
+    mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
+
+    await renderPage(makeParams("j1"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "The dog ran far away." })).toBeDefined();
     });
   });
 

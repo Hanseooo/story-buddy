@@ -15,6 +15,7 @@ export type JobRow = {
   status: string;
   current_stage: string | null;
   failure_reason: string | null;
+  profile_id: string;
   input_text: string;
   title: string | null;
   style_preset_id: string | null;
@@ -54,21 +55,29 @@ export function useJob(jobId: string): {
   async function loadRow(force = false): Promise<boolean> {
     const { data, error } = await supabase
       .from("jobs")
-      .select("id, status, current_stage, failure_reason, input_text, title, style_preset_id, pages, reveal")
+      // `profile_id` is who owns the book, not who is reading it: RLS lets a classmate read an
+      // approved peer row whole, so every consumer of `input_text` has to be able to tell the
+      // owner's own story text from someone else's (story-titles §5).
+      .select("id, status, current_stage, failure_reason, profile_id, input_text, title, style_preset_id, pages, reveal")
       .eq("id", jobId)
       .single();
-    const hasRow = data !== null && data !== undefined;
-    if (force && (error || !hasRow)) return false;
+    // PGRST116 is `.single()` matching zero rows — the book is genuinely absent, or RLS hid it
+    // (indistinguishable by design, and both are "not yours to read"). Any other error is the
+    // read failing: a blip, a 5xx, an expired session. Telling a child their story does not
+    // exist because the network hiccuped is the bug this distinguishes.
+    const readFailure = Boolean(error) && error?.code !== "PGRST116";
+    // A forced refresh must not overwrite a good row with a failed read: the caller re-enables a
+    // paid action on the strength of what it reads back. An absent row is not a failed read — it
+    // is the answer, and the job still has to reclassify, or the page waits on a row that is gone.
+    if (force && readFailure) return false;
     if (force || !liveArrived.current) {
       liveArrived.current = true;
-      // PGRST116 is `.single()` matching zero rows — the book is genuinely absent, or RLS hid it
-      // (indistinguishable by design, and both are "not yours to read"). Any other error is the
-      // read failing: a blip, a 5xx, an expired session. Telling a child their story does not
-      // exist because the network hiccuped is the bug this distinguishes.
-      setReadFailed(Boolean(error) && error?.code !== "PGRST116");
+      setReadFailed(readFailure);
       setRow(data as JobRow | null);
     }
-    return !error && hasRow;
+    // Matches the comment above: an absent row is a completed refresh whose answer is "gone",
+    // not a failed one. Returning false for it told the caller it had learned nothing.
+    return !readFailure;
   }
 
   useEffect(() => {

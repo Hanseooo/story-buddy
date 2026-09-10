@@ -9,7 +9,6 @@ type Job = {
   id: string;
   approved_at: string;
   title: string | null;
-  input_text: string;
   pages: { scene_id: string; caption: string; image_path: string }[] | null;
   profile_id: string;
   profiles: { display_nickname: string; avatar_id: string | null } | null;
@@ -31,7 +30,9 @@ export default async function GalleryPage({
 
   const { data } = await supabase
     .from("jobs")
-    .select("id, approved_at, title, input_text, pages, profile_id, profiles!inner(display_nickname, avatar_id)")
+    // spec §5: no input_text. This page spans every classmate's approved book, so the excerpt
+    // fallback is not authorized for this viewer — a legacy untitled book reads "Untitled".
+    .select("id, approved_at, title, pages, profile_id, profiles!inner(display_nickname, avatar_id)")
     .not("approved_at", "is", null)
     .is("profiles.removed_at", null)
     .order("approved_at", { ascending: false })
@@ -87,7 +88,7 @@ export default async function GalleryPage({
               )}
               <div className="p-3 flex flex-col gap-1">
                 <p className="font-kid truncate text-sm font-bold text-foreground">
-                  {displayTitle(job.title, job.input_text)}
+                  {displayTitle(job.title, null)}
                 </p>
                 <div className="flex items-center gap-3">
                   <Avatar avatarId={job.profiles?.avatar_id ?? null} displayNickname={nickname} size={32} />

@@ -262,6 +262,40 @@ describe("WriteStoryPage title field", () => {
     expect(screen.getByText("7 / 80")).toBeInTheDocument();
   });
 
+  // spec §3 requires "1-80 characters after trimming", so a counter over the untrimmed value
+  // reads 82 / 80 on a title this same page submits without complaint.
+  it("counts the trimmed title so the counter agrees with the validator", () => {
+    render(<WriteStoryPage />);
+    fireEvent.change(screen.getByLabelText("Story title"), {
+      target: { value: `  ${"x".repeat(80)}  ` },
+    });
+    expect(screen.getByText("80 / 80")).toBeInTheDocument();
+  });
+
+  // spec §3: "Count Unicode code points consistently in client and server, not UTF-16 units."
+  // Each dragon is one code point and two UTF-16 units, so a `.length` counter would read
+  // 160 / 80 and block a title the server accepts.
+  it("counts astral-plane characters as one code point each", () => {
+    render(<WriteStoryPage />);
+    fireEvent.change(screen.getByLabelText("Story title"), {
+      target: { value: "\u{1F409}".repeat(80) },
+    });
+    expect(screen.getByText("80 / 80")).toBeInTheDocument();
+  });
+
+  it("accepts an 80-code-point astral title that a UTF-16 length would reject", async () => {
+    render(<WriteStoryPage />);
+    fireEvent.change(screen.getByLabelText("story text"), {
+      target: { value: "one two three four five" },
+    });
+    fireEvent.change(screen.getByLabelText("Story title"), {
+      target: { value: "\u{1F409}".repeat(80) },
+    });
+    fireEvent.submit(screen.getByRole("form", { name: "Write your story" }));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    expect(screen.queryByText("Keep your title to 80 characters.")).toBeNull();
+  });
+
   it("blocks submit and shows the empty-title message", async () => {
     render(<WriteStoryPage />);
     fireEvent.change(screen.getByLabelText("story text"), {
@@ -334,5 +368,84 @@ describe("WriteStoryPage title field", () => {
     fireEvent.keyDown(screen.getByLabelText("Story title"), { key: "Enter", code: "Enter" });
     expect(screen.getByLabelText("story text")).toHaveFocus();
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  // spec §4: "if it becomes empty or exceeds the limit, ask for a different title without
+  // discarding the story." Reporting a rejected title as "Something went wrong. Try again!"
+  // sends the child back with the same title, and spec §3 forbids the converse confusion:
+  // "A transport error is not evidence that the title failed moderation."
+  it("asks for a different title on a rejection instead of reporting a transport error", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      json: async () => ({ detail: "that title isn't allowed" }),
+    }) as unknown as typeof fetch;
+    render(<WriteStoryPage />);
+    fireEvent.change(screen.getByLabelText("story text"), {
+      target: { value: "one two three four five" },
+    });
+    const titleInput = screen.getByLabelText("Story title") as HTMLInputElement;
+    fireEvent.change(titleInput, { target: { value: "call me at 09171234567" } });
+    fireEvent.submit(screen.getByRole("form", { name: "Write your story" }));
+
+    expect(await screen.findByText("Try a different title.")).toBeInTheDocument();
+    expect(screen.queryByText("Something went wrong. Try again!")).toBeNull();
+    expect((screen.getByLabelText("story text") as HTMLTextAreaElement).value).toBe(
+      "one two three four five",
+    );
+    expect(titleInput.value).toBe("call me at 09171234567");
+    expect(titleInput).toHaveFocus();
+  });
+
+  it("still reports a lost response as a transport error", async () => {
+    global.fetch = vi.fn().mockRejectedValue(new Error("network down")) as unknown as typeof fetch;
+    render(<WriteStoryPage />);
+    fireEvent.change(screen.getByLabelText("story text"), {
+      target: { value: "one two three four five" },
+    });
+    fireEvent.change(screen.getByLabelText("Story title"), { target: { value: "My Book" } });
+    fireEvent.submit(screen.getByRole("form", { name: "Write your story" }));
+
+    expect(await screen.findByText("Something went wrong. Try again!")).toBeInTheDocument();
+    expect(screen.queryByText("Try a different title.")).toBeNull();
+  });
+
+  // CC-6 and DESIGN.md §12: the panel blocks a paid submission, so a keyboard or screen-reader
+  // child has to land on it and be able to leave it.
+  it("focuses the privacy-replacement panel and dismisses it on Escape", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      json: async () => ({ detail: { checked_title: "call me at <PH_MOBILE>" } }),
+    }) as unknown as typeof fetch;
+    render(<WriteStoryPage />);
+    fireEvent.change(screen.getByLabelText("story text"), {
+      target: { value: "one two three four five" },
+    });
+    fireEvent.change(screen.getByLabelText("Story title"), {
+      target: { value: "call me at 09171234567" },
+    });
+    fireEvent.submit(screen.getByRole("form", { name: "Write your story" }));
+
+    const confirm = await screen.findByRole("button", { name: /use this title/i });
+    const panel = confirm.closest('[role="alert"]') as HTMLElement;
+    await waitFor(() => expect(panel).toHaveFocus());
+
+    fireEvent.keyDown(panel, { key: "Escape", code: "Escape" });
+    expect(screen.queryByRole("button", { name: /use this title/i })).toBeNull();
+    expect(screen.getByLabelText("Story title")).toHaveFocus();
+  });
+
+  it("describes the title by its counter alone while no error is showing", async () => {
+    render(<WriteStoryPage />);
+    const titleInput = screen.getByLabelText("Story title");
+    expect(titleInput).toHaveAttribute("aria-describedby", "title-count");
+
+    fireEvent.change(screen.getByLabelText("story text"), {
+      target: { value: "one two three four five" },
+    });
+    fireEvent.submit(screen.getByRole("form", { name: "Write your story" }));
+    await screen.findByText("Give your story a title.");
+    expect(titleInput).toHaveAttribute("aria-describedby", "title-count title-error");
   });
 });

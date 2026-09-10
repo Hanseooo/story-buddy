@@ -203,6 +203,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   const isRetryingCharacterChoices = submissionState === "reconciling";
 
   function toggleTrait(charId: string, attribute: string) {
+    setChoiceUpdated(false);
     setSelectedTrait((current) => {
       if (current?.charId === charId && current.attribute === attribute) {
         selectedControlWasFocused.current = false;
@@ -228,10 +229,10 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   const [choiceUpdated, setChoiceUpdated] = useState(false);
 
   useEffect(() => {
-    if (bucket !== "paused" || !row?.reveal || !revealFingerprint) {
-      previousRevealFingerprint.current = null;
-      return;
-    }
+    // Deliberately keeps the last paused fingerprint across the in-flight leg: a redraw always
+    // leaves the pause and comes back, and forgetting it here let a replacement that still
+    // suggested the same trait return with the spent selection intact.
+    if (bucket !== "paused" || !row?.reveal || !revealFingerprint) return;
 
     const previous = previousRevealFingerprint.current;
     const selectionStillOffered = selectedTrait === null || row.reveal.characters.some(
@@ -241,9 +242,17 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
 
     if (selectedTrait && (!selectionStillOffered || revealChanged)) {
       lastSelectedCharId.current = selectedTrait.charId;
-      if (!selectedControlWasFocused.current) {
-        selectedControlWasFocused.current = characterCardRefs.current[selectedTrait.charId]?.contains(document.activeElement) ?? false;
-      }
+      // Two questions, not one. The latch answers "was the child working in this card when they
+      // chose?" — it has to be captured at selection time, because by now the chosen control is
+      // unmounted and focus has already fallen to <body>. This narrows it with "and is focus still
+      // here, or nowhere?": a child who tabbed to Continue is navigating, and dragging them back
+      // to the heading is the theft spec §5 forbids.
+      const active = document.activeElement;
+      const focusIsStillHereOrLost =
+        active === null
+        || active === document.body
+        || (characterCardRefs.current[selectedTrait.charId]?.contains(active) ?? false);
+      selectedControlWasFocused.current = selectedControlWasFocused.current && focusIsStillHereOrLost;
       setSelectedTrait(null);
       setPendingRedrawName(null);
       setChoiceUpdated(true);
@@ -284,7 +293,15 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   const [signedCharUrls, setSignedCharUrls] = useState<Record<string, string>>({});
   const [characterImageState, setCharacterImageState] = useState<Record<string, CharacterImageState>>({});
 
+  // A redraw re-enters this function with the replacement's paths while the previous signing
+  // round may still be awaiting. Without a token the loser's resolution lands last and writes its
+  // stale URL and a fresh "loading" over the picture the child is actually looking at — which also
+  // re-disables "Use these characters" on an image that already loaded.
+  const characterImageLoadId = useRef(0);
+
   async function loadCharacterImages(characters: NonNullable<JobRow["reveal"]>["characters"]) {
+    const loadId = characterImageLoadId.current + 1;
+    characterImageLoadId.current = loadId;
     setSignedCharUrls((current) => {
       const next = { ...current };
       characters.forEach((character) => delete next[character.char_id]);
@@ -312,6 +329,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
       if (url) urls[character.char_id] = url;
       states[character.char_id] = url ? "loading" : "error";
     }
+    if (loadId !== characterImageLoadId.current) return;
     setSignedCharUrls((current) => {
       const next = { ...current };
       characters.forEach((character) => {
@@ -348,7 +366,9 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   ) {
     if (submissionInFlight.current || submissionsDisabled) return;
     submissionInFlight.current = true;
-    setBridgeStage(row?.current_stage ?? null);
+    // Only a redraw returns to this stage; a plain confirm advances, and bridging it made the
+    // continue path claim a redraw was under way.
+    setBridgeStage(action === "try_again" ? row?.current_stage ?? null : null);
     setSubmissionState("sending");
     setConfirmError(false);
     let requestFailed = false;
@@ -430,9 +450,17 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
 
   if (bucket === "paused" && row?.reveal) {
     const { characters, taps_left } = row.reveal;
-    const allRequiredImagesLoaded = characters.length > 0 && characters.every(
+    const allRequiredImagesLoaded = characters.every(
       (character) => characterImageState[character.char_id] === "loaded"
     );
+    // A live region only announces a change to text it already holds, so this node is always
+    // rendered and only its content switches.
+    const liveMessage =
+      pendingRedrawName && submissionsDisabled
+        ? `Redrawing ${pendingRedrawName}…`
+        : choiceUpdated
+        ? "The character choices were updated."
+        : "";
     return (
       <div className="w-full flex-1 min-h-[calc(100dvh-5rem)] flex flex-col justify-center items-center p-6 max-w-5xl mx-auto">
         <div className="w-full flex justify-start mb-4 z-20">
@@ -450,7 +478,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
           className="flex flex-col items-center gap-4 text-center mb-12"
         >
           {row && (
-            <p className="text-sm font-bold text-foreground/50 uppercase tracking-wider">
+            <p className="text-sm font-bold text-foreground/50 tracking-wide">
               {displayTitle(row.title, row.input_text)}
             </p>
           )}
@@ -460,11 +488,16 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
           <p className="font-kid text-lg text-foreground/70 max-w-md">
             Choose a detail you want us to try drawing again.
           </p>
-          {choiceUpdated && (
-            <p aria-live="polite" className="sr-only">
-              The character choices were updated.
-            </p>
-          )}
+          {/* Always rendered, so a live region exists before its text changes. The pending line
+              is announced only — the in-flight screen states it visually — while the changed-reveal
+              explanation is also shown, because a sighted child otherwise watches the chips change
+              with no explanation at all (spec §4). */}
+          <p
+            aria-live="polite"
+            className={choiceUpdated ? "font-kid text-sm text-foreground/70 max-w-md" : "sr-only"}
+          >
+            {liveMessage}
+          </p>
         </motion.div>
 
         <div className="mb-6 text-center font-kid text-foreground">
@@ -509,7 +542,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                   <p>We couldn&apos;t load {c.name}&apos;s picture.</p>
                   <button
                     type="button"
-                    className="min-h-[44px] rounded-xl bg-[var(--color-surface)] px-4 py-2 font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary"
+                    className="min-h-[44px] rounded-xl bg-[var(--color-surface)] px-4 py-2 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
                     onClick={() => void loadCharacterImages([c])}
                   >
                     Try loading {c.name}&apos;s picture again
@@ -529,12 +562,12 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
               <h2
                 ref={(node) => { characterHeadingRefs.current[c.char_id] = node; }}
                 tabIndex={-1}
-                className="font-display text-2xl text-foreground mt-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary"
+                className="font-display text-2xl text-foreground mt-2 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
               >
                 {c.name}
               </h2>
 
-              {c.chips.length === 0 && (
+              {taps_left > 0 && c.chips.length === 0 && (
                 <p className="w-full text-center font-kid text-sm text-foreground/70">
                   No suggested changes are available for this character.
                 </p>
@@ -550,7 +583,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                       aria-pressed={selected}
                       disabled={submissionsDisabled || characterImageState[c.char_id] !== "loaded"}
                       onClick={() => toggleTrait(c.char_id, chip)}
-                      className={`min-h-[44px] max-w-full rounded-full border px-4 py-2 font-kid text-sm text-foreground transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary disabled:opacity-50 ${
+                      className={`min-h-[44px] max-w-full rounded-full border px-4 py-2 font-kid text-sm text-foreground transition-colors focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed ${
                         selected
                           ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10 font-bold"
                           : "border-[var(--color-primary)]/20 bg-background hover:bg-[var(--color-primary)]/5"
@@ -576,7 +609,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                         setPendingRedrawName(c.name);
                         void handleConfirm("try_again", c.char_id, selectedTrait.attribute);
                       }}
-                      className="min-h-[44px] rounded-xl bg-[var(--color-primary)] px-4 py-2 font-kid font-bold text-[var(--color-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary disabled:opacity-50"
+                      className="min-h-[44px] rounded-xl border border-[var(--color-primary)]/40 bg-[var(--color-surface)] px-4 py-2 font-kid font-bold text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Redraw {c.name}
                     </button>
@@ -584,7 +617,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                       type="button"
                       disabled={submissionsDisabled}
                       onClick={() => setSelectedTrait(null)}
-                      className="min-h-[44px] rounded-xl px-4 py-2 font-kid font-bold text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary disabled:opacity-50"
+                      className="min-h-[44px] rounded-xl px-4 py-2 font-kid font-bold text-foreground focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Cancel
                     </button>
@@ -605,7 +638,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
               setPendingRedrawName(null);
               void handleConfirm("confirm");
             }}
-            className="rounded-[16px] bg-[var(--color-primary)] text-[var(--color-surface)] min-h-[56px] px-12 font-kid text-xl disabled:opacity-50 hover:brightness-105 active:scale-[0.98] transition-all font-bold shadow-[0_10px_28px_rgba(49,85,217,0.12)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary"
+            className="rounded-[16px] bg-[var(--color-primary)] text-[var(--color-surface)] min-h-[56px] px-12 font-kid text-xl disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-105 active:scale-[0.98] transition-all font-bold shadow-[0_10px_28px_rgba(49,85,217,0.12)] focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
           >
             Use these characters
           </button>
@@ -626,7 +659,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                   type="button"
                   onClick={() => void retryCharacterChoices()}
                   disabled={isRetryingCharacterChoices}
-                  className="min-h-[44px] rounded-xl bg-[var(--color-surface)] px-4 py-2 font-bold text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary disabled:opacity-50"
+                  className="min-h-[44px] rounded-xl bg-[var(--color-surface)] px-4 py-2 font-bold text-foreground focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Load character choices again
                 </button>
@@ -680,7 +713,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
       </div>
 
       {row && (
-        <p className="z-10 -mb-8 text-sm font-bold text-foreground/50 uppercase tracking-wider">
+        <p className="z-10 -mb-8 text-sm font-bold text-foreground/50 tracking-wide">
           {displayTitle(row.title, row.input_text)}
         </p>
       )}
@@ -733,14 +766,12 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
               initial={{ opacity: 0, scale: 0.8, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.8, y: -10 }}
-              aria-live="polite"
               className="flex flex-col items-center gap-6"
             >
                <DrawingVignette />
                <h2 className="font-display text-3xl md:text-4xl text-foreground tracking-tight">
                  {pendingRedrawName ? `Redrawing ${pendingRedrawName}…` : "Redrawing your character…"}
                </h2>
-               <p className="font-kid text-sm text-foreground/70">The picture shown before was the previous picture.</p>
             </motion.div>
           ) : (
             <motion.div
