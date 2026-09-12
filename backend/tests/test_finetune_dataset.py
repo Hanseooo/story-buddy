@@ -34,7 +34,7 @@ from finetune.dataset_selection import (
     DatasetSelectionAudit,
     validate_hard_negative_matches,
 )
-from finetune.manifest import ManifestError
+from finetune.manifest import ManifestError, read_manifest
 
 
 def memory() -> StoryMemory:
@@ -82,38 +82,105 @@ def memory() -> StoryMemory:
     )
 
 
+def memory_with_rejects() -> StoryMemory:
+    """One character, one scene that exhausted ADR-037's cap and finalized on attempt 1."""
+    return StoryMemory(
+        schema_version=1,
+        story_id="story_2",
+        classroom_id="c1",
+        profile_id="p1",
+        input=Input(raw_text="once upon a time"),
+        characters=[
+            Character(
+                char_id="quill_007",
+                name="Quill",
+                description=CharacterDescription(species="hedgehog"),
+                canonical_ref_image="story_2/ref-quill.png",
+            ),
+        ],
+        scenes=[
+            Scene(
+                scene_id="s1",
+                text_excerpt="x",
+                characters_present=["quill_007"],
+                attempts=[
+                    Attempt(image_ref="story_2/s1-1.png"),
+                    Attempt(image_ref="story_2/s1-2.png"),
+                    Attempt(image_ref="story_2/s1-3.png"),
+                ],
+                final_image_ref="story_2/s1-1.png",
+            ),
+        ],
+    )
+
+
+def test_every_attempt_on_a_finalized_scene_becomes_a_pair():
+    """ADR-060 D1. The judge is deployed on candidates (`consistency_check.py:296`), so the
+    dataset samples candidates rather than the subset the incumbent judge let through."""
+    pairs = bd.pairs_from_memory(memory_with_rejects())
+
+    assert [p.scene_image for p in pairs] == [
+        "story_2/s1-1.png", "story_2/s1-2.png", "story_2/s1-3.png",
+    ]
+    assert {p.char_id for p in pairs} == {"quill_007"}
+
+
+def test_the_finalized_attempt_yields_exactly_one_pair():
+    """ADR-060 Verification 3. `final_image_ref` is itself an attempt, and `mint_pair_id` keys on
+    `(char_id, scene_image)` — harvesting naively mints a colliding duplicate for it."""
+    pairs = bd.pairs_from_memory(memory_with_rejects())
+
+    assert len({p.pair_id for p in pairs}) == len(pairs)
+    assert [p.scene_image for p in pairs].count("story_2/s1-1.png") == 1
+
+
+def test_an_unfinalized_scene_contributes_no_pairs():
+    """ADR-060 D5. A scene with attempts and no final belongs to an incomplete run."""
+    unfinalized = memory_with_rejects()
+    unfinalized.scenes[0].final_image_ref = None
+
+    assert bd.pairs_from_memory(unfinalized) == []
+
+
 def freeze_bundle(
     data_dir, *, split="train", provenance="synthetic", exclusions=None, fixture=True,
-    include_roster=True,
+    include_roster=True, story_id="story-freeze", style="cel",
 ):
+    """One finalized single-character bundle, written to disk so `_preflight` can read its assets.
+
+    `story_id` and `style` default to the original single-bundle shape, so every existing caller is
+    unaffected. They vary so a caller can assemble a production-shaped corpus: pair ids are minted
+    from `(char_id, scene_image)` and both derive from `story_id`, so bundles that share one would
+    collide on `duplicate pair_id` before reaching the allocation guard under test.
+    """
     ref = BytesIO()
     scene = BytesIO()
     Image.new("RGB", (2, 3), "purple").save(ref, format="PNG")
     Image.new("RGB", (2, 3), "purple").save(scene, format="WEBP", quality=82)
     ref_bytes, scene_bytes = ref.getvalue(), scene.getvalue()
-    ref_path = data_dir / "ref" / "story-freeze_ref.png"
-    scene_path = data_dir / "scene" / "story-freeze_scene.webp"
+    ref_path = data_dir / "ref" / f"{story_id}_ref.png"
+    scene_path = data_dir / "scene" / f"{story_id}_scene.webp"
     ref_path.parent.mkdir(parents=True, exist_ok=True)
     scene_path.parent.mkdir(parents=True, exist_ok=True)
     ref_path.write_bytes(ref_bytes)
     scene_path.write_bytes(scene_bytes)
     story = StoryMemory(
         schema_version=1,
-        story_id="story-freeze",
+        story_id=story_id,
         classroom_id="c1",
         profile_id="p1",
         input=Input(raw_text="redacted fixture"),
-        style=Style(style_preset_id="cel", prompt_fragment="fixture cel"),
+        style=Style(style_preset_id=style, prompt_fragment=f"fixture {style}"),
         characters=[
-            Character(char_id="char-freeze", name="Moss", canonical_ref_image="story-freeze/ref.png")
+            Character(char_id="char-freeze", name="Moss", canonical_ref_image=f"{story_id}/ref.png")
         ],
         scenes=[
             Scene(
                 scene_id="s1",
                 text_excerpt="Moss waved.",
                 characters_present=["char-freeze"],
-                attempts=[Attempt(image_ref="story-freeze/scene.webp")],
-                final_image_ref="story-freeze/scene.webp",
+                attempts=[Attempt(image_ref=f"{story_id}/scene.webp")],
+                final_image_ref=f"{story_id}/scene.webp",
             )
         ],
     )
@@ -128,7 +195,7 @@ def freeze_bundle(
         run_metadata={
             "fixture": "true" if fixture else "false",
             "schema_version": 1,
-            "style_preset_id": "cel",
+            "style_preset_id": style,
             "code_commit": "fixture-commit",
             "text_model": "fixture-text",
             "image_model": "fixture-image",
@@ -149,7 +216,7 @@ def freeze_bundle(
         },
         assets=[
             AssetRecord(
-                storage_path="story-freeze/ref.png",
+                storage_path=f"{story_id}/ref.png",
                 local_path=ref_path.relative_to(data_dir).as_posix(),
                 sha256=hashlib.sha256(ref_bytes).hexdigest(),
                 mime_type="image/png",
@@ -159,7 +226,7 @@ def freeze_bundle(
                 kind="ref",
             ),
             AssetRecord(
-                storage_path="story-freeze/scene.webp",
+                storage_path=f"{story_id}/scene.webp",
                 local_path=scene_path.relative_to(data_dir).as_posix(),
                 sha256=hashlib.sha256(scene_bytes).hexdigest(),
                 mime_type="image/webp",
@@ -183,9 +250,12 @@ def test_pair_id_is_deterministic_and_opaque():
     assert "quill" not in a and ".png" not in a
 
 
-def test_pairs_are_reference_first_one_per_finalized_scene_and_skip_missing_references():
+def test_pairs_are_reference_first_one_per_attempt_and_skip_missing_references():
+    # s1 drew twice and finalized on `s1-2`, so `s1-1` is a harvested reject (ADR-060).
+    # `noref_1` is in s1 but has no canonical reference, so it contributes nothing.
     pairs = bd.pairs_from_memory(memory())
     assert [(p.char_id, p.ref_image, p.scene_image) for p in pairs] == [
+        ("quill_007", "story_1/ref-quill.png", "story_1/s1-1.png"),
         ("quill_007", "story_1/ref-quill.png", "story_1/s1-2.png"),
         ("quill_007", "story_1/ref-quill.png", "story_1/s3-1.png"),
     ]
@@ -440,7 +510,8 @@ def test_label_is_the_inverse_of_same_character_and_is_converted_only_here(same_
     )
     pairs = bd.pairs_from_memory(memory())
     keyed = {pairs[0].pair_id: consensus["x"]}
-    records = bd.build_records(memory(), "train", "synthetic", keyed, {pairs[1].pair_id})
+    pilot = {p.pair_id for p in pairs[1:]}
+    records = bd.build_records(memory(), "train", "synthetic", keyed, pilot)
 
     assert len(records) == 1
     assert records[0].same_character is same_character
@@ -459,16 +530,18 @@ def test_pilot_pairs_are_dropped():
 
 
 def test_build_records_carries_the_gating_booleans_and_the_split_metadata():
+    # pairs[0] is s1's harvested reject (ADR-060); this test is about the two finals, so it rides
+    # in the pilot set rather than being annotated.
     pairs = bd.pairs_from_memory(memory())
     keyed = {
-        pairs[0].pair_id: bd.Consensus(
+        pairs[1].pair_id: bd.Consensus(
             same_character=False, failure_reasons=["wrong_colour"], anatomy_intact=False, text_free=False,
         ),
-        pairs[1].pair_id: bd.Consensus(
+        pairs[2].pair_id: bd.Consensus(
             same_character=True, failure_reasons=[], anatomy_intact=True, text_free=True,
         ),
     }
-    rec1, rec2 = bd.build_records(memory(), "test", "donated", keyed, set())
+    rec1, rec2 = bd.build_records(memory(), "test", "donated", keyed, {pairs[0].pair_id})
     assert (rec1.split, rec1.provenance, rec1.pair_type) == ("test", "donated", "pipeline")
     assert rec1.char_id == "story_1:quill_007"
     assert rec1.anatomy_intact is False and rec1.text_free is False
@@ -1102,6 +1175,7 @@ def test_build_dataset_computes_accurate_statistics(tmp_path):
     mem = memory()
     pairs = bd.pairs_from_memory(mem)
     pair1, pair2 = pairs[0], pairs[1]
+    # pairs[2] is s3's final; this test is about two annotated pairs, so it rides in the pilot set.
 
     # pair1: 2 annotators disagree (a1=True, a2=False), adj1=False (adjudicated)
     # pair2: 2 annotators agree (a1=True, a2=True)
@@ -1114,7 +1188,7 @@ def test_build_dataset_computes_accurate_statistics(tmp_path):
     ]
     with patch("finetune.build_dataset.fetch_annotations", return_value=raw_annotations), \
          patch("finetune.build_dataset.fetch_adjudicator_ids", return_value={"adj1"}), \
-         patch("finetune.build_dataset.fetch_pilot_pairs", return_value=set()):
+         patch("finetune.build_dataset.fetch_pilot_pairs", return_value={pairs[2].pair_id}):
         records = bd.build_dataset([(mem, "train", "synthetic")], out_path=out, add_constructed=False)
 
     assert len(records) == 2
@@ -1163,14 +1237,14 @@ def test_build_records_stamps_the_reference_verification_status_on_every_pair():
         for pair in pairs
     }
     records = bd.build_records(unchecked, "train", "synthetic", keyed, set())
-    assert [r.ref_verdict_status for r in records] == ["unverified", "unverified"]
+    assert [r.ref_verdict_status for r in records] == ["unverified"] * len(pairs)
 
     checked = memory()
     checked.characters[0].ref_verdict = RefVerdict(
         differences_observed="", matches_description=True, contradictions=[], text_free=True,
     )
     records = bd.build_records(checked, "train", "synthetic", keyed, set())
-    assert [r.ref_verdict_status for r in records] == ["passed", "passed"]
+    assert [r.ref_verdict_status for r in records] == ["passed"] * len(pairs)
 
 
 def test_constructed_negatives_inherit_the_reference_characters_status():
@@ -1199,7 +1273,7 @@ def test_build_dataset_statistics_count_unverified_reference_anchors(tmp_path):
         bd.build_dataset([(mem, "train", "synthetic")], out_path=out, add_constructed=False)
 
     stats = json.loads((tmp_path / "dataset_manifest.json").read_text(encoding="utf-8"))
-    assert stats["reference_verification"] == {"unverified": 2}
+    assert stats["reference_verification"] == {"unverified": len(pairs)}
 
 
 # --- single-rater test-retest (rounds) ------------------------------------------------------
@@ -1351,3 +1425,154 @@ def test_freeze_agreement_evidence_pairs_round_one_against_round_two(tmp_path):
         for line in (out_dir / "annotation_agreement.jsonl").read_text().splitlines()
     ]
     assert evidence == {"pair_id": pair_id, "labels": [False, True]}
+
+
+# --- P7 / Finding E: the production branch of `_validate_bundles` --------------------------------
+# `_validate_bundles` returns early when every bundle is `fixture: "true"` (freeze_dataset.py:107),
+# so the fixture path that Phase C had rehearsed skipped the allocation guards entirely — the only
+# guards that run on the real campaign. These build the production shape and exercise them.
+
+def production_corpus(data_dir, *, donated_styles=("gouache",) * 4 + ("cel",) * 3 + ("cut_paper",) * 3,
+                      synthetic_per_style=(8, 2)):
+    """30 synthetic (8 train + 2 val per preset) plus donated at the given style allocation."""
+    train_n, val_n = synthetic_per_style
+    bundles = []
+    # Order matters and is not cosmetic: `_write_evaluation_artifacts` requires the combined
+    # manifest to equal its train+val+test projections concatenated. The real corpus arrives that
+    # way — `select_dataset_bundles` returns synthetic then donated, and synthetic story ids sort
+    # train (syn-001..024) before val (syn-025..030). Mirror that here rather than interleaving.
+    for split, count in (("train", train_n), ("val", val_n)):
+        for style in ("cel", "gouache", "cut_paper"):
+            for i in range(count):
+                bundles.append(freeze_bundle(
+                    data_dir, split=split, provenance="synthetic", fixture=False,
+                    story_id=f"syn-{split}-{style}-{i}", style=style,
+                ))
+    for i, style in enumerate(donated_styles):
+        bundles.append(freeze_bundle(
+            data_dir, split="test", provenance="donated", fixture=False,
+            story_id=f"don-{i:03d}", style=style,
+        ))
+    return bundles
+
+
+def test_validate_bundles_accepts_the_production_allocation(tmp_path):
+    data_dir = tmp_path / "corpus"
+    bundles = production_corpus(data_dir)
+    pair_to_story, char_to_story = fd._validate_bundles(bundles, data_dir)
+    assert len(pair_to_story) == 40
+    assert len(char_to_story) == 40
+
+
+def test_validate_bundles_accepts_a_donated_set_enlarged_by_unspent_backups(tmp_path):
+    """2026-09-12 amendment: the donated check is a floor, not an equality. 15 stories at 5/5/5 is
+    what the held-out set looks like when no backup was spent on a replacement."""
+    data_dir = tmp_path / "corpus"
+    bundles = production_corpus(data_dir, donated_styles=("gouache",) * 5 + ("cel",) * 5 + ("cut_paper",) * 5)
+    pair_to_story, _ = fd._validate_bundles(bundles, data_dir)
+    assert len(pair_to_story) == 45
+
+
+def test_validate_bundles_rejects_a_donated_style_below_the_primary_floor(tmp_path):
+    data_dir = tmp_path / "corpus"
+    bundles = production_corpus(data_dir, donated_styles=("gouache",) * 4 + ("cel",) * 2 + ("cut_paper",) * 3)
+    with pytest.raises(ManifestError, match="below the registered primary allocation"):
+        fd._validate_bundles(bundles, data_dir)
+
+
+def test_validate_bundles_rejects_a_short_synthetic_allocation(tmp_path):
+    """Synthetic stays an equality — 24 train and 6 val are fixed and nothing enlarges them."""
+    data_dir = tmp_path / "corpus"
+    bundles = production_corpus(data_dir, synthetic_per_style=(7, 2))
+    with pytest.raises(ManifestError, match="style allocation drift"):
+        fd._validate_bundles(bundles, data_dir)
+
+
+def test_phase_c_rehearsal_freezes_a_production_corpus_end_to_end(tmp_path):
+    """P7: the whole of Phase C on a production-shaped corpus, which had only ever run on the
+    fixture path — where `_validate_bundles` returns early and skips every allocation guard.
+
+    Covers freeze -> annotation truth -> manifest -> validation -> LLaMA-Factory export in one pass.
+    `prepare_dataset_bundles` is patched because selection has its own 40 tests; everything
+    downstream of it is the real thing.
+    """
+    data_dir = tmp_path / "corpus"
+    bundles = production_corpus(data_dir)
+    annotations = []
+    for bundle in bundles:
+        for pair in bd.pairs_from_memory(bundle.memory):
+            annotations += rows(pair.pair_id, {"same_character": True}, {"same_character": True})
+    out_dir = tmp_path / "freeze"
+    selection_path = tmp_path / "dataset_selection.json"
+    selection_bytes = b'{"controlled": true}\n'
+    selection_path.write_bytes(selection_bytes)
+
+    with (
+        patch.object(
+            fd, "prepare_dataset_bundles",
+            return_value=(bundles, DatasetSelection(
+                hard_negatives_frozen_at=datetime.now(timezone.utc) - timedelta(hours=1),
+                hard_negative_matches=[], donated_replacements=[],
+            ), DatasetSelectionAudit(
+                [], [], {}, hashlib.sha256(selection_bytes).hexdigest())),
+        ),
+        patch.object(fd, "fetch_annotations", return_value=annotations),
+        patch.object(fd, "fetch_adjudicator_ids", return_value=set()),
+        patch.object(fd, "fetch_pilot_pairs", return_value=set()),
+        patch.object(fd, "validate_hard_negative_matches", return_value={}),
+    ):
+        report = bd.freeze_dataset(data_dir, out_dir, selection_path=selection_path)
+
+    assert report.counts["split"] == {"train": 24, "val": 6, "test": 10}
+    for name in ("train.json", "val.json", "test.json", "dataset_info.json", "manifest.jsonl"):
+        assert (out_dir / name).exists(), name
+    # §2's invariant, on the artifact that actually ships rather than on a fixture.
+    assert all(r.provenance == "donated" for r in read_manifest(out_dir / "manifest.jsonl")
+               if r.split == "test")
+
+
+def test_phase_c_rehearsal_freezes_with_constructed_negatives(tmp_path):
+    """The same rehearsal with one ADR-057 constructed negative, which the real freeze always has.
+
+    `build_dataset` appends constructed train records after every pipeline record, so the combined
+    manifest stopped being grouped by split and `_write_evaluation_artifacts`' projection guard
+    failed — at the end of Phase C, after the whole spend and the whole labelling window.
+    """
+    data_dir = tmp_path / "corpus"
+    bundles = production_corpus(data_dir)
+    annotations = []
+    for bundle in bundles:
+        for pair in bd.pairs_from_memory(bundle.memory):
+            annotations += rows(pair.pair_id, {"same_character": True}, {"same_character": True})
+    train = [b for b in bundles if b.split == "train"]
+    matches = {
+        bd.lineage_id(train[0].memory.story_id, "char-freeze"):
+            bd.lineage_id(train[1].memory.story_id, "char-freeze"),
+    }
+    selection_path = tmp_path / "dataset_selection.json"
+    selection_bytes = b'{"controlled": true}\n'
+    selection_path.write_bytes(selection_bytes)
+
+    with (
+        patch.object(
+            fd, "prepare_dataset_bundles",
+            return_value=(bundles, DatasetSelection(
+                hard_negatives_frozen_at=datetime.now(timezone.utc) - timedelta(hours=1),
+                hard_negative_matches=[], donated_replacements=[],
+            ), DatasetSelectionAudit(
+                [], [], {}, hashlib.sha256(selection_bytes).hexdigest())),
+        ),
+        patch.object(fd, "fetch_annotations", return_value=annotations),
+        patch.object(fd, "fetch_adjudicator_ids", return_value=set()),
+        patch.object(fd, "fetch_pilot_pairs", return_value=set()),
+        patch.object(fd, "validate_hard_negative_matches", return_value=matches),
+    ):
+        bd.freeze_dataset(data_dir, out_dir := tmp_path / "freeze",
+                                   selection_path=selection_path)
+
+    records = read_manifest(out_dir / "manifest.jsonl")
+    assert sum(r.pair_type == "constructed" for r in records) == 1
+    # The invariant the guard checks, asserted directly: the combined manifest is grouped by split.
+    assert [r.split for r in records] == sorted(
+        (r.split for r in records), key=("train", "val", "test").index
+    )

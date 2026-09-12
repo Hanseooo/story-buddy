@@ -25,6 +25,7 @@ from PIL import Image
 from app.config import IMAGE_BUDGET, MAX_STORY_WORDS, MIN_STORY_WORDS, STYLE_PRESETS
 from app.length import clamp_story, word_count
 from contracts.story_memory import (
+    Attempt,
     Character,
     Cost,
     Location,
@@ -1370,6 +1371,62 @@ def test_download_skips_a_file_already_on_disk(tmp_path):
     build_corpus.download_images(_values(1, chars=1, scenes=1), tmp_path, supabase)
     build_corpus.download_images(_values(1, chars=1, scenes=1), tmp_path, supabase)
     assert len(supabase.storage.downloads) == 2   # not 4
+
+
+def _values_with_attempts() -> dict:
+    """A scene that exhausted ADR-037's cap and finalized on attempt 1, so the final is NOT the
+    last attempt — the shape `count_attempt_pool.py` measures on 52 of 65 real scenes."""
+    return {
+        "cost": Cost(image_count=3),
+        "characters": [
+            Character(char_id="c0", name="c0", canonical_ref_image="story/ref-c0-1.png")
+        ],
+        "scenes": [
+            Scene(
+                scene_id="s0",
+                text_excerpt="x",
+                attempts=[
+                    Attempt(image_ref="story/s0-1.png"),
+                    Attempt(image_ref="story/s0-2.png"),
+                    Attempt(image_ref="story/s0-3.png"),
+                ],
+                final_image_ref="story/s0-1.png",
+            )
+        ],
+    }
+
+
+def test_rejected_attempts_are_downloaded_as_webp_beside_the_final(tmp_path):
+    """ADR-060 D1. The judge is deployed on candidates, so the corpus carries them."""
+    supabase = FakeSupabase()
+    refs, scenes = build_corpus.download_images(_values_with_attempts(), tmp_path, supabase)
+
+    assert refs == 1
+    assert scenes == 3, "the final plus its two rejected attempts"
+    for name in ("story_s0-1.png", "story_s0-2.png", "story_s0-3.png"):
+        assert (tmp_path / "scene" / name).read_bytes().startswith(b"RIFF")
+
+
+def test_the_finalized_attempt_is_downloaded_exactly_once(tmp_path):
+    """ADR-060 Verification 3. `final_image_ref` is itself one of the attempts
+    (`consistency_check.py:424`), so harvesting naively fetches it twice."""
+    supabase = FakeSupabase()
+    build_corpus.download_images(_values_with_attempts(), tmp_path, supabase)
+
+    scene_downloads = [p for p in supabase.storage.downloads if "/s0-" in p]
+    assert scene_downloads.count("story/s0-1.png") == 1
+    assert len(scene_downloads) == 3
+
+
+def test_an_unfinalized_scene_contributes_no_images(tmp_path):
+    """ADR-060 D5. Attempts without a final belong to a run that did not complete."""
+    values = _values_with_attempts()
+    values["scenes"][0].final_image_ref = None
+
+    supabase = FakeSupabase()
+    refs, scenes = build_corpus.download_images(values, tmp_path, supabase)
+
+    assert (refs, scenes) == (1, 0)
 
 
 def test_download_rejects_invalid_reference_magic_bytes(tmp_path):

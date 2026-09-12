@@ -24,6 +24,7 @@ from finetune.corpus_io import (
 from finetune.dataset_selection import (
     SYNTHETIC_INTAKE,
     prepare_dataset_bundles,
+    validate_donated_allocation,
     validate_hard_negative_matches,
 )
 from finetune.manifest import ManifestError, ManifestRecord, local_image_path
@@ -120,8 +121,13 @@ def _validate_bundles(
     donated = Counter(
         bundle.memory.style.style_preset_id for bundle in bundles if bundle.provenance == "donated"
     )
-    if synthetic != expected_synthetic or donated != Counter({"gouache": 4, "cel": 3, "cut_paper": 3}):
+    if synthetic != expected_synthetic:
         raise ManifestError("style allocation drift in production bundles")
+    # Donated is a floor, not an equality — `select_dataset_bundles` may enlarge the held-out set
+    # with unspent backups (2026-09-12 amendment). Same function it validates with, so relaxing one
+    # side without the other is not possible. Synthetic stays an equality: 24 train and 6 val are
+    # fixed by the 2026-08-22 amendment and nothing enlarges them.
+    validate_donated_allocation(donated, context="production bundles")
     return pair_to_story, char_to_story
 
 

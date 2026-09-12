@@ -115,19 +115,40 @@ export async function getNextPair() {
   // Use service role to bypass RLS and fetch a pair that this user hasn't annotated yet
   const adminClient = await createAdminClient();
 
-  const { data: userAnnotations, error: annotationsError } = await adminClient
-    .from("annotations")
-    .select("pair_id, round")
-    .eq("annotator_id", user.id);
+  // Paged, because an unbounded select stops at the Data API's `Max rows` (1000 by
+  // default) with no error. A truncated label set silently re-serves a pair the rater
+  // has already judged, and the duplicate insert is then swallowed as a 23505 — so the
+  // second look is lost rather than recorded. The queue crosses 1000 at two rounds over
+  // ~500 pairs, which this corpus reaches.
+  const ANNOTATION_PAGE_SIZE = 1000;
+  const userAnnotations: { pair_id: string; round: number | null }[] = [];
 
-  if (annotationsError) {
-    return { error: "Failed to load annotation queue" };
+  for (let page = 0; ; page++) {
+    const { data: rows, error: annotationsError } = await adminClient
+      .from("annotations")
+      .select("pair_id, round")
+      .eq("annotator_id", user.id)
+      .range(page * ANNOTATION_PAGE_SIZE, (page + 1) * ANNOTATION_PAGE_SIZE - 1);
+
+    if (annotationsError) {
+      return { error: "Failed to load annotation queue" };
+    }
+
+    if (!rows || rows.length === 0) {
+      break;
+    }
+
+    userAnnotations.push(...rows);
+
+    if (rows.length < ANNOTATION_PAGE_SIZE) {
+      break;
+    }
   }
 
   // Since 0018 a label's identity is (pair, round), not pair alone — the same pair is
   // still owed a second cold pass after its first. Rows written before 0018 have no
   // round and count as round 1, exactly as annotation_truth._round reads them.
-  const labelled = new Set((userAnnotations || []).map(a => `${a.pair_id}:${a.round ?? 1}`));
+  const labelled = new Set(userAnnotations.map(a => `${a.pair_id}:${a.round ?? 1}`));
 
   const PAGE_SIZE = 50;
   let unannotatedPairs: QueuePair[] = [];

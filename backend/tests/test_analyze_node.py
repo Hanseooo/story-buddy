@@ -749,7 +749,9 @@ def test_analyze_maps_owner_name_to_the_capped_character_id():
     assert (obj.materials, obj.colours, obj.form_features) == (["wood"], ["red cord grip"], ["short blade"])
 
 
-def test_analyze_rejects_an_owner_outside_the_persisted_roster():
+def test_analyze_keeps_an_object_whose_owner_is_not_a_character(caplog):
+    """Real donated stories name owners that are never characters — "Angela's parents", "Erin and
+    Klare" — and extraction is deterministic, so raising killed the same story on every run."""
     analysis = _analysis(
         characters=[_character("Ana")],
         objects=[
@@ -758,13 +760,17 @@ def test_analyze_rejects_an_owner_outside_the_persisted_roster():
                 "materials": ["wood"],
                 "colours": ["red cord grip"],
                 "form_features": ["short blade"],
-                "owner_name": "Maya",
+                "owner_name": "Ana and Maya",
             }
         ],
     )
     with patch("pipeline.analyze.extract_entities", return_value=analysis):
-        with pytest.raises(ValueError, match="unknown owner.*Maya"):
-            analyze(_state())
+        with caplog.at_level(logging.WARNING):
+            result = analyze(_state())
+
+    assert result["objects"][0].owner_char_id is None
+    assert result["objects"][0].form_features == ["short blade"]
+    assert "'Ana and Maya' is not in the roster" in caplog.text
 
 
 def test_analyze_keeps_an_object_whose_owner_was_capped_out_of_the_roster(caplog):

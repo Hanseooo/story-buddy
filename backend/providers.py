@@ -426,6 +426,37 @@ NEGATIVE_PROMPT = (
 )
 
 
+# `fal_client` already retries every queue request itself (submit, status poll, result: 10 attempts
+# on 408/409/429, transport errors, and nginx 502/503/504 — `fal_client/client.py`, 1.0.0), so
+# there is no second submission retry here. Resubmitting after the job was accepted would pay
+# twice and put an unrecorded draw past the corpus budget ledger. Two gaps were real (ADR-025
+# Decision 1, audit Finding G): `subscribe` had no ceiling, so a stuck job polled forever and the
+# corpus campaign, which runs outside RQ's deadline, hung with no diagnostic; and the image
+# download had no retry, although by then the image is paid for and fetching it again is free.
+# 600s: one image can legitimately exceed 90s (kid-flow spec §4.1) and RQ kills a job at 1800s
+# (`app/main.py`). On timeout fal_client cancels the request and raises, which lands as
+# `failed_uncertain` — the honest record, because a cancelled job may still bill.
+FAL_CALL_TIMEOUT_SECONDS = 600
+DOWNLOAD_ATTEMPTS = 3
+
+
+def _download_image(url: str) -> bytes:
+    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+        try:
+            response = httpx.get(url, timeout=60.0)
+            response.raise_for_status()
+            return response.content
+        except (httpx.TransportError, httpx.HTTPStatusError) as error:
+            transient = isinstance(error, httpx.TransportError) or (
+                error.response.status_code in (408, 429) or error.response.status_code >= 500
+            )
+            if not transient or attempt == DOWNLOAD_ATTEMPTS:
+                raise
+            _log.warning("fal image download failed (%s); retry %d", error, attempt)
+            time.sleep(2**attempt)
+    raise AssertionError("unreachable")
+
+
 def _run_fal(endpoint: str, arguments: dict, seed: int | None) -> bytes:
     if seed is not None:
         arguments = {**arguments, "seed": seed}
@@ -437,10 +468,9 @@ def _run_fal(endpoint: str, arguments: dict, seed: int | None) -> bytes:
         result = _fal().subscribe(
             endpoint,
             arguments={"output_format": "png", "negative_prompt": NEGATIVE_PROMPT, **arguments},
+            client_timeout=FAL_CALL_TIMEOUT_SECONDS,
         )
-        response = httpx.get(result["images"][0]["url"], timeout=60.0)
-        response.raise_for_status()
-        contents = response.content
+        contents = _download_image(result["images"][0]["url"])
     except Exception:
         if sink:
             sink("failed_uncertain")

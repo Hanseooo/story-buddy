@@ -523,5 +523,53 @@ describe("Tier 2: Server Action Unit Tests", () => {
       const res = await getNextPair();
       expect(res.pair).toBeNull();
     });
+
+    // PostgREST caps an unbounded select at `Max rows` (1000 by default), silently. A queue
+    // larger than that made the labelled set short, so a pair the rater had already judged
+    // was served again and its second label collided on (pair, round) and was dropped.
+    it("sees every label when the annotator has more than the 1000-row API cap", async () => {
+      const API_MAX_ROWS = 1000;
+      const TOTAL = 1200;
+
+      const allPairs = Array.from({ length: TOTAL }, (_, i) => ({
+        id: `pair-${i}`,
+        canonical_storage_path: `c${i}.png`,
+        scene_storage_path: `s${i}.png`,
+      }));
+      const allAnnotations = allPairs.map(p => ({ pair_id: p.id, round: 1 }));
+
+      // A chain that answers a bare select with the server-side cap, and a ranged select
+      // with exactly that window — which is what PostgREST does.
+      const cappedChain = (rows: unknown[]) => {
+        let window: unknown[] | null = null;
+        const chain: Record<string, unknown> = {
+          eq: vi.fn(() => chain),
+          in: vi.fn(() => chain),
+          not: vi.fn(() => chain),
+          order: vi.fn(() => chain),
+          limit: vi.fn(() => chain),
+          range: vi.fn((from: number, to: number) => {
+            window = rows.slice(from, Math.min(to + 1, from + API_MAX_ROWS));
+            return chain;
+          }),
+          then: (resolve: (v: unknown) => void) =>
+            resolve({ data: window ?? rows.slice(0, API_MAX_ROWS), error: null }),
+        };
+        return chain;
+      };
+
+      mockAdminSelect.mockImplementation((table: string) =>
+        table === "annotations" ? cappedChain(allAnnotations) : cappedChain(allPairs)
+      );
+      mockAdminCreateSignedUrl.mockResolvedValue({
+        data: { signedUrl: "https://signed.example/x" },
+        error: null,
+      });
+
+      const res = await getNextPair();
+
+      // Round 1 covers the whole queue, so the only work left is the second cold pass.
+      expect(res.round).toBe(2);
+    });
   });
 });

@@ -679,3 +679,155 @@ Resolved by ADR-057:
 This amendment changes neither the primary endpoint, the δ = 3 F1-point ladder, the one-time
 held-out-test rule, nor the §3.2 character-level split discipline. Constructed negatives remain
 train-only (§3.3 item 2), so no change here can reach the held-out measurement.
+
+### 2026-09-12 — Rejected attempts enter the corpus; finals-only was code, not registration
+
+**State when amended:** zero held-out results had been seen; donated stories had not entered the
+corpus; no study labels had been collected; no fine-tune had been trained. No non-pilot annotation
+exists, so no collected row is affected by a change to the annotation queue's contents.
+
+This registration never stated which images a story contributes. Searching this document for
+`final_image_ref`, `finalized` and `attempt` returns one hit — §12's 2026-09-03 requirement that a
+hard-negative *target* have at least one finalized natural scene. The restriction to final images
+lives in `finetune/build_corpus.py:309-336` and `finetune/build_dataset.py:94-115` only. Like the
+hard-negative completeness rule retired by ADR-057, it is code that reads like a commitment and was
+never one.
+
+The judge is deployed on candidates. `consistency_check` scores each newly generated attempt
+(`pipeline/consistency_check.py:296`) and the scene finalizes on whichever ranked best (`:424`).
+Sampling only finals therefore samples a subset filtered by the model under evaluation, which is a
+departure from the deployment distribution rather than a preservation of it.
+
+Measured on all 10 existing corpus bundles by
+`docs/product/evidence/scripts/count_attempt_pool.py` (USD 0, no provider calls or database writes):
+65 finalized scenes hold 86 harvestable rejected attempts, a 2.32× scene-image pool. `different_face`
+appears on 88% of those rejects and 6 of 151 attempts are `passed=True` while carrying failure
+reasons, so the judge's own flags cannot be used to select or predict what human raters will find.
+
+Resolved by ADR-060:
+
+- **Every rejected attempt on a finalized scene is harvested**, bounded by ADR-037's cap of three
+  attempts per scene. Unfinalized scenes contribute nothing.
+- **No selection by `failure_reason`, and no per-scene cap.** Selecting on the incumbent judge's
+  verdict would bias the held-out measurement toward the incumbent baseline the fine-tune is compared
+  against.
+- **Harvested attempts are pipeline pairs and enter all three splits**, inheriting split from
+  `char_id` under §3.2. They are neither constructed negatives (§3.3 item 2) nor deliberately induced
+  drift (§3.3 item 3): they were produced at unmodified production settings by the ordinary pipeline.
+  That train-only induced-drift allowance is left unspent.
+- **Constructed negatives are unchanged.** ADR-057 stands in full — coverage best-effort, species and
+  style matching not negotiable, train-only, achieved count reported not targeted.
+- **The achieved harvest count is reported, not targeted.** No threshold attaches to it, nothing fails
+  on it, and no selection decision may be made after seeing it — the rule the 2026-08-22 amendment set
+  for achieved style imbalance.
+
+**Recorded against the result in advance:** harvesting admits some easy negatives (`character_absent`
+at 2% of rejects, `wrong_colour` at 1%), which lift F1 for the fine-tuned and incumbent arms alike and
+compress ΔF1. This is a known directional effect on the primary endpoint, registered here before any
+label exists rather than offered as an explanation afterwards.
+
+This amendment changes neither the primary endpoint, the δ = 3 F1-point ladder, the one-time
+held-out-test rule, the §3.2 character-level split discipline, nor the §5.1 clustering. Harvesting
+adds pairs inside existing `char_id` clusters and creates no new characters, so the bootstrap's
+cluster count — which is what governs the interval — is unchanged.
+
+### 2026-09-12 — Four scoping items closed before generation: §2's split contradiction, the non-human endpoint, the slice source, and the held-out size
+
+**State when amended:** zero held-out results had been seen; donated stories had not entered the
+corpus; no study labels had been collected; no fine-tune had been trained. No image had been
+generated under the campaign budget. All four items below are free to settle now and each becomes a
+researcher degree of freedom the moment data exists, which is why they are settled here.
+
+**1. §2's table and its prose contradict each other on the validation split. The table governs.**
+
+The §2 table assigns Validation to the synthetic corpus. The paragraph below it says the ADR-008
+rule is applied "with **zero** synthetic characters in validation or test." Both cannot hold. The
+table is correct and is what every downstream artifact implements: the 2026-08-22 amendment
+allocates 6 synthetic validation stories (2 per preset), and `freeze_dataset.py:116-118` fails the
+freeze on any other synthetic allocation.
+
+Recorded: RESEARCH_PROTOCOL §8's phrase **"never as evaluation stimuli" means the held-out test
+set.** Validation is a development split — it selects checkpoints (§9.5) and fits the cosine
+baselines' thresholds (§9.3), and it reports no Objective-4 result. The prose sentence is superseded;
+the invariant that survives is the one `manifest.validate_manifest` enforces, that **no synthetic
+character reaches the test split.**
+
+**2. Secondary endpoint §1.3 item 2 (non-human slice) is demoted from an interval to a descriptive
+report.**
+
+Counted across the 15 raw donated stories on 2026-09-12, before any of them entered the corpus:
+**21 human and 1 non-human named character** (Bingo, `g6-s5`) out of 22. Widening to unnamed
+agentive non-humans — the goat, the talking mango tree, the imp, the star, the red shoes — gives 6
+candidates, and every one of them sits behind a human protagonist competing for one of the at most 2
+canonical reference slots a story receives (`corpus_io.py:93`). The realistic held-out non-human
+count is **2–4 characters.**
+
+§5.1 clusters the bootstrap by `char_id`. A clustered bootstrap over 3 clusters does not produce an
+interpretable interval, and reporting one would overstate precision on the slice this work
+contributes.
+
+Pre-committed: the non-human slice is reported as a **descriptive count with per-character results
+and the achieved character count**, with **no confidence interval and no comparison claim.** It is
+not dropped, not pooled into the overall number, and not widened by reclassifying characters. No
+threshold is set at which an interval would be reported instead: at the projected count none is
+interpretable, and a rule for a case that will not arise is a rule that gets argued about. Should the
+achieved count come in far above the projection, adding the interval takes a dated amendment written
+before the held-out set is read, which is the mechanism this section exists to provide.
+
+§1.3's pointer for this item also mis-cites the slice definition as §9; it is **§5.2**, as corrected
+by item 3.
+
+**3. §5.2's slice source is stale. The code's source governs.**
+
+§5.2 states that human/non-human is assigned from the Character Bible's `species` field. No code
+reads `species` for this purpose. `freeze_dataset.py:206` builds `character_slices.json` from the
+**intake-declared `declared_non_human` roster**, matched against `Character.name` under casefold,
+and `build_corpus.py:437` seeds `is_humanoid` from the same declaration.
+
+Recorded: the slice is assigned from **`declared_non_human` in the intake record**, which is
+reconciled against the final `StoryMemory` roster (`reconcile_declared_roster`) and frozen by
+`intake_sha256` before generation. This is strictly stronger than the registered text claimed — the
+declaration is fixed at intake and hashed, so it is fixed before any image, label or prediction
+exists, where a Character-Bible field would have been written by the pipeline itself. Everything
+§5.2 commits to otherwise is unchanged: the assignment is never revised after seeing results, and no
+character is dropped from a slice for being awkward.
+
+**4. The held-out set takes every donated story that is consented and finalized, with a floor of 10.**
+
+§2 pre-commits that the 5 backup stories "may be used to enlarge the held-out set before labelling
+begins." The 2026-08-24 amendment then fixed 10 primaries at intake and gave backups a second job,
+fail-closed replacement. The two were never reconciled, and the code implemented only the second:
+`dataset_selection.py` required the final donated selection to be exactly 10 stories at 4 gouache /
+3 cel / 3 cut-paper, and `freeze_dataset.py` re-checked the same equality.
+
+Resolved in favour of §2, because Objective-4 power is governed by the **held-out character count**
+(§5.1, `methodology.md` §4.2) and the campaign generates all 15 donated stories regardless, so the
+enlargement costs annotation labour and no generation budget:
+
+- **Replacement keeps priority.** A backup spent replacing a withdrawn or failed primary under the
+  2026-08-24 rule is spent; it enlarges nothing. The fail-closed same-style replacement rule is
+  unchanged in every respect.
+- **Every unspent backup that is consented and whose run finalized then joins the held-out set.**
+  The admission rule is mechanical and admits no judgement: `withdrawal_state != "withdrawn"` and a
+  completed bundle. **No story may be admitted or excluded on any property of its generated output.**
+  Selecting "the ones that came out well" is the degree of freedom §2 closes by placing the decision
+  before labelling, and it is closed here before any donated story has been generated at all.
+- **A backup that is withdrawn or whose run never finalized is excluded, not fatal.** Unlike a
+  primary it was never a required member of the set, so it must not be able to fail the freeze.
+- **10 remains the floor,** and the 4/3/3 primary allocation remains a per-style floor. Falling below
+  either is still style drift and still fails closed.
+- **The achieved size and style mix are reported as achieved, not targeted.** Enlargement drifts the
+  mix off 4/3/3; per-style results are exploratory diagnostics (2026-08-22) and the achieved
+  imbalance is reported rather than corrected, restyled, or balanced by dropping a story.
+
+Implemented as a single `validate_donated_allocation` shared by the selection and freeze guards, so
+the two cannot diverge. The expected effect is a held-out set of up to ~30 characters rather than
+~20, which narrows the interval on the primary endpoint; it does not change the endpoint, the
+estimator, the δ = 3 ladder, the one-read rule, or §3.2's character-level split discipline.
+
+**Recorded against the result in advance:** items 2 and 4 both move in the direction of a more
+conservative reported claim — one removes an interval that the data cannot support, the other
+widens the base the primary interval is computed over. Item 4 also raises single-rater annotation
+volume on the test half by roughly half, on top of ADR-060's 2.32×, and rater fatigue is a plausible
+route to noisier labels. Test-retest agreement (2026-08-29) is the measurement that would show it,
+and it is reported whatever it shows.

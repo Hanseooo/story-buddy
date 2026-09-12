@@ -3,6 +3,15 @@
 **Status:** Accepted (2026-07-22) · resolves **D-C** · gives ADR-024's loop invariant its failure exit ·
 defines the backend pattern for CC-3 and CC-9 · amended 2026-08-11
 
+**Amendment (2026-09-13) — the fal half of Decision 1 is built, narrower than written.**
+
+`fal_client` 1.0.0 retries every queue request internally (10 attempts on 408/409/429, transport errors,
+nginx 502/503/504), so a helper around `subscribe` would retry a retry, and resubmitting a job fal already
+accepted re-pays and bypasses the corpus budget ledger. `_run_fal` therefore gets a ceiling instead —
+`client_timeout=FAL_CALL_TIMEOUT_SECONDS` (600) — and the image download, which is free to repeat, retries
+transport errors, 408, 429 and 5xx up to `DOWNLOAD_ATTEMPTS` (3). A 4xx download and a server-side job
+failure still raise. Pinned by the two `test_run_fal_*download*` tests in `tests/test_providers.py`.
+
 **Amendment (2026-08-11) — Decision 1 was silently reverted in code for three weeks.**
 
 Commit `23b3dca` set `max_retries=0` on all three `OpenAI(...)` clients in `providers.py`, on the stated

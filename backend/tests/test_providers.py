@@ -2,6 +2,7 @@ import threading
 import time
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 from presidio_analyzer import RecognizerResult
 from presidio_anonymizer import AnonymizerEngine
@@ -309,6 +310,43 @@ def test_run_fal_marks_a_post_submission_failure_as_billing_uncertain():
         providers._fal_event_sink.reset(token)
 
     assert events == ["attempted", "failed_uncertain"]
+
+
+def test_run_fal_retries_a_transient_download_failure_without_resubmitting():
+    """The image is already paid for once `subscribe` returns, so the download retries on its own
+    and fal is never called twice. Before this, one dropped connection here quarantined the story
+    `billing_uncertain` and stopped the whole corpus campaign (audit Finding G, 2026-09-13)."""
+    events = []
+    fal = MagicMock()
+    fal.subscribe.return_value = {"images": [{"url": "https://fal.example/x.png"}]}
+    token = providers._fal_event_sink.set(events.append)
+    try:
+        with patch("providers._fal", return_value=fal), patch(
+            "providers.httpx.get",
+            side_effect=[httpx.ConnectError("reset"), MagicMock(content=b"png-bytes")],
+        ), patch("providers.time.sleep"):
+            image_bytes = providers.text_to_image("a fox")
+    finally:
+        providers._fal_event_sink.reset(token)
+
+    assert image_bytes == b"png-bytes"
+    assert events == ["attempted", "completed"]
+    fal.subscribe.assert_called_once()
+    assert fal.subscribe.call_args.kwargs["client_timeout"] == providers.FAL_CALL_TIMEOUT_SECONDS
+
+
+def test_run_fal_does_not_retry_a_download_the_server_refused():
+    fal = MagicMock()
+    fal.subscribe.return_value = {"images": [{"url": "https://fal.example/x.png"}]}
+    request = httpx.Request("GET", "https://fal.example/x.png")
+    refused = httpx.Response(404, request=request)
+
+    with patch("providers._fal", return_value=fal), patch(
+        "providers.httpx.get", return_value=refused
+    ) as mock_get, patch("providers.time.sleep"), pytest.raises(httpx.HTTPStatusError):
+        providers.text_to_image("a fox")
+
+    mock_get.assert_called_once()
 
 
 def test_edit_image_renames_reference_field_per_endpoint():

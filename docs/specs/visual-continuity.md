@@ -157,8 +157,8 @@ text canon; only the first two may also receive reference images.
 ### 4.2 Stable object canon
 
 `StoryObject.description` becomes a physical description suitable for repeated rendering, not only
-a narrative relation. `owner_char_id` is mapped from a node-local `owner_name`; an unknown owner is
-a semantic boundary error, not silently set to null. Truly unowned props keep `None`.
+a narrative relation. `owner_char_id` is mapped from a node-local `owner_name`; an owner that resolves to no persisted
+character sets `None` with a logged warning (2026-09-13, `story-analyzer.md`). Truly unowned props keep `None`.
 
 `owner_char_id` records ordinary or initial ownership for canon and is not a scene-state machine.
 It does not make an object visible, carry it into a later scene, or create a physical relation.
@@ -355,7 +355,7 @@ All provider calls mocked. Generated-content quality is never asserted in CI.
 6. An inert crystal appears only in `objects[]`; a personified talking object appears only in
    `characters[]`.
 7. A new object requires a stable physical description; `owner_name="Ana"` maps to
-   `owner_char_id="c0"`; an unknown owner fails.
+   `owner_char_id="c0"`; an unknown owner leaves the object unowned with a warning.
 8. The three-character and two-reference caps are unchanged.
 
 ### `segment`

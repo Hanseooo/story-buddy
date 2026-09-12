@@ -1,0 +1,576 @@
+# Objective 4 — campaign readiness audit and roadmap
+
+**Date:** 2026-09-12 · **Repo state:** `77a46fe` (working tree dirty) · **Supersedes:** `OBJECTIVE_4_NEXT_STEPS.md` as the live guide
+
+This replaces the 2026-08-30 runbook, which predates 54 commits and the arrival of the donated corpus.
+Every number here was measured against the repo or the bundles on disk. Anything estimated says so.
+
+---
+
+## 1. Verdict
+
+**Do not start the campaign yet. What remains: merge the P4 branch, P5 (Supabase Pro), D1 (confirm
+the GPU) and D2 (sign off the training config).** P1, P2, P3, P6, P7 and Finding G are done.
+
+The pipeline works, the money path is understood, and the donated corpus arrived on 2026-09-12 —
+15 raw stories at `data/judge/intake/raw/`, which retires the blocker that governed the last runbook.
+
+**The dataset-design blocker is closed (2026-09-12).** As the code stood, the campaign would have
+spent ~$25 to produce a training set whose `different_character` class was roughly 20 auto-labelled
+pairs of obviously-different people, then measured it on real children's stories whose failure mode
+is drift *within* one character — trained on the wrong thing. ADR-060 harvests the rejected attempts
+the campaign already pays for, a measured 2.32× on scene images. Finding A carries the numbers.
+
+**Single largest risk:** the campaign is one indivisible unrepeatable spend, and the dataset defects
+are discovered downstream of it, where the repair is a code change the freeze forbids.
+
+---
+
+## 2. What changed since the last runbook
+
+| Item | Then (2026-08-30) | Now (2026-09-12) |
+|---|---|---|
+| Donated stories | 4 of 15 — the critical path | **15 of 15 collected**, raw `.txt`, unredacted |
+| Stage-1 consent | Unverified, "no retroactive fix" | Owner confirms wording is correct |
+| `donated.json` | Not written | Written 2026-09-13; roster pre-flight 15/15 on two passes |
+| Commits since freeze guidance | — | 54. Nothing is frozen; the tree is dirty right now |
+| Hard negatives | Blocker, resolved by ADR-057 | Resolved, and the cost is now measured: ~20 pairs, not ~300–400 |
+| Phase C rehearsal | "Never executed" | Wrong, and it hid a freeze-stopping bug — fixed, see Finding E |
+
+---
+
+## 3. Prerequisites
+
+Ranked by what it costs to be wrong. `[YOU]` needs your decision or your hands; `[ME]` I can do.
+
+### P1 · Harvest rejected attempts — `[YOU]` decided 2026-09-12, `[ME]` implemented · **done**
+
+Settled as **harvest every rejected attempt, no `failure_reason` filter, all three splits**.
+ADR-060, with the append-only preregistration amendment of the same date.
+
+**The pool was measured, not projected**, by `docs/product/evidence/scripts/count_attempt_pool.py`
+(USD 0, reads committed `memory.json` only). Across all 10 bundles: 65 finalized scenes hold **86**
+harvestable rejects — 1.32 per scene, a **2.32× scene-image pool**.
+
+Two numbers in the earlier draft of this section were wrong and the measurement corrects them:
+
+- **"~180 images" was low.** It was read off filename suffixes, which undercount, because the
+  pipeline finalizes on the best-ranked attempt rather than the last one — on 52 of 65 real scenes
+  the final never passed at all. Annotation labour goes to roughly **2.3×**, not +40%.
+- **"almost no hard negatives" overstated the skip case.** The natural negative class is not
+  predictable from the judge's flags in either direction: `different_face` sits on 88% of rejects and
+  6 of 151 attempts are `passed=True` while carrying failure reasons. The argument for harvesting is
+  the train/test task mismatch (ADR-060 Context), not an empty negative class.
+
+`different_face` filtering was rejected on that 88%: it barely bounds anything and selects by the
+incumbent judge's own decision boundary, which on the held-out split would tilt the primary endpoint
+toward the baseline the fine-tune is measured against.
+
+Implemented in `finetune/manifest.py:scene_images`, imported by both `build_corpus.download_images`
+and `build_dataset.pairs_from_memory` so the two cannot drift. Backend suite 1401 passed.
+
+### P2 · Write `data/judge/intake/donated.json` — `[YOU]` attest, `[ME]` build — done 2026-09-13
+
+**Blocks the campaign.** Nothing downstream runs without it, and it is where you make three
+decisions that become degrees of freedom if made later:
+
+- which 10 of 15 stories are **primary** (style slots are frozen: 4 gouache / 3 cel / 3 cut_paper
+  primary, 1 / 2 / 2 backup — `corpus_io.py:302-310`)
+- which style preset each story gets
+- which characters are **declared non-human**, which is what assigns the slice
+  (`freeze_dataset.py:206-210`)
+
+Do this before generation, so the timestamps precede any result.
+
+**Done.** You attested redaction with independent review, guardian consent and child assent for
+all 15, none withdrawn, and approved the allocation. Ids `don-001`..`don-015` follow the raw file
+order; `data/judge/intake/build_donated.py` holds the mapping and regenerates the file (git-ignored).
+Primaries: gouache g5-s3, g6-s2, g6-s6, g6-s7 · cel g5-s1, g5-s6, g6-s8 · cut_paper g5-s2, g5-s4,
+g6-s5. Backups: gouache g6-s4 · cel g5-s7, g6-s3 · cut_paper g5-s5, g6-s1.
+
+Declared names are the extractor's own, verbatim, after four pre-flight runs. Only two non-human
+characters survive into the reference slice (the goat, Bingo); the mango tree, imp and star never
+rank in the top two. The slice is descriptive-only (P3 item 2), so this costs a count, not an
+endpoint. Pre-flight found Finding I on the way.
+
+### P3 · Resolve four preregistration items in one dated amendment — `[YOU]` decided 2026-09-12, `[ME]` drafted · **done**
+
+All four were honest-scoping moves, free then and degrees of freedom the moment data exists. Settled
+in the dated block appended to §12 (append-only; nothing edited in place).
+
+1. **The §2 contradiction.** The table (`:104`) says Validation = Synthetic; the prose (`:117`) says
+   "zero synthetic characters in validation or test". The table wins — the 2026-08-22 amendment and
+   `freeze_dataset.py:116-118` both lock 6 synthetic validation stories. Record that "evaluation
+   stimuli" means the held-out test set; validation is a development split.
+2. **Demote secondary endpoint #2.** The non-human held-out slice will have 2–4 characters
+   (Finding C). A clustered bootstrap over 3 clusters is not an interval. Pre-commit now that it is
+   reported as a descriptive count with per-character results, not a CI.
+3. **Fix the slice-source text.** `:261` says slices come from the Character Bible `species` field.
+   The code reads intake `declared_non_human`. Code wins; the text is stale.
+4. **Settle the test-set size.** §2 pre-commits that the 5 backups may enlarge the held-out set
+   before labelling; `freeze_dataset.py:122` hard-required exactly 10. Finding B. **Decided: enlarge.**
+   Backups serve fail-closed replacement first; every unspent one that is consented and whose run
+   finalized then joins the held-out set, floor 10, 4/3/3 kept as a per-style floor. Admission is
+   mechanical — `withdrawal_state` plus a completed bundle, never a property of the generated output.
+
+Items 1–3 were documentation catching up to code. Item 4 changed code: `validate_donated_allocation`
+in `dataset_selection.py` is now the one floor rule, imported by both the selection guard and
+`freeze_dataset._validate_bundles`, so the pair cannot drift apart the way they did here. The
+equality checks in both are gone. ~20 held-out characters becomes ~30, at no generation cost —
+the campaign already runs all 15 donated stories — and roughly +50% annotation on the test half.
+
+The speculative "report a CI anyway if the non-human slice reaches N characters" escape hatch was
+drafted and then cut: the projection is 2–4, so the branch never fires, and a threshold nobody can
+justify is worse than no threshold. A later dated amendment covers the case if it ever arrives.
+
+### P4 · Clean the working tree and keep it clean — `[YOU]` · committed 2026-09-13 on `obj4-campaign-readiness`, merge before story 1
+
+`_code_commit` (`build_corpus.py:82-95`) appends `-dirty` when `git status --porcelain` is non-empty,
+and its own comment says this makes the bundle "unfreezable on its own". The tree is dirty right
+now: as of 2026-09-13, 21 paths — the P1/P3/P6/P7 code and tests, the owner fix, ADR-060, the
+amendment, and this doc. They must be committed (and ideally merged) before story 1, not discarded.
+
+Worse than a dirty stamp: if that directory changes *between* the synthetic and donated invocations,
+the two halves carry different `code_commit` values and `freeze_dataset._pinned_versions` rejects the
+campaign permanently, on data you cannot regenerate.
+
+```
+git status --porcelain      # must print nothing before story 1
+```
+
+Then commit nothing at all until the campaign exits 0.
+
+### P5 · Upgrade Supabase to Pro — `[YOU]`, ~$25/mo
+
+Free tier does not hold this campaign. Measured and projected in Finding D: storage lands at
+0.95–1.38 GB against a 1 GB limit, egress at 3.2–5.0 GB against 5 GB/month with annotation still to
+come, and the free plan pauses projects after ~7 days of low activity — which is exactly the shape of
+a multi-week labelling window. P1 adds a measured 2.32x on scene images on top of all three (ADR-060).
+
+### P6 · Fix the annotation queue's row cap — `[ME]` · **done**
+
+`annotate/actions.ts:118-121` selected every one of your annotation rows with no `.range()` and no
+`.limit()`. PostgREST caps this at 1000 by default. Your projected rows are ~880 across two rounds
+before adjudication, and P1's 2.32x pushes it past 1000 outright.
+
+Past the cap the `labelled` set is silently short, an already-labelled pair is re-served, the insert
+hits `23505`, and `:51-56` swallows it with a `console.log` and falls through. You would relabel pairs
+and lose the labels, with no error shown.
+
+Fixed: that select is now a paged loop. A test reproducing the truncation was red on the old code
+(`expected 1 to be 2` — round 1 re-served) and is green on the new.
+
+`adjudicate/actions.ts:207-210` runs the same unbounded select, and it is **not** the same bug. There
+the set is only a pre-filter: an adjudicated pair leaves `status = conflicted`, and if that update
+ever failed, the per-pair read at `:254` still sees the round-3 row and skips the pair at `:271`.
+Left as is; a regression test now pins that backstop, and breaking `:271` turns it red.
+
+### P7 · Finish the free Phase C rehearsal — `[ME]` — done 2026-09-13
+
+`freeze_dataset` and `to_llamafactory` had run only on the fixture path, which returns early at
+`freeze_dataset.py:107-110` and skips the production validation. Finding E. The rehearsal now runs a
+production-shaped corpus (24 train + 6 val synthetic, 10 donated, `fixture=False`) through the whole
+freeze and export, with and without a constructed negative. It found one bug that would have failed
+the real freeze; fixed.
+
+---
+
+## 4. The roadmap
+
+### Phase A — paperwork and fixes · no money
+
+**A1 · Settle the attempt-harvest decision (P1). — done 2026-09-12.** Decided yes. ADR-060, the
+append-only amendment of the same date, and `finetune/manifest.py:scene_images` shared by
+`download_images` and `pairs_from_memory`.
+
+**A2 · Hand-redact the 15 stories.** Substitute identifiers rather than deleting them —
+`"Miguel" → "Andres"` keeps the voice. Keep your substitution list outside the corpus. Nothing
+automated will touch donated text.
+
+Three specific hazards found while reading them:
+
+- `g5-s1` spells the protagonist "Marcos" once in paragraph 5 and "Markus" everywhere else.
+- `g5-s4` has Erin address her cousin Klare as "Moana" in dialogue.
+- `g5-s5` and `g6-s1` are first-person with **no named protagonist at all.** The extractor has to
+  invent a name and your `declared_characters` must match it, case-insensitively.
+
+**A3 · Build `donated.json` (P2). — done 2026-09-13.** I write it from what you attest. Declare **at most 2 characters
+per story** — `corpus_io.py:93` mints canonical references for `memory.characters[:2]` only, and
+`reconcile_declared_roster` hard-fails a declared name that lands outside that slice.
+
+**A4 · Amendments (P3). — done 2026-09-12.** One dated block, four items, appended to §12. Item 4
+also changed `dataset_selection.py` and `freeze_dataset.py`; backend suite 1404 passed.
+
+**A5 · Fixes (P6 and P7 done).** Queue pagination is in. The production-shaped rehearsal through
+freeze and LlamaFactory export passes. The fal retry (Finding G) is in; backend suite 1412 passed.
+
+**A6 · Supabase Pro (P5), and the pre-flight dashboard checks.**
+
+- Storage → Buckets: confirm **`private_assets` exists and is private.** No migration creates it, yet
+  `materialize_pairs.py:28` and `annotate/actions.ts:202` both require it.
+- Settings → API → Max rows: raise to 5000.
+- Reports → Database / Storage / Egress: record current headroom.
+- Measure the checkpoint tables and prune dead smoke threads:
+
+```sql
+select relname, pg_size_pretty(pg_total_relation_size(relid))
+from pg_catalog.pg_statio_user_tables
+where relname in ('checkpoints','checkpoint_blobs','checkpoint_writes');
+```
+
+### Phase B — freeze the code, then spend
+
+**B1 · Land everything, then stop committing.** Record `git rev-parse HEAD`. Confirm
+`git status --porcelain` is empty.
+
+**B2 · Free roster pre-flight on all 45 stories.**
+
+```bash
+cd backend
+uv run python -m finetune.build_corpus --check-rosters --corpus finetune/corpus_synthetic.json
+uv run python -m finetune.build_corpus --check-rosters --corpus ../data/judge/intake/donated.json
+```
+
+Exit 0 required on both. Roughly 1 story in 30 fails extraction at random — rerun before concluding
+anything is wrong. This is where a bad `declared_characters` guess surfaces, for a fraction of a cent
+instead of a story's full image spend.
+
+**B3 · Re-verify fal pricing and record the URL.** The recorded basis is from 2026-09-01 and is now
+eleven days stale. `--price-basis` is required and is stamped into every bundle.
+
+**B4 · Pin the machine.** Run locally — see Finding F for why not Northflank.
+
+```powershell
+powercfg /change standby-timeout-ac 0
+powercfg /change hibernate-timeout-ac 0
+powercfg /change monitor-timeout-ac 0
+```
+
+Sleep kills the single port-5432 connection held for the whole run, and there is no reconnect path.
+
+**B5 · Fresh 3-story smoke at the real cap.** Use a **new** `--out`; a reused directory carries a
+different thread digest and a different ledger.
+
+**B6 · The campaign — 45 stories, one budget.**
+
+```bash
+# 30 synthetic (24 train + 6 val)
+uv run python -m finetune.build_corpus \
+  --corpus finetune/corpus_synthetic.json \
+  --out ../data/judge/corpus \
+  --max-usd 25 --max-calls-per-story 19 \
+  --price-per-megapixel 0.035 --price-basis "<URL + date verified>"
+
+# 15 donated
+uv run python -m finetune.build_corpus \
+  --corpus ../data/judge/intake/donated.json \
+  --out ../data/judge/corpus \
+  --max-usd 25 --max-calls-per-story 19 \
+  --price-per-megapixel 0.035 --price-basis "<same string>"
+```
+
+Rules that are not optional:
+
+- **`--out` must be byte-identical on every invocation and every resume.** `_campaign_thread_id`
+  (`build_corpus.py:592`) hashes the *resolved absolute path*. A different path is a different
+  LangGraph thread and a from-scratch re-run.
+- `--max-usd 25` is the **cumulative** total across both commands, not per command.
+- **Exit code 2 is a failure**, not a warning — the JSON summary on stdout still looks clean. Read
+  stderr. Only exit 0 is a finished campaign.
+- **Check on it periodically.** Finding G: transient fal blips now retry, but a hard fal failure or a
+  600s timeout still quarantines that story and exits 1.
+
+### Phase C — label and freeze
+
+**C1 · Author `dataset_selection.json`** off `--candidate-report`, after generation. It cannot be
+written earlier: `hard_negative_matches` is keyed by `lineage_id`, and `char_id` does not exist until
+the pipeline has run.
+
+**C2 · Seed the queue** with `materialize_pairs`. Never pass `--pilot` — pilot pairs are permanently
+excluded from training.
+
+**C3 · Round 1** at `/annotate`, blinded, every pair once.
+
+**C4 · Round 2**, same person, cold. This is test–retest reliability, not a second annotator. There
+is no annotator 2 in this design. **Leave a real gap — a fortnight, not an evening.** Nothing in the
+database can tell the difference, and the measurement is only as good as the gap.
+
+**C5 · Round 3 adjudication** at `/adjudicate`, on pairs where your own two rounds disagreed.
+
+**C6 · Reconcile and freeze.**
+
+### Phase D — train and evaluate
+
+**D1 · Pick the GPU.** Your current laptop cannot do this: RTX 3050 Ti, 4 GB VRAM. Qwen2.5-VL-7B at
+4-bit is ~5 GB of weights before activations or the vision tower.
+
+The 4060 Ti is viable if it is the **16 GB** variant. At 8 GB it is marginal for a 7B VLM QLoRA —
+image tokens make activations expensive, and you would be fighting OOM with gradient checkpointing
+and a reduced image resolution, which changes the thing being measured. Confirm which card it is
+before planning around it. Paid cloud is the safe path either way, and that money is **outside** the
+$25/$30 generation ceiling.
+
+**D2 · Re-size the training config before the first seed.** `train_qlora.yaml` was written for
+~1,000 examples (`:5`). Against the corpus that actually exists it is mis-sized by roughly 6×:
+`per_device_train_batch_size: 1` × `gradient_accumulation_steps: 8` over ~164 examples for 3 epochs
+is ~61 optimizer steps total, and `eval_steps: 50` then fires about once — so
+`load_best_model_at_end: true` selects from one or two checkpoints. `:58` also still says "~75
+validation pairs"; the real figure is ~42.
+
+This is a research parameter, so it needs your sign-off, not a silent edit.
+
+**D3 · Three seeds, threshold lock on validation, then the single guarded held-out run.** Detailed
+steps 9–15 are in `docs/capstone/research_runbook.md`.
+
+---
+
+## 5. Findings
+
+### A · The pipeline generates the missing training data and discards it
+
+**Measured on the real bundles at `data/judge/corpus-smoke-h`:**
+
+| Story | Scenes | Attempts | Rejected | Rejected with a durable Storage path |
+|---|---|---|---|---|
+| syn-001 | 5 | 12 | **9** | 9 |
+| syn-002 | 5 | 11 | **6** | 6 |
+
+7.5 rejected images per story. Each is an image of the *correct* character that drifted, and each
+carries the judge's own structured reasons. A real sample:
+
+```json
+{"image_ref": "syn-001--campaign-.../s0-1.png", "passed": false,
+ "failure_reasons": ["wrong_body_feature", "different_face"]}
+```
+
+`Attempt.image_ref` is a durable Storage path (`contracts/story_memory.py:185`). But
+`download_images` (`build_corpus.py:313-322`) pulls only `canonical_ref_image` and `final_image_ref`,
+and `pairs_from_memory` (`build_dataset.py:101-115`) walks only `scene.final_image_ref`. Rejected
+attempts never enter the bundle and never become pairs.
+
+**Why this is the finding that matters.** There is no natural cross-character negative anywhere in
+the code — `pairs_from_memory` only pairs a reference with a scene that character is *in*. So the
+entire `different_character` training class comes from ~20 auto-labelled constructed pairs
+(Marisol/Nonoy, Ate Rina/Lala — trivially different people) plus whatever drift survived a retry loop
+whose purpose is to eliminate drift.
+
+The held-out test set is real children's stories where the failure mode is drift *within* one
+character. Training on "obviously a different person" and testing on "same girl, wrong hair" is a
+transfer gap by construction.
+
+**Measured 2026-09-12, superseding the estimate this section first carried.**
+`docs/product/evidence/scripts/count_attempt_pool.py` counts the real pool across all 10 bundles:
+65 finalized scenes hold **86** discarded attempts, 1.32 per scene, a **2.32x scene-image pool** at
+no extra generation cost. The earlier "~180" was read off filename suffixes and undercounts, because
+the pipeline finalizes on the best-ranked attempt, not the last one.
+
+**Caveats, all real:**
+
+1. They cannot be auto-labelled. The judge rejected them and the judge is the thing being replaced
+   (ADR-034, plus the measured finding that no off-the-shelf VLM grounds attributes). Training on its
+   verdicts is circular. These go through human annotation like every other pair.
+2. That roughly doubles your labelling workload. This is the main cost.
+3. ~~Train split only~~ — **this was wrong, and ADR-060 D3/D4 corrects it.** §3.3 item 3 confines
+   *deliberately induced* drift to train; harvested rejects were drawn at unmodified production
+   settings, so it does not reach them. They are pipeline pairs and enter all three splits. The judge
+   is deployed on candidates (`consistency_check.py:296`), so sampling only finals was itself the
+   departure from the deployment distribution.
+4. Needs an ADR and a dated amendment before annotation begins. **Done:** ADR-060 and the
+   2026-09-12 amendment.
+5. Cleanest if `download_images` changes **before** the campaign. A later harvest is possible —
+   `memory.json` preserves the paths, and `code_commit` only requires bundles to agree with each
+   other, so committing after all generation is safe — but it depends on those PNGs still being in
+   Storage and costs a second egress pass.
+
+This is arguably the pre-committed remedy at `PREREGISTRATION_OBJ4.md:149` arriving by a better
+route. That clause exists to harvest natural negatives; this is natural drift from the deployment
+distribution rather than artificially weakened conditioning. Note that induced drift as written —
+weaker conditioning, higher temperature — **is not implemented**: `build_corpus.py` has no such flag
+(`:1269-1297`) and nothing in `backend/finetune/` references it.
+
+### B · The code blocks a test-set power gain the preregistration already granted — **resolved 2026-09-12**
+
+`PREREGISTRATION_OBJ4.md` §2 pre-commits: *"Backup stories (5) may be used to enlarge the held-out set
+before labelling begins."* `methodology.md:567` repeats it as the stated mitigation for low
+Objective-4 power. `judge-finetune.md:296-315` sizes the test set assuming **15** donated stories.
+
+`freeze_dataset.py:122` hard-requires donated bundles to equal exactly
+`{gouache: 4, cel: 3, cut_paper: 3}` — 10 stories. `select_dataset_bundles`
+(`dataset_selection.py:183`) admits primaries plus approved replacements only.
+
+At ≤2 canonical references per story that is ≤20 test characters instead of ≤30. Power is
+bootstrapped **by character** (`PREREGISTRATION_OBJ4.md:255-257`), so this is a ~50% swing in the
+resampling unit of your primary endpoint.
+
+**Resolved** by P3 item 4 and the 2026-09-12 amendment: both equality checks became floors, and
+unspent backups enter the held-out set under a mechanical consented-and-finalized rule. The cost is
+annotation, not generation — B6 runs all 15 donated stories either way.
+
+### C · The non-human slice is not measurable
+
+Counted across the 15 raw donated stories: **21 human, 1 non-human** named character (Bingo, `g6-s5`)
+out of 22. Widening to unnamed agentive non-humans gives 6 candidates — the goat, the talking mango
+tree, the imp, the star, Bingo, the red shoes — and every one sits behind a human protagonist
+competing for one of only 2 reference slots. Only 10 of 15 stories reach the test set.
+
+**Realistic count: 2–4 non-human test characters.** A clustered bootstrap over 3 clusters does not
+produce an interpretable interval. Demote the endpoint now, before you see the data (P3 item 2).
+
+**The related structural fact, stated plainly because a reviewer will compute it:**
+
+| | Synthetic train | Synthetic val | Donated test |
+|---|---|---|---|
+| Stories | 24 | 6 | 15 raw / 10 primary |
+| Mean words | **153.3** | 153 | **312.7** |
+| Non-human share of characters | **83% (25/30)** | 22% (2/9) | **~5% (1/22)** |
+| Projected scenes/story | 5 (measured) | 5 | 9–10 (`MAX_SCENES = 10`) |
+
+Train and validation were written to two different specs — validation resembles the test set,
+training does not. Put this in your limitations section with the numbers. A reviewer who derives it
+independently reads it as something you missed; a reviewer who reads it in your own limitations
+reads it as a constraint you understood.
+
+**Do not fix this by rewriting the corpus.** It is frozen by the 2026-08-22 amendment, editing it
+changes `intake_sha256`, and doing it after seeing smoke outcomes is outcome-directed selection that
+ADR-057 already rejected on these grounds.
+
+### D · Supabase free tier does not hold this campaign
+
+Measured from the bundles on disk: reference PNG mean **785 KB**, scene WebP mean **74 KB**, all
+assets 1024×768, ~1.93 MB per story locally.
+
+The important asymmetry: **Storage holds PNG for both kinds**; the WebP conversion happens locally in
+`download_images`. And every image is re-read out of Storage many times — fal fetching references per
+scene attempt, `consistency_check` pulling scene plus reference per attempt, `output_mod` handing the
+URL to two classifiers. That is roughly **73 full-image reads per story**, about 4× the naive count.
+
+| | Projected | Free | Pro |
+|---|---|---|---|
+| Storage | 0.95–1.38 GB | **1 GB** | 100 GB |
+| Egress | 3.2–5.0 GB | **5 GB/mo** | 250 GB/mo |
+| Inactivity pause | — | **~7 days** | none |
+
+The 7-day pause is aimed directly at your labelling window. P1 multiplies scene images by a measured 2.32x on top.
+
+### E · Phase C is less rehearsed than the runbook says
+
+The runbook says `freeze_dataset` and `to_llamafactory` have never run. They have — on the **fixture**
+path. `data/judge/fixture/dataset.jsonl/` holds a complete `train.json`, `val.json`, `test.json`,
+`dataset_info.json` and `freeze_report.json`.
+
+But `_validate_bundles` returns early when every bundle is `fixture: "true"`
+(`freeze_dataset.py:107-110`), skipping the **production** branch at `:112-124` — the one enforcing
+8 train + 2 val per style and the donated allocation. The tested path skips exactly the validation
+that will run on your real campaign.
+
+**Resolved 2026-09-13.** `tests/test_finetune_dataset.py` now builds production-shaped bundles and
+covers the production branch (accepts 8+2 per style with 4/3/3 or an enlarged donated set, rejects a
+short synthetic style and a donated style below the floor), then freezes that corpus end to end.
+
+That rehearsal found a real bug. `build_dataset` appended ADR-057 constructed negatives after every
+test record. `_write_evaluation_artifacts` requires the combined manifest to equal the train, val and
+test manifests concatenated, so any freeze with at least one constructed negative — every real one —
+raised `split manifest projections differ from combined manifest order`. That is the last step of
+Phase C, after the whole generation spend and labelling window. `build_dataset` now stable-sorts
+records by split before writing. No dataset had been frozen, so the manifest order change costs
+nothing. The regression test goes red with the sort removed.
+
+### F · Run the campaign locally, not on Northflank
+
+The campaign never touches RQ, Redis, or the Northflank worker. `build_corpus.py:1381-1398` runs the
+same LangGraph the worker compiles, in-process, holding one direct port-5432 connection for the whole
+run. ADR-036's 1800-second RQ deadline therefore does not apply.
+
+Northflank is disqualified on one point: its runtime filesystem is ephemeral and erased on restart,
+which destroys `build_state.json` — the append-only ledger the design says must never be lost.
+Provisioning and verifying a persistent volume on a job type where volume support could not be
+confirmed is new untested infrastructure introduced immediately before a one-shot spend. There is
+also no Northflank config in this repo to audit; every setting is dashboard-only.
+
+Local failure modes are real but recoverable: checkpoints are in Postgres, assets are in Storage,
+completed bundles are skipped on resume, and `generate_scene.py:37` does not re-pay for an asset
+already uploaded.
+
+### G · One transient provider error stops the entire campaign — **resolved 2026-09-13**
+
+The original finding overstated the gap. `fal_client` 1.0.0 already retries each queue request on
+its own — submit, status poll and result fetch, 10 attempts on 408/409/429, transport errors and
+nginx 502/503/504 — so a 429 on the queue never reached `_run_fal`. Two gaps were real:
+
+- **No ceiling on `subscribe`.** A stuck job polled forever. The campaign bypasses RQ, so nothing
+  killed it and the run hung with no diagnostic.
+- **No retry on the image download.** The image is paid for by then, yet one dropped connection
+  fired `failed_uncertain`, quarantined the story `billing_uncertain` and exited the campaign.
+
+Fixed in `providers.py`: `subscribe` gets `client_timeout=600` (fal cancels the request and raises),
+and the download retries transport errors, 408, 429 and 5xx up to 3 times with backoff. There is
+deliberately **no resubmission** after fal accepts a job: it would pay twice and put a draw past the
+budget ledger. Tests: `test_run_fal_retries_a_transient_download_failure_without_resubmitting`,
+`test_run_fal_does_not_retry_a_download_the_server_refused`; backend suite 1412 passed.
+
+What remains: a hard fal failure (a job that errors server-side, or hits the 600s ceiling) still
+quarantines that story `billing_uncertain` and exits 1. That is the correct record — billing is
+genuinely unknown — and the restart is `--resume-quarantined <id> --acknowledge-uncertain-billing <id>`
+after checking the fal dashboard. Check on the run periodically; it no longer needs watching.
+
+### H · Honest answer on "an improvement is a must"
+
+The improvement is likely to arrive, but not from the corpus you wrote.
+
+Zero-shot VLM judges have a large documented "same character" bias — they agree with the reference by
+default and rarely fire `different`, producing near-zero recall on the minority class and therefore a
+low F1. A fine-tune on in-domain examples relocates that decision prior and teaches the output shape.
+That mechanism is domain-general: it transfers from hedgehogs to Filipino schoolgirls because it is a
+prior shift, not a visual-feature shift. `judge-finetune.md:558` already says the quiet part —
+*"beating your own base model is necessary, not impressive."*
+
+One accidental piece of good news: the four surviving hard negatives are all human-vs-human,
+same-style. ADR-057 deleted 96% of the constructed pairs, but the ones that survived are the ones
+whose distribution matches a 95%-human test set.
+
+The ways it could still fail, ranked:
+
+1. **Ceiling effect.** The test set is ~95% human, and human face identity is where a 7B VLM's
+   zero-shot discrimination is *strongest*. You are training on the slice with the most headroom and
+   reporting on the slice with the least.
+2. **Checkpoint selection is noise.** ~42 validation pairs over 9 characters, with maybe 8–12
+   positives, and ~61 total training steps against `eval_steps: 50`. Expect a wide seed-to-seed std.
+3. **Narrative-shape shift.** Donated stories span time jumps, costume changes and ghosts —
+   `g6-s4` shows Ana as a child and as an adult in one story. The fine-tune never sees a legitimate
+   same-character pair separated by twenty years. Those are exactly where it will produce false
+   `different` verdicts, and they are concentrated in the test split.
+4. **Format compliance is not a free win.** Constrained decoding applies to the base model too, so
+   you do not get cheap ΔF1 from the baseline emitting broken JSON. That is good preregistration.
+
+Finding A is the one lever that addresses 1 and 3 directly, because it supplies training examples of
+the same character drifting — which is what the test set is made of.
+
+### I · Three real stories died in `analyze` on every run — **resolved 2026-09-13**
+
+The roster pre-flight on the 15 donated stories failed don-002, don-004 and don-010 with
+`analyze: unknown owner` — "Angela's parents", "Erin and Klare", "Nico's grandfather". The spec made
+an owner outside the character roster a hard error (`story-analyzer.md` §4.2). Extraction runs at
+`temperature=0` and the single re-ask is blind, so the failure repeated on all three runs. Children
+write group and relative owners routinely; the live app had the same defect.
+
+Fixed at the rule, not per story: an owner that resolves to no persisted character leaves the object
+unowned with a logged warning — the path an owner capped out of the roster already took
+(`pipeline/analyze.py`). A group owner can never map to one `owner_char_id`, so only a relation the
+object never had is lost; its appearance axes are kept. Test red on the old `raise`, green after;
+backend suite 1410 passed. Both specs updated.
+
+The same pre-flight showed declared names must be the extractor's names verbatim ("the goat", not
+"Goat"), and that don-005 and don-015 extract unstably across runs. Declarations were set to the
+names that repeated; don-005 declares only the stable narrator.
+
+---
+
+## 6. What I could not verify
+
+- Whether the Supabase project is Free or Pro today, and whether `private_assets` exists. Dashboard.
+- LangGraph checkpoint table sizes. Estimated at 2–3 MB/story, 90–135 MB for 45. Query in A6.
+- Scene PNG size *as stored in Supabase* — no scene PNG exists on disk, so storage and egress figures
+  are banded 0.76–1.32 MB per stored PNG.
+- Whether the available 4060 Ti is the 8 GB or 16 GB variant.
+- Current fal.ai and OpenRouter balances and rate-limit tiers.
+- All Northflank settings — no config exists in this repo.
