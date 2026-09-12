@@ -253,40 +253,14 @@ taps_left}` is rendered **as-is**. The screen signs `image_path` at read time an
 chips, recompute `taps_left`, or read graph state. At most two characters exist (ADR-004): side by
 side in landscape and on desktop, stacked in portrait.
 
-Per character: the reference image, the name (*"Meet Luna!"*), and its chips as tappable pills.
+Per character: the reference image, the name, and the worker-provided chips. The interaction,
+copy, selection, shared allowance, image-read recovery, pending, stale, keyboard, and focus rules
+are amended by [Understandable character redraws](character-review-ux.md). That spec keeps this
+document's route, projection, endpoint, server cap, moderation order, and `refetch()` mechanics.
 
-**A chip tap submits immediately.** `POST /jobs/{id}/confirm {action:"try_again", char_id,
-attribute}` fires on tap — no selection state, no second confirm step. One tap, one thing happens,
-which is the model a Grade-5 reader can hold. The cost is real and is accepted: an accidental tap
-spends one of three draws and there is no undo.
-
-**One confirm button, one label: *"Use this one!"*** The docket requires that label at
-`taps_left == 0` so the button never dead-ends. Nothing requires a different label above zero, and
-using it always deletes a branch from the screen that can least afford one. It sends
-`{action:"confirm"}` (`main.py:53-56`).
-
-**At `taps_left == 0` the chips are not rendered at all** — not disabled. A disabled chip is a
-dead-end button wearing a hint.
-
-**The redraw must not bounce through the stepper.** The CAS in `confirm_job` flips `status` to
-`queued`, so the bucket becomes `in-flight` and the four-step stepper would replace the reveal for
-the duration of one redraw, then hand back. A `justConfirmed` ref is set on press and cleared when
-the status returns to `awaiting_confirm` or goes terminal; while it is set, `in-flight` renders a
-reveal-local *"Drawing it again…"* state instead of the stepper. A page reload during the redraw
-loses the ref and shows the stepper — acceptable and honest, because the job really is running.
-
-**Every confirm response calls `refetch()`** before the screen re-renders (§3.3).
-
-**A `200` carrying a status other than `queued`** — S2 constraint 11's duplicate / late / swept /
-finished path — is not an error and shows no error. The row is refetched and the bucket re-classified;
-whatever the job actually is now, that is what renders.
-
-**A reveal image that will not sign.** Re-sign once. If the second attempt also fails, render the
-reveal **without images**, with the character names and the single *"Use this one!"* button. This is
-deliberately *not* a failure screen: the job is not failed, the pause is live, and offering `retry`
-would abandon a resumable job to the sweeper and bill a whole new book. A bare confirm costs nothing,
-un-sticks the job, and gets the child a book. S3 §4.7's re-sign rule was scoped to the reader; this
-extends the same posture to the pause.
+Every confirm response still calls `refetch()` (§3.3). A `200` carrying a status other than
+`queued` remains a successful idempotent response: the refreshed row is authoritative and the
+screen follows its current bucket.
 
 ### 4.3 `terminal-success` — the reader (`/book/[jobId]`)
 
@@ -316,9 +290,11 @@ is the verbatim story text (ADR-013), so it is the correct accessible name for t
 fails the whole read (S1 constraint 7, ADR-025 — no page-shaped holes). **The failure is retried once
 automatically, with no button.** A signing failure is transient by nature — an expired URL, a network
 blip — and S3 §4.7 forbids offering `retry` here, because redrawing an N-page book to repair an
-expired link is real money. If the second attempt also fails, fall through to the machine failure
-screen, and **that press does not increment the chain counter** (§4.5): a signing failure is not a
-failed story.
+expired link is real money. If the second attempt also fails, the reader shows the **read-failure screen**
+(`FailureScreen kind="read-failed"`): it names the read problem, offers a third re-sign as its
+primary action, and creates no job. A rebuild is never offered here — it would redraw an N-page
+book to repair an expired link ([story failure recovery](story-failure-recovery-ux.md) §4).
+Nothing on this screen increments the chain counter (§4.5): a signing failure is not a failed story.
 
 ### 4.4 `terminal-failure` and `not-found` — the failure screens
 
@@ -330,13 +306,21 @@ The kind is selected by `failure_reason` (or the 8-value safe taxonomy in ADR-03
 
 #### 4.4.1 `child_text` (revise) — the child's own text was rejected
 
-Selected when `failure_reason` equals `child_text`. *"Some words need changing before we can make this book."* Button: **Change my words**.
+Selected when `failure_reason` equals `child_text`.
+
+The exact heading, explanation and action for every reason are
+[story failure recovery](story-failure-recovery-ux.md) §3's, implemented as
+`frontend/lib/failureCopy.ts`. This spec keeps the *selection* rule — which reason picks which
+screen — not the words. Unknown values, `machine`, and `null` fail-safe to `system_error`.
 
 Pressing it stashes `jobs.input_text` and navigates to `/write` (§4.5).
 
 #### 4.4.2 Safe retry kinds (`character_safety`, `scene_safety`, `service_busy`, `worker_stopped`, `system_error`)
 
-Renders approved reassure-and-retry copy per reason (e.g. *"One of the pictures we made couldn’t be used."*, *"The story-making service is busy right now."*, *"The story maker stopped before it finished."*, or *"Something interrupted your story."*). Button: **Make the story again** or **Try again**. Unknown values, `machine`, and `null` fail-safe to `system_error`.
+The exact heading, explanation and action for every reason are
+[story failure recovery](story-failure-recovery-ux.md) §3's, implemented as
+`frontend/lib/failureCopy.ts`. This spec keeps the *selection* rule — which reason picks which
+screen — not the words. Unknown values, `machine`, and `null` fail-safe to `system_error`.
 
 Pressing it posts `input_text` verbatim to `POST /storybooks` and navigates to the new
 `/process/[jobId]`. The button disables on press — required by `DESIGN.md` §5 anyway, and it
@@ -344,7 +328,10 @@ incidentally covers S3 §4.11's double-press case without a dedupe mechanism.
 
 #### 4.4.3 Safe limit kinds (`service_limit`, `book_limit`)
 
-Renders allowance/budget limit copy (*"The story-making allowance has run out."* or *"This book reached its picture-making limit."*) and subtext *"Ask a teacher to help."*. Omits the paid retry button and directs the child to show a teacher.
+The exact heading, explanation and action for every reason are
+[story failure recovery](story-failure-recovery-ux.md) §3's, implemented as
+`frontend/lib/failureCopy.ts`. This spec keeps the *selection* rule — which reason picks which
+screen — not the words. Unknown values, `machine`, and `null` fail-safe to `system_error`.
 
 #### 4.4.4 `not-found` — no row
 
@@ -419,7 +406,7 @@ done quietly.
 | 4th tap arrives anyway (stale tab) | `route_reveal` converts it to a confirm (S2 constraint 12); the refetch shows the job running. No error, no failure screen |
 | Confirm returns `200` with `complete` | Refetch reclassifies to `terminal-success`; push to `/book` |
 | Confirm returns `503` (Redis down, S2's rollback) | The pause is intact and un-consumed. Inline *"That didn't work — try once more"*; the button re-enables |
-| Reveal image fails to sign twice | Names + *"Use this one!"*, no images, no failure screen (§4.2) |
+| Reveal image signing/loading fails | Names + inline read retry; continue stays disabled until required pictures load (§4.2, `character-review-ux.md` §4) |
 | Book signs on the second attempt | Renders normally. Nothing recorded, no job created, counter unmoved |
 | Book fails to sign twice | Machine failure screen; the counter does **not** move (§4.3) |
 | `current_stage` is a value the stepper does not know | Heading only, no step highlighted. Never crashes |
@@ -457,8 +444,8 @@ done quietly.
 9. **No child-facing action spends money unless the child pressed `revise` or `retry`.** A re-sign, a
    reload, a bare confirm, and a `404` all cost nothing (S3 invariant 6).
 10. **The chain counter suggests and never gates** (S3 invariant 7).
-11. **The tap cap is not a failure.** A spent budget renders *"Use this one!"* and never reaches the
-    failure vocabulary (S3 invariant 8).
+11. **The tap cap is not a failure.** A spent budget renders no redraw controls, keeps continue and
+    exit available, and never reaches the failure vocabulary (S3 invariant 8).
 
 ## 6. Access & the trust boundary
 
@@ -507,11 +494,11 @@ Frontend, Vitest, every Supabase call mocked (`AGENTS.md` testing bright line).
 **This spec's own additions:**
 
 - A paused row at `/process/[jobId]` with no subsequent UPDATE renders the reveal from the seed.
-- A chip tap POSTs `{action:"try_again", char_id, attribute}` and calls `refetch()`.
-- At `taps_left == 0` no chip is rendered and *"Use this one!"* posts `{action:"confirm"}`.
-- A confirm returning `200` with a non-`queued` status shows no error.
-- While `justConfirmed` is set, an `in-flight` row renders *"Drawing it again…"*, not the stepper.
-- A reveal whose paths fail to sign twice still renders the confirm button.
+- Character review follows `character-review-ux.md` §7; selecting is local, explicit redraw and
+  continue preserve the S2 confirm payloads, and every submission reconciles through `refetch()`.
+- A confirm returning `200` with a non-`queued` status shows no error and follows the refreshed row.
+- During an accepted redraw, local context names the character; after refresh, generic progress is used.
+- Reveal image signing/loading failure follows the inline read-retry rules in `character-review-ux.md` §4.
 - `current_stage = "generate_scene:3/8"` highlights step 3 and reads *Drawing picture 3 of 8*; an
   unrecognised value highlights nothing and does not throw.
 - The stall line appears after the threshold and disappears on the next UPDATE.
@@ -543,9 +530,9 @@ Frontend, Vitest, every Supabase call mocked (`AGENTS.md` testing bright line).
   actions are: one line per `revise` / `retry` / re-sign, carrying the `failure_reason` that selected
   the screen and the chain count at press time. It is the only evidence that will ever exist for
   whether PRD §11.4's N=3 is the right number.
-- [x] **CC-3 Cost control** — a re-sign never rebuilds a book (§4.3); a signing failure at the reveal
-  confirms rather than retries (§4.2); the retry button disables on press; the press-loop stays named
-  for `rate-limiting` (§6).
+- [x] **CC-3 Cost control** — a re-sign never rebuilds a book (§4.3); a signing/loading failure at the
+  reveal uses inline read-retry and never spends a redraw (§4.2, `character-review-ux.md` §4); the
+  retry button disables on press; the press-loop stays named for `rate-limiting` (§6).
 - [ ] CC-1 Moderation ordering — N/A. No render path shortcuts the pipeline.
 - [ ] CC-2 PII redaction — flagged, not clean: the `revise` prefill re-serves the un-redacted
   `jobs.input_text` (S3 §4.3). Unchanged by this spec and unfixable without a schema change; carried
@@ -633,18 +620,15 @@ on `job-failure-reason` (§3.2 — S4 no longer waits on `0006`).
 - **Portrait reading gives the image less room** than the forced-landscape reader `USER_FLOW.md` §4.7
   imagined (§4.3). Accepted in exchange for a reader that has no unreachable state. If child testing
   shows portrait reading is genuinely worse, the fix is a *dismissible* rotate hint, never a wall.
-- **An accidental chip tap costs one of three draws with no undo** (§4.2). Accepted for the one-tap
-  mental model. If testing shows accidental taps are common, the fix is a select-then-confirm step,
-  which is additive.
-
 ## 13. Definition of done
 
 1. `classify` exists as a pure exported function and its table test covers every branch in §3.4.
 2. `/process/[jobId]` and `/book/[jobId]` both seed-then-subscribe and both render all four buckets.
 3. Both of S3 §7's regression tests are green: `failed` at `/book` is not a wait state, and `failed`
    at `/process` with no further UPDATE is not a blank screen.
-4. The reveal renders S2's projection, taps submit, `taps_left == 0` renders no chips and a working
-   *"Use this one!"*, and every confirm refetches.
+4. The reveal renders S2's projection and satisfies `character-review-ux.md`: selection is free,
+   redraw is explicit, the allowance is book-wide, continue preserves its payload, image failures
+   are recoverable, and stale local state never overrides the refreshed row.
 5. The stepper advances through all four steps on a real multi-scene run, with a real `k / N`.
 6. `_run_with_progress` is proven to hand `_finish` the same result `invoke()` did, on both paths.
 7. `pnpm lint && pnpm test` green, `uv run ruff check . && uv run pytest` green.

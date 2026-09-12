@@ -9,6 +9,7 @@ import BookReviewDialog from "@/components/BookReviewDialog";
 import { StaggerGrid, StaggerItem } from "@/components/StaggerGrid";
 import { Job, ReviewDecision, jobState } from "@/lib/types/jobs";
 import { signPaths } from "@/lib/signedUrls";
+import { displayTitle } from "@/lib/displayTitle";
 
 type Tab = "pending" | "approved" | "rejected";
 
@@ -38,7 +39,7 @@ export default function BooksPage() {
     const { data } = await supabase
       .from("jobs")
       .select(
-        "id, status, failure_reason, approved_at, rejected_at, created_at, input_text, pages, profile_id, profiles(display_nickname, avatar_id)"
+        "id, status, failure_reason, approved_at, rejected_at, created_at, input_text, title, pages, profile_id, profiles(display_nickname, avatar_id)"
       )
       .eq("classroom_id", classroomId)
       .order("created_at", { ascending: false });
@@ -318,6 +319,9 @@ export default function BooksPage() {
                     Student
                   </th>
                   <th className="text-left px-6 py-3 font-bold text-foreground/60 text-xs uppercase tracking-wider">
+                    Title
+                  </th>
+                  <th className="text-left px-6 py-3 font-bold text-foreground/60 text-xs uppercase tracking-wider">
                     Submitted
                   </th>
                   <th className="text-left px-6 py-3 font-bold text-foreground/60 text-xs uppercase tracking-wider">
@@ -443,6 +447,9 @@ function BookTableRow({
           <span className="font-bold">{name}</span>
         </div>
       </td>
+      <td className="px-6 py-3 text-foreground/70 max-w-[24ch] truncate">
+        {displayTitle(job.title, job.input_text)}
+      </td>
       <td className="px-6 py-3 text-foreground/60">{date}</td>
       <td className="px-6 py-3">
         <StateBadge state={state} />
@@ -460,7 +467,7 @@ function BookTableRow({
 }
 
 export function FailedBookRow({ job }: { job: Job }) {
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const name = job.profiles?.display_nickname ?? "Unknown";
   const date = new Date(job.created_at).toLocaleDateString(undefined, {
     month: "short",
@@ -470,7 +477,7 @@ export function FailedBookRow({ job }: { job: Job }) {
   const getTeacherLabel = (reason: string | null) => {
     switch (reason) {
       case "child_text":
-        return "The submitted story did not pass the input safety check.";
+        return "The submitted title or story did not pass the input safety check.";
       case "character_safety":
         return "A generated character reference did not pass the image safety check.";
       case "scene_safety":
@@ -488,18 +495,26 @@ export function FailedBookRow({ job }: { job: Job }) {
     }
   };
 
-  const handleCopy = () => {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(job.id);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+  // Awaited: an unawaited write reported success for a denied clipboard permission, and the
+  // reference is the teacher's only handle on a failed job (story-failure-recovery-ux §4).
+  const handleCopy = async () => {
+    try {
+      if (typeof navigator === "undefined" || !navigator.clipboard) throw new Error("clipboard unavailable");
+      await navigator.clipboard.writeText(job.id);
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
     }
+    window.setTimeout(() => setCopyState("idle"), 4000);
   };
 
   return (
     <div className="bg-surface border border-primary/10 rounded-2xl p-4">
       <div className="flex items-center justify-between gap-2 mb-2">
-        <p className="font-bold text-sm text-foreground">{name}</p>
+        <div>
+          <p className="font-bold text-sm text-foreground">{name}</p>
+          <p className="text-xs text-foreground/60">{displayTitle(job.title, job.input_text)}</p>
+        </div>
         <div className="flex items-center gap-2">
           <div className="inline-flex items-center gap-1 font-mono text-xs text-foreground/60 bg-muted/30 px-2 py-0.5 rounded">
             <span>Ref: {job.id.slice(0, 8)}</span>
@@ -509,20 +524,23 @@ export function FailedBookRow({ job }: { job: Job }) {
               onClick={handleCopy}
               className="ml-1 inline-flex items-center justify-center min-h-[44px] min-w-[44px] text-primary font-bold hover:underline"
             >
-              {copied ? "Copied!" : "Copy"}
+              Copy
             </button>
           </div>
+          {/* The button's `aria-label` is its accessible name in every state, so a result swapped in
+              as its content is never announced. It goes in a region present from first render. */}
+          <p
+            role="status"
+            className={`text-xs ${copyState === "failed" ? "text-destructive" : "text-[var(--color-success)]"}`}
+          >
+            {copyState === "copied" ? "Copied!" : copyState === "failed" ? "Couldn’t copy" : ""}
+          </p>
           <p className="text-xs text-foreground/50">{date}</p>
         </div>
       </div>
       <p className="text-sm text-foreground/70 mb-2">
         {getTeacherLabel(job.failure_reason)}
       </p>
-      {job.failure_reason === "child_text" && job.input_text && (
-        <blockquote className="text-sm text-foreground/60 italic border-l-2 border-primary/20 pl-3 mt-1">
-          {job.input_text}
-        </blockquote>
-      )}
     </div>
   );
 }

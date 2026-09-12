@@ -15,8 +15,10 @@ vi.mock("@/lib/useJob", () => ({
 }));
 
 vi.mock("@/components/FailureScreen", () => ({
-  default: ({ kind, countable }: { kind: string; countable?: boolean }) => (
-    <div data-testid="failure-screen" data-kind={kind} data-countable={String(countable ?? true)} />
+  default: ({ kind, countable, onReload }: { kind: string; countable?: boolean; onReload?: () => void }) => (
+    <div data-testid="failure-screen" data-kind={kind} data-countable={String(countable ?? true)}>
+      {onReload && <button onClick={onReload}>reload</button>}
+    </div>
   ),
   resetFailChain: vi.fn(),
 }));
@@ -64,8 +66,8 @@ const PAGES = [
 ];
 
 const COMPLETE_ROW = {
-  id: "j1", status: "complete", current_stage: "compose",
-  failure_reason: null, input_text: "x", style_preset_id: null, pages: PAGES, reveal: null,
+  id: "j1", status: "complete", current_stage: "compose", profile_id: "p1",
+  failure_reason: null, input_text: "x", title: "A Very Long Title That Keeps Going And Going", style_preset_id: null, pages: PAGES, reveal: null,
 };
 
 const SIGNED = PAGES.map((p, i) => ({ signedUrl: `https://cdn/${i}.png`, error: null }));
@@ -141,6 +143,52 @@ describe("BookPage — reader (terminal-success)", () => {
     await waitFor(() => expect(screen.getByLabelText("Back to bookshelf")).toBeDefined());
     const backBtn = screen.getByLabelText("Back to bookshelf");
     expect(backBtn.getAttribute("href")).toBe("/s/p1");
+  });
+
+  it("renders the full book title as the reader heading", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
+    mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
+
+    await renderPage(makeParams("j1"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /A Very Long Title That Keeps Going And Going/ })).toBeDefined();
+    });
+  });
+
+  it("does not excerpt a classmate's story into the heading of their untitled book", async () => {
+    // story-titles §5: the excerpt fallback is computed "only from text already authorized for
+    // that viewer". `jobs.input_text` is the raw pre-redaction story, and RLS hands the whole row
+    // to any classmate who opens an approved book from the shared gallery — so on someone else's
+    // legacy untitled book the excerpt is not ours to render.
+    const peerUntitledRow = {
+      ...COMPLETE_ROW,
+      profile_id: "someone-else",
+      title: null,
+      input_text: "My name is Ana and I live on Mabini Street.",
+    };
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: peerUntitledRow }));
+    mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
+
+    await renderPage(makeParams("j1"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Untitled" })).toBeDefined();
+    });
+    expect(screen.queryByText(/Mabini Street/)).toBeNull();
+    expect(screen.queryByText(/Ana/)).toBeNull();
+  });
+
+  it("still excerpts the reader's own untitled book", async () => {
+    const ownUntitledRow = { ...COMPLETE_ROW, title: null, input_text: "The dog ran far away." };
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: ownUntitledRow }));
+    mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
+
+    await renderPage(makeParams("j1"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "The dog ran far away." })).toBeDefined();
+    });
   });
 
   it("renders Pages view button before Scroll view button in toggle pill", async () => {
@@ -244,14 +292,14 @@ describe("BookPage — reader (terminal-success)", () => {
     expect(mockCreateSignedUrls).toHaveBeenCalledTimes(2);
   });
 
-  it("signing fails twice → machine FailureScreen with countable=false (spec §4.3, §4.5)", async () => {
+  it("signing fails twice → read-failure FailureScreen with countable=false (spec §4.3, §4.5)", async () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
     mockCreateSignedUrls.mockResolvedValue({ data: null, error: new Error("network") });
 
     await renderPage(makeParams("j1"));
 
     await waitFor(() => expect(screen.getByTestId("failure-screen")).toBeDefined());
-    expect(screen.getByTestId("failure-screen").getAttribute("data-kind")).toBe("retry");
+    expect(screen.getByTestId("failure-screen").getAttribute("data-kind")).toBe("read-failed");
     // countable=false prevents bumpChain() on press — signing failure is not a failed story
     expect(screen.getByTestId("failure-screen").getAttribute("data-countable")).toBe("false");
   });
@@ -269,5 +317,37 @@ describe("BookPage — reader (terminal-success)", () => {
     }));
     await renderPage(makeParams("j1"));
     expect(screen.queryByText("SENTINEL_MODERATION_DETAIL")).toBeNull();
+  });
+});
+
+describe("BookPage — a finished book whose pictures will not load (spec §4)", () => {
+  it("offers re-reading, not a new paid book, and does not count against the chain", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
+    mockCreateSignedUrls.mockResolvedValue({ data: [], error: null });
+
+    await renderPage(makeParams("j1"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("failure-screen").getAttribute("data-kind")).toBe("read-failed")
+    );
+    expect(screen.getByTestId("failure-screen").getAttribute("data-countable")).toBe("false");
+    // Two attempts: the automatic re-sign already in signPages, and nothing more.
+    expect(mockCreateSignedUrls).toHaveBeenCalledTimes(2);
+  });
+
+  it("reloading re-signs the same paths and renders the book", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
+    mockCreateSignedUrls.mockResolvedValue({ data: [], error: null });
+
+    await renderPage(makeParams("j1"));
+    await waitFor(() => expect(screen.getByTestId("failure-screen")).toBeDefined());
+
+    mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "reload" }));
+    });
+
+    await waitFor(() => expect(screen.queryByTestId("failure-screen")).toBeNull());
+    expect(mockCreateSignedUrls).toHaveBeenCalledTimes(3);
   });
 });

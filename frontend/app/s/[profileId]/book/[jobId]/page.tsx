@@ -5,6 +5,7 @@
 import { use, useEffect, useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence, useScroll } from "framer-motion";
 import { useJob } from "@/lib/useJob";
+import { displayTitle } from "@/lib/displayTitle";
 import FailureScreen, { resetFailChain } from "@/components/FailureScreen";
 import { signPaths } from "@/lib/signedUrls";
 import Link from "next/link";
@@ -161,7 +162,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
   if (bucket === "terminal-failure") {
     // Signing failure while book was complete: machine screen, counter NOT bumped
     if (signFailed) {
-      return <FailureScreen kind="retry" reason={row?.failure_reason} jobId={jobId} inputText={row?.input_text} stylePresetId={row?.style_preset_id} countable={false} />;
+      return <FailureScreen kind="retry" reason={row?.failure_reason} jobId={jobId} inputText={row?.input_text} title={row?.title} stylePresetId={row?.style_preset_id} countable={false} />;
     }
     const kind =
       row?.failure_reason === "child_text"
@@ -169,7 +170,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
         : row?.status === SWEPT_STATUS
         ? "asleep"
         : "retry";
-    return <FailureScreen kind={kind} reason={row?.failure_reason} jobId={jobId} inputText={row?.input_text} stylePresetId={row?.style_preset_id} />;
+    return <FailureScreen kind={kind} reason={row?.failure_reason} jobId={jobId} inputText={row?.input_text} title={row?.title} stylePresetId={row?.style_preset_id} />;
   }
 
   if (bucket === "in-flight" || bucket === "paused") {
@@ -178,10 +179,23 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
 
   // terminal-success — wait for signing
   if (signFailed) {
-    // No `reason`: the job succeeded and the row's `failure_reason` is null. Signing is a browser-side
-    // failure with no safe reason behind it, so it keeps the legacy machine copy (spec §3 maps a null
-    // reason to `system_error`, which would be a lie about a book that generated fine).
-    return <FailureScreen kind="retry" jobId={jobId} inputText={row?.input_text} stylePresetId={row?.style_preset_id} countable={false} />;
+    // The job succeeded: the row is `complete`, the pages are real, and `failure_reason` is null.
+    // Signing is a browser-side read failure, so the honest fix is re-signing the same paths —
+    // not a new paid generation (spec §4, kid-flow-failure-semantics §4.7). Passing no `reason`
+    // keeps this off the safe taxonomy, which would claim a finished book failed to be made.
+    return (
+      <FailureScreen
+        kind="read-failed"
+        jobId={jobId}
+        inputText={row?.input_text}
+        title={row?.title}
+        countable={false}
+        onReload={() => {
+          setSignFailed(false);
+          signPages(1);
+        }}
+      />
+    );
   }
 
   if (!signedPages) {
@@ -234,6 +248,14 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
           <ArrowLeft size={20} weight="bold" />
           <span>Bookshelf</span>
         </Link>
+
+        <h1 className="font-display text-lg sm:text-xl font-extrabold text-foreground text-center flex-1 min-w-0 mx-3 break-words">
+          {/* `profileId` is an authenticated identity here, not a typed-in segment: `guardRequest`
+              redirects any /s/:id whose id is not the session user (middleware.ts), so this
+              equals the `profile_id = auth.uid()` the RLS policy uses. Comparing it to the row
+              is what keeps a classmate's raw story out of the heading of their untitled book. */}
+          {displayTitle(row?.title, row?.profile_id === profileId ? row?.input_text : null)}
+        </h1>
 
         <div 
           role="group"

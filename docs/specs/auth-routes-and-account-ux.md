@@ -291,8 +291,9 @@ remove a quiescent terminal row and its external assets without reopening genera
 Recovery is still a new job — kid-flow S3 is unamended. What changed is *who builds it*. `/write`
 reached from the shelf is blank: the shelf sets no `sb.prefill`, so the child arrives with their
 story gone and has to retype it. `/process/[jobId]` renders `FailureScreen` for a terminal job
-(kid-flow-reader §4.4), and its `retry` action POSTs `row.input_text` verbatim — the same new job,
-one tap, text intact. The destination is a better door to the same room.
+(kid-flow-reader §4.4), and its `retry` action resubmits the checked title, `row.input_text`, and
+style as the same new job, one tap, text intact. Titleless legacy retries open the write form so
+the required title can be supplied. The destination is a better door to the same room.
 
 The debris itself is now **collapsed, not deleted**: failed cards render inside a `<details>`
 titled *"Didn't finish (n)"* below the grid — the pattern already shipped on the teacher books page
@@ -303,8 +304,9 @@ student `DELETE` policy.
 
 - **Covers** are `pages[0].image_path`, signed at read time (kid-flow constraint), via **one batched
   `createSignedUrls`** call, not one per card.
-- **Titles** come from the first line of `input_text`, truncated. There is no title column and the
-  schema is frozen; S4 does not add one.
+- **Titles** use the checked `jobs.title` metadata through the shared
+  `displayTitle()` fallback; legacy rows use the first line of `input_text` truncated to 60
+  characters, then `Untitled` when no text exists. See [story titles](story-titles.md) §5.
 - **One Realtime channel** for the whole shelf, filtered `profile_id=eq.<pid>` on UPDATE, so an
   in-flight card flips to ready without a refresh. `useJob.ts` is untouched — it stays the per-job
   hook for `/process` and `/book`. `classify` is reused verbatim, not reimplemented per card.

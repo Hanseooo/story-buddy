@@ -66,6 +66,8 @@ function makeJob(overrides: Record<string, unknown> = {}) {
         image_path: "covers/job-1.jpg",
       },
     ],
+    title: null,
+    input_text: "Once upon a time",
     profile_id: "author-1",
     profiles: { display_nickname: "Kai" },
     ...overrides,
@@ -115,11 +117,33 @@ describe("GalleryPage", () => {
     expect(mockLimit).toHaveBeenCalledWith(200);
   });
 
-  it("does not select input_text", async () => {
+  // spec §5: the gallery spans every classmate's approved book, so no viewer is authorized
+  // to read a peer's raw story. Selecting input_text to build an excerpt would broaden access
+  // to raw story text merely to populate a card, which §5 forbids outright.
+  it("never selects input_text, so no peer's raw story reaches the client", async () => {
     const { default: GalleryPage } = await import("./page");
     await GalleryPage({ params });
     const selectArg: string = mockSelect.mock.calls[0][0];
     expect(selectArg).not.toContain("input_text");
+  });
+
+  it("labels a legacy untitled book Untitled instead of its story opening", async () => {
+    mockLimit.mockResolvedValue({
+      data: [makeJob({ title: null, input_text: "My address is 12 Mabini Street" })],
+    });
+    const { default: GalleryPage } = await import("./page");
+    const jsx = await GalleryPage({ params });
+    const { getByText, queryByText } = render(jsx);
+    getByText("Untitled");
+    expect(queryByText(/Mabini/)).toBeNull();
+  });
+
+  it("shows the book title next to the author on a gallery card", async () => {
+    mockLimit.mockResolvedValue({ data: [makeJob({ title: "My Dragon Book" })] });
+    const { default: GalleryPage } = await import("./page");
+    const jsx = await GalleryPage({ params });
+    const { getByText } = render(jsx);
+    getByText("My Dragon Book");
   });
 
   it("links each card to the book reader at the correct URL", async () => {

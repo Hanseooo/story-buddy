@@ -81,16 +81,11 @@ The existing full-screen failure card keeps the Cobalt Playroom visual language 
 4. A quiet story reference with an abbreviated ID and a copy control for the full ID.
 5. A route back to the bookshelf when useful.
 
-| Reason | Child-facing explanation | Primary recovery |
-|---|---|---|
-| `child_text` | “Some words need changing before we can make this book.” | Change my words |
-| `character_safety` | “We couldn’t safely use the character picture we made. Your words aren’t in trouble.” | Make the story again |
-| `scene_safety` | “One of the pictures we made couldn’t be used.” | Make the story again |
-| `service_busy` | “The story-making service is busy right now.” | Try again |
-| `worker_stopped` | “The story maker stopped before it finished.” | Try again |
-| `service_limit` | “The story-making allowance has run out.” | Ask a teacher; no retry control |
-| `book_limit` | “This book reached its picture-making limit.” | Ask a teacher; no retry control |
-| `system_error` | “Something interrupted your story.” | Try again |
+**The child-facing heading, explanation and primary action for each reason live in
+[story failure recovery](story-failure-recovery-ux.md) §3, implemented as
+`frontend/lib/failureCopy.ts`.** This spec keeps the reason contract; it no longer keeps a
+second copy of the copy. The title-aware `child_text` wording follows
+[story titles](story-titles.md) §4.
 
 The existing explicit-submit rule remains: a retry creates and pays for a new job only after the
 child presses the action. Persistent `service_limit` and `book_limit` failures omit the paid retry
@@ -102,7 +97,7 @@ The existing failed-book section displays the story reference and one exact safe
 
 | Reason | Teacher-facing label |
 |---|---|
-| `child_text` | The submitted story did not pass the input safety check. |
+| `child_text` | The submitted title or story did not pass the input safety check. |
 | `character_safety` | A generated character reference did not pass the image safety check. |
 | `scene_safety` | A generated scene did not pass the image safety check. |
 | `service_busy` | A required story-making service was temporarily unavailable. |

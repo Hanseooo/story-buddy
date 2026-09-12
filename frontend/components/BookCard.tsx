@@ -1,5 +1,6 @@
 import { Job, jobState } from "@/lib/types/jobs";
 import { Avatar } from "@/components/Avatar";
+import { displayTitle } from "@/lib/displayTitle";
 
 type Props = {
   job: Job;
@@ -10,6 +11,7 @@ type Props = {
 export default function BookCard({ job, thumbnailUrl, onOpen }: Props) {
   const state = jobState(job);
   const name = job.profiles?.display_nickname ?? "Unknown";
+  const bookTitle = displayTitle(job.title, job.input_text);
   const date = new Date(job.created_at).toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
@@ -19,7 +21,7 @@ export default function BookCard({ job, thumbnailUrl, onOpen }: Props) {
     <button
       onClick={onOpen}
       className="w-full text-left bg-surface border border-primary/15 rounded-2xl overflow-hidden shadow-[0_6px_18px_rgb(49_85_217/10%)] hover:border-primary/40 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2"
-      aria-label={`Review story by ${name}`}
+      aria-label={`Review story by ${name}: ${bookTitle}`}
     >
       {/* Thumbnail */}
       <div className="aspect-[3/2] bg-muted relative">
@@ -43,6 +45,7 @@ export default function BookCard({ job, thumbnailUrl, onOpen }: Props) {
         <Avatar avatarId={job.profiles?.avatar_id ?? null} displayNickname={name} size={32} />
         <div>
           <p className="font-bold text-foreground text-sm truncate">{name}</p>
+          <p className="text-xs text-foreground/60 truncate">{bookTitle}</p>
           <p className="text-xs text-foreground/50 mt-0.5">{date}</p>
         </div>
       </div>

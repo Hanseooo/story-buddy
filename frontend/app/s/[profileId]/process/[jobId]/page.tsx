@@ -2,10 +2,11 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useJob } from "@/lib/useJob";
+import { useJob, type JobRow } from "@/lib/useJob";
+import { displayTitle } from "@/lib/displayTitle";
 import FailureScreen from "@/components/FailureScreen";
 import { supabase } from "@/lib/supabaseClient";
 import { signPaths } from "@/lib/signedUrls";
@@ -19,6 +20,9 @@ const STALL_MS = 90_000;
 const SWEPT_STATUS = "__swept__";
 
 type StepperStep = 1 | 2 | 3 | 4;
+type SelectedTrait = { charId: string; attribute: string } | null;
+type SubmissionState = "idle" | "sending" | "reconciling" | "unknown";
+type CharacterImageState = "signing" | "loading" | "loaded" | "error";
 
 function getStep(stage: string | null): StepperStep | null {
   if (!stage) return null;
@@ -186,8 +190,93 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   // It must be state, not a ref: a ref cannot re-render the thing that reads it, so the bridge
   // would only ever lift on some *other* render.
   const [bridgeStage, setBridgeStage] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState(false);
+  const [submissionState, setSubmissionState] = useState<SubmissionState>("idle");
   const [confirmError, setConfirmError] = useState(false);
+  const [selectedTrait, setSelectedTrait] = useState<SelectedTrait>(null);
+  const [pendingRedrawName, setPendingRedrawName] = useState<string | null>(null);
+  const submissionInFlight = useRef(false);
+  const characterHeadingRefs = useRef<Record<string, HTMLHeadingElement | null>>({});
+  const characterCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const selectedControlWasFocused = useRef(false);
+  const lastSelectedCharId = useRef<string | null>(null);
+  const submissionsDisabled = submissionState !== "idle";
+  const isRetryingCharacterChoices = submissionState === "reconciling";
+
+  function toggleTrait(charId: string, attribute: string) {
+    setChoiceUpdated(false);
+    setSelectedTrait((current) => {
+      if (current?.charId === charId && current.attribute === attribute) {
+        selectedControlWasFocused.current = false;
+        return null;
+      }
+      lastSelectedCharId.current = charId;
+      selectedControlWasFocused.current = characterCardRefs.current[charId]?.contains(document.activeElement) ?? false;
+      return { charId, attribute };
+    });
+  }
+
+  const revealFingerprint = row?.reveal
+    ? JSON.stringify({
+        tapsLeft: row.reveal.taps_left,
+        characters: row.reveal.characters.map(({ char_id, image_path, chips }) => ({
+          charId: char_id,
+          imagePath: image_path,
+          chips,
+        })),
+      })
+    : null;
+  const previousRevealFingerprint = useRef<string | null>(null);
+  const [choiceUpdated, setChoiceUpdated] = useState(false);
+
+  useEffect(() => {
+    // Deliberately keeps the last paused fingerprint across the in-flight leg: a redraw always
+    // leaves the pause and comes back, and forgetting it here let a replacement that still
+    // suggested the same trait return with the spent selection intact.
+    if (bucket !== "paused" || !row?.reveal || !revealFingerprint) return;
+
+    const previous = previousRevealFingerprint.current;
+    const selectionStillOffered = selectedTrait === null || row.reveal.characters.some(
+      (character) => character.char_id === selectedTrait.charId && character.chips.includes(selectedTrait.attribute)
+    );
+    const revealChanged = previous !== null && previous !== revealFingerprint;
+
+    if (selectedTrait && (!selectionStillOffered || revealChanged)) {
+      lastSelectedCharId.current = selectedTrait.charId;
+      // Two questions, not one. The latch answers "was the child working in this card when they
+      // chose?" — it has to be captured at selection time, because by now the chosen control is
+      // unmounted and focus has already fallen to <body>. This narrows it with "and is focus still
+      // here, or nowhere?": a child who tabbed to Continue is navigating, and dragging them back
+      // to the heading is the theft spec §5 forbids.
+      const active = document.activeElement;
+      const focusIsStillHereOrLost =
+        active === null
+        || active === document.body
+        || (characterCardRefs.current[selectedTrait.charId]?.contains(active) ?? false);
+      selectedControlWasFocused.current = selectedControlWasFocused.current && focusIsStillHereOrLost;
+      setSelectedTrait(null);
+      setPendingRedrawName(null);
+      setChoiceUpdated(true);
+    }
+
+    previousRevealFingerprint.current = revealFingerprint;
+  }, [bucket, revealFingerprint, row?.reveal, selectedTrait]);
+
+  useEffect(() => {
+    if (!selectedTrait || submissionsDisabled) return;
+    function clearSelection(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      selectedControlWasFocused.current = false;
+      setSelectedTrait(null);
+    }
+    window.addEventListener("keydown", clearSelection);
+    return () => window.removeEventListener("keydown", clearSelection);
+  }, [selectedTrait, submissionsDisabled]);
+
+  useEffect(() => {
+    if (!choiceUpdated || !selectedControlWasFocused.current || !lastSelectedCharId.current) return;
+    characterHeadingRefs.current[lastSelectedCharId.current]?.focus();
+    selectedControlWasFocused.current = false;
+  }, [choiceUpdated, revealFingerprint]);
 
   // Stall line: show after STALL_MS of no stage change
   const [stalling, setStalling] = useState(false);
@@ -200,26 +289,63 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
     };
   }, [bucket, row?.current_stage]);
 
-  // Reveal character image signing
+  // Reveal character image signing and browser-read state
   const [signedCharUrls, setSignedCharUrls] = useState<Record<string, string>>({});
+  const [characterImageState, setCharacterImageState] = useState<Record<string, CharacterImageState>>({});
+
+  // A redraw re-enters this function with the replacement's paths while the previous signing
+  // round may still be awaiting. Without a token the loser's resolution lands last and writes its
+  // stale URL and a fresh "loading" over the picture the child is actually looking at — which also
+  // re-disables "Use these characters" on an image that already loaded.
+  const characterImageLoadId = useRef(0);
+
+  async function loadCharacterImages(characters: NonNullable<JobRow["reveal"]>["characters"]) {
+    const loadId = characterImageLoadId.current + 1;
+    characterImageLoadId.current = loadId;
+    setSignedCharUrls((current) => {
+      const next = { ...current };
+      characters.forEach((character) => delete next[character.char_id]);
+      return next;
+    });
+    setCharacterImageState((current) => ({
+      ...current,
+      ...Object.fromEntries(characters.map((character) => [character.char_id, "signing"])),
+    }));
+
+    const paths = characters.map((character) => character.image_path);
+    let signed: Record<string, string> = {};
+    for (let attempt = 0; attempt < 2 && Object.keys(signed).length === 0; attempt += 1) {
+      try {
+        signed = await signPaths(paths);
+      } catch {
+        signed = {};
+      }
+    }
+
+    const urls: Record<string, string> = {};
+    const states: Record<string, CharacterImageState> = {};
+    for (const character of characters) {
+      const url = signed[character.image_path];
+      if (url) urls[character.char_id] = url;
+      states[character.char_id] = url ? "loading" : "error";
+    }
+    if (loadId !== characterImageLoadId.current) return;
+    setSignedCharUrls((current) => {
+      const next = { ...current };
+      characters.forEach((character) => {
+        if (urls[character.char_id]) next[character.char_id] = urls[character.char_id];
+        else delete next[character.char_id];
+      });
+      return next;
+    });
+    setCharacterImageState((current) => ({ ...current, ...states }));
+  }
+
   useEffect(() => {
     if (bucket !== "paused" || !row?.reveal?.characters.length) return;
-    const characters = row.reveal.characters;
-    const paths = characters.map(c => c.image_path);
-    function sign(attempt: number) {
-      signPaths(paths).then((signed) => {
-        const map: Record<string, string> = {};
-        characters.forEach((c) => {
-          if (signed[c.image_path]) map[c.char_id] = signed[c.image_path];
-        });
-        if (Object.keys(map).length === 0) {
-          if (attempt < 2) sign(attempt + 1);
-          return; // render without images (spec §4.2)
-        }
-        setSignedCharUrls(map);
-      });
-    }
-    sign(1);
+    // Initialize the per-image read state when the paused reveal becomes authoritative.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadCharacterImages(row.reveal.characters);
   }, [bucket, row?.reveal]);
 
   // Push to /book on terminal-success. The bridge needs no teardown here: `isRedrawing` is read
@@ -238,9 +364,14 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
     char_id?: string,
     attribute?: string
   ) {
-    setBridgeStage(row?.current_stage ?? null);
-    setConfirming(true);
+    if (submissionInFlight.current || submissionsDisabled) return;
+    submissionInFlight.current = true;
+    // Only a redraw returns to this stage; a plain confirm advances, and bridging it made the
+    // continue path claim a redraw was under way.
+    setBridgeStage(action === "try_again" ? row?.current_stage ?? null : null);
+    setSubmissionState("sending");
     setConfirmError(false);
+    let requestFailed = false;
     try {
       const {
         data: { session },
@@ -253,17 +384,44 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
         },
         body: JSON.stringify({ action, char_id: char_id ?? null, attribute: attribute ?? null }),
       });
-      if (!res.ok) {
-        setBridgeStage(null);
-        setConfirmError(true);
-      }
+      requestFailed = !res.ok;
     } catch {
-      setBridgeStage(null);
-      setConfirmError(true);
-    } finally {
-      setConfirming(false);
-      await refetch();
+      requestFailed = true;
     }
+
+    setSubmissionState("reconciling");
+    let refreshed = false;
+    try {
+      refreshed = await refetch();
+    } catch {
+      refreshed = false;
+    }
+    if (!refreshed) {
+      setBridgeStage(null);
+      setSubmissionState("unknown");
+      return;
+    }
+
+    if (requestFailed) setConfirmError(true);
+    setSubmissionState("idle");
+    submissionInFlight.current = false;
+  }
+
+  async function retryCharacterChoices() {
+    if (submissionState !== "unknown") return;
+    setSubmissionState("reconciling");
+    let refreshed = false;
+    try {
+      refreshed = await refetch();
+    } catch {
+      refreshed = false;
+    }
+    if (refreshed) {
+      submissionInFlight.current = false;
+      setSubmissionState("idle");
+      return;
+    }
+    setSubmissionState("unknown");
   }
 
   // Derive FailureScreen kind from row state
@@ -284,6 +442,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
         reason={row?.failure_reason}
         jobId={jobId}
         inputText={row?.input_text}
+        title={row?.title}
         stylePresetId={row?.style_preset_id}
       />
     );
@@ -291,6 +450,17 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
 
   if (bucket === "paused" && row?.reveal) {
     const { characters, taps_left } = row.reveal;
+    const allRequiredImagesLoaded = characters.every(
+      (character) => characterImageState[character.char_id] === "loaded"
+    );
+    // A live region only announces a change to text it already holds, so this node is always
+    // rendered and only its content switches.
+    const liveMessage =
+      pendingRedrawName && submissionsDisabled
+        ? `Redrawing ${pendingRedrawName}…`
+        : choiceUpdated
+        ? "The character choices were updated."
+        : "";
     return (
       <div className="w-full flex-1 min-h-[calc(100dvh-5rem)] flex flex-col justify-center items-center p-6 max-w-5xl mx-auto">
         <div className="w-full flex justify-start mb-4 z-20">
@@ -307,13 +477,43 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
           transition={{ duration: 0.5, ease: "easeOut" }}
           className="flex flex-col items-center gap-4 text-center mb-12"
         >
+          {row && (
+            <p className="text-sm font-bold text-foreground/50 tracking-wide">
+              {displayTitle(row.title, row.input_text)}
+            </p>
+          )}
           <h1 className="font-display text-4xl md:text-5xl text-foreground tracking-tight text-center">
             <KineticText text="Meet your cast!" />
           </h1>
           <p className="font-kid text-lg text-foreground/70 max-w-md">
-            Make sure they look right! Tap a word to fix it, or let&apos;s start drawing.
+            Choose a detail you want us to try drawing again.
+          </p>
+          {/* Always rendered, so a live region exists before its text changes. The pending line
+              is announced only — the in-flight screen states it visually — while the changed-reveal
+              explanation is also shown, because a sighted child otherwise watches the chips change
+              with no explanation at all (spec §4). */}
+          <p
+            aria-live="polite"
+            className={choiceUpdated ? "font-kid text-sm text-foreground/70 max-w-md" : "sr-only"}
+          >
+            {liveMessage}
           </p>
         </motion.div>
+
+        <div className="mb-6 text-center font-kid text-foreground">
+          {taps_left > 0 ? (
+            <>
+              <p className="font-bold">
+                {taps_left} {taps_left === 1 ? "redraw" : "redraws"} left for this book
+              </p>
+              <p className="text-sm text-foreground/70">Shared by all your characters.</p>
+            </>
+          ) : (
+            <p className="max-w-lg">
+              No redraws left for this book. You can use these characters or go back to your bookshelf.
+            </p>
+          )}
+        </div>
 
         <motion.div 
           className="flex flex-wrap justify-center gap-8 w-full"
@@ -330,52 +530,141 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
           {characters.map(c => (
             <motion.div 
               key={c.char_id} 
+              ref={(node) => { characterCardRefs.current[c.char_id] = node; }}
               variants={{
                 hidden: { opacity: 0, y: 40, scale: 0.8 },
                 show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring", bounce: 0.4 } }
               }}
               className="flex flex-col items-center gap-4 neo-border bg-[var(--color-surface)] rounded-[24px] p-5 shadow-[0_10px_28px_rgba(49,85,217,0.12)] hover:-translate-y-1 transition-transform max-w-xs w-full"
             >
-              {signedCharUrls[c.char_id] ? (
+              {characterImageState[c.char_id] === "error" ? (
+                <div role="alert" className="flex aspect-square w-full flex-col items-center justify-center gap-3 rounded-[16px] bg-[var(--color-muted)] p-4 text-center font-kid">
+                  <p>We couldn&apos;t load {c.name}&apos;s picture.</p>
+                  <button
+                    type="button"
+                    className="min-h-[44px] rounded-xl bg-[var(--color-surface)] px-4 py-2 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
+                    onClick={() => void loadCharacterImages([c])}
+                  >
+                    Try loading {c.name}&apos;s picture again
+                  </button>
+                </div>
+              ) : signedCharUrls[c.char_id] ? (
                 <img
                   src={signedCharUrls[c.char_id]}
                   alt={c.name}
                   className="w-full aspect-square object-cover rounded-[16px] bg-[var(--color-muted)]"
+                  onLoad={() => setCharacterImageState((current) => ({ ...current, [c.char_id]: "loaded" }))}
+                  onError={() => setCharacterImageState((current) => ({ ...current, [c.char_id]: "error" }))}
                 />
               ) : (
                 <div className="w-full aspect-square rounded-[16px] bg-[var(--color-muted)] animate-pulse" />
               )}
-              <p className="font-display text-2xl text-foreground mt-2">{c.name}</p>
+              <h2
+                ref={(node) => { characterHeadingRefs.current[c.char_id] = node; }}
+                tabIndex={-1}
+                className="font-display text-2xl text-foreground mt-2 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
+              >
+                {c.name}
+              </h2>
+
+              {taps_left > 0 && c.chips.length === 0 && (
+                <p className="w-full text-center font-kid text-sm text-foreground/70">
+                  No suggested changes are available for this character.
+                </p>
+              )}
               
               <div className="flex flex-wrap justify-center gap-2 mt-2 w-full">
-                {taps_left > 0 && c.chips.map(chip => (
-                  <button
-                    key={chip}
-                    disabled={confirming}
-                    onClick={() => handleConfirm("try_again", c.char_id, chip)}
-                    className="rounded-full border border-[var(--color-primary)]/20 bg-background hover:bg-[var(--color-primary)]/5 min-h-[44px] px-4 font-kid text-sm disabled:opacity-50 transition-colors text-foreground"
-                  >
-                    {chip}
-                  </button>
-                ))}
+                {taps_left > 0 && c.chips.map(chip => {
+                  const selected = selectedTrait?.charId === c.char_id && selectedTrait.attribute === chip;
+                  return (
+                    <button
+                      key={chip}
+                      type="button"
+                      aria-pressed={selected}
+                      disabled={submissionsDisabled || characterImageState[c.char_id] !== "loaded"}
+                      onClick={() => toggleTrait(c.char_id, chip)}
+                      className={`min-h-[44px] max-w-full rounded-full border px-4 py-2 font-kid text-sm text-foreground transition-colors focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed ${
+                        selected
+                          ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10 font-bold"
+                          : "border-[var(--color-primary)]/20 bg-background hover:bg-[var(--color-primary)]/5"
+                      }`}
+                    >
+                      {chip}
+                      {selected && <span className="sr-only"> selected</span>}
+                    </button>
+                  );
+                })}
               </div>
+
+              {selectedTrait?.charId === c.char_id && (
+                <div className="w-full rounded-[16px] bg-[var(--color-primary)]/5 p-4 text-left">
+                  <p className="font-kid text-sm leading-relaxed text-foreground">
+                    We&apos;ll draw a new picture, paying extra attention to {selectedTrait.attribute}. Other details may change.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={submissionsDisabled || characterImageState[c.char_id] !== "loaded"}
+                      onClick={() => {
+                        setPendingRedrawName(c.name);
+                        void handleConfirm("try_again", c.char_id, selectedTrait.attribute);
+                      }}
+                      className="min-h-[44px] rounded-xl border border-[var(--color-primary)]/40 bg-[var(--color-surface)] px-4 py-2 font-kid font-bold text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Redraw {c.name}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={submissionsDisabled}
+                      onClick={() => setSelectedTrait(null)}
+                      className="min-h-[44px] rounded-xl px-4 py-2 font-kid font-bold text-foreground focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </motion.div>
           ))}
         </motion.div>
 
-        <div className="mt-12 w-full flex justify-center">
+        <div className="mt-12 w-full flex flex-col items-center justify-center gap-3">
+          <p className="font-kid text-sm text-foreground/70">Continue with the pictures shown.</p>
           <button
-            disabled={confirming}
-            onClick={() => handleConfirm("confirm")}
-            className="rounded-[16px] bg-[var(--color-primary)] text-[var(--color-surface)] min-h-[56px] px-12 font-kid text-xl disabled:opacity-50 hover:brightness-105 active:scale-[0.98] transition-all font-bold shadow-[0_10px_28px_rgba(49,85,217,0.12)]"
+            type="button"
+            disabled={submissionsDisabled || !allRequiredImagesLoaded}
+            onClick={() => {
+              setSelectedTrait(null);
+              setPendingRedrawName(null);
+              void handleConfirm("confirm");
+            }}
+            className="rounded-[16px] bg-[var(--color-primary)] text-[var(--color-surface)] min-h-[56px] px-12 font-kid text-xl disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-105 active:scale-[0.98] transition-all font-bold shadow-[0_10px_28px_rgba(49,85,217,0.12)] focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
           >
-            They look great! Let&apos;s go!
+            Use these characters
           </button>
         </div>
         
         <div className="h-16 mt-8 flex items-center justify-center">
           <AnimatePresence>
-            {confirmError && (
+            {submissionState === "unknown" ? (
+              <motion.div
+                initial={{ opacity: 0, height: 0, scale: 0.9 }}
+                animate={{ opacity: 1, height: "auto", scale: 1 }}
+                exit={{ opacity: 0, height: 0, scale: 0.9 }}
+                role="alert"
+                className="flex flex-wrap items-center justify-center gap-3 rounded-xl bg-[var(--color-destructive)]/10 px-6 py-3 font-kid text-base text-[var(--color-destructive)]"
+              >
+                <p>We couldn&apos;t refresh your character choices. Try loading them again.</p>
+                <button
+                  type="button"
+                  onClick={() => void retryCharacterChoices()}
+                  disabled={isRetryingCharacterChoices}
+                  className="min-h-[44px] rounded-xl bg-[var(--color-surface)] px-4 py-2 font-bold text-foreground focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Load character choices again
+                </button>
+              </motion.div>
+            ) : confirmError && (
               <motion.p 
                 initial={{ opacity: 0, height: 0, scale: 0.9 }}
                 animate={{ opacity: 1, height: "auto", scale: 1 }}
@@ -383,7 +672,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                 role="alert" 
                 className="font-kid text-base text-[var(--color-destructive)] bg-[var(--color-destructive)]/10 px-6 py-3 rounded-xl"
               >
-                That didn&apos;t work — try once more.
+                We couldn&apos;t send that choice. Please try again.
               </motion.p>
             )}
           </AnimatePresence>
@@ -423,6 +712,11 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
          <div className="w-[600px] h-[600px] bg-[var(--color-secondary)]/20 rounded-full blur-[100px]" />
       </div>
 
+      {row && (
+        <p className="z-10 -mb-8 text-sm font-bold text-foreground/50 tracking-wide">
+          {displayTitle(row.title, row.input_text)}
+        </p>
+      )}
       <h1 className="z-10 mb-16 h-20 flex items-center justify-center font-display text-5xl md:text-6xl text-foreground tracking-tighter">
         <KineticText text="Making your book!" />
       </h1>
@@ -476,7 +770,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
             >
                <DrawingVignette />
                <h2 className="font-display text-3xl md:text-4xl text-foreground tracking-tight">
-                 Drawing it again…
+                 {pendingRedrawName ? `Redrawing ${pendingRedrawName}…` : "Redrawing your character…"}
                </h2>
             </motion.div>
           ) : (

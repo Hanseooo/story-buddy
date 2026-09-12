@@ -3,11 +3,13 @@ import uuid
 from typing import Literal
 
 import sentry_sdk
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
-from app.config import MIN_STORY_WORDS, SELECTABLE_STYLE_PRESET_IDS, settings
+from app.config import MAX_TITLE_CHARS, MIN_STORY_WORDS, SELECTABLE_STYLE_PRESET_IDS, settings
 from app.length import clamp_story, word_count
 from app.db import get_supabase_client
 from app.queue import get_queue
@@ -15,6 +17,7 @@ from app.auth import get_current_user, teacher_router
 import app.classrooms  # noqa: F401 — registers routes on teacher_router as side-effect
 import app.review  # noqa: F401 — registers routes on teacher_router as side-effect
 from app.avatar import AvatarRequest, patch_avatar
+from providers import check_text
 
 if settings.sentry_dsn_backend:
     sentry_sdk.init(dsn=settings.sentry_dsn_backend, traces_sample_rate=0.1)
@@ -43,12 +46,37 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.exception_handler(RequestValidationError)
+async def _validation_error_without_request_values(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """FastAPI's default 422 body carries `input` — the rejected value verbatim.
+
+    For `/storybooks` that value is an unchecked title or story, and a 422 body is a log, a
+    trace, and a Sentry breadcrumb (CC-5, story-titles §4: "Do not log request values in
+    validation errors"). The field location and message are what a client needs to show a
+    field error; the value it just sent is not.
+    """
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": [
+                {"type": error["type"], "loc": error["loc"], "msg": error["msg"]}
+                for error in exc.errors()
+            ]
+        },
+    )
+
 app.include_router(teacher_router)
 
 
 class CreateStorybookRequest(BaseModel):
     text: str
+    title: str
     style_preset_id: str | None = None
+    # Set only on a resubmission after a 409 asked the child to confirm a redacted title.
+    title_ack: str | None = None
 
     @field_validator("text")
     @classmethod
@@ -56,6 +84,19 @@ class CreateStorybookRequest(BaseModel):
         if word_count(v) < MIN_STORY_WORDS:
             raise ValueError(f"Story text must be at least {MIN_STORY_WORDS} words")
         return v
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, v: str) -> str:
+        # Reject before trimming: an embedded newline is invalid regardless of outer whitespace.
+        if "\n" in v or "\r" in v:
+            raise ValueError("Title must be a single line")
+        trimmed = v.strip()
+        if len(trimmed) < 1:
+            raise ValueError("Give your story a title.")
+        if len(trimmed) > MAX_TITLE_CHARS:
+            raise ValueError(f"Keep your title to {MAX_TITLE_CHARS} characters.")
+        return trimmed
 
     @field_validator("style_preset_id")
     @classmethod
@@ -93,12 +134,8 @@ def health() -> dict:
 def create_storybook(
     payload: CreateStorybookRequest, user=Depends(get_current_user)
 ) -> CreateStorybookResponse:
-    job_id = str(uuid.uuid4())
-    before = word_count(payload.text)
-    text, truncated = clamp_story(payload.text)
-    if truncated:
-        # CC-5: log counts only, never the text (ADR-025 D5).
-        _log.info("story truncated: %d words → %d words", before, word_count(text))
+    # Authorization before moderation: `check_text` is two classifier calls plus Presidio, and
+    # billing them for a caller who is about to get a 403 is paid work for a rejected request.
     supabase = get_supabase_client()
     profile_rows = (
         supabase.table("profiles").select("classroom_id").eq("id", user.id).execute().data
@@ -106,12 +143,32 @@ def create_storybook(
     if not profile_rows or profile_rows[0]["classroom_id"] is None:
         raise HTTPException(403, "only students can submit stories")
     classroom_id = profile_rows[0]["classroom_id"]
+
+    # ADR-059: checked synchronously, before any write, and never via input_gate/StoryMemory —
+    # the title is job metadata, not pipeline input.
+    title_safe, _title_categories, checked_title = check_text(payload.title)
+    if not title_safe:
+        raise HTTPException(422, "that title isn't allowed")
+    if len(checked_title) < 1 or len(checked_title) > MAX_TITLE_CHARS:
+        raise HTTPException(422, "give your story a different title")
+    if checked_title != payload.title and payload.title_ack != checked_title:
+        # Redaction changed the title and the child hasn't confirmed this exact string yet
+        # (ADR-059 Decision 4) — nothing written, no silent post-submit rename.
+        raise HTTPException(409, {"checked_title": checked_title})
+
+    job_id = str(uuid.uuid4())
+    before = word_count(payload.text)
+    text, truncated = clamp_story(payload.text)
+    if truncated:
+        # CC-5: log counts only, never the text (ADR-025 D5).
+        _log.info("story truncated: %d words → %d words", before, word_count(text))
     supabase.table("jobs").insert(
         {
             "id": job_id,
             "status": "queued",
             "current_stage": "queued",
             "input_text": text,
+            "title": checked_title,
             "truncated": truncated,
             "style_preset_id": payload.style_preset_id or "gouache",
             "profile_id": user.id,

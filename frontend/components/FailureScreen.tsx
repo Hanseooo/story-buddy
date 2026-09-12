@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, ReactNode } from "react";
+import { useState, useId, useEffect, useRef, ReactNode } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Wrench, Gear, MagnifyingGlass, PencilSimple, BookOpen, Copy, Check } from "@phosphor-icons/react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import { FailureReason } from "@/lib/types/jobs";
+import { resolveFailureCopy, RETRY_CONSEQUENCE } from "@/lib/failureCopy";
+import { displayTitle } from "@/lib/displayTitle";
 
-export type FailureKind = "revise" | "retry" | "not-found" | "asleep";
+export type FailureKind = "revise" | "retry" | "not-found" | "asleep" | "read-failed";
 
 const CHAIN_KEY = "sb.failChain";
 const PREFILL_KEY = "sb.prefill";
@@ -35,19 +37,28 @@ type Props = {
   reason?: FailureReason | string | null;
   jobId?: string;
   inputText?: string;
+  title?: string | null;
   stylePresetId?: string | null;
   countable?: boolean;
+  onReload?: () => void;
 };
 
 function StoryReference({ jobId }: { jobId: string }) {
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
 
-  const handleCopy = () => {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(jobId);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+  // The write is a promise: an unawaited call showed "Copied!" for a denied clipboard permission
+  // or an insecure context — the one thing a child cannot check for themselves (spec §4).
+  const handleCopy = async () => {
+    try {
+      if (typeof navigator === "undefined" || !navigator.clipboard) {
+        throw new Error("clipboard unavailable");
+      }
+      await navigator.clipboard.writeText(jobId);
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
     }
+    window.setTimeout(() => setCopyState("idle"), 4000);
   };
 
   return (
@@ -61,19 +72,29 @@ function StoryReference({ jobId }: { jobId: string }) {
           onClick={handleCopy}
           className="ml-2 inline-flex items-center gap-1 min-h-[44px] min-w-[44px] px-2.5 py-1 text-xs font-kid font-bold text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 rounded-lg transition-colors focus-visible:outline-[var(--color-secondary)] focus-visible:outline-2"
         >
-          {copied ? (
-            <>
-              <Check size={16} weight="bold" className="text-emerald-600" />
-              <span className="text-emerald-700">Copied!</span>
-            </>
+          {copyState === "copied" ? (
+            <Check size={16} weight="bold" className="text-[var(--color-success)]" />
           ) : (
-            <>
-              <Copy size={16} weight="bold" />
-              <span>Copy full ID</span>
-            </>
+            <Copy size={16} weight="bold" />
           )}
+          <span>Copy full ID</span>
         </button>
       </div>
+      {/* The `aria-label` above is the button’s accessible name in every state, so a result swapped
+          in as its content is never announced — the one thing a child cannot check for themselves.
+          It goes in a region that exists from first render instead (spec §4, DESIGN.md §11). */}
+      <p
+        role="status"
+        className={`font-kid text-sm min-h-[1.25rem] max-w-[36ch] leading-snug ${
+          copyState === "failed" ? "text-[var(--color-destructive)]" : "text-[var(--color-success)]"
+        }`}
+      >
+        {copyState === "copied"
+          ? "Copied!"
+          : copyState === "failed"
+          ? "Couldn’t copy — write the reference down."
+          : ""}
+      </p>
     </div>
   );
 }
@@ -87,8 +108,11 @@ function FailureCard({
   submitting,
   secondaryAction,
   error,
+  errorMessage,
+  contextTitle,
   jobId,
   profileId,
+  retryNote = false,
 }: {
   icon: ReactNode;
   title: string;
@@ -98,12 +122,23 @@ function FailureCard({
   submitting: boolean;
   secondaryAction?: ReactNode;
   error?: boolean;
+  errorMessage?: string;
+  contextTitle?: string;
   jobId?: string;
   profileId?: string;
+  retryNote?: boolean;
 }) {
+  const noteId = useId();
+  // Arrival is announced by focusing the cause heading, not by wrapping the whole screen in an
+  // alert. The process page swaps this screen in with no route change, and an alert around the
+  // card made the retry-failure message a second, nested alert (spec §6: announce errors once).
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
+
   return (
     <div
-      role="alert"
       className="w-full flex-1 min-h-[calc(100dvh-5rem)] bg-[var(--background)] flex flex-col items-center justify-center px-6 py-8 text-center overflow-x-hidden selection:bg-[var(--color-primary)] selection:text-[var(--color-surface)]"
     >
       <motion.div 
@@ -124,7 +159,16 @@ function FailureCard({
 
         {/* Copy */}
         <div className="flex flex-col gap-4">
-          <h2 className="font-display text-4xl md:text-5xl font-extrabold text-[var(--foreground)] tracking-tight leading-tight">
+          {contextTitle && (
+            <p className="font-kid text-sm font-bold tracking-wide text-[var(--foreground)]/50 truncate max-w-[40ch] mx-auto">
+              {contextTitle}
+            </p>
+          )}
+          <h2
+            ref={headingRef}
+            tabIndex={-1}
+            className="font-display text-4xl md:text-5xl font-extrabold text-[var(--foreground)] tracking-tight leading-tight outline-none"
+          >
             {title}
           </h2>
           {subtext && (
@@ -140,13 +184,24 @@ function FailureCard({
         {/* Actions */}
         <div className="flex flex-col items-center w-full max-w-sm gap-5 mt-8 md:mt-10">
           {buttonLabel && onAction && (
-            <button
-              className="w-full bg-[var(--color-primary)] text-[var(--color-surface)] rounded-2xl min-h-[56px] px-8 py-4 font-kid font-extrabold text-lg shadow-sm hover:bg-[var(--color-primary-deep)] active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed focus-visible:outline-[var(--color-secondary)] focus-visible:outline-3 focus-visible:outline-offset-3"
-              onClick={onAction}
-              disabled={submitting}
-            >
-              {buttonLabel}
-            </button>
+            <>
+              {retryNote && (
+                <p
+                  id={noteId}
+                  className="font-kid text-base text-[var(--foreground)]/70 max-w-[36ch] leading-snug"
+                >
+                  {RETRY_CONSEQUENCE}
+                </p>
+              )}
+              <button
+                className="w-full bg-[var(--color-primary)] text-[var(--color-surface)] rounded-2xl min-h-[56px] px-8 py-4 font-kid font-extrabold text-lg shadow-sm hover:bg-[var(--color-primary-deep)] active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed focus-visible:outline-[var(--color-secondary)] focus-visible:outline-3 focus-visible:outline-offset-3"
+                onClick={onAction}
+                disabled={submitting}
+                aria-describedby={retryNote ? noteId : undefined}
+              >
+                {buttonLabel}
+              </button>
+            </>
           )}
           {secondaryAction}
           {profileId && (
@@ -159,6 +214,10 @@ function FailureCard({
           )}
         </div>
 
+        <p role="status" className="sr-only">
+          {submitting ? "Starting your book again…" : ""}
+        </p>
+
         <div className="mt-6 min-h-[56px] flex items-start justify-center w-full max-w-sm">
           <AnimatePresence>
             {error && (
@@ -169,7 +228,7 @@ function FailureCard({
                 role="alert"
                 className="font-kid text-base text-[var(--color-destructive)] bg-[var(--color-destructive)]/10 px-5 py-3 rounded-xl leading-snug"
               >
-                That didn&apos;t work either. You can try once more, or write something new.
+                {errorMessage ?? "That didn't work either. You can try once more, or write something new."}
               </motion.p>
             )}
           </AnimatePresence>
@@ -268,17 +327,27 @@ export default function FailureScreen({
   reason,
   jobId,
   inputText = "",
+  title = null,
   stylePresetId = null,
   countable = true,
+  onReload,
 }: Props) {
   const router = useRouter();
   const params = useParams();
   const profileId = (params as { profileId?: string })?.profileId;
   const [submitting, setSubmitting] = useState(false);
   const [retryFailed, setRetryFailed] = useState(false);
+  const [transferFailed, setTransferFailed] = useState(false);
   const chainCount = getChainCount();
+  const contextTitle = (title?.trim() || inputText.trim())
+    ? displayTitle(title, inputText)
+    : undefined;
 
   async function submitRetry() {
+    if (!title || title.trim() === "") {
+      stashPrefillAndOpenWrite();
+      return;
+    }
     setSubmitting(true);
     setRetryFailed(false);
     try {
@@ -292,7 +361,7 @@ export default function FailureScreen({
         },
         // The redo is a brand-new job, so the style has to be re-sent or a legacy row with null style
         // would fall back to the new "gouache" default and the child's book would be silently re-styled.
-        body: JSON.stringify({ text: inputText, style_preset_id: stylePresetId ?? "cel" }),
+        body: JSON.stringify({ text: inputText, title, style_preset_id: stylePresetId ?? "cel" }),
       });
       if (!res.ok) {
         setRetryFailed(true);
@@ -305,6 +374,27 @@ export default function FailureScreen({
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function stashPrefillAndOpenWrite() {
+    const suggestedTitle = title && title.trim() !== ""
+      ? title
+      : inputText.split("\n")[0].slice(0, 60);
+    setTransferFailed(false);
+    try {
+      sessionStorage.setItem(
+        PREFILL_KEY,
+        JSON.stringify({
+          text: inputText,
+          title: suggestedTitle,
+          ...(stylePresetId ? { style_preset_id: stylePresetId } : {}),
+        })
+      );
+    } catch {
+      setTransferFailed(true);
+      return;
+    }
+    router.push(profileId ? `/s/${profileId}/write` : "/write");
   }
 
   const writeSomethingNew = (
@@ -330,8 +420,7 @@ export default function FailureScreen({
   const handleRevise = () => {
     const count = countable ? bumpChain() : chainCount;
     console.log("sb:action", { action: "revise", kind, chain_count: count });
-    try { sessionStorage.setItem(PREFILL_KEY, inputText); } catch { /* unavailable */ }
-    router.push(profileId ? `/s/${profileId}/write` : "/write");
+    stashPrefillAndOpenWrite();
   };
 
   // A machine failure is never the child's fault, so both ways out are offered side by side from
@@ -348,120 +437,31 @@ export default function FailureScreen({
   // spec §3 requires old, null, and unrecognized values to render as `system_error`, so only an
   // omitted prop (a frontend-side failure with no job row behind it) falls through to `kind`.
   if (reason !== undefined) {
-    if (reason === "child_text") {
-      return (
-        <FailureCard
-          icon={<ReviseVignette />}
-          title="Some words need changing before we can make this book."
-          buttonLabel="Change my words"
-          submitting={submitting}
-          onAction={handleRevise}
-          secondaryAction={tryDifferent}
-          jobId={jobId}
-          profileId={profileId}
-        />
-      );
-    }
-    if (reason === "character_safety") {
-      return (
-        <FailureCard
-          icon={<RetryVignette />}
-          title="We couldn’t safely use the character picture we made. Your words aren’t in trouble."
-          buttonLabel={submitting ? "Starting…" : "Make the story again"}
-          submitting={submitting}
-          onAction={handleRetry}
-          secondaryAction={writeSomethingNew}
-          error={retryFailed}
-          jobId={jobId}
-          profileId={profileId}
-        />
-      );
-    }
-    if (reason === "scene_safety") {
-      return (
-        <FailureCard
-          icon={<RetryVignette />}
-          title="One of the pictures we made couldn’t be used."
-          buttonLabel={submitting ? "Starting…" : "Make the story again"}
-          submitting={submitting}
-          onAction={handleRetry}
-          secondaryAction={writeSomethingNew}
-          error={retryFailed}
-          jobId={jobId}
-          profileId={profileId}
-        />
-      );
-    }
-    if (reason === "service_busy") {
-      return (
-        <FailureCard
-          icon={<RetryVignette />}
-          title="The story-making service is busy right now."
-          buttonLabel={submitting ? "Starting…" : "Try again"}
-          submitting={submitting}
-          onAction={handleRetry}
-          secondaryAction={writeSomethingNew}
-          error={retryFailed}
-          jobId={jobId}
-          profileId={profileId}
-        />
-      );
-    }
-    if (reason === "worker_stopped") {
-      return (
-        <FailureCard
-          icon={<RetryVignette />}
-          title="The story maker stopped before it finished."
-          buttonLabel={submitting ? "Starting…" : "Try again"}
-          submitting={submitting}
-          onAction={handleRetry}
-          secondaryAction={writeSomethingNew}
-          error={retryFailed}
-          jobId={jobId}
-          profileId={profileId}
-        />
-      );
-    }
-    if (reason === "service_limit") {
-      return (
-        <FailureCard
-          icon={<RetryVignette />}
-          title="The story-making allowance has run out."
-          subtext="Ask a teacher to help."
-          buttonLabel={null}
-          submitting={submitting}
-          secondaryAction={writeSomethingNew}
-          jobId={jobId}
-          profileId={profileId}
-        />
-      );
-    }
-    if (reason === "book_limit") {
-      return (
-        <FailureCard
-          icon={<RetryVignette />}
-          title="This book reached its picture-making limit."
-          subtext="Ask a teacher to help."
-          buttonLabel={null}
-          submitting={submitting}
-          secondaryAction={writeSomethingNew}
-          jobId={jobId}
-          profileId={profileId}
-        />
-      );
-    }
-    // Fallback: system_error and unknown/legacy values ("machine", null, etc.)
+    const copy = resolveFailureCopy(reason);
+    const isRevise = copy.action === "revise";
+    const isRetry = copy.action === "retry";
+    // `action: "none"` is the two limit reasons. `failure-diagnostics.md` CC-3: "persistent limit
+    // reasons cannot start another paid run from the error screen" — and a link to the write form
+    // is a paid run with one extra click, so the screen keeps only the reference and the way out.
+    // Spec §4's "Write something new remains available under existing rules" is that rule.
+    const startsAPaidRun = copy.action !== "none";
     return (
       <FailureCard
-        icon={<RetryVignette />}
-        title="Something interrupted your story."
-        buttonLabel={submitting ? "Starting…" : "Try again"}
+        icon={isRevise ? <ReviseVignette /> : <RetryVignette />}
+        title={copy.heading}
+        subtext={copy.explanation}
+        buttonLabel={submitting && isRetry ? "Starting…" : copy.actionLabel}
         submitting={submitting}
-        onAction={handleRetry}
-        secondaryAction={writeSomethingNew}
-        error={retryFailed}
+        onAction={isRevise ? handleRevise : isRetry ? handleRetry : undefined}
+        secondaryAction={isRevise ? tryDifferent : startsAPaidRun ? writeSomethingNew : undefined}
+        error={isRevise ? transferFailed : isRetry ? retryFailed || transferFailed : undefined}
+        errorMessage={
+          transferFailed ? "We couldn't carry your story to the editor. Try again, or write something new." : undefined
+        }
+        contextTitle={contextTitle}
         jobId={jobId}
         profileId={profileId}
+        retryNote={isRetry}
       />
     );
   }
@@ -477,6 +477,29 @@ export default function FailureScreen({
         submitting={submitting}
         onAction={handleRevise}
         secondaryAction={tryDifferent}
+        error={transferFailed}
+        errorMessage={transferFailed ? "We couldn't carry your story to the editor. Try again, or write something new." : undefined}
+        contextTitle={contextTitle}
+        jobId={jobId}
+        profileId={profileId}
+      />
+    );
+  }
+
+  // A finished book whose pictures will not sign. The row is `complete`, the pages are real, and
+  // there is no failure_reason — the job never failed (kid-flow-failure-semantics §4.7). Re-signing
+  // is the correct-cost fix; offering a rebuild here would redraw an N-page book to repair an
+  // expired link (spec §4). No `reason` reaches this screen, so nothing routes to the taxonomy.
+  if (kind === "read-failed") {
+    return (
+      <FailureCard
+        icon={<RetryVignette />}
+        title="We couldn’t open your book."
+        subtext="Your book is finished — we just couldn’t load its pictures. Try opening it again."
+        buttonLabel="Try opening it again"
+        onAction={onReload}
+        submitting={false}
+        contextTitle={contextTitle}
         jobId={jobId}
         profileId={profileId}
       />
@@ -507,9 +530,12 @@ export default function FailureScreen({
         submitting={submitting}
         onAction={submitRetry}
         secondaryAction={writeSomethingNew}
-        error={retryFailed}
+        error={retryFailed || transferFailed}
+        errorMessage={transferFailed ? "We couldn't carry your story to the editor. Try again, or write something new." : undefined}
+        contextTitle={contextTitle}
         jobId={jobId}
         profileId={profileId}
+        retryNote
       />
     );
   }
@@ -524,9 +550,12 @@ export default function FailureScreen({
       submitting={submitting}
       onAction={handleRetry}
       secondaryAction={writeSomethingNew}
-      error={retryFailed}
+      error={retryFailed || transferFailed}
+      errorMessage={transferFailed ? "We couldn't carry your story to the editor. Try again, or write something new." : undefined}
+      contextTitle={contextTitle}
       jobId={jobId}
       profileId={profileId}
+      retryNote
     />
   );
 }

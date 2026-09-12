@@ -24,6 +24,7 @@ export type Job = {
   rejected_at: string | null;
   created_at: string;
   input_text: string;
+  title: string | null;
   pages: JobPage[] | null;
   profile_id: string;
   profiles: { display_nickname: string; avatar_id: string | null } | null;

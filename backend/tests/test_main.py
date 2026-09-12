@@ -31,8 +31,11 @@ def test_create_storybook_inserts_job_and_enqueues():
     fake_queue = MagicMock()
 
     with patch("app.main.get_supabase_client", return_value=fake_supabase), \
-         patch("app.main.get_queue", return_value=fake_queue):
-        response = client.post("/storybooks", json={"text": "A dog runs in a field."})
+         patch("app.main.get_queue", return_value=fake_queue), \
+         patch("app.main.check_text", return_value=(True, [], "My Story")):
+        response = client.post(
+            "/storybooks", json={"text": "A dog runs in a field.", "title": "My Story"}
+        )
 
     assert response.status_code == 200
     job_id = response.json()["job_id"]
@@ -41,6 +44,7 @@ def test_create_storybook_inserts_job_and_enqueues():
     fake_supabase.table.assert_called_with("jobs")
     insert_call_args = fake_supabase.table.return_value.insert.call_args[0][0]
     assert insert_call_args["input_text"] == "A dog runs in a field."
+    assert insert_call_args["title"] == "My Story"
     assert insert_call_args["id"] == job_id
 
     fake_queue.enqueue.assert_called_once_with("worker.run_job.run_storybook_job", job_id, job_timeout=JOB_TIMEOUT_SECONDS)
@@ -55,8 +59,12 @@ def test_create_storybook_deletes_the_job_row_and_returns_503_when_enqueue_raise
     fake_queue = MagicMock()
     fake_queue.enqueue.side_effect = RuntimeError("redis down")
 
-    with patch("app.main.get_supabase_client", return_value=fake_supabase),          patch("app.main.get_queue", return_value=fake_queue):
-        response = client.post("/storybooks", json={"text": "A dog runs in a field."})
+    with patch("app.main.get_supabase_client", return_value=fake_supabase), \
+         patch("app.main.get_queue", return_value=fake_queue), \
+         patch("app.main.check_text", return_value=(True, [], "My Story")):
+        response = client.post(
+            "/storybooks", json={"text": "A dog runs in a field.", "title": "My Story"}
+        )
 
     assert response.status_code == 503
     fake_supabase.table.return_value.delete.assert_called_once()
@@ -69,7 +77,14 @@ def test_create_storybook_rejects_comic_style_preset_with_422():
 
     with patch("app.main.get_supabase_client", return_value=fake_supabase), \
          patch("app.main.get_queue", return_value=fake_queue):
-        response = client.post("/storybooks", json={"text": "A dog runs in a field.", "style_preset_id": "comic"})
+        response = client.post(
+            "/storybooks",
+            json={
+                "text": "A dog runs in a field.",
+                "title": "My Story",
+                "style_preset_id": "comic",
+            },
+        )
 
     assert response.status_code == 422
     fake_supabase.table.return_value.insert.assert_not_called()
@@ -80,7 +95,14 @@ def test_create_storybook_rejects_unknown_style_preset_with_422():
     fake_queue = MagicMock()
     with patch("app.main.get_supabase_client", return_value=fake_supabase), \
          patch("app.main.get_queue", return_value=fake_queue):
-        response = client.post("/storybooks", json={"text": "A dog runs in a field.", "style_preset_id": "watercolour"})
+        response = client.post(
+            "/storybooks",
+            json={
+                "text": "A dog runs in a field.",
+                "title": "My Story",
+                "style_preset_id": "watercolour",
+            },
+        )
     assert response.status_code == 422
     fake_supabase.table.return_value.insert.assert_not_called()
 
@@ -90,7 +112,14 @@ def test_create_storybook_rejects_empty_string_style_preset_with_422():
     fake_queue = MagicMock()
     with patch("app.main.get_supabase_client", return_value=fake_supabase), \
          patch("app.main.get_queue", return_value=fake_queue):
-        response = client.post("/storybooks", json={"text": "A dog runs in a field.", "style_preset_id": ""})
+        response = client.post(
+            "/storybooks",
+            json={
+                "text": "A dog runs in a field.",
+                "title": "My Story",
+                "style_preset_id": "",
+            },
+        )
     assert response.status_code == 422
     fake_supabase.table.return_value.insert.assert_not_called()
 
@@ -100,8 +129,11 @@ def test_create_storybook_omitting_style_preset_stores_gouache():
     fake_queue = MagicMock()
 
     with patch("app.main.get_supabase_client", return_value=fake_supabase), \
-         patch("app.main.get_queue", return_value=fake_queue):
-        response = client.post("/storybooks", json={"text": "A dog runs in a field."})
+         patch("app.main.get_queue", return_value=fake_queue), \
+         patch("app.main.check_text", return_value=(True, [], "My Story")):
+        response = client.post(
+            "/storybooks", json={"text": "A dog runs in a field.", "title": "My Story"}
+        )
 
     assert response.status_code == 200
     insert_args = fake_supabase.table.return_value.insert.call_args[0][0]
@@ -113,10 +145,15 @@ def test_create_storybook_null_style_preset_stores_gouache():
     fake_queue = MagicMock()
 
     with patch("app.main.get_supabase_client", return_value=fake_supabase), \
-         patch("app.main.get_queue", return_value=fake_queue):
+         patch("app.main.get_queue", return_value=fake_queue), \
+         patch("app.main.check_text", return_value=(True, [], "My Story")):
         response = client.post(
             "/storybooks",
-            json={"text": "A dog runs in a field.", "style_preset_id": None},
+            json={
+                "text": "A dog runs in a field.",
+                "title": "My Story",
+                "style_preset_id": None,
+            },
         )
 
     assert response.status_code == 200
@@ -130,15 +167,223 @@ def test_create_storybook_accepts_cut_paper_style_preset():
     fake_queue = MagicMock()
 
     with patch("app.main.get_supabase_client", return_value=fake_supabase), \
-         patch("app.main.get_queue", return_value=fake_queue):
+         patch("app.main.get_queue", return_value=fake_queue), \
+         patch("app.main.check_text", return_value=(True, [], "My Story")):
         response = client.post(
             "/storybooks",
-            json={"text": "A dog runs in a field.", "style_preset_id": "cut_paper"},
+            json={
+                "text": "A dog runs in a field.",
+                "title": "My Story",
+                "style_preset_id": "cut_paper",
+            },
         )
 
     assert response.status_code == 200
     insert_args = fake_supabase.table.return_value.insert.call_args[0][0]
     assert insert_args["style_preset_id"] == "cut_paper"
+
+
+# --- story-titles spec §3: title field validation ---
+
+def test_create_storybook_requires_title():
+    fake_supabase = MagicMock()
+    fake_queue = MagicMock()
+    with patch("app.main.get_supabase_client", return_value=fake_supabase), \
+         patch("app.main.get_queue", return_value=fake_queue):
+        response = client.post("/storybooks", json={"text": "A dog runs in a field."})
+    assert response.status_code == 422
+    fake_supabase.table.return_value.insert.assert_not_called()
+
+
+def test_create_storybook_rejects_empty_title():
+    fake_supabase = MagicMock()
+    fake_queue = MagicMock()
+    with patch("app.main.get_supabase_client", return_value=fake_supabase), \
+         patch("app.main.get_queue", return_value=fake_queue):
+        response = client.post(
+            "/storybooks", json={"text": "A dog runs in a field.", "title": "   "}
+        )
+    assert response.status_code == 422
+    fake_supabase.table.return_value.insert.assert_not_called()
+
+
+def test_create_storybook_rejects_title_over_80_chars():
+    fake_supabase = MagicMock()
+    fake_queue = MagicMock()
+    with patch("app.main.get_supabase_client", return_value=fake_supabase), \
+         patch("app.main.get_queue", return_value=fake_queue):
+        response = client.post(
+            "/storybooks",
+            json={"text": "A dog runs in a field.", "title": "x" * 81},
+        )
+    assert response.status_code == 422
+    fake_supabase.table.return_value.insert.assert_not_called()
+
+
+def test_create_storybook_accepts_title_at_exactly_80_chars():
+    fake_supabase = MagicMock()
+    fake_queue = MagicMock()
+    with patch("app.main.get_supabase_client", return_value=fake_supabase), \
+         patch("app.main.get_queue", return_value=fake_queue), \
+         patch("app.main.check_text", return_value=(True, [], "x" * 80)):
+        response = client.post(
+            "/storybooks",
+            json={"text": "A dog runs in a field.", "title": "x" * 80},
+        )
+    assert response.status_code == 200
+
+
+# spec §3: "Count Unicode code points consistently in client and server, not UTF-16 units."
+# The dragon is one code point and two UTF-16 units, so a server counting UTF-16 would reject
+# the 80 the client's Array.from counter told the child was fine.
+def test_create_storybook_accepts_80_astral_code_points():
+    title = "🐉" * 80
+    fake_supabase = MagicMock()
+    fake_queue = MagicMock()
+    with patch("app.main.get_supabase_client", return_value=fake_supabase),          patch("app.main.get_queue", return_value=fake_queue),          patch("app.main.check_text", return_value=(True, [], title)):
+        response = client.post(
+            "/storybooks",
+            json={"text": "A dog runs in a field.", "title": title},
+        )
+    assert response.status_code == 200
+
+
+def test_create_storybook_rejects_81_astral_code_points():
+    fake_supabase = MagicMock()
+    fake_queue = MagicMock()
+    with patch("app.main.get_supabase_client", return_value=fake_supabase),          patch("app.main.get_queue", return_value=fake_queue):
+        response = client.post(
+            "/storybooks",
+            json={"text": "A dog runs in a field.", "title": "🐉" * 81},
+        )
+    assert response.status_code == 422
+    fake_supabase.table.return_value.insert.assert_not_called()
+
+
+def test_create_storybook_rejects_title_with_embedded_newline():
+    fake_supabase = MagicMock()
+    fake_queue = MagicMock()
+    with patch("app.main.get_supabase_client", return_value=fake_supabase), \
+         patch("app.main.get_queue", return_value=fake_queue):
+        response = client.post(
+            "/storybooks", json={"text": "A dog runs in a field.", "title": "My Book\nPart Two"}
+        )
+    assert response.status_code == 422
+    fake_supabase.table.return_value.insert.assert_not_called()
+
+
+def test_create_storybook_trims_outer_whitespace_preserves_interior():
+    fake_supabase = MagicMock()
+    fake_queue = MagicMock()
+    with patch("app.main.get_supabase_client", return_value=fake_supabase), \
+         patch("app.main.get_queue", return_value=fake_queue), \
+         patch("app.main.check_text", return_value=(True, [], "My  Cool Book")) as check_text:
+        response = client.post(
+            "/storybooks", json={"text": "A dog runs in a field.", "title": "  My  Cool Book  "}
+        )
+    assert response.status_code == 200
+    check_text.assert_called_once_with("My  Cool Book")
+
+
+# --- story-titles spec §4: synchronous title check before persistence (ADR-059) ---
+
+def test_create_storybook_persists_checked_title_when_unchanged():
+    fake_supabase = MagicMock()
+    fake_queue = MagicMock()
+    with patch("app.main.get_supabase_client", return_value=fake_supabase), \
+         patch("app.main.get_queue", return_value=fake_queue), \
+         patch("app.main.check_text", return_value=(True, [], "My Dragon Book")) as check_text:
+        response = client.post(
+            "/storybooks",
+            json={"text": "A dog runs in a field.", "title": "My Dragon Book"},
+        )
+    assert response.status_code == 200
+    check_text.assert_called_once_with("My Dragon Book")
+    insert_args = fake_supabase.table.return_value.insert.call_args[0][0]
+    assert insert_args["title"] == "My Dragon Book"
+
+
+def test_create_storybook_rejects_unsafe_title_without_persisting():
+    fake_supabase = MagicMock()
+    fake_queue = MagicMock()
+    with patch("app.main.get_supabase_client", return_value=fake_supabase), \
+         patch("app.main.get_queue", return_value=fake_queue), \
+         patch("app.main.check_text", return_value=(False, ["violence"], "My Violent Book")):
+        response = client.post(
+            "/storybooks",
+            json={"text": "A dog runs in a field.", "title": "My Violent Book"},
+        )
+    assert response.status_code == 422
+    fake_supabase.table.return_value.insert.assert_not_called()
+    assert "My Violent Book" not in response.text
+
+
+def test_request_validation_error_does_not_echo_the_submitted_title():
+    """CC-5 / story-titles §4: an unchecked title must not reach logs or traces, and a 422
+    body is both. The unsafe-title path already withholds it; the pydantic path is the one
+    that used to hand the raw value straight back."""
+    unchecked = "call me at 09171234567 " + "x" * 70
+    response = client.post(
+        "/storybooks",
+        json={"text": "A dog runs in a field.", "title": unchecked},
+    )
+    assert response.status_code == 422
+    assert "09171234567" not in response.text
+    assert unchecked not in response.text
+    # The field and its message still reach the client — only the value is withheld.
+    assert "title" in response.text
+
+
+def test_create_storybook_returns_409_when_redaction_changes_title_unconfirmed():
+    fake_supabase = MagicMock()
+    fake_queue = MagicMock()
+    with patch("app.main.get_supabase_client", return_value=fake_supabase), \
+         patch("app.main.get_queue", return_value=fake_queue), \
+         patch("app.main.check_text", return_value=(True, [], "call me at <PH_MOBILE>")):
+        response = client.post(
+            "/storybooks",
+            json={"text": "A dog runs in a field.", "title": "call me at 09171234567"},
+        )
+    assert response.status_code == 409
+    assert response.json()["detail"]["checked_title"] == "call me at <PH_MOBILE>"
+    fake_supabase.table.return_value.insert.assert_not_called()
+
+
+def test_create_storybook_persists_redacted_title_when_ack_matches():
+    fake_supabase = MagicMock()
+    fake_queue = MagicMock()
+    with patch("app.main.get_supabase_client", return_value=fake_supabase), \
+         patch("app.main.get_queue", return_value=fake_queue), \
+         patch("app.main.check_text", return_value=(True, [], "call me at <PH_MOBILE>")):
+        response = client.post(
+            "/storybooks",
+            json={
+                "text": "A dog runs in a field.",
+                "title": "call me at 09171234567",
+                "title_ack": "call me at <PH_MOBILE>",
+            },
+        )
+    assert response.status_code == 200
+    insert_args = fake_supabase.table.return_value.insert.call_args[0][0]
+    assert insert_args["title"] == "call me at <PH_MOBILE>"
+
+
+def test_create_storybook_rejects_when_redaction_empties_the_title():
+    fake_supabase = MagicMock()
+    fake_queue = MagicMock()
+    with patch("app.main.get_supabase_client", return_value=fake_supabase), \
+         patch("app.main.get_queue", return_value=fake_queue), \
+         patch("app.main.check_text", return_value=(True, [], "")):
+        response = client.post(
+            "/storybooks",
+            json={
+                "text": "A dog runs in a field.",
+                "title": "09171234567",
+                "title_ack": "",
+            },
+        )
+    assert response.status_code == 422
+    fake_supabase.table.return_value.insert.assert_not_called()
 
 
 # --- input-gate-hardening spec: length guard (§4d) ---
@@ -148,7 +393,9 @@ def test_create_storybook_rejects_under_minimum_words_with_422():
     fake_queue = MagicMock()
     with patch("app.main.get_supabase_client", return_value=fake_supabase), \
          patch("app.main.get_queue", return_value=fake_queue):
-        response = client.post("/storybooks", json={"text": "too short"})
+        response = client.post(
+            "/storybooks", json={"text": "too short", "title": "My Story"}
+        )
     assert response.status_code == 422
     fake_supabase.table.return_value.insert.assert_not_called()
     fake_queue.enqueue.assert_not_called()
@@ -159,7 +406,7 @@ def test_create_storybook_rejects_empty_text_with_422():
     fake_queue = MagicMock()
     with patch("app.main.get_supabase_client", return_value=fake_supabase), \
          patch("app.main.get_queue", return_value=fake_queue):
-        response = client.post("/storybooks", json={"text": ""})
+        response = client.post("/storybooks", json={"text": "", "title": "My Story"})
     assert response.status_code == 422
     fake_supabase.table.return_value.insert.assert_not_called()
 
@@ -169,8 +416,11 @@ def test_create_storybook_clamps_over_max_words_and_marks_truncated():
     fake_queue = MagicMock()
     long_text = " ".join(f"w{i}" for i in range(900))
     with patch("app.main.get_supabase_client", return_value=fake_supabase), \
-         patch("app.main.get_queue", return_value=fake_queue):
-        response = client.post("/storybooks", json={"text": long_text})
+         patch("app.main.get_queue", return_value=fake_queue), \
+         patch("app.main.check_text", return_value=(True, [], "My Story")):
+        response = client.post(
+            "/storybooks", json={"text": long_text, "title": "My Story"}
+        )
 
     assert response.status_code == 200
     insert_args = fake_supabase.table.return_value.insert.call_args[0][0]
@@ -182,8 +432,11 @@ def test_create_storybook_normal_body_is_not_truncated():
     fake_supabase = MagicMock()
     fake_queue = MagicMock()
     with patch("app.main.get_supabase_client", return_value=fake_supabase), \
-         patch("app.main.get_queue", return_value=fake_queue):
-        response = client.post("/storybooks", json={"text": "A dog runs in a field."})
+         patch("app.main.get_queue", return_value=fake_queue), \
+         patch("app.main.check_text", return_value=(True, [], "My Story")):
+        response = client.post(
+            "/storybooks", json={"text": "A dog runs in a field.", "title": "My Story"}
+        )
 
     assert response.status_code == 200
     insert_args = fake_supabase.table.return_value.insert.call_args[0][0]
@@ -347,7 +600,9 @@ def test_confirm_rolls_back_the_cas_and_returns_503_when_enqueue_raises():
 
 def test_create_storybook_no_token_returns_401():
     app.dependency_overrides.pop(get_current_user, None)
-    response = client.post("/storybooks", json={"text": "A dog runs in a field."})
+    response = client.post(
+        "/storybooks", json={"text": "A dog runs in a field.", "title": "My Story"}
+    )
     assert response.status_code == 401
 
 
@@ -358,7 +613,7 @@ def test_create_storybook_bad_token_returns_401():
     with patch("app.auth.get_supabase_client", return_value=fake_supabase):
         response = client.post(
             "/storybooks",
-            json={"text": "A dog runs in a field."},
+            json={"text": "A dog runs in a field.", "title": "My Story"},
             headers={"Authorization": "Bearer bad-token"},
         )
     assert response.status_code == 401
@@ -369,8 +624,11 @@ def test_create_storybook_teacher_token_returns_403():
     fake_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [
         {"classroom_id": None}
     ]
-    with patch("app.main.get_supabase_client", return_value=fake_supabase):
-        response = client.post("/storybooks", json={"text": "A dog runs in a field."})
+    with patch("app.main.get_supabase_client", return_value=fake_supabase), \
+         patch("app.main.check_text", return_value=(True, [], "My Story")):
+        response = client.post(
+            "/storybooks", json={"text": "A dog runs in a field.", "title": "My Story"}
+        )
     assert response.status_code == 403
 
 

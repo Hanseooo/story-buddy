@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { resetFailChain } from "@/components/FailureScreen";
 import { supabase } from "@/lib/supabaseClient";
@@ -8,6 +8,7 @@ import { motion } from "framer-motion";
 
 const MIN_STORY_WORDS = 5;
 const MAX_STORY_WORDS = 300;
+const MAX_TITLE_CHARS = 80;
 
 const PREFILL_KEY = "sb.prefill";
 const CHAIN_KEY = "sb.failChain";
@@ -17,6 +18,7 @@ const STYLE_PRESETS = [
   { id: "gouache", label: "Painted" },
   { id: "cut_paper", label: "Paper Cutout" },
 ] as const;
+type StylePresetId = (typeof STYLE_PRESETS)[number]["id"];
 
 function countWords(text: string): number {
   const trimmed = text.trim();
@@ -25,24 +27,55 @@ function countWords(text: string): number {
 
 export default function WriteStoryPage() {
   const [text, setText] = useState("");
+  const [title, setTitle] = useState("");
+  const [titleError, setTitleError] = useState<string | null>(null);
+  const [pendingRedactedTitle, setPendingRedactedTitle] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [postError, setPostError] = useState(false);
   const [chainCount, setChainCount] = useState(0);
+  const [stylePresetId, setStylePresetId] = useState<StylePresetId>("gouache");
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const redactionPanelRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const { profileId } = useParams() as { profileId: string };
 
   useEffect(() => {
-    let prefill: string | null = null;
+    let prefill: { text: string; title: string; stylePresetId?: StylePresetId } | null = null;
     try {
-      prefill = sessionStorage.getItem(PREFILL_KEY);
-      if (prefill !== null) {
+      const raw = sessionStorage.getItem(PREFILL_KEY);
+      if (raw !== null) {
         sessionStorage.removeItem(PREFILL_KEY);
+        const parsed: unknown = JSON.parse(raw);
+        if (
+          typeof parsed === "object" &&
+          parsed !== null &&
+          "text" in parsed &&
+          "title" in parsed &&
+          typeof parsed.text === "string" &&
+          typeof parsed.title === "string"
+        ) {
+          const storedStyle =
+            "style_preset_id" in parsed && typeof parsed.style_preset_id === "string"
+              ? parsed.style_preset_id
+              : null;
+          const stylePresetId = STYLE_PRESETS.some(({ id }) => id === storedStyle)
+            ? (storedStyle as StylePresetId)
+            : undefined;
+          prefill = {
+            text: parsed.text,
+            title: parsed.title,
+            ...(stylePresetId !== undefined ? { stylePresetId } : {}),
+          };
+        }
       }
-    } catch { /* storage unavailable */ }
+    } catch { /* storage unavailable or malformed */ }
 
     if (prefill !== null) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setText(prefill);
+      setText(prefill.text);
+      setTitle(prefill.title);
+      if (prefill.stylePresetId !== undefined) setStylePresetId(prefill.stylePresetId);
       try {
         setChainCount(Number(sessionStorage.getItem(CHAIN_KEY) ?? 0));
       } catch { /* unavailable */ }
@@ -55,43 +88,157 @@ export default function WriteStoryPage() {
   const overCap = wordCount > MAX_STORY_WORDS;
   const progress = Math.min((wordCount / MIN_STORY_WORDS) * 100, 100);
 
+  // The panel blocks a paid submission, so focus has to land on it (CC-6) — announcing it in a
+  // live region is not enough when the next action is inside it.
+  useEffect(() => {
+    if (pendingRedactedTitle !== null) redactionPanelRef.current?.focus();
+  }, [pendingRedactedTitle]);
+
+  function focusTitle() {
+    titleInputRef.current?.focus();
+  }
+
+  function dismissRedactedTitle() {
+    setPendingRedactedTitle(null);
+    focusTitle();
+  }
+
+  async function postStorybook(titleAck?: string) {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    return fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/storybooks`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session?.access_token}`,
+      },
+      body: JSON.stringify({
+        text,
+        title: title.trim(),
+        style_preset_id: stylePresetId,
+        ...(titleAck !== undefined ? { title_ack: titleAck } : {}),
+      }),
+    });
+  }
+
+  async function afterSubmit(res: Response) {
+    if (res.status === 409) {
+      const data = await res.json();
+      const checkedTitle = data?.detail?.checked_title;
+      if (typeof checkedTitle === "string") {
+        setPendingRedactedTitle(checkedTitle);
+      } else {
+        setPostError(true);
+      }
+      return;
+    }
+    if (!res.ok) {
+      // A checked title the server refused is not a transport failure (spec §3): inviting a retry
+      // of the same title would just spend another submission on the same rejection. Ask for a
+      // different title and keep the story (spec §4). A pydantic 422 carries a list, not a string,
+      // and stays a generic error so no request value is echoed at the child.
+      const detail = await res.json().then((body) => body?.detail).catch(() => null);
+      if (res.status === 422 && typeof detail === "string") {
+        setPendingRedactedTitle(null);
+        setTitleError("Try a different title.");
+        focusTitle();
+        return;
+      }
+      setPostError(true);
+      return;
+    }
+    const data = await res.json();
+    router.push(`/s/${profileId}/process/${data.job_id}`);
+  }
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (submitting) return;
+    const trimmedTitle = title.trim();
+    setTitleError(null);
+    if (trimmedTitle.length === 0) {
+      setTitleError("Give your story a title.");
+      focusTitle();
+      return;
+    }
+    if (Array.from(trimmedTitle).length > MAX_TITLE_CHARS) {
+      setTitleError(`Keep your title to ${MAX_TITLE_CHARS} characters.`);
+      focusTitle();
+      return;
+    }
     if (wordCount < MIN_STORY_WORDS) return;
-
-    // ponytail: the radios are uncontrolled — FormData reads the choice, no useState needed.
-    const stylePresetId = new FormData(e.currentTarget).get("style_preset_id");
 
     setSubmitting(true);
     setPostError(false);
+    setPendingRedactedTitle(null);
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/storybooks`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session?.access_token}`,
-        },
-        body: JSON.stringify({ text, style_preset_id: stylePresetId }),
-      });
-      if (!res.ok) {
-        setPostError(true);
-        return;
-      }
-      const data = await res.json();
-      router.push(`/s/${profileId}/process/${data.job_id}`);
+      const res = await postStorybook();
+      await afterSubmit(res);
+    } catch {
+      setPostError(true);
     } finally {
       setSubmitting(false);
     }
   }
 
+  async function confirmRedactedTitle() {
+    if (pendingRedactedTitle === null || submitting) return;
+    setSubmitting(true);
+    setPostError(false);
+    try {
+      const res = await postStorybook(pendingRedactedTitle);
+      await afterSubmit(res);
+    } catch {
+      setPostError(true);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function handleTitleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      textareaRef.current?.focus();
+    }
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="min-h-[calc(100dvh-76px)] sm:min-h-[calc(100dvh-85px)] flex flex-col py-4 sm:py-6 lg:py-8 px-4 sm:px-8 max-w-5xl mx-auto w-full relative">
+    <form aria-label="Write your story" onSubmit={handleSubmit} className="min-h-[calc(100dvh-76px)] sm:min-h-[calc(100dvh-85px)] flex flex-col py-4 sm:py-6 lg:py-8 px-4 sm:px-8 max-w-5xl mx-auto w-full relative">
+
+      {/* Title — story-titles spec §3 */}
+      <div className="mb-3 shrink-0">
+        <label htmlFor="story-title" className="block text-xs font-display font-extrabold tracking-wider uppercase text-foreground/60 mb-1">
+          Story title
+        </label>
+        <input
+          id="story-title"
+          ref={titleInputRef}
+          type="text"
+          value={title}
+          onChange={(e) => { setTitle(e.target.value); setTitleError(null); }}
+          onKeyDown={handleTitleKeyDown}
+          placeholder="Name your book"
+          aria-label="Story title"
+          aria-invalid={titleError !== null}
+          aria-describedby={titleError !== null ? "title-count title-error" : "title-count"}
+          className="w-full bg-transparent font-kid font-bold text-xl sm:text-2xl text-foreground placeholder-foreground/35 focus:outline-none caret-primary border-b-2 border-primary/10 focus:border-primary pb-1"
+        />
+        <div className="flex items-center justify-between mt-1">
+          <span id="title-count" className="text-xs font-bold text-foreground/50">
+            {Array.from(title.trim()).length} / {MAX_TITLE_CHARS}
+          </span>
+          {titleError && (
+            <span id="title-error" role="alert" className="text-xs font-bold text-destructive">
+              {titleError}
+            </span>
+          )}
+        </div>
+      </div>
       
       {/* The Magic Canvas Textarea */}
       <motion.textarea
+        ref={textareaRef}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: "easeOut" }}
@@ -118,7 +265,8 @@ export default function WriteStoryPage() {
                 type="radio"
                 name="style_preset_id"
                 value={id}
-                defaultChecked={id === "gouache"}
+                checked={stylePresetId === id}
+                onChange={() => setStylePresetId(id)}
                 className="sr-only peer"
               />
               <div className="relative rounded-2xl overflow-hidden bg-surface border border-primary/20 transition-all hover:-translate-y-0.5 hover:shadow-sm peer-checked:border-primary peer-checked:ring-2 peer-checked:ring-primary peer-checked:shadow-sm peer-focus-visible:ring-[3px] peer-focus-visible:ring-secondary peer-focus-visible:ring-offset-[3px] peer-focus-visible:ring-offset-background">
@@ -178,7 +326,7 @@ export default function WriteStoryPage() {
             <button
               type="button"
               className="text-sm font-extrabold text-primary hover:text-primary-deep hover:underline px-2 transition-colors"
-              onClick={() => setText("")}
+              onClick={() => { setText(""); setTitle(""); setTitleError(null); }}
             >
               Start over
             </button>
@@ -203,6 +351,45 @@ export default function WriteStoryPage() {
           )}
         </div>
       </motion.div>
+
+      {/* Not a dialog: an inline panel with no modality or focus trap, so it announces its own
+          text and Escape leaves it the same way "Change it" does. */}
+      {pendingRedactedTitle !== null && (
+        <div
+          ref={redactionPanelRef}
+          role="alert"
+          tabIndex={-1}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.stopPropagation();
+              dismissRedactedTitle();
+            }
+          }}
+          className="mt-3 shrink-0 bg-secondary/10 border border-secondary/30 rounded-2xl p-4 focus:outline-none focus:ring-[3px] focus:ring-secondary focus:ring-offset-[3px] focus:ring-offset-background"
+        >
+          <p className="font-kid text-sm text-foreground/80">
+            We changed your title to keep it private: <strong>{pendingRedactedTitle}</strong>
+          </p>
+          <div className="mt-3 flex gap-3">
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={confirmRedactedTitle}
+              className="min-h-[44px] px-4 rounded-xl bg-primary text-on-primary font-bold disabled:opacity-50"
+            >
+              Use this title
+            </button>
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={dismissRedactedTitle}
+              className="min-h-[44px] px-4 rounded-xl border border-primary/20 text-primary font-bold disabled:opacity-50"
+            >
+              Change it
+            </button>
+          </div>
+        </div>
+      )}
     </form>
   );
 }

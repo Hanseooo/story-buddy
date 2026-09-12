@@ -3,10 +3,12 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { Avatar } from "@/components/Avatar";
 import { StaggerGrid, StaggerItem } from "@/components/StaggerGrid";
+import { displayTitle } from "@/lib/displayTitle";
 
 type Job = {
   id: string;
   approved_at: string;
+  title: string | null;
   pages: { scene_id: string; caption: string; image_path: string }[] | null;
   profile_id: string;
   profiles: { display_nickname: string; avatar_id: string | null } | null;
@@ -28,7 +30,9 @@ export default async function GalleryPage({
 
   const { data } = await supabase
     .from("jobs")
-    .select("id, approved_at, pages, profile_id, profiles!inner(display_nickname, avatar_id)")
+    // spec §5: no input_text. This page spans every classmate's approved book, so the excerpt
+    // fallback is not authorized for this viewer — a legacy untitled book reads "Untitled".
+    .select("id, approved_at, title, pages, profile_id, profiles!inner(display_nickname, avatar_id)")
     .not("approved_at", "is", null)
     .is("profiles.removed_at", null)
     .order("approved_at", { ascending: false })
@@ -82,11 +86,16 @@ export default async function GalleryPage({
               ) : (
                 <div className="aspect-[3/4] w-full border-b border-primary/15 bg-muted" />
               )}
-              <div className="p-3 flex items-center gap-3">
-                <Avatar avatarId={job.profiles?.avatar_id ?? null} displayNickname={nickname} size={32} />
-                <p className="font-kid truncate text-base font-bold text-foreground">
-                  by {nickname}
+              <div className="p-3 flex flex-col gap-1">
+                <p className="font-kid truncate text-sm font-bold text-foreground">
+                  {displayTitle(job.title, null)}
                 </p>
+                <div className="flex items-center gap-3">
+                  <Avatar avatarId={job.profiles?.avatar_id ?? null} displayNickname={nickname} size={32} />
+                  <p className="font-kid truncate text-base font-bold text-foreground">
+                    by {nickname}
+                  </p>
+                </div>
               </div>
             </Link>
           </StaggerItem>

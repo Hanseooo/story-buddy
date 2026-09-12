@@ -9,6 +9,7 @@ const BASE: JobRow = {
   current_stage: null,
   failure_reason: null,
   input_text: "x",
+  title: null,
   style_preset_id: null,
   pages: [],
   reveal: null,
@@ -52,14 +53,18 @@ describe("classify", () => {
 
 // ---- Supabase mock ----
 const mockSingle = vi.fn();
+const mockSelectColumns = vi.fn();
 let capturedCallback: ((payload: { new: JobRow }) => void) | null = null;
 
 vi.mock("@/lib/supabaseClient", () => ({
   supabase: {
     from: () => ({
-      select: () => ({
+      select: (columns: string) => {
+        mockSelectColumns(columns);
+        return {
         eq: () => ({ single: () => mockSingle() }),
-      }),
+        };
+      },
     }),
     channel: () => ({
       on: (_event: string, _filter: unknown, cb: (payload: { new: JobRow }) => void) => {
@@ -73,12 +78,20 @@ vi.mock("@/lib/supabaseClient", () => ({
 
 beforeEach(() => {
   mockSingle.mockReset();
+  mockSelectColumns.mockReset();
   capturedCallback = null;
+});
+
+it("select string includes title", async () => {
+  mockSingle.mockResolvedValue({ data: null, error: { code: "PGRST116" } });
+  renderHook(() => useJob("j1"));
+  await waitFor(() => expect(mockSelectColumns).toHaveBeenCalled());
+  expect(mockSelectColumns.mock.calls[0][0]).toContain("title");
 });
 
 const RUNNING: JobRow = {
   id: "j1", status: "running", current_stage: "analyze",
-  failure_reason: null, input_text: "x", style_preset_id: null, pages: [], reveal: null,
+  failure_reason: null, input_text: "x", title: null, style_preset_id: null, pages: [], reveal: null,
 };
 const COMPLETE: JobRow = {
   ...RUNNING, status: "complete",
@@ -159,5 +172,67 @@ describe("useJob", () => {
     });
 
     expect(result.current.bucket).toBe("terminal-success");
+  });
+
+  it("refetch returns true after a successful forced row read", async () => {
+    const paused = {
+      ...RUNNING,
+      status: "awaiting_confirm",
+      current_stage: "reveal",
+      reveal: {
+        characters: [{ char_id: "c0", name: "Kiko", image_path: "j1/ref-c0.png", chips: ["orange sock"] }],
+        taps_left: 2,
+      },
+    } satisfies JobRow;
+    mockSingle
+      .mockResolvedValueOnce({ data: RUNNING, error: null })
+      .mockResolvedValueOnce({ data: paused, error: null });
+    const { result } = renderHook(() => useJob("j1"));
+    await waitFor(() => expect(result.current.row).toEqual(RUNNING));
+
+    let refreshed = false;
+    await act(async () => { refreshed = await result.current.refetch(); });
+
+    expect(refreshed).toBe(true);
+    expect(result.current.row).toEqual(paused);
+  });
+
+  it("a forced refetch reclassifies to not-found when the row is gone", async () => {
+    // A job deleted (or unshared) while the child sat on the pause: PGRST116 is the answer,
+    // not a read failure, so the forced read must still apply it rather than stranding the
+    // page on a stale row behind a retry that can never succeed.
+    mockSingle
+      .mockResolvedValueOnce({ data: RUNNING, error: null })
+      .mockResolvedValueOnce({ data: null, error: { code: "PGRST116", message: "no rows" } });
+    const { result } = renderHook(() => useJob("j1"));
+    await waitFor(() => expect(result.current.bucket).toBe("in-flight"));
+
+    await act(async () => { await result.current.refetch(); });
+
+    expect(result.current.bucket).toBe("not-found");
+  });
+
+  it("refetch returns false after a failed forced row read", async () => {
+    const paused = {
+      ...RUNNING,
+      status: "awaiting_confirm",
+      current_stage: "reveal",
+      reveal: {
+        characters: [{ char_id: "c0", name: "Kiko", image_path: "j1/ref-c0.png", chips: ["orange sock"] }],
+        taps_left: 2,
+      },
+    } satisfies JobRow;
+    mockSingle
+      .mockResolvedValueOnce({ data: paused, error: null })
+      .mockResolvedValueOnce({ data: null, error: { code: "503", message: "unavailable" } });
+    const { result } = renderHook(() => useJob("j1"));
+    await waitFor(() => expect(result.current.bucket).toBe("paused"));
+
+    let refreshed = true;
+    await act(async () => { refreshed = await result.current.refetch(); });
+
+    expect(refreshed).toBe(false);
+    expect(result.current.bucket).toBe("paused");
+    expect(result.current.row).toEqual(paused);
   });
 });
