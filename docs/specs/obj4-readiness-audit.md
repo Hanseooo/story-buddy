@@ -39,9 +39,9 @@ backlog or status file for Objective 4 (`AGENTS.md`, "The status surface").
 
 ## 1. Verdict
 
-**Do not start the campaign yet. What remains, in order: A6 (Supabase dashboard settings), A7 (clear
-the pilot data), B1 (merge PR #81) and D1 (confirm the GPU).** P1–P7, D2, Finding G and the labelling
-rulebook (Finding J) are done. Supabase has been on Pro since 2026-09-14.
+**Do not start the campaign yet. What remains, in order: A6's usage and checkpoint readings, B1 (merge
+PR #81) and D1 (confirm the GPU).** P1–P7, A7, D2, Finding G and the labelling rulebook (Finding J) are
+done. Supabase has been on Pro since 2026-09-14.
 
 The pipeline works, the money path is understood, and the donated corpus arrived on 2026-09-12 —
 15 raw stories at `data/judge/intake/raw/`, which retires the blocker that governed the last runbook.
@@ -244,10 +244,10 @@ review (2026-09-14) found the bundle inventory listed only finals, so every harv
 1. **Max rows → 5000** · **done 2026-09-14.** Integrations → Data API → Settings → Max rows. It is no longer under
    Settings → API, which now shows only the keys. Every reader pages since P6, so this is a second
    line of defence, not the fix.
-2. **Storage → Buckets: confirm `private_assets` exists and is private.** No migration creates it, yet
-   `materialize_pairs.py:28` and `annotate/actions.ts:222` both require it. The owner reports it
-   exists and already holds images from the 2026-08-27 → 09-03 smokes (the local `corpus-smoke-a`..`h`
-   folders), and likely `research/pilot/`. Leave them: the campaign's new `--out` hashes to new
+2. **Storage → Buckets: confirm `private_assets` exists and is private** · **done 2026-09-14.** No
+   migration creates it, yet `materialize_pairs.py:28` and `annotate/actions.ts:222` both require it.
+   It already holds images from the 2026-08-27 → 09-03 smokes (the local `corpus-smoke-a`..`h`
+   folders). Leave them: the campaign's new `--out` hashes to new
    folders (`build_corpus.py:592`), and they cost nothing on Pro. Phase E deletes them.
 3. **Reports → Database / Storage / Egress:** record current usage, so the campaign's own cost is
    measurable afterwards.
@@ -259,9 +259,10 @@ from pg_catalog.pg_statio_user_tables
 where relname in ('checkpoints','checkpoint_blobs','checkpoint_writes');
 ```
 
-**A7 · Clear the pilot data before any production pair exists — `[YOU]`, dry run first.** The
-2026-08-30 rehearsal left pilot pairs and labels in Supabase, some from a second account and a third
-adjudicator profile, and nothing records them being cleared. The freeze drops pilot pairs, so they
+**A7 · Clear the pilot data before any production pair exists — `[YOU]`, dry run first** · **done
+2026-09-14:** the dry run printed `annotations=0 pairs=0 objects=0`, so nothing needed clearing. Re-run
+the dry run if a pilot is ever seeded again. The 2026-08-30 rehearsal wrote pilot pairs and labels to
+Supabase, some from a second account and a third adjudicator profile. The freeze drops pilot pairs, so they
 cannot reach the dataset, but they break labelling:
 
 - `/annotate` serves every `pending` or `partially_annotated` pair with no `is_pilot` filter
@@ -715,8 +716,7 @@ costume change. Report the count in the write-up. It selects and excludes nothin
 ## 6. What I could not verify
 
 - ~~Whether the Supabase project is Free or Pro today~~ Pro since 2026-09-14, and `private_assets`
-  exists (owner, 2026-09-14). Still unconfirmed: that the bucket is private, and whether the
-  2026-08-30 pilot rows remain (A7's dry run answers it).
+  exists and is private (owner, 2026-09-14). No pilot rows or objects remain (A7, 2026-09-14).
 - Supabase dashboard paths in A6, E2 and E5 follow Supabase's docs as of 2026-03; the UI moves.
 - LangGraph checkpoint table sizes. Estimated at 2–3 MB/story, 90–135 MB for 45. Query in A6.
 - Scene PNG size *as stored in Supabase* — no scene PNG exists on disk, so storage and egress figures
