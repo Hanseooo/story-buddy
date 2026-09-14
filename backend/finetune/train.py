@@ -47,7 +47,9 @@ FIXED_CONFIG_PINS = {
     "bf16": True,
     "gradient_checkpointing": True,
     "eval_strategy": "steps",
-    "eval_steps": 50,
+    "eval_steps": 10,
+    "save_strategy": "steps",
+    "save_steps": 10,
     "load_best_model_at_end": True,
 }
 

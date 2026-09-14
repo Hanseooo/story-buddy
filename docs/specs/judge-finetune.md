@@ -425,7 +425,9 @@ seed: 0
 
 ### eval
 eval_strategy: steps
-eval_steps: 50
+eval_steps: 10                                # PREREGISTRATION_OBJ4 §12, 2026-09-14
+save_strategy: steps
+save_steps: 10
 load_best_model_at_end: true                  # early stopping on the disjoint val split
 ```
 

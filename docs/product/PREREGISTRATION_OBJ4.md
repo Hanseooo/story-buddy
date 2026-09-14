@@ -831,3 +831,52 @@ widens the base the primary interval is computed over. Item 4 also raises single
 volume on the test half by roughly half, on top of ADR-060's 2.32×, and rater fatigue is a plausible
 route to noisier labels. Test-retest agreement (2026-08-29) is the measurement that would show it,
 and it is reported whatever it shows.
+
+### 2026-09-14 — Labelling rules written down, and a checkpoint schedule that gives selection something to select from
+
+**State when amended:** zero held-out results had been seen; the 15 donated stories had been
+intake-attested but not generated; no image had been generated under the campaign budget; no
+non-pilot label existed; no fine-tune had been trained.
+
+**1. The labelling rules are `docs/specs/labelling-rulebook.md`, as committed with this amendment.**
+
+§4 froze the field set but no document defined when a pair is Same or Different, and the annotation
+screen cites a "pre-registered study rubric" that did not exist. With one rater (2026-08-29) the
+test–retest number measures agreement with rules that were never written. The rulebook closes that
+before the first label, which is the moment §4 names.
+
+Recorded:
+
+- **Labels are image-only.** The judge's prompt (`to_llamafactory.QUESTION`) carries no story text and
+  the annotation surface shows none, so a rule that depends on the story would ask the rater for
+  information the judge can never have.
+- **Narrative change gets no special case.** Reading the donated stories for redaction showed time jumps
+  and costume changes (`g6-s4` shows one character as a child and as an adult). That knowledge shaped
+  only one decision, and it is recorded here: such pages follow the ordinary identity rules. No rule
+  favours or excuses them, and no story or page is selected, excluded or relabelled because of them
+  (§9.7 stands).
+- **Different requires a named reason**, which the screen already enforces. Clothing and style alone
+  are Same, matching the Same option's on-screen definition ("identity, core species, palette &
+  features") and production's gate, where neither `wrong_clothing` nor `wrong_style` gates.
+- **No rule changes after the first non-pilot label.** An uncovered case gets the closest rule and a
+  private note, reported in the write-up with its count.
+
+**2. The checkpoint schedule is every 10 optimizer steps, evaluated and saved.**
+
+§9.5 selects each seed's reported checkpoint by validation `different_character` F1 from the saved
+checkpoints `evaluate.inventory_checkpoints` finds. The pinned `eval_steps: 50` predated the corpus
+size: 24 synthetic training stories give roughly 60–150 optimizer steps over 3 epochs (the range is
+ADR-060's achieved harvest), so a seed would have left one to three candidates and the selection §9.5
+registers would have been close to a no-op. `save_steps` was never set, so the saving cadence was
+the library default.
+
+Pinned, in `train_qlora.yaml` and `finetune.train.FIXED_CONFIG_PINS`: `eval_strategy: steps`,
+`eval_steps: 10`, `save_strategy: steps`, `save_steps: 10`. Nothing else in §10 changes — rank, learning
+rate, epochs, batch × accumulation, `image_max_pixels` and the seeds are untouched. The achieved
+candidate count per seed is reported, not targeted.
+
+**Recorded against the result in advance:** more candidates means selection on a small validation split
+(§9.5) picks from more noise, so the chosen checkpoint's validation F1 is optimistic. That is why only
+the held-out number is reported as the result, and why all three seeds are reported. Neither item
+changes the primary endpoint, the δ = 3 ladder, the one-read rule, §3.2's split discipline or §5.1's
+clustering.

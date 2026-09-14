@@ -229,6 +229,19 @@ def test_prepare_rejects_mutated_fixed_yaml_keys(tmp_path):
         train.prepare(freeze, tmp_path / "runs", bad, qualification_fixture(tmp_path), report_to="none")
 
 
+@pytest.mark.parametrize("pinned, sparse", [
+    ("eval_steps: 10", "eval_steps: 50"),
+    ("save_steps: 10", "save_steps: 500"),
+])
+def test_prepare_rejects_a_checkpoint_schedule_too_sparse_to_select_from(tmp_path, pinned, sparse):
+    freeze = frozen_fixture(tmp_path)
+    assert pinned in CONFIG.read_text()
+    sparse_config = tmp_path / "sparse.yaml"
+    sparse_config.write_text(CONFIG.read_text().replace(pinned, sparse))
+    with pytest.raises(ManifestError, match=pinned.split(":")[0]):
+        train.prepare(freeze, tmp_path / "runs", sparse_config, qualification_fixture(tmp_path), report_to="none")
+
+
 def test_prepare_rejects_mutated_existing_run_plan(tmp_path, monkeypatch):
     freeze = frozen_fixture(tmp_path)
     run_root = tmp_path / "runs"

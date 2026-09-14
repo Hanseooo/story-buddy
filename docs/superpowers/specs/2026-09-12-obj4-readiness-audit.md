@@ -9,8 +9,8 @@ Every number here was measured against the repo or the bundles on disk. Anything
 
 ## 1. Verdict
 
-**Do not start the campaign yet. What remains: merge the P4 branch, P5 (Supabase Pro), D1 (confirm
-the GPU) and D2 (sign off the training config).** P1, P2, P3, P6, P7 and Finding G are done.
+**Do not start the campaign yet. What remains: merge the P4 branch, P5 (Supabase Pro) and D1
+(confirm the GPU).** P1, P2, P3, P6, P7, D2, Finding G and the labelling rulebook (Finding J) are done.
 
 The pipeline works, the money path is understood, and the donated corpus arrived on 2026-09-12 —
 15 raw stories at `data/judge/intake/raw/`, which retires the blocker that governed the last runbook.
@@ -202,7 +202,7 @@ per story** — `corpus_io.py:93` mints canonical references for `memory.charact
 also changed `dataset_selection.py` and `freeze_dataset.py`; backend suite 1404 passed.
 
 **A5 · Fixes (P6 and P7 done).** Queue pagination is in. The production-shaped rehearsal through
-freeze and LlamaFactory export passes. The fal retry (Finding G) is in; backend suite 1412 passed.
+freeze and LlamaFactory export passes. The fal retry (Finding G) and the checkpoint schedule (D2) are in; backend suite 1414 passed.
 
 **A6 · Supabase Pro (P5), and the pre-flight dashboard checks.**
 
@@ -286,10 +286,13 @@ Rules that are not optional:
 written earlier: `hard_negative_matches` is keyed by `lineage_id`, and `char_id` does not exist until
 the pipeline has run.
 
+**C1a · Count narrative-change pages** — free, read-only, Finding J. Report only.
+
 **C2 · Seed the queue** with `materialize_pairs`. Never pass `--pilot` — pilot pairs are permanently
 excluded from training.
 
-**C3 · Round 1** at `/annotate`, blinded, every pair once.
+**C3 · Round 1** at `/annotate`, blinded, every pair once. Read `docs/specs/labelling-rulebook.md`
+first; it does not change after this.
 
 **C4 · Round 2**, same person, cold. This is test–retest reliability, not a second annotator. There
 is no annotator 2 in this design. **Leave a real gap — a fortnight, not an evening.** Nothing in the
@@ -307,17 +310,18 @@ database can tell the difference, and the measurement is only as good as the gap
 The 4060 Ti is viable if it is the **16 GB** variant. At 8 GB it is marginal for a 7B VLM QLoRA —
 image tokens make activations expensive, and you would be fighting OOM with gradient checkpointing
 and a reduced image resolution, which changes the thing being measured. Confirm which card it is
-before planning around it. Paid cloud is the safe path either way, and that money is **outside** the
-$25/$30 generation ceiling.
+before planning around it. Reducing resolution is not an option: `image_max_pixels` is a §10 pin.
+Unless the card is the 16 GB one, rent a 24 GB GPU (RTX 4090 on RunPod or Vast.ai,
+`judge-finetune.md` §6.2) for the three seeds. That money is **outside** the $25/$30 generation ceiling.
+Budget disk for ~15 checkpoints per seed after D2.
 
-**D2 · Re-size the training config before the first seed.** `train_qlora.yaml` was written for
-~1,000 examples (`:5`). Against the corpus that actually exists it is mis-sized by roughly 6×:
-`per_device_train_batch_size: 1` × `gradient_accumulation_steps: 8` over ~164 examples for 3 epochs
-is ~61 optimizer steps total, and `eval_steps: 50` then fires about once — so
-`load_best_model_at_end: true` selects from one or two checkpoints. `:58` also still says "~75
-validation pairs"; the real figure is ~42.
-
-This is a research parameter, so it needs your sign-off, not a silent edit.
+**D2 · Checkpoint schedule — done 2026-09-14.** `train_qlora.yaml` pinned `eval_steps: 50` and never
+set `save_steps`. 24 training stories give ~60–150 optimizer steps over 3 epochs (the range is the
+achieved harvest), so a seed left one to three `checkpoint-*` directories, and §9.5's selection by
+validation F1 had almost nothing to choose from. Now evaluated and saved every 10 steps, pinned in
+the YAML and `train.FIXED_CONFIG_PINS`; a sparse schedule fails preflight (test red before the pin,
+green after). Dated amendment §12, 2026-09-14. Epochs, learning rate, batch × accumulation and rank
+are unchanged.
 
 **D3 · Three seeds, threshold lock on validation, then the single guarded held-out run.** Detailed
 steps 9–15 are in `docs/capstone/research_runbook.md`.
@@ -533,12 +537,14 @@ The ways it could still fail, ranked:
 1. **Ceiling effect.** The test set is ~95% human, and human face identity is where a 7B VLM's
    zero-shot discrimination is *strongest*. You are training on the slice with the most headroom and
    reporting on the slice with the least.
-2. **Checkpoint selection is noise.** ~42 validation pairs over 9 characters, with maybe 8–12
-   positives, and ~61 total training steps against `eval_steps: 50`. Expect a wide seed-to-seed std.
-3. **Narrative-shape shift.** Donated stories span time jumps, costume changes and ghosts —
-   `g6-s4` shows Ana as a child and as an adult in one story. The fine-tune never sees a legitimate
-   same-character pair separated by twenty years. Those are exactly where it will produce false
-   `different` verdicts, and they are concentrated in the test split.
+2. **Checkpoint selection is noise.** A small validation split over 9 characters, with maybe 8–12
+   positives. D2 now gives selection ~15 candidates per seed instead of one to three, but picking
+   among them on so few positives is still noisy. Expect a wide seed-to-seed std.
+3. **Narrative-shape shift — smaller than first written (Finding J).** Donated stories span time
+   jumps, costume changes and ghosts — `g6-s4` shows Ana as a child and as an adult. But the pipeline
+   draws every page from one frozen reference and never sends story text to the image model, so most
+   such pages still show the child. Only a page whose visual direction names the change is at risk,
+   and the rulebook labels it on what the images show.
 4. **Format compliance is not a free win.** Constrained decoding applies to the base model too, so
    you do not get cheap ΔF1 from the baseline emitting broken JSON. That is good preregistration.
 
@@ -562,6 +568,35 @@ backend suite 1410 passed. Both specs updated.
 The same pre-flight showed declared names must be the extractor's names verbatim ("the goat", not
 "Goat"), and that don-005 and don-015 extract unstably across runs. Declarations were set to the
 names that repeated; don-005 declares only the stable narrator.
+
+### J · No written rule for Same versus Different — **resolved 2026-09-14**
+
+The annotation screen says "Classify character consistency according to the pre-registered study
+rubric". No rubric existed. §4 of the preregistration froze the fields, not what they mean on a
+hard page. With one rater, round 2's agreement measures consistency with rules that were only in
+your head, and the test set carries exactly the pages where that matters.
+
+**Time jumps need no pipeline change.** Checked against the code:
+
+- A `Character` has one `canonical_ref_image` and fixed axes (species, colours, body features,
+  clothing). Only objects carry a per-scene state (`Scene.object_states`); characters do not.
+- `build_prompt` sends the character's axes and the scene's visual direction, never the story text.
+  The generator is pulled toward the reference on every page.
+- The judge's prompt (`to_llamafactory.QUESTION`) and the annotation screen show no story either.
+  Neither the rater nor the judge can tell a change the story explains from generator drift, so an
+  age or costume state in the pipeline would create pairs with no image-only right answer. It would
+  also change the data contract after preregistration, and a picture book wants Ana recognisable.
+- The synthetic corpus has no time jumps (the "years" matches are background), and adding stories
+  modelled on the donated ones would design training data around the test set. Not done.
+
+**Resolved:** `docs/specs/labelling-rulebook.md`, frozen by the 2026-09-14 amendment. Image-only;
+Different needs a named reason (the screen enforces it); clothing, style and lighting alone are Same;
+age, costume, back views and transformations follow the ordinary identity rules. One correction to
+advice given in conversation: "Same, with `wrong_clothing` ticked" cannot be recorded, because
+`TaxonomyControls.tsx` disables the reasons unless Different is chosen.
+
+**Free check after generation (C1a):** count donated scenes whose visual direction names an age or
+costume change. Report the count in the write-up. It selects and excludes nothing (§9.7).
 
 ---
 

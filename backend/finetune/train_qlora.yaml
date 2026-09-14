@@ -2,8 +2,8 @@
 #
 #   llamafactory-cli train backend/finetune/train_qlora.yaml
 #
-# Run it three times with seed: 0, 1, 2 and report mean ± std — at ~1,000 examples a single-seed
-# delta is noise (§6.4). CC-7 requires pinning: base revision hash, rank + alpha, seed(s), the
+# Run it three times with seed: 0, 1, 2 and report mean ± std — at a few hundred examples a
+# single-seed delta is noise (§6.4). CC-7 requires pinning: base revision hash, rank + alpha, seed(s), the
 # manifest hash, image_max_pixels, LLaMA-Factory version (§6.6).
 
 ### model
@@ -49,13 +49,16 @@ seed: 0
 
 ### eval
 eval_strategy: steps
-eval_steps: 50
+eval_steps: 10
+save_strategy: steps
+save_steps: 10                              # every save is a candidate for evaluate.select_checkpoint
 load_best_model_at_end: true                # early stopping on the disjoint val split
 
 # Checkpoint selection (pre-registered 2026-07-13): early stopping stays on eval loss, but the
 # REPORTED checkpoint per seed is selected by `different_character` F1 on the validation split —
 # token-level loss is dominated by the majority class and by rationale tokens. Score saved
-# checkpoints with `finetune/evaluate.py` over the ~75 validation pairs.
+# checkpoints with `finetune/evaluate.py` over the validation pairs. The 10-step schedule is the
+# 2026-09-14 amendment: at 50 steps a run of ~60–150 optimizer steps left one to three candidates.
 #
 # `storybuddy_judge_test` is registered too and is deliberately NOT referenced here: the held-out
 # split is read exactly once, after training, by evaluate.py (§5.5, §7.5).
