@@ -1,16 +1,47 @@
 # Objective 4 — campaign readiness audit and roadmap
 
-**Date:** 2026-09-12 · **Repo state:** `77a46fe` (working tree dirty) · **Supersedes:** `OBJECTIVE_4_NEXT_STEPS.md` as the live guide
+**Date:** 2026-09-12, backlog rewritten 2026-09-14 · **Repo state:** `b5a3841` on `obj4-campaign-readiness` (PR #81, open) · **Supersedes:** `OBJECTIVE_4_NEXT_STEPS.md` as the live guide
 
 This replaces the 2026-08-30 runbook, which predates 54 commits and the arrival of the donated corpus.
 Every number here was measured against the repo or the bundles on disk. Anything estimated says so.
 
 ---
 
+## 0. For agents picking this up
+
+This file is the live Objective 4 backlog. §4 is the ordered sequence: work it top to bottom, and
+mark a step done here, with the date, in the same change that finishes it. Do not start a second
+backlog or status file for Objective 4 (`AGENTS.md`, "The status surface").
+
+- **Read with it.** `docs/capstone/research_runbook.md` holds the exact commands; §4 cites them by
+  step number rather than copying them. `docs/product/PREREGISTRATION_OBJ4.md` binds the method
+  (frozen; amendments are appended to §12, never edited in place). `docs/specs/labelling-rulebook.md`
+  binds the labels.
+- **Who does what.** `[YOU]` is the owner: dashboard clicks, paid runs, labelling, consent, adviser
+  signoff. An agent never logs into Supabase, fal or a GPU host, never reads `backend/.env`, and never
+  runs a paid command (`build_corpus` without `--check-rosters`, `train --execute`) unasked. `[ME]` is
+  agent work.
+- **Never:**
+  - pass `--pilot` with `--data ../data/judge/corpus`;
+  - commit donated stories or anything under `data/`;
+  - add a second rater. Round 2 is the same person, cold;
+  - hand-edit `build_state.json` or a bundle;
+  - commit anything between B1 and the campaign's exit 0. A moved or dirty tree makes the two halves
+    unfreezable (P4).
+- **Where state lives.** Bundles, intake, freezes and evaluations are local under `data/judge/`
+  (git-ignored). Supabase holds uploaded images (`private_assets`), the label queue (`research_pairs`,
+  `annotations`, `profiles`) and LangGraph checkpoints. The freeze reads labels from Supabase and
+  images from the local bundles (`freeze_dataset.py:256-299`); training and evaluation read neither.
+- **A doc that disagrees with the code:** the code wins. Flag the drift here; never reconcile it
+  silently.
+
+---
+
 ## 1. Verdict
 
-**Do not start the campaign yet. What remains: merge the P4 branch, P5 (Supabase Pro) and D1
-(confirm the GPU).** P1, P2, P3, P6, P7, D2, Finding G and the labelling rulebook (Finding J) are done.
+**Do not start the campaign yet. What remains, in order: A6 (Supabase dashboard settings), A7 (clear
+the pilot data), B1 (merge PR #81) and D1 (confirm the GPU).** P1–P7, D2, Finding G and the labelling
+rulebook (Finding J) are done. Supabase has been on Pro since 2026-09-14.
 
 The pipeline works, the money path is understood, and the donated corpus arrived on 2026-09-12 —
 15 raw stories at `data/judge/intake/raw/`, which retires the blocker that governed the last runbook.
@@ -140,7 +171,9 @@ git status --porcelain      # must print nothing before story 1
 
 Then commit nothing at all until the campaign exits 0.
 
-### P5 · Upgrade Supabase to Pro — `[YOU]`, ~$25/mo
+### P5 · Upgrade Supabase to Pro — `[YOU]`, ~$25/mo · **done 2026-09-14**
+
+Upgraded 2026-09-14. Its dashboard checks are A6; the downgrade afterwards is Phase E.
 
 Free tier does not hold this campaign. Measured and projected in Finding D: storage lands at
 0.95–1.38 GB against a 1 GB limit, egress at 3.2–5.0 GB against 5 GB/month with annotation still to
@@ -206,13 +239,19 @@ freeze and LlamaFactory export passes. The fal retry (Finding G) and the checkpo
 review (2026-09-14) found the bundle inventory listed only finals, so every harvested attempt failed
 `materialize_pairs` with "missing pair asset"; `_assets` now uses `scene_images`, tested through `build`.
 
-**A6 · Supabase Pro (P5), and the pre-flight dashboard checks.**
+**A6 · Supabase dashboard pre-flight — `[YOU]`.** Pro is on (P5).
 
-- Storage → Buckets: confirm **`private_assets` exists and is private.** No migration creates it, yet
-  `materialize_pairs.py:28` and `annotate/actions.ts:202` both require it.
-- Settings → API → Max rows: raise to 5000.
-- Reports → Database / Storage / Egress: record current headroom.
-- Measure the checkpoint tables and prune dead smoke threads:
+1. **Max rows → 5000** · **done 2026-09-14.** Integrations → Data API → Settings → Max rows. It is no longer under
+   Settings → API, which now shows only the keys. Every reader pages since P6, so this is a second
+   line of defence, not the fix.
+2. **Storage → Buckets: confirm `private_assets` exists and is private.** No migration creates it, yet
+   `materialize_pairs.py:28` and `annotate/actions.ts:222` both require it. The owner reports it
+   exists and already holds images from the 2026-08-27 → 09-03 smokes (the local `corpus-smoke-a`..`h`
+   folders), and likely `research/pilot/`. Leave them: the campaign's new `--out` hashes to new
+   folders (`build_corpus.py:592`), and they cost nothing on Pro. Phase E deletes them.
+3. **Reports → Database / Storage / Egress:** record current usage, so the campaign's own cost is
+   measurable afterwards.
+4. **Measure the checkpoint tables** in the SQL editor:
 
 ```sql
 select relname, pg_size_pretty(pg_total_relation_size(relid))
@@ -220,10 +259,37 @@ from pg_catalog.pg_statio_user_tables
 where relname in ('checkpoints','checkpoint_blobs','checkpoint_writes');
 ```
 
+**A7 · Clear the pilot data before any production pair exists — `[YOU]`, dry run first.** The
+2026-08-30 rehearsal left pilot pairs and labels in Supabase, some from a second account and a third
+adjudicator profile, and nothing records them being cleared. The freeze drops pilot pairs, so they
+cannot reach the dataset, but they break labelling:
+
+- `/annotate` serves every `pending` or `partially_annotated` pair with no `is_pilot` filter
+  (`annotate/actions.ts:170-175`). Leftover pilot pairs mix into round 1, and round 2 cannot open
+  until they are labelled.
+- `reconcile_pair_status` does not skip pilot pairs (`annotation_truth.py:141-160`). One pilot pair
+  with more than two ordinary labels makes `--reconcile-only` (runbook step 7) fail for the whole
+  queue.
+
+```bash
+cd backend
+uv run python -m scripts.clear_research_pilot                                   # dry run: counts only
+uv run python -m scripts.clear_research_pilot --confirm DELETE-RESEARCH-PILOT   # labels, then pairs, then research/pilot/*
+```
+
+Done when the dry run prints `annotations=0 pairs=0 objects=0`. It touches only `is_pilot` rows and
+`research/pilot/` objects (`research-corpus-operations.md` §7). If the rehearsal's labels are cited
+anywhere, export `annotations` to CSV before confirming. Label with one account from here on.
+
 ### Phase B — freeze the code, then spend
 
-**B1 · Land everything, then stop committing.** Record `git rev-parse HEAD`. Confirm
-`git status --porcelain` is empty.
+**B1 · Merge PR #81, then stop committing — `[YOU]`.** CI is green on `b5a3841`. After merging:
+
+```bash
+git switch main; git pull
+git status --porcelain   # must print nothing
+git rev-parse HEAD       # record it; both halves of the campaign must carry it
+```
 
 **B2 · Free roster pre-flight on all 45 stories.**
 
@@ -251,7 +317,8 @@ powercfg /change monitor-timeout-ac 0
 Sleep kills the single port-5432 connection held for the whole run, and there is no reconnect path.
 
 **B5 · Fresh 3-story smoke at the real cap.** Use a **new** `--out`; a reused directory carries a
-different thread digest and a different ledger.
+different thread digest and a different ledger. Command: runbook step 2. Before B6, check each
+bundle's `attempted_calls` (bundle metadata, `build_corpus.py:517`) is at or under 19.
 
 **B6 · The campaign — 45 stories, one budget.**
 
@@ -284,17 +351,17 @@ Rules that are not optional:
 
 ### Phase C — label and freeze
 
-**C1 · Author `dataset_selection.json`** off `--candidate-report`, after generation. It cannot be
-written earlier: `hard_negative_matches` is keyed by `lineage_id`, and `char_id` does not exist until
-the pipeline has run.
+**C1 · Author `dataset_selection.json`** off `--candidate-report` (runbook step 5), after
+generation. It cannot be written earlier: `hard_negative_matches` is keyed by `lineage_id`, and
+`char_id` does not exist until the pipeline has run.
 
 **C1a · Count narrative-change pages** — free, read-only, Finding J. Report only.
 
-**C2 · Seed the queue** with `materialize_pairs`. Never pass `--pilot` — pilot pairs are permanently
-excluded from training.
+**C2 · Seed the queue** with `materialize_pairs` (runbook step 6). Never pass `--pilot` — pilot pairs
+are permanently excluded from training. Precondition: A7's dry run prints zeros.
 
-**C3 · Round 1** at `/annotate`, blinded, every pair once. Read `docs/specs/labelling-rulebook.md`
-first; it does not change after this.
+**C3 · Round 1** at `/annotate`, blinded, every pair once, one account. Read
+`docs/specs/labelling-rulebook.md` first; it does not change after this.
 
 **C4 · Round 2**, same person, cold. This is test–retest reliability, not a second annotator. There
 is no annotator 2 in this design. **Leave a real gap — a fortnight, not an evening.** Nothing in the
@@ -302,7 +369,8 @@ database can tell the difference, and the measurement is only as good as the gap
 
 **C5 · Round 3 adjudication** at `/adjudicate`, on pairs where your own two rounds disagreed.
 
-**C6 · Reconcile and freeze.**
+**C6 · Reconcile and freeze** (runbook steps 7 and 8). The freeze also writes the LlamaFactory
+files. Stay on Supabase Pro until Phase E.
 
 ### Phase D — train and evaluate
 
@@ -327,6 +395,48 @@ are unchanged.
 
 **D3 · Three seeds, threshold lock on validation, then the single guarded held-out run.** Detailed
 steps 9–15 are in `docs/capstone/research_runbook.md`.
+
+### Phase E — back up, clean up, downgrade Supabase
+
+Safe once C6's freeze folder is backed up, and it can run alongside Phase D: the freeze copies every
+image from the local bundles into its own `assets/` (`freeze_dataset.py:291-299`), and `train.py` and
+`evaluate.py` never call Supabase. Back up before deleting. If the ethics approval sets how long
+donated data is kept, it overrides this phase.
+
+**E1 · Back up `data/judge/` — `[YOU]`.** Corpus, intake, freezes, evaluations and the selected
+checkpoints, to a private second drive. It contains the donated stories: never git, never a shared
+link.
+
+**E2 · Export the label tables — `[YOU]`.** Table Editor → `annotations`, `research_pairs`,
+`profiles` → Export → CSV. The freeze keeps resolved labels and each round's same/different answer
+(`annotation_agreement.jsonl`); every per-round failure reason and timestamp exists only in these
+tables.
+
+**E3 · Delete the campaign's Storage objects — `[YOU]`, dashboard.** In `private_assets`: `research/`
+(`materialize_pairs.py:109-110`) and every folder named after a story ID — `syn-*`, `don-*`, `fix-*`,
+with or without a `--campaign-<hash>` suffix, smoke folders included. Leave every UUID-named folder
+and anything unrecognised: app storybooks live under the job UUID (`worker/run_job.py:191`,
+`generate_scene.py:33`, `char_bible.py:259`). Storage files cannot be removed by SQL
+(`storage.protect_delete`).
+
+**E4 · Delete the campaign's checkpoint rows — `[YOU]`, SQL editor.** They hold story text, donated
+stories included. App threads are job UUIDs, so the filter excludes them. Run the preview first; only
+story IDs should appear.
+
+```sql
+select thread_id, count(*) from checkpoints where thread_id !~ '^[0-9a-f-]{36}$' group by 1;
+delete from checkpoint_writes where thread_id !~ '^[0-9a-f-]{36}$';
+delete from checkpoint_blobs  where thread_id !~ '^[0-9a-f-]{36}$';
+delete from checkpoints       where thread_id !~ '^[0-9a-f-]{36}$';
+```
+
+Then, as a statement on its own, `vacuum full checkpoints, checkpoint_blobs, checkpoint_writes;` —
+a delete alone does not shrink the reported database size.
+
+**E5 · Check usage, then downgrade — `[YOU]`.** Usage must sit inside the Free quotas: 1 GB storage,
+and the database limit on the current pricing page. Then Billing → change plan → Free. **Keep the label
+tables:** re-running C6 reads them. A Free project pauses after ~7 days idle; restore it from the
+dashboard before any re-freeze.
 
 ---
 
@@ -604,7 +714,10 @@ costume change. Report the count in the write-up. It selects and excludes nothin
 
 ## 6. What I could not verify
 
-- Whether the Supabase project is Free or Pro today, and whether `private_assets` exists. Dashboard.
+- ~~Whether the Supabase project is Free or Pro today~~ Pro since 2026-09-14, and `private_assets`
+  exists (owner, 2026-09-14). Still unconfirmed: that the bucket is private, and whether the
+  2026-08-30 pilot rows remain (A7's dry run answers it).
+- Supabase dashboard paths in A6, E2 and E5 follow Supabase's docs as of 2026-03; the UI moves.
 - LangGraph checkpoint table sizes. Estimated at 2–3 MB/story, 90–135 MB for 45. Query in A6.
 - Scene PNG size *as stored in Supabase* — no scene PNG exists on disk, so storage and egress figures
   are banded 0.76–1.32 MB per stored PNG.
