@@ -348,6 +348,7 @@ describe("Tier 2: Server Action Unit Tests", () => {
 
     it("returns null pair when all queue items are annotated", async () => {
       mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [{ pair_id: "pair-1" }], error: null }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null })); // end of labels
       mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null }));
 
       const res = await getNextPair();
@@ -357,6 +358,7 @@ describe("Tier 2: Server Action Unit Tests", () => {
     it("paginates beyond page 0 when user has annotated the first 50 pairs", async () => {
       const annotatedPairs = Array.from({ length: 50 }, (_, i) => ({ pair_id: `pair-${i}` }));
       mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: annotatedPairs, error: null }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null })); // end of labels
 
       const page0Pairs = Array.from({ length: 50 }, (_, i) => ({
         id: `pair-${i}`,
@@ -400,6 +402,7 @@ describe("Tier 2: Server Action Unit Tests", () => {
       ];
 
       mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: annotatedPairs, error: null }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null })); // end of labels
       mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: page0Pairs, error: null }));
       mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: page1Pairs, error: null }));
       mockAdminCreateSignedUrl
@@ -485,6 +488,7 @@ describe("Tier 2: Server Action Unit Tests", () => {
       ];
       // pair-1 has its first pass; pair-2 does not, so round 1 is NOT exhausted.
       mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [{ pair_id: "pair-1", round: 1 }], error: null }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null })); // end of labels
       mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: queuePage, error: null }));
       mockAdminCreateSignedUrl
         .mockResolvedValue({ data: { signedUrl: "https://signed.url/x" }, error: null });
@@ -503,6 +507,7 @@ describe("Tier 2: Server Action Unit Tests", () => {
         data: [{ pair_id: "pair-1", round: 1 }, { pair_id: "pair-2", round: 1 }],
         error: null,
       }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null })); // end of labels
       mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: queuePage, error: null }));
       mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: queuePage, error: null }));
 
@@ -517,6 +522,7 @@ describe("Tier 2: Server Action Unit Tests", () => {
         data: [{ pair_id: "pair-1", round: 1 }, { pair_id: "pair-1", round: 2 }],
         error: null,
       }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null })); // end of labels
       mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: queuePage, error: null }));
       mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: queuePage, error: null }));
 
@@ -527,8 +533,8 @@ describe("Tier 2: Server Action Unit Tests", () => {
     // PostgREST caps an unbounded select at `Max rows` (1000 by default), silently. A queue
     // larger than that made the labelled set short, so a pair the rater had already judged
     // was served again and its second label collided on (pair, round) and was dropped.
-    it("sees every label when the annotator has more than the 1000-row API cap", async () => {
-      const API_MAX_ROWS = 1000;
+    // The 500 case is a cap set below the page size: a short page is not the last page.
+    it.each([1000, 500])("sees every label when the API caps rows at %i", async (API_MAX_ROWS) => {
       const TOTAL = 1200;
 
       const allPairs = Array.from({ length: TOTAL }, (_, i) => ({

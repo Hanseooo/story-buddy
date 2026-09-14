@@ -6,8 +6,9 @@ and `/adjudicate`
 This is the "pre-registered study rubric" the annotation screen refers to. It exists because there is
 one rater and round 2 is the same person two weeks later: agreement with yourself is only as good as
 the rules you are both following. **No rule here changes once the first non-pilot label exists.** A
-case the rules do not cover gets the closest rule, and a line in your private notes (pair ID, what
-you saw, what you chose) for the write-up. It never gets a new rule.
+case the rules do not cover gets the closest rule, and a line in your private notes for the write-up.
+It never gets a new rule. The screen has no notes field and shows no pair ID, so keep the notes in a
+separate file: the date and time, what you saw, and what you chose.
 
 ## The one principle
 
@@ -44,7 +45,9 @@ Compare only the character in the reference. Other characters on the page do not
 
 ## Step 3 — things that are not identity on their own
 
-Each of these alone is **Same**. Tick it as a reason only when the pair is already Different.
+Each of these alone is **Same**. Tick it as a reason only when the pair is already Different. The
+screen will accept Different with only Wrong Clothing or Wrong Style ticked; that combination is
+always a mistake under these rules, so check for it before you submit.
 
 - **Clothing and accessories** changed, added or missing (Wrong Clothing/Accessories).
 - **Art style** looks off (Wrong Style). References and pages share one style preset.
@@ -64,7 +67,8 @@ Each of these alone is **Same**. Tick it as a reason only when the pair is alrea
 
 Independent of Same or Different. Tick them on either answer.
 
-- **Broken Anatomy:** merged, missing or duplicated body parts on the reference character.
+- **Broken Anatomy:** merged, missing or duplicated body parts on the character as drawn on the page
+  (image 2), not on the reference.
 - **Text Visible:** any letters, numbers or writing anywhere on the page.
 
 ## Procedure

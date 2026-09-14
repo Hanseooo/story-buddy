@@ -357,7 +357,7 @@ def _asset(storage_path: str, kind: str, out_dir: pathlib.Path) -> AssetRecord:
 
 def _assets(memory: StoryMemory, out_dir: pathlib.Path) -> list[AssetRecord]:
     paths = [("ref", character.canonical_ref_image) for character in memory.characters]
-    paths += [("scene", scene.final_image_ref) for scene in memory.scenes]
+    paths += [("scene", path) for scene in memory.scenes for path in scene_images(scene)]
     assets = [_asset(path, kind, out_dir) for kind, path in paths if path]
     if len({asset.storage_path for asset in assets}) != len(assets):
         raise CorpusError("completed assets contain duplicate storage paths")

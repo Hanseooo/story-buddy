@@ -36,6 +36,7 @@ from contracts.story_memory import (
     TimelineEvent,
 )
 from finetune import build_corpus
+from finetune.build_dataset import pairs_from_memory
 from finetune.corpus_io import (
     CorpusError,
     IntakeRecord,
@@ -1427,6 +1428,56 @@ def test_an_unfinalized_scene_contributes_no_images(tmp_path):
     refs, scenes = build_corpus.download_images(values, tmp_path, supabase)
 
     assert (refs, scenes) == (1, 0)
+
+
+def test_the_bundle_inventories_every_image_a_pair_names(tmp_path):
+    """ADR-060 D1. `download_images` fetches the rejected attempts, and the bundle's asset list is
+    what `materialize_pairs` and `freeze_dataset` resolve pairs against. An attempt downloaded but
+    not inventoried fails materialization with "missing pair asset" on the first retried scene."""
+    class RetriedSceneGraph:
+        def stream(self, graph_input, config, stream_mode=None):
+            sink = build_corpus._fal_event_sink.get()
+            sink("attempted")
+            sink("completed")
+            values = graph_input.model_dump()
+            values.update(
+                cost=Cost(image_count=1),
+                characters=[
+                    Character(
+                        char_id="c0",
+                        name="Moss",
+                        description={"is_humanoid": False},
+                        canonical_ref_image="fixture-story/ref-c0-1.png",
+                    )
+                ],
+                scenes=[
+                    Scene(
+                        scene_id="s0",
+                        text_excerpt="x",
+                        characters_present=["c0"],
+                        attempts=[
+                            Attempt(image_ref="fixture-story/s0-1.png"),
+                            Attempt(image_ref="fixture-story/s0-2.png"),
+                        ],
+                        final_image_ref="fixture-story/s0-1.png",
+                    )
+                ],
+            )
+            yield "values", values
+
+    build_corpus.build([intake_story()], RetriedSceneGraph(), out_dir=tmp_path, supabase=FakeSupabase())
+
+    [bundle] = load_completed_bundles(tmp_path)
+    inventoried = {asset.storage_path for asset in bundle.assets}
+    assert {pair.scene_image for pair in pairs_from_memory(bundle.memory)} == {
+        "fixture-story/s0-1.png",
+        "fixture-story/s0-2.png",
+    }
+    assert inventoried == {
+        "fixture-story/ref-c0-1.png",
+        "fixture-story/s0-1.png",
+        "fixture-story/s0-2.png",
+    }
 
 
 def test_download_rejects_invalid_reference_magic_bytes(tmp_path):

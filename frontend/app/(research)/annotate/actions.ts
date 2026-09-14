@@ -123,12 +123,15 @@ export async function getNextPair() {
   const ANNOTATION_PAGE_SIZE = 1000;
   const userAnnotations: { pair_id: string; round: number | null }[] = [];
 
-  for (let page = 0; ; page++) {
+  while (true) {
+    // Offset by rows received, not pages requested: under a lower `Max rows` a page
+    // returns fewer rows than asked, and a page-numbered offset would skip the rest.
+    const offset = userAnnotations.length;
     const { data: rows, error: annotationsError } = await adminClient
       .from("annotations")
       .select("pair_id, round")
       .eq("annotator_id", user.id)
-      .range(page * ANNOTATION_PAGE_SIZE, (page + 1) * ANNOTATION_PAGE_SIZE - 1);
+      .range(offset, offset + ANNOTATION_PAGE_SIZE - 1);
 
     if (annotationsError) {
       return { error: "Failed to load annotation queue" };
@@ -138,11 +141,8 @@ export async function getNextPair() {
       break;
     }
 
+    // Only an empty page ends the loop, for the same reason: a short page is not the last.
     userAnnotations.push(...rows);
-
-    if (rows.length < ANNOTATION_PAGE_SIZE) {
-      break;
-    }
   }
 
   // Since 0018 a label's identity is (pair, round), not pair alone — the same pair is

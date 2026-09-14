@@ -202,7 +202,9 @@ per story** — `corpus_io.py:93` mints canonical references for `memory.charact
 also changed `dataset_selection.py` and `freeze_dataset.py`; backend suite 1404 passed.
 
 **A5 · Fixes (P6 and P7 done).** Queue pagination is in. The production-shaped rehearsal through
-freeze and LlamaFactory export passes. The fal retry (Finding G) and the checkpoint schedule (D2) are in; backend suite 1414 passed.
+freeze and LlamaFactory export passes. The fal retry (Finding G) and the checkpoint schedule (D2) are in; backend suite 1415 passed. Pre-merge
+review (2026-09-14) found the bundle inventory listed only finals, so every harvested attempt failed
+`materialize_pairs` with "missing pair asset"; `_assets` now uses `scene_images`, tested through `build`.
 
 **A6 · Supabase Pro (P5), and the pre-flight dashboard checks.**
 
