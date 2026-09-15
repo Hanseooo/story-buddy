@@ -359,11 +359,16 @@ def segment(state: StoryMemory) -> dict:
     scenes = []
     for i, r in enumerate(repaired):
         excerpt = " ".join(units[r.start : r.end + 1])
+        # A character name outside the roster is dropped and logged, as objects are below. The
+        # roster is what `analyze` extracted, and only roster characters have a reference to anchor,
+        # so the name had nothing to draw from. It used to raise; at temperature=0 syn-005
+        # (2026-09-16) listed "the other cranes" beside Pipit on every run and ended the campaign.
         char_ids: list[str] = []
         for name in r.characters_present:
             char_id = name_to_id.get(name)
             if char_id is None:
-                raise ValueError(f"segment: unknown character {name!r}")
+                log.warning("segment: character %r is not in the roster; dropped from s%d", name, i)
+                continue
             char_ids.append(char_id)
         char_ids = list(dict.fromkeys(char_ids))
 
