@@ -2,6 +2,7 @@ import threading
 import time
 from unittest.mock import MagicMock, patch
 
+import fal_client
 import httpx
 import pytest
 from presidio_analyzer import RecognizerResult
@@ -347,6 +348,50 @@ def test_run_fal_does_not_retry_a_download_the_server_refused():
         providers.text_to_image("a fox")
 
     mock_get.assert_called_once()
+
+
+# The message fal's dashboard showed for syn-007's rejected draw (request 01a0a6b4, 2026-09-16,
+# status 422, cost $0.00).
+_FAL_CONTENT_FLAG = (
+    "The content could not be processed because it contained material flagged by a content checker."
+)
+
+
+def _fal_http_error(status_code: int, message: str) -> fal_client.FalClientHTTPError:
+    request = httpx.Request("POST", "https://queue.fal.run/fal-ai/qwen-image")
+    return fal_client.FalClientHTTPError(
+        message, status_code, {}, response=httpx.Response(status_code, request=request)
+    )
+
+
+def test_run_fal_records_a_content_flag_as_a_definite_unbilled_failure():
+    """fal bills nothing for a draw its content checker rejects, so the call is `failed`, not
+    `failed_uncertain`. syn-007 (2026-09-16) stopped the B6 campaign on exactly this 422."""
+    events = []
+    fal = MagicMock()
+    fal.subscribe.side_effect = _fal_http_error(422, _FAL_CONTENT_FLAG)
+    token = providers._fal_event_sink.set(events.append)
+    try:
+        with patch("providers._fal", return_value=fal), pytest.raises(fal_client.FalClientHTTPError):
+            providers.text_to_image("a see-through sprite")
+    finally:
+        providers._fal_event_sink.reset(token)
+
+    assert events == ["attempted", "failed"]
+
+
+def test_run_fal_keeps_any_other_422_billing_uncertain():
+    events = []
+    fal = MagicMock()
+    fal.subscribe.side_effect = _fal_http_error(422, "image_size: unsupported value")
+    token = providers._fal_event_sink.set(events.append)
+    try:
+        with patch("providers._fal", return_value=fal), pytest.raises(fal_client.FalClientHTTPError):
+            providers.text_to_image("a fox")
+    finally:
+        providers._fal_event_sink.reset(token)
+
+    assert events == ["attempted", "failed_uncertain"]
 
 
 def test_edit_image_renames_reference_field_per_endpoint():

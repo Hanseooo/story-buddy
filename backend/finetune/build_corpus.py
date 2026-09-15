@@ -56,7 +56,7 @@ from pipeline.consistency_check import (
 )
 from pipeline.prompt_optimizer import SCENE_PROMPT_VERSION
 from pipeline.segment import SEGMENT_PROMPT_VERSION
-from providers import GENERATED_IMAGE_SIZE, _fal_event_sink, redact_pii
+from providers import GENERATED_IMAGE_SIZE, _fal_event_sink, is_fal_content_flag, redact_pii
 
 CORPUS_PATH = pathlib.Path(__file__).with_name("corpus_synthetic.json")
 # `backend/finetune/build_corpus.py` -> repo root -> `data/judge/corpus` (gitignored).
@@ -1149,8 +1149,10 @@ def build(
                         policy,
                     )
                     raise CorpusError(f"billing uncertain for {story_id}; reconcile before retry") from error
-                if isinstance(error, RosterMismatch) or (
-                    isinstance(error, RuntimeError) and str(error) in MODERATION_VERDICTS
+                if (
+                    isinstance(error, RosterMismatch)
+                    or (isinstance(error, RuntimeError) and str(error) in MODERATION_VERDICTS)
+                    or is_fal_content_flag(error)
                 ):
                     # A moderation verdict takes the same path. B6 (2026-09-16) stopped on its
                     # first story when the image backstop flagged a scene that had passed in the B5
@@ -1164,7 +1166,9 @@ def build(
                     # each declare two characters while the extractor can also surface a third
                     # genuine actor ("the vendor", "lolo"), so an unlucky ranking pushed a
                     # declared name out of the reference slice and ended a 30-story run at story
-                    # seven with six paid bundles. The story is still quarantined
+                    # seven with six paid bundles. fal's own content checker is a verdict too:
+                    # syn-007 (2026-09-16) had one draw of a see-through sprite rejected, unbilled.
+                    # The story is still quarantined
                     # `invalid_terminal` and still needs `--readmit-quarantined` before it runs
                     # again; only the blast radius changes.
                     _quarantine(
