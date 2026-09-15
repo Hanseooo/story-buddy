@@ -744,24 +744,34 @@ def test_segment_does_not_add_a_merely_mentioned_offscreen_character():
     assert scene.characters_present == ["c0"]
 
 
-def test_segment_rejects_an_unknown_visible_character():
+def test_segment_drops_a_character_name_outside_the_roster_and_logs_it(caplog):
+    """syn-005, 2026-09-16: the segmenter listed "the other cranes" beside Pipit, the only
+    character `analyze` extracted. At temperature=0 that raised on every run and ended the B6
+    campaign before its sixth story drew an image."""
     raw = SceneSegmentation(
         scenes=[
             ExtractedScene(
                 start=0,
                 end=0,
-                characters_present=["Ghost"],
+                characters_present=["Pipit", "the other cranes"],
                 visual_direction=_direction(
-                    key_action="Ghost crosses the room.",
+                    key_action="Pipit flies past the shelf.",
                     viewpoint="wide view",
                     framing="wide shot",
                 ),
             )
         ]
     )
+    state = _state(
+        raw="Pipit flew past the other cranes.",
+        characters=[Character(char_id="c0", name="Pipit")],
+    )
     with patch("pipeline.segment.segment_scenes", return_value=raw):
-        with pytest.raises(ValueError, match="unknown character.*Ghost"):
-            segment(_state(raw="Someone crossed the room."))
+        with caplog.at_level(logging.WARNING):
+            scene = segment(state)["scenes"][0]
+
+    assert scene.characters_present == ["c0"]
+    assert "'the other cranes' is not in the roster" in caplog.text
 
 
 def test_segment_reconciles_direction_characters_in_roster_order(caplog):

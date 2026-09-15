@@ -405,6 +405,22 @@ Rules that are not optional:
   bundled with s3 empty and s4–s5 never drawn. `run_story` now asks the graph's moderation routers
   about the final state before calling it completed. Re-run the same B6 command: `syn-001`
   quarantines with zero new spend and the campaign continues; readmit it afterwards.
+- **A story that hits 19 halts the campaign; resume it alone with a higher cap.** Second attempt,
+  2026-09-16, HEAD `1ddf1ce`: `syn-001` quarantined with zero new spend, `syn-002` and `syn-003`
+  bundled, and `syn-004` stopped `budget_stopped` at 19 calls with s5 (of 6 scenes) on its second
+  draw; nearly every scene took all three draws. `--extend-story-call-cap` refused it
+  (`build_corpus.py:805-816` requires an isolated `execution_id`), contrary to
+  `research_runbook.md:155`. What worked, zero-loss: `--limit 4 --max-calls-per-story 22
+  --resume-quarantined syn-004` without the extension flag; it bundled at 20 calls. That bundle
+  records a cap of 22 and no `initial_max_calls_per_story`, so this line is the only record the cap
+  was raised from 19. Repeat that shape (`--limit` up to the halted story) for each later halt, then
+  rerun the plain B6 command. Two OpenRouter 429s on the text backstop stopped this attempt as
+  `moderation_error` with zero spend; a 30-minute wait cleared them.
+- **An unknown character no longer ends the run.** Same attempt: `segment` raised
+  `ValueError: segment: unknown character 'the other cranes'` on `syn-005` (roster: Pipit) before any
+  image, identically at temperature 0. Fixed 2026-09-16: `segment` drops and logs a character name
+  outside the roster, as it already did for objects. Redo B1 on the merge, then rerun the plain B6
+  command.
 
 ### Phase C — label and freeze
 

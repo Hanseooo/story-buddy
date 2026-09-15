@@ -124,7 +124,8 @@ class SceneSegmentation(BaseModel):
    location names, object roster, and `timeline[]` as context.
 4. `repair(...)` — clamp, sort, de-overlap, close gaps, raise if empty, merge to ≤15. `_merge_extracted` combines payload fields deterministically: retains later structured visual direction, later cast, later objects, and later explicit location (`b.location_name or a.location_name`).
 5. Single-pass visible cast validation and explicit object mapping:
-   - `characters_present` names are mapped in listed order; unknown character raises `ValueError`.
+   - `characters_present` names are mapped in listed order; a name outside the roster is dropped
+     from that scene and logged at WARNING, as unknown object names are.
    - After that mapping, roster characters explicitly named in rendered `visual_direction` are
      appended in `name_to_id` (roster) order, without duplicates, and each reconciliation is logged.
      A character mentioned only in the excerpt is not appended.
