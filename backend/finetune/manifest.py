@@ -50,6 +50,47 @@ def local_image_path(storage_path: str, kind: ImageKind, root: Path | None = Non
     return ((root or DATA_ROOT) / kind / storage_path.replace("/", "_")).as_posix()
 
 
+def scene_images(scene) -> list[str]:
+    """Every image a finalized scene contributes, in generation order. The OTHER rule both sides
+    share, and it lives beside `local_image_path` for the same reason that one does.
+
+    ADR-060: the judge is deployed on candidates — `consistency_check` scores each attempt as it is
+    drawn (`consistency_check.py:296`) and the scene finalizes on whichever ranked best (`:424`).
+    Sampling only `final_image_ref` samples a subset filtered by the model under evaluation, so the
+    corpus carries the rejected attempts too.
+
+    Two consequences of that `:424` line, both load-bearing:
+
+    - the final IS one of the attempts, so this dedupes rather than concatenating. `mint_pair_id`
+      keys on `(char_id, scene_image)` and a repeat would mint a colliding pair id;
+    - the final is frequently NOT the last attempt — it is the best-ranked one, which on 52 of 65
+      real scenes never passed at all. Nothing here may assume `attempts[-1]`.
+
+    A scene with no `final_image_ref` belongs to a run that did not complete and contributes
+    nothing (ADR-060 D5).
+
+    Duck-typed on purpose: `build_corpus` calls it with raw graph state (dicts) and `build_dataset`
+    with a parsed `StoryMemory`.
+    """
+    def attr(value, key):
+        # Missing-key tolerant in both directions: graph state carries dicts, `StoryMemory`
+        # carries models, and a caller may hand over a stand-in that declares neither.
+        return value.get(key) if isinstance(value, dict) else getattr(value, key, None)
+
+    final = attr(scene, "final_image_ref")
+    if not final:
+        return []
+
+    images: list[str] = []
+    for attempt in attr(scene, "attempts") or []:
+        ref = attr(attempt, "image_ref")
+        if ref and ref not in images:
+            images.append(ref)
+    if final not in images:
+        images.append(final)    # defensive: a final that was never recorded as an attempt
+    return images
+
+
 def reference_status(character: Character) -> ReferenceStatus:
     """Mirror `char_bible.mint_reference`'s acceptance rule: no contradictions AND text-free.
 

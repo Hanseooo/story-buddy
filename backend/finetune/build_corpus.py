@@ -46,7 +46,7 @@ from finetune.corpus_io import (
     reconcile_declared_roster,
     write_bundle,
 )
-from finetune.manifest import local_image_path
+from finetune.manifest import local_image_path, scene_images
 from pipeline.analyze import EXTRACTION_PROMPT_VERSION, analyze
 from pipeline.char_bible import JUDGE_PROMPT_VERSION as REFERENCE_JUDGE_PROMPT_VERSION
 from pipeline.consistency_check import (
@@ -317,9 +317,9 @@ def download_images(values: dict | StoryMemory, out_dir: pathlib.Path, supabase)
         if _value_attr(character, "canonical_ref_image")
     ]
     targets += [
-        ("scene", _value_attr(scene, "final_image_ref"))
+        ("scene", storage_path)
         for scene in _value_attr(values, "scenes") or []
-        if _value_attr(scene, "final_image_ref")
+        for storage_path in scene_images(scene)
     ]
     for kind, storage_path in targets:
         local = pathlib.Path(local_image_path(storage_path, kind, root=out_dir))
@@ -357,7 +357,7 @@ def _asset(storage_path: str, kind: str, out_dir: pathlib.Path) -> AssetRecord:
 
 def _assets(memory: StoryMemory, out_dir: pathlib.Path) -> list[AssetRecord]:
     paths = [("ref", character.canonical_ref_image) for character in memory.characters]
-    paths += [("scene", scene.final_image_ref) for scene in memory.scenes]
+    paths += [("scene", path) for scene in memory.scenes for path in scene_images(scene)]
     assets = [_asset(path, kind, out_dir) for kind, path in paths if path]
     if len({asset.storage_path for asset in assets}) != len(assets):
         raise CorpusError("completed assets contain duplicate storage paths")

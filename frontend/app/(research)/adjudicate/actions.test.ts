@@ -530,6 +530,45 @@ describe("Adjudication Server Actions", () => {
       expect(res.pair).toBeNull();
     });
 
+    // The pre-filter that skips already-judged pairs runs an unbounded select, so it
+    // silently stops at the Data API's 1000-row cap once a rater crosses two rounds over
+    // ~500 pairs. Unlike the annotate queue, that truncation is not a correctness bug:
+    // an adjudicated pair leaves `status = conflicted`, and if that update ever failed
+    // the per-pair read below still sees the round-3 row and skips it. This test pins
+    // that backstop — remove it and truncation starts re-serving settled pairs.
+    it("does not re-serve an adjudicated pair when the pre-filter is truncated", async () => {
+      const API_MAX_ROWS = 1000;
+      mockGetUser.mockResolvedValueOnce({ data: { user: { id: "solo-rater" } }, error: null });
+      mockProfilesSelect.mockResolvedValueOnce({ data: { role: "researcher", is_adjudicator: false }, error: null });
+
+      // The round-3 row for `pair-done` sits past the cap, so the pre-filter never sees it.
+      const allAnnotations = [
+        ...Array.from({ length: 1150 }, (_, i) => ({ pair_id: `pair-${i}`, round: 1 })),
+        { pair_id: "pair-done", round: 3 },
+      ];
+      const pairDone = { id: "pair-done", canonical_storage_path: "c.png", scene_storage_path: "s.png" };
+      const perPairRows = [
+        { annotator_id: "solo-rater", round: 1, same_character: true, failure_reasons: [], anatomy_intact: true, text_free: true },
+        { annotator_id: "solo-rater", round: 2, same_character: false, failure_reasons: ["wrong_colour"], anatomy_intact: true, text_free: true },
+        { annotator_id: "solo-rater", round: 3, same_character: false, failure_reasons: ["wrong_colour"], anatomy_intact: true, text_free: true },
+      ];
+
+      mockAdminSelect.mockImplementation((table: string, cols: string) => {
+        if (table === "annotations" && cols.startsWith("pair_id")) {
+          return createQueryMock({ data: allAnnotations.slice(0, API_MAX_ROWS), error: null });
+        }
+        if (table === "annotations") {
+          return { eq: vi.fn().mockResolvedValue({ data: perPairRows, error: null }) };
+        }
+        if (table === "research_pairs") return createQueryMock({ data: [pairDone], error: null });
+        return createQueryMock({ data: [], error: null });
+      });
+      mockAdminCreateSignedUrl.mockResolvedValue({ data: { signedUrl: "https://signed.example/x" }, error: null });
+
+      const res = await getConflictedPair();
+      expect(res.pair).toBeNull();
+    });
+
     it("skips pair if user is one of the original annotators and returns the valid one", async () => {
       const mockPairs = [{ id: "pair-1", canonical_storage_path: "path/c1.png", scene_storage_path: "path/s1.png" }, { id: "pair-2", canonical_storage_path: "path/c2.png", scene_storage_path: "path/s2.png" }];
       mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [] })); // userAnnotations

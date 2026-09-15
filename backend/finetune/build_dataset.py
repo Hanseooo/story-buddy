@@ -38,6 +38,7 @@ from finetune.manifest import (
     Split,
     local_image_path,
     reference_status,
+    scene_images,
     write_manifest,
 )
 
@@ -92,26 +93,29 @@ def mint_pair_id(char_id: str, scene_image: str) -> str:
 
 
 def pairs_from_memory(memory: StoryMemory) -> list[Pair]:
-    """Each finalized scene against the canonical reference of every character present in it.
+    """Every image a finalized scene drew, against the canonical reference of each character in it.
 
     Reference first, scene second — order is load-bearing (§5.2), and it is the same order
     `providers.judge` sends them in.
+
+    `scene_images` decides which images those are (ADR-060: candidates, not just the final) and is
+    the same rule `build_corpus.download_images` fetches by. The two must not drift — a pair naming
+    an image the bundle never downloaded resolves to nothing and LLaMA-Factory reports no error.
     """
     by_id = {c.char_id: c for c in memory.characters}
     pairs = []
     for scene in memory.scenes:
-        if not scene.final_image_ref:
-            continue
-        for char_id in scene.characters_present:
-            character = by_id.get(char_id)
-            if character is None or not character.canonical_ref_image:
-                continue    # nothing to compare against; consistency_check skips these too
-            pairs.append(Pair(
-                pair_id=mint_pair_id(char_id, scene.final_image_ref),
-                char_id=char_id,
-                ref_image=character.canonical_ref_image,
-                scene_image=scene.final_image_ref,
-            ))
+        for scene_image in scene_images(scene):
+            for char_id in scene.characters_present:
+                character = by_id.get(char_id)
+                if character is None or not character.canonical_ref_image:
+                    continue    # nothing to compare against; consistency_check skips these too
+                pairs.append(Pair(
+                    pair_id=mint_pair_id(char_id, scene_image),
+                    char_id=char_id,
+                    ref_image=character.canonical_ref_image,
+                    scene_image=scene_image,
+                ))
     return pairs
 
 
@@ -269,6 +273,10 @@ def build_dataset(
         if hard_negative_matches is None:
             raise ManifestError("hard-negative selection is required")
         records += constructed_records(records, hard_negative_matches)
+    # Group by split. `freeze_dataset` writes one manifest per split and checks their concatenation
+    # equals this file byte-for-byte; constructed (train) records appended after the test records
+    # failed that check at the end of Phase C. Stable sort keeps corpus order within each split.
+    records.sort(key=lambda r: ("train", "val", "test").index(r.split))
 
     write_manifest(out_path, records)     # validates — §3.2's guard is not optional
     log.info("build_dataset: wrote %d records to %s", len(records), out_path)

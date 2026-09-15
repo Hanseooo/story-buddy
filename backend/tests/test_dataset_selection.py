@@ -2,6 +2,7 @@
 import copy
 import hashlib
 import json
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -23,10 +24,12 @@ from finetune.corpus_io import (
     intake_sha256,
 )
 from finetune.dataset_selection import (
+    DONATED_PRIMARY_ALLOCATION,
     DatasetSelection,
     DonatedReplacement,
     HardNegativeMatch,
     candidate_report,
+    validate_donated_allocation,
     load_dataset_selection,
     prepare_dataset_bundles,
     select_dataset_bundles,
@@ -370,7 +373,9 @@ def sample_intakes_and_bundles():
     return syn_intakes, syn_bundles, don_intakes, don_bundles
 
 
-def test_select_dataset_bundles_default_primaries():
+def test_unspent_backups_enlarge_the_held_out_set():
+    """2026-09-12 amendment: backups serve replacement first, then every unspent one that is
+    consented and whose run finalized joins the held-out set. Nothing selects among them."""
     syn_intakes, syn_bundles, don_intakes, don_bundles = sample_intakes_and_bundles()
     all_bundles = syn_bundles + don_bundles
     selection = DatasetSelection(
@@ -382,14 +387,74 @@ def test_select_dataset_bundles_default_primaries():
         all_bundles, syn_intakes, don_intakes, selection, "selection-hash-123"
     )
 
-    # 2 synthetic + 10 primary donated = 12
-    assert len(selected) == 12
+    # 2 synthetic + 10 primary + 5 unspent backups = 17
+    assert len(selected) == 17
     selected_don_ids = [b.memory.story_id for b in selected if b.provenance == "donated"]
-    assert len(selected_don_ids) == 10
+    assert len(selected_don_ids) == 15
     assert audit.selected_donated_stories == sorted(selected_don_ids)
-    assert len(audit.excluded_donated_stories) == 5
+    assert audit.excluded_donated_stories == []
     assert audit.selection_sha256 == "selection-hash-123"
     assert audit.replacement_reasons == {}
+
+
+def test_a_backup_whose_run_never_finished_is_left_out():
+    """Admission is mechanical: consented AND finalized. A backup that crashed mid-run is
+    excluded rather than failing the freeze — enlargement must not make the reserve a liability."""
+    syn_intakes, syn_bundles, don_intakes, don_bundles = sample_intakes_and_bundles()
+    without_don_014 = [b for b in don_bundles if b.memory.story_id != "don-014"]
+    selected, audit = select_dataset_bundles(
+        syn_bundles + without_don_014,
+        syn_intakes,
+        don_intakes,
+        DatasetSelection(
+            hard_negatives_frozen_at=datetime.now(timezone.utc),
+            hard_negative_matches=[],
+            donated_replacements=[],
+        ),
+        "sel-hash",
+    )
+    selected_don_ids = {b.memory.story_id for b in selected if b.provenance == "donated"}
+    assert "don-014" not in selected_don_ids
+    assert len(selected_don_ids) == 14
+    assert audit.excluded_donated_stories == ["don-014"]
+
+
+def test_a_withdrawn_backup_does_not_enlarge_the_held_out_set():
+    """Consent is the admission gate it always was. Enlargement never reaches a withdrawn story."""
+    syn_intakes, syn_bundles, don_intakes, don_bundles = sample_intakes_and_bundles()
+    don_intakes[13] = don_intakes[13].model_copy(update={"withdrawal_state": "withdrawn"})
+    don_bundles[13] = don_bundles[13].model_copy(
+        update={"run_metadata": {**don_bundles[13].run_metadata,
+                                 "intake_sha256": intake_sha256(don_intakes[13])}}
+    )
+    selected, audit = select_dataset_bundles(
+        syn_bundles + don_bundles,
+        syn_intakes,
+        don_intakes,
+        DatasetSelection(
+            hard_negatives_frozen_at=datetime.now(timezone.utc),
+            hard_negative_matches=[],
+            donated_replacements=[],
+        ),
+        "sel-hash",
+    )
+    selected_don_ids = {b.memory.story_id for b in selected if b.provenance == "donated"}
+    assert "don-014" not in selected_don_ids
+    assert len(selected_don_ids) == 14
+    assert audit.excluded_donated_stories == ["don-014"]
+
+
+def test_donated_allocation_floor_rejects_a_short_primary_style():
+    """The registered floor, shared with the freeze-side guard so the two cannot drift.
+    Enlargement above 4/3/3 is allowed; falling below any of them is style drift."""
+    validate_donated_allocation(Counter(DONATED_PRIMARY_ALLOCATION), context="selection")
+    validate_donated_allocation(
+        Counter({"gouache": 5, "cel": 5, "cut_paper": 5}), context="selection"
+    )
+    with pytest.raises(ManifestError, match="below the registered primary allocation"):
+        validate_donated_allocation(
+            Counter({"gouache": 4, "cel": 2, "cut_paper": 4}), context="selection"
+        )
 
 
 @pytest.mark.parametrize(
@@ -463,9 +528,12 @@ def test_select_dataset_bundles_with_valid_backup_replacement():
     selected_don_ids = [b.memory.story_id for b in selected if b.provenance == "donated"]
     assert "don-005" not in selected_don_ids
     assert "don-012" in selected_don_ids
-    assert len(selected_don_ids) == 10
+    # don-012 is spent replacing don-005, so it enlarges nothing. The four backups NOT spent on a
+    # replacement do: 9 surviving primaries + don-012 + don-011/013/014/015 = 14.
+    assert len(selected_don_ids) == 14
+    assert selected_don_ids.count("don-012") == 1
     assert audit.replacement_reasons == {"don-005": "withdrawal"}
-    assert "don-005" in audit.excluded_donated_stories
+    assert audit.excluded_donated_stories == ["don-005"]
 
 
 def test_select_dataset_bundles_rejects_withdrawal_replacement_for_active_primary():

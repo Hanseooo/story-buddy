@@ -14,6 +14,35 @@ from finetune.manifest import ManifestError
 
 SYNTHETIC_INTAKE = Path(__file__).with_name("corpus_synthetic.json")
 
+# The 10 primary donated slots, fixed at intake by the 2026-08-22 amendment. Gouache carries the
+# extra slot because it is the product default, not because of any generated outcome.
+DONATED_PRIMARY_ALLOCATION = Counter({"gouache": 4, "cel": 3, "cut_paper": 3})
+
+
+def validate_donated_allocation(styles: Counter, *, context: str) -> None:
+    """The held-out floor. Shared by selection and by the freeze guard so the two cannot disagree.
+
+    Until the 2026-09-12 amendment this was an equality check: exactly 4/3/3, exactly 10 stories.
+    That implemented the 2026-08-24 replacement rule but contradicted §2, which grants the backups
+    to the held-out set when they are not spent replacing a primary. Equality is now a FLOOR —
+    enlargement above it is registered, falling below any style is still drift.
+
+    What the floor actually protects: every primary slot is covered, by its own story or by a
+    same-style replacement. Above it the achieved mix is whatever the mechanical admission rule
+    (consented AND finalized) produces, and §12's 2026-08-22 rule reports it rather than correcting
+    it. Per-style results are exploratory, so the drift costs a reporting line, not an endpoint.
+    """
+    short = {
+        style: (styles.get(style, 0), floor)
+        for style, floor in DONATED_PRIMARY_ALLOCATION.items()
+        if styles.get(style, 0) < floor
+    }
+    if short:
+        detail = ", ".join(f"{style} {got} < {floor}" for style, (got, floor) in sorted(short.items()))
+        raise ManifestError(
+            f"{context}: donated style allocation is below the registered primary allocation ({detail})"
+        )
+
 
 def lineage_id(story_id: str, char_id: str) -> str:
     """Qualify StoryMemory's story-local character IDs for corpus-wide split guards."""
@@ -255,20 +284,37 @@ def select_dataset_bundles(
 
     selected_donated_ids = (primaries - replaced_primaries) | used_backups
 
-    # Verify no selected story is withdrawn
+    # Verify no selected story is withdrawn. Primaries are mandatory members: a withdrawn or
+    # unfinished one must have been replaced, and the freeze fails closed when it was not.
     for sid in selected_donated_ids:
         if donated_by_id[sid].withdrawal_state == "withdrawn":
             raise ManifestError(f"selected story {sid} is withdrawn without replacement")
         if sid not in donated_bundles_by_id:
             raise ManifestError(f"selected donated story {sid} is missing from completed bundles")
 
-    # Verify 10 stories with 4 gouache, 3 cel, 3 cut_paper
-    if len(selected_donated_ids) != 10:
-        raise ManifestError(f"final donated selection must have 10 stories, got {len(selected_donated_ids)}")
+    # 2026-09-12 amendment: replacement first, then every unspent backup enlarges the held-out set.
+    # The test set is bootstrapped by character (§5.1), so each added story is added statistical
+    # power on the primary endpoint, and B6 generates all 15 either way.
+    #
+    # The rule is deliberately mechanical — consented AND finalized, no judgement at this step.
+    # "Admit the ones that came out well" would be selection on generated outcomes, which is the
+    # degree of freedom §2 closes by requiring the decision before labelling begins. A backup that
+    # is withdrawn or whose run never finalized is excluded here rather than raising: unlike a
+    # primary it was never a required member, so it must not be able to fail the freeze.
+    enlarging_backups = {
+        sid for sid in backups - used_backups
+        if donated_by_id[sid].withdrawal_state != "withdrawn" and sid in donated_bundles_by_id
+    }
+    selected_donated_ids |= enlarging_backups
+
+    if len(selected_donated_ids) < DONATED_PRIMARY_ALLOCATION.total():
+        raise ManifestError(
+            f"final donated selection must have at least {DONATED_PRIMARY_ALLOCATION.total()} "
+            f"stories, got {len(selected_donated_ids)}"
+        )
 
     selected_styles = Counter(donated_by_id[sid].style_preset_id for sid in selected_donated_ids)
-    if selected_styles != {"gouache": 4, "cel": 3, "cut_paper": 3}:
-        raise ManifestError(f"final donated selection style distribution must be 4 gouache / 3 cel / 3 cut_paper, got {selected_styles}")
+    validate_donated_allocation(selected_styles, context="final donated selection")
 
     excluded_donated_stories = sorted(sid for sid in donated_by_id if sid not in selected_donated_ids)
 

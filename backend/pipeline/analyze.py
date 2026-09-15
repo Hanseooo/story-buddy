@@ -332,10 +332,12 @@ def analyze(state: StoryMemory) -> dict:
     for character in characters:
         name_to_char_id.setdefault(character.name, character.char_id)
 
-    # §4.2 makes an UNKNOWN owner a boundary error. A owner the model did extract but that the
-    # 3-character cap dropped is not unknown — it is known and uncapped, and raising on it would
-    # turn a routine over-extraction (the cap exists precisely because the prompt is not
-    # enforceable) into a dead job before any image is drawn.
+    # An owner that resolves to no persisted character leaves the object unowned, logged, never a
+    # dead job. Two ways it happens, both routine: the 3-character cap dropped the owner, or the
+    # owner was never a character ("Angela's parents", "Erin and Klare"). The second used to
+    # raise; extraction runs at temperature=0 and the one re-ask is blind, so 3 of the 15 donated
+    # stories (2026-09-13) failed identically on every run. A group owner cannot map to one
+    # `owner_char_id`, so nothing is lost but the relation the object never had.
     extracted_names = {extracted.name for extracted in analysis.characters}
 
     objects = []
@@ -344,11 +346,12 @@ def analyze(state: StoryMemory) -> dict:
         if extracted.owner_name is not None:
             owner_char_id = name_to_char_id.get(extracted.owner_name)
             if owner_char_id is None:
-                if extracted.owner_name not in extracted_names:
-                    raise ValueError(f"analyze: unknown owner {extracted.owner_name!r}")
                 log.warning(
-                    "analyze: owner %r capped out of the roster; object %r kept unowned",
+                    "analyze: owner %r %s; object %r kept unowned",
                     extracted.owner_name,
+                    "capped out of the roster"
+                    if extracted.owner_name in extracted_names
+                    else "is not in the roster",
                     extracted.name,
                 )
         objects.append(

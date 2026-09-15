@@ -61,7 +61,7 @@ export const TAXONOMY_LABELS: Record<
   different_face: {
     label: "Different Face",
     shortcut: "6",
-    example: "Same species, but facial expression identity or eyes belong to an unrelated individual",
+    example: "Same species, but face shape, eyes, or markings belong to an unrelated individual",
     description: "Facial structure, muzzle shape, eye style, or facial markings mismatch",
   },
   character_absent: {

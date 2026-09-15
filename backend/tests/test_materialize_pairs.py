@@ -333,7 +333,9 @@ def test_incomplete_bundle_fails_before_any_insert(tmp_path):
     assert supabase.pairs.inserted == []
 
 
-def test_retry_bundle_materializes_only_the_finalized_scene(tmp_path):
+def test_retry_bundle_materializes_the_rejected_attempt_beside_the_finalized_scene(tmp_path):
+    """ADR-060 D1. This asserted the opposite until 2026-09-12: the judge is deployed on
+    candidates, so a retry's rejected draw is queued for annotation like any other pair."""
     run_bundle = bundle(tmp_path)
     rejected = Attempt(image_ref="upstream/rejected-scene.png", passed=False)
     finalized = run_bundle.memory.scenes[0].attempts[0]
@@ -343,15 +345,36 @@ def test_retry_bundle_materializes_only_the_finalized_scene(tmp_path):
             "final_image_ref": finalized.image_ref,
         }
     )
+    rejected_bytes = image_bytes("WEBP")
+    rejected_path = tmp_path / "rejected-scene.webp"
+    rejected_path.write_bytes(rejected_bytes)
     run_bundle = run_bundle.model_copy(
-        update={"memory": run_bundle.memory.model_copy(update={"scenes": [scene]})}
+        update={
+            "memory": run_bundle.memory.model_copy(update={"scenes": [scene]}),
+            "assets": [
+                *run_bundle.assets,
+                asset(rejected.image_ref, rejected_path, rejected_bytes, "scene"),
+            ],
+        }
     )
     supabase = FakeSupabase()
 
     summary = materialize([run_bundle], supabase)
 
-    assert summary.pairs_inserted == 1
-    assert supabase.pairs.inserted == [[expected_pair(run_bundle)]]
+    rejected_id = mint_pair_id("char-1", rejected.image_ref)
+    assert summary.pairs_inserted == 2
+    assert supabase.pairs.inserted == [[
+        {
+            "id": rejected_id,
+            "canonical_storage_path": f"research/corpus/{rejected_id}/a.png",
+            "scene_storage_path": f"research/corpus/{rejected_id}/b.webp",
+            "char_id": "char-1",
+            "split": run_bundle.split,
+            "is_constructed_negative": False,
+            "is_pilot": False,
+        },
+        expected_pair(run_bundle),
+    ]]
 
 
 def test_database_failure_removes_only_objects_uploaded_by_this_invocation(tmp_path):

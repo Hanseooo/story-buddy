@@ -62,8 +62,10 @@ uv run python -m finetune.build_corpus --check-rosters --corpus finetune/corpus_
 # the telemetry, the abandoned thread and the stated reason in the bundle metadata.
 uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --limit 1 --max-usd <cap> --max-calls-per-story 25 --price-per-megapixel <current-usd-per-megapixel> --price-basis "<official-price-url-and-date>" --readmit-quarantined <story_id> --readmit-reason "<why the prior verdict no longer applies>"
 
-# 2. Fresh paid synthetic smoke (3 stories, 25 calls/story; USD 2.63 at USD 0.035/call)
-uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --limit 3 --max-usd 2.63 --max-calls-per-story 25 --price-per-megapixel <current-usd-per-megapixel> --price-basis "<official-price-url-and-date>"
+# 2. Fresh paid synthetic smoke at the campaign cap (3 stories, 19 calls/story; USD 2.00 at USD 0.035/call).
+# Use a NEW --out, never the campaign directory: --max-usd is cumulative per --out, so smoke spend
+# written into ../data/judge/corpus would be charged against the campaign's USD 25.
+uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus-smoke-final --limit 3 --max-usd 2.00 --max-calls-per-story 19 --price-per-megapixel <current-usd-per-megapixel> --price-basis "<official-price-url-and-date>"
 
 # 2a. Current syn-001 one-time cap extension (14 abandoned calls + 25 calls for each smoke story;
 # USD 3.12 total campaign authorization at USD 0.035/call). Do not use after this incident closes.
@@ -84,14 +86,20 @@ uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json -
 # (30 - 1.925) / 0.035 = 802, having already paid for everything before that.
 #
 # Steps 3 and 4 share one --out, so they are ONE campaign against one ceiling: 30 synthetic + 15
-# donated = 45 stories. The cap the USD 25 working allocation permits is
-# floor(25 / (45 x 0.035)) = 15 calls/story, whose worst case is 45 x 15 x 0.035 = USD 23.63 and
-# which leaves the USD 25-30 band intact for a cap extension on a story that needs one.
-uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --max-usd 25 --max-calls-per-story 15 --price-per-megapixel <same-current-usd-per-megapixel> --price-basis "<same-official-price-url-and-date>"
+# donated = 45 stories. The cap is 19 calls/story, measured rather than derived: the smokes at
+# a723126 drew syn-002 = 14, syn-003 = 15 (budget-stopped) and syn-001 = 18-26 over five runs, so 15
+# would halt the campaign on its first story. The reserve check is per story against what is left,
+# so the binding case is every story maxing out: 45 x 19 x 0.035 = USD 29.93, inside the USD 30
+# ceiling. 20 does not fit (USD 31.50).
+#
+# --max-usd is cumulative across every invocation into this --out, not a fresh budget per command.
+# Start at the USD 25 working allocation; if late stories do not start because the reserve no
+# longer fits, re-run the same command with --max-usd raised toward 30 -- completed stories skip.
+uv run python -m finetune.build_corpus --corpus finetune/corpus_synthetic.json --out ../data/judge/corpus --max-usd 25 --max-calls-per-story 19 --price-per-megapixel <same-current-usd-per-megapixel> --price-basis "<same-official-price-url-and-date>"
 
 # 4. Full donated generation (15 candidate stories: 10 primary + 5 backup). Same campaign
 # directory, same ceiling, same cap -- the arithmetic above already counts these 15 stories.
-uv run python -m finetune.build_corpus --corpus ../data/judge/intake/donated.json --out ../data/judge/corpus --max-usd 25 --max-calls-per-story 15 --price-per-megapixel <same-current-usd-per-megapixel> --price-basis "<same-official-price-url-and-date>"
+uv run python -m finetune.build_corpus --corpus ../data/judge/intake/donated.json --out ../data/judge/corpus --max-usd 25 --max-calls-per-story 19 --price-per-megapixel <same-current-usd-per-megapixel> --price-basis "<same-official-price-url-and-date>"
 
 # 5. Read-only candidate inspection for hard negative selection
 uv run python -m finetune.build_dataset --candidate-report --data ../data/judge/corpus
@@ -138,13 +146,14 @@ uv run python -m finetune.evaluate validate --freeze ../data/judge/freezes/obj4-
 uv run python -m finetune.evaluate heldout --freeze ../data/judge/freezes/obj4-v1 --lock ../data/judge/evaluations/obj4-v1/evaluation_lock.json --signoff ../data/judge/evaluations/obj4-v1/evaluation_signoff.json --ledger ../data/judge/evaluations/obj4-v1/test_access.jsonl --run-id obj4-heldout-1 --predictions ../data/judge/evaluations/obj4-v1/heldout-1/predictions --out ../data/judge/evaluations/obj4-v1/heldout-1/objective4_results.json
 ```
 
-**Before running step 3, read the smoke's per-story `attempted_calls`.** Fifteen calls per story is a
-*budget-derived* cap, not a measured one: no completed corpus story exists yet, and the only spend evidence
-on record is syn-001's 14 abandoned calls. At the production `--scene-attempts 3` a story's structural worst
-case is the full 55, so a cap of 15 stops an overrunning story at the seam and quarantines it for
-reconciliation rather than breaching the campaign ceiling — the intended trade in `research-corpus-operations.md`
-§6, but one that costs a story rather than money. If the smoke shows a completed story needing more than 15
-draws, the corpus must shed stories or `--scene-attempts` must drop; lowering it is not a free tuning knob,
+**Before running step 3, read the smoke's per-story `attempted_calls`.** Nineteen calls per story is
+measured on the a723126 smokes (above), but it is a thin measurement: three stories, one of which ranged
+18-26. At the production `--scene-attempts 3` a story's structural worst case is the full 55, so a cap of 19
+stops an overrunning story at the seam and quarantines it for reconciliation rather than breaching the
+campaign ceiling — the intended trade in `research-corpus-operations.md` §6, but one that costs a story rather
+than money. A single story that stops at the cap can be resumed with `--resume-quarantined <story_id>
+--extend-story-call-cap <story_id>`, spending from the USD 25-30 band. If the smoke shows completed stories
+routinely needing more than 19 draws, the corpus must shed stories or `--scene-attempts` must drop; lowering it is not a free tuning knob,
 because bundles drawn under different caps are different sampling distributions and may not be mixed without
 recording it, so it would have to be applied uniformly and the already-drawn smoke bundles redrawn or excluded.
 Do not raise `--max-calls-per-story` instead: 45 stories at 20 calls is 45 x 20 x 0.035 = USD 31.50, past the
