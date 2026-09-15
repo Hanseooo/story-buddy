@@ -421,6 +421,14 @@ Rules that are not optional:
   image, identically at temperature 0. Fixed 2026-09-16: `segment` drops and logs a character name
   outside the roster, as it already did for objects. Redo B1 on the merge, then rerun the plain B6
   command.
+- **An upstream error sent as HTTP 200 is retried.** Third attempt, 2026-09-16, HEAD `c1f0557`:
+  `syn-005` and `syn-006` bundled, then `syn-007` exited 1 three times at `analyze` with
+  `TypeError: 'NoneType' object is not iterable`, zero images. A replay through `structured_text`
+  captured the body: status 200, `{"error": {"message": "Provider timed out after 6356ms", "code":
+  504}}`, no `choices`. DeepInfra, the only provider `TEXT_PROVIDERS` allows (`providers.py:92-98`),
+  timed out on four of five calls; the SDK retries on status only. Fixed 2026-09-16:
+  `_fetch_completion` asks again up to three times inside `_bounded`, then raises a `RuntimeError`
+  naming the model. Redo B1 on the merge, then rerun the plain B6 command.
 
 ### Phase C — label and freeze
 
