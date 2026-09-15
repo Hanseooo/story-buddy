@@ -130,12 +130,14 @@ class SceneSegmentation(BaseModel):
      A character mentioned only in the excerpt is not appended.
    - `objects_present` maps only the object names explicitly listed for that selected frame; duplicate
      names are removed while preserving order.
-   - Unknown object raises `ValueError`; unknown location logs warning and carries forward.
+   - Unknown object is dropped from the scene with a warning (it raised until 2026-09-16: at
+     temperature 0, syn-001 failed identically on every run); unknown location logs warning and
+     carries forward.
    - `object_states` (ADR-052) maps an object name to how that object looks in THIS scene, and only
      where its appearance departs from the object's permanent axes (ADR-053 D1). It records the state
      the object is in, never the event that changed it, so the same state repeats on every later
      scene where the object still looks that way. Names map through the same roster dict as
-     `objects_present` with the same unknown-name `ValueError`. Values are trimmed, single-line, and
+     `objects_present` with the same unknown-name posture (dropped, warned). Values are trimmed, single-line, and
      at most 120 code points; placeholder values (`none`, `unknown`, `unspecified`, `neutral`) are
      dropped rather than rejected. A state for an object this scene does not show is kept on the
      `Scene` and dropped at render time — `segment` owns the scene, `build_prompt` owns the page.

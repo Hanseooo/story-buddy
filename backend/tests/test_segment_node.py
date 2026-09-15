@@ -909,6 +909,23 @@ def test_unowned_object_explicitly_visible_in_scene_1_and_absent_in_scene_2():
     assert [scene.objects_present for scene in scenes] == [["obj1"], []]
 
 
+def test_segment_drops_an_object_name_outside_the_roster_and_logs_it(caplog):
+    """syn-001, 2026-09-16: the weathervane IS Bok-Bok, so `analyze` rightly extracted no such
+    object, yet the segmenter named it. At temperature=0 that raised on every run and ended the
+    campaign on story one."""
+    raw = SceneSegmentation(
+        scenes=[
+            _r(0, 0, chars=["Ana"], objects_present=["weathervane", "wooden sword"],
+               object_states={"weathervane": "tail bent"}, visual_direction="Ana lifts the sword."),
+        ]
+    )
+    with caplog.at_level(logging.WARNING):
+        scenes = _segment_objects(raw)
+    assert scenes[0].objects_present == ["obj0"]
+    assert scenes[0].object_states == {}
+    assert "'weathervane' is not in the roster" in caplog.text
+
+
 def test_jamie_bolt_contract_keeps_objects_explicit_to_the_selected_frame():
     """Local contract coverage for the production regression; Tier-B still needs the exact story."""
     raw = (
