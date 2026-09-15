@@ -2659,6 +2659,105 @@ def test_a_roster_quarantine_stays_readmittable_after_the_campaign_continues(tmp
     assert bundle.run_metadata["readmit_reason"] == "extraction ranking fixed"
 
 
+class FlaggedGraph(RosterGraph):
+    """Pays for one image, then raises the way `pipeline.graph`'s moderation routers do."""
+
+    def __init__(self, flagged, error):
+        super().__init__()
+        self.flagged = flagged
+        self.error = error
+
+    def stream(self, graph_input, config, stream_mode=None):
+        story_id = config["configurable"]["thread_id"].split("--")[0]
+        for index, chunk in enumerate(super().stream(graph_input, config, stream_mode)):
+            yield chunk
+            if index == 1 and story_id in self.flagged:
+                raise RuntimeError(self.error)
+
+
+@pytest.mark.parametrize("verdict", ["content_flagged", "ref_flagged", "output_moderation_failed"])
+def test_a_moderation_verdict_quarantines_its_story_and_the_campaign_continues(tmp_path, verdict):
+    """B6 (2026-09-16) stopped on its first story: the image backstop flagged syn-001's s3 twice,
+    a scene that had passed in the B5 smoke, and `build` re-raised the router's RuntimeError. The
+    freeze needs every synthetic story, so the story must stay readmittable rather than dropped."""
+    stories = _roster_stories("a", "b", "c")
+
+    summary = build_corpus.build(
+        stories,
+        FlaggedGraph({"b"}, verdict),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("25.00")),
+    )
+    state = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
+
+    assert summary["stories_run"] == 2
+    assert summary["halted"] is False
+    assert summary["quarantined_story_ids"] == ["b"]
+    assert state["b"]["reason_code"] == "invalid_terminal"
+    assert verdict in state["b"]["quarantined"]
+    assert state["b"]["telemetry"]["attempted"] == 1
+
+
+class ResumedFlaggedGraph(RosterGraph):
+    """A thread resumed after a router raised: LangGraph applies the node's saved write and returns
+    normally, so the stream ENDS with the failed verdict in state instead of raising it."""
+
+    def __init__(self, flagged):
+        super().__init__()
+        self.flagged = flagged
+
+    def stream(self, graph_input, config, stream_mode=None):
+        story_id = config["configurable"]["thread_id"].split("--")[0]
+        values = None
+        for mode, payload in super().stream(graph_input, config, stream_mode):
+            values = payload
+            yield mode, payload
+        if story_id in self.flagged:
+            scene = Scene(scene_id="s3", text_excerpt="x", moderation_status="failed")
+            yield "values", dict(values, scenes=[scene])
+
+
+def test_a_resumed_moderation_verdict_is_quarantined_not_bundled(tmp_path):
+    """B6 (2026-09-16): syn-001's checkpoint holds `output_mod`'s failed write. Resumed, it came
+    back "completed", and `_bundle` checks only id, style and roster, so it would have packaged a
+    book with s3 empty and s4-s5 never drawn -- immutable, unquarantined, not readmittable."""
+    stories = _roster_stories("a", "b", "c")
+
+    summary = build_corpus.build(
+        stories,
+        ResumedFlaggedGraph({"b"}),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("25.00")),
+    )
+    state = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
+
+    assert summary["quarantined_story_ids"] == ["b"]
+    assert sorted(bundle.memory.story_id for bundle in load_completed_bundles(tmp_path)) == ["a", "c"]
+    assert "output_moderation_failed" in state["b"]["quarantined"]
+
+
+def test_a_moderation_outage_still_stops_the_campaign(tmp_path):
+    """`moderation_error` is a classifier that could not answer, not a verdict. The node raises it
+    so a resume asks again (`input_gate`, 2026-09-16); quarantining it would spend a readmission on
+    a 429."""
+    stories = _roster_stories("a", "b")
+
+    with pytest.raises(RuntimeError, match="moderation_error"):
+        build_corpus.build(
+            stories,
+            FlaggedGraph({"a"}, "moderation_error"),
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+            policy=build_corpus.SpendPolicy(max_usd=Decimal("25.00")),
+        )
+
+    state = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
+    assert state["a"]["in_progress"] is True
+    assert "b" not in state
+
+
 def test_a_clean_campaign_reports_no_quarantines(tmp_path, stories):
     summary = build_corpus.build(
         stories[:1],

@@ -49,6 +49,7 @@ from finetune.corpus_io import (
 from finetune.manifest import local_image_path, scene_images
 from pipeline.analyze import EXTRACTION_PROMPT_VERSION, analyze
 from pipeline.char_bible import JUDGE_PROMPT_VERSION as REFERENCE_JUDGE_PROMPT_VERSION
+from pipeline.graph import moderation_router, route_after_output_mod
 from pipeline.consistency_check import (
     JUDGE_PROMPT_VERSION,
     SCENE_CONSTRAINT_PROMPT_VERSION,
@@ -65,6 +66,10 @@ BUCKET = "storybook-images"
 # The reveal can interrupt once per book and retry taps are cap-bounded; this is production's
 # existing resume ceiling, unchanged by fixture mode.
 MAX_RESUMES = 4
+# The exact messages `pipeline.graph`'s routers raise when a classifier ANSWERED and said no. A
+# verdict ends one story, not the campaign. `moderation_error` is deliberately absent: it means a
+# classifier could not answer, the node raises it so a resume asks again, and it still stops the run.
+MODERATION_VERDICTS = {"content_flagged", "ref_flagged", "output_moderation_failed"}
 CONFIRM = {"action": "confirm"}
 TELEMETRY_KEYS = ("attempted", "completed", "failed", "uncertain")
 RESTART_METADATA_KEYS = (
@@ -271,6 +276,20 @@ def run_story(app_graph, story: IntakeRecord) -> StoryRun:
         except StoryBudgetStopped:
             return StoryRun(values, _image_count(values), "budget_stopped", "budget_stopped")
         if not interrupted:
+            if values:
+                # A thread resumed after a moderation router raised does not raise again: LangGraph
+                # applies the node's saved write and returns, so the stream ends "completed" with the
+                # verdict still in state. B6's syn-001 (2026-09-16) would have bundled that way, s3
+                # empty and s4-s5 never drawn. Asking the graph's own routers raises the sentinel the
+                # first run raised, and `build` quarantines it the same way. A state that does not
+                # validate is left to packaging, which already quarantines it as invalid_terminal.
+                try:
+                    memory = StoryMemory.model_validate(values)
+                except ValidationError:
+                    memory = None
+                if memory is not None:
+                    moderation_router(memory)
+                    route_after_output_mod(memory)
             return StoryRun(values, _image_count(values), "completed")
         graph_input = Command(resume=CONFIRM)
     return StoryRun(values, _image_count(values), "quarantined", "resume_exhausted")
@@ -1130,7 +1149,14 @@ def build(
                         policy,
                     )
                     raise CorpusError(f"billing uncertain for {story_id}; reconcile before retry") from error
-                if isinstance(error, RosterMismatch):
+                if isinstance(error, RosterMismatch) or (
+                    isinstance(error, RuntimeError) and str(error) in MODERATION_VERDICTS
+                ):
+                    # A moderation verdict takes the same path. B6 (2026-09-16) stopped on its
+                    # first story when the image backstop flagged a scene that had passed in the B5
+                    # smoke; that story's images are already paid for, and stopping would not
+                    # refund them, only strand the 29 stories behind it.
+                    #
                     # `run_story` reconciles as soon as the extraction roster lands, and the graph
                     # is wired `input_gate -> analyze -> segment -> char_bible` with `char_bible`
                     # the first node that draws -- so this verdict costs one text call and zero
