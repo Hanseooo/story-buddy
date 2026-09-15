@@ -661,6 +661,67 @@ def test_a_call_that_answers_is_untouched_by_the_bound():
     assert parse.call_args.kwargs["response_format"] is _Caption
 
 
+# --- an upstream error delivered as HTTP 200 ---
+
+# What OpenRouter sent for syn-007's `analyze` on 2026-09-16, verbatim: status 200, no `choices`.
+# The SDK retries on status only, so it parses this as a success and raises TypeError on `None`.
+_UPSTREAM_TIMEOUT_BODY = (
+    b'{"id":"gen-1789502454-ipgcBZtfoWqv5GZEn71R","error":{"message":"Provider timed out after '
+    b'6356ms","code":504,"metadata":{"error_type":"timeout"}}}'
+)
+_ANSWER = {
+    "id": "gen-answer",
+    "object": "chat.completion",
+    "created": 1789502460,
+    "model": "mistralai/mistral-small-3.2-24b-instruct",
+    "choices": [
+        {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {"role": "assistant", "content": '{"caption": "hi"}'},
+        }
+    ],
+}
+
+
+def _openrouter_replying(*replies):
+    """The real SDK against a fake network: each request gets the next reply, the last repeats."""
+    requests = []
+    real_openai = providers.OpenAI
+
+    def handler(request):
+        requests.append(request)
+        reply = replies[min(len(requests), len(replies)) - 1]
+        if isinstance(reply, bytes):
+            return httpx.Response(200, content=reply, headers={"content-type": "application/json"})
+        return httpx.Response(200, json=reply)
+
+    def client(**kwargs):
+        return real_openai(**kwargs, http_client=httpx.Client(transport=httpx.MockTransport(handler)))
+
+    return client, requests
+
+
+def test_an_error_delivered_as_status_200_is_asked_again():
+    """syn-007, 2026-09-16: DeepInfra, the only provider `TEXT_PROVIDERS` allows the text model,
+    timed out on four of five `analyze` calls, and each timeout ended the whole corpus campaign."""
+    client, requests = _openrouter_replying(_UPSTREAM_TIMEOUT_BODY, _ANSWER)
+    with patch("providers.OpenAI", side_effect=client), patch("providers.time.sleep"):
+        result = providers.structured_text("prompt", _Caption)
+
+    assert result.caption == "hi"
+    assert len(requests) == 2
+
+
+def test_errors_that_keep_arriving_as_status_200_fail_naming_the_model():
+    client, requests = _openrouter_replying(_UPSTREAM_TIMEOUT_BODY)
+    with patch("providers.OpenAI", side_effect=client), patch("providers.time.sleep"):
+        with pytest.raises(RuntimeError, match="mistral-times-out"):
+            providers.structured_text("prompt", _Caption, model="mistral-times-out")
+
+    assert len(requests) == 3
+
+
 # --- redact_pii ---
 
 def test_check_text_safe_no_redaction_needed():

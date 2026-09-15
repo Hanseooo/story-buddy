@@ -280,7 +280,37 @@ def _fetch_completion(
     if include_logprobs:
         kwargs["logprobs"] = True
         kwargs["top_logprobs"] = 5
-    return _bounded(model, lambda: client.chat.completions.parse(**kwargs))
+    return _bounded(model, lambda: _parse_retrying_error_bodies(client, model, kwargs))
+
+
+# OpenRouter reports some upstream failures as HTTP 200 carrying an `error` object and no `choices`
+# (syn-007, 2026-09-16: "Provider timed out after 6356ms", code 504, on four of five `analyze`
+# calls). `MAX_RETRIES` is keyed on status, so the SDK takes that for a success and raises TypeError
+# iterating `choices`, which no node catches. The retry runs inside `_bounded`, so the wall clock
+# still bounds every attempt together, as it bounds `MAX_RETRIES`.
+UPSTREAM_ERROR_ATTEMPTS = 3
+
+
+def _parse_retrying_error_bodies(client: OpenAI, model: str, kwargs: dict):
+    for attempt in range(1, UPSTREAM_ERROR_ATTEMPTS + 1):
+        try:
+            return client.chat.completions.parse(**kwargs)
+        except TypeError as exc:
+            # The SDK's own message for iterating the missing `choices`; any other TypeError is a bug.
+            if "'NoneType' object is not iterable" not in str(exc):
+                raise
+            if attempt == UPSTREAM_ERROR_ATTEMPTS:
+                raise RuntimeError(
+                    f"{model} returned an upstream error instead of choices "
+                    f"{UPSTREAM_ERROR_ATTEMPTS} times"
+                ) from exc
+            _log.warning(
+                "%s returned an upstream error instead of choices; asking again (%d/%d)",
+                model,
+                attempt,
+                UPSTREAM_ERROR_ATTEMPTS,
+            )
+            time.sleep(2 * attempt)
 
 
 def _chat(
