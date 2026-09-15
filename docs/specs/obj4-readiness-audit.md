@@ -429,6 +429,17 @@ Rules that are not optional:
   timed out on four of five calls; the SDK retries on status only. Fixed 2026-09-16:
   `_fetch_completion` asks again up to three times inside `_bounded`, then raises a `RuntimeError`
   naming the model. Redo B1 on the merge, then rerun the plain B6 command.
+- **A fal content flag quarantines the story; the campaign continues.** Fourth attempt,
+  2026-09-16, HEAD `ce7f8d5`: `syn-007` passed `analyze`, then `char_bible` drew 4 references and
+  the 4th, a "transparent, see-through" sprite that had passed twice, came back HTTP 422 "flagged
+  by a content checker". `_run_fal` recorded every exception `failed_uncertain`, so `build`
+  quarantined `billing_uncertain` and exited 1. The owner's fal dashboard showed request
+  `01a0a6b4-302a-7c00-9274-df4debe36e1f` at cost $0.00; balance $21.74 afterwards. Fixed
+  2026-09-16: that 422 is recorded `failed` and the story is quarantined `invalid_terminal` like a
+  moderation verdict; any other 422 stays uncertain. Recover `syn-007` with
+  `--restart-quarantined syn-007 --acknowledge-uncertain-billing syn-007` (a fresh thread gets its
+  own 19-call allowance; the old one saved no references), and readmit it at the end if it is
+  flagged again.
 
 ### Phase C — label and freeze
 

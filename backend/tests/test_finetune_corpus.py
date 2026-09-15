@@ -16,6 +16,8 @@ from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import fal_client
+import httpx
 import pytest
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
@@ -2736,6 +2738,53 @@ def test_a_resumed_moderation_verdict_is_quarantined_not_bundled(tmp_path):
     assert summary["quarantined_story_ids"] == ["b"]
     assert sorted(bundle.memory.story_id for bundle in load_completed_bundles(tmp_path)) == ["a", "c"]
     assert "output_moderation_failed" in state["b"]["quarantined"]
+
+
+class FalFlaggedGraph(RosterGraph):
+    """Pays for one image, then fal's content checker rejects the next draw with a 422."""
+
+    def __init__(self, flagged):
+        super().__init__()
+        self.flagged = flagged
+
+    def stream(self, graph_input, config, stream_mode=None):
+        story_id = config["configurable"]["thread_id"].split("--")[0]
+        for index, chunk in enumerate(super().stream(graph_input, config, stream_mode)):
+            yield chunk
+            if index == 1 and story_id in self.flagged:
+                sink = build_corpus._fal_event_sink.get()
+                sink("attempted")
+                sink("failed")
+                request = httpx.Request("POST", "https://queue.fal.run/fal-ai/qwen-image")
+                raise fal_client.FalClientHTTPError(
+                    "The content could not be processed because it contained material flagged by a"
+                    " content checker.",
+                    422,
+                    {},
+                    response=httpx.Response(422, request=request),
+                )
+
+
+def test_a_fal_content_flag_quarantines_its_story_and_the_campaign_continues(tmp_path):
+    """syn-007 (2026-09-16): fal rejected one draw of a "transparent, see-through" sprite that had
+    passed twice. The story is quarantined like a moderation verdict and stays readmittable."""
+    stories = _roster_stories("a", "b", "c")
+
+    summary = build_corpus.build(
+        stories,
+        FalFlaggedGraph({"b"}),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("25.00")),
+    )
+    state = json.loads((tmp_path / "build_state.json").read_text(encoding="utf-8"))
+
+    assert summary["halted"] is False
+    assert summary["quarantined_story_ids"] == ["b"]
+    assert state["b"]["reason_code"] == "invalid_terminal"
+    assert "flagged by a content checker" in state["b"]["quarantined"]
+    assert state["b"]["telemetry"]["failed"] == 1
+    assert state["b"]["telemetry"]["uncertain"] == 0
 
 
 def test_a_moderation_outage_still_stops_the_campaign(tmp_path):

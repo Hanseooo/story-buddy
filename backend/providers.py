@@ -487,6 +487,17 @@ def _download_image(url: str) -> bytes:
     raise AssertionError("unreachable")
 
 
+def is_fal_content_flag(error: BaseException) -> bool:
+    """fal's content checker rejected the draw. The dashboard bills it $0.00 (syn-007, request
+    01a0a6b4, 2026-09-16), so it is a definite failure. Any other 422 stays uncertain: a malformed
+    argument is a bug to see, not a story to quarantine."""
+    return (
+        isinstance(error, fal_client.FalClientHTTPError)
+        and error.status_code == 422
+        and "flagged by a content checker" in str(error)
+    )
+
+
 def _run_fal(endpoint: str, arguments: dict, seed: int | None) -> bytes:
     if seed is not None:
         arguments = {**arguments, "seed": seed}
@@ -501,9 +512,9 @@ def _run_fal(endpoint: str, arguments: dict, seed: int | None) -> bytes:
             client_timeout=FAL_CALL_TIMEOUT_SECONDS,
         )
         contents = _download_image(result["images"][0]["url"])
-    except Exception:
+    except Exception as error:
         if sink:
-            sink("failed_uncertain")
+            sink("failed" if is_fal_content_flag(error) else "failed_uncertain")
         raise
     if sink:
         sink("completed")
