@@ -1,6 +1,6 @@
 # Objective 4 — campaign readiness audit and roadmap
 
-**Date:** 2026-09-12, backlog rewritten 2026-09-14 · **Repo state:** PR #81 merged as `ad9fb0a` (2026-09-15), the segment fix (PR #82) as `059c416` (2026-09-16); the input_gate resume fix on `fix/input-gate-resume` (2026-09-16) moves HEAD again before B5 · **Supersedes:** `OBJECTIVE_4_NEXT_STEPS.md` as the live guide
+**Date:** 2026-09-12, backlog rewritten 2026-09-14 · **Repo state:** PR #81 merged as `ad9fb0a` (2026-09-15), the segment fix (PR #82) as `059c416` (2026-09-16), the input_gate resume fix (PR #83) as `d6d1a98` (2026-09-16); the moderation-quarantine fix on `fix/corpus-moderation-quarantine` (2026-09-16) moves HEAD again before B6 · **Supersedes:** `OBJECTIVE_4_NEXT_STEPS.md` as the live guide
 
 This replaces the 2026-08-30 runbook, which predates 54 commits and the arrival of the donated corpus.
 Every number here was measured against the repo or the bundles on disk. Anything estimated says so.
@@ -39,8 +39,8 @@ backlog or status file for Objective 4 (`AGENTS.md`, "The status surface").
 
 ## 1. Verdict
 
-**Do not start the campaign yet. What remains, in order: merge the input_gate resume fix, redo B1, B5 (the smoke),
-then B6; D1 (confirm the GPU's VRAM) before Phase D.** P1–P7, A6, A7, B2–B4, D2, Finding G and the
+**B5 passed. What remains, in order: merge the moderation-quarantine fix, redo B1, then B6 (resume
+`--out ../data/judge/corpus`, then readmit `syn-001`); D1 (confirm the GPU's VRAM) before Phase D.** P1–P7, A6, A7, B2–B4, D2, Finding G and the
 labelling rulebook (Finding J) are done. Supabase has been on Pro since 2026-09-14.
 
 The pipeline works, the money path is understood, and the donated corpus arrived on 2026-09-12 —
@@ -288,9 +288,10 @@ anywhere, export `annotations` to CSV before confirming. Label with one account 
 ### Phase B — freeze the code, then spend
 
 **B1 · Merge PR #81, then stop committing — `[YOU]`.** Merged 2026-09-15 as `ad9fb0a`, then reopened:
-B5 found the segment crash below (fix merged as `059c416`), then the input_gate resume trap (a third
-merge). Redo these commands after that merge and record the new hash; it, not `ad9fb0a` or `059c416`,
-is the one both halves carry.
+B5 found the segment crash below (fix merged as `059c416`), then the input_gate resume trap (merged as
+`d6d1a98`, the HEAD B5 passed on), and B6's first attempt found the moderation stop (a fourth merge).
+Redo these commands after that merge and record the new hash; it is the one both halves carry.
+`syn-001` has no bundle from `d6d1a98`, so no bundle carries the older hash.
 
 ```bash
 git switch main; git pull
@@ -356,6 +357,13 @@ the client's 2 retries would have halted B6 and spent that story's single readmi
 resume calls the backstop again. Re-run B5 on the new HEAD with `--out corpus-smoke-b5c`; `b5b` holds
 the dead thread.
 
+Third attempt · **passed 2026-09-16**, HEAD `d6d1a98`, `--out ../data/judge/corpus-smoke-b5c`: exit 0,
+3 stories, 0 quarantined, telemetry 50 attempted / 50 completed, `usd_high` 1.750. `attempted_calls`
+18, 16, 16 (average 16.7, above the 15.8 that `--max-usd 25` affords). Balances fal $25.94 → $24.60,
+OpenRouter $7.32 → $7.30: **$0.027 per image call measured**. B6 therefore runs `--max-usd 28`: the
+reserve check (`build_corpus.py:1062-1064`) would halt a 16.7-call average near story 42 at 25, and 28
+allows at most 800 calls, which at the $0.03 edit price is $24.00, inside the fal balance.
+
 **B6 · The campaign — 45 stories, one budget.**
 
 ```bash
@@ -384,6 +392,19 @@ Rules that are not optional:
   stderr. Only exit 0 is a finished campaign.
 - **Check on it periodically.** Finding G: transient fal blips now retry, but a hard fal failure or a
   600s timeout still quarantines that story and exits 1.
+- **A moderation verdict quarantines one story; it no longer stops the run.** First attempt,
+  2026-09-16, HEAD `d6d1a98`, `--max-usd 28`: exit 1 on `syn-001` after 17 image calls. The image
+  backstop (gemma-3-27b) flagged scene s3 on the draw and on the softened redraw; the NSFW primary
+  said safe, and the same scene passed in B5. `build` re-raised the router's
+  `output_moderation_failed`. Fixed 2026-09-16: `content_flagged`, `ref_flagged` and
+  `output_moderation_failed` quarantine the story `invalid_terminal` and the campaign continues;
+  `moderation_error` (a classifier that could not answer) still stops it. The freeze needs all 30
+  synthetic stories, so **readmit every moderation quarantine** after the run, and each story can be
+  readmitted only once. A resumed thread does not re-raise: LangGraph applies the node's saved write
+  and returns "completed", and `_bundle` checks only id, style and roster, so `syn-001` would have
+  bundled with s3 empty and s4–s5 never drawn. `run_story` now asks the graph's moderation routers
+  about the final state before calling it completed. Re-run the same B6 command: `syn-001`
+  quarantines with zero new spend and the campaign continues; readmit it afterwards.
 
 ### Phase C — label and freeze
 
