@@ -373,25 +373,32 @@ def segment(state: StoryMemory) -> dict:
                 char_ids.append(char_id)
                 log.info("segment: reconciled visual_direction character %r into visible cast for s%d", name, i)
 
+        # An object name outside the roster is dropped and logged, never a dead job. It has no
+        # reference and no permanent axes, so nothing drawn depended on it. It used to raise; the
+        # segmenter runs at temperature=0, so syn-001 (2026-09-16), whose weathervane IS the
+        # character Bok-Bok, failed identically on every run — the same trap `analyze` left for
+        # unknown owners (Finding I).
         visible_objects: list[str] = []
         for name in r.objects_present:
             obj = object_by_name.get(name)
             if obj is None:
-                raise ValueError(f"segment: unknown object {name!r}")
+                log.warning("segment: object %r is not in the roster; dropped from s%d", name, i)
+                continue
             visible_objects.append(obj.obj_id)
 
         visible_objects = list(dict.fromkeys(visible_objects))
 
-        # ADR-052 D3. Same roster dict, same unknown-name posture as objects_present above: a name
-        # the model invented is a contract violation, not a state. Duplicate roster names collapse
-        # in `object_by_name` exactly as they do for objects_present, so both paths agree on which
-        # obj_id a repeated name means. A state for an object this scene does not show is kept here
-        # and dropped at render (D4) — `segment` owns the scene, not the prompt.
+        # ADR-052 D3. Same roster dict, same unknown-name posture as objects_present above.
+        # Duplicate roster names collapse in `object_by_name` exactly as they do for
+        # objects_present, so both paths agree on which obj_id a repeated name means. A state for an
+        # object this scene does not show is kept here and dropped at render (D4) — `segment` owns
+        # the scene, not the prompt.
         object_states: dict[str, str] = {}
         for name, state in r.object_states.items():
             obj = object_by_name.get(name)
             if obj is None:
-                raise ValueError(f"segment: unknown object {name!r}")
+                log.warning("segment: object %r is not in the roster; state dropped from s%d", name, i)
+                continue
             object_states[obj.obj_id] = state
 
         visual_direction = rendered_base

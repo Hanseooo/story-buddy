@@ -1,6 +1,6 @@
 # Objective 4 — campaign readiness audit and roadmap
 
-**Date:** 2026-09-12, backlog rewritten 2026-09-14 · **Repo state:** `b5a3841` on `obj4-campaign-readiness` (PR #81, open) · **Supersedes:** `OBJECTIVE_4_NEXT_STEPS.md` as the live guide
+**Date:** 2026-09-12, backlog rewritten 2026-09-14 · **Repo state:** PR #81 merged as `ad9fb0a` (2026-09-15); the segment fix on `fix/segment-unknown-object` (2026-09-16) moves HEAD again before B5 · **Supersedes:** `OBJECTIVE_4_NEXT_STEPS.md` as the live guide
 
 This replaces the 2026-08-30 runbook, which predates 54 commits and the arrival of the donated corpus.
 Every number here was measured against the repo or the bundles on disk. Anything estimated says so.
@@ -39,9 +39,9 @@ backlog or status file for Objective 4 (`AGENTS.md`, "The status surface").
 
 ## 1. Verdict
 
-**Do not start the campaign yet. What remains, in order: A6's usage and checkpoint readings, B1 (merge
-PR #81) and D1 (confirm the GPU).** P1–P7, A7, D2, Finding G and the labelling rulebook (Finding J) are
-done. Supabase has been on Pro since 2026-09-14.
+**Do not start the campaign yet. What remains, in order: merge the segment fix, redo B1, B5 (the smoke),
+then B6; D1 (confirm the GPU's VRAM) before Phase D.** P1–P7, A6, A7, B2–B4, D2, Finding G and the
+labelling rulebook (Finding J) are done. Supabase has been on Pro since 2026-09-14.
 
 The pipeline works, the money path is understood, and the donated corpus arrived on 2026-09-12 —
 15 raw stories at `data/judge/intake/raw/`, which retires the blocker that governed the last runbook.
@@ -249,9 +249,12 @@ review (2026-09-14) found the bundle inventory listed only finals, so every harv
    It already holds images from the 2026-08-27 → 09-03 smokes (the local `corpus-smoke-a`..`h`
    folders). Leave them: the campaign's new `--out` hashes to new
    folders (`build_corpus.py:592`), and they cost nothing on Pro. Phase E deletes them.
-3. **Reports → Database / Storage / Egress:** record current usage, so the campaign's own cost is
-   measurable afterwards.
-4. **Measure the checkpoint tables** in the SQL editor:
+3. **Record current usage** · **done 2026-09-15.** Organization → Usage, not project Reports (that
+   shows the last hour of requests). Baseline: storage 0.56 GB across both org projects
+   (`private_assets` 48 objects, 20 MB), egress 0 GB, 2 GB disk provisioned per project, 46 Micro
+   compute hours. The org also runs `daytrace`, a second project the $10 compute credit does not cover.
+4. **Measure the checkpoint tables** in the SQL editor · **done 2026-09-15:** `checkpoint_blobs`
+   10 MB, `checkpoint_writes` 6992 kB, `checkpoints` 2760 kB (~20 MB baseline).
 
 ```sql
 select relname, pg_size_pretty(pg_total_relation_size(relid))
@@ -284,7 +287,9 @@ anywhere, export `annotations` to CSV before confirming. Label with one account 
 
 ### Phase B — freeze the code, then spend
 
-**B1 · Merge PR #81, then stop committing — `[YOU]`.** CI is green on `b5a3841`. After merging:
+**B1 · Merge PR #81, then stop committing — `[YOU]`.** Merged 2026-09-15 as `ad9fb0a`, then reopened:
+B5 found the segment crash below, and its fix is a second merge. Redo these commands after that merge
+and record the new hash; it, not `ad9fb0a`, is the one both halves carry.
 
 ```bash
 git switch main; git pull
@@ -292,7 +297,9 @@ git status --porcelain   # must print nothing
 git rev-parse HEAD       # record it; both halves of the campaign must carry it
 ```
 
-**B2 · Free roster pre-flight on all 45 stories.**
+**B2 · Free roster pre-flight on all 45 stories.** · **done 2026-09-15:** synthetic
+`{"checked": 30, "failures": []}`, donated `{"checked": 15, "failures": []}`, both exit 0. Not
+re-run after the segment fix: `--check-rosters` stops after `analyze`, which the fix does not touch.
 
 ```bash
 cd backend
@@ -304,10 +311,14 @@ Exit 0 required on both. Roughly 1 story in 30 fails extraction at random — re
 anything is wrong. This is where a bad `declared_characters` guess surfaces, for a fraction of a cent
 instead of a story's full image spend.
 
-**B3 · Re-verify fal pricing and record the URL.** The recorded basis is from 2026-09-01 and is now
-eleven days stale. `--price-basis` is required and is stamped into every bundle.
+**B3 · Re-verify fal pricing and record the URL.** · **done 2026-09-15.** `qwen-image` $0.02/MP
+(rounded up to the megapixel), `qwen-image-edit-2511` $0.03/MP. At 1024×768 (0.79 MP) every call
+bills as 1 MP, so `--price-per-megapixel 0.035` stays a safe ceiling. `FAL_IMAGE_EDIT_MODEL` is unset
+(owner-confirmed), so the default edit model runs; `fal-ai/omnigen-v2` is $0.15/MP and would break
+every cap. Use this string on B5 and B6, single-quoted in PowerShell so `$` is not expanded:
+`https://fal.ai/models/fal-ai/qwen-image ($0.02/MP) + https://fal.ai/models/fal-ai/qwen-image-edit-2511 ($0.03/MP) (verified 2026-09-15)`
 
-**B4 · Pin the machine.** Run locally — see Finding F for why not Northflank.
+**B4 · Pin the machine.** · **done 2026-09-15.** Run locally — see Finding F for why not Northflank.
 
 ```powershell
 powercfg /change standby-timeout-ac 0
@@ -320,6 +331,17 @@ Sleep kills the single port-5432 connection held for the whole run, and there is
 **B5 · Fresh 3-story smoke at the real cap.** Use a **new** `--out`; a reused directory carries a
 different thread digest and a different ledger. Command: runbook step 2. Before B6, check each
 bundle's `attempted_calls` (bundle metadata, `build_corpus.py:517`) is at or under 19.
+
+First attempt, 2026-09-15/16, `--out ../data/judge/corpus-smoke-b5`: exit 1 twice on `syn-001` with
+`ValueError: segment: unknown object 'weathervane'`, zero images drawn. The story's weathervane is the
+character Bok-Bok, so `analyze` rightly listed no such object, but the segmenter named one, and at
+temperature 0 it did so on every run. A bare `ValueError` is neither `RosterMismatch` nor
+`CorpusError`, so `build_corpus.py:1169` re-raised it and would have ended B6 on story one. Fixed
+2026-09-16: `segment` drops and logs an object name outside the roster, as `analyze` does for unknown
+owners (Finding I). Re-run B5 on the new HEAD with a fresh `--out` (`corpus-smoke-b5b`); the old
+folder's checkpoint predates the fix. Before B6, also compare fal and OpenRouter balances around the
+smoke (2026-09-15: fal $25.94, OpenRouter $7.32) and check average `attempted_calls`: above ~15.8 per
+story, 45 stories exceed the 714 calls `--max-usd 25` buys at $0.035.
 
 **B6 · The campaign — 45 stories, one budget.**
 
