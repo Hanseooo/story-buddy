@@ -1,6 +1,6 @@
 # Objective 4 — campaign readiness audit and roadmap
 
-**Date:** 2026-09-12, backlog rewritten 2026-09-14 · **Repo state:** PR #81 merged as `ad9fb0a` (2026-09-15); the segment fix on `fix/segment-unknown-object` (2026-09-16) moves HEAD again before B5 · **Supersedes:** `OBJECTIVE_4_NEXT_STEPS.md` as the live guide
+**Date:** 2026-09-12, backlog rewritten 2026-09-14 · **Repo state:** PR #81 merged as `ad9fb0a` (2026-09-15), the segment fix (PR #82) as `059c416` (2026-09-16); the input_gate resume fix on `fix/input-gate-resume` (2026-09-16) moves HEAD again before B5 · **Supersedes:** `OBJECTIVE_4_NEXT_STEPS.md` as the live guide
 
 This replaces the 2026-08-30 runbook, which predates 54 commits and the arrival of the donated corpus.
 Every number here was measured against the repo or the bundles on disk. Anything estimated says so.
@@ -39,7 +39,7 @@ backlog or status file for Objective 4 (`AGENTS.md`, "The status surface").
 
 ## 1. Verdict
 
-**Do not start the campaign yet. What remains, in order: merge the segment fix, redo B1, B5 (the smoke),
+**Do not start the campaign yet. What remains, in order: merge the input_gate resume fix, redo B1, B5 (the smoke),
 then B6; D1 (confirm the GPU's VRAM) before Phase D.** P1–P7, A6, A7, B2–B4, D2, Finding G and the
 labelling rulebook (Finding J) are done. Supabase has been on Pro since 2026-09-14.
 
@@ -288,8 +288,9 @@ anywhere, export `annotations` to CSV before confirming. Label with one account 
 ### Phase B — freeze the code, then spend
 
 **B1 · Merge PR #81, then stop committing — `[YOU]`.** Merged 2026-09-15 as `ad9fb0a`, then reopened:
-B5 found the segment crash below, and its fix is a second merge. Redo these commands after that merge
-and record the new hash; it, not `ad9fb0a`, is the one both halves carry.
+B5 found the segment crash below (fix merged as `059c416`), then the input_gate resume trap (a third
+merge). Redo these commands after that merge and record the new hash; it, not `ad9fb0a` or `059c416`,
+is the one both halves carry.
 
 ```bash
 git switch main; git pull
@@ -299,7 +300,8 @@ git rev-parse HEAD       # record it; both halves of the campaign must carry it
 
 **B2 · Free roster pre-flight on all 45 stories.** · **done 2026-09-15:** synthetic
 `{"checked": 30, "failures": []}`, donated `{"checked": 15, "failures": []}`, both exit 0. Not
-re-run after the segment fix: `--check-rosters` stops after `analyze`, which the fix does not touch.
+re-run after the segment or input_gate fixes: `--check-rosters` calls `analyze` directly, and neither
+fix touches it.
 
 ```bash
 cd backend
@@ -342,6 +344,17 @@ owners (Finding I). Re-run B5 on the new HEAD with a fresh `--out` (`corpus-smok
 folder's checkpoint predates the fix. Before B6, also compare fal and OpenRouter balances around the
 smoke (2026-09-15: fal $25.94, OpenRouter $7.32) and check average `attempted_calls`: above ~15.8 per
 story, 45 stories exceed the 714 calls `--max-usd 25` buys at $0.035.
+
+Second attempt, 2026-09-16, HEAD `059c416`, `--out ../data/judge/corpus-smoke-b5b`: exit 1 at
+`input_gate`, zero spend. The text backstop `openai/gpt-oss-safeguard-20b` got a 429 from Groq's
+shared pool. `input_gate` returned `moderation_error` as a failed result and the router raised after
+it, but LangGraph kept that write, so the same-`--out` resume ran nothing, "completed" with
+`characters=[]` and quarantined `syn-001` as `invalid_terminal` (checkpoint history: step 0
+`input_gate` errored, step 1 `next=()`). Every story makes this call once, so any 429 that outlasts
+the client's 2 retries would have halted B6 and spent that story's single readmission. Fixed
+2026-09-16: `input_gate` raises inside the node, as `char_ref_mod` and `output_mod` already did, so a
+resume calls the backstop again. Re-run B5 on the new HEAD with `--out corpus-smoke-b5c`; `b5b` holds
+the dead thread.
 
 **B6 · The campaign — 45 stories, one budget.**
 
