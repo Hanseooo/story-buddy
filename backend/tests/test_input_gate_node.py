@@ -108,16 +108,40 @@ def test_primary_error_backstop_flags_sets_passed_false():
 
 # --- backstop error ---
 
-def test_backstop_error_sets_moderation_error_in_categories():
-    """Spec §4a edge case: backstop OpenRouter error → passed=False, categories=['moderation_error']."""
+def test_backstop_error_raises_moderation_error():
+    """Spec §4a edge case: backstop OpenRouter error → hard fail with RuntimeError('moderation_error')."""
     with patch("pipeline.input_gate.classify_text_primary", return_value=(True, [])), \
          patch("pipeline.input_gate.classify_text_backstop", side_effect=Exception("OpenRouter 500")), \
          patch("pipeline.input_gate.redact_pii", return_value="A dog runs."):
         from pipeline.input_gate import input_gate
-        result = input_gate(_state())
+        with pytest.raises(RuntimeError, match="moderation_error"):
+            input_gate(_state())
 
-    assert result["input"].moderation.passed is False
-    assert "moderation_error" in result["input"].moderation.categories
+
+def test_resume_after_a_backstop_error_calls_the_backstop_again():
+    """B5 smoke, 2026-09-16: a Groq 429 on the backstop was returned as a failed moderation result
+    and the router raised after it. LangGraph kept the node's write, so the resumed thread had
+    nothing left to run, "completed" with no characters, and the story was quarantined
+    `invalid_terminal` without the classifier ever being asked again."""
+    from pipeline import graph as graph_module
+    from langgraph.checkpoint.memory import MemorySaver
+
+    def reached_analyze(state):
+        raise RuntimeError("reached analyze")
+
+    config = {"configurable": {"thread_id": "job-1"}}
+    with patch("pipeline.input_gate.classify_text_primary", return_value=(True, [])), \
+         patch("pipeline.input_gate.classify_text_backstop",
+               side_effect=[Exception("429 rate-limited upstream"), (True, [])]) as mock_backstop, \
+         patch("pipeline.input_gate.redact_pii", return_value="A dog runs."), \
+         patch.object(graph_module, "analyze", reached_analyze):
+        app = graph_module.build_graph(checkpointer=MemorySaver())
+        with pytest.raises(RuntimeError, match="moderation_error"):
+            app.invoke(_state(), config=config)
+        with pytest.raises(RuntimeError, match="reached analyze"):
+            app.invoke(None, config=config)
+
+    assert mock_backstop.call_count == 2
 
 
 # --- state-write invariant (every return path) ---
@@ -128,7 +152,6 @@ def test_backstop_error_sets_moderation_error_in_categories():
         ({"return_value": (True, [])},          {"return_value": (True, [])},          "both pass"),
         ({"return_value": (False, ["S1"])},     {"return_value": (True, [])},          "primary flags"),
         ({"return_value": (True, [])},          {"return_value": (False, ["S2"])},     "backstop flags"),
-        ({"return_value": (True, [])},          {"side_effect": Exception("500")},     "backstop errors"),
     ],
 )
 def test_input_gate_carries_the_whole_input_model_through_every_return_path(primary, backstop, label):

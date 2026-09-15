@@ -89,7 +89,9 @@ its own one-retry loop and its own fail edge. The `consistency_router` is a sepa
 - meta-llama/llama-guard-4-12b OOM / load error: catch → route to backstop only; log the primary failure.
   Never silently skip moderation entirely — the gate always requires at least one complete pass.
 - Backstop OpenRouter timeout / 4xx / 5xx: treat as a hard error per ADR-025 (not a soft skip).
-  Fail the job with `failure_reason = "moderation_error"`.
+  Fail the job with `failure_reason = "moderation_error"`. The node raises it (2026-09-16) rather
+  than writing `categories=["moderation_error"]` for the router: a written result survives in the
+  checkpoint, so a resume skipped the backstop and ended with an empty story.
 - Input over the hard word cap (ADR-012): `length-guard` truncates before `input_gate` runs;
   `input_gate` always sees the final text.
 - Abuse disclosure (e.g., a child describing harm done to them): flag it. The text is unsafe to

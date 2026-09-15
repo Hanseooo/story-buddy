@@ -52,8 +52,11 @@ def input_gate(state: StoryMemory) -> dict:
         backstop_safe, backstop_categories = classify_text_backstop(text)
     except Exception as exc:
         log.error("input_gate: backstop error — hard fail per ADR-025 (%s)", exc)
-        # "moderation_error" category signals the router to raise RuntimeError("moderation_error").
-        return result(False, ["moderation_error"])
+        # Raised here, as `char_ref_mod` and `output_mod` do, never returned as a failed result for
+        # the router to raise on. LangGraph keeps a node's write even when the router after it
+        # raises, so a resumed thread had nothing left to run: B5 smoke (2026-09-16) hit a Groq 429,
+        # and the resume "completed" with no characters and quarantined the story.
+        raise RuntimeError("moderation_error") from exc
 
     if not backstop_safe:
         log.info("input_gate: backstop flagged (categories=%s)", backstop_categories)
