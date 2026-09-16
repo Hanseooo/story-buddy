@@ -498,27 +498,48 @@ def is_fal_content_flag(error: BaseException) -> bool:
     )
 
 
+# fal's checker judges the finished image, not the prompt, so the same prompt draws something it
+# accepts on another attempt: syn-007's see-through sprite passed twice and was rejected once, and
+# B6 (2026-09-16) lost syn-018's fruit bat and syn-019's sock dragon this way, a readmission each.
+# A rejection bills nothing, so a retry costs only one of the story's draws — and that allowance is
+# what `sink("attempted")` enforces, which is why each attempt reports its own.
+CONTENT_FLAG_ATTEMPTS = 3
+
+
 def _run_fal(endpoint: str, arguments: dict, seed: int | None) -> bytes:
     if seed is not None:
         arguments = {**arguments, "seed": seed}
     sink = _fal_event_sink.get()
-    if sink:
-        sink("attempted")
-    try:
-        # Defaults first so `arguments` can override either one; no caller does today.
-        result = _fal().subscribe(
-            endpoint,
-            arguments={"output_format": "png", "negative_prompt": NEGATIVE_PROMPT, **arguments},
-            client_timeout=FAL_CALL_TIMEOUT_SECONDS,
-        )
-        contents = _download_image(result["images"][0]["url"])
-    except Exception as error:
+    for attempt in range(1, CONTENT_FLAG_ATTEMPTS + 1):
         if sink:
-            sink("failed" if is_fal_content_flag(error) else "failed_uncertain")
-        raise
-    if sink:
-        sink("completed")
-    return contents
+            sink("attempted")
+        try:
+            # Defaults first so `arguments` can override either one; no caller does today.
+            result = _fal().subscribe(
+                endpoint,
+                arguments={"output_format": "png", "negative_prompt": NEGATIVE_PROMPT, **arguments},
+                client_timeout=FAL_CALL_TIMEOUT_SECONDS,
+            )
+            contents = _download_image(result["images"][0]["url"])
+        except Exception as error:
+            if not is_fal_content_flag(error):
+                if sink:
+                    sink("failed_uncertain")
+                raise
+            if sink:
+                sink("failed")
+            if attempt == CONTENT_FLAG_ATTEMPTS:
+                raise
+            _log.warning(
+                "fal's content checker rejected the draw; asking again (%d/%d)",
+                attempt,
+                CONTENT_FLAG_ATTEMPTS,
+            )
+            continue
+        if sink:
+            sink("completed")
+        return contents
+    raise AssertionError("unreachable")
 
 
 # ---------------------------------------------------------------------------
