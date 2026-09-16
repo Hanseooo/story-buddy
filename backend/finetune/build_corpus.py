@@ -82,6 +82,7 @@ RESTART_METADATA_KEYS = (
     "readmitted_at",
     "readmit_reason",
     "readmit_overrode",
+    "prior_readmissions",
 )
 
 
@@ -579,6 +580,25 @@ def _persisted_telemetry(values: dict, policy: SpendPolicy, source: str) -> Coun
 RECOVERABLE_REASONS = {"budget_stopped", "resume_exhausted", "billing_uncertain"}
 
 
+def _prior_readmissions(state_entry: dict) -> list[dict]:
+    """Every readmission this story has already had, oldest first.
+
+    syn-019 and syn-027 (2026-09-17) each spent their one readmission and were flagged again, so a
+    second override had to become possible. The justification for the first must survive it: the
+    story writes no bundle while it is quarantined, so this list is the only place it exists.
+    """
+    history = json.loads(state_entry.get("prior_readmissions") or "[]")
+    if state_entry.get("readmitted_at"):
+        history.append(
+            {
+                "readmitted_at": state_entry["readmitted_at"],
+                "readmit_reason": state_entry.get("readmit_reason", ""),
+                "readmit_overrode": state_entry.get("readmit_overrode", ""),
+            }
+        )
+    return history
+
+
 def _restart_metadata(state_entry: dict | None) -> dict:
     if not isinstance(state_entry, dict):
         return {}
@@ -789,6 +809,7 @@ def build(
     extend_story_call_cap: str | None = None,
     readmit_quarantined: str | None = None,
     readmit_reason: str | None = None,
+    acknowledge_prior_readmission: str | None = None,
 ) -> dict:
     """Run only incomplete stories; a completed run is the immutable bundle, never a count."""
     # `consistency_check` reads this at call time, so it must be in place before the first
@@ -905,9 +926,14 @@ def build(
                     # still has to be recorded rather than erased: the telemetry, the abandoned
                     # execution and the operator's stated reason all survive into the new entry,
                     # so a readmission is auditable instead of being a hole in the ledger.
-                    if state_entry.get("readmitted_at"):
+                    if (
+                        state_entry.get("readmitted_at")
+                        and acknowledge_prior_readmission != story_id
+                    ):
                         # Each readmission grants a fresh per-story draw allowance, so an
                         # unbounded one is unbounded spend gated only by a non-empty string.
+                        # Acknowledging names the one story being overridden again, so widening
+                        # this stays a per-story act rather than one flag freeing the campaign.
                         raise CorpusError(f"quarantine was already readmitted: {story_id}")
                     if state_entry.get("reason_code") != "invalid_terminal":
                         raise CorpusError(f"readmission requires invalid_terminal: {story_id}")
@@ -917,6 +943,9 @@ def build(
                         raise CorpusError(f"intake digest differs for quarantined story: {story_id}")
                     prior_telemetry = _persisted_telemetry(state_entry, policy, story_id)
                     readmitted_at = datetime.now(timezone.utc).isoformat()
+                    # Read before the rebuild below rebinds `state_entry` and the record is gone.
+                    # `run_metadata` holds scalars only, so the history travels as a JSON string.
+                    prior_readmissions = _prior_readmissions(state_entry)
                     state_entry = {
                         "in_progress": True,
                         "intake_sha256": intake_sha256(story),
@@ -929,10 +958,13 @@ def build(
                         "readmit_reason": readmit_reason.strip(),
                         # This rebuild erases the verdict being overridden, so it is copied
                         # forward. A reviewer can then read what was overridden and why without
-                        # reconstructing it from an earlier state file. One scalar suffices
-                        # because a quarantine may now be readmitted only once.
+                        # reconstructing it from an earlier state file. A story readmitted more
+                        # than once keeps every earlier justification beside it, because the
+                        # scalar slots below hold only the latest.
                         "readmit_overrode": state_entry["quarantined"],
                     }
+                    if prior_readmissions:
+                        state_entry["prior_readmissions"] = json.dumps(prior_readmissions)
                     state[story_id] = state_entry
                     _write_state(state_path, state)
                 elif restart_quarantined == story_id:
@@ -1317,6 +1349,12 @@ def main(argv: list[str] | None = None) -> int:
         help="why an invalid_terminal quarantine is being re-adjudicated; recorded in the bundle",
     )
     parser.add_argument("--acknowledge-uncertain-billing", metavar="STORY_ID")
+    parser.add_argument(
+        "--acknowledge-prior-readmission",
+        metavar="STORY_ID",
+        help="permit a further readmission of a story already readmitted once; every earlier "
+        "justification is kept beside the new one",
+    )
     parser.add_argument("--max-calls-per-story", type=int)
     parser.add_argument(
         "--scene-attempts",
@@ -1362,6 +1400,11 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--readmit-quarantined requires --readmit-reason")
     if args.readmit_reason is not None and args.readmit_quarantined is None:
         parser.error("--readmit-reason requires --readmit-quarantined")
+    if (
+        args.acknowledge_prior_readmission is not None
+        and args.acknowledge_prior_readmission != args.readmit_quarantined
+    ):
+        parser.error("--acknowledge-prior-readmission requires matching --readmit-quarantined")
     stories = load_intake(args.corpus)[: args.limit]
     try:
         if args.fixture:
@@ -1401,6 +1444,7 @@ def main(argv: list[str] | None = None) -> int:
                     extend_story_call_cap=args.extend_story_call_cap,
                     readmit_quarantined=args.readmit_quarantined,
                     readmit_reason=args.readmit_reason,
+                    acknowledge_prior_readmission=args.acknowledge_prior_readmission,
                 )
     except CorpusError as error:
         print(str(error), file=sys.stderr)
