@@ -105,7 +105,7 @@ def _code_commit() -> str:
 @dataclass(frozen=True)
 class SpendPolicy:
     max_usd: Decimal = Decimal("25.00")
-    hard_usd: Decimal = Decimal("30.00")
+    hard_usd: Decimal = Decimal("30.50")
     smoke_usd: Decimal = Decimal("1.50")
     price_per_megapixel: Decimal = Decimal("0.035")
     price_basis: str = "programmatic"
