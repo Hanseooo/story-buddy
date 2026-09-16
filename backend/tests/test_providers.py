@@ -364,9 +364,32 @@ def _fal_http_error(status_code: int, message: str) -> fal_client.FalClientHTTPE
     )
 
 
-def test_run_fal_records_a_content_flag_as_a_definite_unbilled_failure():
-    """fal bills nothing for a draw its content checker rejects, so the call is `failed`, not
-    `failed_uncertain`. syn-007 (2026-09-16) stopped the B6 campaign on exactly this 422."""
+def test_run_fal_asks_again_when_the_content_checker_rejects_a_draw():
+    """fal's checker judges the finished image, and the same prompt passes on another draw
+    (syn-007, 2026-09-16, and syn-018's fruit bat). A rejection bills nothing, so only the story's
+    call allowance is spent — and each `attempted` is what enforces that allowance."""
+    events = []
+    fal = MagicMock()
+    fal.subscribe.side_effect = [
+        _fal_http_error(422, _FAL_CONTENT_FLAG),
+        {"images": [{"url": "https://fal.example/x.png"}]},
+    ]
+    token = providers._fal_event_sink.set(events.append)
+    try:
+        with patch("providers._fal", return_value=fal), patch(
+            "providers.httpx.get", return_value=MagicMock(content=b"png-bytes")
+        ):
+            image_bytes = providers.text_to_image("a see-through sprite")
+    finally:
+        providers._fal_event_sink.reset(token)
+
+    assert image_bytes == b"png-bytes"
+    assert events == ["attempted", "failed", "attempted", "completed"]
+
+
+def test_run_fal_gives_up_when_every_draw_is_rejected():
+    """Each rejection is `failed`, not `failed_uncertain`: fal bills nothing for it. The story is
+    then quarantined and stays readmittable, and the campaign moves on."""
     events = []
     fal = MagicMock()
     fal.subscribe.side_effect = _fal_http_error(422, _FAL_CONTENT_FLAG)
@@ -377,7 +400,8 @@ def test_run_fal_records_a_content_flag_as_a_definite_unbilled_failure():
     finally:
         providers._fal_event_sink.reset(token)
 
-    assert events == ["attempted", "failed"]
+    assert fal.subscribe.call_count == providers.CONTENT_FLAG_ATTEMPTS
+    assert events == ["attempted", "failed"] * providers.CONTENT_FLAG_ATTEMPTS
 
 
 def test_run_fal_keeps_any_other_422_billing_uncertain():
