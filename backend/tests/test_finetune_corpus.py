@@ -331,8 +331,8 @@ def test_smoke_divides_affordable_draws_and_quarantines_at_the_ceiling(tmp_path,
     assert state["a"]["reason_code"] == "budget_stopped"
 
 
-def test_campaign_hard_cap_is_unconditionally_thirty_dollars():
-    assert build_corpus.SpendPolicy(max_usd=Decimal("31.00")).authorized_usd == Decimal("30.00")
+def test_campaign_hard_cap_is_unconditionally_thirty_dollars_fifty():
+    assert build_corpus.SpendPolicy(max_usd=Decimal("31.00")).authorized_usd == Decimal("30.50")
 
 
 def test_explicit_story_call_cap_overrides_the_smoke_budget_boundary():
