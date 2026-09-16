@@ -440,6 +440,10 @@ Rules that are not optional:
   `--restart-quarantined syn-007 --acknowledge-uncertain-billing syn-007` (a fresh thread gets its
   own 19-call allowance; the old one saved no references), and readmit it at the end if it is
   flagged again.
+- **The run itself is logged in §7.** B6 is in progress as of 2026-09-17: 38 of 45 bundles,
+  $27.335 of $29.50 spent, four synthetic stories still to recover. What broke, what was decided
+  and why, and the measurements worth citing in the defence are all in §7 — read it before
+  resuming the campaign or before running a campaign of this shape again.
 
 ### Phase C — label and freeze
 
@@ -815,3 +819,130 @@ costume change. Report the count in the write-up. It selects and excludes nothin
 - Whether the available 4060 Ti is the 8 GB or 16 GB variant.
 - Current fal.ai and OpenRouter balances and rate-limit tiers.
 - All Northflank settings — no config exists in this repo.
+
+---
+
+## 7. Campaign log — Phase B6, 2026-09-15 → 2026-09-17
+
+Written while B6 was still unfinished, so the defence has the record rather than a reconstruction.
+§5 holds findings about the *design*; this section holds what the *run* did. Numbers were read off
+`build_state.json` and the bundles on 2026-09-17.
+
+### 7.1 Where the run stands
+
+38 of 45 bundles built: 26 synthetic, 12 donated. Spend $27.335 of the $29.50 authorized.
+
+Seven stories are quarantined:
+
+| Story | `reason_code` | Standing |
+| --- | --- | --- |
+| syn-001, syn-017 | `invalid_terminal` (`output_moderation_failed`) | needed; first readmission still available |
+| syn-019 | `invalid_terminal` (fal `content_policy_violation`) | needed; readmission already spent |
+| syn-027 | `invalid_terminal` (`output_moderation_failed`) | needed; readmission already spent |
+| don-006, don-015 | `invalid_terminal` | **left quarantined on purpose** — the donated floor is met |
+| don-013 | `budget_stopped` | **left quarantined on purpose** — same |
+
+The asymmetry is the whole reason four stories are worth more money and three are not:
+`freeze_dataset.py:112-124` treats the synthetic allocation as an **equality** (8 train + 2 val per
+style, all 30), so one missing synthetic story blocks the freeze. Donated is a **floor**
+(`validate_donated_allocation`: gouache >= 4, cel >= 3, cut_paper >= 3), and 12 bundles clear it
+(gouache 4, cel 3, cut_paper 5). There are no spare synthetic stories — `corpus_synthetic.json`
+holds exactly 30.
+
+### 7.2 What went wrong, in the order it bit
+
+1. **The per-story call cap was set from the wrong population.** `--max-calls-per-story 19` was
+   sized on synthetic stories. Donated stories are longer, so they keep more images —
+   mean 16.7 kept for donated against 13.0 for synthetic, and don-012 kept 26 — and five donated
+   stories halted mid-run having spent every call while still making progress. Raising the cap to 22
+   was not enough; 30 rescued don-005, don-010 and don-012 and built don-014, and don-009 needed 40.
+   *The cap is a spend guard, not a length guard, and it has to be sized on the longest population
+   you intend to run.*
+2. **I mis-diagnosed that halt before measuring it.** I told the operator the consistency checker's
+   redraws were pushing donated stories past the cap. Measured, the redraw rate is 3.8% for donated
+   against 17.2% for synthetic — the opposite of the claim. Story *length* was the cause. The wrong
+   explanation was retracted before it cost anything, but it nearly bought a redraw-tuning change
+   that would have fixed nothing.
+3. **fal's own content checker rejects prompts ours clear.** syn-018, syn-019 and don-015 were each
+   refused by fal with HTTP 422 `content_policy_violation`, billed $0.00. syn-019's refusal was a
+   *sock puppet dragon reference sheet*; don-015 is *The Red Shoes*, where the source text has feet
+   "bleeding and swollen" at a funeral. fal judges the finished image, so the same prompt passes on a
+   later draw — but before PR #87 a 422 crashed the campaign, and after it the story is quarantined
+   and the campaign survives. PR #88 goes one step further and simply asks again.
+4. **Our conservative backstop over-refuses, and it is the one doing the refusing.** All four
+   `output_moderation_failed` quarantines carry the same shape: `backstop (primary said safe) after
+   retry`. The primary classifier cleared every one of them. The primary also *errored* 15+ times
+   campaign-wide, and `output_mod._check_image` degrades to backstop-only on a primary error, so a
+   flaky primary silently hands the decision to the stricter model. The operator reviewed the stored
+   images in Supabase on 2026-09-17 and found no safety issue in any of them — syn-027's only defect
+   was an anatomy artefact (extra limbs on a running figure), which is image quality, not safety.
+5. **`--readmit-quarantined` was once per story, and two stories needed it twice.** syn-019 spent its
+   readmission, was refused by fal again on 2 of 4 draws, then crashed at `input_gate` with
+   `moderation_error`. syn-027 spent its readmission on 17 fresh calls and the backstop refused it
+   again. Both were left with no CLI path at all. PR #89 adds
+   `--acknowledge-prior-readmission STORY_ID`, which must name the same story as
+   `--readmit-quarantined` so the widening stays per-story rather than one flag freeing the campaign.
+6. **A readmission does not skip moderation.** It redraws. That makes readmission effective against a
+   *stochastic* refusal and close to useless against a *reliable* one — syn-027 has now been refused
+   on two independent rounds of draws. Budget accordingly: a readmission is a bet, not a fix.
+7. **One provider outage, one timeout.** syn-012 died in a DeepInfra outage. don-009's `analyze` node
+   raised `TimeoutError: mistralai/mistral-small-3.2-24b-instruct did not answer within 120s` at
+   `pipeline/analyze.py:307` and exited 1 with zero image spend; the checkpoint restarts at `analyze`,
+   so rerunning was free.
+
+### 7.3 Decisions taken, and why
+
+- **Relax the `code_commit` pin for this corpus.** `freeze_dataset.PINNED_METADATA_KEYS` includes
+  `code_commit` and refuses a freeze whose bundles disagree. The 38 bundles carry three commits —
+  33 on `f2048a4`, 3 on `1ddf1ce`, 2 on `c1f0557` — and **none carries a `-dirty` stamp**, so every
+  bundle traces to a commit that exists. Of the intervening merges only PR #85 (segment roster fix)
+  can touch image content; #86 and #87 are error handling that changes which stories *survive*, not
+  what they draw. The pin was written to stop a mid-campaign edit going unrecorded; it also stops
+  fixing the bug that is halting the campaign. Keeping it would have meant discarding 38 paid bundles
+  to rerun them under one commit, at a cost the budget does not have. Decided 2026-09-17: relax the
+  pin, record the three commits here, and treat provenance as documented rather than enforced.
+- **Spend the remaining budget on synthetic, not donated.** Forced by the equality-vs-floor
+  asymmetry in 7.1. don-006, don-013 and don-015 stay quarantined.
+- **Raise the authorization from $28 to $29.50.** Taken 2026-09-17 to cover the four remaining
+  synthetic stories.
+- **Readmit on a human verdict, not on an appeal to the classifier.** Each `readmit_reason` records
+  who looked, what they saw, and that the primary cleared it — the record has to stand on its own,
+  because a quarantined story writes no bundle and `run_metadata` is the only place its justification
+  lives. That is also why `_prior_readmissions` carries the first justification forward into the
+  second.
+- **Drop the syn-018/syn-019 readmissions in favour of donated work** (taken mid-campaign, when the
+  budget looked tighter). Correct at the time; superseded once the donated floor was met.
+- **One recommendation reversed before it was acted on.** I recommended dropping five synthetic
+  stories and freezing at 29. Reading `freeze_dataset.py` showed the synthetic allocation is an
+  equality, so a 29-story freeze raises `ManifestError("style allocation drift in production
+  bundles")` and is not a freeze at all. Retracted before any money moved.
+
+### 7.4 What to do differently next campaign
+
+- Size `--max-calls-per-story` on the longest story in the population, then add headroom. A halt at
+  the cap costs everything already spent on that story plus a rerun.
+- Measure before explaining. Two of the three wrong turns above were confident causal claims made
+  from plausibility rather than from the state file.
+- Do not pin the code commit across a campaign long enough to need a bug fix. Record the commits and
+  require the tree to be clean, which is the property that actually matters, and is the one the
+  `-dirty` stamp already enforces.
+- Treat a third-party content checker as a distinct failure surface from your own moderation, with
+  its own classifier and its own retry, because it will refuse things yours clears.
+- A moderation backstop that can only be *overridden* per story needs the override to be repeatable.
+  One-shot overrides strand exactly the stories that need review most.
+
+### 7.5 For the technical defence
+
+These are measurements the write-up can use as-is:
+
+- Donated vs synthetic redraw rate: **3.8% vs 17.2%**. Kept images per story: **16.7 vs 13.0**.
+  Donated stories are longer and more consistent; the synthetic set does more of the work of teaching
+  the consistency judge what a failed draw looks like.
+- Every `output_moderation_failed` in this campaign was the **conservative backstop overruling a
+  primary classifier that said safe**, and human review upheld the primary in all four cases — a
+  false-positive rate of 4/4 on the backstop's unilateral refusals, on a sample of four.
+- fal's content checker independently refused three stories our two-layer moderation cleared, with
+  **$0.00 billed** on each refusal. Third-party moderation is not a redundant copy of yours; it is a
+  differently-calibrated third opinion.
+- Provenance is documented, not pinned: 33 / 3 / 2 bundles on `f2048a4` / `1ddf1ce` / `c1f0557`, no
+  `-dirty` stamps, one content-affecting change (PR #85) among the merges.
