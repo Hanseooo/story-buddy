@@ -97,6 +97,22 @@ completeness rule the `ManifestError` came from, so a re-run now prints
 no hard negative is simply legal now. The row above is the pre-ADR state, kept because ADR-057 cites
 its verbatim output.
 
+## Phase C selection and Finding J (2026-09-17)
+
+Free — no provider calls, no database writes. Both run from `backend/` against the finished B6
+corpus, and unlike the older arms they resolve their own paths, so they re-run from their committed
+location unchanged.
+
+| Script | What it does | Result |
+|---|---|---|
+| `author_selection.py` | writes `dataset_selection.json` by a rule fixed before any yield was seen | 14 hard-negative matches over 44 train references; **104** constructed train pairs achieved; 3 forced donated replacements |
+| `count_narrative_changes.py` | Finding J's free post-generation check | **3 of 104** donated scenes name an age or costume change (one a false positive); 4 more imply one without naming it |
+
+`author_selection.py` refuses to overwrite an existing selection: the artifact is frozen before
+annotation begins and its SHA-256 is recorded in the freeze, so a silent rewrite would invalidate
+collected labels. ADR-057 Decision 3 is why the rule is committed rather than applied by hand — the
+achieved constructed-pair count is reported, and no selection decision may be made after seeing it.
+
 ## Running them again
 
 These are a record, not a suite. Each script hardcodes an absolute path to `backend/` and reads

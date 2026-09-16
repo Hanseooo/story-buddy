@@ -40,7 +40,8 @@ backlog or status file for Objective 4 (`AGENTS.md`, "The status surface").
 ## 1. Verdict
 
 **B6 is done — 42 bundles for $30.100, logged in §7. What remains, in order: Phase C (C1 dataset
-selection, then the annotation rounds), and D1 (confirm the GPU's VRAM) before Phase D.** P1–P7,
+selection done, C2 seeds the queue, then the annotation rounds), and D1 (confirm the GPU's VRAM)
+before Phase D.** P1–P7,
 A6, A7, B1–B6, D2, Finding G and the labelling rulebook (Finding J) are done. Supabase has been on
 Pro since 2026-09-14.
 
@@ -449,11 +450,39 @@ Rules that are not optional:
 
 ### Phase C — label and freeze
 
-**C1 · Author `dataset_selection.json`** off `--candidate-report` (runbook step 5), after
-generation. It cannot be written earlier: `hard_negative_matches` is keyed by `lineage_id`, and
-`char_id` does not exist until the pipeline has run.
+**C1 · Author `dataset_selection.json`** — **done 2026-09-17**, by
+`docs/product/evidence/scripts/author_selection.py`, which applies two rules fixed before any yield
+was inspected and refuses to overwrite an existing selection. Written by script rather than by hand
+because ADR-057 Decision 3 forbids a selection decision made *after* seeing the achieved count, and
+a committed rule is how that stays checkable. `selection_sha256` =
+`8ca8f94e9dff9bbba0ad3f425a65385f7c58357a4ade754ebb9f1a867cda9f90`.
 
-**C1a · Count narrative-change pages** — free, read-only, Finding J. Report only.
+- **Hard negatives: 14 matches over 44 synthetic train references**, each reference taking the first
+  target in `candidate_report`'s own lexicographic order. The other 30 carry none, which ADR-057
+  Decision 1 makes legal. Achieved constructed train pairs: **104**, against 380 natural train pairs
+  — reported, not targeted. ADR-057 projected ~18; the ADR-060 harvest is why it is six times that.
+  Only humans and one tortoise pair collide within a style, exactly as the ADR predicted.
+- **Donated: all three replacements were forced, not chosen.** don-006, don-013 and don-015 are
+  *primaries*, and a primary with no bundle fails the freeze unless replaced by a same-style backup.
+  cel had exactly two spare backups for its two missing primaries and gouache exactly one, so the
+  pairing consumed every backup of those styles and the selected set is identical under any
+  ordering. The two cut_paper backups enlarge the held-out set. Final: 12 donated, cel 3 /
+  gouache 4 / cut_paper 5, floor cleared on every style.
+- Both freeze guards accept it: `select_dataset_bundles` returns 42 bundles (24 train / 6 val /
+  12 test) and `validate_hard_negative_matches` passes all 14.
+
+**C1a · Count narrative-change pages** — **done 2026-09-17**, report only, selects and excludes
+nothing (§9.7). `docs/product/evidence/scripts/count_narrative_changes.py`, free and read-only.
+
+Of **104 finalized donated scenes, 3 (2.9%)** have a visual direction that *names* an age or costume
+change — and one of those, don-014:s6, is a false positive (the "younger cousin" is a second
+character, not Lily at another age). The real count is **2, both don-007**, where Iris puts on a
+firefighter uniform. A further **4 (3.8%)** imply an age gap without naming it, all in don-011:
+three "future" scenes and `s8`, "Ana's daughter". Those four are the Finding J case exactly —
+`build_prompt` sends the frozen reference and the visual direction, never the story text, so the
+generator draws child-Ana on all of them and the rater labels what the image shows. **Finding J's
+"smaller than first written" reading is confirmed on the real corpus**: at most 6 of 104 pages carry
+a narrative change of any kind, and only 2 reach the image model.
 
 **C2 · Seed the queue** with `materialize_pairs` (runbook step 6). Never pass `--pilot` — pilot pairs
 are permanently excluded from training. Precondition: A7's dry run prints zeros.
