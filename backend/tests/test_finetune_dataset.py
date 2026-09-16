@@ -144,7 +144,7 @@ def test_an_unfinalized_scene_contributes_no_pairs():
 
 def freeze_bundle(
     data_dir, *, split="train", provenance="synthetic", exclusions=None, fixture=True,
-    include_roster=True, story_id="story-freeze", style="cel",
+    include_roster=True, story_id="story-freeze", style="cel", code_commit="fixture-commit",
 ):
     """One finalized single-character bundle, written to disk so `_preflight` can read its assets.
 
@@ -196,7 +196,7 @@ def freeze_bundle(
             "fixture": "true" if fixture else "false",
             "schema_version": 1,
             "style_preset_id": style,
-            "code_commit": "fixture-commit",
+            "code_commit": code_commit,
             "text_model": "fixture-text",
             "image_model": "fixture-image",
             "image_edit_model": "fixture-image-edit",
@@ -767,7 +767,7 @@ def test_freeze_dataset_writes_complete_immutable_artifacts_from_annotation_trut
     assert first.counts["story"] == {"story-freeze": 1}
     assert first.counts["split"] == {"train": 1}
     assert first.exclusions == []
-    assert first.pinned_versions["code_commit"] == "fixture-commit"
+    assert first.pinned_versions["code_commits"] == "fixture-commit"
     [manifest_row] = [json.loads(line) for line in (out_dir / "manifest.jsonl").read_text().splitlines()]
     assert manifest_row["images"] == [
         "assets/ref/story-freeze_ref.png",
@@ -836,6 +836,35 @@ def test_freeze_writes_hashed_evaluation_projections_without_identity_fields(tmp
     ):
         assert report.artifact_sha256[name] == hashlib.sha256((out_dir / name).read_bytes()).hexdigest()
 
+
+
+def test_bundles_from_different_commits_freeze_and_record_every_commit(tmp_path):
+    """The B6 campaign needed four bug fixes merged while it ran, so its 42 bundles span five
+    commits. Pinning code_commit to one value would have meant discarding every paid bundle to
+    rerun them under one HEAD. Provenance is recorded instead of enforced, the way style_preset_id
+    already is, and the clean-tree guard below is what still has to hold.
+    """
+    first = freeze_bundle(tmp_path, story_id="story-a", code_commit="aaaaaaa")
+    second = freeze_bundle(tmp_path, story_id="story-b", code_commit="bbbbbbb")
+
+    pinned = fd._pinned_versions([first, second])
+
+    assert pinned["code_commits"] == "aaaaaaa,bbbbbbb"
+    assert "code_commit" not in pinned
+
+
+def test_a_bundle_built_from_a_dirty_tree_is_refused(tmp_path):
+    """The property that actually matters, and the one the equality was standing in for. A `-dirty`
+    stamp means the bundle traces to no commit anyone can check out, so nothing can reproduce it.
+    Relaxing the equality without this would leave the weaker guard as the only guard.
+    """
+    # Both carry the SAME dirty stamp on purpose: one shared value satisfies the old equality, so
+    # only a check that reads the stamp itself can catch this.
+    first = freeze_bundle(tmp_path, story_id="story-a", code_commit="aaaaaaa-dirty")
+    second = freeze_bundle(tmp_path, story_id="story-b", code_commit="aaaaaaa-dirty")
+
+    with pytest.raises(fd.ManifestError, match="dirty"):
+        fd._pinned_versions([first, second])
 
 
 def test_freeze_dataset_rejects_bundle_without_declared_roster(tmp_path):
