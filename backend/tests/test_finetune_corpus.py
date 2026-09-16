@@ -2090,6 +2090,66 @@ def test_readmit_refuses_a_second_readmission_of_the_same_story(tmp_path):
         )
 
 
+def test_an_acknowledged_second_readmission_keeps_the_first_justification(tmp_path):
+    """syn-019 and syn-027 (2026-09-17) were flagged again on their one readmission and stranded.
+
+    The guard exists for two reasons and only one of them is about spend: a single `readmit_reason`
+    slot means a second override erases the first. So the acknowledged path appends the record it
+    replaces instead of overwriting it, and the ledger reads as a history rather than a last write.
+    """
+    story = intake_story(declared_characters=["c0"], declared_non_human=[])
+    entry = isolated_quarantine(story, reason_code="invalid_terminal")
+    entry["readmitted_at"] = "2026-08-26T00:00:00+00:00"
+    entry["readmit_reason"] = "the first override"
+    entry["readmit_overrode"] = "invalid terminal state: output_moderation_failed"
+    (tmp_path / "build_state.json").write_text(json.dumps({story.story_id: entry}), encoding="utf-8")
+
+    build_corpus.build(
+        [story],
+        FakeGraph(per_story_images=2),
+        out_dir=tmp_path,
+        supabase=FakeSupabase(),
+        policy=build_corpus.SpendPolicy(max_usd=Decimal("30.00"), max_calls_per_story=20),
+        readmit_quarantined=story.story_id,
+        readmit_reason="the second override",
+        acknowledge_prior_readmission=story.story_id,
+    )
+
+    metadata = json.loads((tmp_path / "runs" / story.story_id / "run.json").read_text(encoding="utf-8"))["run_metadata"]
+    assert metadata["readmit_reason"] == "the second override"
+    assert json.loads(metadata["prior_readmissions"]) == [
+        {
+            "readmitted_at": "2026-08-26T00:00:00+00:00",
+            "readmit_reason": "the first override",
+            "readmit_overrode": "invalid terminal state: output_moderation_failed",
+        }
+    ]
+
+
+def test_acknowledging_a_prior_readmission_must_name_the_readmitted_story(tmp_path):
+    """The acknowledgement is per-story, like `--acknowledge-uncertain-billing`.
+
+    A blanket one would let a single flag widen every stranded quarantine in the campaign at once.
+    """
+    story = intake_story(declared_characters=["c0"], declared_non_human=[])
+    entry = isolated_quarantine(story, reason_code="invalid_terminal")
+    entry["readmitted_at"] = "2026-08-26T00:00:00+00:00"
+    entry["readmit_reason"] = "the first override"
+    (tmp_path / "build_state.json").write_text(json.dumps({story.story_id: entry}), encoding="utf-8")
+
+    with pytest.raises(build_corpus.CorpusError, match="already readmitted"):
+        build_corpus.build(
+            [story],
+            FakeGraph(per_story_images=2),
+            out_dir=tmp_path,
+            supabase=FakeSupabase(),
+            policy=build_corpus.SpendPolicy(max_usd=Decimal("30.00"), max_calls_per_story=20),
+            readmit_quarantined=story.story_id,
+            readmit_reason="the second override",
+            acknowledge_prior_readmission="syn-999",
+        )
+
+
 def test_readmit_requires_an_explicit_call_cap(tmp_path):
     """Readmitting without a cap wrote an `execution_id` that armed `_validate_restart_cap`.
 
