@@ -184,6 +184,37 @@ def test_a_failed_scene_does_not_point_at_the_flagged_image():
     assert scene.attempts[-1] == Attempt(image_ref="job-1/s0-2.png", prompt=scene.attempts[-1].prompt, passed=False)
 
 
+def test_an_operator_acknowledged_scene_survives_a_backstop_only_refusal(monkeypatch):
+    """syn-017's s0 was refused by the backstop alone on three separate rounds of draws while the
+    primary cleared it every time, and human review upheld the primary. Readmission only redraws,
+    so a scene the backstop refuses reliably was unreachable at any price. The override is named
+    per story and per scene, and the test below pins the half that makes it safe.
+    """
+    from app.config import settings
+    monkeypatch.setattr(settings, "scene_moderation_overrides", {"job-1:s0"})
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"),          patch("pipeline.output_mod.classify_image_primary", return_value=True),          patch("pipeline.output_mod.classify_image_backstop", return_value=False),          patch("pipeline.output_mod.generate_and_store", return_value=("job-1/s0-2.png", True)):
+        from pipeline.output_mod import output_mod
+        scene = output_mod(_state([_scene("s0")]))["scenes"][0]
+
+    assert scene.moderation_status == "passed_operator_override"
+    assert scene.final_image_ref == "job-1/s0-2.png"
+
+
+def test_an_operator_acknowledged_scene_still_fails_when_the_primary_flagged_it(monkeypatch):
+    """The override answers ONE measured failure: the backstop refusing what the primary cleared.
+    A primary flag is a different event and the override must not touch it, or the flag naming a
+    scene becomes a way to turn the whole gate off for it.
+    """
+    from app.config import settings
+    monkeypatch.setattr(settings, "scene_moderation_overrides", {"job-1:s0"})
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"),          patch("pipeline.output_mod.classify_image_primary", return_value=False),          patch("pipeline.output_mod.classify_image_backstop", return_value=True),          patch("pipeline.output_mod.generate_and_store", return_value=("job-1/s0-2.png", True)):
+        from pipeline.output_mod import output_mod
+        scene = output_mod(_state([_scene("s0")]))["scenes"][0]
+
+    assert scene.moderation_status == "failed"
+    assert scene.final_image_ref is None
+
+
 def test_route_after_output_mod_raises_when_scene_failed():
     """route_after_output_mod raises RuntimeError('output_moderation_failed') on failed scene."""
     from pipeline.graph import route_after_output_mod

@@ -85,6 +85,14 @@ class Settings(BaseSettings):
     # time, never bound at import, or the override lands after the reader already has its copy.
     max_scene_attempts: int = 3
 
+    # "<story_id>:<scene_id>" for each scene an operator has cleared by eye after the conservative
+    # backstop refused an image the primary classifier called safe. Empty in production and never
+    # env-driven: `finetune/build_corpus.py` fills it from a CLI flag for one research build.
+    # `output_mod` honours it ONLY on that exact verdict, so it can never soften a primary flag.
+    scene_moderation_overrides: set[str] = set()
+    # Who reviewed those scenes and what they saw. Recorded in every bundle the build writes.
+    scene_moderation_reason: str = ""
+
 
 settings = Settings()
 
