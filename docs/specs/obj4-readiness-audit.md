@@ -39,9 +39,10 @@ backlog or status file for Objective 4 (`AGENTS.md`, "The status surface").
 
 ## 1. Verdict
 
-**B5 passed. What remains, in order: merge the moderation-quarantine fix, redo B1, then B6 (resume
-`--out ../data/judge/corpus`, then readmit `syn-001`); D1 (confirm the GPU's VRAM) before Phase D.** P1–P7, A6, A7, B2–B4, D2, Finding G and the
-labelling rulebook (Finding J) are done. Supabase has been on Pro since 2026-09-14.
+**B6 is done — 42 bundles for $30.100, logged in §7. What remains, in order: Phase C (C1 dataset
+selection, then the annotation rounds), and D1 (confirm the GPU's VRAM) before Phase D.** P1–P7,
+A6, A7, B1–B6, D2, Finding G and the labelling rulebook (Finding J) are done. Supabase has been on
+Pro since 2026-09-14.
 
 The pipeline works, the money path is understood, and the donated corpus arrived on 2026-09-12 —
 15 raw stories at `data/judge/intake/raw/`, which retires the blocker that governed the last runbook.
@@ -440,10 +441,11 @@ Rules that are not optional:
   `--restart-quarantined syn-007 --acknowledge-uncertain-billing syn-007` (a fresh thread gets its
   own 19-call allowance; the old one saved no references), and readmit it at the end if it is
   flagged again.
-- **The run itself is logged in §7.** B6 is in progress as of 2026-09-17: 38 of 45 bundles,
-  $27.335 of $29.50 spent, four synthetic stories still to recover. What broke, what was decided
-  and why, and the measurements worth citing in the defence are all in §7 — read it before
-  resuming the campaign or before running a campaign of this shape again.
+- **B6 is complete and logged in §7.** Finished 2026-09-17: **42 of 45 bundles — all 30 synthetic
+  and 12 donated — for $30.100**, exit 0, no synthetic story quarantined. don-006, don-013 and
+  don-015 stay quarantined on purpose; the donated held-out set is a floor and 12 clears it. What
+  broke, what was decided and why, and the measurements worth citing in the defence are all in §7 —
+  read it before running a campaign of this shape again.
 
 ### Phase C — label and freeze
 
@@ -824,30 +826,53 @@ costume change. Report the count in the write-up. It selects and excludes nothin
 
 ## 7. Campaign log — Phase B6, 2026-09-15 → 2026-09-17
 
-Written while B6 was still unfinished, so the defence has the record rather than a reconstruction.
-§5 holds findings about the *design*; this section holds what the *run* did. Numbers were read off
-`build_state.json` and the bundles on 2026-09-17.
+Written as B6 ran, so the defence has the record rather than a reconstruction — including the
+wrong turns, which a write-up afterwards would have quietly dropped. §5 holds findings about the
+*design*; this section holds what the *run* did. Numbers were read off `build_state.json` and the
+42 bundles on 2026-09-17.
 
-### 7.1 Where the run stands
+### 7.1 Outcome — B6 is complete
 
-38 of 45 bundles built: 26 synthetic, 12 donated. Spend $27.335 of the $29.50 authorized.
+**42 of 45 bundles: all 30 synthetic and 12 donated. Spend $30.100.** Exit 0 on the final synthetic
+run, no synthetic story quarantined. The allocation is exactly what the freeze demands:
 
-Seven stories are quarantined:
+| Provenance | Split | cel | gouache | cut_paper |
+| --- | --- | --- | --- | --- |
+| synthetic | train | 8 | 8 | 8 |
+| synthetic | val | 2 | 2 | 2 |
+| donated | test | 3 | 4 | 5 |
 
-| Story | `reason_code` | Standing |
+Three donated stories stay quarantined **on purpose** — don-006 and don-015 (`invalid_terminal`),
+don-013 (`budget_stopped`) — because the donated held-out set is a floor and 12 bundles clear it.
+
+The asymmetry drove every spending decision in the endgame. `freeze_dataset.py:112-124` treats the
+synthetic allocation as an **equality** (8 train + 2 val per style, all 30), so one missing synthetic
+story blocks the freeze outright. Donated is a **floor** (`validate_donated_allocation`: gouache >= 4,
+cel >= 3, cut_paper >= 3). There are no spare synthetic stories — `corpus_synthetic.json` holds
+exactly 30. That is why the last four stories were worth four budget raises and three donated
+stories were worth none.
+
+**Authorization moved four times**: $28 -> $29.50 -> $30.00 -> $30.38 -> $30.75, finishing at
+$30.100 actual. Two of those raises were needed only because the estimate behind the previous one
+was too low (7.2 item 8). The `hard_usd` ceiling in `build_corpus.py` was raised twice by commit,
+from $30.00 to $30.50 to $30.75.
+
+### 7.1a How the last four stories actually went
+
+All four were `invalid_terminal` and all four needed more than one override:
+
+| Story | Rounds | Outcome |
 | --- | --- | --- |
-| syn-001, syn-017 | `invalid_terminal` (`output_moderation_failed`) | needed; first readmission still available |
-| syn-019 | `invalid_terminal` (fal `content_policy_violation`) | needed; readmission already spent |
-| syn-027 | `invalid_terminal` (`output_moderation_failed`) | needed; readmission already spent |
-| don-006, don-015 | `invalid_terminal` | **left quarantined on purpose** — the donated floor is met |
-| don-013 | `budget_stopped` | **left quarantined on purpose** — same |
+| syn-027 | 2 | passed on the second readmission, 13 calls |
+| syn-019 | 2 | passed on the second readmission under PR #88, 13 calls, no fal refusal |
+| syn-001 | 2 | first readmission applied but budget-halted before spending; ran next pass, 23 calls |
+| syn-017 | 4 | refused on rounds 1, 2 and 3 (7, 8 and 10 calls), passed on round 4, 12 calls |
 
-The asymmetry is the whole reason four stories are worth more money and three are not:
-`freeze_dataset.py:112-124` treats the synthetic allocation as an **equality** (8 train + 2 val per
-style, all 30), so one missing synthetic story blocks the freeze. Donated is a **floor**
-(`validate_donated_allocation`: gouache >= 4, cel >= 3, cut_paper >= 3), and 12 bundles clear it
-(gouache 4, cel 3, cut_paper 5). There are no spare synthetic stories — `corpus_synthetic.json`
-holds exactly 30.
+syn-017 is the instructive one. Its scene s0 was refused three separate times, every time as
+`backstop (primary said safe) after retry` — the same scene, the same verdict. That looked
+deterministic, and the scene-level override in 7.3 was built on the strength of it. **On the fourth
+round s0 passed moderation unaided and the override never fired.** The refusal is stochastic with a
+high rate, not deterministic. Recorded because the wrong conclusion was acted on: see 7.4.
 
 ### 7.2 What went wrong, in the order it bit
 
@@ -882,54 +907,108 @@ holds exactly 30.
    again. Both were left with no CLI path at all. PR #89 adds
    `--acknowledge-prior-readmission STORY_ID`, which must name the same story as
    `--readmit-quarantined` so the widening stays per-story rather than one flag freeing the campaign.
-6. **A readmission does not skip moderation.** It redraws. That makes readmission effective against a
-   *stochastic* refusal and close to useless against a *reliable* one — syn-027 has now been refused
-   on two independent rounds of draws. Budget accordingly: a readmission is a bet, not a fix.
+6. **A readmission does not skip moderation. It redraws.** Which is the whole reason it works, because
+   the refusal turned out to be stochastic: every story that looked permanently refused eventually
+   passed on a later round of draws, syn-017 on its fourth. The cost is that each readmission is a
+   bet at full price — syn-017 spent 37 calls across four rounds on a story that cost 12 to build —
+   and a story can absorb an unbounded number of them. Budget for the number of rounds, not for one.
 7. **One provider outage, one timeout.** syn-012 died in a DeepInfra outage. don-009's `analyze` node
    raised `TimeoutError: mistralai/mistral-small-3.2-24b-instruct did not answer within 120s` at
    `pipeline/analyze.py:307` and exited 1 with zero image spend; the checkpoint restarts at `analyze`,
    so rerunning was free.
+8. **Two guards met and left a story unreachable at any price.** syn-017 could not restart, and
+   neither guard was wrong on its own. `_validate_restart_cap` (`build_corpus.py:671`) is an
+   **equality**: once a story is isolated for restart its recorded call allowance cannot be changed
+   in either direction, and it runs at line 919, *before* the readmit branch at 923, so a readmission
+   cannot rewrite it either. Meanwhile the per-story budget reserve refuses to *start* a story it
+   cannot finish at that allowance. So the locked 30-call allowance reserved $1.05 while $0.82
+   remained, and every route out was closed: `--restart-quarantined` refuses a story that already has
+   an `execution_id`, and `--extend-story-call-cap` requires `--resume-quarantined`, which does not
+   accept `invalid_terminal`. Only raising the ceiling by commit unblocked it.
+9. **The hard ceiling silently clamped a raise, and that was the guard working.** `hard_usd`
+   (`build_corpus.py:108`) is a constant with **no CLI flag**, and `authorized_usd = min(max_usd,
+   hard_usd)`. A `--max-usd 30.38` was clamped to $30.00 and the run halted rather than spending. It
+   is the one limit `--max-usd` cannot escalate, which is exactly why it caught an operator — an
+   agent — walking the budget up one flag at a time. It stays hardcoded on purpose; raising it is a
+   reviewed commit.
+10. **Budget estimates were wrong twice, in the same direction.** The $29.50 and $30.00 ceilings were
+    both sized on an estimate of ~13 calls per story, taken from syn-027 and syn-019. syn-001 took
+    23. Each bad estimate cost a round trip and a decision the owner had to make again with no new
+    information. The third figure was computed instead of estimated — the per-story call cap binds
+    before the budget does, so `spent + cap * price` is a *provable* worst case — and it held.
+11. **A budget halt is free, and that is worth knowing.** Three separate runs refused to start:
+    twice on `budget_reserve`, once on the cap equality. All three spent $0.00, and the readmission
+    they were carrying was not consumed, because the reserve check runs before the readmit branch
+    writes. A refusal to start is not a failed attempt.
 
 ### 7.3 Decisions taken, and why
 
-- **Relax the `code_commit` pin for this corpus.** `freeze_dataset.PINNED_METADATA_KEYS` includes
-  `code_commit` and refuses a freeze whose bundles disagree. The 38 bundles carry three commits —
-  33 on `f2048a4`, 3 on `1ddf1ce`, 2 on `c1f0557` — and **none carries a `-dirty` stamp**, so every
-  bundle traces to a commit that exists. Of the intervening merges only PR #85 (segment roster fix)
-  can touch image content; #86 and #87 are error handling that changes which stories *survive*, not
-  what they draw. The pin was written to stop a mid-campaign edit going unrecorded; it also stops
-  fixing the bug that is halting the campaign. Keeping it would have meant discarding 38 paid bundles
-  to rerun them under one commit, at a cost the budget does not have. Decided 2026-09-17: relax the
-  pin, record the three commits here, and treat provenance as documented rather than enforced.
+- **Relax the `code_commit` pin — implemented 2026-09-17, commit `f8b3ecc`.** The decision was taken
+  mid-campaign; the code change came after B6 finished, because editing the tree during a run stamps
+  every bundle `-dirty`. `freeze_dataset.PINNED_METADATA_KEYS` no longer contains `code_commit`;
+  differing values are collected into `code_commits`, the same idiom `style_preset_id` already used.
+  The 42 bundles span five commits — `f2048a4` x33, `56d7f4c` x3, `1ddf1ce` x3, `c1f0557` x2,
+  `3b42361` x1 — and **none is `-dirty`**. Of the merges only PR #85 (segment roster fix) can touch
+  image content; #86, #87, #88 and #91 are error handling and a spend constant, which change which
+  stories *survive*, not what they draw. Keeping the equality would have meant discarding 42 paid
+  bundles to rerun them under one HEAD, at a cost the budget does not have, to buy a property the
+  campaign never had.
+- **And replace it with the property it was standing in for.** The same change now refuses any
+  bundle whose `code_commit` ends `-dirty`. The old equality could not see that: bundles built from
+  one dirty tree all agree with each other and pass. Relaxing the weaker guard without adding this
+  would have left nothing checking that a bundle traces to a commit anyone can check out.
+- **Add a scene-level moderation override** (commit `8836537`).
+  `--acknowledge-scene-moderation STORY_ID:SCENE_ID`, with a required `--scene-moderation-reason`,
+  accepts one named scene on exactly one verdict: the backstop refusing after retry what the primary
+  classifier called safe. A primary flag or a primary error is a different event and still fails the
+  job, so naming a scene cannot switch the gate off for it. The accepted scene carries
+  `passed_operator_override`, never `passed` — the classifier did refuse, and the bundle has to say
+  so rather than launder it into a clean verdict. Built because story-level readmission only
+  *redraws*, so a scene the backstop refuses reliably was unreachable at any price. **It has never
+  fired**: syn-017 passed unaided on the run it was built for (7.1a). It closes a real gap and the
+  gap is real regardless, but it is untested in production and should be described that way.
+- **Raise the hard ceiling twice, by commit** (`aff5516` to $30.50, `3b42361` to $30.75), rather than
+  making `hard_usd` a CLI flag. A flag would have removed the only limit that the escalating
+  `--max-usd` raises could not pass, which is the guard that caught them.
 - **Spend the remaining budget on synthetic, not donated.** Forced by the equality-vs-floor
   asymmetry in 7.1. don-006, don-013 and don-015 stay quarantined.
-- **Raise the authorization from $28 to $29.50.** Taken 2026-09-17 to cover the four remaining
-  synthetic stories.
 - **Readmit on a human verdict, not on an appeal to the classifier.** Each `readmit_reason` records
   who looked, what they saw, and that the primary cleared it — the record has to stand on its own,
   because a quarantined story writes no bundle and `run_metadata` is the only place its justification
   lives. That is also why `_prior_readmissions` carries the first justification forward into the
-  second.
-- **Drop the syn-018/syn-019 readmissions in favour of donated work** (taken mid-campaign, when the
-  budget looked tighter). Correct at the time; superseded once the donated floor was met.
+  second. syn-001's reason is deliberately weaker than the others: the reviewer could not check every
+  image and said so, and it is recorded as *an absence of a finding, not a positive all-clear*, with
+  the readmission resting on the campaign-wide backstop pattern instead.
 - **One recommendation reversed before it was acted on.** I recommended dropping five synthetic
   stories and freezing at 29. Reading `freeze_dataset.py` showed the synthetic allocation is an
   equality, so a 29-story freeze raises `ManifestError("style allocation drift in production
   bundles")` and is not a freeze at all. Retracted before any money moved.
+- **Drop the syn-018/syn-019 readmissions in favour of donated work** (taken mid-campaign, when the
+  budget looked tighter). Correct at the time; superseded once the donated floor was met.
 
 ### 7.4 What to do differently next campaign
 
 - Size `--max-calls-per-story` on the longest story in the population, then add headroom. A halt at
   the cap costs everything already spent on that story plus a rerun.
-- Measure before explaining. Two of the three wrong turns above were confident causal claims made
-  from plausibility rather than from the state file.
+- **Compute spend ceilings, never estimate them.** Where a cap binds before the budget does,
+  `spent + cap * price` is provable. Two of the four authorization raises existed only because an
+  average was used where an arithmetic bound was available, and each cost the owner a decision they
+  had already made.
+- **Do not generalise a failure from one story to another.** syn-027 passed on its second readmission,
+  so the backstop refusal was called stochastic; syn-017 then failed three times on the same scene,
+  so it was called deterministic and code was written on that basis; it then passed on the fourth.
+  Both readings were drawn from three or fewer observations of a stochastic process. Say "refused
+  3 of 4 times" and let the number stand.
+- Measure before explaining. Three of the wrong turns in 7.2 were confident causal claims made from
+  plausibility rather than from the state file.
 - Do not pin the code commit across a campaign long enough to need a bug fix. Record the commits and
-  require the tree to be clean, which is the property that actually matters, and is the one the
-  `-dirty` stamp already enforces.
+  require the tree to be clean, which is the property that actually matters.
 - Treat a third-party content checker as a distinct failure surface from your own moderation, with
   its own classifier and its own retry, because it will refuse things yours clears.
-- A moderation backstop that can only be *overridden* per story needs the override to be repeatable.
-  One-shot overrides strand exactly the stories that need review most.
+- An override that can only be used once strands exactly the cases that need review most. Both the
+  story-level readmission and the scene-level gate needed a repeatable route in the end.
+- Land the operational fixes a campaign needs **before** it starts, not during. Every mid-campaign
+  merge added a commit to the provenance spread and forced the `code_commit` decision in 7.3.
 
 ### 7.5 For the technical defence
 
@@ -938,11 +1017,21 @@ These are measurements the write-up can use as-is:
 - Donated vs synthetic redraw rate: **3.8% vs 17.2%**. Kept images per story: **16.7 vs 13.0**.
   Donated stories are longer and more consistent; the synthetic set does more of the work of teaching
   the consistency judge what a failed draw looks like.
-- Every `output_moderation_failed` in this campaign was the **conservative backstop overruling a
-  primary classifier that said safe**, and human review upheld the primary in all four cases — a
-  false-positive rate of 4/4 on the backstop's unilateral refusals, on a sample of four.
-- fal's content checker independently refused three stories our two-layer moderation cleared, with
-  **$0.00 billed** on each refusal. Third-party moderation is not a redundant copy of yours; it is a
-  differently-calibrated third opinion.
-- Provenance is documented, not pinned: 33 / 3 / 2 bundles on `f2048a4` / `1ddf1ce` / `c1f0557`, no
-  `-dirty` stamps, one content-affecting change (PR #85) among the merges.
+- **The conservative backstop refused four stories unilaterally — syn-001, syn-017, syn-022 and
+  syn-027 — and human review upheld the primary classifier in all four.** Every one carries the same
+  log shape, `backstop (primary said safe) after retry`. The primary also *errored* 15+ times
+  campaign-wide, and `output_mod._check_image` degrades to backstop-only on a primary error, so a
+  flaky primary silently hands the decision to the stricter model.
+- The refusal is **stochastic, not content-stable**. syn-017's scene s0 was refused on three
+  independent rounds of draws and passed on the fourth, with no change to the prompt or the story.
+  A moderation gate whose verdict on the same scene varies across draws cannot be characterised by a
+  single pass — it is a distribution, and the campaign sampled it four times.
+- fal's content checker independently refused three stories our two-layer moderation cleared
+  (syn-018, syn-019, don-015 — *The Red Shoes*, whose source text has feet "bleeding and swollen" at
+  a funeral), with **$0.00 billed** on each refusal. Third-party moderation is not a redundant copy
+  of yours; it is a differently-calibrated third opinion.
+- Provenance is documented, not pinned: 42 bundles across five commits, **no `-dirty` stamps**, one
+  content-affecting change (PR #85) among the merges. The freeze now enforces the clean-tree property
+  directly (7.3).
+- Cost of the campaign: **$30.100** by the conservative ledger, which charges $0.035 per image call
+  against a real fal price of $0.0157-$0.0236, so actual spend is materially lower.
