@@ -484,8 +484,24 @@ generator draws child-Ana on all of them and the rater labels what the image sho
 "smaller than first written" reading is confirmed on the real corpus**: at most 6 of 104 pages carry
 a narrative change of any kind, and only 2 reach the image model.
 
-**C2 · Seed the queue** with `materialize_pairs` (runbook step 6). Never pass `--pilot` — pilot pairs
-are permanently excluded from training. Precondition: A7's dry run prints zeros.
+**C2 · Seed the queue** — **done 2026-09-17**: `{"pairs_inserted": 795, "skipped": 0,
+"uploaded": 1590}`, matching the offline preflight exactly. A7's dry run printed
+`annotations=0 pairs=0 objects=0` immediately before, so nothing pre-existing mixed in. Queue
+verified read-only afterwards: 795 rows, 380 train / 86 val / 329 test, every row
+`is_pilot=false` and `is_constructed_negative=false`.
+
+659 MB uploaded across 1,590 objects, of which only **93.6 MB is distinct content** — the reference
+PNG is re-stored per pair under `research/corpus/<pair_id>/a.png`, so ~50 references become 795
+copies. Harmless against Pro's 100 GB and it keeps each pair self-contained, but it is why the
+storage figure is 7x the corpus.
+
+**`research_pairs.char_id` holds the story-local id (`c0`, `c1`), not the lineage id**, so a
+`SELECT DISTINCT char_id` over the queue returns 2 and looks alarming. It is inert: the annotation
+UI strips `char_id` and never renders it (`annotate/actions.test.ts:341`), `annotation_truth` does
+not read it, and §3.2's character-level split discipline runs on the manifest, where `build_records`
+qualifies it through `lineage_id`. Recorded so nobody re-derives the scare.
+
+Never pass `--pilot` — pilot pairs are permanently excluded from training.
 
 **C3 · Round 1** at `/annotate`, blinded, every pair once, one account. Read
 `docs/specs/labelling-rulebook.md` first; it does not change after this.
