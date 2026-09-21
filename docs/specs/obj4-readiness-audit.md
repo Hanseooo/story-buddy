@@ -527,13 +527,37 @@ count the write-up will have. Keep it.
 **Incident, 2026-09-21: two extra raters.** Two groupmates labelled on their own researcher accounts
 before this was caught: **42 round-1 rows** (15 from `c4f346f6`, 27 from `d9a03bf8`), written
 06:13–06:31 UTC. A read-only check found no pair labelled by more than one account, and the queue
-intact at 42 `partially_annotated` and 753 `pending`. The design stays one rater. The harm had not
+intact at 42 `partially_annotated` and 753 `pending`. The owner first chose to keep one rater. The harm had not
 happened yet, but it was close: `submitAnnotation` counts every row on a pair, whoever wrote it
 (`annotate/actions.ts:62-98`). A second account's label on the same pair marks it
 `complete`/`conflicted` and removes it from the queue, and the freeze then reads two people's labels
-as one rater's two rounds. **Open:** the groupmates stop, their researcher role is removed, and their
-42 rows are excluded before C6. Each is recorded as a deviation. They kept labelling while this was
-discussed: 245 rows by the last read-only check (116 and 129).
+as one rater's two rounds.
+
+**Decision, 2026-09-21: two raters, the owner adjudicates.** The owner chose to finish labelling now
+rather than stop the groupmates. A read-only check at 07:56 UTC found 342 labels, all round 1, all from
+the two groupmate accounts (172 from `c4f346f6`, 170 from `d9a03bf8`), no pair holding both, and none
+from the owner. This deviates from the 2026-08-29 amendment ("one rater… there is no second"). It uses
+the two-annotator path that amendment kept as a contingency:
+
+- Each groupmate labels every pair once, in round 1. The queue already serves each of them the pairs
+  the other has labelled, so a pair ends with one label from each: `complete` or `conflicted`.
+- **Whoever finishes first stops when the screen says Round 2.** Round 2 opens for an account once it
+  has no round-1 pair left, and a round-2 label would give a pair two labels from one person while the
+  other is still working. The same holds if either stops early: the other must not go on to Round 2.
+- The owner labels nothing on `/annotate`. Once both are done, the owner's profile gets
+  `is_adjudicator = true`, and the owner resolves `conflicted` pairs at `/adjudicate` through the
+  distinct-adjudicator path (`adjudicate/actions.ts`, `annotation_truth.is_adjudication`). An
+  adjudicator cannot open `/annotate`, which here is what we want.
+- The freeze is annotator-agnostic: two ordinary labels per pair, and the adjudication wins a
+  conflict. `annotation_agreement.jsonl` then holds the two groupmates' labels, so the number
+  `evaluate.py` reports as `intra_rater_agreement` is **inter-rater** agreement. Report it under that
+  name. Test–retest reliability is not measured.
+- 342 labels were made under the old in-app guide, which left out rulebook Step 3 (see below). The
+  rest follow the guide in PR #93 once it deploys. Report the batch boundary.
+- Reconcile expectations change: after labelling, complete + conflicted = 795 with `pending` and
+  `partially_annotated` both 0. After adjudication, complete + adjudicated = 795.
+
+This needs a dated deviation in `PREREGISTRATION_OBJ4.md` before the freeze.
 
 *Their labels read against the rulebook, 2026-09-21.* A row check flagged 12 of their labels as
 breaking a rule: 11 were Different with only Wrong Clothing or Wrong Style (Step 3 says that is always
@@ -562,7 +586,8 @@ always true: the generator sometimes drifts out of the preset. That is a generat
 cannot score, because style is not identity. It needs a line in the write-up's limitations, not a
 new rule.
 
-**C4 · Round 2**, same person, cold. This is test–retest reliability, not a second annotator. There
+*Superseded for this campaign by the 2026-09-21 decision above: no round 2, and C5 adjudicates
+the two groupmates' conflicts.* **C4 · Round 2**, same person, cold. This is test–retest reliability, not a second annotator. There
 is no annotator 2 in this design. **Leave a real gap — a fortnight, not an evening.** Nothing in the
 database can tell the difference, and the measurement is only as good as the gap.
 
