@@ -20,7 +20,9 @@ type AdminClient = Awaited<ReturnType<typeof createAdminClient>>;
 // two-rater design (obj4-readiness-audit.md, decision of 2026-09-21), and a round-2 label would
 // give a pair two labels from one person and take it from the rater still working. The check reads
 // every pair, not just the queue: when a rater finishes round 1, the pairs still waiting for the
-// other rater hold only this rater's label.
+// other rater hold only this rater's label. There is no pilot or campaign filter: any row from
+// another account, adjudication included, shuts round 2 on this database for good. A later
+// one-rater study needs a fresh annotations table or a filter here.
 async function anotherRaterHasLabelled(adminClient: AdminClient, userId: string) {
   const { data, error } = await adminClient
     .from("annotations")
