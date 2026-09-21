@@ -1,12 +1,17 @@
 import logging
 
-from app.config import check_image_budget
+from app.config import check_image_budget, settings
 from contracts.story_memory import Attempt, StoryMemory
 from pipeline.generate_scene import generate_and_store
 from pipeline.prompt_optimizer import referenced_characters
 from providers import classify_image_backstop, classify_image_primary, get_signed_url
 
 log = logging.getLogger(__name__)
+
+# The one verdict an operator may override: the backstop refusing what the primary called safe.
+# Kept as the literal `_check_image` returns so the two cannot drift apart silently.
+BACKSTOP_ALONE = "backstop (primary said safe)"
+OVERRIDE_STATUS = "passed_operator_override"
 
 
 def _check_image(image_url: str) -> str | None:
@@ -62,7 +67,7 @@ def output_mod(state: StoryMemory) -> dict:
     current_image_count = state.cost.image_count
 
     for scene in state.scenes:
-        if scene.moderation_status == "passed":
+        if scene.moderation_status in {"passed", OVERRIDE_STATUS}:
             # Screened on an earlier turn of the loop. This node now runs once per finalized scene
             # rather than once over the finished book (see `route_next_scene`), so without this it
             # would re-pay for a classifier call per already-cleared scene, per scene, per book.
@@ -135,6 +140,22 @@ def output_mod(state: StoryMemory) -> dict:
                 # it is. Whether an unjudged image should ship at all is a routing question and
                 # an ADR decision (#78); this line only stops the record from claiming a
                 # verdict that was never issued.
+                "attempts": [*scene.attempts, Attempt(image_ref=retry_path, prompt=softened, passed=False)],
+            }))
+        elif (
+            retry_flagged_by == BACKSTOP_ALONE
+            and f"{state.story_id}:{scene.scene_id}" in settings.scene_moderation_overrides
+        ):
+            # Only reachable when a human has already looked at this scene and named it. The
+            # status is deliberately not "passed": the classifier did refuse, and the bundle has
+            # to carry that rather than launder it into a clean verdict.
+            log.warning(
+                "output_mod: scene_id=%s flagged by %s after retry — accepted on operator override",
+                scene.scene_id, retry_flagged_by,
+            )
+            updated_scenes.append(scene.model_copy(update={
+                "final_image_ref": retry_path,
+                "moderation_status": OVERRIDE_STATUS,
                 "attempts": [*scene.attempts, Attempt(image_ref=retry_path, prompt=softened, passed=False)],
             }))
         else:

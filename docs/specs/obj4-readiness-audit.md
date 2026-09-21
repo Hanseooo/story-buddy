@@ -39,9 +39,11 @@ backlog or status file for Objective 4 (`AGENTS.md`, "The status surface").
 
 ## 1. Verdict
 
-**B5 passed. What remains, in order: merge the moderation-quarantine fix, redo B1, then B6 (resume
-`--out ../data/judge/corpus`, then readmit `syn-001`); D1 (confirm the GPU's VRAM) before Phase D.** P1–P7, A6, A7, B2–B4, D2, Finding G and the
-labelling rulebook (Finding J) are done. Supabase has been on Pro since 2026-09-14.
+**B6 is done — 42 bundles for $30.100, logged in §7. What remains, in order: Phase C (C1 dataset
+selection done, C2 seeds the queue, then the annotation rounds), and D1 (confirm the GPU's VRAM)
+before Phase D.** P1–P7,
+A6, A7, B1–B6, D2, Finding G and the labelling rulebook (Finding J) are done. Supabase has been on
+Pro since 2026-09-14.
 
 The pipeline works, the money path is understood, and the donated corpus arrived on 2026-09-12 —
 15 raw stories at `data/judge/intake/raw/`, which retires the blocker that governed the last runbook.
@@ -440,26 +442,157 @@ Rules that are not optional:
   `--restart-quarantined syn-007 --acknowledge-uncertain-billing syn-007` (a fresh thread gets its
   own 19-call allowance; the old one saved no references), and readmit it at the end if it is
   flagged again.
-- **The run itself is logged in §7.** B6 is in progress as of 2026-09-17: 38 of 45 bundles,
-  $27.335 of $29.50 spent, four synthetic stories still to recover. What broke, what was decided
-  and why, and the measurements worth citing in the defence are all in §7 — read it before
-  resuming the campaign or before running a campaign of this shape again.
+- **B6 is complete and logged in §7.** Finished 2026-09-17: **42 of 45 bundles — all 30 synthetic
+  and 12 donated — for $30.100**, exit 0, no synthetic story quarantined. don-006, don-013 and
+  don-015 stay quarantined on purpose; the donated held-out set is a floor and 12 clears it. What
+  broke, what was decided and why, and the measurements worth citing in the defence are all in §7 —
+  read it before running a campaign of this shape again.
 
 ### Phase C — label and freeze
 
-**C1 · Author `dataset_selection.json`** off `--candidate-report` (runbook step 5), after
-generation. It cannot be written earlier: `hard_negative_matches` is keyed by `lineage_id`, and
-`char_id` does not exist until the pipeline has run.
+**C1 · Author `dataset_selection.json`** — **done 2026-09-17**, by
+`docs/product/evidence/scripts/author_selection.py`, which applies two rules fixed before any yield
+was inspected and refuses to overwrite an existing selection. Written by script rather than by hand
+because ADR-057 Decision 3 forbids a selection decision made *after* seeing the achieved count, and
+a committed rule is how that stays checkable. `selection_sha256` =
+`8ca8f94e9dff9bbba0ad3f425a65385f7c58357a4ade754ebb9f1a867cda9f90`.
 
-**C1a · Count narrative-change pages** — free, read-only, Finding J. Report only.
+- **Hard negatives: 14 matches over 44 synthetic train references**, each reference taking the first
+  target in `candidate_report`'s own lexicographic order. The other 30 carry none, which ADR-057
+  Decision 1 makes legal. Achieved constructed train pairs: **104**, against 380 natural train pairs
+  — reported, not targeted. ADR-057 projected ~18; the ADR-060 harvest is why it is six times that.
+  Only humans and one tortoise pair collide within a style, exactly as the ADR predicted.
+- **Donated: all three replacements were forced, not chosen.** don-006, don-013 and don-015 are
+  *primaries*, and a primary with no bundle fails the freeze unless replaced by a same-style backup.
+  cel had exactly two spare backups for its two missing primaries and gouache exactly one, so the
+  pairing consumed every backup of those styles and the selected set is identical under any
+  ordering. The two cut_paper backups enlarge the held-out set. Final: 12 donated, cel 3 /
+  gouache 4 / cut_paper 5, floor cleared on every style.
+- Both freeze guards accept it: `select_dataset_bundles` returns 42 bundles (24 train / 6 val /
+  12 test) and `validate_hard_negative_matches` passes all 14.
 
-**C2 · Seed the queue** with `materialize_pairs` (runbook step 6). Never pass `--pilot` — pilot pairs
-are permanently excluded from training. Precondition: A7's dry run prints zeros.
+**C1a · Count narrative-change pages** — **done 2026-09-17**, report only, selects and excludes
+nothing (§9.7). `docs/product/evidence/scripts/count_narrative_changes.py`, free and read-only.
+
+Of **104 finalized donated scenes, 3 (2.9%)** have a visual direction that *names* an age or costume
+change — and one of those, don-014:s6, is a false positive (the "younger cousin" is a second
+character, not Lily at another age). The real count is **2, both don-007**, where Iris puts on a
+firefighter uniform. A further **4 (3.8%)** imply an age gap without naming it, all in don-011:
+three "future" scenes and `s8`, "Ana's daughter". Those four are the Finding J case exactly —
+`build_prompt` sends the frozen reference and the visual direction, never the story text, so the
+generator draws child-Ana on all of them and the rater labels what the image shows. **Finding J's
+"smaller than first written" reading is confirmed on the real corpus**: at most 6 of 104 pages carry
+a narrative change of any kind, and only 2 reach the image model.
+
+**C2 · Seed the queue** — **done 2026-09-17**: `{"pairs_inserted": 795, "skipped": 0,
+"uploaded": 1590}`, matching the offline preflight exactly. A7's dry run printed
+`annotations=0 pairs=0 objects=0` immediately before, so nothing pre-existing mixed in. Queue
+verified read-only afterwards: 795 rows, 380 train / 86 val / 329 test, every row
+`is_pilot=false` and `is_constructed_negative=false`.
+
+659 MB uploaded across 1,590 objects, of which only **93.6 MB is distinct content** — the reference
+PNG is re-stored per pair under `research/corpus/<pair_id>/a.png`, so ~50 references become 795
+copies. Harmless against Pro's 100 GB and it keeps each pair self-contained, but it is why the
+storage figure is 7x the corpus.
+
+**`research_pairs.char_id` holds the story-local id (`c0`, `c1`), not the lineage id**, so a
+`SELECT DISTINCT char_id` over the queue returns 2 and looks alarming. It is inert: the annotation
+UI strips `char_id` and never renders it (`annotate/actions.test.ts:341`), `annotation_truth` does
+not read it, and §3.2's character-level split discipline runs on the manifest, where `build_records`
+qualifies it through `lineage_id`. Recorded so nobody re-derives the scare.
+
+Never pass `--pilot` — pilot pairs are permanently excluded from training.
 
 **C3 · Round 1** at `/annotate`, blinded, every pair once, one account. Read
-`docs/specs/labelling-rulebook.md` first; it does not change after this.
+`docs/specs/labelling-rulebook.md` first; it does not change after this. **Started 2026-09-21.**
 
-**C4 · Round 2**, same person, cold. This is test–retest reliability, not a second annotator. There
+The first pair exposed a rulebook gap. The reference draws the eyes as dots, and the page draws them
+with whites and pupils on a surprised face. Different Face counts "eye style" and excludes
+"expression", and neither rule settles which covers this case. Per the rulebook it got the closest rule
+and a line in the rater's private notes (`data/judge/annotation-notes.md`, gitignored), not a new rule.
+Expect it to recur. The write-up should report it as a known ambiguity.
+
+**Known generator limitation: duplicated characters.** Some pages draw the referenced character twice.
+One page adds a translucent, ghost-like copy. This is a known failure of diffusion edit models,
+including Qwen-Image-Edit: the reference subject is repeated or a faded copy is left behind. The
+corpus includes rejected draws on purpose (ADR-060), so failed pages are overrepresented, and those
+pages are what the judge has to learn to catch. **These pairs stay in the queue.** Removing them now
+would be a selection decision made after seeing the data, which ADR-057 Decision 3 forbids. The
+rulebook covers the plain case: Step 1 compares the best-matching figure, and a duplicate is not an
+identity failure. Broken Anatomy applies only when the copy is fused into the character (merged or
+duplicated body parts). The translucent copy is the unclear case: it takes the closest rule and a
+line in the rater's notes. **No field records a duplicate**, so the rater's notes tally is the only
+count the write-up will have. Keep it.
+
+**Incident, 2026-09-21: two extra raters.** Two groupmates labelled on their own researcher accounts
+before this was caught: **42 round-1 rows** (15 from `c4f346f6`, 27 from `d9a03bf8`), written
+06:13–06:31 UTC. A read-only check found no pair labelled by more than one account, and the queue
+intact at 42 `partially_annotated` and 753 `pending`. The owner first chose to keep one rater. The harm had not
+happened yet, but it was close: `submitAnnotation` counts every row on a pair, whoever wrote it
+(`annotate/actions.ts:62-98`). A second account's label on the same pair marks it
+`complete`/`conflicted` and removes it from the queue, and the freeze then reads two people's labels
+as one rater's two rounds.
+
+**Decision, 2026-09-21: two raters, the owner adjudicates.** The owner chose to finish labelling now
+rather than stop the groupmates. A read-only check at 07:56 UTC found 342 labels, all round 1, all from
+the two groupmate accounts (172 from `c4f346f6`, 170 from `d9a03bf8`), no pair holding both, and none
+from the owner. This deviates from the 2026-08-29 amendment ("one rater… there is no second"). It uses
+the two-annotator path that amendment kept as a contingency:
+
+- Each groupmate labels every pair once, in round 1. The queue already serves each of them the pairs
+  the other has labelled, so a pair ends with one label from each: `complete` or `conflicted`.
+- **Round 2 stays shut.** Round 2 opens for an account once it has no round-1 pair left, and a
+  round-2 label would give a pair two labels from one person while the other is still working. PR #93
+  closes it in code: once any other account has a label, `getNextPair` serves nothing in round 2 (the
+  screen shows Queue Complete) and `submitAnnotation` refuses a round-2 label. Until PR #93 deploys,
+  whoever sees Round 2 stops. If one groupmate stops early, their waiting pairs stay open and the
+  freeze fails with "<2 ordinary annotations" until that person finishes.
+- **The owner sets `is_adjudicator = true` now, not at the end.** The guard does not stop a third
+  account from labelling round 1; the adjudicator flag stops the owner's account from opening
+  `/annotate`. Conflicts can be adjudicated as they appear.
+- The owner labels nothing on `/annotate` and resolves `conflicted` pairs at `/adjudicate` through the
+  distinct-adjudicator path (`adjudicate/actions.ts`, `annotation_truth.is_adjudication`). An
+  adjudicator cannot open `/annotate`, which here is what we want.
+- The freeze is annotator-agnostic: two ordinary labels per pair, and the adjudication wins a
+  conflict. `annotation_agreement.jsonl` then holds the two groupmates' labels, so the number
+  `evaluate.py` reports as `intra_rater_agreement` is **inter-rater** agreement. Report it under that
+  name. Test–retest reliability is not measured.
+- 342 labels were made under the old in-app guide, which left out rulebook Step 3 (see below). The
+  rest follow the guide in PR #93 once it deploys. Report the batch boundary.
+- Reconcile expectations change: after labelling, complete + conflicted = 795 with `pending` and
+  `partially_annotated` both 0. After adjudication, complete + adjudicated = 795.
+
+This needs a dated deviation in `PREREGISTRATION_OBJ4.md` before the freeze.
+
+*Their labels read against the rulebook, 2026-09-21.* A row check flagged 12 of their labels as
+breaking a rule: 11 were Different with only Wrong Clothing or Wrong Style (Step 3 says that is always
+a mistake), and 1 was Character Absent with Broken Anatomy ticked. Five of the 12 are test pairs and
+were deleted unopened. The seven train and val pages, looked at beside their references:
+
+- Five show a real change the rulebook deliberately does not count. One page is drawn in pixel art
+  against a flat vector reference. Three cloud pages trade the crayon texture for a glossy, outlined
+  render. One teacher's shirt lost its pocket. Face, colours and body features match in all five,
+  and the other visible changes are expressions. The groupmates named what they saw correctly; the
+  rulebook maps it to Same.
+- One page draws the cloud twice in the reference's own style. It was labelled Wrong Style,
+  presumably the nearest box, because there is no duplicate reason. Step 1 says compare the better
+  match, and that match is Same.
+- One page may be a real Different labelled with the wrong reason. The boy's hair reads paler
+  (orange-brown to blond) and the face is drawn differently, but only Wrong Clothing was ticked.
+
+So the rule that failed is Step 3. The labels were not careless. The in-app guide listed Wrong
+Clothing and Wrong Style as drift reasons, with nothing saying they are not identity on their own,
+and it had no Step 1, Step 3 or Step 4. That is fixed in PR #93:
+the guide now carries the rulebook's rules, and the screen warns, without blocking, when Different
+rests on Clothing or Style alone. No rule changed; the screen now states the frozen rules.
+
+Step 3 also says "References and pages share one style preset". The pixel-art page shows that is not
+always true: the generator sometimes drifts out of the preset. That is a generator failure the judge
+cannot score, because style is not identity. It needs a line in the write-up's limitations, not a
+new rule.
+
+*Superseded for this campaign by the 2026-09-21 decision above: no round 2, and C5 adjudicates
+the two groupmates' conflicts.* **C4 · Round 2**, same person, cold. This is test–retest reliability, not a second annotator. There
 is no annotator 2 in this design. **Leave a real gap — a fortnight, not an evening.** Nothing in the
 database can tell the difference, and the measurement is only as good as the gap.
 
@@ -467,6 +600,57 @@ database can tell the difference, and the measurement is only as good as the gap
 
 **C6 · Reconcile and freeze** (runbook steps 7 and 8). The freeze also writes the LlamaFactory
 files. Stay on Supabase Pro until Phase E.
+
+#### What makes C3–C6 reliable, read from the code on 2026-09-21
+
+- **Round 2 opens by itself.** `getNextPair` (`annotate/actions.ts:157-199`) serves round 2 once
+  round 1 covers all 795 pairs, in the same session, with no confirmation. The only signal is the
+  badge changing from `ROUND 1` to `ROUND 2`. **Stop when it changes**, or the gap is gone. A round-2
+  label cannot be deleted: there is no update or delete policy (`0018_annotation_rounds.sql`).
+- **Round 2 served pairs in exactly round 1's order. Fixed in PR #93 (first opened as #92),
+  which must be merged and deployed before C4.** The per-rater shuffle hashed `p.id + user.id`
+  (`annotate/actions.ts:206`) without the round. So round 2 would have opened on the same pair round 1
+  opened on, the one this section's first paragraph describes. The round now goes through a nonlinear
+mix after the hash. Appending it to the hashed string was tried first, and the test showed it did
+nothing: the polynomial hash is linear, so a shared suffix shifts every value equally. Labels
+  are unaffected. Only the order of the pairs still waiting changes, including round 1's remaining
+  ones, which is harmless.
+- **Labels are immutable, so a misclick is fixed only by disagreement.** A round-1 mistake stays in
+  the table. If round 2 answers differently, the pair goes to adjudication, and that is the only
+  correction path. Check before you submit, above all for Different with only Clothing or Style
+  ticked. The screen accepts it, and the rulebook says it is always wrong.
+- **A conflict is any difference, not only Same versus Different.** `isConsensus` and
+  `annotation_truth._signature` compare the verdict, the full set of reasons and both checkboxes. A
+  pair labelled Same twice but with Text Visible ticked only once goes to C5. Expect C5 to be larger
+  than the Same/Different disagreement rate suggests.
+- **The reliability number is narrower than the labels.** `annotation_agreement.jsonl` records only
+  `same_character` for each round (`freeze_dataset.py:201-217`). `evaluate.py:1391-1440` reports
+  Cohen's kappa and percent agreement on **test-split pairs only** (329), split human/non-human.
+  Reason-level agreement is not computed anywhere. It is recoverable from E2's CSV export if the
+  write-up wants it. Adjudication writes a new round-3 row and never changes rounds 1 and 2, so it
+  cannot inflate the statistic.
+- **Do not look at round-1-versus-round-2 agreement until round 2 is finished.** Seeing it would
+  make round 2 less cold.
+
+Progress checks, all `uv run python -m finetune.build_dataset --reconcile-only` (runbook step 7;
+it rewrites only the derived `research_pairs.status` cache):
+
+| After | Expected `statuses` |
+| --- | --- |
+| C3 | `partially_annotated: 795` |
+| C4 | `complete + conflicted = 795` |
+| C5 | `complete + adjudicated = 795`, `conflicted: 0` |
+
+The freeze refuses to run until every pair has two ordinary labels and every conflict has an
+adjudication (`resolve_annotations` raises `ManifestError`).
+
+**Export.** C6's freeze (runbook step 8, `--out ../data/judge/freezes/obj4-v1`) is the dataset
+export. `train.json`, `val.json` and `dataset_info.json` are LlamaFactory's input. The
+`manifest.{train,val,test}.jsonl`, `annotation_agreement.jsonl` and `character_slices.json` files are
+what `evaluate.py` reads. The held-out split is `manifest.test.jsonl`. It must stay unopened, and
+the runbook's "`test.json`" names a file the freeze does not write. The folder is immutable, and a change means
+a new `obj4-v2`. Per-round reasons and timestamps are not in the freeze, so export them separately
+(E2).
 
 ### Phase D — train and evaluate
 
@@ -824,30 +1008,53 @@ costume change. Report the count in the write-up. It selects and excludes nothin
 
 ## 7. Campaign log — Phase B6, 2026-09-15 → 2026-09-17
 
-Written while B6 was still unfinished, so the defence has the record rather than a reconstruction.
-§5 holds findings about the *design*; this section holds what the *run* did. Numbers were read off
-`build_state.json` and the bundles on 2026-09-17.
+Written as B6 ran, so the defence has the record rather than a reconstruction — including the
+wrong turns, which a write-up afterwards would have quietly dropped. §5 holds findings about the
+*design*; this section holds what the *run* did. Numbers were read off `build_state.json` and the
+42 bundles on 2026-09-17.
 
-### 7.1 Where the run stands
+### 7.1 Outcome — B6 is complete
 
-38 of 45 bundles built: 26 synthetic, 12 donated. Spend $27.335 of the $29.50 authorized.
+**42 of 45 bundles: all 30 synthetic and 12 donated. Spend $30.100.** Exit 0 on the final synthetic
+run, no synthetic story quarantined. The allocation is exactly what the freeze demands:
 
-Seven stories are quarantined:
+| Provenance | Split | cel | gouache | cut_paper |
+| --- | --- | --- | --- | --- |
+| synthetic | train | 8 | 8 | 8 |
+| synthetic | val | 2 | 2 | 2 |
+| donated | test | 3 | 4 | 5 |
 
-| Story | `reason_code` | Standing |
+Three donated stories stay quarantined **on purpose** — don-006 and don-015 (`invalid_terminal`),
+don-013 (`budget_stopped`) — because the donated held-out set is a floor and 12 bundles clear it.
+
+The asymmetry drove every spending decision in the endgame. `freeze_dataset.py:112-124` treats the
+synthetic allocation as an **equality** (8 train + 2 val per style, all 30), so one missing synthetic
+story blocks the freeze outright. Donated is a **floor** (`validate_donated_allocation`: gouache >= 4,
+cel >= 3, cut_paper >= 3). There are no spare synthetic stories — `corpus_synthetic.json` holds
+exactly 30. That is why the last four stories were worth four budget raises and three donated
+stories were worth none.
+
+**Authorization moved four times**: $28 -> $29.50 -> $30.00 -> $30.38 -> $30.75, finishing at
+$30.100 actual. Two of those raises were needed only because the estimate behind the previous one
+was too low (7.2 item 8). The `hard_usd` ceiling in `build_corpus.py` was raised twice by commit,
+from $30.00 to $30.50 to $30.75.
+
+### 7.1a How the last four stories actually went
+
+All four were `invalid_terminal` and all four needed more than one override:
+
+| Story | Rounds | Outcome |
 | --- | --- | --- |
-| syn-001, syn-017 | `invalid_terminal` (`output_moderation_failed`) | needed; first readmission still available |
-| syn-019 | `invalid_terminal` (fal `content_policy_violation`) | needed; readmission already spent |
-| syn-027 | `invalid_terminal` (`output_moderation_failed`) | needed; readmission already spent |
-| don-006, don-015 | `invalid_terminal` | **left quarantined on purpose** — the donated floor is met |
-| don-013 | `budget_stopped` | **left quarantined on purpose** — same |
+| syn-027 | 2 | passed on the second readmission, 13 calls |
+| syn-019 | 2 | passed on the second readmission under PR #88, 13 calls, no fal refusal |
+| syn-001 | 2 | first readmission applied but budget-halted before spending; ran next pass, 23 calls |
+| syn-017 | 4 | refused on rounds 1, 2 and 3 (7, 8 and 10 calls), passed on round 4, 12 calls |
 
-The asymmetry is the whole reason four stories are worth more money and three are not:
-`freeze_dataset.py:112-124` treats the synthetic allocation as an **equality** (8 train + 2 val per
-style, all 30), so one missing synthetic story blocks the freeze. Donated is a **floor**
-(`validate_donated_allocation`: gouache >= 4, cel >= 3, cut_paper >= 3), and 12 bundles clear it
-(gouache 4, cel 3, cut_paper 5). There are no spare synthetic stories — `corpus_synthetic.json`
-holds exactly 30.
+syn-017 is the instructive one. Its scene s0 was refused three separate times, every time as
+`backstop (primary said safe) after retry` — the same scene, the same verdict. That looked
+deterministic, and the scene-level override in 7.3 was built on the strength of it. **On the fourth
+round s0 passed moderation unaided and the override never fired.** The refusal is stochastic with a
+high rate, not deterministic. Recorded because the wrong conclusion was acted on: see 7.4.
 
 ### 7.2 What went wrong, in the order it bit
 
@@ -882,54 +1089,108 @@ holds exactly 30.
    again. Both were left with no CLI path at all. PR #89 adds
    `--acknowledge-prior-readmission STORY_ID`, which must name the same story as
    `--readmit-quarantined` so the widening stays per-story rather than one flag freeing the campaign.
-6. **A readmission does not skip moderation.** It redraws. That makes readmission effective against a
-   *stochastic* refusal and close to useless against a *reliable* one — syn-027 has now been refused
-   on two independent rounds of draws. Budget accordingly: a readmission is a bet, not a fix.
+6. **A readmission does not skip moderation. It redraws.** Which is the whole reason it works, because
+   the refusal turned out to be stochastic: every story that looked permanently refused eventually
+   passed on a later round of draws, syn-017 on its fourth. The cost is that each readmission is a
+   bet at full price — syn-017 spent 37 calls across four rounds on a story that cost 12 to build —
+   and a story can absorb an unbounded number of them. Budget for the number of rounds, not for one.
 7. **One provider outage, one timeout.** syn-012 died in a DeepInfra outage. don-009's `analyze` node
    raised `TimeoutError: mistralai/mistral-small-3.2-24b-instruct did not answer within 120s` at
    `pipeline/analyze.py:307` and exited 1 with zero image spend; the checkpoint restarts at `analyze`,
    so rerunning was free.
+8. **Two guards met and left a story unreachable at any price.** syn-017 could not restart, and
+   neither guard was wrong on its own. `_validate_restart_cap` (`build_corpus.py:671`) is an
+   **equality**: once a story is isolated for restart its recorded call allowance cannot be changed
+   in either direction, and it runs at line 919, *before* the readmit branch at 923, so a readmission
+   cannot rewrite it either. Meanwhile the per-story budget reserve refuses to *start* a story it
+   cannot finish at that allowance. So the locked 30-call allowance reserved $1.05 while $0.82
+   remained, and every route out was closed: `--restart-quarantined` refuses a story that already has
+   an `execution_id`, and `--extend-story-call-cap` requires `--resume-quarantined`, which does not
+   accept `invalid_terminal`. Only raising the ceiling by commit unblocked it.
+9. **The hard ceiling silently clamped a raise, and that was the guard working.** `hard_usd`
+   (`build_corpus.py:108`) is a constant with **no CLI flag**, and `authorized_usd = min(max_usd,
+   hard_usd)`. A `--max-usd 30.38` was clamped to $30.00 and the run halted rather than spending. It
+   is the one limit `--max-usd` cannot escalate, which is exactly why it caught an operator — an
+   agent — walking the budget up one flag at a time. It stays hardcoded on purpose; raising it is a
+   reviewed commit.
+10. **Budget estimates were wrong twice, in the same direction.** The $29.50 and $30.00 ceilings were
+    both sized on an estimate of ~13 calls per story, taken from syn-027 and syn-019. syn-001 took
+    23. Each bad estimate cost a round trip and a decision the owner had to make again with no new
+    information. The third figure was computed instead of estimated — the per-story call cap binds
+    before the budget does, so `spent + cap * price` is a *provable* worst case — and it held.
+11. **A budget halt is free, and that is worth knowing.** Three separate runs refused to start:
+    twice on `budget_reserve`, once on the cap equality. All three spent $0.00, and the readmission
+    they were carrying was not consumed, because the reserve check runs before the readmit branch
+    writes. A refusal to start is not a failed attempt.
 
 ### 7.3 Decisions taken, and why
 
-- **Relax the `code_commit` pin for this corpus.** `freeze_dataset.PINNED_METADATA_KEYS` includes
-  `code_commit` and refuses a freeze whose bundles disagree. The 38 bundles carry three commits —
-  33 on `f2048a4`, 3 on `1ddf1ce`, 2 on `c1f0557` — and **none carries a `-dirty` stamp**, so every
-  bundle traces to a commit that exists. Of the intervening merges only PR #85 (segment roster fix)
-  can touch image content; #86 and #87 are error handling that changes which stories *survive*, not
-  what they draw. The pin was written to stop a mid-campaign edit going unrecorded; it also stops
-  fixing the bug that is halting the campaign. Keeping it would have meant discarding 38 paid bundles
-  to rerun them under one commit, at a cost the budget does not have. Decided 2026-09-17: relax the
-  pin, record the three commits here, and treat provenance as documented rather than enforced.
+- **Relax the `code_commit` pin — implemented 2026-09-17, commit `f8b3ecc`.** The decision was taken
+  mid-campaign; the code change came after B6 finished, because editing the tree during a run stamps
+  every bundle `-dirty`. `freeze_dataset.PINNED_METADATA_KEYS` no longer contains `code_commit`;
+  differing values are collected into `code_commits`, the same idiom `style_preset_id` already used.
+  The 42 bundles span five commits — `f2048a4` x33, `56d7f4c` x3, `1ddf1ce` x3, `c1f0557` x2,
+  `3b42361` x1 — and **none is `-dirty`**. Of the merges only PR #85 (segment roster fix) can touch
+  image content; #86, #87, #88 and #91 are error handling and a spend constant, which change which
+  stories *survive*, not what they draw. Keeping the equality would have meant discarding 42 paid
+  bundles to rerun them under one HEAD, at a cost the budget does not have, to buy a property the
+  campaign never had.
+- **And replace it with the property it was standing in for.** The same change now refuses any
+  bundle whose `code_commit` ends `-dirty`. The old equality could not see that: bundles built from
+  one dirty tree all agree with each other and pass. Relaxing the weaker guard without adding this
+  would have left nothing checking that a bundle traces to a commit anyone can check out.
+- **Add a scene-level moderation override** (commit `8836537`).
+  `--acknowledge-scene-moderation STORY_ID:SCENE_ID`, with a required `--scene-moderation-reason`,
+  accepts one named scene on exactly one verdict: the backstop refusing after retry what the primary
+  classifier called safe. A primary flag or a primary error is a different event and still fails the
+  job, so naming a scene cannot switch the gate off for it. The accepted scene carries
+  `passed_operator_override`, never `passed` — the classifier did refuse, and the bundle has to say
+  so rather than launder it into a clean verdict. Built because story-level readmission only
+  *redraws*, so a scene the backstop refuses reliably was unreachable at any price. **It has never
+  fired**: syn-017 passed unaided on the run it was built for (7.1a). It closes a real gap and the
+  gap is real regardless, but it is untested in production and should be described that way.
+- **Raise the hard ceiling twice, by commit** (`aff5516` to $30.50, `3b42361` to $30.75), rather than
+  making `hard_usd` a CLI flag. A flag would have removed the only limit that the escalating
+  `--max-usd` raises could not pass, which is the guard that caught them.
 - **Spend the remaining budget on synthetic, not donated.** Forced by the equality-vs-floor
   asymmetry in 7.1. don-006, don-013 and don-015 stay quarantined.
-- **Raise the authorization from $28 to $29.50.** Taken 2026-09-17 to cover the four remaining
-  synthetic stories.
 - **Readmit on a human verdict, not on an appeal to the classifier.** Each `readmit_reason` records
   who looked, what they saw, and that the primary cleared it — the record has to stand on its own,
   because a quarantined story writes no bundle and `run_metadata` is the only place its justification
   lives. That is also why `_prior_readmissions` carries the first justification forward into the
-  second.
-- **Drop the syn-018/syn-019 readmissions in favour of donated work** (taken mid-campaign, when the
-  budget looked tighter). Correct at the time; superseded once the donated floor was met.
+  second. syn-001's reason is deliberately weaker than the others: the reviewer could not check every
+  image and said so, and it is recorded as *an absence of a finding, not a positive all-clear*, with
+  the readmission resting on the campaign-wide backstop pattern instead.
 - **One recommendation reversed before it was acted on.** I recommended dropping five synthetic
   stories and freezing at 29. Reading `freeze_dataset.py` showed the synthetic allocation is an
   equality, so a 29-story freeze raises `ManifestError("style allocation drift in production
   bundles")` and is not a freeze at all. Retracted before any money moved.
+- **Drop the syn-018/syn-019 readmissions in favour of donated work** (taken mid-campaign, when the
+  budget looked tighter). Correct at the time; superseded once the donated floor was met.
 
 ### 7.4 What to do differently next campaign
 
 - Size `--max-calls-per-story` on the longest story in the population, then add headroom. A halt at
   the cap costs everything already spent on that story plus a rerun.
-- Measure before explaining. Two of the three wrong turns above were confident causal claims made
-  from plausibility rather than from the state file.
+- **Compute spend ceilings, never estimate them.** Where a cap binds before the budget does,
+  `spent + cap * price` is provable. Two of the four authorization raises existed only because an
+  average was used where an arithmetic bound was available, and each cost the owner a decision they
+  had already made.
+- **Do not generalise a failure from one story to another.** syn-027 passed on its second readmission,
+  so the backstop refusal was called stochastic; syn-017 then failed three times on the same scene,
+  so it was called deterministic and code was written on that basis; it then passed on the fourth.
+  Both readings were drawn from three or fewer observations of a stochastic process. Say "refused
+  3 of 4 times" and let the number stand.
+- Measure before explaining. Three of the wrong turns in 7.2 were confident causal claims made from
+  plausibility rather than from the state file.
 - Do not pin the code commit across a campaign long enough to need a bug fix. Record the commits and
-  require the tree to be clean, which is the property that actually matters, and is the one the
-  `-dirty` stamp already enforces.
+  require the tree to be clean, which is the property that actually matters.
 - Treat a third-party content checker as a distinct failure surface from your own moderation, with
   its own classifier and its own retry, because it will refuse things yours clears.
-- A moderation backstop that can only be *overridden* per story needs the override to be repeatable.
-  One-shot overrides strand exactly the stories that need review most.
+- An override that can only be used once strands exactly the cases that need review most. Both the
+  story-level readmission and the scene-level gate needed a repeatable route in the end.
+- Land the operational fixes a campaign needs **before** it starts, not during. Every mid-campaign
+  merge added a commit to the provenance spread and forced the `code_commit` decision in 7.3.
 
 ### 7.5 For the technical defence
 
@@ -938,11 +1199,21 @@ These are measurements the write-up can use as-is:
 - Donated vs synthetic redraw rate: **3.8% vs 17.2%**. Kept images per story: **16.7 vs 13.0**.
   Donated stories are longer and more consistent; the synthetic set does more of the work of teaching
   the consistency judge what a failed draw looks like.
-- Every `output_moderation_failed` in this campaign was the **conservative backstop overruling a
-  primary classifier that said safe**, and human review upheld the primary in all four cases — a
-  false-positive rate of 4/4 on the backstop's unilateral refusals, on a sample of four.
-- fal's content checker independently refused three stories our two-layer moderation cleared, with
-  **$0.00 billed** on each refusal. Third-party moderation is not a redundant copy of yours; it is a
-  differently-calibrated third opinion.
-- Provenance is documented, not pinned: 33 / 3 / 2 bundles on `f2048a4` / `1ddf1ce` / `c1f0557`, no
-  `-dirty` stamps, one content-affecting change (PR #85) among the merges.
+- **The conservative backstop refused four stories unilaterally — syn-001, syn-017, syn-022 and
+  syn-027 — and human review upheld the primary classifier in all four.** Every one carries the same
+  log shape, `backstop (primary said safe) after retry`. The primary also *errored* 15+ times
+  campaign-wide, and `output_mod._check_image` degrades to backstop-only on a primary error, so a
+  flaky primary silently hands the decision to the stricter model.
+- The refusal is **stochastic, not content-stable**. syn-017's scene s0 was refused on three
+  independent rounds of draws and passed on the fourth, with no change to the prompt or the story.
+  A moderation gate whose verdict on the same scene varies across draws cannot be characterised by a
+  single pass — it is a distribution, and the campaign sampled it four times.
+- fal's content checker independently refused three stories our two-layer moderation cleared
+  (syn-018, syn-019, don-015 — *The Red Shoes*, whose source text has feet "bleeding and swollen" at
+  a funeral), with **$0.00 billed** on each refusal. Third-party moderation is not a redundant copy
+  of yours; it is a differently-calibrated third opinion.
+- Provenance is documented, not pinned: 42 bundles across five commits, **no `-dirty` stamps**, one
+  content-affecting change (PR #85) among the merges. The freeze now enforces the clean-tree property
+  directly (7.3).
+- Cost of the campaign: **$30.100** by the conservative ledger, which charges $0.035 per image call
+  against a real fal price of $0.0157-$0.0236, so actual spend is materially lower.

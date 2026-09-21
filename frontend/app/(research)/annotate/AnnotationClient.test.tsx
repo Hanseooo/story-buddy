@@ -82,6 +82,20 @@ describe("Tier 1: AnnotationClient Component Tests", () => {
     expect(sameCharRadio).not.toBeChecked();
   });
 
+  // labelling-rulebook.md Step 3: the screen accepts Different with only Clothing or Style,
+  // which is always a mistake, so it warns without blocking.
+  it("warns, without blocking, when Different rests on clothing or style alone", () => {
+    render(<AnnotationClient pair={mockPair} />);
+    fireEvent.click(screen.getByRole("radio", { name: /Different Character/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Wrong Clothing/Accessories" }));
+
+    expect(screen.getByRole("status")).toHaveTextContent(/clothing or style alone/i);
+    expect(screen.getByRole("button", { name: /Submit Annotation/i })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Wrong Color" }));
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
   it("toggles gating booleans (Broken Anatomy & Text Visible) independently", () => {
     render(<AnnotationClient pair={mockPair} />);
     const brokenAnatomyCheckbox = screen.getByLabelText(/Broken Anatomy/i);

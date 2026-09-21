@@ -50,6 +50,7 @@ from finetune.manifest import local_image_path, scene_images
 from pipeline.analyze import EXTRACTION_PROMPT_VERSION, analyze
 from pipeline.char_bible import JUDGE_PROMPT_VERSION as REFERENCE_JUDGE_PROMPT_VERSION
 from pipeline.graph import moderation_router, route_after_output_mod
+from pipeline.output_mod import OVERRIDE_STATUS
 from pipeline.consistency_check import (
     JUDGE_PROMPT_VERSION,
     SCENE_CONSTRAINT_PROMPT_VERSION,
@@ -105,7 +106,7 @@ def _code_commit() -> str:
 @dataclass(frozen=True)
 class SpendPolicy:
     max_usd: Decimal = Decimal("25.00")
-    hard_usd: Decimal = Decimal("30.50")
+    hard_usd: Decimal = Decimal("30.75")
     smoke_usd: Decimal = Decimal("1.50")
     price_per_megapixel: Decimal = Decimal("0.035")
     price_basis: str = "programmatic"
@@ -178,6 +179,24 @@ def _unchecked_references(memory: StoryMemory) -> int:
         for character in memory.characters
         if character.canonical_ref_image is not None and character.ref_verdict is None
     )
+
+
+def _scene_moderation_metadata(memory) -> dict:
+    """Scenes in this story that shipped on an operator override, and the reviewer's justification.
+
+    Records what actually happened rather than what was asked for: a flag naming a scene that then
+    passed moderation on its own leaves nothing here. syn-017 (2026-09-17) is the case the override
+    exists for, and a bundle carrying an overridden scene has to say so on its face.
+    """
+    overridden = sorted(
+        scene.scene_id for scene in memory.scenes if scene.moderation_status == OVERRIDE_STATUS
+    )
+    if not overridden:
+        return {}
+    return {
+        "scene_moderation_overrides": ",".join(overridden),
+        "scene_moderation_reason": settings.scene_moderation_reason,
+    }
 
 
 def _budget_basis(policy: SpendPolicy) -> dict:
@@ -533,6 +552,7 @@ def _bundle(
             "recursion_limit": RECURSION_LIMIT,
             "unchecked_references": _unchecked_references(memory),
             "fixture": "true" if fixture else "false",
+            **_scene_moderation_metadata(memory),
             **_budget_basis(policy),
             "attempted_calls": (telemetry or {}).get("attempted", 0),
             "completed_calls": (telemetry or {}).get("completed", 0),
@@ -810,11 +830,15 @@ def build(
     readmit_quarantined: str | None = None,
     readmit_reason: str | None = None,
     acknowledge_prior_readmission: str | None = None,
+    scene_moderation_overrides: set[str] | None = None,
+    scene_moderation_reason: str = "",
 ) -> dict:
     """Run only incomplete stories; a completed run is the immutable bundle, never a count."""
     # `consistency_check` reads this at call time, so it must be in place before the first
     # story streams. Process-wide and not restored: this module is a CLI entrypoint.
     settings.max_scene_attempts = policy.scene_attempts
+    settings.scene_moderation_overrides = scene_moderation_overrides or set()
+    settings.scene_moderation_reason = scene_moderation_reason
     records = [_record(story) for story in stories]
     if resume_quarantined is not None and restart_quarantined is not None:
         raise CorpusError("choose either resume or isolated restart, not both")
@@ -1355,6 +1379,17 @@ def main(argv: list[str] | None = None) -> int:
         help="permit a further readmission of a story already readmitted once; every earlier "
         "justification is kept beside the new one",
     )
+    parser.add_argument(
+        "--acknowledge-scene-moderation",
+        metavar="STORY_ID:SCENE_ID",
+        action="append",
+        help="accept one scene the conservative backstop refused after retry while the primary "
+        "classifier called it safe; refused for any other verdict. Repeat per scene",
+    )
+    parser.add_argument(
+        "--scene-moderation-reason",
+        help="who reviewed the acknowledged scenes and what they saw; recorded in the bundle",
+    )
     parser.add_argument("--max-calls-per-story", type=int)
     parser.add_argument(
         "--scene-attempts",
@@ -1405,6 +1440,13 @@ def main(argv: list[str] | None = None) -> int:
         and args.acknowledge_prior_readmission != args.readmit_quarantined
     ):
         parser.error("--acknowledge-prior-readmission requires matching --readmit-quarantined")
+    if args.acknowledge_scene_moderation and not (args.scene_moderation_reason or "").strip():
+        parser.error("--acknowledge-scene-moderation requires --scene-moderation-reason")
+    if args.scene_moderation_reason is not None and not args.acknowledge_scene_moderation:
+        parser.error("--scene-moderation-reason requires --acknowledge-scene-moderation")
+    for target in args.acknowledge_scene_moderation or []:
+        if target.count(":") != 1 or not all(part.strip() for part in target.split(":")):
+            parser.error(f"--acknowledge-scene-moderation expects STORY_ID:SCENE_ID, got {target!r}")
     stories = load_intake(args.corpus)[: args.limit]
     try:
         if args.fixture:
@@ -1445,6 +1487,8 @@ def main(argv: list[str] | None = None) -> int:
                     readmit_quarantined=args.readmit_quarantined,
                     readmit_reason=args.readmit_reason,
                     acknowledge_prior_readmission=args.acknowledge_prior_readmission,
+                    scene_moderation_overrides=set(args.acknowledge_scene_moderation or []),
+                    scene_moderation_reason=(args.scene_moderation_reason or "").strip(),
                 )
     except CorpusError as error:
         print(str(error), file=sys.stderr)

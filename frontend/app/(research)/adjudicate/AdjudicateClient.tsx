@@ -411,7 +411,7 @@ export default function AdjudicateClient({
 
               <VerdictBar
                 sameCharacter={explicitSameCharacter}
-                failureReasonsCount={failureReasons.length}
+                failureReasons={failureReasons}
                 error={error}
                 isPending={isPending}
                 isSubmissionValid={isSubmissionValid}

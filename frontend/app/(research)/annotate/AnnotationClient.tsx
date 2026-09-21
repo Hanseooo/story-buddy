@@ -251,7 +251,7 @@ export default function AnnotationClient({ pair, round = 1 }: { pair: ResearchPa
 
               <VerdictBar
                 sameCharacter={explicitSameCharacter}
-                failureReasonsCount={failureReasons.length}
+                failureReasons={failureReasons}
                 error={error}
                 isPending={isPending}
                 isSubmissionValid={isSubmissionValid}

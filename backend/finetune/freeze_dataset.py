@@ -30,7 +30,7 @@ from finetune.dataset_selection import (
 from finetune.manifest import ManifestError, ManifestRecord, local_image_path
 
 PINNED_METADATA_KEYS = {
-    "code_commit", "schema_version", "text_model", "image_model", "image_edit_model",
+    "schema_version", "text_model", "image_model", "image_edit_model",
     "judge_model", "moderation_primary_model", "moderation_primary_image_model",
     "moderation_backstop_model", "moderation_backstop_image_model",
     "extraction_prompt_version", "reference_judge_prompt_version", "scene_prompt_version",
@@ -68,6 +68,19 @@ def _pinned_versions(bundles: list[RunBundle]) -> dict[str, str]:
     pinned["style_preset_ids"] = ",".join(
         sorted({str(bundle.run_metadata["style_preset_id"]) for bundle in bundles})
     )
+    # `code_commit` is recorded, not pinned (decided 2026-09-17, audit §7.3). The B6 campaign needed
+    # four bug fixes merged while it ran, and an equality here would have meant discarding 42 paid
+    # bundles to rerun them under one HEAD. What the equality was really standing in for is that
+    # every bundle traces to a commit someone can check out, and that is asserted directly below.
+    commits = set()
+    for bundle in bundles:
+        commit = str(bundle.run_metadata.get("code_commit") or "")
+        if not commit:
+            raise ManifestError(f"{bundle.memory.story_id}: missing pinned run metadata: ['code_commit']")
+        if commit.endswith("-dirty"):
+            raise ManifestError(f"{bundle.memory.story_id}: built from a dirty tree: {commit}")
+        commits.add(commit)
+    pinned["code_commits"] = ",".join(sorted(commits))
     return pinned
 
 

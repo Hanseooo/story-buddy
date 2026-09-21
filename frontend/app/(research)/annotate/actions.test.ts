@@ -44,6 +44,7 @@ const mockAdminCreateSignedUrl = vi.fn();
 const createQueryMock = (resolvedValue: unknown) => {
   const chain: Record<string, unknown> = {
     eq: vi.fn(() => chain),
+    neq: vi.fn(() => chain),
     in: vi.fn(() => chain),
     not: vi.fn(() => chain),
     order: vi.fn(() => chain),
@@ -63,6 +64,7 @@ vi.mock("@supabase/supabase-js", () => ({
           if (res) return res;
           const chain = {
             eq: vi.fn(() => chain),
+            neq: vi.fn(() => chain),
             in: vi.fn(() => chain),
             not: vi.fn(() => chain),
             order: vi.fn(() => chain),
@@ -388,29 +390,33 @@ describe("Tier 2: Server Action Unit Tests", () => {
     });
 
     it("hash-orders all available pages instead of preferring the earliest page", async () => {
+      // Which of the two wins depends on the hash, so the test asserts the property instead: moving
+      // each pair to the other page must not change the pick. Page preference would flip it.
       const annotatedPairs = Array.from({ length: 49 }, (_, i) => ({ pair_id: `done-${i}` }));
-      const page0Pairs = [
-        ...annotatedPairs.map(({ pair_id }) => ({
-          id: pair_id,
-          canonical_storage_path: `path/${pair_id}-ref.png`,
-          scene_storage_path: `path/${pair_id}-scene.png`,
-        })),
-        { id: "pair-z", canonical_storage_path: "path/z-ref.png", scene_storage_path: "path/z-scene.png" },
-      ];
-      const page1Pairs = [
-        { id: "pair-a", canonical_storage_path: "path/a-ref.png", scene_storage_path: "path/a-scene.png" },
-      ];
+      const pairA = { id: "pair-a", canonical_storage_path: "path/a-ref.png", scene_storage_path: "path/a-scene.png" };
+      const pairZ = { id: "pair-z", canonical_storage_path: "path/z-ref.png", scene_storage_path: "path/z-scene.png" };
 
-      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: annotatedPairs, error: null }));
-      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null })); // end of labels
-      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: page0Pairs, error: null }));
-      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: page1Pairs, error: null }));
-      mockAdminCreateSignedUrl
-        .mockResolvedValueOnce({ data: { signedUrl: "https://signed.url/a-ref" }, error: null })
-        .mockResolvedValueOnce({ data: { signedUrl: "https://signed.url/a-scene" }, error: null });
+      const pickWith = async (onPage0: typeof pairA, onPage1: typeof pairA) => {
+        const page0Pairs = [
+          ...annotatedPairs.map(({ pair_id }) => ({
+            id: pair_id,
+            canonical_storage_path: `path/${pair_id}-ref.png`,
+            scene_storage_path: `path/${pair_id}-scene.png`,
+          })),
+          onPage0,
+        ];
+        mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: annotatedPairs, error: null }));
+        mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null })); // end of labels
+        mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: page0Pairs, error: null }));
+        mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [onPage1], error: null }));
+        mockAdminCreateSignedUrl.mockResolvedValue({ data: { signedUrl: "https://signed.url/x" }, error: null });
+        return (await getNextPair()).pair?.id;
+      };
 
-      const res = await getNextPair();
-      expect(res.pair?.id).toBe("pair-a");
+      const first = await pickWith(pairA, pairZ);
+      const swapped = await pickWith(pairZ, pairA);
+      expect(first).toMatch(/^pair-[az]$/);
+      expect(swapped).toBe(first);
     });
 
     it("returns an error instead of a labelable pair when URL signing fails", async () => {
@@ -439,6 +445,7 @@ describe("Tier 2: Server Action Unit Tests", () => {
   // annotation_truth.resolve_annotations requires. See annotation-surface.md 4.1.
   describe("Test-retest rounds", () => {
     it("writes the served round on the annotation row", async () => {
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null })); // no other rater
       mockAdminSelect.mockReturnValue({
         eq: vi.fn().mockResolvedValue({ count: 2, error: null }),
       });
@@ -516,6 +523,56 @@ describe("Tier 2: Server Action Unit Tests", () => {
       expect(["pair-1", "pair-2"]).toContain(secondPass.pair?.id);
     });
 
+    // Round 2 is only cold if it is not round 1 replayed. The shuffle is per rater AND per
+    // round, so the second pass does not open on the pair the first pass opened on.
+    it("does not open round 2 on the pair round 1 opened on", async () => {
+      const queuePage = Array.from({ length: 20 }, (_, i) => ({
+        id: `pair-${i}`,
+        canonical_storage_path: `c${i}.png`,
+        scene_storage_path: `s${i}.png`,
+      }));
+      mockAdminCreateSignedUrl.mockResolvedValue({ data: { signedUrl: "https://signed.url/x" }, error: null });
+
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: queuePage, error: null }));
+      const firstPass = await getNextPair();
+      expect(firstPass.round).toBe(1);
+
+      const roundOneDone = queuePage.map(p => ({ pair_id: p.id, round: 1 }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: roundOneDone, error: null }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null })); // end of labels
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: queuePage, error: null }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: queuePage, error: null }));
+      const secondPass = await getNextPair();
+      expect(secondPass.round).toBe(2);
+
+      expect(secondPass.pair?.id).not.toBe(firstPass.pair?.id);
+    });
+
+    // Two-rater campaign (obj4-readiness-audit.md, 2026-09-21): round 2 is one person's second pass,
+    // so it stays shut once anyone else has labelled. The pairs still waiting for the other rater
+    // hold only this rater's label, so the check has to look past the queue.
+    it("serves nothing in round 2 once another account has labelled", async () => {
+      const queuePage = [{ id: "pair-1", canonical_storage_path: "c1.png", scene_storage_path: "s1.png" }];
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [{ pair_id: "pair-1", round: 1 }], error: null }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null })); // end of labels
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: queuePage, error: null })); // round 1
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: queuePage, error: null })); // round 2
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [{ pair_id: "pair-7" }], error: null })); // other rater
+
+      const res = await getNextPair();
+      expect(res.pair).toBeNull();
+      expect(mockAdminCreateSignedUrl).not.toHaveBeenCalled();
+    });
+
+    it("refuses a round-2 label once another account has labelled", async () => {
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [{ pair_id: "pair-7" }], error: null }));
+
+      const res = await submitAnnotation({ pairId: "pair-1", failureReasons: [], sameCharacter: true, anatomyIntact: true, textFree: true, round: 2 });
+      expect(res.error).toMatch(/round 2 is closed/i);
+      expect(mockAnnotationsUpsert).not.toHaveBeenCalled();
+    });
+
     it("reports queue complete once both rounds cover every pair", async () => {
       const queuePage = [{ id: "pair-1", canonical_storage_path: "c1.png", scene_storage_path: "s1.png" }];
       mockAdminSelect.mockReturnValueOnce(createQueryMock({
@@ -550,6 +607,11 @@ describe("Tier 2: Server Action Unit Tests", () => {
         let window: unknown[] | null = null;
         const chain: Record<string, unknown> = {
           eq: vi.fn(() => chain),
+          // Every label here is this rater's own, so "labelled by anyone else" matches nothing.
+          neq: vi.fn(() => {
+            window = [];
+            return chain;
+          }),
           in: vi.fn(() => chain),
           not: vi.fn(() => chain),
           order: vi.fn(() => chain),

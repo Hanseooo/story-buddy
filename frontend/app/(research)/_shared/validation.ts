@@ -1,3 +1,5 @@
+import type { TaxonomyState } from "./constants";
+
 export type SubmissionPayload = {
   pairId: string;
   failureReasons: string[];
@@ -37,4 +39,14 @@ export function isConsensus(
     a1.text_free === a2.text_free &&
     reasonsEqual
   );
+}
+
+// labelling-rulebook.md Step 3: clothing and art style are never identity on their own, so
+// Different resting on them alone is always a mistake. The screen warns and still accepts it,
+// as the rulebook says it does.
+// Typed by the taxonomy keys, so a misspelt reason fails the build.
+const NON_IDENTITY_REASONS: ReadonlySet<string> = new Set<keyof TaxonomyState>(["wrong_clothing", "wrong_style"]);
+
+export function isNonIdentityOnly(failureReasons: string[]): boolean {
+  return failureReasons.length > 0 && failureReasons.every(r => NON_IDENTITY_REASONS.has(r));
 }
