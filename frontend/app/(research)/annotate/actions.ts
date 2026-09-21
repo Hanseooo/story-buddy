@@ -14,6 +14,22 @@ const ORDINARY_ROUNDS = [1, 2];
 
 type QueuePair = { id: string; canonical_storage_path: string; scene_storage_path: string };
 
+type AdminClient = Awaited<ReturnType<typeof createAdminClient>>;
+
+// Round 2 is one rater's cold second pass. Once anyone else has labelled, the campaign is the
+// two-rater design (obj4-readiness-audit.md, decision of 2026-09-21), and a round-2 label would
+// give a pair two labels from one person and take it from the rater still working. The check reads
+// every pair, not just the queue: when a rater finishes round 1, the pairs still waiting for the
+// other rater hold only this rater's label.
+async function anotherRaterHasLabelled(adminClient: AdminClient, userId: string) {
+  const { data, error } = await adminClient
+    .from("annotations")
+    .select("pair_id")
+    .neq("annotator_id", userId)
+    .limit(1);
+  return { labelled: Boolean(data && data.length > 0), error };
+}
+
 export async function submitAnnotation(payload: SubmissionPayload) {
   const { pairId, failureReasons, sameCharacter, anatomyIntact, textFree } = payload;
   const round = payload.round ?? 1;
@@ -30,6 +46,14 @@ export async function submitAnnotation(payload: SubmissionPayload) {
 
   if (!ORDINARY_ROUNDS.includes(round)) {
     return { error: "Invalid state: annotate accepts round 1 or 2 only" };
+  }
+
+  const adminClient = await createAdminClient();
+
+  if (round === 2) {
+    const { labelled, error } = await anotherRaterHasLabelled(adminClient, user.id);
+    if (error) return { error: "Failed to verify the annotation round" };
+    if (labelled) return { error: "Round 2 is closed: another rater has labels in this study" };
   }
 
   const supabase = await createSupabaseServerClient();
@@ -57,8 +81,6 @@ export async function submitAnnotation(payload: SubmissionPayload) {
       return { error: "Failed to save annotation" };
     }
   }
-
-  const adminClient = await createAdminClient();
 
   // We need to count annotations for this pair
   const { count, error: countError } = await adminClient
@@ -200,6 +222,12 @@ export async function getNextPair() {
 
   if (unannotatedPairs.length === 0) {
     return { pair: null };
+  }
+
+  if (servedRound === 2) {
+    const { labelled, error } = await anotherRaterHasLabelled(adminClient, user.id);
+    if (error) return { error: "Failed to load annotation queue" };
+    if (labelled) return { pair: null };
   }
 
   // Reproducible pseudo-random shuffle per annotator and per round, so round 2 is not round 1

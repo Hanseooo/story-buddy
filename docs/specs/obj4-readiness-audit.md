@@ -541,11 +541,16 @@ the two-annotator path that amendment kept as a contingency:
 
 - Each groupmate labels every pair once, in round 1. The queue already serves each of them the pairs
   the other has labelled, so a pair ends with one label from each: `complete` or `conflicted`.
-- **Whoever finishes first stops when the screen says Round 2.** Round 2 opens for an account once it
-  has no round-1 pair left, and a round-2 label would give a pair two labels from one person while the
-  other is still working. The same holds if either stops early: the other must not go on to Round 2.
-- The owner labels nothing on `/annotate`. Once both are done, the owner's profile gets
-  `is_adjudicator = true`, and the owner resolves `conflicted` pairs at `/adjudicate` through the
+- **Round 2 stays shut.** Round 2 opens for an account once it has no round-1 pair left, and a
+  round-2 label would give a pair two labels from one person while the other is still working. PR #93
+  closes it in code: once any other account has a label, `getNextPair` serves nothing in round 2 (the
+  screen shows Queue Complete) and `submitAnnotation` refuses a round-2 label. Until PR #93 deploys,
+  whoever sees Round 2 stops. If one groupmate stops early, their waiting pairs stay open and the
+  freeze fails with "<2 ordinary annotations" until that person finishes.
+- **The owner sets `is_adjudicator = true` now, not at the end.** The guard does not stop a third
+  account from labelling round 1; the adjudicator flag stops the owner's account from opening
+  `/annotate`. Conflicts can be adjudicated as they appear.
+- The owner labels nothing on `/annotate` and resolves `conflicted` pairs at `/adjudicate` through the
   distinct-adjudicator path (`adjudicate/actions.ts`, `annotation_truth.is_adjudication`). An
   adjudicator cannot open `/annotate`, which here is what we want.
 - The freeze is annotator-agnostic: two ordinary labels per pair, and the adjudication wins a
