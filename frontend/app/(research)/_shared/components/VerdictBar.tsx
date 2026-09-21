@@ -1,5 +1,5 @@
-import { isNonIdentityOnly } from "../validation";
 import { CheckCircle, XCircle, Info, CircleNotch, WarningCircle } from "@phosphor-icons/react";
+import { isNonIdentityOnly } from "../validation";
 
 type VerdictBarProps = {
   sameCharacter: boolean;

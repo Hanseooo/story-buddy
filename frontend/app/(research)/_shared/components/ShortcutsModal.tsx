@@ -149,7 +149,7 @@ export function ShortcutsModal({ isOpen, onClose }: ShortcutsModalProps) {
 
           <div className="space-y-3 pt-4 border-t border-primary/10">
             <span className="text-xs font-mono uppercase font-bold text-foreground/70 block">
-              Step 2 · Drift reasons (frozen 7)
+              Drift reasons, Steps 1–3 (frozen 7)
             </span>
 
             <div className="grid gap-3">

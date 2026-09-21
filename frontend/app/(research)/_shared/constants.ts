@@ -58,7 +58,7 @@ export const TAXONOMY_LABELS: Record<
     label: "Wrong Style",
     shortcut: "5",
     doesNotCount: "an art style change on its own, which is Same. Tick it only when another reason already makes the pair Different",
-    description: "Art style, rendering or line work looks off",
+    description: "Art style looks off",
   },
   different_face: {
     label: "Different Face",
