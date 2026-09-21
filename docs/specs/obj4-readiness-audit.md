@@ -564,6 +564,14 @@ the two-annotator path that amendment kept as a contingency:
 
 This needs a dated deviation in `PREREGISTRATION_OBJ4.md` before the freeze.
 
+*Guide boundary, 2026-09-21.* PR #93 merged at 09:30:48 UTC. Production deploy `757a406` reported
+success at **09:31:50 UTC** (GitHub deployment 6565496238). The groupmates paused for the deploy: the
+last label before it was written at 09:30:27, and a read-only check found none after it. So the
+**first 642 labels** (324 from `c4f346f6`, 318 from `d9a03bf8`) were made under the old guide, and
+every later label under the new one. At that point all labels were round 1. No pair held more than two
+labels or two from one account, 42 pairs held both groupmates' labels (33 `complete`, 9 `conflicted`),
+and the owner's profile (`383b2bd4`) carried `is_adjudicator = true`.
+
 *Their labels read against the rulebook, 2026-09-21.* A row check flagged 12 of their labels as
 breaking a rule: 11 were Different with only Wrong Clothing or Wrong Style (Step 3 says that is always
 a mistake), and 1 was Character Absent with Broken Anatomy ticked. Five of the 12 are test pairs and
