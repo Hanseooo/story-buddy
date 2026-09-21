@@ -553,7 +553,7 @@ were deleted unopened. The seven train and val pages, looked at beside their ref
 
 So the rule that failed is Step 3. The labels were not careless. The in-app guide listed Wrong
 Clothing and Wrong Style as drift reasons, with nothing saying they are not identity on their own,
-and it had no Step 1, Step 3 or Step 4. That is fixed on branch `fix/annotate-guide-matches-rulebook`:
+and it had no Step 1, Step 3 or Step 4. That is fixed in PR #93:
 the guide now carries the rulebook's rules, and the screen warns, without blocking, when Different
 rests on Clothing or Style alone. No rule changed; the screen now states the frozen rules.
 
@@ -577,7 +577,7 @@ files. Stay on Supabase Pro until Phase E.
   round 1 covers all 795 pairs, in the same session, with no confirmation. The only signal is the
   badge changing from `ROUND 1` to `ROUND 2`. **Stop when it changes**, or the gap is gone. A round-2
   label cannot be deleted: there is no update or delete policy (`0018_annotation_rounds.sql`).
-- **Round 2 served pairs in exactly round 1's order. Fixed on branch `fix/round2-serving-order`,
+- **Round 2 served pairs in exactly round 1's order. Fixed in PR #93 (first opened as #92),
   which must be merged and deployed before C4.** The per-rater shuffle hashed `p.id + user.id`
   (`annotate/actions.ts:206`) without the round. So round 2 would have opened on the same pair round 1
   opened on, the one this section's first paragraph describes. The round now goes through a nonlinear
