@@ -25,51 +25,51 @@ export const INITIAL_TAXONOMY: TaxonomyState = {
 };
 
 // Wording follows docs/specs/labelling-rulebook.md Step 2 and Step 3. `description` is what counts,
-// `example` is what does not; edit the rulebook first, never only this text.
+// `doesNotCount` is what does not; edit the rulebook first, never only this text.
 export const TAXONOMY_LABELS: Record<
   keyof TaxonomyState,
-  { label: string; shortcut: string; example: string; description: string }
+  { label: string; shortcut: string; doesNotCount: string; description: string }
 > = {
   wrong_colour: {
     label: "Wrong Color",
     shortcut: "1",
-    example: "Does not count: clothing colour (that is Wrong Clothing)",
+    doesNotCount: "clothing colour (that is Wrong Clothing)",
     description: "Skin, fur, hair, eye or body colour differs from the reference",
   },
   wrong_species: {
     label: "Wrong Species",
     shortcut: "2",
-    example: "Does not count: pose or camera angle",
+    doesNotCount: "pose, angle",
     description: "Animal type or core silhouette differs",
   },
   wrong_body_feature: {
     label: "Wrong Body Feature",
     shortcut: "3",
-    example: "Does not count: a part hidden by the pose",
+    doesNotCount: "a part hidden by the pose",
     description: "Countable or structural parts differ: eyes, ears, tail, horns, wings, limbs",
   },
   wrong_clothing: {
     label: "Wrong Clothing/Accessories",
     shortcut: "4",
-    example: "Not identity on its own: clothing alone is Same. Tick it only when another reason already makes the pair Different",
+    doesNotCount: "a clothing change on its own, which is Same. Tick it only when another reason already makes the pair Different",
     description: "Clothing or accessories changed, added or missing",
   },
   wrong_style: {
     label: "Wrong Style",
     shortcut: "5",
-    example: "Not identity on its own: art style alone is Same. Tick it only when another reason already makes the pair Different",
+    doesNotCount: "an art style change on its own, which is Same. Tick it only when another reason already makes the pair Different",
     description: "Art style, rendering or line work looks off",
   },
   different_face: {
     label: "Different Face",
     shortcut: "6",
-    example: "Does not count: expression, mouth open, looking away",
+    doesNotCount: "expression, mouth open, looking away",
     description: "Face shape, eye style, or facial markings belong to another individual",
   },
   character_absent: {
     label: "Character Absent",
     shortcut: "7",
-    example: "Other characters on the page do not count",
+    doesNotCount: "other characters on the page",
     description: "The reference character is not on the page",
   },
 };

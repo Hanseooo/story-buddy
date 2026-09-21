@@ -115,7 +115,7 @@ export function TaxonomyControls({
           {(
             Object.entries(TAXONOMY_LABELS) as [
               keyof TaxonomyState,
-              { label: string; shortcut: string; example: string; description: string }
+              { label: string; shortcut: string; doesNotCount: string; description: string }
             ][]
           ).map(([key, { label, shortcut }]) => (
             <label

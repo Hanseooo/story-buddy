@@ -204,8 +204,8 @@ export async function getNextPair() {
 
   // Reproducible pseudo-random shuffle per annotator and per round, so round 2 is not round 1
   // replayed in the same order, which would undo the cold second pass. The round goes through a
-  // nonlinear mix: the polynomial hash is linear, so appending the round to the key would shift
-  // every hash by one constant and leave the order unchanged.
+  // nonlinear mix (murmur3's fmix32 finalizer): the polynomial hash is linear, so appending the
+  // round to the key would shift every hash by one constant, which at most rotates the order.
   const hashedSort = unannotatedPairs.map(p => {
     let hash = 0;
     const str = p.id + user.id;

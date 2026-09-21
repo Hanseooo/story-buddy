@@ -1,10 +1,9 @@
+import { isNonIdentityOnly } from "../validation";
 import { CheckCircle, XCircle, Info, CircleNotch, WarningCircle } from "@phosphor-icons/react";
 
 type VerdictBarProps = {
   sameCharacter: boolean;
-  failureReasonsCount: number;
-  // Different with only Clothing or Style ticked (labelling-rulebook.md Step 3).
-  nonIdentityOnly?: boolean;
+  failureReasons: string[];
   error: string | null;
   isPending: boolean;
   isSubmissionValid: boolean;
@@ -14,14 +13,17 @@ type VerdictBarProps = {
 
 export function VerdictBar({
   sameCharacter,
-  failureReasonsCount,
-  nonIdentityOnly = false,
+  failureReasons,
   error,
   isPending,
   isSubmissionValid,
   onSubmit,
   submitLabel = "Submit Annotation",
 }: VerdictBarProps) {
+  const failureReasonsCount = failureReasons.length;
+  // Different with only Clothing or Style ticked (labelling-rulebook.md Step 3).
+  const nonIdentityOnly = isNonIdentityOnly(failureReasons);
+
   return (
     <div className="pt-3 border-t border-primary/10 flex flex-col gap-3 mt-auto">
       {/* Clean status indicator */}

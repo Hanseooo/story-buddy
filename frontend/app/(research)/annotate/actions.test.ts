@@ -388,29 +388,33 @@ describe("Tier 2: Server Action Unit Tests", () => {
     });
 
     it("hash-orders all available pages instead of preferring the earliest page", async () => {
+      // Which of the two wins depends on the hash, so the test asserts the property instead: moving
+      // each pair to the other page must not change the pick. Page preference would flip it.
       const annotatedPairs = Array.from({ length: 49 }, (_, i) => ({ pair_id: `done-${i}` }));
-      const page0Pairs = [
-        ...annotatedPairs.map(({ pair_id }) => ({
-          id: pair_id,
-          canonical_storage_path: `path/${pair_id}-ref.png`,
-          scene_storage_path: `path/${pair_id}-scene.png`,
-        })),
-        { id: "pair-a", canonical_storage_path: "path/a-ref.png", scene_storage_path: "path/a-scene.png" },
-      ];
-      const page1Pairs = [
-        { id: "pair-z", canonical_storage_path: "path/z-ref.png", scene_storage_path: "path/z-scene.png" },
-      ];
+      const pairA = { id: "pair-a", canonical_storage_path: "path/a-ref.png", scene_storage_path: "path/a-scene.png" };
+      const pairZ = { id: "pair-z", canonical_storage_path: "path/z-ref.png", scene_storage_path: "path/z-scene.png" };
 
-      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: annotatedPairs, error: null }));
-      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null })); // end of labels
-      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: page0Pairs, error: null }));
-      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: page1Pairs, error: null }));
-      mockAdminCreateSignedUrl
-        .mockResolvedValueOnce({ data: { signedUrl: "https://signed.url/z-ref" }, error: null })
-        .mockResolvedValueOnce({ data: { signedUrl: "https://signed.url/z-scene" }, error: null });
+      const pickWith = async (onPage0: typeof pairA, onPage1: typeof pairA) => {
+        const page0Pairs = [
+          ...annotatedPairs.map(({ pair_id }) => ({
+            id: pair_id,
+            canonical_storage_path: `path/${pair_id}-ref.png`,
+            scene_storage_path: `path/${pair_id}-scene.png`,
+          })),
+          onPage0,
+        ];
+        mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: annotatedPairs, error: null }));
+        mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null })); // end of labels
+        mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: page0Pairs, error: null }));
+        mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [onPage1], error: null }));
+        mockAdminCreateSignedUrl.mockResolvedValue({ data: { signedUrl: "https://signed.url/x" }, error: null });
+        return (await getNextPair()).pair?.id;
+      };
 
-      const res = await getNextPair();
-      expect(res.pair?.id).toBe("pair-z");
+      const first = await pickWith(pairA, pairZ);
+      const swapped = await pickWith(pairZ, pairA);
+      expect(first).toMatch(/^pair-[az]$/);
+      expect(swapped).toBe(first);
     });
 
     it("returns an error instead of a labelable pair when URL signing fails", async () => {
