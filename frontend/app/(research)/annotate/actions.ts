@@ -202,13 +202,20 @@ export async function getNextPair() {
     return { pair: null };
   }
 
-  // Reproducible pseudo-random shuffle per annotator
+  // Reproducible pseudo-random shuffle per annotator and per round, so round 2 is not round 1
+  // replayed in the same order, which would undo the cold second pass. The round goes through a
+  // nonlinear mix: the polynomial hash is linear, so appending the round to the key would shift
+  // every hash by one constant and leave the order unchanged.
   const hashedSort = unannotatedPairs.map(p => {
     let hash = 0;
     const str = p.id + user.id;
     for (let i = 0; i < str.length; i++) {
       hash = (Math.imul(31, hash) + str.charCodeAt(i)) | 0;
     }
+    hash ^= Math.imul(servedRound, 0x9e3779b9);
+    hash = Math.imul(hash ^ (hash >>> 16), 0x85ebca6b);
+    hash = Math.imul(hash ^ (hash >>> 13), 0xc2b2ae35);
+    hash ^= hash >>> 16;
     return { ...p, sortVal: hash };
   }).sort((a, b) => a.sortVal - b.sortVal);
 
