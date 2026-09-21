@@ -504,7 +504,13 @@ qualifies it through `lineage_id`. Recorded so nobody re-derives the scare.
 Never pass `--pilot` — pilot pairs are permanently excluded from training.
 
 **C3 · Round 1** at `/annotate`, blinded, every pair once, one account. Read
-`docs/specs/labelling-rulebook.md` first; it does not change after this.
+`docs/specs/labelling-rulebook.md` first; it does not change after this. **Started 2026-09-21.**
+
+The first pair exposed a rulebook gap. The reference draws the eyes as dots, and the page draws them
+with whites and pupils on a surprised face. Different Face counts "eye style" and excludes
+"expression", and neither rule settles which covers this case. Per the rulebook it got the closest rule
+and a line in the rater's private notes (`data/judge/annotation-notes.md`, gitignored), not a new rule.
+Expect it to recur. The write-up should report it as a known ambiguity.
 
 **C4 · Round 2**, same person, cold. This is test–retest reliability, not a second annotator. There
 is no annotator 2 in this design. **Leave a real gap — a fortnight, not an evening.** Nothing in the
@@ -514,6 +520,54 @@ database can tell the difference, and the measurement is only as good as the gap
 
 **C6 · Reconcile and freeze** (runbook steps 7 and 8). The freeze also writes the LlamaFactory
 files. Stay on Supabase Pro until Phase E.
+
+#### What makes C3–C6 reliable, read from the code on 2026-09-21
+
+- **Round 2 opens by itself.** `getNextPair` (`annotate/actions.ts:157-199`) serves round 2 once
+  round 1 covers all 795 pairs, in the same session, with no confirmation. The only signal is the
+  badge changing from `ROUND 1` to `ROUND 2`. **Stop when it changes**, or the gap is gone. A round-2
+  label cannot be deleted: there is no update or delete policy (`0018_annotation_rounds.sql`).
+- **Open · round 2 serves pairs in exactly round 1's order.** The per-rater shuffle hashes
+  `p.id + user.id` (`annotate/actions.ts:206`), and the round is not in the hash. So round 2 opens on
+  the same pair round 1 opened on, the one this section's first paragraph describes. The fix is adding
+  the round to the hashed string. Round 1 labels are unaffected; round 1's remaining order would
+  change, which is harmless. **Must land before C4.**
+- **Labels are immutable, so a misclick is fixed only by disagreement.** A round-1 mistake stays in
+  the table. If round 2 answers differently, the pair goes to adjudication, and that is the only
+  correction path. Check before you submit, above all for Different with only Clothing or Style
+  ticked. The screen accepts it, and the rulebook says it is always wrong.
+- **A conflict is any difference, not only Same versus Different.** `isConsensus` and
+  `annotation_truth._signature` compare the verdict, the full set of reasons and both checkboxes. A
+  pair labelled Same twice but with Text Visible ticked only once goes to C5. Expect C5 to be larger
+  than the Same/Different disagreement rate suggests.
+- **The reliability number is narrower than the labels.** `annotation_agreement.jsonl` records only
+  `same_character` for each round (`freeze_dataset.py:201-217`). `evaluate.py:1391-1440` reports
+  Cohen's kappa and percent agreement on **test-split pairs only** (329), split human/non-human.
+  Reason-level agreement is not computed anywhere. It is recoverable from E2's CSV export if the
+  write-up wants it. Adjudication writes a new round-3 row and never changes rounds 1 and 2, so it
+  cannot inflate the statistic.
+- **Do not look at round-1-versus-round-2 agreement until round 2 is finished.** Seeing it would
+  make round 2 less cold.
+
+Progress checks, all `uv run python -m finetune.build_dataset --reconcile-only` (runbook step 7;
+it rewrites only the derived `research_pairs.status` cache):
+
+| After | Expected `statuses` |
+| --- | --- |
+| C3 | `partially_annotated: 795` |
+| C4 | `complete + conflicted = 795` |
+| C5 | `complete + adjudicated = 795`, `conflicted: 0` |
+
+The freeze refuses to run until every pair has two ordinary labels and every conflict has an
+adjudication (`resolve_annotations` raises `ManifestError`).
+
+**Export.** C6's freeze (runbook step 8, `--out ../data/judge/freezes/obj4-v1`) is the dataset
+export. `train.json`, `val.json` and `dataset_info.json` are LlamaFactory's input. The
+`manifest.{train,val,test}.jsonl`, `annotation_agreement.jsonl` and `character_slices.json` files are
+what `evaluate.py` reads. The held-out split is `manifest.test.jsonl`. It must stay unopened, and
+the runbook's "`test.json`" names a file the freeze does not write. The folder is immutable, and a change means
+a new `obj4-v2`. Per-round reasons and timestamps are not in the freeze, so export them separately
+(E2).
 
 ### Phase D — train and evaluate
 
