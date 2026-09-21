@@ -512,6 +512,28 @@ with whites and pupils on a surprised face. Different Face counts "eye style" an
 and a line in the rater's private notes (`data/judge/annotation-notes.md`, gitignored), not a new rule.
 Expect it to recur. The write-up should report it as a known ambiguity.
 
+**Known generator limitation: duplicated characters.** Some pages draw the referenced character twice.
+One page adds a translucent, ghost-like copy. This is a known failure of diffusion edit models,
+including Qwen-Image-Edit: the reference subject is repeated or a faded copy is left behind. The
+corpus includes rejected draws on purpose (ADR-060), so failed pages are overrepresented, and those
+pages are what the judge has to learn to catch. **These pairs stay in the queue.** Removing them now
+would be a selection decision made after seeing the data, which ADR-057 Decision 3 forbids. The
+rulebook covers the plain case: Step 1 compares the best-matching figure, and a duplicate is not an
+identity failure. Broken Anatomy applies only when the copy is fused into the character (merged or
+duplicated body parts). The translucent copy is the unclear case: it takes the closest rule and a
+line in the rater's notes. **No field records a duplicate**, so the rater's notes tally is the only
+count the write-up will have. Keep it.
+
+**Incident, 2026-09-21: two extra raters.** Two groupmates labelled on their own researcher accounts
+before this was caught: **42 round-1 rows** (15 from `c4f346f6`, 27 from `d9a03bf8`), written
+06:13–06:31 UTC. A read-only check found no pair labelled by more than one account, and the queue
+intact at 42 `partially_annotated` and 753 `pending`. The design stays one rater. The harm had not
+happened yet, but it was close: `submitAnnotation` counts every row on a pair, whoever wrote it
+(`annotate/actions.ts:62-98`). A second account's label on the same pair marks it
+`complete`/`conflicted` and removes it from the queue, and the freeze then reads two people's labels
+as one rater's two rounds. **Open:** the groupmates stop, their researcher role is removed, and their
+42 rows are excluded before C6. Each is recorded as a deviation.
+
 **C4 · Round 2**, same person, cold. This is test–retest reliability, not a second annotator. There
 is no annotator 2 in this design. **Leave a real gap — a fortnight, not an evening.** Nothing in the
 database can tell the difference, and the measurement is only as good as the gap.
@@ -527,11 +549,14 @@ files. Stay on Supabase Pro until Phase E.
   round 1 covers all 795 pairs, in the same session, with no confirmation. The only signal is the
   badge changing from `ROUND 1` to `ROUND 2`. **Stop when it changes**, or the gap is gone. A round-2
   label cannot be deleted: there is no update or delete policy (`0018_annotation_rounds.sql`).
-- **Open · round 2 serves pairs in exactly round 1's order.** The per-rater shuffle hashes
-  `p.id + user.id` (`annotate/actions.ts:206`), and the round is not in the hash. So round 2 opens on
-  the same pair round 1 opened on, the one this section's first paragraph describes. The fix is adding
-  the round to the hashed string. Round 1 labels are unaffected; round 1's remaining order would
-  change, which is harmless. **Must land before C4.**
+- **Round 2 served pairs in exactly round 1's order. Fixed on branch `fix/round2-serving-order`,
+  which must be merged and deployed before C4.** The per-rater shuffle hashed `p.id + user.id`
+  (`annotate/actions.ts:206`) without the round. So round 2 would have opened on the same pair round 1
+  opened on, the one this section's first paragraph describes. The round now goes through a nonlinear
+mix after the hash. Appending it to the hashed string was tried first, and the test showed it did
+nothing: the polynomial hash is linear, so a shared suffix shifts every value equally. Labels
+  are unaffected. Only the order of the pairs still waiting changes, including round 1's remaining
+  ones, which is harmless.
 - **Labels are immutable, so a misclick is fixed only by disagreement.** A round-1 mistake stays in
   the table. If round 2 answers differently, the pair goes to adjudication, and that is the only
   correction path. Check before you submit, above all for Different with only Clothing or Style
