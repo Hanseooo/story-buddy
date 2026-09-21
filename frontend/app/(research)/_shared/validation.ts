@@ -38,3 +38,12 @@ export function isConsensus(
     reasonsEqual
   );
 }
+
+// labelling-rulebook.md Step 3: clothing and art style are never identity on their own, so
+// Different resting on them alone is always a mistake. The screen warns and still accepts it,
+// as the rulebook says it does.
+const NON_IDENTITY_REASONS = new Set(["wrong_clothing", "wrong_style"]);
+
+export function isNonIdentityOnly(failureReasons: string[]): boolean {
+  return failureReasons.length > 0 && failureReasons.every(r => NON_IDENTITY_REASONS.has(r));
+}

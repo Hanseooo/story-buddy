@@ -24,6 +24,8 @@ export const INITIAL_TAXONOMY: TaxonomyState = {
   character_absent: false,
 };
 
+// Wording follows docs/specs/labelling-rulebook.md Step 2 and Step 3. `description` is what counts,
+// `example` is what does not; edit the rulebook first, never only this text.
 export const TAXONOMY_LABELS: Record<
   keyof TaxonomyState,
   { label: string; shortcut: string; example: string; description: string }
@@ -31,43 +33,43 @@ export const TAXONOMY_LABELS: Record<
   wrong_colour: {
     label: "Wrong Color",
     shortcut: "1",
-    example: "Cream chest patch is rendered brown; fur hue shifted",
-    description: "Fur, hair, skin, or dominant color differs from reference",
+    example: "Does not count: clothing colour (that is Wrong Clothing)",
+    description: "Skin, fur, hair, eye or body colour differs from the reference",
   },
   wrong_species: {
     label: "Wrong Species",
     shortcut: "2",
-    example: "Fox cub rendered as a dog; animal silhouette altered",
-    description: "Species, animal type, or defining core silhouette is altered",
+    example: "Does not count: pose or camera angle",
+    description: "Animal type or core silhouette differs",
   },
   wrong_body_feature: {
     label: "Wrong Body Feature",
     shortcut: "3",
-    example: "Two eyes instead of three; tail or wings missing/added",
-    description: "Countable or structural body parts (ears, tail, horns, snout, wings, limbs)",
+    example: "Does not count: a part hidden by the pose",
+    description: "Countable or structural parts differ: eyes, ears, tail, horns, wings, limbs",
   },
   wrong_clothing: {
     label: "Wrong Clothing/Accessories",
     shortcut: "4",
-    example: "Striped scarf absent, recolored, or hat missing",
-    description: "Attire, hat, collar, glasses, or signature accessories missing or altered",
+    example: "Not identity on its own: clothing alone is Same. Tick it only when another reason already makes the pair Different",
+    description: "Clothing or accessories changed, added or missing",
   },
   wrong_style: {
     label: "Wrong Style",
     shortcut: "5",
-    example: "Photorealistic rendering rather than flat storybook gouache",
-    description: "Art style, rendering medium, line weight, or texture differs from reference",
+    example: "Not identity on its own: art style alone is Same. Tick it only when another reason already makes the pair Different",
+    description: "Art style, rendering or line work looks off",
   },
   different_face: {
     label: "Different Face",
     shortcut: "6",
-    example: "Same species, but face shape, eyes, or markings belong to an unrelated individual",
-    description: "Facial structure, muzzle shape, eye style, or facial markings mismatch",
+    example: "Does not count: expression, mouth open, looking away",
+    description: "Face shape, eye style, or facial markings belong to another individual",
   },
   character_absent: {
     label: "Character Absent",
     shortcut: "7",
-    example: "Main character does not appear in the scene at all",
-    description: "Main character is completely absent from the composition",
+    example: "Other characters on the page do not count",
+    description: "The reference character is not on the page",
   },
 };

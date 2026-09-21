@@ -55,7 +55,7 @@ export function TaxonomyControls({
               Different Character
             </span>
             <p className="text-xs text-foreground/70 mt-0.5">
-              Select one or more drift reasons below
+              Name at least one identity difference below
             </p>
           </div>
           <kbd className="px-2.5 py-1 bg-surface border border-foreground/15 rounded-lg text-xs font-mono font-bold text-foreground/80 neo-shadow-xs">
@@ -87,7 +87,7 @@ export function TaxonomyControls({
               Same Character
             </span>
             <p className="text-xs text-foreground/70 mt-0.5">
-              Character maintains identity, core species, palette &amp; features
+              Species, face, body colours &amp; features match. Clothing or style alone is Same
             </p>
           </div>
           <kbd className="px-2.5 py-1 bg-surface border border-foreground/15 rounded-lg text-xs font-mono font-bold text-foreground/80 neo-shadow-xs">

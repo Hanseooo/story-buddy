@@ -10,6 +10,7 @@ import { LightboxModal } from "../_shared/components/LightboxModal";
 import { ShortcutsModal } from "../_shared/components/ShortcutsModal";
 import { ImageCards } from "../_shared/components/ImageCards";
 import { VerdictBar } from "../_shared/components/VerdictBar";
+import { isNonIdentityOnly } from "../_shared/validation";
 import { TaxonomyControls } from "../_shared/components/TaxonomyControls";
 
 export default function AnnotationClient({ pair, round = 1 }: { pair: ResearchPair; round?: number }) {
@@ -252,6 +253,7 @@ export default function AnnotationClient({ pair, round = 1 }: { pair: ResearchPa
               <VerdictBar
                 sameCharacter={explicitSameCharacter}
                 failureReasonsCount={failureReasons.length}
+                nonIdentityOnly={isNonIdentityOnly(failureReasons)}
                 error={error}
                 isPending={isPending}
                 isSubmissionValid={isSubmissionValid}

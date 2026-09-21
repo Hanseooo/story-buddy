@@ -1,8 +1,10 @@
-import { CheckCircle, XCircle, Info, CircleNotch } from "@phosphor-icons/react";
+import { CheckCircle, XCircle, Info, CircleNotch, WarningCircle } from "@phosphor-icons/react";
 
 type VerdictBarProps = {
   sameCharacter: boolean;
   failureReasonsCount: number;
+  // Different with only Clothing or Style ticked (labelling-rulebook.md Step 3).
+  nonIdentityOnly?: boolean;
   error: string | null;
   isPending: boolean;
   isSubmissionValid: boolean;
@@ -13,6 +15,7 @@ type VerdictBarProps = {
 export function VerdictBar({
   sameCharacter,
   failureReasonsCount,
+  nonIdentityOnly = false,
   error,
   isPending,
   isSubmissionValid,
@@ -40,6 +43,19 @@ export function VerdictBar({
           <Info weight="duotone" className="size-4 text-primary shrink-0" />
           <span>
             Select <strong>Same Character</strong> or <strong>Different Character</strong> failure reasons to submit.
+          </span>
+        </div>
+      )}
+
+      {!sameCharacter && nonIdentityOnly && (
+        <div
+          role="status"
+          className="p-3 rounded-xl bg-warning/15 border border-warning/50 text-foreground text-xs font-medium flex items-start gap-2"
+        >
+          <WarningCircle weight="bold" className="size-4 shrink-0 text-warning mt-px" />
+          <span>
+            Clothing or style alone is not identity (rulebook Step 3). Tick the identity reason too,
+            or choose <strong>Same Character</strong>.
           </span>
         </div>
       )}

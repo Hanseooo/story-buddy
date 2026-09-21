@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validateSubmissionPayload, isConsensus, type SubmissionPayload } from "./validation";
+import { validateSubmissionPayload, isConsensus, isNonIdentityOnly, type SubmissionPayload } from "./validation";
 
 describe("validation.ts unit tests", () => {
   describe("validateSubmissionPayload", () => {
@@ -117,6 +117,19 @@ describe("validation.ts unit tests", () => {
       const a1 = { same_character: false, failure_reasons: ["wrong_style"], anatomy_intact: true, text_free: true };
       const a2 = { same_character: false, failure_reasons: ["wrong_colour"], anatomy_intact: true, text_free: true };
       expect(isConsensus(a1, a2)).toBe(false);
+    });
+  });
+
+  // labelling-rulebook.md Step 3: clothing and style are never identity on their own.
+  describe("isNonIdentityOnly", () => {
+    it("flags Different with only clothing or style reasons", () => {
+      expect(isNonIdentityOnly(["wrong_clothing"])).toBe(true);
+      expect(isNonIdentityOnly(["wrong_clothing", "wrong_style"])).toBe(true);
+    });
+
+    it("does not flag when an identity reason is present, or when there are no reasons", () => {
+      expect(isNonIdentityOnly(["wrong_clothing", "wrong_colour"])).toBe(false);
+      expect(isNonIdentityOnly([])).toBe(false);
     });
   });
 });

@@ -532,7 +532,35 @@ happened yet, but it was close: `submitAnnotation` counts every row on a pair, w
 (`annotate/actions.ts:62-98`). A second account's label on the same pair marks it
 `complete`/`conflicted` and removes it from the queue, and the freeze then reads two people's labels
 as one rater's two rounds. **Open:** the groupmates stop, their researcher role is removed, and their
-42 rows are excluded before C6. Each is recorded as a deviation.
+42 rows are excluded before C6. Each is recorded as a deviation. They kept labelling while this was
+discussed: 245 rows by the last read-only check (116 and 129).
+
+*Their labels read against the rulebook, 2026-09-21.* A row check flagged 12 of their labels as
+breaking a rule: 11 were Different with only Wrong Clothing or Wrong Style (Step 3 says that is always
+a mistake), and 1 was Character Absent with Broken Anatomy ticked. Five of the 12 are test pairs and
+were deleted unopened. The seven train and val pages, looked at beside their references:
+
+- Five show a real change the rulebook deliberately does not count. One page is drawn in pixel art
+  against a flat vector reference. Three cloud pages trade the crayon texture for a glossy, outlined
+  render. One teacher's shirt lost its pocket. Face, colours and body features match in all five,
+  and the other visible changes are expressions. The groupmates named what they saw correctly; the
+  rulebook maps it to Same.
+- One page draws the cloud twice in the reference's own style. It was labelled Wrong Style,
+  presumably the nearest box, because there is no duplicate reason. Step 1 says compare the better
+  match, and that match is Same.
+- One page may be a real Different labelled with the wrong reason. The boy's hair reads paler
+  (orange-brown to blond) and the face is drawn differently, but only Wrong Clothing was ticked.
+
+So the rule that failed is Step 3. The labels were not careless. The in-app guide listed Wrong
+Clothing and Wrong Style as drift reasons, with nothing saying they are not identity on their own,
+and it had no Step 1, Step 3 or Step 4. That is fixed on branch `fix/annotate-guide-matches-rulebook`:
+the guide now carries the rulebook's rules, and the screen warns, without blocking, when Different
+rests on Clothing or Style alone. No rule changed; the screen now states the frozen rules.
+
+Step 3 also says "References and pages share one style preset". The pixel-art page shows that is not
+always true: the generator sometimes drifts out of the preset. That is a generator failure the judge
+cannot score, because style is not identity. It needs a line in the write-up's limitations, not a
+new rule.
 
 **C4 · Round 2**, same person, cold. This is test–retest reliability, not a second annotator. There
 is no annotator 2 in this design. **Leave a real gap — a fortnight, not an evening.** Nothing in the
