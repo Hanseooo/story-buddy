@@ -395,10 +395,10 @@ describe("Tier 2: Server Action Unit Tests", () => {
           canonical_storage_path: `path/${pair_id}-ref.png`,
           scene_storage_path: `path/${pair_id}-scene.png`,
         })),
-        { id: "pair-z", canonical_storage_path: "path/z-ref.png", scene_storage_path: "path/z-scene.png" },
+        { id: "pair-a", canonical_storage_path: "path/a-ref.png", scene_storage_path: "path/a-scene.png" },
       ];
       const page1Pairs = [
-        { id: "pair-a", canonical_storage_path: "path/a-ref.png", scene_storage_path: "path/a-scene.png" },
+        { id: "pair-z", canonical_storage_path: "path/z-ref.png", scene_storage_path: "path/z-scene.png" },
       ];
 
       mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: annotatedPairs, error: null }));
@@ -406,11 +406,11 @@ describe("Tier 2: Server Action Unit Tests", () => {
       mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: page0Pairs, error: null }));
       mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: page1Pairs, error: null }));
       mockAdminCreateSignedUrl
-        .mockResolvedValueOnce({ data: { signedUrl: "https://signed.url/a-ref" }, error: null })
-        .mockResolvedValueOnce({ data: { signedUrl: "https://signed.url/a-scene" }, error: null });
+        .mockResolvedValueOnce({ data: { signedUrl: "https://signed.url/z-ref" }, error: null })
+        .mockResolvedValueOnce({ data: { signedUrl: "https://signed.url/z-scene" }, error: null });
 
       const res = await getNextPair();
-      expect(res.pair?.id).toBe("pair-a");
+      expect(res.pair?.id).toBe("pair-z");
     });
 
     it("returns an error instead of a labelable pair when URL signing fails", async () => {
@@ -514,6 +514,32 @@ describe("Tier 2: Server Action Unit Tests", () => {
       const secondPass = await getNextPair();
       expect(secondPass.round).toBe(2);
       expect(["pair-1", "pair-2"]).toContain(secondPass.pair?.id);
+    });
+
+    // Round 2 is only cold if it is not round 1 replayed. The shuffle is per rater AND per
+    // round, so the second pass does not open on the pair the first pass opened on.
+    it("does not open round 2 on the pair round 1 opened on", async () => {
+      const queuePage = Array.from({ length: 20 }, (_, i) => ({
+        id: `pair-${i}`,
+        canonical_storage_path: `c${i}.png`,
+        scene_storage_path: `s${i}.png`,
+      }));
+      mockAdminCreateSignedUrl.mockResolvedValue({ data: { signedUrl: "https://signed.url/x" }, error: null });
+
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: queuePage, error: null }));
+      const firstPass = await getNextPair();
+      expect(firstPass.round).toBe(1);
+
+      const roundOneDone = queuePage.map(p => ({ pair_id: p.id, round: 1 }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: roundOneDone, error: null }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: [], error: null })); // end of labels
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: queuePage, error: null }));
+      mockAdminSelect.mockReturnValueOnce(createQueryMock({ data: queuePage, error: null }));
+      const secondPass = await getNextPair();
+      expect(secondPass.round).toBe(2);
+
+      expect(secondPass.pair?.id).not.toBe(firstPass.pair?.id);
     });
 
     it("reports queue complete once both rounds cover every pair", async () => {
