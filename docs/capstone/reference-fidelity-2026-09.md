@@ -94,6 +94,40 @@ ambiguous-reference list, not missing limbs.
 - **Plural characters drawn as one figure** (syn-006 "the family", syn-020 "the other tortoises"). Real,
   and not a body-part defect. Open question rather than a finding.
 
+## A prediction, stated before it was counted
+
+**Recorded 2026-09-24, during adjudication, from three observed pages. No count exists yet, and this
+paragraph is committed before one is run so that the order is git's and not a memory's.**
+
+**The hypothesis (the study owner's).** `fal-ai/qwen-image-edit-2511` does not read a *glyph* face — two
+dots and a drawn curve, of the kind `fal-ai/qwen-image` puts on an object character — as a face. When a
+page asks that character to show an emotion, the edit model has nowhere to put the expression, so it draws
+an anatomical face on the nearest face-shaped surface and leaves the glyph untouched. The observed case:
+syn-006 Sardo, a tin can, whose page carries its original dot-and-smile label face **and** a second larger
+face with brows and a worried mouth on the metal body above it.
+
+**What it predicts, in the owner's words: strongest on non-human characters, and strongest again on strong
+emotions — angry, surprised — but not confined to non-humans; a human page demanding a strong expression
+may show it too.** Concretely:
+
+1. Duplicated or relocated faces cluster on characters whose reference face is a **glyph**, and are rare on
+   characters whose reference face is **rendered** (pupils, a modelled mouth), regardless of species.
+2. Within the glyph group, the defect is more frequent on pages whose scene calls for a **high-arousal**
+   emotion than on calm ones.
+3. Invented limbs travel with it, since the same prompt asks an object to act.
+
+**What would falsify it.** Duplicated faces spread evenly across glyph-faced and rendered-face references;
+or concentrated on non-humans irrespective of how their reference face was drawn, which would make it a
+species effect rather than a glyph-legibility one.
+
+**What it does not touch.** Any label. Labels are image-only and the generator's reason for a defect is
+never an input — the adjudication rule for these pages is row 5 of `adjudication-notes-2026-09.md` and it
+is unchanged by whether this hypothesis holds. What it changes is **issue #97**: if the mechanism is glyph
+illegibility rather than inanimate description, the fix belongs in reference generation — do not hand an
+object character a glyph face — and no amount of prompt work on the page model will reach it.
+
+---
+
 ## What this supports
 
 - **ADR-056 and `reference_judge_investigation_2026-09-02.md`**, which established on a single sheep

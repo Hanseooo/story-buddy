@@ -1,5 +1,7 @@
 -- Label audit queries — C3, run during adjudication, 2026-09-24
 -- Read-only. Nothing here writes, and nothing here is part of the freeze path.
+-- Tables are schema-qualified: the Supabase SQL editor does not always carry
+-- public on the search_path, which reports as 42P01 "relation does not exist".
 --
 -- WHY: during adjudication several pairs turned up where BOTH raters answered
 -- Different and the frozen rulebook says Same (clothing-only reasons; an
@@ -15,7 +17,7 @@ with lab as (
          bool_and(a.same_character)                                       as all_same,
          bool_or(a.same_character)                                        as any_same,
          coalesce(array_agg(distinct r) filter (where r is not null), '{}') as rs
-  from annotations a
+  from public.annotations a
   left join lateral unnest(a.failure_reasons) as r on true
   where a.round <= 2
   group by a.pair_id
@@ -37,7 +39,7 @@ with lab as (
          bool_and(a.same_character)                                       as all_same,
          bool_or(a.same_character)                                        as any_same,
          coalesce(array_agg(distinct r) filter (where r is not null), '{}') as rs
-  from annotations a
+  from public.annotations a
   left join lateral unnest(a.failure_reasons) as r on true
   where a.round <= 2
   group by a.pair_id
@@ -54,7 +56,7 @@ with lab as (
          count(distinct a.annotator_id) as n,
          bool_and(a.same_character)     as all_same,
          bool_or(a.same_character)      as any_same
-  from annotations a
+  from public.annotations a
   where a.round <= 2
   group by a.pair_id
 )
