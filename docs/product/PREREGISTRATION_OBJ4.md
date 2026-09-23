@@ -880,3 +880,121 @@ candidate count per seed is reported, not targeted.
 the held-out number is reported as the result, and why all three seeds are reported. Neither item
 changes the primary endpoint, the δ = 3 ladder, the one-read rule, §3.2's split discipline or §5.1's
 clustering.
+
+### 2026-09-23 — Two raters and owner adjudication; the agreement metric is inter-rater; a sensitivity analysis declared before the numbers exist
+
+**State when amended.** No held-out result has been seen, no judge prediction of any kind has been made,
+no dataset has been frozen and no fine-tune has been trained. Round-1 labelling is complete: two raters
+each labelled all 795 non-pilot pairs once on 2026-09-21 between 09:00 and 14:37 UTC, giving 1,590
+ordinary labels and no adjudication rows.
+
+**What has already been seen, disclosed because it bounds what this amendment can still pre-register.**
+A read-only check of `research_pairs` on 2026-09-23 returned the pair statuses: 623 `complete`, 172
+`conflicted`. That is overall raw percent agreement across all 795 pairs (78.4%) and it cannot be
+un-seen. Nothing further has been computed: no κ, no human/non-human slice, no per-character breakdown,
+no before/after-guide split, and not the held-out-only agreement that `evaluate.py` reports (it filters
+to the test slice, so the number registered here is not the number already seen). The sensitivity
+analysis in (5) is declared against that state, and its enabling artefact — the ambiguous-reference
+character list — is required to be committed before any per-character number is produced.
+
+**1. The operative annotation procedure, superseding 2026-08-29 for this campaign.**
+
+Two raters label, and they are not the same person. Each of the two groupmate accounts (`c4f346f6…`,
+`d9a03bf8…`) labelled every pair exactly once, all in `round = 1`. Where their two labels disagree on
+`same_character`, the study owner (`383b2bd4…`, whose profile carries `is_adjudicator = true`) resolves
+the pair once; that row is the pair's authoritative label, and `annotation_truth.is_adjudication`
+recognises it by the adjudicator profile rather than by round number.
+
+**There is no round 2 and there will be none.** The test–retest design registered on 2026-08-29 required
+one rater labelling twice; two raters labelling once each answers the same question better and makes
+round 2 meaningless. Round 2 is shut on this database in code (`7fe30ae`, `0f55c06`), not merely left
+unused. The round-3 adjudication path and `ADJUDICATION_ROUND` stay in the code and its tests; they are
+contingency for a one-rater deployment, not part of this campaign.
+
+Ground truth is therefore: the owner's adjudicated label where the two raters disagreed, and the agreed
+label otherwise. No pair is resolved by majority, by the owner's own opinion on an agreed pair, or by a
+third ordinary rater; `annotation_truth` raises rather than accepting an adjudicator row on an agreed
+pair.
+
+**2. The reported agreement is inter-rater, and the JSON key is a misnomer.**
+
+Cohen's κ between two annotators is defined for this dataset. The 2026-08-29 sentence "Inter-rater κ is
+undefined for this dataset — permanently, not pending" is withdrawn, and with it the test–retest
+substitution and its limitation paragraph, which no longer describe anything this campaign collected.
+
+`evaluate.py` emits the number under the key `intra_rater_agreement` (`evaluate.py:206`, `:1489`) and
+its computation is annotator-agnostic — it takes the two boolean labels recorded per held-out pair and
+compares them. **The key name is not changed.** It is pinned by the report schema and its tests, and
+renaming it would edit a frozen evidence artefact after labels exist, which is a larger risk than a
+wrong name. Recorded here instead: under this campaign's design the field contains **inter-rater**
+agreement between two distinct raters, and every sentence that reports it — in the manuscript, in any
+table, in any figure caption — must say so. It may not be called test–retest or intra-rater.
+
+Scope of the number: `evaluate.py` restricts the agreement rows to the held-out test slice before
+computing κ, so the reported inter-rater agreement describes the test set, not all 795 pairs. The
+all-pairs figure may be reported alongside it, labelled as such.
+
+**The limitation this creates, stated before the number is computed.** The two raters are both group
+members, briefed on the same rulebook by the study owner, who also adjudicates their conflicts. This is
+not independent recruitment, and κ here cannot detect a misunderstanding both raters share — it is a
+weaker instrument than two blind, independently trained annotators, and a stronger one than one
+person's agreement with themselves. The adjudicator is not blind to which rater produced which label.
+Any sentence reporting κ carries this limitation.
+
+**3. The in-app guide changed mid-campaign, and the boundary is recorded.**
+
+The first 642 labels (324 from `c4f346f6…`, 318 from `d9a03bf8…`) were made while the annotation guide
+omitted rulebook Step 3 ("clothing or style alone is Same"), Step 1 and Step 4. PR #93 merged at
+09:30:48 UTC and deployed as `757a406` at 09:31:50 UTC on 2026-09-21; the last label before the deploy
+was written at 09:30:27 UTC and none fell between. Every label after the boundary is under the corrected
+guide. **No rule changed** — the rulebook is frozen and the guide was brought into line with it
+(`docs/specs/obj4-readiness-audit.md`, Phase C).
+
+Registered here: agreement is reported **before versus after the boundary**, as a descriptive split,
+whichever way it falls. No label is removed, corrected or re-collected on account of the boundary, and
+no pair is excluded for falling on the wrong side of it.
+
+**4. Cases the frozen rulebook does not cover, recorded rather than ruled on.**
+
+Seen during labelling and carried into the write-up's limitations:
+
+- **Hair length and style.** One canonical reference shows a short-haired boy's head in a girls' school
+  uniform; the pages draw longer hair. Step 2 counts hair *colour* only, so the strict answer is Same
+  and raters can reasonably split. Per the rulebook's own instruction, each uncovered case gets the
+  closest existing rule plus a dated private note, applied identically thereafter. Those notes are
+  `docs/capstone/adjudication-notes-2026-09.md`, and their count is reported.
+- **Duplicated characters.** Covered: Step 1 compares the better match, and a duplicate is not an
+  identity failure; Step 5's Broken Anatomy is for parts of one figure. Recorded as a generator
+  limitation the judge is not asked to score.
+- **The shared-style premise.** Step 3 asserts "References and pages share one style preset". At least
+  one page was drawn as pixel art under a non-pixel preset, so the premise does not always hold. Style
+  is not identity and nothing gates on it; recorded as a limitation.
+
+Pairs where the raters agreed on a wrong answer are never surfaced to the adjudicator, by design. The
+adjudicator sees only the 172 conflicts. This bounds what adjudication can fix and is stated in the
+write-up.
+
+**5. Sensitivity analysis, declared here, with its artefact ordered before the numbers.**
+
+§9.7 is unchanged: **no item is excluded from the held-out set after labelling.** The primary analysis —
+every endpoint, the primary gate, the claim ladder, and the reported inter-rater κ — uses every pair.
+
+In addition, one secondary analysis is registered: the same metrics recomputed with pairs dropped whose
+character appears on the **ambiguous-reference list**. A character belongs on that list when its
+canonical reference is internally contradictory or unreadable *judged from the reference image alone*,
+without reference to any page, any label, or any agreement figure. The list lives at
+`docs/capstone/ambiguous-references-2026-09.md`, is written by the study owner, and **must be committed
+before any per-character, per-slice or before/after-boundary number is computed**; git history is the
+evidence of that order. A list written afterwards would be selection on the outcome, and this amendment
+does not authorise one.
+
+Both analyses are reported, whichever way they fall and however far apart they land. The secondary never
+replaces the primary, no rung of the §6 claim ladder is decided on it, δ = 3 is not reopened, and a pair
+dropped from the secondary is still present in the frozen dataset and in the primary result.
+
+**6. What is unchanged.** The endpoints (§1), the corpus provenance (§2), split-by-character (§3.2), the
+frozen field set (§4), δ = 3 and the clustered bootstrap (§5, §5.1), the frozen slices (§5.2), the claim
+ladder (§6), the one-read test-set policy (§7), the exclusions rule (§9.7) and the reproducibility pins
+(§10) all stand exactly as registered. This amendment changes who labels, what the agreement number is
+called and what is additionally reported — nothing about what the judge is scored against or how the
+result is decided.
