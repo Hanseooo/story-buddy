@@ -119,11 +119,11 @@ the owner rejects on inspection, add any the screen missed, and fill `char_id` f
 
 | `char_id` | Story | Character | Clause | What the reference shows | Confirmed |
 |---|---|---|---|---|---|
-| | don-005 | the narrator | 1 | Cropped dark boy's head and boyish face above a girls' sailor blouse, navy pleated skirt and knee socks. | |
-| | syn-028 | Aya | 1 | Short cropped dark boy's haircut and flat brow above a sailor blouse and navy pleated skirt. | |
-| | syn-030 | Basti | 1 | Short dark boy's crop and boyish face above a navy pleated skirt with knee socks. | |
-| | don-012 | Mia | 1 | Bowl cut and neutral face above a school skirt. Weakest of the four — a bowl cut is not a male cue the way the three above are. | |
-| | syn-022 | the man | 2 | Skin, hair fringe and shirt all one teal, close to the background's own colour, leaving no usable colour for the Wrong Color rule. Arguable: legible, just monochrome. | |
+| `don-005:c1` | don-005 | the narrator | 1 | Cropped dark boy's head and boyish face above a girls' sailor blouse, navy pleated skirt and knee socks. | |
+| `syn-028:c0` | syn-028 | Aya | 1 | Short cropped dark boy's haircut and flat brow above a sailor blouse and navy pleated skirt. | |
+| `syn-030:c0` | syn-030 | Basti | 1 | Short dark boy's crop and boyish face above a navy pleated skirt with knee socks. | |
+| `don-012:c0` | don-012 | Mia | 1 | Bowl cut and neutral face above a school skirt. Weakest of the four — a bowl cut is not a male cue the way the three above are. | |
+| `syn-022:c1` | syn-022 | the man | 2 | Skin, hair fringe and shirt all one teal, close to the background's own colour, leaving no usable colour for the Wrong Color rule. Arguable: legible, just monochrome. | |
 
 **Candidates under the current criterion:** 5 of 79 · **Confirmed by the owner:** ___ · **Dropped on
 inspection:** ___ · **Added by the owner that the screen missed:** ___ · **Written on:** 2026-09-__
