@@ -998,6 +998,18 @@ no eyes was seen during labelling, on reference-image evidence alone and with no
 agreement figure in view. The criterion may be narrowed but never loosened once the first row is
 written, and every change to it is dated in that file.
 
+*Narrowed the same day, 2026-09-23, before any row of that list was confirmed and before any
+per-character number existed: clause (3) is withdrawn.* A rater never sees the `CharacterDescription`
+— labelling is image-only by design, and so is the judge's prompt — so a reference that contradicts
+its description is still a well-posed anchor for the page-to-reference comparison. Clause (3)
+measured whether a reference was faithful to its specification, which is a property of reference
+generation and not a source of label ambiguity, and only label ambiguity can distort what this
+secondary analysis is for. The criterion is therefore clauses (1) and (2) only. What clause (3)
+found is reported in `docs/capstone/reference-fidelity-2026-09.md` and in the write-up's
+limitations, not as an exclusion. Recorded plainly because the narrowing is also convenient — it
+takes the candidate count from 27 of 79 to 5 — and a reader is entitled to weigh that against the
+reasoning.
+
 Both analyses are reported, whichever way they fall and however far apart they land. The secondary never
 replaces the primary, no rung of the §6 claim ladder is decided on it, δ = 3 is not reopened, and a pair
 dropped from the secondary is still present in the frozen dataset and in the primary result.

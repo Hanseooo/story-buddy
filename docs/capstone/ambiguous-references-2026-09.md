@@ -18,24 +18,41 @@ A character goes on the list when its **canonical reference image**, judged on i
    can follow one and contradict the other. The case that prompted this: a short-haired boy's head above
    a girls' school uniform, where the pages drew longer hair and the character reads as a girl; or
 2. **unreadable on an identity axis the rulebook scores** — species, palette, body features or face
-   cannot be made out well enough for a rater to apply Step 2; or
-3. **defective on a structural part the rulebook counts** — the reference omits or invents a countable
-   part (eyes, ears, limbs, tail, horns, wings) that the character's `CharacterDescription` neither
-   states nor excludes, so the anchor every page is scored against is itself the anomaly. A part merely
-   *hidden* in the reference — eyes closed, covered by hair or a hat, face turned — is not this: the
-   rulebook already exempts a part hidden by the pose, and such a character does not belong on the list.
+   cannot be made out well enough for a rater to apply Step 2.
+
+The test both clauses share: **would a rater, holding this reference beside a page, be unable to tell
+what they are comparing to?** That is the only way a reference can distort a label.
 
 It does **not** go on the list for being unusual, ugly, off-style, badly composed, drawn twice, or for
 disagreeing with the story. Those are generator faults the labels already handle. Nor does it go on the
 list because the pages agree with each other and not with it; that comparison needs the pages, which
-this list may not use.
+this list may not use. And it does not go on the list for disagreeing with its own
+`CharacterDescription` — see the next paragraph.
 
-**Changes to this criterion.** 2026-09-23, before any row was written and before any per-character
-number existed: clause 3 added. It was prompted by a reference seen during labelling — a character whose
-canonical drawing has no eyes while its pages all draw eyes — which clauses 1 and 2 did not cover,
-since that reference is neither self-contradicting nor unreadable. The input was a reference image, which
-is the same information this list is built from, and no label, count or agreement figure informed it.
-No clause is loosened or removed after the first row is written.
+**Changes to this criterion.**
+
+*2026-09-23, morning — clause 3 added, then removed the same day.* Clause 3 read: "defective on a
+structural part the rulebook counts — the reference omits or invents a countable part that the
+description neither states nor excludes." It was added after a reference was described as having no
+eyes while its pages all drew eyes, on the reasoning that the anchor itself was the anomaly.
+
+*2026-09-23, evening — clause 3 removed, before any row was confirmed and before any per-character
+number existed.* **A rater never sees the description.** Labels are image-only by design
+(`labelling-rulebook.md`; the judge's prompt carries no description either). So a reference that
+contradicts its description is still a perfectly usable anchor: the page-to-reference comparison is
+well-posed, the label is decidable, and nothing about it is ambiguous to the person doing the work.
+Clause 3 measured *defective for the product*, which is a different property from *ambiguous for the
+rater*, and only the second one can distort a label. Adding it was a reasoning error, made before the
+pre-screen showed how wide it reached.
+
+The removal is recorded rather than done quietly because it is also convenient: it takes the candidate
+count from 27 to 5, and a secondary analysis that drops five characters is reportable where one that
+drops twenty-seven is a different dataset. The justification above stands without that convenience, and
+it is the justification, but a reader is entitled to see both.
+
+**What clause 3 found is kept, not discarded** — it moves to
+`docs/capstone/reference-fidelity-2026-09.md` as a reported finding about reference generation, which
+is what it always was. No clause is loosened or removed after the first row is written.
 
 ## What may and may not be looked at while writing it
 
@@ -79,25 +96,10 @@ owner did not have to re-scan them from memory. Any sentence describing this pro
 says exactly that.
 
 **What the pre-screen returned** (aggregate, recorded before any row was confirmed): 79 screened, 27
-flagged — 4 under clause 1, 1 under clause 2, 22 under clause 3, of which 9 are missing a part the
-description states and 13 show a part it does not state. Every case it judged to be a part merely
-hidden by the pose it rejected rather than listing. Counting all 79 rather than only the flagged ones,
-**21 references differ structurally from what their own description states.**
-
-**Thirteen of those 21 are one behaviour, not thirteen accidents.** In each `body_features` list, index
-1 is the face descriptor. Where a character's description reads "no face" or "smooth unbroken front
-surface" — an object or invented creature that is not supposed to have a face — `qwen-image` drew two
-eyes and a mouth anyway. The pre-screen also reported that the pattern concentrates in the synthetic
-bundles and in non-human, object and invented-creature characters, with human characters near-clean on
-structural parts. That is a reference-defect rate, not an agreement, accuracy or per-character result
-number, and it was produced before any row of this list was confirmed; it is recorded here so the
-observation is dated rather than discovered later.
-
-**`ref_verdict` disagrees with the screen on several of those characters** and was deliberately not used
-as an input: it is not part of the criterion, and `docs/capstone/reference_judge_investigation_2026-09-02.md`
-and ADR-056 already establish that the reference judge cannot reliably ground stated attributes. The
-disagreement is consistent with that finding rather than new, and it is reported as corroboration, never
-as a reason to change a label.
+flagged — 4 under clause 1, 1 under clause 2, 22 under the since-removed clause 3. Under the criterion
+as it now stands, **5 candidates**, and the other 22 move to `reference-fidelity-2026-09.md`. Every case
+the screen judged to be a part merely hidden by the pose it rejected rather than listing, including
+three references whose eyes are simply closed in a smile.
 
 ## When it must exist
 
@@ -112,9 +114,16 @@ is cheap.
 Fill one row per character. Leave the table empty and say so if no reference qualifies; an empty list is
 a valid, reportable result.
 
-| `char_id` | Character | Which criterion (1 or 2) | What the reference shows |
-|---|---|---|---|
-| | | | |
+The five candidates the pre-screen returned under clauses 1 and 2 are below, **unconfirmed**. Strike any
+the owner rejects on inspection, add any the screen missed, and fill `char_id` from the database.
 
-**Candidates from the pre-screen:** 27 of 79 · **Confirmed by the owner:** ___ · **Dropped on
+| `char_id` | Story | Character | Clause | What the reference shows | Confirmed |
+|---|---|---|---|---|---|
+| | don-005 | the narrator | 1 | Cropped dark boy's head and boyish face above a girls' sailor blouse, navy pleated skirt and knee socks. | |
+| | syn-028 | Aya | 1 | Short cropped dark boy's haircut and flat brow above a sailor blouse and navy pleated skirt. | |
+| | syn-030 | Basti | 1 | Short dark boy's crop and boyish face above a navy pleated skirt with knee socks. | |
+| | don-012 | Mia | 1 | Bowl cut and neutral face above a school skirt. Weakest of the four — a bowl cut is not a male cue the way the three above are. | |
+| | syn-022 | the man | 2 | Skin, hair fringe and shirt all one teal, close to the background's own colour, leaving no usable colour for the Wrong Color rule. Arguable: legible, just monochrome. | |
+
+**Candidates under the current criterion:** 5 of 79 · **Confirmed by the owner:** ___ · **Dropped on
 inspection:** ___ · **Added by the owner that the screen missed:** ___ · **Written on:** 2026-09-__
