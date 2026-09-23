@@ -24,10 +24,13 @@ decision still stands for this campaign — add a line under Limitations instead
 | 1 | Hair **length or style** differs; hair colour matches | Step 2 lists hair **colour** only, and Step 3 makes presentation alone Same | *(draft — confirm or change before the first such pair)* Same, unless the face itself is drawn as a different individual, which is `different_face` on its own terms | 2026-09-__ | |
 | 2 | The **reference** omits a structural part the pages all draw — seen: a canonical with no eyes, every page with eyes | Step 2 lists eyes under Wrong Body Feature; the exclusion column exempts "a part hidden by the pose" | *(draft — confirm before the first such pair)* Decide which of the two it is, **from the reference**: eyes **absent** on an otherwise visible face → Wrong Body Feature → **Different**. Eyes **not visible** — closed, covered by hair or a hat, face turned — → hidden by the pose → **Same** | 2026-09-__ | |
 | 3 | The page adds or changes an **outfit** the story called for, everything else matching | Step 3 as written: "clothing or style alone is Same". Labels are image-only, so whether the story required the outfit is not an input | **Same.** Before recording it, check the two axes clothing is easily confused with: body colour (Wrong Color covers skin, fur, hair, eye and body colour — never garment colour) and countable parts (wings, horns, limbs). If either of those holds it is Different *for that reason*, and the outfit is still not one of them | 2026-09-23 | |
+| 4 | A body **part is missing or mangled in the drawing** — seen: a rooster drawn with body, legs and tail but no neck or head | Step 4's "judge what is visible... never mark Different only because the face cannot be seen", and Step 5, which exists for "merged, missing or duplicated body parts" | **Same Character**, and tick **Broken Anatomy**. A rendering defect is not an identity difference: the question Step 2 asks is *which individual is this*, and a broken drawing of the right character is still the right character. **Not** Character Absent — that means you cannot find them on the page at all, not that part of them is missing. Wrong Body Feature is reserved for a part that is *different* (three eyes where there were two, no tail on an intact animal), not for a part the generator failed to render | 2026-09-24 | |
 
 Row 1 is pre-filled as a draft because it is the case most likely to come up first and the one the
 raters are most likely to have split on. Confirm it, or replace it, **before** adjudicating the first
 pair it touches — not after seeing how the pairs fall.
+
+Row 4 separates the two artifact questions the screen asks side by side. The test: *could you name the character from what is drawn?* Yes, with a part missing or mangled → Same + Broken Anatomy. No, they are not on the page → Different + Character Absent. Both raters called the rooster Absent when its body, tail and legs were plainly there, so this row is written the first time the case appeared rather than after seeing how the rest fall.
 
 Row 2 is not a gap in the rules, only in which branch applies; the decision is which one, once, for
 every pair of that character. Note what it is **not**: "the pages all agree with each other, so the
@@ -62,3 +65,4 @@ happens that a reader of the results would want to know. Do not record pair-leve
 database is the record of those.
 
 - 2026-09-23 — file created; adjudication not yet started.
+- 2026-09-24 — row 4 added on its first live case (headless rooster, syn-001). Rows 3 and 4 were both written from conflicts seen during adjudication, which is the procedure: decide the kind once, at first sight, then apply it.
