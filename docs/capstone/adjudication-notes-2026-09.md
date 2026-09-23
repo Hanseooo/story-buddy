@@ -22,12 +22,19 @@ decision still stands for this campaign — add a line under Limitations instead
 | # | Case the rules do not cover | Closest rule applied | Decision | Decided | Times applied |
 |---|---|---|---|---|---|
 | 1 | Hair **length or style** differs; hair colour matches | Step 2 lists hair **colour** only, and Step 3 makes presentation alone Same | *(draft — confirm or change before the first such pair)* Same, unless the face itself is drawn as a different individual, which is `different_face` on its own terms | 2026-09-__ | |
-| 2 | | | | | |
+| 2 | The **reference** omits a structural part the pages all draw — seen: a canonical with no eyes, every page with eyes | Step 2 lists eyes under Wrong Body Feature; the exclusion column exempts "a part hidden by the pose" | *(draft — confirm before the first such pair)* Decide which of the two it is, **from the reference**: eyes **absent** on an otherwise visible face → Wrong Body Feature → **Different**. Eyes **not visible** — closed, covered by hair or a hat, face turned — → hidden by the pose → **Same** | 2026-09-__ | |
 | 3 | | | | | |
 
 Row 1 is pre-filled as a draft because it is the case most likely to come up first and the one the
 raters are most likely to have split on. Confirm it, or replace it, **before** adjudicating the first
 pair it touches — not after seeing how the pairs fall.
+
+Row 2 is not a gap in the rules, only in which branch applies; the decision is which one, once, for
+every pair of that character. Note what it is **not**: "the pages all agree with each other, so the
+reference is the odd one out" is not an axis this rulebook has. Every label compares one page to the
+canonical reference, and agreement among pages is not evidence for either answer. If the reference is
+the defective artefact, the place that records it is
+`ambiguous-references-2026-09.md`, not a label.
 
 ## Cases that are already covered — no note needed
 

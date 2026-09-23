@@ -988,6 +988,16 @@ before any per-character, per-slice or before/after-boundary number is computed*
 evidence of that order. A list written afterwards would be selection on the outcome, and this amendment
 does not authorise one.
 
+*The criterion in full, recorded 2026-09-23 with this amendment and before any row of that list
+existed.* A reference qualifies when it is (1) internally contradictory, (2) unreadable on an identity
+axis the rulebook scores, or (3) defective on a countable part the rulebook scores — it omits or
+invents eyes, ears, limbs, tail, horns or wings that the character's `CharacterDescription` neither
+states nor excludes. A part merely *hidden* in the reference does not qualify, matching the rulebook's
+own exemption for a part hidden by the pose. Clause (3) was added the same day, after a reference with
+no eyes was seen during labelling, on reference-image evidence alone and with no label, count or
+agreement figure in view. The criterion may be narrowed but never loosened once the first row is
+written, and every change to it is dated in that file.
+
 Both analyses are reported, whichever way they fall and however far apart they land. The secondary never
 replaces the primary, no rung of the §6 claim ladder is decided on it, δ = 3 is not reopened, and a pair
 dropped from the secondary is still present in the frozen dataset and in the primary result.
