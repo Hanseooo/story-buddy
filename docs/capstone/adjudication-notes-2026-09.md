@@ -23,7 +23,7 @@ decision still stands for this campaign — add a line under Limitations instead
 |---|---|---|---|---|---|
 | 1 | Hair **length or style** differs; hair colour matches | Step 2 lists hair **colour** only, and Step 3 makes presentation alone Same | *(draft — confirm or change before the first such pair)* Same, unless the face itself is drawn as a different individual, which is `different_face` on its own terms | 2026-09-__ | |
 | 2 | The **reference** omits a structural part the pages all draw — seen: a canonical with no eyes, every page with eyes | Step 2 lists eyes under Wrong Body Feature; the exclusion column exempts "a part hidden by the pose" | *(draft — confirm before the first such pair)* Decide which of the two it is, **from the reference**: eyes **absent** on an otherwise visible face → Wrong Body Feature → **Different**. Eyes **not visible** — closed, covered by hair or a hat, face turned — → hidden by the pose → **Same** | 2026-09-__ | |
-| 3 | | | | | |
+| 3 | The page adds or changes an **outfit** the story called for, everything else matching | Step 3 as written: "clothing or style alone is Same". Labels are image-only, so whether the story required the outfit is not an input | **Same.** Before recording it, check the two axes clothing is easily confused with: body colour (Wrong Color covers skin, fur, hair, eye and body colour — never garment colour) and countable parts (wings, horns, limbs). If either of those holds it is Different *for that reason*, and the outfit is still not one of them | 2026-09-23 | |
 
 Row 1 is pre-filled as a draft because it is the case most likely to come up first and the one the
 raters are most likely to have split on. Confirm it, or replace it, **before** adjudicating the first

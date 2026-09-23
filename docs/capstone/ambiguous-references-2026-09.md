@@ -81,8 +81,10 @@ reached the session that writes the judge's prompts and evaluation code.
 **That restriction was then lifted by the owner, the same day, and this line records it rather than
 leaving a false claim in place.** The owner asked for the candidate table in the session so the rows
 could be looked up in the database, and the assistant read the file at that point. What it now holds:
-the 27 candidate rows with story, character, clause and a sentence each, plus the rejected set. It
-still has not seen any generated page, any label, any pair status or any agreement figure. The
+the 27 candidate rows with story, character, clause and a sentence each, plus the rejected set.
+Later the same day the owner also shared a screenshot of one adjudication screen while asking a
+rulebook question, so the assistant has now seen one generated page, one reference, and both
+raters' labels for that single pair. No other page, label, pair status or agreement figure. The
 consequence to state in the write-up if it matters: any later change the assistant makes to `analyze`,
 to `char_bible` or to a judge prompt is made by a party that has seen which held-out references are
 defective. Those changes are all scheduled after Objective 4 (issues #95, #97), and the fine-tune's
