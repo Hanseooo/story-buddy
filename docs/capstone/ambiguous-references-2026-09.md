@@ -1,6 +1,6 @@
 # Ambiguous canonical references — C3, September 2026
 
-**Status:** criterion written, list **not yet filled** · **Created:** 2026-09-23
+**Status:** **final** — 3 characters listed, criterion locked · **Created:** 2026-09-23
 **Registered by:** `PREREGISTRATION_OBJ4.md`, amendment 2026-09-23, item 5
 **Written by:** the study owner. Not by an agent — see "Who may write it" below.
 
@@ -111,19 +111,27 @@ is cheap.
 
 ## The list
 
-Fill one row per character. Leave the table empty and say so if no reference qualifies; an empty list is
-a valid, reportable result.
-
-The five candidates the pre-screen returned under clauses 1 and 2 are below, **unconfirmed**. Strike any
-the owner rejects on inspection, add any the screen missed, and fill `char_id` from the database.
+**This list is final for the C3 campaign.** The study owner looked at all five candidates the pre-screen
+returned under clauses 1 and 2 and confirmed three. The two struck are recorded below the table with the
+reason, because a list is only as informative as what it declined to include.
 
 | `char_id` | Story | Character | Clause | What the reference shows | Confirmed |
 |---|---|---|---|---|---|
-| `don-005:c1` | don-005 | the narrator | 1 | Cropped dark boy's head and boyish face above a girls' sailor blouse, navy pleated skirt and knee socks. | |
-| `syn-028:c0` | syn-028 | Aya | 1 | Short cropped dark boy's haircut and flat brow above a sailor blouse and navy pleated skirt. | |
-| `syn-030:c0` | syn-030 | Basti | 1 | Short dark boy's crop and boyish face above a navy pleated skirt with knee socks. | |
-| `don-012:c0` | don-012 | Mia | 1 | Bowl cut and neutral face above a school skirt. Weakest of the four — a bowl cut is not a male cue the way the three above are. | |
-| `syn-022:c1` | syn-022 | the man | 2 | Skin, hair fringe and shirt all one teal, close to the background's own colour, leaving no usable colour for the Wrong Color rule. Arguable: legible, just monochrome. | |
+| `don-005:c1` | don-005 | the narrator | 1 | Cropped dark boy's head and boyish face above a girls' sailor blouse, navy pleated skirt and knee socks. | yes |
+| `syn-028:c0` | syn-028 | Aya | 1 | Short cropped dark boy's haircut and flat brow above a sailor blouse and navy pleated skirt. | yes |
+| `syn-030:c0` | syn-030 | Basti | 1 | Short dark boy's crop and boyish face above a navy pleated skirt with knee socks. | yes |
 
-**Candidates under the current criterion:** 5 of 79 · **Confirmed by the owner:** ___ · **Dropped on
-inspection:** ___ · **Added by the owner that the screen missed:** ___ · **Written on:** 2026-09-__
+**Candidates under the current criterion:** 5 of 79 · **Confirmed by the owner:** 3 · **Struck on
+inspection:** 2 · **Added by the owner that the screen missed:** 0 · **Written on:** 2026-09-23
+
+### Struck on inspection
+
+- **`don-012:c0`, Mia** (clause 1 candidate). A bowl cut above a school skirt. The screen called it the
+  weakest of the four and it is: a bowl cut is not a male cue the way a cropped boy's head is, and a
+  rater holding this reference beside a page knows perfectly well what they are comparing to. Not
+  ambiguous.
+- **`syn-022:c1`, the man** (clause 2 candidate). Skin, hair and shirt in one teal close to the
+  background. Monochrome, but legible: species, body features and face all read, and the Wrong Color
+  rule has a colour to work with even if there is only one. Not unreadable.
+
+The criterion is now locked. No clause is loosened or removed after the first row is written.
