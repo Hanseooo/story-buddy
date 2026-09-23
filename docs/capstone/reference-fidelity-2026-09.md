@@ -122,9 +122,10 @@ species effect rather than a glyph-legibility one.
 
 **What it does not touch.** Any label. Labels are image-only and the generator's reason for a defect is
 never an input — the adjudication rule for these pages is row 5 of `adjudication-notes-2026-09.md` and it
-is unchanged by whether this hypothesis holds. What it changes is **issue #97**: if the mechanism is glyph
-illegibility rather than inanimate description, the fix belongs in reference generation — do not hand an
-object character a glyph face — and no amount of prompt work on the page model will reach it.
+is unchanged by whether this hypothesis holds. What it changes is **issue #99**, whose cause 1 points at
+#97: if the mechanism is glyph illegibility rather than inanimate description, the fix belongs in
+reference generation — do not hand an object character a glyph face — and no amount of prompt work on the
+page model will reach it.
 
 ---
 
