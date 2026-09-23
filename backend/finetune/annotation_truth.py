@@ -19,6 +19,18 @@ PAIRS_TABLE = "research_pairs"
 ORDINARY_ROUNDS = (1, 2)
 ADJUDICATION_ROUND = 3
 
+# --- label audit, 2026-09-24 ------------------------------------------------------------------
+# Both raters agreed Different, resting on wrong_clothing / wrong_style alone, which rulebook Step 3
+# calls always a mistake. Agreed pairs never reach adjudication, so these are re-labelled once by
+# the adjudicator. Selected by Q4 of docs/capstone/label-audit-queries.sql, not by hand; the rule
+# was set before counting (adjudication-notes-2026-09.md). Two more such pairs were already
+# conflicted and go through the ordinary queue. The freeze refuses to run until each one is done.
+AUDIT_PAIRS = frozenset({
+    "0a7623239b552142", "4bff6091f800f312", "71e74774a21ee599", "89ec648100898455",
+    "9d9ae24e3523b38f", "b3e1b5aa75025e83", "b45bf1c8e0f07d9d", "d552d7dad1711c20",
+    "f01326c778127f66", "ca57de2b96f78d37",
+})
+
 
 def _round(row: dict) -> int:
     """Rows written before 0018 carry no `round` key; they are round 1 by definition."""
@@ -114,12 +126,15 @@ def resolve_annotations(
         if len(ordinary) < 2:
             raise ManifestError(f"Pair {pair_id} has <2 ordinary annotations.")
         signatures = {_signature(row) for row in ordinary}
-        if len(signatures) == 1:
+        audited = pair_id in AUDIT_PAIRS
+        if len(signatures) == 1 and not audited:
             if adjudications:
                 raise ManifestError(f"Pair {pair_id}: ordinary annotators agreed, but adjudicator row exists.")
             final_rows, adjudicated = ordinary, False
         else:
             if not adjudications:
+                if audited:
+                    raise ManifestError(f"Pair {pair_id}: in the label audit, not yet re-labelled.")
                 raise ManifestError(f"Pair {pair_id}: unresolved conflict (no adjudicator).")
             final_rows, adjudicated = adjudications, True
 
@@ -154,7 +169,7 @@ def reconcile_pair_status(
             statuses[pair_id] = "pending" if not ordinary else "partially_annotated"
             continue
         conflicted = len({_signature(row) for row in ordinary}) > 1
-        if not conflicted and adjudications:
+        if not conflicted and adjudications and pair_id not in AUDIT_PAIRS:
             raise ManifestError(f"Pair {pair_id}: ordinary annotators agreed, but adjudicator row exists.")
         statuses[pair_id] = "adjudicated" if adjudications else "conflicted" if conflicted else "complete"
     return statuses

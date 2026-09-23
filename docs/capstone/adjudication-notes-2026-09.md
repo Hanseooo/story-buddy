@@ -58,8 +58,27 @@ Recorded here so they are not mistaken for gaps:
 
 - Pairs where **both raters agreed on a wrong answer** never reach adjudication. The adjudicator sees
   only the 172 conflicts, so this file cannot record — and adjudication cannot fix — an error the two
-  raters shared.
+  raters shared. One kind of shared error is visible from the labels alone and was counted: see
+  *Label audit of agreed pairs* below. Every other kind stays in this limitation.
 - The adjudicator is **not blind** to which rater produced which label.
+
+## Label audit of agreed pairs
+
+**Rule, set before counting (2026-09-24):** count the agreed-Different pairs whose only reasons are
+Wrong Clothing or Wrong Style, which Step 3 calls "always a mistake under these rules". Single digits → a
+limitations line. Ten or more → the adjudicator re-labels exactly the pairs the query returns, no more and
+no fewer, and nothing is excluded.
+
+**Count (Q1 and Q4, `label-audit-queries.sql`):** 12 of 112 agreed-Different pairs (9 Wrong Style, 3 Wrong
+Clothing). Two are test pairs that were already conflicted for another reason and go through the
+ordinary queue. The other ten (9 train, 1 val) had consensus, so the queue never shows them. They are
+listed in `AUDIT_PAIRS` (`backend/finetune/annotation_truth.py`), and the freeze refuses to run until
+each has one round-3 row. The adjudicator labels them from the two images alone, with the raters' labels
+hidden, via `label-audit-relabel.sql`. Rounds 1 and 2 stay untouched.
+
+**Counted, not acted on:** 26 agreed-Different pairs include Character Absent. No rule separates correct
+uses from misuses like the rooster (row 4) without looking at the images, and looking at only some of them
+would be choosing pairs by hand. They are reported as a count in the write-up.
 
 ## Log
 
@@ -70,3 +89,4 @@ database is the record of those.
 - 2026-09-23 — file created; adjudication not yet started.
 - 2026-09-24 — row 5 added on its first live case (Sardo the tin can, syn-006): arms invented, face duplicated, original face intact.
 - 2026-09-24 — row 4 added on its first live case (headless rooster, syn-001). Rows 3 and 4 were both written from conflicts seen during adjudication, which is the procedure: decide the kind once, at first sight, then apply it.
+- 2026-09-24 — label audit run: 12 agreed-Different pairs rest on clothing or style alone; 10 go to a round-3 re-label (see *Label audit of agreed pairs*).

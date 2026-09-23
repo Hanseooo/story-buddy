@@ -397,6 +397,31 @@ def test_resolve_annotations_strict_rules():
     ) == {}
 
 
+AUDITED = "0a7623239b552142"  # agreed Different on wrong_style alone; Q4, 2026-09-24
+
+
+def test_an_audited_consensus_pair_takes_the_adjudicators_label():
+    audited_rows = rows(
+        AUDITED,
+        {"annotator_id": "a1", "same_character": False, "failure_reasons": ["wrong_style"]},
+        {"annotator_id": "a2", "same_character": False, "failure_reasons": ["wrong_style"]},
+        {"annotator_id": "adj", "same_character": True},
+    )
+    resolved = bd.resolve_annotations(audited_rows, {"adj"}, set())
+    assert resolved[AUDITED].same_character is True
+    assert resolved[AUDITED].adjudicated is True
+    assert bd.reconcile_pair_status(audited_rows, {"adj"})[AUDITED] == "adjudicated"
+
+
+def test_an_audited_pair_blocks_the_freeze_until_it_is_relabelled():
+    with pytest.raises(ManifestError, match="label audit"):
+        bd.resolve_annotations(
+            rows(AUDITED, {"same_character": False, "failure_reasons": ["wrong_style"]},
+                 {"same_character": False, "failure_reasons": ["wrong_style"]}),
+            set(), set(),
+        )
+
+
 def test_reconcile_pair_status_derives_every_state_without_trusting_cached_status():
     annotation_rows = [
         {"pair_id": "pending", "annotator_id": None, "status": "adjudicated"},
