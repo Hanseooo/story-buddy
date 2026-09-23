@@ -53,6 +53,32 @@ that is the same exposure §7 exists to prevent, and it has been kept off throug
 `obj4-readiness-audit.md`, Phase C, where five flagged test pairs were deleted unopened). The owner has
 already seen every reference in the course of adjudication and loses nothing by writing it.
 
+**A pre-screen was run, 2026-09-23, and it is not the list.** At the owner's request a separate agent
+read all 79 reference images and the `characters` block of each bundle's `memory.json`, applied the
+criterion above, and wrote a candidate table to a scratchpad file outside this repository. Its
+restrictions: no generated page, no database, no label, no pair status, no agreement figure, and no
+script under `backend/`. It reported back to the assistant **counts only** — no character, story or
+filename, and no description of any individual image — so no per-character fact about held-out data
+reached the session that writes the judge's prompts and evaluation code. That restriction held.
+
+**The authoring act is the owner's confirmation.** A candidate becomes a row only when the owner has
+looked at that reference and agreed it meets the criterion; unconfirmed candidates are dropped and the
+count of dropped ones is recorded below. The pre-screen chose nothing — it ordered 79 images so the
+owner did not have to re-scan them from memory. Any sentence describing this procedure in the write-up
+says exactly that.
+
+**What the pre-screen returned** (aggregate, recorded before any row was confirmed): 79 screened, 27
+flagged — 4 under clause 1, 1 under clause 2, 22 under clause 3, of which 9 are missing a part the
+description states and 13 show a part it does not state. Every case it judged to be a part merely
+hidden by the pose it rejected rather than listing. Counting all 79 rather than only the flagged ones,
+**21 references differ structurally from what their own description states.**
+
+**`ref_verdict` disagrees with the screen on several of those characters** and was deliberately not used
+as an input: it is not part of the criterion, and `docs/capstone/reference_judge_investigation_2026-09-02.md`
+and ADR-056 already establish that the reference judge cannot reliably ground stated attributes. The
+disagreement is consistent with that finding rather than new, and it is reported as corroboration, never
+as a reason to change a label.
+
 ## When it must exist
 
 **Before any per-character, per-slice, or before/after-guide number is computed**, and before the
@@ -70,4 +96,5 @@ a valid, reportable result.
 |---|---|---|---|
 | | | | |
 
-**Characters reviewed:** ___ of ___ · **Listed:** ___ · **Written on:** 2026-09-__
+**Candidates from the pre-screen:** 27 of 79 · **Confirmed by the owner:** ___ · **Dropped on
+inspection:** ___ · **Added by the owner that the screen missed:** ___ · **Written on:** 2026-09-__
