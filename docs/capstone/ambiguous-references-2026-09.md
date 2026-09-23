@@ -59,7 +59,18 @@ criterion above, and wrote a candidate table to a scratchpad file outside this r
 restrictions: no generated page, no database, no label, no pair status, no agreement figure, and no
 script under `backend/`. It reported back to the assistant **counts only** — no character, story or
 filename, and no description of any individual image — so no per-character fact about held-out data
-reached the session that writes the judge's prompts and evaluation code. That restriction held.
+reached the session that writes the judge's prompts and evaluation code.
+
+**That restriction was then lifted by the owner, the same day, and this line records it rather than
+leaving a false claim in place.** The owner asked for the candidate table in the session so the rows
+could be looked up in the database, and the assistant read the file at that point. What it now holds:
+the 27 candidate rows with story, character, clause and a sentence each, plus the rejected set. It
+still has not seen any generated page, any label, any pair status or any agreement figure. The
+consequence to state in the write-up if it matters: any later change the assistant makes to `analyze`,
+to `char_bible` or to a judge prompt is made by a party that has seen which held-out references are
+defective. Those changes are all scheduled after Objective 4 (issues #95, #97), and the fine-tune's
+inputs are pinned by `code_commit`, so nothing in the reported result was produced after the exposure —
+but the ordering is the reason it is safe, not the exposure being harmless.
 
 **The authoring act is the owner's confirmation.** A candidate becomes a row only when the owner has
 looked at that reference and agreed it meets the criterion; unconfirmed candidates are dropped and the
@@ -72,6 +83,15 @@ flagged — 4 under clause 1, 1 under clause 2, 22 under clause 3, of which 9 ar
 description states and 13 show a part it does not state. Every case it judged to be a part merely
 hidden by the pose it rejected rather than listing. Counting all 79 rather than only the flagged ones,
 **21 references differ structurally from what their own description states.**
+
+**Thirteen of those 21 are one behaviour, not thirteen accidents.** In each `body_features` list, index
+1 is the face descriptor. Where a character's description reads "no face" or "smooth unbroken front
+surface" — an object or invented creature that is not supposed to have a face — `qwen-image` drew two
+eyes and a mouth anyway. The pre-screen also reported that the pattern concentrates in the synthetic
+bundles and in non-human, object and invented-creature characters, with human characters near-clean on
+structural parts. That is a reference-defect rate, not an agreement, accuracy or per-character result
+number, and it was produced before any row of this list was confirmed; it is recorded here so the
+observation is dated rather than discovered later.
 
 **`ref_verdict` disagrees with the screen on several of those characters** and was deliberately not used
 as an input: it is not part of the criterion, and `docs/capstone/reference_judge_investigation_2026-09-02.md`
