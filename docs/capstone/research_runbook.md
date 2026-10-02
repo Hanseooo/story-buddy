@@ -207,6 +207,54 @@ donated held-out split while preparing or qualifying the toolchain.
    selection. Before a later held-out run, freeze the serving command and effective processor/
    decoding settings with the signed evaluation evidence.
 
+## Full-run readiness and cost assessment (2026-10-02)
+
+Local read-only checks passed for the registered training configuration and the hashed training
+artifacts in `obj4-v1`: 484 training and 86 validation rows. They did not open the held-out test
+payload, run a model or execute training. `data/judge/training_qualification.json` is still absent.
+The successful synthetic contracts above do not replace approval of a live training host.
+
+For one GPU, batch size 1, accumulation 8 and three epochs, the pinned
+[Transformers 5.6.0 trainer](https://github.com/huggingface/transformers/blob/v5.6.0/src/transformers/trainer.py)
+uses `ceil(484 / 8) = 61` updates per epoch: **183 updates per seed**, or 549 across three seeds.
+The checked-in ten-step save schedule implies **18 regular checkpoints per seed**, or 54 total.
+The actual saved inventory is authoritative; an additional final-step checkpoint would increase
+this count. `capture_validation` evaluates every candidate sequentially on all 86 validation
+pairs, so those regular checkpoints alone require **4,644 generated verdicts**. In-training
+validation loss is a separate workload, also scheduled every ten updates. There is no configured
+early-stopping callback; `load_best_model_at_end` reloads the loss-selected checkpoint.
+
+The following are **linear budgeting scenarios, not a qualified full-run forecast**. The rate
+is the ended rental's $0.447/hour including its 100 GB disk, not a current offer. Refresh the
+live offer before spending; [Vast's pricing guide](https://docs.vast.ai/guides/instances/pricing)
+separates compute, continuing storage charges and usage-based transfer.
+
+| Work | Saved observation and calculation | Scenario at the historical rate |
+|---|---|---|
+| Training updates only, all three seeds | `vast-53678415/update2.log` reports 47.59 seconds for two updates; `549 × 47.59 / 2` | 3.63 hours, $1.62 |
+| Regular checkpoint validation | The two adapter requests in `vast-53867285-inference1/inference-contract.json`, inside the verified backup archive, took 21.915 and 46.647 seconds; apply each to 4,644 sequential requests | 28.27–60.17 hours, $12.64–26.90 |
+
+The two-request mean gives 44.22 hours/$19.77 for checkpoint validation alone. This tiny sample
+includes warmup effects and a disposable two-step adapter, not a trained study model. Request
+lengths, caching and later checkpoint behavior can change runtime substantially. The training
+probe disabled evaluation and saved every step. Neither scenario includes installation, downloads,
+in-training validation loss, preprocessing, serving startup, extra final checkpoints, embedding
+controls, failures/retries, held-out comparisons or transfer. Do not present their sum as a total
+study quote or retain the old $5–15 estimate as an approved budget.
+
+The owner reported $0.96 remaining after destroying the latest instance. That is about 2.15
+running hours at the historical rate before transfer, shorter than even the training-only
+projection. No new rental or top-up is authorized by this assessment.
+
+Before another paid session, obtain the remaining governance status, approve an explicit budget
+covering training **and** checkpoint validation, activate an external spend alarm, and prepare the
+transfer/backup procedure locally. On the actual target host, verify the pinned trainer and full
+hardware inventory, qualify the registered evaluation-loss path, and obtain the operator-approved
+training record before `--prepare`/`--execute`. Serving many checkpoint adapters has not been
+qualified by the one-adapter probe; check capacity against the actual inventory before starting
+validation. Preserve the registered save schedule and all candidates. A cheaper schedule or
+scientific recipe change needs a separately recorded decision, not a silent cost workaround.
+
 ## Execution pipeline sequence
 
 Run all commands from `backend/`. Angle-bracket values (`<...>`) are operator inputs, not copy-ready literals.

@@ -216,7 +216,7 @@ the one-file, not one-env-var, case.
 | Image generation | ~$0.02–0.035/image | ADR-001 |
 | Per book (images) | ~$0.30–0.65/book | ADR-001 |
 | Whole stack, monthly | ~$60–110/month at 200 books/month, dominated by image generation | ADR-015, PRD §15 |
-| Judge fine-tune (one-time) | ~$5–15, a few hours on a rented RTX 4090 (~$0.45–0.49/hr) or A100 (~$1.50/hr) | ADR-016, ADR-018 |
+| Judge fine-tune and checkpoint validation | Budget pending the [registered full-run workload assessment](capstone/research_runbook.md#full-run-readiness-and-cost-assessment-2026-10-02); refresh live compute, storage and transfer rates before rental | ADR-018, ADR-061 |
 | Judge serving (Modal, if kept warm) | ~$1/hr to keep one container warm during study sessions (cold start ~30–90s otherwise) | ADR-019 |
 | Judge inference (steady state, if fine-tune ships) | ~2,000 calls/month × ~3s ≈ 100 GPU-minutes — cheaper than 2,000 Gemma-27B API calls | ADR-019 |
 | Moderation backstop (`gpt-oss-safeguard-20b`) | One call per story (not per scene) — cost is noise | ADR-011 |

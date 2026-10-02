@@ -24,7 +24,7 @@ exist.** The fine-tune is not a prerequisite for anything. It is an upgrade to o
 | 4 | Ethics Stage 1 clears → children donate stories | in parallel, starts **now** | — |
 | 5 | Run Phase 1 over the donated stories → **images** | 1 day of compute, ~$30 | prompted |
 | 6 | Two researchers label those images → **the dataset** | one weekend | — |
-| 7 | Train the LoRA on a rented GPU | 2–3 hours, ~$5–15 | — |
+| 7 | Train the LoRA on a rented GPU | Host-dependent; include checkpoint validation in the [full-run cost assessment](../capstone/research_runbook.md#full-run-readiness-and-cost-assessment-2026-10-02) | — |
 | 8 | Evaluate against four baselines | 1–2 days | — |
 | 9 | **Objective 4** result: precision/recall/F1 vs. human labels on held-out set (F1 primary). **Deployment gate** (separate, engineering): did the fine-tune beat the base model + does it match prompted Gemma. §7.5's ladder | | |
 | 10a | Rung A or B → serve it behind vLLM, flip two env vars | ~2 days | **fine-tuned** |
@@ -382,7 +382,8 @@ Qualify an actual Qwen3.5 two-image training step and record peak GPU memory bef
 run. Start with a host of at least 24 GB and use more if measurement requires it. Compare live compute, storage and bandwidth
 charges, then set a spend alarm before training. Runtime and total cost must come from the
 qualified host and actual run, not the earlier ~1,000-example planning estimate; the registered
-freeze now has 484 training pairs. See the research runbook's dataset handoff.
+freeze now has 484 training pairs. See the research runbook's
+[full-run cost assessment](../capstone/research_runbook.md#full-run-readiness-and-cost-assessment-2026-10-02).
 
 ### 6.3 The config
 
@@ -431,7 +432,7 @@ eval_strategy: steps
 eval_steps: 10                                # PREREGISTRATION_OBJ4 §12, 2026-09-14
 save_strategy: steps
 save_steps: 10
-load_best_model_at_end: true                  # early stopping on the disjoint val split
+load_best_model_at_end: true                  # load the loss-selected checkpoint; does not stop early
 ```
 
 ### 6.4 Run it
@@ -796,7 +797,7 @@ Gemma with its own rubric (ADR-011). Consistency has a best-of fallback; safety 
 
 ## 9. Cross-cutting checklist (MASTER_SPEC §5)
 
-- [x] **CC-3 Cost control** — data ≈ $29, training ≈ $5–15 one-time; serving is scale-to-zero (ADR-019). Spend alarm on the rented GPU.
+- [x] **CC-3 Cost control** — serving is scale-to-zero (ADR-019); rented training requires an active external spend alarm. The [full-run cost assessment](../capstone/research_runbook.md#full-run-readiness-and-cost-assessment-2026-10-02) includes checkpoint validation; the old $5–15 estimate is not an approved full-study budget.
 - [x] **CC-5 Observability** — judge calls traced through LangSmith unchanged; vLLM is OpenAI-compatible.
 - [x] **CC-7 Reproducibility** — §6.6. Eval is deterministic (temperature 0).
 - [ ] **CC-1 Moderation ordering** — **explicitly not touched.** ADR-011's image-safety rubric stays on prompted Gemma. **The fine-tuned model never sits on the child-safety path** (ADR-004 amendment b, §8).

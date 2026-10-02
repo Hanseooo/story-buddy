@@ -508,7 +508,7 @@ image generation:
 - **Develop against the cheapest provider; spend paid budget only on study runs.**
 - Recommended budget for comfortable dev + a real study: **~$50–100**. Trivially cheap; don't constrain the research over ~$30.
 - **Cost circuit-breaker:** a per-book worst-case ceiling that trips rather than silently running; per-classroom daily cap (§14).
-- **Fine-tuning the judge is a one-time ~$5–15** on a rented 4090 (ADR-018). **Set a budget alarm.**
+- **Fine-tuning and checkpoint validation need a host-specific budget.** Use the [registered full-run workload assessment](../capstone/research_runbook.md#full-run-readiness-and-cost-assessment-2026-10-02), refresh live rental/transfer rates, and **set a budget alarm** before spending (ADR-018, ADR-061).
 - **Serving the judge *lowers* running cost**: ~2,000 calls/month at ~3 s each is ~100 GPU-minutes on a
   scale-to-zero container, cheaper than 2,000 Gemma-27B API calls (ADR-019). Keep-warm during a study
   session is ~$1/hr.
