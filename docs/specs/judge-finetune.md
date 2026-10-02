@@ -510,8 +510,10 @@ model answers. The held-out runner records such a run as failed. Default validat
 held-out Qwen loaders embed frozen assets without
 rewriting them. Gemma receives the original inputs. The remote probe also checks prepared RGB
 pixel hashes against local trainer verification, then compares the actual serving grids.
-Renewed GPU inference qualification remains pending; local pixel/grid agreement is not a
-passed inference contract or a quality result.
+The corrected synthetic base/adapter contract probe passed and its raw evidence was verified;
+see the [canonical qualification status](../capstone/research_runbook.md#qwen35-host-qualification).
+This does not establish quality improvement, production serving qualification or an approved
+training-host record.
 
 PyTorch/CUDA and bitsandbytes builds are hardware-specific. Their exact versions are selected only after the
 school-or-cloud hardware qualification and declared in `training_qualification.json` with `base_model`,

@@ -75,17 +75,18 @@ run with a separate run directory.
 
 ## Qwen35 host qualification
 
-**Pending, not a passed host qualification.** Installation/runtime and registered preprocessing
-checks have passed on the rented host. The original one-step GPU execution logged zero learning
+**Training-host approval pending; synthetic inference contracts passed.** The checks below span
+separate qualification sessions, not one approved training-host record. Installation/runtime and
+registered preprocessing checks passed on the initial rented host. Its one-step GPU execution logged zero learning
 rate and saved zero LoRA B tensors; retain it as training-path evidence only. The later guarded
 two-step retry produced a nonzero weight update, verified directly against the saved initial
 adapter. Its logs, trainer states, measured peak memory and complete final adapter are locally
-verified and backed up. Base/adapter inference remains unqualified.
+verified and backed up. The later inference result is recorded below.
 See the session evidence above for raw results and
 capture status. No model-improvement evaluation or registered three-seed run has started.
 The owner confirmed this qualification instance destroyed on 2026-10-02 Manila time after
 local backups were verified. See the session capture notes for final billing and restore artifacts;
-a future host needs fresh runtime checks and the remaining inference qualification.
+a future training host needs fresh runtime checks and an operator-approved qualification record.
 The replacement inference-only instance 53813406 was also destroyed after its downloaded
 evidence and the prior adapter backup passed local hash checks. Its isolated vLLM server
 started after replacing an incompatible TorchCodec CUDA build with the same-version CPU
@@ -101,9 +102,20 @@ existing Pillow dependency. The Qwen observer requires embedded image data so re
 cannot silently bypass preparation. Gemma retains original inputs. Local verification matches
 the pinned trainer's prepared RGB pixels for every synthetic transfer asset and all recorded
 train/validation image grids. Those checks do not qualify actual model inference.
-Keep paid work paused until the corrected bundle is restore-verified and a bounded session
-is authorized. The next remote probe must check the prepared pixels and grids of the same
-bytes sent to both models, then retain actual base/adapter contract responses.
+The corrected bundle was restore-verified and tested on inference-only instance 53867285.
+Its four preselected synthetic base/adapter requests passed strict verdict-field and raw-type
+checks, returned the requested model names, and matched the qualified training image grids.
+The downloaded archive, every retained file hash, original input/profile bytes and raw responses
+were independently verified locally. The server warned about unsupported visual LoRA wrappers;
+inspection of the saved adapter tensor header confirmed that it contains only language-model
+tensors, so those warnings did not omit trained visual adapter weights. All four confidence
+values were unavailable; retain that limitation rather than inventing probabilities.
+The owner confirmed the instance destroyed after backup verification. This is a synthetic
+contract result, not quality improvement, a production deployment qualification or completed
+study training. Evidence, billing and pending screenshots are recorded in
+[`vast-53867285/capture_notes.md`](../../data/judge/qualification/vast-53867285/capture_notes.md),
+with the machine-readable integrity receipt beside it. Next, complete the remaining governance,
+training-host approval and full-run cost/spend-alarm preparation before another rental.
 The laptop's observed RTX 3050 Ti has 4 GB VRAM. Do not run steps 10–11 or upload the
 donated held-out split while preparing or qualifying the toolchain.
 
