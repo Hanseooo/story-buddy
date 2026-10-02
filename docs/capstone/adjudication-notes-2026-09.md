@@ -56,10 +56,9 @@ Recorded here so they are not mistaken for gaps:
 
 ## Limitations to carry into the write-up
 
-- Pairs where **both raters agreed on a wrong answer** never reach adjudication. The adjudicator sees
-  only the 172 conflicts, so this file cannot record — and adjudication cannot fix — an error the two
-  raters shared. One kind of shared error is visible from the labels alone and was counted: see
-  *Label audit of agreed pairs* below. Every other kind stays in this limitation.
+- Pairs where **both raters agreed on a wrong answer** do not reach the ordinary adjudication queue.
+  The ten agreed pairs selected by the separate, pre-count label audit below are the recorded exception.
+  Other shared errors remain a limitation.
 - The adjudicator is **not blind** to which rater produced which label.
 
 ## Label audit of agreed pairs
@@ -87,6 +86,56 @@ happens that a reader of the results would want to know. Do not record pair-leve
 database is the record of those.
 
 - 2026-09-23 — file created; adjudication not yet started.
+- 2026-09-30 — the owner accepted an AI-assisted, image-only review of all ten preselected label-audit
+  pairs (nine train, one validation) without independently assigning ten item-by-item labels in this
+  session. The assistant proposed Same, intact anatomy, and text-free for each; the owner approved
+  those exact values, and ten round-3 rows were inserted under the owner's adjudicator profile.
+  A read-back verified ten such rows and the original twenty ordinary rows. This is an explicit
+  deviation from independently human-adjudicated reference labels, not evidence of ten independent
+  human judgments. No held-out test pair was changed. The separate sixteen-pair exploratory training
+  exclusion remains a different decision.
+- 2026-09-29 — post-adjudication quality check of synthetic training characters
+  `syn-006:c0` (Sardo), `syn-016:c0` (General Lint), and `syn-024:c0` (Wobblejaw). This is an
+  unresolved audit flag, not a new rule or a change to any annotation, split, or exclusion list.
+  Read-only resolved-label snapshots were 4 Same / 1 Different, 2 Same / 10 Different, and
+  12 Same / 3 Different, respectively. The `syn-016:c0` snapshot corrects the mistaken claim
+  that it had zero Same pairs.
+
+  The Sardo reference has a small face on its label and two feet. Reviewed pages add arms and
+  a separate, larger face, including pages currently resolved as Same; some pages visibly contain
+  writing despite `text_free = true`. The Wobblejaw reference has no visible eyes, while reviewed
+  pages add eye-like features; row 2 above remains unconfirmed. These are reasons to recheck the
+  affected labels against the frozen, image-only rulebook, not grounds to infer that a label must
+  change from page-to-page agreement or from how the generator works. General Lint has both
+  matching and drifting pages, so a story-wide exclusion is not supported by this review.
+
+  The canonical references are generated with `fal-ai/qwen-image` and scenes with
+  `fal-ai/qwen-image-edit-2511`. Different endpoints are verified; inability of the edit model
+  to preserve a small or absent face is not. Sardo's original `s3` prompt also requests
+  "eyes wide". Its third retry says to match "human, human faces, hands" even though Sardo's
+  description has none of those features: `regenerate.py` passes all story characters to
+  `correction_clauses`, which joins their body features. This explains the retry text but cannot
+  explain drift already present on earlier attempts. Issue #99 separately records the measured
+  reference-versus-description face problem; it does not establish this scene-edit cause.
+
+  **Next check:** the study owner reviews the flagged synthetic pairs at full size against the
+  existing Step 2 and Step 5 rules, and records each suspected labelling error with its reason.
+  Submitted annotation rows are final under `annotation-surface.md` §4; the ordinary adjudication
+  path covers disagreements, not pairs on which raters agreed. This review therefore makes no
+  automatic label correction. Inspect the per-character Same/Different mix before considering a
+  separately documented training-data decision. `freeze_dataset.py` applies
+  `RunBundle.exclusions` during dataset construction, but completed `run.json` bundles are
+  immutable; adding IDs to them after generation would alter the recorded corpus.
+  Keep validation membership fixed for comparisons and preserve the registered held-out primary
+  set (§9.7). No change to the registered dataset or generator-cause conclusion is recorded here.
+
+  A separate dated input at `data/judge/intake/omit.json` lists 16
+  disputed Same-labelled synthetic training pairs from the image review: 14 with visible
+  structural differences and two Wobblejaw pages with ambiguous closed eye-like marks. The
+  study owner chose to omit all 16 from a separate exploratory training run, without deciding
+  that the two ambiguous labels are wrong. It does not edit annotations or corpus bundles.
+  The input affects a new exploratory freeze only when explicitly
+  passed to `build_dataset --freeze --train-exclusions`; the registered freeze command omits it.
 - 2026-09-24 — row 5 added on its first live case (Sardo the tin can, syn-006): arms invented, face duplicated, original face intact.
 - 2026-09-24 — row 4 added on its first live case (headless rooster, syn-001). Rows 3 and 4 were both written from conflicts seen during adjudication, which is the procedure: decide the kind once, at first sight, then apply it.
 - 2026-09-24 — label audit run: 12 agreed-Different pairs rest on clothing or style alone; 10 go to a round-3 re-label (see *Label audit of agreed pairs*).

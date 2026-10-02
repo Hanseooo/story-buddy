@@ -1,0 +1,41 @@
+{
+  "pair_id": "b052cde608442385",
+  "split": "train",
+  "provenance": "synthetic",
+  "source_relative_path": "assets/scene/syn-001--readmit-74a8712d4f5749c4b69a9112ed74062e_s0-1.png",
+  "source_sha256": "0e1cdbf033e2b06bb23842359a9ae55e74529a78fcdbf18a7b167e73961110ef",
+  "source_size": [
+    1024,
+    768
+  ],
+  "prepared_size": [
+    591,
+    443
+  ],
+  "prepared_rgb_pixels_sha256": "31af6799f29d17626583f3fb9b07217996e58bd035b2b655156f864429b5996f",
+  "upstream_trainer_commit": "7af909522a951e3ad9f022ea6f88b6755257eaa5",
+  "upstream_source_sha256": "9a7db6d36ac355b0cf4f8dca79408fa7c06c4b10f273405815b28079b53837dc",
+  "reference": {
+    "source_relative_path": "assets/ref/syn-001--readmit-74a8712d4f5749c4b69a9112ed74062e_ref-c0-1.png",
+    "source_sha256": "feb48e976e6b7da04fccdb99b59c13689566b2f5bfa3cce393f36fe3f621a1d3",
+    "prepared_rgb_pixels_sha256": "85ffd4c09a10f73242d9bcf6d8779e4ae2309e42d65c7d4fbfea72dfccc171ba"
+  },
+  "record": {
+    "pair_id": "b052cde608442385",
+    "char_id": "syn-001:c0",
+    "split": "train",
+    "provenance": "synthetic",
+    "pair_type": "pipeline",
+    "images": [
+      "assets/ref/syn-001--readmit-74a8712d4f5749c4b69a9112ed74062e_ref-c0-1.png",
+      "assets/scene/syn-001--readmit-74a8712d4f5749c4b69a9112ed74062e_s0-1.png"
+    ],
+    "differences_observed": "Present on the page: hedgehog, brown, white, small, round-bodied animal with short legs, small pointed snout with three amber eyes, spiky back, pointed nose, none.",
+    "same_character": true,
+    "label": false,
+    "anatomy_intact": true,
+    "text_free": true,
+    "failure_reasons": [],
+    "ref_verdict_status": "failed"
+  }
+}

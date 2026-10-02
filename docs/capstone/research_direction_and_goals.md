@@ -106,8 +106,9 @@ The contribution is a **pipeline**, not a model. Each element exists because a s
    This is what makes regeneration *purposeful* rather than a random re-roll. If the retry still fails, the
    higher-scoring image is kept — a child never sees a broken page (per ADR-010 in the repository, which establishes the policy of one targeted retry using the VLM's extracted failure reasons, followed by a best-of fallback to ensure a guaranteed shippable page).
 
-**The consistency judge is a vision-language model.** The study **fine-tunes a lightweight open VLM —
-`Qwen2.5-VL-7B-Instruct`, QLoRA — for the character-consistency classification task**, and evaluates its
+**The consistency judge is a vision-language model.** The study **fine-tunes an open VLM —
+`Qwen3.5-9B`, QLoRA — for the character-consistency classification task** under the
+[2026-09-30 postregistration amendment](../product/PREREGISTRATION_OBJ4.md), and evaluates its
 performance against human reference labels (Objective 4, §3). A prompted `gemma-3-27b-it` serves as the
 existing baseline the fine-tuned model is measured against. Whether the fine-tuned judge replaces the
 prompted incumbent *in the shipped product* is a separate deployment decision (ADR-018); the pipeline is
@@ -151,7 +152,7 @@ panel; it is measured separately by the ISO/IEC 25010 questionnaire (Objective 5
 
 ### 3.2 Objective 4 — Consistency Judge classification performance (the method)
 
-The fine-tuned `Qwen2.5-VL-7B-Instruct` predicts, for each held-out image pair, whether the generated scene
+The fine-tuned `Qwen3.5-9B` predicts, for each held-out image pair, whether the generated scene
 shows the **Same Character** or a **Different Character** relative to the canonical reference. Predictions are
 matched to the human reference labels by unique pair ID and scored with **precision, recall, and F1-score**;
 **F1 is the primary summary metric** because it balances precision and recall. The held-out split is
@@ -283,7 +284,7 @@ The corpus is one grade band in one country. **A tight population is a delimitat
 never-invent overrides the floor) · Story Memory Manager · Character Bible + canonical reference (≤ 2
 canonical references) · Style Preset (finite catalog; see ADR-042) · Prompt Optimizer · AI Scene Generation
 (Qwen-Image-Edit) · Consistency Judge & Targeted Regeneration (prompted judge in the product; fine-tuned
-`Qwen2.5-VL-7B` evaluated in Objective 4) · Picture Book Composition (slide composer; narration and PDF
+`Qwen3.5-9B` evaluated in Objective 4) · Picture Book Composition (slide composer; narration and PDF
 export are cut — ADR-058). Moderation stack (input text, output images, Filipino PII redaction)
 and teacher-gated, display-only classroom sharing wrap the pipeline.
 

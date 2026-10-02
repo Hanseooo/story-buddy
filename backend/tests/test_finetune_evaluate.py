@@ -1,4 +1,5 @@
 """Tests for offline judge evaluation, validation selection, access ledger, and reporting."""
+import json
 import pytest
 
 from finetune import evaluate as ev
@@ -168,8 +169,8 @@ def valid_lock(tmp_path):
     return {
         "schema_version": ev.PREDICTION_SCHEMA_VERSION,
         "bootstrap_seed": 0,
-        "base_model": "Qwen/Qwen2.5-VL-7B-Instruct",
-        "base_revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
+        "base_model": "Qwen/Qwen3.5-9B",
+        "base_revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
         "llamafactory_version": "v0.9.5",
         "llamafactory_commit": "7af909522a951e3ad9f022ea6f88b6755257eaa5",
         "deployment_seed": 0,
@@ -294,6 +295,13 @@ def test_inventory_checkpoints_discovers_and_hashes(tmp_path):
     assert len(result["candidates"]) == 1
     assert result["candidates"][0]["model_id"] == "seed0_checkpoint50"
     assert "vllm_command" in result
+    command = result["vllm_command"]
+    assert command[:5] == [
+        "vllm", "serve", "Qwen/Qwen3.5-9B", "--revision",
+        "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+    ]
+    assert json.loads(command[command.index("--default-chat-template-kwargs") + 1]) == {"enable_thinking": False}
+    assert json.loads(command[command.index("--limit-mm-per-prompt") + 1]) == {"image": 2}
     assert out.exists()
 
 
@@ -942,6 +950,7 @@ def test_deployment_never_passes_when_base_ci_includes_zero_or_recall_regresses(
 
 
 def test_vlm_observation_uses_metadata_and_shipped_prompt_for_gemma(monkeypatch):
+    from pathlib import Path
     from types import SimpleNamespace
     from contracts.story_memory import VlmVerdict
     from pipeline.consistency_check import JUDGE_PROMPT, SceneVerdict
@@ -955,7 +964,10 @@ def test_vlm_observation_uses_metadata_and_shipped_prompt_for_gemma(monkeypatch)
 
     monkeypatch.setattr("providers.judge_with_metadata", fake_judge)
     record = manifest_record("p1")
-    base = ev._vlm_observer("base", lambda path: f"uri:{path}", prompt=ev.QUESTION, schema=VlmVerdict)
+    fixture = Path(__file__).parent / "fixtures/qwen35-resize-scene.png"
+    base = ev._vlm_observer(
+        "base", lambda path: ev.image_data_uri(fixture), prompt=ev.QUESTION, schema=VlmVerdict,
+    )
     gemma = ev._vlm_observer(
         "gemma", lambda path: f"uri:{path}",
         prompt=JUDGE_PROMPT.format(name="the character"), schema=SceneVerdict, route="openrouter",

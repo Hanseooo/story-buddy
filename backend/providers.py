@@ -123,6 +123,7 @@ class EvaluationJudgeResult(Generic[T]):
     verdict: T
     confidence: float | None
     latency_ms: int
+    generation_id: str | None = None
 
 
 def _same_character_confidence(completion) -> float | None:
@@ -256,7 +257,12 @@ def judge_with_metadata(
 
     elapsed_ms = int(round((time.perf_counter_ns() - t0) / 1_000_000))
     confidence = _same_character_confidence(completion)
-    return EvaluationJudgeResult(verdict=message.parsed, confidence=confidence, latency_ms=elapsed_ms)
+    return EvaluationJudgeResult(
+        verdict=message.parsed,
+        confidence=confidence,
+        latency_ms=elapsed_ms,
+        generation_id=completion.id,
+    )
 
 
 def _fetch_completion(

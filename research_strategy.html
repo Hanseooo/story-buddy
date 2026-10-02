@@ -148,6 +148,10 @@
     </style>
   </head>
   <body>
+    <p style="padding: 12px; border: 2px solid #f59e0b; background: #fff7ed;">
+      Updated model decision: <a href="docs/product/adr/ADR-061-qwen3-5-9b-as-the-objective-4-judge-base.md">ADR-061</a>
+      amends Objective 4 to Qwen3.5-9B after registration. Use the dated protocol and research runbook for execution.
+    </p>
     <h1>StoryBuddy: Research Operations Blueprint</h1>
     <p>
       This single-file runbook covers Objective 4: manufacture a reproducible
@@ -163,7 +167,7 @@
         The task is binary character consistency: compare a canonical
         reference with a scene and classify whether they show the same
         character. The research model is
-        <code>Qwen2.5-VL-7B-Instruct</code> with QLoRA; the prompted
+        <code>Qwen3.5-9B</code> with QLoRA under the dated amendment; the prompted
         <code>gemma-3-27b-it</code> judge remains the incumbent baseline.
       </p>
       <ul>
@@ -191,7 +195,7 @@
       <ul>
         <li>
           <strong>Base Model:</strong>
-          <code>Qwen2.5-VL-7B-Instruct</code> (Apache-2.0, native multi-image
+          <code>Qwen3.5-9B</code> (Apache-2.0, multi-image
           support).
         </li>
         <li>

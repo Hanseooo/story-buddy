@@ -54,7 +54,7 @@ a causal one — there is no control or comparison arm.
 
 ### Objective 4 — Judge classification: the fine-tuned consistency judge
 
-The pipeline's vision-language consistency judge — **Qwen2.5-VL-7B-Instruct, fine-tuned with QLoRA** — performs
+The study's vision-language consistency judge — **Qwen3.5-9B, fine-tuned with QLoRA under the 2026-09-30 postregistration amendment** — performs
 binary character-consistency classification on generated scene pairs: **1 = Different Character** (the
 positive class) and **0 = Same Character**. (The schema field `same_character: bool` encodes the same
 distinction; the int/bool framing is noted once here and not belaboured elsewhere.) Its structured output

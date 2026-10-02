@@ -216,7 +216,7 @@ Product/architecture choices are in the ADRs; this is the working reference, **i
 | Backend web | FastAPI | Northflank (Singapore). ADR-031 |
 | Worker / queue | RQ worker + Redis broker | Separate service. ADR-005 |
 | Pipeline engine | LangGraph (deterministic) + `langgraph-checkpoint-postgres`. Checkpoints go over the **direct** Postgres connection (5432), not the 6543 transaction pooler | ADR-003,005,033 |
-| LLM / VLM | `mistralai/mistral-small-3.2-24b-instruct` (nodes; ~~`qwen/qwen3-32b`~~ until 2026-08-11) + judge (`gemma-3-27b-it` → fine-tuned `Qwen2.5-VL-7B` in Phase 2.5) | ADR-002 (amended 2026-08-11),004,015,018 |
+| LLM / VLM | `mistralai/mistral-small-3.2-24b-instruct` (nodes; ~~`qwen/qwen3-32b`~~ until 2026-08-11) + prompted judge `gemma-3-27b-it`; fine-tuned `Qwen3.5-9B` is the amended Objective 4 candidate and ships only if its product gate passes | ADR-002 (amended 2026-08-11),004,015,018,061 |
 | Image model | `fal-ai/qwen-image` (text→image refs & fallback) + `fal-ai/qwen-image-edit-2511` (reference-conditioned scenes) via fal.ai | ADR-001, ADR-015 |
 | Judge serving | vLLM on a scale-to-zero GPU container (Modal). OpenAI-compatible — `JUDGE_BASE_URL` is the swap | ADR-019 |
 | Model access layer | `backend/providers.py` — thin functions, one impl each. **The only file naming a *provider*** (model *ids* are env vars read in `app/config.py` — ADR-015: "swapping a model is an env var; swapping a provider is one file") | ADR-015 |

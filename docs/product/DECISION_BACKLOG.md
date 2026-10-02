@@ -8,8 +8,8 @@ spec edit). Per `CLAUDE.md §1`, architectural decisions are made in their own s
 inline while building a module. When a row is decided: write the ADR, delete the row from
 this file (git keeps the history), and update the affected spec in the same change.
 
-**ADR numbering.** ADRs are append-only sequential; the last assigned number is **ADR-044**, so the
-next free number is **ADR-045**. Numbers are assigned *when the ADR is written*, not reserved here —
+**ADR numbering.** ADRs are append-only sequential; the last assigned number is **ADR-061**, so the
+next free number is **ADR-062**. Numbers are assigned *when the ADR is written*, not reserved here —
 the items below use stable `D-*` ids instead, because the write order can shift.
 
 **Two non-decisions, recorded so they don't get reopened by reflex:**
@@ -199,6 +199,17 @@ precede the reveal, so the node, migration and endpoint land together with it. `
   decide among fail-closed job failure, a required human hold at reveal, or the existing fail-open
   fallback. Resolve only with child-facing failure/recovery and image-budget consequences specified
   together.
+
+---
+
+## Tier 2i — opened by live trace privacy audit (2026-09-26)
+
+- **D-R · How intentional public research traces omit child story text.** One live export
+  contains `input.raw_text` in LangGraph state, while `backend/worker/run_job.py` calls
+  `set_trace_as_public()` for the same trace. Keep the intended public link, and decide where
+  to mask the callback payload or project only approved research fields. Verify the chosen
+  behavior on the actual public page and preserve the PII-before-storage rule. See
+  `docs/capstone/pipeline-gate-audit-2026-09.md`; do not record a story or trace URL here.
 
 ---
 

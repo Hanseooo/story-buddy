@@ -65,8 +65,7 @@ changes what it reports.
 
 ### 1.2 Primary endpoint (§7.1) — the "did the fine-tune work" gate
 
-> **ΔF1 on the `different_character` class, held-out test set, fine-tuned Qwen2.5-VL-7B vs. zero-shot
-> Qwen2.5-VL-7B.** The gate passes only if the **95% CI on ΔF1 excludes zero.**
+> ~~**ΔF1 on the `different_character` class, held-out test set, fine-tuned Qwen2.5-VL-7B vs. zero-shot Qwen2.5-VL-7B.**~~ See the 2026-09-30 model amendment below. The gate passes only if the **95% CI on ΔF1 excludes zero.**
 
 Same architecture, same weights, same prompt; the adapter is the only difference. This is a **deployment
 build gate**, and — per ADR-008 — it may *also* be reported as Objective 4's optional secondary comparison.
@@ -274,9 +273,9 @@ comparison, the non-human slice, and κ.
 
 | Rung | Condition | Requirement met? | Outcome (engineering) | Ship? |
 |---|---|---|---|---|
-| **A** | Beats base **and** beats prompted Gemma | Yes | Specialized 7B judge outperforms the prompted 27B incumbent on our in-domain held-out set, at lower latency and zero marginal cost — a clear swap | Yes |
-| **B** | Beats base; within **δ = 3** F1 of Gemma; **no recall regression** | Yes | Specialization recovers 27B-level quality at 7B, self-hostable, zero marginal cost — non-inferiority satisfied, swap | Yes |
-| **C** | Beats base; loses to Gemma by **> δ** | **Yes** | Fine-tuning worked, but specialization at 7B did not close the gap. Keep the incumbent; note it as a limitation, not a finding | No — keep the prompted judge |
+| **A** | Beats base **and** beats prompted Gemma | Yes | ~~Specialized 7B judge outperforms the prompted 27B incumbent on our in-domain held-out set, at lower latency and zero marginal cost — a clear swap~~ See the 2026-09-30 model amendment; latency and cost are measured, not presumed. | Yes |
+| **B** | Beats base; within **δ = 3** F1 of Gemma; **no recall regression** | Yes | ~~Specialization recovers 27B-level quality at 7B, self-hostable, zero marginal cost — non-inferiority satisfied, swap~~ See the 2026-09-30 model amendment; non-inferiority still decides the swap. | Yes |
+| **C** | Beats base; loses to Gemma by **> δ** | **Yes** | ~~Fine-tuning worked, but specialization at 7B did not close the gap.~~ Fine-tuning worked, but the amended base did not close the gap. Keep the incumbent; note it as a limitation, not a finding. | No — keep the prompted judge |
 | **D** | Does **not** beat base | No | The LoRA did nothing. A **bug report, not a result** | No — debug |
 
 **δ = 3 F1 points**, chosen because it sits inside one annotator's disagreement band on ~60 minority-class
@@ -405,7 +404,7 @@ fails to parse 20% of the time is a finding about that baseline, not a reason to
 
 ### 9.2 The four baselines — all of them, no substitutions
 
-Zero-shot `Qwen2.5-VL-7B` (primary comparator) · prompted `gemma-3-27b-it` reason-then-score (product gate) ·
+~~Zero-shot `Qwen2.5-VL-7B` (primary comparator)~~ (superseded by the 2026-09-30 model amendment) · prompted `gemma-3-27b-it` reason-then-score (product gate) ·
 CLIP image–image cosine (control) · **DINOv2 cosine** (control). Non-negotiable (`judge-finetune.md` §7.3).
 
 **Pre-committed, so it cannot be argued at the defense:** CLIP and DINOv2 are **scientific controls, not
@@ -475,8 +474,8 @@ document's timestamp.
 
 | Pin | Value | Status |
 |---|---|---|
-| Base model | `Qwen/Qwen2.5-VL-7B-Instruct` | Fixed (ADR-018) |
-| Base model **revision hash** | `cc594898137f460bfe9f0759e9844b3ce807cfb5` | ✅ Fixed 2026-08-25 before training or held-out access. |
+| Base model | ~~`Qwen/Qwen2.5-VL-7B-Instruct`~~ | ~~Fixed (ADR-018)~~ Superseded by the 2026-09-30 model amendment. |
+| Base model **revision hash** | ~~`cc594898137f460bfe9f0759e9844b3ce807cfb5`~~ | ~~✅ Fixed 2026-08-25 before training or held-out access.~~ Superseded by the 2026-09-30 model amendment. |
 | LoRA rank / alpha | **16 / 32** | Fixed (`train_qlora.yaml`, §6.3) |
 | `lora_target` | `all` | Fixed |
 | Quantization | 4-bit, `bnb` (QLoRA) | Fixed |
@@ -908,13 +907,13 @@ recognises it by the adjudicator profile rather than by round number.
 **There is no round 2 and there will be none.** The test–retest design registered on 2026-08-29 required
 one rater labelling twice; two raters labelling once each answers the same question better and makes
 round 2 meaningless. Round 2 is shut on this database in code (`7fe30ae`, `0f55c06`), not merely left
-unused. The round-3 adjudication path and `ADJUDICATION_ROUND` stay in the code and its tests; they are
-contingency for a one-rater deployment, not part of this campaign.
+  unused. ~~The round-3 adjudication path and `ADJUDICATION_ROUND` stay in the code and its tests; they are
+  contingency for a one-rater deployment, not part of this campaign.~~ See the dated 2026-09-30 deviation below.
 
-Ground truth is therefore: the owner's adjudicated label where the two raters disagreed, and the agreed
+~~Ground truth is therefore: the owner's adjudicated label where the two raters disagreed, and the agreed
 label otherwise. No pair is resolved by majority, by the owner's own opinion on an agreed pair, or by a
 third ordinary rater; `annotation_truth` raises rather than accepting an adjudicator row on an agreed
-pair.
+pair.~~ See the dated 2026-09-30 deviation below.
 
 **2. The reported agreement is inter-rater, and the JSON key is a misnomer.**
 
@@ -970,9 +969,9 @@ Seen during labelling and carried into the write-up's limitations:
   one page was drawn as pixel art under a non-pixel preset, so the premise does not always hold. Style
   is not identity and nothing gates on it; recorded as a limitation.
 
-Pairs where the raters agreed on a wrong answer are never surfaced to the adjudicator, by design. The
+~~Pairs where the raters agreed on a wrong answer are never surfaced to the adjudicator, by design. The
 adjudicator sees only the 172 conflicts. This bounds what adjudication can fix and is stated in the
-write-up.
+write-up.~~ See the dated 2026-09-30 deviation below.
 
 **5. Sensitivity analysis, declared here, with its artefact ordered before the numbers.**
 
@@ -1020,3 +1019,70 @@ ladder (§6), the one-read test-set policy (§7), the exclusions rule (§9.7) an
 (§10) all stand exactly as registered. This amendment changes who labels, what the agreement number is
 called and what is additionally reported — nothing about what the judge is scored against or how the
 result is decided.
+
+### 2026-09-30 — Agreed-pair label audit and AI-assisted adjudication (post-label deviation)
+
+This is a disclosure after ordinary labels existed, not a new pre-registered decision. On 2026-09-24,
+the rule in `docs/capstone/adjudication-notes-2026-09.md` selected agreed-Different pairs whose only
+reasons were Wrong Clothing or Wrong Style. The query found 12; two held-out test pairs already had
+conflicts and followed ordinary adjudication. The remaining ten (nine train, one validation) were
+listed in `annotation_truth.AUDIT_PAIRS`, making the freeze require a round-3 row for each. Their
+round-1 labels were kept unchanged.
+
+On 2026-09-30, the assistant reviewed the ten reference/scene pairs without fetching the raters'
+label values and proposed Same, intact anatomy, and text-free for every pair. The study owner accepted
+those values without independently assigning item-by-item labels in this session. Ten round-3 rows
+were then inserted under the owner's adjudicator profile; read-back confirmed the ten new rows and
+twenty unchanged ordinary rows. These ten final labels are **AI-assisted and owner-approved**, not
+independently human-adjudicated. The prior 2026-09-23 procedure above did not permit adjudication
+of agreed pairs, so this is a protocol deviation that must be reported with the results. It changes
+nine training labels and one validation label from the ordinary agreed value. It changes no held-out
+test label or test membership, and does not alter the registered evaluation endpoints or thresholds.
+
+The sixteen disputed synthetic training pairs listed in `data/judge/intake/omit.json` are a separate,
+opt-in exploratory training exclusion. They are not removed from the registered freeze. Any comparison
+using that exploratory freeze must be named exploratory and must retain the same validation and test
+membership as the registered freeze.
+
+### 2026-09-30 — Qwen3.5-9B replaces the Objective 4 fine-tune base (postregistration model deviation)
+
+**Decision and timing.** The owner accepted [ADR-061](./adr/ADR-061-qwen3-5-9b-as-the-objective-4-judge-base.md)
+on 2026-09-30, after human labels, adjudication, and the registered dataset freeze existed. This amendment
+replaces the originally registered `Qwen/Qwen2.5-VL-7B-Instruct` base and its revision
+`cc594898137f460bfe9f0759e9844b3ce807cfb5` with `Qwen/Qwen3.5-9B` at the [pinned revision](https://huggingface.co/Qwen/Qwen3.5-9B/commit/c202236235762e1c871ad0ccb60c8ee5ba337b9a)
+`c202236235762e1c871ad0ccb60c8ee5ba337b9a`. The original base and revision remain struck through
+in §10 above and visible in ADR-018. The owner preferred the newer open-weight multimodal base before
+the October defense. Neither general model-card benchmarks nor the exploratory pilot proves a gain on
+this task. The resulting analysis is **postregistration amended**, not the unchanged original endpoint.
+
+**What had already been seen.** Two ordinary raters had labelled the corpus, conflicts had been
+adjudicated, and ten agreed-pair rows had received owner-approved AI-assisted adjudication as disclosed
+above. The registered freeze contains 484 training, 86 validation, and 329 held-out test pairs. A
+separate exploratory freeze omits 16 disputed synthetic training pairs and does not change validation
+or test membership. A 24-pair synthetic **training** pilot had tested prompted Gemma-3 and Qwen3.5 on
+reference/scene identity. Gemma parsed 23/24 calls and Qwen3.5 parsed 18/24; among 17 jointly parsed
+pairs, each matched 9 stored labels. Qwen3.5 used mixed OpenRouter providers. These figures are neither
+a controlled base-model fine-tuning comparison nor held-out performance. The project record contains no
+held-out model result at this decision point; held-out human annotation/adjudication did occur. The
+held-out split remains unavailable for model, prompt, checkpoint, or fallback selection.
+
+**Amended endpoint and pins.** §1.2's base-versus-tuned gate now means ΔF1 on the
+`different_character` class, **fine-tuned Qwen3.5-9B versus zero-shot Qwen3.5-9B at the same pinned
+revision** on the same held-out pairs. The two arms use the same two-image preprocessing, prompt,
+direct-answer/non-thinking response mode, and temperature-zero decoding; the adapter alone differs.
+The 95% CI exclusion-of-zero rule and character-clustered analysis are unchanged. §1.3's mandatory
+zero-shot comparator is now Qwen3.5-9B. The fine-tuned judge's absolute precision, recall, and F1
+against human labels remain Objective 4's reported result. The prompted Gemma-3 product comparator,
+δ = 3 F1-point non-inferiority rule, no-recall-regression requirement, other baselines, three seeds,
+split membership, validation-only checkpoint selection, and one-read held-out policy are unchanged.
+The registered freeze remains the primary training dataset; the 16-pair filtered freeze remains
+exploratory. No endpoint is added.
+
+**Execution boundary.** ~~The training and evaluation code still pins Qwen2.5. It must be aligned with
+this amendment, and~~ The ADR-061 code migration is now implemented; qualification is pending under the
+[research runbook](../capstone/research_runbook.md#qwen35-host-qualification). Two-image preprocessing,
+an actual QLoRA step with measured peak GPU memory, and
+base/adapter inference must qualify before the full run. If qualification fails, stop for another
+recorded decision; do not silently use the old base. This amendment does not change the production
+prompted judge, safety classifiers, text model, reference generator, or scene editor. Their C3 issues
+remain separate, and a later generator change creates a new image distribution for the judge.

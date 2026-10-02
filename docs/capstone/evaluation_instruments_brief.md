@@ -180,8 +180,8 @@ outside the scope of this brief, but flagged here.)*
 
 **Judge classification — now Objective 4 in full, not a descriptive footnote.**
 
-- **Model:** the consistency judge, **Qwen2.5-VL-7B-Instruct fine-tuned with QLoRA** (the one sanctioned LoRA,
-  ADR-016→018), performs binary character-consistency classification: **1 = Different Character** (positive
+- **Model:** the consistency judge, **Qwen3.5-9B fine-tuned with QLoRA** (the one sanctioned LoRA,
+  ADR-016→018 as amended by ADR-061), performs binary character-consistency classification: **1 = Different Character** (positive
   class), **0 = Same Character**.
 - **Metrics:** **precision, recall, and F1-score**, with **F1 as the primary summary metric**, computed
   against human-established reference labels.

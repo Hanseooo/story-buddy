@@ -8,7 +8,6 @@ The metric is F1 on `different_character` — the minority class, the class the 
 on, and the class where a miss ships a broken page to a child (§3.3). `ManifestRecord.label` is
 already that class; it is read, never re-derived (`build_dataset.py` owns the inversion).
 """
-import base64
 import hashlib
 import json
 import logging
@@ -36,19 +35,16 @@ from finetune.evaluation_metrics import (
     prf1,
 )
 from finetune.manifest import ManifestError, ManifestRecord, read_manifest
+from finetune.image_preprocessing import ImagePreparationError, image_data_uri, prepare_qwen_image_uri
 from finetune.to_llamafactory import QUESTION
+from finetune.train import BASE_MODEL, BASE_REVISION, LLAMAFACTORY_VERSION, LLAMAFACTORY_COMMIT, SEEDS
 
 
 log = logging.getLogger(__name__)
 
-BASE_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct"
-BASE_REVISION = "cc594898137f460bfe9f0759e9844b3ce807cfb5"
-LLAMAFACTORY_VERSION = "v0.9.5"
-LLAMAFACTORY_COMMIT = "7af909522a951e3ad9f022ea6f88b6755257eaa5"
 BOOTSTRAP_SEED = 0
 PREDICTION_SCHEMA_VERSION = 2
 REPORT_SCHEMA_VERSION = 1
-SEEDS = (0, 1, 2)
 REPORT_JUDGES = (
     "seed_0", "seed_1", "seed_2", "zero_shot_base", "prompted_gemma",
     "clip_cosine", "dinov2_cosine",
@@ -293,6 +289,8 @@ def inventory_checkpoints(runs_root: Path, out_path: Path | None = None) -> dict
     candidates.sort(key=lambda c: (c["seed"], c["step"]))
     vllm_command = [
         "vllm", "serve", BASE_MODEL, "--revision", BASE_REVISION,
+        "--default-chat-template-kwargs", '{"enable_thinking": false}',
+        "--limit-mm-per-prompt", '{"image": 2}',
         "--enable-lora", "--max-lora-rank", "16", "--lora-modules",
         *[f"{item['model_id']}={item['path']}" for item in candidates],
     ]
@@ -522,6 +520,8 @@ def capture_predictions(
                     checkpoint_id=checkpoint_id,
                 )
             )
+        except ImagePreparationError:
+            raise
         except Exception as exc:
             log.warning("malformed output for pair %s: %s", record.pair_id, exc)
             rows.append(
@@ -614,6 +614,8 @@ def _vlm_observer(
 
     def predict(record: ManifestRecord) -> JudgeObservation:
         urls = [image_loader(path) for path in record.images]
+        if route == "judge":
+            urls = [prepare_qwen_image_uri(uri) for uri in urls]
         result = judge_with_metadata(prompt, urls, schema, model=model, route=route)
         prediction = not result.verdict.same_character
         score = None if result.confidence is None else (
@@ -635,7 +637,7 @@ def finetuned_judge(image_loader: Callable[[str], str], model: str = "judge") ->
 
 
 def zero_shot_base_judge(image_loader: Callable[[str], str],
-                         model: str = "Qwen/Qwen2.5-VL-7B-Instruct") -> Observer:
+                         model: str = BASE_MODEL) -> Observer:
     """§7.1's PRIMARY comparator: same architecture, same weights, same prompt, no adapter."""
     return _vlm_observer(model, image_loader, prompt=QUESTION, schema=VlmVerdict)
 
@@ -715,7 +717,7 @@ def _embedding_observation(similarity: float, threshold: float, latency_ms: int)
 
 BASELINES: dict[str, str] = {
     "finetuned": "the fine-tuned LoRA (§7.1 subject)",
-    "zero_shot_base": "zero-shot Qwen2.5-VL-7B — the primary comparator (§7.1)",
+    "zero_shot_base": "zero-shot Qwen3.5-9B — the amended primary comparator (ADR-061, §7.1)",
     "prompted_gemma": "prompted gemma-3-27b-it — the product gate (§7.2)",
     "clip_cosine": "CLIP image-image cosine — scientific control (§7.3)",
     "dinov2_cosine": "DINOv2 cosine — scientific control (§7.3)",
@@ -730,10 +732,7 @@ def capture_validation(freeze_dir: Path, candidates_path: Path, predictions_dir:
     predictions_dir.mkdir(parents=True, exist_ok=True)
 
     def image_uri(relative_path: str) -> str:
-        path = freeze_dir / relative_path
-        suffix = path.suffix.lower()
-        mime = "image/png" if suffix == ".png" else "image/webp"
-        return f"data:{mime};base64," + base64.b64encode(path.read_bytes()).decode()
+        return image_data_uri(freeze_dir / relative_path)
 
     def pil_image(relative_path: str):
         from PIL import Image
@@ -1104,7 +1103,9 @@ def run_heldout(
                     adapter_id=ckpt_info["path"], checkpoint_id=ckpt_info["checkpoint_id"],
                 )
             elif rows is None:
-                judge_callable = finetuned_judge(image_loader or (lambda p: p), model=ckpt_info["model_id"])
+                judge_callable = finetuned_judge(
+                    image_loader or (lambda p: image_data_uri(freeze_dir / p)), model=ckpt_info["model_id"],
+                )
                 rows = capture_predictions(
                     test_records, judge_id,
                     judge_callable,
@@ -1132,7 +1133,9 @@ def run_heldout(
                 model_id=BASE_MODEL, prompt_version=lock.prompt_version,
             )
         elif rows is None:
-            judge_callable = zero_shot_base_judge(image_loader or (lambda p: p), model=BASE_MODEL)
+            judge_callable = zero_shot_base_judge(
+                image_loader or (lambda p: image_data_uri(freeze_dir / p)), model=BASE_MODEL,
+            )
             rows = capture_predictions(
                 test_records, "zero_shot_base",
                 judge_callable,
@@ -1159,7 +1162,7 @@ def run_heldout(
                 model_id=lock.vlm_judge_model, prompt_version=lock.prompt_version,
             )
         elif rows is None:
-            judge_callable = prompted_gemma_judge(image_loader or (lambda p: p))
+            judge_callable = prompted_gemma_judge(image_loader or (lambda p: image_data_uri(freeze_dir / p)))
             rows = capture_predictions(
                 test_records, "prompted_gemma",
                 judge_callable,

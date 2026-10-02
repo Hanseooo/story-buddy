@@ -8,22 +8,22 @@ from finetune import train as tr
 from finetune.manifest import ManifestError, ManifestRecord
 
 
-def test_train_yaml_pins_match_frozen_pre_registration():
+def test_train_yaml_pins_match_adr061_amended_pre_registration():
     yaml_path = Path(__file__).resolve().parent.parent / "finetune" / "train_qlora.yaml"
     data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
 
-    assert data["model_name_or_path"] == "Qwen/Qwen2.5-VL-7B-Instruct"
-    assert data["model_revision"] == "cc594898137f460bfe9f0759e9844b3ce807cfb5"
+    assert data["model_name_or_path"] == "Qwen/Qwen3.5-9B"
+    assert data["model_revision"] == "c202236235762e1c871ad0ccb60c8ee5ba337b9a"
     assert data["cutoff_len"] == 2048
-    assert data["template"] == "qwen2_vl"
+    assert data["template"] == "qwen3_5_nothink"
     assert data["lora_rank"] == 16
     assert data["lora_alpha"] == 32
     assert data["report_to"] == "none"
 
 
 def test_constants_match_across_train_and_evaluate():
-    assert tr.BASE_MODEL == ev.BASE_MODEL == "Qwen/Qwen2.5-VL-7B-Instruct"
-    assert tr.BASE_REVISION == ev.BASE_REVISION == "cc594898137f460bfe9f0759e9844b3ce807cfb5"
+    assert tr.BASE_MODEL == ev.BASE_MODEL == "Qwen/Qwen3.5-9B"
+    assert tr.BASE_REVISION == ev.BASE_REVISION == "c202236235762e1c871ad0ccb60c8ee5ba337b9a"
     assert tr.LLAMAFACTORY_VERSION == ev.LLAMAFACTORY_VERSION == "v0.9.5"
     assert tr.LLAMAFACTORY_COMMIT == ev.LLAMAFACTORY_COMMIT == "7af909522a951e3ad9f022ea6f88b6755257eaa5"
     assert tr.SEEDS == ev.SEEDS == (0, 1, 2)
@@ -90,8 +90,8 @@ def test_heldout_fails_closed_if_test_manifest_modified_after_lock(tmp_path):
     valid_lock = {
         "schema_version": ev.PREDICTION_SCHEMA_VERSION,
         "bootstrap_seed": 0,
-        "base_model": "Qwen/Qwen2.5-VL-7B-Instruct",
-        "base_revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
+        "base_model": "Qwen/Qwen3.5-9B",
+        "base_revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
         "llamafactory_version": "v0.9.5",
         "llamafactory_commit": "7af909522a951e3ad9f022ea6f88b6755257eaa5",
         "deployment_seed": 0,

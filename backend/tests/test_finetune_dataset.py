@@ -1194,7 +1194,11 @@ def test_freeze_dataset_rejects_production_without_controlled_inputs(tmp_path):
         bd.freeze_dataset(data_dir, tmp_path / "freeze")
 
 
-def test_freeze_dataset_cli_passes_controlled_inputs(tmp_path):
+@pytest.mark.parametrize(
+    ("extra_args", "extra_kwargs"),
+    [([], {}), (["--train-exclusions", "omit.json"], {"train_exclusions_path": Path("omit.json")})],
+)
+def test_freeze_dataset_cli_passes_controlled_inputs(tmp_path, extra_args, extra_kwargs):
     report = fd.FreezeReport(
         dataset_sha256="hash123",
         counts={},
@@ -1213,6 +1217,7 @@ def test_freeze_dataset_cli_passes_controlled_inputs(tmp_path):
             "--out", str(tmp_path / "freeze"),
             "--donated-intake", "donated.json",
             "--selection", "selection.json",
+            *extra_args,
         ])
 
     assert ret == 0
@@ -1221,6 +1226,7 @@ def test_freeze_dataset_cli_passes_controlled_inputs(tmp_path):
         tmp_path / "freeze",
         donated_intake_path=Path("donated.json"),
         selection_path=Path("selection.json"),
+        **extra_kwargs,
     )
 
 def test_build_dataset_computes_accurate_statistics(tmp_path):

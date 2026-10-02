@@ -308,9 +308,19 @@ inside that immutable directory. It fails on:
 Because production `StoryMemory.char_id` values are story-local (`c0`, `c1`, …), export qualifies the
 manifest lineage key as `<opaque story_id>:<char_id>` before corpus-wide split and style checks.
 
-Any deliberate pair exclusion is recorded in its immutable run bundle before freeze; migration-flagged
-pilot pairs are the only external exclusions. The freeze rejects unknown exclusions and reports the exact
-excluded pair IDs.
+In the registered freeze, any deliberate pair exclusion is recorded in its immutable run bundle
+before freeze; migration-flagged pilot pairs are the only external exclusions. The freeze rejects
+unknown exclusions and reports the exact excluded pair IDs.
+
+An **exploratory** freeze may additionally pass `--train-exclusions <JSON>` after annotation. The
+dated JSON names its `synthetic_train_only` scope, a nonblank criterion and unique pair IDs. Freeze
+accepts only existing synthetic training pairs whose resolved label is Same, leaves completed bundles
+and annotation rows untouched, copies the exact JSON bytes into the new freeze with a SHA-256 in
+`freeze_report.json`, and reports the IDs with other exclusions. Constructed negatives are rebuilt
+from retained natural training pairs, so they may change too. This opt-in output uses a new freeze
+directory and is reported as exploratory; it does not replace the registered dataset or change
+validation or held-out membership. The normal freeze command still applies only bundle and pilot
+exclusions.
 
 The immutable directory contains the exact controlled `dataset_selection.json` bytes and the freeze rejects
 any change between selection validation and snapshot installation. The freeze report records dataset SHA-256,

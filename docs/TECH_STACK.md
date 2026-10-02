@@ -17,7 +17,7 @@ or an SDK call at a call site, stop and read §5 first.
 | Text pipeline (analyze/segment/prompts) | `mistralai/mistral-small-3.2-24b-instruct` | Apache-2.0 | OpenRouter | `settings.text_model` | ADR-002 (amended 2026-08-11, 2026-08-12) | Phase 1 — model unchanged by the 08-12 amendment; it failed strict-schema fidelity on **Parasail** (row `558afb6d`), so `providers.TEXT_PROVIDERS` pins the route and `_chat` re-asks once. |
 | ~~Text pipeline~~ (superseded 2026-08-11) | ~~`qwen/qwen3-32b`~~ | Apache-2.0 | OpenRouter | — | ADR-002 | Passed Probe 3 (2026-07-29) and still failed in production: emitted prose under `response_format`, prod job `af068baf`. `require_parameters: true` selects providers that *accept* structured output, not ones that *honour* it. |
 | Consistency judge (prompted) | `google/gemma-3-27b-it` | Gemma license (not OSI) | OpenRouter | `settings.vlm_judge_model` | ADR-002, ADR-004 | Phase 1 |
-| Consistency judge (fine-tuned, replaces prompted if it ships) | `Qwen2.5-VL-7B-Instruct` + QLoRA adapter | Apache-2.0 | Modal (vLLM, scale-to-zero), reached via `settings.judge_base_url` | `settings.judge_base_url` / `settings.judge_api_key` | ADR-018, ADR-019 | Phase 2.5 |
+| Consistency judge (fine-tuned, replaces prompted only if gate and serving qualification pass) | `Qwen3.5-9B` + QLoRA adapter; [qualification procedure and status](capstone/research_runbook.md#qwen35-host-qualification) | Apache-2.0 | Modal (vLLM, scale-to-zero) target; serving unqualified | `settings.judge_base_url` / `settings.judge_api_key` | ADR-018, ADR-019, ADR-061 | Phase 2.5 |
 | Canonical character reference (text→image) | `fal-ai/qwen-image` | Apache-2.0 | fal.ai | `settings.fal_image_model` | ADR-001, ADR-007 | Phase 1 |
 | Scene generation (reference-conditioned edit) | `fal-ai/qwen-image-edit-2511` | Apache-2.0 | fal.ai | `settings.fal_image_edit_model` | ADR-001 | Phase 1 |
 | Input-text moderation (primary) | `meta-llama/llama-guard-4-12b` 0.6B | Apache-2.0 | OpenRouter | `settings.moderation_primary_model` | ADR-011 (revised 2026-07-21c), ADR-032 | Phase 2 |
@@ -267,9 +267,9 @@ Be honest — these are open, not silently resolved:
   would not change, because every vendor call is already isolated in `providers.py`.
 - **CyberLab training GPU VRAM is unconfirmed.** `docs/capstone/hardware_and_hosting.md` §3a: the tentative
   spec "RTX 4060, 32 GB" almost certainly means an RTX 4060 GPU (8 GB VRAM, 16 GB on a 4060 Ti) + 32 GB
-  *system* RAM — not 32 GB VRAM. QLoRA on a 7B VLM with two-image inputs needs ~16 GB+ VRAM, so an 8 GB
-  card likely OOMs. The rented RTX 4090/A100 fallback (~$5–15, ADR-018) exists precisely for this case —
-  verify the exact GPU model and VRAM before committing the training run.
+  *system* RAM — not 32 GB VRAM. The earlier two-image 7B recipe was estimated at ~16 GB+ VRAM,
+  so an 8 GB card is unsuitable for the amended Qwen3.5-9B run. ADR-061 requires a measured
+  two-image QLoRA step before the host is qualified; the earlier 4090 cost estimate is not a 9B quote.
 - ~~**The output-image safety gate is entirely unbuilt.**~~ — resolved 2026-08-02 by `moderation-stack`:
   `input_gate` is a real implementation (meta-llama/llama-guard-4-12b OpenRouter API + Presidio PII redaction,
   concurrent, with an OpenRouter backstop), `char_ref_mod` gates every canonical reference before the

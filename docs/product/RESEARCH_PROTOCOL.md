@@ -148,8 +148,9 @@ validators, not by a naive-reader recall session.
 
 ### Objective 4 — judge classification
 
-- **Model.** **Qwen2.5-VL-7B-Instruct**, fine-tuned with **QLoRA**, binary character-consistency
-  classification.
+- **Model.** ~~**Qwen2.5-VL-7B-Instruct**, fine-tuned with **QLoRA**, binary character-consistency
+  classification.~~ **Qwen3.5-9B**, fine-tuned with QLoRA for the same task, under the
+  [2026-09-30 postregistration amendment](./PREREGISTRATION_OBJ4.md) and ADR-061.
 - **Labels.** `1 = Different Character`, `0 = Same Character` (the `different_character` class is the
   positive class; the schema field `same_character: bool` encodes the same distinction — one int, one
   bool, same fact, stated once so it never needs re-deriving).

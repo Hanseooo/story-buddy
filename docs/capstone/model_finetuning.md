@@ -6,14 +6,14 @@ The core control loop of StoryBuddy relies on a **Vision-Language Model (VLM) Ju
 
 Prompting large generalist models has a known ceiling (~79.6% human agreement on established benchmarks like DreamBench++), and open-weight models natively lack strong instance identity evaluation capabilities, especially for stylized or non-human characters. To address this, the project fine-tunes a specialized judge model. 
 
-The selected base model is **`Qwen2.5-VL-7B-Instruct`** (Apache-2.0, native multi-image support). Fine-tuning a 7B model offers a structural win: it delivers faster latency and zero marginal cost compared to prompting a 27B incumbent, while focusing specifically on the stylized children's book domain.
+The selected base model is **`Qwen3.5-9B`** (Apache-2.0, multi-image input) under the [2026-09-30 postregistration amendment](../product/PREREGISTRATION_OBJ4.md). Fine-tuning targets stylized children's book character identity. Latency, serving cost and accuracy gains over the prompted incumbent remain to be measured.
 
 ---
 
 ## 2. Fine-Tuning Approach
 
 ### 2.1 Methodology
-The model is fine-tuned using **QLoRA** (Quantized Low-Rank Adaptation). This approach fits comfortably on a single 24GB consumer GPU (e.g., RTX 4090) and requires only 1–2 hours of training. It produces a lightweight adapter patch over frozen base weights, keeping training cheap and the base model easily swappable.
+The model is fine-tuned using **QLoRA** (Quantized Low-Rank Adaptation). Two-image Qwen3.5 training fit, peak memory, time and cost must be qualified on the intended GPU before the three-seed run. It produces an adapter over frozen base weights.
 
 ### 2.2 Dataset Construction
 There is no existing off-the-shelf dataset for pairwise identity judgments of stylized, non-human characters. Therefore, a custom dataset is manufactured from the pipeline's own output over the donated corpus. Exact image, pair, and cost totals are **planning targets** in `docs/specs/judge-finetune.md`, finalized against the character yield of the ten primary stories; Objective-4 statistical power is governed by the number of held-out **characters**, not the raw pair total.
@@ -41,7 +41,7 @@ The evaluation architecture separates the *reported research finding* (**Objecti
 
 ### 4.1 Baselines
 The fine-tuned model is evaluated against four strict baselines:
-1. **Zero-shot `Qwen2.5-VL-7B`**: The primary comparator. This establishes that the LoRA adapter, rather than the base weights, is responsible for any performance gains.
+1. **Zero-shot `Qwen3.5-9B` at the same pinned revision**: The primary comparator. This establishes whether the LoRA adapter, rather than the base weights, is responsible for any performance gains.
 2. **Prompted `gemma-3-27b-it` (Reason-then-score)**: The product incumbent. The fine-tuned model must remain competitive with this larger model to be shipped.
 3. **CLIP Image-Image Cosine**: A scientific control representing standard image embedding similarity.
 4. **DINOv2 Cosine**: A stronger scientific control representing self-supervised instance identity embeddings. *(Note: While DINOv2 may be strong, it emits a scalar and cannot provide the categorical failure reasons required by the regeneration controller).*
@@ -61,8 +61,8 @@ To prevent moving goalposts, the ship/no-ship decision is categorized into a pre
 
 | Rung | Condition | Build interpretation (not a reported claim) | Ship to Production? |
 |---|---|---|---|
-| **A** | Beats base **and** beats prompted Gemma | Specialized 7B judge outperforms a prompted 27B incumbent in-domain, at lower latency. | **Yes** |
-| **B** | Beats base; within 3 F1 points of Gemma; no recall regression | Specialization recovers 27B-level quality at 7B. | **Yes** |
+| **A** | Beats base **and** beats prompted Gemma | Tuned Qwen3.5 outperforms the prompted incumbent in-domain; latency is measured separately. | **Yes** |
+| **B** | Beats base; within 3 F1 points of Gemma; no recall regression | Tuned Qwen3.5 is non-inferior within the registered margin. | **Yes** |
 | **C** | Beats base; loses to Gemma by > 3 F1 points | Fine-tuning worked, but the bottleneck is data, not capacity. | **No** (Keep prompted judge) |
 | **D** | Does not beat base | The LoRA adapter did nothing. (A bug, not a result). | **No** (Debug) |
 

@@ -662,6 +662,10 @@ a new `obj4-v2`. Per-round reasons and timestamps are not in the freeze, so expo
 
 ### Phase D — train and evaluate
 
+The D1 hardware estimate below predates the accepted ADR-061 Qwen3.5-9B base change. It describes
+the original 7B plan, not a qualified GPU size for the amended study. Measure a two-image QLoRA
+step and peak memory before selecting the host.
+
 **D1 · Pick the GPU.** Your current laptop cannot do this: RTX 3050 Ti, 4 GB VRAM. Qwen2.5-VL-7B at
 4-bit is ~5 GB of weights before activations or the vision tower.
 

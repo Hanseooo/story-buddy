@@ -337,6 +337,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--data", type=Path, default=Path("data/judge/corpus"))
     parser.add_argument("--donated-intake", type=Path, default=None)
     parser.add_argument("--selection", type=Path, default=None)
+    parser.add_argument("--train-exclusions", type=Path, default=None)
     parser.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
     try:
@@ -351,12 +352,13 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.out is None:
             parser.error("--freeze requires --out")
-        report = freeze_dataset(
-            args.data,
-            args.out,
-            donated_intake_path=args.donated_intake,
-            selection_path=args.selection,
-        )
+        freeze_options = {
+            "donated_intake_path": args.donated_intake,
+            "selection_path": args.selection,
+        }
+        if args.train_exclusions is not None:
+            freeze_options["train_exclusions_path"] = args.train_exclusions
+        report = freeze_dataset(args.data, args.out, **freeze_options)
         print(report.model_dump_json())
         return 0
     except (CorpusError, ManifestError) as error:

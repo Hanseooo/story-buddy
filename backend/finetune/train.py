@@ -10,8 +10,8 @@ import yaml
 
 from finetune.manifest import ManifestError, read_manifest
 
-BASE_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct"
-BASE_REVISION = "cc594898137f460bfe9f0759e9844b3ce807cfb5"
+BASE_MODEL = "Qwen/Qwen3.5-9B"
+BASE_REVISION = "c202236235762e1c871ad0ccb60c8ee5ba337b9a"
 LLAMAFACTORY_VERSION = "v0.9.5"
 LLAMAFACTORY_COMMIT = "7af909522a951e3ad9f022ea6f88b6755257eaa5"
 SEEDS = (0, 1, 2)
@@ -35,7 +35,7 @@ FIXED_CONFIG_PINS = {
     "quantization_method": "bnb",
     "dataset": "storybuddy_judge_train",
     "eval_dataset": "storybuddy_judge_val",
-    "template": "qwen2_vl",
+    "template": "qwen3_5_nothink",
     "cutoff_len": 2048,
     "image_max_pixels": 262144,
     "per_device_train_batch_size": 1,

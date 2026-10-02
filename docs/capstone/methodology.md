@@ -160,8 +160,9 @@ match*. Field order is load-bearing: a model that emits a verdict first will rat
 `wrong_clothing`, `wrong_style`, `different_face`, `character_absent` — fixed before any labelling begins.
 Extending the taxonomy after annotation starts invalidates every label already collected.
 
-**The judge in the shipped pipeline is a *prompted* model.** The study **fine-tunes a lightweight open VLM —
-`Qwen2.5-VL-7B-Instruct`, QLoRA — for the character-consistency classification task**, and evaluates its
+**The judge in the shipped pipeline is a *prompted* model.** The study **fine-tunes an open VLM —
+`Qwen3.5-9B`, QLoRA — for the character-consistency classification task** under the
+[2026-09-30 postregistration amendment](../product/PREREGISTRATION_OBJ4.md), and evaluates its
 classification performance against human reference labels (Objective 4, §5, §7.2). Whether the fine-tuned
 judge replaces the prompted incumbent *in the shipped product* is a separate deployment decision (ADR-018);
 the pipeline's architecture is identical either way.
@@ -287,8 +288,10 @@ Candidates were surveyed and rejected on the record (full table in `docs/specs/j
 **That absence is itself a contribution of this work.** The dataset is manufactured from the production
 pipeline's output over both provenance-separated sources. Each story yields canonical references and scenes;
 each reference/scene pair remains within the story's frozen style. Same-style **constructed hard negatives**
-augment train only. Each pipeline pair is human-labelled Same/Different Character. Exact totals are achieved
-values, while Objective-4 power is set by held-out character count rather than raw pair count.
+augment train only. Two humans initially labelled each pipeline pair Same/Different Character. Ten
+preselected training/validation pairs later received owner-approved, AI-assisted audit labels
+(`PREREGISTRATION_OBJ4.md`, 2026-09-30 deviation); held-out test labels remain human-only. Exact totals
+are achieved values, while Objective-4 power is set by held-out character count rather than raw pair count.
 
 ### 4.3 Splits, and the three ways this dataset can lie to you
 
@@ -330,12 +333,16 @@ so are the human annotators.
 
 ### 5.1 Model training ⚠️
 
-- **Base model:** `Qwen2.5-VL-7B-Instruct` (Apache-2.0, native multi-image support).
-- **Method:** **QLoRA** — 4-bit quantized base weights with a trainable low-rank adapter. Fits on a single
-  24 GB consumer GPU (RTX 4090, rented), 1–2 hours, roughly US$5–15 per run. The artifact is a **LoRA adapter
-  of a few tens of megabytes** over public base weights, not a model.
-- **Hyperparameters:** LoRA rank 16, alpha 32, 4-bit quantization, `qwen2_vl` chat template, images capped at
-  262,144 pixels. Fixed seed. Best checkpoint selected on validation loss.
+- **Base model:** `Qwen3.5-9B` at the ADR-061 pinned revision (Apache-2.0, multi-image input).
+- **Method:** **QLoRA** — 4-bit quantized base weights with a trainable low-rank adapter. The
+  earlier 7B estimate of 24 GB, 1–2 hours and US$5–15 per run does not qualify this 9B recipe;
+  measure memory, time and cost on the chosen host. The artifact is a **LoRA adapter** over public
+  base weights, not a new base model.
+- **Hyperparameters:** LoRA rank 16, alpha 32, 4-bit quantization, `qwen3_5_nothink` chat template, images capped at
+  262,144 pixels. Training tracks evaluation loss and loads its loss-selected checkpoint at the
+  end. The reported checkpoint for each seed is selected separately by `different_character` F1
+  on character-disjoint validation, with ties choosing the earlier checkpoint. The deployment
+  seed has the highest validation F1 among those checkpoints, with ties choosing the lower seed.
 - **Robustness:** every reported result is over **≥ 3 training seeds.**
 
 **What each split is for, and the discipline that makes the result meaningful:**
@@ -491,7 +498,7 @@ statistics reviewer finds a hole. A **secondary descriptive endpoint** reports t
 character slice, where the judge's difficulty is expected to concentrate.
 
 **Optional comparison (secondary).** To characterise the effect of fine-tuning and the model's suitability for
-integration, the fine-tuned model **may** be reported alongside its **zero-shot base** (`Qwen2.5-VL-7B`) and
+integration, the fine-tuned model **may** be reported alongside its **zero-shot base** (`Qwen3.5-9B`) and
 the **existing prompted baseline** (`gemma-3-27b-it`) on the same held-out pairs and human labels — paired
 per-item comparison via **McNemar's exact test**. This comparison is secondary to the fine-tuned model's
 absolute agreement with human labels; embedding baselines (CLIP, DINOv2 cosine similarity) are reported as

@@ -3,6 +3,7 @@ import hashlib
 import json
 import tempfile
 from collections import Counter
+from datetime import date
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -52,6 +53,33 @@ class FreezeReport(BaseModel):
     replacement_reasons: dict[str, str] = Field(default_factory=dict)
     selection_sha256: str | None = None
     artifact_sha256: dict[str, str] = Field(default_factory=dict)
+
+
+def _load_train_exclusions(path: Path) -> tuple[list[str], bytes]:
+    """Read one dated, train-only exploratory filter without changing corpus bundles."""
+    try:
+        contents = path.read_bytes()
+        payload = json.loads(contents)
+    except (OSError, ValueError) as error:
+        raise ManifestError(f"cannot read train exclusions: {path}: {error}") from error
+    if not isinstance(payload, dict) or set(payload) != {
+        "decision_date", "scope", "criterion", "pair_ids"
+    }:
+        raise ManifestError("train exclusions must contain decision_date, scope, criterion and pair_ids")
+    try:
+        date.fromisoformat(payload["decision_date"])
+    except (TypeError, ValueError) as error:
+        raise ManifestError("train exclusions need an ISO decision_date") from error
+    if payload["scope"] != "synthetic_train_only" or not isinstance(payload["criterion"], str) or not payload["criterion"].strip():
+        raise ManifestError("train exclusions need synthetic_train_only scope and a criterion")
+    pair_ids = payload["pair_ids"]
+    if not isinstance(pair_ids, list) or not pair_ids or any(
+        not isinstance(pair_id, str) or len(pair_id) != 16 or
+        any(char not in "0123456789abcdef" for char in pair_id)
+        for pair_id in pair_ids
+    ) or len(pair_ids) != len(set(pair_ids)):
+        raise ManifestError("train exclusions need unique 16-character lowercase pair IDs")
+    return pair_ids, contents
 
 
 def _pinned_versions(bundles: list[RunBundle]) -> dict[str, str]:
@@ -248,6 +276,7 @@ def freeze_dataset(
     donated_intake_path: Path | None = None,
     selection_path: Path | None = None,
     synthetic_intake_path: Path = SYNTHETIC_INTAKE,
+    train_exclusions_path: Path | None = None,
 ) -> FreezeReport:
     from finetune.build_dataset import build_dataset, pairs_from_memory
     from finetune.materialize_pairs import read_verified_asset
@@ -266,6 +295,15 @@ def freeze_dataset(
     )
 
     pair_to_story, char_to_story = _validate_bundles(selected_bundles, data_dir)
+    train_exclusions, train_exclusion_bytes = (
+        _load_train_exclusions(train_exclusions_path)
+        if train_exclusions_path is not None else ([], None)
+    )
+    bundle_by_story = {bundle.memory.story_id: bundle for bundle in selected_bundles}
+    for pair_id in train_exclusions:
+        owner = bundle_by_story.get(pair_to_story.get(pair_id, ""))
+        if owner is None or owner.provenance != "synthetic" or owner.split != "train":
+            raise ManifestError(f"train exclusion is not a synthetic training pair: {pair_id}")
     annotations, adjudicators, pilot_pairs = (
         fetch_annotations(), fetch_adjudicator_ids(), fetch_pilot_pairs()
     )
@@ -273,8 +311,8 @@ def freeze_dataset(
     unknown_exclusions = declared_exclusions - pair_to_story.keys()
     if unknown_exclusions:
         raise ManifestError(f"unknown exclusions: {sorted(unknown_exclusions)}")
-    exclusions = declared_exclusions | (pilot_pairs & pair_to_story.keys())
-    ignored_pairs = declared_exclusions | pilot_pairs
+    exclusions = declared_exclusions | set(train_exclusions) | (pilot_pairs & pair_to_story.keys())
+    ignored_pairs = declared_exclusions | set(train_exclusions) | pilot_pairs
 
     all_loaded_pairs = {p.pair_id for b in bundles for p in pairs_from_memory(b.memory)}
     unknown = {row["pair_id"] for row in annotations} - all_loaded_pairs - pilot_pairs
@@ -285,6 +323,11 @@ def freeze_dataset(
         row for row in annotations
         if row.get("pair_id") in pair_to_story or row.get("pair_id") in pilot_pairs
     ]
+    if train_exclusions:
+        truth = resolve_annotations(relevant_annotations, adjudicators, pilot_pairs)
+        for pair_id in train_exclusions:
+            if pair_id not in truth or not truth[pair_id].same_character:
+                raise ManifestError(f"train exclusion is not a resolved Same pair: {pair_id}")
 
     matches = {} if selection is None else validate_hard_negative_matches(
         selected_bundles, selection, annotations, pilot_pairs
@@ -301,6 +344,8 @@ def freeze_dataset(
             frozen_selection.write_bytes(selection_path.read_bytes())
             if hashlib.sha256(frozen_selection.read_bytes()).hexdigest() != audit.selection_sha256:
                 raise ManifestError("selection artifact changed during freeze")
+        if train_exclusion_bytes is not None:
+            (staged / "train_exclusions.json").write_bytes(train_exclusion_bytes)
         for bundle in selected_bundles:
             for asset in bundle.assets:
                 target = Path(local_image_path(asset.storage_path, asset.kind, root=Path("assets")))
@@ -328,6 +373,8 @@ def freeze_dataset(
             adjudicators,
             ignored_pairs,
         )
+        if train_exclusion_bytes is not None:
+            artifact_hashes["train_exclusions.json"] = hashlib.sha256(train_exclusion_bytes).hexdigest()
         consensus = resolve_annotations(relevant_annotations, adjudicators, ignored_pairs)
         report = FreezeReport(
             dataset_sha256=hashlib.sha256((staged / "manifest.jsonl").read_bytes()).hexdigest(),

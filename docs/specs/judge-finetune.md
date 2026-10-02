@@ -1,11 +1,13 @@
 # Feature Spec — Consistency Judge Fine-Tune
 
 **Status:** draft · **Phase:** 2.5 · **Owner node:** `backend/pipeline/consistency_check.py` (consumer) + `backend/finetune/` (producer)
-**Derived from:** MASTER_SPEC §2, §6 · **Rationale:** ADR-018 (decision), ADR-019 (serving), ADR-004 (judge role), ADR-008 (evaluation)
+**Derived from:** MASTER_SPEC §2, §6 · **Rationale:** ADR-018 as amended by ADR-061 (base), ADR-019 (serving), ADR-004 (judge role), ADR-008 (evaluation)
 
-> Read ADR-018 first. This spec is the *how*; the ADR is the *why* and it is where the binding
-> decisions live. Read ADR-016 alongside it — it is superseded, but its reasoning is what makes the
-> judge the right target instead of the image model.
+> Read ADR-018 and the accepted ADR-061 first. ADR-061 changes the Objective 4 base to Qwen3.5-9B
+> after registration; the dated amendment in `PREREGISTRATION_OBJ4.md` is binding. This spec is the
+> operational target. `backend/finetune` training/evaluation now uses the ADR-061 pins and
+> `qwen3_5_nothink`. GPU/toolchain qualification remains required before a full run. Read ADR-016
+> for why the judge is the target.
 
 ---
 
@@ -148,7 +150,7 @@ invalidates every label collected under the old one.
 
 ## 5. Data
 
-**Base model:** `Qwen2.5-VL-7B-Instruct` (Apache-2.0, native multi-image).
+**Base model:** `Qwen3.5-9B` at ADR-061's pinned revision (Apache-2.0, multi-image input).
 
 ### 5.1 There is no dataset to download. You manufacture one.
 
@@ -375,18 +377,19 @@ Register it in `dataset_info.json`:
 
 ### 6.2 Rent the GPU
 
-Two images at 512px on a 7B model needs ~16–20 GB. A 24 GB **RTX 4090** on RunPod or Vast.ai is
-~$0.35–0.45/hour. Three epochs over ~1,000 examples is **1–2 hours**. Budget **$5–15** including the
-fumbling. **Set a spend alarm before you start** — an idle pod bills all night.
-
-*Rent, don't buy.* ADR-016 did this arithmetic. The available 8–16 GB card cannot hold it comfortably.
+The previous two-image 7B recipe was estimated at ~16–20 GB; this does not establish a 9B fit.
+Qualify an actual Qwen3.5 two-image training step and record peak GPU memory before the three-seed
+run. Start with a host of at least 24 GB and use more if measurement requires it. Compare live compute, storage and bandwidth
+charges, then set a spend alarm before training. Runtime and total cost must come from the
+qualified host and actual run, not the earlier ~1,000-example planning estimate; the registered
+freeze now has 484 training pairs. See the research runbook's dataset handoff.
 
 ### 6.3 The config
 
 ```yaml
 ### model
-model_name_or_path: Qwen/Qwen2.5-VL-7B-Instruct
-model_revision: cc594898137f460bfe9f0759e9844b3ce807cfb5   # CC-7. Never "main".
+model_name_or_path: Qwen/Qwen3.5-9B
+model_revision: c202236235762e1c871ad0ccb60c8ee5ba337b9a   # ADR-061. Never "main".
 image_max_pixels: 262144                      # 512 x 512
 trust_remote_code: true
 
@@ -403,7 +406,7 @@ quantization_method: bnb
 ### dataset
 dataset: storybuddy_judge_train
 eval_dataset: storybuddy_judge_val            # character-disjoint. §3.2
-template: qwen2_vl
+template: qwen3_5_nothink
 cutoff_len: 2048
 
 ### output
@@ -450,7 +453,11 @@ Weights & Biases is optional. The canonical evidence is the local immutable run 
 config and manifest hashes, stdout/stderr log, tool versions, hardware description, checkpoints and adapter
 paths. W&B may mirror those artifacts, but it is never the only copy or required for reproduction.
 
-**Checkpoint selection (pre-registered 2026-07-13).** Early stopping stays on eval loss, but the
+**Agent evidence workflow:** Before Objective-4 GPU rental, qualification, training, validation, held-out
+evaluation or capstone reporting, follow the runbook's
+[capture checklist and owner reminders](../capstone/research_runbook.md#fine-tuning-evidence-for-the-capstone).
+
+**Checkpoint selection (pre-registered 2026-07-13).** Training checkpoint loading uses eval loss, but the
 **reported** checkpoint per seed is selected by `different_character` F1 on the validation split —
 token-level loss on an ~80/20 split is dominated by the majority class and by rationale tokens, so
 the loss-minimizing checkpoint is not necessarily the best one on the single class the control loop
@@ -471,17 +478,40 @@ an optional controlled Storage or W&B mirror.
 Base model **revision hash** · LoRA rank + alpha · seed(s) · the exact `manifest.jsonl` (hash it) ·
 `image_max_pixels` · LLaMA-Factory version. Evaluation runs at temperature 0.
 
-The Batch-3 pins fixed on 2026-08-25, before any fine-tune or held-out result, are:
+The original Batch-3 Qwen2.5 pin was fixed on 2026-08-25. ADR-061 and the dated amendment
+replace that base after labels existed. The active training pins are:
 
-- base model `Qwen/Qwen2.5-VL-7B-Instruct` at
-  `cc594898137f460bfe9f0759e9844b3ce807cfb5`;
+- base model `Qwen/Qwen3.5-9B` at
+  `c202236235762e1c871ad0ccb60c8ee5ba337b9a`;
 - LLaMA-Factory `v0.9.5` at `7af909522a951e3ad9f022ea6f88b6755257eaa5`;
 - seeds `0`, `1`, `2`; bootstrap RNG seed `0`;
 - local immutable run evidence as the source of truth, with W&B optional.
 
-The manifest hash, generator IDs/date, prompt version, hardware description and adapter locations do not yet
-exist. `finetune.train` and the evaluation lock reject blanks, placeholder text and unhashed artifacts rather
-than inventing them.
+The 2026-09-30 registered and exploratory freeze reports now pin the manifest hashes and
+generator/model/prompt metadata; see `docs/capstone/research_runbook.md` for the dataset handoff.
+Hardware qualification and adapter locations remain pending. `finetune.train` and the
+evaluation lock reject blanks, placeholder text and unhashed artifacts rather than inventing them.
+
+The evaluator imports the base/tool/seed pins from `finetune.train`. Its generated vLLM command
+pins the base revision, sets `enable_thinking=false` through `--default-chat-template-kwargs`,
+and limits each prompt to two images. The base and adapter use the same server defaults and
+temperature-zero provider path. These flags are a serving target, not proof of Qwen3.5 LoRA
+compatibility or matching image preprocessing. Record the effective processor configuration,
+token lengths, training peak memory and strict base/adapter verdicts using the
+[runbook qualification procedure](../capstone/research_runbook.md#qwen35-host-qualification).
+The failed inference qualification identified a missing trainer image-preparation step in
+serving and validation inputs. Equal pixel limits alone do not establish preprocessing
+equivalence. The approved correction now shares `finetune/image_preprocessing.py` between
+qualification and the Qwen evaluation arms. It prepares embedded image bytes using the
+unchanged trainer resize semantics before the model processor's patch-aligned resize.
+Qwen research loaders must supply base64 image data URIs; remote URLs are rejected before
+model requests. Image-preparation errors abort capture instead of being scored as malformed
+model answers. The held-out runner records such a run as failed. Default validation and
+held-out Qwen loaders embed frozen assets without
+rewriting them. Gemma receives the original inputs. The remote probe also checks prepared RGB
+pixel hashes against local trainer verification, then compares the actual serving grids.
+Renewed GPU inference qualification remains pending; local pixel/grid agreement is not a
+passed inference contract or a quality result.
 
 PyTorch/CUDA and bitsandbytes builds are hardware-specific. Their exact versions are selected only after the
 school-or-cloud hardware qualification and declared in `training_qualification.json` with `base_model`,
@@ -497,8 +527,8 @@ The approved record has this exact shape (values under `hardware` must equal
 
 ```json
 {
-  "base_model": "Qwen/Qwen2.5-VL-7B-Instruct",
-  "base_revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
+  "base_model": "Qwen/Qwen3.5-9B",
+  "base_revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
   "llamafactory_version": "v0.9.5",
   "llamafactory_commit": "7af909522a951e3ad9f022ea6f88b6755257eaa5",
   "hardware": {"os": "...", "python": "...", "gpu": "...", "torch": "...", "cuda": "...", "bitsandbytes": "..."}
@@ -544,14 +574,14 @@ the prompted incumbent. Separate them and neither is hostage to a coin flip.
 
 ### 7.1 The primary endpoint — the "did the fine-tune work" gate
 
-> ΔF1 on the `different_character` class, held-out test set, **fine-tuned Qwen2.5-VL-7B vs. zero-shot
-> `Qwen2.5-VL-7B`.** The gate passes only if the 95% CI on ΔF1 excludes zero. (The deployment build gate;
+> ΔF1 on the `different_character` class, held-out test set, **fine-tuned Qwen3.5-9B vs. zero-shot
+> `Qwen3.5-9B` at the same revision.** The gate passes only if the 95% CI on ΔF1 excludes zero. (The deployment build gate;
 > as Objective 4's optional secondary comparison it may also be reported alongside the primary F1-vs-human-
 > labels result — ADR-008, revised 2026-07-25.)
 
 Same architecture, same weights, same prompt; the adapter is the only difference. It is the cleanest causal
-statement available about the fine-tune, it is the ablation every fine-tuning paper reports, and on ~900
-in-domain training pairs the expected gap is large.
+statement available about the fine-tune and the ablation every fine-tuning paper reports. The registered
+freeze contains 484 training pairs; the size of any gain is unknown before training.
 
 - **Significance:** McNemar's exact test on the paired per-item decisions — both judges score the same items.
 - **Effect size:** ΔF1 with a 95% bootstrap CI, 10,000 resamples, **resampled by `char_id`, not by pair.**
@@ -586,7 +616,7 @@ prompted generalist is the most reliable way a small fine-tune wins.
 
 | Baseline | Role | What its absence would let a reviewer claim |
 |---|---|---|
-| **Zero-shot `Qwen2.5-VL-7B`** | **the primary comparator** | "Your base model was already good; the LoRA did nothing" |
+| **Zero-shot `Qwen3.5-9B`** | **the primary comparator** | "Your base model was already good; the LoRA did nothing" |
 | **Prompted `gemma-3-27b-it`**, reason-then-score | **the product gate** | "You never beat the system you already had" (ADR-004) |
 | CLIP image–image cosine | scientific control | "A 2021 embedding would have done this" |
 | **DINOv2 cosine** | scientific control | "A self-supervised embedding beats your VLM at instance identity" |
@@ -604,7 +634,7 @@ pipeline.** Write that sentence into the paper before the defense, not during it
    existing prompted baseline — permitted, not required (ADR-008, revised 2026-07-25).
 2. The primary metric on the **non-human character slice.** The contribution — and the least-powered slice.
 3. **Cohen's κ vs. human**, overall and split by human / non-human.
-4. **Latency and $/call.** A structural win: 7B beats 27B, self-hosted beats per-call.
+4. **Latency and $/call.** Measure both on the qualified serving route; a 9B cost or latency win is not assumed.
 5. **DreamBench++ transfer — descriptive only.** No comparison claim; it is out-of-domain by
    construction. **Binarization is fixed in the pre-registration, before the transfer eval runs:**
    DreamBench++'s human scores are *graded* concept-preservation ratings, not binary same/different
@@ -634,9 +664,9 @@ fine-tuned judge replaces the prompted incumbent in the product, and whether the
 
 | Rung | Condition | Requirement met? | Outcome (engineering) | Ship? |
 |---|---|---|---|---|
-| **A** | Beats base **and** beats prompted Gemma | Yes | Specialized 7B judge outperforms the prompted 27B incumbent on our in-domain held-out set, at lower latency and zero marginal cost — a clear swap | Yes |
-| **B** | Beats base; within δ = 3 F1 of Gemma; no recall regression | Yes | Specialization recovers 27B-level quality at 7B, self-hostable, zero marginal cost — non-inferiority satisfied, swap | Yes |
-| **C** | Beats base; loses to Gemma by > δ | **Yes** | Fine-tuning worked, but specialization at 7B did not close the gap. Keep the incumbent; note it as a limitation, not a finding | No — keep the prompted judge |
+| **A** | Beats base **and** beats prompted Gemma | Yes | Tuned Qwen3.5 outperforms the prompted incumbent in-domain; serving cost and latency are measured separately | Yes |
+| **B** | Beats base; within δ = 3 F1 of Gemma; no recall regression | Yes | Tuned Qwen3.5 is non-inferior within the registered margin; serving cost and latency are measured separately | Yes |
+| **C** | Beats base; loses to Gemma by > δ | **Yes** | Fine-tuning worked, but the amended base did not close the gap. Keep the incumbent; note it as a limitation, not a finding | No — keep the prompted judge |
 | **D** | Does not beat base | No | The LoRA did nothing. A **bug report, not a result** | No — debug |
 
 δ = 3 F1 points is a judgment call, chosen because it sits inside one annotator's disagreement band on ~60
@@ -730,10 +760,15 @@ byte-identical report bytes and a different report can never replace ledgered ev
 
 Rung A or B (§7.5). This is the entire deployment, and it is why `providers.py` was built the way it was.
 
-Start vLLM with the base model and the adapter attached (ADR-019 — Modal, scale-to-zero):
+The following serving shape is a target, not a qualified command for Qwen3.5. Verify the pinned
+revision, two-image requests, schema and attached LoRA on the intended serving stack before a
+product swap (ADR-019 — Modal, scale-to-zero):
 
 ```bash
-vllm serve Qwen/Qwen2.5-VL-7B-Instruct \
+vllm serve Qwen/Qwen3.5-9B \
+  --revision c202236235762e1c871ad0ccb60c8ee5ba337b9a \
+  --default-chat-template-kwargs '{"enable_thinking": false}' \
+  --limit-mm-per-prompt '{"image": 2}' \
   --enable-lora --lora-modules judge=/vol/judge-lora-seed0 --max-lora-rank 16
 ```
 
@@ -834,9 +869,9 @@ Read in this order. Two hours total; do not read the QLoRA paper first.
 | # | What | Why |
 |---|---|---|
 | 1 | [LLaMA-Factory data format](https://github.com/hiyouga/LLaMA-Factory/blob/main/data/README.md) | The exact JSON you must emit. Read §6.1 alongside it. |
-| 2 | [LLaMA-Factory examples](https://github.com/hiyouga/LLaMA-Factory/blob/main/examples/README.md) | Working `qwen2_vl` LoRA YAMLs to diff against §6.3. |
-| 3 | [Qwen2.5-VL-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct) | The base model card. Grab the revision hash here (CC-7). |
-| 4 | [QLoRA (Dettmers et al., 2023)](https://arxiv.org/abs/2305.14314) | *Why* a 7B model fits in 24 GB. Read after your first successful run. |
+| 2 | [Pinned LLaMA-Factory template source](https://github.com/hiyouga/LLaMA-Factory/blob/7af909522a951e3ad9f022ea6f88b6755257eaa5/src/llamafactory/data/template.py) | `qwen3_5_nothink` support to qualify against §6.3. |
+| 3 | [Qwen3.5-9B](https://huggingface.co/Qwen/Qwen3.5-9B) | The accepted base-model card; ADR-061 pins its revision. |
+| 4 | [QLoRA (Dettmers et al., 2023)](https://arxiv.org/abs/2305.14314) | Background for the method; GPU fit must be measured for this two-image 9B recipe. |
 | 5 | [DreamBench++ (arXiv:2406.16855)](https://arxiv.org/abs/2406.16855) | The transfer test, and the related-work paragraph. |
 | 6 | [vLLM LoRA serving](https://docs.vllm.ai/en/latest/features/lora.html) | §8. `--enable-lora`, `--max-lora-rank`. |
 

@@ -650,6 +650,10 @@
   </style>
 </head>
 <body>
+  <p style="padding: 12px; margin: 12px; border: 2px solid #f59e0b; background: #fff7ed; color: #1f2937;">
+    This older interactive runbook predates <a href="docs/product/adr/ADR-061-qwen3-5-9b-as-the-objective-4-judge-base.md">ADR-061</a>.
+    Objective 4 now uses Qwen3.5-9B under a dated postregistration amendment. Training commands remain blocked until code and GPU qualification are aligned; use the current research runbook for execution.
+  </p>
 
 <div class="container">
 
@@ -671,7 +675,7 @@
         <span>●</span> Current State: <strong>Ticket 07 (Paid 3-Story Synthetic Smoke)</strong>
       </div>
       <div class="meta-pill">
-        Base VLM: <strong>Qwen2.5-VL-7B-Instruct (cc594898)</strong>
+        Base VLM: <strong>Qwen3.5-9B (c202236)</strong>
       </div>
       <div class="meta-pill">
         Incumbent Comparator: <strong>Prompted Gemma-3-27B-IT</strong>
@@ -724,7 +728,7 @@
         In automated digital picture book generation for children, character identity drift across sequential scene illustrations is the critical failure mode. StoryBuddy employs a <strong>closed-loop control architecture</strong> where a Vision-Language Model (VLM) Judge evaluates character instance consistency between a generated scene and a canonical reference image. If inconsistent, the pipeline triggers a targeted regeneration loop.
       </p>
       <p style="margin-top: 10px;">
-        <strong>Objective 4</strong> evaluates whether fine-tuning an open-weight 7B parameter VLM (<code>Qwen2.5-VL-7B-Instruct</code>) using QLoRA can match or exceed the performance of a zero-shot 27B model (<code>gemma-3-27b-it</code>) on human pairwise consistency judgments of stylized, non-human, and child-authored characters, while reducing latency and operating at zero marginal inference cost.
+        <strong>Objective 4</strong> reports the fine-tuned open-weight <code>Qwen3.5-9B</code> judge's precision, recall and F1 against human labels under the dated postregistration amendment. Its zero-shot base and prompted <code>gemma-3-27b-it</code> incumbent are separate comparators; latency and cost remain measured outcomes.
       </p>
 
       <div class="diagram-container">
@@ -1294,7 +1298,7 @@ uv run python -m finetune.build_dataset --freeze `
         <span class="badge badge-primary">PHASE 6</span>
       </div>
       <p>
-        Training fine-tunes <code>Qwen2.5-VL-7B-Instruct</code> using 4-bit QLoRA over <strong>3 fixed random seeds: 0, 1, 2</strong>.
+        Training targets <code>Qwen3.5-9B</code> using 4-bit QLoRA over <strong>3 fixed random seeds: 0, 1, 2</strong>, after two-image GPU qualification.
       </p>
 
       <div class="table-container">
@@ -1309,8 +1313,8 @@ uv run python -m finetune.build_dataset --freeze `
           <tbody>
             <tr>
               <td><strong>Base Model & Revision</strong></td>
-              <td><code>Qwen/Qwen2.5-VL-7B-Instruct</code> @ <code>cc594898137f460bfe9f0759e9844b3ce807cfb5</code></td>
-              <td>Apache-2.0 open weight VLM with native multi-image support (ADR-018).</td>
+              <td><code>Qwen/Qwen3.5-9B</code> @ <code>c202236235762e1c871ad0ccb60c8ee5ba337b9a</code></td>
+              <td>Apache-2.0 open-weight VLM with multi-image input (ADR-061).</td>
             </tr>
             <tr>
               <td><strong>Toolchain Commit</strong></td>
@@ -1320,7 +1324,7 @@ uv run python -m finetune.build_dataset --freeze `
             <tr>
               <td><strong>Quantization & Method</strong></td>
               <td>4-bit bitsandbytes (<code>bnb</code>), QLoRA</td>
-              <td>Fits in 24 GB VRAM (RTX 3090/4090 or A100/H100).</td>
+              <td>GPU fit is unverified; qualify an actual two-image QLoRA step before the full run.</td>
             </tr>
             <tr>
               <td><strong>LoRA Rank / Alpha / Target</strong></td>
@@ -1456,7 +1460,7 @@ uv run python -m finetune.evaluate heldout `
               <td><strong style="color: #1e40af;">Rung B</strong></td>
               <td>Beats base; within $\delta = 3.0\text{ F1}$ of Gemma; <strong>no recall regression</strong></td>
               <td><span class="badge badge-success">Objective 4 Succeeded</span></td>
-              <td><strong>Ship LoRA to Production</strong> (Non-inferiority satisfied, zero marginal cost).</td>
+              <td><strong>Ship LoRA to Production</strong> only after non-inferiority and serving qualification; measure cost.</td>
             </tr>
             <tr style="background-color: #fffbeb;">
               <td><strong style="color: #92400e;">Rung C</strong></td>
@@ -1522,7 +1526,7 @@ uv run python -m finetune.evaluate heldout `
         <div style="border: 1px solid var(--border-color); border-radius: 10px; padding: 18px; background: #ffffff;">
           <h4 style="color: var(--accent-cyan); font-size: 15px; margin-bottom: 8px;">Option B: Cloud Container Fallback (RunPod / Vast.ai)</h4>
           <ul style="padding-left: 18px; font-size: 13px; color: var(--text-muted); line-height: 1.6;">
-            <li><strong>Target Instance:</strong> 1 &times; RTX 4090 (24 GB) or 1 &times; A100 (40 GB/80 GB SXM) on PyTorch 2.4 / CUDA 12.4 template.</li>
+            <li><strong>Target Instance:</strong> qualify Qwen3.5 two-image memory on the intended GPU; 24 GB fit is not established.</li>
             <li><strong>Hourly Rate:</strong> ~$0.35 &ndash; $0.45 / hr (RTX 4090) or ~$1.10 / hr (A100).</li>
             <li><strong>Spend Alarm Requirement:</strong> Activate an external billing alarm capped at $10.00 USD before launching.</li>
             <li><strong>Command Flag:</strong> Pass <code>--spend-alarm-confirmed</code> to <code>finetune.train --execute</code>.</li>
@@ -1536,7 +1540,7 @@ uv run python -m finetune.evaluate heldout `
         <p>
           Whether executing on local hardware or cloud containers, the fine-tuning process <strong>must use the identical pinned commit of LLaMA-Factory and base model revision</strong>:
           <br>
-          • <strong>Base Model Revision:</strong> <code>Qwen/Qwen2.5-VL-7B-Instruct</code> @ <code>cc594898137f460bfe9f0759e9844b3ce807cfb5</code>
+          • <strong>Base Model Revision:</strong> <code>Qwen/Qwen3.5-9B</code> @ <code>c202236235762e1c871ad0ccb60c8ee5ba337b9a</code>
           <br>
           • <strong>LLaMA-Factory Version:</strong> <code>v0.9.5</code> @ <code>7af909522a951e3ad9f022ea6f88b6755257eaa5</code>
           <br>

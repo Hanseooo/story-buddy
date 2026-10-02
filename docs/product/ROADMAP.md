@@ -7,6 +7,7 @@ identify/resolve risks → develop & verify → plan next iteration); full mappi
 **Team:** one developer (build), three researchers (corpus, annotation, study, ethics). The build track
 is solo; the research track is not. They run in parallel and meet at Phase 2.5 and Phase 3.
 **Companion docs:** PRD v2, ADRs, RESEARCH_PROTOCOL.
+**Current follow-up:** [C3 findings and issues #94–#100](#c3-findings-follow-up).
 
 ---
 
@@ -211,12 +212,13 @@ build-gate-only number; an optional secondary comparison against the zero-shot b
 may be reported alongside it (ADR-008, revised 2026-07-25). Full recipe: `docs/specs/judge-finetune.md` — **start at its §0, which is
 the step-by-step order of operations.**
 
-**The product is finished before this phase starts.** Phases 1–2 ship with the *prompted* judge; this phase
-swaps one replaceable part. If it fails its gate, nothing else changes.
+**Scheduling update:** C3 labelling has already run while Phase 2 work remains. The product uses the
+*prompted* judge until the registered product gate decides whether a fine-tuned judge ships.
 
 - **Data.** There is **no dataset to download** — it is manufactured from Phase 1's own output over the
   Stage-1 corpus (**15 stories collected → 10 primary + 5 backup**, Grade 5–6, Matina Aplaya Elementary
-  School — RESEARCH_PROTOCOL §8). Positives are **human-confirmed** by the researchers; auto-labelling them
+  School — RESEARCH_PROTOCOL §8). Positives are **human-confirmed** by the researchers, except for ten
+  owner-approved AI-assisted audit labels disclosed in `PREREGISTRATION_OBJ4.md`; auto-labelling them
   trains a detector for *"was a reference used?"*. Hard negatives are constructed for free and go into
   **train only**. Rationales are a **fixed checkbox taxonomy**, never model-generated. Splits are
   **character-disjoint** (train / validation / held-out test), test stratified human vs. non-human. Two annotators, IRR reported. ⚠️ Exact per-split character/image counts are a planning
@@ -229,17 +231,19 @@ swaps one replaceable part. If it fails its gate, nothing else changes.
   promise. **This supersedes `judge-finetune.md` §5's `labels/*.csv`**; `build_dataset.py` reads the table.
   It is built *before* labelling starts, not alongside it — ~1500 rows of silent spreadsheet misalignment is
   undetectable after the fact and would invalidate Objective 4.
-- **Pre-register the analysis plan before a single label is collected.** **Two gates, not one**
+- **Analysis plan and amendment.** The original plan was registered before labels; ADR-061 changed the
+  base afterward and the postregistration status must accompany every result. **Two gates, not one**
   (ADR-018 amendment a). *Research gate (did the fine-tune work):* held-out ΔF1 on `different_character` vs. **zero-shot
-  Qwen2.5-VL-7B**, 95% CI excluding zero, McNemar + bootstrap **clustered by character**. *Product gate:*
+  Qwen3.5-9B** at the ADR-061 pinned revision, 95% CI excluding zero, McNemar + bootstrap **clustered by character**. *Product gate:*
   non-inferiority to prompted Gemma-27B within δ = 3 F1, no recall regression. Claim ladder A/B/C/D declared
   in advance; **only rung D fails, and rung D is a bug.** Both gates are **build/deployment** decisions,
   separate from Objective 4 itself: Objective 4 reports the fine-tuned judge's precision/recall/F1 against
   human labels (F1 primary, IRR on the human labels, held-out set read once) as a formal research finding;
   the optional base/prompted comparison may be reported alongside it (ADR-008, revised 2026-07-25).
-- **Train.** `Qwen2.5-VL-7B-Instruct` + QLoRA via LLaMA-Factory, on a rented 4090 (~$5–15, 1–2 hours,
-  ≥3 seeds). W&B for runs. Output is a ~tens-of-MB **LoRA adapter**, not a model.
-- **Evaluate.** Four baselines: zero-shot Qwen2.5-VL-7B, prompted Gemma-3-27B, CLIP cosine, DINOv2 cosine.
+- **Train.** `Qwen3.5-9B` + QLoRA via the pinned LLaMA-Factory, on a qualified rented GPU,
+  three seeds. The earlier 7B/4090 time, memory and cost estimates do not qualify this 9B run.
+  Output is a **LoRA adapter**, not a new base model.
+- **Evaluate.** Four baselines: zero-shot Qwen3.5-9B at the same revision, prompted Gemma-3-27B, CLIP cosine, DINOv2 cosine.
   Metrics: κ vs. human **split by human/non-human character**, F1 on `different_character`, AUROC, latency, cost.
 - **Transfer-test** on DreamBench++ — **evaluate only, never train on it, never redistribute it.** Evaluation
   is the benchmark's intended use, so no permission is needed. No off-the-shelf training set exists for this
@@ -255,9 +259,48 @@ ladder (ADR-008, revised 2026-07-25): it decides what ships, not what the paper 
 reports the fine-tuned judge's precision/recall/F1 against human labels either way, so no rung is an
 embarrassment to write up.
 
-**Blocked on:** Ethics Stage 1 → corpus → Phase 1 run over the corpus. **Do not label before Phase 0.5
-passes** — the judge learns the drift signature of the image model that drew its training images, so a
-substrate swap invalidates the weekend.
+**Original dependencies:** Ethics Stage 1 → corpus → Phase 1 run over the corpus. C3 has reached
+labelling; [#94](https://github.com/Hanseooo/story-buddy/issues/94) and the follow-up below track the
+remaining study work. The judge learns the drift signature of the image model that drew its training
+images, so a substrate swap before the registered result would change what is being measured.
+
+---
+
+## C3 findings follow-up
+
+This is a provisional work order, not a new architectural decision. Issue bodies and comments hold
+the investigation details. Some issue comments predate the [gate recount](../capstone/pipeline-gate-audit-2026-09.md);
+use it for current gate semantics. [ADR-061](./adr/ADR-061-qwen3-5-9b-as-the-objective-4-judge-base.md)
+amends the Objective 4 fine-tune base to Qwen3.5-9B after labels existed; the trainer/evaluator now
+use its pins. Host qualification remains pending under the [research runbook](../capstone/research_runbook.md#qwen35-host-qualification).
+Keep generation and the prompted product judge fixed for this result.
+Public-trace review and read-only diagnosis on permitted synthetic material can proceed
+in parallel. Offline model trials are separate experiments, not changes to the registered corpus.
+Use the `C3-01`–`C3-13` labels to refer to these tasks; keep each label with its task if rows move.
+
+| When / dependency | Work | Gate before moving on |
+|---|---|---|
+| **C3-01** · Dataset review complete 2026-09-30 | The registered freeze preserves all annotated pairs. A separately named exploratory freeze omits 16 disputed Same-labelled synthetic training pairs under the owner's decision; it changes no validation or test pair. Each selected scene image had one character pair, and the exploratory training manifest retains no natural or constructed pair using those images. The ten agreed-pair audit rows and AI assistance are disclosed in the pre-registration. | The [research runbook](../capstone/research_runbook.md#dataset-handoff-2026-09-30) records the two freeze hashes, counts and validation/test equality. Keep both freezes and the source images and labels for audit. |
+| **C3-02** · Next, Objective 4 | The training/evaluation code is aligned with pinned Qwen3.5-9B under [#94](https://github.com/Hanseooo/story-buddy/issues/94) and the dated ADR-061 protocol amendment. Next qualify two-image preprocessing, a GPU training step and base/adapter inference, then run three seeds on the registered freeze. Select checkpoints using validation only; run the held-out primary and ambiguous-reference sensitivity analyses and guide-boundary comparison once under the access rule. Keep any run on the 16-pair filtered freeze exploratory and separately named. | Confirm governance and third-party processing approval before upload; record host/tool qualification and spend alarm. Follow the [agent evidence-capture reminders](../capstone/research_runbook.md#agent-reminders-and-capture-status), including owner screenshots and verified backup before instance deletion. Report the postregistration base change and AI-assisted labels as limitations. |
+| **C3-03** · Now, parallel safety check | Public trace links are intentional. The [one-trace cross-check](../capstone/pipeline-gate-audit-2026-09.md) found raw story text in Langfuse state; the worker calls `set_trace_as_public()` for that trace. Verify the public view and choose a redaction or projection boundary in a dedicated ADR session while read-only judge diagnosis continues on permitted material. | A trace shared by URL exposes only approved, redacted research fields; verify this on the actual public view without exposing a child's story in the review record. |
+| **C3-04** · Now, read-only | Audit the actual reference and scene gates before changing prompts or models. The [C3 gate audit](../capstone/pipeline-gate-audit-2026-09.md) separates draw attempts from selected images and `matches_description` from reference acceptance. Its live trace confirms capped failed-page selection; Fal screenshots make `s3`'s `wrong_body_feature` rejections review candidates and show invented lettering as a separate generator artifact. Compare full-size attempts with canonical references, then blindly review a preselected synthetic sample to classify false accepts and false rejections. | Report denominators, model/prompt/code versions, and human-checked error types. A failed verdict alone is not a bad image; a screenshot alone cannot establish a false rejection. |
+| **C3-05** · After Objective 4, with read-only diagnosis possible earlier | Investigate references that add faces against descriptions [#99](https://github.com/Hanseooo/story-buddy/issues/99) and miss stated part counts [#100](https://github.com/Hanseooo/story-buddy/issues/100) on permitted synthetic material. The 21/79 mismatch count is a manual screen, and the [gate recount](../capstone/pipeline-gate-audit-2026-09.md) does not establish visual accuracy. Separate unsupported descriptions, generator misses, judge misses, and the capped best-of policy that can ship a failed reference. | Controlled rates for each failure stage before choosing a prompt or model. Preserve ADR-056's measured count limitation. |
+| **C3-06** · After Objective 4 | For [#95](https://github.com/Hanseooo/story-buddy/issues/95), check affected descriptions and count existing hair entries; unstated hair length/style may leave mixed references. Then test whether a prompt-only `body_features` change improves reference and page agreement, without inferring appearance from names or assigning hair to hairless characters. | Report human-checked before/after rates on a fixed sample; a prompt change is a tested option, not an assumed fix. |
+| **C3-07** · Before the next corpus campaign | For [#96](https://github.com/Hanseooo/story-buddy/issues/96), compare reference review before pages with review after generation. The product reveal pauses for human review, while `build_corpus` auto-confirms it. Define the rejection rule and estimate review effort, retries, spend, and false rejections. The existing 21/79 screen establishes defect prevalence in that corpus, not how well a live reviewer would detect defects. | The chosen process and observed review/rejection counts are recorded; the already-generated C3 corpus is handled through #94. |
+| **C3-08** · After Objective 4, if stories require a visual transformation | Investigate [#97](https://github.com/Hanseooo/story-buddy/issues/97) jointly with #99; neither proposed change ships alone. Check each story for an actual change of form; speech or emotion alone does not establish one. Before a schema or gate change, decide canonical form, scene-state precedence over reference conditioning, and which identity checks stay active in a dedicated ADR session. | A visual probe and deterministic gate cases cover transformed and unchanged characters, including both in one scene; measure false scene states because they could disable identity checks. |
+| **C3-09** · After Objective 4 for any additional product-judge investigation | The 2026-09-30 small Gemma/Qwen3.5 two-image pilot is recorded below; it was exploratory and did not establish task superiority. ADR-061 has now selected Qwen3.5 as the amended **fine-tune base**, so no additional provider model-selection campaign gates training. A later human-checked synthetic gate audit may compare reference-to-description and scene identity/constraint failures separately before a product-judge change. Do not use the Objective 4 held-out set to choose a product model. | Report human-checked false accepts/rejections, failure types, malformed outputs, latency, provider, prompt version and spend. Any further paid screen needs its own approved cap. |
+| **C3-10** · After failure-stage audit, offline image-model screen | Against the current `fal-ai/qwen-image` reference and `fal-ai/qwen-image-edit-2511` scene-edit baselines, test Apache-2.0 [FLUX.2 klein 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) on both legs ([fal multi-reference edit](https://fal.ai/models/fal-ai/flux-2/klein/4b/edit/api)). Test [Qwen-Image-2512](https://huggingface.co/Qwen/Qwen-Image-2512) on reference generation only ([fal endpoint](https://fal.ai/models/fal-ai/qwen-image-2512/api)). Use the same permitted synthetic stories and stratify scenes by zero, one, or two character references; do not mix new-model images into the registered Objective-4 corpus. | Blindly score identity, story details, anatomy, invented lettering/artifacts, safety, retries, latency, and total cost per completed book. Verify reference-count support and provider reachability; set a spend cap. Any new image distribution requires rechecking the judge before a product swap and its ADR. |
+| **C3-11** · After Objective 4, if upstream text errors remain | Compare the current Mistral text model with one open-weight reasoning candidate, starting with `analyze` and `segment` separately. `prompt_optimizer` is deterministic. `qwen/qwen3.6-35b-a3b` is a documented candidate, not a selected model; first prove actual-provider reachability, strict JSON/Pydantic output, and acceptable latency. Then compare story-grounded visual facts, invented attributes, roster and scene assignments on fixed synthetic stories before paying for paired images. | A text-model change needs a measured story-level and image-level benefit; do not use the Objective-4 held-out result for selection. |
+| **C3-12** · After the amended judge result | Apply `PREREGISTRATION_OBJ4.md`'s fine-tuned Qwen3.5-9B versus prompted Gemma-3 product gate. Before any deployment, qualify LoRA serving and the production two-image schema on the selected host. Keep safety moderation independent. Further product-model or generator changes require separate measured decisions and ADRs; do not use Objective 4's held-out set for selection. | The amended Objective 4 result and product gate are reported with their postregistration status. A passing product gate and serving qualification are both required before a production swap. |
+| **C3-13** · Last, after Objective 4 | Trial pixel art [#98](https://github.com/Hanseooo/story-buddy/issues/98) against an existing style on the same stories, including whether small identity details remain judgeable. | Approve the paid trial's spend first; a style change needs its own measured decision and ADR. |
+
+The [2026-09-30 exploratory C3-09 provider pilot](../capstone/pipeline-gate-audit-2026-09.md#c3-09-exploratory-provider-pilot--2026-09-30)
+used stored synthetic training labels only. It does not close C3-09's human-checked
+reference and page audit or change the registered Objective-4 model plan.
+
+`DECISION_BACKLOG.md` remains the queue for undecided architectural questions, not for these
+investigations. If #97, #96, or a model trial reaches such a decision, log that question there
+for its own session.
 
 ---
 

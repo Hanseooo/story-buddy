@@ -63,7 +63,7 @@ The updated capstone manuscript is now authoritative for the study design (ADR-0
 - **Setting: Grade 5–6 Philippine students.** Teacher (or BEED student) owns the classroom and issues each
   student a classroom-scoped account; the child logs in and authors their own story directly; the
   parent's role stays consent-giver. Sharing is classroom-scoped. **No public mode, ever.** ADR-017.
-- **The judge is fine-tuned** (`Qwen2.5-VL-7B`, QLoRA), served on vLLM. ADR-018 supersedes ADR-016;
+- **The judge is fine-tuned** (`Qwen3.5-9B`, QLoRA, postregistration amendment), served on vLLM if qualified and selected by the product gate. ADR-018 as amended by ADR-061 supersedes ADR-016;
   ADR-019 adds the fourth service. The **pipeline is still the contribution (§3)**.
 - **No proprietary models at all** (ADR-015 hardened). Removes exactly two things: OpenAI
   `omni-moderation` → **`gpt-oss-safeguard-20b`** (Apache-2.0 open weights, via OpenRouter — Granite
@@ -215,7 +215,7 @@ it is the long pole and cannot be compressed by coding faster (§10, §18, RESEA
 | Consistency metric (research) | Human ratings = headline; VLM-judge = runtime signal; report VLM–human agreement as a secondary result | Avoids circularity of optimizing and reporting the same score. ADR-004, ADR-008 |
 | Auth model | **Teacher-issued classroom account**: child gets nickname + teacher-set password (no email, no self-serve signup); teacher-initiated reset only | Keeps the child off self-serve/social-network surfaces while letting them author and own their story; RLS isolates by classroom (and by child within it). **ADR-017** |
 | Sharing | **Classroom-scoped, teacher-gated, display-only gallery.** No public mode, ever. No reflection/comment surface — the storybook is the only peer-visible artifact. | Peer-visible child content without a gatekeeper is a social network for ten-year-olds. ADR-017, ADR-021 |
-| **Fine-tuning** | **The consistency judge** (`Qwen2.5-VL-7B`, QLoRA), served on vLLM | Identity and style are the wrong targets (ADR-016's reasoning survives); the judge is the documented weakest link with a known prompting ceiling. **ADR-018, ADR-019** |
+| **Fine-tuning** | **The consistency judge** (`Qwen3.5-9B`, QLoRA), vLLM serving conditional on qualification and gate | Identity and style are the wrong targets (ADR-016's reasoning survives); the judge is the documented weakest link with a known prompting ceiling. **ADR-018, ADR-019, ADR-061** |
 | Design language | Cartoon-pop (student flow); calmer/denser variant (teacher screens) | Matches storybook tone; density fits the teacher dashboard. |
 | Moderation | Two independent **open** classifiers per path + PII + image gate + self-refusal fallback | Non-negotiable for child users. Proprietary backstop removed and replaced, not abandoned. §13, ADR-011 |
 | Captions | Kid's **verbatim** text excerpt (not LLM-rewritten) | Preserves story fidelity; no extra generation/moderation surface. |
@@ -323,7 +323,7 @@ the *warrant* for why acceptability matters; it is not a finding of this study.
   coded **positive / negative / suggestion** per criterion, across five criteria (narrative coherence,
   story faithfulness, visual presentation, visual style consistency, classroom suitability). This replaces
   the earlier feature-level scored rubric (CVI / Krippendorff's α).
-- **Objective 4 — judge classification.** The fine-tuned `Qwen2.5-VL-7B-Instruct` (QLoRA) judge predicts
+- **Objective 4 — judge classification.** The fine-tuned `Qwen3.5-9B` (QLoRA, postregistration amended) judge predicts
   Same/Different Character on the character-disjoint held-out set; scored against human reference labels
   with **precision, recall, F1 (F1 primary)**. **Optionally**, reported alongside the zero-shot base model
   and the existing prompted baseline on the same held-out pairs — secondary to the absolute agreement
@@ -404,8 +404,8 @@ use only, not any evaluation leg.
 7. **Whole-run timeout / stall** → **LangGraph checkpointing + resumability**: a stall at scene N resumes from N, never re-rolls scenes 1…N-1. Kid sees "taking a little longer…" then "we saved your progress — come back soon." ADR-005.
 8. **Image model/API** → **Qwen-Image-Edit (Apache-2.0) on fal.ai.** Open weight, hosted. ADR-001, ADR-015.
 9. **Moderation services** → text (**meta-llama/llama-guard-4-12b** on the OpenRouter + **`gpt-oss-safeguard-20b`** on OpenRouter, both Apache-2.0) + PII (Presidio + **Filipino recognizers**) + image (NSFW ViT + VLM safety rubric). **Two independent open classifiers per path.** §13, ADR-011.
-10. **Fine-tuning** → **the consistency judge** (`Qwen2.5-VL-7B`, QLoRA), served on vLLM. Identity and style
-    remain the *wrong* targets — ADR-016's reasoning is preserved and is precisely why the judge is right. **ADR-018, ADR-019.**
+10. **Fine-tuning** → **the consistency judge** (`Qwen3.5-9B`, QLoRA), served on vLLM only if qualified and selected. Identity and style
+    remain the *wrong* targets — ADR-016's reasoning is preserved and is precisely why the judge is right. **ADR-018, ADR-019, ADR-061.**
 11. **What "open source" means** → **open weight**, hosted inference, self-hosting available — and, as of
     2026-07-10b, **no proprietary models anywhere**, including backstops and accessories. ADR-015 (hardened).
 12. **Setting and gatekeeper** → **teacher- (or BEED-student-) issued classroom account**, Grade 5–6

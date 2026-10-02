@@ -9,6 +9,13 @@ excludes a pair, or feeds the Objective 4 sensitivity analysis — the reasoning
 `ambiguous-references-2026-09.md` under "Changes to this criterion": a rater never sees the description,
 so a reference that contradicts its description is still a usable anchor.
 
+**Gate correction, 2026-09-26:** The original screen below used
+`ref_verdict.matches_description` as if it were the acceptance condition. It is not.
+`char_bible` accepts only an empty `contradictions` list with `text_free: true`, and
+can still ship the best failed draw. The synthetic-only recount and its limits are in
+`pipeline-gate-audit-2026-09.md`. The 79-image visual screen is retained as a manual
+finding; its gate and causal interpretations below have been corrected.
+
 ---
 
 ## The numbers
@@ -20,32 +27,38 @@ so a reference that contradicts its description is still a usable anchor.
 | Characters whose description says "no face" or "smooth unbroken front surface" *and* have a reference | 11 |
 | …of those, references that drew a face anyway | **11 of 11** |
 | `ref_verdict.matches_description` across all 98 characters | 73 true · 6 false · 19 absent |
-| …of the 11 no-face violations, passed as `matches_description: true` | **7** |
+| …of the 11 face-slot contradictions, recorded as `matches_description: true` | **7** |
 
-The gate rejected 6 references in the whole corpus. The screen found structural mismatches in 21.
+The six `matches_description: false` values are **not** a gate-rejection count.
+The screen found 21 structural mismatches; that manual classification has not been
+independently repeated.
 
-## The face slot — one behaviour, not eleven accidents
+## Face-slot contradictions observed
 
-In every `body_features` list, index 1 is the face descriptor. Where `analyze` wrote "no face" or
-"smooth unbroken front surface" for an object or invented creature, `fal-ai/qwen-image` drew two eyes
-and a mouth regardless. It did this every single time it was asked.
+In every `body_features` list, index 1 is the face descriptor. The 11 selected
+references below add facial features contrary to that descriptor. The descriptors
+are not identical: some specify a blank surface, while others specify eyes or a
+beak but exclude another facial part. One stored draw per character cannot establish
+that a model always behaves this way or that all 11 share one cause.
 
-| Story | Character | Description says | Reference draws | `ref_verdict` |
+| Story | Character | Description says | Reference draws | `matches_description` (not the gate) |
 |---|---|---|---|---|
-| syn-008 | Mister Kettle | smooth unbroken front surface | two eyes and a smile | passed |
-| syn-006 | Sardo | smooth front surface with faded label | two eyes, a smile, two legs | passed |
-| syn-016 | the vacuum | smooth front surface with nozzle | two eyes, two legs with feet | passed |
-| syn-017 | Bakal | smooth unbroken front surface | an eye and a smiling muzzle | passed |
-| syn-001 | Bok-Bok | metal beak and comb, no face | an eye and a smile; comb soft red, not metal | passed |
-| don-005 | the mango tree | smooth unbroken front surface | a two-eyed smiling face on the trunk | passed |
-| syn-011 | Tarsi | large round eyes, no nose or mouth | a clear nose and smiling mouth | passed |
-| syn-007 | Halo | smooth front surface, one spoon-shaped appendage | two eyes, two feet, a second nub | failed |
-| syn-010 | Bramblefoot | no face, five leaf ears | full badger face, two ears, three leaves | failed |
-| syn-012 | Cog | eight legs, key on back, smooth front | six legs, no key, two-eyed face | failed |
-| syn-014 | Nimbus Nine | nine raindrop feet, no face | four legs, two-eyed smiling face | failed |
+| syn-008 | Mister Kettle | smooth unbroken front surface | two eyes and a smile | true |
+| syn-006 | Sardo | smooth front surface with faded label | two eyes, a smile, two legs | true |
+| syn-016 | the vacuum | smooth front surface with nozzle | two eyes, two legs with feet | true |
+| syn-017 | Bakal | smooth unbroken front surface | an eye and a smiling muzzle | true |
+| syn-001 | Bok-Bok | metal beak and comb, no face | an eye and a smile; comb soft red, not metal | true |
+| don-005 | the mango tree | smooth unbroken front surface | a two-eyed smiling face on the trunk | true |
+| syn-011 | Tarsi | large round eyes, no nose or mouth | a clear nose and smiling mouth | true |
+| syn-007 | Halo | smooth front surface, one spoon-shaped appendage | two eyes, two feet, a second nub | false |
+| syn-010 | Bramblefoot | no face, five leaf ears | full badger face, two ears, three leaves | false |
+| syn-012 | Cog | eight legs, key on back, smooth front | six legs, no key, two-eyed face | false |
+| syn-014 | Nimbus Nine | nine raindrop feet, no face | four legs, two-eyed smiling face | false |
 
-Four failed the gate and shipped anyway: `best_draw` re-rolls up to three times and returns the best of
-them, so a character that fails every draw still gets a reference.
+Four have `matches_description: false`. In the synthetic-only recount, all ten
+listed synthetic characters have a **failing final gate verdict** and still have a
+selected reference. The donated case was not read in that recount. `best_draw`
+returns the best draw after capped failures, so a failed verdict need not stop pages.
 
 ## Stated counts not rendered
 
@@ -62,6 +75,8 @@ them, so a character that fails every draw still gets a reference.
 
 Counter-example worth keeping: syn-001 Quill's description states "three amber eyes" and the reference
 draws exactly three. The generator does render stated counts sometimes.
+Its stored reference verdict nevertheless lists "two orange eyes" as a contradiction;
+the visual spot-check and verdict fields are recorded in `pipeline-gate-audit-2026-09.md`.
 
 ## Parts invented or misplaced
 
@@ -123,26 +138,27 @@ species effect rather than a glyph-legibility one.
 **What it does not touch.** Any label. Labels are image-only and the generator's reason for a defect is
 never an input — the adjudication rule for these pages is row 5 of `adjudication-notes-2026-09.md` and it
 is unchanged by whether this hypothesis holds. What it changes is **issue #99**, whose cause 1 points at
-#97: if the mechanism is glyph illegibility rather than inanimate description, the fix belongs in
-reference generation — do not hand an object character a glyph face — and no amount of prompt work on the
-page model will reach it.
+#97: if the mechanism is glyph illegibility rather than inanimate description, improving reference
+generation is one candidate. A page-prompt or editor effect must be tested separately.
 
 ---
 
 ## What this supports
 
 - **ADR-056 and `reference_judge_investigation_2026-09-02.md`**, which established on a single sheep
-  that the reference judge cannot ground stated attributes. Here it is on a corpus: 7 of 11 explicit
-  "no face" violations passed, and the gate rejected 6 references where 21 are wrong.
-- **Issue #96** — a person checking references before pages are drawn would catch roughly a quarter of
-  them. This is that rate.
-- **Issue #97** — the face-slot cases are the ice-cream problem thirteen times over: `analyze` describes
-  an object in its inanimate form, and the story then animates it.
+  that the reference judge can misground stated attributes. Here the 7 of 11
+  `matches_description: true` values show that boolean is insufficient; the later
+  synthetic recount shows the actual gate can fail and still ship a reference.
+- **Issue #96** — 21 of 79 references were classified as structurally mismatched in
+  this manual screen. A prospective human review rule, detection rate, and cost remain unmeasured.
+- **Issue #97** — inspect each story for an actual visual transformation before
+  treating a face-slot contradiction as a scene-state problem. Speech or emotion
+  alone does not establish a change of form.
 - **Issue #95** — the presentation failures (hair unstated, clothing stated) are the human-character
   half of the same gap.
-- **The write-up's limitations**, where the honest sentence is that the anchor every page is drawn from
-  is unfaithful to its own specification about a quarter of the time, and the automatic gate does not
-  detect it.
+- **The write-up's limitations** — the original manual screen found 21 of 79
+  anchors structurally unfaithful to their descriptions. The gate can flag a
+  reference and still ship it; its detection accuracy needs a separate visual audit.
 
 ## What it does not support
 
