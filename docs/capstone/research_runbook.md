@@ -75,15 +75,17 @@ run with a separate run directory.
 
 ## Qwen35 host qualification
 
-**Training-host approval pending; synthetic inference contracts passed.** The checks below span
-separate qualification sessions, not one approved training-host record. Installation/runtime and
+**Training host 54113001 approved; registered run started, latest observed seed 0 at step 20.** Its independently
+verified qualification evidence and operator acceptance are recorded in
+[`vast-54113001/capture_notes.md`](../../data/judge/qualification/vast-54113001/capture_notes.md).
+The earlier checks below span separate qualification sessions. Installation/runtime and
 registered preprocessing checks passed on the initial rented host. Its one-step GPU execution logged zero learning
 rate and saved zero LoRA B tensors; retain it as training-path evidence only. The later guarded
 two-step retry produced a nonzero weight update, verified directly against the saved initial
 adapter. Its logs, trainer states, measured peak memory and complete final adapter are locally
 verified and backed up. The later inference result is recorded below.
 See the session evidence above for raw results and
-capture status. No model-improvement evaluation or registered three-seed run has started.
+capture status. Those earlier qualification sessions did not start registered study training.
 The owner confirmed this qualification instance destroyed on 2026-10-02 Manila time after
 local backups were verified. See the session capture notes for final billing and restore artifacts;
 a future training host needs fresh runtime checks and an operator-approved qualification record.
@@ -114,8 +116,15 @@ The owner confirmed the instance destroyed after backup verification. This is a 
 contract result, not quality improvement, a production deployment qualification or completed
 study training. Evidence, billing and pending screenshots are recorded in
 [`vast-53867285/capture_notes.md`](../../data/judge/qualification/vast-53867285/capture_notes.md),
-with the machine-readable integrity receipt beside it. Next, complete the remaining governance,
-training-host approval and full-run cost/spend-alarm preparation before another rental.
+with the machine-readable integrity receipt beside it. The current training-host attempt is
+recorded in [`vast-54113001/capture_notes.md`](../../data/judge/qualification/vast-54113001/capture_notes.md).
+Its raw-file backup verification and operator acceptance passed. The owner reported matching
+immutable three-seed plans and sufficient live GPU/disk resources. Registered seed 0 has now
+started under the existing budget and confirmed spend alert; retain raw run evidence.
+The first execution attempt stopped before any trainer child because the runner compared the
+CLI's `version 0.9.5` banner with the literal `v0.9.5` Git tag. A locally tested correction
+compares the complete version value while preserving the commit and recipe pins. See the
+current capture notes for the failed launch, patch hashes and successful retry's progress.
 The laptop's observed RTX 3050 Ti has 4 GB VRAM. Do not run steps 10–11 or upload the
 donated held-out split while preparing or qualifying the toolchain.
 
@@ -209,10 +218,23 @@ donated held-out split while preparing or qualifying the toolchain.
 
 ## Full-run readiness and cost assessment (2026-10-02)
 
+The owner reported on 2026-10-03 that consent is now good. Keep the final consent version
+and approval references in the restricted study record. This owner update does not supply
+the separate live training-host qualification or authorize a full-run spending budget.
+
+For the next session, follow the local
+[training operator handoff](../../data/judge/qualification/training-session-commands.md)
+one stage at a time. Its [transfer receipt](../../data/judge/qualification/training-transfer-verification.json)
+records source/config hashes and archive verification. Synthetic qualification data is separate
+from the opaque combined-manifest integrity files; keep the latter local until host qualification
+passes. Local package verification does not supply the approved live-host record.
+
 Local read-only checks passed for the registered training configuration and the hashed training
 artifacts in `obj4-v1`: 484 training and 86 validation rows. They did not open the held-out test
-payload, run a model or execute training. `data/judge/training_qualification.json` is still absent.
-The successful synthetic contracts above do not replace approval of a live training host.
+payload, run a model or execute training. The approved live-host record is now retained in
+`data/judge/training_qualification.json`; see the current session capture notes above for the
+evidence, acceptance and confirmed spend alert. Registered training is now in progress;
+see those notes for owner-reported milestones pending later raw-file backup verification.
 
 For one GPU, batch size 1, accumulation 8 and three epochs, the pinned
 [Transformers 5.6.0 trainer](https://github.com/huggingface/transformers/blob/v5.6.0/src/transformers/trainer.py)

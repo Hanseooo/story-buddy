@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import json
 import platform
+import re
 import subprocess
 from pathlib import Path
 
@@ -276,7 +277,8 @@ def execute(
         capture_output=True, text=True, check=True,
     )
     version_output = version_proc.stdout.strip()
-    if LLAMAFACTORY_VERSION not in version_output:
+    version_match = re.search(r"\bversion\s+v?([^\s|]+)", version_output)
+    if version_match is None or version_match.group(1) != LLAMAFACTORY_VERSION.removeprefix("v"):
         raise ManifestError(
             f"LLaMA-Factory version mismatch: expected {LLAMAFACTORY_VERSION}, got {version_output}"
         )

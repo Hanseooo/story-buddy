@@ -490,7 +490,8 @@ replace that base after labels existed. The active training pins are:
 
 The 2026-09-30 registered and exploratory freeze reports now pin the manifest hashes and
 generator/model/prompt metadata; see `docs/capstone/research_runbook.md` for the dataset handoff.
-Hardware qualification and adapter locations remain pending. `finetune.train` and the
+Live-host approval and registered training progress are recorded in that runbook; study
+checkpoint selection and its evaluation adapter locations remain pending. `finetune.train` and the
 evaluation lock reject blanks, placeholder text and unhashed artifacts rather than inventing them.
 
 The evaluator imports the base/tool/seed pins from `finetune.train`. Its generated vLLM command
@@ -523,6 +524,9 @@ the target host. Both `--prepare` and `--execute` require that file, reject pin 
 inventory to equal its approved record. Preflight also reads the uv tool environment's installed
 `direct_url.json` and requires its VCS commit to equal the frozen LLaMA-Factory commit. Changing hardware
 requires a new qualification and run directory.
+Execution compares the CLI banner's complete version value with the pinned version, allowing
+the Git tag's optional `v` prefix. The trainer prints `version 0.9.5`; `0.9.50` and other
+versions fail before a training child starts. The approved record retains the tag `v0.9.5`.
 This is an explicit sequencing rule, not permission to use an unpinned package.
 
 The approved record has this exact shape (values under `hardware` must equal

@@ -10,6 +10,7 @@ from finetune import train
 from finetune.manifest import ManifestError
 
 CONFIG = Path(__file__).resolve().parent.parent / "finetune" / "train_qlora.yaml"
+VERSION_BANNER = (Path(__file__).parent / "fixtures" / "llamafactory_version.txt").read_text(encoding="utf-8")
 
 
 @pytest.fixture(autouse=True)
@@ -207,7 +208,7 @@ def test_execute_runs_seeds_in_order_and_stops_on_first_failure(tmp_path, monkey
         if command[:2] == ["git", "rev-parse"]:
             return subprocess.CompletedProcess(command, 0, "a" * 40, "")
         if command[:2] == ["llamafactory-cli", "version"]:
-            return subprocess.CompletedProcess(command, 0, "v0.9.5", "")
+            return subprocess.CompletedProcess(command, 0, VERSION_BANNER, "")
         commands.append(command)
         if "seed=1" in command:
             raise subprocess.CalledProcessError(1, command)
@@ -219,6 +220,25 @@ def test_execute_runs_seeds_in_order_and_stops_on_first_failure(tmp_path, monkey
     assert [next(value for value in command if value.startswith("seed=")) for command in commands] == [
         "seed=0", "seed=1"
     ]
+
+
+def test_execute_rejects_version_with_matching_prefix_before_training(tmp_path, monkeypatch):
+    monkeypatch.setattr(train, "hardware_inventory", qualified_inventory)
+    wrong_banner = VERSION_BANNER.replace("version 0.9.5", "version v0.9.50")
+
+    def fake_run(command, **kwargs):
+        if command[:2] == ["git", "rev-parse"]:
+            return subprocess.CompletedProcess(command, 0, "a" * 40, "")
+        if command[:2] == ["llamafactory-cli", "version"]:
+            return subprocess.CompletedProcess(command, 0, wrong_banner, "")
+        pytest.fail("training must not start with a different trainer version")
+
+    monkeypatch.setattr(train.subprocess, "run", fake_run)
+    with pytest.raises(ManifestError, match="version mismatch"):
+        train.execute(
+            frozen_fixture(tmp_path), tmp_path / "runs", CONFIG, qualification_fixture(tmp_path),
+            spend_alarm_confirmed=True,
+        )
 
 
 def test_prepare_rejects_mutated_fixed_yaml_keys(tmp_path):
