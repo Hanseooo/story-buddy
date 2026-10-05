@@ -8,6 +8,7 @@ const BASE: JobRow = {
   status: "running",
   current_stage: null,
   failure_reason: null,
+  profile_id: "p1",
   input_text: "x",
   title: null,
   style_preset_id: null,
@@ -91,7 +92,7 @@ it("select string includes title", async () => {
 
 const RUNNING: JobRow = {
   id: "j1", status: "running", current_stage: "analyze",
-  failure_reason: null, input_text: "x", title: null, style_preset_id: null, pages: [], reveal: null,
+  failure_reason: null, profile_id: "p1", input_text: "x", title: null, style_preset_id: null, pages: [], reveal: null,
 };
 const COMPLETE: JobRow = {
   ...RUNNING, status: "complete",

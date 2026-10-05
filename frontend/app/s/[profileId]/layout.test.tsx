@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import StudentLayout from "./layout";
 
 const mockSingle = vi.fn();

@@ -6,7 +6,7 @@ import Signup from "../signup/page";
 const mockSignIn = vi.hoisted(() => vi.fn());
 const mockSignUp = vi.hoisted(() => vi.fn());
 const mockPush = vi.hoisted(() => vi.fn());
-const mockSearchParamsGet = vi.hoisted(() => vi.fn(() => null as string | null));
+const mockSearchParamsGet = vi.hoisted(() => vi.fn<(key: string) => string | null>(() => null));
 
 const mockFrom = vi.hoisted(() => vi.fn());
 const mockSelect = vi.hoisted(() => vi.fn());

@@ -15,7 +15,7 @@ const {
   const mockOrder = vi.fn(() => ({ limit: mockLimit }));
   const mockIs = vi.fn(() => ({ order: mockOrder }));
   const mockNot = vi.fn(() => ({ is: mockIs }));
-  const mockSelect = vi.fn(() => ({ not: mockNot }));
+  const mockSelect = vi.fn<(columns: string) => { not: typeof mockNot }>(() => ({ not: mockNot }));
   const mockFrom = vi.fn(() => ({ select: mockSelect }));
   const mockCreateSignedUrls = vi.fn();
   const mockStorageFrom = vi.fn(() => ({ createSignedUrls: mockCreateSignedUrls }));
