@@ -320,3 +320,33 @@ remain untouched.
 Subsequently on 2026-09-30, the owner accepted [ADR-061](../product/adr/ADR-061-qwen3-5-9b-as-the-objective-4-judge-base.md)
 and a dated Objective 4 amendment choosing Qwen3.5-9B as the fine-tune base. That later
 decision is postregistration and does not turn this pilot into evidence of superiority.
+
+## Selected-page lettering screen — 2026-10-06
+
+Read-only, synthetic only. The frame is the 150 selected final pages of the 30
+`syn-*` bundles (`attempt.image_ref == scene.final_image_ref`). Their stored scene
+verdicts record `text_free=False` on 108, `True` on 37 and no verdict on 5. Since
+2026-09-02 `text_free` records and ranks but does not gate scene pages
+(`consistency_check.py`); it still gates references (`char_bible.py`). The comment at
+`config.py:136` still describes it as gating and is stale.
+
+Sample: the 8 flagged and 8 unflagged pages with the lowest SHA-256 of
+`lettering|<final_image_ref>`, viewed in key order with the stored flag hidden. An AI
+reviewer recorded each image first; the owner has not checked these.
+
+| Stored flag | No lettering | Text-like marks, illegible | Glyphs that belong (clock numerals) | Garbled caption text |
+|---|---:|---:|---:|---:|
+| `text_free=False` (8) | 4 (syn-028 s1, syn-009 s3, syn-007 s4, syn-029 s0) | 2 (syn-027 s4 newspaper; syn-027 s2 radio and wall papers) | 1 (syn-012 s0) | 1 (syn-024 s0, corner caption) |
+| `text_free=True` (8) | 8 | 0 | 0 | 0 |
+
+In this sample the flag missed no lettering, and half its positives had none. The one
+clear defect is invented caption text on syn-024 s0; illegible marks on drawn
+newspapers and papers are a softer case. Eight pages per arm cannot estimate a rate:
+it does not establish how many of the 108 flagged pages carry real lettering, and the
+earlier syn-006 package lettering shows the flag can also miss. A count rule (caption
+vs. object marks vs. legitimate glyphs) has to be fixed before any larger screen.
+
+Incidental: syn-007 s4-3 is pixel art under the `cel` preset, a style escape relevant
+to #98.
+
+No label, freeze, prompt, gate or model changed.
