@@ -63,22 +63,33 @@ export default function ClassroomSettingsPage() {
       }
       setClassroom((c) => c && { ...c, name: newName.trim() });
       setToast("Classroom renamed");
+    } catch {
+      setToast("Could not rename — try again");
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete() {
-    const tok = await getToken();
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_BASE_URL}/classrooms/${classroomId}`,
-      {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${tok}` },
-      }
-    );
-    if (!res.ok) {
+    let ok = false;
+    try {
+      const tok = await getToken();
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/classrooms/${classroomId}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${tok}` },
+        }
+      );
+      ok = res.ok;
+    } catch {
+      // Network failure: fall through to the same not-deleted state as a non-2xx.
+    }
+    if (!ok) {
       // Navigating away here would show the teacher a classroom list that still has it.
+      // Close the modal first: while it is open the rest of the page is inert, so the
+      // toast would sit unreadable behind its backdrop.
+      setDeleteConfirm(false);
       setToast("Could not delete — try again");
       return;
     }

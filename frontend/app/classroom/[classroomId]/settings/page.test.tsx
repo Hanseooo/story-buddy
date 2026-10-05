@@ -80,4 +80,34 @@ describe("failed teacher mutations are reported, not swallowed (#77)", () => {
     expect(REPLACE).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   });
+
+  it("a rename that never reaches the server is reported", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    render(<SettingsPage />);
+
+    const nameInput = await screen.findByDisplayValue("Grade 3");
+    fireEvent.change(nameInput, { target: { value: "Grade 4" } });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+
+    expect(await screen.findByText(/could not rename/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /save/i })).not.toHaveAttribute("disabled");
+    vi.unstubAllGlobals();
+  });
+
+  it("a delete that never reaches the server is reported and stays put", async () => {
+    REPLACE.mockClear();
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    render(<SettingsPage />);
+
+    const input = await screen.findByPlaceholderText(/type "grade 3"/i);
+    fireEvent.change(input, { target: { value: "Grade 3" } });
+    fireEvent.click(screen.getByRole("button", { name: /delete classroom/i }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /yes, delete/i, hidden: true })
+    );
+
+    expect(await screen.findByText(/could not delete/i)).toBeInTheDocument();
+    expect(REPLACE).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
 });
