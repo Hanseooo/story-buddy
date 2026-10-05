@@ -161,6 +161,30 @@ def test_create_storybook_null_style_preset_stores_gouache():
     assert insert_args["style_preset_id"] == "gouache"
 
 
+@pytest.mark.parametrize("enabled, status", [(False, 422), (True, 200)])
+def test_pixel_style_preset_is_accepted_only_when_switched_on(enabled, status):
+    """C3-13 trial preset (#98): hidden unless ENABLE_PIXEL_STYLE is set, so the default product
+    is the one Objective 4 describes."""
+    fake_supabase = MagicMock()
+    fake_queue = MagicMock()
+
+    with patch("app.main.get_supabase_client", return_value=fake_supabase), \
+         patch("app.main.get_queue", return_value=fake_queue), \
+         patch("app.main.check_text", return_value=(True, [], "My Story")), \
+         patch("app.main.settings.enable_pixel_style", enabled):
+        response = client.post(
+            "/storybooks",
+            json={"text": "A dog runs in a field.", "title": "My Story", "style_preset_id": "pixel"},
+        )
+
+    assert response.status_code == status
+    if enabled:
+        insert_args = fake_supabase.table.return_value.insert.call_args[0][0]
+        assert insert_args["style_preset_id"] == "pixel"
+    else:
+        fake_supabase.table.return_value.insert.assert_not_called()
+
+
 def test_create_storybook_accepts_cut_paper_style_preset():
     """ADR-042 §10: cut_paper is the third selectable preset after promotion."""
     fake_supabase = MagicMock()

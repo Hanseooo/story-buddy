@@ -76,6 +76,13 @@ class Settings(BaseSettings):
     # failure. Set true to restore the pre-ADR-045 behaviour; that is the whole revert.
     pii_pseudonymize_persons: bool = False
 
+    # C3-13 / #98: lets the API accept the `pixel` trial preset. Off by default, so the product
+    # Objective 4 evaluates (gouache, cel, cut_paper) is unchanged unless someone opts in. The
+    # frontend picker has its own switch, NEXT_PUBLIC_ENABLE_PIXEL_STYLE; set both to try it.
+    # Pixel is not in SELECTABLE_STYLE_PRESET_IDS on purpose: that set also defines the corpus
+    # strata (`freeze_dataset.py`), and the judge has never been trained or tested on pixel art.
+    enable_pixel_style: bool = False
+
     # ADR-037: consistency-checked attempts per scene — the initial draw plus two corrected
     # retries. Production is 3 and the specs are written against 3; this is a field rather than a
     # constant so `finetune/build_corpus.py` can lower it for a research build, where the
@@ -158,6 +165,11 @@ STYLE_PRESETS: dict[str, str] = {
     "comic": "bold comic-book illustration, heavy ink outlines of varied weight, flat spot colours, ben-day halftone dot shading in the backgrounds and shadows, the character itself in flat unscreened colour, limited palette, no gradients, no glow",
     "gouache": "flat gouache storybook illustration, no outlines, shapes formed by brushed colour, matte paper grain, limited warm palette, flat colour fills, no gradients, no glossy highlights",
     "cut_paper": "flat cut-paper storybook collage, clean simplified shapes with crisp cut edges, flat layered colour areas, limited warm palette, subtle paper fibre texture, no outlines, no gradients, no glossy highlights, no dimensional shadows",
+    # C3-13 trial preset, behind `enable_pixel_style`. Wording and the reasons for it:
+    # docs/capstone/pixel-art-research-2026-10.md. It avoids "sprite", "8-bit" and "16-bit": in
+    # syn-007 "sprite" alone pulled in a video-game look, and game words invite score counters,
+    # which are lettering. ⚠️ UNMEASURED until the C3-13 trial runs.
+    "pixel": "pixel art storybook illustration, large square pixels on one regular grid, flat colour in every pixel, limited palette, crisp dark one-pixel outlines, simple readable shapes, no gradients, no dithering, no anti-aliasing, no glossy highlights",
 }
 SELECTABLE_STYLE_PRESET_IDS: frozenset[str] = frozenset({"cel", "gouache", "cut_paper"})
 

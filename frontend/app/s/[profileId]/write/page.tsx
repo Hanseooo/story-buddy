@@ -17,8 +17,19 @@ const STYLE_PRESETS = [
   { id: "cel", label: "Cartoon" },
   { id: "gouache", label: "Painted" },
   { id: "cut_paper", label: "Paper Cutout" },
+  { id: "pixel", label: "Pixel" },
 ] as const;
 type StylePresetId = (typeof STYLE_PRESETS)[number]["id"];
+
+// C3-13 / #98: `pixel` is a trial preset, hidden unless NEXT_PUBLIC_ENABLE_PIXEL_STYLE is "true".
+// The API has its own switch (ENABLE_PIXEL_STYLE, backend/app/config.py) and rejects `pixel`
+// without it, so set both. Next inlines NEXT_PUBLIC_ values at build time: changing it needs a
+// rebuild. Read inside a function so tests can stub it.
+function visibleStylePresets() {
+  return process.env.NEXT_PUBLIC_ENABLE_PIXEL_STYLE === "true"
+    ? STYLE_PRESETS
+    : STYLE_PRESETS.filter(({ id }) => id !== "pixel");
+}
 
 function countWords(text: string): number {
   const trimmed = text.trim();
@@ -59,7 +70,7 @@ export default function WriteStoryPage() {
             "style_preset_id" in parsed && typeof parsed.style_preset_id === "string"
               ? parsed.style_preset_id
               : null;
-          const stylePresetId = STYLE_PRESETS.some(({ id }) => id === storedStyle)
+          const stylePresetId = visibleStylePresets().some(({ id }) => id === storedStyle)
             ? (storedStyle as StylePresetId)
             : undefined;
           prefill = {
@@ -259,7 +270,7 @@ export default function WriteStoryPage() {
       >
         <legend className="text-xs font-display font-extrabold tracking-wider uppercase text-foreground/60 mb-2">Pick a look</legend>
         <div className="flex gap-3">
-          {STYLE_PRESETS.map(({ id, label }) => (
+          {visibleStylePresets().map(({ id, label }) => (
             <label key={id} className="flex-1 cursor-pointer">
               <input
                 type="radio"

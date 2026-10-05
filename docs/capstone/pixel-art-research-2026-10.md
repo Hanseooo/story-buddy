@@ -188,6 +188,12 @@ Using the synthetic-corpus mix from the [image-model screen](image-model-researc
 | Clean-up arm | offline | offline | $0 | $0 |
 | Later LoRA arm (if run) | qwen-image + LoRA $0.020 (surcharge unknown) | edit-2511/lora $0.0275–$0.035 | $0.46–$0.54 | $2.76–$3.26 |
 
+### Hidden preset, added 2026-10-06
+
+The fragment above is now `STYLE_PRESETS["pixel"]` (`backend/app/config.py`), off by default. To try it, set `ENABLE_PIXEL_STYLE=true` on the API and `NEXT_PUBLIC_ENABLE_PIXEL_STYLE=true` on the frontend build, and apply `supabase/migrations/0020_add_pixel_style_preset.sql`. It is not in `SELECTABLE_STYLE_PRESET_IDS`, so corpus strata and freezes are unchanged.
+
+The picker sample `frontend/public/style-presets/pixel.png` was drawn once through `text_to_image` (`fal-ai/qwen-image`, seed 21) with this fragment. It shows clear pixel art on the character, but the model read "on one regular grid" as a drawn grid: graph-paper lines cover the sky, and the grass stays soft rather than pixelated. That wording is the first thing to revise before the trial. A second call with the same subject and seed redrew `cut_paper.png` with the unchanged `cut_paper` fragment, at the owner's request.
+
 Prompt-only trial: **about $5.00–$5.90** for 12 books. Worst case at `IMAGE_BUDGET` 55 calls × $0.030 = $1.65 per book is $19.80. A cap of about $8 covers the expected case plus retries; size it after reading the fal dashboard on the first book. Judge calls on OpenRouter are not included.
 
 ## Sources
