@@ -1228,4 +1228,8 @@ These are measurements the write-up can use as-is:
   content-affecting change (PR #85) among the merges. The freeze now enforces the clean-tree property
   directly (7.3).
 - Cost of the campaign: **$30.100** by the conservative ledger, which charges $0.035 per image call
-  against a real fal price of $0.0157-$0.0236, so actual spend is materially lower.
+  against a real fal price of $0.0157-$0.0236, so actual spend is materially lower. (Correction
+  2026-10-06: fal rounds `qwen-image` up to the next megapixel, so each 1024x768 reference draw is
+  $0.020, and an `edit-2511` page is $0.0236-$0.030 depending on unstated rounding. The B5 smoke
+  measured $0.027 per call (line 365). The ledger is still conservative, by less than stated. See
+  `docs/capstone/image-model-research-2026-10.md`.)

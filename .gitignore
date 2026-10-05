@@ -24,3 +24,4 @@ data/judge/
 .DS_Store
 *.log
 .worktrees/
+brag-output*/

@@ -135,7 +135,8 @@ settings = Settings()
 # page scale, and in that sample the thin limbs came back solid black on a green character while one
 # arm stayed outlined green. `text_free` also became gating, and `lettering-suppression.md:216`
 # names ben-day halftone dots as the expected judge false positive. `comic` was the only preset
-# feeding either.
+# feeding either. (`text_free` stopped gating scene pages on 2026-09-02 and now only records and
+# ranks them, `consistency_check.py:341`. It still gates references, `char_bible.py:361`.)
 #
 # The halftone is NOT removed, and that is deliberate: ADR-022 makes `comic` the gating primary
 # substrate *because* it is "textured enough (halftone) that the no-reference baseline can't fake the
