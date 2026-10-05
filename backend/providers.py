@@ -493,11 +493,18 @@ def _download_image(url: str) -> bytes:
     raise AssertionError("unreachable")
 
 
+class FalFlaggedImage(Exception):
+    """fal returned a 200 whose `has_nsfw_concepts` marks the image. Its output schemas say such an
+    image may be black; storing it would ship a blank page or anchor every page on a blank
+    reference. Seen only in the schema so far, never in our draws (390 corpus images, 0 black,
+    2026-10-06), and whether fal bills it is unverified (ROADMAP C3-10)."""
+
+
 def is_fal_content_flag(error: BaseException) -> bool:
     """fal's content checker rejected the draw. The dashboard bills it $0.00 (syn-007, request
     01a0a6b4, 2026-09-16), so it is a definite failure. Any other 422 stays uncertain: a malformed
     argument is a bug to see, not a story to quarantine."""
-    return (
+    return isinstance(error, FalFlaggedImage) or (
         isinstance(error, fal_client.FalClientHTTPError)
         and error.status_code == 422
         and "flagged by a content checker" in str(error)
@@ -526,6 +533,8 @@ def _run_fal(endpoint: str, arguments: dict, seed: int | None) -> bytes:
                 arguments={"output_format": "png", "negative_prompt": NEGATIVE_PROMPT, **arguments},
                 client_timeout=FAL_CALL_TIMEOUT_SECONDS,
             )
+            if any(result.get("has_nsfw_concepts") or []):
+                raise FalFlaggedImage(f"{endpoint} returned an image flagged by a content checker")
             contents = _download_image(result["images"][0]["url"])
         except Exception as error:
             if not is_fal_content_flag(error):
