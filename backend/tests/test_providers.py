@@ -404,6 +404,31 @@ def test_run_fal_gives_up_when_every_draw_is_rejected():
     assert events == ["attempted", "failed"] * providers.CONTENT_FLAG_ATTEMPTS
 
 
+def test_run_fal_treats_a_flagged_success_as_a_content_flag():
+    """fal's output schemas (qwen-image, qwen-image-edit-2511) document `has_nsfw_concepts` and say
+    a flagged image may come back black in a 200 instead of a 422. The shape below is from that
+    schema, not a captured payload: no draw of ours has returned one (390 corpus images, 0 black,
+    2026-10-06). Reading `images[0]` regardless would store the blank image as a page or reference."""
+    events = []
+    fal = MagicMock()
+    fal.subscribe.side_effect = [
+        {"images": [{"url": "https://fal.example/black.png"}], "has_nsfw_concepts": [True]},
+        {"images": [{"url": "https://fal.example/x.png"}], "has_nsfw_concepts": [False]},
+    ]
+    token = providers._fal_event_sink.set(events.append)
+    try:
+        with patch("providers._fal", return_value=fal), patch(
+            "providers.httpx.get", return_value=MagicMock(content=b"png-bytes")
+        ) as mock_get:
+            image_bytes = providers.text_to_image("a see-through sprite")
+    finally:
+        providers._fal_event_sink.reset(token)
+
+    assert image_bytes == b"png-bytes"
+    assert events == ["attempted", "failed", "attempted", "completed"]
+    mock_get.assert_called_once_with("https://fal.example/x.png", timeout=60.0)
+
+
 def test_run_fal_keeps_any_other_422_billing_uncertain():
     events = []
     fal = MagicMock()

@@ -216,7 +216,7 @@ the one-file, not one-env-var, case.
 | Image generation | ~$0.02–0.035/image | ADR-001 |
 | Per book (images) | ~$0.30–0.65/book | ADR-001 |
 | Whole stack, monthly | ~$60–110/month at 200 books/month, dominated by image generation | ADR-015, PRD §15 |
-| Judge fine-tune and checkpoint validation | Budget pending the [registered full-run workload assessment](capstone/research_runbook.md#full-run-readiness-and-cost-assessment-2026-10-02); refresh live compute, storage and transfer rates before rental | ADR-018, ADR-061 |
+| Judge fine-tune and checkpoint validation | Completed training and validation selection are recorded in the [research runbook](capstone/research_runbook.md); budget remaining held-out work separately and refresh live compute, storage and transfer rates before rental | ADR-018, ADR-061 |
 | Judge serving (Modal, if kept warm) | ~$1/hr to keep one container warm during study sessions (cold start ~30–90s otherwise) | ADR-019 |
 | Judge inference (steady state, if fine-tune ships) | ~2,000 calls/month × ~3s ≈ 100 GPU-minutes — cheaper than 2,000 Gemma-27B API calls | ADR-019 |
 | Moderation backstop (`gpt-oss-safeguard-20b`) | One call per story (not per scene) — cost is noise | ADR-011 |
@@ -273,9 +273,10 @@ Be honest — these are open, not silently resolved:
 - ~~**The output-image safety gate is entirely unbuilt.**~~ — resolved 2026-08-02 by `moderation-stack`:
   `input_gate` is a real implementation (meta-llama/llama-guard-4-12b OpenRouter API + Presidio PII redaction,
   concurrent, with an OpenRouter backstop), `char_ref_mod` gates every canonical reference before the
-  reveal, and `output_mod` gates every output scene (qwen/qwen3-vl-32b-instruct + Gemma safety rubric, one
+  reveal, and `output_mod` gates every output scene (~~qwen/qwen3-vl-32b-instruct~~ → mistralai/mistral-small-3.2-24b-instruct since 2026-08-11 + Gemma safety rubric, one
   soften-and-retry). `moderation_router` and `route_after_output_mod` enforce the ADR-011 ordering in
   `graph.py`. §1's moderation rows now describe shipped code, not a target. **Still open:** the worker RAM
-  budget with Presidio+spaCy, the ViT and the CPU text gate all resident (`moderation-stack` §8).
+  budget with Presidio+spaCy resident; ~~the ViT and the CPU text gate~~ were removed by ADR-032 and
+  are now OpenRouter calls (`moderation-stack` §8; issue #28, 2026-10-09).
 - **Both moderation gates (input text, output image) are unverified in Filipino and Taglish** until the
   Phase 0.5 moderation probe runs — a release gate for Phase 2, not a curiosity (ADR-011).

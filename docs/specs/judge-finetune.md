@@ -490,8 +490,11 @@ replace that base after labels existed. The active training pins are:
 
 The 2026-09-30 registered and exploratory freeze reports now pin the manifest hashes and
 generator/model/prompt metadata; see `docs/capstone/research_runbook.md` for the dataset handoff.
-Live-host approval and registered training progress are recorded in that runbook; study
-checkpoint selection and its evaluation adapter locations remain pending. `finetune.train` and the
+Live-host approval, completed registered training and validation checkpoint selection are recorded in
+that runbook. Selected original checkpoint directories and hashes are pinned in its linked evaluation
+lock; the partial held-out Qwen comparison is now saved, with the complete seven-comparator report
+pending Gemma authentication recovery. Current status and numbers are linked from the runbook.
+`finetune.train` and the
 evaluation lock reject blanks, placeholder text and unhashed artifacts rather than inventing them.
 
 The evaluator imports the base/tool/seed pins from `finetune.train`. Its generated vLLM command
@@ -633,6 +636,10 @@ controller consumes `failure_reasons` — it has to know to *restate the scarf*,
 tell it that. So **if DINOv2 wins on F1, that is a reported finding about metrics and changes nothing in the
 pipeline.** Write that sentence into the paper before the defense, not during it.
 
+Normalize CLIP's projected image embedding, not its model-output wrapper. With the pinned
+Transformers 5.6 stack, `get_image_features` places that tensor in `pooler_output`; tensor-returning
+versions remain supported. Both controls must have finite scores before threshold fitting.
+
 ### 7.4 Secondary endpoints — ordered in advance, reported regardless of the primary
 
 1. **Fine-tuned vs. prompted `gemma-3-27b-it`.** Same metric, same test set. **The input to the product
@@ -709,13 +716,32 @@ reordered or unknown pair aborts the report. Missing confidence makes AUROC unav
 recorded reason; it never becomes a fabricated probability.
 
 The production `providers.judge()` signature stays unchanged. An additive evaluation-only provider function
-returns the parsed verdict plus logprob/latency metadata, keeping all remote calls in `providers.py`. The
+returns the parsed verdict plus logprob/latency metadata, keeping all vendor model requests in `providers.py`. The
 offline evaluator consumes that richer result. CI calls neither function against a real model.
+
+The owner-operated research launcher keeps the signed checkpoint-path checks and held-out access ledger
+on Windows. Its existing `predict_fn` callback may transport image bytes to the previously qualified Linux
+embedding controls through native private SSH. This does not add a public service or transmit labels or
+pair/character identifiers. Qualification evidence, source/package/model hashes and CPU thread count must
+match before worker readiness. A validation-only SSH replay precedes held-out execution. The control
+request latency includes SSH transfer and computation. A lost or invalid control response aborts capture
+and records a failed run rather than converting a transport failure into a malformed model answer.
+Resume retains the same run ID and verified complete comparator files. Signed scientific choices remain
+unchanged. Runtime qualification evidence is linked from the research runbook.
+
+The selected serving packet's restore helper validates its manifest inside the archive without
+restoring that metadata as a destination payload. Existing payload files must match their hashes
+before any new file is written, preserving prior validation evidence on the retained instance.
 
 Validation is repeatable and uses only `manifest.val.jsonl`. It selects each seed's checkpoint and the
 CLIP/DINOv2 thresholds, then writes `evaluation_lock.json` containing every checkpoint/hash, threshold,
 prompt/model/tool pin, manifest-projection hash, bootstrap seed and prediction-schema version. The lock must
 be signed off before test access and cannot be replaced in place.
+`capture-validation` verifies every existing candidate and control prediction file's SHA-256 sidecar,
+schema, ordered pair/character/split alignment, and model/adapter/prompt/checkpoint/threshold identity
+before any model call or embedding-control initialization. Verified complete files are reused unchanged;
+only missing files are captured. Invalid existing evidence aborts without replacing it. Recovery is at
+the complete checkpoint/control file boundary; interruption within an unsaved file repeats that file's calls.
 
 Held-out access is file-ledgered and fail-closed. The runner acquires an exclusive lock and reserves a read
 before opening `manifest.test.jsonl`. It evaluates all three selected fine-tunes and all four baselines in one
@@ -724,7 +750,18 @@ the frozen hashes for `character_slices.json` and `annotation_agreement.jsonl`, 
 checkpoint directories to still match their frozen paths and directory digests. Lock
 creation is exclusive and an existing byte-identical lock is the only idempotent success. Each completed judge
 prediction file has an immutable SHA-256 sidecar; a crashed run records `resumed`, verifies the file hash,
-alignment and frozen judge/checkpoint identity, and invokes only judges whose evidence is missing. The ledger
+alignment and frozen judge/checkpoint identity, and invokes only judges whose evidence is missing.
+Saved selected-seed evidence is verified before any new model call. Missing untuned Qwen predictions
+are captured first, followed by missing selected-seed predictions and the other registered baselines.
+Capture order does not change the signed choices or the requirement for complete report coverage.
+HTTP 401 authentication errors abort capture before publishing a completed comparator file. They are
+request failures, not malformed model answers. The existing scoring rule for malformed model output
+is unchanged; saved comparator evidence is never silently overwritten during recovery. The ledger
+also guards a requested partial analysis of already saved comparator files under the same run ID.
+Such an analysis verifies the signed identities and ordered evidence, uses the existing metrics,
+labels itself partial, preserves the validation-selected deployment seed, and neither publishes
+`objective4_results.json` nor records completion or a claim-ladder decision. Missing or invalid
+comparators remain outstanding for the complete registered report. The ledger
 records `reserved`, `resumed`, `completed` and `failed` without story text or asset paths. A crashed run may
 resume only under the same run ID and identical hashes. A second run is accepted only
 when the first completed report is Rung D and a dated deviation record binds the first report, defect, fix

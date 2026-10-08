@@ -612,7 +612,10 @@ def test_object_axes_keep_a_permanent_feature_sharing_one_word_with_the_change()
 
 
 @pytest.mark.parametrize(
-    "atom", ["   ", "unspecified", "NONE", "x" * 121, "two\nlines", " , "]
+    "atom",
+    # `colours: [` is a leaked schema key, stored on 4 synthetic objects (syn-008's table:
+    # materials `["wood", "colours: ["]`) and written into every scene prompt that showed them.
+    ["   ", "unspecified", "NONE", "x" * 121, "two\nlines", " , ", "colours: [", "form_features: ["],
 )
 def test_object_axis_normalizer_drops_rather_than_raises(atom):
     """ADR-053 D3's hard constraint. `providers.py:300-315` grants exactly ONE blind re-ask, same

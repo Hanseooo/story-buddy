@@ -15,8 +15,8 @@ from pipeline.prompt_optimizer import style_prohibitions
 from providers import NEGATIVE_PROMPT
 
 
-def test_style_presets_has_exactly_four_keys():
-    assert set(STYLE_PRESETS.keys()) == {"cel", "comic", "gouache", "cut_paper"}
+def test_style_presets_has_exactly_five_keys():
+    assert set(STYLE_PRESETS.keys()) == {"cel", "comic", "gouache", "cut_paper", "pixel"}
 
 
 def test_selectable_style_preset_ids_excludes_worker_compatibility_only_comic():

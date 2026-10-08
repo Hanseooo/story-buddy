@@ -1,0 +1,162 @@
+<mxfile host="Electron" modified="2026-10-09T00:00:00.000Z" version="26.0.0">
+  <diagram id="pipeline-2026-10" name="LangGraph Pipeline (2026-10)">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="LangGraph Pipeline, after (as built 2026-10-09)" style="text;strokeColor=none;fillColor=none;fontSize=18;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="10" width="560" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="source" value="Source: backend/pipeline/graph.py build_graph(). 11 nodes. Routers are pure functions that only read state (ADR-024)." style="text;strokeColor=none;fillColor=none;fontSize=11;fontColor=#555555;" vertex="1" parent="1">
+          <mxGeometry x="40" y="38" width="760" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Setup column -->
+        <mxCell id="start" value="START" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="280" y="70" width="60" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="input_gate" value="input_gate&lt;br&gt;&lt;font color=&quot;#b85450&quot;&gt;&lt;i&gt;flag → job fails&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="220" y="125" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="analyze" value="analyze" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="220" y="215" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="segment" value="segment" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="220" y="305" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="char_bible" value="char_bible" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="220" y="395" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="char_ref_mod" value="char_ref_mod&lt;br&gt;&lt;font color=&quot;#b85450&quot;&gt;&lt;i&gt;second flag → job fails&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="220" y="485" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="reveal" value="reveal&lt;br&gt;&lt;i&gt;interrupt(): waits for the child&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="220" y="575" width="180" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Scene loop -->
+        <mxCell id="loop" value="Scene loop: one page at a time" style="swimlane;startSize=26;html=1;dashed=1;fillColor=none;strokeColor=#82b366;fontColor=#3d6b2e;" vertex="1" parent="1">
+          <mxGeometry x="470" y="300" width="500" height="410" as="geometry" />
+        </mxCell>
+        <mxCell id="router" value="route_next_scene&lt;br&gt;&lt;i&gt;(router, not a node)&lt;/i&gt;" style="rhombus;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="520" y="350" width="190" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="output_mod" value="output_mod&lt;br&gt;&lt;font color=&quot;#b85450&quot;&gt;&lt;i&gt;flag → job fails, no partial book&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="780" y="370" width="170" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="generate_scene" value="generate_scene" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="525" y="490" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="consistency_check" value="consistency_check&lt;br&gt;&lt;i&gt;keeps the better attempt&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="525" y="590" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="regenerate" value="regenerate&lt;br&gt;&lt;i&gt;one redraw with the judge&amp;#39;s reasons&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="780" y="590" width="170" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Exit -->
+        <mxCell id="compose" value="compose" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="525" y="200" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="end" value="END" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="780" y="210" width="60" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Setup edges -->
+        <mxCell id="e_start" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" source="start" target="input_gate" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_in" value="pass" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" source="input_gate" target="analyze" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_an" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" source="analyze" target="segment" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_seg" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" source="segment" target="char_bible" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_cb" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" source="char_bible" target="char_ref_mod" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_mod_pass" value="pass" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" source="char_ref_mod" target="reveal" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_mod_redraw" value="flagged: one redraw" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;strokeColor=#b85450;fontColor=#b85450;exitX=1;exitY=0.5;entryX=1;entryY=0.5;" edge="1" source="char_ref_mod" target="char_bible" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="430" y="510" />
+              <mxPoint x="430" y="420" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_try_again" value="try again&lt;br&gt;(up to 3 taps)" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;strokeColor=#9673a6;fontColor=#9673a6;exitX=0;exitY=0.5;entryX=0;entryY=0.5;" edge="1" source="reveal" target="char_bible" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="180" y="600" />
+              <mxPoint x="180" y="420" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_accept" value="accepted" style="edgeStyle=orthogonalEdgeStyle;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" source="reveal" target="router" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="450" y="600" />
+              <mxPoint x="450" y="395" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Loop edges -->
+        <mxCell id="e_to_gen" value="a page not drawn yet" style="edgeStyle=orthogonalEdgeStyle;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" source="router" target="generate_scene" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_gen" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" source="generate_scene" target="consistency_check" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_fail" value="fail, retry left" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;strokeColor=#b85450;fontColor=#b85450;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" source="consistency_check" target="regenerate" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_rejudge" value="judge again" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;strokeColor=#b85450;fontColor=#b85450;exitX=0.5;exitY=1;entryX=0.5;entryY=1;" edge="1" source="regenerate" target="consistency_check" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="865" y="675" />
+              <mxPoint x="615" y="675" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_done" value="page final&lt;br&gt;(pass, or retry spent)" style="edgeStyle=orthogonalEdgeStyle;html=1;exitX=0;exitY=0.5;entryX=0.25;entryY=0.75;" edge="1" source="consistency_check" target="router" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="495" y="615" />
+              <mxPoint x="495" y="465" />
+              <mxPoint x="567" y="465" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_to_mod" value="a final page&lt;br&gt;not yet screened" style="edgeStyle=orthogonalEdgeStyle;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" source="router" target="output_mod" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_mod_ok" value="passed" style="edgeStyle=orthogonalEdgeStyle;html=1;exitX=0.5;exitY=1;entryX=0.75;entryY=0.75;" edge="1" source="output_mod" target="router" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="865" y="460" />
+              <mxPoint x="662" y="460" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_to_compose" value="every page drawn and screened" style="edgeStyle=orthogonalEdgeStyle;html=1;exitX=0.5;exitY=0;entryX=0.5;entryY=1;" edge="1" source="router" target="compose" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_end" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" source="compose" target="end" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- What changed -->
+        <mxCell id="changes" value="&lt;b&gt;Changed since the July diagram&lt;/b&gt; (langgraph_pipeline_before_2026-07.drawio)&lt;br&gt;1. reveal node added: the run pauses until the child accepts the references; &quot;try again&quot; redraws them, at most 3 times.&lt;br&gt;2. char_ref_mod can send a flagged reference back to char_bible for one redraw (MAX_MOD_REDRAWS = 1).&lt;br&gt;3. regenerate returns to consistency_check, not generate_scene; the better of the two attempts is kept.&lt;br&gt;4. Output moderation runs on each page as soon as it is final, inside the loop (2026-08-13), not once at the end.&lt;br&gt;5. route_next_scene decides what happens next: draw a page, screen a page, or compose." style="text;html=1;whiteSpace=wrap;align=left;verticalAlign=top;fillColor=#f5f5f5;strokeColor=#666666;spacing=8;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="740" width="930" height="120" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

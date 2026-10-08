@@ -101,6 +101,8 @@ class CreateStorybookRequest(BaseModel):
     @field_validator("style_preset_id")
     @classmethod
     def validate_style_preset(cls, v: str | None) -> str | None:
+        if v == "pixel" and settings.enable_pixel_style:
+            return v
         if v is not None and v not in SELECTABLE_STYLE_PRESET_IDS:
             raise ValueError(f"Unknown style_preset_id: {v!r}")
         return v

@@ -97,6 +97,9 @@ def _stems(text: str | None) -> set[str]:
     }
 
 
+_LEAKED_KEY = re.compile(r"^\w+\s*:\s*[\[{]?$")
+
+
 def _permanent_atoms(entries: list[str], changed: set[str]) -> list[str]:
     """ADR-053 D3. Split, clean, bound, then drop what the object's own `changes_during_story`
     already says. The model emits `'bamboo, paint'` as ONE entry, so an axis is atomised on commas
@@ -115,6 +118,8 @@ def _permanent_atoms(entries: list[str], changed: set[str]) -> list[str]:
             if _is_description_placeholder(atom):
                 continue
             if "\n" in atom or "\r" in atom or len(atom) > 120:
+                continue
+            if _LEAKED_KEY.match(atom):   # `wood, colours: [` — the next field's key, not a material
                 continue
             if len(_stems(atom) & changed) >= 2:
                 continue

@@ -222,11 +222,20 @@ character explicitly named in `visual_direction` is appended to `char_ids` when 
 model list. Iterating `name_to_id` gives roster order; existing model-listed order remains first,
 and each append is logged. Unknown names in `characters_present` still raise.
 
+**Species reconciliation (2026-10-08).** The same append fires when the direction names a roster
+character only by its species head noun (`_species_noun`: "paper crane" → "crane"), as syn-021's
+"Lala examines the moth's wings" did for Ashwing. A noun counts only when it picks out one roster
+entry: `human` never does, nor a noun two entries share (Pebble and "the other tortoises"). Matching
+is singular and whole-word, so "the moths" stays a group. A replay over 30 synthetic stories, the
+stored runs plus a fresh rerun, changed syn-021 s0 and s1 and nothing else
+(`docs/capstone/model-probes-2026-10.md`). Excerpt triggers were replayed too and rejected: about one
+wrong addition per right one, the same over-recovery that removed excerpt recovery above.
+
 **What remains after the removal, and the residual risk.** An explicitly named roster character
 omitted from `characters_present` is now reconciled from `visual_direction` before image generation,
 so that mismatch receives its canonical reference. The remaining omission risk is a character that
-is not explicitly named in the direction — for example, a pronoun-only or alias reference that
-`_names_character` cannot identify. In that case `generate_scene` can still find no reference and
+is not explicitly named in the direction — for example, a pronoun-only reference, or an alias that
+is neither its name nor a unique species noun, which `_names_character` cannot identify. In that case `generate_scene` can still find no reference and
 fall through to `text_to_image`; `visual-continuity` §4.6's scene-constraint judge remains the
 downstream detector for such reference-free output, not a text-side recovery mechanism.
 

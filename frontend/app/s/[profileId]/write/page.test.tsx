@@ -76,6 +76,17 @@ describe("WriteStoryPage", () => {
     expect(body.style_preset_id).toBe("cel");
   });
 
+  it("shows the pixel trial preset only when NEXT_PUBLIC_ENABLE_PIXEL_STYLE is true (C3-13)", () => {
+    const { unmount } = render(<WriteStoryPage />);
+    expect(screen.queryByLabelText("Pixel")).toBeNull();
+    unmount();
+
+    vi.stubEnv("NEXT_PUBLIC_ENABLE_PIXEL_STYLE", "true");
+    render(<WriteStoryPage />);
+    expect(screen.getByLabelText("Pixel")).toBeDefined();
+    vi.unstubAllEnvs();
+  });
+
   it("sends the session bearer token — POST /storybooks is auth-guarded", async () => {
     render(<WriteStoryPage />);
     fireEvent.change(screen.getByLabelText("Story title"), {
@@ -113,7 +124,7 @@ describe("WriteStoryPage", () => {
 describe("Style preset sample art", () => {
   it("every ADR-042 selectable preset has a sample image in public/style-presets/", () => {
     const dir = path.resolve(__dirname, "..", "..", "..", "..", "public", "style-presets");
-    for (const id of ["cel", "gouache", "cut_paper"]) {
+    for (const id of ["cel", "gouache", "cut_paper", "pixel"]) {
       expect(fs.existsSync(path.join(dir, `${id}.png`)), `missing file: ${id}.png`).toBe(true);
     }
   });

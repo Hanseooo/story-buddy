@@ -46,6 +46,25 @@ def test_capture_predictions_is_ordered_and_scores_malformed_output_as_a_miss():
     assert rows[1].parse_status == "malformed"
 
 
+def test_capture_aborts_on_observed_authentication_error(val_records):
+    import httpx
+    from openai import AuthenticationError
+
+    payload = {"error": {"message": "User not found.", "code": 401}}
+    response = httpx.Response(401, request=httpx.Request("POST", "https://example.test"), json=payload)
+    error = AuthenticationError("User not found.", response=response, body=payload)
+    calls = []
+
+    def predict(record):
+        calls.append(record.pair_id)
+        raise error
+
+    with pytest.raises(AuthenticationError) as caught:
+        ev.capture_predictions(val_records, "prompted_gemma", predict, model_id="gemma", prompt_version="4")
+    assert caught.value is error
+    assert calls == ["p1"]
+
+
 def test_write_predictions_and_validate_alignment(tmp_path):
     records = [manifest_record("p1"), manifest_record("p2")]
     rows = [
@@ -492,13 +511,10 @@ def test_heldout_resume_reuses_hash_verified_predictions(tmp_path, valid_lock, m
     calls = []
 
     original_write = ev.write_predictions
-    writes = 0
 
     def interrupt_after_first(path, rows):
-        nonlocal writes
         original_write(path, rows)
-        writes += 1
-        if writes == 1:
+        if path.name == "seed_0.jsonl":
             raise RuntimeError("interrupted")
 
     monkeypatch.setattr(ev, "write_predictions", interrupt_after_first)
@@ -511,7 +527,15 @@ def test_heldout_resume_reuses_hash_verified_predictions(tmp_path, valid_lock, m
             ),
         )
 
+    assert calls[0] == "zero_shot_base"
     monkeypatch.setattr(ev, "write_predictions", original_write)
+    base_prediction = predictions_dir / "zero_shot_base.jsonl"
+    base_bytes = base_prediction.read_bytes()
+    base_sidecar = base_prediction.with_suffix(".jsonl.sha256")
+    base_hash = base_sidecar.read_bytes()
+    # A missing baseline must not bypass validation of a saved seed's evidence.
+    base_prediction.unlink()
+    base_sidecar.unlink()
     first_prediction = predictions_dir / "seed_0.jsonl"
     original_bytes = first_prediction.read_bytes()
     first_prediction.write_text("{}\n", encoding="utf-8")
@@ -522,6 +546,8 @@ def test_heldout_resume_reuses_hash_verified_predictions(tmp_path, valid_lock, m
             predict_fn=lambda judge, row: pytest.fail("tampered evidence must fail before prediction"),
         )
     first_prediction.write_bytes(original_bytes)
+    base_prediction.write_bytes(base_bytes)
+    base_sidecar.write_bytes(base_hash)
     calls.clear()
     ev.run_heldout(
         freeze_dir, lock_path, signoff, ledger, run_id="run-1",
@@ -531,6 +557,7 @@ def test_heldout_resume_reuses_hash_verified_predictions(tmp_path, valid_lock, m
         ),
     )
     assert "seed_0" not in calls
+    assert "zero_shot_base" not in calls
     assert [event.status for event in ev._read_ledger(ledger)] == [
         "reserved", "failed", "resumed", "failed", "resumed", "completed"
     ]
@@ -1113,3 +1140,103 @@ def test_capture_validation_writes_every_candidate_and_control(
         "seed0_checkpoint50.jsonl", "seed1_checkpoint50.jsonl",
         "clip_cosine.jsonl", "dinov2_cosine.jsonl",
     ]
+
+
+@pytest.fixture
+def validation_resume_capture(tmp_path, monkeypatch):
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    import providers
+
+    fixtures = Path(__file__).parent / "fixtures"
+    receipt = json.loads((fixtures / "qwen35-resize-scene.json").read_text())
+    replay = json.loads((fixtures / "validation-resume-response.json").read_text())
+    # Reuse captured synthetic pair metadata in the validation recovery interface.
+    record = ManifestRecord.model_validate(receipt["record"]).model_copy(update={"split": "val"})
+    freeze = tmp_path / "freeze"
+    freeze.mkdir()
+    (freeze / "manifest.val.jsonl").write_text(record.model_dump_json() + "\n", encoding="utf-8")
+    for relative, image in zip(record.images, ("qwen35-resize-reference.png", "qwen35-resize-scene.png")):
+        target = freeze / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((fixtures / image).read_bytes())
+    candidates = tmp_path / "candidates.json"
+    candidates.write_text(json.dumps({"candidates": [
+        {"model_id": "seed1_checkpoint10", "checkpoint_id": "checkpoint-10"},
+        {"model_id": "seed0_checkpoint10", "checkpoint_id": "checkpoint-10"},
+    ]}), encoding="utf-8")
+    out = tmp_path / "predictions"
+    completed = ev.PredictionRecord.model_validate(replay["prediction"]).model_copy(update={
+        "pair_id": record.pair_id, "char_id": record.char_id,
+    })
+    ev.write_predictions(out / "seed0_checkpoint10.jsonl", [completed])
+    for control in ("clip_cosine", "dinov2_cosine"):
+        ev.write_predictions(out / f"{control}.jsonl", [completed.model_copy(update={
+            "judge_id": control, "model_id": control, "adapter_id": None, "checkpoint_id": None,
+        })])
+    requests = []
+
+    def parse(**kwargs):
+        requests.append(kwargs["model"])
+        response = replay["response"]
+        return SimpleNamespace(id="replayed-validation", choices=[SimpleNamespace(
+            message=SimpleNamespace(
+                parsed=kwargs["response_format"].model_validate_json(response["raw"]),
+                content=response["raw"],
+            ), logprobs=None, finish_reason=response["finish_reason"],
+        )])
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(parse=parse)))
+    monkeypatch.setattr(providers, "OpenAI", lambda **kwargs: client)
+    return freeze, candidates, out, requests
+
+
+def test_capture_validation_resume_calls_only_missing_candidate(validation_resume_capture):
+    freeze, candidates, out, requests = validation_resume_capture
+    original = {path.name: path.read_bytes() for path in out.iterdir()}
+
+    written = ev.capture_validation(freeze, candidates, out)
+    assert written == [
+        "seed1_checkpoint10.jsonl", "seed0_checkpoint10.jsonl",
+        "clip_cosine.jsonl", "dinov2_cosine.jsonl",
+    ]
+    assert requests == ["seed1_checkpoint10"]
+    captured = json.loads((out / written[0]).read_text())
+    assert captured["prediction"] is False
+    assert captured["parse_status"] == "parsed"
+    assert captured["checkpoint_id"] == "checkpoint-10"
+    assert ev.capture_validation(freeze, candidates, out) == written
+    assert requests == ["seed1_checkpoint10"]
+    assert all((out / name).read_bytes() == data for name, data in original.items())
+
+
+@pytest.mark.parametrize("damage, error", [
+    ("checksum", "SHA-256"),
+    ("checkpoint", "checkpoint_id mismatch"),
+    ("alignment", "alignment error"),
+    ("control", "model_id mismatch"),
+])
+def test_capture_validation_rejects_saved_evidence_before_requests(
+    validation_resume_capture, damage, error,
+):
+    import hashlib
+
+    freeze, candidates, out, requests = validation_resume_capture
+    path = out / ("clip_cosine.jsonl" if damage == "control" else "seed0_checkpoint10.jsonl")
+    row = json.loads(path.read_text())
+    if damage == "checkpoint":
+        row["checkpoint_id"] = "checkpoint-20"
+    elif damage == "alignment":
+        row["pair_id"] = "wrong-pair"
+    elif damage == "control":
+        row["model_id"] = "wrong-control"
+    path.write_text(json.dumps(row) + "\n", encoding="utf-8", newline="\n")
+    digest = "0" * 64 if damage == "checksum" else hashlib.sha256(path.read_bytes()).hexdigest()
+    path.with_suffix(".jsonl.sha256").write_text(digest + "\n")
+    before = {item.name: item.read_bytes() for item in out.iterdir()}
+
+    with pytest.raises(ManifestError, match=error):
+        ev.capture_validation(freeze, candidates, out)
+    assert requests == []
+    assert {item.name: item.read_bytes() for item in out.iterdir()} == before
