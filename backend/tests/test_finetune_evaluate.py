@@ -1231,9 +1231,9 @@ def test_capture_validation_rejects_saved_evidence_before_requests(
         row["pair_id"] = "wrong-pair"
     elif damage == "control":
         row["model_id"] = "wrong-control"
-    path.write_text(json.dumps(row) + "\n", encoding="utf-8")
-    if damage != "checksum":
-        path.with_suffix(".jsonl.sha256").write_text(hashlib.sha256(path.read_bytes()).hexdigest() + "\n")
+    path.write_text(json.dumps(row) + "\n", encoding="utf-8", newline="\n")
+    digest = "0" * 64 if damage == "checksum" else hashlib.sha256(path.read_bytes()).hexdigest()
+    path.with_suffix(".jsonl.sha256").write_text(digest + "\n")
     before = {item.name: item.read_bytes() for item in out.iterdir()}
 
     with pytest.raises(ManifestError, match=error):
