@@ -149,3 +149,14 @@ viewed 7 flagged images directly (references d8ead91d1ab4, b64d6554eac2, 79a52b9
 4da67bffcd9c, 2c1df694f7da, eb25f0f58fcf, 09453202ece0) and agreed with the AI review on all 7.
 These were all flagged items, so they test the review's precision and say nothing about what it
 missed. The results stay provisional. The routes are judged by before/after reruns instead.
+
+## Duplicate-gate replay — 2026-10-08 ($0)
+
+Replayed the stored verdicts as if `subjects_unique` gated. 12 of the 150 shipped pages have
+`subjects_unique=False` (8 the review calls duplicate or extra, 4 it does not). 11 of those 12 had
+already used all 3 attempts, so gating would have bought 1 redraw in 150 scenes. On 5 of the 11,
+all 3 draws were flagged. All 149 stored prompts already carry both anti-duplicate clauses
+("draw each character exactly once" and "This illustration contains exactly N characters").
+Duplicates mostly persist across corrected redraws on the same scene. **Inferred:** the cause is
+the edit model, not the prompt or the gate. Route 2 (gate duplicates) is dropped. On 5 of the 11,
+an attempt that was not flagged as a duplicate lost on rank to the flagged one that shipped.
