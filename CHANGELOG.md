@@ -48,6 +48,10 @@ Segment species fix, Objective 4 resume, October probes, group guide.
 - `ROADMAP.md`: dated status on C3-02, 04, 05 and 13; C3-10 and C3-11 closed. A stray cp1252 byte
   that made the file invalid UTF-8 replaced.
 - Stale moderation text in `TECH_STACK.md`, `moderation-stack.md` and `AGENTS.md` (#28).
+- `AGENTS.md` rewritten from 828 to 224 lines: wrong facts fixed (two raters plus adjudication,
+  migration numbering, export cut), the build log and dated history cut, still-true gotchas moved to
+  Project Invariants and a new Known Gaps section.
+- Root `CHANGELOG.md` added (this file).
 
 ### Checks
 
