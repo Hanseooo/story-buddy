@@ -143,3 +143,9 @@ and role are hidden.
 
 Because the deviation was chosen after results, owner agreement here is a check on two findings,
 not a confirmation of the whole audit. Identity, action and extraction findings stay provisional.
+
+**Superseded the same day.** The owner skipped the sheet to move faster. Instead, the assistant
+viewed 7 flagged images directly (references d8ead91d1ab4, b64d6554eac2, 79a52b903036; pages
+4da67bffcd9c, 2c1df694f7da, eb25f0f58fcf, 09453202ece0) and agreed with the AI review on all 7.
+These were all flagged items, so they test the review's precision and say nothing about what it
+missed. The results stay provisional. The routes are judged by before/after reruns instead.
