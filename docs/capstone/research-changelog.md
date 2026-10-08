@@ -57,7 +57,20 @@ For the current state in plain words, read [`group-guide.md`](group-guide.md) fi
 
    The stage audit behind them was scored by AI reviewers and is provisional.
    [`model-probes-2026-10.md`, "Limitations to carry into the write-up"]
-8. **The product did not change its models.** The scene editor stays Qwen-Image-Edit (ADR-063). The
+8. **The labels have limitations of their own.**
+   - Hair length or style is not a rulebook reason (only hair colour is), so raters could split on it.
+   - Pairs both raters got wrong never reached adjudication. The ten audited pairs are the only
+     exception.
+   - The adjudicator could see which rater gave which label.
+   - 26 agreed-Different pairs include Character Absent. They were counted, not re-checked.
+   - Object and invented characters lean toward Different as a group: their references have a
+     minimal face and stick legs, and their pages add limbs (adjudication notes, row 5).
+   - Duplicated characters are a generator defect the judge is not asked to score.
+   - The rulebook assumes references and pages share one style. At least one page came out as
+     pixel art under a non-pixel preset.
+
+   [`PREREGISTRATION_OBJ4.md` §12, 2026-09-23 item 4; `adjudication-notes-2026-09.md`]
+9. **The product did not change its models.** The scene editor stays Qwen-Image-Edit (ADR-063). The
    product judge stays prompted Gemma, since the fine-tuned judge is not deployed.
 
 ## 2. Why the focus moved from the judge to the pipeline
@@ -77,6 +90,7 @@ and confirmed scope"]
 
 | Date | Type | What changed | Why | Paper section | Source |
 |---|---|---|---|---|---|
+| 2026-10-09 | Limitation | Label limitations gathered for the write-up: hair-length gap, agreed-wrong pairs unseen by the adjudicator, adjudicator not blind to rater, 26 Character Absent pairs counted not checked, object characters skewed toward Different, duplicates, style premise | Recorded during C3 but not yet in this file (#94) | Methods (annotation), Limitations | `PREREGISTRATION_OBJ4.md` §12; `adjudication-notes-2026-09.md` |
 | 2026-10-09 | Finding | Registered agreement and sensitivity analyses run. Inter-rater κ, test slice 0.634 (all pairs 0.659); non-human slice κ 0 at 96% agreement, a prevalence artifact (24 of 25 pairs Same for both). Guide boundary: no clear effect, groups small and mostly straddling. Without the ambiguous-reference characters (20 pairs, n = 309): untuned F1 0.48, seed 1 0.35, ΔF1 −0.13 (95% CI −0.33 to +0.05), McNemar p = 0.0075; same direction as the primary | Pre-registered items 2, 3 and 5 of the 2026-09-23 amendment; saved predictions only | Methods (annotation), Results (Objective 4) | runbook, "Registered agreement and sensitivity analyses (2026-10-09)"; `heldout-1/sensitivity_and_agreement.json` (local, git-ignored) |
 | 2026-10-08 | Decision | FLUX.2 klein rejected as scene editor; Qwen-Image-Edit stays | On 30 random pages, blinded, klein drew as many duplicates (4 against 4) and lost identity more (10 against 3) | Methods (system), Discussion | ADR-063 |
 | 2026-10-08 | Limitation | Duplicate characters stay an open defect at about 13% of page images | Two editors produced them at the same rate; a prompt line, rewritten directions and best-of ranking all failed | Limitations | `model-probes-2026-10.md` |

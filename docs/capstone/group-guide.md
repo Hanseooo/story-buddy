@@ -182,7 +182,11 @@ as provisional.
    scored by one AI rater, the assistant. Only the klein screen was blinded and used random pages.
 6. **The judge result.** Objective 4's result is partial, and the trained judge scored lower F1
    than the untrained one.
-7. **Scope.** One grade band, one school, one country. The base model changed after registration,
+7. **The labels.** Two groupmates labelled every pair and the owner settled disagreements. Pairs
+   both raters got wrong were never re-checked, apart from ten audited ones. Hair length is not a
+   rule, so raters could split on it. Object characters (such as a tin can) lean toward
+   "different" because their pages add arms and legs their references never had.
+8. **Scope.** One grade band, one school, one country. The base model changed after registration,
    and AI assistance in labelling is disclosed. Both are reported as limitations.
 
 [`docs/capstone/model-probes-2026-10.md` "Limitations to carry into the write-up",

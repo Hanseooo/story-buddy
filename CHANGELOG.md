@@ -23,8 +23,9 @@ Refs [#94](https://github.com/Hanseooo/story-buddy/issues/94), #102
 
 - `research_runbook.md`: new section "Registered agreement and sensitivity analyses (2026-10-09)"
   with inter-rater κ, the guide-boundary split and the ambiguous-reference secondary analysis.
-- `research-changelog.md`: Finding row and a κ line in §1. `group-guide.md` §5.2: κ and the
-  secondary result in plain words. `ROADMAP.md` C3-02: dated status.
+- `research-changelog.md`: Finding row and a κ line in §1; a Limitation row and §1 item 8 listing
+  the label limitations #94 asks the write-up to carry. `group-guide.md` §5.2: κ and the secondary
+  result in plain words; §6: the label limitations. `ROADMAP.md` C3-02: dated status.
 
 ### Checks
 
