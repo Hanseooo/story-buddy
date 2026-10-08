@@ -154,7 +154,7 @@ export default function PipelineMap() {
               <div className="absolute left-[calc(50%+180px)] md:left-[calc(50%+220px)] top-1/2 -translate-y-1/2 hidden sm:block">
                 <FlowNode 
                   title="Regenerate" 
-                  desc="One retry with the judge’s reasons; the better attempt is kept." 
+                  desc="Up to two retries with the judge’s reasons; the best attempt is kept." 
                   icon={<ArrowsClockwise weight="bold" className="w-5 h-5" />}
                   delay={1.5} 
                   isSecondary

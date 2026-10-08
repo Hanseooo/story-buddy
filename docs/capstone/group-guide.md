@@ -48,7 +48,7 @@ Each step runs automatically, in this order:
 | Reveal | Shows the references before the pages are drawn |
 | Generate scene | Draws each page, using the reference pictures so characters look the same |
 | Consistency check | An AI judge compares each page with the references |
-| Regenerate | If the judge finds a mismatch, the page is redrawn once, with the reasons fed back. The better of the two is kept |
+| Regenerate | If the judge finds a mismatch, the page is redrawn with the reasons fed back, up to twice. The best of the (at most three) attempts is kept |
 | Output moderation | Checks the pages are safe |
 | Compose | Assembles the book |
 
@@ -95,12 +95,16 @@ All of them are open-weight models.
 The held-out test set has 329 image pairs, and 47 of them show a different character. The table
 ranks each judge by how well it catches those 47.
 
-| Judge | F1 | Precision | Recall |
-|---|---|---|---|
-| Untrained Qwen3.5-9B | 0.47 | 0.38 | 0.62 |
-| Trained, seed 1 (picked in advance on validation data) | 0.31 | 0.82 | 0.19 |
-| Trained, seed 0 | 0.36 | 0.79 | 0.23 |
-| Trained, seed 2 | 0.42 | 0.35 | 0.51 |
+| Judge | F1 | Precision | Recall | Unreadable answers (of 329) |
+|---|---|---|---|---|
+| Untrained Qwen3.5-9B | 0.47 | 0.38 | 0.62 | 3 |
+| Trained, seed 1 (picked in advance on validation data) | 0.31 | 0.82 | 0.19 | 40 |
+| Trained, seed 0 | 0.36 | 0.79 | 0.23 | 44 |
+| Trained, seed 2 | 0.42 | 0.35 | 0.51 | 8 |
+
+An unreadable answer is output that did not parse. It is scored as "same character", so on a
+different-character pair it counts as a miss. Seeds 0 and 1 gave unreadable answers on about one
+pair in eight, which is part of why their recall is low.
 
 **In plain words:**
 
@@ -111,7 +115,10 @@ ranks each judge by how well it catches those 47.
 - This is a partial result. It does not say fine-tuning can never work. It says this training run
   did not improve the judge under these data and settings.
 
-[`docs/capstone/research_runbook.md` "Partial untuned versus fine-tuned comparison"]
+[`data/judge/evaluations/obj4-v1/heldout-1/qwen_comparison.partial.json`, the numbers' source. It
+is local research evidence, git-ignored, so it is not in the public repository. How it was produced:
+`docs/capstone/research_runbook.md` "Partial untuned versus fine-tuned comparison". Scoring of
+unreadable answers: `backend/finetune/evaluate.py`, `prediction=False` on `malformed`]
 
 ### 5.3 What goes wrong on the pages (October stage audit, provisional)
 

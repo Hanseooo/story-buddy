@@ -173,7 +173,7 @@ export default async function ResearchMethodologyPage() {
                 <p>Unconditioned image generators drift across pages. StoryBuddy turns character identity from a prompt-hoping gamble into deterministic application state.</p>
                 <ul className="list-disc pl-5 space-y-3 marker:text-primary">
                   <li><strong>Reason-Then-Score VLM Judge:</strong> Evaluates generated scenes against canonical references using field-order discipline, preventing post-hoc rationalization.</li>
-                  <li><strong>Targeted Regeneration:</strong> The extracted failure taxonomy feeds directly into a single, prompt-corrected retry.</li>
+                  <li><strong>Targeted Regeneration:</strong> The extracted failure taxonomy feeds directly into up to two prompt-corrected retries; the best attempt is kept.</li>
                   <li><strong>Story Memory:</strong> Main characters are rendered once up front. Subsequent scenes are strictly reference-conditioned.</li>
                 </ul>
               </div>

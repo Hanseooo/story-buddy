@@ -14,6 +14,31 @@ instead of repeating it.
 
 ---
 
+## Direct to `main` · 2026-10-09
+
+Retry count and Objective 4 table corrections from the defense-prep audit.
+Closes [#109](https://github.com/Hanseooo/story-buddy/issues/109) · Refs #102, #94
+
+### Code
+
+- **`/research` page copy**: the pipeline map and the "Targeted Regeneration" bullet said one
+  retry; the code allows three attempts with the best kept (`settings.max_scene_attempts = 3`,
+  ADR-037).
+
+### Docs
+
+- `group-guide.md` §3: same retry correction. §5.2: the Objective 4 table adds unreadable
+  (unparsed) answers per judge (3 / 40 / 44 / 8 of 329), says they score as "same character", and
+  cites the local result JSON as the numbers' source.
+- `research-changelog.md`: the 2026-10-08 finding row cites the same JSON and the unparsed counts.
+- `system_architecture.md`: same retry correction.
+
+### Checks
+
+- Frontend `pnpm lint && pnpm build && pnpm test`.
+
+---
+
 ## PR #101 · 2026-10-09
 
 Segment species fix, Objective 4 resume, October probes, group guide.
