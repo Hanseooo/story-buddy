@@ -393,3 +393,42 @@ the scenes were picked because they had failed.
 **Cost.** 10 calls at $0.03 per megapixel of output, about $0.024 each, or $0.03 if rounded up.
 Whether input references are billed is unstated, so this is at most about $0.30 plus any input
 charge.
+
+## Blinded klein screen: random scenes (2026-10-08) — plan, written before any paid call
+
+**Question.** On random scenes, not ones picked for failing, does klein draw fewer duplicate or
+extra characters than Qwen without losing identity or style? Exploratory: ADR-062 runs its gates
+after Objective 4, and a pass here counts as its first gate only through a follow-up ADR.
+
+**Sample.** Synthetic scenes from the stored runs, ranked by SHA-256 of `klein-screen|<story>|<scene>`.
+The lowest 15 with one referenced cast member and the lowest 15 with two. Excluded are the 21 scenes
+already viewed with their alternatives in this file: syn-001 s2, 002 s2, 004 s1, 004 s5, 005 s2,
+008 s2, 008 s3, 012 s0, 012 s2, 013 s2, 014 s2, 014 s3, 016 s1, 018 s0, 019 s1, 021 s2, 021 s5,
+021 s6, 022 s3, 024 s3, 025 s1.
+
+**Arms.** Qwen: each scene's stored first attempt (`fal-ai/qwen-image-edit-2511`), no new calls.
+klein: one new draw from `fal-ai/flux-2/klein/4b/base/edit` with the same first-attempt prompt,
+references, `NEGATIVE_PROMPT` and size. Hard cap 30 calls, about $0.62.
+
+**Blinding.** Each scene's two images are shown as A and B, the side set by a hash, beside the
+references and the direction. The assistant saves every score before opening the key. klein's style
+may be recognisable, so the blinding is partial.
+
+**Scored per image.** Major means a reader would notice it on the page.
+
+- **Duplicate or extra (major):** a cast character drawn more than once, or a figure the direction
+  does not ask for that reads as a character. Figures the direction asks for ("the other cranes")
+  are not defects.
+- **Identity (major):** a cast character not recognisable from its reference: wrong species, main
+  colour, or a defining feature.
+- **Style (major):** clearly a different art style from the references, such as a cut-paper story
+  drawn as a smooth digital render.
+- **Lettering:** any invented text.
+- **Action:** the direction's main action not shown, or done by the wrong character.
+
+**Pass rule, fixed now.** klein passes if both hold:
+
+1. klein has fewer duplicate-or-extra pages than Qwen.
+2. klein's identity-or-style pages exceed Qwen's by at most 3, which is 10% of 30.
+
+Lettering and action are reported but do not decide.
