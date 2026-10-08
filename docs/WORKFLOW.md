@@ -97,6 +97,10 @@ checklists is exactly the noise you were worried about.
 
 ## Right now
 
+For Objective-4 work, read the [current held-out resume context](capstone/research_runbook.md#held-out-resume-context-2026-10-07)
+before renting, resuming capture or interpreting results. It records the saved partial run,
+GPU availability blocker and the unresolved Qwen-first scope decision.
+
 **Phase 2 is in progress.** Phase 1 is complete; Phase 0.5 closed 2026-07-29 — see
 `docs/product/PHASE_05_RESULTS.md`. The build log below is chronological.
 `story-memory-contract` is **built** (2026-07-29).

@@ -523,6 +523,8 @@ def capture_predictions(
         except ImagePreparationError:
             raise
         except Exception as exc:
+            if getattr(exc, "status_code", None) == 401:
+                raise
             log.warning("malformed output for pair %s: %s", record.pair_id, exc)
             rows.append(
                 PredictionRecord(
@@ -690,6 +692,7 @@ def embedding_control(name: str, threshold: float, image_loader: Callable[[str],
         with torch.no_grad():
             out = model.get_image_features(**inputs) if hasattr(model, "get_image_features") \
                 else model(**inputs).last_hidden_state[:, 0]
+            out = getattr(out, "pooler_output", out)
         return torch.nn.functional.normalize(out, dim=-1)
 
     def predict(record: ManifestRecord) -> JudgeObservation:
@@ -731,6 +734,27 @@ def capture_validation(freeze_dir: Path, candidates_path: Path, predictions_dir:
     predictions_dir = Path(predictions_dir)
     predictions_dir.mkdir(parents=True, exist_ok=True)
 
+    completed = set()
+    for candidate in candidates:
+        model_id = candidate["model_id"]
+        filename = f"{model_id}.jsonl"
+        rows = _load_completed_predictions(
+            predictions_dir / filename, records, model_id,
+            model_id=BASE_MODEL, adapter_id=model_id, prompt_version="4",
+            checkpoint_id=candidate.get("checkpoint_id"), threshold_id=None,
+        )
+        if rows is not None:
+            completed.add(filename)
+    for control in ("clip_cosine", "dinov2_cosine"):
+        filename = f"{control}.jsonl"
+        rows = _load_completed_predictions(
+            predictions_dir / filename, records, control,
+            model_id=control, adapter_id=None, prompt_version="4",
+            checkpoint_id=None, threshold_id=None,
+        )
+        if rows is not None:
+            completed.add(filename)
+
     def image_uri(relative_path: str) -> str:
         return image_data_uri(freeze_dir / relative_path)
 
@@ -743,20 +767,26 @@ def capture_validation(freeze_dir: Path, candidates_path: Path, predictions_dir:
     written = []
     for candidate in candidates:
         model_id = candidate["model_id"]
+        filename = f"{model_id}.jsonl"
+        if filename in completed:
+            written.append(filename)
+            continue
         rows = capture_predictions(
             records, model_id, finetuned_judge(image_uri, model=model_id),
             model_id=BASE_MODEL, adapter_id=model_id, prompt_version="4",
             checkpoint_id=candidate.get("checkpoint_id"),
         )
-        filename = f"{model_id}.jsonl"
         write_predictions(predictions_dir / filename, rows)
         written.append(filename)
     for control in ("clip_cosine", "dinov2_cosine"):
+        filename = f"{control}.jsonl"
+        if filename in completed:
+            written.append(filename)
+            continue
         rows = capture_predictions(
             records, control, embedding_control(control, 0.0, pil_image),
             model_id=control, prompt_version="4",
         )
-        filename = f"{control}.jsonl"
         write_predictions(predictions_dir / filename, rows)
         written.append(filename)
     return written
@@ -1096,27 +1126,9 @@ def run_heldout(
                 prompt_version=lock.prompt_version,
                 checkpoint_id=ckpt_info["checkpoint_id"],
             )
-            if rows is None and predict_fn is not None:
-                rows = capture_predictions(
-                    test_records, judge_id, lambda r, j=judge_id: predict_fn(j, r),
-                    model_id=BASE_MODEL, prompt_version=lock.prompt_version,
-                    adapter_id=ckpt_info["path"], checkpoint_id=ckpt_info["checkpoint_id"],
-                )
-            elif rows is None:
-                judge_callable = finetuned_judge(
-                    image_loader or (lambda p: image_data_uri(freeze_dir / p)), model=ckpt_info["model_id"],
-                )
-                rows = capture_predictions(
-                    test_records, judge_id,
-                    judge_callable,
-                    model_id=BASE_MODEL, prompt_version=lock.prompt_version,
-                    adapter_id=ckpt_info["path"], checkpoint_id=ckpt_info["checkpoint_id"],
-                )
-            if not pred_file.exists():
-                write_predictions(pred_file, rows)
-            written_files.append(pred_file.name)
             results[judge_id] = rows
 
+        # Verify saved seed evidence before spending on the requested untuned baseline.
         pred_file = predictions_dir / "zero_shot_base.jsonl"
         rows = _load_completed_predictions(
             pred_file,
@@ -1145,6 +1157,31 @@ def run_heldout(
             write_predictions(pred_file, rows)
         written_files.append(pred_file.name)
         results["zero_shot_base"] = rows
+
+        for seed_key, ckpt_info in lock.selected_checkpoints.items():
+            judge_id = seed_key
+            pred_file = predictions_dir / f"{judge_id}.jsonl"
+            rows = results[judge_id]
+            if rows is None and predict_fn is not None:
+                rows = capture_predictions(
+                    test_records, judge_id, lambda r, j=judge_id: predict_fn(j, r),
+                    model_id=BASE_MODEL, prompt_version=lock.prompt_version,
+                    adapter_id=ckpt_info["path"], checkpoint_id=ckpt_info["checkpoint_id"],
+                )
+            elif rows is None:
+                judge_callable = finetuned_judge(
+                    image_loader or (lambda p: image_data_uri(freeze_dir / p)), model=ckpt_info["model_id"],
+                )
+                rows = capture_predictions(
+                    test_records, judge_id,
+                    judge_callable,
+                    model_id=BASE_MODEL, prompt_version=lock.prompt_version,
+                    adapter_id=ckpt_info["path"], checkpoint_id=ckpt_info["checkpoint_id"],
+                )
+            if not pred_file.exists():
+                write_predictions(pred_file, rows)
+            written_files.append(pred_file.name)
+            results[judge_id] = rows
 
         pred_file = predictions_dir / "prompted_gemma.jsonl"
         rows = _load_completed_predictions(

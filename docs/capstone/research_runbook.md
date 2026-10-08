@@ -73,9 +73,221 @@ evidence and delete the instance when finished. The registered freeze is the inp
 the registered run; use the exploratory freeze only for an explicitly named exploratory
 run with a separate run directory.
 
+## Held-out resume context (2026-10-07)
+
+This section records the latest owner conversation and local artifact checks. Earlier qualification
+and preparation notes below describe their own stages, not the current execution state.
+
+**Training and validation selection are complete. The owner confirmed the reporting scope as
+untuned Qwen versus fine-tuned Qwen and requested documentation with verification references.
+The partial held-out comparison is saved; all four Qwen and both embedding-control captures are
+verified locally. The owner reported destroying the remaining rentals and cannot fund another
+top-up. Paid evaluation has stopped. Prompted Gemma failed authentication and the full registered
+report remains incomplete. Preserve that failed attempt as infrastructure evidence, not a quality
+result. The next workstream is the existing pipeline, with the production judge unchanged.**
+
+The [signed evaluation lock](../../data/judge/evaluations/obj4-v1/evaluation_lock.json) and
+[owner sign-off](../../data/judge/evaluations/obj4-v1/evaluation_signoff.json) remain authoritative.
+Keep their checkpoint choices, prompts, thresholds and 256-token generation cap unchanged.
+The validation precision, recall and F1 in the
+[validation score report](../../data/judge/evaluations/obj4-v1/validation_scores.json) are selection
+results, not final test results. That table compares the three selected fine-tuned seeds with CLIP
+and DINO. It does not contain untuned Qwen or prompted Gemma.
+
+### Saved progress and safe resume
+
+- Run ID: `obj4-heldout-1`. The [access ledger](../../data/judge/evaluations/obj4-v1/test_access.jsonl)
+  contains one `reserved` event at `2026-10-06T19:34:56.305412Z`, with no completed report event.
+- In `data/judge/evaluations/obj4-v1/heldout-1/predictions/`, `seed_0.jsonl` and `seed_1.jsonl`
+  each contain 329 rows. Both checksum sidecars passed a fresh local SHA256 check for this handoff.
+  At the original pause, seed 2 had not published a complete prediction file.
+- The resumed run saved `seed_2.jsonl` and `zero_shot_base.jsonl`, each with 329 rows and matching
+  checksum sidecars. All four GPU-dependent comparator files are now complete and locally verified.
+- `prompted_gemma.jsonl` has 329 malformed entries and zero parsed entries following the owner's
+  reported HTTP 401 `User not found` errors. Preserve the file and sidecar as the failed attempt.
+  A Vast credit top-up does not repair OpenRouter authentication. The exact credential/account
+  cause is unconfirmed; credentials must be entered by the owner at the hidden prompt only.
+- Both held-out embedding controls now contain 329 parsed rows. Fresh local checks verified both
+  checksum sidecars and the owner supplied successful alignment output from the recovery helper.
+  `heldout-1/objective4_results.json` does not exist. The partial Qwen results below are available;
+  a final Objective-4 claim-ladder/product-gate decision has not been calculated.
+  A final report including the failed Gemma capture would misrepresent authentication as model quality.
+- Resume the same run ID with identical signed hashes and the existing ledger. Preserve complete
+  files and sidecars. The evaluator reuses complete verified comparator files; an unfinished
+  comparator repeats its capture. This is not per-request resume. Do not delete or manually reset
+  the ledger to create another first evaluation.
+
+The original full Windows checkpoint directories are still needed for the signed hash guards.
+Compact serving adapters do not replace them. The [operator handoff](../../data/judge/evaluations/obj4-v1/heldout-1/OPERATOR.md)
+owns commands and the existing local guarded launcher. No raw held-out examples should be browsed
+for development or used to tune the failed outputs.
+
+### Partial untuned versus fine-tuned comparison (2026-10-08)
+
+The owner requested this comparison after confirming destruction of the rentals. The reproducible
+[partial result](../../data/judge/evaluations/obj4-v1/heldout-1/qwen_comparison.partial.json) is the source
+of its numbers. The [screenshot table](../../data/judge/evaluations/obj4-v1/heldout-1/qwen_comparison.partial.html)
+labels the comparison as partial and shows every selected seed, the untuned baseline, precision,
+recall, F1, intervals and malformed counts. Run `heldout-1/score_qwen_comparison.py` through the
+existing backend `uv run --frozen` environment to reproduce it.
+
+On the frozen held-out pairs, untuned Qwen has higher observed F1 than each selected fine-tune.
+The validation-preselected seed 1 gains precision but loses recall; its character-clustered paired
+F1-difference interval includes zero. These results do not demonstrate a positive fine-tuning effect
+under the evaluated dataset, training and inference constraints. This is not evidence that fine-tuning
+is infeasible in general. Technical training feasibility and improved judge performance are separate
+findings. The source contains the registered 10,000-resample interval, exact McNemar result and seed
+mean/sample standard deviation. No seed or checkpoint was reselected using these results.
+
+The analysis verified signed checkpoint identities, prediction sidecars and ordered pair coverage,
+then used the existing metric functions under the same ledgered run ID. All thirteen
+launcher/transport/recovery/partial-analysis tests and relevant lint passed after the new aggregation
+tests first failed on real validation evidence. The final seven-comparator report and completed ledger
+event remain absent. Gemma's authentication failure is excluded from this quality comparison;
+the captured CLIP/DINO controls are outside this requested Qwen-only table. Prompts, caps and
+thresholds remain fixed. Further model changes cannot be justified using inspection of these test outputs.
+
+### Verification sources for the accepted comparison
+
+Paths below are relative to the repository root unless linked. The machine-readable result owns
+the reported numbers; screenshots supplement it. These artifacts remain local research evidence,
+not a public dataset or a second source of truth for study status.
+
+| What to verify | Source / proof | Verification purpose |
+|---|---|---|
+| Reported metrics and uncertainty | [qwen_comparison.partial.json](../../data/judge/evaluations/obj4-v1/heldout-1/qwen_comparison.partial.json) | Four Qwen summaries, confusion counts, preselected seed 1 versus base, paired character-clustered interval, McNemar result, seed mean/SD, input hashes and limitations. |
+| Screenshot for the manuscript | [qwen_comparison.partial.html](../../data/judge/evaluations/obj4-v1/heldout-1/qwen_comparison.partial.html) | Human-readable display of the same partial result. |
+| Immutable captured decisions | [untuned](../../data/judge/evaluations/obj4-v1/heldout-1/predictions/zero_shot_base.jsonl), [seed 0](../../data/judge/evaluations/obj4-v1/heldout-1/predictions/seed_0.jsonl), [seed 1](../../data/judge/evaluations/obj4-v1/heldout-1/predictions/seed_1.jsonl), [seed 2](../../data/judge/evaluations/obj4-v1/heldout-1/predictions/seed_2.jsonl) | Each file has 329 ordered rows and an adjacent `.jsonl.sha256` sidecar; the result also records each digest. |
+| Choices fixed before test reporting | [evaluation_lock.json](../../data/judge/evaluations/obj4-v1/evaluation_lock.json), [evaluation_signoff.json](../../data/judge/evaluations/obj4-v1/evaluation_signoff.json), [validation_scores.json](../../data/judge/evaluations/obj4-v1/validation_scores.json) | Base revision, selected checkpoint paths/digests, candidate seed, prompts, thresholds, manifest hashes and owner approval. Validation scores explain selection, not test effectiveness. |
+| Frozen ground truth and coverage | [manifest.test.jsonl](../../data/judge/freezes/obj4-v1/manifest.test.jsonl), [freeze_report.json](../../data/judge/freezes/obj4-v1/freeze_report.json) | Manifest identity is checked against the signed lock. Reproduction uses the guarded analysis below; test examples are not debugging or tuning inputs. |
+| Original read and resumptions | [test_access.jsonl](../../data/judge/evaluations/obj4-v1/test_access.jsonl) | Same run ID `obj4-heldout-1`, unchanged signed hashes, original reservation and resumptions. No completed full-report event exists. |
+| Reproducible calculation | [score_qwen_comparison.py](../../data/judge/evaluations/obj4-v1/heldout-1/score_qwen_comparison.py), [evaluate.py](../../backend/finetune/evaluate.py), [evaluation_metrics.py](../../backend/finetune/evaluation_metrics.py) | Guards, ordered evidence checks, existing metric definitions, 10,000-resample character bootstrap and fixed RNG seed. No model call is made. |
+| Regression and verification record | [test_score_qwen_comparison.py](../../data/judge/evaluations/obj4-v1/heldout-1/test_score_qwen_comparison.py), [preparation-verification.json](../../data/judge/evaluations/obj4-v1/heldout-1/preparation-verification.json) | Real validation fixtures test aggregate counts and refusal of reordered rows. Receipt records tests, partial-result/script hashes, saved progress and exclusions. |
+| Training feasibility | [verified-extracted training runs](../../data/judge/qualification/vast-54113001/registered-training/verified-extracted/storybuddy/data/judge/runs/obj4-v1/), [qualification notes](../../data/judge/qualification/vast-54113001/capture_notes.md) | For each `seed-0`, `seed-1`, `seed-2`: `stdout.log`, `run_plan.json`, `hardware.json`, `output/trainer_state.json`, `output/train_results.json` and `output/eval_results.json`. Selected adapter locations/hashes are in the signed lock. Training success is separate from classification improvement. |
+| Original study commitments | [PREREGISTRATION_OBJ4.md](../product/PREREGISTRATION_OBJ4.md) §§5, 7, 9; [judge-finetune.md](../specs/judge-finetune.md) §7 | Registered metrics, test-access policy and comparator requirements. The budget-limited partial comparison does not replace these commitments. |
+
+To reproduce the saved comparison without paid calls, from the repository's `backend/` directory:
+
+```powershell
+uv run --frozen python ../data/judge/evaluations/obj4-v1/heldout-1/score_qwen_comparison.py
+Start-Process ../data/judge/evaluations/obj4-v1/heldout-1/qwen_comparison.partial.html
+```
+
+The script verifies the signed lock and original checkpoint directories, resumes the same ledgered
+run, checks frozen manifest and prediction hashes/identities, and reproduces the existing partial
+outputs exclusively/idempotently. It neither overwrites predictions nor publishes the full report.
+Keep the referenced original checkpoint directories available for these checks. For a checksum-only
+audit, compare `Get-FileHash -Algorithm SHA256` against the adjacent prediction sidecars and the
+result's `prediction_sha256` map; this does not read test labels or reserve another access.
+
+### Owner decisions and confirmed scope
+
+The owner explicitly requested **untuned Qwen next**, then consideration of a documented research
+finding and a return to pipeline work if fine-tuning performs weakly. Untuned Qwen is already a
+registered comparator (`zero_shot_base`, the same pinned Qwen3.5-9B without an adapter).
+The local runner now verifies saved seed evidence, captures missing untuned Qwen predictions first,
+then resumes missing selected seeds and the other registered comparators. The existing resume test
+first failed because `seed_0` ran before `zero_shot_base`; after the ordering change all 46 evaluator
+tests and relevant lint passed. The test also removes the saved baseline while tampering with a saved
+seed to require refusal before any new prediction. Existing complete baseline and seed files are reused.
+This is an operational capture-order change, not a change to the signed research choices or coverage.
+
+The owner confirmed that "normal Qwen" meant the trained fine-tune: report **untuned versus
+fine-tuned Qwen**, document the finding and proof locations, and stop further paid evaluation because
+another top-up is not possible. Seed 1 remains the validation-preselected primary comparison;
+all three selected seeds remain in the table and original evidence. This budget-limited scope leaves
+the registered seven-comparator study incomplete. It does not amend the frozen requirements or
+permit a complete-report/production-swap claim. CLIP/DINO captures remain preserved as auxiliary
+evidence; the invalid Gemma attempt remains excluded from quality comparisons.
+
+Three completed training runs establish technical feasibility in this setup. They do not establish
+improved judgment. If the completed registered comparison supports it, a bounded finding could be:
+"Under the evaluated dataset, training settings and inference constraints, fine-tuning did not
+demonstrate a reliable improvement over the untuned baseline." Do not generalize that conclusion
+to fine-tuning in all settings, or use validation selection scores to support it. Preserve malformed
+outputs as registered failures rather than changing the cap after seeing test behavior.
+Further training, a production judge swap and changes to the frozen research design have not been
+approved by this discussion. Keep the production Gemma judge and existing pipeline decisions.
+
+### Infrastructure and budget handoff
+
+The owner's latest observations, not a fresh API check, were:
+
+- Retained instance **54471883**, host `361582`, machine `124820`, was inactive after an attempt
+  to restart showed `Scheduling` because its GPU was in use. Files were retained. Last SSH endpoint
+  was `122.183.60.28:41180`; obtain the current endpoint before reconnecting. Stopping released
+  the GPU reservation, so restarting is not guaranteed. Its displayed storage charge was
+  `$0.038/hour`, and running base cost `$0.438/hour`, excluding bandwidth.
+- Replacement **54633938**, host `86680`, machine `149573`, IP `129.153.115.129`, had only been
+  reported as creating. No SSH endpoint, runtime qualification or transfer was completed. Its
+  stopped/destroyed status was unconfirmed. The latest all-instances page no longer lists it.
+- Replacement **54645099**, host `314882`, machine `51579`, IP `72.83.150.152`, remained
+  `Connecting` at 16 minutes with a displayed running rate of `$0.515/hour`. Its proxy endpoint
+  was `ssh7.vast.ai:10679`. Both SCP and plain SSH with configuration disabled failed before
+  authentication: `banner exchange: Connection to UNKNOWN port -1: Connection refused`.
+  TCP connected before the plain SSH failure. No direct-port check or container log was available,
+  so the root cause remains undiagnosed. The operating guide could not be downloaded; no study
+  payload was uploaded. The owner subsequently reported deleting this instance.
+  Offer **54647728** then appeared on the same host/machine. Avoid retrying that machine for the
+  next attempt without evidence that its connectivity issue has been resolved.
+- The owner nevertheless rented **54649859** on host `314882`, machine `51579`, IP
+  `72.83.150.152`. At 53 seconds it showed `Loading` and "Successfully loaded vastai/pytorch:cuda-12.8.1-auto".
+  Its direct SSH endpoint is now `72.83.150.152:52502`. The owner connected, downloaded its
+  operating guide (read locally), uploaded both compact recovery packets and reported pinned
+  installation, CUDA computation and media import passed. The owner subsequently reported pinned
+  Qwen caching and SHA256 verification of both public control weights passed. Remote log evidence
+  is not yet downloaded.
+- A fresh local recovery check verified the full compact selected-serving archive hash and every
+  member, located the original Linux evaluator snapshot matching the qualified hash in the prior
+  validation packet, and rechecked both complete seed prediction sidecars. New-host installation,
+  model caching and validation-only control qualification are still required.
+- The verified [fresh-host support packet](../../data/judge/evaluations/obj4-v1/heldout-1/serving/fresh-host-support-v1.zip)
+  contains the qualified Linux source, 69 validation images, their original preparation metadata
+  and both saved validation controls. Its 88 payload members total an 11,658,451-byte ZIP, with
+  SHA256 `46255907a6fe7f38e10275661d56ef2d159a1c20a1211e5b596dbf29c30b00d1`.
+  It complements the existing selected-serving adapter packet; neither contains held-out records.
+  Both archives passed member/hash checks. The owner reported installation and public model
+  downloads passed. The owner then reported all six validation scores and frozen decisions passed
+  over live SSH on the new host, followed by HTTP health 200 and exact base/adapter inventory checks.
+- The SSH control transport now explicitly sets the original qualified 14 CPU threads, rather
+  than depending on the new machine's CPU allocation. Its regression test failed when those
+  settings were absent, then all nine launcher tests and targeted lint passed after the adjustment.
+  The original immutable Linux proof remains the expected reference. It does not establish that
+  this new host passes. The owner subsequently supplied passing output for the six live validation
+  scores on the replacement. This check made no additional held-out access or ledger reservation.
+- Last reported balance was **$1.61**, not a live balance. The owner prefers manual top-ups and
+  asked to avoid repeated balance/time questions. Previous extensions do not authorize unlimited
+  spending or a new top-up. Preserve the approved limits and allow for backup/transfer charges.
+
+Before paid capture on any replacement host, read its operating guide, verify its runtime, qualify
+the Linux controls using validation only, check private serving health and the exact base/adapter
+inventory, and pass the local signed-input guards. The retained-host wrapper assumes cached model
+weights; a fresh host needs verified public weights first. Do not blindly reuse offline startup
+commands on an empty cache. Existing preparation receipts record the fixes for manifest collisions,
+TorchCodec imports and Linux control compatibility.
+
+**Next action:** the confirmed comparison and verification references are documented above. Return
+to the existing pipeline workstream after consulting its current backlog/spec. No
+further paid evaluation or top-up is authorized by the latest request. The owner reported destroying
+the remaining rentals after both CPU controls passed local verification; this is not an independent
+billing API check. All GPU and CPU comparator files are saved locally. Gemma recovery is outstanding
+but no longer the active paid task. Preserve its failed file/sidecar. If completing the full study is
+later authorized, recover authentication and capture Gemma under the same run and signed choices.
+Do not rerun the ordinary launcher as-is:
+it would reuse the invalid all-malformed Gemma file and still require an unnecessary Linux host.
+The observed 401 payload
+reproduced the runner swallowing authentication errors as malformed model answers. The minimal fix
+propagates HTTP 401 before publishing a comparator file, while preserving the malformed-output scoring
+rule. Recovery must not overwrite existing evidence or reset the ledger. The requested partial Qwen
+comparison is saved above; completing the full study still requires the valid prompted Gemma capture.
+Do not present the partial result as the complete registered report. No new training is needed.
+
 ## Qwen35 host qualification
 
-**Training host 54113001 approved; registered run started, latest observed seed 0 at step 20.** Its independently
+Registered three-seed training and backups are complete; validation checkpoint selection and control
+thresholds are locked. See [held-out resume context](#held-out-resume-context-2026-10-07) for current progress.
+The owner confirmed hosts 54113001 and 54261178 destroyed after verified local backups.
+See the [validation runtime benchmark](#validation-runtime-benchmark-2026-10-05) before budgeting further scoring. Its independently
 verified qualification evidence and operator acceptance are recorded in
 [`vast-54113001/capture_notes.md`](../../data/judge/qualification/vast-54113001/capture_notes.md).
 The earlier checks below span separate qualification sessions. Installation/runtime and
@@ -119,8 +331,8 @@ study training. Evidence, billing and pending screenshots are recorded in
 with the machine-readable integrity receipt beside it. The current training-host attempt is
 recorded in [`vast-54113001/capture_notes.md`](../../data/judge/qualification/vast-54113001/capture_notes.md).
 Its raw-file backup verification and operator acceptance passed. The owner reported matching
-immutable three-seed plans and sufficient live GPU/disk resources. Registered seed 0 has now
-started under the existing budget and confirmed spend alert; retain raw run evidence.
+immutable three-seed plans and sufficient live GPU/disk resources. Registered seed 0 started
+under the existing budget and confirmed spend alert; the completed three-seed evidence is retained locally.
 The first execution attempt stopped before any trainer child because the runner compared the
 CLI's `version 0.9.5` banner with the literal `v0.9.5` Git tag. A locally tested correction
 compares the complete version value while preserving the commit and recipe pins. See the
@@ -233,8 +445,8 @@ Local read-only checks passed for the registered training configuration and the 
 artifacts in `obj4-v1`: 484 training and 86 validation rows. They did not open the held-out test
 payload, run a model or execute training. The approved live-host record is now retained in
 `data/judge/training_qualification.json`; see the current session capture notes above for the
-evidence, acceptance and confirmed spend alert. Registered training is now in progress;
-see those notes for owner-reported milestones pending later raw-file backup verification.
+evidence, acceptance and confirmed spend alert. Registered training and raw-file backup
+verification are now complete; see those notes for the retained evidence.
 
 For one GPU, batch size 1, accumulation 8 and three epochs, the pinned
 [Transformers 5.6.0 trainer](https://github.com/huggingface/transformers/blob/v5.6.0/src/transformers/trainer.py)
@@ -276,6 +488,175 @@ training record before `--prepare`/`--execute`. Serving many checkpoint adapters
 qualified by the one-adapter probe; check capacity against the actual inventory before starting
 validation. Preserve the registered save schedule and all candidates. A cheaper schedule or
 scientific recipe change needs a separately recorded decision, not a silent cost workaround.
+
+### Validation runtime benchmark (2026-10-05)
+
+The October 2 scenarios above are historical planning evidence. Registered training has since
+completed on all three seeds. Verified backups contain **19 checkpoints per seed, 57 total**,
+including the final step 183. Evaluating each against all **86 validation pairs** requires
+**4,902 generated verdicts**, before embedding controls and held-out comparisons. The validation
+split contains only four `different_character` positives; checkpoint-selection F1 is therefore
+particularly sensitive to individual verdicts. Preserve the frozen split and report this limitation.
+
+Instance 54261178 measured seed 0 checkpoint 10, chosen before looking at validation F1.
+The locally hash-verified archive retained **81 completed-call timings: 80 parsed and one failed**.
+The 79 warm parsed calls averaged **21.615 seconds**, giving a provisional sequential extrapolation
+of **29.43 hours**, or **$13.16 at the historical $0.447/hour**. This excludes startup, checkpoint
+switching, failed-call overhead, embedding controls, held-out evaluation, transfers and backups.
+One checkpoint and a partial capture do not establish a reliable upper bound for the study.
+
+The failed response reached the 256-completion-token limit and could not be parsed. The bounded
+capture produced no final prediction file or native summary, so it is timing evidence only,
+not a completed validation result or checkpoint selection. The server log records SIGTERM
+shutdown. Archive SHA256, call identities, package versions and owner-confirmed destruction are in
+[`benchmark-backup-verification.json`](../../data/judge/qualification/vast-54261178/benchmark-backup-verification.json).
+Raw logs remain in that protected directory's verified archive. No held-out data was accessed.
+
+The server explicitly disabled compilation and CUDA graphs with `--enforce-eager`, allowed only
+one active sequence, and received sequential requests. Its active-request logging intervals had
+a median generation throughput of 4.6 tokens/second; these interval aggregates are not individual
+request decode rates. The adapter header contains 496 language-model tensors and no trained
+vision tensors, so the ignored visual-module warnings do not identify omitted visual adapter weights.
+The pinned [vLLM 0.26.0 compilation documentation](https://github.com/vllm-project/vllm/blob/v0.26.0/docs/design/debug_vllm_compile.md)
+confirms the execution-mode flag disables those optimizations. This motivated the bounded
+comparison below; the original benchmark alone did not establish a speedup or explain all latency.
+
+Local diagnosis and an **unqualified experimental profile** are recorded in
+[`runtime-diagnosis.json`](../../data/judge/qualification/vast-54261178/runtime-diagnosis.json).
+The comparison command removes only `--enforce-eager`; all model, adapter, image-processing,
+prompt and decoding settings stay fixed. Concurrency is a separate later hypothesis. Do not
+shorten registered reasoning, discard checkpoints or silently change the output cap to reduce
+this estimate. The comparison approval does not authorize a full-validation rental or budget.
+
+The locally verified [comparison packet and operator handoff](../../data/judge/evaluations/obj4-v1/execution-comparison/OPERATOR.md)
+uses ten fixed validation pairs plus two base controls per execution mode, saving predictions,
+raw responses, token usage and timings after each completed call. Its offline interruption
+tests pass. Instance 54325867 completed both modes on the fixed selection. The locally verified
+[comparison result](../../data/judge/qualification/vast-54325867/execution-comparison-result.json)
+records all 24 calls parsing successfully, matching per-call and aggregate predictions, raw-response
+schema checks, unchanged binary verdicts on all 12 matched judgments, and the bundled source hashes.
+Both captures passed the frozen raw-image and prepared RGB pixel guards. The default server enabled
+compilation and CUDA graphs; its command differed only by removing `--enforce-eager`.
+
+| Execution mode | Completed / parsed calls | Warm adapter calls | Mean warm wall seconds |
+|---|---|---|---|
+| Eager | 12 / 12 | 9 | 22.071 |
+| Default compilation and CUDA graphs | 12 / 12 | 9 | 3.636 |
+
+The observed warm wall speedup was **6.07 times**. Six raw response texts changed, and mean warm
+completion lengths were 132.22 versus 110.22 tokens. Wall time normalized by completion-token count
+improved by 5.06 times; this includes image processing, prefill and request overhead and is not a
+pure decoding-throughput measurement. Default startup took approximately 377 seconds from the
+saved launch receipt to the route-registration log. Its saved log records completed shutdown.
+
+Extrapolating the nine warm default calls to 4,902 judgments gives **4.95 hours**, or **$2.21 at the
+historical $0.447/hour**, for calls alone. This is not a whole-study upper bound or approved budget.
+The selection contains ten adapter pairs on one checkpoint and host, rather than a representative
+sample across all candidates. Startup, checkpoint switching, embedding controls, held-out comparisons,
+failures, transfers and backups remain outside the projection. The earlier 256-token truncation risk
+also remains despite this sample passing. No validation F1, checkpoint selection or held-out evaluation
+was performed. Full-validation recovery now checks all saved candidate and control files before
+model calls or embedding initialization, reusing only hash-, schema-, alignment- and identity-verified
+files. The local regression cases first reproduced repeat calls and late immutable-file rejection,
+then passed with the fix; the evaluator suite passed 46 tests and the full backend suite passed
+1,447 tests with 87 skips and six provider smoke tests deselected. Recovery is at complete file
+boundaries, so an interruption within an unsaved checkpoint still repeats its calls. See the
+[evaluation evidence contract](../specs/judge-finetune.md#76-batch-3-evaluation-evidence-and-access-control).
+Next budget a bounded validation run using this evidence, allowing time for startup and backups.
+The local [first validation batch handoff](../../data/judge/evaluations/obj4-v1/validation-first-batch/OPERATOR.md)
+prepares one complete checkpoint and both controls before the remaining candidates. Its
+[transport receipt](../../data/judge/evaluations/obj4-v1/validation-first-batch/preparation-receipt.json)
+records source, adapter, manifest and image checks. At preparation time, the exact packaged evaluator
+passed its offline regression suite and the managed-server handoff awaited a fresh-host run.
+No checkpoint-selection result or new rental approval follows from preparing this packet.
+
+Instance 54445936's first complete capture is retained in
+[`first-capture-verification.json`](../../data/judge/qualification/vast-54445936/first-capture-verification.json).
+The paid judge file and DINOv2 control passed SHA256, ordered-row and identity checks. The CLIP
+control failed because Transformers 5.6 returns projected features inside `pooler_output`, while
+the evaluator normalized the wrapper. The first-batch contract check reproduced the missing
+finite scores before the one-line compatibility fix. Preserve the failed CLIP file and sidecar
+as attempt evidence, repair only that control on validation, and retain the judge and DINOv2
+files byte-for-byte. The owner reported the remote repair contract passing with 86 finite scores
+for each control and the judge and DINOv2 hashes unchanged, recorded in
+[`clip-repair-owner-report.json`](../../data/judge/qualification/vast-54445936/clip-repair-owner-report.json).
+The [local backup verification](../../data/judge/qualification/vast-54445936/backup-verification.json)
+then passed the archive SHA256, 28 safe members, all prediction sidecars and the first-batch
+contract. Canonical validation files are retained locally with the failed CLIP attempt preserved.
+The owner confirmed instance 54445936 destroyed. No selection or held-out result follows.
+
+The [remaining-validation handoff](../../data/judge/evaluations/obj4-v1/validation-remaining/OPERATOR.md)
+prepares the other candidates with compact serving adapters and the three verified first-batch files.
+The [transport receipt](../../data/judge/evaluations/obj4-v1/validation-remaining/preparation-receipt.json)
+records member hashes, original checkpoint provenance and verification. Capture remains sequential
+and saves after each complete checkpoint. The tested restore refuses changed existing files before
+writing anything. The private server has a six-hour timeout and one active GPU adapter slot, with
+CPU cache capacity for the remaining adapters. At preparation time, live multi-adapter startup and
+switching were unmeasured. No checkpoint selection or held-out access followed from local preparation.
+
+Instance 54471883 completed the remaining capture and the remote completion contract. The
+[local backup verification](../../data/judge/qualification/vast-54471883/backup-verification.json)
+checks the archive and all saved prediction sidecars, complete ordered validation rows, frozen judge
+identities, the carried first-batch hashes and transport metadata. The canonical validation folder now
+retains the complete capture. An initial verification assertion incorrectly assumed label inversion for
+malformed rows; it was corrected to the existing evaluator's `prediction=False` failure representation,
+without changing predictions or scoring code. The failed assertion and corrected checks are recorded
+in the same receipt. [Capture notes](../../data/judge/qualification/vast-54471883/capture_notes.md)
+track the remaining manual screenshot and cleanup records. The owner subsequently retained instance
+54471883 for held-out serving; its latest state is in the resume context above. Local checkpoint selection and control threshold fitting subsequently completed using
+the existing registered evaluator. The [validation score report](../../data/judge/evaluations/obj4-v1/validation_scores.json)
+owns the selected checkpoint metrics, all candidate scores and fitted control thresholds. The
+[evaluation lock](../../data/judge/evaluations/obj4-v1/evaluation_lock.json) pins the selected original
+checkpoint directories and their hashes. The [scoring verification](../../data/judge/evaluations/obj4-v1/validation-scoring-verification.json)
+records a byte-identical rerun and independent checks against confusion counts. Its initial exact-float
+comparison failed on rounding and was corrected to a numerical tolerance without changing scores.
+These are validation selection results, with few positive pairs, not a held-out improvement finding.
+At this validation-selection stage, held-out data had not been opened and evaluation had not run.
+
+For a supplementary research screenshot, open the [validation table](../../data/judge/evaluations/obj4-v1/validation_summary.html)
+in a local browser. It shows selected checkpoints, precision, recall, F1, malformed outputs and controls,
+and expands to all checkpoint scores. The JSON and CSV remain the numeric evidence. Reproduce the
+calculation locally from `backend/`, without a rental or model calls:
+
+```powershell
+uv run --frozen python ../data/judge/evaluations/obj4-v1/score_validation.py
+Start-Process ../data/judge/evaluations/obj4-v1/validation_summary.html
+```
+
+Save a screenshot as `data/judge/evaluations/obj4-v1/validation-selection.png`, keeping the title and
+validation-only interpretation visible. The owner reported taking an Excel screenshot, with its saved
+location still unconfirmed. The owner-authored [evaluation sign-off](../../data/judge/evaluations/obj4-v1/evaluation_signoff.json)
+is now verified against the exact locked bytes and all three original checkpoint directory hashes;
+the [sign-off verification](../../data/judge/evaluations/obj4-v1/signoff-verification.json) retains that check.
+At sign-off verification, no held-out access had been reserved or performed. The signed lock uses Windows checkpoint paths,
+so executing it unchanged on a Linux host would fail the existing path checks. The owner approved
+keeping the guarded evaluator local, serving Qwen remotely, and making the separate OpenRouter comparator
+calls. Windows control qualification failed, so the retained Linux environment is used for controls. Control qualification and
+remote readiness must pass before execution. The [held-out operator handoff](../../data/judge/evaluations/obj4-v1/heldout-1/OPERATOR.md)
+records the prepared commands and spending safeguards. No API credential has been used for this preparation.
+
+The [local CPU qualification](../../data/judge/evaluations/obj4-v1/heldout-1/cpu-control-attempt1/cpu-control-verification.json)
+checked six validation control scores using verified public model weights. Scores stayed within the
+declared numerical tolerance, but DINO's score for a pair exactly at its locked threshold crossed the
+boundary on Windows. The original failure evidence and signed thresholds remain unchanged.
+The owner reused instance **54471883** with its files retained. Its subsequent GPU availability
+blocker is recorded in the resume context above. The [Linux validation-only probe](../../data/judge/evaluations/obj4-v1/heldout-1/serving/verify_linux_controls.py)
+checks the existing environment and selected compact adapter files, then replays the same sampled
+control comparisons. The [downloaded Linux proof](../../data/judge/qualification/vast-54471883/linux-control-check-54471883.json)
+passed all six score and frozen-threshold comparisons exactly, with 14 CPU threads, and verified all six
+selected compact adapter files. The controls were not cached because remaining validation reused saved
+control results. Their pinned public weights were downloaded and verified before this probe.
+The launcher uses those Linux controls through an owner-operated private SSH process. It sends only image
+bytes, a request sequence and the control identifier, without held-out labels or pair/character IDs. Control
+latency is measured locally around the SSH request, including transfer and computation. The owner terminal passed the live SSH image
+replay for all six validation scores and frozen decisions. Server startup subsequently passed and
+the first held-out run partially captured two seeds, as recorded in the resume context above. Windows signed-checkpoint checks
+and the access ledger remain authoritative. See the operator handoff for the validation-only transport
+check before resuming execution. The existing test access reservation must be preserved.
+
+The [backup verification](../../data/judge/qualification/vast-54325867/backup-verification.json)
+records the archive SHA256, 82 safe readable members and 28 verified prediction checksum sidecars.
+Instance destruction is pending owner confirmation.
 
 ## Execution pipeline sequence
 

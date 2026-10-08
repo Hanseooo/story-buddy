@@ -1,0 +1,34 @@
+{
+  "source_archive_sha256": "3e6ba23913f0b8ec0637b1328f6b29ac7b9ad23315779a36d202980b43ccc8d3",
+  "prediction": {
+    "adapter_id": "seed0_checkpoint10",
+    "char_id": "syn-025:c0",
+    "checkpoint_id": "checkpoint-10",
+    "confidence": null,
+    "judge_id": "seed0_checkpoint10",
+    "latency_ms": 19320,
+    "latency_phase": "cold",
+    "model_id": "Qwen/Qwen3.5-9B",
+    "pair_id": "52e7b252f4bd7abf",
+    "parse_status": "parsed",
+    "prediction": false,
+    "prompt_version": "4",
+    "score": null,
+    "split": "val",
+    "threshold_id": null
+  },
+  "response": {
+    "error_type": null,
+    "finish_reason": "stop",
+    "raw": "{\"differences_observed\": \"The character on the page is drawn in a different art style than the reference. The character's anatomy is intact. The character is drawn exactly once. The picture is free of any text.\", \"same_character\": true, \"attributes_present\": [\"blue polo shirt\", \"brown hair\", \"blue pants\"], \"style_match\": false, \"anatomy_intact\": true, \"subjects_unique\": true, \"text_free\": true}",
+    "request_seconds": 19.319809214008274,
+    "returned_model": "seed0_checkpoint10",
+    "usage": {
+      "completion_tokens": 98,
+      "completion_tokens_details": null,
+      "prompt_tokens": 646,
+      "prompt_tokens_details": null,
+      "total_tokens": 744
+    }
+  }
+}
