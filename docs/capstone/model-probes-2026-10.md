@@ -18,7 +18,8 @@ One row per entry below, newest last. Each entry adds its row here when it lands
 | Cast-rule replay | only "species noun in the direction" adds characters without wrong ones | species reconciliation in `segment` | PR #101, awaiting merge |
 | Segment prompt trial | no prompt change separates from run-to-run noise | none; `SEGMENT_PROMPT_VERSION` stays 3 | closed |
 | Best-of ranking review | ranking `subjects_unique` higher helps one scene and hurts another | none; `_rank` unchanged | closed |
-| Defect tally | duplicates are the largest major defect a change could still fix | none yet; picks the next probe | open |
+| Defect tally | duplicates are the largest major defect a change could still fix | none; picked duplicates as the next target | closed |
+| Duplicate causes | 8 of 13 duplicate pages are the edit model's own behaviour; no prompt or data fix covers more than 2 | none | open: edit model is the lever |
 
 ## Edit-model probe: FLUX.2 klein 4B base — 2026-10-08
 
@@ -287,3 +288,35 @@ duplicate pages; most duplicates happen in scenes with no group at all.
 
 **Reading.** Duplicates are the largest major defect still open to a change, and most of them are
 not caused by group directions.
+
+## Duplicate causes: what the 13 non-group duplicates have in common (2026-10-08, $0)
+
+**Question.** The defect tally left 13 pages with a major duplicate or extra character in scenes
+that direct no group. Is there one cause a cheap change could remove?
+
+**Method.** Each shipped page was viewed beside the reference images it was given, with its prompt.
+
+| Pattern | Pages | Example |
+|---|---|---|
+| Two moments in one frame: the direction describes a move, and the character is drawn at both ends | 5 | syn-012 s0, "revealing Cog crawling out": Cog in the clock and on the table. Also syn-001 s2, syn-012 s2, syn-021 s2, syn-021 s5 |
+| No visible cause | 3 | syn-021 s6, "Lala looks up at the sky": two Lalas side by side. Also syn-004 s1, syn-004 s5 |
+| The setting text names an uncast roster character | 2 | syn-014 s2, s3: the hill is "small, grassy, with a goat on it", the goat is not cast, and two or three goats are drawn |
+| A cast member past the two-reference cap (ADR-004) | 2 | syn-008 s2, s3: the grandfather has no reference and is drawn twice |
+| A body-part count read as more characters | 1 | syn-024 s3, "all four jaws talking at once": three Wobblejaws |
+
+One copy matched the reference's pose only on syn-001 s2, so pasting the reference is not the
+pattern. Every page prompt already says "draw each character exactly once".
+
+**Fixes considered.**
+
+- Setting text: across all 150 scenes, 14 have a setting that names an uncast roster character.
+  Only syn-014's goat pages shipped a duplicate from it (2 major, 1 minor elsewhere). Too small
+  for a change.
+- Two-reference cap: 10 scenes cast a character without a reference. The cap is ADR-004's, so it
+  stays.
+- Two moments and no visible cause (8 of 13) belong to the edit model. The edit-model probe drew
+  three of these scenes with klein (syn-001 s2, syn-021 s2, syn-021 s6), and all 6 draws were
+  clean.
+
+**Reading.** No prompt or data change reaches more than 2 of the 13. The edit model is the lever
+the evidence points to, and it needs an ADR and a judge recheck before production.
