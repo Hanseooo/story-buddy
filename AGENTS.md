@@ -650,7 +650,8 @@ is not documentation of a good design; it is the blast radius, written down so t
   attempt including reference-free ones. **As of 2026-08-26**, explicit roster names in rendered
   `visual_direction` that are omitted from `characters_present` are reconciled by appending them in
   roster order; excerpt-only mentions remain absent, and pronoun/alias residuals go to the scene
-  judge. `_names_character` now detects those explicit direction names for reconciliation; it does
+  judge. **As of 2026-10-08** a unique species noun in the direction ("the moth" for Ashwing)
+  reconciles the same way; `human` and shared nouns are skipped. `_names_character` now detects those explicit direction names for reconciliation; it does
   not reject them. See `scene-segmentation.md` → "Name recovery — excerpt recovery remains removed;
   direction reconciliation is retained".
   **(B) `GATING_REASONS`** (`consistency-checker.md`): `passed` gains

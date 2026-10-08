@@ -331,6 +331,24 @@ def _names_character(text: str, name: str) -> bool:
     ) is not None
 
 
+def _species_noun(species: str | None) -> str:
+    """The head noun: 'paper crane' -> 'crane', 'dragon (sock)' -> 'dragon',
+    'creature made of twigs and dry vine' -> 'creature'."""
+    words = re.sub(r"\(.*?\)", "", species or "").split(" made of ")[0].lower().split()
+    return words[-1] if words else ""
+
+
+def _species_to_id(characters: list) -> dict[str, str]:
+    """Species nouns that pick out exactly one roster entry. 'human' never does (stories say 'the
+    girl', never 'the human'), nor a noun two entries share (Pebble and 'the other tortoises')."""
+    by_stem: dict[str, list[tuple[str, str]]] = {}
+    for c in characters:
+        noun = _species_noun(c.description.without_placeholders().species)
+        if noun and noun != "human":
+            by_stem.setdefault(noun.removesuffix("s"), []).append((noun, c.char_id))
+    return {entries[0][0]: entries[0][1] for entries in by_stem.values() if len(entries) == 1}
+
+
 def segment(state: StoryMemory) -> dict:
     text = state.input.redacted_text or state.input.raw_text
     units = split_sentences(text)
@@ -355,6 +373,10 @@ def segment(state: StoryMemory) -> dict:
     prev_loc: str | None = state.locations[0].loc_id if state.locations else None
 
     object_by_name = {obj.name: obj for obj in state.objects}
+    # A direction that names a roster character only by its species ("the moth" for Ashwing) is the
+    # same omission as a missed name. syn-021 drew its moth reference-free on two pages; the
+    # 2026-10-08 replay over 30 stories x 2 runs added nothing else, right or wrong.
+    species_to_id = _species_to_id(state.characters)
 
     scenes = []
     for i, r in enumerate(repaired):
@@ -377,6 +399,10 @@ def segment(state: StoryMemory) -> dict:
             if char_id not in char_ids and _names_character(rendered_base, name):
                 char_ids.append(char_id)
                 log.info("segment: reconciled visual_direction character %r into visible cast for s%d", name, i)
+        for noun, char_id in species_to_id.items():
+            if char_id not in char_ids and _names_character(rendered_base, noun):
+                char_ids.append(char_id)
+                log.info("segment: reconciled visual_direction species %r into visible cast for s%d", noun, i)
 
         # An object name outside the roster is dropped and logged, never a dead job. It has no
         # reference and no permanent axes, so nothing drawn depended on it. It used to raise; the

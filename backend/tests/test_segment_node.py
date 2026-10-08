@@ -806,6 +806,44 @@ def test_segment_reconciles_direction_characters_in_roster_order(caplog):
     assert "reconciled visual_direction character 'Shadow Wizard'" in caplog.text
 
 
+
+def _one_scene_cast(direction: str, characters: list[Character], present: list[str]) -> list[str]:
+    raw = SceneSegmentation(scenes=[ExtractedScene(
+        start=0, end=0, characters_present=present,
+        visual_direction=_direction(key_action=direction, viewpoint="profile", framing="close-up"),
+    )])
+    with patch("pipeline.segment.segment_scenes", return_value=raw):
+        return segment(_state(raw="It was there.", characters=characters))["scenes"][0].characters_present
+
+
+def test_segment_reconciles_a_character_the_direction_names_by_species():
+    # syn-021 s1 (2026-10-08 replay): the excerpt is all Ashwing, the direction says "the moth",
+    # and the cast was Lala alone, so the moth was drawn with no reference.
+    lala = Character(char_id="c0", name="Lala", description=CharacterDescription(species="human"))
+    ashwing = Character(char_id="c1", name="Ashwing",
+                        description=CharacterDescription(species="moth", is_humanoid=False))
+    cast = _one_scene_cast("Lala examines the moth's grey wings.", [lala, ashwing], ["Lala"])
+    assert cast == ["c0", "c1"]
+
+
+@pytest.mark.parametrize(("direction", "present", "expected"), [
+    # species shared with the group: which tortoise is meant?
+    ("Lala walks past a tortoise.", ["Lala"], ["c0"]),
+    # a plural is a group, never the one roster moth
+    ("Lala waves at the moths outside.", ["Lala"], ["c0"]),
+    # 'human' names no one: stories say 'the girl', never 'the human'
+    ("A human hand reaches into the box.", [], []),
+])
+def test_segment_species_reconciliation_skips_ambiguous_words(direction, present, expected):
+    roster = [
+        Character(char_id="c0", name="Lala", description=CharacterDescription(species="human")),
+        Character(char_id="c1", name="Ashwing", description=CharacterDescription(species="moth")),
+        Character(char_id="c2", name="Pebble", description=CharacterDescription(species="tortoise")),
+        Character(char_id="c3", name="the other tortoises",
+                  description=CharacterDescription(species="tortoise")),
+    ]
+    assert _one_scene_cast(direction, roster, present) == expected
+
 SWORD = StoryObject(
     obj_id="obj0",
     name="wooden sword",
