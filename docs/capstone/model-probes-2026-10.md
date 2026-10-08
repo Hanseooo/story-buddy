@@ -19,7 +19,8 @@ One row per entry below, newest last. Each entry adds its row here when it lands
 | Segment prompt trial | no prompt change separates from run-to-run noise | none; `SEGMENT_PROMPT_VERSION` stays 3 | closed |
 | Best-of ranking review | ranking `subjects_unique` higher helps one scene and hurts another | none; `_rank` unchanged | closed |
 | Defect tally | duplicates are the largest major defect a change could still fix | none; picked duplicates as the next target | closed |
-| Duplicate causes | 8 of 13 duplicate pages are the edit model's own behaviour; no prompt or data fix covers more than 2 | none | open: edit model is the lever |
+| Duplicate causes | 8 of 13 duplicate pages are the edit model's own behaviour; no prompt or data fix covers more than 2 | none | closed |
+| Edit-model probe, extension | klein drew 9 of 12 draws clean on 6 more duplicate scenes; 18 of 24 across both rounds | none; a swap needs an ADR, a judge recheck and a style check | open lead, strongest so far |
 
 ## Edit-model probe: FLUX.2 klein 4B base — 2026-10-08
 
@@ -320,3 +321,41 @@ pattern. Every page prompt already says "draw each character exactly once".
 
 **Reading.** No prompt or data change reaches more than 2 of the 13. The edit model is the lever
 the evidence points to, and it needs an ADR and a judge recheck before production.
+
+## Edit-model probe, extension: six more duplicate scenes (2026-10-08, about $0.36 at most)
+
+**Question.** The first klein round covered 6 duplicate scenes. Does the drop in duplicates hold on
+the 6 duplicate scenes it did not try?
+
+**Setup.** As in the first round: `fal-ai/flux-2/klein/4b/base/edit`, each scene's stored
+first-attempt prompt, the same canonical references, `NEGATIVE_PROMPT`, 1024×768, 2 draws per
+scene, 12 calls, no controls. Images are in `data/judge/evaluations/klein-probe-2026-10b/`. Not
+blinded: the assistant viewed every stored Qwen attempt next to both klein draws.
+
+| Scene | Qwen attempts (stored) | klein draw 1 | klein draw 2 |
+|---|---|---|---|
+| syn-004 s1 | Tuko twice; then a child added, twice | clean | clean |
+| syn-004 s5 | a shadow gecko; then a second kid and second Tuko, twice | clean | clean |
+| syn-012 s0 | Cog in the clock and on the table (1 attempt) | one Cog, merged into the clock | a second, smaller beetle |
+| syn-012 s2 | Cog in the drawer and on the shelf, 3 of 3 | clean | clean |
+| syn-021 s5 | the moth twice, 3 of 3, and Lala twice once | clean | clean |
+| syn-024 s3 | three Wobblejaws; then 2 clean (one with invented lettering) | two Wobblejaws | three heads |
+
+**Result.** klein drew 9 of 12 clean against 2 or 3 clean of the 16 stored Qwen attempts. Across
+both rounds, klein drew 18 of 24 clean on scenes where Qwen shipped a duplicate. It still fails
+where the prompt itself invites copies: the body-count phrase in syn-024 ("all four jaws") and the
+cast member without a reference in syn-008.
+
+**Caveats.** The scenes were chosen because Qwen failed on them, so some regression to the mean
+is expected. Qwen's later attempts had corrected prompts, while klein got the first prompt. There
+is one rater and no blinding. klein loses the style in places: syn-024 lost the cut-paper look,
+and syn-004 drifted to orange backgrounds. The first round's 4 controls kept identity on 8 of 8
+draws; this round had no controls.
+
+**Reading.** The duplicate drop held on new scenes. The edit model is the strongest lever found
+for the largest fixable defect. Before production, it needs an ADR, a judge recheck on klein's
+image distribution (C3-10), and a style-fidelity check on a random sample, not on failure-picked
+scenes.
+
+**Cost.** 12 calls; at most about $0.36 by the first round's upper bound. Total spend across the
+probes in this file is at most about $1.91 of the $2 cap.
