@@ -177,3 +177,47 @@ and against the stage audit's 29 cast errors (6 major).
 "machine" for the vacuum) could match a different creature or machine in a direction. Neither
 sample has a case. A direction naming another individual of a cast species ("a stray dog" while
 Bantay is off-page) would add Bantay; neither sample has that either.
+
+## Segment prompt trial: roster kinds and a roster-only rule — 2026-10-08 (about $0.09)
+
+**Question.** Most audit cast errors are groups or people with no roster entry, which the direction
+draws without a reference. Separately, `SEGMENTATION_PROMPT` lists only roster *names*, so the
+model cannot tell that Ashwing is the moth. Does a prompt change fix either?
+
+**Arms.** `segment` only, on each story's stored `analyze` output, so the roster is fixed. Mistral
+on deepinfra, 30 synthetic stories per sample.
+
+- **base**: the current prompt, v3.
+- **kinds**: adds "What each character is: Lala is a human; Ashwing is a moth." and a rule that a
+  character referred to by its kind is that character.
+- **variant**: kinds, plus "visual_direction may depict only the roster characters listed …
+  show the roster character's reaction or the result instead".
+
+Each sample was scored on the 9 audit cast errors that involve a roster character, matched by
+quote; on empty-cast pages; and on directions that name or species-name a roster character missing
+from the cast.
+
+| Sample | Audit errors fixed (of 9) | Empty-cast pages | Direction names an uncast roster character |
+|---|---|---|---|
+| base, run 1 | 3 | 1 | 3 (all syn-021's moth) |
+| base, run 2 | 4 | 1 | 2 (syn-021's moth) |
+| kinds, run 1 | 6 | 0 | 2 (syn-021's moth) |
+| kinds, run 2 | 4 | 2 | 1 (syn-021's moth) |
+| variant, run 1 | 8 | 3 | 0 |
+| variant, run 2 | 4 | 1 | not scored |
+
+For variant run 1 only, the assistant read every direction in the 19 stories with audit cast
+errors. Off-roster beings drawn fell from 15 to 12 against base run 1. The rule was ignored or made
+things worse on syn-003, 011, 013 and 016, and syn-004 s0 became an empty light switch.
+
+**Reading.** No prompt change separates from run-to-run variation. The two baseline runs differ
+by one, and the variant's 8 of 9 did not replicate (4 of 9). Mistral at temperature 0 is not
+deterministic here, so single-sample prompt comparisons, including the ones earlier in this file,
+show direction only. The kinds line did not reliably cast the moth either: s0 stayed uncast in both
+kinds runs. The deterministic species reconciliation (PR #101) catches every one of the uncast moth
+directions above. No prompt changes; `SEGMENT_PROMPT_VERSION` stays 3. Groups drawn without a
+reference remain an open limitation for segment.
+
+**Cost.** 180 `segment` calls at deepinfra's $0.075/M input and $0.20/M output, estimated at about
+$0.09. The OpenRouter usage counter did not move during the runs, likely because the provider key
+is BYOK, so the in-script cap of $0.25 could not see this spend. The estimate comes from prices.
