@@ -490,3 +490,52 @@ exists to protect. Qwen stays the scene editor on the evidence, not only on ADR-
 
 **Cost.** 30 calls: 15 with one reference at about $0.016 and 15 with two at about $0.025, about
 $0.62 at most. This screen and the single-moment test were authorised separately from the $2 cap.
+
+## One-moment directions on Qwen (2026-10-08) — plan, written before any paid call
+
+**Question.** The single-moment line failed, but it left the move in the direction ("revealing Cog
+crawling out"). If the direction itself describes one frozen instant, does Qwen stop drawing the
+character at both ends? Does it draw the action the audit found missing? This tests the mechanism
+with hand-written rewrites. Whether `segment` can write such directions is a later question.
+
+**Rewrite rules, applied to the "Visual direction:" line only.** Everything else in the stored
+first-attempt prompt stays byte-identical: references, count line, setting and style.
+
+1. One instant: the end state of any move.
+2. Each character in exactly one stated place.
+3. Name only what is visible. Nothing pretended, absent, or about to happen.
+4. Keep the characters, expressions, viewpoint and framing.
+
+**Duplicate scenes, 2 draws each.** These are the five move scenes from the duplicate-cause review.
+Stored Qwen attempts: 0 of 13 clean. With the single-moment line: 1 of 10 clean.
+
+| Scene | Rewritten direction |
+|---|---|
+| syn-001 s2 | Quill stands on top of the fence with one paw raised in the air. Quill looks focused; Bok-Bok stands on the ground below, watching. |
+| syn-012 s0 | Ate Rina holds the open broken clock; Cog's head and front legs poke out of the clock's open case. Ate Rina looks surprised. |
+| syn-012 s2 | Ate Rina bends over the open drawer; Cog sits inside the drawer among tiny screwdrivers. Ate Rina gentle, Cog calm. |
+| syn-021 s2 | Lala holds the jar in both hands; Ashwing sits inside the jar. Lala's face curious and gentle. |
+| syn-021 s5 | Lala holds the open jar up toward the sky; Ashwing flies alone just above the jar's mouth. Lala's face hopeful. |
+
+**Action scenes, 1 draw each.** These are audit pages whose action was missing or wrong.
+
+| Scene | Audit defect | Rewritten direction |
+|---|---|---|
+| syn-001 s0 | Bok-Bok upright and clean, no fall | Bok-Bok sits in the mud at the foot of the barn wall, splattered with mud, looking embarrassed. Quill watches with all three eyes. |
+| syn-012 s3 | Cog strides instead of stopping to point | Cog stands still in the middle of the floor with one front leg raised, pointing. Cog focused, Ate Rina watching. |
+| syn-019 s1 | real fire drawn for "pretending to breathe fire" | Snorkel puffs out his chest, cheeks round and full of air, while the other toys watch politely. Snorkel's eyes are wide with effort, tongue out, and the other toys smile faintly. |
+| syn-016 s3 | the vacuum inside the crack with them | General Lint and the last two soldiers squeeze into a crack in the wall; the vacuum stands outside the wall, behind them. Relieved, determined. |
+
+Each keeps its original "Viewpoint: … Framing: …" text. Hard cap: 14 calls through
+`providers.edit_image`, the production path, about $0.34 to $0.42.
+
+**Pass rule, fixed now.**
+
+- **Duplicates (decides):** at least 6 of the 10 duplicate-scene draws have no duplicate or extra
+  character.
+- **Action (reported):** for how many of the 4 action draws the rewritten instant is visible.
+- **Guard (reported):** any identity loss or new defect the rewrite introduces.
+
+**Limits.** Not blinded: there is one new arm, scored against stored attempts already seen. One
+rater. These scenes were picked because they had failed. A pass justifies a `segment` rule
+measured by rate on random scenes (ADR-055), not a production change by itself.
