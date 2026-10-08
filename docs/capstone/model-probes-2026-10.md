@@ -221,3 +221,31 @@ reference remain an open limitation for segment.
 **Cost.** 180 `segment` calls at deepinfra's $0.075/M input and $0.20/M output, estimated at about
 $0.09. The OpenRouter usage counter did not move during the runs, likely because the provider key
 is BYOK, so the in-script cap of $0.25 could not see this spend. The estimate comes from prices.
+
+## Best-of ranking review (2026-10-08, $0)
+
+**Question.** In 5 stored scenes, the shipped attempt had the judge's `subjects_unique` set to
+False, and another attempt in the same scene had it True: syn-004 s1, syn-005 s2, syn-013 s2,
+syn-016 s1 and syn-024 s3. Should `_rank` move `subjects_unique` up so the unflagged attempt
+ships?
+
+**Which term decided.** The shipped attempt never won on a term close to `subjects_unique`. In
+three scenes it was the only one whose scene check returned no contradictions (term 2). In
+syn-024 it had the fewest contradictions (term 3). In syn-016 it was the only one with
+`same_character` True. Moving `subjects_unique` past `text_free` or `GATING_REASONS` changes none
+of the five. Only putting it first, ahead of the scene check, would.
+
+**The images.** The assistant compared all three attempts per scene:
+
+| Scene | Shipped attempt | Best unflagged attempt | Better |
+|---|---|---|---|
+| syn-004 s1 | Tuko drawn twice | a human child added | neither |
+| syn-005 s2 | Pipit among the other cranes, as the story says | a child riding Pipit | shipped |
+| syn-013 s2 | Puddleback and a crowd of toads | the same crowd; the judge missed it | neither |
+| syn-016 s1 | General Lint and a squad of dust bunnies | Lint and three dust bunnies | neither |
+| syn-024 s3 | Wobblejaw drawn three times | one Wobblejaw, clean | unflagged |
+
+**Reading.** One scene improves, one gets worse, and three are a wash. The judge's
+`subjects_unique` has false positives (the syn-005 cranes, as seen before) and false negatives
+(syn-013 a2). Where it and the scene check disagree, neither is reliably right. The `_rank` order
+stays as it is.
