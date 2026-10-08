@@ -22,7 +22,7 @@ One row per entry below, newest last. Each entry adds its row here when it lands
 | Duplicate causes | 8 of 13 duplicate pages are the edit model's own behaviour; no prompt or data fix covers more than 2 | none | closed |
 | Edit-model probe, extension | klein drew 9 of 12 draws clean on 6 more duplicate scenes; 18 of 24 across both rounds | [ADR-062](../product/adr/ADR-062-klein-4b-base-is-the-candidate-scene-editor-not-yet-the-production-one.md): klein base edit is the candidate scene editor; the swap waits for a blinded rate screen, a judge recheck and a contract check | accepted 2026-10-08; the exploratory blinded screen failed |
 | Single-moment line on Qwen | a prompt line asking for one moment left 9 of 10 Qwen draws with a duplicate; klein drew 9 of 10 clean on the same scenes without it | none; the line is not adopted | closed |
-| Blinded klein screen | on 30 random scenes, klein drew as many duplicates as Qwen (4 each) and lost identity on 10 pages to Qwen's 3 | none; klein fails the preregistered rule, Qwen stays | closed; a follow-up ADR to ADR-062 is due |
+| Blinded klein screen | on 30 random scenes, klein drew as many duplicates as Qwen (4 each) and lost identity on 10 pages to Qwen's 3 | [ADR-063](../product/adr/ADR-063-klein-fails-the-blinded-screen-qwen-image-edit-stays-the-scene-editor.md): klein fails the preregistered rule, Qwen stays | accepted 2026-10-08 |
 | One-moment directions on Qwen | rewriting the direction as one instant left 7 of 10 duplicate-scene draws with a copy or an extra; 2 of 4 missing actions appeared | none; duplicates stay an open defect | closed |
 
 ## Edit-model probe: FLUX.2 klein 4B base — 2026-10-08
