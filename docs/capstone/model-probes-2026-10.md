@@ -592,7 +592,9 @@ one.
 
 Each row is a defect the October probes measured or tried to fix and left open. Rates are from the
 stage audit's 221 page images across 150 scenes (rejected attempts included), majors only, unless
-the row says otherwise. Sections above hold the evidence.
+the row says otherwise. The audit's scores come from AI reviewers and stay provisional: the owner
+has not confirmed them ([stage audit](pipeline-stage-audit-2026-10.md)). Sections above hold the
+evidence.
 
 | Defect | Rate | What was tried | Status |
 |---|---|---|---|
@@ -603,6 +605,7 @@ the row says otherwise. Sections above hold the evidence.
 | Identity drift | 15 of 221; 3 of 30 for Qwen on random scenes | none directly; klein was worse (10 of 30) | open, not probed |
 | Setting against the page's own text | 3 major, 30 minor | none | open. Consistency of the setting between pages is unmeasured |
 
-**Method limits shared by every probe.** One rater. Only the klein screen was blinded and drawn on
-random scenes; the other paid probes used scenes picked because they had failed, with one or two
-draws each. None of these results is a rate for the product except the klein screen and the audit.
+**Method limits shared by every probe.** One rater, and that rater is the assistant, an AI, not a
+person. Only the klein screen was blinded and drawn on random scenes. The other paid probes used
+scenes picked because they had failed, with one or two draws each. None of these results is a rate
+for the product except the klein screen and the audit.
