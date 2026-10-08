@@ -12,7 +12,7 @@ One row per entry below, newest last. Each entry adds its row here when it lands
 
 | Entry | Finding | Change | Status |
 |---|---|---|---|
-| Edit-model probe | klein drew a duplicate on 3 of 12 draws where every shipped Qwen page had one | none; a swap needs an ADR and a judge recheck | open lead |
+| Edit-model probe | klein drew a duplicate on 3 of 12 draws where every shipped Qwen page had one | none; a swap needs an ADR and a judge recheck | superseded by the blinded klein screen |
 | Reference count screen | no text-to-image model draws stated body counts | none; ADR-056 stands | closed |
 | Text-model trial | no open-weight model beats Mistral on the strict-schema path | none; Mistral stays | closed |
 | Cast-rule replay | only "species noun in the direction" adds characters without wrong ones | species reconciliation in `segment` | PR #101, awaiting merge |
@@ -20,8 +20,9 @@ One row per entry below, newest last. Each entry adds its row here when it lands
 | Best-of ranking review | ranking `subjects_unique` higher helps one scene and hurts another | none; `_rank` unchanged | closed |
 | Defect tally | duplicates are the largest major defect a change could still fix | none; picked duplicates as the next target | closed |
 | Duplicate causes | 8 of 13 duplicate pages are the edit model's own behaviour; no prompt or data fix covers more than 2 | none | closed |
-| Edit-model probe, extension | klein drew 9 of 12 draws clean on 6 more duplicate scenes; 18 of 24 across both rounds | [ADR-062](../product/adr/ADR-062-klein-4b-base-is-the-candidate-scene-editor-not-yet-the-production-one.md): klein base edit is the candidate scene editor; the swap waits for a blinded rate screen, a judge recheck and a contract check | accepted 2026-10-08; gates run after Objective 4 |
+| Edit-model probe, extension | klein drew 9 of 12 draws clean on 6 more duplicate scenes; 18 of 24 across both rounds | [ADR-062](../product/adr/ADR-062-klein-4b-base-is-the-candidate-scene-editor-not-yet-the-production-one.md): klein base edit is the candidate scene editor; the swap waits for a blinded rate screen, a judge recheck and a contract check | accepted 2026-10-08; the exploratory blinded screen failed |
 | Single-moment line on Qwen | a prompt line asking for one moment left 9 of 10 Qwen draws with a duplicate; klein drew 9 of 10 clean on the same scenes without it | none; the line is not adopted | closed |
+| Blinded klein screen | on 30 random scenes, klein drew as many duplicates as Qwen (4 each) and lost identity on 10 pages to Qwen's 3 | none; klein fails the preregistered rule, Qwen stays | closed; a follow-up ADR to ADR-062 is due |
 
 ## Edit-model probe: FLUX.2 klein 4B base — 2026-10-08
 
@@ -432,3 +433,60 @@ may be recognisable, so the blinding is partial.
 2. klein's identity-or-style pages exceed Qwen's by at most 3, which is 10% of 30.
 
 Lettering and action are reported but do not decide.
+
+## Blinded klein screen: result (2026-10-08, about $0.62 at most)
+
+**Run.** 30 klein calls as planned, none failed, `has_nsfw_concepts` false on all 30. Images and
+`log.json` are in `data/judge/evaluations/klein-screen-2026-10/`. All 60 images were scored and the
+scores saved (`scores-blind.json` there) before the key was opened.
+
+| Per 30 pages | Qwen (stored first attempt) | klein (one new draw) |
+|---|---|---|
+| Duplicate or extra (major) | 4 | 4 |
+| Identity (major) | 3 | 10 |
+| Style (major) | 0 | 0 |
+| Lettering | 2 | 0 |
+| Action | 2 | 8 |
+| No defect of any kind | 20 | 13 |
+
+Duplicates fell the same way in both arms: 1 of 15 one-reference scenes and 3 of 15 two-reference
+scenes. The arms failed on different scenes and shared only one: syn-008 s4, where the grandfather
+has no reference. Qwen duplicated in syn-008 s4, syn-015 s3, syn-029 s1 and syn-005 s0. klein
+duplicated in syn-008 s4, syn-016 s3, syn-021 s0 and syn-007 s4.
+
+**klein's identity losses:**
+
+- Skin drawn much darker than the reference: syn-027 s3 and s5, the same character.
+- Hair changed: syn-028 s5 and syn-005 s0.
+- Colours or body shape changed: syn-026 s0 (shirt and hair), and Ngiwi in syn-009 s1 and s2.
+- Anatomy invented or a character re-rendered: syn-016 s3 gave a limbless blob limbs and boots;
+  syn-007 s4 drew a pixel-art character smooth; syn-003 s2 turned a cute gargoyle into a realistic,
+  menacing one.
+
+Qwen's three were syn-012 s3 (a beetle given shoes), syn-016 s3, and syn-005 s1, where an origami
+crane was drawn as a real bird.
+
+**Pass rule.** Rule 1 fails: klein's duplicate count is equal to Qwen's, not lower. Rule 2 fails:
+klein's identity-or-style count exceeds Qwen's by 7, beyond the margin of 3. klein does not pass.
+
+**Reading.** On random scenes, klein's duplicate advantage disappears. Qwen's rate here is 4 of 30
+(13%), the stage audit's rate, and klein's is the same. The earlier probes showed klein clean on
+scenes where Qwen fails again and again. This screen shows klein has its own failing scenes. Picking
+scenes for Qwen's failures inflated the gap, the regression to the mean the probe caveats warned
+of. It also qualifies the single-moment test's reading. Those duplicates are a Qwen behaviour on
+those scenes. Duplicates in general are not Qwen-specific: both editors produce them at about the
+same rate, in different places. klein also kept identity worse, the defect the reference pipeline
+exists to protect. Qwen stays the scene editor on the evidence, not only on ADR-062's timing.
+
+**Caveats.**
+
+- One rater. Blinding was partial: klein's look is sometimes recognisable.
+- The Qwen arm is a stored draw, the one production actually made. The klein arm is a single draw.
+- Seven of klein's ten identity losses are clear-cut: skin, hair, colour. A stricter or looser
+  threshold moves the count by a page or two, not by seven.
+- syn-027 s3 and s5 are the same character, so those two losses are correlated.
+- Exploratory under ADR-062, which places the gates after Objective 4. This result does not amend
+  ADR-062 by itself. A follow-up ADR records it.
+
+**Cost.** 30 calls: 15 with one reference at about $0.016 and 15 with two at about $0.025, about
+$0.62 at most. This screen and the single-moment test were authorised separately from the $2 cap.
