@@ -126,3 +126,20 @@ ears fall off in winter). Four stored objects carry the literal string `colours:
 an extraction parse defect.
 
 No label, freeze, prompt, gate or model changed.
+
+## Deviation — owner confirmation, 2026-10-08
+
+Changed after the provisional results were seen, for speed. The fixed 30-page, 10-reference subset
+is replaced by a decision-scoped sheet (`confirm.html`, 111 items) that checks only the two findings
+the next routes rest on. Each item is answered Yes, No or Unsure. The AI verdict, stored verdict
+and role are hidden.
+
+- **References** (55, all): "Does this drawing match everything the story makes important about
+  this character?" Tests the reference findings and the stored reference gate.
+- **Duplicates** (56 pages): the 28 the AI review marked with a major `duplicate_character`, plus 28
+  unflagged controls with the lowest SHA-256 of `stage-audit-2026-10|dup-control|<item_id>`, mixed in
+  `dup-order` hash order. "Is any character drawn more than once on this page?" Tests the review and
+  `subjects_unique`.
+
+Because the deviation was chosen after results, owner agreement here is a check on two findings,
+not a confirmation of the whole audit. Identity, action and extraction findings stay provisional.
