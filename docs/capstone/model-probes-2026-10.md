@@ -23,6 +23,7 @@ One row per entry below, newest last. Each entry adds its row here when it lands
 | Edit-model probe, extension | klein drew 9 of 12 draws clean on 6 more duplicate scenes; 18 of 24 across both rounds | [ADR-062](../product/adr/ADR-062-klein-4b-base-is-the-candidate-scene-editor-not-yet-the-production-one.md): klein base edit is the candidate scene editor; the swap waits for a blinded rate screen, a judge recheck and a contract check | accepted 2026-10-08; the exploratory blinded screen failed |
 | Single-moment line on Qwen | a prompt line asking for one moment left 9 of 10 Qwen draws with a duplicate; klein drew 9 of 10 clean on the same scenes without it | none; the line is not adopted | closed |
 | Blinded klein screen | on 30 random scenes, klein drew as many duplicates as Qwen (4 each) and lost identity on 10 pages to Qwen's 3 | none; klein fails the preregistered rule, Qwen stays | closed; a follow-up ADR to ADR-062 is due |
+| One-moment directions on Qwen | rewriting the direction as one instant left 7 of 10 duplicate-scene draws with a copy or an extra; 2 of 4 missing actions appeared | none; duplicates stay an open defect | closed |
 
 ## Edit-model probe: FLUX.2 klein 4B base — 2026-10-08
 
@@ -539,3 +540,50 @@ Each keeps its original "Viewpoint: … Framing: …" text. Hard cap: 14 calls t
 **Limits.** Not blinded: there is one new arm, scored against stored attempts already seen. One
 rater. These scenes were picked because they had failed. A pass justifies a `segment` rule
 measured by rate on random scenes (ADR-055), not a production change by itself.
+
+## One-moment directions on Qwen: result (2026-10-08, about $0.34 to $0.42)
+
+**Run.** 14 calls as planned, none failed. Images and `log.json` are in
+`data/judge/evaluations/oneshot-test-2026-10/`. Each draw was scored against its references and its
+rewritten direction.
+
+| Scene | Draw 1 | Draw 2 |
+|---|---|---|
+| syn-001 s2 | clean | clean |
+| syn-012 s0 | clean | Cog twice (a second small beetle face on the clock); Cog drawn more cartoonish |
+| syn-012 s2 | Ate Rina twice, and an extra creature face | an extra round sun-faced creature behind Cog |
+| syn-021 s2 | Ashwing twice: in the jar and in the background | same |
+| syn-021 s5 | Lala twice | Ashwing twice, and an extra origami-like bird |
+
+| Action scene | Rewritten instant visible? |
+|---|---|
+| syn-001 s0 | no. Quill sits in the mud at the barn wall; Bok-Bok stands clean beside it. The roles are swapped |
+| syn-012 s3 | partly. Cog has one leg raised, but Ate Rina does the pointing |
+| syn-019 s1 | yes. Puffed cheeks and a puff of air, tongue out, toys watching; no fire |
+| syn-016 s3 | yes. Lint pressed into the crack, the vacuum outside behind them |
+
+**Pass rule.** 3 of 10 duplicate-scene draws are clean, against the 6 required. The rewrite fails.
+
+**Action.** 2 of 4 show the instant, 1 partly, 1 with the roles swapped. Where the old direction
+named something absent or pretended (fire, the vacuum's position), naming only the visible state
+worked. Where two characters share the scene, the action can still go to the wrong one.
+
+**Guard.**
+
+- Cog lost its beetle shape twice: drawn cartoonish (syn-012 s0 draw 2), and standing upright on two
+  long black legs (syn-012 s3).
+- syn-016 s3 drew the two soldiers as human boys. They are named in the direction but not cast, so
+  the prompt says nothing about what they look like. That is the uncast-character gap, not the
+  rewrite.
+- Quill was drawn with two eyes despite "all three eyes", as in the count screen.
+
+**Reading.** Directions with one instant and one place per character did not stop the duplicates.
+Moves are gone from these directions, yet 7 of 10 draws still copy a character or add one. The
+both-ends-of-a-move explanation does not cover these scenes. Qwen copies characters on them however
+the direction is phrased. 3 of 10 against the line's 1 of 10 is within the noise of two draws per
+scene. Missing actions respond better: stating the visible end state fixed both pages whose old
+direction named something absent. Role swaps did not respond.
+
+**Caveats.** One rater, not blinded, failure-picked scenes, two draws per duplicate scene and one per
+action scene. The action result is 4 pages and only suggests a `segment` rule; it does not measure
+one.
