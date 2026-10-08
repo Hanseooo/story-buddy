@@ -277,6 +277,8 @@ Stop and ask one focused question. Surfacing a confusion is cheaper than a wrong
     `group-guide.md` is the plain-language start page for group members, and `research-changelog.md`
     logs every decision, deviation, finding and limitation since registration; update both when a
     result lands.
+  - What changed in the repository, per merged PR → `CHANGELOG.md` at the root. Each PR adds its
+    entry in the same PR; research meaning stays in `research-changelog.md`.
   - Anything touching the VLM judge → `docs/specs/judge-finetune.md` (Objective 4: fine-tune a
     consistency judge) **and** `docs/product/PREREGISTRATION_OBJ4.md` (frozen 2026-08-14).
     ⚠️ `settings.vlm_judge_model` is a **pre-registered baseline** — prompted `gemma-3-27b-it` is

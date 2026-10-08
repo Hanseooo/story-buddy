@@ -1,0 +1,72 @@
+# Changelog
+
+What changed in the repository, one entry per merged PR, newest first. The baseline at the bottom
+is `main` as it stood before PR #101.
+
+**How to add an entry.** In the PR itself, add a section at the top: the PR number and date, the
+issues it closes or refers to, and what changed under Code, Docs and Checks. Sub-issues of the
+defense-prep audit ([#102](https://github.com/Hanseooo/story-buddy/issues/102)) each add one when
+their PR merges.
+
+**What does not go here.** What a change means for the paper (findings, deviations, limitations)
+goes in [`docs/capstone/research-changelog.md`](docs/capstone/research-changelog.md). Link to it
+instead of repeating it.
+
+---
+
+## PR #101 · 2026-10-09
+
+Segment species fix, Objective 4 resume, October probes, group guide.
+[PR #101](https://github.com/Hanseooo/story-buddy/pull/101) · Closes #28 · Refs #65, #94, #98, #100
+
+### Code
+
+- **`segment`** adds a cast member when the drawing direction names it by a unique species noun
+  ("the moth" adds Ashwing). `human` never matches, a noun two cast members share is skipped, and
+  plurals stay groups. (`19cc743`, `docs/specs/scene-segmentation.md`)
+- **`analyze`** drops a schema key that leaked into object axes. (`2b15d25`)
+- **`providers`**: a fal image flagged inside an HTTP 200 is treated as a content flag. (`80ebd6f`)
+- **Styles**: hidden `pixel` trial preset behind `ENABLE_PIXEL_STYLE` and
+  `NEXT_PUBLIC_ENABLE_PIXEL_STYLE`, both off by default; migration `0020`; redrawn `cut_paper`
+  card. (`9f9d166`)
+- **Objective 4 evaluation** (`backend/finetune/evaluate.py`): validation and held-out capture
+  reuse verified saved prediction files and capture only the missing ones; HTTP 401 aborts instead
+  of scoring as malformed; the CLIP control reads `pooler_output`. (`4fe5072`)
+- **`/research` page**: the pipeline map shows all 11 graph nodes and the models in use; it had
+  said 10 nodes and named Qwen3-32B and qwen3-vl-32b, both replaced on 2026-08-11. (`a87dbfb`)
+
+### Docs
+
+- October model probes: findings ledger, klein probes and blinded screen, one-moment direction
+  test, limitations table (`docs/capstone/model-probes-2026-10.md`). ADR-062 and ADR-063: klein
+  rejected, Qwen-Image-Edit stays.
+- Pipeline stage audit, provisional and AI-scored (`docs/capstone/pipeline-stage-audit-2026-10.md`).
+- Plain-language start page (`docs/capstone/group-guide.md`) and research changelog
+  (`docs/capstone/research-changelog.md`), both linked from `AGENTS.md`.
+- Diagrams: the July LangGraph drawio renamed `langgraph_pipeline_before_2026-07.drawio`;
+  `langgraph_pipeline_after_2026-10.drawio` drawn from `graph.py`, with a list of what changed.
+- `ROADMAP.md`: dated status on C3-02, 04, 05 and 13; C3-10 and C3-11 closed. A stray cp1252 byte
+  that made the file invalid UTF-8 replaced.
+- Stale moderation text in `TECH_STACK.md`, `moderation-stack.md` and `AGENTS.md` (#28).
+
+### Checks
+
+- Backend: `ruff` clean; `pytest` 1457 passed, 87 skipped. CI green on `f2f8c0e`.
+- Frontend: `eslint` and `tsc` clean; `vitest` 529 passed; `/research` checked in a browser.
+- Fixed on the way: a checksum test only failed its file on Windows, where CRLF translation changed
+  the bytes; it now writes a wrong digest instead. (`7fa2d53`)
+
+---
+
+## Baseline: `main` at `863a16f` · 2026-10-06
+
+The state before PR #101, for comparison.
+
+- **Pipeline**: 11 LangGraph nodes, the reveal included. Text `mistral-small-3.2-24b-instruct`,
+  references `fal-ai/qwen-image`, scene editor `fal-ai/qwen-image-edit-2511`, product judge
+  prompted `gemma-3-27b-it`. `segment` added cast members only by name.
+- **Objective 4**: three Qwen3.5-9B seeds trained and backed up; no held-out result yet.
+- **C3 follow-up**: the September gate audit and the C3-01 to C3-13 tasks in `ROADMAP.md`; no
+  October probes, no stage audit.
+- **Known stale**: `/research` said 10 nodes and named retired models; the only LangGraph diagram
+  was from July and missed the reveal; #28 open.
