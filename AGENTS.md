@@ -518,7 +518,7 @@ is not documentation of a good design; it is the blast radius, written down so t
   **Every Phase-1 feature spec is now built.**
   **`moderation-stack` is built (2026-08-02):** `pipeline/input_gate.py` (real implementation —
   meta-llama/llama-guard-4-12b OpenRouter API + Presidio PII redaction concurrent, OpenRouter backstop);
-  `pipeline/char_ref_mod.py` (qwen/qwen3-vl-32b-instruct + Gemma safety rubric, two-classifier check per char ref);
+  `pipeline/char_ref_mod.py` (~~qwen/qwen3-vl-32b-instruct~~ → mistralai/mistral-small-3.2-24b-instruct since 2026-08-11 + Gemma safety rubric, two-classifier check per char ref);
   `pipeline/output_mod.py` (same two-classifier check + soften-and-retry on each output scene).
   `moderation_router` and `route_after_output_mod` added to `graph.py`. `providers.py` gains
   `get_signed_url`, `_parse_guard_response`, and five moderation provider functions.

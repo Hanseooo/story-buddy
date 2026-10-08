@@ -273,9 +273,10 @@ Be honest — these are open, not silently resolved:
 - ~~**The output-image safety gate is entirely unbuilt.**~~ — resolved 2026-08-02 by `moderation-stack`:
   `input_gate` is a real implementation (meta-llama/llama-guard-4-12b OpenRouter API + Presidio PII redaction,
   concurrent, with an OpenRouter backstop), `char_ref_mod` gates every canonical reference before the
-  reveal, and `output_mod` gates every output scene (qwen/qwen3-vl-32b-instruct + Gemma safety rubric, one
+  reveal, and `output_mod` gates every output scene (~~qwen/qwen3-vl-32b-instruct~~ → mistralai/mistral-small-3.2-24b-instruct since 2026-08-11 + Gemma safety rubric, one
   soften-and-retry). `moderation_router` and `route_after_output_mod` enforce the ADR-011 ordering in
   `graph.py`. §1's moderation rows now describe shipped code, not a target. **Still open:** the worker RAM
-  budget with Presidio+spaCy, the ViT and the CPU text gate all resident (`moderation-stack` §8).
+  budget with Presidio+spaCy resident; ~~the ViT and the CPU text gate~~ were removed by ADR-032 and
+  are now OpenRouter calls (`moderation-stack` §8; issue #28, 2026-10-09).
 - **Both moderation gates (input text, output image) are unverified in Filipino and Taglish** until the
   Phase 0.5 moderation probe runs — a release gate for Phase 2, not a curiosity (ADR-011).

@@ -358,11 +358,14 @@ section is only half satisfied: it clears the text path and says nothing about t
 - **Open — backstop routing error policy:** this spec treats a backstop routing error as a hard
   job failure. Alternative: proceed on primary-only if the backstop is unreachable (not the same
   as a "pass" verdict from the backstop). Decide at build time with a new ADR amendment if needed.
-- **Open — `config.py` field shape for a OpenRouter API primary:** `moderation_model` currently
-  holds `meta-llama/llama-guard-4-12b` (the ADR-011c-demoted fallback) because the real primary
-  is not an OpenRouter id, and `moderation_backstop_model` is unset so the Phase-0.5 probe stays
-  opt-in. Both are commented in place. **This spec owns fixing them** — decide the field shape
-  (local weights path vs. model id, one field or two) when building `input_gate`.
-- **Open — worker RAM at Phase 2 entry:** Presidio+spaCy (~200 MB), qwen/qwen3-vl-32b-instruct (~350 MB),
-  meta-llama/llama-guard-4-12b (~1.2 GB) are all OpenRouter API. ROADMAP warns to check the Northflank plan
-  tier at the *start* of Phase 2, not the end. Budget these before writing the first line of code.
+- ~~**Open — `config.py` field shape for a OpenRouter API primary.**~~ Resolved: `moderation_model`
+  no longer exists. `backend/app/config.py` has four fields, all OpenRouter model ids:
+  `moderation_primary_model` (`meta-llama/llama-guard-4-12b`), `moderation_backstop_model`
+  (`openai/gpt-oss-safeguard-20b`), `moderation_primary_image_model`
+  (`mistralai/mistral-small-3.2-24b-instruct` since 2026-08-11) and
+  `moderation_backstop_image_model` (`google/gemma-3-27b-it`). (Issue #28, 2026-10-09.)
+- **Open — worker RAM at Phase 2 entry:** since ADR-032, only Presidio+spaCy (`en_core_web_sm`,
+  about 200 MB) stays resident in the worker. Every classifier is an OpenRouter API call and uses no
+  worker RAM; the local ViT and the local text gate were removed (`backend/providers.py`, the
+  ADR-032 markers). The 2026-08-02 text listed resident sizes for models that are remote. (Issue #28,
+  corrected 2026-10-09.)
