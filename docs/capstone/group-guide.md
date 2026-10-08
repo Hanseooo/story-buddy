@@ -114,11 +114,21 @@ pair in eight, which is part of why their recall is low.
 - The gap's 95% interval runs from −0.36 to +0.003, so it just touches zero.
 - This is a partial result. It does not say fine-tuning can never work. It says this training run
   did not improve the judge under these data and settings.
+- Dropping the characters whose references were ambiguous (a check registered in advance; one
+  of them is in the test set, 20 pairs) does not change the picture: untrained F1 0.48, trained
+  seed 1 0.35.
+
+**How much the two human raters agreed.** On the 329 test pairs, the two groupmates gave the same
+"same or different" answer 89.7% of the time; Cohen's κ, which corrects for chance agreement, is
+0.63. Both raters were briefed by the owner, who settled their disagreements, so κ cannot catch a
+misunderstanding they shared.
 
 [`data/judge/evaluations/obj4-v1/heldout-1/qwen_comparison.partial.json`, the numbers' source. It
 is local research evidence, git-ignored, so it is not in the public repository. How it was produced:
 `docs/capstone/research_runbook.md` "Partial untuned versus fine-tuned comparison". Scoring of
-unreadable answers: `backend/finetune/evaluate.py`, `prediction=False` on `malformed`]
+unreadable answers: `backend/finetune/evaluate.py`, `prediction=False` on `malformed`. Agreement
+and the ambiguous-reference check: runbook "Registered agreement and sensitivity analyses
+(2026-10-09)"]
 
 ### 5.3 What goes wrong on the pages (October stage audit, provisional)
 

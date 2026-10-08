@@ -180,6 +180,77 @@ Keep the referenced original checkpoint directories available for these checks. 
 audit, compare `Get-FileHash -Algorithm SHA256` against the adjacent prediction sidecars and the
 result's `prediction_sha256` map; this does not read test labels or reserve another access.
 
+### Registered agreement and sensitivity analyses (2026-10-09)
+
+These are the 2026-09-23 amendment's items 2, 3 and 5 (`PREREGISTRATION_OBJ4.md` §12), run on the
+saved predictions and frozen labels only. No model call, no reselection, no label change. The
+[result](../../data/judge/evaluations/obj4-v1/heldout-1/sensitivity_and_agreement.json) owns the
+numbers; [score_sensitivity.py](../../data/judge/evaluations/obj4-v1/heldout-1/score_sensitivity.py)
+reproduces it. It resumed run `obj4-heldout-1` once more (new resumed event in `test_access.jsonl`,
+2026-10-08T23:28:48Z). Label timestamps came from a read-only fetch of the `annotations` table
+(`annotation_times_2026-10-09.json`, 1772 rows); the script refuses to run unless the database labels
+equal the freeze labels on every pair. Agreement treats "different character" as the positive
+class, as `evaluate.py` does. All files are local and git-ignored.
+
+**Inter-rater agreement on `same_character`** (raters `c4f346f6` and `d9a03bf8`):
+
+| Slice | n | Cohen's κ | Agreement |
+|---|---|---|---|
+| Test slice (registered number) | 329 | 0.634 | 89.7% |
+| Test, human characters | 304 | 0.636 | |
+| Test, non-human characters | 25 | 0.000 | 96.0% |
+| All 795 pairs (labelled as such) | 795 | 0.659 | 89.3% |
+
+The non-human κ of 0 is a prevalence artifact, checked: 24 of 25 pairs were Same for both raters,
+and on the one disagreement only one rater said Different, so the other rater has no Different
+label and κ cannot rise above 0. Report it with the raw counts, not as "no agreement".
+
+The amendment's 78.4% agreement (172 conflicted pairs) is a different measure. The labelling app
+marks a pair conflicted unless both raters match on `same_character`, `anatomy_intact`,
+`text_free` and the set of failure reasons (`frontend/app/(research)/_shared/validation.ts`,
+`isConsensus`). Only 85 of 795 pairs disagree on `same_character`. The 182 adjudication rows match
+the 172 conflicts plus the ten AI-assisted audit labels (inferred from the counts). The 172 was not recounted here; the
+timestamp fetch held only `same_character`.
+
+**Before and after the guide fix** (deploy `757a406`, 2026-09-21 09:31:50 UTC). Labels before the
+boundary: 324 and 318, matching the amendment. A pair counts as before or after only when both
+labels fall on that side; most pairs straddle because the raters worked in different orders.
+
+| Pairs | All: n | All: κ | Test: n | Test: κ |
+|---|---|---|---|---|
+| Both before | 42 | 0.419 | 11 | 1.000 |
+| Straddling | 558 | 0.683 | 228 | 0.662 |
+| Both after | 195 | 0.630 | 90 | 0.483 |
+
+The groups are small and self-selected by labelling order, so this shows no clear guide effect
+either way. It is not evidence that the guide fix helped or hurt.
+
+**Secondary sensitivity analysis** (ambiguous-reference list from
+[`ambiguous-references-2026-09.md`](ambiguous-references-2026-09.md): `don-005:c1`, `syn-028:c0`,
+`syn-030:c0`). Only `don-005:c1` is in the test slice, so 20 pairs were dropped: n = 309, 41
+Different, 268 Same.
+
+| Judge | F1 | Precision | Recall |
+|---|---|---|---|
+| Untuned | 0.476 | 0.391 | 0.610 |
+| Seed 1 (preselected) | 0.346 | 0.818 | 0.220 |
+| Seed 0 | 0.400 | 0.786 | 0.268 |
+| Seed 2 | 0.438 | 0.382 | 0.512 |
+
+Seed 1 minus untuned: ΔF1 −0.130, 95% character-clustered CI −0.333 to +0.053, exact McNemar
+p = 0.0075. Inter-rater κ on the kept test pairs: 0.709. The direction matches the primary analysis.
+The primary analysis (every pair) stands; this secondary never replaces it and decides no claim rung.
+
+**Limitations.** Both raters are group members briefed by the owner, who adjudicates; κ cannot
+detect a shared misunderstanding. The comparison remains partial (no prompted Gemma).
+
+```powershell
+uv run --frozen python ../data/judge/evaluations/obj4-v1/heldout-1/score_sensitivity.py
+```
+
+Run from `backend/`. Each run adds a resumed event to the ledger. The publish step is exclusive: identical
+output is accepted, and any changed output raises instead of overwriting.
+
 ### Owner decisions and confirmed scope
 
 The owner explicitly requested **untuned Qwen next**, then consideration of a documented research

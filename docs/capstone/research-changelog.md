@@ -27,6 +27,9 @@ For the current state in plain words, read [`group-guide.md`](group-guide.md) fi
    2026-08-29, so agreement is reported between raters, not as test-retest. Ten audit labels were
    adjudicated with AI assistance, and that is disclosed. [`PREREGISTRATION_OBJ4.md` §12, 2026-09-23
    and 2026-09-30]
+   Inter-rater κ on `same_character`, test slice: 0.634 (89.7% agreement, n = 329). The amendment's
+   78.4% is a different measure: it counts a pair as conflicted when the raters differ on any
+   labelled field. [runbook, "Registered agreement and sensitivity analyses (2026-10-09)"]
 3. **The Objective 4 result is partial.**
    - Only untuned Qwen and the three fine-tuned seeds were compared on the held-out set.
    - The prompted Gemma baseline failed authentication, and paid evaluation stopped for budget. The
@@ -74,6 +77,7 @@ and confirmed scope"]
 
 | Date | Type | What changed | Why | Paper section | Source |
 |---|---|---|---|---|---|
+| 2026-10-09 | Finding | Registered agreement and sensitivity analyses run. Inter-rater κ, test slice 0.634 (all pairs 0.659); non-human slice κ 0 at 96% agreement, a prevalence artifact (24 of 25 pairs Same for both). Guide boundary: no clear effect, groups small and mostly straddling. Without the ambiguous-reference characters (20 pairs, n = 309): untuned F1 0.48, seed 1 0.35, ΔF1 −0.13 (95% CI −0.33 to +0.05), McNemar p = 0.0075; same direction as the primary | Pre-registered items 2, 3 and 5 of the 2026-09-23 amendment; saved predictions only | Methods (annotation), Results (Objective 4) | runbook, "Registered agreement and sensitivity analyses (2026-10-09)"; `heldout-1/sensitivity_and_agreement.json` (local, git-ignored) |
 | 2026-10-08 | Decision | FLUX.2 klein rejected as scene editor; Qwen-Image-Edit stays | On 30 random pages, blinded, klein drew as many duplicates (4 against 4) and lost identity more (10 against 3) | Methods (system), Discussion | ADR-063 |
 | 2026-10-08 | Limitation | Duplicate characters stay an open defect at about 13% of page images | Two editors produced them at the same rate; a prompt line, rewritten directions and best-of ranking all failed | Limitations | `model-probes-2026-10.md` |
 | 2026-10-08 | Finding | Describing only the visible end state fixed 2 of 2 pages whose direction named something absent or pretend; role swaps did not respond | One-moment direction test, 4 action pages, one AI rater | Discussion (future work) | `model-probes-2026-10.md` |

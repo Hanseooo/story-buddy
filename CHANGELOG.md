@@ -14,6 +14,25 @@ instead of repeating it.
 
 ---
 
+## Direct to `main` · 2026-10-09 (agreement and sensitivity)
+
+Objective 4's registered agreement and sensitivity analyses.
+Refs [#94](https://github.com/Hanseooo/story-buddy/issues/94), #102
+
+### Docs
+
+- `research_runbook.md`: new section "Registered agreement and sensitivity analyses (2026-10-09)"
+  with inter-rater κ, the guide-boundary split and the ambiguous-reference secondary analysis.
+- `research-changelog.md`: Finding row and a κ line in §1. `group-guide.md` §5.2: κ and the
+  secondary result in plain words. `ROADMAP.md` C3-02: dated status.
+
+### Checks
+
+- Analysis script (local, git-ignored) verifies the signed lock, manifest and prediction hashes,
+  and that database labels equal the freeze labels, before computing anything. No model calls.
+
+---
+
 ## Direct to `main` · 2026-10-09
 
 Retry count and Objective 4 table corrections from the defense-prep audit.
