@@ -20,7 +20,7 @@ One row per entry below, newest last. Each entry adds its row here when it lands
 | Best-of ranking review | ranking `subjects_unique` higher helps one scene and hurts another | none; `_rank` unchanged | closed |
 | Defect tally | duplicates are the largest major defect a change could still fix | none; picked duplicates as the next target | closed |
 | Duplicate causes | 8 of 13 duplicate pages are the edit model's own behaviour; no prompt or data fix covers more than 2 | none | closed |
-| Edit-model probe, extension | klein drew 9 of 12 draws clean on 6 more duplicate scenes; 18 of 24 across both rounds | none; a swap needs an ADR, a judge recheck and a style check | open lead, strongest so far |
+| Edit-model probe, extension | klein drew 9 of 12 draws clean on 6 more duplicate scenes; 18 of 24 across both rounds | [ADR-062](../product/adr/ADR-062-klein-4b-base-is-the-candidate-scene-editor-not-yet-the-production-one.md): klein base edit is the candidate scene editor; the swap waits for a blinded rate screen, a judge recheck and a contract check | accepted 2026-10-08; gates run after Objective 4 |
 
 ## Edit-model probe: FLUX.2 klein 4B base — 2026-10-08
 
