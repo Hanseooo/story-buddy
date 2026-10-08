@@ -59,23 +59,31 @@ export default function PipelineMap() {
          
          <FlowNode 
            title="Input Gate" 
-           desc="meta-llama/llama-guard-4-12b + Presidio Identifier Redaction." 
+           desc="meta-llama/llama-guard-4-12b text check (gpt-oss-safeguard backstop) + Presidio identifier redaction." 
            icon={<ShieldCheck weight="duotone" className="w-6 h-6" />}
            delay={0.1} 
          />
          <EdgeDown delay={0.2} />
 
          <FlowNode 
-           title="Analyze & Segment" 
-           desc="Qwen3-32B parses arcs and segments scenes." 
+           title="Analyze" 
+           desc="Mistral Small 3.2 lists the characters, objects and places." 
            icon={<Robot weight="duotone" className="w-6 h-6" />}
            delay={0.3} 
+         />
+         <EdgeDown delay={0.35} />
+
+         <FlowNode 
+           title="Segment" 
+           desc="Mistral Small 3.2 splits the story into pages and writes each drawing direction." 
+           icon={<Robot weight="duotone" className="w-6 h-6" />}
+           delay={0.4} 
          />
          <EdgeDown delay={0.4} />
 
          <FlowNode 
            title="Character Bible" 
-           desc="Generates canonical character references." 
+           desc="fal.ai Qwen-Image draws one canonical reference per main character." 
            icon={<PaintBrush weight="duotone" className="w-6 h-6" />}
            delay={0.5} 
          />
@@ -83,7 +91,7 @@ export default function PipelineMap() {
 
          <FlowNode 
            title="Char Ref Mod" 
-           desc="qwen/qwen3-vl-32b-instruct safety check + Gemma rubric." 
+           desc="Mistral Small 3.2 image safety check + Gemma-3-27B rubric backstop." 
            icon={<Warning weight="duotone" className="w-6 h-6" />}
            delay={0.7} 
          />
@@ -91,7 +99,7 @@ export default function PipelineMap() {
 
          <FlowNode 
            title="Reveal" 
-           desc="Interrupts until teacher/child accepts refs." 
+           desc="Pauses until the references are accepted; up to 3 “try again” taps redraw them." 
            icon={<Eye weight="duotone" className="w-6 h-6" />}
            delay={0.9} 
          />
@@ -128,7 +136,7 @@ export default function PipelineMap() {
 
             <FlowNode 
               title="Generate Scene" 
-              desc="fal.ai Qwen-Image-Edit creates illustrations." 
+              desc="fal.ai Qwen-Image-Edit draws each page from the references." 
               icon={<PaintBrush weight="duotone" className="w-6 h-6" />}
               delay={1.1} 
             />
@@ -137,7 +145,7 @@ export default function PipelineMap() {
             <div className="relative flex justify-center w-full">
               <FlowNode 
                 title="Consistency Check" 
-                desc="Gemma-3-27B VLM evaluates against char bible." 
+                desc="Gemma-3-27B judge compares each page with the references." 
                 icon={<CheckCircle weight="duotone" className="w-6 h-6" />}
                 delay={1.3} 
               />
@@ -146,7 +154,7 @@ export default function PipelineMap() {
               <div className="absolute left-[calc(50%+180px)] md:left-[calc(50%+220px)] top-1/2 -translate-y-1/2 hidden sm:block">
                 <FlowNode 
                   title="Regenerate" 
-                  desc="Targeted retry on fail." 
+                  desc="One retry with the judge’s reasons; the better attempt is kept." 
                   icon={<ArrowsClockwise weight="bold" className="w-5 h-5" />}
                   delay={1.5} 
                   isSecondary
@@ -160,14 +168,14 @@ export default function PipelineMap() {
          <EdgeDown delay={1.7} />
          <FlowNode 
            title="Output Mod" 
-           desc="Final safety pass on generated story images." 
+           desc="Safety pass on each finished page, inside the scene loop." 
            icon={<ShieldCheck weight="duotone" className="w-6 h-6" />}
            delay={1.8} 
          />
          <EdgeDown delay={1.9} />
          <FlowNode 
-           title="Compose & Export" 
-           desc="Assembles final payload and writes to Supabase." 
+           title="Compose" 
+           desc="Assembles the book and writes it to Supabase." 
            icon={<Database weight="duotone" className="w-6 h-6" />}
            delay={2.0} 
          />

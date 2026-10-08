@@ -107,7 +107,7 @@ export default async function ResearchMethodologyPage() {
               The Architecture
             </h2>
             <p className="text-foreground/70 text-lg md:text-xl max-w-[60ch] leading-relaxed">
-              Our pipeline consists of 10 deterministic nodes. There is no autonomous routing; conditional edges exist only at moderation and consistency checkpoints. Explore the sequence below.
+              Our pipeline consists of 11 deterministic nodes. There is no autonomous routing; conditional edges exist only at the moderation checkpoints, the reference reveal, the consistency check and the step that picks the next page. Explore the sequence below.
             </p>
           </div>
           
@@ -141,7 +141,7 @@ export default async function ResearchMethodologyPage() {
                 <p>When Grade 5–6 children author stories about their real lives, privacy cannot rely on black-box cloud defaults. StoryBuddy implements a localized, non-negotiable multi-stage safety stack.</p>
                 <ul className="list-disc pl-5 space-y-3 marker:text-primary">
                   <li><strong>Localized PII Redaction:</strong> We deploy custom Filipino recognizers via Presidio to intercept localized address structures and Philippine identifier formats (mobile numbers, TIN, SSS, PhilHealth) before storage or export.</li>
-                  <li><strong>Dual Independent Classifiers:</strong> Chained safety gates run on both text (meta-llama/llama-guard-4-12b) and output images (qwen/qwen3-vl-32b-instruct + Gemma-3-27B rubric).</li>
+                  <li><strong>Dual Independent Classifiers:</strong> Chained safety gates run on both text (meta-llama/llama-guard-4-12b + gpt-oss-safeguard-20b) and images (Mistral Small 3.2 + Gemma-3-27B rubric).</li>
                   <li><strong>Non-Punitive Failure States:</strong> System refusals present supportive, age-appropriate UI guidance so children are never penalized.</li>
                 </ul>
               </div>
@@ -156,7 +156,7 @@ export default async function ResearchMethodologyPage() {
               <div className="space-y-4 text-foreground/80 leading-relaxed text-lg">
                 <p>Proprietary model APIs create severe cost barriers and vendor lock-in, placing AI tools out of reach for provincial public schools. StoryBuddy runs entirely on open-weight models to ensure long-term reproducibility.</p>
                 <ul className="list-disc pl-5 space-y-3 marker:text-primary">
-                  <li><strong>100% Open-Weight Stack:</strong> Driven by Qwen3-32B, Qwen-Image-Edit, and Gemma-3-27B.</li>
+                  <li><strong>100% Open-Weight Stack:</strong> Driven by Mistral Small 3.2, Qwen-Image, Qwen-Image-Edit, and Gemma-3-27B.</li>
                   <li><strong>Zero Per-Seat Vendor Fees:</strong> Self-hostable architecture designed so any school can deploy the platform on standard infrastructure.</li>
                   <li><strong>Architectural Sovereignty:</strong> Building with open weights forces safety and identity control into deterministic logic rather than relying on black-box promises.</li>
                 </ul>
