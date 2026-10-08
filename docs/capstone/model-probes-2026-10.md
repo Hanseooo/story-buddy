@@ -114,7 +114,7 @@ the same-named location field.
 **Scene quality, DeepSeek vs Mistral (assistant's reading, 5 stories).** The three timeouts were
 rerun with a 400 s bound for the trial only.
 
-- DeepSeek cut finer: 34 scenes against Mistral's 26 on the same five stories. More pages mean
+- DeepSeek cut finer: 36 scenes against Mistral's 26 on the same five stories. More pages mean
   more images to pay for.
 - Both kept the moth out of the cast in syn-021 before it is named. DeepSeek made it worse: s0
   directs an empty wall although the moth is in the excerpt, and s1 directs "a large moth" with
