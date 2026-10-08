@@ -88,3 +88,41 @@ The owner confirms a fixed subset before any count is treated as more than provi
 `uncertain` item and the 30 pages and 10 references with the lowest SHA-256 of
 `stage-audit-2026-10|confirm|<item_id>`. No label, freeze, prompt, gate or model changes from this
 audit alone.
+
+## Provisional results — 2026-10-08
+
+AI review only; the owner confirmation subset (`owner_confirm.json`: 30 pages, 10 references, 2
+uncertain) is not yet checked. All 276 items were reviewed; none missing. Reviewer effects are
+confounded with stories.
+
+**Shipped pages.** 77 of 150 have at least one major defect, 71 are acceptable, 2 uncertain. Pages
+with no `non_human` tag: 11 of 33 defective, against 66 of 117 for non-human pages. The synthetic
+corpus is 83% invented non-human characters while donated stories are mostly human, so the overall
+rate likely overstates what classroom stories meet.
+
+**Where the 77 come from** (a page can have several origins): a reference-origin major on 38 (26 only
+that), a generator-origin major on 43 (34 only that), a description-origin major on 7. Most common
+majors: `reference_inherited` 34, `duplicate_character` 15, `action_mismatch` 9, `identity_drift` 8,
+`extra_character` 5. Duplicate or extra characters appear on 17 pages.
+
+**References.** 17 of 55 defective, chiefly a missed stated count (8 major: six legs drawn as four,
+seven stripes as five, four wings as two). The stored reference gate failed 15 of those 17 and also
+15 of the 38 acceptable references. It detects bad references, but `char_bible` ships the best
+failing draw, so every detected defect still reached the pages.
+
+**Page gate.** Of the 77 defective shipped pages, 29 passed the stored gate; of the 71 acceptable,
+28 failed it. 23 of the 71 rejected first draws were acceptable, so those paid redraws were likely
+unnecessary. The identity judge compares against the reference, so a defect inherited from the
+reference passes it by construction.
+
+**Duplicates.** Across all 216 page images, the review marked 33 with a major duplicate or extra
+character. The stored `subjects_unique` was False on 16 of those and on 9 of the 183 others. It is
+recorded but does not gate.
+
+**Extraction** (text review, 30 stories): 20 major and 146 minor findings. Majors are mostly cast
+errors (a character in the excerpt but not in `characters_present`) and background groups the visual
+direction draws but no roster lists. One story needs a per-scene character state (syn-010's leaf
+ears fall off in winter). Four stored objects carry the literal string `colours: [` in `materials`,
+an extraction parse defect.
+
+No label, freeze, prompt, gate or model changed.
