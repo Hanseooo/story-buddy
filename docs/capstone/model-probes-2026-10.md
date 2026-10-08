@@ -587,3 +587,22 @@ direction named something absent. Role swaps did not respond.
 **Caveats.** One rater, not blinded, failure-picked scenes, two draws per duplicate scene and one per
 action scene. The action result is 4 pages and only suggests a `segment` rule; it does not measure
 one.
+
+## Limitations to carry into the write-up (2026-10-08)
+
+Each row is a defect the October probes measured or tried to fix and left open. Rates are from the
+stage audit's 221 page images across 150 scenes (rejected attempts included), majors only, unless
+the row says otherwise. Sections above hold the evidence.
+
+| Defect | Rate | What was tried | Status |
+|---|---|---|---|
+| Duplicate character | 28 of 221 (13%); 4 of 30 for both editors on random scenes | "draw each character exactly once" in every prompt; best-of ranking on `subjects_unique`; a single-moment line (1 of 10 clean); one-instant directions (3 of 10); a second editor, klein (ties on random scenes, loses identity) | open. A limitation of the edit substrate, measured on two editors ([ADR-063](../product/adr/ADR-063-klein-fails-the-blinded-screen-qwen-image-edit-stays-the-scene-editor.md)). No automatic catch: `subjects_unique` both misses and over-flags. |
+| Stated body counts | 9 of 17 defective references | five text-to-image models in the count screen | limitation by decision ([ADR-056](../product/adr/ADR-056-numeric-attribute-fidelity-is-a-documented-limitation-not-a-pre-campaign-fix.md)) |
+| Beings with no roster entry | 17 of 150 scenes direct them; those scenes ship a duplicate or extra on 24% of pages, against 10% elsewhere | none. PR #101 reconciles a cast member named by species, not a group | open. The editor draws them from the name alone: dust-bunny soldiers came out as human boys |
+| Missing or wrong action | 13 of 221, on 9 scenes | one-instant directions on 4 failed pages | open. Naming only the visible end state fixed both pages whose direction named something absent or pretended. Two characters swapping roles did not respond. The fixable kind is about 3 of 150 scenes, too few to measure a `segment` rule by rate before the defense |
+| Identity drift | 15 of 221; 3 of 30 for Qwen on random scenes | none directly; klein was worse (10 of 30) | open, not probed |
+| Setting against the page's own text | 3 major, 30 minor | none | open. Consistency of the setting between pages is unmeasured |
+
+**Method limits shared by every probe.** One rater. Only the klein screen was blinded and drawn on
+random scenes; the other paid probes used scenes picked because they had failed, with one or two
+draws each. None of these results is a rate for the product except the klein screen and the audit.
