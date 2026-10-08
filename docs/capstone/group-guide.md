@@ -1,8 +1,11 @@
 # StoryBuddy: Start Here (Group Guide)
 
-**Last updated:** 2026-10-08 · **For:** group members who need the research context without reading
+**Last updated:** 2026-10-09 · **For:** group members who need the research context without reading
 the code. Every statement below stands on its own. The repository paths in brackets are where the
 evidence lives, for anyone who wants to check it.
+
+What changed since registration, and what the manuscript must now say, is in
+[`research-changelog.md`](research-changelog.md).
 
 If this guide disagrees with the manuscript or with a file it cites, the other source wins and this
 guide needs fixing.
@@ -67,7 +70,7 @@ All of them are open-weight models.
 |---|---|
 | 1–2 | Built. The research corpus holds 42 generated books: 30 from synthetic stories and 12 from donated stories. |
 | 3 | Planned (Tool B, a written open-ended interview form). The repository records no completed session yet. |
-| 4 | Training done on three seeds. A **partial** held-out result exists (below). The full report is waiting on the Gemma baseline, which failed authentication. |
+| 4 | Training done on three seeds. A **partial** held-out result exists (below). Paid evaluation stopped on 2026-10-07 for budget, and the Gemma baseline failed authentication, so the full registered report is incomplete. Since then the main work has been the page-drawing pipeline. |
 | 5 | Planned (Tool C, the ISO/IEC 25010 questionnaire). The repository records no completed session yet. |
 
 [`docs/product/ROADMAP.md` Phase 3 and C3-02, `docs/capstone/research_runbook.md` "Held-out resume context"]
@@ -201,6 +204,7 @@ as provisional.
 
 | If you want… | Read |
 |---|---|
+| What changed since registration, and what the paper must say | `docs/capstone/research-changelog.md` |
 | The research story, for an adviser | `docs/capstone/research_direction_and_goals.md` |
 | The full method | `docs/capstone/methodology.md` |
 | Every October test, one line each | the table at the top of `docs/capstone/model-probes-2026-10.md` |
