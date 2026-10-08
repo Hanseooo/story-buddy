@@ -134,3 +134,46 @@ for, not from model capacity: both models leave a character out while the story 
 description. Mistral stays.
 
 **Cost.** Text calls only, a few cents.
+
+## Cast-rule replay: does a deterministic rule fix cast errors? — 2026-10-08 ($0 + cents)
+
+**Question.** `segment` already adds a roster character whose *name* appears in the rendered visual
+direction. Would a wider rule fix the audit's cast errors without adding wrong characters?
+
+**Rules replayed.** For a roster character missing from a scene's cast:
+
+- **B**: its species head noun appears in the visual direction.
+- **A**: its species head noun appears in the excerpt.
+- **C**: its name appears in the excerpt.
+
+Head noun means the last word of `species`, with parentheses and anything after "made of"
+dropped. A and B skip `human`, which stories never use, and any species two roster entries share.
+That rules out Pebble against "the other tortoises" and Mango against "the other bats".
+Matching is singular and whole-word, so a plural ("moths") never matches.
+
+**Samples.** The stored corpus runs (30 synthetic stories), plus a fresh Mistral rerun of `analyze`
++ `segment` on the same 30 (154 scenes). Each addition was judged against the excerpt and direction,
+and against the stage audit's 29 cast errors (6 major).
+
+| Rule | Additions (stored / fresh) | Correct | Wrong | Arguable |
+|---|---|---|---|---|
+| B: species in direction | 2 / 2, the same scenes | syn-021 s0, s1 (both audit majors) | none | none |
+| A: species in excerpt, not B | 4 / 2 | syn-014 s5 (stored only) | syn-009 s4 (the cat "stopped coming"), in both samples | syn-010 s1, syn-014 s1 |
+| C: name in excerpt | 9 / 9 | syn-018 the other bats, syn-019 s2 Snorkel, syn-021 s6, syn-001 s4, syn-014 s5 | syn-003 s2 gardener, syn-004 s2 kid, syn-016 vacuum twice ("a vacuum cannot follow you") | syn-010 s1, syn-014 s1 |
+
+**Reading.**
+
+- B made no wrong additions in either sample, but it fixes only 2 of the 6 audit majors, both in
+  one story.
+- A and C each have about one wrong addition for every right one. Neither fixes the direction:
+  the added character gets a reference and a slot in the subject-count clause, but the direction
+  never says what it does.
+- syn-019 s2 is a direction that drops a beat (Snorkel on a hand), not a cast slip.
+- About 20 of the 29 cast errors are groups or people with no roster entry: the librarian, the
+  pigeons, the other cranes, Lint's army, the neighbours. No cast rule can add those. They need
+  `analyze` to roster them, or the direction to stop drawing them.
+
+**Untested edge cases for B.** Generic head nouns ("creature" for Bramblefoot, Tarsi and Wobblejaw;
+"machine" for the vacuum) could match a different creature or machine in a direction. Neither
+sample has a case. A direction naming another individual of a cast species ("a stray dog" while
+Bantay is off-page) would add Bantay; neither sample has that either.
