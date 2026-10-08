@@ -21,6 +21,7 @@ One row per entry below, newest last. Each entry adds its row here when it lands
 | Defect tally | duplicates are the largest major defect a change could still fix | none; picked duplicates as the next target | closed |
 | Duplicate causes | 8 of 13 duplicate pages are the edit model's own behaviour; no prompt or data fix covers more than 2 | none | closed |
 | Edit-model probe, extension | klein drew 9 of 12 draws clean on 6 more duplicate scenes; 18 of 24 across both rounds | [ADR-062](../product/adr/ADR-062-klein-4b-base-is-the-candidate-scene-editor-not-yet-the-production-one.md): klein base edit is the candidate scene editor; the swap waits for a blinded rate screen, a judge recheck and a contract check | accepted 2026-10-08; gates run after Objective 4 |
+| Single-moment line on Qwen | a prompt line asking for one moment left 9 of 10 Qwen draws with a duplicate; klein drew 9 of 10 clean on the same scenes without it | none; the line is not adopted | closed |
 
 ## Edit-model probe: FLUX.2 klein 4B base — 2026-10-08
 
@@ -359,3 +360,36 @@ scenes.
 
 **Cost.** 12 calls; at most about $0.36 by the first round's upper bound. Total spend across the
 probes in this file is at most about $1.91 of the $2 cap.
+
+## Single-moment line on Qwen (2026-10-08, about $0.30 at most)
+
+**Question.** In 5 of the 13 duplicate pages, the direction describes a move ("revealing Cog
+crawling out", "places Cog in the drawer"), and Qwen drew the character at both ends. Does a prompt
+line asking for one moment stop that on the production editor?
+
+**Setup.** `fal-ai/qwen-image-edit-2511` through `providers.edit_image`, the production path. Each
+scene's stored first-attempt prompt, with one line added under the character-count line: "Show one
+single moment: each character appears in one place only, never at both the start and the end of an
+action." The same references, 2 draws per scene, 10 calls: syn-001 s2, syn-012 s0, syn-012 s2,
+syn-021 s2, syn-021 s5. Images are in `data/judge/evaluations/moment-test-2026-10/`. Not blinded.
+
+| Scene | Stored Qwen attempts | With the line | klein, earlier probes, without the line |
+|---|---|---|---|
+| syn-001 s2 | Quill twice, 3 of 3 | Quill twice; clean | clean, clean |
+| syn-012 s0 | Cog twice (1 attempt) | Cog in the clock and on the table, twice | 1 of 2 clean |
+| syn-012 s2 | Cog twice, 3 of 3 | Cog in the drawer and a beetle-costumed figure, twice | clean, clean |
+| syn-021 s2 | the moth twice, 3 of 3 | the moth in or on the jar and again outside, twice | clean, clean |
+| syn-021 s5 | the moth twice, 3 of 3; Lala twice once | Lala twice and the moth twice, twice | clean, clean |
+
+**Result.** 1 of 10 draws with the line was clean, against 0 of 13 stored Qwen attempts. klein drew
+9 of 10 clean on the same five scenes from the same prompt without the line.
+
+**Reading.** The line does not stop Qwen drawing a move at both ends, so it is not adopted. Nothing
+in the prompt changed and klein did not duplicate, while Qwen ignored a direct instruction. Of the
+explanations tested here, that leaves the editor. This is the strongest evidence in this file that
+these duplicates are a Qwen behaviour and not a prompt defect, though n is 5 scenes, one rater, and
+the scenes were picked because they had failed.
+
+**Cost.** 10 calls at $0.03 per megapixel of output, about $0.024 each, or $0.03 if rounded up.
+Whether input references are billed is unstated, so this is at most about $0.30 plus any input
+charge.
