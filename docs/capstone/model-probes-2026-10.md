@@ -6,6 +6,20 @@ total spend at USD 2. Synthetic stories only. Images are under the gitignored
 each image), tiny n. The edit probe was not blinded between arms; the count screen was. No
 production setting changed.
 
+## Findings and changes
+
+One row per entry below, newest last. Each entry adds its row here when it lands.
+
+| Entry | Finding | Change | Status |
+|---|---|---|---|
+| Edit-model probe | klein drew a duplicate on 3 of 12 draws where every shipped Qwen page had one | none; a swap needs an ADR and a judge recheck | open lead |
+| Reference count screen | no text-to-image model draws stated body counts | none; ADR-056 stands | closed |
+| Text-model trial | no open-weight model beats Mistral on the strict-schema path | none; Mistral stays | closed |
+| Cast-rule replay | only "species noun in the direction" adds characters without wrong ones | species reconciliation in `segment` | PR #101, awaiting merge |
+| Segment prompt trial | no prompt change separates from run-to-run noise | none; `SEGMENT_PROMPT_VERSION` stays 3 | closed |
+| Best-of ranking review | ranking `subjects_unique` higher helps one scene and hurts another | none; `_rank` unchanged | closed |
+| Defect tally | duplicates are the largest major defect a change could still fix | none yet; picks the next probe | open |
+
 ## Edit-model probe: FLUX.2 klein 4B base — 2026-10-08
 
 **Question.** The duplicate replay showed duplicates persisting across redraws although every prompt
@@ -249,3 +263,27 @@ of the five. Only putting it first, ahead of the scene check, would.
 `subjects_unique` has false positives (the syn-005 cranes, as seen before) and false negatives
 (syn-013 a2). Where it and the scene check disagree, neither is reliably right. The `_rank` order
 stays as it is.
+
+## Defect tally: where to aim next (2026-10-08, $0)
+
+**Question.** Which defect should the next probe target?
+
+**Tally.** The stage audit's 221 page reviews, by pages carrying each major defect:
+
+| Major defect | Pages | Fixable by a change? |
+|---|---|---|
+| `reference_inherited` | 52 | mostly no: 9 of the 17 defective references are stated counts (`count_miss`), which the count screen and ADR-056 rule out. Faces drawn on faceless characters (`added_face`, 8 references with major or minor) are the remainder. |
+| `duplicate_character` | 28 | open: the edit-model probe suggests the edit model is the lever |
+| `identity_drift` | 15 | not probed |
+| `action_mismatch` | 13 | not probed |
+| `extra_character` | 7 | partly; see below |
+
+**Group directions.** Every page prompt says "This illustration contains exactly N character(s)"
+and lists only roster characters. 17 of the 150 scenes on stored runs then direct beings that have
+no roster entry ("the other cranes spin in the wind", "his six dust bunny soldiers", "a group of
+frogs"), so the prompt contradicts itself. Those 17 shipped a major duplicate or extra character on
+4 pages (24%), against 13 of the other 133 (10%). The clash is real but explains only 4 of the 17
+duplicate pages; most duplicates happen in scenes with no group at all.
+
+**Reading.** Duplicates are the largest major defect still open to a change, and most of them are
+not caused by group directions.
