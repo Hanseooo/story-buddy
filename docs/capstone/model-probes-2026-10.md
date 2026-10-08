@@ -87,3 +87,50 @@ features (stripes, spots) are themselves uncertain within ±1.
 **Cost.** qwen-image 16 calls at $0.02 per MP rounded up to 1 MP, $0.32. klein 24 at $0.009/MP,
 about $0.22. qwen-image-2512 16 calls; its price was not checked, and at qwen-image's rate it is
 $0.32. Screen total about $0.86. Both probes together come to at most about $1.41 of the $2 cap.
+
+## Text-model trial: analyze + segment — 2026-10-08
+
+**Question.** Does a stronger open-weight text model plan better scenes (right cast, faithful
+direction) than `mistralai/mistral-small-3.2-24b-instruct`?
+
+**Setup.** `analyze` then `segment`, unchanged, on six synthetic stories: syn-002, 007, 010, 016,
+019, 021. Same prompts and strict schema (`structured_text`), temperature 0. Each candidate was
+pinned to one provider through `TEXT_PROVIDERS`, as production pins Mistral to deepinfra.
+
+**Which candidates ran at all.**
+
+| Model | Provider | Result |
+|---|---|---|
+| openai/gpt-oss-120b | default routing | 5/6 broke the schema, 1/6 timed out at 120 s |
+| openai/gpt-oss-120b | deepinfra, then groq | broke the schema; groq returned nothing parsable |
+| qwen/qwen3-235b-a22b-2507 | deepinfra | broke the schema (1 story tried) |
+| deepseek/deepseek-chat-v3.1 | deepinfra | 1/6 broke the schema, 3/6 exceeded the production 120 s call bound; about 185 s per story against Mistral's 42 s |
+
+Every schema break was the same: a character-description object in `locations[].description`, which
+the sent schema declares a plain string. The schema was checked (`to_strict_json_schema`). So these
+endpoints do not enforce the grammar, and the models copy the character `description` shape into
+the same-named location field.
+
+**Scene quality, DeepSeek vs Mistral (assistant's reading, 5 stories).** The three timeouts were
+rerun with a 400 s bound for the trial only.
+
+- DeepSeek cut finer: 34 scenes against Mistral's 26 on the same five stories. More pages mean
+  more images to pay for.
+- Both kept the moth out of the cast in syn-021 before it is named. DeepSeek made it worse: s0
+  directs an empty wall although the moth is in the excerpt, and s1 directs "a large moth" with
+  an empty cast.
+- DeepSeek dropped the baby from syn-019's roster, then directed "facing baby who is laughing".
+  That baby has no reference.
+- DeepSeek dropped Bramblefoot from syn-010 s5, the scene where he pulls the fence apart.
+- DeepSeek put 5 framing values ("close-up", "wide shot") in the viewpoint slot.
+- DeepSeek did better in places. Mopsi is the one eating in syn-002 (Mistral's direction had
+  this right too, but Qwen-Edit drew Marisol). syn-016's vacuum and dust-bunny beats get their
+  own scenes, where Mistral cast no vacuum when it arrives. And no odd directions like Mistral's
+  "empty toy box with Snorkel's faint outline".
+
+**Reading.** No gain. The one candidate that fits the strict-schema path is slower, less reliable
+and makes the same class of cast error. The cast errors come from what the segment prompt asks
+for, not from model capacity: both models leave a character out while the story calls it by
+description. Mistral stays.
+
+**Cost.** Text calls only, a few cents.
