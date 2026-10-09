@@ -14,6 +14,30 @@ instead of repeating it.
 
 ---
 
+## Research run browser · 2026-10-09 (branch in progress)
+
+Refs [#107](https://github.com/Hanseooo/story-buddy/issues/107), #104, #103 · Plan C
+
+### Code
+
+- Public run list: failure split, unchecked pages, images per page, and by-style totals.
+  Status and style filters replace the URL and remember the query for the upcoming detail page.
+- One viewer rule controls titles and run links. Hidden titles are cleared before rendering.
+  Desktop rows and phone cards use the warned, flag-gated Langfuse button.
+- Updated loading skeleton, empty and filtered-empty states, and retry error boundary.
+
+### Docs
+
+- Run-browser spec and route map record the built list. Detail and graph remain plans D–E.
+
+### Checks
+
+- Frontend lint, production build/typecheck and full unit suite. Privacy regression verified by
+  temporarily removing title sanitization: the HTML assertion fails, then passes after restoration.
+- Browser checks are deferred to plan E, as plan C specifies.
+
+---
+
 ## Direct to `main` · 2026-10-09 (agreement and sensitivity)
 
 Objective 4's registered agreement and sensitivity analyses.

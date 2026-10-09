@@ -2,7 +2,8 @@
 
 **Status:** design approved 2026-10-09; ADR-064 accepted 2026-10-09; backend route (§5.1) built
 2026-10-09; research shell (§2, §3) and reusable Langfuse button (§6, plan B) built 2026-10-09.
-Run list, detail and graph (plans C–E), including Langfuse button placement, remain unbuilt.
+Run list (§4, plan C), including its Langfuse button placement, built 2026-10-09.
+Run detail and graph (plans D–E) remain unbuilt. Run-list browser checks are deferred to plan E.
 Production checkpoint reads, endpoint latency and signed-in browser checks remain unverified.
 **Issues:** #107 (run list), #104 (run detail), #103 (Langfuse warning and env flag). One PR.
 Sub-issue #111 (annotate/adjudicate demo mode) follows after merge and is out of scope here.
@@ -92,7 +93,8 @@ matches shows "No runs match these filters" and a "Clear filters" button.
 style, pages `passed/total`, redraws, failure reason in words, cost, date, and the Langfuse button
 when the flag is on. A row the viewer can open is one link with the accessible name
 "Open run <title or short id>", and the whole row is clickable. Otherwise the title cell shows a lock
-and either "Sign in to view" (a link to `/login?next=/research/metrics/<id>`) or "Not approved yet".
+and either "Sign in to view" (a link to `/login?next=/research/metrics/<id>`), "Not approved yet"
+for a researcher, or "Researchers only" for other signed-in roles.
 
 **States.** `loading.tsx` skeleton (existing, updated to the new layout), "No runs recorded yet",
 the filtered-empty state above, and `error.tsx` with a Retry button.

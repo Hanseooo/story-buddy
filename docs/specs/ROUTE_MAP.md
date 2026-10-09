@@ -26,7 +26,7 @@ All routes are Next.js App Router filesystem routes under `frontend/app/`.
 | `/signup` | Auth — signup | Client | Teacher / BEED-student account creation |
 | `/join` | Student login | Client | Public — no Supabase auth. Classroom code entry, then nickname + password (teacher-issued) |
 | `/join/[code]` | Direct join via link | Client | Pre-fills the classroom code; still requires nickname + password. Teacher shares this URL |
-| `/research/metrics` | Research metrics | Server | Public list, with the shared role-aware research header. Run-list upgrade remains plan C. |
+| `/research/metrics` | Research runs | Server | Public aggregates and URL-filtered run list, with the shared role-aware research header. Titles and run links follow `canOpenRun`; hidden titles are cleared on the server. |
 
 ### Teacher routes (require Supabase Auth session)
 

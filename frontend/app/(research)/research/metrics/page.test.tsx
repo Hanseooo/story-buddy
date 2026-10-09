@@ -1,4 +1,7 @@
-import { expect, test } from "vitest";
+import { beforeEach, describe, expect, it, test, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { renderToStaticMarkup } from "react-dom/server";
+import RunsPage from "./page";
 import { computeAggregates, JobRow } from "@/utils/metrics";
 
 test("aggregate math matches expected values", () => {
@@ -54,4 +57,52 @@ test("in-progress statuses are counted so the tiles sum to totalRuns", () => {
   expect(stats.complete + stats.failed + stats.inProgress).toBe(stats.totalRuns);
   // Unconcluded runs must not drag the job pass rate down.
   expect(stats.jobPassRate).toBe(1 / 2);
+});
+
+const RUN_ID = "3f9a1c2e-0000-4000-8000-000000000001";
+const mockViewer = vi.hoisted(() => vi.fn());
+const mockRows = vi.hoisted(() => vi.fn());
+const mockSelect = vi.hoisted(() => vi.fn());
+vi.mock("../../_shared/getResearchViewer", () => ({ getResearchViewer: mockViewer }));
+vi.mock("@supabase/supabase-js", () => ({
+  createClient: () => ({ from: () => ({ select: mockSelect }) }),
+}));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn() }),
+  usePathname: () => "/research/metrics",
+  useSearchParams: () => new URLSearchParams(),
+}));
+
+describe("RunsPage", () => {
+  beforeEach(() => {
+    vi.stubEnv("NEXT_PUBLIC_SHOW_LANGFUSE_LINKS", "false");
+    mockSelect.mockReturnValue({ order: mockRows });
+    mockRows.mockResolvedValue({
+      data: [{ id: RUN_ID, status: "failed", created_at: "2026-10-01T10:00:00Z",
+        title: "Secret Kite", approved_at: null, failure_reason: "machine", style_preset_id: "cel" }],
+      error: null,
+    });
+    mockViewer.mockResolvedValue(null);
+  });
+
+  it("signed out: no title in the HTML and a sign-in link to the run", async () => {
+    const page = await RunsPage({ searchParams: Promise.resolve({}) });
+    expect(renderToStaticMarkup(page)).not.toContain("Secret Kite");
+    render(page);
+    expect(screen.getAllByRole("link", { name: "Sign in to view" })[0]).toHaveAttribute(
+      "href", `/login?next=/research/metrics/${RUN_ID}`
+    );
+    expect(mockSelect.mock.calls.at(-1)?.[0].replace(/\s/g, "")).toBe(
+      "id,status,created_at,style_preset_id,failure_reason,regen_count,image_count,scenes_total,scenes_passed,scenes_unchecked,usd_estimate,langfuse_trace_url,approved_at,title"
+    );
+    expect(screen.queryByRole("button", { name: /Langfuse/ })).toBeNull();
+  });
+
+  it("adjudicator: the row is a link named after the title", async () => {
+    mockViewer.mockResolvedValue({ id: "r-2", role: "researcher", isAdjudicator: true, displayName: null });
+    render(await RunsPage({ searchParams: Promise.resolve({}) }));
+    expect(screen.getAllByRole("link", { name: "Open run Secret Kite" })[0]).toHaveAttribute(
+      "href", `/research/metrics/${RUN_ID}`
+    );
+  });
 });
