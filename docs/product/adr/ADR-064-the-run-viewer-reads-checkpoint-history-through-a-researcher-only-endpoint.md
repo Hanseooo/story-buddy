@@ -1,6 +1,6 @@
 # ADR-064 — The run viewer reads checkpoint history through a researcher-only endpoint
 
-**Status:** Proposed (2026-10-09) · settles the open questions in issue #104 · adds one backend
+**Status:** Accepted (2026-10-09) · settles the open questions in issue #104 · adds one backend
 route and widens one account's read access (the adjudicator) · no migration · no `StoryMemory` or
 `contracts/` change · extends ADR-033 (checkpoint store) and ADR-006 (signed URLs) to a new reader
 

@@ -1,7 +1,6 @@
 # Feature Spec — Research run browser
 
-**Status:** design approved 2026-10-09; not built. ADR-064 is Proposed and must be accepted before
-the backend route is written.
+**Status:** design approved 2026-10-09; ADR-064 accepted 2026-10-09; not built.
 **Issues:** #107 (run list), #104 (run detail), #103 (Langfuse warning and env flag). One PR.
 Sub-issue #111 (annotate/adjudicate demo mode) follows after merge and is out of scope here.
 **Derived from:** [ADR-064](../product/adr/ADR-064-the-run-viewer-reads-checkpoint-history-through-a-researcher-only-endpoint.md),
@@ -263,7 +262,7 @@ Done means:
 - Each state in §4 and §5.4 is seen at least once.
 - Checked in a browser with `playwright-cli`, at desktop and phone width, with a clean console. The
   owner signs in; the agent stops at the login wall.
-- `CHANGELOG.md` entry. ADR-064 accepted before merge.
+- `CHANGELOG.md` entry.
 
 ## 9. Out of scope
 
