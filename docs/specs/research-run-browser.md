@@ -1,6 +1,7 @@
 # Feature Spec — Research run browser
 
-**Status:** design approved 2026-10-09; ADR-064 accepted 2026-10-09; not built.
+**Status:** design approved 2026-10-09; ADR-064 accepted 2026-10-09; backend route (§5.1) built
+2026-10-09; frontend (plans B–E) not built. Production checkpoint reads and endpoint latency remain unverified.
 **Issues:** #107 (run list), #104 (run detail), #103 (Langfuse warning and env flag). One PR.
 Sub-issue #111 (annotate/adjudicate demo mode) follows after merge and is out of scope here.
 **Derived from:** [ADR-064](../product/adr/ADR-064-the-run-viewer-reads-checkpoint-history-through-a-researcher-only-endpoint.md),

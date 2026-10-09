@@ -300,6 +300,7 @@ Each route group also gets an `error.tsx`:
 | `POST /classrooms/{classroom_id}/students/{profile_id}/remove` | Teacher (`owned_classroom`) | Soft-removes student (`removed_at` + auth ban) (204) |
 | `POST /classrooms/{classroom_id}/students/{profile_id}/restore` | Teacher (`owned_classroom`) | Restores removed student and returns new password |
 | `POST /jobs/{job_id}/review` | Teacher (`require_teacher` + `owned_job`) | Sets review state (`approved`, `rejected`, `pending`) |
+| `GET /research/runs/{job_id}` | Researcher (`require_researcher`); adjudicator any run, others approved runs only | Run viewer projection of the checkpoint history (ADR-064). 403 `researchers_only` / `not_approved`, 404 `not_found`, 422 for a non-UUID id |
 
 ---
 

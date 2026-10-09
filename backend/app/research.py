@@ -7,10 +7,14 @@ is never selected.
 import logging
 from datetime import datetime
 from typing import Callable
+from uuid import UUID
 
+from fastapi import APIRouter, Depends, HTTPException
 from langgraph.checkpoint.postgres import PostgresSaver
 
+from app.auth import require_researcher
 from app.config import settings
+from app.db import get_supabase_client
 from contracts.story_memory import StoryMemory
 from pipeline.graph import build_graph
 from providers import get_signed_url
@@ -118,3 +122,18 @@ def project_run(job: dict, snapshots: list, sign: Callable[[str | None], str | N
     if latest is not None:
         out |= _state_parts(StoryMemory.model_validate(latest.values), sign)
     return out
+
+
+research_router = APIRouter()
+
+
+@research_router.get("/research/runs/{job_id}")
+def get_run(job_id: UUID, viewer: dict = Depends(require_researcher)) -> dict:
+    rows = get_supabase_client().table("jobs").select(JOB_COLUMNS).eq("id", str(job_id)).execute().data
+    if not rows:
+        raise HTTPException(404, "not_found")
+    job = rows[0]
+    # ADR-064 rule 2: the adjudicator reads any run; every other researcher keeps 0008's approved-only rule.
+    if not viewer["is_adjudicator"] and job["approved_at"] is None:
+        raise HTTPException(403, "not_approved")
+    return project_run(job, load_history(str(job_id)), sign)

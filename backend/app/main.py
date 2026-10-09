@@ -14,6 +14,7 @@ from app.length import clamp_story, word_count
 from app.db import get_supabase_client
 from app.queue import get_queue
 from app.auth import get_current_user, teacher_router
+from app.research import research_router
 import app.classrooms  # noqa: F401 — registers routes on teacher_router as side-effect
 import app.review  # noqa: F401 — registers routes on teacher_router as side-effect
 from app.avatar import AvatarRequest, patch_avatar
@@ -69,6 +70,7 @@ async def _validation_error_without_request_values(
     )
 
 app.include_router(teacher_router)
+app.include_router(research_router)
 
 
 class CreateStorybookRequest(BaseModel):

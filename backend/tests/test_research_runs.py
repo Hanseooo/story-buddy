@@ -1,12 +1,16 @@
 """GET /research/runs/{job_id} and its projection. Spec: docs/specs/research-run-browser.md §5.1, ADR-064."""
 import json
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+import pytest
+from fastapi.testclient import TestClient
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 
 from app import research
+from app.auth import require_researcher
+from app.main import app, get_current_user
 from app.research import project_run
 from contracts.story_memory import (
     CURRENT_SCHEMA_VERSION, Attempt, Character, FailureReason, Input, ModerationResult, RefVerdict, Scene,
@@ -174,3 +178,76 @@ def test_sign_returns_none_when_storage_fails():
     with patch("app.research.get_signed_url", side_effect=Exception("object not found")):
         assert research.sign("pages/gone.webp") is None
     assert research.sign(None) is None
+
+
+client = TestClient(app)
+ANNOTATOR = {"id": "r-1", "role": "researcher", "is_adjudicator": False}
+ADJUDICATOR = {"id": "r-2", "role": "researcher", "is_adjudicator": True}
+
+
+def _db(rows):
+    db = MagicMock()
+    db.table.return_value.select.return_value.eq.return_value.execute.return_value.data = rows
+    return db
+
+
+@pytest.fixture(autouse=True)
+def _clear_overrides():
+    yield
+    app.dependency_overrides.clear()
+
+
+def _get_as(profile, rows, job_id=JOB_ID):
+    app.dependency_overrides[require_researcher] = lambda: profile
+    db = _db(rows)
+    with patch("app.research.get_supabase_client", return_value=db), \
+         patch("app.research.load_history", return_value=[]):
+        return client.get(f"/research/runs/{job_id}"), db
+
+
+def test_signed_out_is_401():
+    assert client.get(f"/research/runs/{JOB_ID}").status_code == 401
+
+
+def test_teacher_is_403():
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id="t-1")
+    with patch("app.auth.get_supabase_client",
+               return_value=_db([{"id": "t-1", "role": "teacher", "is_adjudicator": False}])):
+        response = client.get(f"/research/runs/{JOB_ID}")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "researchers_only"
+
+
+def test_annotator_cannot_open_an_unapproved_run():
+    response, _ = _get_as(ANNOTATOR, [_job(status="failed", approved_at=None)])
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "not_approved"
+
+
+def test_annotator_opens_an_approved_run_without_reading_input_text():
+    response, db = _get_as(ANNOTATOR, [_job()])
+
+    assert response.status_code == 200
+    assert response.json()["job"]["title"] == "The Red Kite"
+    assert "input_text" not in db.table.return_value.select.call_args.args[0]
+
+
+def test_adjudicator_opens_an_unapproved_run():
+    response, _ = _get_as(ADJUDICATOR, [_job(status="failed", approved_at=None)])
+
+    assert response.status_code == 200
+    assert response.json()["job"]["approved"] is False
+
+
+def test_unknown_run_is_404():
+    response, _ = _get_as(ADJUDICATOR, [])
+
+    assert response.status_code == 404
+
+
+def test_malformed_id_is_422():
+    response, _ = _get_as(ADJUDICATOR, [_job()], job_id="abc")
+
+    assert response.status_code == 422

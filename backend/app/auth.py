@@ -24,6 +24,14 @@ def require_teacher(user=Depends(get_current_user)) -> dict:
     return rows[0]
 
 
+def require_researcher(user=Depends(get_current_user)) -> dict:
+    rows = (get_supabase_client().table("profiles")
+            .select("id, role, is_adjudicator").eq("id", user.id).execute().data)
+    if not rows or rows[0]["role"] != "researcher":
+        raise HTTPException(403, "researchers_only")
+    return rows[0]
+
+
 def owned_classroom(classroom_id: str = Path(...), teacher=Depends(require_teacher)) -> dict:
     rows = (get_supabase_client().table("classrooms").select("*")
             .eq("id", classroom_id).eq("owner_id", teacher["id"]).execute().data)
