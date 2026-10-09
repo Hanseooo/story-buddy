@@ -170,8 +170,13 @@ A server component fetches the route with the session's access token
    colours, body features, clothing), reference safety check, judge verdict with its
    contradictions in plain words.
 6. **Pages.** One block per scene: excerpt, drawing direction and cast on the left; attempts side by
-   side on the right. The shipped attempt wears a **Shipped** ribbon; each attempt shows a pass or
-   fail badge, its failure reasons as labels, the scene contradictions, and a collapsed "Prompt".
+   side on the right. The selected attempt wears a **Used in the book** ribbon; each attempt shows
+   **Passed required checks**, **Failed required checks**, or **Not checked**. AI-judge findings
+   use direct descriptions such as "Face differs from the character reference" and "Text detected
+   in the illustration", never a "Not:" prefix on a positive check. Required-check issues are
+   separate from other warnings. The recorded `passed` value remains authoritative: text,
+   duplication and style observations do not themselves reject a drawing. Unknown reason values
+   remain visible. Prompts stay collapsed.
    Images open a single-image viewer (`ImageViewer`, a native `<dialog>`). `LightboxModal` is not
    reused: it is built for a reference-and-scene pair with tabs. A shield badge shows the page's
    safety check.
@@ -220,24 +225,41 @@ From `steps`: a node's visit count, and an edge's traversal count from consecuti
 
 Clicking a node opens a panel, a native `<dialog>` styled as a right-hand sheet on `md+` and a bottom
 sheet on phones. Escape or the close button dismisses it, and focus returns to the node. It shows
-the node's visits with their times, plus what that node produced, in words:
+the step's purpose under **What this step does**, then a short outcome under **What happened in
+this run**. Detailed outputs are collapsed under **Recorded results**. Node ids, execution counts
+and timestamps are collapsed under **Execution details**. Both disclosures use native `<details>`
+controls. A section link remains available without expanding either disclosure.
+
+Each summary describes that step's own job:
 
 - `input_gate`: safety result, whether text was redacted or truncated.
 - `analyze`, `segment`: characters, objects and places found; pages and their directions.
-- `char_bible`, `char_ref_mod`: each reference and its verdict and safety result.
-- `reveal`: "waited for the child", and the try-again count (`cost.ref_retry_count`).
-- `generate_scene`, `consistency_check`, `regenerate`: attempts per page with verdicts.
+- `char_bible`: recorded reference images and description verdicts.
+- `char_ref_mod`: reference safety results and safety-redraw count.
+- `reveal`: reaching the confirmation step and recorded redraw requests (`cost.ref_retry_count`).
+  It never claims the child confirmed from a visit alone; with no references the prompt can be skipped.
+- `generate_scene`: recorded drawings per page.
+- `consistency_check`: overall passed/failed/not-checked counts, then per-attempt required-check
+  issues and other warnings.
+- `regenerate`: extra drawings on pages that have recorded redraws and which attempt was selected.
 - `output_mod`: page safety results.
-- `compose`: pages shipped.
+- `compose`: pages with a drawing selected for the book.
 
-Each panel ends with a link that scrolls to the matching section below.
+An unvisited step says **This step did not run** and shows no run-result details. The current
+`ended_on` step takes precedence over the visit list: waiting says it is waiting for child
+confirmation, running says results are not final, and failed says the step's result may be
+incomplete. Missing retry counts say **not recorded**, rather than implying zero.
+
+Each panel provides a link that scrolls to the matching section below.
 
 The client component lives in `PipelineGraphView.tsx`. Using the plan's `PipelineGraph.tsx`
 beside `pipelineGraph.ts` resolves the component import to the data module on Windows.
-Drawing-node summaries include each attempt's passed, failed or not-checked result and readable
+The consistency-check summary includes each attempt's passed, failed or not-checked result and readable
 failure reasons and composition contradictions, in addition to the attempt count and shipped
 attempt. A composition-only failure is failed even when there is no character verdict object;
-the page-attempt badge uses the same rule.
+the page-attempt badge uses the same rule through `reviewAttempt` in `nodeSummary.ts`. This
+presentation helper classifies recorded findings using `consistency_check.py`'s existing required
+checks; it does not recompute or change the backend's pass decision.
 
 ### 5.4 States
 

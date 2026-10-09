@@ -1,23 +1,21 @@
-import { sceneFailureLabel, VERDICT_CHECK_LABELS } from "@/utils/metrics";
 import ImageViewer from "../ImageViewer";
+import { reviewAttempt } from "../nodeSummary";
 import type { RunAttempt, RunCharacter, RunScene } from "../types";
 import SafetyBadge from "./SafetyBadge";
 
-function Verdict({ attempt }: { attempt: RunAttempt }) {
-  if (attempt.passed) {
-    return <span className="rounded-full bg-success/15 px-2.5 py-1 text-xs font-bold text-success">Passed</span>;
+function Verdict({ outcome }: { outcome: string }) {
+  if (outcome === "Passed required checks") {
+    return <span className="rounded-full bg-success/15 px-2.5 py-1 text-xs font-bold text-success">{outcome}</span>;
   }
   // A recorded reason or composition contradiction means the judge answered without a verdict object.
-  if (attempt.vlm_verdict == null && attempt.failure_reasons.length === 0 && !attempt.scene_contradictions?.length) {
-    return <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-bold text-foreground/70">Not checked</span>;
+  if (outcome === "Not checked") {
+    return <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-bold text-foreground/70">{outcome}</span>;
   }
-  return <span className="rounded-full bg-destructive/15 px-2.5 py-1 text-xs font-bold text-destructive">Failed</span>;
+  return <span className="rounded-full bg-destructive/15 px-2.5 py-1 text-xs font-bold text-destructive">{outcome}</span>;
 }
 
 function AttemptCard({ attempt, page, index, shipped }: { attempt: RunAttempt; page: number; index: number; shipped: boolean }) {
-  const failedChecks = attempt.vlm_verdict
-    ? (Object.keys(VERDICT_CHECK_LABELS) as (keyof typeof VERDICT_CHECK_LABELS)[]).filter((key) => attempt.vlm_verdict?.[key] === false)
-    : [];
+  const review = reviewAttempt(attempt);
 
   return (
     <li
@@ -26,30 +24,31 @@ function AttemptCard({ attempt, page, index, shipped }: { attempt: RunAttempt; p
     >
       {shipped && (
         <span className="absolute left-3 top-3 z-10 rounded-full bg-success px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-on-success">
-          Shipped
+          Used in the book
         </span>
       )}
       <ImageViewer src={attempt.image_url} alt={`Page ${page}, attempt ${index + 1}`} className="aspect-square w-full" />
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-bold">Attempt {index + 1}</span>
-        <Verdict attempt={attempt} />
+        <Verdict outcome={review.outcome} />
       </div>
-      {(attempt.failure_reasons.length > 0 || failedChecks.length > 0) && (
-        <ul aria-label="What the judge flagged" className="flex flex-wrap gap-1.5">
-          {attempt.failure_reasons.map((reason) => (
-            <li key={reason} className="rounded-md bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">{sceneFailureLabel(reason)}</li>
-          ))}
-          {failedChecks.map((key) => (
-            <li key={key} className="rounded-md bg-warning/20 px-2 py-0.5 text-xs font-medium">Not: {VERDICT_CHECK_LABELS[key]}</li>
-          ))}
-        </ul>
-      )}
-      {attempt.scene_contradictions && attempt.scene_contradictions.length > 0 && (
-        <div className="text-xs">
-          <p className="font-bold text-foreground/70">Contradicts the page</p>
-          <ul className="mt-1 list-disc space-y-0.5 pl-4">
-            {attempt.scene_contradictions.map((contradiction) => <li key={contradiction}>{contradiction}</li>)}
+      {review.required.length > 0 && (
+        <div className="text-sm">
+          <p className="font-bold">Required-check issues</p>
+          <p className="mt-1 text-xs text-foreground/70">The AI judge reported:</p>
+          <ul className="mt-1 list-disc space-y-1 pl-4 text-foreground">
+            {review.required.map((issue) => <li key={issue}>{issue}</li>)}
           </ul>
+        </div>
+      )}
+      {review.warnings.length > 0 && (
+        <div className="text-sm">
+          <p className="font-bold">Other warnings</p>
+          <p className="mt-1 text-xs text-foreground/70">The AI judge reported:</p>
+          <ul className="mt-1 list-disc space-y-1 pl-4">
+            {review.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+          </ul>
+          <p className="mt-2 text-xs text-foreground/70">These observations do not reject the drawing on their own.</p>
         </div>
       )}
       {attempt.vlm_verdict?.differences_observed && (

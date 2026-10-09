@@ -28,7 +28,11 @@ Refs [#103](https://github.com/Hanseooo/story-buddy/issues/103), #104, #107, #10
   and whole-row links for allowed viewers. Hidden titles are cleared before rendering.
 - Run detail: a clickable 11-node pipeline graph with visit and traversal counts, ended-step
   markers and native node panels, before story, characters, page attempts, safety, timing and
-  copyable JSON. Panels list visits, readable summaries and verdicts, and link to each section.
+  copyable JSON. Panels lead with the step's purpose and run result, with recorded results and
+  timings in native disclosures, and link to each section. Drawing, checking and redrawing have
+  distinct summaries. Unvisited, waiting and incomplete steps are described explicitly.
+  Image checks use direct, reference-based descriptions and separate required-check issues from
+  other warnings. The selected attempt is labeled "Used in the book".
   Image dialogs preserve keyboard dismissal and focus, including broken images.
 - Shared research header on metrics, annotate and adjudicate. Researcher login can return to
   `/research/metrics/...`. Langfuse links require `NEXT_PUBLIC_SHOW_LANGFUSE_LINKS=true` and warn
@@ -46,13 +50,19 @@ Refs [#103](https://github.com/Hanseooo/story-buddy/issues/103), #104, #107, #10
 
 - Backend: `uv run ruff check .` passed; `uv run pytest -q`: 1,474 passed, 87 skipped,
   6 deselected. The skipped database/RLS and provider checks remain unverified.
-- Frontend: `pnpm lint` and `pnpm build` passed; `pnpm test`: 61 files, 597 tests passed.
+- Frontend: `pnpm lint` and `pnpm build` passed; `pnpm test`: 61 files, 598 tests passed.
   The build used CI's placeholder public Supabase values. Next.js reports the existing
   middleware-to-proxy deprecation; that migration is outside this change.
 - Playwright: signed-out list at 1280 × 800 and 360 × 780, generic ids without titles, Langfuse
   hidden, filters survive reload, empty results clear, detail URLs redirect to login. No console errors.
 - Captured synthetic fixture: desktop graph, keyboard Enter/Escape and focus return, section
   links, phone graph scrolling within its box, 44.45 px node height, bottom sheet. No console errors.
+- Clarity follow-up (2026-10-10): purpose/result and disclosure checks passed on desktop and
+  360 × 780 fixtures, with 44 px disclosure targets, no horizontal overflow and no unexpected
+  console errors during those checks. Judge fields captured from the supplied synthetic run
+  cover a passing image with face and text warnings. The real run's new summary was inspected,
+  but repeated live reloads stalled, so final layout and keyboard checks used a temporary preview,
+  removed afterward. Waiting and missing-result states remain unit-checked.
 - Traversal-count and section-link focus regressions were introduced deliberately, observed failing,
   and restored. Page integration failed before mounting the graph, then passed.
 - Signed-in synthetic run: all sections, graph counts matching 39 steps, Enter/Escape/focus,

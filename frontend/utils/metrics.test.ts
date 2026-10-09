@@ -82,8 +82,8 @@ describe("run filters", () => {
 
 describe("sceneFailureLabel", () => {
   it("labels the closed set and passes unknown values through", () => {
-    expect(sceneFailureLabel("wrong_colour")).toBe("Wrong colour");
-    expect(sceneFailureLabel("character_absent")).toBe("Character missing");
+    expect(sceneFailureLabel("wrong_colour")).toBe("Character colour differs from the reference");
+    expect(sceneFailureLabel("character_absent")).toBe("Expected character is missing");
     expect(sceneFailureLabel("new_reason")).toBe("new_reason");
     expect(sceneFailureLabel("constructor")).toBe("constructor");
     expect(sceneFailureLabel("toString")).toBe("toString");

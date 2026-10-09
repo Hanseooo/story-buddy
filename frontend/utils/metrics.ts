@@ -95,26 +95,26 @@ export function failureLabel(reason: string): string {
 
 // FailureReason, backend/contracts/story_memory.py. Unknown values pass through as-is.
 export const SCENE_FAILURE_LABELS: Record<string, string> = {
-  wrong_colour: "Wrong colour",
-  wrong_species: "Wrong species",
-  wrong_body_feature: "Wrong body feature",
-  wrong_clothing: "Wrong clothing",
-  wrong_style: "Wrong style",
-  different_face: "Different face",
-  character_absent: "Character missing",
+  wrong_colour: "Character colour differs from the reference",
+  wrong_species: "Character species differs from the reference",
+  wrong_body_feature: "Character body features differ from the reference",
+  wrong_clothing: "Character clothing differs from the reference",
+  wrong_style: "Illustration style differs from the chosen style",
+  different_face: "Face differs from the character reference",
+  character_absent: "Expected character is missing",
 };
 
 export function sceneFailureLabel(reason: string): string {
   return Object.hasOwn(SCENE_FAILURE_LABELS, reason) ? SCENE_FAILURE_LABELS[reason] : reason;
 }
 
-// The judge's yes/no checks on a page (VlmVerdict). Shown when one is false.
+// Findings reported when a judge check is false, phrased directly rather than "Not: <positive>".
 export const VERDICT_CHECK_LABELS = {
-  same_character: "Same character",
-  style_match: "Style matches",
-  anatomy_intact: "Anatomy intact",
-  subjects_unique: "No duplicate characters",
-  text_free: "No lettering",
+  same_character: "Character does not match the reference",
+  style_match: "Illustration style differs from the chosen style",
+  anatomy_intact: "Missing, extra or distorted body parts",
+  subjects_unique: "A character appears more than once",
+  text_free: "Text detected in the illustration",
 } as const;
 
 export function failedSplit(byReason: Record<string, number>): string {

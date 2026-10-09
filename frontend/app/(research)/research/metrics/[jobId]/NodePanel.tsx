@@ -48,7 +48,6 @@ export default function NodePanel({
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 id="node-panel-title" className="font-display text-2xl font-bold">{node.label}</h2>
-              <p className="font-mono text-xs text-foreground/70">{node.id}</p>
             </div>
             <button
               type="button"
@@ -60,28 +59,15 @@ export default function NodePanel({
             </button>
           </div>
 
-          <div>
-            <h3 className="text-xs font-semibold uppercase tracking-widest text-foreground/70">Visits</h3>
-            {visits.length === 0 ? (
-              <p className="mt-1 text-sm text-foreground/70">This step did not run in this run.</p>
-            ) : (
-              <ol className="mt-1 space-y-1 font-mono text-xs">
-                {visits.map((v, i) => (
-                  <li key={i}>
-                    {i + 1}. {TIME.format(new Date(v.started_at))} UTC · {formatDuration(v.duration_ms)}
-                  </li>
-                ))}
-              </ol>
-            )}
-          </div>
-
           {summary && (
             <>
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-widest text-foreground/70">What it did</h3>
-                <ul className="mt-1 space-y-1 text-sm">
-                  {summary.lines.map((line, i) => <li key={i}>{line}</li>)}
-                </ul>
+                <h3 className="text-sm font-bold">What this step does</h3>
+                <p className="mt-1 text-sm leading-relaxed">{summary.purpose}</p>
+              </div>
+              <div>
+                <h3 className="text-sm font-bold">What happened in this run</h3>
+                <p className="mt-1 text-sm leading-relaxed">{summary.result}</p>
               </div>
               <a
                 href={`#${summary.section.id}`}
@@ -93,8 +79,28 @@ export default function NodePanel({
               >
                 Go to {summary.section.label}
               </a>
+              {summary.lines.length > 0 && (
+                <details className="text-sm">
+                  <summary className={`min-h-11 cursor-pointer py-3 font-bold text-primary ${FOCUS}`}>Recorded results</summary>
+                  <ul className="mt-1 list-disc space-y-2 pl-5 leading-relaxed">
+                    {summary.lines.map((line, i) => <li key={i}>{line}</li>)}
+                  </ul>
+                </details>
+              )}
             </>
           )}
+          <details className="text-sm">
+            <summary className={`min-h-11 cursor-pointer py-3 font-bold text-primary ${FOCUS}`}>Execution details</summary>
+            <p className="mt-1 font-mono text-xs text-foreground/70">{node.id}</p>
+            <p className="mt-2 text-foreground/70">{visits.length === 0 ? "No executions recorded." : `Ran ${visits.length} ${visits.length === 1 ? "time" : "times"}.`}</p>
+            <ol className="mt-2 space-y-1 font-mono text-xs">
+              {visits.map((v, i) => (
+                <li key={i}>
+                  {i + 1}. {TIME.format(new Date(v.started_at))} UTC · {formatDuration(v.duration_ms)}
+                </li>
+              ))}
+            </ol>
+          </details>
         </div>
       )}
     </dialog>
