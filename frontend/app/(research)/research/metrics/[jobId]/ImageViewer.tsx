@@ -17,6 +17,7 @@ export default function ImageViewer({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [broken, setBroken] = useState(false);
+  const [enlargedBroken, setEnlargedBroken] = useState(false);
 
   if (!src || broken) {
     return (
@@ -69,8 +70,14 @@ export default function ImageViewer({
           >
             <X weight="bold" className="size-5" aria-hidden />
           </button>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={src} alt={alt} onError={() => setBroken(true)} className="block max-h-[90dvh] w-auto max-w-full" />
+          {enlargedBroken ? (
+            <div role="img" aria-label={alt} className="flex min-h-64 min-w-56 items-center justify-center px-5 text-sm text-foreground/70">
+              Image unavailable
+            </div>
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={src} alt={alt} onError={() => setEnlargedBroken(true)} className="block max-h-[90dvh] w-auto max-w-full" />
+          )}
         </div>
       </dialog>
     </>

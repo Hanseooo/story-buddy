@@ -59,4 +59,22 @@ describe("ImageViewer", () => {
     expect(screen.getByRole("img", { name: "Page 2, attempt 1" })).toHaveTextContent("Image unavailable");
     expect(screen.queryByRole("button", { name: /Enlarge/ })).toBeNull();
   });
+
+  it("keeps a failed enlarged image dismissible and returns focus to the opener", () => {
+    render(<ImageViewer src="https://img.test/a.webp" alt="Page 1" />);
+    const trigger = screen.getByRole("button", { name: "Enlarge Page 1" });
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole("dialog", { name: "Page 1" });
+    const close = screen.getByRole("button", { name: "Close image" });
+    close.focus();
+
+    fireEvent.error(dialog.querySelector("img")!);
+
+    expect(dialog).toHaveAttribute("open");
+    expect(close).toHaveFocus();
+    expect(dialog.querySelector('[role="img"]')).toHaveTextContent("Image unavailable");
+    fireEvent.click(close);
+    expect(dialog).not.toHaveAttribute("open");
+    expect(trigger).toHaveFocus();
+  });
 });
