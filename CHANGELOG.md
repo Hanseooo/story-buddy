@@ -14,37 +14,48 @@ instead of repeating it.
 
 ---
 
-## Research run browser · 2026-10-09 (branch in progress)
+## Research run browser · 2026-10-09 (PR pending)
 
-Refs [#107](https://github.com/Hanseooo/story-buddy/issues/107), #104, #103 · Plans C–D
+Run list, run detail with a pipeline graph, and a warned Langfuse link.
+Refs [#103](https://github.com/Hanseooo/story-buddy/issues/103), #104, #107, #108, #111 · Plans A–E
 
 ### Code
 
-- Public run list: failure split, unchecked pages, images per page, and by-style totals.
-  Status and style filters replace the URL and remember the query for the upcoming detail page.
-- One viewer rule controls titles and run links. Hidden titles are cleared before rendering.
-  Desktop rows and phone cards use the warned, flag-gated Langfuse button.
-- Updated loading skeleton, empty and filtered-empty states, and retry error boundary.
-- Run detail reads the backend projection and shows the redacted story, characters, page
-  attempts, safety, timing, summary and copyable JSON, with access and missing-checkpoint states.
-  Image dialogs preserve keyboard dismissal and focus; broken images retain named placeholders.
+- `GET /research/runs/{job_id}` reads checkpoint history and returns a projection without raw
+  story text or account ids. Annotators open approved runs, the adjudicator opens all (ADR-064).
+  The route signs images for an hour through `get_signed_url(..., expires_in=3600)`.
+- Public run list: failure split, unchecked pages, images per page, by-style totals, URL filters,
+  and whole-row links for allowed viewers. Hidden titles are cleared before rendering.
+- Run detail: a clickable 11-node pipeline graph with visit and traversal counts, ended-step
+  markers and native node panels, before story, characters, page attempts, safety, timing and
+  copyable JSON. Panels list visits, readable summaries and verdicts, and link to each section.
+  Image dialogs preserve keyboard dismissal and focus, including broken images.
+- Shared research header on metrics, annotate and adjudicate. Researcher login can return to
+  `/research/metrics/...`. Langfuse links require `NEXT_PUBLIC_SHOW_LANGFUSE_LINKS=true` and warn
+  that traces contain the story before redaction.
 
 ### Docs
 
-- Run-browser spec and route map record the built list and detail. The graph remains plan E.
+- Accepted ADR-064, run-browser spec and route map describe the built routes and graph.
+- The graph component is `PipelineGraphView.tsx` to avoid Windows resolving its import to
+  `pipelineGraph.ts`. Drawing summaries include verdicts as required by the spec.
 
 ### Checks
 
-- Frontend lint, production build/typecheck and full unit suite. Privacy regression verified by
-  temporarily removing title sanitization: the HTML assertion fails, then passes after restoration.
-- Browser checks are deferred to plan E, as plan C specifies.
-- Detail regressions verified by removing the malformed-id, unchecked-attempt and
-  missing-checkpoint branches in turn, observing failures, and restoring passing behavior.
-- Image failures retain an open dialog and its close control. Closing returns focus to
-  the opener or its named placeholder if the thumbnail also failed.
+- Backend: `uv run ruff check .` passed; `uv run pytest -q`: 1,474 passed, 87 skipped,
+  6 deselected. The skipped database/RLS and provider checks remain unverified.
+- Frontend lint and focused run-detail tests passed. Full unit suite and production build/typecheck
+  results are recorded in the PR body once release verification is finished.
+- Playwright: signed-out list at 1280 × 800 and 360 × 780, generic ids without titles, Langfuse
+  hidden, filters survive reload, empty results clear, detail URLs redirect to login. No console errors.
+- Captured synthetic fixture: desktop graph, keyboard Enter/Escape and focus return, section
+  links, phone graph scrolling within its box, 44.45 px node height, bottom sheet. No console errors.
+- Traversal-count and section-link focus regressions were introduced deliberately, observed failing,
+  and restored. Page integration failed before mounting the graph, then passed.
+- Signed-in real-run checks and endpoint latency remain pending owner sign-in and a synthetic
+  test-story run id. Push and PR creation await owner approval, per plan E Task 5.
 
 ---
-
 ## Direct to `main` · 2026-10-09 (agreement and sensitivity)
 
 Objective 4's registered agreement and sensitivity analyses.

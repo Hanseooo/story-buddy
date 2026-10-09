@@ -26,7 +26,6 @@ All routes are Next.js App Router filesystem routes under `frontend/app/`.
 | `/signup` | Auth — signup | Client | Teacher / BEED-student account creation |
 | `/join` | Student login | Client | Public — no Supabase auth. Classroom code entry, then nickname + password (teacher-issued) |
 | `/join/[code]` | Direct join via link | Client | Pre-fills the classroom code; still requires nickname + password. Teacher shares this URL |
-| `/research/metrics` | Research runs | Server | Public aggregates and URL-filtered run list, with the shared role-aware research header. Titles and run links follow `canOpenRun`; hidden titles are cleared on the server. |
 
 ### Teacher routes (require Supabase Auth session)
 
@@ -54,6 +53,16 @@ by the child), just not the Supabase Auth session teachers use — session is es
 | `/s/[profileId]/book/[jobId]` | Storybook reader | Client | Immersive full-screen. Image + caption. Next/prev |
 | `/s/[profileId]/gallery` | Classroom gallery | Server | Browse & read classmates' approved books. Display-only — no reflection surface |
 | `/s/[profileId]/settings` | Student account settings | Client | Change password. No email, no self-serve recovery — reset otherwise is teacher-initiated |
+
+### Research routes
+
+The shared header shows Runs, Annotate and Adjudicate according to the viewer's role
+(`docs/specs/research-run-browser.md` §3). The list stays public.
+
+| URL pattern | Page | Rendering | Notes |
+|---|---|---|---|
+| `/research/metrics` | Run list | Server | Public totals, by-style table and URL filters. Titles and run links follow `canOpenRun`; hidden titles are cleared on the server (ADR-064 rule 6) |
+| `/research/metrics/[jobId]` | Run detail | Server | Login required. Reads `GET /research/runs/{job_id}`; annotators see approved runs, the adjudicator sees all (ADR-064 rule 2). Pipeline graph, pages, safety and raw state |
 
 ---
 
@@ -157,7 +166,7 @@ app/
 | `/s/[profileId]/**` | Profile (student) | Profile session must be active (stored in sessionStorage or cookie). Profile must exist and belong to an active classroom |
 | `/s/[profileId]/book/[bookId]/**` | Profile (student) | `bookId` must belong to `profileId` (own book) |
 | `/research/metrics` | Public | Middleware refreshes the session for the research header without requiring sign-in |
-| `/research/metrics/[jobId]` | Auth session | Signed-out descendants redirect to `/login?next=<path>`; the server-rendered detail report shows backend access messages and recorded run state. The pipeline graph remains plan E. |
+| `/research/metrics/[jobId]` | Auth session | Signed-out descendants redirect to `/login?next=<path>`; the server-rendered detail report shows backend access messages, recorded run state and the pipeline graph. |
 
 ### Middleware strategy
 

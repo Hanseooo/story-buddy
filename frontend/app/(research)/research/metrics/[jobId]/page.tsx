@@ -4,6 +4,8 @@ import { formatJob } from "@/utils/metrics";
 import StatusPill from "../StatusPill";
 import BackLink from "./BackLink";
 import { loadRun } from "./loadRun";
+import { summarizeNodes } from "./nodeSummary";
+import PipelineGraph from "./PipelineGraphView";
 import Characters from "./sections/Characters";
 import Pages from "./sections/Pages";
 import RawJson from "./sections/RawJson";
@@ -74,6 +76,7 @@ export default async function RunPage({ params }: { params: Promise<{ jobId: str
 
       {run.checkpointed ? (
         <>
+          <PipelineGraph steps={run.steps} endedOn={run.ended_on} summaries={summarizeNodes(run)} />
           <Story story={run.story} />
           <Characters characters={run.characters} />
           <Pages scenes={run.scenes} characters={run.characters} objects={run.state?.objects ?? []} />

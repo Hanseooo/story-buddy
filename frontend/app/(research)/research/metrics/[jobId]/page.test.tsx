@@ -75,4 +75,11 @@ describe("RunPage states", () => {
     expect(screen.getByText("Input safety result not recorded")).toBeInTheDocument();
     expect(screen.getByText("Content blocked")).toBeInTheDocument();
   });
+
+  it("a checkpointed run shows the graph before the story", async () => {
+    mockFetch.mockResolvedValue(new Response(JSON.stringify(RUN)));
+    await renderPage();
+    const headings = screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent);
+    expect(headings.slice(0, 2)).toEqual(["Path through the pipeline", "Story"]);
+  });
 });

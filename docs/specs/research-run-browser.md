@@ -3,9 +3,12 @@
 **Status:** design approved 2026-10-09; ADR-064 accepted 2026-10-09; backend route (§5.1) built
 2026-10-09; research shell (§2, §3) and reusable Langfuse button (§6, plan B) built 2026-10-09.
 Run list (§4, plan C), including its Langfuse button placement, built 2026-10-09.
-Run detail (§5.2, §5.4, plan D) built 2026-10-09. The pipeline graph (plan E) remains unbuilt.
-Run-list and detail browser checks are deferred to plan E.
-Production checkpoint reads, endpoint latency and signed-in browser checks remain unverified.
+Run detail (§5.2, §5.4, plan D) and pipeline graph (§5.3, plan E) built 2026-10-09 on
+`feat/research-run-browser`. PR pending owner approval to push.
+Signed-out run-list checks passed at 1280 × 800 and 360 × 780. The captured synthetic fixture
+verified graph layout, native keyboard dismissal, section links and phone sheet placement.
+Production checkpoint reads, endpoint latency and signed-in browser checks remain unverified,
+pending owner sign-in and identification of a synthetic test-story run (plan E Task 5).
 **Issues:** #107 (run list), #104 (run detail), #103 (Langfuse warning and env flag). One PR.
 Sub-issue #111 (annotate/adjudicate demo mode) follows after merge and is out of scope here.
 **Derived from:** [ADR-064](../product/adr/ADR-064-the-run-viewer-reads-checkpoint-history-through-a-researcher-only-endpoint.md),
@@ -203,9 +206,9 @@ From `steps`: a node's visit count, and an edge's traversal count from consecuti
 - Visited nodes solid with a `×N` badge when N > 1. Taken edges thick with a count label
   ("redraw ×3"). Untaken nodes and edges faded.
 - `ended_on`: red outline and "Failed here" for `failed`; amber and "Waiting for the child" for
-  `waiting`.
-- A step whose node is not in `PIPELINE_GRAPH` is still listed in the panel and the timing table,
-  and the graph shows a small "1 step not on this map" note instead of failing.
+  `waiting`; blue and "Running now" for `running`.
+- A step whose node is not in `PIPELINE_GRAPH` is still listed in the timing table, and the graph
+  shows a small "1 step not on this map" note linking to Run details instead of failing.
 - Each node is a `<button>` with an accessible name such as
   "consistency check, ran 7 times, 3 redraws". Tab moves in flow order.
 
@@ -222,6 +225,11 @@ the node's visits with their times, plus what that node produced, in words:
 - `compose`: pages shipped.
 
 Each panel ends with a link that scrolls to the matching section below.
+
+The client component lives in `PipelineGraphView.tsx`. Using the plan's `PipelineGraph.tsx`
+beside `pipelineGraph.ts` resolves the component import to the data module on Windows.
+Drawing-node summaries include each attempt's passed, failed or not-checked result and readable
+failure reasons, in addition to the attempt count and shipped attempt.
 
 ### 5.4 States
 
@@ -257,8 +265,7 @@ beside it, `components/LangfuseButton.tsx`.
 Changed: `backend/providers.py` (`get_signed_url` argument), `backend/app/main.py` (router),
 `frontend/middleware.ts`, `research/metrics/page.tsx` and `loading.tsx`, `utils/metrics.ts`,
 `annotate/layout.tsx`, `adjudicate/layout.tsx`, `(research)/_shared/constants.ts`,
-`frontend/.env.local.example`, `docs/specs/ROUTE_MAP.md` (it lists no research routes today; add the
-two metrics routes), `CHANGELOG.md`.
+`frontend/.env.local.example`, `docs/specs/ROUTE_MAP.md` (the two metrics routes), `CHANGELOG.md`.
 
 ## 8. Testing and done
 
