@@ -16,7 +16,21 @@ describe("summarizeNodes", () => {
 
   it("describes each page's attempts for the drawing nodes", () => {
     const summary = summarizeNodes(RUN).consistency_check;
-    expect(summary.lines).toEqual(["Page 1: 2 attempts, shipped attempt 2.", "Page 2: 1 attempt, shipped attempt 1."]);
+    expect(summary.lines).toEqual([
+      "Page 1: 2 attempts, shipped attempt 2.",
+      "Page 1, attempt 1: failed (Wrong colour).",
+      "Page 1, attempt 2: passed.",
+      "Page 2: 1 attempt, shipped attempt 1.",
+      "Page 2, attempt 1: passed.",
+    ]);
     expect(summary.section.id).toBe("pages");
+    const unchecked = {
+      ...RUN,
+      scenes: [{ ...RUN.scenes[0], shipped_attempt: null, attempts: [{ ...RUN.scenes[0].attempts[0], failure_reasons: [] }] }],
+    };
+    expect(summarizeNodes(unchecked).consistency_check.lines).toEqual([
+      "Page 1: 1 attempt, nothing shipped yet.",
+      "Page 1, attempt 1: not checked.",
+    ]);
   });
 });

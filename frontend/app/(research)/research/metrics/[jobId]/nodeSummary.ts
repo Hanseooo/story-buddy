@@ -1,3 +1,4 @@
+import { sceneFailureLabel } from "@/utils/metrics";
 import type { RunDetail } from "./types";
 
 export type NodeSummary = { lines: string[]; section: { id: string; label: string } };
@@ -33,9 +34,20 @@ function references(run: RunDetail): string[] {
 }
 
 function attempts(run: RunDetail): string[] {
-  const lines = run.scenes.map((s, i) => {
+  const lines = run.scenes.flatMap((s, i) => {
     const outcome = s.shipped_attempt == null ? "nothing shipped yet" : `shipped attempt ${s.shipped_attempt + 1}`;
-    return `Page ${i + 1}: ${plural(s.attempts.length, "attempt", "attempts")}, ${outcome}.`;
+    return [
+      `Page ${i + 1}: ${plural(s.attempts.length, "attempt", "attempts")}, ${outcome}.`,
+      ...s.attempts.map((attempt, index) => {
+        const verdict = attempt.passed
+          ? "passed"
+          : attempt.vlm_verdict == null && attempt.failure_reasons.length === 0
+            ? "not checked"
+            : "failed";
+        const reasons = attempt.failure_reasons.map(sceneFailureLabel).join(", ");
+        return `Page ${i + 1}, attempt ${index + 1}: ${verdict}${reasons ? ` (${reasons})` : ""}.`;
+      }),
+    ];
   });
   return lines.length > 0 ? lines : ["No pages were drawn."];
 }
