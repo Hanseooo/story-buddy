@@ -16,39 +16,45 @@ export default function ImageViewer({
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const placeholderRef = useRef<HTMLDivElement>(null);
   const [broken, setBroken] = useState(false);
   const [enlargedBroken, setEnlargedBroken] = useState(false);
 
-  if (!src || broken) {
-    return (
-      <div
-        role="img"
-        aria-label={alt}
-        className={`flex flex-col items-center justify-center gap-1 rounded-xl bg-muted/40 text-foreground/50 ${className}`}
-      >
-        <ImageBroken weight="duotone" className="size-8" aria-hidden />
-        <span className="px-2 text-center text-xs font-medium">Image unavailable</span>
-      </div>
-    );
-  }
+  const placeholder = (
+    <div
+      ref={placeholderRef}
+      tabIndex={-1}
+      role="img"
+      aria-label={alt}
+      className={`flex flex-col items-center justify-center gap-1 rounded-xl bg-muted/40 text-foreground/50 ${FOCUS} ${className}`}
+    >
+      <ImageBroken weight="duotone" className="size-8" aria-hidden />
+      <span className="px-2 text-center text-xs font-medium">Image unavailable</span>
+    </div>
+  );
+
+  if (!src) return placeholder;
 
   function closeDialog() {
     dialogRef.current?.close();
-    triggerRef.current?.focus();
+    if (broken) placeholderRef.current?.focus();
+    else triggerRef.current?.focus();
   }
 
   return (
     <>
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-label={`Enlarge ${alt}`}
-        onClick={() => dialogRef.current?.showModal()}
-        className={`block min-h-11 min-w-11 overflow-hidden rounded-xl bg-muted/30 ${FOCUS} ${className}`}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={src} alt={alt} onError={() => setBroken(true)} className="size-full object-cover" />
-      </button>
+      {broken ? placeholder : (
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-label={`Enlarge ${alt}`}
+          onClick={() => dialogRef.current?.showModal()}
+          className={`block min-h-11 min-w-11 overflow-hidden rounded-xl bg-muted/30 ${FOCUS} ${className}`}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={src} alt={alt} onError={() => setBroken(true)} className="size-full object-cover" />
+        </button>
+      )}
       <dialog
         ref={dialogRef}
         aria-label={alt}

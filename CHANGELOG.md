@@ -40,7 +40,8 @@ Refs [#107](https://github.com/Hanseooo/story-buddy/issues/107), #104, #103 · P
 - Browser checks are deferred to plan E, as plan C specifies.
 - Detail regressions verified by removing the malformed-id, unchecked-attempt and
   missing-checkpoint branches in turn, observing failures, and restoring passing behavior.
-- Enlarged-image failures retain the dialog and its close control, with focus preserved.
+- Image failures retain an open dialog and its close control. Closing returns focus to
+  the opener or its named placeholder if the thumbnail also failed.
 
 ---
 

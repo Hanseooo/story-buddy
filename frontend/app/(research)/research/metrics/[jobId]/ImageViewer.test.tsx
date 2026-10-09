@@ -77,4 +77,21 @@ describe("ImageViewer", () => {
     expect(dialog).not.toHaveAttribute("open");
     expect(trigger).toHaveFocus();
   });
+
+  it("keeps the modal open after a late thumbnail error and returns focus to its placeholder", () => {
+    render(<ImageViewer src="https://img.test/a.webp" alt="Page 1" />);
+    const trigger = screen.getByRole("button", { name: "Enlarge Page 1" });
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole("dialog", { name: "Page 1" });
+    const close = screen.getByRole("button", { name: "Close image" });
+    close.focus();
+
+    fireEvent.error(trigger.querySelector("img")!);
+
+    expect(screen.getByRole("dialog", { name: "Page 1" })).toBe(dialog);
+    expect(close).toHaveFocus();
+    fireEvent.click(close);
+    expect(screen.getByRole("img", { name: "Page 1" })).toHaveFocus();
+    expect(screen.queryByRole("button", { name: /Enlarge/ })).toBeNull();
+  });
 });
