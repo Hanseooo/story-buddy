@@ -10,7 +10,7 @@
 
 **Spec:** `docs/specs/research-run-browser.md` §2, §3, §6.
 
-**Plan set:** A `2026-10-09-research-runs-a-backend-route.md` → B (this file) → C `2026-10-09-research-runs-c-run-list.md` → D `2026-10-09-research-runs-d-run-detail.md` → E `2026-10-09-research-runs-e-graph.md`. C and D import what B produces. Branch `feat/research-run-browser`, one PR.
+**Plan set:** A (backend route built; interface in `docs/specs/research-run-browser.md` §5.1) → B (this file) → C `2026-10-09-research-runs-c-run-list.md` → D `2026-10-09-research-runs-d-run-detail.md` → E `2026-10-09-research-runs-e-graph.md`. C and D import what B produces. Branch `feat/research-run-browser`, one PR.
 
 ## Global Constraints
 

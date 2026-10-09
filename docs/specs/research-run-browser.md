@@ -105,7 +105,8 @@ the checkpoint history per ADR-064 rule 1, and returns:
 
 ```
 job:        id, title, status, style_preset_id, created_at, failure_reason, approved (bool),
-            langfuse_trace_url, cost columns from the row
+            langfuse_trace_url, usd_estimate, image_count, regen_count, ref_retry_count,
+            scenes_total, scenes_passed, scenes_unchecked
 checkpointed: bool                      # false → the page shows the row summary only
 story:      redacted_text, word_count, truncated
 steps:      [{node, started_at, duration_ms | null}]    # history order; "__start__" dropped
@@ -132,6 +133,9 @@ none. A router that raises (the input gate, page moderation) discards the writes
 follows (checked on langgraph 1.2.8, 2026-10-09), so a run blocked at the input gate has no input
 safety result in its state; the page says "not recorded" and `ended_on` names the node.
 `get_signed_url(path, expires_in=300)` gains the argument; this route passes 3600.
+
+Errors: 401 when signed out; 403 `researchers_only` for other roles or `not_approved` for an
+annotator opening an unapproved run; 404 `not_found` for an unknown run; 422 for a non-UUID id.
 
 Only the final reference and its verdict are in the state. Reference draws that were rejected are
 not stored, so the page does not claim a draw count.
