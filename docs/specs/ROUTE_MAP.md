@@ -26,6 +26,7 @@ All routes are Next.js App Router filesystem routes under `frontend/app/`.
 | `/signup` | Auth — signup | Client | Teacher / BEED-student account creation |
 | `/join` | Student login | Client | Public — no Supabase auth. Classroom code entry, then nickname + password (teacher-issued) |
 | `/join/[code]` | Direct join via link | Client | Pre-fills the classroom code; still requires nickname + password. Teacher shares this URL |
+| `/research/metrics` | Research metrics | Server | Public list, with the shared role-aware research header. Run-list upgrade remains plan C. |
 
 ### Teacher routes (require Supabase Auth session)
 
@@ -102,6 +103,7 @@ app/
 | `ClassroomLayout` | Pushes classroom name into breadcrumbs; no extra nav | No (inherits) |
 | `StudentShell` | Profile guard, bottom tab bar / top navbar, kid-density typography (Nunito 18/20px) | Yes |
 | `ImmersiveLayout` | Strips all nav chrome. Optional top-left back button (ghost). Full viewport | No |
+| Research metrics, annotate and adjudicate layouts | Request-cached `getResearchViewer()` supplies `ResearchHeader`; annotate refuses adjudicators, adjudicate permits researchers and leaves pair access to its page | Yes (non-sticky) |
 
 ---
 
@@ -154,6 +156,8 @@ app/
 | `/settings` | Auth (teacher) | — |
 | `/s/[profileId]/**` | Profile (student) | Profile session must be active (stored in sessionStorage or cookie). Profile must exist and belong to an active classroom |
 | `/s/[profileId]/book/[bookId]/**` | Profile (student) | `bookId` must belong to `profileId` (own book) |
+| `/research/metrics` | Public | Middleware refreshes the session for the research header without requiring sign-in |
+| `/research/metrics/[jobId]` | Auth session | Signed-out descendants redirect to `/login?next=<path>`; detail page and backend-access messages remain plan D |
 
 ### Middleware strategy
 

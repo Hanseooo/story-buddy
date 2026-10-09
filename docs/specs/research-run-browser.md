@@ -1,7 +1,9 @@
 # Feature Spec — Research run browser
 
 **Status:** design approved 2026-10-09; ADR-064 accepted 2026-10-09; backend route (§5.1) built
-2026-10-09; frontend (plans B–E) not built. Production checkpoint reads and endpoint latency remain unverified.
+2026-10-09; research shell (§2, §3) and reusable Langfuse button (§6, plan B) built 2026-10-09.
+Run list, detail and graph (plans C–E), including Langfuse button placement, remain unbuilt.
+Production checkpoint reads, endpoint latency and signed-in browser checks remain unverified.
 **Issues:** #107 (run list), #104 (run detail), #103 (Langfuse warning and env flag). One PR.
 Sub-issue #111 (annotate/adjudicate demo mode) follows after merge and is out of scope here.
 **Derived from:** [ADR-064](../product/adr/ADR-064-the-run-viewer-reads-checkpoint-history-through-a-researcher-only-endpoint.md),
@@ -32,14 +34,15 @@ One rule decides both the title and the link: **a viewer sees a run's title exac
 open it.** It lives in one helper, `canOpenRun(viewer, job)`, used by the list. The backend
 enforces the same rule on its own (ADR-064 rule 2); the frontend helper only decides what to render.
 
-Middleware adds `/research/metrics/:path*` to its matcher, and `guardRequest` redirects a signed-out
+Middleware includes `/research/metrics` and `/research/metrics/:path*` in its matcher, and `guardRequest` redirects a signed-out
 request for any path under `/research/metrics/` to `/login?next=<path>`. The list itself stays
-public. The login page today follows `next` for a researcher only under `/annotate` or
-`/adjudicate`; it also accepts `/research/metrics` paths, so "Sign in to view" lands on the run.
+public. The login page accepts a researcher's `next` under `/research/metrics` as well as their
+role's `/annotate` or `/adjudicate` path, so "Sign in to view" lands on the run.
 
 ## 3. Shared research header
 
-New `(research)/_shared/components/ResearchHeader.tsx`. A server part loads the viewer (user,
+`(research)/_shared/components/ResearchHeader.tsx`. The request-cached server loader
+`getResearchViewer()` loads the viewer (user,
 `role`, `is_adjudicator`, `display_name`), and a client part renders the tabs and marks the active
 one with `aria-current="page"`.
 
