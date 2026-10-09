@@ -32,6 +32,9 @@ function AttemptCard({ attempt, page, index, shipped }: { attempt: RunAttempt; p
         <span className="text-sm font-bold">Attempt {index + 1}</span>
         <Verdict outcome={review.outcome} />
       </div>
+      {review.outcome === "Not checked" && (
+        <p className="text-sm text-foreground/70">A required check has no recorded result, so this drawing did not pass.</p>
+      )}
       {review.required.length > 0 && (
         <div className="text-sm">
           <p className="font-bold">Required-check issues</p>

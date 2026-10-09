@@ -177,6 +177,9 @@ A server component fetches the route with the session's access token
    separate from other warnings. The recorded `passed` value remains authoritative: text,
    duplication and style observations do not themselves reject a drawing. Unknown reason values
    remain visible. Prompts stay collapsed.
+   A missing required result with no recorded required-check issue is **Not checked**, even if
+   a character verdict exists. It explains that the drawing did not pass because a required result
+   was not recorded. A recorded composition contradiction remains a failed required check.
    Images open a single-image viewer (`ImageViewer`, a native `<dialog>`). `LightboxModal` is not
    reused: it is built for a reference-and-scene pair with tabs. A shield badge shows the page's
    safety check.

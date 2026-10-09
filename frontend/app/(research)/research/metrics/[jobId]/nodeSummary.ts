@@ -27,9 +27,10 @@ export function reviewAttempt(attempt: RunAttempt) {
     }
   }
   (attempt.passed ? warnings : required).push(...(attempt.scene_contradictions ?? []));
+  // A clean character verdict alone cannot prove failure: the page-content check may be absent.
+  const incomplete = required.length === 0 && (attempt.vlm_verdict == null || attempt.scene_contradictions == null);
   const outcome = attempt.passed ? "Passed required checks"
-    : attempt.vlm_verdict == null && attempt.failure_reasons.length === 0 && !attempt.scene_contradictions?.length
-      ? "Not checked" : "Failed required checks";
+    : incomplete ? "Not checked" : "Failed required checks";
   return { outcome, required: [...new Set(required)], warnings: [...new Set(warnings)] };
 }
 
@@ -130,7 +131,7 @@ export function summarizeNodes(run: RunDetail): Record<string, NodeSummary> {
     },
     consistency_check: {
       purpose: "Compares each drawing with the character references and the page's requirements.",
-      result: `${plural(passed, "drawing", "drawings")} passed required checks; ${drawings.length - passed - unchecked} failed; ${unchecked} have no check result.`,
+      result: `${plural(passed, "drawing", "drawings")} passed required checks; ${drawings.length - passed - unchecked} failed; ${unchecked} ${unchecked === 1 ? "has" : "have"} no complete check result.`,
       lines: attempts(run), section: PAGES,
     },
     regenerate: {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import fixture from "./__fixtures__/run.json";
+import passedWithWarnings from "./__fixtures__/passed-with-warnings.json";
 import { summarizeNodes } from "./nodeSummary";
 import type { RunDetail } from "./types";
 
@@ -18,7 +19,7 @@ describe("summarizeNodes", () => {
   it("describes each page's attempts for the drawing nodes", () => {
     const summary = summarizeNodes(RUN).consistency_check;
     expect(summary.purpose).toBe("Compares each drawing with the character references and the page's requirements.");
-    expect(summary.result).toBe("2 drawings passed required checks; 1 failed; 0 have no check result.");
+    expect(summary.result).toBe("2 drawings passed required checks; 1 failed; 0 have no complete check result.");
     expect(summarizeNodes({ ...RUN, steps: [...RUN.steps, { ...RUN.steps[0], node: "generate_scene" }] }).generate_scene.result).toBe("Recorded initial drawings for 2 pages.");
     expect(summarizeNodes(RUN).regenerate.result).toBe("Recorded 1 extra drawing across 1 page.");
     expect(summarizeNodes(RUN).regenerate.lines).toEqual([
@@ -65,5 +66,11 @@ describe("summarizeNodes", () => {
     const blocked = summarizeNodes({ ...RUN, ended_on: { node: "input_gate", kind: "failed" }, moderation: null });
     expect(blocked.input_gate.result).toBe("The run stopped at this step. Its result may be incomplete.");
     expect(blocked.input_gate.lines[0]).toBe("Input safety result not recorded.");
+    const incomplete = summarizeNodes({
+      ...RUN,
+      scenes: [{ ...RUN.scenes[1], attempts: [{ ...RUN.scenes[1].attempts[0], ...passedWithWarnings, passed: false, scene_contradictions: null }] }],
+    });
+    expect(incomplete.consistency_check.result).toBe("0 drawings passed required checks; 0 failed; 1 has no complete check result.");
+    expect(incomplete.consistency_check.lines[1]).toBe("Page 1, attempt 1: not checked. Other warnings: Face differs from the character reference; Text detected in the illustration.");
   });
 });

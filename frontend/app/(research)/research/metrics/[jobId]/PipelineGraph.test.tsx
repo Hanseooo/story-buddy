@@ -43,7 +43,7 @@ describe("PipelineGraph", () => {
     const panel = screen.getByRole("dialog", { name: "Consistency check" });
     expect(panel).toHaveAttribute("open");
     expect(within(panel).getByText("Compares each drawing with the character references and the page's requirements.")).toBeVisible();
-    expect(within(panel).getByText("2 drawings passed required checks; 1 failed; 0 have no check result.")).toBeVisible();
+    expect(within(panel).getByText("2 drawings passed required checks; 1 failed; 0 have no complete check result.")).toBeVisible();
     expect(within(panel).getByText("Page 1: 2 attempts, attempt 2 selected for the book.")).not.toBeVisible();
     expect(within(panel).getByText(/10:00:04 UTC/)).not.toBeVisible();
 

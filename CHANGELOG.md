@@ -45,6 +45,9 @@ Refs [#103](https://github.com/Hanseooo/story-buddy/issues/103), #104, #107, #10
   `pipelineGraph.ts`. Drawing summaries include verdicts as required by the spec.
 - Review fixes: readable graph/panel text contrast, mobile sheet indicator, and composition-only
   failures labeled Failed in both node summaries and page-attempt badges.
+- Clarity review fix: a clean character verdict with a missing page-content result is Not checked,
+  with an explanation, rather than a failed check. Its node summary counts the incomplete result
+  separately. Recorded composition contradictions still count as failures.
 
 ### Checks
 
@@ -53,6 +56,8 @@ Refs [#103](https://github.com/Hanseooo/story-buddy/issues/103), #104, #107, #10
 - Frontend: `pnpm lint` and `pnpm build` passed; `pnpm test`: 61 files, 598 tests passed.
   The build used CI's placeholder public Supabase values. Next.js reports the existing
   middleware-to-proxy deprecation; that migration is outside this change.
+  One concurrent build/test run hit `Test timed out in 5000ms` in the gallery's first render
+  test. All 10 gallery tests passed in isolation, then all 598 tests passed in a standalone run.
 - Playwright: signed-out list at 1280 × 800 and 360 × 780, generic ids without titles, Langfuse
   hidden, filters survive reload, empty results clear, detail URLs redirect to login. No console errors.
 - Captured synthetic fixture: desktop graph, keyboard Enter/Escape and focus return, section

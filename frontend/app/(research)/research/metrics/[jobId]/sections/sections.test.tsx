@@ -49,6 +49,15 @@ describe("Pages", () => {
     expect(screen.getByText("Not checked")).toBeInTheDocument();
     expect(screen.queryByText("Failed required checks")).toBeNull();
 
+    const incomplete = {
+      ...scene,
+      attempts: [{ ...scene.attempts[0], ...passedWithWarnings, passed: false, scene_contradictions: null }],
+    };
+    rerender(<Pages scenes={[incomplete]} characters={RUN.characters} objects={[]} />);
+    expect(screen.getByText("Not checked")).toBeInTheDocument();
+    expect(screen.getByText("A required check has no recorded result, so this drawing did not pass.")).toBeInTheDocument();
+    expect(screen.queryByText("Failed required checks")).toBeNull();
+
     const checked = {
       ...scene,
       attempts: [{ ...scene.attempts[0], scene_contradictions: RUN.scenes[0].attempts[0].failure_reasons }],
