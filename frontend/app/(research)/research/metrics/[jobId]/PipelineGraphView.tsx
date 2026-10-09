@@ -130,7 +130,7 @@ export default function PipelineGraph({
                     <span className="text-xs font-bold sm:text-sm">{node.label}</span>
                     {ended && <span className={`text-[10px] font-bold ${ENDED_TONE[ended]}`}>{ENDED_TEXT[ended]}</span>}
                     {n > 1 && (
-                      <span className="absolute -right-2 -top-2 rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-bold text-on-primary">
+                      <span className="absolute right-3 -top-2 rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-bold text-on-primary">
                         ×{n}
                       </span>
                     )}
