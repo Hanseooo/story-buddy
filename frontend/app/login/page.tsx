@@ -58,9 +58,10 @@ export default function Login() {
           : profile.role === "teacher"
             ? isPathUnder(safeNext, "/classroom") || isPathUnder(safeNext, "/settings")
             : profile.role === "researcher"
-              ? profile.is_adjudicator
-                ? isPathUnder(safeNext, "/adjudicate")
-                : isPathUnder(safeNext, "/annotate")
+              ? isPathUnder(safeNext, "/research/metrics") ||
+                (profile.is_adjudicator
+                  ? isPathUnder(safeNext, "/adjudicate")
+                  : isPathUnder(safeNext, "/annotate"))
               : false;
 
       if (allowedNext && safeNext) {

@@ -118,6 +118,22 @@ describe("Teacher Auth Pages", () => {
     expect(mockPush).not.toHaveBeenCalledWith("/s/student-1/write");
   });
 
+  it("lets a researcher resume a run detail next target", async () => {
+    const run = "/research/metrics/3f9a1c2e-0000-4000-8000-000000000001";
+    mockSearchParamsGet.mockImplementation((key: string) => (key === "next" ? run : null));
+    mockSignIn.mockResolvedValueOnce({ data: { user: { id: "researcher-1" } }, error: null });
+    mockSingle.mockResolvedValueOnce({ data: { role: "researcher", is_adjudicator: false } });
+    render(<Login />);
+
+    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "researcher@school.org" } });
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: "secret123" } });
+    fireEvent.click(screen.getByRole("button", { name: /log in/i }));
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith(run);
+    });
+  });
+
   it("does not fall back to the student tree when the profile lookup fails", async () => {
     mockSignIn.mockResolvedValueOnce({ data: { user: { id: "researcher-1" } }, error: null });
     mockSingle.mockResolvedValueOnce({ data: null, error: { message: "profile lookup failed" } });
