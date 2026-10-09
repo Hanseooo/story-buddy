@@ -16,7 +16,8 @@ export function guardRequest(
     (pathname.startsWith("/classroom") ||
       pathname === "/settings" ||
       pathname.startsWith("/annotate") ||
-      pathname.startsWith("/adjudicate")) &&
+      pathname.startsWith("/adjudicate") ||
+      pathname.startsWith("/research/metrics/")) &&
     !userId
   )
     return `/login?next=${safe(pathname) ?? ""}`;
@@ -57,5 +58,7 @@ export const config = {
     "/annotate/:path*",
     "/adjudicate",
     "/adjudicate/:path*",
+    "/research/metrics",
+    "/research/metrics/:path*",
   ],
 };
