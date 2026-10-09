@@ -1338,3 +1338,16 @@ def test_redact_pii_still_hard_redacts_identifiers_when_pseudonymization_is_off(
     result = _redact(text, results)
     assert "09171234567" not in result
     assert "PH_MOBILE" in result
+
+
+def test_get_signed_url_defaults_to_300_seconds_and_accepts_an_override():
+    with patch("providers.get_supabase_client") as client:
+        bucket = client.return_value.storage.from_.return_value
+        bucket.create_signed_url.return_value = {"signedURL": "https://signed/p.png"}
+
+        assert providers.get_signed_url("p.png") == "https://signed/p.png"
+        assert providers.get_signed_url("p.png", expires_in=3600) == "https://signed/p.png"
+
+    first, second = bucket.create_signed_url.call_args_list
+    assert first.kwargs["expires_in"] == 300
+    assert second.kwargs["expires_in"] == 3600
