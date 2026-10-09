@@ -1,6 +1,6 @@
 # Research Runs E — Pipeline Graph and Release Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** The run page shows the path a run took through the 11-node pipeline as a graph: visited nodes solid with visit counts, taken edges thick with traversal counts, the node it ended on marked. Clicking a node opens a panel that says, in words, what that node did. Then the whole PR is documented and checked in a real browser.
 
@@ -20,16 +20,28 @@ Existing page tests mock fetch, so the integration test uses that seam rather th
 Task 4's PR number remains pending Task 5 Step 7. Spec status and CHANGELOG state that explicitly.
 
 Verification: backend ruff passed; pytest 1,474 passed, 87 skipped, 6 deselected. Frontend lint,
-build/typecheck and all 596 tests passed. Traversal counts and section-link focus were deliberately
+build/typecheck and all 597 tests (61 files) passed. Traversal counts and section-link focus were deliberately
 broken and observed failing, then restored. Signed-out browser checks passed at 1280 × 800 and
 360 × 780 with no console errors. A separate captured-fixture page verified native Enter/Escape,
 focus return, section links, desktop graph and phone bottom sheet; nodes measured 44.45 px high
 and the graph scrolled inside its box without page overflow. The temporary fixture route was removed.
 
-**Remaining:** owner sign-in, an identified synthetic student run, signed-in checks and endpoint
-latency (Steps 4–5); real-data phone detail/header/image checks (Step 6); owner approval before
-push, PR creation and PR-number doc update (Step 7). This plan remains until those release checks
-are completed. No donated story was opened. No credentials or tokens were read.
+Signed-in checks passed on the owner-supplied synthetic run at desktop and phone widths:
+all sections, graph counts matching 39 steps, native keyboard/focus and section links, image
+viewer, filters restored by All runs, malformed ids, and backend outage/retry. Nodes measured
+44.46 px; graph scrolling stayed inside its box. The adjudicator header fit at phone width.
+No unexpected console errors occurred during normal navigation after recovery.
+The local endpoint fetch took 5.172 s including JSON receipt/parsing; the required follow-up is
+[issue #112](https://github.com/Hanseooo/story-buddy/issues/112), published with owner approval.
+Browser regressions caught overlapping visit/redraw labels and a Retry that did not refetch;
+the badge was inset and the route now uses installed Next.js 16's `unstable_retry()`.
+Both failed before their fixes and passed afterward; full frontend checks were rerun.
+
+Failed, waiting, input-blocked and checkpoint-free real runs were not identified as synthetic;
+those states remain unit/fixture-tested only. Annotate remains unit-checked under its role.
+**Remaining:** owner approval before push, PR creation and PR-number doc update (Step 7).
+This plan remains until those release steps are completed. No donated story was opened.
+No credentials or tokens were read.
 
 ## Global Constraints
 
@@ -925,9 +937,9 @@ Expected: all green. Paste the summary lines into the PR body.
   - Typing `/research/metrics/<id>` directly redirects to login.
   - Console: no errors.
 
-- [ ] **Step 4: Login wall.** Stop. Ask the owner to sign in as the adjudicator in that browser and say when it is done. Do not type, read, or screenshot credentials or tokens.
+- [x] **Step 4: Login wall.** Stop. Ask the owner to sign in as the adjudicator in that browser and say when it is done. Do not type, read, or screenshot credentials or tokens.
 
-- [ ] **Step 5: Signed in as adjudicator.**
+- [x] **Step 5: Signed in as adjudicator.**
   - The list shows titles and whole-row links; the header shows Runs active and the Adjudicator chip.
   - Open a run of a synthetic story (submitted through a test student account; no donated story is opened for this check). Every section renders; the graph highlights the path; counts match the timing table.
   - Keyboard only: Tab to a node, Enter opens the panel, Escape closes it, focus is back on the node. "Go to …" lands on the section.
@@ -938,7 +950,7 @@ Expected: all green. Paste the summary lines into the PR body.
   - `/research/metrics/not-a-uuid`: "Run not found" with "All runs".
   - Console: no errors.
 
-- [ ] **Step 6: Phone (360 × 780).** The list cards, the run page, the graph (scrolls inside its box, the page does not scroll sideways, nodes about 44 px tall), the node panel as a bottom sheet, the image viewer, the header tabs fitting without overflow. Annotate and adjudicate still look as before, with the header above them.
+- [x] **Step 6: Phone (360 × 780).** The list cards, the run page, the graph (scrolls inside its box, the page does not scroll sideways, nodes about 44 px tall), the node panel as a bottom sheet, the image viewer, the header tabs fitting without overflow. Annotate and adjudicate still look as before, with the header above them. Annotate was unit-checked only; the signed-in browser account was the adjudicator.
 
 - [ ] **Step 7: Open the PR, after asking.** Ask the owner before pushing. Then:
 

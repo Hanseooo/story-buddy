@@ -46,7 +46,7 @@ Refs [#103](https://github.com/Hanseooo/story-buddy/issues/103), #104, #107, #10
 
 - Backend: `uv run ruff check .` passed; `uv run pytest -q`: 1,474 passed, 87 skipped,
   6 deselected. The skipped database/RLS and provider checks remain unverified.
-- Frontend: `pnpm lint` and `pnpm build` passed; `pnpm test`: 60 files, 596 tests passed.
+- Frontend: `pnpm lint` and `pnpm build` passed; `pnpm test`: 61 files, 597 tests passed.
   The build used CI's placeholder public Supabase values. Next.js reports the existing
   middleware-to-proxy deprecation; that migration is outside this change.
 - Playwright: signed-out list at 1280 × 800 and 360 × 780, generic ids without titles, Langfuse
@@ -55,8 +55,18 @@ Refs [#103](https://github.com/Hanseooo/story-buddy/issues/103), #104, #107, #10
   links, phone graph scrolling within its box, 44.45 px node height, bottom sheet. No console errors.
 - Traversal-count and section-link focus regressions were introduced deliberately, observed failing,
   and restored. Page integration failed before mounting the graph, then passed.
-- Signed-in real-run checks and endpoint latency remain pending owner sign-in and a synthetic
-  test-story run id. Push and PR creation await owner approval, per plan E Task 5.
+- Signed-in synthetic run: all sections, graph counts matching 39 steps, Enter/Escape/focus,
+  phone scrolling and bottom sheet, image viewer, filter-preserving back link, malformed ids,
+  backend outage and Retry recovery. The adjudicator header fits at phone width. No unexpected
+  console errors in normal operation; the intentional outage produces the expected fetch errors.
+- Browser regressions: moved visit badges away from redraw labels after a bounding-box assertion
+  failed; replaced `reset()` with Next.js 16's `unstable_retry()` after Retry failed to refetch.
+  Both have failing-before/passing-after evidence, including real outage/recovery.
+- Local backend endpoint fetch: 5.172 s including JSON receipt/parsing for the 39-step synthetic
+  run. Performance follow-up: [issue #112](https://github.com/Hanseooo/story-buddy/issues/112).
+- Failed, waiting, input-blocked and checkpoint-free real runs were not identified as synthetic
+  for this pass; those states and the annotator-only layout remain unit-tested. Push and PR
+  creation await owner approval, per plan E Task 5.
 
 ---
 ## Direct to `main` · 2026-10-09 (agreement and sensitivity)

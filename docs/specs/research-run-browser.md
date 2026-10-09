@@ -7,8 +7,14 @@ Run detail (§5.2, §5.4, plan D) and pipeline graph (§5.3, plan E) built 2026-
 `feat/research-run-browser`. PR pending owner approval to push.
 Signed-out run-list checks passed at 1280 × 800 and 360 × 780. The captured synthetic fixture
 verified graph layout, native keyboard dismissal, section links and phone sheet placement.
-Production checkpoint reads, endpoint latency and signed-in browser checks remain unverified,
-pending owner sign-in and identification of a synthetic test-story run (plan E Task 5).
+The owner-supplied synthetic run was checked as adjudicator at desktop and phone widths:
+39 steps, matching graph counts, node and image dialogs, filter-preserving back navigation,
+backend outage/recovery and malformed ids. The local backend endpoint fetch took 5.172 s
+(including JSON receipt/parsing), above plan E's 3 s threshold. The performance follow-up is
+recorded in [issue #112](https://github.com/Hanseooo/story-buddy/issues/112).
+Failed, waiting, input-blocked and checkpoint-free real runs were not identified as synthetic
+for this pass and remain unit-tested only. Annotate remains unit-tested under the annotator role;
+the adjudicator header was checked in the browser. Push and PR creation await owner approval.
 **Issues:** #107 (run list), #104 (run detail), #103 (Langfuse warning and env flag). One PR.
 Sub-issue #111 (annotate/adjudicate demo mode) follows after merge and is out of scope here.
 **Derived from:** [ADR-064](../product/adr/ADR-064-the-run-viewer-reads-checkpoint-history-through-a-researcher-only-endpoint.md),
@@ -238,7 +244,8 @@ the page-attempt badge uses the same rule.
 - `loading.tsx`: skeleton of header, graph block and two page blocks.
 - 404: "Run not found", with a link back to the list.
 - 403: "Not approved yet" or "Researchers only", with the back link.
-- Backend unreachable or 5xx: `error.tsx`, "Couldn't load this run", Retry (`reset()`) and the back
+- Backend unreachable or 5xx: `error.tsx`, "Couldn't load this run", Retry (`unstable_retry()` in
+  the installed Next.js 16 version, which refetches the server segment) and the back
   link.
 - `checkpointed: false`: header and summary from the row, plus "No recorded steps for this run".
 - An in-progress run: everything recorded so far, with a note that the run is still going.
