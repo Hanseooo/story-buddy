@@ -26,6 +26,8 @@ Refs [#94](https://github.com/Hanseooo/story-buddy/issues/94), #102
 - `research-changelog.md`: Finding row and a κ line in §1; a Limitation row and §1 item 8 listing
   the label limitations #94 asks the write-up to carry. `group-guide.md` §5.2: κ and the secondary
   result in plain words; §6: the label limitations. `ROADMAP.md` C3-02: dated status.
+- `adjudication-notes-2026-09.md`: rows 1 and 2, left as drafts, now record what was applied. Row 1
+  from the round-3 labels (15 of 17 pairs Same); row 2 from the owner's recollection, unchecked.
 
 ### Checks
 
