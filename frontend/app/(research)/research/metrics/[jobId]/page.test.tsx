@@ -2,37 +2,46 @@ import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fixture from "./__fixtures__/run.json";
 import type { RunDetail } from "./types";
+import LangfuseButton from "@/components/LangfuseButton";
 import RunPage from "./page";
 
 const RUN = fixture as unknown as RunDetail;
+
+// Every element of `type` in a server component's output. Client component props reach the browser.
+function elementsOf(node: unknown, type: unknown): unknown[] {
+  if (Array.isArray(node)) return node.flatMap((child) => elementsOf(child, type));
+  if (!node || typeof node !== "object" || !("props" in node)) return [];
+  const element = node as { type: unknown; props: { children?: unknown } };
+  return [...(element.type === type ? [element] : []), ...elementsOf(element.props.children, type)];
+}
 const JOB = RUN.job.id;
 const mockSession = vi.hoisted(() => vi.fn());
 const mockFetch = vi.hoisted(() => vi.fn());
-const mockRedirect = vi.hoisted(() =>
-  vi.fn(() => {
-    throw new Error("NEXT_REDIRECT");
-  })
-);
 
 vi.mock("@/utils/supabase/server", () => ({
   createSupabaseServerClient: async () => ({ auth: { getSession: mockSession } }),
 }));
-vi.mock("next/navigation", () => ({ redirect: mockRedirect }));
 
 const renderPage = async () => render(await RunPage({ params: Promise.resolve({ jobId: JOB }) }));
 
 describe("RunPage states", () => {
   beforeEach(() => {
-    mockRedirect.mockClear();
     mockSession.mockResolvedValue({ data: { session: { access_token: "test-token" } } });
     vi.stubGlobal("fetch", mockFetch);
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it("sends a signed-out reader to log in and back", async () => {
-    mockSession.mockResolvedValue({ data: { session: null } });
-    await expect(renderPage()).rejects.toThrow("NEXT_REDIRECT");
-    expect(mockRedirect).toHaveBeenCalledWith(`/login?next=${encodeURIComponent(`/research/metrics/${JOB}`)}`);
+  // Middleware is the only auth gate (AGENTS.md). Redirecting a signed-in user to /login would
+  // bounce them to /classroom, so a session the backend rejects throws to error.tsx instead.
+  it("a rejected session throws instead of redirecting", async () => {
+    mockFetch.mockResolvedValue(new Response(null, { status: 401 }));
+    await expect(renderPage()).rejects.toThrow("Unauthorized");
+  });
+
+  it("flag off: the trace URL stays on the server", async () => {
+    const trace = "https://cloud.langfuse.com/project/p/traces/secret";
+    mockFetch.mockResolvedValue(new Response(JSON.stringify({ ...RUN, job: { ...RUN.job, langfuse_trace_url: trace } })));
+    expect(elementsOf(await RunPage({ params: Promise.resolve({ jobId: JOB }) }), LangfuseButton)).toEqual([]);
   });
 
   it.each([

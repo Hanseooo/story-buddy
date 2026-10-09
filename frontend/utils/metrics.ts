@@ -202,6 +202,11 @@ export function statusLabel(status: string): string {
 }
 
 // sessionStorage key: the list writes its query here, the run page's back link reads it.
+// #103. A trace holds the story before redaction, so the links are off unless the deploy opts in.
+// With the flag off, a server page must not pass the URL to a client component either: its props
+// are sent to the browser even when it renders nothing.
+export const langfuseLinksOn = () => process.env.NEXT_PUBLIC_SHOW_LANGFUSE_LINKS === "true";
+
 export const RUNS_QUERY_KEY = "research-runs-query";
 
 export function formatJob(job: JobRow) {

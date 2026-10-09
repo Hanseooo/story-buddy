@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
+import LangfuseButton from "@/components/LangfuseButton";
 import RunsPage from "./page";
 import { computeAggregates, JobRow } from "@/utils/metrics";
 
@@ -60,6 +61,15 @@ test("in-progress statuses are counted so the tiles sum to totalRuns", () => {
 });
 
 const RUN_ID = "3f9a1c2e-0000-4000-8000-000000000001";
+const TRACE = "https://cloud.langfuse.com/project/p/traces/secret";
+
+// Every element of `type` in a server component's output. Client component props reach the browser.
+function elementsOf(node: unknown, type: unknown): unknown[] {
+  if (Array.isArray(node)) return node.flatMap((child) => elementsOf(child, type));
+  if (!node || typeof node !== "object" || !("props" in node)) return [];
+  const element = node as { type: unknown; props: { children?: unknown } };
+  return [...(element.type === type ? [element] : []), ...elementsOf(element.props.children, type)];
+}
 const mockViewer = vi.hoisted(() => vi.fn());
 const mockRows = vi.hoisted(() => vi.fn());
 const mockSelect = vi.hoisted(() => vi.fn());
@@ -79,7 +89,8 @@ describe("RunsPage", () => {
     mockSelect.mockReturnValue({ order: mockRows });
     mockRows.mockResolvedValue({
       data: [{ id: RUN_ID, status: "failed", created_at: "2026-10-01T10:00:00Z",
-        title: "Secret Kite", approved_at: null, failure_reason: "machine", style_preset_id: "cel" }],
+        title: "Secret Kite", approved_at: null, failure_reason: "machine", style_preset_id: "cel",
+        langfuse_trace_url: TRACE }],
       error: null,
     });
     mockViewer.mockResolvedValue(null);
@@ -96,6 +107,18 @@ describe("RunsPage", () => {
       "id,status,created_at,style_preset_id,failure_reason,regen_count,image_count,scenes_total,scenes_passed,scenes_unchecked,usd_estimate,langfuse_trace_url,approved_at,title"
     );
     expect(screen.queryByRole("button", { name: /Langfuse/ })).toBeNull();
+  });
+
+  // #103: the button renders nothing with the flag off, but the URL in its props would still ship.
+  it("flag off: no trace URL leaves the server", async () => {
+    const page = await RunsPage({ searchParams: Promise.resolve({}) });
+    expect(elementsOf(page, LangfuseButton)).toEqual([]);
+  });
+
+  it("flag on: each row gets the button with its trace", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SHOW_LANGFUSE_LINKS", "true");
+    const page = await RunsPage({ searchParams: Promise.resolve({}) });
+    expect(elementsOf(page, LangfuseButton).map((el) => (el as { props: { url: string } }).props.url)).toEqual([TRACE, TRACE]);
   });
 
   it("adjudicator: the row is a link named after the title", async () => {

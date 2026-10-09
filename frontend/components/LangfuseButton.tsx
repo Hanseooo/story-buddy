@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { ArrowSquareOut } from "@phosphor-icons/react";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import { langfuseLinksOn } from "@/utils/metrics";
 
-// #103. A trace holds the story before redaction, so the link is off unless the deploy opts in,
-// and it asks first. Read inside the component: Next inlines NEXT_PUBLIC_ values at build either way.
+// #103. The link asks first, and is off unless the deploy opts in (`langfuseLinksOn`).
 export default function LangfuseButton({
   url,
   label = "Open Langfuse trace",
@@ -14,7 +14,7 @@ export default function LangfuseButton({
   label?: string;
 }) {
   const [open, setOpen] = useState(false);
-  if (process.env.NEXT_PUBLIC_SHOW_LANGFUSE_LINKS !== "true" || !url) return null;
+  if (!langfuseLinksOn() || !url) return null;
 
   return (
     <>

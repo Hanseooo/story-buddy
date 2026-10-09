@@ -9,6 +9,7 @@ import {
   filterJobs,
   formatJob,
   JobRow,
+  langfuseLinksOn,
   parseRunFilter,
   styleBreakdown,
 } from "@/utils/metrics";
@@ -98,7 +99,7 @@ export default async function RunsPage({
   const shown = filterJobs(jobs, filter);
   const styleIds = byStyle.flatMap((row) => (row.style ? [row.style] : []));
   const hasNoStyle = byStyle.some((row) => row.style === null);
-  const showTrace = process.env.NEXT_PUBLIC_SHOW_LANGFUSE_LINKS === "true";
+  const showTrace = langfuseLinksOn();
   const concluded = stats.complete + stats.failed;
 
   return (
@@ -275,7 +276,9 @@ export default async function RunsPage({
                     </dl>
                     <div className="flex items-center justify-between">
                       <span className="rounded-md bg-muted/40 px-2 py-1 text-xs font-medium">{job.style_preset_id ?? "No style"}</span>
-                      <LangfuseButton url={job.langfuse_trace_url} label={`Open Langfuse trace for ${job.title ?? `run ${shortId}`}`} />
+                      {showTrace && (
+                        <LangfuseButton url={job.langfuse_trace_url} label={`Open Langfuse trace for ${job.title ?? `run ${shortId}`}`} />
+                      )}
                     </div>
                   </li>
                 );

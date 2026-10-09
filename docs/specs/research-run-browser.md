@@ -207,7 +207,9 @@ beside it. Positions and edges are one constant, `PIPELINE_GRAPH`, in
   targets below.
 - `consistency_check→regenerate` (judge failed the page, `route_after_check`), plus the
   `route_next_scene` targets.
-- `output_mod`: the `route_next_scene` targets.
+- `output_mod`: the `route_next_scene` targets, except `→output_mod`. The router allows it, but
+  `output_mod` screens every finished page in one pass, so no run takes it; its visits still count
+  on the node.
 - `route_next_scene` targets, from each of `reveal`, `consistency_check`, `output_mod`:
   `→output_mod` (a finished page awaits its safety check: the usual step after a passing judge),
   `→generate_scene` (draw the next page), `→compose` (every page done).

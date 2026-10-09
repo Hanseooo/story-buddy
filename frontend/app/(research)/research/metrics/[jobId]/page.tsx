@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation";
 import LangfuseButton from "@/components/LangfuseButton";
-import { formatJob } from "@/utils/metrics";
+import { formatJob, langfuseLinksOn } from "@/utils/metrics";
 import StatusPill from "../StatusPill";
 import BackLink from "./BackLink";
 import { loadRun } from "./loadRun";
@@ -43,7 +42,9 @@ const STILL_GOING: Record<string, string> = {
 export default async function RunPage({ params }: { params: Promise<{ jobId: string }> }) {
   const { jobId } = await params;
   const result = await loadRun(jobId);
-  if (result.kind === "signed_out") redirect(`/login?next=${encodeURIComponent(`/research/metrics/${jobId}`)}`);
+  // Middleware is the only auth gate (AGENTS.md). Here a signed-in user's session was rejected;
+  // /login would bounce them to /classroom, so error.tsx offers Retry and the way back instead.
+  if (result.kind === "signed_out") throw new Error("Unauthorized");
   if (result.kind === "not_found") return <RunMessage which="not_found" />;
   if (result.kind === "forbidden") return <RunMessage which={result.reason} />;
 
@@ -64,7 +65,7 @@ export default async function RunPage({ params }: { params: Promise<{ jobId: str
           <span>{job.style_preset_id ?? "No style"}</span>
           <span>{formattedDate}</span>
           <span className="break-all font-mono text-xs">{job.id}</span>
-          <LangfuseButton url={job.langfuse_trace_url} />
+          {langfuseLinksOn() && <LangfuseButton url={job.langfuse_trace_url} />}
         </div>
       </header>
 

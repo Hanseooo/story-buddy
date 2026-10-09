@@ -36,7 +36,10 @@ Refs [#103](https://github.com/Hanseooo/story-buddy/issues/103), #104, #107, #10
   Image dialogs preserve keyboard dismissal and focus, including broken images.
 - Shared research header on metrics, annotate and adjudicate. Researcher login can return to
   `/research/metrics/...`. Langfuse links require `NEXT_PUBLIC_SHOW_LANGFUSE_LINKS=true` and warn
-  that traces contain the story before redaction.
+  that traces contain the story before redaction. With the flag off, no trace URL reaches the
+  browser: the pages no longer pass it to the hidden button.
+- A run detail request whose session the backend rejects shows the error page (Retry, back link)
+  instead of redirecting a signed-in user to `/login`, which sent them on to `/classroom`.
 
 ### Docs
 
@@ -48,6 +51,8 @@ Refs [#103](https://github.com/Hanseooo/story-buddy/issues/103), #104, #107, #10
 - Clarity review fix: a clean character verdict with a missing page-content result is Not checked,
   with an explanation, rather than a failed check. Its node summary counts the incomplete result
   separately. Recorded composition contradictions still count as failures.
+- The spec records why the graph omits `output_mod→output_mod`: `output_mod` screens every
+  finished page in one pass, so no run takes it.
 
 ### Checks
 
@@ -60,6 +65,8 @@ Refs [#103](https://github.com/Hanseooo/story-buddy/issues/103), #104, #107, #10
   test. All 10 gallery tests passed in isolation, then all 598 tests passed in a standalone run.
 - Playwright: signed-out list at 1280 × 800 and 360 × 780, generic ids without titles, Langfuse
   hidden, filters survive reload, empty results clear, detail URLs redirect to login. No console errors.
+- Code review fix (2026-10-10): with the flag off, the signed-out list page's HTML carried 47
+  Langfuse trace URLs before the fix and 0 after, on the local dev server.
 - Captured synthetic fixture: desktop graph, keyboard Enter/Escape and focus return, section
   links, phone graph scrolling within its box, 44.45 px node height, bottom sheet. No console errors.
 - Clarity follow-up (2026-10-10): purpose/result and disclosure checks passed on desktop and
