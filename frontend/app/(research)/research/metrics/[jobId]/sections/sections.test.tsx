@@ -27,10 +27,18 @@ describe("Pages", () => {
       shipped_attempt: null,
       attempts: [{ ...RUN.scenes[1].attempts[0], passed: false, vlm_verdict: null }],
     };
-    render(<Pages scenes={[scene]} characters={RUN.characters} objects={[]} />);
+    const { rerender } = render(<Pages scenes={[scene]} characters={RUN.characters} objects={[]} />);
 
     expect(screen.getByText("Not checked")).toBeInTheDocument();
     expect(screen.queryByText("Failed")).toBeNull();
+
+    const checked = {
+      ...scene,
+      attempts: [{ ...scene.attempts[0], scene_contradictions: RUN.scenes[0].attempts[0].failure_reasons }],
+    };
+    rerender(<Pages scenes={[checked]} characters={RUN.characters} objects={[]} />);
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(screen.queryByText("Not checked")).toBeNull();
   });
 });
 

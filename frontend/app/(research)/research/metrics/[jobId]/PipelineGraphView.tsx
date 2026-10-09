@@ -55,9 +55,9 @@ export default function PipelineGraph({
     <section id="graph" aria-labelledby="graph-heading" className="scroll-mt-6 space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <h2 id="graph-heading" className="font-display text-2xl font-bold">Path through the pipeline</h2>
-        <p className="text-xs text-foreground/60">Solid steps ran. Faded steps did not. ×N is how many times. Select a step for details.</p>
+        <p className="text-xs text-foreground/70">Solid steps ran. Faded steps did not. ×N is how many times. Select a step for details.</p>
       </div>
-      <p className="text-xs text-foreground/60 sm:hidden">Swipe sideways to see the redraw loop.</p>
+      <p className="text-xs text-foreground/70 sm:hidden">Swipe sideways to see the redraw loop.</p>
 
       <div className="overflow-x-auto rounded-3xl bg-surface p-3 neo-border neo-shadow-sm">
         <div
@@ -94,7 +94,7 @@ export default function PipelineGraph({
                       dominantBaseline="middle"
                       strokeWidth={4}
                       style={{ paintOrder: "stroke" }}
-                      className="fill-current stroke-surface text-[12px] font-bold"
+                      className={`stroke-surface text-[12px] font-bold ${n > 0 ? "fill-current" : "fill-foreground/70"}`}
                     >
                       {text}
                     </text>
@@ -124,7 +124,7 @@ export default function PipelineGraph({
                     className={`relative flex size-full flex-col items-center justify-center rounded-xl px-2 text-center leading-tight transition-colors focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 ${
                       n > 0
                         ? "bg-surface text-foreground neo-border hover:bg-primary/10"
-                        : "border border-dashed border-foreground/25 bg-surface/60 text-foreground/45 hover:bg-muted/40"
+                        : "border border-dashed border-foreground/25 bg-surface/60 text-foreground/70 hover:bg-muted/40"
                     } ${ended ? RING[ended] : ""}`}
                   >
                     <span className="text-xs font-bold sm:text-sm">{node.label}</span>

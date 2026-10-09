@@ -32,5 +32,18 @@ describe("summarizeNodes", () => {
       "Page 1: 1 attempt, nothing shipped yet.",
       "Page 1, attempt 1: not checked.",
     ]);
+    const compositionFailure = {
+      ...unchecked,
+      scenes: [{
+        ...unchecked.scenes[0],
+        attempts: [{
+          ...unchecked.scenes[0].attempts[0],
+          scene_contradictions: RUN.scenes[0].attempts[0].failure_reasons,
+        }],
+      }],
+    };
+    expect(summarizeNodes(compositionFailure).consistency_check.lines[1]).toBe(
+      "Page 1, attempt 1: failed (wrong_colour)."
+    );
   });
 });

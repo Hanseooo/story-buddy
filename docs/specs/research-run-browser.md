@@ -229,7 +229,9 @@ Each panel ends with a link that scrolls to the matching section below.
 The client component lives in `PipelineGraphView.tsx`. Using the plan's `PipelineGraph.tsx`
 beside `pipelineGraph.ts` resolves the component import to the data module on Windows.
 Drawing-node summaries include each attempt's passed, failed or not-checked result and readable
-failure reasons, in addition to the attempt count and shipped attempt.
+failure reasons and composition contradictions, in addition to the attempt count and shipped
+attempt. A composition-only failure is failed even when there is no character verdict object;
+the page-attempt badge uses the same rule.
 
 ### 5.4 States
 

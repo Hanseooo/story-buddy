@@ -7,8 +7,8 @@ function Verdict({ attempt }: { attempt: RunAttempt }) {
   if (attempt.passed) {
     return <span className="rounded-full bg-success/15 px-2.5 py-1 text-xs font-bold text-success">Passed</span>;
   }
-  // A recorded reason means the judge answered even if its verdict object was not kept.
-  if (attempt.vlm_verdict == null && attempt.failure_reasons.length === 0) {
+  // A recorded reason or composition contradiction means the judge answered without a verdict object.
+  if (attempt.vlm_verdict == null && attempt.failure_reasons.length === 0 && !attempt.scene_contradictions?.length) {
     return <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-bold text-foreground/70">Not checked</span>;
   }
   return <span className="rounded-full bg-destructive/15 px-2.5 py-1 text-xs font-bold text-destructive">Failed</span>;

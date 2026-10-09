@@ -41,10 +41,13 @@ function attempts(run: RunDetail): string[] {
       ...s.attempts.map((attempt, index) => {
         const verdict = attempt.passed
           ? "passed"
-          : attempt.vlm_verdict == null && attempt.failure_reasons.length === 0
+          : attempt.vlm_verdict == null && attempt.failure_reasons.length === 0 && !attempt.scene_contradictions?.length
             ? "not checked"
             : "failed";
-        const reasons = attempt.failure_reasons.map(sceneFailureLabel).join(", ");
+        const reasons = [
+          ...attempt.failure_reasons.map(sceneFailureLabel),
+          ...(attempt.scene_contradictions ?? []),
+        ].join(", ");
         return `Page ${i + 1}, attempt ${index + 1}: ${verdict}${reasons ? ` (${reasons})` : ""}.`;
       }),
     ];

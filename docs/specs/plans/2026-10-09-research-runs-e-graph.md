@@ -1,6 +1,6 @@
 # Research Runs E — Pipeline Graph and Release Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** The run page shows the path a run took through the 11-node pipeline as a graph: visited nodes solid with visit counts, taken edges thick with traversal counts, the node it ended on marked. Clicking a node opens a panel that says, in words, what that node did. Then the whole PR is documented and checked in a real browser.
 
@@ -11,6 +11,25 @@
 **Spec:** `docs/specs/research-run-browser.md` §5.3, §7, §8.
 
 **Plan set:** A → B → C → D → E (this file). E needs D's `RunDetail` types, `format.ts` and `page.tsx`. Branch `feat/research-run-browser`, one PR.
+
+
+**Execution record (2026-10-09):** Tasks 1–4 implemented on `feat/research-run-browser`.
+The component file is `PipelineGraphView.tsx` because Windows resolves `./PipelineGraph` to
+`pipelineGraph.ts`; the summary also includes per-attempt verdicts as required by the spec.
+Existing page tests mock fetch, so the integration test uses that seam rather than `mockLoad`.
+Task 4's PR number remains pending Task 5 Step 7. Spec status and CHANGELOG state that explicitly.
+
+Verification: backend ruff passed; pytest 1,474 passed, 87 skipped, 6 deselected. Frontend lint,
+build/typecheck and all 596 tests passed. Traversal counts and section-link focus were deliberately
+broken and observed failing, then restored. Signed-out browser checks passed at 1280 × 800 and
+360 × 780 with no console errors. A separate captured-fixture page verified native Enter/Escape,
+focus return, section links, desktop graph and phone bottom sheet; nodes measured 44.45 px high
+and the graph scrolled inside its box without page overflow. The temporary fixture route was removed.
+
+**Remaining:** owner sign-in, an identified synthetic student run, signed-in checks and endpoint
+latency (Steps 4–5); real-data phone detail/header/image checks (Step 6); owner approval before
+push, PR creation and PR-number doc update (Step 7). This plan remains until those release checks
+are completed. No donated story was opened. No credentials or tokens were read.
 
 ## Global Constraints
 
@@ -83,7 +102,7 @@ Commands run from `frontend/` unless they start with `cd`.
   - `ENDED_TEXT: Record<EndedOn["kind"], string>`.
   - `nodeName(node: GraphNode, counts: PathCounts, endedOn: EndedOn | null): string`.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -140,12 +159,12 @@ describe("PIPELINE_GRAPH", () => {
 });
 ```
 
-- [ ] **Step 2: Run them and confirm they fail.**
+- [x] **Step 2: Run them and confirm they fail.**
 
 Run: `pnpm exec vitest run "app/(research)/research/metrics/[jobId]/pipelineGraph.test.ts"`
 Expected: FAIL, `Failed to resolve import "./pipelineGraph"`.
 
-- [ ] **Step 3: Implement.** Layout: the main line runs down x 155-305 on a 72-unit pitch; `regenerate` sits right of the consistency check. Loops back up run on the left (lanes x 125 and x 85). The rare skips (`reveal` straight to page safety or the book, the check straight to the book) run on the far right (lanes x 535 and x 555, and x 335).
+- [x] **Step 3: Implement.** Layout: the main line runs down x 155-305 on a 72-unit pitch; `regenerate` sits right of the consistency check. Loops back up run on the left (lanes x 125 and x 85). The rare skips (`reveal` straight to page safety or the book, the check straight to the book) run on the far right (lanes x 535 and x 555, and x 335).
 
 ```ts
 import type { EndedOn, RunStep } from "./types";
@@ -238,14 +257,14 @@ export function nodeName(node: GraphNode, counts: PathCounts, endedOn: EndedOn |
 }
 ```
 
-- [ ] **Step 4: Run them and confirm they pass.**
+- [x] **Step 4: Run them and confirm they pass.**
 
 Run: the Step 2 command.
 Expected: 3 passed.
 
-- [ ] **Step 5: Break it on purpose.** In `pathCounts`, change `counts.edges[key] = (counts.edges[key] ?? 0) + 1` to `counts.edges[key] = 1` (marks an edge as taken but loses how often). Run: the `pathCounts` test FAILS on `consistency_check->regenerate`, expected 2, got 1. Restore: PASS.
+- [x] **Step 5: Break it on purpose.** In `pathCounts`, change `counts.edges[key] = (counts.edges[key] ?? 0) + 1` to `counts.edges[key] = 1` (marks an edge as taken but loses how often). Run: the `pathCounts` test FAILS on `consistency_check->regenerate`, expected 2, got 1. Restore: PASS.
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
 ```bash
 git add "app/(research)/research/metrics/[jobId]/pipelineGraph.ts" "app/(research)/research/metrics/[jobId]/pipelineGraph.test.ts"
@@ -266,7 +285,7 @@ git commit -m "feat(run-detail): pipeline graph layout and path counts (#104)"
   - `type NodeSummary = { lines: string[]; section: { id: string; label: string } }`.
   - `summarizeNodes(run: RunDetail): Record<string, NodeSummary>`, one entry per `PIPELINE_GRAPH` node. Pure; runs on the server.
 
-- [ ] **Step 1: Write the failing tests.** These use Plan D's captured fixture: input passed, 7 words, character Mia whose reference matches, page 1 shipped on attempt 2 of 2, page 2 on attempt 1 of 1.
+- [x] **Step 1: Write the failing tests.** These use Plan D's captured fixture: input passed, 7 words, character Mia whose reference matches, page 1 shipped on attempt 2 of 2, page 2 on attempt 1 of 1.
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -293,12 +312,12 @@ describe("summarizeNodes", () => {
 });
 ```
 
-- [ ] **Step 2: Run them and confirm they fail.**
+- [x] **Step 2: Run them and confirm they fail.**
 
 Run: `pnpm exec vitest run "app/(research)/research/metrics/[jobId]/nodeSummary.test.ts"`
 Expected: FAIL, `Failed to resolve import "./nodeSummary"`.
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
 
 ```ts
 import type { RunDetail } from "./types";
@@ -382,12 +401,12 @@ export function summarizeNodes(run: RunDetail): Record<string, NodeSummary> {
 }
 ```
 
-- [ ] **Step 4: Run them and confirm they pass.**
+- [x] **Step 4: Run them and confirm they pass.**
 
 Run: the Step 2 command.
 Expected: 2 passed.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ```bash
 git add "app/(research)/research/metrics/[jobId]/nodeSummary.ts" "app/(research)/research/metrics/[jobId]/nodeSummary.test.ts"
@@ -408,7 +427,7 @@ git commit -m "feat(run-detail): plain-words summary per pipeline node"
   - `PipelineGraph({ steps, endedOn, summaries }: { steps: RunStep[]; endedOn: EndedOn | null; summaries: Record<string, NodeSummary> })`, default export, client, section id `graph`.
   - `NodePanel({ node, visits, summary, onClose, onJump }: { node: GraphNode | null; visits: RunStep[]; summary: NodeSummary | null; onClose: () => void; onJump: () => void })`, default export, client. Open while `node` is not null.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
 
 ```tsx
 import { fireEvent, render, screen, within } from "@testing-library/react";
@@ -483,12 +502,12 @@ describe("PipelineGraph", () => {
 });
 ```
 
-- [ ] **Step 2: Run them and confirm they fail.**
+- [x] **Step 2: Run them and confirm they fail.**
 
 Run: `pnpm exec vitest run "app/(research)/research/metrics/[jobId]/PipelineGraph.test.tsx"`
 Expected: FAIL, `Failed to resolve import "./PipelineGraph"`.
 
-- [ ] **Step 3: Write `NodePanel.tsx`.** A bottom sheet on phones, a right-hand sheet from `md`:
+- [x] **Step 3: Write `NodePanel.tsx`.** A bottom sheet on phones, a right-hand sheet from `md`:
 
 ```tsx
 "use client";
@@ -594,7 +613,7 @@ export default function NodePanel({
 }
 ```
 
-- [ ] **Step 4: Write `PipelineGraph.tsx`.**
+- [x] **Step 4: Write `PipelineGraph.tsx`.**
 
 ```tsx
 "use client";
@@ -762,14 +781,14 @@ export default function PipelineGraph({
 }
 ```
 
-- [ ] **Step 5: Run the tests and confirm they pass.**
+- [x] **Step 5: Run the tests and confirm they pass.**
 
 Run: the Step 2 command.
 Expected: 4 passed.
 
-- [ ] **Step 6: Break it on purpose.** In `handleClose`, delete `!jumping.current &&`. Run: `the section link closes the panel without pulling focus back` FAILS. Restore: PASS.
+- [x] **Step 6: Break it on purpose.** In `handleClose`, delete `!jumping.current &&`. Run: `the section link closes the panel without pulling focus back` FAILS. Restore: PASS.
 
-- [ ] **Step 7: Commit.**
+- [x] **Step 7: Commit.**
 
 ```bash
 git add "app/(research)/research/metrics/[jobId]/PipelineGraph.tsx" "app/(research)/research/metrics/[jobId]/NodePanel.tsx" "app/(research)/research/metrics/[jobId]/PipelineGraph.test.tsx"
@@ -787,7 +806,7 @@ git commit -m "feat(run-detail): clickable pipeline graph with a node panel (#10
 **Interfaces:**
 - Consumes: `PipelineGraph` (Task 3), `summarizeNodes` (Task 2).
 
-- [ ] **Step 1: Write the failing test.** Append to `page.test.tsx` inside `describe("RunPage states", …)`:
+- [x] **Step 1: Write the failing test.** Append to `page.test.tsx` inside `describe("RunPage states", …)`:
 
 ```tsx
   it("a checkpointed run shows the graph before the story", async () => {
@@ -798,12 +817,12 @@ git commit -m "feat(run-detail): clickable pipeline graph with a node panel (#10
   });
 ```
 
-- [ ] **Step 2: Run it and confirm it fails.**
+- [x] **Step 2: Run it and confirm it fails.**
 
 Run: `pnpm exec vitest run "app/(research)/research/metrics/[jobId]/page.test.tsx"`
 Expected: FAIL, the first level-2 heading is "Story".
 
-- [ ] **Step 3: Mount it.** In `page.tsx`, add the imports:
+- [x] **Step 3: Mount it.** In `page.tsx`, add the imports:
 
 ```tsx
 import { summarizeNodes } from "./nodeSummary";
@@ -819,12 +838,12 @@ and make the checkpointed branch start with the graph:
           <Story story={run.story} />
 ```
 
-- [ ] **Step 4: Run the page tests and confirm they pass.**
+- [x] **Step 4: Run the page tests and confirm they pass.**
 
 Run: the Step 2 command.
 Expected: all PASS.
 
-- [ ] **Step 5: ROUTE_MAP.** In `docs/specs/ROUTE_MAP.md` §1, after the Student routes table and before `---`, add:
+- [x] **Step 5: ROUTE_MAP.** In `docs/specs/ROUTE_MAP.md` §1, after the Student routes table and before `---`, add:
 
 ```markdown
 ### Research routes
@@ -838,7 +857,7 @@ Researcher accounts (`role = 'researcher'`). The header has Runs, Annotate and A
 | `/research/metrics/[jobId]` | Run detail | Server | Login required. Reads `GET /research/runs/{job_id}`; annotators see approved runs, the adjudicator sees all (ADR-064 rule 2). Pipeline graph, pages, safety, raw state |
 ```
 
-- [ ] **Step 6: CHANGELOG.** Add at the top of `CHANGELOG.md`, above the first `##` entry (fill in the PR number once the PR exists, Task 5 Step 7):
+- [x] **Step 6: CHANGELOG.** Add at the top of `CHANGELOG.md`, above the first `##` entry (fill in the PR number once the PR exists, Task 5 Step 7):
 
 ```markdown
 ## PR #<n> · 2026-10-<dd>
@@ -873,13 +892,13 @@ Research run browser: run list, run detail with the pipeline graph, Langfuse war
   time on a real run: <fill in from Task 5 Step 5>.
 ```
 
-- [ ] **Step 7: Spec status.** In `docs/specs/research-run-browser.md`, change the `**Status:**` line to:
+- [x] **Step 7: Spec status.** In `docs/specs/research-run-browser.md`, change the `**Status:**` line to:
 
 ```markdown
 **Status:** design approved 2026-10-09; ADR-064 accepted 2026-10-09; built on `feat/research-run-browser` (PR #<n>).
 ```
 
-- [ ] **Step 8: Commit.**
+- [x] **Step 8: Commit.**
 
 ```bash
 git add "app/(research)/research/metrics/[jobId]" ../docs/specs/ROUTE_MAP.md ../CHANGELOG.md ../docs/specs/research-run-browser.md
@@ -892,14 +911,14 @@ git commit -m "feat(run-detail): mount the graph; route map, changelog, spec sta
 
 No code unless the check finds a defect. A defect found here gets a failing test first, then the fix, in its own commit.
 
-- [ ] **Step 1: Full suites.**
+- [x] **Step 1: Full suites.**
 
 Run: `cd ../backend && uv run pytest -q && uv run ruff check . && cd ../frontend && pnpm lint && pnpm test && pnpm build`
 Expected: all green. Paste the summary lines into the PR body.
 
-- [ ] **Step 2: Start the app.** In two background shells: `cd backend && uv run uvicorn app.main:app --reload` and `cd frontend && pnpm dev`. The worker is not needed: the viewer only reads checkpoints that already exist.
+- [x] **Step 2: Start the app.** In two background shells: `cd backend && uv run uvicorn app.main:app --reload` and `cd frontend && pnpm dev`. The worker is not needed: the viewer only reads checkpoints that already exist.
 
-- [ ] **Step 3: Signed out, desktop (1280 × 800), with `playwright-cli`.**
+- [x] **Step 3: Signed out, desktop (1280 × 800), with `playwright-cli`.**
   - `/research/metrics`: tiles, failed split, by-style table, filters. No run title anywhere in the page text. No Langfuse button (flag off).
   - Set a filter, reload: it stays. "Clear filters" on an empty result returns every row.
   - A locked row's "Sign in to view" goes to `/login?next=/research/metrics/<id>`.

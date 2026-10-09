@@ -39,13 +39,16 @@ Refs [#103](https://github.com/Hanseooo/story-buddy/issues/103), #104, #107, #10
 - Accepted ADR-064, run-browser spec and route map describe the built routes and graph.
 - The graph component is `PipelineGraphView.tsx` to avoid Windows resolving its import to
   `pipelineGraph.ts`. Drawing summaries include verdicts as required by the spec.
+- Review fixes: readable graph/panel text contrast, mobile sheet indicator, and composition-only
+  failures labeled Failed in both node summaries and page-attempt badges.
 
 ### Checks
 
 - Backend: `uv run ruff check .` passed; `uv run pytest -q`: 1,474 passed, 87 skipped,
   6 deselected. The skipped database/RLS and provider checks remain unverified.
-- Frontend lint and focused run-detail tests passed. Full unit suite and production build/typecheck
-  results are recorded in the PR body once release verification is finished.
+- Frontend: `pnpm lint` and `pnpm build` passed; `pnpm test`: 60 files, 596 tests passed.
+  The build used CI's placeholder public Supabase values. Next.js reports the existing
+  middleware-to-proxy deprecation; that migration is outside this change.
 - Playwright: signed-out list at 1280 × 800 and 360 × 780, generic ids without titles, Langfuse
   hidden, filters survive reload, empty results clear, detail URLs redirect to login. No console errors.
 - Captured synthetic fixture: desktop graph, keyboard Enter/Escape and focus return, section

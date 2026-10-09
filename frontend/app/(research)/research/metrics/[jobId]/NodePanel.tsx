@@ -42,12 +42,13 @@ export default function NodePanel({
       }}
       className="fixed inset-x-0 bottom-0 top-auto m-0 max-h-[85dvh] w-full max-w-none overflow-y-auto rounded-t-3xl bg-surface p-0 text-foreground backdrop:bg-foreground/40 md:inset-y-0 md:left-auto md:right-0 md:h-dvh md:max-h-none md:max-w-md md:rounded-l-3xl md:rounded-tr-none"
     >
+      <div aria-hidden="true" className="mx-auto mt-3 h-1.5 w-12 rounded-full bg-foreground/25 md:hidden" />
       {node && (
         <div className="flex flex-col gap-5 p-6">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 id="node-panel-title" className="font-display text-2xl font-bold">{node.label}</h2>
-              <p className="font-mono text-xs text-foreground/50">{node.id}</p>
+              <p className="font-mono text-xs text-foreground/70">{node.id}</p>
             </div>
             <button
               type="button"
@@ -60,7 +61,7 @@ export default function NodePanel({
           </div>
 
           <div>
-            <h3 className="text-xs font-semibold uppercase tracking-widest text-foreground/50">Visits</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-foreground/70">Visits</h3>
             {visits.length === 0 ? (
               <p className="mt-1 text-sm text-foreground/70">This step did not run in this run.</p>
             ) : (
@@ -77,7 +78,7 @@ export default function NodePanel({
           {summary && (
             <>
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-widest text-foreground/50">What it did</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-widest text-foreground/70">What it did</h3>
                 <ul className="mt-1 space-y-1 text-sm">
                   {summary.lines.map((line, i) => <li key={i}>{line}</li>)}
                 </ul>
