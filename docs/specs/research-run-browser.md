@@ -3,7 +3,8 @@
 **Status:** design approved 2026-10-09; ADR-064 accepted 2026-10-09; backend route (§5.1) built
 2026-10-09; research shell (§2, §3) and reusable Langfuse button (§6, plan B) built 2026-10-09.
 Run list (§4, plan C), including its Langfuse button placement, built 2026-10-09.
-Run detail and graph (plans D–E) remain unbuilt. Run-list browser checks are deferred to plan E.
+Run detail (§5.2, §5.4, plan D) built 2026-10-09. The pipeline graph (plan E) remains unbuilt.
+Run-list and detail browser checks are deferred to plan E.
 Production checkpoint reads, endpoint latency and signed-in browser checks remain unverified.
 **Issues:** #107 (run list), #104 (run detail), #103 (Langfuse warning and env flag). One PR.
 Sub-issue #111 (annotate/adjudicate demo mode) follows after merge and is out of scope here.
@@ -155,19 +156,20 @@ A server component fetches the route with the session's access token
 2. **Summary strip.** Pages passed, redraws, reference retries, cost, total time (sum of step
    durations, labelled "includes time waiting for the child"), failure reason.
 3. **Pipeline graph** (§5.3).
-4. **Characters.** A card each: reference image (opens the lightbox), description chips (species,
+4. **Story.** The redacted text, word count, and whether it was cut to the word limit.
+5. **Characters.** A card each: reference image (opens the lightbox), description chips (species,
    colours, body features, clothing), reference safety check, judge verdict with its
    contradictions in plain words.
-5. **Pages.** One block per scene: excerpt, drawing direction and cast on the left; attempts side by
+6. **Pages.** One block per scene: excerpt, drawing direction and cast on the left; attempts side by
    side on the right. The shipped attempt wears a **Shipped** ribbon; each attempt shows a pass or
    fail badge, its failure reasons as labels, the scene contradictions, and a collapsed "Prompt".
    Images open a single-image viewer (`ImageViewer`, a native `<dialog>`). `LightboxModal` is not
    reused: it is built for a reference-and-scene pair with tabs. A shield badge shows the page's
    safety check.
-6. **Safety checks.** Input gate (passed, categories), reference checks, page checks, in one row.
-7. **Run details.** Prompt versions where recorded; "Models: not recorded for this run"; a
+7. **Safety checks.** Input gate (passed, categories), reference checks, page checks, in one row.
+8. **Run details.** Prompt versions where recorded; "Models: not recorded for this run"; a
    per-step timing table.
-8. **Raw JSON.** `<details>`, collapsed, pretty-printed `state`, with a Copy button.
+9. **Raw JSON.** `<details>`, collapsed, pretty-printed `state`, with a Copy button.
 
 Failure reasons and verdict fields get readable labels from one map in `utils/metrics.ts`, beside
 `FAILURE_LABELS`. An unknown value shows as is.

@@ -93,6 +93,30 @@ export function failureLabel(reason: string): string {
   return FAILURE_LABELS[reason] ?? reason;
 }
 
+// FailureReason, backend/contracts/story_memory.py. Unknown values pass through as-is.
+export const SCENE_FAILURE_LABELS: Record<string, string> = {
+  wrong_colour: "Wrong colour",
+  wrong_species: "Wrong species",
+  wrong_body_feature: "Wrong body feature",
+  wrong_clothing: "Wrong clothing",
+  wrong_style: "Wrong style",
+  different_face: "Different face",
+  character_absent: "Character missing",
+};
+
+export function sceneFailureLabel(reason: string): string {
+  return Object.hasOwn(SCENE_FAILURE_LABELS, reason) ? SCENE_FAILURE_LABELS[reason] : reason;
+}
+
+// The judge's yes/no checks on a page (VlmVerdict). Shown when one is false.
+export const VERDICT_CHECK_LABELS = {
+  same_character: "Same character",
+  style_match: "Style matches",
+  anatomy_intact: "Anatomy intact",
+  subjects_unique: "No duplicate characters",
+  text_free: "No lettering",
+} as const;
+
 export function failedSplit(byReason: Record<string, number>): string {
   return Object.entries(byReason)
     .sort(([, a], [, b]) => b - a)

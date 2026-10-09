@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeAggregates, failedSplit, filterJobs, JobRow, parseRunFilter, styleBreakdown } from "@/utils/metrics";
+import { computeAggregates, failedSplit, filterJobs, JobRow, parseRunFilter, sceneFailureLabel, styleBreakdown } from "@/utils/metrics";
 
 const run = (over: Partial<JobRow>): JobRow => ({ id: "x", status: "complete", created_at: "2026-10-01", ...over });
 
@@ -77,5 +77,15 @@ describe("run filters", () => {
     expect(ids(filterJobs(jobs, { status: "all", style: "none" }))).toEqual(["c", "d"]);
     expect(ids(filterJobs(jobs, { status: "failed", style: "cel" }))).toEqual(["b"]);
     expect(ids(filterJobs(jobs, { status: "all", style: "pixel" }))).toEqual([]);
+  });
+});
+
+describe("sceneFailureLabel", () => {
+  it("labels the closed set and passes unknown values through", () => {
+    expect(sceneFailureLabel("wrong_colour")).toBe("Wrong colour");
+    expect(sceneFailureLabel("character_absent")).toBe("Character missing");
+    expect(sceneFailureLabel("new_reason")).toBe("new_reason");
+    expect(sceneFailureLabel("constructor")).toBe("constructor");
+    expect(sceneFailureLabel("toString")).toBe("toString");
   });
 });

@@ -16,7 +16,7 @@ instead of repeating it.
 
 ## Research run browser · 2026-10-09 (branch in progress)
 
-Refs [#107](https://github.com/Hanseooo/story-buddy/issues/107), #104, #103 · Plan C
+Refs [#107](https://github.com/Hanseooo/story-buddy/issues/107), #104, #103 · Plans C–D
 
 ### Code
 
@@ -25,16 +25,21 @@ Refs [#107](https://github.com/Hanseooo/story-buddy/issues/107), #104, #103 · P
 - One viewer rule controls titles and run links. Hidden titles are cleared before rendering.
   Desktop rows and phone cards use the warned, flag-gated Langfuse button.
 - Updated loading skeleton, empty and filtered-empty states, and retry error boundary.
+- Run detail reads the backend projection and shows the redacted story, characters, page
+  attempts, safety, timing, summary and copyable JSON, with access and missing-checkpoint states.
+  Image dialogs preserve keyboard dismissal and focus; broken images retain named placeholders.
 
 ### Docs
 
-- Run-browser spec and route map record the built list. Detail and graph remain plans D–E.
+- Run-browser spec and route map record the built list and detail. The graph remains plan E.
 
 ### Checks
 
 - Frontend lint, production build/typecheck and full unit suite. Privacy regression verified by
   temporarily removing title sanitization: the HTML assertion fails, then passes after restoration.
 - Browser checks are deferred to plan E, as plan C specifies.
+- Detail regressions verified by removing the malformed-id, unchecked-attempt and
+  missing-checkpoint branches in turn, observing failures, and restoring passing behavior.
 
 ---
 

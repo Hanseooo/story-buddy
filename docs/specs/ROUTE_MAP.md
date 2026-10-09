@@ -157,7 +157,7 @@ app/
 | `/s/[profileId]/**` | Profile (student) | Profile session must be active (stored in sessionStorage or cookie). Profile must exist and belong to an active classroom |
 | `/s/[profileId]/book/[bookId]/**` | Profile (student) | `bookId` must belong to `profileId` (own book) |
 | `/research/metrics` | Public | Middleware refreshes the session for the research header without requiring sign-in |
-| `/research/metrics/[jobId]` | Auth session | Signed-out descendants redirect to `/login?next=<path>`; detail page and backend-access messages remain plan D |
+| `/research/metrics/[jobId]` | Auth session | Signed-out descendants redirect to `/login?next=<path>`; the server-rendered detail report shows backend access messages and recorded run state. The pipeline graph remains plan E. |
 
 ### Middleware strategy
 
