@@ -24,6 +24,7 @@ vi.mock("@/utils/supabase/server", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
+  usePathname: () => "/adjudicate",
   redirect: vi.fn((url: string) => {
     throw new Error(`REDIRECT:${url}`);
   }),
@@ -75,5 +76,6 @@ describe("AdjudicateLayout", () => {
     render(jsx);
 
     expect(screen.getByText("Child Content")).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Research" })).toBeInTheDocument();
   });
 });

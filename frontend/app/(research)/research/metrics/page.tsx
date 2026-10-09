@@ -1,7 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { computeAggregates, failureLabel, formatJob, JobRow } from "@/utils/metrics";
-import { ArrowRight, CheckCircle, XCircle, Clock, ArrowLeft, Info } from "@phosphor-icons/react/dist/ssr";
-import Link from "next/link";
+import { ArrowRight, CheckCircle, XCircle, Clock, Info } from "@phosphor-icons/react/dist/ssr";
 
 export const revalidate = 0;
 
@@ -34,26 +33,6 @@ export default async function ResearchPage() {
         
         {/* Header */}
         <div className="flex flex-col gap-6">
-          <div className="flex items-center justify-between border-b border-primary/10 pb-4">
-            <Link 
-              href="/research"
-              className="inline-flex items-center gap-1.5 text-sm font-bold text-primary hover:text-primary-deep transition-colors w-fit"
-            >
-              <ArrowLeft weight="bold" className="w-4 h-4" />
-              Back to Methodology
-            </Link>
-
-            <div className="flex items-center gap-2 select-none">
-              <div className="grid size-7 sm:size-8 place-items-center rounded-[9px_9px_9px_3px] overflow-hidden bg-surface shadow-sm shrink-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/logo.png" alt="" className="h-full w-full object-contain scale-[1.35]" />
-              </div>
-              <span className="font-display text-lg font-extrabold text-primary tracking-tight hidden sm:block">
-                StoryBuddy
-              </span>
-            </div>
-          </div>
-
           <div className="flex flex-col gap-2">
             <h1 className="text-4xl md:text-5xl font-display font-extrabold tracking-tight text-foreground">
               Research Metrics
