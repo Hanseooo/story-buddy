@@ -33,7 +33,8 @@ enforces the same rule on its own (ADR-064 rule 2); the frontend helper only dec
 
 Middleware adds `/research/metrics/:path*` to its matcher, and `guardRequest` redirects a signed-out
 request for any path under `/research/metrics/` to `/login?next=<path>`. The list itself stays
-public.
+public. The login page today follows `next` for a researcher only under `/annotate` or
+`/adjudicate`; it also accepts `/research/metrics` paths, so "Sign in to view" lands on the run.
 
 ## 3. Shared research header
 
@@ -53,7 +54,8 @@ one with `aria-current="page"`.
   scrolls sideways.
 
 It renders in a new `research/metrics/layout.tsx` and at the top of `annotate/layout.tsx` and
-`adjudicate/layout.tsx`. `AnnotationClient` and `AdjudicateClient` are not changed: their own
+`adjudicate/layout.tsx`. It is not sticky: the annotate and adjudicate task bars below it already
+are (`sticky top-0`), and two sticky bars would stack. `AnnotationClient` and `AdjudicateClient` are not changed: their own
 sticky task bars, including their back link, stay as they are. #111 relies on that.
 
 ## 4. Run list — `/research/metrics`
@@ -106,7 +108,7 @@ job:        id, title, status, style_preset_id, created_at, failure_reason, appr
 checkpointed: bool                      # false → the page shows the row summary only
 story:      redacted_text, word_count, truncated
 steps:      [{node, started_at, duration_ms | null}]    # history order; "__start__" dropped
-ended_on:   {node, kind: "failed" | "waiting" } | null  # last snapshot's `next`, if non-empty
+ended_on:   {node, kind: "failed" | "waiting" | "running"} | null  # last snapshot's `next`
 moderation: input (ModerationResult)
 characters: [{char_id, name, description, ref_image_url, ref_moderation_status,
               ref_verdict, ref_verdict_prompt_version}]
@@ -122,7 +124,12 @@ Projection is a pure function, `project_run(job_row, snapshots, sign) → dict`,
 without a database. `raw_text`, `profile_id` and `classroom_id` are dropped from `state` and appear
 nowhere else. `duration_ms` is the gap to the next snapshot's `created_at`; the failing step's is
 `null`. `shipped_attempt` is the index of the attempt whose `image_ref` equals `final_image_ref`.
-`kind` is `"waiting"` when the job status is `awaiting_confirm`, otherwise `"failed"`.
+`kind` is `"failed"` for status `failed`, `"waiting"` for `awaiting_confirm`, `"running"` for
+`queued` or `running`, and `ended_on` is `null` for `complete`. `story`, `moderation`, `cost` and
+`state` come from the newest snapshot whose values are not empty, and are `null` when there is
+none. A router that raises (the input gate, page moderation) discards the writes of the node it
+follows (checked on langgraph 1.2.8, 2026-10-09), so a run blocked at the input gate has no input
+safety result in its state; the page says "not recorded" and `ended_on` names the node.
 `get_signed_url(path, expires_in=300)` gains the argument; this route passes 3600.
 
 Only the final reference and its verdict are in the state. Reference draws that were rejected are
@@ -144,8 +151,9 @@ A server component fetches the route with the session's access token
 5. **Pages.** One block per scene: excerpt, drawing direction and cast on the left; attempts side by
    side on the right. The shipped attempt wears a **Shipped** ribbon; each attempt shows a pass or
    fail badge, its failure reasons as labels, the scene contradictions, and a collapsed "Prompt".
-   Images open the lightbox, reusing `(research)/_shared/components/LightboxModal.tsx`. A shield
-   badge shows the page's safety check.
+   Images open a single-image viewer (`ImageViewer`, a native `<dialog>`). `LightboxModal` is not
+   reused: it is built for a reference-and-scene pair with tabs. A shield badge shows the page's
+   safety check.
 6. **Safety checks.** Input gate (passed, categories), reference checks, page checks, in one row.
 7. **Run details.** Prompt versions where recorded; "Models: not recorded for this run"; a
    per-step timing table.
@@ -212,6 +220,8 @@ Each panel ends with a link that scrolls to the matching section below.
   link.
 - `checkpointed: false`: header and summary from the row, plus "No recorded steps for this run".
 - An in-progress run: everything recorded so far, with a note that the run is still going.
+- A run blocked at the input gate: "Input safety result not recorded", and the graph marks
+  `input_gate` "Failed here".
 - A broken image: a placeholder with the alt text. Every image's alt names the page and attempt.
 
 ## 6. Langfuse link (#103)
