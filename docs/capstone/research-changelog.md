@@ -1,6 +1,6 @@
 # StoryBuddy: Research Changelog
 
-**Last updated:** 2026-10-09 · **Covers:** everything since the Objective 4 pre-registration was frozen
+**Last updated:** 2026-10-10 · **Covers:** everything since the Objective 4 pre-registration was frozen
 on 2026-08-14. **Use it to:** update the manuscript. Each entry says what changed, why, and which
 part of the paper it touches.
 
@@ -90,6 +90,7 @@ and confirmed scope"]
 
 | Date | Type | What changed | Why | Paper section | Source |
 |---|---|---|---|---|---|
+| 2026-10-10 | Decision | Donated-story detail in public docs stays as written: IDs, plot summaries, reference-image descriptions, one title with a quoted line, and character names. Nothing is redacted, so there is no history rewrite and the repository stays public | The owner wants the detail on hand if the panel asks. The consent draft promises name removal and private images, not private story text. Open for the adviser: some names are as the children wrote them, and the administered consent wording is not recorded (#54) | Ethics (data handling) | #108; `story_donation_consent_and_assent_draft.md` |
 | 2026-10-09 | Limitation | Label limitations gathered for the write-up: hair-length gap, agreed-wrong pairs unseen by the adjudicator, adjudicator not blind to rater, 26 Character Absent pairs counted not checked, object characters skewed toward Different, duplicates, style premise | Recorded during C3 but not yet in this file (#94) | Methods (annotation), Limitations | `PREREGISTRATION_OBJ4.md` §12; `adjudication-notes-2026-09.md` |
 | 2026-10-09 | Finding | Registered agreement and sensitivity analyses run. Inter-rater κ, test slice 0.634 (all pairs 0.659); non-human slice κ 0 at 96% agreement, a prevalence artifact (24 of 25 pairs Same for both). Guide boundary: no clear effect, groups small and mostly straddling. Without the ambiguous-reference characters (20 pairs, n = 309): untuned F1 0.48, seed 1 0.35, ΔF1 −0.13 (95% CI −0.33 to +0.05), McNemar p = 0.0075; same direction as the primary | Pre-registered items 2, 3 and 5 of the 2026-09-23 amendment; saved predictions only | Methods (annotation), Results (Objective 4) | runbook, "Registered agreement and sensitivity analyses (2026-10-09)"; `heldout-1/sensitivity_and_agreement.json` (local, git-ignored) |
 | 2026-10-08 | Decision | FLUX.2 klein rejected as scene editor; Qwen-Image-Edit stays | On 30 random pages, blinded, klein drew as many duplicates (4 against 4) and lost identity more (10 against 3) | Methods (system), Discussion | ADR-063 |
