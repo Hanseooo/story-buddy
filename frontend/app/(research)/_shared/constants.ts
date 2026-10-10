@@ -76,13 +76,16 @@ export const TAXONOMY_LABELS: Record<
   },
 };
 
-// The research header's tabs. A future page (#106 Dataset, #105 Docs) is one entry here.
+// The research header's tabs. Dataset, Results and Docs are public static pages (ADR-065, ADR-066).
 export const RESEARCH_TABS: {
   label: string;
   href: string;
   visibleTo: (viewer: ResearchViewer | null) => boolean;
 }[] = [
   { label: "Runs", href: "/research/metrics", visibleTo: () => true },
+  { label: "Dataset", href: "/research/dataset", visibleTo: () => true },
+  { label: "Results", href: "/research/results", visibleTo: () => true },
+  { label: "Docs", href: "/research/docs", visibleTo: () => true },
   {
     label: "Annotate",
     href: "/annotate",

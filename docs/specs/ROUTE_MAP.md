@@ -56,13 +56,16 @@ by the child), just not the Supabase Auth session teachers use — session is es
 
 ### Research routes
 
-The shared header shows Runs, Annotate and Adjudicate according to the viewer's role
-(`docs/specs/research-run-browser.md` §3). The list stays public.
+The shared header shows Runs, Dataset, Results and Docs to everyone, and Annotate or Adjudicate
+according to the viewer's role (`docs/specs/research-run-browser.md` §3). The list stays public.
 
 | URL pattern | Page | Rendering | Notes |
 |---|---|---|---|
 | `/research/metrics` | Run list | Server | Public totals, by-style table and URL filters. Titles and run links follow `canOpenRun`; hidden titles are cleared on the server (ADR-064 rule 6) |
 | `/research/metrics/[jobId]` | Run detail | Server | Login required. Reads `GET /research/runs/{job_id}`; annotators see approved runs, the adjudicator sees all (ADR-064 rule 2). Pipeline graph, pages, safety and raw state |
+| `/research/dataset` | Judge dataset | Server | Prerendered, public, no session read (ADR-065, ADR-066). What the registered freeze holds, how a pair was labelled, rater agreement, and six synthetic example pairs with their frozen records |
+| `/research/results` | Judge results | Server | Prerendered, public, no session read (ADR-066). The partial judge comparison of 2026-10-08, how the judge was trained, and what the project takes from it |
+| `/research/docs` | Research documents | Server | Prerendered, public, no session read (ADR-065). Lists the research documents by folder; each links to its file on GitHub |
 
 ---
 
@@ -113,6 +116,7 @@ app/
 | `StudentShell` | Profile guard, bottom tab bar / top navbar, kid-density typography (Nunito 18/20px) | Yes |
 | `ImmersiveLayout` | Strips all nav chrome. Optional top-left back button (ghost). Full viewport | No |
 | Research metrics, annotate and adjudicate layouts | Request-cached `getResearchViewer()` supplies `ResearchHeader`; annotate refuses adjudicators, adjudicate permits researchers and leaves pair access to its page | Yes (non-sticky) |
+| Research reference layout (`research/(reference)/layout.tsx`) | `ResearchHeader` with no viewer and no account block, and a back link to `/research`. Reads no session (ADR-065) | Yes (non-sticky) |
 
 ---
 
@@ -167,6 +171,7 @@ app/
 | `/s/[profileId]/book/[bookId]/**` | Profile (student) | `bookId` must belong to `profileId` (own book) |
 | `/research/metrics` | Public | Middleware refreshes the session for the research header without requiring sign-in |
 | `/research/metrics/[jobId]` | Auth session | Signed-out descendants redirect to `/login?next=<path>`; the server-rendered detail report shows backend access messages, recorded run state and the pipeline graph. |
+| `/research/dataset`, `/research/results`, `/research/docs` | Public | Prerendered. Not in the middleware matcher, and no session is read (ADR-065) |
 
 ### Middleware strategy
 

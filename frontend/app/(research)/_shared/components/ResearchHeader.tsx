@@ -9,7 +9,15 @@ import type { ResearchViewer } from "../viewer";
 const FOCUS = "focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3";
 
 // Not sticky: the annotate and adjudicate task bars below it already stick to the top.
-export default function ResearchHeader({ viewer }: { viewer: ResearchViewer | null }) {
+// The row wraps: on a phone the tabs fill the first line and the account block drops to a second.
+// showAccount is off on the static pages (ADR-065): they read no session, so they cannot say who is signed in.
+export default function ResearchHeader({
+  viewer,
+  showAccount = true,
+}: {
+  viewer: ResearchViewer | null;
+  showAccount?: boolean;
+}) {
   const pathname = usePathname() ?? "/research/metrics";
   const tabs = RESEARCH_TABS.filter((tab) => tab.visibleTo(viewer));
   const roleChip =
@@ -17,7 +25,7 @@ export default function ResearchHeader({ viewer }: { viewer: ResearchViewer | nu
 
   return (
     <header className="border-b border-primary/10 bg-background">
-      <div className="mx-auto flex max-w-7xl items-center gap-1 px-3 py-2 sm:gap-4 sm:px-6">
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-1 px-3 py-2 sm:gap-4 sm:px-6">
         <Link
           href="/research"
           aria-label="StoryBuddy research home"
@@ -32,7 +40,7 @@ export default function ResearchHeader({ viewer }: { viewer: ResearchViewer | nu
           </span>
         </Link>
 
-        <nav aria-label="Research" className="flex min-w-0 flex-1 gap-0.5">
+        <nav aria-label="Research" className="flex flex-1 gap-0.5">
           {tabs.map((tab) => {
             const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
             return (
@@ -50,8 +58,8 @@ export default function ResearchHeader({ viewer }: { viewer: ResearchViewer | nu
           })}
         </nav>
 
-        {viewer ? (
-          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+        {!showAccount ? null : viewer ? (
+          <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
             {viewer.displayName && (
               <span className="hidden max-w-[16ch] truncate text-sm font-medium text-foreground/70 md:block">
                 {viewer.displayName}
@@ -76,7 +84,7 @@ export default function ResearchHeader({ viewer }: { viewer: ResearchViewer | nu
         ) : (
           <Link
             href={`/login?next=${pathname}`}
-            className={`inline-flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-xl border border-primary/20 px-2 text-sm font-bold text-primary hover:bg-primary/5 sm:px-3 ${FOCUS}`}
+            className={`ml-auto inline-flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-xl border border-primary/20 px-2 text-sm font-bold text-primary hover:bg-primary/5 sm:px-3 ${FOCUS}`}
           >
             Researcher sign in
           </Link>

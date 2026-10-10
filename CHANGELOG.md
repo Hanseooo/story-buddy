@@ -14,6 +14,103 @@ instead of repeating it.
 
 ---
 
+## PR #115 · 2026-10-11
+
+A research documents hub, a judge-dataset page and a judge-results page, all public and static.
+Closes #105, #106 · Refs #102 · ADR-065, ADR-066
+
+### Code
+
+- `/research/docs` lists the research documents by repository folder. Each file links to its
+  latest version on GitHub in a new tab, with the question it answers. The entries live in one
+  array, and a test fails when a listed file is renamed or deleted.
+- `/research/dataset` shows what the registered freeze holds (899 pairs by split and label), how
+  a pair was labelled, how much the two raters agreed, and six hand-picked synthetic example
+  pairs with their label and reasons. Every number names the tracked file it comes from.
+  Donated material appears as whole-split counts only: a test fails if the page data or an image
+  file name contains `don-`.
+- Each example card opens to the pair's frozen manifest record and says what the two raters first
+  answered. A new section explains every field of a record and shows one training record whole,
+  prompt and target answer. The constructed example is now a tortoise pair that reuses the page of
+  one of the Same examples (ADR-066). Where the freeze is on disk, a test compares each record with
+  it; CI skips that test because the freeze is git-ignored.
+- `/research/results` shows the partial judge comparison of 2026-10-08: F1, precision and recall
+  for the four judges, what each did with the 47 Different and 282 Same test pairs, the unreadable
+  answers, the registered seed 1 comparison, the ambiguous-reference check and the limits. The
+  charts are HTML and CSS bars with no chart library. A test fails when a value on the page is not
+  in the runbook table it cites.
+- The results page also says how the judge was trained (the settings, why three seeds, which
+  checkpoint was used) and what the project takes from the result: four readings with their
+  sources, then four explanations under a heading that says none was tested (ADR-066 amendment
+  (a)). A test checks each setting against the runbook and against `train_qlora.yaml`.
+- The docs hub lists `docs/specs/judge-finetune.md` and `backend/finetune/train_qlora.yaml`.
+- The three pages are prerendered and read no session, so the middleware matcher is unchanged. They
+  share one layout (back link to `/research`) and one error page (Try again, back link).
+- The research header gains Dataset, Results and Docs tabs. On the three static pages it hides the account
+  block, because those pages do not know who is signed in. Its row now wraps, so on a phone the
+  account block drops below the tabs instead of overlapping them.
+- `/research` links to all three pages beside "View Live Metrics".
+- Twelve 768 × 576 WebP example images under `frontend/public/research/dataset/`, 316 KB in all.
+
+### Docs
+
+- Accepted ADR-065: the two routes are static, link out to GitHub, and show synthetic material
+  only.
+- `research_runbook.md` gains "What the registered freeze contains": the per-split counts, drift
+  reasons and artifact counts the dataset page cites, counted from the `obj4-v1` freeze report.
+- Accepted ADR-066: the dataset page shows frozen records, and the results page shows the partial
+  comparison from tracked numbers only. Amendment (a), same day, adds the training and reading
+  sections.
+- `research_runbook.md` gains "Registered training settings", copied from `train_qlora.yaml`, and
+  the sentence that all 104 constructed pairs carry one reason and one script-written sentence.
+- `research-changelog.md`: three more rows. The cause of the result is not established (four
+  untested explanations), the two seeds selected at `checkpoint-40` are the two with the most
+  unreadable answers, and training changed the judge's answers without improving F1.
+- `research_runbook.md` gains "Exact values of the partial comparison": the confusion counts,
+  intervals, exact McNemar p and validation F1 the results page cites, copied from the local
+  result. It also records that two constructed training pairs contradict a rated pair.
+- `research-changelog.md`: one finding (which way the McNemar p points) and three limitations
+  (selection on four Different validation pairs, the two contradictory pairs, three constant fields
+  in the training answer).
+- The two pipeline diagrams are now `.drawio.svg` files, which GitHub draws and draw.io still edits
+  (ADR-065 decision 3). The `.drawio` originals are removed. `research-run-browser.md` §5.3 and the
+  note inside the 2026-10 diagram cite the new names.
+- `ROUTE_MAP.md` lists the three static routes, their layout and their public access.
+  `research-run-browser.md` §3 lists the six header tabs and says the row wraps on a phone.
+- `methodology.md` §4.3 and `model_finetuning.md` §2.2 and §3: two statements that matched neither
+  the registration nor the freeze are corrected. Training and validation pairs are synthetic and the
+  donated stories are the test set only; constructed negatives raise the Different share of the
+  training split without balancing it. `research-changelog.md` has the row.
+
+### Checks
+
+- Frontend: `pnpm lint`, `pnpm tsc --noEmit` and `pnpm build` passed. The build lists
+  `/research/dataset`, `/research/docs` and `/research/results` as static. `pnpm test`: 68 files,
+  653 passed. Before the two diagrams were exported, `entries.test.ts` failed on both.
+- The diagrams were exported through draw.io's embed mode in a browser, because draw.io is not
+  installed on this machine. Each file was then loaded as an image and compared with its source
+  by eye. In the 2026-10 diagram the "accepted" label sits under the "page final" label; that
+  comes from the diagram's own layout and is left alone.
+- The `don-` guard went red on a planted `don-` file name before it was trusted.
+- The freeze comparison went red on a changed `char_id` and on a changed `style_match` before it
+  was trusted. The results tests went red on a wrong F1 planted in the page data, and
+  on eleven planted changes the implementing agent reported, one at a time. The training tests
+  went red on seven planted values, one at a time: epochs, scheduler, updates per seed, a
+  checkpoint, the token cap, the Different count and the non-human share.
+- Playwright, signed out, at 1280, 375 and 320 px: the three pages render with no console errors
+  and no sideways page scroll. On the dataset page all 12 example images load, the split table
+  scrolls inside its own box, and Tab reaches the header, the back link, the table and each
+  source link with a visible outline. Enter on a focused "Frozen record" opens it. On the results
+  page the wide table scrolls inside its own box. `/research` → "See the Judge Results" → "Back
+  to Methodology" returns to `/research`.
+- Header at 320, 375, 640 and 1280 px, signed out and with adjudicator markup injected into the
+  page: nothing overlaps and nothing overflows. Before the wrap, the tabs ran 20 px under the
+  sign-in link at 375 px. A real signed-in session was not driven.
+- `/research` logs one console error from `PipelineMap.tsx` (an SVG path that uses `calc()`).
+  It predates this change and is left alone.
+
+---
+
 ## PR #113 · 2026-10-10
 
 Run list, run detail with a pipeline graph, and a warned Langfuse link.

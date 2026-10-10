@@ -320,8 +320,10 @@ dataset is **not** classified merely by whether the same reference image was use
 identity shown in the generated image is assessed against the established character-consistency criteria.
 
 **Class imbalance.** The minority class (`different_character`) is the one the control loop acts on, and a
-missed failure ships a broken page to a child. The training set is therefore balanced using constructed
-negatives — but those negatives are placed in **train only**, so validation and test preserve the true
+missed failure ships a broken page to a child. Constructed negatives are therefore added to the training
+set to raise that class's share. They do not balance it: coverage is best-effort (ADR-057), and Same pairs
+still outnumber Different in the frozen training split (`research_runbook.md`, "What the registered
+freeze contains"). Those negatives are placed in **train only**, so validation and test preserve the true
 deployment distribution.
 
 ---
