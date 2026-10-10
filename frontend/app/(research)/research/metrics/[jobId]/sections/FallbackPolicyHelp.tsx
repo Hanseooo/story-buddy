@@ -41,6 +41,8 @@ export default function FallbackPolicyHelp() {
       {open && (
         <div id={id} role="tooltip" className="absolute right-0 top-full z-20 w-72 max-w-full rounded-xl bg-surface p-3 text-sm leading-relaxed neo-border neo-shadow-sm">
           If redraws still fail, the pipeline can keep its best available drawing.
+          {" "}Drawings are compared in this order: available check results, no page-content contradictions (then fewer contradictions), character match, intact anatomy, no text, correct character colour and body features, no duplicate characters, and matching style.
+          {" "}The first difference decides the winner. If everything ties, the newest drawing wins.
           {" "}A selected drawing can still have failed consistency checks. Safety is checked separately.
           {" "}This policy is not a recorded explanation for this selection.
         </div>
