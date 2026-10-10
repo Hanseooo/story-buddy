@@ -6,10 +6,14 @@ export interface JobRow {
   classroom_id?: string | null;
   failure_reason?: string | null;
   regen_count?: number | null;
+  image_count?: number | null;
   scenes_total?: number | null;
   scenes_passed?: number | null;
+  scenes_unchecked?: number | null;
   usd_estimate?: number | null;
   langfuse_trace_url?: string | null;
+  approved_at?: string | null;
+  title?: string | null;
 }
 
 export function computeAggregates(jobs: JobRow[]) {
@@ -23,8 +27,24 @@ export function computeAggregates(jobs: JobRow[]) {
   let estCost = 0;
   let sumPassed = 0;
   let sumTotalScenes = 0;
+  const failedByReason: Record<string, number> = {};
+  let uncheckedPages = 0;
+  let imageSum = 0;
+  let pagesWithImages = 0;
 
   for (const job of jobs) {
+    if (job.status === "failed") {
+      const reason = job.failure_reason ?? "unrecorded";
+      failedByReason[reason] = (failedByReason[reason] ?? 0) + 1;
+    }
+    if (job.scenes_unchecked != null) {
+      uncheckedPages += job.scenes_unchecked;
+    }
+    // Only runs that recorded both: a failed run usually wrote image_count but never scenes_total.
+    if (job.image_count != null && job.scenes_total != null) {
+      imageSum += job.image_count;
+      pagesWithImages += job.scenes_total;
+    }
     if (job.regen_count != null) {
       totalRegens += job.regen_count;
     }
@@ -56,6 +76,10 @@ export function computeAggregates(jobs: JobRow[]) {
     estCost,
     scenePassRate,
     jobPassRate,
+    failedByReason,
+    uncheckedPages,
+    imagesPerPage: pagesWithImages > 0 ? imageSum / pagesWithImages : null,
+    pagesTotal: sumTotalScenes,
   };
 }
 
@@ -68,6 +92,122 @@ const FAILURE_LABELS: Record<string, string> = {
 export function failureLabel(reason: string): string {
   return FAILURE_LABELS[reason] ?? reason;
 }
+
+// FailureReason, backend/contracts/story_memory.py. Unknown values pass through as-is.
+export const SCENE_FAILURE_LABELS: Record<string, string> = {
+  wrong_colour: "Character colour differs from the reference",
+  wrong_species: "Character species differs from the reference",
+  wrong_body_feature: "Character body features differ from the reference",
+  wrong_clothing: "Character clothing differs from the reference",
+  wrong_style: "Illustration style differs from the chosen style",
+  different_face: "Face differs from the character reference",
+  character_absent: "Expected character is missing",
+};
+
+export function sceneFailureLabel(reason: string): string {
+  return Object.hasOwn(SCENE_FAILURE_LABELS, reason) ? SCENE_FAILURE_LABELS[reason] : reason;
+}
+
+// Findings reported when a judge check is false, phrased directly rather than "Not: <positive>".
+export const VERDICT_CHECK_LABELS = {
+  same_character: "Character does not match the reference",
+  style_match: "Illustration style differs from the chosen style",
+  anatomy_intact: "Missing, extra or distorted body parts",
+  subjects_unique: "A character appears more than once",
+  text_free: "Text detected in the illustration",
+} as const;
+
+export function failedSplit(byReason: Record<string, number>): string {
+  return Object.entries(byReason)
+    .sort(([, a], [, b]) => b - a)
+    .map(([reason, n]) => `${n} ${reason === "unrecorded" ? "no reason recorded" : failureLabel(reason).toLowerCase()}`)
+    .join(" · ");
+}
+
+export type StyleRow = {
+  style: string | null;
+  runs: number;
+  jobPassRate: number | null;
+  pagePassRate: number | null;
+  avgCost: number | null;
+};
+
+export function styleBreakdown(jobs: JobRow[]): StyleRow[] {
+  const groups = new Map<string | null, JobRow[]>();
+  for (const job of jobs) {
+    const key = job.style_preset_id ?? null;
+    const rows = groups.get(key);
+    if (rows) rows.push(job);
+    else groups.set(key, [job]);
+  }
+  return [...groups]
+    .map(([style, rows]) => {
+      const stats = computeAggregates(rows);
+      const costed = rows.filter((row) => row.usd_estimate != null);
+      return {
+        style,
+        runs: rows.length,
+        jobPassRate: stats.complete + stats.failed > 0 ? stats.jobPassRate : null,
+        pagePassRate: stats.pagesTotal > 0 ? stats.scenePassRate : null,
+        avgCost:
+          costed.length > 0
+            ? costed.reduce((sum, row) => sum + Number(row.usd_estimate), 0) / costed.length
+            : null,
+      };
+    })
+    .sort((a, b) => (a.style === null ? 1 : b.style === null ? -1 : b.runs - a.runs));
+}
+
+export type RunStatusFilter = "all" | "complete" | "failed" | "in_progress";
+export type RunFilter = { status: RunStatusFilter; style: string };
+
+const STATUS_FILTERS: RunStatusFilter[] = ["all", "complete", "failed", "in_progress"];
+
+function first(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export function parseRunFilter(params: Record<string, string | string[] | undefined>): RunFilter {
+  const status = first(params.status);
+  return {
+    status: STATUS_FILTERS.includes(status as RunStatusFilter) ? (status as RunStatusFilter) : "all",
+    style: first(params.style) || "all",
+  };
+}
+
+export function filterJobs(jobs: JobRow[], filter: RunFilter): JobRow[] {
+  return jobs.filter((job) => {
+    const status =
+      filter.status === "all" ||
+      (filter.status === "in_progress"
+        ? job.status !== "complete" && job.status !== "failed"
+        : job.status === filter.status);
+    const style =
+      filter.style === "all" ||
+      (filter.style === "none" ? job.style_preset_id == null : job.style_preset_id === filter.style);
+    return status && style;
+  });
+}
+
+export const STATUS_LABELS: Record<string, string> = {
+  complete: "Complete",
+  failed: "Failed",
+  queued: "Queued",
+  running: "Running",
+  awaiting_confirm: "Waiting for the child",
+};
+
+export function statusLabel(status: string): string {
+  return STATUS_LABELS[status] ?? status;
+}
+
+// sessionStorage key: the list writes its query here, the run page's back link reads it.
+// #103. A trace holds the story before redaction, so the links are off unless the deploy opts in.
+// With the flag off, a server page must not pass the URL to a client component either: its props
+// are sent to the browser even when it renders nothing.
+export const langfuseLinksOn = () => process.env.NEXT_PUBLIC_SHOW_LANGFUSE_LINKS === "true";
+
+export const RUNS_QUERY_KEY = "research-runs-query";
 
 export function formatJob(job: JobRow) {
   return {

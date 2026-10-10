@@ -1,3 +1,5 @@
+import type { ResearchViewer } from "./viewer";
+
 export type ResearchPair = {
   id: string;
   canonical_signed_url: string;
@@ -73,3 +75,22 @@ export const TAXONOMY_LABELS: Record<
     description: "The reference character is not on the page",
   },
 };
+
+// The research header's tabs. A future page (#106 Dataset, #105 Docs) is one entry here.
+export const RESEARCH_TABS: {
+  label: string;
+  href: string;
+  visibleTo: (viewer: ResearchViewer | null) => boolean;
+}[] = [
+  { label: "Runs", href: "/research/metrics", visibleTo: () => true },
+  {
+    label: "Annotate",
+    href: "/annotate",
+    visibleTo: (viewer) => viewer?.role === "researcher" && !viewer.isAdjudicator,
+  },
+  {
+    label: "Adjudicate",
+    href: "/adjudicate",
+    visibleTo: (viewer) => viewer?.role === "researcher" && viewer.isAdjudicator,
+  },
+];

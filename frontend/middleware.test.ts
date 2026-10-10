@@ -100,3 +100,19 @@ describe("guardRequest — no redirect", () => {
     expect(guardRequest("/join", null)).toBeNull();
   });
 });
+
+describe("guardRequest — research run browser", () => {
+  it("unauthenticated run detail → /login?next=...", () => {
+    expect(guardRequest(`/research/metrics/${UUID_A}`, null)).toBe(
+      `/login?next=/research/metrics/${UUID_A}`
+    );
+  });
+
+  it("the run list stays public", () => {
+    expect(guardRequest("/research/metrics", null)).toBeNull();
+  });
+
+  it("a signed-in run detail request passes", () => {
+    expect(guardRequest(`/research/metrics/${UUID_A}`, UUID_B)).toBeNull();
+  });
+});

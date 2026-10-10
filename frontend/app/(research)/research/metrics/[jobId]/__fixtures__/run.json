@@ -1,0 +1,264 @@
+{
+  "job": {
+    "id": "3f9a1c2e-0000-4000-8000-000000000001",
+    "title": "The Red Kite",
+    "status": "complete",
+    "style_preset_id": "cel",
+    "created_at": "2026-10-01T10:00:00+00:00",
+    "failure_reason": null,
+    "langfuse_trace_url": null,
+    "usd_estimate": 0.31,
+    "image_count": 3,
+    "regen_count": 1,
+    "ref_retry_count": 0,
+    "scenes_total": 2,
+    "scenes_passed": 2,
+    "scenes_unchecked": 0,
+    "approved": true
+  },
+  "checkpointed": true,
+  "story": {
+    "redacted_text": "Mia the fox found a red kite.",
+    "word_count": 7,
+    "truncated": false
+  },
+  "steps": [
+    {
+      "node": "input_gate",
+      "started_at": "2026-10-01T10:00:00+00:00",
+      "duration_ms": 1500
+    },
+    {
+      "node": "analyze",
+      "started_at": "2026-10-01T10:00:01.500000+00:00",
+      "duration_ms": 2500
+    },
+    {
+      "node": "consistency_check",
+      "started_at": "2026-10-01T10:00:04+00:00",
+      "duration_ms": 2000
+    },
+    {
+      "node": "regenerate",
+      "started_at": "2026-10-01T10:00:06+00:00",
+      "duration_ms": 8000
+    },
+    {
+      "node": "consistency_check",
+      "started_at": "2026-10-01T10:00:14+00:00",
+      "duration_ms": 2000
+    }
+  ],
+  "ended_on": null,
+  "moderation": {
+    "input": {
+      "passed": true,
+      "categories": []
+    }
+  },
+  "characters": [
+    {
+      "char_id": "c1",
+      "name": "Mia",
+      "description": {
+        "species": null,
+        "colours": [],
+        "body_features": [],
+        "clothing": [],
+        "notes": null,
+        "is_humanoid": true
+      },
+      "ref_moderation_status": "passed",
+      "ref_verdict": {
+        "differences_observed": "none",
+        "contradictions": [],
+        "matches_description": true,
+        "attributes_present": [],
+        "text_free": true
+      },
+      "ref_verdict_prompt_version": 3,
+      "ref_image_url": "signed:refs/c1.png"
+    }
+  ],
+  "scenes": [
+    {
+      "scene_id": "s1",
+      "text_excerpt": "Mia finds a kite.",
+      "caption": null,
+      "characters_present": [],
+      "regeneration_count": 1,
+      "moderation_status": "passed",
+      "objects_present": [],
+      "visual_direction": null,
+      "shipped_attempt": 1,
+      "attempts": [
+        {
+          "prompt": null,
+          "vlm_verdict": null,
+          "failure_reasons": [
+            "wrong_colour"
+          ],
+          "passed": false,
+          "scene_contradictions": null,
+          "image_url": "signed:pages/s1-a0.webp"
+        },
+        {
+          "prompt": null,
+          "vlm_verdict": null,
+          "failure_reasons": [],
+          "passed": true,
+          "scene_contradictions": null,
+          "image_url": "signed:pages/s1-a1.webp"
+        }
+      ]
+    },
+    {
+      "scene_id": "s2",
+      "text_excerpt": "The kite flies.",
+      "caption": null,
+      "characters_present": [],
+      "regeneration_count": 0,
+      "moderation_status": "passed",
+      "objects_present": [],
+      "visual_direction": null,
+      "shipped_attempt": 0,
+      "attempts": [
+        {
+          "prompt": null,
+          "vlm_verdict": null,
+          "failure_reasons": [],
+          "passed": true,
+          "scene_contradictions": null,
+          "image_url": "signed:pages/s2-a0.webp"
+        }
+      ]
+    }
+  ],
+  "cost": {
+    "image_count": 0,
+    "regen_count": 0,
+    "usd_estimate": 0.0,
+    "ref_retry_count": 0,
+    "ref_mod_retry_count": 0
+  },
+  "state": {
+    "schema_version": 1,
+    "story_id": "3f9a1c2e-0000-4000-8000-000000000001",
+    "input": {
+      "redacted_text": "Mia the fox found a red kite.",
+      "synthetic_no_pii": false,
+      "word_count": 7,
+      "truncated": false,
+      "moderation": {
+        "passed": true,
+        "categories": []
+      }
+    },
+    "characters": [
+      {
+        "char_id": "c1",
+        "name": "Mia",
+        "description": {
+          "species": null,
+          "colours": [],
+          "body_features": [],
+          "clothing": [],
+          "notes": null,
+          "is_humanoid": true
+        },
+        "canonical_ref_image": "refs/c1.png",
+        "ref_moderation_status": "passed",
+        "ref_verdict": {
+          "differences_observed": "none",
+          "contradictions": [],
+          "matches_description": true,
+          "attributes_present": [],
+          "text_free": true
+        },
+        "ref_verdict_prompt_version": 3
+      }
+    ],
+    "locations": [],
+    "objects": [],
+    "timeline": [],
+    "style": {
+      "style_preset_id": null,
+      "prompt_fragment": null
+    },
+    "scenes": [
+      {
+        "scene_id": "s1",
+        "text_excerpt": "Mia finds a kite.",
+        "caption": null,
+        "characters_present": [],
+        "location_id": null,
+        "prompt": null,
+        "attempts": [
+          {
+            "image_ref": "pages/s1-a0.webp",
+            "prompt": null,
+            "vlm_verdict": null,
+            "failure_reasons": [
+              "wrong_colour"
+            ],
+            "passed": false,
+            "scene_contradictions": null
+          },
+          {
+            "image_ref": "pages/s1-a1.webp",
+            "prompt": null,
+            "vlm_verdict": null,
+            "failure_reasons": [],
+            "passed": true,
+            "scene_contradictions": null
+          }
+        ],
+        "final_image_ref": "pages/s1-a1.webp",
+        "regeneration_count": 1,
+        "moderation_status": "passed",
+        "objects_present": [],
+        "visual_direction": null,
+        "object_states": {}
+      },
+      {
+        "scene_id": "s2",
+        "text_excerpt": "The kite flies.",
+        "caption": null,
+        "characters_present": [],
+        "location_id": null,
+        "prompt": null,
+        "attempts": [
+          {
+            "image_ref": "pages/s2-a0.webp",
+            "prompt": null,
+            "vlm_verdict": null,
+            "failure_reasons": [],
+            "passed": true,
+            "scene_contradictions": null
+          }
+        ],
+        "final_image_ref": "pages/s2-a0.webp",
+        "regeneration_count": 0,
+        "moderation_status": "passed",
+        "objects_present": [],
+        "visual_direction": null,
+        "object_states": {}
+      }
+    ],
+    "sharing": {
+      "teacher_approved": false,
+      "in_gallery": false
+    },
+    "cost": {
+      "image_count": 0,
+      "regen_count": 0,
+      "usd_estimate": 0.0,
+      "ref_retry_count": 0,
+      "ref_mod_retry_count": 0
+    },
+    "eval": {
+      "seed": null
+    },
+    "reference_retry": null
+  }
+}

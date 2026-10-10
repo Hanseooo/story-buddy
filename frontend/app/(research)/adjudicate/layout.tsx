@@ -1,27 +1,16 @@
-import { createSupabaseServerClient } from "@/utils/supabase/server";
+import ResearchHeader from "../_shared/components/ResearchHeader";
+import { getResearchViewer } from "../_shared/getResearchViewer";
 
 export default async function AdjudicateLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const viewer = await getResearchViewer();
 
-  if (!user) {
-    throw new Error("Unauthorized");
-  }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role, is_adjudicator")
-    .eq("id", user.id)
-    .single();
-
-  if (profile?.role !== "researcher") {
+  if (viewer?.role !== "researcher") {
     throw new Error("Unauthorized");
   }
 
   return (
     <div className="min-h-[100dvh] bg-background text-foreground flex flex-col selection:bg-primary/20">
+      <ResearchHeader viewer={viewer} />
       {children}
     </div>
   );

@@ -150,7 +150,8 @@ page. The security boundary is RLS (S3), not this comparison.
 
 The login page applies one more check after reading `profiles.role`: a student may resume only
 their own `/s/<sub>` tree, a teacher may resume `/classroom` or `/settings`, and a researcher may
-resume `/annotate` or `/adjudicate` only when that surface matches `is_adjudicator`. An incompatible
+resume `/research/metrics` and its descendants, or `/annotate` or `/adjudicate` when that surface
+matches `is_adjudicator`. An incompatible
 internal target is ignored in favor of the role destination. A profile lookup error stays on the
 login form with a generic account-loading message; it must never fall through to `/s/<sub>`.
 

@@ -54,6 +54,16 @@ by the child), just not the Supabase Auth session teachers use — session is es
 | `/s/[profileId]/gallery` | Classroom gallery | Server | Browse & read classmates' approved books. Display-only — no reflection surface |
 | `/s/[profileId]/settings` | Student account settings | Client | Change password. No email, no self-serve recovery — reset otherwise is teacher-initiated |
 
+### Research routes
+
+The shared header shows Runs, Annotate and Adjudicate according to the viewer's role
+(`docs/specs/research-run-browser.md` §3). The list stays public.
+
+| URL pattern | Page | Rendering | Notes |
+|---|---|---|---|
+| `/research/metrics` | Run list | Server | Public totals, by-style table and URL filters. Titles and run links follow `canOpenRun`; hidden titles are cleared on the server (ADR-064 rule 6) |
+| `/research/metrics/[jobId]` | Run detail | Server | Login required. Reads `GET /research/runs/{job_id}`; annotators see approved runs, the adjudicator sees all (ADR-064 rule 2). Pipeline graph, pages, safety and raw state |
+
 ---
 
 ## 2. Layout Nesting
@@ -102,6 +112,7 @@ app/
 | `ClassroomLayout` | Pushes classroom name into breadcrumbs; no extra nav | No (inherits) |
 | `StudentShell` | Profile guard, bottom tab bar / top navbar, kid-density typography (Nunito 18/20px) | Yes |
 | `ImmersiveLayout` | Strips all nav chrome. Optional top-left back button (ghost). Full viewport | No |
+| Research metrics, annotate and adjudicate layouts | Request-cached `getResearchViewer()` supplies `ResearchHeader`; annotate refuses adjudicators, adjudicate permits researchers and leaves pair access to its page | Yes (non-sticky) |
 
 ---
 
@@ -154,6 +165,8 @@ app/
 | `/settings` | Auth (teacher) | — |
 | `/s/[profileId]/**` | Profile (student) | Profile session must be active (stored in sessionStorage or cookie). Profile must exist and belong to an active classroom |
 | `/s/[profileId]/book/[bookId]/**` | Profile (student) | `bookId` must belong to `profileId` (own book) |
+| `/research/metrics` | Public | Middleware refreshes the session for the research header without requiring sign-in |
+| `/research/metrics/[jobId]` | Auth session | Signed-out descendants redirect to `/login?next=<path>`; the server-rendered detail report shows backend access messages, recorded run state and the pipeline graph. |
 
 ### Middleware strategy
 
@@ -300,6 +313,7 @@ Each route group also gets an `error.tsx`:
 | `POST /classrooms/{classroom_id}/students/{profile_id}/remove` | Teacher (`owned_classroom`) | Soft-removes student (`removed_at` + auth ban) (204) |
 | `POST /classrooms/{classroom_id}/students/{profile_id}/restore` | Teacher (`owned_classroom`) | Restores removed student and returns new password |
 | `POST /jobs/{job_id}/review` | Teacher (`require_teacher` + `owned_job`) | Sets review state (`approved`, `rejected`, `pending`) |
+| `GET /research/runs/{job_id}` | Researcher (`require_researcher`); adjudicator any run, others approved runs only | Run viewer projection of the checkpoint history (ADR-064). 403 `researchers_only` / `not_approved`, 404 `not_found`, 422 for a non-UUID id |
 
 ---
 

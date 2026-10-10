@@ -1,0 +1,14 @@
+{
+  "passed": true,
+  "failure_reasons": ["different_face"],
+  "vlm_verdict": {
+    "differences_observed": "Snow: The character on the page is depicted in a different pose, sitting and looking at a tablet. The expression is different, showing sadness or frustration rather than a neutral or happy expression. The character is wearing a different outfit – a long-sleeved orange shirt and blue pants, while the reference shows a similar orange sweater but with different pants. The hair is styled differently, appearing more messy and voluminous on the page. The background is completely different, with posters and furniture present on the page, while the reference has a plain background. The page also includes a tablet, hands interacting with it, and a chair, which are absent in the reference.",
+    "same_character": true,
+    "attributes_present": ["dark hair", "round face", "orange sweater", "similar facial features"],
+    "style_match": true,
+    "anatomy_intact": true,
+    "subjects_unique": true,
+    "text_free": false
+  },
+  "scene_contradictions": []
+}

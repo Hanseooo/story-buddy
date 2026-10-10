@@ -1,0 +1,53 @@
+{
+  "scene_id": "s6",
+  "regeneration_count": 0,
+  "shipped_attempt": 1,
+  "attempts": [
+    {
+      "passed": false,
+      "failure_reasons": ["different_face"],
+      "vlm_verdict": {
+        "differences_observed": "Snow: The character on the page has a more rounded face and a different hairstyle, with more volume and curls. The eyebrows are also more defined and arched. The character on the page is holding a stylus and drawing on a tablet, and is seated in a chair. The character's ears are visible on the page, but not in the reference image.",
+        "same_character": false,
+        "attributes_present": ["orange sweater", "blue jeans", "rosy cheeks", "dark hair", "human"],
+        "style_match": true,
+        "anatomy_intact": true,
+        "subjects_unique": true,
+        "text_free": false
+      },
+      "scene_contradictions": []
+    },
+    {
+      "passed": false,
+      "failure_reasons": ["wrong_body_feature"],
+      "vlm_verdict": {
+        "differences_observed": "Snow: The hair in the second image is longer and styled differently, with more defined strands. The eyebrows are more prominent and arched in the second image. The face shape appears slightly more elongated in the second image. The hands are visible and actively engaged with a tablet in the second image, while they are hidden in the first. The clothing is the same colour, but the second image shows the character seated and interacting with objects.",
+        "same_character": true,
+        "attributes_present": ["short dark hair", "round face", "rosy cheeks", "orange sweater", "blue pants"],
+        "style_match": true,
+        "anatomy_intact": true,
+        "subjects_unique": true,
+        "text_free": false
+      },
+      "scene_contradictions": []
+    },
+    {
+      "passed": false,
+      "failure_reasons": ["wrong_body_feature", "character_absent"],
+      "vlm_verdict": {
+        "differences_observed": "Snow: The hair in the second image is darker and more textured. The face in the second image appears slightly wider and the eyes are smaller. The second image shows Snow seated and interacting with another character, holding a tablet. The second image shows Snow wearing a sweater and pants, while the reference image shows a similar outfit but with more detail. The second image has text on posters in the background.",
+        "same_character": true,
+        "attributes_present": ["short dark hair", "round face", "rosy cheeks", "orange sweater", "blue pants"],
+        "style_match": true,
+        "anatomy_intact": true,
+        "subjects_unique": true,
+        "text_free": false
+      },
+      "scene_contradictions": [
+        "number of Snows: two instances of Snow are present, but the constraints require exactly 1 character: Snow",
+        "tablet holder: both Snows are holding the tablet, but the constraints require Snow opens the tablet and starts working on her project",
+        "Snow's expression: Snow's expression is neutral, but the constraints require Snow looks focused and determined"
+      ]
+    }
+  ]
+}

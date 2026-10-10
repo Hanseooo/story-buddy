@@ -565,8 +565,8 @@ def _run_fal(endpoint: str, arguments: dict, seed: int | None) -> bytes:
 _STORAGE_BUCKET = "storybook-images"
 
 
-def get_signed_url(path: str) -> str:
-    resp = get_supabase_client().storage.from_(_STORAGE_BUCKET).create_signed_url(path, expires_in=300)
+def get_signed_url(path: str, expires_in: int = 300) -> str:
+    resp = get_supabase_client().storage.from_(_STORAGE_BUCKET).create_signed_url(path, expires_in=expires_in)
     return resp["signedURL"]
 
 

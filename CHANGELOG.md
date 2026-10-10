@@ -14,6 +14,94 @@ instead of repeating it.
 
 ---
 
+## PR #113 · 2026-10-10
+
+Run list, run detail with a pipeline graph, and a warned Langfuse link.
+[PR #113](https://github.com/Hanseooo/story-buddy/pull/113) · Closes #103, #104, #107 · Refs #108, #111 · Plans A–E completed and retired
+
+### Code
+
+- `GET /research/runs/{job_id}` reads checkpoint history and returns a projection without raw
+  story text or account ids. Annotators open approved runs, the adjudicator opens all (ADR-064).
+  The route signs images for an hour through `get_signed_url(..., expires_in=3600)`.
+- Public run list: failure split, unchecked pages, images per page, by-style totals, URL filters,
+  and whole-row links for allowed viewers. Hidden titles are cleared before rendering.
+- Run detail: a clickable 11-node pipeline graph with visit and traversal counts, ended-step
+  markers and native node panels, before story, characters, page attempts, safety, timing and
+  copyable JSON. Panels lead with the step's purpose and run result, with recorded results and
+  timings in native disclosures, and link to each section. Drawing, checking and redrawing have
+  distinct summaries. Unvisited, waiting and incomplete steps are described explicitly.
+  Image checks use direct, reference-based descriptions and separate required-check issues from
+  other warnings. The selected attempt is labeled "Used in the book".
+  Image dialogs preserve keyboard dismissal and focus, including broken images.
+- Selection clarity (2026-10-10): selected drawings say when no selection explanation was
+  recorded, and explicitly acknowledge failed consistency checks. A small question-mark button
+  explains the general fallback policy on hover, focus or tap. Consistency-check recorded results
+  group each page once, with its drawing count, selection, attempt outcomes and warning lists.
+- Shared research header on metrics, annotate and adjudicate. Researcher login can return to
+  `/research/metrics/...`. Langfuse links require `NEXT_PUBLIC_SHOW_LANGFUSE_LINKS=true` and warn
+  that traces contain the story before redaction. With the flag off, no trace URL reaches the
+  browser: the pages no longer pass it to the hidden button.
+- A run detail request whose session the backend rejects shows the error page (Retry, back link)
+  instead of redirecting a signed-in user to `/login`, which sent them on to `/classroom`.
+
+### Docs
+
+- Accepted ADR-064, run-browser spec and route map describe the built routes and graph.
+- The graph component is `PipelineGraphView.tsx` to avoid Windows resolving its import to
+  `pipelineGraph.ts`. Drawing summaries include verdicts as required by the spec.
+- Review fixes: readable graph/panel text contrast, mobile sheet indicator, and composition-only
+  failures labeled Failed in both node summaries and page-attempt badges.
+- Clarity review fix: a clean character verdict with a missing page-content result is Not checked,
+  with an explanation, rather than a failed check. Its node summary counts the incomplete result
+  separately. Recorded composition contradictions still count as failures.
+- The spec records why the graph omits `output_mod→output_mod`: `output_mod` screens every
+  finished page in one pass, so no run takes it.
+
+### Checks
+
+- Backend: `uv run ruff check .` passed; `uv run pytest -q`: 1,474 passed, 87 skipped,
+  6 deselected. The skipped database/RLS and provider checks remain unverified.
+- Frontend: `pnpm lint` and `pnpm build` passed; `pnpm test`: 61 files, 604 tests passed.
+  The build used CI's placeholder public Supabase values. Next.js reports the existing
+  middleware-to-proxy deprecation; that migration is outside this change.
+  An earlier concurrent build/test run hit `Test timed out in 5000ms` in the gallery's first render
+  test. All 10 gallery tests passed in isolation, then all 598 tests passed in a standalone run.
+- Playwright: signed-out list at 1280 × 800 and 360 × 780, generic ids without titles, Langfuse
+  hidden, filters survive reload, empty results clear, detail URLs redirect to login. No console errors.
+- Code review fix (2026-10-10): with the flag off, the signed-out list page's HTML carried 47
+  Langfuse trace URLs before the fix and 0 after, on the local dev server.
+- Captured synthetic fixture: desktop graph, keyboard Enter/Escape and focus return, section
+  links, phone graph scrolling within its box, 44.45 px node height, bottom sheet. No console errors.
+- Clarity follow-up (2026-10-10): purpose/result and disclosure checks passed on desktop and
+  360 × 780 fixtures, with 44 px disclosure targets, no horizontal overflow and no unexpected
+  console errors during those checks. Judge fields captured from the supplied synthetic run
+  cover a passing image with face and text warnings. The real run's new summary was inspected,
+  but repeated live reloads stalled, so final layout and keyboard checks used a temporary preview,
+  removed afterward. Waiting and missing-result states remain unit-checked.
+- Selection follow-up (2026-10-10): the supplied synthetic run loaded successfully. Captured
+  page 7 judge fields cover three failed drawings with attempt 2 selected. Regression tests first
+  failed on missing selection copy, a missing page heading and Escape leaving hover help open,
+  then passed. Live checks passed at 1280, 360 and 320 px: hover, focus, touch tap, Escape,
+  hoverable tooltip content, 44 px help target, no horizontal overflow, eight distinct page
+  headings, and panel dismissal with focus return. Browser console: 0 errors, 0 warnings.
+  Backend checks were not rerun for this frontend-only follow-up.
+- Traversal-count and section-link focus regressions were introduced deliberately, observed failing,
+  and restored. Page integration failed before mounting the graph, then passed.
+- Signed-in synthetic run: all sections, graph counts matching 39 steps, Enter/Escape/focus,
+  phone scrolling and bottom sheet, image viewer, filter-preserving back link, malformed ids,
+  backend outage and Retry recovery. The adjudicator header fits at phone width. No unexpected
+  console errors in normal operation; the intentional outage produces the expected fetch errors.
+- Browser regressions: moved visit badges away from redraw labels after a bounding-box assertion
+  failed; replaced `reset()` with Next.js 16's `unstable_retry()` after Retry failed to refetch.
+  Both have failing-before/passing-after evidence, including real outage/recovery.
+- Local backend endpoint fetch: 5.172 s including JSON receipt/parsing for the 39-step synthetic
+  run. Performance follow-up: [issue #112](https://github.com/Hanseooo/story-buddy/issues/112).
+- Failed, waiting, input-blocked and checkpoint-free real runs were not identified as synthetic
+  for this pass; those states and the annotator-only layout remain unit-tested. The owner approved
+  pushing the branch and opening PR #113 on 2026-10-10.
+
+---
 ## Direct to `main` · 2026-10-09 (agreement and sensitivity)
 
 Objective 4's registered agreement and sensitivity analyses.
