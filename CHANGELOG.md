@@ -14,10 +14,10 @@ instead of repeating it.
 
 ---
 
-## Research run browser · 2026-10-09 (PR pending)
+## PR #113 · 2026-10-10
 
 Run list, run detail with a pipeline graph, and a warned Langfuse link.
-Refs [#103](https://github.com/Hanseooo/story-buddy/issues/103), #104, #107, #108, #111 · Plans A–E
+[PR #113](https://github.com/Hanseooo/story-buddy/pull/113) · Closes #103, #104, #107 · Refs #108, #111 · Plans A–E completed and retired
 
 ### Code
 
@@ -98,8 +98,8 @@ Refs [#103](https://github.com/Hanseooo/story-buddy/issues/103), #104, #107, #10
 - Local backend endpoint fetch: 5.172 s including JSON receipt/parsing for the 39-step synthetic
   run. Performance follow-up: [issue #112](https://github.com/Hanseooo/story-buddy/issues/112).
 - Failed, waiting, input-blocked and checkpoint-free real runs were not identified as synthetic
-  for this pass; those states and the annotator-only layout remain unit-tested. Push and PR
-  creation await owner approval, per plan E Task 5.
+  for this pass; those states and the annotator-only layout remain unit-tested. The owner approved
+  pushing the branch and opening PR #113 on 2026-10-10.
 
 ---
 ## Direct to `main` · 2026-10-09 (agreement and sensitivity)

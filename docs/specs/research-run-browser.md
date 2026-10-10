@@ -4,7 +4,7 @@
 2026-10-09; research shell (§2, §3) and reusable Langfuse button (§6, plan B) built 2026-10-09.
 Run list (§4, plan C), including its Langfuse button placement, built 2026-10-09.
 Run detail (§5.2, §5.4, plan D) and pipeline graph (§5.3, plan E) built 2026-10-09 on
-`feat/research-run-browser`. PR pending owner approval to push.
+`feat/research-run-browser` ([PR #113](https://github.com/Hanseooo/story-buddy/pull/113)).
 Signed-out run-list checks passed at 1280 × 800 and 360 × 780. The captured synthetic fixture
 verified graph layout, native keyboard dismissal, section links and phone sheet placement.
 The owner-supplied synthetic run was checked as adjudicator at desktop and phone widths:
@@ -14,7 +14,8 @@ backend outage/recovery and malformed ids. The local backend endpoint fetch took
 recorded in [issue #112](https://github.com/Hanseooo/story-buddy/issues/112).
 Failed, waiting, input-blocked and checkpoint-free real runs were not identified as synthetic
 for this pass and remain unit-tested only. Annotate remains unit-tested under the annotator role;
-the adjudicator header was checked in the browser. Push and PR creation await owner approval.
+the adjudicator header was checked in the browser. The branch was pushed and PR #113 opened
+with owner approval on 2026-10-10. Plans A–E are completed and retired.
 **Issues:** #107 (run list), #104 (run detail), #103 (Langfuse warning and env flag). One PR.
 Sub-issue #111 (annotate/adjudicate demo mode) follows after merge and is out of scope here.
 **Derived from:** [ADR-064](../product/adr/ADR-064-the-run-viewer-reads-checkpoint-history-through-a-researcher-only-endpoint.md),
