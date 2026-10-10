@@ -71,13 +71,31 @@ export default async function ResearchMethodologyPage() {
             </p>
           </FadeIn>
           <FadeIn>
-            <div className="pt-4">
+            <div className="pt-4 flex flex-wrap gap-3">
               <Link 
                 href="/research/metrics" 
                 className="inline-flex items-center gap-2 px-7 py-4 rounded-2xl bg-primary text-surface font-bold text-lg hover:bg-primary-deep transition-all shadow-[0_10px_28px_rgb(49_85_217/16%)] hover:shadow-[0_6px_18px_rgb(49_85_217/10%)] hover:translate-y-[2px]"
               >
                 View Live Metrics
                 <ArrowRight weight="bold" className="w-5 h-5" />
+              </Link>
+              <Link
+                href="/research/dataset"
+                className="inline-flex items-center gap-2 px-7 py-4 rounded-2xl border border-primary/25 bg-surface text-primary font-bold text-lg hover:bg-primary/5 transition-colors"
+              >
+                See the Judge Dataset
+              </Link>
+              <Link
+                href="/research/results"
+                className="inline-flex items-center gap-2 px-7 py-4 rounded-2xl border border-primary/25 bg-surface text-primary font-bold text-lg hover:bg-primary/5 transition-colors"
+              >
+                See the Judge Results
+              </Link>
+              <Link
+                href="/research/docs"
+                className="inline-flex items-center gap-2 px-7 py-4 rounded-2xl border border-primary/25 bg-surface text-primary font-bold text-lg hover:bg-primary/5 transition-colors"
+              >
+                Read the Research Documents
               </Link>
             </div>
           </FadeIn>

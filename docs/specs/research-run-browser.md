@@ -60,17 +60,19 @@ one with `aria-current="page"`.
 
 - Left: the StoryBuddy logo, linking to `/research` (the methodology page).
 - Tabs come from one list, `RESEARCH_TABS` in `(research)/_shared/constants.ts`. Each entry has
-  `label`, `href` and `visibleTo(viewer) → boolean`. Today: **Runs** (everyone), **Annotate**
+  `label`, `href` and `visibleTo(viewer) → boolean`. Today: **Runs**, **Dataset**, **Results** and **Docs**
+  (everyone; the last three are the static pages of ADR-065 and ADR-066), **Annotate**
   (researcher, not adjudicator, matching `annotate/layout.tsx`), **Adjudicate** (adjudicator).
-  Future pages (#106 Dataset, #105 Docs) are one entry each.
 - Right: signed in, `display_name` plus a role chip ("Adjudicator" / "Annotator") and a Log out
   form posting to `/auth/signout`, as the annotate empty state does. Signed out, a
   "Researcher sign in" link to `/login?next=<current path>`.
-- On phones, the three tabs fit in one row, the name collapses to the role chip, and nothing
-  scrolls sideways.
+- On phones the row wraps and the account block drops below the tabs. The name collapses to the
+  role chip, and nothing scrolls sideways.
 
 It renders in a new `research/metrics/layout.tsx` and at the top of `annotate/layout.tsx` and
-`adjudicate/layout.tsx`. It is not sticky: the annotate and adjudicate task bars below it already
+`adjudicate/layout.tsx`. The static pages' `research/(reference)/layout.tsx` renders it with
+`viewer={null}` and `showAccount={false}`: those pages read no session, so they leave the account
+block out (ADR-065). It is not sticky: the annotate and adjudicate task bars below it already
 are (`sticky top-0`), and two sticky bars would stack. `AnnotationClient` and `AdjudicateClient` are not changed: their own
 sticky task bars, including their back link, stay as they are. #111 relies on that.
 
@@ -201,7 +203,7 @@ Failure reasons and verdict fields get readable labels from one map in `utils/me
 ### 5.3 Pipeline graph
 
 A hand-placed SVG of the 11 nodes, laid out like
-`docs/diagrams/drawio/langgraph_pipeline_after_2026-10.drawio`: the main line top to bottom, loops
+`docs/diagrams/drawio/langgraph_pipeline_after_2026-10.drawio.svg`: the main line top to bottom, loops
 beside it. Positions and edges are one constant, `PIPELINE_GRAPH`, in
 `(research)/research/metrics/[jobId]/pipelineGraph.ts`, with a comment citing
 `backend/pipeline/graph.py:build_graph` as the source. Edges:

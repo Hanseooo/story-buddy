@@ -53,6 +53,52 @@ freeze byte for byte. The training runner's hash and manifest preflight passed f
 The ten AI-assisted audit labels and their protocol deviation are recorded in
 `PREREGISTRATION_OBJ4.md` and `adjudication-notes-2026-09.md`.
 
+### What the registered freeze contains (counted 2026-10-10)
+
+Counted from `data/judge/freezes/obj4-v1/manifest.jsonl` and checked against `freeze_report.json`.
+Both are local and git-ignored, so this table is the public source for these totals. The
+`/research/dataset` page cites it (ADR-065).
+
+| Split | Stories | Characters | Pairs | Same | Different | Constructed pairs |
+|---|---|---|---|---|---|---|
+| Train (synthetic) | 24 | 44 | 484 | 327 | 157 | 104 |
+| Validation (synthetic) | 6 | 11 | 86 | 82 | 4 | 0 |
+| Held-out test (donated) | 12 | 24 | 329 | 282 | 47 | 0 |
+| All | 42 | 79 | 899 | 691 | 208 | 104 |
+
+No story or character is in more than one split. A constructed pair sets one character's reference
+against another character's page, so it is Different by construction and was not shown to the
+raters. The other 795 pairs came out of the pipeline and are the ones the two raters labelled.
+All 104 constructed pairs carry the one reason `different_face` and the one sentence in
+`CONSTRUCTED_RATIONALE` (`backend/finetune/build_dataset.py`). No rater wrote either.
+
+**Two constructed pairs contradict a rated pair (found 2026-10-11).** `constructed_records` in
+`backend/finetune/build_dataset.py` pairs a reference with every page its matched character has a
+pipeline pair for. `dataset_selection.json` holds 14 frozen matches. Twelve pair a character with
+one from another story. The other two match `syn-020:c0` and `syn-020:c1` to each other inside one
+story, and one page of that story (`s1-1`) shows both of them. So the builder made `e16ef0eee299d1ae` (c0's reference, that page)
+and `3f5380f572b0730b` (c1's reference, that page) as Different, while the raters had labelled the
+same two image pairs Same (`a130ca522d1ebb36`, `83fec61200a0dfc0`). `train.json` therefore holds two
+image pairs with both answers: 2 of the 104 constructed pairs, 4 of the 484 training records. The
+other 102 constructed pairs share no image pair with a rated pair (checked over all 899 records).
+The freeze is registered and is not changed. No validation or test pair is affected. Whether a
+constructed page happens to show the reference character without a rated pair saying so was not
+checked by eye.
+
+Drift reasons on the 208 Different pairs. A pair can carry more than one, so they sum to 236:
+
+| Reason | Pairs |
+|---|---|
+| Different Face | 141 |
+| Wrong Body Feature | 50 |
+| Character Absent | 18 |
+| Wrong Clothing/Accessories | 12 |
+| Wrong Color | 9 |
+| Wrong Style | 4 |
+| Wrong Species | 2 |
+
+The two artifact checkboxes, on all 899 pairs: Broken Anatomy on 32, Text Visible on 3.
+
 Next: qualify a rented GPU host, install the pinned LLaMA-Factory tool and host-specific
 PyTorch/CUDA/bitsandbytes versions, record `training_qualification.json`, then run steps
 10–11 below under the accepted
@@ -146,6 +192,65 @@ tests first failed on real validation evidence. The final seven-comparator repor
 event remain absent. Gemma's authentication failure is excluded from this quality comparison;
 the captured CLIP/DINO controls are outside this requested Qwen-only table. Prompts, caps and
 thresholds remain fixed. Further model changes cannot be justified using inspection of these test outputs.
+
+#### Exact values of the partial comparison (copied 2026-10-11)
+
+Copied from `qwen_comparison.partial.json`, which is local and git-ignored, so this table is the
+public source for these values. The `/research/results` page cites it (ADR-066). Test slice: 329
+pairs, 47 Different and 282 Same. "Caught" is a Different pair the judge called Different, a "false
+alarm" is a Same pair it called Different, and an unreadable answer is scored as Same.
+
+| Judge | F1 | F1 95% interval | Precision | Recall | Caught (of 47) | Missed (of 47) | False alarms (of 282) | Correct Same (of 282) | Unreadable (of 329) |
+|---|---|---|---|---|---|---|---|---|---|
+| Untuned Qwen3.5-9B | 0.472 | 0.236 to 0.629 | 0.382 | 0.617 | 29 | 18 | 47 | 235 | 3 |
+| Seed 1 (preselected) | 0.310 | 0.000 to 0.491 | 0.818 | 0.191 | 9 | 38 | 2 | 280 | 40 |
+| Seed 0 | 0.361 | 0.000 to 0.586 | 0.786 | 0.234 | 11 | 36 | 3 | 279 | 44 |
+| Seed 2 | 0.417 | 0.214 to 0.566 | 0.353 | 0.511 | 24 | 23 | 44 | 238 | 8 |
+
+- Seed 1 minus untuned: ΔF1 −0.161, 95% character-clustered interval −0.358 to +0.003, exact
+  McNemar p = 0.0035. Intervals use 10,000 resamples clustered by character.
+- The three seeds: mean F1 0.363, sample SD 0.054.
+- Selected checkpoint and its validation F1: seed 0 `checkpoint-40` 0.333, seed 1 `checkpoint-40`
+  0.444, seed 2 `checkpoint-140` 0.364. The validation split has 4 Different pairs out of 86, so
+  these three numbers each rest on four pairs.
+
+Derived from the table, not stored in the source: the untuned model called 76 pairs Different and
+was wrong on 65 pairs (47 false alarms, 18 misses). Seed 1 called 11 pairs Different and was wrong on
+40 (2 false alarms, 38 misses). McNemar's test compares which pairs each judge got right, so its
+small p goes with seed 1 being wrong on 25 fewer pairs. It does not say seed 1 is the better
+detector: F1, the registered primary metric, is lower for seed 1 because it misses 38 of the 47
+Different pairs. A judge that answered Same every time would be right on 282 of 329 pairs and catch
+none.
+
+#### Registered training settings (copied 2026-10-11)
+
+Copied from `backend/finetune/train_qlora.yaml`, which last changed on 2026-10-02, before the
+three-seed run. The `/research/results` page cites this table (ADR-066 amendment (a)). Between the
+three runs the runner varies only `seed`, `output_dir`, `run_name` and `report_to`
+(`docs/specs/judge-finetune.md` §6.4).
+
+| Setting | Value |
+|---|---|
+| `model_name_or_path` | Qwen/Qwen3.5-9B |
+| `finetuning_type` | lora |
+| `quantization_bit` | 4 |
+| `lora_rank` | 16 |
+| `lora_alpha` | 32 |
+| `image_max_pixels` | 262144 |
+| `num_train_epochs` | 3.0 |
+| `per_device_train_batch_size` | 1 |
+| `gradient_accumulation_steps` | 8 |
+| `learning_rate` | 1.0e-4 |
+| `lr_scheduler_type` | cosine |
+| `warmup_ratio` | 0.1 |
+| `save_steps` | 10 |
+
+- Training length: 61 updates per epoch, 183 per seed, on the 484 training records. The arithmetic
+  is under "Full-run readiness and cost assessment (2026-10-02)" below.
+- Derived from the table, not stored in a source: `checkpoint-40` is 40 of the 183 updates, before
+  the first epoch ends at update 61. `checkpoint-140` is in the third epoch, which starts after
+  update 122.
+- A judge's answer at evaluation is capped at 256 tokens ("Held-out resume context" above).
 
 ### Verification sources for the accepted comparison
 
