@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import fixture from "../__fixtures__/run.json";
 import passedWithWarnings from "../__fixtures__/passed-with-warnings.json";
+import selectedWithFailedChecks from "../__fixtures__/selected-with-failed-checks.json";
 import type { RunDetail } from "../types";
 import Pages from "./Pages";
 import RawJson from "./RawJson";
@@ -36,6 +37,55 @@ describe("Pages", () => {
     expect(screen.getByText("Face differs from the character reference")).toBeInTheDocument();
     expect(screen.getByText("These observations do not reject the drawing on their own.")).toBeInTheDocument();
     expect(screen.queryByText("Required-check issues")).toBeNull();
+  });
+
+  it("explains the missing selection reason and offers fallback help by hover, focus or tap", () => {
+    const scene = {
+      ...RUN.scenes[1],
+      attempts: [{ ...RUN.scenes[1].attempts[0], ...passedWithWarnings }],
+    };
+    render(<Pages scenes={[scene]} characters={RUN.characters} objects={[]} />);
+
+    expect(screen.getByText("Why it was used")).toBeInTheDocument();
+    expect(screen.getByText("No selection explanation was recorded.")).toBeInTheDocument();
+    const help = screen.getByRole("button", { name: "About the fallback policy" });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    fireEvent.mouseEnter(help);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("A selected drawing can still have failed consistency checks.");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Safety is checked separately.");
+    expect(help).toHaveAttribute("aria-describedby", screen.getByRole("tooltip").id);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    fireEvent.mouseEnter(help);
+    fireEvent.mouseLeave(help);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    fireEvent.focus(help);
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    fireEvent.keyDown(help, { key: "Escape" });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    fireEvent.click(help);
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    fireEvent.blur(help);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("keeps the failed result visible on a selected drawing without inventing why it won", () => {
+    // Judge results and selected index captured from the owner's synthetic run, page 7.
+    const scene = {
+      ...RUN.scenes[0], ...selectedWithFailedChecks,
+      attempts: selectedWithFailedChecks.attempts.map((attempt) => ({ image_url: null, prompt: null, ...attempt })),
+    };
+    const { rerender } = render(<Pages scenes={[scene]} characters={RUN.characters} objects={[]} />);
+    const selected = screen.getByRole("listitem", { name: "Attempt 2" });
+    expect(within(selected).getByText("Used in the book")).toBeInTheDocument();
+    expect(within(selected).getByText("Failed required checks")).toBeInTheDocument();
+    expect(within(selected).getByText("This drawing was used even though it failed the required consistency checks.")).toBeInTheDocument();
+    expect(within(selected).getByText("No selection explanation was recorded.")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "About the fallback policy" })).toHaveLength(1);
+
+    rerender(<Pages scenes={[{ ...scene, shipped_attempt: null }]} characters={RUN.characters} objects={[]} />);
+    expect(screen.queryByText("Why it was used")).toBeNull();
+    expect(screen.queryByRole("button", { name: "About the fallback policy" })).toBeNull();
   });
 
   it("says Not checked when the judge gave no answer", () => {

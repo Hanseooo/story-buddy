@@ -177,6 +177,12 @@ A server component fetches the route with the session's access token
    separate from other warnings. The recorded `passed` value remains authoritative: text,
    duplication and style observations do not themselves reject a drawing. Unknown reason values
    remain visible. Prompts stay collapsed.
+   A selected drawing has a **Why it was used** note saying **No selection explanation was
+   recorded**. If it failed required checks, the note explicitly says it was used despite that
+   failure. A small **?** help button explains the general best-of fallback policy and that safety
+   is checked separately. It opens on hover, keyboard focus or tap, stays available while hovered,
+   and dismisses on Escape or leaving the help area. It never presents the general policy as a
+   recorded reason for this selection. The button has an accessible name and a 44 px target.
    A missing required result with no recorded required-check issue is **Not checked**, even if
    a character verdict exists. It explains that the drawing did not pass because a required result
    was not recorded. A recorded composition contradiction remains a failed required check.
@@ -245,7 +251,9 @@ Each summary describes that step's own job:
   It never claims the child confirmed from a visit alone; with no references the prompt can be skipped.
 - `generate_scene`: recorded drawings per page.
 - `consistency_check`: overall passed/failed/not-checked counts, then per-attempt required-check
-  issues and other warnings.
+  issues and other warnings. Recorded results use one heading per page, followed by its drawing
+  count and selected attempt, then each attempt's outcome and separate lists of issues and warnings.
+  The page name is not repeated for each attempt; these are drawings of the same page, not characters.
 - `regenerate`: extra drawings on pages that have recorded redraws and which attempt was selected.
 - `output_mod`: page safety results.
 - `compose`: pages with a drawing selected for the book.

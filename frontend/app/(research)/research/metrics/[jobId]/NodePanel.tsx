@@ -79,12 +79,49 @@ export default function NodePanel({
               >
                 Go to {summary.section.label}
               </a>
-              {summary.lines.length > 0 && (
+              {(summary.lines.length > 0 || (summary.pageResults?.length ?? 0) > 0) && (
                 <details className="text-sm">
                   <summary className={`min-h-11 cursor-pointer py-3 font-bold text-primary ${FOCUS}`}>Recorded results</summary>
-                  <ul className="mt-1 list-disc space-y-2 pl-5 leading-relaxed">
-                    {summary.lines.map((line, i) => <li key={i}>{line}</li>)}
-                  </ul>
+                  {summary.lines.length > 0 && (
+                    <ul className="mt-1 list-disc space-y-2 pl-5 leading-relaxed">
+                      {summary.lines.map((line, i) => <li key={i}>{line}</li>)}
+                    </ul>
+                  )}
+                  {summary.pageResults && (
+                    <ul aria-label="Page results" className="mt-1 space-y-5 leading-relaxed">
+                      {summary.pageResults.map((page) => (
+                        <li key={page.page}>
+                          <h4 className="font-display text-base font-bold">Page {page.page}</h4>
+                          <p className="mt-1 text-foreground/70">
+                            {page.drawings} {page.drawings === 1 ? "drawing" : "drawings"} · {page.selectedAttempt == null ? "No drawing selected for the book yet." : `Attempt ${page.selectedAttempt} used in the book.`}
+                          </p>
+                          <ol className="mt-3 space-y-3">
+                            {page.attempts.map((attempt) => (
+                              <li key={attempt.number}>
+                                <p className="font-bold">Attempt {attempt.number}: {attempt.outcome}</p>
+                                {attempt.required.length > 0 && (
+                                  <div className="mt-2">
+                                    <p className="font-medium">Required-check issues</p>
+                                    <ul className="list-disc pl-5">
+                                      {attempt.required.map((issue) => <li key={issue}>{issue}</li>)}
+                                    </ul>
+                                  </div>
+                                )}
+                                {attempt.warnings.length > 0 && (
+                                  <div className="mt-2">
+                                    <p className="font-medium">Other warnings</p>
+                                    <ul className="list-disc pl-5">
+                                      {attempt.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+                                    </ul>
+                                  </div>
+                                )}
+                              </li>
+                            ))}
+                          </ol>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </details>
               )}
             </>

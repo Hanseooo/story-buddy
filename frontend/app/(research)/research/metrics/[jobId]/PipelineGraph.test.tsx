@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeAll, describe, expect, it } from "vitest";
 import fixture from "./__fixtures__/run.json";
+import passedWithWarnings from "./__fixtures__/passed-with-warnings.json";
 import { summarizeNodes } from "./nodeSummary";
 import PipelineGraph from "./PipelineGraphView";
 import type { RunDetail } from "./types";
@@ -44,12 +45,30 @@ describe("PipelineGraph", () => {
     expect(panel).toHaveAttribute("open");
     expect(within(panel).getByText("Compares each drawing with the character references and the page's requirements.")).toBeVisible();
     expect(within(panel).getByText("2 drawings passed required checks; 1 failed; 0 have no complete check result.")).toBeVisible();
-    expect(within(panel).getByText("Page 1: 2 attempts, attempt 2 selected for the book.")).not.toBeVisible();
+    expect(within(panel).getByText("2 drawings · Attempt 2 used in the book.")).not.toBeVisible();
     expect(within(panel).getByText(/10:00:04 UTC/)).not.toBeVisible();
 
     fireEvent.click(within(panel).getByRole("button", { name: "Close panel" }));
     expect(panel).not.toHaveAttribute("open");
     expect(check).toHaveFocus();
+  });
+
+  it("groups recorded checks under one page heading, with attempts and warnings underneath", () => {
+    const run = {
+      ...RUN,
+      scenes: [{ ...RUN.scenes[1], attempts: [{ ...RUN.scenes[1].attempts[0], ...passedWithWarnings }] }],
+    };
+    render(<PipelineGraph steps={run.steps} endedOn={null} summaries={summarizeNodes(run)} />);
+    fireEvent.click(screen.getByRole("button", { name: "Consistency check, ran 2 times, 1 redraw" }));
+    const panel = screen.getByRole("dialog", { name: "Consistency check" });
+    const results = within(panel).getByText("Recorded results").closest("details")!;
+    fireEvent.click(within(panel).getByText("Recorded results"));
+    expect(within(results).getAllByRole("heading", { name: "Page 1" })).toHaveLength(1);
+    expect(within(results).getByText("1 drawing · Attempt 1 used in the book.")).toBeVisible();
+    expect(within(results).getByText("Attempt 1: Passed required checks")).toBeVisible();
+    expect(within(results).getByText("Other warnings")).toBeVisible();
+    expect(within(results).getByText("Face differs from the character reference")).toBeVisible();
+    expect(within(results).getByText("Text detected in the illustration")).toBeVisible();
   });
 
   it("the section link closes the panel without pulling focus back", () => {

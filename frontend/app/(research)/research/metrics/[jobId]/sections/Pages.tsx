@@ -2,6 +2,7 @@ import ImageViewer from "../ImageViewer";
 import { reviewAttempt } from "../nodeSummary";
 import type { RunAttempt, RunCharacter, RunScene } from "../types";
 import SafetyBadge from "./SafetyBadge";
+import FallbackPolicyHelp from "./FallbackPolicyHelp";
 
 function Verdict({ outcome }: { outcome: string }) {
   if (outcome === "Passed required checks") {
@@ -32,6 +33,15 @@ function AttemptCard({ attempt, page, index, shipped }: { attempt: RunAttempt; p
         <span className="text-sm font-bold">Attempt {index + 1}</span>
         <Verdict outcome={review.outcome} />
       </div>
+      {shipped && (
+        <div className="text-sm">
+          <FallbackPolicyHelp />
+          <p className="text-foreground/70">No selection explanation was recorded.</p>
+          {review.outcome === "Failed required checks" && (
+            <p className="mt-2">This drawing was used even though it failed the required consistency checks.</p>
+          )}
+        </div>
+      )}
       {review.outcome === "Not checked" && (
         <p className="text-sm text-foreground/70">A required check has no recorded result, so this drawing did not pass.</p>
       )}

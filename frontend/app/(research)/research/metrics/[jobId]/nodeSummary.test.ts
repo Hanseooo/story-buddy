@@ -25,21 +25,25 @@ describe("summarizeNodes", () => {
     expect(summarizeNodes(RUN).regenerate.lines).toEqual([
       "Page 1: 1 redraw recorded. Attempt 2 was selected for the book.",
     ]);
-    expect(summary.lines).toEqual([
-      "Page 1: 2 attempts, attempt 2 selected for the book.",
-      "Page 1, attempt 1: failed required checks. Required-check issues: Character colour differs from the reference.",
-      "Page 1, attempt 2: passed required checks.",
-      "Page 2: 1 attempt, attempt 1 selected for the book.",
-      "Page 2, attempt 1: passed required checks.",
+    expect(summary.pageResults).toEqual([
+      { page: 1, drawings: 2, selectedAttempt: 2, attempts: [
+        { number: 1, outcome: "Failed required checks", required: ["Character colour differs from the reference"], warnings: [] },
+        { number: 2, outcome: "Passed required checks", required: [], warnings: [] },
+      ] },
+      { page: 2, drawings: 1, selectedAttempt: 1, attempts: [
+        { number: 1, outcome: "Passed required checks", required: [], warnings: [] },
+      ] },
     ]);
+    expect(summary.lines).toEqual([]);
     expect(summary.section.id).toBe("pages");
     const unchecked = {
       ...RUN,
       scenes: [{ ...RUN.scenes[0], shipped_attempt: null, attempts: [{ ...RUN.scenes[0].attempts[0], failure_reasons: [] }] }],
     };
-    expect(summarizeNodes(unchecked).consistency_check.lines).toEqual([
-      "Page 1: 1 attempt, no drawing selected for the book yet.",
-      "Page 1, attempt 1: not checked.",
+    expect(summarizeNodes(unchecked).consistency_check.pageResults).toEqual([
+      { page: 1, drawings: 1, selectedAttempt: null, attempts: [
+        { number: 1, outcome: "Not checked", required: [], warnings: [] },
+      ] },
     ]);
     const compositionFailure = {
       ...unchecked,
@@ -51,8 +55,8 @@ describe("summarizeNodes", () => {
         }],
       }],
     };
-    expect(summarizeNodes(compositionFailure).consistency_check.lines[1]).toBe(
-      "Page 1, attempt 1: failed required checks. Required-check issues: wrong_colour."
+    expect(summarizeNodes(compositionFailure).consistency_check.pageResults?.[0].attempts[0]).toEqual(
+      { number: 1, outcome: "Failed required checks", required: ["wrong_colour"], warnings: [] }
     );
   });
 
@@ -71,6 +75,11 @@ describe("summarizeNodes", () => {
       scenes: [{ ...RUN.scenes[1], attempts: [{ ...RUN.scenes[1].attempts[0], ...passedWithWarnings, passed: false, scene_contradictions: null }] }],
     });
     expect(incomplete.consistency_check.result).toBe("0 drawings passed required checks; 0 failed; 1 has no complete check result.");
-    expect(incomplete.consistency_check.lines[1]).toBe("Page 1, attempt 1: not checked. Other warnings: Face differs from the character reference; Text detected in the illustration.");
+    expect(incomplete.consistency_check.pageResults?.[0].attempts[0]).toEqual({
+      number: 1, outcome: "Not checked", required: [],
+      warnings: ["Face differs from the character reference", "Text detected in the illustration"],
+    });
+    const unvisited = summarizeNodes({ ...RUN, steps: RUN.steps.filter((step) => step.node !== "consistency_check") });
+    expect(unvisited.consistency_check.pageResults).toEqual([]);
   });
 });

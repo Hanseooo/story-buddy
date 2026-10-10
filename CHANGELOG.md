@@ -34,6 +34,10 @@ Refs [#103](https://github.com/Hanseooo/story-buddy/issues/103), #104, #107, #10
   Image checks use direct, reference-based descriptions and separate required-check issues from
   other warnings. The selected attempt is labeled "Used in the book".
   Image dialogs preserve keyboard dismissal and focus, including broken images.
+- Selection clarity (2026-10-10): selected drawings say when no selection explanation was
+  recorded, and explicitly acknowledge failed consistency checks. A small question-mark button
+  explains the general fallback policy on hover, focus or tap. Consistency-check recorded results
+  group each page once, with its drawing count, selection, attempt outcomes and warning lists.
 - Shared research header on metrics, annotate and adjudicate. Researcher login can return to
   `/research/metrics/...`. Langfuse links require `NEXT_PUBLIC_SHOW_LANGFUSE_LINKS=true` and warn
   that traces contain the story before redaction. With the flag off, no trace URL reaches the
@@ -58,10 +62,10 @@ Refs [#103](https://github.com/Hanseooo/story-buddy/issues/103), #104, #107, #10
 
 - Backend: `uv run ruff check .` passed; `uv run pytest -q`: 1,474 passed, 87 skipped,
   6 deselected. The skipped database/RLS and provider checks remain unverified.
-- Frontend: `pnpm lint` and `pnpm build` passed; `pnpm test`: 61 files, 598 tests passed.
+- Frontend: `pnpm lint` and `pnpm build` passed; `pnpm test`: 61 files, 604 tests passed.
   The build used CI's placeholder public Supabase values. Next.js reports the existing
   middleware-to-proxy deprecation; that migration is outside this change.
-  One concurrent build/test run hit `Test timed out in 5000ms` in the gallery's first render
+  An earlier concurrent build/test run hit `Test timed out in 5000ms` in the gallery's first render
   test. All 10 gallery tests passed in isolation, then all 598 tests passed in a standalone run.
 - Playwright: signed-out list at 1280 × 800 and 360 × 780, generic ids without titles, Langfuse
   hidden, filters survive reload, empty results clear, detail URLs redirect to login. No console errors.
@@ -75,6 +79,13 @@ Refs [#103](https://github.com/Hanseooo/story-buddy/issues/103), #104, #107, #10
   cover a passing image with face and text warnings. The real run's new summary was inspected,
   but repeated live reloads stalled, so final layout and keyboard checks used a temporary preview,
   removed afterward. Waiting and missing-result states remain unit-checked.
+- Selection follow-up (2026-10-10): the supplied synthetic run loaded successfully. Captured
+  page 7 judge fields cover three failed drawings with attempt 2 selected. Regression tests first
+  failed on missing selection copy, a missing page heading and Escape leaving hover help open,
+  then passed. Live checks passed at 1280, 360 and 320 px: hover, focus, touch tap, Escape,
+  hoverable tooltip content, 44 px help target, no horizontal overflow, eight distinct page
+  headings, and panel dismissal with focus return. Browser console: 0 errors, 0 warnings.
+  Backend checks were not rerun for this frontend-only follow-up.
 - Traversal-count and section-link focus regressions were introduced deliberately, observed failing,
   and restored. Page integration failed before mounting the graph, then passed.
 - Signed-in synthetic run: all sections, graph counts matching 39 steps, Enter/Escape/focus,

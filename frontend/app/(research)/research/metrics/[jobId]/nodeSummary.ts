@@ -1,7 +1,18 @@
 import { sceneFailureLabel, VERDICT_CHECK_LABELS } from "@/utils/metrics";
 import type { RunAttempt, RunDetail } from "./types";
 
-export type NodeSummary = { purpose: string; result: string; lines: string[]; section: { id: string; label: string } };
+export type NodeSummary = {
+  purpose: string;
+  result: string;
+  lines: string[];
+  pageResults?: {
+    page: number;
+    drawings: number;
+    selectedAttempt: number | null;
+    attempts: ({ number: number } & ReturnType<typeof reviewAttempt>)[];
+  }[];
+  section: { id: string; label: string };
+};
 
 const STORY = { id: "story", label: "Story" };
 const CHARACTERS = { id: "characters", label: "Characters" };
@@ -56,18 +67,13 @@ function references(run: RunDetail): string[] {
   return lines.length > 0 ? lines : ["No references were recorded."];
 }
 
-function attempts(run: RunDetail): string[] {
-  const lines = run.scenes.flatMap((s, i) => {
-    const outcome = s.shipped_attempt == null ? "no drawing selected for the book yet" : `attempt ${s.shipped_attempt + 1} selected for the book`;
-    return [
-      `Page ${i + 1}: ${plural(s.attempts.length, "attempt", "attempts")}, ${outcome}.`,
-      ...s.attempts.map((attempt, index) => {
-        const review = reviewAttempt(attempt);
-        return `Page ${i + 1}, attempt ${index + 1}: ${review.outcome.toLowerCase()}.${review.required.length ? ` Required-check issues: ${review.required.join("; ")}.` : ""}${review.warnings.length ? ` Other warnings: ${review.warnings.join("; ")}.` : ""}`;
-      }),
-    ];
-  });
-  return lines.length > 0 ? lines : ["No pages were drawn."];
+function attempts(run: RunDetail): NonNullable<NodeSummary["pageResults"]> {
+  return run.scenes.map((scene, index) => ({
+    page: index + 1,
+    drawings: scene.attempts.length,
+    selectedAttempt: scene.shipped_attempt == null ? null : scene.shipped_attempt + 1,
+    attempts: scene.attempts.map((attempt, i) => ({ number: i + 1, ...reviewAttempt(attempt) })),
+  }));
 }
 
 export function summarizeNodes(run: RunDetail): Record<string, NodeSummary> {
@@ -132,7 +138,8 @@ export function summarizeNodes(run: RunDetail): Record<string, NodeSummary> {
     consistency_check: {
       purpose: "Compares each drawing with the character references and the page's requirements.",
       result: `${plural(passed, "drawing", "drawings")} passed required checks; ${drawings.length - passed - unchecked} failed; ${unchecked} ${unchecked === 1 ? "has" : "have"} no complete check result.`,
-      lines: attempts(run), section: PAGES,
+      lines: run.scenes.length === 0 ? ["No pages were drawn."] : [],
+      pageResults: attempts(run), section: PAGES,
     },
     regenerate: {
       purpose: "Draws a new version of a page after it fails the required checks.",
@@ -165,6 +172,7 @@ export function summarizeNodes(run: RunDetail): Record<string, NodeSummary> {
     } else if (!run.steps.some((step) => step.node === id)) {
       summary.result = "This step did not run.";
       summary.lines = [];
+      if (summary.pageResults) summary.pageResults = [];
     }
   }
   return summaries;
