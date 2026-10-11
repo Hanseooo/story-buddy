@@ -14,6 +14,59 @@ instead of repeating it.
 
 ---
 
+## PR #116 · 2026-10-11
+
+A public page for the pipeline's findings and limitations, and signed-in annotation and
+adjudication demos for panel presentations. Implements #111 · Refs #99, #100, #102 · ADR-067
+
+### Code
+
+- `/research/limitations` is a new public static page. It shows the defect rates for human and
+  non-human characters, the most common major defects, what the two automatic checks caught, the
+  scene editor against FLUX.2 klein and OmniGen2, the October tests the group guide lists, and the
+  nine limitations. It says near the top that the audit is provisional. A test fails when a number
+  or a copied sentence is not in the file the page names. The header has a Limitations tab and
+  `/research` links to the page.
+- `Source` and `ScrollTable` moved to the shared research components. The dataset and results
+  pages import them, with no change to what they show.
+- Empty research queues link to explicit demos using two committed synthetic pairs. The demos
+  render the existing labelling forms, taxonomy, conflict comparison, verdict bar and inspector.
+- Demo submissions advance locally, reset the form, then offer completion, restart and exit.
+  Live submit actions are supplied only to live route props and are absent from demo clients.
+- Image loading and failure disable submission, including an image that failed before the page
+  became interactive. Retry keeps selections. Native dialogs contain focus and restore it on
+  dismissal. Keyboard shortcuts work from radio and checkbox controls.
+- Space and `?` still close the dialog they open, and the other shortcuts keep working while one
+  is open, as before this change. Enter cannot submit from an open dialog.
+- Each empty state keeps Log out as its one filled action. The demo link is outlined.
+- Adjudication labels the demo comparison "Illustrative disagreements — not recorded rater
+  answers" in place of the live "Blinded Dual Annotations" caption.
+
+### Docs
+
+- Added the approved [demo spec](docs/specs/research-labelling-demo.md) and linked it from the
+  annotation-surface spec.
+- Added ADR-067 for the limitations page, and its rows in the ADR index and the route map.
+- `model-probes-2026-10.md` records the reference edit-repair probes, the tradeoffs of adopting
+  edit repair, and the recommendation not to change the pipeline before the defense. What this
+  means for the paper is in the
+  [research changelog](docs/capstone/research-changelog.md), 2026-10-11.
+- The group guide now says the Phase 0.5 character was a three-eyed lizard-bird, and notes that
+  the limitations page copies its §5.4 and §6.
+
+### Checks
+
+- Client and route tests cover local progression/restart, image recovery and the absence of live
+  submit/queue calls. Static checks use the committed synthetic data and image assets.
+- `pnpm lint`, `pnpm build` (with public Supabase placeholders), and
+  `pnpm test --maxWorkers=2` passed: 73 files, 691 tests.
+- The limitations page was checked in a browser at desktop and phone widths with a clean console.
+- The owner viewed the adjudication demo in a browser on 2026-10-11. The rest of the demo spec's
+  browser checklist (the annotation demo, phone width, every shortcut, a failed image) is still
+  open.
+
+---
+
 ## PR #115 · 2026-10-11
 
 A research documents hub, a judge-dataset page and a judge-results page, all public and static.
