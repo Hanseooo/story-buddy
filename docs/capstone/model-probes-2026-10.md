@@ -15,7 +15,7 @@ One row per entry below, newest last. Each entry adds its row here when it lands
 | Edit-model probe | klein drew a duplicate on 3 of 12 draws where every shipped Qwen page had one | none; a swap needs an ADR and a judge recheck | superseded by the blinded klein screen |
 | Reference count screen | no text-to-image model draws stated body counts | none; ADR-056 stands | closed |
 | Text-model trial | no open-weight model beats Mistral on the strict-schema path | none; Mistral stays | closed |
-| Cast-rule replay | only "species noun in the direction" adds characters without wrong ones | species reconciliation in `segment` | PR #101, awaiting merge |
+| Cast-rule replay | only "species noun in the direction" adds characters without wrong ones | species reconciliation in `segment` | merged 2026-10-09 (PR #101) |
 | Segment prompt trial | no prompt change separates from run-to-run noise | none; `SEGMENT_PROMPT_VERSION` stays 3 | closed |
 | Best-of ranking review | ranking `subjects_unique` higher helps one scene and hurts another | none; `_rank` unchanged | closed |
 | Defect tally | duplicates are the largest major defect a change could still fix | none; picked duplicates as the next target | closed |
@@ -24,6 +24,9 @@ One row per entry below, newest last. Each entry adds its row here when it lands
 | Single-moment line on Qwen | a prompt line asking for one moment left 9 of 10 Qwen draws with a duplicate; klein drew 9 of 10 clean on the same scenes without it | none; the line is not adopted | closed |
 | Blinded klein screen | on 30 random scenes, klein drew as many duplicates as Qwen (4 each) and lost identity on 10 pages to Qwen's 3 | [ADR-063](../product/adr/ADR-063-klein-fails-the-blinded-screen-qwen-image-edit-stays-the-scene-editor.md): klein fails the preregistered rule, Qwen stays | accepted 2026-10-08 |
 | One-moment directions on Qwen | rewriting the direction as one instant left 7 of 10 duplicate-scene draws with a copy or an extra; 2 of 4 missing actions appeared | none; duplicates stay an open defect | closed |
+| Stage-audit gate cuts | the 185 scene redraws removed a generator defect on 8 scenes and introduced one on 9; a failed gate marks a generator defect on 24 of 76 shipped pages, against 29% of all shipped pages | none; the attempt cap and the gate are unchanged | closed; rests on the audit's provisional AI reviews |
+| Reference repair by edit | the edit model fixed the stated count on 5 of 9 shipped references without losing the character (6 with one borderline); it missed seven stripes, four wings and nine feet | none; `char_bible` and the reveal redraw are unchanged | pass on the margin of the 6-of-9 rule; followed by the page check below |
+| Repaired reference on a page | redrawn from the repaired reference, 5 of 6 pages show the stated count and 1 is borderline; one page gained a second face | none; adopting it needs an ADR and a rate screen | passed the 4-of-6 rule; generated instructions, damage to clean references and the rate are unmeasured |
 
 ## Edit-model probe: FLUX.2 klein 4B base — 2026-10-08
 
@@ -588,6 +591,290 @@ direction named something absent. Role swaps did not respond.
 action scene. The action result is 4 pages and only suggests a `segment` rule; it does not measure
 one.
 
+## Stage-audit gate cuts: what the redraws bought (2026-10-11, $0)
+
+**Question.** The stage audit counted the page gate's false accepts and false rejections. Do the
+redraws the gate pays for ship better pages, and does any gate signal pick out the pages a redraw
+could fix?
+
+**Method.** `docs/product/evidence/scripts/stage_audit_gate_cuts.py` joins the audit's 221 page
+reviews to the stored verdicts in the 30 synthetic bundles. No new image, judge call or review. A
+defect counts when the review marked it major. "Generator-origin" is the review's
+`origin: generator`: a defect the reference did not already have, which is the only kind a redraw
+can change.
+
+**Redraws.** The 150 scenes took 335 draws, so 185 were redraws, spread over 97 scenes. In 26 of
+those scenes the first draw shipped anyway. In the other 71 the audit reviewed both the rejected
+first draw and the page that shipped:
+
+| Rejected first draw, then shipped page | Any major | Generator-origin major |
+|---|---:|---:|
+| Defect removed | 9 | 8 |
+| Defect introduced | 5 | 9 |
+| Defective both times | 39 | 16 |
+| Clean both times | 18 | 38 |
+
+**Gate signals on the 150 shipped pages.** 43 of them carry a generator-origin major (29%).
+
+| Stored signal | Pages it fired on | Of those, with a generator-origin major | Such pages it missed |
+|---|---:|---:|---:|
+| Gate failed (`passed` false) | 76 | 24 | 19 |
+| Scene contradictions listed | 53 | 14 | 29 |
+| A gating reason (`wrong_colour`, `wrong_body_feature`) | 33 | 13 | 30 |
+| `same_character` false | 6 | 3 | 40 |
+| `anatomy_intact` false | 0 | none | all 43 |
+
+`anatomy_intact` is false on none of the 221 reviewed images, while the review marked a major
+`anatomy` defect on 3 shipped pages. `subjects_unique` is false on 12 shipped pages, 8 of them among
+the 17 the review marks with a duplicate or extra character, which matches the audit's own replay.
+
+**Human-only pages.** 33 shipped pages carry no `non_human` tag, across 13 stories. 11 have a major
+defect: `reference_inherited` on 5, `object_wrong` on 2, `identity_drift` on 2, and one each of
+`group_as_one`, `duplicate_character` and `invented_lettering`. A duplicate or extra character is on
+1 of the 33, against 16 of the 117 non-human pages. 2 of the 21 human references have a major
+defect, against 15 of the 34 non-human ones.
+
+**Reference check.** The stored reference verdict had already failed 15 of the 17 references the
+review marks with a major defect, and the pipeline shipped them as the best of its draws. It also
+failed 15 of the 38 the review calls clean. 10 of the 17 are a stated count the drawing does not
+match (9) or a face on a character described without one (2, one reference has both), the cases
+ADR-056 and the reference-fidelity audit record as beyond the reference generator. So a second
+approver at the reference step, human or model, would mostly repeat a verdict the pipeline already
+has. What is missing is a draw that fixes the defect, not a check that finds it.
+
+**Reading.** On these labels the redraws removed about as many generator defects as they
+introduced, and they are 185 of the 335 scene draws. A failed gate marks a page with a generator
+defect 24 times in 76 (32%), close to the 29% for any shipped page, so the gate does not pick out
+the pages a redraw could fix. No change is made here. The attempt cap is ADR-037's and the gate is
+the consistency-checker spec's; changing either needs its own decision and a rate measured on
+labels a person has checked (ADR-055).
+
+**Caveats.**
+
+- The reviews are AI reviews, provisional, and the owner has not confirmed them. A defect's origin
+  is the reviewer's judgement.
+- Later rejected draws were not reviewed, so the 26 scenes where the first draw shipped say nothing
+  about whether a better draw was passed over.
+- A shipped page can be the second or third draw, and each redraw used a corrected prompt.
+- The human-only cut is 33 pages, too few for a rate.
+- One synthetic corpus, 83% non-human, across five code commits.
+
+## Reference repair by edit: plan (2026-10-11, about $0.27 at most)
+
+**Question.** The count screen found no text-to-image model that draws a stated body count
+(ADR-056), and the cut above shows the reference check already names most of these misses. Can the
+shipping edit model, `fal-ai/qwen-image-edit-2511`, repair the shipped reference when told the
+count? The owner approved about $0.30 on 2026-10-11.
+
+**Setup.** The 9 shipped references the stage audit marks with a major `count_miss`. Each goes to
+`providers.edit_image`, the production path, as the only input image, with one hand-written
+instruction followed by "Keep the character, its colours, the art style and the plain background
+exactly the same." One draw each, seed 11. Hard cap 9 calls, about $0.03 each. Script:
+`docs/product/evidence/scripts/ref_repair_probe.py`. Images go to the gitignored
+`data/judge/evaluations/ref-repair-probe-2026-10/`.
+
+| Reference | Shipped | Instruction |
+|---|---|---|
+| syn-002 Mopsi | four legs, six stated | Add two more legs to the sheep so it has six legs in total, three on each side. |
+| syn-004 Tuko | five stripes, seven stated | Add two more blue stripes on the gecko's back so there are exactly seven blue stripes. |
+| syn-005 Pipit | two wings, four stated | Add a second pair of wings to the paper crane so it has four wings in total. |
+| syn-010 Bramblefoot | badger face and three leaf ears; no face and five stated | Replace the badger face with a head covered in leaves that has no face: no eyes, no nose, no mouth. Give the head exactly five leaf ears. |
+| syn-012 Cog | six legs, eight stated | Add one more leg on each side of the beetle so it has eight legs in total. |
+| syn-013 Puddleback | many dark green blotches; nine spots stated, yellow per the review | Replace the dark green blotches on the toad's back with exactly nine yellow spots. |
+| syn-014 Nimbus Nine | a face, stick arms and legs, loose drops; no face and nine raindrop feet stated | Remove the face, the stick arms, the stick legs and the loose falling raindrops. Give the cloud exactly nine raindrop-shaped feet in a row along its underside. |
+| syn-015 Sablefin | two lanterns on the head and one on the flank; three on the head stated | Move the lantern on the fish's side up onto its head so there are exactly three lanterns on top of the head and none on the body. |
+| syn-019 Snorkel | dot eyes and one button on the ear; two mismatched buttons stated | Replace the two black dot eyes with two mismatched button eyes, one large blue button and one small yellow button, and remove the button on the ear. |
+
+**Pass rule, fixed now.**
+
+- **Count (decides):** on at least 6 of the 9 edits the stated count can be counted in the image and
+  the character is still the reference's character (species, colours, style).
+- **Guard (reported):** identity or style change, a new defect, and for syn-010 and syn-014 whether
+  the face is gone.
+
+**Limits.** Not blinded: the rater knows the target of every edit. One rater, the assistant. One
+draw per reference, so a miss is one failed draw, not a rate. The instructions are hand-written and
+name the miss exactly, which is the best case; the pipeline would have to build them from the
+reference check's contradiction list, which was wrong on 15 of 38 clean references. A pass justifies
+an ADR proposal and a rate screen with generated instructions (ADR-029 §2 defines the reveal redraw
+as a fresh draw), not a production change. A fail closes edit repair for stated counts.
+
+## Reference repair by edit: result (2026-10-11, about $0.27)
+
+**Deviation.** fal's content checker rejected the syn-019 edit at seed 11 six times out of six, so
+that one reference was drawn at seed 22. Rejections are not billed. 9 paid calls.
+
+| Reference | Stated | Edited image (assistant's count) | Score |
+|---|---|---|---|
+| syn-002 Mopsi | six legs | six legs, three front and three rear | hit |
+| syn-004 Tuko | seven stripes | about eleven stripes, running down the tail | miss |
+| syn-005 Pipit | four wings | five or six pointed flaps, not readable as four wings | miss |
+| syn-010 Bramblefoot | no face, five leaf ears | leaf head with no face, five leaf ears | hit |
+| syn-012 Cog | eight legs | eight legs, four a side, plus the two antennae | hit |
+| syn-013 Puddleback | nine spots on back | nine yellow spots on the back, three more on the foreleg and three dull ones on the hind leg | borderline |
+| syn-014 Nimbus Nine | no face, nine raindrop feet | no face, arms or legs; seven drops in a row | miss |
+| syn-015 Sablefin | three lanterns on head | three lanterns on the head, none on the body | hit |
+| syn-019 Snorkel | two mismatched buttons | one large blue and one small yellow button eye; ear button gone | hit |
+
+**Against the pass rule.** 5 clear hits, 6 if syn-013 counts. The rule needs 6, so it is met only
+on a borderline call by a rater who knew the target. Recorded as a pass on the margin; the owner has
+not looked at the nine images.
+
+**Guard.** All 9 edits kept the species, colours, style, pose and plain background of the input.
+The face is gone on both references that had one. One new defect: syn-010 lost its red ears, and
+its leaf ears came out green and orange where the description says red in autumn. The black post
+under syn-015 was already in the shipped reference.
+
+**Against the count screen.** On the same characters the three text-to-image models scored six legs
+0 of 7, eight legs 1 of 7, four wings 0 of 7, seven stripes 0 of 7, nine spots 0 of 7, nine feet
+0 of 7 and three lanterns 4 of 7. The edit model drew six legs and eight legs on its one draw each.
+It missed the same three a text-to-image model missed: seven stripes, four wings, nine feet.
+
+**Reading.** Editing the shipped reference fixed the count on 5 of 9 without losing the character,
+which no fresh draw did for the legs. The three misses are the two highest counts of a repeated
+mark and the folded-paper wings. This is one draw per reference with hand-written instructions, so
+it shows the edit model can do it, not how often. Three things are still unmeasured, and any one of
+them can make the repair worthless:
+
+1. Whether the scene editor carries a repaired count onto the pages. A six-legged reference helps
+   only if the page shows six legs.
+2. Whether an instruction built from the reference check's contradiction list works as well as a
+   hand-written one.
+3. What an edit does to a reference that was clean, since the check fails 15 of the 38 clean ones.
+
+Size of the prize: 18 of the 34 shipped pages with a major `reference_inherited` defect inherit it
+from these 9 references, 10 of them from the 5 clear hits. No production setting changed. A change
+to `char_bible` or the reveal redraw needs an ADR (ADR-029 §2) and a rate measured on generated
+instructions (ADR-055).
+
+## Repaired reference on a page: plan (2026-10-11, about $0.18 at most)
+
+**Question.** The repair above only matters if the scene editor carries the repaired count onto the
+page. Does it? The owner approved this check on 2026-10-11.
+
+**Setup.** The 5 clear hits and the borderline toad. For each, one shipped page is redrawn through
+`providers.edit_image` with the scene's stored prompt and the same references in the same order,
+except that the repaired reference replaces the shipped one. One draw each, seed 11, hard cap 6
+calls. Script: `docs/product/evidence/scripts/ref_repair_page_check.py`.
+
+Pages were picked by hand, before any draw, from the pages the audit marks with a major
+`reference_inherited` defect on that character, taking one whose direction shows the body part.
+syn-015 has no such page, so its first scene is used.
+
+| Page | Direction (start) | Stated | Shipped page, per the audit |
+|---|---|---|---|
+| syn-002 s4 | Marisol builds a wooden pen next to the creek, Mopsi watching; wide shot | six legs | four legs |
+| syn-010 s0 | Bramblefoot stands in the forest, body visible with five leaf ears; medium shot | no face, five leaf ears | badger face, four leaves and two red animal ears |
+| syn-012 s1 | Cog stands up straight and clicks at Ate Rina; front, medium shot | eight legs | six legs, no key |
+| syn-013 s1 | the heron points at Puddleback's back with its beak; profile, medium shot | nine spots on back | dark green blotches |
+| syn-015 s0 | Sablefin swims alone with dim lanterns on her head; medium shot | three lanterns on head | no inherited defect recorded |
+| syn-019 s0 | Snorkel sits in the toy box, mismatched buttons visible; medium shot | two mismatched buttons | one button only |
+
+**Pass rule, fixed now.**
+
+- **Count (decides):** on at least 4 of the 6 pages the stated count can be counted on the
+  character. A page where the part is hidden or the character is missing counts as not shown.
+- **Guard (reported):** whether the character matches the repaired reference, any duplicate or
+  extra character, any face on syn-010, any other new defect.
+
+**Limits.** One draw per page, so this is not a rate. Not blinded, one rater, the assistant. Pages
+and references were both picked by hand, and the references were repaired with hand-written
+instructions. There is no same-seed control with the shipped reference; the comparison is the
+stored shipped page. A pass justifies an ADR proposal and a rate screen; a fail closes edit repair.
+
+## Repaired reference on a page: result (2026-10-11, about $0.13 to $0.18)
+
+6 paid calls, 3 with one reference and 3 with two. No deviation from the plan.
+
+| Page | Stated | Redrawn page (assistant's count) | Score |
+|---|---|---|---|
+| syn-002 s4 | six legs | Mopsi has six legs, three front and three rear | hit |
+| syn-010 s0 | no face, five leaf ears | no face, five leaf ears | hit |
+| syn-012 s1 | eight legs | eight legs, four a side | hit |
+| syn-013 s1 | nine spots on back | nine yellow spots on the back, three more on the foreleg and dull ones on the hind leg, as in the repaired reference | borderline |
+| syn-015 s0 | three lanterns on head | three lanterns on the head | hit |
+| syn-019 s0 | two mismatched buttons | one large blue and one small yellow button eye | hit |
+
+**Against the pass rule.** 5 clear hits and 1 borderline; the rule needed 4 of 6. Pass. Every
+page shows what its repaired reference shows, including the toad's extra leg spots.
+
+**Guard.** The character matches the repaired reference on 6 of 6. No duplicate or extra character
+on any page, and no face on syn-010. One new major defect: on syn-012 s1 Cog has a second face
+drawn on his wing covers. Cog is also as tall as Ate Rina, which the shipped page already had.
+
+**Reading.** With a hand-repaired reference, the scene editor drew the stated count on every page
+checked, where the shipped pages had the wrong count on the five that recorded one. So the count
+problem on these characters sits in the reference draw, and an edit of the reference removes it for
+5 of the 9 count-miss references. That is 10 of the 150 shipped pages. It does not show a rate: it
+is one draw per page on hand-picked pages, with hand-written repair instructions, scored by one
+unblinded rater.
+
+Still unmeasured before any change to `char_bible`:
+
+1. Whether an instruction built from the reference check's contradiction list repairs as well as a
+   hand-written one. The check named the miss on 7 of these 9 references, flagged syn-014's feet
+   for their shape and not their number, and listed nothing for the toad.
+2. What an edit does to a reference that was clean, since the check fails 15 of the 38 clean ones.
+3. The rate over repeated draws, and whether the second face on Cog is a one-off.
+
+No production setting changed. Adopting this needs an ADR, because ADR-029 §2 defines the reveal
+redraw as a fresh draw and `char_bible.mint_reference` only redraws, and a rate screen on generated
+instructions (ADR-055).
+
+## Edit repair of references: tradeoffs of adopting it (2026-10-11, no decision)
+
+Written so a later session does not have to rebuild the argument. Nothing here is decided. Each
+line says whether it is measured in this file or is the assistant's reading.
+
+**What it would buy.**
+
+- Measured: the only thing tried so far that fixes a count or a face inherited from the reference.
+  5 of 9 count-miss references repaired, and 5 of 6 redrawn pages carried the repair.
+- Measured: the reach is small. 18 of the 34 shipped pages with a major `reference_inherited`
+  defect come from the 9 count-miss references, 10 of them from the 5 repaired ones, out of 150
+  pages in a corpus written to stress counts.
+- Reading: donated stories are mostly about humans and rarely state a body count, so the gain in
+  classroom use is likely smaller than 10 in 150. No donated story was reviewed.
+
+**What it would cost.**
+
+1. **The pipeline cannot tell whether a repair worked.** Measured: the reference check fails 15 of
+   38 clean references and passed the toad, and ADR-056 records it listing "six legs" as present on
+   a four-legged sheep. An automatic "keep the edit if the check now passes" rule rests on that check.
+2. **Edits to references that were fine.** Unmeasured. If the trigger is the check, about 4 in 10
+   clean references would be edited for nothing.
+3. **A miss is a different wrong picture, not the old one.** Measured: five stripes became about
+   eleven, two wings became five or six flaps, and Bramblefoot lost his red ears. One redrawn page
+   gained a second face.
+4. **fal's content checker.** Measured: it rejected one edit six times out of six at one seed. The
+   pipeline would need a fallback to the unrepaired reference, and the edited reference has to pass
+   `char_ref_mod` again.
+5. **Engineering.** `char_bible.mint_reference` only redraws and ADR-029 §2 defines the reveal
+   redraw as a fresh draw, so this is a new ADR, a spec change and tests. If the repair is an added
+   draw, `IMAGE_BUDGET`'s 15-image prelude (6 draws, 3 taps, 6 moderation redraws) has no room for
+   it and the spend spec changes too.
+6. **The measurements describe the pipeline as it was.** The stage audit, the 42-bundle corpus and
+   the judge dataset were all generated before any repair step. Changing the reference step before
+   the defense means the reported defect rates no longer describe the shipped pipeline unless a new
+   batch is generated and reviewed.
+
+**The cheapest shape, if it is ever adopted (assistant's proposal, untested).** Make the child's
+tap at the reveal an edit of the current reference instead of a fresh draw: the tapped chip
+("six legs") becomes the instruction. It costs the same one image the tap already costs, needs no
+budget change, and the child, not the reference check, decides whether the result is right, which
+removes costs 1 and 2. What it needs first: a screen of the tap's own wording (`Be sure to
+include: six legs.`, not the hand-written "Add two more legs") on the same 9 references, about
+$0.27, then the ADR. `build_corpus` auto-confirms the reveal (#96), so a corpus batch would not
+exercise it without a rule for which chip to tap.
+
+**Owner check skipped (2026-10-11).** The assistant asked the owner to view the borderline toad
+reference and Cog's redrawn page. The owner chose not to. Both edit-repair probes therefore rest
+on the assistant's unblinded reading alone, and the toad stays scored borderline.
+
+**Recommendation recorded.** Keep this as a finding and as future work through the defense, and do
+not change the pipeline before it. The finding already improves the limitation statement: stated
+counts fail at the reference draw, and an edit of the reference removes the failure in a small test.
+
 ## Limitations to carry into the write-up (2026-10-08)
 
 Each row is a defect the October probes measured or tried to fix and left open. Rates are from the
@@ -599,11 +886,18 @@ evidence.
 | Defect | Rate | What was tried | Status |
 |---|---|---|---|
 | Duplicate character | 28 of 221 (13%); 4 of 30 for both editors on random scenes | "draw each character exactly once" in every prompt; best-of ranking on `subjects_unique`; a single-moment line (1 of 10 clean); one-instant directions (3 of 10); a second editor, klein (ties on random scenes, loses identity) | open. A limitation of the edit substrate, measured on two editors ([ADR-063](../product/adr/ADR-063-klein-fails-the-blinded-screen-qwen-image-edit-stays-the-scene-editor.md)). No automatic catch: `subjects_unique` both misses and over-flags. |
-| Stated body counts | 9 of 17 defective references | five text-to-image models in the count screen | limitation by decision ([ADR-056](../product/adr/ADR-056-numeric-attribute-fidelity-is-a-documented-limitation-not-a-pre-campaign-fix.md)) |
+| Stated body counts | 9 of 17 defective references | five text-to-image models in the count screen; one edit of each of the 9 shipped references (5 fixed, 1 borderline, 3 missed) | limitation by decision ([ADR-056](../product/adr/ADR-056-numeric-attribute-fidelity-is-a-documented-limitation-not-a-pre-campaign-fix.md)). Edit repair is a lead, not a fix: redrawn pages carried the repaired count on 5 of 6 (1 borderline), but the repair instructions were hand-written and no rate is measured |
 | Beings with no roster entry | 17 of 150 scenes direct them; those scenes ship a duplicate or extra on 24% of pages, against 10% elsewhere | none. PR #101 reconciles a cast member named by species, not a group | open. The editor draws them from the name alone: dust-bunny soldiers came out as human boys |
 | Missing or wrong action | 13 of 221, on 9 scenes | one-instant directions on 4 failed pages | open. Naming only the visible end state fixed both pages whose direction named something absent or pretended. Two characters swapping roles did not respond. The fixable kind is about 3 of 150 scenes, too few to measure a `segment` rule by rate before the defense |
 | Identity drift | 15 of 221; 3 of 30 for Qwen on random scenes | none directly; klein was worse (10 of 30) | open, not probed |
 | Setting against the page's own text | 3 major, 30 minor | none | open. Consistency of the setting between pages is unmeasured |
+
+**Rates by character kind (cut added 2026-10-11).** The audit's rates come from a corpus that is
+83% non-human by design, so they are reported split, never pooled alone. Shipped pages with a major
+defect: 11 of 33 with human characters only, 66 of 117 with a non-human character. A duplicate or
+extra character: 1 of 33 against 16 of 117. References with a major defect: 2 of 21 human, 15 of 34
+non-human. The human-only cut is 33 pages across 13 stories, too few for a rate, and no donated
+story was reviewed, so this does not measure what classroom stories get.
 
 **Method limits shared by every probe.** One rater, and that rater is the assistant, an AI, not a
 person. Only the klein screen was blinded and drawn on random scenes. The other paid probes used

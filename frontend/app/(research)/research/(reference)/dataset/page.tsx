@@ -1,7 +1,8 @@
-import { ArrowSquareOut, CheckCircle, XCircle } from "@phosphor-icons/react/dist/ssr";
+import { CheckCircle, XCircle } from "@phosphor-icons/react/dist/ssr";
 import { TAXONOMY_LABELS, type TaxonomyState } from "../../../_shared/constants";
-import { githubUrl } from "../docs/entries";
-import { AGREEMENT, EXAMPLES, REASON_PAIRS, RECORD_FIELDS, SOURCES, SPLITS, TRAINING_RECORD, type Example, type SourceKey } from "./data";
+import ScrollTable from "../../../_shared/components/ScrollTable";
+import Source from "../../../_shared/components/Source";
+import { AGREEMENT, EXAMPLES, REASON_PAIRS, RECORD_FIELDS, SOURCES, SPLITS, TRAINING_RECORD, type Example } from "./data";
 
 export const metadata = {
   title: "StoryBuddy Judge Dataset",
@@ -19,37 +20,6 @@ const sum = (key: "stories" | "characters" | "pairs" | "same" | "different") =>
 const reasonKeys = (Object.keys(REASON_PAIRS) as (keyof TaxonomyState)[]).sort(
   (a, b) => REASON_PAIRS[b] - REASON_PAIRS[a]
 );
-
-function Source({ file, where }: { file: SourceKey; where: string }) {
-  return (
-    <p className="text-sm text-foreground/60">
-      Source:{" "}
-      <a
-        href={githubUrl(SOURCES[file])}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={`inline-flex min-h-11 items-center gap-1 rounded-lg font-mono font-bold text-primary hover:text-primary-deep hover:underline sm:min-h-0 ${FOCUS}`}
-      >
-        <span className="break-all">{SOURCES[file]}</span>
-        <ArrowSquareOut weight="bold" className="size-3.5 shrink-0" aria-hidden />
-        <span className="sr-only"> (opens on GitHub in a new tab)</span>
-      </a>
-      , {where}
-    </p>
-  );
-}
-
-// tabIndex: a table wider than the screen scrolls sideways, and a keyboard user needs to reach it.
-function ScrollTable({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div role="region" aria-label={label} tabIndex={0} className={`overflow-x-auto rounded-2xl neo-border ${FOCUS}`}>
-      <table className="w-full min-w-[36rem] border-collapse text-sm">
-        <caption className="sr-only">{label}</caption>
-        {children}
-      </table>
-    </div>
-  );
-}
 
 const answer = (same: boolean) => (same ? "Same" : "Different");
 
@@ -179,8 +149,8 @@ export default function DatasetPage() {
           <li>Two of those constructed pairs reuse an image pair the raters had labelled Same, so the training file holds those two image pairs with both answers. The dataset is registered and was left as it is.</li>
           <li>The judge trains on synthetic stories and is tested on children&apos;s. A gap between the two shows up in the test result.</li>
         </ul>
-        <Source file="runbook" where="“What the registered freeze contains”" />
-        <Source file="preregistration" where="§2 and §3" />
+        <Source path={SOURCES.runbook} where="“What the registered freeze contains”" />
+        <Source path={SOURCES.preregistration} where="§2 and §3" />
       </section>
 
       <section aria-labelledby="labelling" className="space-y-4">
@@ -236,9 +206,9 @@ export default function DatasetPage() {
             No test label changed. It is reported as a deviation.
           </p>
         </div>
-        <Source file="rulebook" where="Steps 1 to 5" />
-        <Source file="preregistration" where="§12, amendments of 2026-09-23 and 2026-09-30" />
-        <Source file="runbook" where="“What the registered freeze contains”, for the pair counts" />
+        <Source path={SOURCES.rulebook} where="Steps 1 to 5" />
+        <Source path={SOURCES.preregistration} where="§12, amendments of 2026-09-23 and 2026-09-30" />
+        <Source path={SOURCES.runbook} where="“What the registered freeze contains”, for the pair counts" />
       </section>
 
       <section aria-labelledby="agreement" className="space-y-4">
@@ -279,8 +249,8 @@ export default function DatasetPage() {
             misunderstanding they shared.
           </li>
         </ul>
-        <Source file="runbook" where="“Registered agreement and sensitivity analyses (2026-10-09)”" />
-        <Source file="groupGuide" where="§5.2 and §6, for the limits" />
+        <Source path={SOURCES.runbook} where="“Registered agreement and sensitivity analyses (2026-10-09)”" />
+        <Source path={SOURCES.groupGuide} where="§5.2 and §6, for the limits" />
       </section>
 
       <section aria-labelledby="examples" className="space-y-4">
@@ -325,7 +295,7 @@ export default function DatasetPage() {
             ))}
           </tbody>
         </ScrollTable>
-        <Source file="manifest" where="the comments on ManifestRecord" />
+        <Source path={SOURCES.manifest} where="the comments on ManifestRecord" />
 
         <h3 className="font-display text-xl font-extrabold tracking-tight">One training record, whole</h3>
         <p className="max-w-[70ch] text-foreground/80">
@@ -341,8 +311,8 @@ export default function DatasetPage() {
           hold the same fixed value in every training record (an empty list, false and true), so they say nothing about
           this pair.
         </p>
-        <Source file="buildDataset" where="constructed_records and render_rationale" />
-        <Source file="runbook" where="“What the registered freeze contains”, for the two contradictory pairs" />
+        <Source path={SOURCES.buildDataset} where="constructed_records and render_rationale" />
+        <Source path={SOURCES.runbook} where="“What the registered freeze contains”, for the two contradictory pairs" />
       </section>
     </main>
   );

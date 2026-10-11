@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { X } from "@phosphor-icons/react";
 import { ResearchPair } from "../constants";
 
@@ -10,23 +11,49 @@ type LightboxModalProps = {
 };
 
 export function LightboxModal({ isOpen, onClose, pair, activeTab, setActiveTab }: LightboxModalProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = dialogRef.current;
+    dialog?.showModal();
+    dialog?.focus();
+    return () => {
+      if (dialog?.open) dialog.close();
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
+  // Enter stays in the dialog so it cannot submit the form behind it. Every other key reaches the page shortcuts.
+  const handleDialogKeyDown = (event: React.KeyboardEvent<HTMLDialogElement>) => {
+    if (event.key === "Enter") event.stopPropagation();
+  };
+
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      className="fixed inset-0 z-50 bg-foreground/80 backdrop-blur-md flex flex-col p-4 md:p-8 animate-in fade-in duration-200"
+    <dialog
+      ref={dialogRef}
+      aria-labelledby="lightbox-dialog-title"
+      tabIndex={-1}
+      onKeyDown={handleDialogKeyDown}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+      className="fixed inset-0 z-50 m-0 flex h-[100dvh] w-screen max-h-none max-w-none flex-col border-0 bg-foreground/80 p-4 text-surface backdrop-blur-md md:p-8 animate-in fade-in duration-200"
     >
-      <div className="flex items-center justify-between pb-4 text-surface border-b border-surface/20">
-        <div className="flex items-center gap-3">
-          <h3 className="font-display font-extrabold text-lg">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface/20 pb-4">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <h3 id="lightbox-dialog-title" className="font-display font-extrabold text-base sm:text-lg">
             High-Resolution Image Inspector
           </h3>
-          <div className="flex items-center rounded-lg bg-surface/10 p-1 border border-surface/20">
+          <div className="flex flex-wrap items-center rounded-lg bg-surface/10 p-1 border border-surface/20">
             <button
               onClick={() => setActiveTab("side-by-side")}
-              className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
+              aria-pressed={activeTab === "side-by-side"}
+              className={`min-h-11 sm:min-h-0 px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
                 activeTab === "side-by-side"
                   ? "bg-surface text-foreground"
                   : "text-surface/80 hover:text-surface"
@@ -36,7 +63,8 @@ export function LightboxModal({ isOpen, onClose, pair, activeTab, setActiveTab }
             </button>
             <button
               onClick={() => setActiveTab("canonical")}
-              className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
+              aria-pressed={activeTab === "canonical"}
+              className={`min-h-11 sm:min-h-0 px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
                 activeTab === "canonical"
                   ? "bg-surface text-foreground"
                   : "text-surface/80 hover:text-surface"
@@ -46,7 +74,8 @@ export function LightboxModal({ isOpen, onClose, pair, activeTab, setActiveTab }
             </button>
             <button
               onClick={() => setActiveTab("scene")}
-              className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
+              aria-pressed={activeTab === "scene"}
+              className={`min-h-11 sm:min-h-0 px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
                 activeTab === "scene"
                   ? "bg-surface text-foreground"
                   : "text-surface/80 hover:text-surface"
@@ -59,7 +88,8 @@ export function LightboxModal({ isOpen, onClose, pair, activeTab, setActiveTab }
 
         <button
           onClick={onClose}
-          className="p-2 rounded-xl bg-surface/10 hover:bg-surface/20 text-surface transition-colors"
+          aria-label="Close image inspector"
+          className="shrink-0 min-h-11 min-w-11 inline-flex items-center justify-center p-2 rounded-xl bg-surface/10 hover:bg-surface/20 text-surface transition-colors"
           title="Close (Esc)"
         >
           <X weight="bold" className="size-5" />
@@ -112,6 +142,6 @@ export function LightboxModal({ isOpen, onClose, pair, activeTab, setActiveTab }
           </div>
         )}
       </div>
-    </div>
+    </dialog>
   );
 }

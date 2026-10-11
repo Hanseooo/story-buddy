@@ -1,5 +1,5 @@
-import { ArrowSquareOut } from "@phosphor-icons/react/dist/ssr";
-import { githubUrl } from "../docs/entries";
+import ScrollTable from "../../../_shared/components/ScrollTable";
+import Source from "../../../_shared/components/Source";
 import {
   AGREEMENT,
   COMPARISON,
@@ -18,14 +18,12 @@ import {
   VALIDATION,
   calledDifferent,
   wrong,
-  type SourceKey,
 } from "./data";
 
 export const metadata = {
   title: "StoryBuddy Judge Results",
 };
 
-const FOCUS = "focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3";
 const CARD = "rounded-3xl bg-surface p-5 neo-border neo-shadow-sm sm:p-6";
 const H2 = "font-display text-2xl font-extrabold tracking-tight md:text-3xl";
 const TH = "px-2 py-2 text-left text-xs font-semibold uppercase tracking-widest text-foreground/60";
@@ -42,38 +40,6 @@ const OTHER = "bg-foreground/60";
 const [UNTRAINED, SEED_1, SEED_0, SEED_2] = JUDGES;
 
 const percent = (part: number, whole: number) => `${((part / whole) * 100).toFixed(1)}%`;
-
-// Source and ScrollTable are copied from ../dataset/page.tsx. This is their second use: extract on a third.
-function Source({ file, where }: { file: SourceKey; where: string }) {
-  return (
-    <p className="text-sm text-foreground/60">
-      Source:{" "}
-      <a
-        href={githubUrl(SOURCES[file])}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={`inline-flex min-h-11 items-center gap-1 rounded-lg font-mono font-bold text-primary hover:text-primary-deep hover:underline sm:min-h-0 ${FOCUS}`}
-      >
-        <span className="break-all">{SOURCES[file]}</span>
-        <ArrowSquareOut weight="bold" className="size-3.5 shrink-0" aria-hidden />
-        <span className="sr-only"> (opens on GitHub in a new tab)</span>
-      </a>
-      , {where}
-    </p>
-  );
-}
-
-// tabIndex: a table wider than the screen scrolls sideways, and a keyboard user needs to reach it.
-function ScrollTable({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div role="region" aria-label={label} tabIndex={0} className={`overflow-x-auto rounded-2xl neo-border ${FOCUS}`}>
-      <table className="w-full min-w-[36rem] border-collapse text-sm">
-        <caption className="sr-only">{label}</caption>
-        {children}
-      </table>
-    </div>
-  );
-}
 
 function Swatch({ tone }: { tone: string }) {
   return <span aria-hidden className={`inline-block size-2.5 shrink-0 rounded-sm ${tone}`} />;
@@ -162,11 +128,11 @@ export default function ResultsPage() {
           the results were seen.
         </p>
         <Source
-          file="runbook"
+          path={SOURCES.runbook}
           where="“Exact values of the partial comparison (copied 2026-10-11)” and “What the registered freeze contains”"
         />
-        <Source file="groupGuide" where="§8, for the three definitions" />
-        <Source file="preregistration" where="§5, for F1 as the primary metric" />
+        <Source path={SOURCES.groupGuide} where="§8, for the three definitions" />
+        <Source path={SOURCES.preregistration} where="§5, for F1 as the primary metric" />
       </section>
 
       <section aria-labelledby="training" className="space-y-4">
@@ -211,12 +177,12 @@ export default function ResultsPage() {
           {`For each seed, the checkpoint with the best F1 on the validation pairs was used: checkpoint ${SEED_0.checkpoint} for seed 0, checkpoint ${SEED_1.checkpoint} for seed 1 and checkpoint ${SEED_2.checkpoint} for seed 2. Checkpoint ${SEED_1.checkpoint} is ${SEED_1.checkpoint} of the ${TRAINING.updatesPerSeed} updates, before the first epoch ends at update ${TRAINING.updatesPerEpoch}. Seed 1 was then picked as the one to compare, also on validation data.`}
         </p>
         <Source
-          file="runbook"
+          path={SOURCES.runbook}
           where="“Registered training settings (copied 2026-10-11)” and “Exact values of the partial comparison (copied 2026-10-11)”"
         />
-        <Source file="trainConfig" where="the settings file itself" />
-        <Source file="finetuneSpec" where="§6, for how a run is started" />
-        <Source file="preregistration" where="§9.5, for the seeds and the choice of checkpoint" />
+        <Source path={SOURCES.trainConfig} where="the settings file itself" />
+        <Source path={SOURCES.finetuneSpec} where="§6, for how a run is started" />
+        <Source path={SOURCES.preregistration} where="§9.5, for the seeds and the choice of checkpoint" />
       </section>
 
       <section aria-labelledby="scores" className="space-y-4">
@@ -263,8 +229,8 @@ export default function ResultsPage() {
             ))}
           </ul>
         </figure>
-        <Source file="runbook" where="“Exact values of the partial comparison (copied 2026-10-11)”" />
-        <Source file="groupGuide" where="§5.2, for the reading in plain words" />
+        <Source path={SOURCES.runbook} where="“Exact values of the partial comparison (copied 2026-10-11)”" />
+        <Source path={SOURCES.groupGuide} where="§5.2, for the reading in plain words" />
       </section>
 
       <section aria-labelledby="answers" className="space-y-4">
@@ -310,7 +276,7 @@ export default function ResultsPage() {
             ))}
           </ul>
         </figure>
-        <Source file="runbook" where="“Exact values of the partial comparison (copied 2026-10-11)”" />
+        <Source path={SOURCES.runbook} where="“Exact values of the partial comparison (copied 2026-10-11)”" />
       </section>
 
       <section aria-labelledby="table" className="space-y-4">
@@ -350,7 +316,7 @@ export default function ResultsPage() {
         <p className={PROSE}>
           {`The three trained seeds have a mean F1 of ${SEEDS.meanF1}, with a sample standard deviation of ${SEEDS.sampleSd}.`}
         </p>
-        <Source file="runbook" where="“Exact values of the partial comparison (copied 2026-10-11)”" />
+        <Source path={SOURCES.runbook} where="“Exact values of the partial comparison (copied 2026-10-11)”" />
       </section>
 
       <section aria-labelledby="unreadable" className="space-y-4">
@@ -370,8 +336,8 @@ export default function ResultsPage() {
         <p className={PROSE}>
           {`Seeds 0 and 1 gave unreadable answers on ${UNREADABLE_SHARE}, which is part of why their recall is low.`}
         </p>
-        <Source file="groupGuide" where="§5.2" />
-        <Source file="runbook" where="“Exact values of the partial comparison (copied 2026-10-11)”, for the counts" />
+        <Source path={SOURCES.groupGuide} where="§5.2" />
+        <Source path={SOURCES.runbook} where="“Exact values of the partial comparison (copied 2026-10-11)”, for the counts" />
       </section>
 
       <section aria-labelledby="comparison" className="space-y-4">
@@ -405,11 +371,11 @@ export default function ResultsPage() {
           </p>
         </div>
         <Source
-          file="runbook"
+          path={SOURCES.runbook}
           where="“Exact values of the partial comparison (copied 2026-10-11)” and “Partial untuned versus fine-tuned comparison (2026-10-08)”"
         />
-        <Source file="groupGuide" where="§5.2" />
-        <Source file="preregistration" where="§1.2, for the comparison" />
+        <Source path={SOURCES.groupGuide} where="§5.2" />
+        <Source path={SOURCES.preregistration} where="§1.2, for the comparison" />
       </section>
 
       <section aria-labelledby="sensitivity" className="space-y-4">
@@ -440,8 +406,8 @@ export default function ResultsPage() {
         <p className={PROSE}>
           {`Seed 1 minus the untrained model: ΔF1 ${SENSITIVITY.deltaF1}, 95% interval ${SENSITIVITY.interval}, exact McNemar p = ${SENSITIVITY.mcnemarP}. The direction matches the primary analysis. The primary analysis, on every pair, stands. This check never replaces it.`}
         </p>
-        <Source file="runbook" where="“Registered agreement and sensitivity analyses (2026-10-09)”" />
-        <Source file="groupGuide" where="§5.2" />
+        <Source path={SOURCES.runbook} where="“Registered agreement and sensitivity analyses (2026-10-09)”" />
+        <Source path={SOURCES.groupGuide} where="§5.2" />
       </section>
 
       <section aria-labelledby="reading" className="space-y-4">
@@ -498,16 +464,16 @@ export default function ResultsPage() {
           test set is allowed, and only after a defect is found and fixed. Trying new settings does not count as a
           defect. No second read has been made.
         </p>
-        <Source file="preregistration" where="§1.1 for the objective, §6 for the rule on shipping, §7 for what may come next" />
+        <Source path={SOURCES.preregistration} where="§1.1 for the objective, §6 for the rule on shipping, §7 for what may come next" />
         <Source
-          file="changelog"
+          path={SOURCES.changelog}
           where="§1 items 3, 4 and 9, §2 for the move to the pipeline, and the 2026-10-11 rows for the four explanations"
         />
         <Source
-          file="runbook"
+          path={SOURCES.runbook}
           where="“Registered training settings (copied 2026-10-11)”, “What the registered freeze contains” and “Held-out resume context”"
         />
-        <Source file="groupGuide" where="§5.3, for the kinds of stories" />
+        <Source path={SOURCES.groupGuide} where="§5.3, for the kinds of stories" />
       </section>
 
       <section aria-labelledby="limits" className="space-y-4">
@@ -537,10 +503,10 @@ export default function ResultsPage() {
           </li>
         </ul>
         <Source
-          file="runbook"
+          path={SOURCES.runbook}
           where="“Partial untuned versus fine-tuned comparison (2026-10-08)”, “Exact values of the partial comparison (copied 2026-10-11)”, “What the registered freeze contains” and “Registered agreement and sensitivity analyses (2026-10-09)”"
         />
-        <Source file="groupGuide" where="§4 and §5.2" />
+        <Source path={SOURCES.groupGuide} where="§4 and §5.2" />
       </section>
     </main>
   );

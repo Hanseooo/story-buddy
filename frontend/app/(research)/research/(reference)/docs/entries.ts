@@ -37,7 +37,8 @@ export const DOC_FOLDERS: DocFolder[] = [
       },
       {
         file: "model-probes-2026-10.md",
-        answers: "What did the small October model screens find, and did anything change?",
+        answers:
+          "What did the small October model screens find, did anything change, and which pipeline limits must the write-up state?",
       },
     ],
   },

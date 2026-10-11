@@ -9,8 +9,6 @@ export const SOURCES = {
   trainConfig: "backend/finetune/train_qlora.yaml",
 } as const;
 
-export type SourceKey = keyof typeof SOURCES;
-
 // Runbook, "Partial untuned versus fine-tuned comparison (2026-10-08)".
 export const RESULT_DATE = "2026-10-08";
 
