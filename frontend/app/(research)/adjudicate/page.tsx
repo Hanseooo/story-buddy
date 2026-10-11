@@ -2,14 +2,24 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { CheckCircle, ArrowLeft, WarningCircle } from "@phosphor-icons/react/dist/ssr";
-import { getConflictedPair } from "./actions";
+import { getConflictedPair, submitAdjudication } from "./actions";
 import AdjudicateClient from "./AdjudicateClient";
+import { DEMO_SAMPLES } from "../_shared/demoSamples";
 
 export const metadata = {
   title: "Adjudicate Conflicts · StoryBuddy Research Lab",
 };
 
-export default async function AdjudicatePage() {
+type AdjudicatePageProps = {
+  searchParams?: Promise<{ demo?: string | string[] }>;
+};
+
+export default async function AdjudicatePage({ searchParams = Promise.resolve({}) }: AdjudicatePageProps = {}) {
+  const query = await searchParams;
+  if (query.demo === "1") {
+    return <AdjudicateClient key="demo" mode="demo" samples={DEMO_SAMPLES} />;
+  }
+
   const result = await getConflictedPair();
   const pair = result?.pair;
   const annotationA = result?.annotationA;
@@ -52,6 +62,19 @@ export default async function AdjudicatePage() {
           <p className="text-sm text-foreground/70 leading-relaxed max-w-[40ch]">
             No conflicted pairs pending adjudication found.
           </p>
+          <Link
+            href="/adjudicate?demo=1"
+            className="inline-flex min-h-11 items-center justify-center px-5 py-2.5 rounded-xl border border-primary/20 text-primary font-semibold text-sm hover:bg-primary/10 active:scale-[0.98] transition-all focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
+          >
+            Try adjudication demo
+          </Link>
+          <Link
+            href="/research"
+            className="inline-flex min-h-11 items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-foreground font-semibold text-sm hover:bg-foreground/5 transition-all focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
+          >
+            <ArrowLeft weight="bold" className="size-4" />
+            Back to Research Lab
+          </Link>
           <form action="/auth/signout" method="post" className="pt-2">
             <button
               type="submit"
@@ -65,5 +88,14 @@ export default async function AdjudicatePage() {
     );
   }
 
-  return <AdjudicateClient pair={pair} annotationA={annotationA} annotationB={annotationB} />;
+  return (
+    <AdjudicateClient
+      mode="live"
+      key="live"
+      pair={pair}
+      annotationA={annotationA}
+      annotationB={annotationB}
+      submitAction={submitAdjudication}
+    />
+  );
 }

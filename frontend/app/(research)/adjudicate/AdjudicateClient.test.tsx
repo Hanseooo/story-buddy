@@ -1,7 +1,8 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import AdjudicateClient from "./AdjudicateClient";
 import * as actions from "./actions";
+import { DEMO_SAMPLES } from "../_shared/demoSamples";
 
 const mockRefresh = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -37,9 +38,128 @@ describe("AdjudicateClient Component Tests", () => {
     vi.clearAllMocks();
   });
 
+  const samples = DEMO_SAMPLES;
+
+  it("completes and restarts the synthetic demo without a submission or refresh", () => {
+    render(<AdjudicateClient mode="demo" samples={samples} />);
+    expect(screen.getByText(/Synthetic samples/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Example 1 of 2" })).toBeInTheDocument();
+    expect(screen.getAllByRole("img").map((image) => image.getAttribute("src"))).toEqual([
+      "/research/dataset/033b8372e89e4c06-reference.webp",
+      "/research/dataset/033b8372e89e4c06-page.webp",
+    ]);
+    expect(screen.getAllByText("Disagreement")).toHaveLength(2);
+    screen.getAllByRole("img").forEach((image) => fireEvent.load(image));
+    fireEvent.keyDown(window, { key: "1" });
+    expect(screen.getByRole("checkbox", { name: "Wrong Color" })).toBeChecked();
+    fireEvent.keyDown(window, { key: "0" });
+    expect(screen.getByRole("checkbox", { name: "Wrong Color" })).not.toBeChecked();
+    const different = screen.getByRole("radio", { name: /Different Character/ });
+    different.focus();
+    fireEvent.keyDown(different, { key: "D", shiftKey: true });
+    fireEvent.keyDown(different, { key: "1" });
+    expect(screen.getByRole("checkbox", { name: "Wrong Color" })).toBeChecked();
+    for (const [key, label] of [
+      ["2", "Wrong Species"], ["3", "Wrong Body Feature"],
+      ["4", "Wrong Clothing/Accessories"], ["5", "Wrong Style"],
+      ["6", "Different Face"], ["7", "Character Absent"],
+    ]) {
+      fireEvent.keyDown(window, { key });
+      expect(screen.getByRole("checkbox", { name: label })).toBeChecked();
+      fireEvent.keyDown(window, { key });
+      expect(screen.getByRole("checkbox", { name: label })).not.toBeChecked();
+    }
+    fireEvent.keyDown(window, { key: "?" });
+    expect(screen.getByRole("dialog", { name: /Shortcuts/ })).toHaveFocus();
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(screen.getByRole("heading", { name: "Example 1 of 2" })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.keyDown(window, { key: "a" });
+    fireEvent.keyDown(window, { key: "t" });
+    fireEvent.click(screen.getByRole("button", { name: /Submit demo decision/ }));
+    expect(screen.getByRole("heading", { name: "Example 2 of 2" })).toHaveFocus();
+    expect(screen.getAllByRole("img").map((image) => image.getAttribute("src"))).toEqual([
+      "/research/dataset/1843d7d4835a8397-reference.webp",
+      "/research/dataset/1843d7d4835a8397-page.webp",
+    ]);
+    expect(screen.getAllByText("Disagreement")).toHaveLength(3);
+
+    expect(screen.getByRole("button", { name: /Submit demo decision/ })).toBeDisabled();
+    expect(screen.getByLabelText("Broken Anatomy")).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: /Same Character/ })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: /Different Character/ })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Wrong Color" })).not.toBeChecked();
+    expect(screen.getByLabelText("Text Visible")).not.toBeChecked();
+    fireEvent.keyDown(window, { key: "0" });
+    expect(screen.getByRole("button", { name: /Submit demo decision/ })).toBeDisabled();
+    fireEvent.keyDown(window, { key: "Enter" });
+    screen.getAllByRole("img").forEach((image) => fireEvent.load(image));
+    fireEvent.keyDown(window, { key: "0" });
+    fireEvent.keyDown(window, { key: " " });
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(screen.getByRole("heading", { name: "Example 2 of 2" })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(screen.getByRole("heading", { name: /Demo complete/ })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Restart demo" }));
+    expect(screen.getByRole("heading", { name: "Example 1 of 2" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: /Submit demo decision/ })).toBeDisabled();
+    expect(actions.submitAdjudication).not.toHaveBeenCalled();
+    expect(mockRefresh).not.toHaveBeenCalled();
+  });
+
+  it("labels the demo comparison as illustrative, not as blinded rater answers", () => {
+    render(<AdjudicateClient mode="demo" samples={samples} />);
+
+    const summary = screen.getByRole("region", { name: "Annotator Discrepancies" });
+    expect(within(summary).getByText("Illustrative disagreements — not recorded rater answers")).toBeInTheDocument();
+    expect(screen.queryByText(/Blinded Dual Annotations/)).not.toBeInTheDocument();
+  });
+
+  it("keeps shortcuts working from inside an open dialog and never submits from one", () => {
+    render(<AdjudicateClient mode="demo" samples={samples} />);
+    screen.getAllByRole("img").forEach((image) => fireEvent.load(image));
+
+    fireEvent.keyDown(window, { key: " " });
+    const inspector = screen.getByRole("dialog", { name: /Image Inspector/ });
+    fireEvent.keyDown(inspector, { key: "0" });
+    expect(screen.getByRole("radio", { name: /Same Character/ })).toBeChecked();
+    fireEvent.keyDown(inspector, { key: "Enter" });
+    expect(screen.getByRole("heading", { name: "Example 1 of 2" })).toBeInTheDocument();
+    fireEvent.keyDown(inspector, { key: " " });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "?" });
+    fireEvent.keyDown(screen.getByRole("dialog", { name: /Shortcuts/ }), { key: "?" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(actions.submitAdjudication).not.toHaveBeenCalled();
+  });
+
+  it("blocks an unselected or failed-image demo and retains selections on retry", () => {
+    render(<AdjudicateClient mode="demo" samples={samples} />);
+    fireEvent.keyDown(window, { key: "Enter" });
+    screen.getAllByRole("img").forEach((image) => fireEvent.load(image));
+    expect(screen.getByRole("button", { name: /Submit demo decision/ })).toBeDisabled();
+    fireEvent.keyDown(window, { key: "Enter" });
+    fireEvent.keyDown(window, { key: "0" });
+    expect(screen.getByRole("button", { name: /Submit demo decision/ })).toBeEnabled();
+    fireEvent.error(screen.getAllByRole("img")[0]);
+    expect(screen.getByRole("alert")).toHaveTextContent(/sample/i);
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(screen.getByRole("heading", { name: "Example 1 of 2" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Exit demo" })).toHaveAttribute("href", "/adjudicate");
+    fireEvent.click(screen.getByRole("button", { name: /Retry/ }));
+    expect(screen.getByRole("radio", { name: /Same Character/ })).toBeChecked();
+    screen.getAllByRole("img").forEach((image) => fireEvent.load(image));
+    expect(screen.getByRole("button", { name: /Submit demo decision/ })).toBeEnabled();
+    expect(actions.submitAdjudication).not.toHaveBeenCalled();
+    expect(mockRefresh).not.toHaveBeenCalled();
+  });
+
   it("asserts NO metadata leaks in DOM (strict blinding verification)", () => {
     const { container } = render(
       <AdjudicateClient
+        mode="live" submitAction={actions.submitAdjudication}
         pair={mockPair}
         annotationA={mockAnnotationA}
         annotationB={mockAnnotationB}
@@ -65,6 +185,7 @@ describe("AdjudicateClient Component Tests", () => {
   it("renders conflict summary highlighting differing fields between Annotator 1 and Annotator 2", () => {
     render(
       <AdjudicateClient
+        mode="live" submitAction={actions.submitAdjudication}
         pair={mockPair}
         annotationA={mockAnnotationA}
         annotationB={mockAnnotationB}
@@ -83,6 +204,7 @@ describe("AdjudicateClient Component Tests", () => {
   it("handles form state transitions between Same Character and failure taxonomy", () => {
     render(
       <AdjudicateClient
+        mode="live" submitAction={actions.submitAdjudication}
         pair={mockPair}
         annotationA={mockAnnotationA}
         annotationB={mockAnnotationB}
@@ -130,6 +252,7 @@ describe("AdjudicateClient Component Tests", () => {
   it("toggles gating booleans (Broken Anatomy & Text Visible) independently", () => {
     render(
       <AdjudicateClient
+        mode="live" submitAction={actions.submitAdjudication}
         pair={mockPair}
         annotationA={mockAnnotationA}
         annotationB={mockAnnotationB}
@@ -154,6 +277,7 @@ describe("AdjudicateClient Component Tests", () => {
   it("submits authoritative adjudication decision and refreshes router", async () => {
     render(
       <AdjudicateClient
+        mode="live" submitAction={actions.submitAdjudication}
         pair={mockPair}
         annotationA={mockAnnotationA}
         annotationB={mockAnnotationB}
@@ -185,6 +309,7 @@ describe("AdjudicateClient Component Tests", () => {
 
     render(
       <AdjudicateClient
+        mode="live" submitAction={actions.submitAdjudication}
         pair={mockPair}
         annotationA={mockAnnotationA}
         annotationB={mockAnnotationB}
@@ -206,6 +331,7 @@ describe("AdjudicateClient Component Tests", () => {
   it("supports keyboard shortcuts (0, 1-7, A, T, Enter)", async () => {
     render(
       <AdjudicateClient
+        mode="live" submitAction={actions.submitAdjudication}
         pair={mockPair}
         annotationA={mockAnnotationA}
         annotationB={mockAnnotationB}

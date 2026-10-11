@@ -10,6 +10,12 @@ are in; **D-K and D-L resolved** (2026-08-19, via migrations 0016/0017 and expli
 > live. It supersedes the `labels/` raw-CSV mechanism sketched in `docs/specs/judge-finetune.md` §5.3/§5.4 —
 > that directory is now historical.
 
+
+The signed-in, synthetic-only presentation demos for these same forms are specified in
+[research-labelling-demo](research-labelling-demo.md). Demo choices never enter the research
+submission path. The operative staffing protocol is the 2026-09-23 preregistration amendment
+and its later recorded deviations. The single-rater account below is historical.
+
 ---
 
 ## 1. Purpose

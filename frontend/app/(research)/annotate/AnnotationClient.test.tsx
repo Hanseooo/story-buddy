@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import AnnotationClient from "./AnnotationClient";
 import * as actions from "./actions";
+import { DEMO_SAMPLES } from "../_shared/demoSamples";
 
 const mockRefresh = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -23,8 +24,116 @@ describe("Tier 1: AnnotationClient Component Tests", () => {
     vi.clearAllMocks();
   });
 
+  const samples = DEMO_SAMPLES;
+
+  it("completes and restarts the synthetic demo without a submission or refresh", () => {
+    render(<AnnotationClient mode="demo" samples={samples} />);
+    expect(screen.getByText(/Synthetic samples/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Example 1 of 2" })).toBeInTheDocument();
+    expect(screen.getAllByRole("img").map((image) => image.getAttribute("src"))).toEqual([
+      "/research/dataset/033b8372e89e4c06-reference.webp",
+      "/research/dataset/033b8372e89e4c06-page.webp",
+    ]);
+    screen.getAllByRole("img").forEach((image) => fireEvent.load(image));
+    fireEvent.keyDown(window, { key: "1" });
+    expect(screen.getByRole("checkbox", { name: "Wrong Color" })).toBeChecked();
+    fireEvent.keyDown(window, { key: "0" });
+    expect(screen.getByRole("checkbox", { name: "Wrong Color" })).not.toBeChecked();
+    const different = screen.getByRole("radio", { name: /Different Character/ });
+    different.focus();
+    fireEvent.keyDown(different, { key: "D", shiftKey: true });
+    fireEvent.keyDown(different, { key: "1" });
+    expect(screen.getByRole("checkbox", { name: "Wrong Color" })).toBeChecked();
+    for (const [key, label] of [
+      ["2", "Wrong Species"], ["3", "Wrong Body Feature"],
+      ["4", "Wrong Clothing/Accessories"], ["5", "Wrong Style"],
+      ["6", "Different Face"], ["7", "Character Absent"],
+    ]) {
+      fireEvent.keyDown(window, { key });
+      expect(screen.getByRole("checkbox", { name: label })).toBeChecked();
+      fireEvent.keyDown(window, { key });
+      expect(screen.getByRole("checkbox", { name: label })).not.toBeChecked();
+    }
+    fireEvent.keyDown(window, { key: "?" });
+    expect(screen.getByRole("dialog", { name: /Shortcuts/ })).toHaveFocus();
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(screen.getByRole("heading", { name: "Example 1 of 2" })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.keyDown(window, { key: "a" });
+    fireEvent.keyDown(window, { key: "t" });
+    fireEvent.click(screen.getByRole("button", { name: /Submit demo answer/ }));
+    expect(screen.getByRole("heading", { name: "Example 2 of 2" })).toHaveFocus();
+    expect(screen.getAllByRole("img").map((image) => image.getAttribute("src"))).toEqual([
+      "/research/dataset/1843d7d4835a8397-reference.webp",
+      "/research/dataset/1843d7d4835a8397-page.webp",
+    ]);
+
+    expect(screen.getByRole("button", { name: /Submit demo answer/ })).toBeDisabled();
+    expect(screen.getByLabelText("Broken Anatomy")).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: /Same Character/ })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: /Different Character/ })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Wrong Color" })).not.toBeChecked();
+    expect(screen.getByLabelText("Text Visible")).not.toBeChecked();
+    fireEvent.keyDown(window, { key: "0" });
+    expect(screen.getByRole("button", { name: /Submit demo answer/ })).toBeDisabled();
+    fireEvent.keyDown(window, { key: "Enter" });
+    screen.getAllByRole("img").forEach((image) => fireEvent.load(image));
+    fireEvent.keyDown(window, { key: "0" });
+    fireEvent.keyDown(window, { key: " " });
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(screen.getByRole("heading", { name: "Example 2 of 2" })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(screen.getByRole("heading", { name: /Demo complete/ })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Restart demo" }));
+    expect(screen.getByRole("heading", { name: "Example 1 of 2" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: /Submit demo answer/ })).toBeDisabled();
+    expect(actions.submitAnnotation).not.toHaveBeenCalled();
+    expect(mockRefresh).not.toHaveBeenCalled();
+  });
+
+  it("keeps shortcuts working from inside an open dialog and never submits from one", () => {
+    render(<AnnotationClient mode="demo" samples={samples} />);
+    screen.getAllByRole("img").forEach((image) => fireEvent.load(image));
+
+    fireEvent.keyDown(window, { key: " " });
+    const inspector = screen.getByRole("dialog", { name: /Image Inspector/ });
+    fireEvent.keyDown(inspector, { key: "0" });
+    expect(screen.getByRole("radio", { name: /Same Character/ })).toBeChecked();
+    fireEvent.keyDown(inspector, { key: "Enter" });
+    expect(screen.getByRole("heading", { name: "Example 1 of 2" })).toBeInTheDocument();
+    fireEvent.keyDown(inspector, { key: " " });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "?" });
+    fireEvent.keyDown(screen.getByRole("dialog", { name: /Shortcuts/ }), { key: "?" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(actions.submitAnnotation).not.toHaveBeenCalled();
+  });
+
+  it("blocks an unselected or failed-image demo and retains selections on retry", () => {
+    render(<AnnotationClient mode="demo" samples={samples} />);
+    fireEvent.keyDown(window, { key: "Enter" });
+    screen.getAllByRole("img").forEach((image) => fireEvent.load(image));
+    expect(screen.getByRole("button", { name: /Submit demo answer/ })).toBeDisabled();
+    fireEvent.keyDown(window, { key: "Enter" });
+    fireEvent.keyDown(window, { key: "0" });
+    expect(screen.getByRole("button", { name: /Submit demo answer/ })).toBeEnabled();
+    fireEvent.error(screen.getAllByRole("img")[0]);
+    expect(screen.getByRole("alert")).toHaveTextContent(/sample/i);
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(screen.getByRole("heading", { name: "Example 1 of 2" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Exit demo" })).toHaveAttribute("href", "/annotate");
+    fireEvent.click(screen.getByRole("button", { name: /Retry/ }));
+    expect(screen.getByRole("radio", { name: /Same Character/ })).toBeChecked();
+    screen.getAllByRole("img").forEach((image) => fireEvent.load(image));
+    expect(screen.getByRole("button", { name: /Submit demo answer/ })).toBeEnabled();
+    expect(actions.submitAnnotation).not.toHaveBeenCalled();
+    expect(mockRefresh).not.toHaveBeenCalled();
+  });
+
   it("asserts NO metadata leaks in DOM (strict blinding verification)", () => {
-    const { container } = render(<AnnotationClient pair={mockPair} />);
+    const { container } = render(<AnnotationClient mode="live" submitAction={actions.submitAnnotation} pair={mockPair} />);
     
     // DOM should contain the signed URLs and image elements
     expect(container.innerHTML).toContain("https://example.com/canonical-test-url.png");
@@ -41,7 +150,7 @@ describe("Tier 1: AnnotationClient Component Tests", () => {
   });
 
   it("handles form state transitions properly between Same Character and failure taxonomy", () => {
-    render(<AnnotationClient pair={mockPair} />);
+    render(<AnnotationClient mode="live" submitAction={actions.submitAnnotation} pair={mockPair} />);
     const sameCharRadio = screen.getByRole("radio", { name: /Same Character/i });
     const diffCharRadio = screen.getByRole("radio", { name: /Different Character/i });
     const wrongColorCheckbox = screen.getByLabelText(/Wrong Color/i);
@@ -85,7 +194,7 @@ describe("Tier 1: AnnotationClient Component Tests", () => {
   // labelling-rulebook.md Step 3: the screen accepts Different with only Clothing or Style,
   // which is always a mistake, so it warns without blocking.
   it("warns, without blocking, when Different rests on clothing or style alone", () => {
-    render(<AnnotationClient pair={mockPair} />);
+    render(<AnnotationClient mode="live" submitAction={actions.submitAnnotation} pair={mockPair} />);
     fireEvent.click(screen.getByRole("radio", { name: /Different Character/i }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Wrong Clothing/Accessories" }));
 
@@ -97,7 +206,7 @@ describe("Tier 1: AnnotationClient Component Tests", () => {
   });
 
   it("toggles gating booleans (Broken Anatomy & Text Visible) independently", () => {
-    render(<AnnotationClient pair={mockPair} />);
+    render(<AnnotationClient mode="live" submitAction={actions.submitAnnotation} pair={mockPair} />);
     const brokenAnatomyCheckbox = screen.getByLabelText(/Broken Anatomy/i);
     const textVisibleCheckbox = screen.getByLabelText(/Text Visible/i);
     const sameCharRadio = screen.getByRole("radio", { name: /Same Character/i });
@@ -114,7 +223,7 @@ describe("Tier 1: AnnotationClient Component Tests", () => {
   });
 
   it("submits valid annotation payload and refreshes router", async () => {
-    render(<AnnotationClient pair={mockPair} />);
+    render(<AnnotationClient mode="live" submitAction={actions.submitAnnotation} pair={mockPair} />);
     const sameCharRadio = screen.getByRole("radio", { name: /Same Character/i });
     const submitBtn = screen.getByRole("button", { name: /Submit/i });
 
@@ -139,7 +248,7 @@ describe("Tier 1: AnnotationClient Component Tests", () => {
       error: "Invalid state: same_character is false but no failure reasons provided"
     });
 
-    render(<AnnotationClient pair={mockPair} />);
+    render(<AnnotationClient mode="live" submitAction={actions.submitAnnotation} pair={mockPair} />);
     const submitBtn = screen.getByRole("button", { name: /Submit/i });
     const sameCharRadio = screen.getByRole("radio", { name: /Same Character/i });
     
@@ -154,7 +263,7 @@ describe("Tier 1: AnnotationClient Component Tests", () => {
   });
 
   it("supports keyboard shortcuts (0, 1-7, A, T, Enter)", async () => {
-    render(<AnnotationClient pair={mockPair} />);
+    render(<AnnotationClient mode="live" submitAction={actions.submitAnnotation} pair={mockPair} />);
     const sameCharRadio = screen.getByRole("radio", { name: /Same Character/i });
     const diffCharRadio = screen.getByRole("radio", { name: /Different Character/i });
     const wrongColorCheckbox = screen.getByLabelText(/Wrong Color/i);
@@ -220,12 +329,12 @@ describe("Test-retest rounds (annotation-surface.md §4.1)", () => {
   });
 
   it("tells the rater which pass they are on", () => {
-    render(<AnnotationClient pair={mockPair} round={2} />);
+    render(<AnnotationClient mode="live" submitAction={actions.submitAnnotation} pair={mockPair} round={2} />);
     expect(screen.getByText(/Round 2/i)).toBeDefined();
   });
 
   it("submits the served round with the label", async () => {
-    render(<AnnotationClient pair={mockPair} round={2} />);
+    render(<AnnotationClient mode="live" submitAction={actions.submitAnnotation} pair={mockPair} round={2} />);
     fireEvent.click(screen.getByRole("radio", { name: /Same Character/i }));
     fireEvent.click(screen.getByRole("button", { name: /Submit/i }));
 
@@ -237,7 +346,7 @@ describe("Test-retest rounds (annotation-surface.md §4.1)", () => {
   });
 
   it("shows no trace of a previous round's answer", () => {
-    const { container } = render(<AnnotationClient pair={mockPair} round={2} />);
+    const { container } = render(<AnnotationClient mode="live" submitAction={actions.submitAnnotation} pair={mockPair} round={2} />);
     const sameChar = screen.getByRole("radio", { name: /Same Character/i }) as HTMLInputElement;
     const diffChar = screen.getByRole("radio", { name: /Different Character/i }) as HTMLInputElement;
     expect(sameChar.checked).toBe(false);

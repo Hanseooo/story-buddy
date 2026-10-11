@@ -3,13 +3,23 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { CheckCircle, ArrowLeft, WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import AnnotationClient from "./AnnotationClient";
-import { getNextPair } from "./actions";
+import { getNextPair, submitAnnotation } from "./actions";
+import { DEMO_SAMPLES } from "../_shared/demoSamples";
 
 export const metadata = {
   title: "Annotate Image Pair · StoryBuddy Research Lab",
 };
 
-export default async function AnnotatePage() {
+type AnnotatePageProps = {
+  searchParams?: Promise<{ demo?: string | string[] }>;
+};
+
+export default async function AnnotatePage({ searchParams = Promise.resolve({}) }: AnnotatePageProps = {}) {
+  const query = await searchParams;
+  if (query.demo === "1") {
+    return <AnnotationClient key="demo" mode="demo" samples={DEMO_SAMPLES} />;
+  }
+
   const result = await getNextPair();
   const pair = result?.pair;
   const error = result?.error;
@@ -50,6 +60,19 @@ export default async function AnnotatePage() {
           <p className="text-sm text-foreground/70 leading-relaxed max-w-[40ch]">
             No pending pairs found in the annotation queue. All available pairs have been evaluated.
           </p>
+          <Link
+            href="/annotate?demo=1"
+            className="inline-flex min-h-11 items-center justify-center px-5 py-2.5 rounded-xl border border-primary/20 text-primary font-semibold text-sm hover:bg-primary/10 active:scale-[0.98] transition-all focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
+          >
+            Try annotation demo
+          </Link>
+          <Link
+            href="/research"
+            className="inline-flex min-h-11 items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-foreground font-semibold text-sm hover:bg-foreground/5 transition-all focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
+          >
+            <ArrowLeft weight="bold" className="size-4" />
+            Back to Research Lab
+          </Link>
           <form action="/auth/signout" method="post" className="pt-2">
             <button
               type="submit"
@@ -63,5 +86,13 @@ export default async function AnnotatePage() {
     );
   }
 
-  return <AnnotationClient pair={pair} round={result?.round ?? 1} />;
+  return (
+    <AnnotationClient
+      mode="live"
+      key="live"
+      pair={pair}
+      round={result?.round ?? 1}
+      submitAction={submitAnnotation}
+    />
+  );
 }

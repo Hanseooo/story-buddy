@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { X, BookOpen } from "@phosphor-icons/react";
 import { TAXONOMY_LABELS } from "../constants";
 
@@ -7,25 +8,51 @@ type ShortcutsModalProps = {
 };
 
 export function ShortcutsModal({ isOpen, onClose }: ShortcutsModalProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = dialogRef.current;
+    dialog?.showModal();
+    dialog?.focus();
+    return () => {
+      if (dialog?.open) dialog.close();
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
+  // Enter stays in the dialog so it cannot submit the form behind it. Every other key reaches the page shortcuts.
+  const handleDialogKeyDown = (event: React.KeyboardEvent<HTMLDialogElement>) => {
+    if (event.key === "Enter") event.stopPropagation();
+  };
+
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      className="fixed inset-0 z-50 bg-foreground/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+    <dialog
+      ref={dialogRef}
+      aria-labelledby="shortcuts-dialog-title"
+      tabIndex={-1}
+      onKeyDown={handleDialogKeyDown}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+      className="fixed inset-0 z-50 m-0 flex h-[100dvh] w-screen max-h-none max-w-none items-center justify-center border-0 bg-foreground/60 p-4 text-foreground backdrop-blur-sm animate-in fade-in duration-150"
     >
       <div className="bg-surface rounded-2xl neo-border neo-shadow-lg max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
         <div className="p-6 border-b border-primary/10 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <BookOpen className="size-5 text-primary" weight="duotone" />
-            <h3 className="font-display font-extrabold text-lg text-foreground">
+            <h3 id="shortcuts-dialog-title" className="font-display font-extrabold text-lg text-foreground">
               Shortcuts &amp; Labelling Rulebook
             </h3>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-foreground/50 hover:text-foreground hover:bg-muted/60 transition-colors"
+            aria-label="Close shortcuts guide"
+            className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-lg text-foreground/50 hover:text-foreground hover:bg-muted/60 transition-colors"
             title="Close (Esc)"
           >
             <X weight="bold" className="size-4" />
@@ -198,6 +225,6 @@ export function ShortcutsModal({ isOpen, onClose }: ShortcutsModalProps) {
           </button>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }
