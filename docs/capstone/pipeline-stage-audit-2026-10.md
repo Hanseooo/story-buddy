@@ -96,8 +96,9 @@ uncertain) is not yet checked. All 276 items were reviewed; none missing. Review
 confounded with stories.
 
 **Shipped pages.** 77 of 150 have at least one major defect, 71 are acceptable, 2 uncertain. Pages
-with no `non_human` tag: 11 of 33 defective, against 66 of 117 for non-human pages. The synthetic
-corpus is 83% invented non-human characters while donated stories are mostly human, so the overall
+with no `non_human` tag: 11 of 33 defective, against 66 of 117 for pages with that tag, including
+mixed human/non-human casts. Thus 117 of 150 shipped pages are tagged non-human; this is a page
+grouping, not the fine-tuning character or pair mix. Donated stories are mostly human, so the overall
 rate likely overstates what classroom stories meet.
 
 **Where the 77 come from** (a page can have several origins): a reference-origin major on 38 (26 only

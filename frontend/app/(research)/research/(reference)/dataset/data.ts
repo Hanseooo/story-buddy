@@ -20,6 +20,15 @@ export const SPLITS = [
 
 export type SplitName = (typeof SPLITS)[number]["name"];
 
+// Runbook, "Human/non-human training and validation mix". Generated characters, not declared rosters.
+export const CHARACTER_KINDS = [
+  { split: "Train", humanCharacters: 19, nonHumanCharacters: 25, humanPairs: 220, nonHumanPairs: 264 },
+  { split: "Validation", humanCharacters: 9, nonHumanCharacters: 2, humanPairs: 75, nonHumanPairs: 11 },
+] as const;
+
+// Runbook, "Dataset handoff": this filtered freeze was separate from the completed registered runs.
+export const EXPLORATORY = { excluded: 16, trainPairs: 468 } as const;
+
 // Same table. A pair can carry several reasons, so these sum to 236 over 208 Different pairs.
 export const REASON_PAIRS: Record<keyof TaxonomyState, number> = {
   different_face: 141,

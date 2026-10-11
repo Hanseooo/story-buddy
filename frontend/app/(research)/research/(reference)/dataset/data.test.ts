@@ -21,6 +21,15 @@ describe("dataset page data", () => {
 
     expect(data.SPLITS.map((split) => split.pairs)).toEqual([484, 86, 329]);
     expect([sum("pairs"), sum("same"), sum("different"), sum("constructed")]).toEqual([899, 691, 208, 104]);
+    const runbook = readFileSync(path.join(REPO_ROOT, data.SOURCES.runbook), "utf8");
+    for (const row of data.CHARACTER_KINDS) {
+      expect(runbook).toContain(`| ${row.split} | ${row.humanCharacters} | ${row.nonHumanCharacters} | ${row.humanPairs} | ${row.nonHumanPairs} |`);
+    }
+    expect(data.CHARACTER_KINDS).toEqual([
+      { split: "Train", humanCharacters: 19, nonHumanCharacters: 25, humanPairs: 220, nonHumanPairs: 264 },
+      { split: "Validation", humanCharacters: 9, nonHumanCharacters: 2, humanPairs: 75, nonHumanPairs: 11 },
+    ]);
+    expect(data.EXPLORATORY).toEqual({ excluded: 16, trainPairs: 468 });
   });
 
   it("cites only files that are in the repository", () => {

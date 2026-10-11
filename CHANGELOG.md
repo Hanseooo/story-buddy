@@ -14,6 +14,37 @@ instead of repeating it.
 
 ---
 
+## Direct update to main · 2026-10-12
+
+### Code
+
+- Accept stories up to 500 words in the frontend and backend under ADR-068. Existing page,
+  retry, image and recursion ceilings remain unchanged.
+- Research pages distinguish generated character and pair counts from the stage audit's page
+  tags, explain the separate exploratory freeze, and clarify provisional AI-assisted findings.
+- The running-job test fixture uses the database's empty-object reveal default.
+- Calculate the reveal fingerprint only while paused so that default cannot crash the
+  running-job screen.
+
+### Docs
+
+- Added accepted ADR-068 and aligned the affected specifications and product documents.
+- Corrected dataset descriptions and recorded the source and limits of the reconstructed
+  training/validation counts in the research runbook and research changelog.
+
+### Checks
+
+- Backend: `uv sync --frozen`, `uv run ruff check .` and `uv run pytest` passed
+  (1,474 passed, 87 skipped, 6 deselected).
+- Frontend: `pnpm lint`, `pnpm build` (with public Supabase placeholders), and
+  `pnpm test --maxWorkers=2` passed (73 files, 691 tests).
+- The initial frontend run reproduced the empty-reveal crash. The processing-page file
+  passed all 44 tests after the paused-state guard was added, before the full rerun.
+- Credential-dependent backend checks were skipped or deselected. No provider smoke test
+  or browser review was run for this update.
+
+---
+
 ## PR #116 · 2026-10-11
 
 A public page for the pipeline's findings and limitations, and signed-in annotation and

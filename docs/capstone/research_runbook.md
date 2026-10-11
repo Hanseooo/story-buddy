@@ -50,6 +50,10 @@ The registered `data/judge/freezes/obj4-v1` freeze is installed: manifest SHA-25
 pairs only. No retained natural or constructed training pair uses one of their scene
 images; validation and test manifests and the validation payload match the registered
 freeze byte for byte. The training runner's hash and manifest preflight passed for both.
+The completed three-seed training used `obj4-v1`: each saved run plan pins the registered
+manifest hash above, and each final trainer state records step 183 and epoch 3.0. All 16
+exploratory omission IDs remain in the registered training manifest. The exploratory freeze
+was prepared separately; it was not the dataset used by those completed runs.
 The ten AI-assisted audit labels and their protocol deviation are recorded in
 `PREREGISTRATION_OBJ4.md` and `adjudication-notes-2026-09.md`.
 
@@ -65,6 +69,35 @@ Both are local and git-ignored, so this table is the public source for these tot
 | Validation (synthetic) | 6 | 11 | 86 | 82 | 4 | 0 |
 | Held-out test (donated) | 12 | 24 | 329 | 282 | 47 | 0 |
 | All | 42 | 79 | 899 | 691 | 208 | 104 |
+
+**Human/non-human training and validation mix (checked 2026-10-11).** These counts describe
+the generated characters and manifest records, including constructed pairs:
+
+| Split | Human characters | Non-human characters | Human pairs | Non-human pairs |
+|---|---|---|---|---|
+| Train | 19 | 25 | 220 | 264 |
+| Validation | 9 | 2 | 75 | 11 |
+
+Non-human pairs are 264 of 484 training records (54.5%). The earlier 83% figure is 25 of
+30 **intake-declared training characters**, not a share of stories or generated training
+pairs. The generated training roster has 44 characters. Validation has 11 generated
+characters and 86 pairs; 11 of those pairs (12.8%) are non-human.
+
+The original freeze directories were not readable during this check. The four train/validation
+manifest and payload copies in `data/judge/qualification/registered-train-val/` match the
+artifact hashes in their copied `freeze_report.json`. Character slices were reconstructed with
+`freeze_dataset.py`'s exact rule: match each generated character name, case-insensitively, to
+the run's intake-declared non-human roster. All 30 synthetic run declarations match
+`corpus_synthetic.json`. No held-out example was read. These character/pair slices differ
+from the stage audit's page tags, where a page with any non-human tag joins the non-human
+group, including a mixed human/non-human cast.
+
+**Other exclusions.** Three donated candidate stories never entered the registered freeze
+because their pipelines failed to finalize. Donated stories supply the test set only, so this
+does not reduce training. Pilot pairs are excluded by the freeze code; the registered report
+has no pair-level exclusions (`exclusions: []`). The secondary ambiguous-reference analysis
+drops 20 test pairs only when recomputing sensitivity metrics; all 329 remain in the primary
+test analysis and frozen dataset.
 
 No story or character is in more than one split. A constructed pair sets one character's reference
 against another character's page, so it is Different by construction and was not shown to the

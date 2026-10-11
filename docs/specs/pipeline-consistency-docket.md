@@ -108,7 +108,7 @@ Decided in earlier sessions. Later sessions treat these as given, not open.
 | BC-18 | **S4 adds no spend ceiling or retry allowance.** Setting failures may consume the existing redraw more often; no paid run was taken and no visual-quality claim is made. | S4 |
 | BC-19 | **A scene has at most three consistency-checked attempts** — the initial draw plus two corrected retries (`MAX_SCENE_ATTEMPTS = 3`, ADR-037 amending ADR-010). N is fixed; there is no stop-on-non-improvement rule, and passing or unchecked results remain the only early exits. | S5 |
 | BC-20 | **The retry raised is ADR-010's alone.** `MAX_DRAWS`, `MAX_MOD_REDRAWS`, and `MAX_RETRY_TAPS` keep their existing values. Output moderation retains exactly one softened redraw. | S5 |
-| BC-21 | **`MAX_STORY_WORDS = 300` and `MAX_SCENES = 10` are the price of BC-19.** Length and retries are one currency. The frontend makes the child shorten visible over-cap text rather than silently discarding it; the backend clamp remains authoritative. | S5 |
+| BC-21 | **`MAX_STORY_WORDS = 500` (ADR-068) and `MAX_SCENES = 10` are the current ceilings.** ADR-068 raises ADR-037's word cap only. The frontend makes the child shorten visible over-cap text rather than silently discarding it; the backend clamp remains authoritative. | S5 |
 | BC-22 | **`IMAGE_BUDGET = MAX_SCENES * 4 + 15 = 55` funds every structurally permitted paid draw.** The `* 4` includes output moderation's redraw, which the pre-S5 `* 2` never counted. `RECURSION_LIMIT = MAX_SCENES * 7 + 17 = 87`. The two preludes stay unequal on purpose — different units. | S5 |
 | BC-23 | **Every paid fal path goes through one breaker.** `output_mod`'s softened redraw is counted in `cost.image_count` and breaker-bound like the others; judge and classifier calls stay absent from `Cost` by decision, not omission. | S5 |
 | BC-24 | **S5 amends BC-11, BC-16, and BC-18's "existing single redraw" to two.** Those rows are left as written — they were true for S2/S4 — and no S5 change adds a node, edge, provider, model, contract field, or paid run. No visual-quality claim is made for the third attempt. | S5, BC-1 |
@@ -455,6 +455,9 @@ docket's work.
   contradictions deduplicated in first-seen order. The S5 economics (10 scenes, 3 attempts, 55 image
   budget, 87 recursion limit) and cost arithmetic remain frozen and unchanged while historical docket
   rows remain visible as design context.
+- 2026-10-11 (word-ceiling amendment): ADR-068 raises `MAX_STORY_WORDS` from 300 to 500 in
+  the frontend and backend. BC-21 reflects the current word ceiling. Scene count, retry allowance,
+  image budget, recursion limit, and completed research artifacts are unchanged.
 
 ---
 

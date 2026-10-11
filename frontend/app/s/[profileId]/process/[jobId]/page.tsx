@@ -215,7 +215,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
     });
   }
 
-  const revealFingerprint = row?.reveal
+  const revealFingerprint = bucket === "paused" && row?.reveal
     ? JSON.stringify({
         tapsLeft: row.reveal.taps_left,
         characters: row.reveal.characters.map(({ char_id, image_path, chips }) => ({

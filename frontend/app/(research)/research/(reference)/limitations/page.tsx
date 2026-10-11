@@ -74,7 +74,7 @@ export default function LimitationsPage() {
         <div className="space-y-1">
           <p className="font-bold">Read these numbers as provisional</p>
           <p className={PROSE}>
-            {`The ${AUDIT.pages} pages and ${AUDIT.references} reference pictures were scored by AI reviewers on ${AUDIT.date}, and the owner has not confirmed the scores, so every audit number here is provisional. Only synthetic stories were reviewed. No child's story is shown or counted on this page.`}
+            {`The ${AUDIT.pages} pages and ${AUDIT.references} reference pictures used AI-assisted visual assessment on ${AUDIT.date}. The owner has not confirmed the scores, so every audit number here is provisional. Only synthetic stories were reviewed. No child's story is shown or counted on this page.`}
           </p>
         </div>
       </div>
@@ -97,8 +97,9 @@ export default function LimitationsPage() {
       <section aria-labelledby="kinds" className="space-y-4">
         <h2 id="kinds" className={H2}>Human and non-human characters</h2>
         <p className={PROSE}>
-          Invented, non-human characters go wrong far more often than human ones. The same split shows on the
-          pages, on the reference pictures they are copied from, and on duplicates.
+          Pages tagged as containing non-human characters have more defects than human-only pages in this audit,
+          including mixed human and non-human casts. Reference counts classify the reference pictures themselves;
+          page counts use the audit&apos;s tags rather than the fine-tuning character slices.
         </p>
         <div className={`${CARD} space-y-6`}>
           {BY_KIND.map((row) => (
@@ -109,7 +110,7 @@ export default function LimitationsPage() {
           ))}
         </div>
         <p className={PROSE}>
-          {`The synthetic stories are ${AUDIT.syntheticNonHuman} non-human, while donated stories are mostly about humans. So the overall rate likely overstates what a classroom story gets. The human group is only ${BY_KIND[0].human.whole} pages, too few to call a rate, and no donated story was reviewed.`}
+          {`The audit tags ${BY_KIND[0].nonHuman.whole} of ${AUDIT.pages} shipped pages as containing non-human characters; the other ${BY_KIND[0].human.whole} are human-only. Donated stories are mostly about humans, so the overall rate likely overstates what a classroom story gets. The human-only group is too small to call a rate, and no donated story was reviewed.`}
         </p>
         <Source path={SOURCES.groupGuide} where="§5.3" />
         <Source path={SOURCES.stageAudit} where="“Provisional results”, Shipped pages and References" />

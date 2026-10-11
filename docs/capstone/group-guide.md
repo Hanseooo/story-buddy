@@ -142,11 +142,12 @@ and the ambiguous-reference check: runbook "Registered agreement and sensitivity
   characters.
 - The same split shows in the references (2 of 21 human references have a major defect, against
   15 of 34 non-human) and in duplicates (1 of 33 human pages, against 16 of 117).
-- The synthetic stories are 83% non-human, while donated stories are mostly about humans. So this
-  rate likely overstates what real classroom stories get. Always give the rate split by character
+- The audit tags 117 of 150 shipped pages as containing non-human characters, including mixed
+  human and non-human casts; the other 33 pages are human-only. Donated stories are mostly about
+  humans. So this rate likely overstates what real classroom stories get. Always give the rate split by character
   kind. The human group is only 33 pages, and no donated story was reviewed.
 
-These scores come from AI reviewers, and the owner has not confirmed them. Treat every audit number
+These scores use AI-assisted visual assessment, and the owner has not confirmed them. Treat every audit number
 as provisional.
 
 | Defect | What it looks like |
@@ -188,8 +189,8 @@ as provisional.
 4. **Actions.** Some pages miss the action, or give it to the wrong character. Describing only what
    is visible helped where the text mentioned something absent or pretend. That kind is about 3
    pages in 150, too few to measure a fix before the defense.
-5. **Who scored the image findings.** The stage audit used AI reviewers. The October probes were
-   scored by one AI rater, the assistant. Only the klein screen was blinded and used random pages.
+5. **How the image findings were sampled.** Most October probes used pages chosen because they
+   had failed, with one or two draws each. Only the klein screen was blinded and used random pages.
 6. **The judge result.** Objective 4's result is partial, and the trained judge scored lower F1
    than the untrained one.
 7. **The labels.** Two groupmates labelled every pair and the owner settled disagreements. Pairs
@@ -199,7 +200,8 @@ as provisional.
 8. **Scope.** One grade band, one school, one country. The base model changed after registration,
    and AI assistance in labelling is disclosed. Both are reported as limitations.
 9. **Where the defect rate comes from.** The "about half the pages" figure is from invented
-   stories that are 83% non-human. Human pages did better (11 of 33 against 66 of 117), but 33
+   stories, with 117 of 150 pages tagged as containing non-human characters, including mixed
+   casts. Human-only pages did better (11 of 33 against 66 of 117), but 33
    pages is too few to call a rate, and no donated story was reviewed.
 
 [`docs/capstone/model-probes-2026-10.md` "Limitations to carry into the write-up",

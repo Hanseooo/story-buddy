@@ -197,7 +197,7 @@ MIN_SCENES = 3
 MIN_STORY_WORDS = 5     # a book needs at least one scene's worth of text
 # docs/specs/story-titles.md §1/§3: fixed length independent of story word count.
 MAX_TITLE_CHARS = 80
-MAX_STORY_WORDS = 300   # spend-and-retry-economics spec §4.1 (moved from 800)
+MAX_STORY_WORDS = 500   # ADR-068 amends ADR-037's word cap; scene/image ceilings stay unchanged
 # 15-image prelude: 6 (2 refs × 3 draws) + 3 (ADR-029 taps) + 6 (one moderation redraw cycle,
 # which re-mints every flagged ref at 3 draws each — `reference-moderation-retry.md` §4.5).
 # Was 9 until 2026-08-13. `char_bible` carries NO breaker of its own and deliberately so: the

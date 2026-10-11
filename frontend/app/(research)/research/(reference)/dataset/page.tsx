@@ -2,7 +2,7 @@ import { CheckCircle, XCircle } from "@phosphor-icons/react/dist/ssr";
 import { TAXONOMY_LABELS, type TaxonomyState } from "../../../_shared/constants";
 import ScrollTable from "../../../_shared/components/ScrollTable";
 import Source from "../../../_shared/components/Source";
-import { AGREEMENT, EXAMPLES, REASON_PAIRS, RECORD_FIELDS, SOURCES, SPLITS, TRAINING_RECORD, type Example } from "./data";
+import { AGREEMENT, CHARACTER_KINDS, EXAMPLES, EXPLORATORY, REASON_PAIRS, RECORD_FIELDS, SOURCES, SPLITS, TRAINING_RECORD, type Example } from "./data";
 
 export const metadata = {
   title: "StoryBuddy Judge Dataset",
@@ -148,7 +148,38 @@ export default function DatasetPage() {
           </li>
           <li>Two of those constructed pairs reuse an image pair the raters had labelled Same, so the training file holds those two image pairs with both answers. The dataset is registered and was left as it is.</li>
           <li>The judge trains on synthetic stories and is tested on children&apos;s. A gap between the two shows up in the test result.</li>
+          <li>{`A separate exploratory freeze excluded ${EXPLORATORY.excluded} disputed synthetic training pairs, leaving ${EXPLORATORY.trainPairs}. The completed three-seed training used the registered freeze and kept all ${SPLITS[0].pairs} pairs.`}</li>
+          <li>Three donated candidate stories were excluded after pipeline failures. They were test candidates, never training stories.</li>
         </ul>
+
+        <h3 className="font-display text-xl font-extrabold tracking-tight">Human and non-human pairs</h3>
+        <p className="max-w-[70ch] text-foreground/80">
+          Character kind follows the intake-declared non-human roster matched to each generated character&apos;s
+          name. These counts cover the generated characters and all pairs, including constructed ones. They
+          differ from a page audit, where a page can contain both human and non-human characters.
+        </p>
+        <ScrollTable label="Human and non-human training and validation pairs">
+          <thead>
+            <tr className="border-b border-primary/15 bg-muted/30">
+              <th scope="col" className={TH}>Split</th>
+              <th scope="col" className={TH}>Human characters</th>
+              <th scope="col" className={TH}>Non-human characters</th>
+              <th scope="col" className={TH}>Human pairs</th>
+              <th scope="col" className={TH}>Non-human pairs</th>
+            </tr>
+          </thead>
+          <tbody>
+            {CHARACTER_KINDS.map((row) => (
+              <tr key={row.split} className="border-b border-primary/10">
+                <th scope="row" className="px-3 py-2 text-left font-bold">{row.split}</th>
+                <td className={TD}>{row.humanCharacters}</td>
+                <td className={TD}>{row.nonHumanCharacters}</td>
+                <td className={TD}>{row.humanPairs}</td>
+                <td className={TD}>{row.nonHumanPairs}</td>
+              </tr>
+            ))}
+          </tbody>
+        </ScrollTable>
         <Source path={SOURCES.runbook} where="“What the registered freeze contains”" />
         <Source path={SOURCES.preregistration} where="§2 and §3" />
       </section>

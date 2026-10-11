@@ -174,8 +174,8 @@ def test_max_title_chars_is_80():
     assert MAX_TITLE_CHARS == 80
 
 
-def test_max_story_words_is_three_hundred():
-    assert MAX_STORY_WORDS == 300
+def test_max_story_words_is_five_hundred():
+    assert MAX_STORY_WORDS == 500
 
 
 def test_max_scenes_is_ten():

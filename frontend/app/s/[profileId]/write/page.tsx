@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { motion } from "framer-motion";
 
 const MIN_STORY_WORDS = 5;
-const MAX_STORY_WORDS = 300;
+const MAX_STORY_WORDS = 500;
 const MAX_TITLE_CHARS = 80;
 
 const PREFILL_KEY = "sb.prefill";

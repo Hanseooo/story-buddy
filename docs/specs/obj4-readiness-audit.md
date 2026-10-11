@@ -830,8 +830,12 @@ produce an interpretable interval. Demote the endpoint now, before you see the d
 |---|---|---|---|
 | Stories | 24 | 6 | 15 raw / 10 primary |
 | Mean words | **153.3** | 153 | **312.7** |
-| Non-human share of characters | **83% (25/30)** | 22% (2/9) | **~5% (1/22)** |
+| Non-human share of intake-declared characters (pre-generation) | **83% (25/30)** | 22% (2/9) | **~5% (1/22)** |
 | Projected scenes/story | 5 (measured) | 5 | 9–10 (`MAX_SCENES = 10`) |
+
+These are pre-generation declared rosters, not the later frozen character or pair counts.
+The generated training roster has 25 non-human characters out of 44 and 264 non-human pairs
+out of 484 (54.5%); see `research_runbook.md`, "Human/non-human training and validation mix".
 
 Train and validation were written to two different specs — validation resembles the test set,
 training does not. Put this in your limitations section with the numbers. A reviewer who derives it

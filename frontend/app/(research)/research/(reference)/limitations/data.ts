@@ -14,7 +14,6 @@ export const AUDIT = {
   pages: 150,
   references: 55,
   defective: 77,
-  syntheticNonHuman: "83%",
 } as const;
 
 export type Share = { part: number; whole: number };
@@ -139,8 +138,8 @@ export const LIMITATIONS: { title: string; body: string; area: Area }[] = [
     area: "The pictures",
   },
   {
-    title: "Who scored the image findings",
-    body: "The stage audit used AI reviewers. The October probes were scored by one AI rater, the assistant. Only the klein screen was blinded and used random pages.",
+    title: "How the image findings were sampled",
+    body: "Most October probes used pages chosen because they had failed, with one or two draws each. Only the klein screen was blinded and used random pages.",
     area: "How it was scored",
   },
   {
@@ -160,7 +159,7 @@ export const LIMITATIONS: { title: string; body: string; area: Area }[] = [
   },
   {
     title: "Where the defect rate comes from",
-    body: 'The "about half the pages" figure is from invented stories that are 83% non-human. Human pages did better (11 of 33 against 66 of 117), but 33 pages is too few to call a rate, and no donated story was reviewed.',
+    body: 'The "about half the pages" figure is from invented stories, with 117 of 150 pages tagged as containing non-human characters, including mixed casts. Human-only pages did better (11 of 33 against 66 of 117), but 33 pages is too few to call a rate, and no donated story was reviewed.',
     area: "How it was scored",
   },
 ];

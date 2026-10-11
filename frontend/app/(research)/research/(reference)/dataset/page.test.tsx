@@ -10,6 +10,11 @@ describe("/research/dataset", () => {
     const test = within(splits).getByRole("row", { name: /Held-out test/ });
     expect(within(test).getByText("329")).toBeInTheDocument();
     expect(within(test).getByText("47")).toBeInTheDocument();
+    expect(screen.getByText(/16 disputed synthetic training pairs.*468.*all 484/i)).toBeInTheDocument();
+    const kinds = screen.getByRole("table", { name: /human and non-human training and validation pairs/i });
+    const train = within(kinds).getByRole("row", { name: /Train/ });
+    expect(within(train).getByText("220")).toBeInTheDocument();
+    expect(within(train).getByText("264")).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /research_runbook\.md/ })[0]).toHaveAttribute(
       "href",
       "https://github.com/Hanseooo/story-buddy/blob/main/docs/capstone/research_runbook.md"

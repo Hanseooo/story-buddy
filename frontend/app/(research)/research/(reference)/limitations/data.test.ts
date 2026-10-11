@@ -46,7 +46,7 @@ describe("limitations page data", () => {
       pages,
       `duplicates (${duplicate.human.part} of ${duplicate.human.whole} human pages, against ${duplicate.nonHuman.part} of ${duplicate.nonHuman.whole})`
     );
-    states(pages, `The synthetic stories are ${a.syntheticNonHuman} non-human, while donated stories are mostly about humans.`);
+    states(pages, `The audit tags ${page.nonHuman.whole} of ${a.pages} shipped pages as containing non-human characters, including mixed human and non-human casts; the other ${page.human.whole} pages are human-only.`);
   });
 
   it("gives each defect the count the stage audit prints and the description the guide gives", () => {

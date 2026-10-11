@@ -41,6 +41,8 @@ describe("/research/results", () => {
     expect(within(reading).getByRole("heading", { name: /why it happened is not known/i })).toBeInTheDocument();
     const untested = within(reading).getByRole("list", { name: /explanations that were not tested/i });
     expect(within(untested).getAllByRole("listitem")).toHaveLength(4);
+    expect(within(untested).getByText(/264 of 484 training pairs \(54\.5%\) are non-human/)).toBeInTheDocument();
+    expect(within(untested).queryByText(/83%/)).not.toBeInTheDocument();
     expect(within(reading).getByText(/keeps its prompted Gemma judge/)).toBeInTheDocument();
   });
 

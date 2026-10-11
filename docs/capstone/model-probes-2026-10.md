@@ -657,7 +657,8 @@ labels a person has checked (ADR-055).
   about whether a better draw was passed over.
 - A shipped page can be the second or third draw, and each redraw used a corrected prompt.
 - The human-only cut is 33 pages, too few for a rate.
-- One synthetic corpus, 83% non-human, across five code commits.
+- One synthetic corpus across five code commits; 117 of 150 shipped pages carry the audit's
+  `non_human` tag, including mixed human/non-human casts. This is not the fine-tuning pair mix.
 
 ## Reference repair by edit: plan (2026-10-11, about $0.27 at most)
 
@@ -879,7 +880,7 @@ counts fail at the reference draw, and an edit of the reference removes the fail
 
 Each row is a defect the October probes measured or tried to fix and left open. Rates are from the
 stage audit's 221 page images across 150 scenes (rejected attempts included), majors only, unless
-the row says otherwise. The audit's scores come from AI reviewers and stay provisional: the owner
+the row says otherwise. The audit's scores use AI-assisted visual assessment and stay provisional: the owner
 has not confirmed them ([stage audit](pipeline-stage-audit-2026-10.md)). Sections above hold the
 evidence.
 
@@ -892,9 +893,10 @@ evidence.
 | Identity drift | 15 of 221; 3 of 30 for Qwen on random scenes | none directly; klein was worse (10 of 30) | open, not probed |
 | Setting against the page's own text | 3 major, 30 minor | none | open. Consistency of the setting between pages is unmeasured |
 
-**Rates by character kind (cut added 2026-10-11).** The audit's rates come from a corpus that is
-83% non-human by design, so they are reported split, never pooled alone. Shipped pages with a major
-defect: 11 of 33 with human characters only, 66 of 117 with a non-human character. A duplicate or
+**Rates by character kind (cut added 2026-10-11).** The audit tags 117 of 150 shipped pages as
+containing non-human characters, including mixed human/non-human casts, so rates are reported
+split, never pooled alone. This page grouping is not the fine-tuning character or pair mix.
+Shipped pages with a major defect: 11 of 33 with human characters only, 66 of 117 with a non-human character. A duplicate or
 extra character: 1 of 33 against 16 of 117. References with a major defect: 2 of 21 human, 15 of 34
 non-human. The human-only cut is 33 pages across 13 stories, too few for a rate, and no donated
 story was reviewed, so this does not measure what classroom stories get.

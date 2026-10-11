@@ -107,7 +107,8 @@ describe("results page data", () => {
     );
     states(flat(settings), `capped at ${t.generationCap} tokens`);
     states(flat(runbook), `All ${TRAIN.constructed} constructed pairs carry the one reason`);
-    states(flat(read(data.SOURCES.groupGuide)), `The synthetic stories are ${t.syntheticNonHuman} non-human`);
+    expect(rows(runbook)).toContain(`| Train | 19 | 25 | 220 | ${t.nonHumanPairs} |`);
+    expect(t.nonHumanPairs).toBe(264);
     expect(t).toMatchObject({ updatesPerEpoch: 61, updatesPerSeed: 183, generationCap: 256 });
   });
 

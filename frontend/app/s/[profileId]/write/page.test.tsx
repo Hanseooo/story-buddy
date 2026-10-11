@@ -211,10 +211,8 @@ describe("WriteStoryPage — prefill and chain counter", () => {
   });
 });
 
-// spend-and-retry-economics §6.1: "Frontend word count accepts 300, rejects 301, disables
-// submission over cap, and keeps the textual `Too long!` state." The cap moved 800 → 300 with
-// ADR-037; nothing pinned the boundary, so a stale constant would have shipped silently.
-describe("WriteStoryPage — the 300-word cap", () => {
+// spend-and-retry-economics §6.1: accept 500 words, reject 501, and preserve over-cap text.
+describe("WriteStoryPage — the 500-word cap", () => {
   const words = (n: number) => Array.from({ length: n }, (_, i) => `w${i}`).join(" ");
   const submitButton = () => screen.getByText("Make my book").closest("button");
 
@@ -227,17 +225,22 @@ describe("WriteStoryPage — the 300-word cap", () => {
     }) as unknown as typeof fetch;
   });
 
-  it("accepts exactly 300 words — the boundary is inclusive", () => {
+  it("submits exactly 500 words — the boundary is inclusive", async () => {
     render(<WriteStoryPage />);
-    fireEvent.change(screen.getByLabelText("story text"), { target: { value: words(300) } });
+    const text = words(500);
+    fireEvent.change(screen.getByLabelText("Story title"), { target: { value: "My Book" } });
+    fireEvent.change(screen.getByLabelText("story text"), { target: { value: text } });
 
     expect(screen.queryByText("Too long!")).toBeNull();
     expect(submitButton()).not.toBeDisabled();
+    fireEvent.click(screen.getByText("Make my book"));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/s/prof-123/process/abc-123"));
+    expect(JSON.parse((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body).text).toBe(text);
   });
 
-  it("rejects 301 words with the textual Too long! state, not a colour-only cue (CC-6)", () => {
+  it("rejects 501 words with the textual Too long! state, not a colour-only cue (CC-6)", () => {
     render(<WriteStoryPage />);
-    fireEvent.change(screen.getByLabelText("story text"), { target: { value: words(301) } });
+    fireEvent.change(screen.getByLabelText("story text"), { target: { value: words(501) } });
 
     expect(screen.getByText("Too long!")).toBeDefined();
     expect(submitButton()).toBeDisabled();
@@ -245,7 +248,9 @@ describe("WriteStoryPage — the 300-word cap", () => {
 
   it("does not POST over cap — the child shortens the story, nothing is silently discarded", async () => {
     render(<WriteStoryPage />);
-    fireEvent.change(screen.getByLabelText("story text"), { target: { value: words(400) } });
+    const text = words(501);
+    fireEvent.change(screen.getByLabelText("Story title"), { target: { value: "My Book" } });
+    fireEvent.change(screen.getByLabelText("story text"), { target: { value: text } });
     fireEvent.click(screen.getByText("Make my book"));
 
     // `handleSubmit` awaits getSession before it fetches, so a synchronous assertion here
@@ -254,6 +259,7 @@ describe("WriteStoryPage — the 300-word cap", () => {
 
     expect(global.fetch).not.toHaveBeenCalled();
     expect(pushMock).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("story text")).toHaveValue(text);
   });
 });
 

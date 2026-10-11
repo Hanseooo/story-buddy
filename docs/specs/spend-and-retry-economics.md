@@ -4,11 +4,11 @@
 `backend/pipeline/segment.py`, `backend/pipeline/consistency_check.py`,
 `backend/pipeline/output_mod.py`, `frontend/app/s/[profileId]/write/page.tsx`
 
-**Derived from:** `pipeline-consistency-docket.md` S5 · **Rationale:** proposed ADR-037;
+**Derived from:** `pipeline-consistency-docket.md` S5 · **Rationale:** ADR-037, amended by ADR-068;
 ADR-010, ADR-012, ADR-024, ADR-025, ADR-028; docket BC-1…BC-18
 
 > Trade book length for one more corrected scene attempt while making the paid-image breaker
-> truthful. The product accepts at most 300 words and 10 scenes; each scene may use three
+> truthful. The product accepts at most 500 words and 10 scenes; each scene may use three
 > consistency attempts and one output-moderation redraw; every structurally permitted draw is
 > funded inside a 55-image ceiling.
 
@@ -48,8 +48,8 @@ BC-1 still forbids a population-level consistency claim, and no paid run is part
    and never bypasses moderation.
 6. `IMAGE_BUDGET` funds every structurally permitted paid draw; legal retry paths do not compete
    for an intentionally undersized shared pool.
-7. `MAX_STORY_WORDS = 300`, `MAX_SCENES = 10`, `IMAGE_BUDGET = 55`, and
-   `RECURSION_LIMIT = 87` are one coupled policy.
+7. `MAX_STORY_WORDS = 500` (ADR-068), `MAX_SCENES = 10`, `IMAGE_BUDGET = 55`, and
+   `RECURSION_LIMIT = 87` are the current limits. ADR-068 raises only the word ceiling.
 
 ## 3. Position in the system map
 
@@ -77,10 +77,11 @@ input_gate → analyze → segment → char_bible → char_ref_mod → reveal
 
 ### 4.1 Input and page ceilings
 
-`MAX_STORY_WORDS` moves from 800 to **300** in both existing enforcement surfaces:
+`MAX_STORY_WORDS` is **500** in both existing enforcement surfaces (ADR-068 amends ADR-037's
+300-word ceiling):
 
-- The frontend disables submission above 300 words and shows its existing `Too long!` state.
-- The backend remains authoritative. A direct, stale, or bypassed request above 300 words is
+- The frontend disables submission above 500 words and shows its existing `Too long!` state.
+- The backend remains authoritative. A direct, stale, or bypassed request above 500 words is
   clamped by the existing paragraph → sentence → hard-cut policy, with the retains-half floor and
   `truncated=true` unchanged.
 - No summarization is introduced. The frontend requires the child to shorten visible over-cap text
@@ -90,9 +91,10 @@ input_gate → analyze → segment → char_bible → char_ref_mod → reveal
 instead of carrying a stale literal, and deterministic repair merges to the same ceiling.
 `MIN_SCENES = 3` and `MIN_SCENE_WORDS = 12` are unchanged.
 
-The 300-word cap does not mathematically prove that a story has at most ten visual beats. The
-deterministic merge is still the actual ceiling; 300 words only limits how dense those merged pages
-can become. At the joint maximum, the mean is 30 caption words per scene.
+The 500-word cap does not mathematically prove that a story has at most ten visual beats. The
+deterministic merge is still the actual ceiling; 500 words only limits how dense those merged pages
+can become. At the joint maximum, the mean is 50 words per scene. Visual quality at this larger
+input ceiling has not been measured.
 
 ### 4.2 Third consistency attempt
 
@@ -179,8 +181,8 @@ units. `output_mod`'s internal redraw changes the image coefficient but adds no 
 
 | Case | Behavior |
 |---|---|
-| Frontend text exceeds 300 words | Submission disabled; child edits the visible story. |
-| Direct request exceeds 300 words | Existing boundary-aware backend clamp; stored text is the clamped text. |
+| Frontend text exceeds 500 words | Submission disabled; child edits the visible story. |
+| Direct request exceeds 500 words | Existing boundary-aware backend clamp; stored text is the clamped text. |
 | Segmentation extracts more than 10 scenes | Existing deterministic smallest-neighbour merge reduces to 10. |
 | Attempt 2 is worse than attempt 1 | Attempt 3 is still allowed after a concrete failure; best-of retains the strongest result. |
 | Attempt 2 is unchecked | Finalize immediately; no blind attempt 3. |
@@ -218,9 +220,9 @@ quality.
 
 ### Length and segmentation
 
-1. Frontend word count accepts 300, rejects 301, disables submission over cap, and keeps the
+1. Frontend word count accepts 500, rejects 501, disables submission over cap, and keeps the
    textual `Too long!` state.
-2. Backend `clamp_story` preserves exactly 300 words and clamps 301+ using the existing boundary
+2. Backend `clamp_story` preserves exactly 500 words and clamps 501+ using the existing boundary
    and retains-half rules.
 3. `MAX_SCENES == 10`; the segmentation prompt names the same ceiling; deterministic repair emits
    at most ten scenes.
@@ -259,9 +261,10 @@ population-level rate, comparisons across prompt versions, or a research result 
 
 ## 8. Linked decisions and residual risks
 
-**Requires proposed ADR-037:** this policy amends ADR-010 from one corrected retry to two, amends
-ADR-012 from the 500–800 range to 300 words, and corrects ADR-025 D4 so its paid-image breaker
-includes `output_mod`'s existing redraw. Implementation is blocked until ADR-037 is accepted.
+**Accepted ADR-037, amended by ADR-068:** ADR-037 changed ADR-010 from one corrected retry to
+two, lowered ADR-012's 500–800 range to 300 words, and corrected ADR-025 D4 to include
+`output_mod`'s existing redraw. ADR-068 raises the word ceiling to 500 while keeping the scene,
+retry, image, and recursion ceilings.
 
 **Depends on:** ADR-024 (derived loop position, pure router, recursion backstop); ADR-028 (closed
 failure taxonomy and lexicographic best-of); ADR-029 (three reveal taps); BC-1, BC-4, and BC-6.
@@ -269,7 +272,7 @@ failure taxonomy and lexicographic best-of); ADR-029 (three reveal taps); BC-1, 
 **Residual risks:**
 
 - Attempt 3's quality benefit is unmeasured.
-- Ten scenes may merge distinct visual beats into denser pages; the 300-word cap limits but does
+- Ten scenes may merge distinct visual beats into denser pages; the 500-word cap limits but does
   not eliminate that risk.
 - Cumulative corrections may repeat emphasis. The maximum is two correction layers; deduplicate
   only if a real prompt or output demonstrates harm.

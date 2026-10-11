@@ -44,6 +44,9 @@ The server owns allowed attributes, pause claiming, resume enqueue, and the cap.
 Local selection is ephemeral UI state, not another persisted contract. Existing
 row refresh/subscription behavior remains the source of job progress.
 
+Compute the reveal fingerprint only in the paused state. Before the worker publishes
+that pause, the database's reveal value is `{}` and must not be read as character choices.
+
 ## 3. Screen and interaction
 
 Keep character pictures/names prominent and use existing Cobalt Playroom components

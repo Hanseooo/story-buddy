@@ -1,5 +1,8 @@
 # Spend-and-Retry Economics Implementation Plan
 
+> Historical implementation plan for ADR-037. Its 300-word limit was superseded by ADR-068
+> on 2026-10-11. Current behavior is specified in `../spend-and-retry-economics.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Give a concretely failed scene one additional corrected attempt while reducing the graph's structurally possible worst-case paid-image spend from 60 to 55.

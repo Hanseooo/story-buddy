@@ -452,7 +452,7 @@ export default function ResultsPage() {
           </li>
           <li>
             <strong className="text-foreground">Different kinds of stories.</strong>{" "}
-            {`Training used synthetic stories, which are ${TRAINING.syntheticNonHuman} non-human. The test stories are children's, mostly about humans.`}
+            {`Training used synthetic stories: ${TRAINING.nonHumanPairs} of ${TRAIN.records} training pairs (${((TRAINING.nonHumanPairs / TRAIN.records) * 100).toFixed(1)}%) are non-human, including constructed pairs. The test stories are children's, mostly about humans.`}
           </li>
           <li>
             <strong className="text-foreground">Answers cut off.</strong>{" "}

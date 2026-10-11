@@ -449,7 +449,7 @@ def test_create_storybook_clamps_over_max_words_and_marks_truncated():
     assert response.status_code == 200
     insert_args = fake_supabase.table.return_value.insert.call_args[0][0]
     assert insert_args["truncated"] is True
-    assert len(insert_args["input_text"].split()) == 300
+    assert len(insert_args["input_text"].split()) == 500
 
 
 def test_create_storybook_normal_body_is_not_truncated():

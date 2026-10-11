@@ -146,8 +146,8 @@ export const TRAINING_SETTINGS = [
   { key: "save_steps", value: "10", means: "A checkpoint, a saved copy of the adapter, is kept every 10 updates." },
 ] as const;
 
-// Same section, and group-guide.md §5.3 for the share of synthetic stories about non-human characters.
-export const TRAINING = { updatesPerEpoch: 61, updatesPerSeed: 183, generationCap: 256, syntheticNonHuman: "83%" } as const;
+// Same section; non-human counts come from the runbook's generated-character/pair mix table.
+export const TRAINING = { updatesPerEpoch: 61, updatesPerSeed: 183, generationCap: 256, nonHumanPairs: 264 } as const;
 
 // group-guide.md §5.2, on seeds 0 and 1.
 export const UNREADABLE_SHARE = "about one pair in eight";

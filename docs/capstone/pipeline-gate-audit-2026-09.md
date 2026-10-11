@@ -184,7 +184,7 @@ per-call model revision.
 
 ### Provisional image review and stored-gate comparison
 
-An AI reviewer recorded the visible assessment before reading each stored verdict.
+An AI-assisted scoring pass recorded the visible assessment before reading each stored verdict.
 The study owner has not independently checked these 28 assessments. `Defect` below
 means a visible mismatch with the description or scene direction, not necessarily
 a different character from the canonical reference. `Uncertain` is not resolved

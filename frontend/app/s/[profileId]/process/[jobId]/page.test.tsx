@@ -93,7 +93,8 @@ async function renderPausedPage(paramsPromise = makeParams("j1")) {
 
 const RUNNING_ROW = {
   id: "j1", status: "running", current_stage: "analyze",
-  failure_reason: null, input_text: "A story.", style_preset_id: null, pages: [], reveal: null,
+  // 0005_jobs_awaiting_confirm.sql defaults reveal to {} until the worker publishes a pause.
+  failure_reason: null, input_text: "A story.", style_preset_id: null, pages: [], reveal: {},
 };
 
 const FAILED_MACHINE_ROW = {

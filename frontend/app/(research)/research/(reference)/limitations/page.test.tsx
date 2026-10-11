@@ -6,7 +6,8 @@ describe("/research/limitations", () => {
   it("says who scored the pages and that the numbers are provisional", () => {
     render(<LimitationsPage />);
 
-    expect(screen.getByText(/scored by AI reviewers.*provisional/i)).toBeInTheDocument();
+    expect(screen.getByText(/AI-assisted visual assessment.*provisional/i)).toBeInTheDocument();
+    expect(screen.queryByText(/AI reviewers|AI rater/i)).not.toBeInTheDocument();
   });
 
   it("splits the defect rate by character kind", () => {
@@ -16,6 +17,8 @@ describe("/research/limitations", () => {
     const pages = within(kinds).getByRole("group", { name: "Pages with a major defect" });
     expect(within(pages).getByText("11 of 33")).toBeInTheDocument();
     expect(within(pages).getByText("66 of 117")).toBeInTheDocument();
+    expect(within(kinds).getByText(/including mixed human and non-human casts/i)).toBeInTheDocument();
+    expect(within(kinds).queryByText(/83%/)).not.toBeInTheDocument();
   });
 
   it("gives each defect its row", () => {
