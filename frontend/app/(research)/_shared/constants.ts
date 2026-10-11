@@ -76,7 +76,7 @@ export const TAXONOMY_LABELS: Record<
   },
 };
 
-// The research header's tabs. Dataset, Results and Docs are public static pages (ADR-065, ADR-066).
+// The research header's tabs. Dataset, Results, Limitations and Docs are public static pages (ADR-065, ADR-066, ADR-067).
 export const RESEARCH_TABS: {
   label: string;
   href: string;
@@ -85,6 +85,7 @@ export const RESEARCH_TABS: {
   { label: "Runs", href: "/research/metrics", visibleTo: () => true },
   { label: "Dataset", href: "/research/dataset", visibleTo: () => true },
   { label: "Results", href: "/research/results", visibleTo: () => true },
+  { label: "Limitations", href: "/research/limitations", visibleTo: () => true },
   { label: "Docs", href: "/research/docs", visibleTo: () => true },
   {
     label: "Annotate",

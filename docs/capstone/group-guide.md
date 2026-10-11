@@ -1,6 +1,6 @@
 # StoryBuddy: Start Here (Group Guide)
 
-**Last updated:** 2026-10-09 · **For:** group members who need the research context without reading
+**Last updated:** 2026-10-11 · **For:** group members who need the research context without reading
 the code. Every statement below stands on its own. The repository paths in brackets are where the
 evidence lives, for anyone who wants to check it.
 
@@ -9,6 +9,10 @@ What changed since registration, and what the manuscript must now say, is in
 
 If this guide disagrees with the manuscript or with a file it cites, the other source wins and this
 guide needs fixing.
+
+The public page `/research/limitations` copies §5.4 and §6 word for word and takes its numbers from
+§5.1 and §5.3 (ADR-067). A test fails when they differ, so a change here is followed by a change to
+`frontend/app/(research)/research/(reference)/limitations/data.ts`.
 
 ---
 
@@ -164,7 +168,7 @@ as provisional.
 | Rewriting the direction as one frozen instant | 3 of 10 free of duplicates. Not adopted. It did fix both pages where the text described something absent or pretend. |
 | Shipping whichever attempt the judge did not flag for duplicates | Helped one scene and hurt another. Not adopted. |
 | A different text model | No open-weight model beat Mistral. |
-| Adding a character the direction names by species ("the moth") | Fixed the one story it targets. Waiting to merge (PR #101). |
+| Adding a character the direction names by species ("the moth") | Fixed the one story it targets. Merged on 2026-10-09 (PR #101). |
 | Other reference-picture models for stated body counts | None drew counts like "six legs" correctly. Already a stated limitation (ADR-056). |
 | Editing the finished reference to fix the count (October 11) | 5 of 9 fixed with the character unchanged, 1 borderline, 3 missed. Pages redrawn from the fixed references then showed the right count on 5 of 6 (1 borderline). One try each, with instructions written by hand. Not adopted yet: it needs a test with automatic instructions and an ADR. |
 

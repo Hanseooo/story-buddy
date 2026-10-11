@@ -15,7 +15,7 @@ One row per entry below, newest last. Each entry adds its row here when it lands
 | Edit-model probe | klein drew a duplicate on 3 of 12 draws where every shipped Qwen page had one | none; a swap needs an ADR and a judge recheck | superseded by the blinded klein screen |
 | Reference count screen | no text-to-image model draws stated body counts | none; ADR-056 stands | closed |
 | Text-model trial | no open-weight model beats Mistral on the strict-schema path | none; Mistral stays | closed |
-| Cast-rule replay | only "species noun in the direction" adds characters without wrong ones | species reconciliation in `segment` | PR #101, awaiting merge |
+| Cast-rule replay | only "species noun in the direction" adds characters without wrong ones | species reconciliation in `segment` | merged 2026-10-09 (PR #101) |
 | Segment prompt trial | no prompt change separates from run-to-run noise | none; `SEGMENT_PROMPT_VERSION` stays 3 | closed |
 | Best-of ranking review | ranking `subjects_unique` higher helps one scene and hurts another | none; `_rank` unchanged | closed |
 | Defect tally | duplicates are the largest major defect a change could still fix | none; picked duplicates as the next target | closed |

@@ -92,6 +92,12 @@ export default async function ResearchMethodologyPage() {
                 See the Judge Results
               </Link>
               <Link
+                href="/research/limitations"
+                className="inline-flex items-center gap-2 px-7 py-4 rounded-2xl border border-primary/25 bg-surface text-primary font-bold text-lg hover:bg-primary/5 transition-colors"
+              >
+                See the Findings and Limitations
+              </Link>
+              <Link
                 href="/research/docs"
                 className="inline-flex items-center gap-2 px-7 py-4 rounded-2xl border border-primary/25 bg-surface text-primary font-bold text-lg hover:bg-primary/5 transition-colors"
               >

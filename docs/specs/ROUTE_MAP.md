@@ -65,6 +65,7 @@ according to the viewer's role (`docs/specs/research-run-browser.md` §3). The l
 | `/research/metrics/[jobId]` | Run detail | Server | Login required. Reads `GET /research/runs/{job_id}`; annotators see approved runs, the adjudicator sees all (ADR-064 rule 2). Pipeline graph, pages, safety and raw state |
 | `/research/dataset` | Judge dataset | Server | Prerendered, public, no session read (ADR-065, ADR-066). What the registered freeze holds, how a pair was labelled, rater agreement, and six synthetic example pairs with their frozen records |
 | `/research/results` | Judge results | Server | Prerendered, public, no session read (ADR-066). The partial judge comparison of 2026-10-08, how the judge was trained, and what the project takes from it |
+| `/research/limitations` | Findings and limitations | Server | Prerendered, public, no session read (ADR-067). The pipeline's defect rates by character kind, the common defects, what the automatic checks caught, the scene editor against two others, what was tried, and the limitations |
 | `/research/docs` | Research documents | Server | Prerendered, public, no session read (ADR-065). Lists the research documents by folder; each links to its file on GitHub |
 
 ---
@@ -171,7 +172,7 @@ app/
 | `/s/[profileId]/book/[bookId]/**` | Profile (student) | `bookId` must belong to `profileId` (own book) |
 | `/research/metrics` | Public | Middleware refreshes the session for the research header without requiring sign-in |
 | `/research/metrics/[jobId]` | Auth session | Signed-out descendants redirect to `/login?next=<path>`; the server-rendered detail report shows backend access messages, recorded run state and the pipeline graph. |
-| `/research/dataset`, `/research/results`, `/research/docs` | Public | Prerendered. Not in the middleware matcher, and no session is read (ADR-065) |
+| `/research/dataset`, `/research/results`, `/research/limitations`, `/research/docs` | Public | Prerendered. Not in the middleware matcher, and no session is read (ADR-065) |
 
 ### Middleware strategy
 
