@@ -209,7 +209,7 @@ export default function LimitationsPage() {
           <div className={`${CARD} space-y-4`}>
             <h3 className={H3}>FLUX.2 klein, October 2026</h3>
             <p className="text-sm text-foreground/80">
-              {`${KLEIN.pages} random pages, drawn by both editors and scored without knowing which editor drew which.`}
+              {`${KLEIN.pages} random pages, drawn by both editors and scored with the editor's name hidden. klein's style may be recognisable, so the blinding is partial.`}
             </p>
             <BarGroup title="Pages with a duplicate character">
               <Bar
@@ -247,8 +247,8 @@ export default function LimitationsPage() {
           <div className={`${CARD} space-y-4`}>
             <h3 className={H3}>OmniGen2, July 2026</h3>
             <p className="text-sm text-foreground/80">
-              One invented hedgehog. How often it stayed recognisable on a page, with its reference picture and
-              without it.
+              One invented character, a three-eyed lizard-bird. How often it stayed recognisable on a page, with
+              its reference picture and without it.
             </p>
             <BarGroup title="Qwen-Image-Edit">
               <Bar label="With the reference" value={PHASE_05.qwen.withReference} width={PHASE_05.qwen.withReference} tone={GOOD} />
@@ -273,7 +273,7 @@ export default function LimitationsPage() {
       <section aria-labelledby="tried" className="space-y-4">
         <h2 id="tried" className={H2}>What was tried in October</h2>
         <p className={PROSE}>
-          Every October test of a fix, one row each. Tests that failed are listed with the rest.
+          The October tests the group guide lists, one row each. Tests that failed are listed with the rest.
         </p>
         <ScrollTable label="What was tried in October">
           <thead>

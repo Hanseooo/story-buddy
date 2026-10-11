@@ -11,8 +11,6 @@ export const SOURCES = {
   buildDataset: "backend/finetune/build_dataset.py",
 } as const;
 
-export type SourceKey = keyof typeof SOURCES;
-
 // Runbook, "What the registered freeze contains".
 export const SPLITS = [
   { name: "Train", storiesFrom: "Synthetic", stories: 24, characters: 44, pairs: 484, same: 327, different: 157, constructed: 104 },

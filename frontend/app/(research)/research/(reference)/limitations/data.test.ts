@@ -80,6 +80,19 @@ describe("limitations page data", () => {
     states(phase05, `(OmniGen2, Run 3) reached ${p.omnigen.withReference} against ${p.omnigen.without}.`);
   });
 
+  // The guide restates these. The files that measured them have to print the same numbers.
+  it("finds both scene-editor comparisons in the files that measured them", () => {
+    const { KLEIN: k, PHASE_05: p } = data;
+    const results = read(data.SOURCES.phase05);
+
+    states(
+      flat(read(data.SOURCES.probes)),
+      `on ${k.pages} random scenes, klein drew as many duplicates as Qwen (${k.duplicates.klein} each) and lost identity on ${k.identityLost.klein} pages to Qwen's ${k.identityLost.qwen}`
+    );
+    states(between(results, "### Result — Run 2", "### Result — Run 3"), `| Quill | ${p.qwen.withReference} | ${p.qwen.without} |`);
+    states(between(results, "### Result — Run 3", "### Secondary arm"), `| Quill | ${p.omnigen.withReference} | ${p.omnigen.without} |`);
+  });
+
   // ADR-067 decision 4: the two lists are the guide's own rows and items, word for word.
   it("copies every row of the guide's table of what was tried", () => {
     const table = rows(tried).filter((row) => row.startsWith("| ") && !row.startsWith("| Tried") && !row.startsWith("|---"));

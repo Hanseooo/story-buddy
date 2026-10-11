@@ -35,7 +35,8 @@ What the code and documents say, checked on 2026-10-11:
 
 2. **It shows six things:** the defect rate split by character kind, the most common major
    defects, what the reference check and the page check said about the reviewed images, the scene
-   editor against FLUX.2 klein and OmniGen2, every October test of a fix, and the nine limitations.
+   editor against FLUX.2 klein and OmniGen2, the October tests of a fix that the group guide lists,
+   and the nine limitations.
 
 3. **Every number comes from a tracked file and names it.** The sources are `group-guide.md`,
    `pipeline-stage-audit-2026-10.md`, `model-probes-2026-10.md` and `PHASE_05_RESULTS.md`. A unit

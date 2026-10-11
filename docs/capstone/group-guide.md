@@ -83,8 +83,8 @@ All of them are open-weight models.
 
 ### 5.1 Reference pictures help invented characters (Phase 0.5, July 2026)
 
-- On the scene editor StoryBuddy ships (Qwen-Image-Edit, Run 2), the invented hedgehog Quill stayed
-  recognisable on 70% of pages with its reference picture, and on 40% without it.
+- On the scene editor StoryBuddy ships (Qwen-Image-Edit, Run 2), the invented three-eyed lizard-bird
+  Quill stayed recognisable on 70% of pages with its reference picture, and on 40% without it.
 - A second model tried as a backup (OmniGen2, Run 3) reached 80% against 30%.
 - A realistic fox cub scored the same with or without its reference.
 - Both runs failed the gate set in advance. Qwen-Image-Edit stayed the editor, and the failed gate is

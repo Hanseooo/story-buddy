@@ -36,12 +36,18 @@ describe("/research/limitations", () => {
     const identity = within(editors).getByRole("group", { name: "Pages where the character lost its identity" });
     expect(within(identity).getByText("3 of 30")).toBeInTheDocument();
     expect(within(identity).getByText("10 of 30")).toBeInTheDocument();
-    expect(within(editors).getByText(/not a finding of the study/i)).toBeInTheDocument();
+    expect(within(editors).getByText(/editor's name hidden.*the blinding is partial/i)).toBeInTheDocument();
+    expect(within(editors).getByText(/three-eyed lizard-bird/i)).toBeInTheDocument();
+    // ADR-067 decision 6: the three things the Phase 0.5 card must say.
+    const buildCheck = within(editors).getByText(/not a finding of the study/i);
+    expect(buildCheck).toHaveTextContent(/scored without blinding/i);
+    expect(buildCheck).toHaveTextContent(/both runs failed the gate/i);
   });
 
   it("lists everything that was tried and all nine limitations", () => {
     render(<LimitationsPage />);
 
+    expect(screen.getByText(/the October tests the group guide lists/i)).toBeInTheDocument();
     const tried = screen.getByRole("table", { name: /what was tried in october/i });
     expect(within(tried).getAllByRole("row")).toHaveLength(9);
     const limits = screen.getByRole("region", { name: /limitations to state/i });

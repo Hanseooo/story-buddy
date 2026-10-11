@@ -7,8 +7,6 @@ export const SOURCES = {
   phase05: "docs/product/PHASE_05_RESULTS.md",
 } as const;
 
-export type SourceKey = keyof typeof SOURCES;
-
 // Group guide §5.3. The date is the stage audit's "Provisional results" heading.
 export const AUDIT = {
   date: "2026-10-08",
