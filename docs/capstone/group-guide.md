@@ -136,8 +136,11 @@ and the ambiguous-reference check: runbook "Registered agreement and sensitivity
 - About half the pages (77 of 150) have at least one major defect.
 - Pages with non-human characters fail far more often: 66 of 117, against 11 of 33 for human
   characters.
+- The same split shows in the references (2 of 21 human references have a major defect, against
+  15 of 34 non-human) and in duplicates (1 of 33 human pages, against 16 of 117).
 - The synthetic stories are 83% non-human, while donated stories are mostly about humans. So this
-  rate likely overstates what real classroom stories get.
+  rate likely overstates what real classroom stories get. Always give the rate split by character
+  kind. The human group is only 33 pages, and no donated story was reviewed.
 
 These scores come from AI reviewers, and the owner has not confirmed them. Treat every audit number
 as provisional.
@@ -163,6 +166,7 @@ as provisional.
 | A different text model | No open-weight model beat Mistral. |
 | Adding a character the direction names by species ("the moth") | Fixed the one story it targets. Waiting to merge (PR #101). |
 | Other reference-picture models for stated body counts | None drew counts like "six legs" correctly. Already a stated limitation (ADR-056). |
+| Editing the finished reference to fix the count (October 11) | 5 of 9 fixed with the character unchanged, 1 borderline, 3 missed. Pages redrawn from the fixed references then showed the right count on 5 of 6 (1 borderline). One try each, with instructions written by hand. Not adopted yet: it needs a test with automatic instructions and an ADR. |
 
 [`docs/capstone/model-probes-2026-10.md`, top table]
 
@@ -172,7 +176,9 @@ as provisional.
    editors do this at the same rate, and four fixes failed. It is a limitation of this kind of edit
    model, measured on two of them, and it remains open.
 2. **Stated body counts.** "Six legs" or "seven stripes" usually come out wrong. No tested model
-   fixes it (ADR-056).
+   draws them from text (ADR-056). Editing the finished reference fixed 5 of 9 in one small test,
+   and pages redrawn from those references kept the fix. It is a lead and not yet a fix: one try
+   each, with instructions written by hand.
 3. **Characters with no reference.** Background groups like "his six dust-bunny soldiers" have no
    reference picture. The model guesses what they look like, and once drew them as human boys.
 4. **Actions.** Some pages miss the action, or give it to the wrong character. Describing only what
@@ -188,6 +194,9 @@ as provisional.
    "different" because their pages add arms and legs their references never had.
 8. **Scope.** One grade band, one school, one country. The base model changed after registration,
    and AI assistance in labelling is disclosed. Both are reported as limitations.
+9. **Where the defect rate comes from.** The "about half the pages" figure is from invented
+   stories that are 83% non-human. Human pages did better (11 of 33 against 66 of 117), but 33
+   pages is too few to call a rate, and no donated story was reviewed.
 
 [`docs/capstone/model-probes-2026-10.md` "Limitations to carry into the write-up",
 `docs/product/PREREGISTRATION_OBJ4.md`, `docs/capstone/methodology.md` §9]

@@ -108,7 +108,8 @@ majors: `reference_inherited` 34, `duplicate_character` 15, `action_mismatch` 9,
 **References.** 17 of 55 defective, chiefly a missed stated count (8 major: six legs drawn as four,
 seven stripes as five, four wings as two). The stored reference gate failed 15 of those 17 and also
 15 of the 38 acceptable references. It detects bad references, but `char_bible` ships the best
-failing draw, so every detected defect still reached the pages.
+failing draw, so every detected defect still reached the pages. By character kind (cut added
+2026-10-11): 2 of 21 human references defective, 15 of 34 non-human.
 
 **Page gate.** Of the 77 defective shipped pages, 29 passed the stored gate; of the 71 acceptable,
 28 failed it. 23 of the 71 rejected first draws were acceptable, so those paid redraws were likely
