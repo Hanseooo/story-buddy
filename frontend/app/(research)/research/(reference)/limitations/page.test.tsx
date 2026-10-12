@@ -30,6 +30,25 @@ describe("/research/limitations", () => {
     expect(within(table).getAllByRole("row")).toHaveLength(6);
   });
 
+  it("illustrates four visible limitations with requirements and historical output roles", () => {
+    render(<LimitationsPage />);
+
+    const examples = screen.getByRole("region", { name: "Examples of visible limitations" });
+    expect(within(examples).getAllByRole("article")).toHaveLength(4);
+    expect(within(examples).getAllByRole("img")).toHaveLength(5);
+    expect(within(examples).getByText(/hand-picked synthetic examples.*do not establish/i)).toBeInTheDocument();
+    expect(within(examples).getByText(/only four legs are depicted/i)).toBeInTheDocument();
+    expect(within(examples).getByText(/what came out was air, because he was a sock/i)).toBeInTheDocument();
+    expect(within(examples).getByText(/syn-021.*s6.*selected final.*attempt 1/i)).toBeInTheDocument();
+    expect(within(examples).getByText(/syn-019.*s1.*selected final.*attempt 3/i)).toBeInTheDocument();
+    expect(within(examples).getByRole("link", { name: /identity-drift examples/i })).toHaveAttribute("href", "/research/dataset#examples");
+    for (const image of within(examples).getAllByRole("img")) {
+      expect(image).toHaveAttribute("width", "768");
+      expect(image).toHaveAttribute("height", "576");
+      expect(image).toHaveAttribute("loading", "lazy");
+    }
+  });
+
   it("sets the scene editor against the two others that were tried", () => {
     render(<LimitationsPage />);
 
@@ -65,7 +84,7 @@ describe("/research/limitations", () => {
     for (const link of within(contents).getAllByRole("link")) {
       expect(document.getElementById(link.getAttribute("href")!.slice(1)), link.textContent ?? "").not.toBeNull();
     }
-    expect(within(contents).getAllByRole("link")).toHaveLength(6);
+    expect(within(contents).getAllByRole("link")).toHaveLength(7);
   });
 
   it("opens the group guide on GitHub in a new tab", () => {

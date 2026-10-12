@@ -5,7 +5,76 @@ export const SOURCES = {
   stageAudit: "docs/capstone/pipeline-stage-audit-2026-10.md",
   probes: "docs/capstone/model-probes-2026-10.md",
   phase05: "docs/product/PHASE_05_RESULTS.md",
+  examples: "docs/specs/research-limitations-examples.md",
 } as const;
+
+// ADR-070: hand-picked historical synthetic captures, not a representative sample or new labels.
+// The feature spec records immutable source hashes, commits and selected-final verification.
+export const EXAMPLES = [
+  {
+    title: "Character duplication",
+    storyId: "syn-021",
+    split: "train",
+    role: "s6 · selected final page · attempt 1",
+    style: "Paper Cutout",
+    requirement: "Lala looks up at the sky.",
+    observation: "Only Lala is in the named scene cast, but the page draws two copies of her side by side.",
+    images: [{
+      caption: "Selected final page",
+      src: "/research/limitations/syn-021-s6-1.webp",
+      alt: "Two matching red-haired children in yellow shirts and orange shorts stand together on a porch.",
+    }],
+  },
+  {
+    title: "Stated body counts",
+    storyId: "syn-002",
+    split: "train",
+    role: "c1 (Mopsi) · final canonical reference · draw 1",
+    style: "Gouache",
+    requirement: "It had six legs and its wool was green moss and little white flowers grew in it.",
+    observation: "The moss and flowers are present, but only four legs are depicted. A scene matching this reference would not establish that the requested body count was correct.",
+    images: [{
+      caption: "Final canonical reference",
+      src: "/research/limitations/syn-002-ref-c1-1.webp",
+      alt: "A sheep with green mossy wool and white flowers, depicted with four legs.",
+    }],
+  },
+  {
+    title: "Missing or wrong action",
+    storyId: "syn-019",
+    split: "train",
+    role: "s1 · selected final page · attempt 3",
+    style: "Cartoon",
+    requirement: "He practised breathing fire every night and what came out was air, because he was a sock.",
+    observation: "The page depicts flames where the story explicitly says only air comes out. Other body and cast defects are visible too; this example does not isolate their cause.",
+    images: [
+      {
+        caption: "Final canonical reference · c0 · draw 1",
+        src: "/research/limitations/syn-019-ref-c0-1.webp",
+        alt: "A red striped sock-shaped dragon with horns, a button and a long red tongue.",
+      },
+      {
+        caption: "Selected final page",
+        src: "/research/limitations/syn-019-s1-3.webp",
+        alt: "A standing red dragon breathes a large flame beside a toy box containing another small red dragon.",
+      },
+    ],
+  },
+  {
+    title: "Background groups without references",
+    storyId: "syn-016",
+    split: "train",
+    role: "s2 · selected final page · attempt 4",
+    style: "Cartoon",
+    requirement: "He called himself General Lint and he commanded an army of six smaller dust bunnies.",
+    observation: "The scene direction requests Lint and his soldiers crouching under the vacuum. Only Lint and the vacuum have references; the page invents helmeted humanoid soldiers instead of smaller dust bunnies.",
+    images: [{
+      caption: "Selected final page · also shown on the Dataset page",
+      src: "/research/dataset/1843d7d4835a8397-page.webp",
+      alt: "A round grey dust creature beneath a vacuum, surrounded by helmeted humanoid soldiers in uniforms.",
+    }],
+  },
+] as const;
 
 // Group guide §5.3. The date is the stage audit's "Provisional results" heading.
 export const AUDIT = {

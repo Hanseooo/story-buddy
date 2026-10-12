@@ -40,7 +40,7 @@ export default function ResearchHeader({
           </span>
         </Link>
 
-        <nav aria-label="Research" className="flex flex-1 gap-0.5">
+        <nav aria-label="Research" className="flex min-w-0 flex-1 flex-wrap gap-0.5">
           {tabs.map((tab) => {
             const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
             return (

@@ -1,6 +1,6 @@
 # Changelog
 
-What changed in the repository, one entry per merged PR, newest first. The baseline at the bottom
+What changed in the repository, one entry per merged PR or direct main update, newest first. The baseline at the bottom
 is `main` as it stood before PR #101.
 
 **How to add an entry.** In the PR itself, add a section at the top: the PR number and date, the
@@ -13,6 +13,35 @@ goes in [`docs/capstone/research-changelog.md`](docs/capstone/research-changelog
 instead of repeating it.
 
 ---
+
+## Direct main update · 2026-10-13 · Illustrated limitations
+
+### Code
+
+- Add four historical synthetic examples to `/research/limitations`, with explicit requirements,
+  visible discrepancies, reference/attempt roles and a hand-picked-example disclaimer.
+- Bundle four new WebP assets with the frontend and reuse one existing Dataset image. No Storage,
+  backend or external image request is needed. Link to Dataset examples for identity drift.
+- Let the research header tabs wrap at 320px, fixing measured overflow without changing navigation,
+  role visibility or account behavior.
+
+### Docs
+
+- Record the approved static-image decision in ADR-070 and immutable source provenance in
+  [the feature spec](docs/specs/research-limitations-examples.md).
+- Preserve audit caveats, existing limitations, frozen labels and completed research results.
+  The presentation decision is recorded in the research changelog.
+
+### Checks
+
+- `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm build` and `pnpm test` passed:
+  694 tests across 73 files. Focused tests first failed on missing examples and navigation, then passed.
+- An unchanged gallery test timed out once, then passed in isolation and in the full suite without
+  changing its timeout or skipping tests. Temporary verification-guard errors were corrected.
+- Five source hashes verified. Browser checks load every image with external requests blocked,
+  confirm desktop/320px layouts, zero horizontal overflow and working example links.
+- No paid calls, private material or held-out assets. Backend source and provider configuration are
+  untouched; backend checks were not rerun locally for this frontend presentation change.
 
 ## PR #127 · 2026-10-13
 

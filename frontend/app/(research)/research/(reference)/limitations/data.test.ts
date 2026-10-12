@@ -113,4 +113,19 @@ describe("limitations page data", () => {
   it("names no donated story", () => {
     expect(JSON.stringify(data)).not.toMatch(/don-/i);
   });
+
+  it("ships only local synthetic examples with tracked provenance", () => {
+    expect(data.EXAMPLES.map((example) => example.storyId)).toEqual(["syn-021", "syn-002", "syn-019", "syn-016"]);
+    const provenance = read(data.SOURCES.examples);
+    for (const example of data.EXAMPLES) {
+      expect(example.split).toBe("train");
+      expect(provenance).toContain(example.storyId);
+      expect(provenance).toContain(example.requirement);
+      for (const image of example.images) {
+        expect(image.src).toMatch(/^\/research\/(limitations|dataset)\/[^/]+\.webp$/);
+        expect(image.alt.length).toBeGreaterThan(0);
+        expect(existsSync(path.join(REPO_ROOT, "frontend/public", image.src)), image.src).toBe(true);
+      }
+    }
+  });
 });

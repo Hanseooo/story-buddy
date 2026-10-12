@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowRight, Warning } from "@phosphor-icons/react/dist/ssr";
 import ScrollTable from "../../../_shared/components/ScrollTable";
 import Source from "../../../_shared/components/Source";
-import { AUDIT, BY_KIND, CHECKS, DEFECTS, KLEIN, LIMITATIONS, PHASE_05, SOURCES, TRIED, type Share } from "./data";
+import { AUDIT, BY_KIND, CHECKS, DEFECTS, EXAMPLES, KLEIN, LIMITATIONS, PHASE_05, SOURCES, TRIED, type Share } from "./data";
 
 export const metadata = {
   title: "StoryBuddy Findings and Limitations",
@@ -25,6 +25,7 @@ const OTHER = "bg-foreground/60";
 const SECTIONS = [
   { id: "kinds", label: "By character kind" },
   { id: "defects", label: "Common defects" },
+  { id: "examples", label: "Image examples" },
   { id: "checks", label: "Automatic checks" },
   { id: "editors", label: "Scene editors" },
   { id: "tried", label: "What was tried" },
@@ -141,6 +142,58 @@ export default function LimitationsPage() {
         </ScrollTable>
         <Source path={SOURCES.stageAudit} where="“Provisional results”, Where the 77 come from" />
         <Source path={SOURCES.groupGuide} where="§5.3, for what each defect looks like" />
+      </section>
+
+      <section aria-labelledby="examples" className="space-y-6">
+        <h2 id="examples" className={H2}>Examples of visible limitations</h2>
+        <p className={PROSE}>
+          Hand-picked synthetic examples illustrate these failures; they do not establish their frequency or
+          current performance. They are training-split captures from the provisional October 8, 2026 audit,
+          made with generation prompt version 4. They are illustrations, not new independent human labels.
+        </p>
+        <div className="space-y-8">
+          {EXAMPLES.map((example) => (
+            <article key={example.storyId} className="grid gap-5 border-t border-primary/10 pt-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:gap-8">
+              <div className="space-y-3">
+                <h3 className={H3}>{example.title}</h3>
+                <p className="text-sm text-foreground/60">{example.style} · synthetic · training split</p>
+                <div className="space-y-1">
+                  <p className="text-sm font-bold">Requested</p>
+                  <blockquote className="text-sm text-foreground/80">“{example.requirement}”</blockquote>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-bold">Visible in the image</p>
+                  <p className="text-sm text-foreground/80">{example.observation}</p>
+                </div>
+                <p className="text-xs text-foreground/60">{example.storyId} · {example.role}</p>
+              </div>
+              <div className={`grid content-start gap-4 ${example.images.length > 1 ? "sm:grid-cols-2" : ""}`}>
+                {example.images.map((image) => (
+                  <figure key={image.src} className="min-w-0 space-y-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={image.src}
+                      alt={image.alt}
+                      width={768}
+                      height={576}
+                      loading="lazy"
+                      className="h-auto w-full rounded-2xl border border-primary/10 bg-muted/20"
+                    />
+                    <figcaption className="text-xs text-foreground/60">{image.caption}</figcaption>
+                  </figure>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+        <p className={PROSE}>
+          <Link href="/research/dataset#examples" className={`inline-flex min-h-11 items-center gap-1.5 rounded-lg font-bold text-primary hover:text-primary-deep hover:underline ${FOCUS}`}>
+            See reference/page identity-drift examples
+            <ArrowRight weight="bold" className="size-4" aria-hidden />
+          </Link>
+        </p>
+        <Source path={SOURCES.examples} where="Selected examples, requirements and source provenance" />
+        <Source path={SOURCES.stageAudit} where="Provisional review and its limitations" />
       </section>
 
       <section aria-labelledby="checks" className="space-y-4">
