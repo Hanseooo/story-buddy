@@ -6,6 +6,7 @@
 **Derived from:** `docs/specs/kid-flow-ui-docket.md` S2 · **Rationale:** ADR-029 (the whole shape),
 ADR-024 (pure routers, `recursion_limit`), ADR-025 (D4 breaker, failure posture), ADR-028 (`RefVerdict`),
 ADR-011 / PRD §13 (moderation ordering), ADR-006 (durable paths)
+**Chip policy amendment:** ADR-069 (accepted 2026-10-12), eligible emphasis choices independent of verdict.
 
 > ADR-029 froze the reveal's shape and listed its consequences to build. This spec builds all of them
 > **except the screen** (S4's): the two contract fields, the `reveal` node and `route_reveal`,
@@ -142,10 +143,10 @@ exactly what `interrupt()`'s payload is for.
 
 ### 4.3 Chips, and why the list can never be empty
 
-`chips` are the described attributes the judge could not find: the `species`, `colours`,
-`body_features` and `clothing` axes of `CharacterDescription`, minus `ref_verdict.attributes_present`,
-compared case-insensitively. `notes` is excluded — it is free prose, not an attribute, and not a thing
-a child can tap.
+`chips` are eligible emphasis choices from the `species`, `colours`, `body_features` and
+`clothing` axes of `CharacterDescription` (ADR-069). They are independent of the reference
+verdict, not a list of judge-detected defects. `notes` is excluded. The stored description
+is unchanged; selecting an existing value requests emphasis, not an arbitrary new appearance.
 
 **Attributes the active style forbids are excluded too (ADR-035).** The axes are passed through
 `prompt_optimizer.filtered_description` first, so under `comic` (`"no glow"`) a `colours` entry of
@@ -162,27 +163,21 @@ offered `"orb"`. This was the one live leak in ADR-035 — a tapped chip becomes
 explicit emphasis, so the forbidden term would walk back into a draw prompt on a **fresh** job.
 `main.confirm_job` validates a tap against the stored chips (§4.9), so it
 could not catch this: the chips were the thing that was wrong. An all-forbidden species offers no chip
-and falls through to fallback 2 below.
+and falls through to the general fallback below.
 
-**Two fallbacks, in order, because an empty chip list dead-ends the button.** The endpoint validates a
-tap against the offered chips (§4.9), so a character offering none can never be retried — and
-ADR-029's *"the button never dead-ends"* would be false at the top of the pause rather than at the cap.
+**Stable distinct choices (ADR-069).** After style filtering, remove exact duplicates by
+trimmed, case-folded comparison, preserving first occurrence and exact offered text.
+Suppress only ADR-069's finite vague-label list. Generic human morphology is suppressed
+only for an explicitly `human` species, never from `is_humanoid` alone; meaningful
+nonhuman morphology and unknown phrases remain. Do not infer detail or match synonyms.
+Passing, contradictory and unavailable verdicts expose the same eligible choices.
 
-1. **Nothing missing** — `ref_verdict is None` (a judge outage; `char_bible` accepts the draw unchecked
-   and records `None`) or `ref_verdict.contradictions` is empty. Fall back to the **full axis list**: a
-   child may disagree with a reference the judge passed, and that disagreement is the entire point of
-   the reveal (ADR-029 context).
-
-   ⚠️ **This is `char_bible`'s acceptance predicate, and the two must stay in lockstep** (ADR-034).
-   It reads `contradictions`, never `matches_description` — those two disagree in production, and a
-   `reveal` that branched on the boolean would hand the child the full chip list for a reference the
-   gate had just rejected, so the tap would target an attribute that was never the problem.
-2. **No axes at all** — `analyze` produced a bare description with no species, colours, features or clothing,
-   or ADR-035 filtered every one of them away (including the species, post-amendment).
-   Fall back to **`["overall physical appearance"]`** (ADR-041). The tap then restates that neutral chip rather than
-   the character's name, preventing fresh pseudonyms from entering targeted prompt projections. `body_plan`
-   and `face_or_interface` arrive as separate standalone chips, and targeted redraw restates the tapped stored
-   chip exactly once.
+**General fallback.** When no eligible choice survives, offer
+**`["overall physical appearance"]`**. The endpoint requires an offered choice (§4.9),
+so an empty list would remove redraw recourse. The neutral chip avoids introducing the
+character name into the redraw prompt and receives general new-picture wording in
+`character-review-ux`. Eligible folded body/face phrases remain separate chips, and
+targeted redraw restates the selected offered string exactly once.
 
 ### 4.4 The counter increments in `char_bible`, not in `reveal`
 
@@ -321,10 +316,10 @@ A duplicate returning `200` rather than `409` is a deliberate child-facing choic
 six-year-old must not be shown an error, and S4 should never have to design a screen for one. Machine
 clients lose nothing — the returned status says exactly what happened.
 
-**Validation is against the current row, so a stale client gets `422`.** A tap held over from the
-previous pause may name a chip that the redraw has since satisfied and the new projection no longer
-offers. Rejecting it is correct: the child would be asking to fix something that is no longer wrong,
-and their screen is out of date. S4 refreshes from the row.
+**Validation is against the current row.** A character or attribute no longer offered
+gets `422`; S4 reconciles from the row. There is no pause revision token. A delayed
+request whose attribute remains offered can claim a later `awaiting_confirm` pause.
+The UI fingerprint and status CAS remain safeguards, not complete stale-request rejection.
 
 **A failed enqueue rolls the CAS back.** If the queue write raises after the status flipped, the
 endpoint restores `status='awaiting_confirm'` and returns `503`:
@@ -442,17 +437,17 @@ this change.
 | **Unknown job UUID** | `404` — no status to return, capability does not resolve. |
 | **`char_id` not in `jobs.reveal`** | `422`. Nothing enqueued, status unchanged, pause not consumed. |
 | **`attribute` valid for another char, not this one** | `422` — chips are validated per-character, not as a flat set. |
-| **Stale chip from the previous pause** | `422`. The client's screen is out of date; the redraw already satisfied that attribute. |
+| **Stale chip from the previous pause** | `422` if no longer offered. A still-offered value can claim a later pause; there is no pause revision token. |
 | **Missing / unknown `action`** | `422` at the Pydantic boundary. Never reaches the CAS. |
 | **Redis down at enqueue** | CAS rolled back to `awaiting_confirm`, `503`. The pause survives and the child can retry (§4.9). |
 | **No characters in the story** | `reveal` returns `{}` without interrupting; the book runs straight through. No empty screen, no permanent pause (§4.1). |
 | **Five characters** | Two references exist (`char_bible` cap); the projection lists those two. The other three offer no tap. |
-| **A character with an empty description** | Chips fall back to `[name]`; the tap is a blind re-roll (§4.3). |
-| **Every axis is style-forbidden** (e.g. `colours == ["glowing"]` under `comic`) | ADR-035 filters them all, and the same `[name]` fallback applies — the child still gets a tap, just a blind one. |
+| **A character with no eligible choices** | Chips fall back to `["overall physical appearance"]`; a general new-picture attempt (§4.3). |
+| **Every axis is style-forbidden** (e.g. `colours == ["glowing"]` under `comic`) | ADR-035 filters them all; the same neutral fallback applies. |
 | **A forbidden word inside `species`** (e.g. `species == "glowing orb"` under `comic`) | Word-filtered to `"orb"` for the chip only (ADR-035 amendment). The draw and judge prompts still say `"glowing orb"` — `filtered_description` never touches `species`, and that carve-out is what keeps acceptance from going vacuous. |
-| **`ref_verdict is None`** (judge outage upstream) | Chips fall back to the full axis list; the child still has something to tap. |
-| **Reference passed the judge** (`contradictions == []`) | Same fallback. The pause happens regardless — the child's disagreement is the point. |
-| **`contradictions` non-empty but `matches_description=True`** | Treated as a **failed** reference — chips are the missing set (ADR-034). Matches what `char_bible`'s gate did with the same verdict. |
+| **`ref_verdict is None`** (judge outage upstream) | Same eligible choices as any other verdict; no quality claim. |
+| **Reference passed the judge** (`contradictions == []`) | Same eligible choices. The pause happens regardless. |
+| **`contradictions` non-empty but `matches_description=True`** | Mint acceptance still follows contradictions/text-free. Reveal choices do not depend on either field (ADR-069). |
 | **A retried reference is flagged by `char_ref_mod`** | `moderation_router` raises `content_flagged`, job `failed`. The retry path is not exempt from the gate. |
 | **Process dies between `reveal` and `char_bible`** | Checkpoint resumes at `char_bible` with `reference_retry` set and `ref_retry_count` un-bumped; the tap is re-spent, not lost or double-counted. |
 | **Two different taps race** | First wins the CAS; the second gets `200` and its `char_id`/`attribute` are discarded. One resume per pause, always. |
@@ -519,18 +514,15 @@ future migration (S1 §6.3).
 - `cost` is untouched by the node (invariant 5 — the bump is `char_bible`'s).
 
 **Projection (`_project_reveal`, pure — no mocks), same file:**
-- Chips are described-minus-`attributes_present`, case-insensitively.
-- **Full axis list** when `ref_verdict is None`, and when `contradictions` is empty.
-- **Missing set** when `contradictions` is non-empty — the projection branches on that alone, so it
-  follows the gate's predicate rather than the judge's boolean (ADR-034). Prod job b9506307, where
-  `matches_description` was `True` on a verdict whose own prose named a contradiction, is one case
-  of that rule and not the rule itself.
-- **`[name]`** when the description carries no axes at all (§4.3).
+- Chips are stable eligible emphasis choices, independent of all reference verdict fields.
+- The committed synthetic capture reproduces duplicate axes; deduplication occurs after style filtering.
+- Finite vague-label suppression is contextual for human morphology and preserves meaningful nonhumans.
+- **`["overall physical appearance"]`** when no eligible choices survive (§4.3).
 - `notes` never appears as a chip.
 - An attribute the active style fragment forbids never appears as a chip; the same attribute under a
   fragment that permits it does (ADR-035, per-preset).
 - A forbidden word inside `species` is stripped from the chip (`"glowing orb"` → `"orb"`), and a
-  wholly-forbidden species falls through to `[name]` (ADR-035 amendment).
+  wholly-forbidden species falls through to the neutral fallback (ADR-035/069).
 - A character with `canonical_ref_image is None` is **absent** from `characters`.
 - `taps_left == 3 - ref_retry_count`.
 
@@ -604,11 +596,13 @@ future migration (S1 §6.3).
 
 No new instrument. Two rules this spec imposes on an existing one:
 
-1. **A tapped attribute is a free human label on reference quality** (ADR-029 §2), and
-   `annotation-surface` should join it to the `RefVerdict` that preceded it.
+1. **A tapped attribute records requested emphasis** (ADR-069), not a verified defect
+   or quality outcome. It can accompany the preceding `RefVerdict` as interaction context;
+   it must not be treated as a human-scored correction-success label.
 2. **§4.6's per-draw paths make that a before/after pair.** The superseded reference is still in
    Storage, so the corpus can carry *"this is what the child rejected, this is what they were given,
-   and this is the attribute they named"* — the strongest signal in the whole flow. Named, not built.
+   and this is the attribute they named"*. Requested-trait success, unchanged identity,
+   style drift and preference need separate human assessment. Named, not built.
 
 ## 10. Blast radius — changed in the same change
 
@@ -646,8 +640,8 @@ that row to `0006` in the same change. Next free number after this spec is `0006
 
 **Depends on:** ADR-029 (the entire frozen shape — node, router, targeted mode, 3-tap cap,
 `awaiting_confirm`, the endpoint) · ADR-024 (pure label-returning routers, `recursion_limit`'s formula)
-· ADR-025 (D4 breaker; failure posture; never partial) · ADR-028 (`RefVerdict.attributes_present`, the
-source of the chips) · ADR-011 / PRD §13 (moderation ordering) · ADR-006 (durable paths, signed at read
+· ADR-025 (D4 breaker; failure posture; never partial) · ADR-028 (`RefVerdict`) · ADR-069 (chip policy)
+· ADR-011 / PRD §13 (moderation ordering) · ADR-006 (durable paths, signed at read
 time) · S1 (`docs/specs/kid-flow-book-persistence.md`) constraints 1–8.
 
 **Deviates from ADR-029 in one placement, deliberately:** the `ref_retry_count` bump lives in
@@ -662,7 +656,8 @@ time) · S1 (`docs/specs/kid-flow-book-persistence.md`) constraints 1–8.
   S3 names the resubmit-a-different-story action, it is not this endpoint.
 - **S4 (reader & wait states)** — the reveal screen; the *"use this one"* rendering at `taps_left == 0`;
   the `SELECT`-then-subscribe fix on `/process/[jobId]` that §4.11 property 1 requires; and re-reading
-  the row after a resume so a stale chip list cannot produce a `422` the child can see.
+  the row after a resume before another submission, with safe stale-choice reconciliation
+  and ADR-069's documented limit on delayed requests across pauses.
 - **`data-deletion`** — the TTL, the reaper, and the terminal status a swept pause gets, constrained
   only by §4.11 property 2 (it is not ADR-025 `failed`). Its object sweep now also covers the
   superseded reference draws of §4.6.
@@ -673,10 +668,9 @@ time) · S1 (`docs/specs/kid-flow-book-persistence.md`) constraints 1–8.
   stable contract, and §4.8 now depends on it for both detection *and* content. If a version bump
   changes it, the alternative is `app_graph.get_state(config)` — `.next` for detection, `.tasks[0].interrupts[0].value`
   for the payload. One change, in one place, because the branch exists exactly once.
-- **Chip matching is exact and case-insensitive.** A judge that reports `"an orange sock"` against a
-  described `"orange sock"` yields a chip that is arguably already present. The failure mode is a
-  redundant chip, not a missing one, and §4.3's fallbacks mean the list is never empty. Fuzzy matching
-  is not built.
+- **Semantic overlap remains possible.** ADR-069 removes exact duplicates and finite vague labels,
+  not paraphrases. Existing desired details may already be visible; chips make no defect claim.
+  Server request membership remains exact, and fuzzy matching is not built.
 - **A tap can make the reference worse and the child keeps it** (ADR-029 §2, stated honestly there).
   Unchanged by this spec; §4.6 means the better earlier draw still exists in Storage, but nothing
   offers it back, and nothing should — ranking over the child's head is what the reveal exists to stop.

@@ -14,6 +14,34 @@ instead of repeating it.
 
 ---
 
+## PR #123 · 2026-10-12
+
+Make character redraw suggestions distinct and explain replacement. Refs #118 and #119.
+
+### Code
+
+- Offer eligible style-filtered emphasis choices independently of reference-quality verdicts.
+- Deduplicate after filtering, suppress finite vague labels with explicit human context,
+  and preserve meaningful nonhuman details and the general fallback.
+- Explain the new-picture attempt and replacement before explicit redraw, including
+  separate general-fallback wording. Keep exact request values and existing interaction states.
+
+### Docs
+
+- Added accepted ADR-069 and aligned the reveal, character and contract specs, including
+  the existing stale-request limitation without a pause revision token.
+
+### Checks
+
+- Frontend lint, build with CI placeholders, and 692 tests passed. Backend lint and
+  1,479 tests passed; 87 skipped and six provider smoke tests deselected.
+- Changed expectations failed before implementation. Independent review found no remaining issues.
+- Verification used temporary dotenv-read guards. No provider experiments were run.
+- Browser QA is pending owner review. Generation drift and moderation-intent persistence
+  remain follow-up work; generation, replacement, moderation, API and allowance policies are unchanged.
+
+---
+
 ## PR #122 · 2026-10-12
 
 Show complete character reference pictures when a child confirms the cast. Refs #117.

@@ -251,7 +251,8 @@ design care as success screens; a wait state is a state, not an absence of one.
   and then subscribe. `/process/[jobId]` subscribes today with no initial fetch, so a child
   returning to a paused job sees nothing until the next UPDATE — which, at a pause, never comes.
 - **From S2:** render *"use this one"* at `taps_left == 0` (ADR-029 — the button never dead-ends),
-  and re-read the row after each resume so a stale chip list cannot surface a `422` to a child.
+  and re-read the row after each resume before another submission. Reconcile stale choices
+  safely; ADR-069 documents the remaining limit without a pause revision token.
 - **From S2:** the reveal screen renders constraint 9's projection as-is. It signs `image_path` at
   read time; it does not re-derive chips, and it never reads graph state.
 - **From S3 (build order, not design):** the differentiated failure screens select on

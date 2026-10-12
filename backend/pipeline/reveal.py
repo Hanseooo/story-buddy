@@ -14,16 +14,24 @@ from pipeline.prompt_optimizer import filtered_description, permitted_words
 
 MAX_RETRY_TAPS = 3
 
+# ADR-069: finite chip-scope exclusions, never canonical-description normalization.
+_VAGUE_CHIPS = {
+    "skin tone", "average height", "warm clothing", "casual clothes", "plain clothes",
+    "traditional or warm clothes",
+}
+_VAGUE_HUMAN_CHIPS = {
+    "human", "bipedal human", "human face", "human body", "humanoid body",
+    "child's humanoid body", "adult's humanoid body", "child's body", "adult's body",
+}
+
 
 def _chips(character: Character, style_fragment: str | None) -> list[str]:
-    """Described attributes minus what the judge already found (spec §4.3). `notes` is free
-    prose, not an attribute, and is never offered as a chip. Never empty (two fallbacks below) —
-    an empty chip list would dead-end the "try again" button (invariant 4)."""
-    verdict = character.ref_verdict
-    # ADR-035 surface 5. A chip promises that tapping it buys a redraw that could plausibly fix
-    # the attribute. Under `comic` ("no glow") a tap on "glowing" spends one of three ADR-029 taps
-    # and one paid draw on something the style guarantees will not change. Filtering here is also
-    # what lets `char_bible._mint_targeted` trust `retry.attribute`.
+    """Eligible emphasis choices from style-filtered canon, independent of the judge (ADR-069).
+    `notes` is free prose, not an attribute, and is never offered. The fallback keeps the list
+    nonempty so "try again" remains reachable (invariant 4).
+    """
+    # ADR-035 surface 5. Under `comic` ("no glow"), a tap on "glowing" spends a draw on a
+    # style-forbidden trait. Filtering also lets `_mint_targeted` trust `retry.attribute`.
     description = filtered_description(character.description, style_fragment)
     axes = {
         # `species` is the one axis `filtered_description` deliberately leaves alone (Decision 2),
@@ -41,17 +49,19 @@ def _chips(character: Character, style_fragment: str | None) -> list[str]:
         for v in ([value] if isinstance(value, str) else value)
         if v
     ]
-    if not full_axis_list:
-        return ["overall physical appearance"]
-    # ADR-034: the same acceptance predicate `char_bible` gates on, for the same reason. This
-    # branch means "the reference passed" — if it read `matches_description` while the gate read
-    # `contradictions`, a reference accepted by one and rejected by the other would offer the
-    # child the wrong chips. Keep the two in lockstep.
-    if verdict is None or not verdict.contradictions:
-        return full_axis_list
-    present = {a.lower() for a in verdict.attributes_present}
-    missing = [axis for axis in full_axis_list if axis.lower() not in present]
-    return missing or full_axis_list
+    human = (character.description.species or "").strip().casefold() == "human"
+    seen: set[str] = set()
+    chips = []
+    for axis in full_axis_list:
+        key = axis.strip().casefold()
+        # Apostrophe equivalence is suppression-only. Deduplication preserves exact offered text.
+        suppression_key = key.replace("‘", "'").replace("’", "'")
+        if suppression_key in _VAGUE_CHIPS or (human and suppression_key in _VAGUE_HUMAN_CHIPS):
+            continue
+        if key not in seen:
+            seen.add(key)
+            chips.append(axis)
+    return chips or ["overall physical appearance"]
 
 
 def _project_reveal(state: StoryMemory) -> dict:

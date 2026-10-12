@@ -1,6 +1,7 @@
 # Feature Spec — Understandable character redraws
 
 **Status:** implemented 2026-09-10; interaction design approved 2026-09-09.
+Suggestion and wording amendment approved 2026-10-12 under [ADR-069](../product/adr/ADR-069-character-redraw-chips-are-emphasis-choices-not-judge-detected-defects.md).
 **Owner:** `frontend/app/s/[profileId]/process/[jobId]/page.tsx`, existing reveal view.
 **Derived from:** [pause lifecycle](kid-flow-pause-lifecycle.md),
 [reader and wait states](kid-flow-reader-and-wait-states.md),
@@ -13,21 +14,24 @@
 A child understands that a trait asks for a new picture emphasizing that detail.
 Selecting a trait spends nothing. An explicit **Redraw [name]** starts the redraw,
 which replaces the current picture and may change other details. Preserve existing
-worker-provided suggestions and the shared three-redraw budget. Continue uses
+worker-provided eligible emphasis choices and the shared three-redraw budget. Continue uses
 **Use these characters**, avoiding a claim that the pictures are perfect.
 
-No old/new chooser, undo after dispatch, typed correction, additional traits, prompt
+No old/new chooser, undo after dispatch, typed correction, invented traits, prompt
 change, extra draw, new modal, or changed moderation/acceptance policy. This spec owns
 the reveal interaction amendment; backend pause/retry contracts remain authoritative.
 
 ## 2. Existing contract and corrected assumptions
 
 `backend/pipeline/reveal.py:_project_reveal` provides `characters[]` with `char_id`,
-`name`, `image_path`, `chips`, plus book-wide `taps_left`. `_chips` supplies missing
-visual axes when available, otherwise all filtered visual axes; when no axes survive,
-ADR-041 supplies `overall physical appearance`. These are suggestions, not a definitive
-list of defects. The earlier discussion's “only missing traits” description was too
-narrow. Keep this actual behavior unchanged.
+`name`, `image_path`, `chips`, plus book-wide `taps_left`. Under ADR-069, `_chips`
+supplies stable eligible choices from the filtered visual axes, independent of the
+reference verdict. Exact duplicates are removed after filtering, preserving first
+occurrence and exact offered text. ADR-069 defines the finite vague-label exclusions,
+including human-context exclusions that do not apply merely because a character is
+humanoid. Unknown and meaningful nonhuman phrases remain. When no eligible axes survive,
+offer `overall physical appearance`. Choices are emphasis requests, not detected defects
+or arbitrary new values: `gray hair` asks for stored gray hair, not a different color.
 
 `backend/pipeline/char_bible.py:_mint_targeted` generates a new picture from the
 description with `Be sure to include: [attribute]`, replaces the chosen character's
@@ -46,12 +50,14 @@ row refresh/subscription behavior remains the source of job progress.
 
 Compute the reveal fingerprint only in the paused state. Before the worker publishes
 that pause, the database's reveal value is `{}` and must not be read as character choices.
+The API has no pause revision token. A delayed request with a still-offered attribute
+can claim a later pause; current safeguards do not guarantee rejection of every stale request.
 
 ## 3. Screen and interaction
 
 Keep character pictures/names prominent and use existing Cobalt Playroom components
 and tokens. Show the book title as context per [story titles](story-titles.md) §5.
-Instruction: **“Choose a detail you want us to try drawing again.”**
+Instruction: **“Choose a detail you want the new picture to show.”**
 
 Fit each complete source image proportionally inside the reserved square picture
 area, without cropping or stretching. Keep the same reserved area for loading and
@@ -63,7 +69,8 @@ already outside the generated image.
    Selecting another replaces it. Selecting the same trait again clears it.
 2. No request, counter decrement, or picture change occurs on selection.
 3. Under the selected character, show:
-   **“We'll draw a new picture, paying extra attention to [trait]. Other details may change.”**
+   **“We'll make a new picture and try to show [trait]. It will replace this picture. Other details may change.”**
+   For `overall physical appearance`, show **“We'll try a new picture of [name]. It will replace this picture. Other details may change.”**
    Place **Redraw [name]** next to this explanation. It is unavailable without a
    valid selection. A visible **Cancel** clears selection without a request.
 4. Show **“3 redraws left for this book”**, **“2 redraws left for this book”**, or
@@ -140,7 +147,8 @@ reveal clears selection and displays server allowance. Critical failure path: fa
 dispatch followed by a refreshed already-consumed pause does not spend another redraw.
 Extend existing cases for cap, confirm payload, image-read error, and empty chips as
 needed rather than creating new test infrastructure. Existing backend reveal/confirm
-tests remain evidence that the contract and cap are unchanged.
+tests remain evidence that the API and cap are unchanged. Extend reveal tests for
+ADR-069's projection rules and process-page tests for concrete/general wording.
 
 Manual QA covers one/two characters, one/zero attempts, long traits, Cancel/Escape,
 keyboard-only use, slow redraw, failed image reads, and returning from bookshelf.
@@ -149,10 +157,11 @@ the allowance is shared. Do not assert the image actually improves in determinis
 tests or add a new model-quality evaluation claim.
 
 When implemented, update `kid-flow-reader-and-wait-states.md` §4.2 to point here for
-interaction rules and retire immediate-tap UI requirements/tests. Do not alter
-`kid-flow-pause-lifecycle.md` or ADR-029 backend mechanics to fit a UI preference.
+interaction rules and retire immediate-tap UI requirements/tests. Keep
+`kid-flow-pause-lifecycle.md` aligned with ADR-069's approved chip policy without
+changing ADR-029's generation, replacement or allowance mechanics.
 Run from `frontend/`: `pnpm lint`, `pnpm build`, `pnpm test`. If backend code changes
-are proposed, stop and establish why this frontend-only contract needs that expansion.
+are proposed beyond ADR-069's reveal projection, stop and establish the need.
 
 **Next gate:** manual QA — one/two characters, one/zero attempts, long traits, Cancel/Escape,
 keyboard-only use, slow redraw, failed image reads, and returning from bookshelf.

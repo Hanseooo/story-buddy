@@ -116,9 +116,10 @@ job status only ever moves forward — `queued → running → awaiting_confirm 
 failed` — so a live UPDATE is never older than the seed.
 
 The hook also exposes **`refetch()`**, called after every `POST /jobs/{id}/confirm` response. This is
-S2's carry-in requirement: re-read the row after each resume so a stale chip list can never surface a
-`422` to a child. The subscription would deliver the same row a moment later; the explicit refetch is
-what makes the ordering guaranteed rather than probable.
+S2's carry-in requirement: re-read the row after each resume before another submission.
+The subscription may deliver the same row later; explicit refetch reconciles the choice
+with current state. This does not provide a pause revision token or reject every delayed
+request; see ADR-069 and `character-review-ux` for the remaining stale-request limit.
 
 The channel is removed once the bucket is terminal — no UPDATE will ever come for a terminal row.
 

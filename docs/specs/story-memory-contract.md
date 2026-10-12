@@ -356,8 +356,10 @@ N/A — the contract produces no generated content.
   required model output under strict `json_schema`, and the judge would be asked to state its own prompt version.
 - **Added 2026-08-11 (additive, no `schema_version` bump) → ADR-034:** `RefVerdict.contradictions`, declared
   **between** `differences_observed` and `matches_description`. Reference acceptance is now derived —
-  `not verdict.contradictions` — in both `char_bible` (the gate) and `reveal` (the chip projection), which must
-  stay in lockstep. `matches_description` is **kept and demoted to an observation**: prod job `b9506307` set it
+  `not verdict.contradictions` — in `char_bible` (the gate); later lettering suppression also requires
+  `text_free`. ADR-034 originally tied reveal projection to that predicate, but ADR-069 (2026-10-12)
+  makes chips independent of verdicts without changing this schema or mint acceptance.
+  `matches_description` is **kept and demoted to an observation**: prod job `b9506307` set it
   TRUE on a verdict whose own `differences_observed` read *"This is a contradiction"*, and ADR-004's ordering did
   not prevent that — ordering makes the model reason before it scores, not score in line with its reasoning.
   Retaining the boolean keeps that disagreement rate measurable, and removing it would be **breaking**

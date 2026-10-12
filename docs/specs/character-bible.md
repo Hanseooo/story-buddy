@@ -143,9 +143,9 @@ unchanged). A judge *failure* (exception) is still accept-unchecked (ADR-025's a
 The judge is asked to enumerate one entry per contradicted attribute and whether the image is free of text.
 `matches_description` is still requested and still persisted, but **nothing branches on it**: prod job
 `b9506307` set it TRUE on a verdict whose own `differences_observed` read *"This is a contradiction"*, shipping
-a flat teal star against a description reading `star; glowing; tiny`. `reveal` reads the same predicate — see
-`kid-flow-pause-lifecycle` §4.3; the two must stay in lockstep or a reference the gate rejected would
-still offer the child the full chip list.
+a flat teal star against a description reading `star; glowing; tiny`. Under ADR-069,
+`reveal` offers eligible emphasis choices independently of the verdict — see
+`kid-flow-pause-lifecycle` §4.3. This changes chip selection only, not this acceptance predicate.
 
 **Best-of ranks on fewest `contradictions`**, then `text_free`, then `len(attributes_present)`, ties → earliest draw
 (`(-len(contradictions), text_free, len(attributes_present), -i)`).

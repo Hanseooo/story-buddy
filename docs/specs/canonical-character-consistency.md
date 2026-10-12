@@ -234,7 +234,8 @@ existing ADR-035 reference filtering. A legacy `species="robot"` therefore does 
 This exception avoids a new terminal failure and does not apply to fresh validated analysis. Logs
 record only `char_id` and a fallback boolean, never the name, story, or full prompt.
 
-Reveal chips have a different fallback. If placeholder/style filtering removes every offered axis,
+Reveal chips have a different fallback. If placeholder/style filtering and ADR-069's finite
+eligibility rules remove every offered axis,
 `reveal` offers the fixed chip `overall physical appearance`, not `Character.name`. A targeted redraw
 therefore cannot reintroduce a fresh pseudonym through `ReferenceRetry.attribute`. This narrowly
 amends ADR-029's chip fallback without changing reveal payload shape, tap count, pause behavior, or
@@ -287,8 +288,8 @@ the displayed character name.
 - [ ] **CC-6 Accessibility** — captions unchanged. (Narration is cut — ADR-058.)
 - [ ] **CC-7 Reproducibility** — still unsatisfied because Fal remains unseeded. Tier-B records
   prompt versions and every attempt without claiming deterministic causality.
-- [x] **CC-8 Kid vs teacher design** — the reveal display name remains, folded morphology becomes
-  child-facing retry chips, and the empty list uses the short fixed `overall physical appearance`
+- [x] **CC-8 Kid vs teacher design** — the reveal display name remains, eligible folded morphology becomes
+  child-facing retry chips under ADR-069, and the empty list uses the short fixed `overall physical appearance`
   chip. The 120-code-point field cap and standalone-chip tests protect the new payload values; no
   payload shape or screen changes.
 - [ ] **CC-9 Failure states** — current fail-open reference policy remains pending D-Q.
@@ -334,8 +335,9 @@ generated-image quality.
 10. When every fresh reveal chip is style-filtered away, the fixed `overall physical appearance`
     chip reaches targeted redraw and the name does not.
 11. A targeted legacy redraw follows the same projection predicate and neutral chip rule.
-12. Folded body/face phrases are offered as concise, standalone reveal chips and survive targeted
-    restatement without being concatenated into one unreadable chip.
+12. Eligible folded body/face phrases are offered as standalone reveal chips under ADR-069
+    and survive targeted restatement without concatenation. Its finite vague-label suppression
+    applies in chip scope only; stored morphology and reference/judge prompts are unchanged.
 13. Legacy fallback logging contains `char_id`/boolean only, never name, story, or prompt.
 
 ### 6.3 Integration regression
