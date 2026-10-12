@@ -51,6 +51,15 @@ def regenerate(state: StoryMemory) -> dict:
         for c in referenced_characters(scene.characters_present, state.characters)
     ]
 
+    # Corrections include visible text-only characters, but never the off-scene roster.
+    # Reference selection above remains narrower: it requires a canonical image.
+    by_id = {character.char_id: character for character in state.characters}
+    scene_characters = [
+        by_id[char_id]
+        for char_id in dict.fromkeys(scene.characters_present)
+        if char_id in by_id
+    ]
+
     # Invariant 5: every reachable path appends at least one clause. The three booleans cover the
     # holes the frozen 7 leave — anatomy and lettering are outside FailureReason entirely (ADR-028),
     # and a same_character failure can arrive with no reason named. A prompt identical to the
@@ -74,7 +83,7 @@ def regenerate(state: StoryMemory) -> dict:
 
     rendered_clauses = correction_clauses(
         last.failure_reasons,
-        state.characters,
+        scene_characters,
         state.style.prompt_fragment,
         same_character=same_char,
         anatomy_intact=anatomy_ok,
@@ -84,7 +93,7 @@ def regenerate(state: StoryMemory) -> dict:
     prompt = correct_prompt(
         base_prompt,
         last.failure_reasons,
-        state.characters,
+        scene_characters,
         state.style.prompt_fragment,
         same_character=same_char,
         anatomy_intact=anatomy_ok,

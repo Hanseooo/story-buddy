@@ -20,7 +20,7 @@ from contracts.story_memory import (
 
 log = logging.getLogger(__name__)
 
-SCENE_PROMPT_VERSION = 4   # v4: ADR-053 D4 — an object renders as name, axes, then scene state
+SCENE_PROMPT_VERSION = 5   # v5: corrections use only the scene cast (issue #121); v4 base unchanged
 
 
 # ADR-035. Every preset states its own prohibitions in its own fragment text ("no gradients,
@@ -491,7 +491,8 @@ def correct_prompt(
 
     Attribution ceiling (spec §4): `VlmVerdict`/`Attempt.failure_reasons` carry no per-character
     breakdown, so axis-based clauses fill from EVERY character in `characters`, joining multiple
-    values — over-specifying rather than guessing wrong. A clause whose axes are ALL empty across
+    values. The regeneration caller supplies only the deduplicated, resolvable scene cast,
+    including text-only characters. A clause whose axes are ALL empty across
     ALL of them is dropped rather than rendered hollow (`_fillable`), and if that empties the whole
     correction, `IDENTITY_CLAUSE` floors it.
 
