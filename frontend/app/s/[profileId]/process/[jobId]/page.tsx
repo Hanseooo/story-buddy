@@ -552,7 +552,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                 <img
                   src={signedCharUrls[c.char_id]}
                   alt={c.name}
-                  className="w-full aspect-square object-cover rounded-[16px] bg-[var(--color-muted)]"
+                  className="w-full aspect-square object-contain rounded-[16px] bg-[var(--color-muted)]"
                   onLoad={() => setCharacterImageState((current) => ({ ...current, [c.char_id]: "loaded" }))}
                   onError={() => setCharacterImageState((current) => ({ ...current, [c.char_id]: "error" }))}
                 />

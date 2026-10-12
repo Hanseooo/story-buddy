@@ -14,6 +14,26 @@ instead of repeating it.
 
 ---
 
+## PR #122 · 2026-10-12
+
+Show complete character reference pictures when a child confirms the cast. Refs #117.
+
+### Code
+
+- Fit reference images proportionally inside the existing square area without display cropping.
+
+### Docs
+
+- Updated the character review UI spec with full-image fitting and consistent loading/error space.
+
+### Checks
+
+- `pnpm lint`, `pnpm build` (with public Supabase placeholders), and `pnpm test` passed
+  (73 files, 691 tests). Landscape, portrait, and square image-fit geometry checks passed.
+- Browser QA is pending owner review. Generation and quality-check policy are unchanged.
+
+---
+
 ## Direct update to main · 2026-10-12
 
 ### Code
