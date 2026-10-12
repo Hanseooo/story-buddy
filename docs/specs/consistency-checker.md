@@ -142,13 +142,18 @@ nodes at once, not a hotfix here.
 1. Select the first `Scene` whose `final_image_ref is None` (ADR-024 — no cursor). None → `{}`.
 2. Take `scene.attempts[-1]`. No attempts → log and return `{}`. Unreachable in the linear flow
    (`generate_scene` either appended one or raised), so this is a guard, not a path.
-3. Build subjects: each `char_id` in `characters_present` that resolves to a `Character` carrying a
-   `canonical_ref_image`, as `(name, canonical_ref_image)`.
+3. Build subjects: each order-preserving deduplicated `char_id` in `characters_present` that
+   resolves to a `Character` carrying a `canonical_ref_image`, as `(name, canonical_ref_image)`.
 4. `judge_attempt(attempt.image_ref, subjects, constraint_prompt)`. The caller passes
    `scene.prompt or attempt.prompt or ""` (`pipeline/consistency_check.py`) — the **immutable**
    scene prompt, never a corrected attempt's. ADR-047: correction clauses are instructions to
    the image model, not facts about the scene, so they must not become checkable constraints.
-5. **Fold identity verdicts, worst-wins** (`None` or empty subjects → `vlm_verdict=None`):
+5. Persist `Attempt.identity_checks` under the caller's corresponding `char_id`, retaining
+   `same_character` and `failure_reasons` for every referenced subject, including clean ones.
+   No subject ID is requested from the judge; names/prose never determine this association.
+   `None` means unavailable identity results, `{}` means no referenced subjects. Judge prompts,
+   wire schemas and model stay unchanged. **Fold identity verdicts, worst-wins**, as before
+   (`None` or empty subjects → `vlm_verdict=None`):
    - `same_character`, `anatomy_intact`, `style_match`, `subjects_unique`, `text_free` → `all(...)`
    - `attributes_present`, `failure_reasons` → union, deduped; `failure_reasons` emitted in
      `FailureReason` **declaration order**, which is the order `correct_prompt` iterates

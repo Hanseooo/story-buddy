@@ -215,14 +215,17 @@ precede the reveal, so the node, migration and endpoint land together with it. `
 
 ## Tier 2j — opened by scene-correction scope investigation (2026-10-13)
 
-- **D-S · How scene retries preserve per-character identity attribution (#121).** The identity
-  judge evaluates referenced characters separately, but `consistency_check` persists only folded
+- **D-S · Accepted 2026-10-13: per-character identity attribution (#121).** Investigation found the identity
+  judge evaluated referenced characters separately, but `consistency_check` persisted only folded
   verdicts and unioned reasons. Scene-scoped correction inputs exclude off-scene attributes but
   still join attributes of all visible characters. An offline controlled permutation of the
   committed synthetic capture's c0/c1 verdicts produced identical persisted attempts and colour
   corrections when only the failing character changed; this is not an asset-quality measurement.
-  Resolve the persisted `char_id` association, legacy-checkpoint fallback, per-subject sparse-axis
-  floors, and scene-wide anatomy/text handling in a dedicated contract design before implementation.
+  The owner approved an additive caller-owned `Attempt.identity_checks` mapping containing only
+  `same_character` and the existing reasons. Target reference image numbers, validate cast/fold
+  agreement before spend, floor sparse/no-reason failures per subject, and retain legacy `None`
+  fallback and global style/anatomy/text handling. Design source: `story-memory-contract.md` and
+  `prompt-optimizer.md` in `docs/specs/`; generation version 6, judge versions unchanged.
   Preserve existing folded gates/ranking, immutable-base/latest-attempt corrections, pinned judge
   prompts/model, bounded spend, and research provenance. Do not infer attribution from verdict prose.
 

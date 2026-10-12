@@ -51,7 +51,8 @@ def regenerate(state: StoryMemory) -> dict:
         for c in referenced_characters(scene.characters_present, state.characters)
     ]
 
-    # Corrections include visible text-only characters, but never the off-scene roster.
+    # Legacy corrections include visible text-only characters, but never the off-scene roster.
+    # Attributed corrections use only subjects the identity check actually evaluated.
     # Reference selection above remains narrower: it requires a canonical image.
     by_id = {character.char_id: character for character in state.characters}
     scene_characters = [
@@ -89,6 +90,7 @@ def regenerate(state: StoryMemory) -> dict:
         anatomy_intact=anatomy_ok,
         text_free=text_ok,
         scene_contradictions=last.scene_contradictions,
+        identity_checks=last.identity_checks,
     )
     prompt = correct_prompt(
         base_prompt,
@@ -99,6 +101,7 @@ def regenerate(state: StoryMemory) -> dict:
         anatomy_intact=anatomy_ok,
         text_free=text_ok,
         scene_contradictions=last.scene_contradictions,
+        identity_checks=last.identity_checks,
     )
 
     attempt_n = len(scene.attempts) + 1

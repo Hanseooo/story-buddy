@@ -130,6 +130,11 @@ def test_ref_verdict_declares_reason_before_score():
 def test_failure_reason_is_a_closed_set():
     with pytest.raises(ValidationError):
         Attempt(image_ref="p.png", failure_reasons=["not_a_real_reason"])
+    with pytest.raises(ValidationError):
+        Attempt.model_validate({
+            "image_ref": "p.png",
+            "identity_checks": {"c0": {"same_character": True, "failure_reasons": ["not_a_real_reason"]}},
+        })
 
 
 def test_asset_fields_accept_a_plain_storage_path():
@@ -207,6 +212,7 @@ def test_a_checkpoint_blob_written_before_this_change_still_deserializes():
 
     assert restored.scenes[0].location_id is None
     assert restored.scenes[0].attempts[0].vlm_verdict.subjects_unique is True
+    assert restored.scenes[0].attempts[0].model_dump().get("identity_checks", "missing") is None
 
 
 def test_the_two_additive_fields_do_not_bump_the_schema_version():
@@ -320,7 +326,7 @@ def test_visual_continuity_fields_round_trip_and_stay_last():
     assert Scene.model_validate(scene.model_dump()) == scene
     assert list(StoryObject.model_fields)[-1] == "owner_char_id"
     assert list(Scene.model_fields)[-3:] == ["objects_present", "visual_direction", "object_states"]
-    assert list(Attempt.model_fields)[-1] == "scene_contradictions"
+    assert list(Attempt.model_fields)[-2:] == ["scene_contradictions", "identity_checks"]
     assert CURRENT_SCHEMA_VERSION == 1
     assert [reason.value for reason in FailureReason] == [
         "wrong_colour",

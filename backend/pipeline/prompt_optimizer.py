@@ -13,6 +13,7 @@ from contracts.story_memory import (
     Character,
     CharacterDescription,
     FailureReason,
+    IdentityCheck,
     Location,
     StoryObject,
     _is_description_placeholder,
@@ -20,7 +21,7 @@ from contracts.story_memory import (
 
 log = logging.getLogger(__name__)
 
-SCENE_PROMPT_VERSION = 5   # v5: corrections use only the scene cast (issue #121); v4 base unchanged
+SCENE_PROMPT_VERSION = 6   # v6: per-reference identity corrections (issue #121); v4 base unchanged
 
 
 # ADR-035. Every preset states its own prohibitions in its own fragment text ("no gradients,
@@ -417,6 +418,7 @@ def correction_clauses(
     anatomy_intact: bool = True,
     text_free: bool = True,
     scene_contradictions: list[str] | None = None,
+    identity_checks: dict[str, IdentityCheck] | None = None,
 ) -> list[str]:
     """Pure. Assembles the list of correction clauses for a retry (spec `prompt-optimizer.md`).
 
@@ -427,32 +429,66 @@ def correction_clauses(
     # ADR-035 surface 4. Issue #24: `wrong_colour` used to answer with "match the reference's
     # exact colours: glowing" — reinforcing, on the retry, the one attribute the style guaranteed
     # the reference would not have. `species` is deliberately unfiltered (Decision 2).
-    descriptions = [filtered_description(character.description, style) for character in characters]
-    values = {
-        "colours": _joined(colour for description in descriptions for colour in description.colours),
-        "species": _joined(description.species for description in descriptions),
-        "body_features": _joined(
-            feature for description in descriptions for feature in description.body_features
-        ),
-        "clothing": _joined(item for description in descriptions for item in description.clothing),
-        "name": _joined(character.name for character in characters),
-        "style_fragment": style,
-    }
     present = set(failure_reasons)
+    if identity_checks is None:
+        targets = [("", characters, same_character, present)]
+    else:
+        referenced = referenced_characters([c.char_id for c in characters], characters)
+        if set(identity_checks) != {c.char_id for c in referenced}:
+            raise ValueError("identity_checks must match the referenced scene cast exactly")
+        union = {reason for check in identity_checks.values() for reason in check.failure_reasons}
+        if union != present or all(c.same_character for c in identity_checks.values()) != same_character:
+            raise ValueError("identity_checks must agree with the folded identity inputs")
+        targets = [
+            (
+                f"For the character in reference Image {n}: ", [character],
+                identity_checks[character.char_id].same_character,
+                set(identity_checks[character.char_id].failure_reasons),
+            )
+            for n, character in enumerate(referenced, 1)
+        ]
+
+    target_values = []
+    for prefix, cast, same, reasons in targets:
+        descriptions = [filtered_description(character.description, style) for character in cast]
+        values = {
+            "colours": _joined(colour for description in descriptions for colour in description.colours),
+            "species": _joined(description.species for description in descriptions),
+            "body_features": _joined(
+                feature for description in descriptions for feature in description.body_features
+            ),
+            "clothing": _joined(item for description in descriptions for item in description.clothing),
+            "name": _joined(character.name for character in cast),
+            "style_fragment": style,
+        }
+        target_values.append((prefix, values, same, reasons))
+
     clauses: list[str] = []
     dropped: list[str] = []
+    filled: set[str] = set()
     for reason in FailureReason:
         if reason not in present:
             continue
+        if identity_checks is not None and reason == FailureReason.wrong_style:
+            clauses.append(style)
+            continue
         template = FAILURE_CLAUSES[reason]
-        if _fillable(template, values):
-            clauses.append(template.format(**values))
-        else:
-            dropped.append(reason.value)
+        for prefix, values, _, reasons in target_values:
+            if reason not in reasons:
+                continue
+            if _fillable(template, values):
+                clauses.append(prefix + template.format(**values))
+                filled.add(prefix)
+            else:
+                dropped.append(prefix + reason.value)
     if dropped:
         log.info("correct_prompt: dropped unfillable clause(s) %s — nothing on that axis", dropped)
+    if identity_checks is not None:
+        for prefix, _, same, reasons in target_values:
+            if (not same or reasons - {FailureReason.wrong_style}) and prefix not in filled:
+                clauses.append(prefix + "match that reference character exactly")
     # Guarded on EMPTY failure_reasons so it never duplicates different_face's clause.
-    if not same_character and not failure_reasons:
+    if identity_checks is None and not same_character and not failure_reasons:
         clauses.append(IDENTITY_CLAUSE)
     if not anatomy_intact:
         clauses.append(ANATOMY_CLAUSE)
@@ -464,7 +500,7 @@ def correction_clauses(
     # `IDENTITY_CLAUSE` is the right floor for exactly that: it points at the images, which are in
     # the payload and do know the colour. Requires a non-empty `failure_reasons`, so the no-op call
     # (nothing failed) still returns `prompt` untouched.
-    if failure_reasons and not clauses:
+    if identity_checks is None and failure_reasons and not clauses:
         clauses.append(IDENTITY_CLAUSE)
     unique_contradictions = list(dict.fromkeys(scene_contradictions or []))
     clauses.extend(
@@ -485,16 +521,20 @@ def correct_prompt(
     anatomy_intact: bool = True,
     text_free: bool = True,
     scene_contradictions: list[str] | None = None,
+    identity_checks: dict[str, IdentityCheck] | None = None,
 ) -> str:
-    """Pure. Never drops content from `prompt` (invariant 3) — only appends emphasis clauses, one
-    per `FailureReason` present in `failure_reasons`, in enum-declaration order, no duplicates.
+    """Pure. Never drops content from `prompt` (invariant 3) — only appends emphasis clauses,
+    in enum-declaration order, once per reason/subject (once per reason on the legacy path).
 
-    Attribution ceiling (spec §4): `VlmVerdict`/`Attempt.failure_reasons` carry no per-character
+    Legacy attribution ceiling (spec §4): folded inputs carry no per-character
     breakdown, so axis-based clauses fill from EVERY character in `characters`, joining multiple
     values. The regeneration caller supplies only the deduplicated, resolvable scene cast,
     including text-only characters. A clause whose axes are ALL empty across
     ALL of them is dropped rather than rendered hollow (`_fillable`), and if that empties the whole
     correction, `IDENTITY_CLAUSE` floors it.
+
+    When identity_checks is present, each reference subject uses only its own signal and axes,
+    addressed by image-roll number. Sparse/no-reason failures floor independently per subject.
 
     `same_character` / `anatomy_intact` / `text_free` / `scene_contradictions` close the holes where
     the reason clauses alone append NOTHING, which would make the retry a pure resample (ADR-010
@@ -508,5 +548,6 @@ def correct_prompt(
         anatomy_intact=anatomy_intact,
         text_free=text_free,
         scene_contradictions=scene_contradictions,
+        identity_checks=identity_checks,
     )
     return "\n".join([prompt, *clauses]) if clauses else prompt

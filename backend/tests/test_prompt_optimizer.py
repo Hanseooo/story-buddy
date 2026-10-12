@@ -35,7 +35,7 @@ def test_build_prompt_signature_has_no_text_excerpt_parameter():
         "visual_direction",
         "object_states",
     ]
-    assert SCENE_PROMPT_VERSION == 5
+    assert SCENE_PROMPT_VERSION == 6
 
 
 def test_visual_continuity_prompt_blocks_are_in_contract_order():
