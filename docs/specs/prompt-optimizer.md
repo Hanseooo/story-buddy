@@ -13,7 +13,7 @@
 
 Build the text prompt `generate_scene` sends to the image model: present characters' appearance
 descriptions + visible objects + rendered visual direction + location setting + the frozen style
-fragment (`SCENE_PROMPT_VERSION = 3`). Per ADR-040, narrative text excerpt and character notes are
+fragment (`SCENE_PROMPT_VERSION = 5`). Per ADR-040, narrative text excerpt and character notes are
 excluded from positive scene prompt construction. Separately, build the ADR-010 corrected prompt a
 future targeted-retry node uses after a failed consistency check, by turning the judge's
 `failure_reasons` into emphasis clauses.
@@ -76,7 +76,7 @@ Helpers exported because pipeline nodes share them. `filtered_object` applies th
 
 ### Block Ordering and Invariants
 
-`build_prompt` emits prompt blocks in the exact contract order (`SCENE_PROMPT_VERSION = 4`):
+`build_prompt` emits prompt blocks in the exact contract order (`SCENE_PROMPT_VERSION = 5`):
 1. Reference roll (`Image N is...`) with extended `REFERENCE_CLAUSE`:
    > `"The reference images define appearance, not pose, crop, expression or viewing angle; the Visual direction controls those scene properties."`
 2. Text-only character descriptions (unreferenced present characters, appearance axes only)
@@ -97,7 +97,11 @@ Helpers exported because pipeline nodes share them. `filtered_object` applies th
 6. Setting line (`Setting: <name> - <description>`)
 7. Style fragment (`style`)
 
-`generate_scene` requires a non-empty `scene.visual_direction` and logs `image_model=settings.fal_image_model` alongside attempt metrics and `scene_prompt_version=3`.
+`generate_scene` requires a non-empty `scene.visual_direction` and logs `image_model=settings.fal_image_model` alongside attempt metrics and `scene_prompt_version=5`.
+
+Version 5 records scene-scoped correction inputs (issue #121). The version 4 base layout remains
+unchanged. Corpus metadata uses the same generation version boundary; historical captures retain
+their recorded versions. Both judge prompt versions remain unchanged.
 
 `referenced_characters` deduplicates `characters_present` order-preservingly, so a checkpoint
 written before `segment`'s own dedup cannot send one reference image as two subjects on resume.
@@ -156,13 +160,17 @@ clause to `prompt`. **Attribution ceiling:** `VlmVerdict`/`Attempt.failure_reaso
 per-character breakdown today — a scene with two `characters_present` gives no signal for *which*
 character a `wrong_colour` verdict concerns. `correct_prompt` therefore fills axis-based clauses
 (`wrong_colour`, `wrong_species`, `wrong_body_feature`, `wrong_clothing`) from **every** character in
-`characters`, joining multiple values where more than one is present — over-specifying rather than
-guessing wrong. `wrong_style`/`different_face` don't fill from a `CharacterDescription` axis at all, so
-this ceiling doesn't touch them. `character_absent` fills `{name}` from every character in
-`characters` whose `char_id` isn't yet confirmed present — since that confirmation is
-`consistency_check`'s job (unbuilt) and out of scope here, it names all of them. Sharpening this to a
-single named character requires the judge to attribute a reason to a `char_id`, which is
-`consistency-checker`'s contract decision, not this spec's.
+the supplied `characters`, joining multiple values where more than one is present. `regenerate`
+supplies only resolvable `Scene.characters_present`, deduplicated in scene order, to both
+`correction_clauses` and `correct_prompt`. Visible text-only characters remain included even when
+they have no canonical reference. Off-scene roster names and axes cannot enter these structured
+corrections or make an otherwise unfillable clause fillable. `wrong_style`/`different_face` don't
+fill from a `CharacterDescription` axis at all. `character_absent` names every supplied scene
+character because the folded reasons do not preserve which character was absent. Sharpening this to a
+single named character requires preserving the caller's `char_id`-to-verdict association in
+Story Memory: the identity judge already evaluates each referenced character separately, but
+`consistency_check` persists only the fold. This is `consistency-checker`'s contract decision,
+not a requirement for another judge call or a judge-prompt rewrite.
 
 **Unfillable clauses.** A clause whose every `{placeholder}` interpolates to an empty string is
 **dropped**, and if that leaves the correction empty, `IDENTITY_CLAUSE` floors it. `_fillable` reads

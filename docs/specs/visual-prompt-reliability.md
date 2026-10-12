@@ -352,6 +352,12 @@ boolean clauses, current scene contradictions, and one composition-preservation 
 duplicate current contradiction strings are deduplicated in first-seen order before rendering; no
 semantic/fuzzy deduplication is attempted.
 
+Structured identity corrections use only the resolvable, deduplicated `Scene.characters_present`
+roster, including visible text-only characters. Off-scene roster axes and names are excluded from
+correction construction and clause counting (generation prompt version 5, issue #121). Reference
+selection and the latest-attempt/immutable-base behavior above are unchanged. Folded identity reasons
+still cannot identify a particular subject within that scene cast.
+
 **Tradeoff:** a previously fixed issue may return when the latest judge misses it. Carrying all raw
 history avoids forgetting but recreates contradictory growth. The exact-story reproduction compares
 attempt trajectories and is the evidence gate for revisiting this choice.

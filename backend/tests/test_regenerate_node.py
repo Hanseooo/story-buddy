@@ -3,8 +3,11 @@
 One seam (MASTER_SPEC §6): the node with `generate_and_store` patched. Everything else in this
 node is pure — `correct_prompt` has no model call, and the selection rule is a list scan.
 """
+import json
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch
 
 from app.config import IMAGE_BUDGET
 from contracts.story_memory import (
@@ -565,3 +568,71 @@ def test_regenerate_logs_provenance_and_deduplication_fields(caplog):
     assert "latest_source_attempt=1" in log_text
     assert "correction_count=" in log_text
     assert "deduplicated_contradictions=2" in log_text
+
+
+def test_regenerate_captured_scene_excludes_off_scene_body_features():
+    """Replay the committed syn-901 s0 verdict, not a visual-quality assertion."""
+    capture = Path(__file__).resolve().parents[2] / "docs/product/evidence/bundles/probe_out/memory.json"
+    state = StoryMemory.model_validate(json.loads(capture.read_text(encoding="utf-8")))
+    original = next(scene for scene in state.scenes if scene.scene_id == "s0")
+    scene = original.model_copy(update={
+        "final_image_ref": None, "moderation_status": None, "attempts": original.attempts[:1],
+    })
+    state = state.model_copy(update={"scenes": [scene]})
+    storage = MagicMock()
+    storage.storage.from_.return_value.download.side_effect = FileNotFoundError("fixture not stored")
+
+    with (
+        patch("pipeline.generate_scene.get_supabase_client", return_value=storage),
+        patch("pipeline.generate_scene.get_signed_url", side_effect=lambda path: f"https://example.invalid/{path}"),
+        patch("pipeline.generate_scene.edit_image", return_value=b"fixture") as draw,
+    ):
+        result = regenerate(state)
+
+    sent = draw.call_args.args[0]
+    assert "human adult body" not in sent, "off-scene c2 entered the c0/c1-only correction"
+    assert "match these body features exactly: human child body, human face with short hair, human child body, human face with red hair tie" in sent
+    assert len(draw.call_args.args[1]) == 2
+    assert draw.call_args.args[1][0].endswith("/ref-c0-1.png")
+    assert draw.call_args.args[1][1].endswith("/ref-c1-1.png")
+    assert result["scenes"][0].prompt == scene.prompt
+    assert result["scenes"][0].attempts[0] == scene.attempts[0]
+    assert result["scenes"][0].attempts[-1].prompt == sent
+
+
+@pytest.mark.parametrize("reason, expected_clause", [
+    (FailureReason.wrong_colour, IDENTITY_CLAUSE),
+    (FailureReason.wrong_body_feature, "match these body features exactly: human adult body, human face"),
+])
+def test_regenerate_sparse_text_only_cast_uses_its_own_axes(reason, expected_clause, caplog):
+    """Controlled projection of captured c2: no reference or colours, unlike off-scene c0/c1."""
+    capture = Path(__file__).resolve().parents[2] / "docs/product/evidence/bundles/probe_out/memory.json"
+    state = StoryMemory.model_validate(json.loads(capture.read_text(encoding="utf-8")))
+    original = next(scene for scene in state.scenes if scene.scene_id == "s0")
+    latest = original.attempts[0].model_copy(update={
+        "failure_reasons": [reason], "scene_contradictions": [],
+        "vlm_verdict": original.attempts[0].vlm_verdict.model_copy(update={"text_free": True}),
+    })
+    scene = original.model_copy(update={
+        "characters_present": ["c2", "c2", "missing-id"],
+        "prompt": "Visual direction: Lola stands.", "visual_direction": "Lola stands.",
+        "final_image_ref": None, "moderation_status": None, "attempts": [latest],
+    })
+    state = state.model_copy(update={"scenes": [scene]})
+    storage = MagicMock()
+    storage.storage.from_.return_value.download.side_effect = FileNotFoundError("fixture not stored")
+
+    with (
+        caplog.at_level("INFO", logger="pipeline.regenerate"),
+        patch("pipeline.generate_scene.get_supabase_client", return_value=storage),
+        patch("pipeline.generate_scene.text_to_image", return_value=b"fixture") as draw,
+    ):
+        result = regenerate(state)
+
+    sent = draw.call_args.args[0]
+    assert expected_clause in sent
+    assert sent.count("human adult body") == (1 if reason == FailureReason.wrong_body_feature else 0)
+    assert "short hair" not in sent
+    assert "red hair tie" not in sent
+    assert "correction_count=2" in caplog.text
+    assert result["scenes"][0].attempts[-1].prompt == sent

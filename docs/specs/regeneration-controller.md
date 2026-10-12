@@ -196,12 +196,16 @@ def regenerate(state: StoryMemory) -> dict:
         raise RuntimeError(...)
 
     ref_paths = [...]                                 # referenced_characters(), the shared list
+    by_id = {character.char_id: character for character in state.characters}
+    scene_characters = [
+        by_id[char_id] for char_id in dict.fromkeys(scene.characters_present) if char_id in by_id
+    ]
     last = scene.attempts[-1]
     v = last.vlm_verdict
     prompt = correct_prompt(
         scene.prompt,
         last.failure_reasons,
-        state.characters,
+        scene_characters,
         state.style.prompt_fragment,
         same_character=v.same_character if v else True,
         anatomy_intact=v.anatomy_intact if v else True,
@@ -226,6 +230,18 @@ def regenerate(state: StoryMemory) -> dict:
 `characters_present` that resolves to a `Character` carrying a `canonical_ref_image`, unresolvable ids
 skipped. The retry is conditioned on the same references as the original, or it would be measuring a
 different thing.
+
+Correction inputs are the resolvable, order-preserving, deduplicated `characters_present` roster,
+including visible characters without a canonical reference. Both `correction_clauses` (for the
+logged count) and `correct_prompt` receive this same scene-scoped list. Reference selection remains
+the existing helper above. Off-scene names and attributes cannot fill a structured correction or
+suppress its unfillable-axis floor. Reasons remain aggregated across the visible cast.
+`SCENE_PROMPT_VERSION = 5` records this correction boundary without changing either judge prompt.
+
+Regression coverage replays the committed synthetic `probe_out/memory.json` s0 first verdict:
+the c0/c1-only correction excludes c2's adult body features and preserves reference order and the
+immutable base. A controlled projection of captured text-only c2 checks duplicate/missing ids,
+visible body axes, and the colour-axis floor despite populated off-scene colours.
 
 ⚠️ **The same list, not a copy of the same rule.** `correct_prompt` only appends (invariant 3), so the
 corrected prompt still carries `build_prompt`'s numbered image roll — *"Image 2 is the star"* is
