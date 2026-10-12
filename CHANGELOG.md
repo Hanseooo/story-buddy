@@ -14,6 +14,33 @@ instead of repeating it.
 
 ---
 
+## PR #127 · 2026-10-13
+
+Document the remaining scene-judge investigation and reconcile setting-input claims. Refs #121.
+
+### Code
+
+- No executable, prompt, version, schema, gate, ranking, moderation or spend changes.
+  Previously merged #124–126 construction protections remain intact.
+
+### Docs
+
+- Record all six investigation concerns, selected synthetic requirement-to-final traces,
+  competing explanations, missing evidence, alternatives and prospective human-review criteria.
+- Correct setting specs' excerpt-input and version claims. Preserve the retained executable
+  instruction gap and historical DONE docket wording explicitly.
+- Record research limitations without changing frozen artifacts or completed Objective 4 results.
+  See [the dated investigation](docs/capstone/scene-judge-investigation-2026-10.md).
+
+### Checks
+
+- Eleven reviewed synthetic asset hashes and historical prompt versions verified. Two current
+  ranking replays leave selected final images unchanged after removing suspect camera entries.
+- Backend Ruff and 1,489 tests passed; 87 live database/research-artifact checks skipped and six
+  provider smoke tests deselected. Documentation links/privacy and diff whitespace checks passed.
+- No paid calls or held-out access. AI-assisted review is not independent human calibration;
+  the original job trace is unavailable.
+
 ## PR #126 · 2026-10-13
 
 Distinguish named scene cast from explicitly requested background groups. Refs #121, which remains open.

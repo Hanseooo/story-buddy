@@ -180,7 +180,13 @@ folded, and available to `regeneration-controller`'s ranking, but do **not** gat
 `text_free` per `lettering-suppression.md` §4.6 risk 2 — see the amendment there for the
 measurement).
 
-The scene-constraint judge checks the `Setting:` line (if present) against the page, reporting only concrete violations of stated permanent features as contradictions. Temporary differences supported by the excerpt (weather, lighting) are ignored. This is enforced by `SCENE_CONSTRAINT_PROMPT_VERSION = 3`.
+The version-4 scene-constraint prompt asks the judge to check stated permanent features in the
+`Setting:` line, if present. Its instruction about temporary differences supported by a later
+excerpt survives from version 3, but ADR-040/047 supplies only the immutable visual base, not
+the excerpt. Instruction presence and structured output do not establish visual correctness.
+The [dated #121 investigation](../capstone/scene-judge-investigation-2026-10.md) records this
+information gap, camera-axis confusion, the two distinct style checks, and correction/selection
+consequences. It makes no judge-calibration or original-job recovery claim.
 
 #### `GATING_REASONS` — the identity-attribute gate (2026-08-13)
 

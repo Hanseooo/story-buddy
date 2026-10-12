@@ -459,6 +459,13 @@ docket's work.
   the frontend and backend. BC-21 reflects the current word ceiling. Scene count, retry allowance,
   image budget, recursion limit, and completed research artifacts are unchanged.
 
+- 2026-10-13 (documentation reconciliation, #121): BC-15's excerpt ownership is historical
+  context. ADR-040 excludes excerpts from the downstream visual prompt, and ADR-047 supplies
+  that immutable base to the scene checker. `segment` must project selected temporary facts
+  into Visual direction; the setting judge's retained excerpt wording cannot read the upstream
+  text directly. [The dated investigation](../capstone/scene-judge-investigation-2026-10.md)
+  records the information gap without changing a DONE session, prompt, gate or frozen ADR.
+
 ---
 
 ## Roster note
