@@ -303,7 +303,8 @@ The exact-story reproduction records any visibly poor merge choice.
    `colours`, `body_features`, and `clothing` only;
 2. reference-use clause;
 3. unreferenced visible characters using the same appearance-only projection;
-4. whole-canvas subject count and non-human guard;
+4. named cast count and exactly-once guard, allowing background people or creatures only when
+   the Visual direction or Setting explicitly requests them (generation version 7);
 5. visible objects and stable physical descriptions;
 6. the one `Visual direction` rendered by `segment`;
 7. setting name and permanent description;

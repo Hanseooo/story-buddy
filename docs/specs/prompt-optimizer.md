@@ -13,7 +13,7 @@
 
 Build the text prompt `generate_scene` sends to the image model: present characters' appearance
 descriptions + visible objects + rendered visual direction + location setting + the frozen style
-fragment (`SCENE_PROMPT_VERSION = 6`). Per ADR-040, narrative text excerpt and character notes are
+fragment (`SCENE_PROMPT_VERSION = 7`). Per ADR-040, narrative text excerpt and character notes are
 excluded from positive scene prompt construction. Separately, build the ADR-010 corrected prompt a
 future targeted-retry node uses after a failed consistency check, by turning the judge's
 `failure_reasons` into emphasis clauses.
@@ -76,11 +76,14 @@ Helpers exported because pipeline nodes share them. `filtered_object` applies th
 
 ### Block Ordering and Invariants
 
-`build_prompt` emits prompt blocks in the exact contract order (`SCENE_PROMPT_VERSION = 6`):
+`build_prompt` emits prompt blocks in the exact contract order (`SCENE_PROMPT_VERSION = 7`):
 1. Reference roll (`Image N is...`) with extended `REFERENCE_CLAUSE`:
    > `"The reference images define appearance, not pose, crop, expression or viewing angle; the Visual direction controls those scene properties."`
 2. Text-only character descriptions (unreferenced present characters, appearance axes only)
-3. Exact visible cast count and non-human clause (`SUBJECT_COUNT_CLAUSE`, `NON_HUMAN_CLAUSE`)
+3. Exact named cast count (`SUBJECT_COUNT_CLAUSE`): each resolvable, deduplicated scene cast
+   member appears exactly once. Background people or creatures are allowed only when explicitly
+   requested by the Visual direction or Setting. No group keyword detection is used, and the
+   rule applies with or without reference images. Empty resolved cast emits no count clause.
 4. Visible objects block. Per ADR-053 the three axes are the object's *permanent* appearance;
    `Scene.object_states[obj_id]`, when present, renders after them as that page's state, and the
    line falls back to the name alone when no axis atom survives the style filter:
@@ -97,10 +100,12 @@ Helpers exported because pipeline nodes share them. `filtered_object` applies th
 6. Setting line (`Setting: <name> - <description>`)
 7. Style fragment (`style`)
 
-`generate_scene` requires a non-empty `scene.visual_direction` and logs `image_model=settings.fal_image_model` alongside attempt metrics and `scene_prompt_version=6`.
+`generate_scene` requires a non-empty `scene.visual_direction` and logs `image_model=settings.fal_image_model` alongside attempt metrics and `scene_prompt_version=7`.
 
 Version 6 adds per-reference identity correction targeting after version 5 scoped inputs to the
-scene cast (issue #121). The version 4 base layout remains unchanged. Corpus metadata uses the same
+scene cast (issue #121). Version 7 scopes the base count to named cast members and permits only
+explicitly requested background groups; block order and reference selection remain unchanged.
+Existing stored bases are not rebuilt on retry. Corpus metadata uses the same
 generation version boundary; historical captures retain
 their recorded versions. Both judge prompt versions remain unchanged.
 

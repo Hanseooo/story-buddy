@@ -152,9 +152,12 @@ Setting: the beach - golden sand, palm trees, blue water
   scene prompt names several. Emitted **unconditionally**, for the same reason `char_bible` made it
   unconditional: branching on species needs a word list that is wrong the first time a child
   writes something not on it, and the clause is a no-op for a person.
-- **`SUBJECT_COUNT_CLAUSE`** — `"This illustration contains exactly N characters: Ana and the
-  star."` A whole-canvas count is structurally different from the per-character "draw each
-  character exactly once" already in `REFERENCE_CLAUSE`.
+- **`SUBJECT_COUNT_CLAUSE`** — generation version 7 clarifies the original whole-canvas guard:
+  `"This illustration contains exactly N named cast characters: Ana and the star. Draw each
+  named cast character exactly once. Include background people or creatures only when
+  explicitly requested by the Visual direction or Setting."` The count covers resolved,
+  deduplicated scene cast members, not an explicitly requested background group. It preserves
+  the duplicate guard and restricts unrequested extras without group keyword detection.
 
 **Both new clauses sit OUTSIDE `REFERENCE_CLAUSE`**, because the roll and its clause are omitted
 entirely on the text-to-image path (`prompt_optimizer.py:212-217`) and both guards must apply there
@@ -165,7 +168,7 @@ too. Placing them inside would make them silently inert on every ref-less scene.
 | Case | Behavior |
 |---|---|
 | `characters_present` empty (after the missing-`char_id` filter) | no roll, no count clause, no non-human clause — all three would reference nothing |
-| `N == 1` | `"exactly 1 character"` — pluralization handled, no `1 characters` |
+| `N == 1` | `"exactly 1 named cast character"` — pluralization handled |
 | `char_id` present but absent from `characters` | already warned + skipped today; **the count must be computed after that filter**, or it asserts a number the prompt does not name |
 | A character present but with no canonical reference | keeps a plain `_describe` line below the roll; still counted in `N` |
 | No references at all | no roll; count and non-human clauses still emitted |
@@ -191,7 +194,7 @@ Fully deterministic, testable with no model.
 `build_prompt` deduplicates on the same key when it builds `present`. This is a **third** site, not
 a redundant one: `present` is derived from `characters_present` directly rather than from
 `referenced_characters`, and it is what `SUBJECT_COUNT_CLAUSE` counts. Without it, a pre-change
-checkpoint would assert *"exactly 2 characters: the star and the star."*
+checkpoint would assert *"exactly 2 named cast characters: the star and the star."*
 
 > This is a **hypothesis with a mechanism**, not a confirmed diagnosis of any specific book. It is
 > worth fixing regardless — sending one image as two subjects is wrong on its own terms — but the
@@ -308,7 +311,9 @@ Models mocked. No assertion on generated content.
 11. Roll order still matches `referenced_characters` order.
 12. `SUBJECT_COUNT_CLAUSE` and `NON_HUMAN_CLAUSE` appear on **both** the reference and the
     text-to-image paths.
-13. `N` counts present characters after the missing-`char_id` filter, and reads `1 character`.
+13. `N` counts resolved, deduplicated named cast members and reads `1 named cast character`.
+    Requested background groups are permitted without requiring them on other scenes; each
+    named cast member remains exactly once and unrequested background extras remain restricted.
 14. `characters_present` empty → none of the three clauses appear.
 15. `filtered_location` drops a forbidden word from the description (`"glowing cave"` under
     `no glow`) and leaves the **name** untouched.

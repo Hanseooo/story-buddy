@@ -21,7 +21,7 @@ from contracts.story_memory import (
 
 log = logging.getLogger(__name__)
 
-SCENE_PROMPT_VERSION = 6   # v6: per-reference identity corrections (issue #121); v4 base unchanged
+SCENE_PROMPT_VERSION = 7   # v7: named cast count permits explicitly requested background groups
 
 
 # ADR-035. Every preset states its own prohibitions in its own fragment text ("no gradients,
@@ -233,15 +233,14 @@ REFERENCE_CLAUSE = (
     "the Visual direction controls those scene properties."
 )
 
-# §4.2. BOTH clauses below sit OUTSIDE REFERENCE_CLAUSE deliberately: the roll and its clause are
-# omitted entirely on the text-to-image path (`generate_scene:55-57` sends no images), and both
-# guards must apply there too. Inside, they would be silently inert on every ref-less scene.
-
-# A WHOLE-CANVAS count, structurally different from REFERENCE_CLAUSE's per-character "draw each
-# character exactly once": that one constrains each subject, this one constrains the canvas. D3(b)
-# residual duplication is compositing, and a canvas-level assertion is the only shape that can
-# contradict it.
-SUBJECT_COUNT_CLAUSE = "This illustration contains exactly {n} character{plural}: {names}."
+# The named cast guard sits outside REFERENCE_CLAUSE so it also applies without references.
+# A whole-canvas count would contradict explicitly requested background people or creatures.
+SUBJECT_COUNT_CLAUSE = (
+    "This illustration contains exactly {n} named cast character{plural}: {names}. "
+    "Draw each named cast character exactly once. "
+    "Include background people or creatures only when explicitly requested by the "
+    "Visual direction or Setting."
+)
 
 
 def _names(names: list[str]) -> str:
