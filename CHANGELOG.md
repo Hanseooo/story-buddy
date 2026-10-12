@@ -14,6 +14,32 @@ instead of repeating it.
 
 ---
 
+## PR #124 · 2026-10-13
+
+Scope scene retry corrections to the visible cast. Refs #121, which remains open.
+
+### Code
+
+- Supply both correction construction and clause counting with the deduplicated, resolvable
+  scene cast, including visible characters without reference images. Exclude off-scene axes
+  and names while preserving reference selection and immutable-base/latest-attempt behavior.
+- Record generation prompt version 5 without changing the base layout or either judge prompt.
+
+### Docs
+
+- Align the prompt, regeneration, composition and reliability specs. Record per-character
+  attribution as D-S for a separate persisted-contract design.
+
+### Checks
+
+- Three new regression cases failed before the fix. Backend Ruff and 1,482 tests passed;
+  87 database/research-artifact checks skipped and six provider smoke tests deselected.
+- Diff checks passed. Tests used a temporary dotenv-read guard and placeholder credentials.
+- No paid experiments or visual-quality measurements ran. Exact reported-run tracing and
+  crowd/viewpoint/style calibration remain follow-ups.
+
+---
+
 ## PR #123 · 2026-10-12
 
 Make character redraw suggestions distinct and explain replacement. Refs #118 and #119.
