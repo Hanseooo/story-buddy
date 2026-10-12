@@ -52,9 +52,11 @@ corpus-level rate, and this spec makes no visual-quality claim without a named r
   `scene-setting-and-subject-binding.md`: a null location inherits the previous scene; a null first
   scene takes `locations[0]` when one exists; a story with no locations leaves all location ids
   null.
-- `build_prompt` keeps the S3-approved order: `Visual direction → Setting → excerpt → style`.
+- After ADR-040, `build_prompt` emits `Visual direction → Setting → style`; narrative excerpts
+  are excluded from both the image prompt and its scene-constraint projection.
   ADR-035's transient `filtered_location` projection still filters the description but never the
-  name. The later excerpt is authoritative for temporary conditions.
+  name. `segment` reads the excerpt upstream; scene-specific visual facts must reach the
+  downstream image model and checker through the rendered Visual direction.
 - `consistency_check` keeps its one existing scene-constraint judge call and one existing
   consistency pass/fail edge. No graph edge or node is added.
 - `regenerate` needs no setting-specific branch: it already appends concrete
@@ -86,32 +88,42 @@ Locations remain uncapped. A textual location adds no image or judge call, so th
 
 The canon describes stable identity such as layout, landmarks, materials, and recurring colours.
 The excerpt may state a temporary variation such as night, rain, storm damage, or changed lighting.
-That later, scene-specific statement controls the page without mutating `Location.description`.
+It is available to `segment`, not directly to the image model or scene checker after ADR-040.
+Selected scene-specific facts must be rendered into Visual direction without mutating
+`Location.description`; omission from that projection is not repaired by a downstream excerpt read.
 
 The prompt order does not change. `Visual direction` continues to own action, movement, pose,
-crop, expression, and viewpoint under S3; the excerpt owns story-stated transient setting changes.
+crop, expression, and viewpoint under S3. Permanent location facts belong to the Setting line.
+The nonblank extraction validator does not independently prove a description contains only
+permanent facts; see the [dated #121 investigation](../capstone/scene-judge-investigation-2026-10.md).
 
 ### 4.3 Setting gate
 
-`SCENE_CONSTRAINT_PROMPT` explicitly tells the existing scene-constraint judge:
+The current version-4 `SCENE_CONSTRAINT_PROMPT` tells the existing scene-constraint judge:
 
 - when a `Setting:` line exists, check its name and permanent description against the page;
 - report only concrete violations of stated permanent features as contradictions; and
 - do not report weather, lighting, time, damage, or other temporary differences when the later
   excerpt supports them.
 
+The last instruction is retained wording from version 3. The checker receives the immutable
+visual base, which excludes that excerpt under ADR-040/047. It cannot directly check excerpt
+support. This documented information gap is not a claim that temporary differences are reliably
+handled. The #121 investigation does not rewrite the prompt or remove the setting gate.
+
 The result uses the existing `SceneConstraintVerdict.contradictions` list. No location-specific
 boolean or persisted field is added. A non-empty list already makes `composition_clean=False`,
 sets `passed=False`, and leaves the first attempt unfinalized so the existing consistency branch
-routes once to `regenerate`.
+routes to `regenerate` while the configured attempt allowance remains.
 
 `correct_prompt` already appends the contradictions. The existing S3 composition-preservation
 clause stays last, so a setting correction may not rewrite the requested action or viewpoint.
-After the second failed attempt, ADR-010's existing composition-first best-of rule prefers fewer
+At the configured attempt limit, the existing composition-first best-of rule prefers fewer
 total scene contradictions and finalizes the page.
 
-Because the judged instruction changes, `SCENE_CONSTRAINT_PROMPT_VERSION` increments from **2 to
-3**. Per BC-6, results from v2 and v3 are never pooled. `JUDGE_PROMPT_VERSION` and
+This feature originally incremented `SCENE_CONSTRAINT_PROMPT_VERSION` from **2 to 3**.
+ADR-049 later introduced structured contradictions and version **4**, which remains current.
+Per BC-6, results from different versions are never pooled. `JUDGE_PROMPT_VERSION` and
 `settings.vlm_judge_model` do not change.
 
 ### 4.4 Failure and compatibility cases
@@ -143,7 +155,7 @@ Because the judged instruction changes, `SCENE_CONSTRAINT_PROMPT_VERSION` increm
 - [x] **CC-10 Checkpointing / resumability** — no contract field changes; old nullable descriptions
   remain readable, while newly extracted locations are strict only at the transient boundary.
 - [ ] **CC-7 Reproducibility** — unchanged and unsatisfied: the existing text and judge calls expose
-  no seed. Prompt version 3 prevents silent pooling but does not make calls deterministic.
+  no seed. Recorded prompt versions prevent silent pooling but do not make calls deterministic.
 - [ ] CC-1, CC-4, CC-6, CC-8, CC-9 — untouched. S4 changes no moderation edge, asset access,
   frontend surface, or job-failure taxonomy.
 
@@ -163,8 +175,9 @@ draws a recognizable place.
 
 ### `consistency_check`
 
-6. `SCENE_CONSTRAINT_PROMPT_VERSION == 3` and the prompt distinguishes permanent requirements from
-   excerpt-supported temporary conditions.
+6. `SCENE_CONSTRAINT_PROMPT_VERSION == 4`; tests assert the permanent-feature instruction.
+   They do not establish whether a model correctly handles temporary conditions or the stale
+   excerpt reference described in §4.3.
 7. A setting contradiction in the existing composition verdict makes the first attempt fail and
    remain unfinalized, buying the existing redraw.
 8. An empty contradiction list leaves an otherwise clean attempt passed and finalized.
@@ -178,7 +191,7 @@ draws a recognizable place.
 
 ### Existing behavior guards
 
-12. Prompt order remains `Visual direction → Setting → excerpt → style`.
+12. Prompt order after ADR-040 is `Visual direction → Setting → style`, with no excerpt block.
 13. Null-location carry-forward and leading-location seeding remain unchanged.
 14. `filtered_location` can reduce a description to name-only but never filters the name.
 

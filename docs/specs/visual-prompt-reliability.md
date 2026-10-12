@@ -363,6 +363,12 @@ folded correction behavior. Reference selection, gates/ranking, both judge promp
 latest-attempt/immutable-base behavior above are unchanged. This fixes signal attribution, not
 judge calibration, and makes no image-quality claim.
 
+The [dated #121 investigation](../capstone/scene-judge-investigation-2026-10.md) traces selected
+synthetic attempts through corrections and final selection. It records mixed camera/style
+evidence, the setting/excerpt information gap, and an action-preservation miss despite this
+construction rule. Independent human calibration and prospective matched controls remain
+outstanding; the unavailable original job is not claimed fixed.
+
 **Tradeoff:** a previously fixed issue may return when the latest judge misses it. Carrying all raw
 history avoids forgetting but recreates contradictory growth. The exact-story reproduction compares
 attempt trajectories and is the evidence gate for revisiting this choice.
