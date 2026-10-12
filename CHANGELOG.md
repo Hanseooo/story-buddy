@@ -14,7 +14,7 @@ instead of repeating it.
 
 ---
 
-## PR pending · 2026-10-12
+## PR #123 · 2026-10-12
 
 Make character redraw suggestions distinct and explain replacement. Refs #118 and #119.
 
