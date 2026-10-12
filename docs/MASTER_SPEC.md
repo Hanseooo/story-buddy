@@ -146,7 +146,7 @@ input_gate ──► analyze ──► segment ──► char_bible ──► [c
 | *char_ref_mod* (Phase 2) | `characters[].canonical_ref_image` | `characters[].ref_moderation_status` | ADR-011, ADR-002 |
 | *`reveal`* | `characters[]`, `style`, `cost.ref_retry_count` | `reference_retry` — **no effects**; pauses on `interrupt()`; retry counter is written by `char_bible` | ADR-029,069 |
 | `generate_scene` | scene + char refs + `style` | `scenes[].attempts[].image_ref` | ADR-001,010 |
-| `consistency_check` | ref + attempt image | `scenes[].attempts[].vlm_verdict`, `failure_reasons`, `passed` | ADR-004 |
+| `consistency_check` | ref + attempt image | `scenes[].attempts[].vlm_verdict`, `identity_checks`, `failure_reasons`, `scene_contradictions`, `passed` | ADR-004 |
 | `regenerate` | `failure_reasons` | corrected `prompt` → new attempt (≤2 retries per ADR-037); `final_image_ref` (best-of) | ADR-010, ADR-037 |
 | `output_mod` | scene `final_image_ref` (per scene) | `scenes[].moderation_status` | ADR-011, ADR-025 |
 | `compose` | passed scenes + captions | validates all scenes finalized; returns `{}` | ADR-013, ADR-024 |

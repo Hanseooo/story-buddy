@@ -762,7 +762,7 @@ def test_node_returns_empty_when_the_selected_scene_has_no_attempts():
 def test_node_skips_a_char_id_absent_from_the_roster():
     """Spec §4: this node may not extend the roster. Same posture as generate_scene."""
     state = _state(
-        [_scene_with_attempt(characters_present=["c0", "ghost-id"])],
+        [_scene_with_attempt(characters_present=["c0", "ghost-id", "c0"])],
         [_char("c0", "the dog", "job-1/ref-c0.png")],
     )
 

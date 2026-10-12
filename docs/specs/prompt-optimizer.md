@@ -13,7 +13,7 @@
 
 Build the text prompt `generate_scene` sends to the image model: present characters' appearance
 descriptions + visible objects + rendered visual direction + location setting + the frozen style
-fragment (`SCENE_PROMPT_VERSION = 5`). Per ADR-040, narrative text excerpt and character notes are
+fragment (`SCENE_PROMPT_VERSION = 6`). Per ADR-040, narrative text excerpt and character notes are
 excluded from positive scene prompt construction. Separately, build the ADR-010 corrected prompt a
 future targeted-retry node uses after a failed consistency check, by turning the judge's
 `failure_reasons` into emphasis clauses.
@@ -63,7 +63,7 @@ def build_prompt(
     objects: list[StoryObject] | None = None,
     visual_direction: str | None = None,
 ) -> str
-def correct_prompt(prompt: str, failure_reasons: list[FailureReason], characters: list[Character], style_fragment: str | None, same_character: bool = True, anatomy_intact: bool = True, text_free: bool = True) -> str
+def correct_prompt(prompt: str, failure_reasons: list[FailureReason], characters: list[Character], style_fragment: str | None, same_character: bool = True, anatomy_intact: bool = True, text_free: bool = True, scene_contradictions: list[str] | None = None, identity_checks: dict[str, IdentityCheck] | None = None) -> str
 ```
 
 (Corrected during implementation: `build_prompt` needs `characters_present` to do its own
@@ -76,7 +76,7 @@ Helpers exported because pipeline nodes share them. `filtered_object` applies th
 
 ### Block Ordering and Invariants
 
-`build_prompt` emits prompt blocks in the exact contract order (`SCENE_PROMPT_VERSION = 5`):
+`build_prompt` emits prompt blocks in the exact contract order (`SCENE_PROMPT_VERSION = 6`):
 1. Reference roll (`Image N is...`) with extended `REFERENCE_CLAUSE`:
    > `"The reference images define appearance, not pose, crop, expression or viewing angle; the Visual direction controls those scene properties."`
 2. Text-only character descriptions (unreferenced present characters, appearance axes only)
@@ -97,10 +97,11 @@ Helpers exported because pipeline nodes share them. `filtered_object` applies th
 6. Setting line (`Setting: <name> - <description>`)
 7. Style fragment (`style`)
 
-`generate_scene` requires a non-empty `scene.visual_direction` and logs `image_model=settings.fal_image_model` alongside attempt metrics and `scene_prompt_version=5`.
+`generate_scene` requires a non-empty `scene.visual_direction` and logs `image_model=settings.fal_image_model` alongside attempt metrics and `scene_prompt_version=6`.
 
-Version 5 records scene-scoped correction inputs (issue #121). The version 4 base layout remains
-unchanged. Corpus metadata uses the same generation version boundary; historical captures retain
+Version 6 adds per-reference identity correction targeting after version 5 scoped inputs to the
+scene cast (issue #121). The version 4 base layout remains unchanged. Corpus metadata uses the same
+generation version boundary; historical captures retain
 their recorded versions. Both judge prompt versions remain unchanged.
 
 `referenced_characters` deduplicates `characters_present` order-preservingly, so a checkpoint
@@ -155,9 +156,27 @@ to an emphasis-clause template:
 | `different_face` | "match the reference character's face exactly" |
 | `character_absent` | "make sure {name} is clearly visible in the scene" |
 
-For each `FailureReason` in the input list (order preserved, duplicates collapsed), append the filled
+### Per-character attribution (D-S, approved 2026-10-13)
+
+`correction_clauses` and `correct_prompt` accept a final defaulted parameter
+`identity_checks: dict[str, IdentityCheck] | None = None`. When present, the mapping must contain
+exactly the deduplicated referenced scene cast; its unioned reasons and conjoined `same_character`
+must agree with the folded inputs. Inconsistency raises before image generation.
+
+For each reason in enum order, then each referenced subject in image-roll order, fill only that
+subject's filtered axes and prefix with `For the character in reference Image N: `. Never infer
+the subject from names or verdict prose. Style is restated once globally. Each subject with a
+failed identity or non-style reason but no fillable identity clause independently receives
+`For the character in reference Image N: match that reference character exactly`. Another
+subject's values, a style clause, or anatomy/text corrections cannot suppress this floor.
+Scene contradictions retain exact deduplication and composition preservation remains once, last.
+
+`None` preserves the legacy behavior below byte-for-byte. `{}` represents no referenced subjects;
+it does not invent identity findings for visible text-only characters.
+
+For each `FailureReason` in the legacy input list (enum order, duplicates collapsed), append the filled
 clause to `prompt`. **Attribution ceiling:** `VlmVerdict`/`Attempt.failure_reasons` carry no
-per-character breakdown today — a scene with two `characters_present` gives no signal for *which*
+per-character breakdown in legacy attempts — a scene with two `characters_present` gives no signal for *which*
 character a `wrong_colour` verdict concerns. `correct_prompt` therefore fills axis-based clauses
 (`wrong_colour`, `wrong_species`, `wrong_body_feature`, `wrong_clothing`) from **every** character in
 the supplied `characters`, joining multiple values where more than one is present. `regenerate`
@@ -167,10 +186,8 @@ they have no canonical reference. Off-scene roster names and axes cannot enter t
 corrections or make an otherwise unfillable clause fillable. `wrong_style`/`different_face` don't
 fill from a `CharacterDescription` axis at all. `character_absent` names every supplied scene
 character because the folded reasons do not preserve which character was absent. Sharpening this to a
-single named character requires preserving the caller's `char_id`-to-verdict association in
-Story Memory: the identity judge already evaluates each referenced character separately, but
-`consistency_check` persists only the fold. This is `consistency-checker`'s contract decision,
-not a requirement for another judge call or a judge-prompt rewrite.
+single reference subject now uses the persisted caller's `char_id`-to-verdict association above.
+Legacy records cannot recover it. No additional judge call or judge-prompt rewrite is involved.
 
 **Unfillable clauses.** A clause whose every `{placeholder}` interpolates to an empty string is
 **dropped**, and if that leaves the correction empty, `IDENTITY_CLAUSE` floors it. `_fillable` reads
@@ -256,7 +273,7 @@ no mocks"), node-level tests exercise `build_prompt` for real rather than patchi
 - Multiple reasons in one list all appear, in enum-declaration order.
 - A repeated reason produces the clause once, not duplicated.
 - Two characters in `characters` and one axis-based reason (e.g. `wrong_colour`) → the clause joins
-  both characters' colours, guarding the attribution-ceiling behavior in §4.
+  both characters' colours, guarding the legacy attribution-ceiling behavior in §4.
 - Empty `failure_reasons` → returns `prompt` unchanged (identity).
 - The original `prompt` content is never truncated or altered — only appended to.
 - **Unfillable clauses:** an empty axis drops its clause and floors on `IDENTITY_CLAUSE`; an empty
@@ -312,7 +329,10 @@ Per AGENTS.md *Definition of Done*. This module is done when **all** of the foll
    - `AGENTS.md` *Validation Notes* — note `prompt-optimizer` built; *Project Context* stub list is
      unaffected (this spec doesn't touch a graph node's stub status).
 
-**Not done** if: any §6 test is skipped; `backend/contracts/` is modified; `correct_prompt` is wired
+The original implementation boundary below predates D-S. The approved version 6 extension adds
+only `IdentityCheck` and the optional `Attempt.identity_checks` contract field described above.
+
+**Not done** if: any §6 test is skipped; unrelated `backend/contracts/` fields are modified; `correct_prompt` is wired
 into a node this spec doesn't own; `build_prompt` invents character detail beyond what
 `CharacterDescription` populated; or the `image-generator` hand-off (the provider-call swap) is
 silently absorbed into this change instead of being left to its owner.

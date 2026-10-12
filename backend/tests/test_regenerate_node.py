@@ -8,6 +8,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, StateGraph
 
 from app.config import IMAGE_BUDGET
 from contracts.story_memory import (
@@ -24,7 +26,8 @@ from contracts.story_memory import (
     Style,
     VlmVerdict,
 )
-from pipeline.prompt_optimizer import ANATOMY_CLAUSE, IDENTITY_CLAUSE, TEXT_CLAUSE, build_prompt
+from pipeline.consistency_check import SceneConstraintVerdict, SceneVerdict, consistency_check
+from pipeline.prompt_optimizer import ANATOMY_CLAUSE, COMPOSITION_CLAUSE, IDENTITY_CLAUSE, TEXT_CLAUSE, build_prompt
 from pipeline.regenerate import regenerate
 
 
@@ -570,10 +573,14 @@ def test_regenerate_logs_provenance_and_deduplication_fields(caplog):
     assert "deduplicated_contradictions=2" in log_text
 
 
+def _captured_memory():
+    capture = Path(__file__).resolve().parents[2] / "docs/product/evidence/bundles/probe_out/memory.json"
+    return StoryMemory.model_validate(json.loads(capture.read_text(encoding="utf-8")))
+
+
 def test_regenerate_captured_scene_excludes_off_scene_body_features():
     """Replay the committed syn-901 s0 verdict, not a visual-quality assertion."""
-    capture = Path(__file__).resolve().parents[2] / "docs/product/evidence/bundles/probe_out/memory.json"
-    state = StoryMemory.model_validate(json.loads(capture.read_text(encoding="utf-8")))
+    state = _captured_memory()
     original = next(scene for scene in state.scenes if scene.scene_id == "s0")
     scene = original.model_copy(update={
         "final_image_ref": None, "moderation_status": None, "attempts": original.attempts[:1],
@@ -606,8 +613,7 @@ def test_regenerate_captured_scene_excludes_off_scene_body_features():
 ])
 def test_regenerate_sparse_text_only_cast_uses_its_own_axes(reason, expected_clause, caplog):
     """Controlled projection of captured c2: no reference or colours, unlike off-scene c0/c1."""
-    capture = Path(__file__).resolve().parents[2] / "docs/product/evidence/bundles/probe_out/memory.json"
-    state = StoryMemory.model_validate(json.loads(capture.read_text(encoding="utf-8")))
+    state = _captured_memory()
     original = next(scene for scene in state.scenes if scene.scene_id == "s0")
     latest = original.attempts[0].model_copy(update={
         "failure_reasons": [reason], "scene_contradictions": [],
@@ -635,4 +641,110 @@ def test_regenerate_sparse_text_only_cast_uses_its_own_axes(reason, expected_cla
     assert "short hair" not in sent
     assert "red hair tie" not in sent
     assert "correction_count=2" in caplog.text
+    assert result["scenes"][0].attempts[-1].prompt == sent
+
+
+@pytest.mark.parametrize("failing_id, expected_clause", [
+    ("c0", "For the character in reference Image 1: match the reference's exact colours: short hair"),
+    ("c1", "For the character in reference Image 2: match the reference's exact colours: red hair tie"),
+])
+def test_captured_identity_attribution_survives_checkpoint_and_targets_retry(failing_id, expected_clause):
+    """Controlled verdict permutations on real captured inputs, not image-quality evidence."""
+    state = _captured_memory()
+    original = next(scene for scene in state.scenes if scene.scene_id == "s0")
+    scene = original.model_copy(update={
+        "attempts": original.attempts[:1], "final_image_ref": None, "moderation_status": None,
+    })
+    state = state.model_copy(update={"scenes": [scene]})
+    clean = SceneVerdict.model_validate(original.attempts[0].vlm_verdict.model_dump() | {
+        "same_character": True, "anatomy_intact": True, "text_free": True, "failure_reasons": [],
+    })
+    failed = clean.model_copy(update={"failure_reasons": [FailureReason.wrong_colour]})
+    first = [failed, clean] if failing_id == "c0" else [clean, failed]
+    composition = SceneConstraintVerdict(differences_observed="", contradictions=[])
+    check_storage = MagicMock()
+    check_storage.storage.from_.return_value.download.return_value = b"fixture"
+    draw_storage = MagicMock()
+    draw_storage.storage.from_.return_value.download.side_effect = FileNotFoundError("fixture not stored")
+    graph = StateGraph(StoryMemory)
+    graph.add_node("check", consistency_check)
+    graph.add_node("retry", regenerate)
+    graph.add_node("final_check", consistency_check)
+    graph.set_entry_point("check")
+    graph.add_edge("check", "retry")
+    graph.add_edge("retry", "final_check")
+    graph.add_edge("final_check", END)
+    app = graph.compile(checkpointer=MemorySaver(), interrupt_after=["check"])
+    config = {"configurable": {"thread_id": "attribution-control"}}
+
+    with (
+        patch("pipeline.consistency_check.get_supabase_client", return_value=check_storage),
+        patch("pipeline.consistency_check.judge", side_effect=[*first, composition, clean, clean, composition]),
+        patch("pipeline.generate_scene.get_supabase_client", return_value=draw_storage),
+        patch("pipeline.generate_scene.get_signed_url", side_effect=lambda path: f"https://example.invalid/{path}"),
+        patch("pipeline.generate_scene.edit_image", return_value=b"fixture") as draw,
+    ):
+        app.invoke(state, config=config)
+        snapshot = app.get_state(config)
+        assert snapshot.next == ("retry",)
+        checked = StoryMemory.model_validate(snapshot.values).scenes[0].attempts[-1]
+        result = StoryMemory.model_validate(app.invoke(None, config=config))
+
+    sent = draw.call_args.args[0]
+    assert sent == scene.prompt + "\n" + expected_clause + "\n" + COMPOSITION_CLAUSE
+    assert checked.identity_checks[failing_id].failure_reasons == [FailureReason.wrong_colour]
+    assert set(checked.identity_checks) == {"c0", "c1"}
+    assert draw.call_args.args[1][0].endswith("/ref-c0-1.png")
+    assert draw.call_args.args[1][1].endswith("/ref-c1-1.png")
+    assert result.scenes[0].prompt == scene.prompt
+    assert result.scenes[0].attempts[0] == checked
+    assert result.scenes[0].attempts[-1].prompt == sent
+    assert result.scenes[0].attempts[-1].passed is True
+    assert result.scenes[0].final_image_ref == result.scenes[0].attempts[-1].image_ref
+
+
+@pytest.mark.parametrize("case", ["empty_axis", "missing_reason", "invalid_mapping"])
+def test_captured_attribution_failure_paths_do_not_borrow_other_subject_axes(case):
+    state = _captured_memory()
+    original = next(scene for scene in state.scenes if scene.scene_id == "s0")
+    state = state.model_copy(update={"characters": [
+        character.model_copy(update={"description": character.description.model_copy(update={"colours": []})})
+        if character.char_id == "c0" else character for character in state.characters
+    ]})
+    c0_check = {"same_character": case != "missing_reason", "failure_reasons": [] if case == "missing_reason" else ["wrong_colour"]}
+    checks = {
+        "c2" if case == "invalid_mapping" else "c0": c0_check,
+        "c1": {"same_character": True, "failure_reasons": ["wrong_colour"]},
+    }
+    latest = Attempt.model_validate(original.attempts[0].model_dump() | {
+        "failure_reasons": ["wrong_colour"], "scene_contradictions": [], "identity_checks": checks,
+        "vlm_verdict": original.attempts[0].vlm_verdict.model_dump() | {
+            "same_character": case != "missing_reason", "anatomy_intact": True, "text_free": False,
+        },
+    })
+    scene = original.model_copy(update={
+        "attempts": [latest], "final_image_ref": None, "moderation_status": None,
+    })
+    state = state.model_copy(update={"scenes": [scene]})
+    storage = MagicMock()
+    storage.storage.from_.return_value.download.side_effect = FileNotFoundError("fixture not stored")
+
+    with (
+        patch("pipeline.generate_scene.get_supabase_client", return_value=storage),
+        patch("pipeline.generate_scene.get_signed_url", side_effect=lambda path: f"https://example.invalid/{path}"),
+        patch("pipeline.generate_scene.edit_image", return_value=b"fixture") as draw,
+    ):
+        if case == "invalid_mapping":
+            with pytest.raises(ValueError, match="identity_checks"):
+                regenerate(state)
+            draw.assert_not_called()
+            return
+        result = regenerate(state)
+
+    sent = draw.call_args.args[0]
+    assert sent == scene.prompt + "\n" + "\n".join([
+        "For the character in reference Image 2: match the reference's exact colours: red hair tie",
+        "For the character in reference Image 1: match that reference character exactly",
+        TEXT_CLAUSE, COMPOSITION_CLAUSE,
+    ])
     assert result["scenes"][0].attempts[-1].prompt == sent

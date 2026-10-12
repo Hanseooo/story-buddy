@@ -347,16 +347,20 @@ Earlier corrections are intentionally not carried. If a problem disappeared from
 attempt, repeating it is unnecessary; if it returned, the latest judge names it again. This avoids
 free-text history aggregation and preserves the existing immutable `Scene.prompt` contract meaning.
 
-`correct_prompt` continues appending at most one clause per current structured reason, the existing
+`correct_prompt` appends at most one clause per current structured reason per checked reference
+subject when attribution is present (once per reason for legacy attempts), the existing
 boolean clauses, current scene contradictions, and one composition-preservation clause. Exact
 duplicate current contradiction strings are deduplicated in first-seen order before rendering; no
 semantic/fuzzy deduplication is attempted.
 
 Structured identity corrections use only the resolvable, deduplicated `Scene.characters_present`
 roster, including visible text-only characters. Off-scene roster axes and names are excluded from
-correction construction and clause counting (generation prompt version 5, issue #121). Reference
-selection and the latest-attempt/immutable-base behavior above are unchanged. Folded identity reasons
-still cannot identify a particular subject within that scene cast.
+correction construction and clause counting (version 5, issue #121). Generation version 6 adds
+caller-owned `Attempt.identity_checks`: target each checked reference subject by image-roll number
+and floor sparse/no-reason identity failures independently. Legacy `None` retains version 5's
+folded correction behavior. Reference selection, gates/ranking, both judge prompts/model and the
+latest-attempt/immutable-base behavior above are unchanged. This fixes signal attribution, not
+judge calibration, and makes no image-quality claim.
 
 **Tradeoff:** a previously fixed issue may return when the latest judge misses it. Carrying all raw
 history avoids forgetting but recreates contradictory growth. The exact-story reproduction compares

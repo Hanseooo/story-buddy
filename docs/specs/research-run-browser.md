@@ -135,10 +135,15 @@ characters: [{char_id, name, description, ref_image_url, ref_moderation_status,
 scenes:     [{scene_id, text_excerpt, caption, visual_direction, characters_present,
               objects_present, moderation_status, regeneration_count, shipped_attempt (index|null),
               attempts: [{image_url, prompt, passed, failure_reasons, vlm_verdict,
-                          scene_contradictions}]}]
+                          scene_contradictions, identity_checks}]}]
 cost:       StoryMemory.cost
 state:      the projected StoryMemory, for the raw JSON viewer
 ```
+
+`identity_checks` is an optional caller-owned `char_id` mapping containing `same_character` and
+the existing reasons, exposed in attempts and raw projected state through existing serialization.
+Legacy/unavailable values are `null`; no-reference values are `{}`. This addition changes no access
+control, frontend presentation or human annotation target.
 
 Projection is a pure function, `project_run(job_row, snapshots, sign) → dict`, so it is tested
 without a database. `raw_text`, `profile_id` and `classroom_id` are dropped from `state` and appear

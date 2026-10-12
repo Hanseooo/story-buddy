@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.db import get_supabase_client
-from contracts.story_memory import Attempt, FailureReason, StoryMemory, VlmVerdict
+from contracts.story_memory import Attempt, FailureReason, IdentityCheck, StoryMemory, VlmVerdict
 from providers import judge
 
 log = logging.getLogger(__name__)
@@ -297,7 +297,8 @@ def consistency_check(state: StoryMemory) -> dict:
 
     by_id = {c.char_id: c for c in state.characters}
     subjects: list[tuple[str, str]] = []
-    for char_id in scene.characters_present:
+    subject_ids: list[str] = []
+    for char_id in dict.fromkeys(scene.characters_present):
         character = by_id.get(char_id)
         if character is None:
             log.warning(
@@ -308,10 +309,18 @@ def consistency_check(state: StoryMemory) -> dict:
             # ADR-028: a failing ref_verdict still ships its reference, so it is still the thing
             # this scene was drawn from and still the thing consistency is measured against.
             subjects.append((character.name, character.canonical_ref_image))
+            subject_ids.append(char_id)
 
     identity_verdicts, composition = judge_attempt(
         attempt.image_ref, subjects, scene.prompt or attempt.prompt or ""
     )
+
+    # Preserve the caller's association before the worst-wins fold loses it. No judge-produced ID
+    # or inference from names/prose: this order is the reference image roll used for generation.
+    identity_checks = None if identity_verdicts is None else {
+        char_id: IdentityCheck(same_character=v.same_character, failure_reasons=v.failure_reasons)
+        for char_id, v in zip(subject_ids, identity_verdicts)
+    }
 
     verdict: VlmVerdict | None = None
     reasons: list[FailureReason] = []
@@ -367,6 +376,7 @@ def consistency_check(state: StoryMemory) -> dict:
         attempt.model_copy(
             update={
                 "vlm_verdict": verdict,
+                "identity_checks": identity_checks,
                 "failure_reasons": reasons,
                 "scene_contradictions": scene_contradictions,
                 "passed": passed,

@@ -127,6 +127,15 @@ per-scene. `docs/specs/image-generator.md` is corrected in the same change (§8)
 
 ### The correction is total
 
+Generation prompt version 6 adds `identity_checks=last.identity_checks` to both correction
+construction and clause counting. The current mapping targets only its checked reference subject,
+by the same image-roll number used for generation, and validates cast/fold agreement before spend.
+Sparse axes and no-reason identity failures floor per subject, independently of other subjects or
+global style/anatomy/text clauses. `None` keeps the scene-scoped legacy behavior below unchanged.
+See `prompt-optimizer.md` §4 and `story-memory-contract.md` for the additive approved D-S contract.
+
+The following table and abbreviated helper sketch describe that legacy fallback.
+
 | Failure | Hole | Fix |
 |---|---|---|
 | `anatomy_intact is False` | ADR-028 froze anatomy **out** of `FailureReason`, so no clause exists | `anatomy_intact` param → fixed anatomy clause |
@@ -211,6 +220,7 @@ def regenerate(state: StoryMemory) -> dict:
         anatomy_intact=v.anatomy_intact if v else True,
         text_free=v.text_free if v else True,
         scene_contradictions=last.scene_contradictions,
+        identity_checks=last.identity_checks,
     )
     path, paid = generate_and_store(
         prompt, state.story_id, scene.scene_id, len(scene.attempts) + 1, ref_paths
@@ -235,8 +245,9 @@ Correction inputs are the resolvable, order-preserving, deduplicated `characters
 including visible characters without a canonical reference. Both `correction_clauses` (for the
 logged count) and `correct_prompt` receive this same scene-scoped list. Reference selection remains
 the existing helper above. Off-scene names and attributes cannot fill a structured correction or
-suppress its unfillable-axis floor. Reasons remain aggregated across the visible cast.
-`SCENE_PROMPT_VERSION = 5` records this correction boundary without changing either judge prompt.
+suppress its unfillable-axis floor. Legacy reasons remain aggregated across the visible cast;
+current mappings preserve the checked subject. `SCENE_PROMPT_VERSION = 6` records targeted retries
+after version 5's scene-scoping change, without changing the base layout or either judge prompt.
 
 Regression coverage replays the committed synthetic `probe_out/memory.json` s0 first verdict:
 the c0/c1-only correction excludes c2's adult body features and preserves reference order and the
@@ -252,7 +263,7 @@ plausible wrong image rather than an exception. Pinned by
 `test_ref_paths_agree_with_the_image_roll_the_corrected_prompt_carries`.
 
 **Clean-base retry** (ratified by ADR-046, superseding ADR-037 Decision 3)**.** Retries derive from immutable `Scene.prompt` and only the latest attempt's verdict
-(`Attempt.scene_contradictions`, `failure_reasons`, and boolean flags). Prior corrections are intentionally
+(`Attempt.scene_contradictions`, `identity_checks`, `failure_reasons`, and boolean flags). Prior corrections are intentionally
 not accumulated; exact duplicate contradiction strings are deduplicated in first-seen order. Missing
 `Scene.prompt` raises before any spend.
 

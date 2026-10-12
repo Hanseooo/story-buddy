@@ -181,6 +181,13 @@ class VlmVerdict(BaseModel):
                                        # subjects_unique → style_match.
 
 
+class IdentityCheck(BaseModel):
+    """Caller-associated identity signal; the folded verdict still owns gates and ranking."""
+
+    same_character: bool
+    failure_reasons: list[FailureReason] = Field(default_factory=list)
+
+
 class Attempt(BaseModel):
     image_ref: str                     # durable Storage PATH
     prompt: Optional[str] = None       # the prompt THIS attempt used; regeneration corrects it (ADR-010),
@@ -189,6 +196,9 @@ class Attempt(BaseModel):
     failure_reasons: list[FailureReason] = Field(default_factory=list)  # closed set; extras rejected
     passed: bool = False
     scene_contradictions: Optional[list[str]] = None
+    identity_checks: Optional[dict[str, IdentityCheck]] = None  # char_id -> evaluated identity signal;
+                                       # None=legacy/unavailable, {}=no referenced subjects. Additive,
+                                       # declared last; schema_version and judge wire shape unchanged.
 
 
 class Scene(BaseModel):

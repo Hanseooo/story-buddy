@@ -125,6 +125,10 @@ class VlmVerdict(BaseModel):
                                        # is untouched. Additive → no schema_version bump.
     text_free: bool = True             # lettering-suppression §2: visible text anywhere. Declared LAST.
 
+class IdentityCheck(BaseModel):
+    same_character: bool
+    failure_reasons: list[FailureReason] = Field(default_factory=list)
+
 class Attempt(BaseModel):
     image_ref: str                     # durable Storage PATH
     prompt: Optional[str] = None       # the prompt THIS attempt used; regeneration corrects it (ADR-010),
@@ -133,6 +137,16 @@ class Attempt(BaseModel):
     failure_reasons: list[FailureReason] = Field(default_factory=list)  # closed set; extras rejected
     passed: bool = False
     scene_contradictions: Optional[list[str]] = None  # None=unavailable, []=checked clean, non-empty=checked failure
+    identity_checks: Optional[dict[str, IdentityCheck]] = None  # caller-owned char_id -> identity signal
+
+# identity_checks: None = legacy or unavailable identity check; {} = no reference subjects.
+# Non-empty maps contain all checked referenced subjects, including clean ones, under caller-owned
+# char_ids. They retain only same_character and the existing seven reasons for correction targeting.
+# Folded vlm_verdict/failure_reasons remain the gates and ranking signal. This additive default
+# keeps schema_version=1; old JSON/checkpoints load without attribution. Newly dumped attempts and
+# researcher run-detail state include the optional field. Never rewrite frozen corpus bundles or
+# use this runtime signal as human training labels. Regeneration validates keyset/fold agreement
+# before generation; it never infers missing attribution from differences_observed.
 
 class Scene(BaseModel):
     scene_id: str
