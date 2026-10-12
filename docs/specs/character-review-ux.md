@@ -53,6 +53,11 @@ Keep character pictures/names prominent and use existing Cobalt Playroom compone
 and tokens. Show the book title as context per [story titles](story-titles.md) §5.
 Instruction: **“Choose a detail you want us to try drawing again.”**
 
+Fit each complete source image proportionally inside the reserved square picture
+area, without cropping or stretching. Keep the same reserved area for loading and
+image errors. This preserves details present in the asset; it cannot restore parts
+already outside the generated image.
+
 1. Each supplied trait is a native button with visible selected styling and
    `aria-pressed`. Allow one selection across the screen: a character ID and trait.
    Selecting another replaces it. Selecting the same trait again clears it.
