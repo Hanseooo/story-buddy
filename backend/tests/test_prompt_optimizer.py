@@ -35,7 +35,7 @@ def test_build_prompt_signature_has_no_text_excerpt_parameter():
         "visual_direction",
         "object_states",
     ]
-    assert SCENE_PROMPT_VERSION == 6
+    assert SCENE_PROMPT_VERSION == 7
 
 
 def test_visual_continuity_prompt_blocks_are_in_contract_order():
@@ -81,7 +81,7 @@ def test_visual_continuity_prompt_blocks_are_in_contract_order():
     markers = [
         "Image 1 is Ana",
         "Maya",
-        "exactly 2 characters: Ana and Maya",
+        "exactly 2 named cast characters: Ana and Maya",
         "Visible objects:",
         "Visual direction:",
         "Setting:",
@@ -143,7 +143,7 @@ def test_build_prompt_populated_axes_block_order_and_no_excerpt_or_notes():
         "Image 1 is Ana, human, brown eyes, round face, yellow shirt.",
         "Use them only as references",
         "Maya, human, black hair, oval face, blue dress",
-        "This illustration contains exactly 2 characters: Ana and Maya.",
+        "This illustration contains exactly 2 named cast characters: Ana and Maya.",
         "Visible objects:\nwooden sword, wood, red cord grip, short blade",
         f"Visual direction: {direction}",
         "Setting: forest - tall pine trees",
@@ -955,7 +955,43 @@ def test_the_subject_count_clause_names_every_present_character():
 
     prompt = build_prompt(["c0", "c1"], [ana, star], FRAG)
 
-    assert "This illustration contains exactly 2 characters: Ana and the star." in prompt
+    assert "This illustration contains exactly 2 named cast characters: Ana and the star." in prompt
+
+
+def test_named_cast_count_allows_only_explicit_background_groups():
+    # Name/cast/direction projection from synthetic train capture syn-017 s3.
+    # No private story material or dependency on the gitignored corpus.
+    nonoy = Character(char_id="c0", name="Nonoy", description=CharacterDescription())
+    bakal = Character(char_id="c1", name="Bakal", description=CharacterDescription())
+    direction = (
+        "Some neighbors step back, looking frightened Nonoy waves reassuringly "
+        "Viewpoint: profile. Framing: medium shot."
+    )
+    prompt = build_prompt(["c0", "c1"], [nonoy, bakal], FRAG, visual_direction=direction)
+
+    assert (
+        "This illustration contains exactly 2 named cast characters: Nonoy and Bakal. "
+        "Draw each named cast character exactly once. "
+        "Include background people or creatures only when explicitly requested by the "
+        "Visual direction or Setting."
+    ) in prompt
+    assert f"Visual direction: {direction}" in prompt
+    assert "This illustration contains exactly 2 characters:" not in prompt
+
+
+def test_named_cast_guard_does_not_require_a_background_group():
+    # Same captured cast, with the group/action block omitted as a negative control.
+    nonoy = Character(char_id="c0", name="Nonoy", description=CharacterDescription())
+    bakal = Character(char_id="c1", name="Bakal", description=CharacterDescription())
+    prompt = build_prompt(["c0", "c1"], [nonoy, bakal], FRAG)
+
+    assert "Draw each named cast character exactly once." in prompt
+    assert (
+        "Include background people or creatures only when explicitly requested by the "
+        "Visual direction or Setting."
+    ) in prompt
+    assert "Visual direction:" not in prompt
+    assert "Some neighbors" not in prompt
 
 
 def test_the_subject_count_clause_appears_on_the_reference_path():
@@ -964,7 +1000,7 @@ def test_the_subject_count_clause_appears_on_the_reference_path():
 
     prompt = build_prompt(["c0"], [ana], FRAG)
 
-    assert "This illustration contains exactly 1 character: Ana." in prompt
+    assert "This illustration contains exactly 1 named cast character: Ana." in prompt
 
 
 def test_the_subject_count_clause_appears_on_the_text_to_image_path():
@@ -976,16 +1012,17 @@ def test_the_subject_count_clause_appears_on_the_text_to_image_path():
     prompt = build_prompt(["c0"], [ana], FRAG)
 
     assert "Image 1" not in prompt
-    assert "This illustration contains exactly 1 character: Ana." in prompt
+    assert "This illustration contains exactly 1 named cast character: Ana." in prompt
 
 
 def test_the_count_reads_one_character_singular():
-    """§6 test 13, second half: no `1 characters`."""
+    """§6 test 13, second half: the named cast count stays singular."""
     ana = _referenced("c0", "Ana", species="girl")
 
     prompt = build_prompt(["c0"], [ana], FRAG)
 
-    assert "1 characters" not in prompt
+    assert "exactly 1 named cast character: Ana." in prompt
+    assert "1 named cast characters" not in prompt
 
 
 def test_the_count_is_computed_after_the_missing_char_id_filter():
@@ -995,7 +1032,7 @@ def test_the_count_is_computed_after_the_missing_char_id_filter():
 
     prompt = build_prompt(["c0", "ghost-id"], [ana], FRAG)
 
-    assert "This illustration contains exactly 1 character: Ana." in prompt
+    assert "This illustration contains exactly 1 named cast character: Ana." in prompt
     assert "ghost-id" not in prompt
 
 
@@ -1006,7 +1043,7 @@ def test_a_present_character_without_a_reference_is_still_counted():
 
     prompt = build_prompt(["c0", "c1"], [ana, star], FRAG)
 
-    assert "This illustration contains exactly 2 characters: Ana and the star." in prompt
+    assert "This illustration contains exactly 2 named cast characters: Ana and the star." in prompt
 
 
 def test_the_count_names_three_characters_with_a_serial_comma_free_join():
@@ -1016,7 +1053,7 @@ def test_the_count_names_three_characters_with_a_serial_comma_free_join():
 
     prompt = build_prompt(["c0", "c1", "c2"], [ana, star, bird], FRAG)
 
-    assert "exactly 3 characters: Ana, the star and the bird." in prompt
+    assert "exactly 3 named cast characters: Ana, the star and the bird." in prompt
 
 
 def test_no_clause_at_all_when_characters_present_is_empty():
@@ -1133,7 +1170,7 @@ def test_the_roll_numbers_a_repeated_char_id_only_once():
 
     assert "Image 1 is the star, tiny." in prompt
     assert "Image 2" not in prompt
-    assert "This illustration contains exactly 1 character: the star." in prompt
+    assert "This illustration contains exactly 1 named cast character: the star." in prompt
 
 
 def test_correct_prompt_appends_the_text_clause_when_text_free_is_false():

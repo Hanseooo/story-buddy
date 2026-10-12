@@ -246,8 +246,10 @@ including visible characters without a canonical reference. Both `correction_cla
 logged count) and `correct_prompt` receive this same scene-scoped list. Reference selection remains
 the existing helper above. Off-scene names and attributes cannot fill a structured correction or
 suppress its unfillable-axis floor. Legacy reasons remain aggregated across the visible cast;
-current mappings preserve the checked subject. `SCENE_PROMPT_VERSION = 6` records targeted retries
-after version 5's scene-scoping change, without changing the base layout or either judge prompt.
+current mappings preserve the checked subject. Generation version 6 records targeted retries
+after version 5's scene-scoping change. Current `SCENE_PROMPT_VERSION = 7` clarifies named cast
+count versus explicitly requested background groups for newly built bases. A retry preserves
+its stored immutable base, including historical count wording. Neither judge prompt changes.
 
 Regression coverage replays the committed synthetic `probe_out/memory.json` s0 first verdict:
 the c0/c1-only correction excludes c2's adult body features and preserves reference order and the

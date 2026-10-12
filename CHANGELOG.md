@@ -14,6 +14,31 @@ instead of repeating it.
 
 ---
 
+## PR #126 · 2026-10-13
+
+Distinguish named scene cast from explicitly requested background groups. Refs #121, which remains open.
+
+### Code
+
+- Scope the numeric guard to resolved, deduplicated named cast members, each drawn once.
+  Permit background people or creatures only when the Visual direction or Setting explicitly
+  requests them, without keyword detection. Record generation prompt version 7.
+- Preserve reference selection, correction attribution, stored immutable bases, latest-attempt
+  corrections, judge prompts/model, gates/ranking, moderation and image budgets.
+
+### Docs
+
+- Align affected specs and record the construction decision and unmeasured image behavior in
+  [the research changelog](docs/capstone/research-changelog.md).
+
+### Checks
+
+- Both new regressions failed on the previous wording and now pass. Backend Ruff and 1,489
+  tests passed; 87 live database/research-artifact checks skipped and six provider smoke tests
+  deselected. No paid calls or held-out re-evaluation.
+- Offline comparison of 11 synthetic training scenes changed only the count guard, retaining
+  reference order. All 33 historical-base correction comparisons remained byte-identical.
+
 ## PR #125 · 2026-10-13
 
 Target scene retry identity corrections to the evaluated character. Refs #121, which remains open.
