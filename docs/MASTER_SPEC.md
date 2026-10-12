@@ -144,7 +144,7 @@ input_gate ──► analyze ──► segment ──► char_bible ──► [c
 | `segment` | analysis + timeline | `scenes[].text_excerpt`, `caption`, `characters_present` | ADR-012 / §5,§8 |
 | `char_bible` | `characters[]`, `style.prompt_fragment` | `characters[].canonical_ref_image`, `ref_verdict`, `cost.image_count` | ADR-001,007,028 |
 | *char_ref_mod* (Phase 2) | `characters[].canonical_ref_image` | `characters[].ref_moderation_status` | ADR-011, ADR-002 |
-| *`reveal`* | `characters[]`, `ref_verdict` | `reference_retry`, `cost.ref_retry_count` — **no effects**; pauses on `interrupt()` | ADR-029 |
+| *`reveal`* | `characters[]`, `style`, `cost.ref_retry_count` | `reference_retry` — **no effects**; pauses on `interrupt()`; retry counter is written by `char_bible` | ADR-029,069 |
 | `generate_scene` | scene + char refs + `style` | `scenes[].attempts[].image_ref` | ADR-001,010 |
 | `consistency_check` | ref + attempt image | `scenes[].attempts[].vlm_verdict`, `failure_reasons`, `passed` | ADR-004 |
 | `regenerate` | `failure_reasons` | corrected `prompt` → new attempt (≤2 retries per ADR-037); `final_image_ref` (best-of) | ADR-010, ADR-037 |

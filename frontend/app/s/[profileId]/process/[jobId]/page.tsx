@@ -486,7 +486,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
             <KineticText text="Meet your cast!" />
           </h1>
           <p className="font-kid text-lg text-foreground/70 max-w-md">
-            Choose a detail you want us to try drawing again.
+            Choose a detail you want the new picture to show.
           </p>
           {/* Always rendered, so a live region exists before its text changes. The pending line
               is announced only — the in-flight screen states it visually — while the changed-reveal
@@ -599,7 +599,9 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
               {selectedTrait?.charId === c.char_id && (
                 <div className="w-full rounded-[16px] bg-[var(--color-primary)]/5 p-4 text-left">
                   <p className="font-kid text-sm leading-relaxed text-foreground">
-                    We&apos;ll draw a new picture, paying extra attention to {selectedTrait.attribute}. Other details may change.
+                    {selectedTrait.attribute === "overall physical appearance"
+                      ? `We'll try a new picture of ${c.name}. It will replace this picture. Other details may change.`
+                      : `We'll make a new picture and try to show ${selectedTrait.attribute}. It will replace this picture. Other details may change.`}
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button

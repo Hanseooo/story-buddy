@@ -1,5 +1,9 @@
 """Deterministic tests for the reveal node and its projection (spec §7)."""
+import json
+from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from contracts.story_memory import (
     CURRENT_SCHEMA_VERSION,
@@ -66,7 +70,7 @@ def test_project_reveal_taps_left_is_three_minus_ref_retry_count():
     assert _project_reveal(state)["taps_left"] == 2
 
 
-def test_project_reveal_chips_are_described_minus_attributes_present_case_insensitive():
+def test_project_reveal_offers_present_and_missing_traits_despite_a_failed_verdict():
     description = CharacterDescription(species="dog", colours=["Orange"], body_features=["one floppy ear"])
     verdict = RefVerdict(
         differences_observed="d",
@@ -76,17 +80,23 @@ def test_project_reveal_chips_are_described_minus_attributes_present_case_insens
     )
     state = _state([_char("c0", "Kiko", description=description, verdict=verdict)])
     chips = _project_reveal(state)["characters"][0]["chips"]
-    assert chips == ["one floppy ear"]
+    assert chips == ["dog", "Orange", "one floppy ear"]
 
 
-def test_project_reveal_falls_back_to_full_axis_list_when_ref_verdict_is_none():
-    description = CharacterDescription(species="dog", colours=["orange"])
-    state = _state([_char("c0", "Kiko", description=description, verdict=None)])
+def test_project_reveal_deduplicates_casefolded_traits_and_keeps_first_offered_text():
+    description = CharacterDescription(
+        species="dog", colours=[" Orange ", "orange", "ORANGE", "Straße", "STRASSE"],
+        body_features=[" DOG "],
+    )
+    state = _state(
+        [_char("c0", "Kiko", description=description, verdict=None)],
+        style=Style(prompt_fragment="flat shapes"),
+    )
     chips = _project_reveal(state)["characters"][0]["chips"]
-    assert chips == ["dog", "orange"]
+    assert chips == ["dog", " Orange ", "Straße"]
 
 
-def test_project_reveal_falls_back_to_full_axis_list_when_there_are_no_contradictions():
+def test_project_reveal_offers_present_traits_when_there_are_no_contradictions():
     description = CharacterDescription(species="dog", colours=["orange"])
     verdict = RefVerdict(differences_observed="d", matches_description=True, attributes_present=["dog", "orange"])
     state = _state([_char("c0", "Kiko", description=description, verdict=verdict)])
@@ -94,14 +104,8 @@ def test_project_reveal_falls_back_to_full_axis_list_when_there_are_no_contradic
     assert chips == ["dog", "orange"]
 
 
-def test_project_reveal_subtracts_when_contradictions_disagree_with_matches_description():
-    """ADR-034: this node reads the same predicate the gate does, never the boolean.
-
-    The prod job b9506307 shape — the judge names a contradiction and sets the boolean TRUE.
-    `char_bible` now re-rolls on that, so `reveal` must also treat it as a failed reference; if
-    it read the boolean it would offer the child the full chip list for a reference the gate
-    rejected, and the "try again" tap would target an attribute that was never the problem.
-    """
+def test_project_reveal_ignores_contradictions_that_disagree_with_matches_description():
+    """ADR-069: emphasis choices stay available even for the b9506307 verdict shape."""
     description = CharacterDescription(species="dog", colours=["orange"], body_features=["one floppy ear"])
     verdict = RefVerdict(
         differences_observed="the ear is upright. This is a contradiction.",
@@ -110,33 +114,85 @@ def test_project_reveal_subtracts_when_contradictions_disagree_with_matches_desc
         attributes_present=["dog", "orange"],
     )
     state = _state([_char("c0", "Kiko", description=description, verdict=verdict)])
-    assert _project_reveal(state)["characters"][0]["chips"] == ["one floppy ear"]
+    assert _project_reveal(state)["characters"][0]["chips"] == ["dog", "orange", "one floppy ear"]
 
 
-def test_project_reveal_falls_back_to_fixed_chip_when_description_has_no_axes():
-    state = _state([_char("c0", "Leo", description=CharacterDescription(), verdict=None)])
+@pytest.mark.parametrize("description", [
+    CharacterDescription(),
+    CharacterDescription(
+        species=" HuMaN ",
+        colours=[" Skin TONE ", "average height"],
+        body_features=[
+            "human", "bipedal human", "human face", "human body", "humanoid body",
+            "child's humanoid body", "adult’s humanoid body", "child‘s body", "adult's body",
+        ],
+        clothing=["warm clothing", "casual clothes", "plain clothes", "traditional or warm clothes"],
+        is_humanoid=False,
+    ),
+])
+def test_project_reveal_falls_back_to_fixed_chip_when_no_eligible_axes_remain(description):
+    state = _state([_char("c0", "Leo", description=description, verdict=None)])
 
     assert _project_reveal(state)["characters"][0]["chips"] == [
         "overall physical appearance"
     ]
 
 
-def test_project_reveal_offers_body_and_face_as_separate_standalone_chips():
+def test_project_reveal_suppresses_redundant_human_axes_from_the_committed_capture():
+    capture_path = (
+        Path(__file__).resolve().parents[2]
+        / "docs/product/evidence/bundles/probe_out3/memory.json"
+    )
+    captured = json.loads(capture_path.read_text(encoding="utf-8"))
+    character = Character.model_validate(captured["characters"][0])
+    original = character.model_dump()
+
+    assert _project_reveal(_state([character]))["characters"][0]["chips"] == ["short hair"]
+    assert character.model_dump() == original
+
+
+@pytest.mark.parametrize("species", ["robot", "human child", None])
+def test_project_reveal_preserves_nonhuman_and_specific_body_and_face_chips(species):
     description = CharacterDescription(
-        species="robot",
+        species=species,
         colours=["silver"],
         body_features=[
             "small box-shaped metal body",
             "rounded metal head with two blue LED lenses",
+            "human face",
+            "child’s body",
+            "human face with freckles",
         ],
+        clothing=["plain clothes", "traditional blue coat"],
+        is_humanoid=True,
     )
     state = _state([_char("c0", "Leo", description=description, verdict=None)])
 
-    assert _project_reveal(state)["characters"][0]["chips"] == [
-        "robot",
+    chips = _project_reveal(state)["characters"][0]["chips"]
+    if species is not None:
+        assert chips[0] == species
+        chips = chips[1:]
+    assert chips == [
         "silver",
         "small box-shaped metal body",
         "rounded metal head with two blue LED lenses",
+        "human face",
+        "child’s body",
+        "human face with freckles",
+        "traditional blue coat",
+    ]
+
+
+def test_project_reveal_preserves_specific_and_unknown_human_traits():
+    description = CharacterDescription(
+        species="human",
+        body_features=["human face", "human face with freckles", "humanoid silhouette"],
+        clothing=["warm clothing", "warm clothing with red trim"],
+    )
+    state = _state([_char("c0", "Leo", description=description)])
+
+    assert _project_reveal(state)["characters"][0]["chips"] == [
+        "human face with freckles", "humanoid silhouette", "warm clothing with red trim",
     ]
 
 
@@ -206,7 +262,7 @@ def test_project_reveal_never_offers_a_chip_for_a_style_forbidden_attribute():
     assert payload["characters"][0]["chips"] == ["star", "yellow"]
 
 
-def test_project_reveal_word_filters_a_forbidden_term_out_of_the_species_chip():
+def test_project_reveal_deduplicates_collisions_after_style_word_filtering():
     """ADR-035 amendment. Decision 2 keeps `species` unfiltered in the DESCRIPTION — it is what
     stops acceptance going vacuous — but Decision 5 lists `_chips` as a filtered surface, and its
     reason ("a tap that cannot succeed") applies to a forbidden species word just as much as to a
@@ -219,7 +275,10 @@ def test_project_reveal_word_filters_a_forbidden_term_out_of_the_species_chip():
     """
     orb = _char(
         "c1", "the orb",
-        description=CharacterDescription(species="glowing orb", colours=["blue"]),
+        description=CharacterDescription(
+            species="glowing orb", colours=[" Orb ", "blue", " BLUE "],
+            body_features=["glowing blue"],
+        ),
     )
     payload = _project_reveal(_state([orb], style=Style(prompt_fragment=STYLE_PRESETS["comic"])))
 

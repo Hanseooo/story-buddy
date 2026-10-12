@@ -66,7 +66,7 @@ class CharacterDescription(BaseModel):
 # --- Reference acceptance verdict (ADR-028 Decision 3). Reason-then-score, like every judge call. ---
 class RefVerdict(BaseModel):
     differences_observed: str          # MUST be declared before matches_description (ADR-004)
-    # ADR-034. The gate. Empty list = accepted; `char_bible` and `reveal` both branch on THIS.
+    # ADR-034: reference acceptance uses this list plus text_free. ADR-069 reveal choices ignore it.
     # Declared between the reason and the score deliberately: ADR-004's ordering is enforced on
     # the wire by `providers._assert_field_order`, so the judge must enumerate before it scores.
     contradictions: list[str] = Field(default_factory=list)

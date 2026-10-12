@@ -261,8 +261,9 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     expect(global.fetch).not.toHaveBeenCalled();
     expect(trait).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText(
-      "We'll draw a new picture, paying extra attention to orange sock. Other details may change."
+      "We'll make a new picture and try to show orange sock. It will replace this picture. Other details may change."
     )).toBeDefined();
+    expect(screen.getByText("Choose a detail you want the new picture to show.")).toBeDefined();
 
     const redraw = screen.getByRole("button", { name: "Redraw Kiko" });
     fireEvent.click(redraw);
@@ -280,6 +281,35 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
 
     resolveFetch({ ok: true, status: 200 } as Response);
     await waitFor(() => expect(REFETCH).toHaveBeenCalledTimes(1));
+  });
+
+  it("explains the general fallback as a new picture and sends the offered attribute unchanged", async () => {
+    mockUseJob.mockReturnValue(jobState({
+      bucket: "paused",
+      row: {
+        ...PAUSED_ROW,
+        reveal: {
+          ...PAUSED_ROW.reveal,
+          characters: [{ ...PAUSED_ROW.reveal.characters[0], chips: ["overall physical appearance"] }],
+        },
+      },
+    }));
+    await renderPausedPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "overall physical appearance" }));
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(screen.getByText(
+      "We'll try a new picture of Kiko. It will replace this picture. Other details may change."
+    )).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Redraw Kiko" }));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/jobs/j1/confirm"),
+      expect.objectContaining({
+        body: JSON.stringify({ action: "try_again", char_id: "c0", attribute: "overall physical appearance" }),
+      })
+    ));
   });
 
   it("keeps one selection across the screen and Cancel clears it", async () => {
