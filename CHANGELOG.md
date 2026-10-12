@@ -14,6 +14,38 @@ instead of repeating it.
 
 ---
 
+## PR #125 · 2026-10-13
+
+Target scene retry identity corrections to the evaluated character. Refs #121, which remains open.
+
+### Code
+
+- Retain caller-owned per-character identity signals on each evaluated attempt and target
+  reference image numbers. Fill only that subject's axes and floor sparse/no-reason failures
+  independently. Reject cast/fold mismatches before generation.
+- Deduplicate identity subjects in reference order. Keep the folded gates/ranking, legacy
+  fallback, immutable-base/latest-attempt behavior, moderation and image budgets.
+- Record generation prompt version 6. The optional state field also appears through existing
+  researcher run-detail serialization. See the contract spec for compatibility and provenance.
+
+### Docs
+
+- Align affected specs and record approved D-S design and its research implications in
+  [the research changelog](docs/capstone/research-changelog.md).
+
+### Checks
+
+- Eight regressions failed before implementation and now pass, including checkpoint resume
+  through real check/retry/check nodes and final selection. Backend Ruff and 1,487 tests passed;
+  87 live database/research-artifact checks skipped and six provider smoke tests deselected.
+- All seven reasons passed 28 ID/name/reference-order permutations. Legacy clause lists matched
+  merged main in 8,192 combinations. Frozen corpus bundles remain untouched.
+- Diff checks passed. Settings used placeholders with dotenv reads disabled. No paid calls or
+  image-quality measurement ran. Live Postgres persistence and broader judge calibration remain
+  unverified.
+
+---
+
 ## PR #124 · 2026-10-13
 
 Scope scene retry corrections to the visible cast. Refs #121, which remains open.
