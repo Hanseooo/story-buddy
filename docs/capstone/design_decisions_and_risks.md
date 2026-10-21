@@ -285,5 +285,5 @@ moot post-pivot). Solve none of them yet. The plan is the deliverable.
 > `graph.py`), input-gate hardening (ADR-012 length clamp + Filipino PII recognizers), and the kid-facing
 > flow (`jobs.pages` persistence, the ADR-029 reveal + `POST /jobs/{id}/confirm`, failure semantics, and
 > the reader/wait-state surfaces) are built. Open: `auth-and-classroom` (the classroom RLS gap),
-> `teacher-dashboard`, ~~`narration`~~, ~~`export-pdf`~~ *(both cut — ADR-058)*, `rate-limiting`, `data-deletion`. Probe 4
+> `teacher-dashboard`, ~~`narration`~~ *(cut — ADR-058)*, `export-pdf` *(restored 2026-10-21 — ADR-071/072; teacher-approved classroom books, on demand, no stored PDF)*, `rate-limiting`, `data-deletion`. Probe 4
 > (Filipino/Taglish moderation) is still un-run and remains a Phase-2 *release* gate.

@@ -174,7 +174,7 @@ Each step advance pushes a history entry, so browser back and the Android back g
 |---|---|---|
 | 1 | Classroom code | Six boxes, auto-advance, paste-aware, lowercased on entry |
 | 2 | Nickname | Single field, live preview of the normalized form |
-| 3 | Password | Show/hide toggle, **shown by default** |
+| 3 | Password | Show/hide toggle, **hidden by default** |
 
 **The code field ignores excluded characters.** S1-3's 31-symbol alphabet omits `0 O 1 I l`
 precisely because they are ambiguous, so there is no valid character to map them to. The field
@@ -188,8 +188,8 @@ the generic failure of §5.2 — never a field-level error. S1 §5 puts nickname
 teacher's screen; a field-level error here would confirm to an attacker that their nickname guess
 was well-formed.
 
-**The password is visible by default.** Hidden entry is a leading mistype source for this age band
-and there is no threat model on a classroom device that justifies the friction. The toggle hides it.
+**The password is hidden by default** (`type="password"`). The child can choose **Show** to check
+their secret word, then **Hide** to mask it again. Toggling visibility preserves the entered word.
 
 ### 5.2 Submission and failure
 
@@ -356,7 +356,7 @@ Six of the original states need no new component: they reuse what kid-flow S4 al
 - [x] **CC-4 Security** — every route has a stated auth level and redirect; `?next=` is validated
   against open redirect; the guard fails closed; the bookshelf query does not rely on RLS alone.
 - [x] **CC-6 Accessibility** — 44px targets, autofocus per step, screen-reader step announcements,
-  visible password by default.
+  password hidden by default with an explicit Show/Hide control.
 - [x] **CC-8 Kid vs teacher design** — two registers, no shared auth layout, separate `error.tsx`.
 - [x] **CC-9 Failure states = success states** — §7.4 renders nine states, including a stale-session
   logout escape hatch on every fallback surface.

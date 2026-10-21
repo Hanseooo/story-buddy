@@ -181,7 +181,7 @@ ten-year-olds (ADR-017).
 5. Prompt Optimization Engine
 6. Image Generation Engine (reference-conditioned, Qwen-Image-Edit)
 7. Consistency Checker (VLM-as-judge; triggers one targeted regeneration). **Fine-tuned in Phase 2.5** — ADR-018
-8. Slide Composer + classroom library. *(PDF export and TTS narration are **cut** — ADR-058.)*
+8. Slide Composer + classroom library + on-demand PDF download of teacher-approved books in the student's current classroom (ADR-071 restores ADR-013's WeasyPrint approach; ADR-072 permits classmate downloads). TTS narration remains cut under ADR-058.
 9. **Teacher/BEED-student account + classroom + teacher-issued student accounts** (Supabase Auth for
    teacher; classroom-scoped nickname+password auth for students; RLS) — ADR-017
 10. Moderation & Safety Stack (input text, PII incl. **Filipino recognizers**, output image, self-refusal fallback)
@@ -243,8 +243,11 @@ it is the long pole and cannot be compressed by coding faster (§10, §18, RESEA
 12. **Classroom gallery** — classmates read approved books. Display-only: no reflection prompt,
     comment, or scoring surface. ADR-021.
 
-*(An earlier step 13, PDF export, is **cut** — ADR-058. A book is read inside the classroom gallery; it does
-not leave the container.)*
+13. **Download PDF** — after teacher approval, an active student can download their own or a classmate's completed book in their current classroom
+    directly from the reader. It contains finalized illustrations, the checked title and existing captions.
+    Generate on demand without storing the PDF (ADR-027/071/072). Preparation and retry keep reading usable.
+    The teacher review dialog explains before approval that classmates can read and download the book.
+    A saved copy leaves classroom access controls and cannot be revoked by later unapproval/deletion.
 
 ---
 

@@ -26,7 +26,7 @@ export default function JoinCodePage({
   const [step, setStep] = useState<2 | 3>(2);
   const [nickname, setNickname] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 

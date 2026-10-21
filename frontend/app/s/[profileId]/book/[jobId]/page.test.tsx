@@ -26,9 +26,15 @@ vi.mock("@/components/FailureScreen", () => ({
 import { resetFailChain } from "@/components/FailureScreen";
 
 const mockCreateSignedUrls = vi.fn();
+const mockGetSession = vi.fn();
+const mockSingle = vi.fn();
 vi.mock("@/lib/supabaseClient", () => ({
   supabase: {
+    auth: { getSession: (...args: unknown[]) => mockGetSession(...args) },
     storage: { from: () => ({ createSignedUrls: (...a: unknown[]) => mockCreateSignedUrls(...a) }) },
+    from: () => ({ select: () => ({ eq: () => ({ single: () => mockSingle() }) }) }),
+    channel: () => ({ on: () => ({ subscribe: () => ({}) }) }),
+    removeChannel: vi.fn(),
   },
 }));
 
@@ -68,6 +74,7 @@ const PAGES = [
 const COMPLETE_ROW = {
   id: "j1", status: "complete", current_stage: "compose", profile_id: "p1",
   failure_reason: null, input_text: "x", title: "A Very Long Title That Keeps Going And Going", style_preset_id: null, pages: PAGES, reveal: null,
+  approved_at: "2026-10-21T00:00:00Z", rejected_at: null,
 };
 
 const SIGNED = PAGES.map((p, i) => ({ signedUrl: `https://cdn/${i}.png`, error: null }));
@@ -77,7 +84,108 @@ beforeEach(() => {
   pushMock.mockClear();
   mockUseJob.mockReset();
   mockCreateSignedUrls.mockReset();
+  mockGetSession.mockReset();
+  mockSingle.mockReset();
+  vi.unstubAllGlobals();
   vi.mocked(resetFailChain).mockReset();
+});
+
+describe("BookPage — PDF download", () => {
+  it.each(["peer", "owner", "read_failure"])("reconciles denied PDF access for %s without a Realtime update", async (kind) => {
+    const { useJob } = await vi.importActual<typeof import("@/lib/useJob")>("@/lib/useJob");
+    mockUseJob.mockImplementation(useJob);
+    const row = { ...COMPLETE_ROW, profile_id: kind === "owner" ? "p1" : "classmate-1" };
+    mockSingle.mockResolvedValueOnce({ data: row, error: null }).mockResolvedValue({
+      data: kind === "owner" ? { ...row, approved_at: null } : null,
+      error: kind === "owner" ? null : { code: kind === "peer" ? "PGRST116" : "503" },
+    });
+    mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
+    mockGetSession.mockResolvedValue({ data: { session: { access_token: "test-token" } } });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: kind === "owner" ? 409 : 404 })));
+    await renderPage(makeParams("j1"));
+    await waitFor(() => expect(screen.getByRole("button", { name: /download pdf/i })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /download pdf/i }));
+    if (kind === "peer") {
+      await waitFor(() => expect(screen.queryByRole("img")).toBeNull());
+      expect(screen.queryByRole("button", { name: /download pdf/i })).toBeNull();
+    } else if (kind === "owner") {
+      await waitFor(() => expect(screen.getByRole("button", { name: /download pdf/i })).toBeDisabled());
+      expect(screen.getByText(/your teacher needs to approve/i)).toBeDefined();
+      expect(screen.queryByRole("alert")).toBeNull();
+    } else {
+      await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("We couldn't download your book. Try again."));
+      expect(screen.getByRole("button", { name: /download pdf/i })).toBeEnabled();
+      expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/0.png");
+    }
+  });
+
+  it.each(["own", "peer"])("downloads an approved %s PDF with preparation feedback and preserves reading mode", async (kind) => {
+    const row = kind === "peer" ? { ...COMPLETE_ROW, profile_id: "classmate-1" } : COMPLETE_ROW;
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row }));
+    mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
+    mockGetSession.mockResolvedValue({ data: { session: { access_token: "test-token" } } });
+    let finish!: (response: Response) => void;
+    const fetchPdf = vi.fn(() => new Promise<Response>(resolve => { finish = resolve; }));
+    vi.stubGlobal("fetch", fetchPdf);
+    const createUrl = vi.fn(() => "blob:storybook");
+    const revokeUrl = vi.fn();
+    vi.stubGlobal("URL", { createObjectURL: createUrl, revokeObjectURL: revokeUrl });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    await renderPage(makeParams("j1"));
+    await waitFor(() => expect(screen.getByRole("button", { name: /download pdf/i })).toBeEnabled());
+    fireEvent.click(screen.getByLabelText("Scroll View"));
+    fireEvent.click(screen.getByRole("button", { name: /download pdf/i }));
+    await waitFor(() => expect(fetchPdf).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("button", { name: /preparing pdf/i })).toBeDisabled();
+    expect(screen.getByLabelText("Back to bookshelf")).toHaveAttribute("href", "/s/p1");
+    finish(new Response("%PDF-1.7", {
+      headers: { "content-type": "application/pdf", "content-disposition": 'attachment; filename="storybuddy-My-Story.pdf"' },
+    }));
+    await waitFor(() => expect(click).toHaveBeenCalledTimes(1));
+    expect(click.mock.instances[0]).toHaveAttribute("download", "storybuddy-My-Story.pdf");
+    expect(fetchPdf).toHaveBeenCalledWith(expect.stringContaining("/jobs/j1/pdf"), expect.objectContaining({
+      headers: { Authorization: "Bearer test-token" }, signal: expect.any(AbortSignal),
+    }));
+    expect(screen.getByLabelText("Scroll View")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /download pdf/i })).toBeEnabled();
+    click.mockRestore();
+  });
+
+  it("offers retry after a failed download and cancels an unfinished request on leaving", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
+    mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
+    mockGetSession.mockResolvedValue({ data: { session: { access_token: "test-token" } } });
+    const fetchPdf = vi.fn().mockRejectedValueOnce(new Error("network unavailable"))
+      .mockImplementationOnce(() => new Promise(() => {}));
+    vi.stubGlobal("fetch", fetchPdf);
+    const { unmount } = await renderPage(makeParams("j1"));
+    await waitFor(() => expect(screen.getByRole("button", { name: /download pdf/i })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /download pdf/i }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("We couldn't download your book. Try again."));
+    expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/0.png");
+    fireEvent.click(screen.getByRole("button", { name: /download pdf/i }));
+    await waitFor(() => expect(fetchPdf).toHaveBeenCalledTimes(2));
+    const signal = fetchPdf.mock.calls[1][1].signal as AbortSignal;
+    unmount();
+    expect(signal.aborted).toBe(true);
+  });
+
+  it.each(["pending", "rejected", "peer_pending", "peer_rejected"])("does not enable PDF export for a %s book", async (kind) => {
+    const row = { ...COMPLETE_ROW,
+      approved_at: null,
+      ...(kind.startsWith("peer") ? { profile_id: "someone-else" } : {}),
+      ...(kind.endsWith("rejected") ? { rejected_at: "2026-10-21T01:00:00Z" } : {}),
+    };
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row }));
+    mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
+    await renderPage(makeParams("j1"));
+    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
+    if (kind.startsWith("peer")) expect(screen.queryByRole("button", { name: /download pdf/i })).toBeNull();
+    else {
+      expect(screen.getByRole("button", { name: /download pdf/i })).toBeDisabled();
+      expect(screen.getByText(/your teacher needs to approve/i)).toBeDefined();
+    }
+  });
 });
 
 describe("BookPage — bucket routing (spec invariant 1)", () => {
@@ -217,13 +325,18 @@ describe("BookPage — reader (terminal-success)", () => {
     expect(caption).toHaveAttribute("aria-hidden", "true");
   });
 
-  it("shows page indicator k / N", async () => {
+  it("identifies the current page when jumping with the page controls", async () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
     mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
 
     await renderAndSwitchToPages(makeParams("j1"));
 
     await waitFor(() => expect(screen.getByLabelText("Page 1 of 2")).toBeDefined());
+    expect(screen.getByRole("button", { name: "Go to page 1" })).toHaveAttribute("aria-current", "page");
+    fireEvent.click(screen.getByRole("button", { name: "Go to page 2" }));
+    await waitFor(() => expect(screen.getByLabelText("Page 2 of 2")).toBeDefined());
+    expect(screen.getByRole("button", { name: "Go to page 2" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("button", { name: "Go to page 1" })).not.toHaveAttribute("aria-current");
   });
 
   it("right tap zone advances to next page", async () => {

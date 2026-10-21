@@ -8,9 +8,10 @@ import { useJob } from "@/lib/useJob";
 import { displayTitle } from "@/lib/displayTitle";
 import FailureScreen, { resetFailChain } from "@/components/FailureScreen";
 import { signPaths } from "@/lib/signedUrls";
+import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { CaretLeft, CaretRight, BookOpen, Rows, ArrowLeft } from "@phosphor-icons/react";
+import { CaretLeft, CaretRight, BookOpen, Rows, ArrowLeft, DownloadSimple } from "@phosphor-icons/react";
 
 function ScrollImage({ src, alt, onClick }: { src: string; alt: string; onClick?: () => void }) {
   const [isLoaded, setIsLoaded] = useState(false);
@@ -93,7 +94,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
   const { jobId } = use(params);
   const routeParams = useParams<{ profileId: string }>();
   const profileId = routeParams?.profileId;
-  const { bucket, row } = useJob(jobId);
+  const { bucket, row, refetch } = useJob(jobId);
   const [pageIndex, setPageIndex] = useState(0);
   const [signedPages, setSignedPages] = useState<SignedPage[] | null>(null);
   const [signFailed, setSignFailed] = useState(false);
@@ -102,6 +103,56 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
   const [hasInteracted, setHasInteracted] = useState(false);
   const [viewMode, setViewMode] = useState<"pages" | "scroll">("pages");
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
+  const downloadRequest = useRef<AbortController | null>(null);
+  const ownsBook = Boolean(profileId && row?.profile_id === profileId);
+  // RLS supplies readable classroom books; the PDF endpoint rechecks active membership/approval.
+  const canDownload = Boolean(profileId && row?.approved_at) && !row?.rejected_at;
+  const showDownload = ownsBook || canDownload;
+
+  useEffect(() => () => downloadRequest.current?.abort(), [jobId, canDownload]);
+
+  async function downloadPdf() {
+    if (!canDownload || downloadRequest.current) return;
+    const controller = new AbortController();
+    downloadRequest.current = controller;
+    setExporting(true);
+    setExportError("");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (controller.signal.aborted) return;
+      if (!session) throw new Error("session unavailable");
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/jobs/${jobId}/pdf`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        signal: controller.signal,
+      });
+      // A withdrawn peer approval can hide the row before Realtime delivers its update.
+      if (response.status === 404 || response.status === 409) {
+        if (controller.signal.aborted) return;
+        await refetch();
+      }
+      if (!response.ok || !response.headers.get("content-type")?.includes("application/pdf")) {
+        throw new Error("download unavailable");
+      }
+      const blob = await response.blob();
+      if (controller.signal.aborted) return;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = response.headers.get("content-disposition")?.match(/filename="([^"]+)"/)?.[1] ?? "storybook.pdf";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      // Give mobile browsers time to begin consuming the blob before releasing it.
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      if (!controller.signal.aborted) setExportError("We couldn't download your book. Try again.");
+    } finally {
+      downloadRequest.current = null;
+      setExporting(false);
+    }
+  }
 
   const signPages = useCallback(async (attempt: number) => {
     if (!row?.pages.length) return;
@@ -238,18 +289,18 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
         )}
       </AnimatePresence>
 
-      {/* Reader Sub-Header (Back Button + View Toggle) */}
-      <div className="w-full max-w-6xl lg:max-w-7xl mx-auto px-4 sm:px-6 pt-4 pb-2 flex items-center justify-between z-30">
+      {/* Navigation and export share a row; the mobile title always has its own width. */}
+      <div className="relative z-30 mx-auto grid w-full max-w-6xl grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-3 px-5 pt-5 pb-2 sm:px-8 lg:max-w-7xl lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:px-12">
         <Link
           href={profileId ? `/s/${profileId}` : "/"}
           aria-label="Back to bookshelf"
-          className="flex min-h-11 items-center gap-1.5 px-4 rounded-xl bg-surface neo-shadow border border-primary/20 text-foreground hover:text-primary hover:bg-muted/30 transition-all font-kid font-bold text-sm shrink-0"
+          className="order-1 inline-flex min-h-11 items-center justify-self-start gap-1.5 rounded-xl px-2 font-kid text-sm font-bold text-foreground/75 transition-colors hover:bg-muted/30 hover:text-primary focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 sm:px-3"
         >
-          <ArrowLeft size={20} weight="bold" />
+          <ArrowLeft size={20} weight="bold" aria-hidden="true" />
           <span>Bookshelf</span>
         </Link>
 
-        <h1 className="font-display text-lg sm:text-xl font-extrabold text-foreground text-center flex-1 min-w-0 mx-3 break-words">
+        <h1 className="order-3 col-span-2 min-w-0 text-center font-display text-xl leading-snug font-extrabold break-words text-foreground sm:text-2xl lg:order-2 lg:col-span-1 lg:px-6">
           {/* `profileId` is an authenticated identity here, not a typed-in segment: `guardRequest`
               redirects any /s/:id whose id is not the session user (middleware.ts), so this
               equals the `profile_id = auth.uid()` the RLS policy uses. Comparing it to the row
@@ -257,23 +308,51 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
           {displayTitle(row?.title, row?.profile_id === profileId ? row?.input_text : null)}
         </h1>
 
-        <div 
+        {showDownload && (
+          <button
+            type="button"
+            onClick={downloadPdf}
+            disabled={!canDownload || exporting}
+            aria-busy={exporting}
+            aria-describedby={!canDownload ? "pdf-approval-hint" : undefined}
+            className="order-2 col-start-2 row-start-1 inline-flex min-h-11 items-center justify-center justify-self-end gap-1.5 rounded-xl border border-primary/20 bg-surface px-3 py-2 font-kid text-sm font-bold whitespace-nowrap text-primary transition-colors hover:bg-muted/30 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:cursor-not-allowed disabled:opacity-50 lg:order-3 lg:col-start-3"
+          >
+            <DownloadSimple size={18} weight="bold" aria-hidden="true" />
+            {exporting ? "Preparing PDF…" : "Download PDF"}
+          </button>
+        )}
+
+        {showDownload && (!canDownload || exportError) && (
+          <div className="order-2 col-span-2 text-right font-kid text-sm lg:order-4 lg:col-span-3">
+            {!canDownload && (
+              <p id="pdf-approval-hint" className="text-foreground/75">
+                Your teacher needs to approve this book before you can download it.
+              </p>
+            )}
+            {canDownload && exportError && <p role="alert" className="text-destructive">{exportError}</p>}
+          </div>
+        )}
+        <p role="status" aria-live="polite" className="sr-only">
+          {exporting ? "Preparing your PDF. You can keep reading." : ""}
+        </p>
+
+        <div
           role="group"
           aria-label="Reading view mode"
-          className="flex items-center gap-1 bg-surface neo-shadow border border-muted p-1 rounded-full shrink-0"
+          className="order-4 col-span-2 flex items-center justify-self-center gap-1 rounded-2xl border border-primary/15 bg-surface p-1 lg:order-5 lg:col-span-3"
         >
           <button
             type="button"
             onClick={() => setViewMode("pages")}
             aria-label="Pages View"
             aria-pressed={viewMode === "pages"}
-            className={`flex min-h-10 items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-full font-kid font-bold text-xs sm:text-sm transition-all cursor-pointer ${
+            className={`flex min-h-11 items-center gap-1.5 rounded-xl px-4 py-1.5 font-kid text-sm font-bold transition-colors focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 cursor-pointer ${
               viewMode === "pages"
-                ? "bg-primary text-white shadow-sm"
+                ? "bg-primary text-on-primary"
                 : "text-foreground/75 hover:text-primary hover:bg-muted/30"
             }`}
           >
-            <BookOpen size={18} weight={viewMode === "pages" ? "bold" : "regular"} />
+            <BookOpen size={18} weight={viewMode === "pages" ? "bold" : "regular"} aria-hidden="true" />
             <span>Pages</span>
           </button>
           <button
@@ -281,13 +360,13 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
             onClick={() => setViewMode("scroll")}
             aria-label="Scroll View"
             aria-pressed={viewMode === "scroll"}
-            className={`flex min-h-10 items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-full font-kid font-bold text-xs sm:text-sm transition-all cursor-pointer ${
+            className={`flex min-h-11 items-center gap-1.5 rounded-xl px-4 py-1.5 font-kid text-sm font-bold transition-colors focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 cursor-pointer ${
               viewMode === "scroll"
-                ? "bg-primary text-white shadow-sm"
+                ? "bg-primary text-on-primary"
                 : "text-foreground/75 hover:text-primary hover:bg-muted/30"
             }`}
           >
-            <Rows size={18} weight={viewMode === "scroll" ? "bold" : "regular"} />
+            <Rows size={18} weight={viewMode === "scroll" ? "bold" : "regular"} aria-hidden="true" />
             <span>Scroll</span>
           </button>
         </div>
@@ -392,16 +471,14 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                     </div>
                     
                     {/* Progress dots at the bottom */}
-                    <div className="mt-6 md:mt-8 flex justify-start items-center gap-2 shrink-0" aria-label={`Page ${pageIndex + 1} of ${totalPages}`}>
+                    <div className="mt-4 flex flex-wrap items-center justify-start gap-1 shrink-0 md:mt-6" aria-label={`Page ${pageIndex + 1} of ${totalPages}`}>
                       {signedPages.map((_, i) => (
                         <button
                           key={i}
+                          type="button"
                           aria-label={`Go to page ${i + 1}`}
-                          className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
-                            i === pageIndex
-                              ? "w-8 bg-primary"
-                              : "w-2 bg-muted hover:bg-primary-deep/50"
-                          }`}
+                          aria-current={i === pageIndex ? "page" : undefined}
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors hover:bg-muted/30 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 cursor-pointer"
                           onClick={(e) => {
                              e.stopPropagation();
                              setHasInteracted(true);
@@ -410,7 +487,9 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                                setPageIndex(i);
                              }
                           }}
-                        />
+                        >
+                          <span aria-hidden="true" className={`h-2 rounded-full transition-all duration-150 ${i === pageIndex ? "w-6 bg-primary" : "w-2 bg-muted"}`} />
+                        </button>
                       ))}
                     </div>
                   </div>

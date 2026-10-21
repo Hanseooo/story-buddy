@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { classify, useJob } from "./useJob";
 import type { JobRow } from "./useJob";
 import { renderHook, act, waitFor } from "@testing-library/react";
+import { supabase } from "./supabaseClient";
 
 const BASE: JobRow = {
   id: "j1",
@@ -12,6 +13,8 @@ const BASE: JobRow = {
   input_text: "x",
   title: null,
   style_preset_id: null,
+  approved_at: null,
+  rejected_at: null,
   pages: [],
   reveal: null,
 };
@@ -81,6 +84,7 @@ beforeEach(() => {
   mockSingle.mockReset();
   mockSelectColumns.mockReset();
   capturedCallback = null;
+  vi.mocked(supabase.removeChannel).mockClear();
 });
 
 it("select string includes title", async () => {
@@ -88,11 +92,14 @@ it("select string includes title", async () => {
   renderHook(() => useJob("j1"));
   await waitFor(() => expect(mockSelectColumns).toHaveBeenCalled());
   expect(mockSelectColumns.mock.calls[0][0]).toContain("title");
+  expect(mockSelectColumns.mock.calls[0][0]).toContain("approved_at");
+  expect(mockSelectColumns.mock.calls[0][0]).toContain("rejected_at");
 });
 
 const RUNNING: JobRow = {
   id: "j1", status: "running", current_stage: "analyze",
   failure_reason: null, profile_id: "p1", input_text: "x", title: null, style_preset_id: null, pages: [], reveal: null,
+  approved_at: null, rejected_at: null,
 };
 const COMPLETE: JobRow = {
   ...RUNNING, status: "complete",
@@ -137,6 +144,11 @@ describe("useJob", () => {
       capturedCallback?.({ new: COMPLETE });
     });
     expect(result.current.bucket).toBe("terminal-success");
+    expect(supabase.removeChannel).not.toHaveBeenCalled();
+    await act(async () => {
+      capturedCallback?.({ new: { ...COMPLETE, approved_at: "2026-10-21T00:00:00Z" } });
+    });
+    expect(result.current.row?.approved_at).toBe("2026-10-21T00:00:00Z");
   });
 
   it("seed is discarded when a live UPDATE already arrived (overtake protection)", async () => {

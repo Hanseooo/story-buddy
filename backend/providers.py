@@ -3,6 +3,7 @@
 Text + VLM judge go through OpenRouter (OpenAI-compatible). Images go through fal.ai.
 Deterministic tests mock these functions; nothing here runs in CI (MASTER_SPEC §6).
 """
+import asyncio
 import hashlib
 import json
 import logging
@@ -568,6 +569,35 @@ _STORAGE_BUCKET = "storybook-images"
 def get_signed_url(path: str, expires_in: int = 300) -> str:
     resp = get_supabase_client().storage.from_(_STORAGE_BUCKET).create_signed_url(path, expires_in=expires_in)
     return resp["signedURL"]
+
+
+def download_book_image(path: str) -> bytes:
+    """Bounded private Storage read for on-demand PDF export. Never follows redirects."""
+    from app.config import PDF_IMAGE_FETCH_TIMEOUT_SECONDS, PDF_MAX_IMAGE_BYTES
+    from supabase import AsyncClient, AsyncClientOptions
+
+    async def download() -> bytes:
+        # A per-operation HTTP timeout cannot stop trickling response headers. Keep signing
+        # and streaming cancellable under one deadline, and close their shared connection pool.
+        async with asyncio.timeout(PDF_IMAGE_FETCH_TIMEOUT_SECONDS):
+            async with httpx.AsyncClient(timeout=PDF_IMAGE_FETCH_TIMEOUT_SECONDS, follow_redirects=False) as client:
+                storage = AsyncClient(
+                    settings.supabase_url, settings.supabase_service_role_key,
+                    options=AsyncClientOptions(httpx_client=client, auto_refresh_token=False, persist_session=False),
+                ).storage
+                signed = await storage.from_(_STORAGE_BUCKET).create_signed_url(
+                    path, expires_in=PDF_IMAGE_FETCH_TIMEOUT_SECONDS,
+                )
+                contents = bytearray()
+                async with client.stream("GET", signed["signedURL"]) as response:
+                    response.raise_for_status()
+                    async for chunk in response.aiter_raw():
+                        if len(contents) + len(chunk) > PDF_MAX_IMAGE_BYTES:
+                            raise ValueError("PDF image fetch limit exceeded")
+                        contents.extend(chunk)
+                return bytes(contents)
+
+    return asyncio.run(download())
 
 
 def _parse_guard_response(response: str) -> tuple[bool, list[str]]:

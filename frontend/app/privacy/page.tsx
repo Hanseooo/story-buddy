@@ -12,7 +12,7 @@ export default function PrivacyPolicy() {
 
       <div className="max-w-3xl mx-auto mt-12 bg-surface rounded-3xl p-8 sm:p-12 shadow-sm border border-primary/10">
         <h1 className="font-display text-4xl sm:text-5xl font-extrabold text-primary mb-6">Privacy Policy</h1>
-        <p className="text-foreground/70 mb-10 text-lg">Last updated: August 2026</p>
+        <p className="text-foreground/70 mb-10 text-lg">Last updated: October 2026</p>
 
         <div className="space-y-10 text-foreground/80 leading-relaxed">
           <section>
@@ -41,6 +41,7 @@ export default function PrivacyPolicy() {
 
           <section>
             <h2 className="font-display text-2xl font-bold text-primary mb-4">4. Data Deletion and Guardian Rights</h2>
+            <p className="mb-3">Students can download their own and their classmates&apos; teacher-approved books within their classroom as PDFs. Each PDF contains the book&apos;s title, final illustrations and story text with sensitive details removed. We prepare it on request and do not store the PDF on our servers. A copy saved to a device cannot be removed by later withdrawing approval or deleting the book.</p>
             <p>Parents and guardians are the ultimate consent givers. If a parent requests data removal, teachers have a one-action button to permanently delete a student&apos;s data and account from our systems.</p>
           </section>
         </div>

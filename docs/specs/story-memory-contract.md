@@ -385,7 +385,7 @@ N/A — the contract produces no generated content.
   unchecked reads clean and pre-change checkpoints resume without re-judging. Rank order widens to
   `same_character → anatomy_intact → text_free → subjects_unique → style_match`.
 - ~~**Deferred:** `pdf_ref` / composed-book reference for the export leg.~~ → **Cancelled 2026-09-04
-  (ADR-058 D1):** PDF export is cut, so the field is never added.
+  (ADR-058 D1):** PDF export was cut, so the field was never added. ADR-071 restores on-demand rendering from the completed job's pages, with no persisted PDF and no `StoryMemory` field.
 - **Removed 2026-09-04 (no `schema_version` bump) → ADR-058 D5:** `NarrationEntry` and
   `StoryMemory.narration`. Narration is cut. Verified before removal: the field was declared and read or
   written **nowhere** in `backend/` — an orphan, not a live contract slice. Removal is non-breaking because

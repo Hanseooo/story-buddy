@@ -119,30 +119,37 @@ export default function BookReviewDialog({
           </div>
 
           {/* Decision footer — fixed at bottom, thumb-reachable */}
-          <div className="px-6 py-4 border-t border-primary/10 bg-surface shrink-0 flex gap-3 justify-end">
-            {state !== "rejected" && state !== "pending" ? null : (
-              <button
-                onClick={() => onDecide("rejected")}
-                className="min-h-[44px] px-6 py-2 rounded-xl border border-destructive text-destructive font-bold text-sm hover:bg-destructive/10 transition-colors"
-              >
-                Reject
-              </button>
-            )}
-            {state !== "approved" ? (
-              <button
-                onClick={() => onDecide("approved")}
-                className="min-h-[44px] px-8 py-2 rounded-xl bg-primary text-on-primary font-bold text-sm hover:bg-primary-deep transition-colors"
-              >
-                Approve
-              </button>
-            ) : (
-              <button
-                onClick={() => onDecide("pending")}
-                className="min-h-[44px] px-6 py-2 rounded-xl border border-primary/20 font-bold text-sm hover:bg-muted transition-colors"
-              >
-                Move back to queue
-              </button>
-            )}
+          <div className="px-6 py-4 border-t border-primary/10 bg-surface shrink-0 space-y-3">
+            <p id="book-sharing-note" className="text-sm leading-relaxed text-foreground/75">
+              Classmates will be able to read and download this book. Copies already saved remain
+              after approval is withdrawn or the book is deleted.
+            </p>
+            <div className="flex flex-wrap gap-3 justify-end">
+              {state !== "rejected" && state !== "pending" ? null : (
+                <button
+                  onClick={() => onDecide("rejected")}
+                  className="min-h-[44px] px-6 py-2 rounded-xl border border-destructive text-destructive font-bold text-sm hover:bg-destructive/10 transition-colors"
+                >
+                  Reject
+                </button>
+              )}
+              {state !== "approved" ? (
+                <button
+                  onClick={() => onDecide("approved")}
+                  aria-describedby="book-sharing-note"
+                  className="min-h-[44px] px-8 py-2 rounded-xl bg-primary text-on-primary font-bold text-sm hover:bg-primary-deep transition-colors"
+                >
+                  Approve
+                </button>
+              ) : (
+                <button
+                  onClick={() => onDecide("pending")}
+                  className="min-h-[44px] px-6 py-2 rounded-xl border border-primary/20 font-bold text-sm hover:bg-muted transition-colors"
+                >
+                  Move back to queue
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

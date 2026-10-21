@@ -165,7 +165,7 @@ book from being shown as complete).
 
 **Open questions:** ⚠️ a storage-shape choice is a schema decision under AGENTS.md §2 — if the
 session lands on one that is hard to reverse, it writes an ADR and flags it rather than
-settling it inline. (`export-pdf` was the other consumer of whatever this decides; it is cut — ADR-058.) Design for two
+settling it inline. (`export-pdf` was cut by ADR-058; ADR-071 restores it as an HTTP action reading completed job pages, outside the checkpoint contract.) Design for two
 readers, don't build for the second.
 
 ---

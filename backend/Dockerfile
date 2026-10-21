@@ -14,6 +14,12 @@ ENV UV_LINK_MODE=copy
 # it failed "after 10 retries" having spent 814s inside them.
 ENV UV_HTTP_RETRIES=10
 
+# ADR-071 restores ADR-013's on-demand WeasyPrint renderer. Bundle a font covering
+# Filipino and punctuation so document layout does not depend on the host's fonts.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install dependencies using the lockfile (cache effectively).
 # `vendor` is mounted because the lockfile now resolves en_core_web_sm from a path inside it;
 # without this the layer fails on a missing file rather than a refused stream.

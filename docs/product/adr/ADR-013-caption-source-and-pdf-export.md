@@ -1,8 +1,8 @@
 # ADR-013 — Caption source and PDF export
 
-**Status:** Accepted · **revised 2026-07-21** — PDF renderer resolved to WeasyPrint (D-2) · **the export
-half is retired by [ADR-058](./ADR-058-narration-and-pdf-export-are-cut-from-the-evaluated-scope.md)**
-(2026-09-04): PDF export is cut and WeasyPrint never shipped. **The caption decision below — the child's
+**Status:** Accepted · **WeasyPrint export restored by [ADR-071](./ADR-071-restore-on-demand-pdf-downloads-for-approved-books.md) (2026-10-21)** · **revised 2026-07-21** — PDF renderer resolved to WeasyPrint (D-2) · **the export
+half was retired by [ADR-058](./ADR-058-narration-and-pdf-export-are-cut-from-the-evaluated-scope.md)**
+(2026-09-04): PDF export was cut before WeasyPrint shipped. ADR-071 restores it as an on-demand API action. **The caption decision below — the child's
 verbatim post-redaction text, never LLM-rewritten — is untouched and remains live.**
 
 **Context:** Captions can be the child's words or LLM-rewritten; each generated surface adds a moderation surface and a fidelity risk. Export needs a PDF renderer.

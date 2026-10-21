@@ -12,7 +12,7 @@ export default function TermsOfService() {
 
       <div className="max-w-3xl mx-auto mt-12 bg-surface rounded-3xl p-8 sm:p-12 shadow-sm border border-primary/10">
         <h1 className="font-display text-4xl sm:text-5xl font-extrabold text-primary mb-6">Terms of Service</h1>
-        <p className="text-foreground/70 mb-10 text-lg">Last updated: August 2026</p>
+        <p className="text-foreground/70 mb-10 text-lg">Last updated: October 2026</p>
 
         <div className="space-y-10 text-foreground/80 leading-relaxed">
           <section>
@@ -26,7 +26,7 @@ export default function TermsOfService() {
           <section>
             <h2 className="font-display text-2xl font-bold text-primary mb-4">2. Teacher Responsibilities</h2>
             <ul className="list-disc pl-5 space-y-3">
-              <li><strong>The Gatekeeper Role:</strong> Teachers must manually review and approve every completed storybook. A book cannot enter the classroom gallery until the teacher says it is okay.</li>
+              <li><strong>The Gatekeeper Role:</strong> Teachers must manually review and approve every completed storybook. A book cannot enter the classroom gallery or be downloaded as a PDF until the teacher approves it.</li>
               <li><strong>Account Management:</strong> Teachers manage student nicknames and passwords and are responsible for deleting student accounts upon guardian request.</li>
             </ul>
           </section>
@@ -42,7 +42,7 @@ export default function TermsOfService() {
 
           <section>
             <h2 className="font-display text-2xl font-bold text-primary mb-4">4. Ownership</h2>
-            <p>Students own their original stories. Once a teacher approves a storybook, it appears in the classroom gallery for the child and their classmates to read. There is no public sharing mode.</p>
+            <p>Students own their original stories. Once a teacher approves a storybook, the child and their classmates can read it in the classroom gallery and download it as a PDF. Approval allows classroom reading and downloading; it does not transfer ownership of the story. Story Buddy does not store the PDF or offer public sharing links. A copy saved outside the classroom cannot be removed by later withdrawing approval or deleting the book.</p>
           </section>
         </div>
       </div>

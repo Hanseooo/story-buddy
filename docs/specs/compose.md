@@ -9,9 +9,9 @@ ADR-025, ADR-028
 The graph's terminal gate. It asserts the run produced a shippable book, emits the one per-book
 record, and produces no artifact.
 
-**There is nothing to assemble.** MASTER_SPEC §2's `compose / export` row reads *"passed scenes +
-captions → storybook + PDF in Storage"*. The PDF half is **cut** (ADR-058; `export-pdf` never shipped),
-and the page sequence already exists — `story_memory.py:129-131`
+**There is nothing to assemble.** The page sequence already exists. PDF export, cut by ADR-058,
+is restored as a separate on-demand API action (ADR-071; `export-pdf.md`), with no stored PDF.
+`story_memory.py:129-131`
 makes `scenes[]` insertion order the contract and deliberately refuses a `Scene.order` field
 because it would be a second source of truth. A page is a `Scene`: image plus verbatim caption,
 nothing else (USER_FLOW §4.7, ADR-013). Building a derived `pages[]` block would create exactly
@@ -180,7 +180,7 @@ existing end-to-end runs now assert against a node that can fail, which is cover
 ## 8. Linked decisions & open questions
 
 **Depends on:** ADR-003 (no new branch point), ADR-010 + ADR-028 (best-of is a shippable outcome,
-not a failure), ADR-013 (a page is image + verbatim caption; its PDF half is cut per ADR-058),
+not a failure), ADR-013 (a page is image + verbatim caption; PDF rendering is restored outside the graph by ADR-071),
 ADR-024 (the empty-`scenes[]` path that makes the gate necessary; partial-return convention),
 ADR-025 (never a partial book; a raise becomes job `failed`), MASTER_SPEC §6 rule 1 (no helper).
 
@@ -200,8 +200,9 @@ ADR-025 (never a partial book; a raise becomes job `failed`), MASTER_SPEC §6 ru
   is moderated"* — the CC-1 promise is that no unmoderated image reaches a child, and this is the
   last place to check it. That extension is `moderation-stack`'s to make, in the same change that
   starts writing the field.
-- ~~**The PDF/storybook artifact → `export-pdf`**~~ — **cut, ADR-058.** MASTER_SPEC §2's
-  `compose / export` row is one row for two nodes; this spec covers only the first.
+- **The downloadable PDF → `export-pdf`** — cut by ADR-058, restored outside the graph by
+  ADR-071 (`export-pdf.md`). This spec owns composition only; the download is an HTTP action,
+  not a second pipeline node or persisted artifact.
 
 **No open decisions.** Nothing here needs an ADR — the node adds no branch, no contract change,
 no dependency, and no schema change.

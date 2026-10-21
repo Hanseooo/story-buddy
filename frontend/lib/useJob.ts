@@ -19,6 +19,8 @@ export type JobRow = {
   input_text: string;
   title: string | null;
   style_preset_id: string | null;
+  approved_at: string | null;
+  rejected_at: string | null;
   pages: Array<{ scene_id: string; caption: string; image_path: string }>;
   reveal: {
     characters: Array<{
@@ -58,7 +60,7 @@ export function useJob(jobId: string): {
       // `profile_id` is who owns the book, not who is reading it: RLS lets a classmate read an
       // approved peer row whole, so every consumer of `input_text` has to be able to tell the
       // owner's own story text from someone else's (story-titles §5).
-      .select("id, status, current_stage, failure_reason, profile_id, input_text, title, style_preset_id, pages, reveal")
+      .select("id, status, current_stage, failure_reason, profile_id, input_text, title, style_preset_id, approved_at, rejected_at, pages, reveal")
       .eq("id", jobId)
       .single();
     // PGRST116 is `.single()` matching zero rows — the book is genuinely absent, or RLS hid it
@@ -94,7 +96,8 @@ export function useJob(jobId: string): {
           const newRow = payload.new;
           setRow(newRow);
           const b = classify(newRow);
-          if (b === "terminal-success" || b === "terminal-failure") {
+          // Completed books can still gain or lose teacher approval while the reader is open.
+          if (b === "terminal-failure") {
             supabase.removeChannel(channel);
           }
         }

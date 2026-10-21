@@ -14,6 +14,10 @@ and a Methods section, not into a Philippine Chapter-1 template.
 
 ---
 
+~~**Product-scope amendment, 2026-10-21 (ADR-071).** On-demand PDF download of a student's own teacher-approved book is restored. Future Tool A picture-book-production verification includes composition and a separate authenticated, complete PDF download check, as specified in `docs/specs/functional-verification-matrix.md`. Preserve all historical criteria/results. Narration stays cut, Objective 4 is unchanged, and revised questionnaire wording still needs adviser sign-off before administration (`docs/capstone/research_instruments.md`).~~
+
+**Classroom-download amendment, 2026-10-21 (ADR-071/072).** On-demand PDF download covers teacher-approved books by active students in the viewer's current classroom, including classmates' books. Future Tool A picture-book-production verification includes composition and a separate authenticated, complete PDF download check (`docs/specs/functional-verification-matrix.md`). Preserve historical criteria/results. Narration stays cut, Objective 4 is unchanged, and revised questionnaire wording still needs adviser sign-off before administration (`docs/capstone/research_instruments.md`).
+
 ## 1. The problem, in one paragraph
 
 A child writes a story. The teacher marks it. It goes in a folder. Nobody reads it. Prior work on writing

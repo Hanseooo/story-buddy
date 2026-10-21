@@ -8,8 +8,8 @@ spec edit). Per `CLAUDE.md §1`, architectural decisions are made in their own s
 inline while building a module. When a row is decided: write the ADR, delete the row from
 this file (git keeps the history), and update the affected spec in the same change.
 
-**ADR numbering.** ADRs are append-only sequential; the last assigned number is **ADR-061**, so the
-next free number is **ADR-062**. Numbers are assigned *when the ADR is written*, not reserved here —
+**ADR numbering.** ADRs are append-only sequential; the last assigned number is **ADR-072**, so the
+next free number is **ADR-073**. Numbers are assigned *when the ADR is written*, not reserved here —
 the items below use stable `D-*` ids instead, because the write order can shift.
 
 **Two non-decisions, recorded so they don't get reopened by reflex:**
@@ -26,7 +26,7 @@ the items below use stable `D-*` ids instead, because the write order can shift.
 
 - ~~**D-1 · Moderation backstop routing**~~ → **ADR-011 (revised 2026-07-21c):** primary meta-llama/llama-guard-4-12b
   on the OpenRouter, backstop routed to `gpt-oss-safeguard-20b` on OpenRouter.
-- ~~**D-2 · PDF renderer**~~ → **ADR-013 (revised 2026-07-21):** WeasyPrint. *(Moot — PDF export is cut, ADR-058; the renderer was never installed.)*
+- ~~**D-2 · PDF renderer**~~ → **ADR-013 (revised 2026-07-21):** WeasyPrint. Export was cut by ADR-058 and restored with this renderer by ADR-071 (2026-10-21).
 - ~~**D-B · LangGraph node & edge conventions**~~ → **ADR-024 (2026-07-22):** partial-return node signature;
   sequential per-scene loop (position from `final_image_ref is None`, no cursor); upsert-by-`scene_id` reducer
   on `scenes[]` only; two pure routers (moderation, consistency). Amends ADR-003, ADR-023.
@@ -103,7 +103,7 @@ the items below use stable `D-*` ids instead, because the write order can shift.
 
 - ~~**D-1 · Moderation backstop routing**~~ → **ADR-011 (revised 2026-07-21c):** primary meta-llama/llama-guard-4-12b
   on the OpenRouter, backstop routed to `gpt-oss-safeguard-20b` on OpenRouter.
-- ~~**D-2 · PDF renderer**~~ → **ADR-013 (revised 2026-07-21):** WeasyPrint. *(Moot — PDF export is cut, ADR-058; the renderer was never installed.)*
+- ~~**D-2 · PDF renderer**~~ → **ADR-013 (revised 2026-07-21):** WeasyPrint. Export was cut by ADR-058 and restored with this renderer by ADR-071 (2026-10-21).
 - ~~**D-B · LangGraph node & edge conventions**~~ → **ADR-024 (2026-07-22):** partial-return node signature;
   sequential per-scene loop (position from `final_image_ref is None`, no cursor); upsert-by-`scene_id` reducer
   on `scenes[]` only; two pure routers (moderation, consistency). Amends ADR-003, ADR-023.
@@ -409,15 +409,15 @@ roadmap order. Source: MASTER_SPEC §7.
     Migration `0011` ADR-flagged.)*
 - [x] `classroom-sharing`   *(**built 2026-08-09** — gallery page + StudentTabBar; `/s/[profileId]/gallery` live; tab bar covers Bookshelf / Gallery / Profile; logout moved to settings)*
 - ~~[ ] `narration`~~ **CUT 2026-09-04 (ADR-058)** — `providers.narrate()` was never written. The book reader ships without a play button, permanently.
-- ~~[ ] `export-pdf`~~ **CUT 2026-09-04 (ADR-058)** — invoked ROADMAP rung 3. WeasyPrint was chosen (D-2) and never installed.
+- [x] `export-pdf` **RESTORED 2026-10-21 (ADR-071)** — cut 2026-09-04 under ADR-058, now implemented with the previously chosen WeasyPrint renderer. See `docs/specs/export-pdf.md` for verification and pending deployment/device checks.
 - [ ] `rate-limiting`
 - [ ] `data-deletion`   *(must own ADR-029's ⚠️: a job can sit in `awaiting_confirm` forever. The sweep is one
       line over the existing `jobs.updated_at`; must name the swept-pause status value — S4 maps it to `asleep` FailureScreen kind. Until named, unknown status falls to `retry`. See `kid-flow-reader-and-wait-states.md` §4.4.4.)*
 - [x] `kid-flow-ui` → **decomposed into four specs, all built** *(docket `docs/specs/kid-flow-ui-docket.md`,
       DONE 2026-08-04; MASTER_SPEC §7 carries the four rows). The **multi-page persistence gap** `compose`
       flagged is **closed**: `run_job.py`'s `_finish` is the only writer of `pages`/`reveal`, and
-      `/book/[jobId]` reads the ordered `jobs.pages` array. (`export-pdf` was to be the second reader of
-      that shape; it is cut — ADR-058, so the reader is the only one.)*
+      `/book/[jobId]` reads the ordered `jobs.pages` array. ADR-071 restores `export-pdf` as a second
+      reader of that persisted shape, outside the graph, without a new checkpoint field.)*
   - [x] `kid-flow-book-persistence` (S1)   *(**built 2026-08-02** — `docs/specs/kid-flow-book-persistence.md`;
         `supabase/migrations/0004_jobs_pages.sql` adds the ordered JSONB `{scene_id, caption, image_path}`
         array, durable Storage paths only. One writer, one write, atomic with `status='complete'`;
@@ -570,8 +570,9 @@ now fully specified.
 
 1. **`data-deletion`** — non-deferrable (RA 10173 + ethics clearance), but doesn't unblock anything else.
    Owns ADR-029's ⚠️: the `awaiting_confirm` sweep and the `asleep` status value S4 is waiting for.
-2. ~~**`narration` + `export-pdf`**~~ — **cut 2026-09-04 (ADR-058)**, not sequenced. The Tool A row they
-   were to satisfy was narrowed to `Compose` in the same change, so nothing downstream is left waiting.
+2. ~~**`narration`**~~ — remains cut by ADR-058. **`export-pdf`** was restored by ADR-071
+   (2026-10-21), with classroom-peer access under ADR-072: on-demand download of approved classroom books. Future Tool A verification must
+   exercise the export endpoint separately; historical `Compose` results do not verify export.
 3. **`rate-limiting`** — must not silently slip past any public deployment.
 
 **No open decision blocks Phase 1 or Phase 2 entry.** Tiers 1, 2, 2b, 2c, and 3 are all resolved. D-I closed

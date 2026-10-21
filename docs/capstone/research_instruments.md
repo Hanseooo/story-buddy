@@ -90,12 +90,14 @@ instrument from expert validation (defense-panel note 11): Objective 3 judges th
 produces; this questionnaire judges the system itself.
 
 **Pending adviser approval (2026-09-04):** the functional-suitability item below was corrected — it named
-`narrate` and `export`, both **cut** (ADR-058) and never built. An instrument change needs sign-off before
+`narrate` and `export`, both **cut at that date** (ADR-058) and never built at that date. An instrument change needs sign-off before
 administration; it cannot be relabelled after collection.
+
+**2026-10-21 update (ADR-071):** PDF download is restored; narration stays excluded. The revised item below remains a proposal until adviser sign-off and deployed-feature verification. No collected ratings or historical compose-only results may be relabelled.
 
 | Characteristic | What the items ask about |
 |---|---|
-| Functional suitability | Does the system do what it claims — analyze, segment, illustrate, and assemble a book? |
+| Functional suitability | Proposed 2026-10-21, pending adviser sign-off: Does the system analyze, segment, illustrate, assemble a book, and download a teacher-approved classroom book as a PDF? |
 | Performance efficiency | Is generation time acceptable within a classroom period? |
 | Usability | Can a Grade 5–6 student and a teacher operate it without instruction? |
 | Reliability | Does it recover from a stalled or failed generation without losing work? |
