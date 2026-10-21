@@ -235,6 +235,10 @@ S2-5 froze `/books` as the only route, so there is no `/books/[jobId]`. The read
 `<dialog>` (S2-8), which is also the right answer: focus trap, `Esc`, `::backdrop` and an inert
 background are all native and are exactly what is easy to get subtly wrong by hand.
 
+**Approval includes classroom downloads (ADR-072).** Before approval, the dialog explains:
+“Classmates will be able to read and download this book. Copies already saved remain after approval
+is withdrawn or the book is deleted.” Associate this explanation with the approval control.
+
 **The dialog advances.** This is the single decision that makes forty books tractable:
 
 1. A row opens the dialog at that book.

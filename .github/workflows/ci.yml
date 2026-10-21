@@ -41,6 +41,8 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
+      - name: Install PDF rendering libraries
+        run: sudo apt-get update && sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core
       # --frozen matches backend/Dockerfile. Bare `uv sync` re-resolves and rewrites uv.lock in
       # the runner's checkout, exits 0, and nobody sees it — so a drifted lockfile passes here and
       # fails the Northflank build with "Commit could not be built". Same flag, same verdict.

@@ -15,6 +15,12 @@ student writes → teacher approves → peers see the book.
 ADR-021 defines the whole feature surface: **the storybook is the only peer-visible artifact.**
 No reflection prompt, comment, reply, or scoring surface of any kind.
 
+**2026-10-21 amendment (ADR-072):** the existing reader also offers on-demand PDF downloads of
+approved classroom books to active students in that classroom. The author must remain an active
+classroom student. Teacher approval explains reading, downloading and the permanence of saved
+copies. The authenticated export endpoint is specified separately in `export-pdf.md`; this gallery
+still introduces no backend route, schema or pipeline change.
+
 ## 2. What already exists (this row builds none of it)
 
 | Layer | Where | State |

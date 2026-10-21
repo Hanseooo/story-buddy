@@ -47,7 +47,9 @@ features by name.
 
 ## 3. Scope decision
 
-**Narration and PDF export are both cut from the evaluated product scope.**
+**Historical decision, 2026-09-04: Narration and PDF export are both cut from the evaluated product scope.**
+
+**Supersession, 2026-10-21:** ADR-071 restores PDF download only. The future Tool A criterion and pending questionnaire revision are recorded in `functional-verification-matrix.md` and `docs/capstone/research_instruments.md`. The September freeze below remains historical evidence; narration stays cut and prior results are not relabelled.
 
 ### 3.1 PDF export
 

@@ -1,5 +1,8 @@
+import json
 import threading
 import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import fal_client
@@ -1351,3 +1354,91 @@ def test_get_signed_url_defaults_to_300_seconds_and_accepts_an_override():
     first, second = bucket.create_signed_url.call_args_list
     assert first.kwargs["expires_in"] == 300
     assert second.kwargs["expires_in"] == 3600
+
+
+@pytest.fixture
+def pdf_image_server(monkeypatch):
+    """Real HTTP/SDK calls, with only Storage replaced by a local server."""
+    image = Path("tests/fixtures/qwen35-resize-scene.png").read_bytes()
+    stopped = threading.Event()
+    disconnected = threading.Event()
+    slow_phase = [None]
+    signed_path = "/object/sign/storybook-images/job-1/scene-1.png?token=fixture"
+
+    class StorageHandler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def reply(self, body, phase):
+            try:
+                if slow_phase[0] == phase:
+                    self.wfile.write(b"HTTP/1.1 200 OK\r\nX-Slow: ")
+                    for _ in range(100):
+                        self.wfile.write(b"x")
+                        self.wfile.flush()
+                        if stopped.wait(0.03):
+                            return
+                    self.wfile.write(f"\r\nContent-Length: {len(body)}\r\n\r\n".encode())
+                else:
+                    self.send_response(200)
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                if phase == "headers" and slow_phase[0] == "body":
+                    for index in range(100):
+                        self.wfile.write(body[index:index + 1])
+                        self.wfile.flush()
+                        if stopped.wait(0.03):
+                            return
+                    body = body[100:]
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                disconnected.set()
+
+        def do_POST(self):
+            self.rfile.read(int(self.headers["Content-Length"]))
+            if self.path != "/storage/v1/object/sign/storybook-images/job-1/scene-1.png":
+                self.send_error(404)
+                return
+            # Supabase's documented signedURL response, parsed by the real Storage SDK.
+            self.reply(json.dumps({"signedURL": signed_path}).encode(), "signing")
+
+        def do_GET(self):
+            if self.path != f"/storage/v1{signed_path}":
+                self.send_error(404)
+                return
+            self.reply(image, "headers")
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), StorageHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    monkeypatch.setattr(providers.settings, "supabase_url", f"http://127.0.0.1:{server.server_port}")
+    monkeypatch.setattr(providers.settings, "supabase_service_role_key", "test-service-role-key")
+    providers.get_supabase_client.cache_clear()
+    thread.start()
+    try:
+        yield image, slow_phase, disconnected
+    finally:
+        stopped.set()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+        providers.get_supabase_client.cache_clear()
+
+
+def test_pdf_image_download_preserves_the_complete_image(pdf_image_server):
+    image, _, _ = pdf_image_server
+    assert providers.download_book_image("job-1/scene-1.png") == image
+
+
+@pytest.mark.parametrize("phase", ["signing", "headers", "body"])
+def test_pdf_image_deadline_closes_slow_connections(pdf_image_server, monkeypatch, phase):
+    import app.config as config
+
+    _, slow_phase, disconnected = pdf_image_server
+    slow_phase[0] = phase
+    monkeypatch.setattr(config, "PDF_IMAGE_FETCH_TIMEOUT_SECONDS", 1.0)
+    started = time.monotonic()
+    with pytest.raises((TimeoutError, ValueError)):
+        providers.download_book_image("job-1/scene-1.png")
+    elapsed = time.monotonic() - started
+    assert elapsed < 2.0, f"image fetch exceeded its 1-second deadline: {elapsed:.2f}s"
+    assert disconnected.wait(1.0), "timed-out request left its connection open"

@@ -1,6 +1,6 @@
 # StoryBuddy: Research Changelog
 
-**Last updated:** 2026-10-13 · **Covers:** everything since the Objective 4 pre-registration was frozen
+**Last updated:** 2026-10-21 · **Covers:** everything since the Objective 4 pre-registration was frozen
 on 2026-08-14. **Use it to:** update the manuscript. Each entry says what changed, why, and which
 part of the paper it touches.
 
@@ -49,9 +49,7 @@ For the current state in plain words, read [`group-guide.md`](group-guide.md) fi
    partial comparison (copied 2026-10-11)"]
    Do not give a cause for the result. None was tested; the four candidate explanations are in the
    2026-10-11 Limitation row below. [`PREREGISTRATION_OBJ4.md` §7]
-5. **Narration and PDF export are out of scope** (ADR-058). The Objective 5 questionnaire item that
-   named them was corrected. That correction still needs adviser sign-off before the questionnaire is
-   given. [`docs/capstone/research_instruments.md`]
+5. **Narration remains out of scope** (ADR-058). **PDF download is restored** (ADR-071/072, 2026-10-21), for teacher-approved books in the active student's current classroom, rendered on demand with no stored PDF. Future Tool A verification includes a separate complete-download check; historical results and Objective 4 are unchanged. Revised Objective 5 wording still needs adviser sign-off before administration. [`docs/capstone/research_instruments.md`]
 6. **The corpus is 42 generated books:** 30 from synthetic stories and 12 from donated stories.
    Rejected page attempts are included as judge data (ADR-060). [`PREREGISTRATION_OBJ4.md` §12,
    2026-09-12]
@@ -96,6 +94,8 @@ and confirmed scope"]
 
 | Date | Type | What changed | Why | Paper section | Source |
 |---|---|---|---|---|---|
+| 2026-10-21 | Scope | Approved books may be downloaded by active classmates in the same current classroom; teacher approval explains downloads and saved-copy permanence | Owner approved classmate downloads after reviewing the sharing implications | Methods (system), Instruments; proposed wording updated, adviser sign-off and deployed-feature verification still pending; historical results and Objective 4 unchanged | ADR-072; `docs/specs/export-pdf.md`; `research_instruments.md` |
+| 2026-10-21 | Scope | PDF download restored for the student's own teacher-approved book, using on-demand WeasyPrint without PDF storage; narration remains cut | Owner prioritised direct-download UX | Methods (system), Instruments; future Tool A includes separate export evidence, historical results and Objective 4 unchanged; questionnaire revision pending adviser sign-off | ADR-071; `docs/specs/export-pdf.md`; `research_instruments.md` |
 | 2026-10-13 | Decision | The public limitations page illustrates duplication, stated body counts, actions and unreferenced background groups using selected historical synthetic training captures bundled with the frontend | The owner approved static examples and delegated remaining candidate verification/selection. Source hashes, requirements and selected-final roles were checked; selection remains AI-assisted. These hand-picked illustrations add no labels, representative rate, current-quality claim or completed Objective 4 result | System presentation, Limitations | `docs/product/adr/ADR-070-static-synthetic-examples-illustrate-visible-limitations.md`; `docs/specs/research-limitations-examples.md` |
 | 2026-10-13 | Limitation | The #121 investigation distinguishes confirmed retry construction protections from uncalibrated camera, style and setting judgments. Selected synthetic historical traces contain cross-axis camera complaints, mixed style evidence, and an action miss despite preservation wording. The setting prompt refers to an excerpt absent from its downstream input | Hash-verified assets and deterministic ranking replays support bounded mechanism claims, not quality rates or causal prompt effects. Original private job unavailable; independent human calibration not obtained. No prompt/model/gate change, paid call, held-out access, label change or completed Objective 4 result change | System implementation, Limitations | [Dated investigation](scene-judge-investigation-2026-10.md); `docs/specs/setting-consistency.md`; `docs/specs/consistency-checker.md` |
 | 2026-10-13 | Decision | Generation version 7 limits the numeric count to named scene cast members, each exactly once, and allows background people or creatures only when the Visual direction or Setting explicitly requests them | Synthetic training-capture inspection found a whole-canvas count alongside an explicit background group. This removes conflicting construction instructions without keyword detection. Deterministic tests verify wording, not generator compliance or judge calibration. No paid experiment or held-out re-evaluation. Stored bases, judge versions/model, gates/ranking, human labels, frozen bundles and completed Objective 4 results are unchanged; versions must remain separate in future comparisons | System implementation, Limitations | `docs/specs/prompt-optimizer.md`; `docs/specs/scene-setting-and-subject-binding.md`; `backend/tests/test_prompt_optimizer.py` |

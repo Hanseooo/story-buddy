@@ -300,6 +300,10 @@ checks; it does not recompute or change the backend's pass decision.
 
 - `NEXT_PUBLIC_SHOW_LANGFUSE_LINKS`: the buttons render only when it equals `"true"`. Off by
   default; added to `frontend/.env.local.example`.
+- Even with the flag enabled, the server renders a trace control only for a researcher who can
+  open that run, using `canOpenRun`: approved runs for ordinary researchers, all runs for the
+  adjudicator. Signed-out visitors, students and teachers receive neither the control nor its
+  URL in client-component props. The detail route retains its existing backend authorization.
 - Clicking opens `ConfirmDialog`: title "Open the full Langfuse trace?", description "This trace
   is the full raw record of the run, including the story text before redaction. Open it only when
   you need that detail." Buttons: Cancel (first, so it takes focus; Escape and backdrop click also
@@ -335,7 +339,7 @@ Tests (each red first, for the intended reason):
 
 Done means:
 
-- Signed out, the list shows no titles and no Langfuse button with the flag off, and a detail URL
+- Signed out, the list shows no titles or Langfuse buttons even with the flag enabled, and a detail URL
   redirects to login.
 - As adjudicator, a run of a synthetic story (submitted through a test student account; no donated
   story is opened for this check) renders every section in §5.2, the graph highlights its path, and

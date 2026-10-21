@@ -14,6 +14,47 @@ instead of repeating it.
 
 ---
 
+## Working tree update · 2026-10-21 · Reader UX and PDF downloads
+
+- Group Bookshelf and a quiet outlined PDF action in the reader header. Mobile titles have a
+  full-width row, desktop titles sit between those actions, and Pages/Scroll sits above the book.
+  Enlarge page-dot hit areas to 44px and announce the selected page.
+- Keep Langfuse links off by default. When enabled, show them only to researchers who can open
+  the run, keeping unauthorized trace URLs out of client-component props.
+- Hide student secret words by default, retaining the explicit Show/Hide control.
+- Restore on-demand WeasyPrint downloads for teacher-approved classroom books (ADR-071/072),
+  with preparation/retry feedback, cancellation, server authorization and no stored PDF.
+  Permit active classmates in the same current classroom and explain downloads/saved-copy permanence before teacher approval.
+  Add the renderer's locked dependency and Linux runtime/CI libraries.
+- Enforce the image-fetch deadline across URL signing, response headers and body streaming,
+  cancelling timed-out connections so they release the PDF export slot.
+- Refresh the reader after PDF access/readiness denials so withdrawn approval shows the current
+  unavailable or approval state, while temporary read failures retain retry feedback.
+- Reconcile product, privacy/terms and capstone scope. Historical results are unchanged.
+  Revised questionnaire wording still needs adviser sign-off. See the research changelog.
+- Checks: frontend lint/build and 709 tests; backend lint, 1,493 tests and 27 real-renderer
+  PDF tests split between the Windows checkout and Linux runtime. 87 expected environment-gated
+  skips and 6 smoke tests deselected. Production Docker build, four-page PDF text/visual review,
+  320–1280px browser layouts, 200% desktop zoom layout and keyboard focus order pass.
+  The initial full-container attempt lacked Git/host fixtures; the checkout suite passes.
+  Live RLS/provider, physical-phone download/open and offline Tool A checks were not run.
+  Deployment remains pending. Detailed evidence is in `docs/specs/export-pdf.md`.
+  The timeout correction adds a normal-image case and three slow-connection regressions,
+  verified failing first. All 85 provider tests pass in the Linux runtime; the classroom-access follow-up passes all 27 PDF tests there.
+
+## Working tree update · 2026-10-14 · Supabase downgrade preparation
+
+Refs #110 and #114. Correct Phase E's campaign-image bucket, require verified independent copies
+and separate database/Storage recovery coverage, and replace the negative-UUID deletion rule with
+reviewed campaign IDs. Document both services' connection dependency, quota scope and billing rules.
+
+Checks: traced current bucket, thread and demo code, checked official Supabase documentation, and
+completed a read-only local file-size/disk inventory after initial sandbox access failures. No backup
+of the full research archive has run. The campaign subset was subsequently copied to the owner's
+borrowed E: drive: 2,277 files, 319,998,378 bytes, zero copy failures and zero SHA-256 mismatches.
+Training/evaluation folders remain excluded. No live SQL, deletion, connection or billing change
+has run. Runtime tests and live recovery checks were not run for this preparation.
+
 ## Direct main update · 2026-10-13 · Illustrated limitations
 
 ### Code

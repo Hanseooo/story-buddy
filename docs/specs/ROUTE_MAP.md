@@ -169,7 +169,7 @@ app/
 | `/classroom/[classroomId]/**` | Auth (teacher) | Classroom-scoped: teacher must own this classroom |
 | `/settings` | Auth (teacher) | — |
 | `/s/[profileId]/**` | Profile (student) | Profile session must be active (stored in sessionStorage or cookie). Profile must exist and belong to an active classroom |
-| `/s/[profileId]/book/[bookId]/**` | Profile (student) | `bookId` must belong to `profileId` (own book) |
+| `/s/[profileId]/book/[jobId]/**` | Profile (student) | `profileId` identifies the viewer. RLS permits own books and approved classroom peer books; PDF export additionally checks active viewer/author membership (ADR-072) |
 | `/research/metrics` | Public | Middleware refreshes the session for the research header without requiring sign-in |
 | `/research/metrics/[jobId]` | Auth session | Signed-out descendants redirect to `/login?next=<path>`; the server-rendered detail report shows backend access messages, recorded run state and the pipeline graph. |
 | `/research/dataset`, `/research/results`, `/research/limitations`, `/research/docs` | Public | Prerendered. Not in the middleware matcher, and no session is read (ADR-065) |
@@ -308,6 +308,7 @@ Each route group also gets an `error.tsx`:
 | Route | Auth | Notes |
 |---|---|---|
 | `GET /health` | None | Liveness check |
+| `GET /jobs/{job_id}/pdf` | Student (`get_current_user`) + active classroom membership | Complete, teacher-approved, unrejected book by an active student in the viewer's current classroom. On-demand attachment, no stored PDF; 404 inaccessible or unavailable peer book, 409 own book not ready, 503 retryable failure (ADR-071/072). |
 | `POST /storybooks` | Student (`get_current_user`) | Enqueues a new story job |
 | `POST /jobs/{job_id}/confirm` | Student (`get_current_user`) | Confirms or retries a job at the reveal checkpoint |
 | `PATCH /me/avatar` | Student (`get_current_user`) | Body `{"avatar_id": "<id>" \| null}`. Guarded by `get_current_user`; writes only `auth.uid()`'s own row. 422 on invalid id. |
@@ -349,7 +350,7 @@ Each route group also gets an `error.tsx`:
 
 ## Appendix B: Cross-cutting checklist (MASTER_SPEC §5)
 
-- [x] **CC-4 Security (RLS + signed URLs)** — Every student route is profile-scoped via RLS. Gallery reads are classroom-scoped + teacher-approved only. No book leaves the container at all — PDF export is cut (ADR-017, ADR-058).
+- [x] **CC-4 Security (RLS + signed URLs)** — Every student route is profile-scoped via RLS. Gallery reads are classroom-scoped + teacher-approved only. Active students may download their own or classmates' teacher-approved books in their current classroom as PDFs (ADR-017, ADR-071/072). No public links or stored PDFs. A saved copy cannot be revoked by later unapproval/deletion.
 - [x] **CC-6 Accessibility** — Large touch targets (44×44px min) in student nav. Text labels on all tab bar icons. No narration — ADR-058 narrows CC-6 to targets and text.
 - [x] **CC-8 Kid vs teacher design language** — Two distinct layout shells with different typography (Nunito vs Inter), density, and component libraries.
 - [x] **CC-9 Failure states = success states** — Every route group has a designed `error.tsx` with age-appropriate messaging. Processing stalls get a friendly checkpoint message, not a raw error.

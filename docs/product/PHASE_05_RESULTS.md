@@ -6,6 +6,10 @@ failed gate is carried as a stated limitation. · ✅ Probe 3 **PASS**, both arm
 not run (2 needs fal credit; 4 waits on the Phase-2 moderation spec) ·
 **Owner:** build track · **Companion:** ROADMAP Phase 0.5
 
+~~**Product-scope amendment, 2026-10-21:** ADR-071 restores on-demand PDF downloads for approved owners. See `docs/specs/export-pdf.md` for implementation/release status. This changes no probe outcome, provider decision, phase gate or Objective 4 result. Future Tool A export verification is separate from historical composition evidence.~~
+
+**Classroom-download amendment, 2026-10-21 (ADR-071/072):** on-demand PDF downloads cover teacher-approved books by active students in the viewer's current classroom, including classmates' books. See `docs/specs/export-pdf.md` for implementation/release status. This changes no probe outcome, provider decision, phase gate or Objective 4 result. Future Tool A export verification stays separate from historical composition evidence.
+
 This file is **written before the probes run.** Each section states what the probe tests, what
 counts as a pass, and what to do on each way it can fail — *then* leaves a blank for the number.
 

@@ -186,8 +186,9 @@ fallback means Phase 1 wobbles rather than collapses.
 - **Teacher dashboard/library** + **teacher review gate** before a book enters the gallery.
 - **Classroom sharing** — teacher-curated, display-only gallery of approved storybooks (ADR-021).
 - **Story Map** — read-only page over Story Memory. No new models.
-- ~~**Narration**~~ and ~~**Export**~~ — **both cut, ADR-058.** Neither was ever built; export invoked
-  rung 3 of the ladder below. The accessibility cost of dropping narration is recorded in ADR-058, not here.
+- ~~**Narration**~~ — remains cut by ADR-058. **PDF export**, cut under the same ADR, is restored
+  by ADR-071 (2026-10-21), with classroom-peer access under ADR-072: direct download of approved classroom books, rendered on demand using
+  WeasyPrint without Storage persistence. See `../specs/export-pdf.md` for verification/deployment status.
 - **Rate limiting** (`slowapi`) + per-profile daily cap + cost circuit-breaker.
 - **Data deletion path** for the teacher/owner.
 - **Kid-flow polish** — cartoon-pop components, Lottie wait states, kid-appropriate failure states.
@@ -412,7 +413,7 @@ Two edges nobody draws, and they are the two likeliest ways the schedule dies:
 |---|---|---|
 | 1 | "What happens next?" continuation | Nothing the research needs |
 | 2 | Story Map | An author-facing mirror |
-| 3 | ~~PDF export~~ — **taken 2026-09-04 (ADR-058)** | The out-of-container escape hatch; slideshow still works |
+| 3 | ~~PDF export~~ — **taken 2026-09-04 (ADR-058), restored 2026-10-21 (ADR-071)** | The out-of-container escape hatch; slideshow still works |
 | 4 | **Fine-tuned judge *ships*** → evaluate it offline instead | The "faster, cheaper product" claim. **Objective 4 survives** — the judge is still evaluated against human labels, just not served in production. Modal disappears (ADR-019) |
 | **Never** | Phase 0.5, Objective 4's judge evaluation, the moderation stack | The project — the judge evaluation is Objective 4's classification-performance leg and the moderation stack is non-negotiable. (Objective 4 is a formal reported objective — precision/recall/F1 against human labels, F1 primary, with an optional secondary comparison — not a build-gate-only or descriptive-only measure; ADR-008, revised 2026-07-25.) |
 
@@ -435,5 +436,5 @@ Two edges nobody draws, and they are the two likeliest ways the schedule dies:
 - **Image moderation carries more weight than it used to.** No built-in filter, no proprietary backstop.
   Under-scoping it is a safety bug, not a polish item.
 - **Phase 2 is much larger than the old "week 4."** Classroom auth, sharing, teacher gate, and Filipino PII
-  all landed in it. Narration and export did too, until ADR-058 cut both.
+  all landed in it. Narration and export did too, until ADR-058 cut both. ADR-071 restored on-demand PDF download on 2026-10-21; narration remains cut.
 - **At 3 months, the de-scope ladder is not optional.** At 6 months it is insurance.

@@ -176,5 +176,7 @@ S3's 33-test Tier-A isolation suite (`backend/tests/test_rls_isolation.py`) is w
 (`middleware.ts`, `/join`, `/join/[code]`, `/s/[profileId]` bookshelf + settings) is fully built —
 144 frontend tests across 17 files. ADR-017's classroom boundary is enforced and verified. Next free
 migration is `0016`. **Next action per `docs/product/DECISION_BACKLOG.md`:** `data-deletion`
-(ethics-gated; owes the `awaiting_confirm` sweep and S4's `asleep` status value). `export-pdf` is no
-longer a candidate — ADR-058 cut it.
+(ethics-gated; owes the `awaiting_confirm` sweep and S4's `asleep` status value). **2026-10-21:** ADR-071
+restores `export-pdf` using ADR-013's WeasyPrint renderer; ADR-072 permits approved classroom-book downloads.
+See `specs/export-pdf.md` for its current
+verification/deployment status. Narration remains cut under ADR-058.

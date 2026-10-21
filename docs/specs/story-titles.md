@@ -12,7 +12,9 @@ The title is required for new submissions, limited to 80 characters independentl
 the story word count, and fixed once submitted. It names the book only: it does not
 provide characters, events, captions, or instructions to the illustration pipeline.
 Titles receive safety and privacy checks. Existing untitled books retain their
-story-excerpt label. No generated titles, rename flow, new cover image, or export work.
+story-excerpt label. No generated titles, rename flow, new cover image, or export work within this
+title feature. The later `export-pdf.md` feature uses the checked stored title or `Untitled`,
+never a raw-story excerpt.
 
 This is a feature across existing surfaces, not a new pipeline node. This document
 owns title behavior; [failure recovery](story-failure-recovery-ux.md) owns explanations
@@ -129,7 +131,10 @@ legacy untitled book reads `Untitled`. Do not re-add `input_text` to that query.
 
 Cards allow two lines and visually truncate overflow; accessible link names retain
 the full display label. Reader headings wrap long unbroken text without horizontal
-overflow. Duplicate titles stay distinguishable by existing author/status/cover context.
+overflow. Below 768px, the reader heading occupies its own full-width row below the
+Bookshelf link and Pages/Scroll controls. The controls wrap if needed and retain
+44px touch targets. At 768px and above, the heading shares the controls' row when
+space permits. Duplicate titles stay distinguishable by existing author/status/cover context.
 Do not render the title into generated artwork or create an extra story page.
 Missing covers retain a title-bearing placeholder. Loading skeletons reserve title
 space; failed reads must not masquerade as an empty library.

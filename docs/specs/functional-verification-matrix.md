@@ -10,7 +10,7 @@
 
 ## 1. Purpose
 
-A **script over tracing exports** that computes a per-functional-category success rate from Langfuse traces
+A **script over tracing exports and separate PDF-download evidence** that computes a per-functional-category success rate from Langfuse traces
 of fixture-story runs, and hands the resulting table to the manuscript. It is not a UI and it does not add a
 new database table — `MASTER_SPEC.md:217` already commits the eval harness to "offline scripts + tracing
 exports," and CC-5 (`MASTER_SPEC.md:246`) already requires every trace to carry gen time, regen count, cost,
@@ -25,11 +25,12 @@ annotation surface, restated here because this is where that data actually lives
 ## 2. Contract slice (Story Memory — MASTER_SPEC §3)
 
 This script writes nothing to `StoryMemory` and adds no table. It is a pure **consumer** of already-emitted
-traces.
+traces and fixture-book export verification evidence (ADR-071).
 
 - **Reads:** Langfuse trace exports for fixture-story runs — per-node status, gen time, regen count, cost,
   VLM verdict (CC-5) — plus the terminal `StoryMemory` snapshot per run (for schema validity checks against
-  `story-memory-contract.md`).
+  `story-memory-contract.md`), plus authenticated PDF-download results and document-completeness
+  evidence for approved fixture books. This additional offline evidence collection remains to be implemented.
 - **Writes:** a CSV/table of per-category success rates. No production data, no new schema.
 - **Invariants:** every row it reports traces back to a fixture-story run, never a real child's story — see
   §4 on why that keeps this instrument outside ethics clearance.
@@ -62,13 +63,15 @@ traces, then for each of the six functional categories below count `Successful �
 | Scene structuring | Scene Segmentation, Story Memory | Story converted to sequential scenes, Story Memory still schema-valid | per story |
 | Visual planning | Character Bible, Style Preset, Prompt Optimizer | Character refs + style + structured prompt produced, all schema-valid | per scene |
 | Scene generation & refinement | Image Generator, Consistency Judge, Regeneration | **Consistency loop ran to a terminal state and a shippable page was produced** (incl. best-of fallback) | per scene |
-| Picture book production | Compose | Scenes assembled as a complete book | per book |
+| Picture book production | Compose + on-demand PDF download (ADR-071/072 amendments, 2026-10-21) | Scenes assembled as a complete book and an authorized active classroom student can download its complete approved PDF | per book |
 
 **"Picture book production" narrowed 2026-09-04 (ADR-058 D4).** It read `Compose, TTS narration, Export`
 against "assembled + narrated + exported". Narration and PDF export are cut and were never built, so a rate
 reported against the old criterion would measure a product that does not exist. The category is narrowed,
 not deleted — `Compose` is real and still verified. This lands **before** any Tool A run, per
 `DECISION_BACKLOG.md:440`, which permitted the cut only with this row narrowed in the same change.
+
+**PDF scope amendment, 2026-10-21 (ADR-071/072).** The September narrowing above records the scope at that date. Future Tool A runs must verify both composition and authorized PDF download of an approved classroom book. A compose trace alone cannot prove download: pair it with an authenticated export check and document completeness evidence for the same fixture book. Keep any earlier compose-only results labelled with their original criterion; never count export retroactively. Narration stays excluded. The offline instrument must support this evidence before a future run can report the widened row as passed.
 
 **Formula:** `Success Rate = Successful ÷ Total × 100`. *(An earlier draft had this inverted, which would
 produce ≥100% — the script must not repeat that.)*

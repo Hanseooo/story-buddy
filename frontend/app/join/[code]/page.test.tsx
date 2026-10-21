@@ -119,12 +119,13 @@ describe("Join code page — §9.6–10", () => {
     });
   });
 
-  it("password is visible by default (type=text)", async () => {
+  it("password is hidden by default (type=password)", async () => {
     await renderJoinCode();
     fireEvent.change(screen.getByLabelText(/nickname/i), { target: { value: "Juan" } });
     fireEvent.click(screen.getByRole("button", { name: /next/i }));
     await waitFor(() => screen.getByRole("heading", { name: /secret word/i }));
-    expect(screen.getByLabelText(/secret word/i)).toHaveAttribute("type", "text");
+    expect(screen.getByLabelText(/secret word/i)).toHaveAttribute("type", "password");
+    expect(screen.getByRole("button", { name: /show/i })).toBeDefined();
   });
 
   it("show/hide toggle changes password visibility", async () => {
@@ -134,8 +135,12 @@ describe("Join code page — §9.6–10", () => {
     await waitFor(() => screen.getByRole("heading", { name: /secret word/i }));
 
     const passwordInput = screen.getByLabelText(/secret word/i);
+    fireEvent.change(passwordInput, { target: { value: "dragon" } });
+    expect(passwordInput).toHaveAttribute("type", "password");
+    fireEvent.click(screen.getByRole("button", { name: /show/i }));
     expect(passwordInput).toHaveAttribute("type", "text");
     fireEvent.click(screen.getByRole("button", { name: /hide/i }));
     expect(passwordInput).toHaveAttribute("type", "password");
+    expect(passwordInput).toHaveValue("dragon");
   });
 });

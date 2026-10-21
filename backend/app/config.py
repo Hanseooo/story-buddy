@@ -197,6 +197,11 @@ MIN_SCENES = 3
 MIN_STORY_WORDS = 5     # a book needs at least one scene's worth of text
 # docs/specs/story-titles.md §1/§3: fixed length independent of story word count.
 MAX_TITLE_CHARS = 80
+PDF_MAX_CAPTION_CHARS = 15_000
+PDF_MAX_IMAGE_BYTES = 8 * 1024 * 1024
+PDF_MAX_TOTAL_IMAGE_BYTES = 32 * 1024 * 1024
+PDF_MAX_IMAGE_PIXELS = 2048 * 2048
+PDF_IMAGE_FETCH_TIMEOUT_SECONDS = 20
 MAX_STORY_WORDS = 500   # ADR-068 amends ADR-037's word cap; scene/image ceilings stay unchanged
 # 15-image prelude: 6 (2 refs × 3 draws) + 3 (ADR-029 taps) + 6 (one moderation redraw cycle,
 # which re-mints every flagged ref at 3 draws each — `reference-moderation-retry.md` §4.5).

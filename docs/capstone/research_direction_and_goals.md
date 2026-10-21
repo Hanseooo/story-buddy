@@ -284,8 +284,8 @@ The corpus is one grade band in one country. **A tight population is a delimitat
 never-invent overrides the floor) · Story Memory Manager · Character Bible + canonical reference (≤ 2
 canonical references) · Style Preset (finite catalog; see ADR-042) · Prompt Optimizer · AI Scene Generation
 (Qwen-Image-Edit) · Consistency Judge & Targeted Regeneration (prompted judge in the product; fine-tuned
-`Qwen3.5-9B` evaluated in Objective 4) · Picture Book Composition (slide composer; narration and PDF
-export are cut — ADR-058). Moderation stack (input text, output images, Filipino PII redaction)
+`Qwen3.5-9B` evaluated in Objective 4) · Picture Book Composition (slide composer; narration remains cut — ADR-058; on-demand PDF
+download of teacher-approved classroom books is restored — ADR-071/072, 2026-10-21; release status in `docs/specs/export-pdf.md`). Moderation stack (input text, output images, Filipino PII redaction)
 and teacher-gated, display-only classroom sharing wrap the pipeline.
 
 **Permanently excluded:** public sharing. All sharing is classroom-scoped and teacher-gated.
@@ -329,7 +329,7 @@ Riskiest assumptions first. Build track and research track run in parallel and m
 | 0 | Scaffolding & walking skeleton | ✅ done |
 | **0.5** | **Open-weight spike — can the image model hold a non-human character?** | **⚠️ Run 2026-07-29. Split result: absolute gate met (80%), separation gate missed (+25 vs ≥30). Probe 3 passed; probes 2 and 4 outstanding.** |
 | 1 | Core pipeline + prompted consistency judge | ✅ **complete (2026-08-02)** — all ten specs built; opened on a stated limitation, not a clean pass |
-| 2 | Moderation, classroom auth, sharing | **in progress (2026-08-04)** — moderation stack, input-gate hardening and the kid-facing flow built; auth/RLS, teacher review and data deletion open; narration and export cut (ADR-058). Release still gated on probe 4 |
+| 2 | Moderation, classroom auth, sharing | **in progress (2026-08-04)** — moderation stack, input-gate hardening and the kid-facing flow built; auth/RLS, teacher review and data deletion open; narration cut (ADR-058); PDF download restored 2026-10-21 (ADR-071, release status in `docs/specs/export-pdf.md`). Release still gated on probe 4 |
 | 2.5 | Judge fine-tuning + classification evaluation (Objective 4) | blocked on Ethics Stage 1 → corpus → a Phase 1 run |
 | 3 | Expert validation (Objective 3) + ISO/IEC 25010 (Objective 5) | blocked on corpus |
 

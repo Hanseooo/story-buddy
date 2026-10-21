@@ -5,6 +5,8 @@
 > **Status:** readiness assessment and remediation guide; not a certification or canonical phase-status document  
 > **Disclosure:** this is the public-safe edition. It intentionally omits reproduction details for sensitive findings involving child-derived data. Track those details privately.
 
+> **Later scope decisions:** ADR-058 cut narration/export on 2026-09-04. ADR-071 restored on-demand PDF download only on 2026-10-21. This August snapshot remains historical; see `docs/specs/export-pdf.md` for current release status.
+
 ## Executive conclusion
 
 StoryBuddy cannot yet support a defensible claim that it “passes ISO/IEC 25010.” The current edition of the

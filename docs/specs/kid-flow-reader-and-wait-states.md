@@ -121,7 +121,10 @@ The subscription may deliver the same row later; explicit refetch reconciles the
 with current state. This does not provide a pause revision token or reject every delayed
 request; see ADR-069 and `character-review-ux` for the remaining stale-request limit.
 
-The channel is removed once the bucket is terminal — no UPDATE will ever come for a terminal row.
+Failed-job channels are removed once terminal. **ADR-071 amendment (2026-10-21):** completed-book
+channels remain subscribed until unmount because teacher approval can change after generation ends.
+The existing query includes `approved_at` and `rejected_at` for the reader's export control. The
+server independently enforces active viewer/author classroom membership and approval checks on every download (`export-pdf.md`, ADR-072).
 
 ### 3.4 Four buckets, and a fail-safe fifth branch
 
@@ -278,6 +281,12 @@ question by making it moot.**
 **Controls.** Giant tap zones, left and right 30% of the viewport (`USER_FLOW.md` §4.7), plus arrow
 keys and a `k / N` page indicator (CC-6). Zones at the ends of the book are not rendered — a
 one-page book has neither. Images use `object-contain` so a portrait illustration is never cropped.
+
+The reader header groups Bookshelf and the PDF action on its top row. Below 1024px the
+title has its own full-width row; desktop places it between those actions. Pages / Scroll stays
+centered above the book. Export guidance and feedback follow `export-pdf.md` §3. Page dots retain
+their compact visual marks inside 44×44px buttons, wrap for longer books and expose the current
+page through `aria-current="page"`.
 
 **Page position is component state.** Not a URL segment and not a query param — `ROUTE_MAP.md` §7
 reserves query params for filters and pagination, and there is no bookshelf to return to until

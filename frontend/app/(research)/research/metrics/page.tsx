@@ -99,7 +99,7 @@ export default async function RunsPage({
   const shown = filterJobs(jobs, filter);
   const styleIds = byStyle.flatMap((row) => (row.style ? [row.style] : []));
   const hasNoStyle = byStyle.some((row) => row.style === null);
-  const showTrace = langfuseLinksOn();
+  const showTrace = langfuseLinksOn() && viewer?.role === "researcher";
   const concluded = stats.complete + stats.failed;
 
   return (
@@ -239,10 +239,10 @@ export default async function RunsPage({
                         <td className="whitespace-nowrap px-6 py-4 text-xs text-foreground/60">{formattedDate}</td>
                         {showTrace && (
                           <td className="whitespace-nowrap px-6 py-4 text-right">
-                            <LangfuseButton
+                            {canOpenRun(viewer, job) && <LangfuseButton
                               url={job.langfuse_trace_url}
                               label={`Open Langfuse trace for ${job.title ?? `run ${shortId}`}`}
-                            />
+                            />}
                           </td>
                         )}
                       </tr>
@@ -276,7 +276,7 @@ export default async function RunsPage({
                     </dl>
                     <div className="flex items-center justify-between">
                       <span className="rounded-md bg-muted/40 px-2 py-1 text-xs font-medium">{job.style_preset_id ?? "No style"}</span>
-                      {showTrace && (
+                      {showTrace && canOpenRun(viewer, job) && (
                         <LangfuseButton url={job.langfuse_trace_url} label={`Open Langfuse trace for ${job.title ?? `run ${shortId}`}`} />
                       )}
                     </div>

@@ -1,6 +1,6 @@
 # ADR-058 — Narration and PDF export are cut from the evaluated scope
 
-**Status:** Accepted (2026-09-04) · **supersedes ADR-020** ·
+**Status:** Accepted (2026-09-04) · **PDF cut superseded by [ADR-071](./ADR-071-restore-on-demand-pdf-downloads-for-approved-books.md) (2026-10-21); narration remains cut** · **supersedes ADR-020** ·
 **retires the export half of ADR-013** (its caption decision is untouched) · **narrows CC-6**
 (`MASTER_SPEC.md:264`) · **invokes `ROADMAP.md:372` de-scope rung 3** · **narrows the Tool A
 "Picture book production" row** (`functional-verification-matrix.md:65`) · **does not amend
