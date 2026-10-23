@@ -277,7 +277,7 @@ affordance, not an authority. A submitted `display_nickname` that normalizes to 
 never from the body (`auth-identity-and-classroom-schema.md` §6.3).
 
 **Code minting** is unchanged from `auth-identity-and-classroom-schema.md` §6.2: six characters from
-the 31-symbol alphabet, retried on unique violation. The collision is invisible to the teacher.
+the 32-symbol alphabet `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, retried on unique violation. The collision is invisible to the teacher.
 
 ### 5.1 Bulk create is per-row, never per-batch
 

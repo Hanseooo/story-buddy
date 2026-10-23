@@ -6,8 +6,8 @@ import Link from "next/link";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { ArrowLeft, Backpack } from "@phosphor-icons/react";
 
-// S1-3 alphabet: a-z0-9 minus ambiguous chars 0, O, 1, I, l
-const EXCLUDED = new Set(["0", "o", "1", "i", "l"]);
+// Match backend/app/classrooms.py: letters except I/O, plus digits 2–9.
+const CODE_CHAR = /^[a-hj-np-z2-9]$/;
 const BOX_COUNT = 6;
 
 export default function JoinPage() {
@@ -18,20 +18,23 @@ export default function JoinPage() {
   const refs = useRef<Array<HTMLInputElement | null>>(Array(BOX_COUNT).fill(null));
 
   const handleKeyDown = (idx: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
     const key = e.key.toLowerCase();
     if (e.key === "Backspace" && !boxes[idx] && idx > 0) {
       refs.current[idx - 1]?.focus();
       return;
     }
     if (e.key === "ArrowLeft" && idx > 0) {
+      e.preventDefault();
       refs.current[idx - 1]?.focus();
       return;
     }
     if (e.key === "ArrowRight" && idx < BOX_COUNT - 1) {
+      e.preventDefault();
       refs.current[idx + 1]?.focus();
       return;
     }
-    if (key.length === 1 && EXCLUDED.has(key)) {
+    if (key.length === 1 && !CODE_CHAR.test(key)) {
       e.preventDefault();
       setHint(true);
     } else if (key.length === 1) {
@@ -52,7 +55,7 @@ export default function JoinPage() {
     let hasExcluded = false;
 
     for (const char of raw) {
-      if (EXCLUDED.has(char)) {
+      if (!CODE_CHAR.test(char)) {
         hasExcluded = true;
       } else {
         cleanChars.push(char);
@@ -90,12 +93,13 @@ export default function JoinPage() {
     const text = e.clipboardData
       .getData("text")
       .toLowerCase()
-      .replace(/[01oil\s]/g, "");
-    const chars = text.split("").slice(0, BOX_COUNT);
+      .replace(/\s/g, "");
+    const validChars = [...text].filter((char) => CODE_CHAR.test(char));
+    const chars = validChars.slice(0, BOX_COUNT);
     const next = Array(BOX_COUNT).fill("") as string[];
     chars.forEach((c, i) => { next[i] = c; });
     setBoxes(next);
-    setHint(false);
+    setHint(validChars.length !== text.length);
     refs.current[Math.min(chars.length, BOX_COUNT - 1)]?.focus();
   };
 
@@ -140,7 +144,7 @@ export default function JoinPage() {
             Class code
           </h1>
           <p className="text-foreground/75 text-base">
-            Ask your teacher for the six-letter code to join your classroom.
+            Ask your teacher for the six-character code to join your classroom.
           </p>
         </div>
 
@@ -165,6 +169,7 @@ export default function JoinPage() {
                 value={val}
                 autoFocus={idx === 0}
                 aria-label={`Code character ${idx + 1}`}
+                onFocus={(e) => e.currentTarget.select()}
                 whileFocus={{ scale: 1.04, boxShadow: "0 10px 28px rgba(49,85,217,0.12)" }}
                 className="w-12 h-14 sm:w-14 sm:h-16 text-center text-2xl sm:text-3xl font-extrabold text-primary border-2 border-primary/20 rounded-[16px] bg-background focus:border-primary focus:outline-none transition-all uppercase caret-primary leading-none p-0 flex items-center justify-center"
                 onKeyDown={(e) => handleKeyDown(idx, e)}

@@ -39,6 +39,11 @@ describe("Join code page — §9.6–10", () => {
     expect(screen.getByRole("heading", { name: /what's your nickname/i })).toBeDefined();
   });
 
+  it("accepts a generated class code containing L", async () => {
+    await renderJoinCode("ABCL23");
+    expect(screen.getByRole("heading", { name: /what's your nickname/i })).toBeDefined();
+  });
+
   it("§9.8 — advances to password step when nickname submitted", async () => {
     await renderJoinCode();
     fireEvent.change(screen.getByLabelText(/nickname/i), { target: { value: "Juan" } });

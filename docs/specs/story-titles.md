@@ -125,17 +125,21 @@ legacy untitled book reads `Untitled`. Do not re-add `input_text` to that query.
 | Child bookshelf | Title above secondary status, across queued, paused, failed, and complete books |
 | Shared classroom gallery | Title plus existing author identity and cover |
 | Teacher book review | Title in pending, approved, rejected, and failed lists and preview |
-| Child processing/reveal | Book title as context without competing with the current action |
+| Child processing | Full book title as the main heading, with smaller “Making your book…” status below |
+| Child reveal | Book title as context without competing with the current action |
 | Reader, including shared reader | Full title as the book heading, existing captions unchanged |
 | Failure/revision | Checked title identifies the failed book and survives recovery |
 
 Cards allow two lines and visually truncate overflow; accessible link names retain
-the full display label. Reader headings wrap long unbroken text without horizontal
+the full display label. Processing and reader headings wrap long unbroken text without horizontal
 overflow. Below 768px, the reader heading occupies its own full-width row below the
 Bookshelf link and Pages/Scroll controls. The controls wrap if needed and retain
 44px touch targets. At 768px and above, the heading shares the controls' row when
 space permits. Duplicate titles stay distinguishable by existing author/status/cover context.
 Do not render the title into generated artwork or create an extra story page.
+The processing title uses responsive heading sizes and natural height, with positive spacing
+between title and status. Neither line is clamped or placed in a fixed-height heading box.
+Short viewports scroll normally so the title, progress, and bookshelf exit remain reachable.
 Missing covers retain a title-bearing placeholder. Loading skeletons reserve title
 space; failed reads must not masquerade as an empty library.
 

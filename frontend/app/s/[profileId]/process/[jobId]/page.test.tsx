@@ -129,13 +129,13 @@ describe("ProcessingPage — bucket routing", () => {
     expect(screen.getByText(/making your book/i)).toBeDefined();
   });
 
-  it("in-flight shows the stored title as context", async () => {
+  it("in-flight identifies the book with its stored title as the main heading", async () => {
     mockUseJob.mockReturnValue(jobState({
       bucket: "in-flight",
       row: { ...RUNNING_ROW, title: "My Dragon Book" },
     }));
     await renderPage(makeParams("j1"));
-    expect(screen.getByText("My Dragon Book")).toBeDefined();
+    expect(screen.getByRole("heading", { level: 1, name: "My Dragon Book" })).toBeDefined();
   });
 
   it("in-flight: analyze stage highlights step 1 with Reading your story", async () => {

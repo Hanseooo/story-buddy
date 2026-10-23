@@ -8,8 +8,8 @@ import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, Eye, EyeSlash, UserCircle, Key } from "@phosphor-icons/react";
 
-// S1-3 alphabet: a-z0-9 minus {0,o,1,i,l}
-const CODE_REGEX = /^[a-hj-km-np-z2-9]{6}$/;
+// Match backend/app/classrooms.py: letters except I/O, plus digits 2–9.
+const CODE_REGEX = /^[a-hj-np-z2-9]{6}$/i;
 
 export const CRED_ERROR = "Something didn't work. Check your code and nickname.";
 export const NET_ERROR = "We can't reach StoryBuddy right now. Try again in a moment.";
@@ -35,7 +35,7 @@ export default function JoinCodePage({
       if (!CODE_REGEX.test(c)) {
         setMalformed(c);
       } else {
-        setCode(c);
+        setCode(c.toLowerCase());
       }
     });
   }, [params]);
