@@ -186,8 +186,8 @@ does not have to re-read four specs to find them.
 - **S1 §3.2 — The role is a column on `profiles`, never a JWT claim.** `app_metadata` is
   used at creation time as transport into the `handle_new_user` trigger, and is never read
   by a policy.
-- **S1 §3.3 — The classroom code is immutable.** Six characters from a 31-symbol alphabet
-  (lowercase `a–z` + digits, minus ambiguous glyphs).
+- **S1 §3.3 — The classroom code is immutable.** Six characters from the 32-symbol alphabet
+  `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, accepted case-insensitively, including `L`.
 
 **From the kid-flow-ui docket** (`docs/specs/kid-flow-ui-docket.md`, DONE):
 

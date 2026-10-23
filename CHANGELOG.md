@@ -14,6 +14,28 @@ instead of repeating it.
 
 ---
 
+## PR #129 · 2026-10-23 · Student login and classroom UI
+
+### Code
+
+- Accept `L` in typed and pasted classroom codes and direct class links, matching the existing
+  generator. Keep `I`, `O`, `0`, and `1` excluded, reject punctuation, preserve keyboard shortcuts,
+  and select filled code boxes for correction.
+- Make the book title the processing screen's main heading with smaller “Making your book…”
+  text below. Let long titles wrap with responsive sizing and spacing.
+- Show the teacher's classroom name beneath the student greeting. Wrap long names and omit
+  unavailable class names without blocking the student shell.
+
+### Docs
+
+- Align the alphabet descriptions with the generator and update student shell and processing specs.
+
+### Checks
+
+- `pnpm lint`, `pnpm build`, and `pnpm test` passed: 712 tests across 73 files.
+  The login regressions failed before the fix. Browser visual checks, live account login,
+  and backend checks were not run for this frontend change.
+
 ## Working tree update · 2026-10-21 · Reader UX and PDF downloads
 
 - Group Bookshelf and a quiet outlined PDF action in the reader header. Mobile titles have a

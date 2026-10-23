@@ -210,6 +210,10 @@ minimum targets, one or two accents per screen.
 
 ### 4.1 `in-flight` — the wait state (`/process/[jobId]`)
 
+The full book title leads as the main heading, followed by smaller “Making your book…”
+status text. Follow `story-titles.md` §5 for fallback titles and responsive wrapping.
+Use natural heading height and positive spacing so long titles never overlap the status.
+
 A four-step vertical stepper, driven by `current_stage`. Steps are the child's phases, not the
 graph's nodes:
 
@@ -224,8 +228,8 @@ Steps above the current one are done (Mint Lime check), the current one animates
 grey. Step 3's label carries the counter; before `segment` runs, `N` is unknown and step 3 reads
 *Drawing your pictures*.
 
-**An unrecognised `current_stage` highlights no step** and shows the heading alone —
-*"Making your book!"*. It never crashes and never guesses. Old rows written before this ships hold
+**An unrecognised `current_stage` highlights no step** and keeps the book heading and
+*"Making your book…"* status without a stage-specific label. It never crashes and never guesses. Old rows written before this ships hold
 `reveal` or `compose`, both of which map.
 
 **Step 2 completing is the reveal appearing.** The pause is the character step, so the stepper and

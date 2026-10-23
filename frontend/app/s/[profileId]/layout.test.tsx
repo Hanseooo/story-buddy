@@ -25,12 +25,33 @@ vi.mock("next/headers", () => ({
 describe("Student Shell Layout", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSingle.mockReset();
+    mockSingle.mockResolvedValue({ data: null });
   });
 
   it("renders the student shell with greeting when profile is a valid student", async () => {
     mockSingle.mockResolvedValueOnce({
       data: { display_nickname: "Juan", role: "student", classroom_id: "cls_1" },
     });
+    mockSingle.mockResolvedValueOnce({ data: { name: "5-Rizal" } });
+
+    const jsx = await StudentLayout({
+      children: <div>Child Content</div>,
+      params: Promise.resolve({ profileId: "123" }),
+    });
+
+    render(jsx);
+
+    expect(screen.getByText(/hi, juan!/i)).toBeDefined();
+    expect(screen.getByText("Class: 5-Rizal")).toBeDefined();
+    expect(screen.getByText("Child Content")).toBeDefined();
+  });
+
+  it("keeps the student shell usable when the classroom name cannot load", async () => {
+    mockSingle.mockResolvedValueOnce({
+      data: { display_nickname: "Juan", role: "student", classroom_id: "cls_1" },
+    });
+    mockSingle.mockResolvedValueOnce({ data: null, error: { message: "Network error" } });
 
     const jsx = await StudentLayout({
       children: <div>Child Content</div>,
@@ -41,6 +62,7 @@ describe("Student Shell Layout", () => {
 
     expect(screen.getByText(/hi, juan!/i)).toBeDefined();
     expect(screen.getByText("Child Content")).toBeDefined();
+    expect(screen.queryByText(/^Class:/)).toBeNull();
   });
 
   it("renders setup error when profile is missing", async () => {

@@ -176,10 +176,13 @@ Each step advance pushes a history entry, so browser back and the Android back g
 | 2 | Nickname | Single field, live preview of the normalized form |
 | 3 | Password | Show/hide toggle, **hidden by default** |
 
-**The code field ignores excluded characters.** S1-3's 31-symbol alphabet omits `0 O 1 I l`
-precisely because they are ambiguous, so there is no valid character to map them to. The field
-ignores the keystroke and, only after an ignored one, reveals: *"That letter isn't used in class
-codes."* Specific, kind, and it leaks nothing.
+**The code field accepts the generator's 32-symbol alphabet.** S1-3 uses
+`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`. `L` is valid; `I`, `O`, `0`, and `1` are excluded.
+Typing and pasting both reject characters outside that alphabet and reveal:
+*"That letter isn't used in class codes."* Paste ignores whitespace and fills up to six boxes.
+Input is case-insensitive and normalized to lowercase, including direct `/join/[code]` links.
+Filled boxes select their character on focus for easy correction. Keyboard shortcuts remain native.
+The prompt calls it a six-character code because digits are valid too.
 
 **The nickname preview is reassurance, not validation.** It renders *"we'll look for:
 `juan-dela-cruz`"*. `normalizeNickname` already forgives case, spacing, accents and stray hyphens,
@@ -256,11 +259,17 @@ as a docket amendment, not decided silently.
 
 ### 7.1 `StudentShell`
 
-One query on mount: `profiles` for `{display_nickname, role, classroom_id}`. It pays for itself
-three times.
+The server layout reads `profiles` for `{display_nickname, role, classroom_id, avatar_id,
+is_adjudicator}`. For a valid student it also reads only `classrooms.name`, scoped to that
+profile's `classroom_id`, using the existing student access policy. It passes the name to
+`StudentHeader`; client pages do not refetch it.
 
 - **Greeting.** *"Hi, Juan!"* — on a shared classroom device this is the fastest confirmation that
   you are you.
+- **Class identity.** Beneath the greeting, show `Class: <classroom name>` using the teacher's
+  exact name, without the entry code. The greeting and class name wrap, including unbroken text,
+  without shrinking the avatar or colliding with navigation. Names remain readable on mobile.
+  If the class name is unavailable or the read fails, omit the line and keep the shell usable.
 - **Log out, first-class.** In the shell header and on settings. This is the shared-device product:
   without a visible "I'm done", the next child inherits the session, which is exactly the stale
   bookmark §4's redirect exists to clean up after. Better not to create it.
@@ -387,7 +396,8 @@ Six of the original states need no new component: they reuse what kid-flow S4 al
 7. A network rejection produces the network message, not the credentials message.
 8. Failed login returns to step 1 of the current route with all fields preserved; `/join` returns to
    the code step, `/join/[code]` to the nickname step.
-9. The code field ignores `0 O 1 I l` and surfaces the hint after an ignored keystroke.
+9. The code field accepts every generated character in either case, including `L`, rejects
+   `0 O 1 I` and non-alphabet characters for typing and paste, and surfaces the hint after rejection.
 10. A malformed `/join/[code]` segment drops to step 1 with the code shown.
 
 **Bookshelf:**

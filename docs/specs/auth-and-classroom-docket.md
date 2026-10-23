@@ -65,7 +65,7 @@ Confirmed 2026-08-05.
 
 - **S1-1 — Students are real `auth.users` rows.** Login address is `{nickname}@{code}.students.storybuddy.invalid`. Supabase owns all password material. `auth.uid()` exists for students; S3 writes student policies in the ordinary way.
 - **S1-2 — The role is `profiles.role`** (values: `teacher`, `student`, `researcher`), read through `public.auth_role()` security definer. A revoked role takes effect on the next query, not the next token refresh.
-- **S1-3 — The classroom code is a 6-character immutable string** from a 31-symbol alphabet (a–z + digits, minus 0, O, 1, I, l). Regeneration is permanently off — it would invalidate every student's login address with no atomic remedy.
+- **S1-3 — The classroom code is a 6-character immutable string** from the 32-symbol alphabet `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, accepted case-insensitively. `L` is valid; `I`, `O`, `0`, and `1` are excluded. Regeneration is permanently off — it would invalidate every student's login address with no atomic remedy.
 - **S1-4 — `jobs.profile_id` and `jobs.classroom_id` are both `NOT NULL` with `ON DELETE CASCADE`.** Deleting a student deletes their books; deleting a classroom deletes everything in it.
 - **S1-5 — A student belongs to one classroom for life.** No transfer mechanism exists or may be added; transfer would change the login address (the same N-rewrite problem as the code).
 - **S1-6 — The approval bit is `jobs.approved_at timestamptz`, nullable.** `null` = not peer-visible. S3 scopes the gallery with `approved_at is not null`.

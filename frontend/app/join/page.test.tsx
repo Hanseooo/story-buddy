@@ -17,16 +17,29 @@ describe("Join page — step 1 (§9.9, §9.8 code step)", () => {
     expect(inputs).toHaveLength(6);
   });
 
-  it("§9.9 — ignored chars (0, O, 1, I, l) do not enter and show hint", () => {
+  it("accepts every generated code character in either case, including L", () => {
+    render(<JoinPage />);
+    const input = screen.getAllByRole("textbox")[0];
+    for (const char of "LABCDEFGHJKMNPQRSTUVWXYZ23456789labcdefghjkmnpqrstuvwxyz") {
+      fireEvent.change(input, { target: { value: char } });
+      expect(input).toHaveValue(char.toLowerCase());
+    }
+  });
+
+  it("§9.9 — invalid characters do not enter and show hint for typing and paste", () => {
     render(<JoinPage />);
     const inputs = screen.getAllByRole("textbox");
-    const EXCLUDED = ["0", "O", "1", "I", "l"];
+    const EXCLUDED = ["0", "O", "o", "1", "I", "i", "!", "/", " ", "é"];
 
     for (const char of EXCLUDED) {
       fireEvent.keyDown(inputs[0], { key: char });
+      fireEvent.change(inputs[0], { target: { value: char } });
+      expect(inputs[0]).toHaveValue("");
       expect(screen.getByRole("alert")).toHaveTextContent(
         "That letter isn't used in class codes."
       );
+      fireEvent.paste(inputs[0], { clipboardData: { getData: () => char } });
+      expect(inputs[0]).toHaveValue("");
     }
   });
 
@@ -48,12 +61,15 @@ describe("Join page — step 1 (§9.9, §9.8 code step)", () => {
   it("handles paste: strips excluded chars and fills boxes", () => {
     render(<JoinPage />);
     const group = screen.getByRole("group", { name: /class code/i });
-    const pasteData = { getData: () => "ab0cde" }; // '0' should be stripped → "abcde" (5 chars)
+    const pasteData = { getData: () => "aL0!cd2" }; // Invalid characters are stripped, L is preserved.
     fireEvent.paste(group, { clipboardData: pasteData });
     const inputs = screen.getAllByRole("textbox");
     expect(inputs[0]).toHaveValue("a");
-    expect(inputs[1]).toHaveValue("b");
+    expect(inputs[1]).toHaveValue("l");
     expect(inputs[2]).toHaveValue("c");
+    expect(inputs[3]).toHaveValue("d");
+    expect(inputs[4]).toHaveValue("2");
+    expect(inputs[5]).toHaveValue("");
   });
 
   it("§9.8 — submit button disabled until all 6 boxes filled", () => {

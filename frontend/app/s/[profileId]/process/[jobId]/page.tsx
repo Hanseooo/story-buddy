@@ -697,7 +697,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   };
 
   return (
-    <div className="w-full flex-1 min-h-[calc(100dvh-5rem)] flex flex-col justify-center items-center p-6 max-w-4xl mx-auto relative overflow-hidden">
+    <div className="w-full flex-1 min-h-[calc(100dvh-5rem)] flex flex-col justify-center items-center p-5 sm:p-6 max-w-4xl mx-auto relative">
       
       {/* Top Navigation Exit */}
       <div className="w-full flex justify-start mb-4 z-20">
@@ -710,21 +710,21 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
       </div>
 
       {/* Spotlight Background effect */}
-      <div className="absolute inset-0 pointer-events-none flex justify-center items-center opacity-30 z-0">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none flex justify-center items-center opacity-30 z-0" aria-hidden="true">
          <div className="w-[600px] h-[600px] bg-[var(--color-secondary)]/20 rounded-full blur-[100px]" />
       </div>
 
-      {row && (
-        <p className="z-10 -mb-8 text-sm font-bold text-foreground/50 tracking-wide">
-          {displayTitle(row.title, row.input_text)}
+      <div className="z-10 w-full min-w-0 text-center mb-8 sm:mb-12">
+        <h1 className="font-display font-extrabold text-4xl md:text-5xl leading-tight text-foreground tracking-tight [overflow-wrap:anywhere]">
+          {displayTitle(row?.title, row?.input_text)}
+        </h1>
+        <p className="mt-3 font-kid text-lg sm:text-xl font-bold text-foreground/75">
+          Making your book…
         </p>
-      )}
-      <h1 className="z-10 mb-16 h-20 flex items-center justify-center font-display text-5xl md:text-6xl text-foreground tracking-tighter">
-        <KineticText text="Making your book!" />
-      </h1>
+      </div>
 
       {/* The Journey Tracker */}
-      <div className="flex items-center justify-center gap-4 md:gap-8 w-full max-w-2xl z-10 mb-16 relative">
+      <div className="flex items-center justify-center gap-4 md:gap-8 w-full max-w-2xl z-10 mb-8 sm:mb-16 relative">
          {/* Connecting line behind */}
          <div className="absolute top-1/2 left-8 right-8 h-1 bg-[var(--color-muted)] -translate-y-1/2 z-0 hidden sm:block" />
          <motion.div 
