@@ -14,7 +14,7 @@ instead of repeating it.
 
 ---
 
-## Student login and classroom UI · 2026-10-23
+## PR #129 · 2026-10-23 · Student login and classroom UI
 
 ### Code
 
