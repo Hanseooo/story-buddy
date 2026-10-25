@@ -138,6 +138,10 @@ Two projects, no shared root tooling. Run each from its directory.
   because another approach looks cleaner. To change one, write
   `docs/product/adr/ADR-0NN-<kebab-title>.md` plus its row in `ADRs.md`, flag it, and wait for
   acceptance. A task that seems to require violating an ADR → stop and surface it.
+- **Post technical defense conflict gates (temporary).** A ticket under `.scratch/ptd-*/` with a
+  `Conflict gate:` line touches an accepted ADR or a child-safety rule. Before grilling,
+  brainstorming, designing or building it, name the conflict to the owner and wait for their verdict.
+  Remove this rule when `.scratch/post-technical-defense/map.md` closes the phase.
 - **Architectural questions get their own session.** One that comes up while building is logged to
   `docs/product/DECISION_BACKLOG.md`, not settled in code.
 - **Open-weight models only** (ADR-015). Never reach for Gemini/GPT/Claude to make a node work.

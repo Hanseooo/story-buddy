@@ -7,7 +7,8 @@ identify/resolve risks → develop & verify → plan next iteration); full mappi
 **Team:** one developer (build), three researchers (corpus, annotation, study, ethics). The build track
 is solo; the research track is not. They run in parallel and meet at Phase 2.5 and Phase 3.
 **Companion docs:** PRD v2, ADRs, RESEARCH_PROTOCOL.
-**Current follow-up:** [C3 findings and issues #94–#100](#c3-findings-follow-up).
+**Current follow-up:** [Post technical defense](#post-technical-defense) (opened 2026-10-25);
+[C3 findings and issues #94–#100](#c3-findings-follow-up) stays open beside it.
 
 ---
 
@@ -302,6 +303,28 @@ reference and page audit or change the registered Objective-4 model plan.
 `DECISION_BACKLOG.md` remains the queue for undecided architectural questions, not for these
 investigations. If #97, #96, or a model trial reaches such a decision, log that question there
 for its own session.
+
+---
+
+## Post technical defense
+
+The defense panel's suggestions, ranked for November 2026. The panel's list, the decisions taken on
+2026-10-25 and the workflow are in [`.scratch/post-technical-defense/map.md`](../../.scratch/post-technical-defense/map.md);
+this table only orders the work. Every epic starts with a $0 audit and a grill that ends in a spec.
+Epics marked *gated* touch an accepted ADR or a child-safety rule: the owner rules before design, and
+the result ships behind an off-by-default setting until an ethics re-review. The freeze point is the
+git tag `technical-defense-2026-10`.
+
+| Rank | Epic | Gate |
+|---|---|---|
+| 1 | [Account onboarding and password change](../../.scratch/ptd-account-onboarding/map.md) | — |
+| 2 | [Moderation calibration](../../.scratch/ptd-moderation-calibration/map.md) | gated: ADR-011, child-safety rules |
+| 3 | [Review feedback, comments, highlights](../../.scratch/ptd-review-feedback/map.md) | gated: teacher-review spec §12–13 |
+| 4 | [Child creative control](../../.scratch/ptd-child-creative-control/map.md) | gated: ADR-029 §2, ADR-069 |
+| 5 | [Pipeline speed](../../.scratch/ptd-pipeline-speed/map.md) | — |
+| 6 | [Roster card/table views](../../.scratch/ptd-roster-views/map.md) | — |
+| 7 | [AI-assisted review](../../.scratch/ptd-ai-assisted-review/map.md) | gated: ADR-017 |
+| 8 | [Story construction quality](../../.scratch/ptd-story-quality/map.md) | gated only if the child's words would be rewritten: ADR-013 |
 
 ---
 
