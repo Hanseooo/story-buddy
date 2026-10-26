@@ -1,5 +1,5 @@
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
+import { createSupabaseServerClient } from "@/utils/supabase/server";
+import { getStudentProfile } from "@/utils/supabase/student";
 import Link from "next/link";
 import { StudentTabBar } from "@/components/StudentTabBar";
 import { StudentHeader } from "@/components/StudentHeader";
@@ -12,24 +12,9 @@ export default async function StudentLayout({
   params: Promise<{ profileId: string }>;
 }) {
   const { profileId } = await params;
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co",
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key",
-    {
-      cookies: {
-        get: (name) => cookieStore.get(name)?.value,
-      },
-    }
-  );
+  const data = await getStudentProfile(profileId);
 
-  const { data } = await supabase
-    .from("profiles")
-    .select("display_nickname, role, classroom_id, avatar_id, is_adjudicator")
-    .eq("id", profileId)
-    .single();
-
-  if (!data) {
+  if (!data || data.removed_at || (data.role === "student" && !data.classroom_id)) {
     return (
       <div className="font-kid min-h-screen bg-background text-foreground flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-surface border border-primary/20 rounded-2xl p-6 sm:p-8 text-center shadow-[0_10px_28px_rgba(49,85,217,0.12)]">
@@ -84,6 +69,13 @@ export default async function StudentLayout({
     );
   }
 
+  const reset = data.password_reset_version, completed = data.password_completed_version;
+  if (!Number.isSafeInteger(reset) || !Number.isSafeInteger(completed) || completed < 0 || reset < completed) {
+    throw new Error("Account state unavailable");
+  }
+  if (completed < reset) return <main className="font-kid min-h-screen bg-background text-foreground">{children}</main>;
+
+  const supabase = await createSupabaseServerClient();
   const { data: classroom } = await supabase
     .from("classrooms")
     .select("name")

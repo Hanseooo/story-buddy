@@ -25,5 +25,6 @@ export async function createSupabaseMiddlewareClient(request: NextRequest) {
     }
   );
 
-  return { supabase, response };
+  // Auth refresh can replace the response after this helper returns.
+  return { supabase, get response() { return response; } };
 }
