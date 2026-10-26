@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { AVATAR_IDS } from "@/lib/avatars";
 import { Avatar } from "@/components/Avatar";
 import { motion } from "framer-motion";
+import { changePassword, passwordLengthError } from "@/lib/password";
 
 const CATEGORIES = [
   { id: "all", label: "All" },
@@ -26,11 +27,19 @@ export default function SettingsPage() {
   const [activeCategory, setActiveCategory] = useState<CategoryId>("all");
 
   // Password state
+  const [currentPassword, setCurrentPassword] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [passwordSaved, setPasswordSaved] = useState(false);
+  const submittingPassword = useRef(false);
+  const passwordFeedback = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (message && !passwordSaved) passwordFeedback.current?.focus();
+  }, [message, passwordSaved]);
 
   // Fetch current avatar on mount
   useEffect(() => {
@@ -76,18 +85,50 @@ export default function SettingsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submittingPassword.current) return;
+    setPasswordSaved(false);
+    setMessage("");
+    if (!currentPassword) {
+      setMessage("Enter your current password.");
+      return;
+    }
     if (password !== confirm) {
       setMessage("Passwords don't match.");
       return;
     }
+    const lengthError = passwordLengthError(password);
+    if (lengthError) {
+      setMessage(lengthError);
+      return;
+    }
+    submittingPassword.current = true;
     setLoading(true);
-    const { error } = await supabase.auth.updateUser({ password });
-    setMessage(
-      error
-        ? error.message
-        : "Password saved. If you forget it, ask your teacher."
-    );
-    setLoading(false);
+    try {
+      const { error } = await changePassword(supabase, currentPassword, password, confirm);
+      if (error) {
+        if (error.code === "current_password_mismatch" || error.code === "current_password_required") {
+          setMessage("Your current password is incorrect. Check it and try again.");
+        } else if (error.code === "weak_password" || error.code === "same_password") {
+          setMessage("Choose a different password with at least 8 characters. Spaces are okay.");
+        } else if (error.status === 401 || error.code === "session_not_found" || error.code === "refresh_token_not_found") {
+          setMessage("Your session has ended. Log out and sign in again.");
+        } else {
+          setMessage("We couldn't save your password. Check your connection and try again.");
+        }
+        return;
+      }
+      setCurrentPassword("");
+      setPassword("");
+      setConfirm("");
+      setShowPassword(false);
+      setPasswordSaved(true);
+      setMessage("Password saved. If you forget it, ask your teacher.");
+    } catch {
+      setMessage("We couldn't confirm your password was saved. Check your connection. Try signing in with your new password before changing it again.");
+    } finally {
+      submittingPassword.current = false;
+      setLoading(false);
+    }
   };
 
   const visibleAvatars = AVATAR_IDS.filter((id) =>
@@ -222,8 +263,10 @@ export default function SettingsPage() {
           {message && (
             <div
               role="status"
+              ref={passwordFeedback}
+              tabIndex={-1}
               className={`mb-6 p-4 rounded-xl border text-sm font-bold ${
-                message.includes("match") || message.includes("error")
+                !passwordSaved
                   ? "bg-destructive/10 border-destructive/20 text-destructive"
                   : "bg-success/10 border-success/20 text-success"
               }`}
@@ -232,7 +275,25 @@ export default function SettingsPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-4 items-end">
+          <p className="text-sm font-medium text-foreground/70 mb-4">
+            Use at least 8 characters. Spaces are okay. If you forget it, ask your teacher.
+          </p>
+          <form onSubmit={handleSubmit} aria-busy={loading} className="flex flex-col gap-4">
+            <div className="w-full">
+              <label htmlFor="current-password" className="block text-sm font-bold text-foreground/80 mb-2">
+                Current password
+              </label>
+              <input
+                id="current-password"
+                type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                required
+                disabled={loading}
+                className="w-full min-h-[48px] px-4 py-3 rounded-xl border-2 border-primary/10 bg-background text-foreground focus:outline-none focus:ring-[3px] focus:ring-secondary focus:border-transparent transition-all"
+              />
+            </div>
             <div className="flex-1 w-full">
               <label htmlFor="new-password" className="block text-sm font-bold text-foreground/80 mb-2">
                 New password
@@ -244,12 +305,16 @@ export default function SettingsPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  autoComplete="new-password"
+                  disabled={loading}
                   className="w-full min-h-[48px] px-4 py-3 rounded-xl border-2 border-primary/10 bg-background text-foreground focus:outline-none focus:ring-[3px] focus:ring-secondary focus:border-transparent transition-all pr-16"
                 />
                 <button
                   type="button"
+                  aria-label={showPassword ? "Hide passwords" : "Show passwords"}
+                  aria-pressed={showPassword}
                   onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-sm font-bold text-primary px-3 py-1.5 rounded-lg hover:bg-primary/10 transition-colors"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 min-h-11 min-w-11 text-sm font-bold text-primary px-3 py-1.5 rounded-lg hover:bg-primary/10 transition-colors focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
                 >
                   {showPassword ? "Hide" : "Show"}
                 </button>
@@ -266,6 +331,8 @@ export default function SettingsPage() {
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
                 required
+                autoComplete="new-password"
+                disabled={loading}
                 className="w-full min-h-[48px] px-4 py-3 rounded-xl border-2 border-primary/10 bg-background text-foreground focus:outline-none focus:ring-[3px] focus:ring-secondary focus:border-transparent transition-all"
               />
             </div>

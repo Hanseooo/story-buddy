@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Book, ImageSquare, User } from "@phosphor-icons/react";
 import { Avatar } from "@/components/Avatar";
 import { motion } from "framer-motion";
@@ -12,6 +13,8 @@ type Props = {
 };
 
 export function StudentHeader({ profileId, avatarId, displayNickname, classroomName }: Props) {
+  const pathname = usePathname();
+  if (pathname === `/s/${profileId}/introduction` || pathname === `/s/${profileId}/change-password`) return null;
   return (
     <header className="bg-surface/95 backdrop-blur-md border-b border-primary/15 px-5 py-3 sm:px-8 z-40 sticky top-0">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">

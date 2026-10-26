@@ -24,7 +24,8 @@ def pdf_request(monkeypatch):
     query.select.return_value = query
     query.eq.return_value = query
     query.execute.side_effect = lambda: SimpleNamespace(data=[row])
-    viewer = {"id": "student-1", "role": "student", "removed_at": None, "classroom_id": "class-1"}
+    viewer = {"id": "student-1", "role": "student", "removed_at": None, "classroom_id": "class-1",
+              "password_reset_version": 0, "password_completed_version": 0}
     profiles = MagicMock()
     profiles.select.return_value = profiles
     profiles.eq.return_value = profiles

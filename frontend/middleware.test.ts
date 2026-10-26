@@ -1,8 +1,23 @@
 import { describe, it, expect } from "vitest";
-import { guardRequest } from "./middleware";
+import { guardRequest, guardOnboarding } from "./middleware";
 
 const UUID_A = "00000000-0000-0000-0000-000000000001";
 const UUID_B = "00000000-0000-0000-0000-000000000002";
+
+describe("current profile onboarding gate", () => {
+  it("blocks product paths but leaves the caller's password route reachable", () => {
+    const profile = { role: "student", password_reset_version: 2, password_completed_version: 1 };
+    for (const path of [`/s/${UUID_A}`, `/s/${UUID_A}/gallery`, "/classroom", "/settings", "/join"])
+      expect(guardOnboarding(path, UUID_A, profile)).toBe(`/s/${UUID_A}/change-password`);
+    expect(guardOnboarding(`/s/${UUID_A}/change-password`, UUID_A, profile)).toBeNull();
+  });
+  it("fails closed on unknown state and preserves the legacy exemption", () => {
+    expect(guardOnboarding(`/s/${UUID_A}`, UUID_A, null)).toBe(`/s/${UUID_A}/change-password`);
+    expect(guardOnboarding(`/s/${UUID_A}`, UUID_A,
+      { role: "student", password_reset_version: 0, password_completed_version: 0 })).toBeNull();
+    expect(guardOnboarding("/settings", UUID_A, { role: "teacher" })).toBeNull();
+  });
+});
 
 // §9 test 1
 describe("guardRequest — unauthenticated protected routes", () => {

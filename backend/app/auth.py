@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, Header, HTTPException, Path
+from fastapi import APIRouter, Depends, Header, HTTPException, Path, Request
 
 from app.db import get_supabase_client
 
 
-async def get_current_user(authorization: str | None = Header(None)):
+async def get_current_user(request: Request, authorization: str | None = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "missing token")
     jwt = authorization.removeprefix("Bearer ")
@@ -11,9 +11,26 @@ async def get_current_user(authorization: str | None = Header(None)):
         result = get_supabase_client().auth.get_user(jwt)
         if not result.user:
             raise HTTPException(401, "invalid token")
-        return result.user
-    except Exception as e:
-        raise HTTPException(401, f"invalid token: {str(e)}")
+    except Exception:
+        raise HTTPException(401, "invalid token") from None
+    if request.url.path not in ("/me/password", "/me/onboarding"):
+        rows = (get_supabase_client().table("profiles")
+                .select("role, classroom_id, removed_at, password_reset_version, password_completed_version")
+                .eq("id", result.user.id).execute().data)
+        if not rows:
+            raise HTTPException(403, "account_unavailable")
+        profile = rows[0]
+        if profile.get("role") not in ("student", "teacher", "researcher"):
+            raise HTTPException(403, "account_unavailable")
+        if profile.get("role") == "student":
+            reset, completed = profile.get("password_reset_version"), profile.get("password_completed_version")
+            if type(reset) is not int or type(completed) is not int or not 0 <= completed <= reset:
+                raise HTTPException(503, "onboarding_unavailable")
+            if profile.get("removed_at") or not profile.get("classroom_id"):
+                raise HTTPException(403, "account_unavailable")
+            if completed < reset:
+                raise HTTPException(403, "password_change_required")
+    return result.user
 
 
 def require_teacher(user=Depends(get_current_user)) -> dict:

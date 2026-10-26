@@ -92,6 +92,7 @@ def _create_one(supabase, classroom_id: str, code: str, student_in: _StudentIn) 
 
     password = mint_password()
     email = f"{nickname}@{code}.students.storybuddy.invalid"
+    created_user_id = None
     try:
         result = supabase.auth.admin.create_user(
             {
@@ -104,10 +105,12 @@ def _create_one(supabase, classroom_id: str, code: str, student_in: _StudentIn) 
                     "display_nickname": display,
                 },
                 "email_confirm": True,
+                "ban_duration": "876000h",
             }
         )
         if not result.user:
             return {"rejected": True, "display_nickname": display, "reason": "creation failed"}
+        created_user_id = result.user.id
         # GoTrue INSERTs auth.users before writing raw_app_meta_data, so the
         # handle_new_user trigger fires with empty metadata and defaults role to
         # 'teacher'. Upsert the correct profile row here; service_role bypasses RLS.
@@ -119,8 +122,12 @@ def _create_one(supabase, classroom_id: str, code: str, student_in: _StudentIn) 
                 "nickname": nickname,
                 "display_nickname": display,
                 "display_name": None,
+                "password_reset_version": 1,
+                "password_completed_version": 0,
             }
         ).execute()
+        # No session is possible while Auth's temporary teacher profile exists.
+        supabase.auth.admin.update_user_by_id(created_user_id, {"ban_duration": "none"})
         return {
             "rejected": False,
             "profile_id": result.user.id,
@@ -129,6 +136,11 @@ def _create_one(supabase, classroom_id: str, code: str, student_in: _StudentIn) 
             "password": password,
         }
     except Exception as exc:
+        if created_user_id:
+            try:
+                supabase.auth.admin.delete_user(created_user_id)
+            except Exception:
+                pass  # A profile-write failure leaves the account banned.
         msg = str(exc).lower()
         reason = "nickname already taken" if "duplicate" in msg or "unique" in msg else "creation failed"
         return {"rejected": True, "display_nickname": display, "reason": reason}
@@ -162,7 +174,7 @@ def add_students(
 def _get_student(supabase, profile_id: str, classroom_id: str) -> dict:
     rows = (
         supabase.table("profiles")
-        .select("id, nickname, display_nickname")
+        .select("id, nickname, display_nickname, removed_at")
         .eq("id", profile_id)
         .eq("classroom_id", classroom_id)
         .execute()
@@ -180,8 +192,16 @@ def reset_student(
 ):
     supabase = get_supabase_client()
     profile = _get_student(supabase, profile_id, classroom["id"])
+    if profile.get("removed_at"):
+        raise HTTPException(404, "student not found")
     password = mint_password()
-    supabase.auth.admin.update_user_by_id(profile_id, {"password": password})
+    operation = supabase.rpc("begin_password_operation", {"p_user_id": profile_id, "p_kind": "reset"}).execute().data
+    if not isinstance(operation, str) or not operation:
+        raise HTTPException(503, "password_unavailable")
+    supabase.auth.admin.update_user_by_id(profile_id, {
+        "password": password, "ban_duration": "none",
+        "app_metadata": {"storybuddy_password_operation": operation},
+    })
     return {
         "profile_id": profile_id,
         "display_nickname": profile["display_nickname"],
@@ -212,9 +232,12 @@ def restore_student(
     supabase = get_supabase_client()
     profile = _get_student(supabase, profile_id, classroom["id"])
     password = mint_password()
-    supabase.table("profiles").update({"removed_at": None}).eq("id", profile_id).execute()
+    operation = supabase.rpc("begin_password_operation", {"p_user_id": profile_id, "p_kind": "restore"}).execute().data
+    if not isinstance(operation, str) or not operation:
+        raise HTTPException(503, "password_unavailable")
     supabase.auth.admin.update_user_by_id(
-        profile_id, {"ban_duration": "none", "password": password}
+        profile_id, {"ban_duration": "none", "password": password,
+                     "app_metadata": {"storybuddy_password_operation": operation}}
     )
     return {
         "profile_id": profile_id,

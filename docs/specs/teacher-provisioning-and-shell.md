@@ -6,6 +6,11 @@
 **Derived from:** `docs/specs/teacher-dashboard-docket.md` S2 · **Rationale:** ADR-017, ADR-021,
 ADR-026, MASTER_SPEC §5 (CC-2, CC-4)
 
+> **Implementation amendment (2026-10-26):** Current onboarding amendment: provision students banned until their 1/0 profile exists. Reset/restore reserve versioned operations, and restoration clears removal inside the Auth password transaction.
+> [Account onboarding](account-onboarding.md) sections 1 and 7 define the current contract,
+> verification results and remaining real-boundary release gates. The original sections below
+> are the baseline where that amendment applies. No hosted deployment is claimed.
+
 > A provisioning session. It answers how a classroom and its student accounts come to exist on a
 > real device, and what shell every teacher screen lives in. It defines **no** book state, **no**
 > review screen, and **no** meaning for `approved_at` (S3). It does not re-decide S1's authorization

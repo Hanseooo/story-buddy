@@ -31,7 +31,7 @@ describe("Student Shell Layout", () => {
 
   it("renders the student shell with greeting when profile is a valid student", async () => {
     mockSingle.mockResolvedValueOnce({
-      data: { display_nickname: "Juan", role: "student", classroom_id: "cls_1" },
+      data: { display_nickname: "Juan", role: "student", classroom_id: "cls_1", password_reset_version: 0, password_completed_version: 0 },
     });
     mockSingle.mockResolvedValueOnce({ data: { name: "5-Rizal" } });
 
@@ -49,7 +49,7 @@ describe("Student Shell Layout", () => {
 
   it("keeps the student shell usable when the classroom name cannot load", async () => {
     mockSingle.mockResolvedValueOnce({
-      data: { display_nickname: "Juan", role: "student", classroom_id: "cls_1" },
+      data: { display_nickname: "Juan", role: "student", classroom_id: "cls_1", password_reset_version: 0, password_completed_version: 0 },
     });
     mockSingle.mockResolvedValueOnce({ data: null, error: { message: "Network error" } });
 

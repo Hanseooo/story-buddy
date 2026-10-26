@@ -4,6 +4,11 @@
 **Derived from:** `docs/specs/auth-and-classroom-docket.md` S4 · **Rationale:** ADR-006, ADR-017,
 ADR-021, MASTER_SPEC §6 (CC-4, CC-6, CC-8, CC-9)
 
+> **Implementation amendment (2026-10-26):** Current onboarding amendment: middleware reads own profile counters, and settings password changes use POST /me/password. Required/change and introduction routes are implemented.
+> [Account onboarding](account-onboarding.md) sections 1 and 7 define the current contract,
+> verification results and remaining real-boundary release gates. The original sections below
+> are the baseline where that amendment applies. No hosted deployment is claimed.
+
 > The last session of the docket. Every URL and every screen the identity layer adds or moves.
 > This spec re-opens **no** schema (S1), **no** session mechanism (S2), and **no** policy (S3).
 > The gallery (`classroom-sharing`), the teacher dashboard (`teacher-dashboard`) and the

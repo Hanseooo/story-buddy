@@ -1,6 +1,9 @@
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+MIN_PASSWORD_CHARACTERS = 8
+MAX_PASSWORD_BYTES = 72
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

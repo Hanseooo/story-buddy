@@ -15,7 +15,6 @@ const mockFrom = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/supabaseClient", () => ({
   supabase: {
     auth: {
-      updateUser: mockUpdateUser,
       getSession: mockGetSession,
     },
     from: mockFrom,
@@ -36,11 +35,18 @@ function setupDefaultFrom(avatar_id: string | null = null) {
 describe("Settings — password change", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetSession.mockResolvedValue({ data: { session: { access_token: "student-session" } } });
+    vi.stubGlobal("fetch", vi.fn(async (_url, options) => {
+      const result = await mockUpdateUser(JSON.parse(options.body));
+      return { ok: !result.error, status: result.error?.status ?? 400,
+        json: async () => result.error ? { detail: result.error.code } : {} };
+    }));
     setupDefaultFrom();
   });
 
   it("renders new-password and confirm-password fields", () => {
     render(<SettingsPage />);
+    expect(screen.getByLabelText(/current password/i)).toBeDefined();
     expect(screen.getByLabelText(/new password/i)).toBeDefined();
     expect(screen.getByLabelText(/confirm password/i)).toBeDefined();
     expect(screen.getByRole("button", { name: /save password/i })).toBeDefined();
@@ -49,6 +55,8 @@ describe("Settings — password change", () => {
   it("shows teacher reminder on success", async () => {
     mockUpdateUser.mockResolvedValueOnce({ error: null });
     render(<SettingsPage />);
+
+    fireEvent.change(screen.getByLabelText(/current password/i), { target: { value: "oldpass123" } });
 
     fireEvent.change(screen.getByLabelText(/new password/i), { target: { value: "newpass123" } });
     fireEvent.change(screen.getByLabelText(/confirm password/i), { target: { value: "newpass123" } });
@@ -59,11 +67,13 @@ describe("Settings — password change", () => {
         /if you forget it, ask your teacher/i
       );
     });
-    expect(mockUpdateUser).toHaveBeenCalledWith({ password: "newpass123" });
+    expect(mockUpdateUser).toHaveBeenCalledWith({ current_password: "oldpass123", password: "newpass123", confirmation: "newpass123" });
   });
 
   it("validates password match before calling updateUser", async () => {
     render(<SettingsPage />);
+
+    fireEvent.change(screen.getByLabelText(/current password/i), { target: { value: "oldpass123" } });
 
     fireEvent.change(screen.getByLabelText(/new password/i), { target: { value: "abc" } });
     fireEvent.change(screen.getByLabelText(/confirm password/i), { target: { value: "xyz" } });
@@ -79,14 +89,39 @@ describe("Settings — password change", () => {
     mockUpdateUser.mockResolvedValueOnce({ error: null });
     render(<SettingsPage />);
 
-    fireEvent.change(screen.getByLabelText(/new password/i), { target: { value: "pass" } });
-    fireEvent.change(screen.getByLabelText(/confirm password/i), { target: { value: "pass" } });
+    fireEvent.change(screen.getByLabelText(/current password/i), { target: { value: "oldpass123" } });
+
+    fireEvent.change(screen.getByLabelText(/new password/i), { target: { value: "newpass123" } });
+    fireEvent.change(screen.getByLabelText(/confirm password/i), { target: { value: "newpass123" } });
     fireEvent.click(screen.getByRole("button", { name: /save password/i }));
 
     await waitFor(() => {
       expect(screen.getByRole("status")).toBeDefined();
       expect(screen.getByRole("heading", { name: /change password/i })).toBeDefined();
+      expect(screen.getByRole("status")).toHaveTextContent(/password saved/i);
     });
+  });
+
+  it("rejects short Unicode passwords and recovers safely after Auth or network failure", async () => {
+    render(<SettingsPage />);
+    fireEvent.change(screen.getByLabelText(/current password/i), { target: { value: "oldpass123" } });
+    fireEvent.change(screen.getByLabelText(/new password/i), { target: { value: "😀😀😀😀" } });
+    fireEvent.change(screen.getByLabelText(/confirm password/i), { target: { value: "😀😀😀😀" } });
+    fireEvent.click(screen.getByRole("button", { name: /save password/i }));
+    expect(screen.getByRole("status")).toHaveTextContent(/at least 8 characters/i);
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText(/new password/i), { target: { value: "newpass123" } });
+    fireEvent.change(screen.getByLabelText(/confirm password/i), { target: { value: "newpass123" } });
+    mockUpdateUser.mockResolvedValueOnce({ error: { code: "current_password_mismatch", message: "private upstream detail" } });
+    fireEvent.click(screen.getByRole("button", { name: /save password/i }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/current password.*incorrect/i));
+    expect(screen.queryByText(/private upstream detail/i)).toBeNull();
+
+    mockUpdateUser.mockRejectedValueOnce(new Error("private network detail"));
+    fireEvent.click(screen.getByRole("button", { name: /save password/i }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/connection/i));
+    expect(screen.getByRole("button", { name: /save password/i })).not.toBeDisabled();
   });
 });
 

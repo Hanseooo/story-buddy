@@ -23,6 +23,7 @@ const TABS = [
 
 export function StudentTabBar({ profileId }: { profileId: string }) {
   const pathname = usePathname();
+  if (pathname === `/s/${profileId}/introduction` || pathname === `/s/${profileId}/change-password`) return null;
 
   return (
     <nav

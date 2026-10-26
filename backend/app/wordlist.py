@@ -1,4 +1,4 @@
-import random
+import secrets
 
 WORDS = (
     "tiger", "lamp", "cloud", "brick", "river", "frog", "pencil", "drum",
@@ -20,7 +20,7 @@ WORDS = (
 
 
 def mint_password() -> str:
-    w1 = random.choice(WORDS)
-    w2 = random.choice(WORDS)
-    nn = random.randint(10, 99)
+    w1 = secrets.choice(WORDS)
+    w2 = secrets.choice(WORDS)
+    nn = 10 + secrets.randbelow(90)
     return f"{w1}-{w2}-{nn}"

@@ -1011,8 +1011,9 @@ def test_remove_sets_removed_at_and_bans(_classroom):
 
 
 def test_restore_clears_removed_at_and_unbans_and_new_password(_classroom):
-    """Test 7: restore clears removed_at, sends ban_duration=none, returns new password."""
+    """Test 7: restore reserves the transaction that clears removal and changes Auth."""
     supabase_mock = MagicMock()
+    supabase_mock.rpc.return_value.execute.return_value.data = "restore-operation"
     supabase_mock.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
         {"id": "pid-1", "nickname": "juan", "display_nickname": "Juan"}
     ]
@@ -1029,13 +1030,25 @@ def test_restore_clears_removed_at_and_unbans_and_new_password(_classroom):
     for pw in (pw1, pw2):
         assert len(pw.split("-")) == 3
 
-    # removed_at cleared
-    update_calls = supabase_mock.table.return_value.update.call_args_list
-    assert any("removed_at" in str(call) for call in update_calls)
+    # The Auth transaction trigger owns clearing removed_at. No early unlock.
+    supabase_mock.table.return_value.update.assert_not_called()
+    supabase_mock.rpc.assert_called_with("begin_password_operation", {"p_user_id": "pid-1", "p_kind": "restore"})
+    supabase_mock.auth.admin.update_user_by_id.assert_called_with("pid-1", {
+        "ban_duration": "none", "password": pw2,
+        "app_metadata": {"storybuddy_password_operation": "restore-operation"},
+    })
 
-    # ban cleared
-    admin_calls = supabase_mock.auth.admin.update_user_by_id.call_args_list
-    assert any("none" in str(call).lower() for call in admin_calls)
+
+def test_reset_does_not_issue_a_password_without_a_reserved_operation(_classroom):
+    supabase_mock = MagicMock()
+    supabase_mock.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
+        {"id": "pid-1", "nickname": "juan", "display_nickname": "Juan", "removed_at": None}
+    ]
+    supabase_mock.rpc.return_value.execute.return_value.data = None
+    with patch("app.classrooms.get_supabase_client", return_value=supabase_mock):
+        response = client.post("/classrooms/cls-123/students/pid-1/reset")
+    assert response.status_code == 503
+    supabase_mock.auth.admin.update_user_by_id.assert_not_called()
 
 
 def test_invalid_display_nickname_lands_in_rejected_not_500(_classroom):

@@ -8,8 +8,8 @@ spec edit). Per `CLAUDE.md §1`, architectural decisions are made in their own s
 inline while building a module. When a row is decided: write the ADR, delete the row from
 this file (git keeps the history), and update the affected spec in the same change.
 
-**ADR numbering.** ADRs are append-only sequential; the last assigned number is **ADR-072**, so the
-next free number is **ADR-073**. Numbers are assigned *when the ADR is written*, not reserved here —
+**ADR numbering.** ADRs are append-only sequential; the last assigned number is **ADR-078**, so the
+next free number is **ADR-079**. Numbers are assigned *when the ADR is written*, not reserved here —
 the items below use stable `D-*` ids instead, because the write order can shift.
 
 **Two non-decisions, recorded so they don't get reopened by reflex:**
@@ -228,6 +228,23 @@ precede the reveal, so the node, migration and endpoint land together with it. `
   `prompt-optimizer.md` in `docs/specs/`; generation version 6, judge versions unchanged.
   Preserve existing folded gates/ranking, immutable-base/latest-attempt corrections, pinned judge
   prompts/model, bounded spend, and research provenance. Do not infer attribution from verdict prose.
+
+---
+
+## Tier 2k — opened by account-onboarding blocker review (2026-10-26)
+
+- **D-T - Trusted password replacement and recoverable completion: native integration evidence open.**
+  Owner-directed implementation now uses a private single-use operation reserved before proof and a
+  deferred trigger consuming that operation in the Auth password transaction. See
+  [account-onboarding section 7](../specs/account-onboarding.md#7-open-decisions-readiness-and-coverage)
+  for the exact current contract and section 1 for measured local evidence. This preserves
+  ADR-075 profile authority and ADR-076 recovery without another change solely for failure.
+  Metadata and audit logs are not completion authority. No password material is persisted outside
+  Auth. Direct Auth writes without an operation are rejected, closing the Unicode-count bypass.
+  Local SQL tests pass. Native Auth transactions/concurrent connections, hosted permissions/settings,
+  login/hash re-encryption and account-deletion compatibility still need evidence before release.
+  This row authorizes no production deployment or credential use.
+
 
 ---
 

@@ -25,11 +25,14 @@ _PRIVATE = {"Cache-Control": "private, no-store"}
 
 def _approved_book(job_id: str, user_id: str) -> dict:
     client = db.get_supabase_client()
-    viewers = (client.table("profiles").select("role, removed_at, classroom_id")
+    viewers = (client.table("profiles").select("role, removed_at, classroom_id, password_reset_version, password_completed_version")
                .eq("id", user_id).execute().data)
     if not viewers:
         raise HTTPException(404, "book not found", headers=_PRIVATE)
     viewer = viewers[0]
+    reset, completed = viewer.get("password_reset_version"), viewer.get("password_completed_version")
+    if type(reset) is not int or type(completed) is not int or not 0 <= completed == reset:
+        raise HTTPException(404, "book not found", headers=_PRIVATE)
     if (viewer.get("role") != "student" or viewer.get("removed_at") is not None
             or not viewer.get("classroom_id")):
         raise HTTPException(404, "book not found", headers=_PRIVATE)
