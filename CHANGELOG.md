@@ -14,6 +14,34 @@ instead of repeating it.
 
 ---
 
+## Working tree update · 2026-10-26 · Research run access and moderation probe
+
+### Code
+
+- Implement moderation-calibration ticket 03 and accepted ADR-079: every signed-in researcher
+  can inspect failed, unapproved, in-progress and approved runs. Show their titles, run links
+  and flag-enabled Langfuse controls. Remove the approval-only forbidden state.
+- Preserve backend role enforcement, private-field projection and signed-image lifetimes.
+- Fix ticket 04's Phase 0.5 text probe to read the current primary and backstop settings,
+  and clarify that its direct classifier call is not production-path evidence.
+
+### Docs
+
+- Mark the research-run-browser access amendment built and correct the obsolete probe-setting note.
+
+### Checks
+
+- Backend `uv run ruff check .` passed. `uv run pytest`: 1,531 passed, 89 skipped,
+  6 deselected, 6 PDF-export failures. WeasyPrint cannot load the local native library
+  `libgobject-2.0-0`; the PDF file reproduces all six failures independently.
+- Backend access regressions failed first (403 instead of 200); all 28 research route/projection
+  tests now pass. Frontend access/loader regressions failed first; targeted checks pass
+  (36 tests across four files).
+- Frontend `pnpm lint`, `pnpm build` and `pnpm test` passed: 728 tests across 77 files.
+- The zero-cost Phase 0.5 import/settings check passed. No obsolete `moderation_model` field
+  reference remains in backend code. The paid probe was not run.
+- Signed-in desktop/phone browser verification and database-backed RLS checks were not run.
+
 ## PR #129 · 2026-10-23 · Student login and classroom UI
 
 ### Code

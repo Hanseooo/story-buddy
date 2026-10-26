@@ -1,5 +1,10 @@
 # Feature Spec — Research run browser
 
+**Access amendment (2026-10-26):** ADR-079 is accepted. Sections 2, 4, 5, 6 and 8 below specify
+the new researcher access rule, built 2026-10-26 in moderation-calibration ticket 03. Backend
+route/projection and frontend helper/list/detail tests pass. The signed-in researcher browser
+journey at desktop and phone widths remains unverified. See `CHANGELOG.md` for batch checks.
+
 **Status:** design approved 2026-10-09; ADR-064 accepted 2026-10-09; backend route (§5.1) built
 2026-10-09; research shell (§2, §3) and reusable Langfuse button (§6, plan B) built 2026-10-09.
 Run list (§4, plan C), including its Langfuse button placement, built 2026-10-09.
@@ -19,6 +24,7 @@ with owner approval on 2026-10-10. Plans A–E are completed and retired.
 **Issues:** #107 (run list), #104 (run detail), #103 (Langfuse warning and env flag). One PR.
 Sub-issue #111 (annotate/adjudicate demo mode) follows after merge and is out of scope here.
 **Derived from:** [ADR-064](../product/adr/ADR-064-the-run-viewer-reads-checkpoint-history-through-a-researcher-only-endpoint.md),
+[ADR-079](../product/adr/ADR-079-researchers-can-inspect-failed-and-unapproved-runs.md) (researcher access amendment),
 ADR-033 (checkpoint store), ADR-006 (signed URLs), ADR-059 (titles),
 `supabase/migrations/0008_authorization_surface.sql`.
 
@@ -37,14 +43,19 @@ runs in this sense and never appear here.
 
 | Route | Signed out | Annotator (`researcher`, not adjudicator) | Adjudicator (`is_adjudicator`) |
 | --- | --- | --- | --- |
-| `/research/metrics` | list, short ids, no titles | list; titles on approved runs | list, all titles |
-| `/research/metrics/[jobId]` | redirect to `/login?next=…` | approved runs; others show "Not approved yet" | every run |
-| `GET /research/runs/{job_id}` (backend) | 401 | 200 if approved, else 403 | 200 |
+| `/research/metrics` | list, short ids, no titles | list, all titles | list, all titles |
+| `/research/metrics/[jobId]` | redirect to `/login?next=…` | every run | every run |
+| `GET /research/runs/{job_id}` (backend) | 401 | 200 for every existing run | 200 for every existing run |
 
 Teachers and students get 403 from the backend route and the detail page shows "Researchers only".
 One rule decides both the title and the link: **a viewer sees a run's title exactly when they can
-open it.** It lives in one helper, `canOpenRun(viewer, job)`, used by the list. The backend
-enforces the same rule on its own (ADR-064 rule 2); the frontend helper only decides what to render.
+open it.** It lives in one helper, `canOpenRun(viewer)`, used by the list. The backend
+enforces the same rule on its own (ADR-079, amending ADR-064 rule 2); the frontend helper only
+decides what to render. Approval, job status and `is_adjudicator` do not restrict researcher run
+inspection. This applies to failed, complete-but-unapproved and in-progress runs as well as approved
+runs. Inspection includes the existing projected story, prompts, image attempts and verdicts in §5.1.
+The existing private-field exclusions and signed-image lifetimes remain enforced. Inspection grants
+no book-approval, flagged-image-release or resume authority and does not change annotation permissions.
 
 Middleware includes `/research/metrics` and `/research/metrics/:path*` in its matcher, and `guardRequest` redirects a signed-out
 request for any path under `/research/metrics/` to `/login?next=<path>`. The list itself stays
@@ -106,8 +117,9 @@ matches shows "No runs match these filters" and a "Clear filters" button.
 style, pages `passed/total`, redraws, failure reason in words, cost, date, and the Langfuse button
 when the flag is on. A row the viewer can open is one link with the accessible name
 "Open run <title or short id>", and the whole row is clickable. Otherwise the title cell shows a lock
-and either "Sign in to view" (a link to `/login?next=/research/metrics/<id>`), "Not approved yet"
-for a researcher, or "Researchers only" for other signed-in roles.
+and either "Sign in to view" (a link to `/login?next=/research/metrics/<id>`) or "Researchers only"
+for other signed-in roles. Researchers see a run link regardless of approval; no approval lock or
+"Not approved yet" message applies to them.
 
 **States.** `loading.tsx` skeleton (existing, updated to the new layout), "No runs recorded yet",
 the filtered-empty state above, and `error.tsx` with a Retry button.
@@ -157,8 +169,9 @@ follows (checked on langgraph 1.2.8, 2026-10-09), so a run blocked at the input 
 safety result in its state; the page says "not recorded" and `ended_on` names the node.
 `get_signed_url(path, expires_in=300)` gains the argument; this route passes 3600.
 
-Errors: 401 when signed out; 403 `researchers_only` for other roles or `not_approved` for an
-annotator opening an unapproved run; 404 `not_found` for an unknown run; 422 for a non-UUID id.
+Errors: 401 when signed out; 403 `researchers_only` for other roles; 404 `not_found` for an unknown
+run; 422 for a non-UUID id. An authenticated researcher never receives `not_approved` because of
+approval status. A direct backend request enforces the same rule as page navigation.
 
 Only the final reference and its verdict are in the state. Reference draws that were rejected are
 not stored, so the page does not claim a draw count.
@@ -286,7 +299,7 @@ checks; it does not recompute or change the backend's pass decision.
 
 - `loading.tsx`: skeleton of header, graph block and two page blocks.
 - 404: "Run not found", with a link back to the list.
-- 403: "Not approved yet" or "Researchers only", with the back link.
+- 403: "Researchers only", with the back link. Approval does not block a researcher.
 - Backend unreachable or 5xx: `error.tsx`, "Couldn't load this run", Retry (`unstable_retry()` in
   the installed Next.js 16 version, which refetches the server segment) and the back
   link.
@@ -301,8 +314,8 @@ checks; it does not recompute or change the backend's pass decision.
 - `NEXT_PUBLIC_SHOW_LANGFUSE_LINKS`: the buttons render only when it equals `"true"`. Off by
   default; added to `frontend/.env.local.example`.
 - Even with the flag enabled, the server renders a trace control only for a researcher who can
-  open that run, using `canOpenRun`: approved runs for ordinary researchers, all runs for the
-  adjudicator. Signed-out visitors, students and teachers receive neither the control nor its
+  open that run, using `canOpenRun`: every run for both ordinary researchers and the
+  adjudicator, regardless of approval. Signed-out visitors, students and teachers receive neither the control nor its
   URL in client-component props. The detail route retains its existing backend authorization.
 - Clicking opens `ConfirmDialog`: title "Open the full Langfuse trace?", description "This trace
   is the full raw record of the run, including the story text before redaction. Open it only when
@@ -329,15 +342,26 @@ Tests (each red first, for the intended reason):
 
 - Backend: `project_run` on a hand-built two-scene history: step order and durations,
   `shipped_attempt`, `ended_on` for a failed and a waiting run, and a sentinel `raw_text` string
-  absent from the serialized response. Access: signed out 401, teacher 403, annotator on an
-  unapproved job 403, annotator on an approved job 200, adjudicator on an unapproved job 200.
+  absent from the serialized response. Access: signed out 401, teacher/student 403; an ordinary
+  researcher receives 200 on failed, complete-but-unapproved, in-progress and approved jobs;
+  an adjudicator retains access to all of them. An unknown job returns 404 for a researcher.
+  Exercise direct backend requests and verify that no private field reaches any response.
   `get_signed_url` default stays 300.
 - Frontend: one test per new aggregate in `utils/metrics.ts`; `canOpenRun` for all three viewers;
+  researcher title and link visibility for every approval/status combination above, with no approval
+  lock or `not_approved` message; signed-out and non-researcher title restrictions remain enforced;
   `pathCounts` on a looping step list; the Langfuse button with the flag on (modal; Cancel and
   Escape close it; Open calls `window.open`) and off (no button); `guardRequest` for a signed-out
   detail path. The existing `metrics` tests still pass.
 
 Done means:
+
+- ADR-079 amendment: an ordinary researcher can navigate from the list into failed and unapproved
+  synthetic runs, inspect retained content and return to the filtered list. Existing loading, empty,
+  missing-data, error, keyboard and focus states work. Run backend `uv run ruff check .` and
+  `uv run pytest`; run frontend `pnpm lint`, `pnpm build` and `pnpm test` from their respective
+  directories. Report hosted checks not performed. The historical verification at the top of
+  this spec does not establish verification of this amendment.
 
 - Signed out, the list shows no titles or Langfuse buttons even with the flag enabled, and a detail URL
   redirects to login.

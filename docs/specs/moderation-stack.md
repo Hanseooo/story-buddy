@@ -321,8 +321,9 @@ of rendered scenes with expected verdicts (spooky house, dark forest, startled c
 must-not-flag side; genuine gore and injury on the must-flag side), fed to
 `classify_image_primary` and `classify_image_backstop`. Until then the pre-Phase-2 gate in this
 section is only half satisfied: it clears the text path and says nothing about the image path.
-(`spikes/phase_05.py:434` also still reads `settings.moderation_model`, renamed to
-`moderation_primary_model`, so the text arm does not currently run either — separate fix.)
+(`spikes/phase_05.py` now reads `settings.moderation_primary_model` and the configured backstop
+after moderation-calibration ticket 04, 2026-10-26. Its import check passes; the paid text probe
+has not been rerun. This direct `structured_text` probe is not production-path evidence.)
 
 ## 8. Linked decisions & open questions
 

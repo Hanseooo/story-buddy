@@ -209,21 +209,28 @@ def test_signed_out_is_401():
     assert client.get(f"/research/runs/{JOB_ID}").status_code == 401
 
 
-def test_teacher_is_403():
+@pytest.mark.parametrize("role", ["teacher", "student"])
+def test_non_researcher_is_403(role):
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id="t-1")
     with patch("app.auth.get_supabase_client",
-               return_value=_db([{"id": "t-1", "role": "teacher", "is_adjudicator": False}])):
+               return_value=_db([{"id": "t-1", "role": role, "is_adjudicator": False}])):
         response = client.get(f"/research/runs/{JOB_ID}")
 
     assert response.status_code == 403
     assert response.json()["detail"] == "researchers_only"
 
 
-def test_annotator_cannot_open_an_unapproved_run():
-    response, _ = _get_as(ANNOTATOR, [_job(status="failed", approved_at=None)])
+@pytest.mark.parametrize("profile", [ANNOTATOR, ADJUDICATOR])
+@pytest.mark.parametrize("status, approved_at", [
+    ("failed", None), ("complete", None), ("queued", None),
+    ("running", None), ("awaiting_confirm", None), ("complete", "2026-10-02T00:00:00+00:00"),
+])
+def test_researcher_opens_any_run(profile, status, approved_at):
+    response, _ = _get_as(profile, [_job(status=status, approved_at=approved_at)])
 
-    assert response.status_code == 403
-    assert response.json()["detail"] == "not_approved"
+    assert response.status_code == 200
+    assert response.json()["job"]["status"] == status
+    assert response.json()["job"]["approved"] is (approved_at is not None)
 
 
 def test_annotator_opens_an_approved_run_without_reading_input_text():
@@ -242,7 +249,7 @@ def test_adjudicator_opens_an_unapproved_run():
 
 
 def test_unknown_run_is_404():
-    response, _ = _get_as(ADJUDICATOR, [])
+    response, _ = _get_as(ANNOTATOR, [])
 
     assert response.status_code == 404
 

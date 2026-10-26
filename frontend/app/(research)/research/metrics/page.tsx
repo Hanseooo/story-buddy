@@ -37,7 +37,7 @@ function Tile({ label, value, note, tone = "text-foreground" }: { label: string;
 
 function RunName({ job, viewer }: { job: JobRow; viewer: ResearchViewer | null }) {
   const name = job.title ?? `Run ${formatJob(job).shortId}`;
-  if (canOpenRun(viewer, job)) {
+  if (canOpenRun(viewer)) {
     // after:inset-0 stretches this link over its row or card, so the whole row opens the run.
     return (
       <Link
@@ -61,8 +61,6 @@ function RunName({ job, viewer }: { job: JobRow; viewer: ResearchViewer | null }
           >
             Sign in to view
           </Link>
-        ) : viewer.role === "researcher" ? (
-          "Not approved yet"
         ) : (
           "Researchers only"
         )}
@@ -239,7 +237,7 @@ export default async function RunsPage({
                         <td className="whitespace-nowrap px-6 py-4 text-xs text-foreground/60">{formattedDate}</td>
                         {showTrace && (
                           <td className="whitespace-nowrap px-6 py-4 text-right">
-                            {canOpenRun(viewer, job) && <LangfuseButton
+                            {canOpenRun(viewer) && <LangfuseButton
                               url={job.langfuse_trace_url}
                               label={`Open Langfuse trace for ${job.title ?? `run ${shortId}`}`}
                             />}
@@ -276,7 +274,7 @@ export default async function RunsPage({
                     </dl>
                     <div className="flex items-center justify-between">
                       <span className="rounded-md bg-muted/40 px-2 py-1 text-xs font-medium">{job.style_preset_id ?? "No style"}</span>
-                      {showTrace && canOpenRun(viewer, job) && (
+                      {showTrace && canOpenRun(viewer) && (
                         <LangfuseButton url={job.langfuse_trace_url} label={`Open Langfuse trace for ${job.title ?? `run ${shortId}`}`} />
                       )}
                     </div>

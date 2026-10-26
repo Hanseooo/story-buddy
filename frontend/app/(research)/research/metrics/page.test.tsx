@@ -119,10 +119,6 @@ describe("RunsPage", () => {
   it.each([true, false])("flag on: a researcher gets each accessible run's trace (adjudicator: %s)", async (isAdjudicator) => {
     vi.stubEnv("NEXT_PUBLIC_SHOW_LANGFUSE_LINKS", "true");
     mockViewer.mockResolvedValue({ id: "r-2", role: "researcher", isAdjudicator, displayName: null });
-    if (!isAdjudicator) {
-      const { data, error } = await mockRows();
-      mockRows.mockResolvedValue({ data: data.map((job: JobRow) => ({ ...job, approved_at: "2026-10-21T00:00:00Z" })), error });
-    }
     const page = await RunsPage({ searchParams: Promise.resolve({}) });
     expect(elementsOf(page, LangfuseButton).map((el) => (el as { props: { url: string } }).props.url)).toEqual([TRACE, TRACE]);
   });
@@ -131,7 +127,6 @@ describe("RunsPage", () => {
     null,
     { id: "s-1", role: "student", isAdjudicator: false, displayName: null },
     { id: "t-1", role: "teacher", isAdjudicator: false, displayName: null },
-    { id: "r-1", role: "researcher", isAdjudicator: false, displayName: null },
   ])("flag on: an inaccessible run's trace never reaches the browser for %j", async (viewer) => {
     vi.stubEnv("NEXT_PUBLIC_SHOW_LANGFUSE_LINKS", "true");
     mockViewer.mockResolvedValue(viewer);
@@ -140,11 +135,17 @@ describe("RunsPage", () => {
     expect(renderToStaticMarkup(page)).not.toContain(TRACE);
   });
 
-  it("adjudicator: the row is a link named after the title", async () => {
-    mockViewer.mockResolvedValue({ id: "r-2", role: "researcher", isAdjudicator: true, displayName: null });
+  it.each([
+    ["failed", null], ["complete", null], ["queued", null], ["running", null],
+    ["awaiting_confirm", null], ["complete", "2026-10-21T00:00:00Z"],
+  ])("researcher: %s (%s) has its title and run link", async (status, approved_at) => {
+    mockViewer.mockResolvedValue({ id: "r-1", role: "researcher", isAdjudicator: false, displayName: null });
+    const { data, error } = await mockRows();
+    mockRows.mockResolvedValue({ data: [{ ...data[0], status, approved_at }], error });
     render(await RunsPage({ searchParams: Promise.resolve({}) }));
     expect(screen.getAllByRole("link", { name: "Open run Secret Kite" })[0]).toHaveAttribute(
       "href", `/research/metrics/${RUN_ID}`
     );
+    expect(screen.queryByText("Not approved yet")).toBeNull();
   });
 });

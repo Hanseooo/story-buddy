@@ -133,7 +133,5 @@ def get_run(job_id: UUID, viewer: dict = Depends(require_researcher)) -> dict:
     if not rows:
         raise HTTPException(404, "not_found")
     job = rows[0]
-    # ADR-064 rule 2: the adjudicator reads any run; every other researcher keeps 0008's approved-only rule.
-    if not viewer["is_adjudicator"] and job["approved_at"] is None:
-        raise HTTPException(403, "not_approved")
+    # ADR-079: require_researcher grants inspection regardless of approval or adjudicator status.
     return project_run(job, load_history(str(job_id)), sign)

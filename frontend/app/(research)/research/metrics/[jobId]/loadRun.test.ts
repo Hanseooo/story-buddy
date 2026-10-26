@@ -45,8 +45,7 @@ describe("loadRun", () => {
 
   it.each([
     [401, { detail: "Not authenticated" }, { kind: "signed_out" }],
-    [403, { detail: "not_approved" }, { kind: "forbidden", reason: "not_approved" }],
-    [403, { detail: "researchers_only" }, { kind: "forbidden", reason: "researchers_only" }],
+    [403, { detail: "researchers_only" }, { kind: "forbidden" }],
     [404, { detail: "not_found" }, { kind: "not_found" }],
     [422, { detail: [] }, { kind: "not_found" }],
   ])("maps %i %j", async (status, body, expected) => {
