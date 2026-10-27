@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { use, useEffect, useRef, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useJob, type JobRow } from "@/lib/useJob";
@@ -180,6 +180,54 @@ const StackingVignette = () => (
   </div>
 );
 
+function HoldRecovery({jobId, profileId, refetch}: {jobId: string; profileId: string; refetch: () => Promise<boolean>}) {
+  const [canRepair, setCanRepair] = useState<boolean | null>(null);
+  const [error, setError] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [readVersion, setReadVersion] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const {data: {session}} = await supabase.auth.getSession();
+        if (!session) throw new Error();
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/jobs/${jobId}/state`, {
+          headers: {Authorization: `Bearer ${session.access_token}`}, cache: "no-store", signal: controller.signal,
+        });
+        if (!response.ok) throw new Error();
+        const state = await response.json();
+        if (!controller.signal.aborted) { setCanRepair(state.can_reconcile_hold === true); setError(false); }
+      } catch { if (!controller.signal.aborted) setError(true); }
+    })();
+    return () => { controller.abort(); };
+  }, [jobId, readVersion]);
+  async function repair() {
+    if (sending) return;
+    setSending(true); setError(false);
+    try {
+      const {data: {session}} = await supabase.auth.getSession();
+      if (!session) throw new Error();
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/jobs/${jobId}/reconcile-hold`, {
+        method: "POST", headers: {Authorization: `Bearer ${session.access_token}`}, cache: "no-store",
+      });
+      if (!response.ok) throw new Error();
+      setSubmitted(true);
+      await refetch();
+    } catch { setError(true); } finally { setSending(false); }
+  }
+  return <main className="flex flex-1 flex-col items-center justify-center gap-6 p-6 text-center">
+    <h1 className="font-display text-3xl font-extrabold text-primary">Your writing is saved</h1>
+    <p role="status">{submitted ? "We’re checking the saved step. You can return to your books." : "We couldn’t finish the last step. Your writing is still here."}</p>
+    {error && <p role="alert">We couldn’t check your saved story. Try again.</p>}
+    {canRepair === null && !error && <p role="status">Checking your saved story…</p>}
+    {canRepair && !submitted && <button type="button" disabled={sending} onClick={() => void repair()} className="min-h-11 rounded-2xl bg-primary px-6 font-bold text-on-primary disabled:opacity-50">{sending ? "Checking…" : "Try saving this step again"}</button>}
+    {error && <button type="button" disabled={sending} className="min-h-11 underline" onClick={() => {setError(false); setReadVersion(value => value + 1);}}>Try checking again</button>}
+    {canRepair === false && <Link href={`/s/${profileId}/write`} className="min-h-11 underline">Write a new story</Link>}
+    <Link href={`/s/${profileId}`} className="inline-flex min-h-11 items-center rounded-2xl bg-primary px-6 font-bold text-on-primary">Back to my books</Link>
+  </main>;
+}
+
 export default function ProcessingPage({ params }: { params: Promise<{ profileId: string; jobId: string }> }) {
   const { profileId, jobId } = use(params);
   const { bucket, row, refetch } = useJob(jobId);
@@ -200,6 +248,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   const selectedControlWasFocused = useRef(false);
   const lastSelectedCharId = useRef<string | null>(null);
   const submissionsDisabled = submissionState !== "idle";
+  const imageRequest = useRef<AbortController | null>(null);
   const isRetryingCharacterChoices = submissionState === "reconciling";
 
   function toggleTrait(charId: string, attribute: string) {
@@ -299,7 +348,10 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   // re-disables "Use these characters" on an image that already loaded.
   const characterImageLoadId = useRef(0);
 
-  async function loadCharacterImages(characters: NonNullable<JobRow["reveal"]>["characters"]) {
+  const loadCharacterImages = useCallback(async (characters: NonNullable<JobRow["reveal"]>["characters"]) => {
+    imageRequest.current?.abort();
+    const controller = new AbortController();
+    imageRequest.current = controller;
     const loadId = characterImageLoadId.current + 1;
     characterImageLoadId.current = loadId;
     setSignedCharUrls((current) => {
@@ -316,7 +368,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
     let signed: Record<string, string> = {};
     for (let attempt = 0; attempt < 2 && Object.keys(signed).length === 0; attempt += 1) {
       try {
-        signed = await signPaths(paths);
+        signed = await signPaths(paths, [{id: jobId, moderation_mode: row?.moderation_mode, reveal: {characters}}], controller.signal);
       } catch {
         signed = {};
       }
@@ -329,7 +381,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
       if (url) urls[character.char_id] = url;
       states[character.char_id] = url ? "loading" : "error";
     }
-    if (loadId !== characterImageLoadId.current) return;
+    if (controller.signal.aborted || loadId !== characterImageLoadId.current) return;
     setSignedCharUrls((current) => {
       const next = { ...current };
       characters.forEach((character) => {
@@ -339,14 +391,15 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
       return next;
     });
     setCharacterImageState((current) => ({ ...current, ...states }));
-  }
+  }, [jobId, row?.moderation_mode]);
 
   useEffect(() => {
     if (bucket !== "paused" || !row?.reveal?.characters.length) return;
     // Initialize the per-image read state when the paused reveal becomes authoritative.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadCharacterImages(row.reveal.characters);
-  }, [bucket, row?.reveal]);
+    return () => { imageRequest.current?.abort(); };
+  }, [bucket, row?.reveal, loadCharacterImages]);
 
   // Push to /book on terminal-success. The bridge needs no teardown here: `isRedrawing` is read
   // only on the in-flight branch and only while the stage still matches, so a stale value cannot
@@ -425,11 +478,24 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   }
 
   // Derive FailureScreen kind from row state
+  if (bucket === "teacher-held") {
+    return (
+      <main className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-12 text-center">
+        <Users weight="duotone" className="size-16 text-primary" aria-hidden="true" />
+        <h1 className="font-display text-3xl font-extrabold text-primary">Waiting for your teacher</h1>
+        <p className="max-w-md text-lg">Your story is saved. Your teacher will help it continue.</p>
+        <Link href={`/s/${profileId}`} className="inline-flex min-h-14 items-center rounded-2xl bg-primary px-6 font-extrabold text-on-primary focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-secondary">
+          Back to my books
+        </Link>
+      </main>
+    );
+  }
   if (bucket === "not-found") {
     return <FailureScreen kind="not-found" />;
   }
 
   if (bucket === "terminal-failure") {
+    if (row?.moderation_mode === "teacher_review_v1") return <HoldRecovery jobId={jobId} profileId={profileId} refetch={refetch} />;
     const kind =
       row?.failure_reason === "child_text"
         ? "revise"

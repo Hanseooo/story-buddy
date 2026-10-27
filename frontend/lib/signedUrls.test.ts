@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockCreateSignedUrls = vi.fn();
+const mockSession = vi.fn();
 vi.mock("@/lib/supabaseClient", () => ({
   supabase: {
+    auth: { getSession: () => mockSession() },
     storage: { from: () => ({ createSignedUrls: (...a: unknown[]) => mockCreateSignedUrls(...a) }) },
   },
 }));
@@ -15,6 +17,26 @@ beforeEach(() => {
 });
 
 describe("signPaths", () => {
+  it("feature pictures use authenticated bytes and revoke their blob on exit", async () => {
+    sessionStorage.setItem("sb:signed", JSON.stringify({"j/s0-1.png": {url: "https://old-link", exp: Date.now() + 100000}}));
+    mockSession.mockResolvedValue({data: {session: {access_token: "test-token"}}});
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue({ok: true, blob: async () => new Blob(["image"])} as Response);
+    const create = vi.fn(() => "blob:feature-image");
+    const revoke = vi.fn();
+    vi.stubGlobal("URL", Object.assign(URL, {createObjectURL: create, revokeObjectURL: revoke}));
+    const controller = new AbortController();
+    const urls = await signPaths(["j/s0-1.png"], [{id: "j", moderation_mode: "teacher_review_v1", pages: [
+      {scene_id: "s0", image_path: "j/s0-1.png"},
+    ]}], controller.signal);
+    expect(urls).toEqual({"j/s0-1.png": "blob:feature-image"});
+    expect(mockCreateSignedUrls).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/jobs/j/images/scene-s0"), expect.objectContaining({
+      cache: "no-store", headers: {Authorization: "Bearer test-token"},
+    }));
+    controller.abort();
+    expect(revoke).toHaveBeenCalledWith("blob:feature-image");
+    fetchMock.mockRestore();
+  });
   it("returns a path -> url map", async () => {
     mockCreateSignedUrls.mockResolvedValue({
       data: [{ path: "a.png", signedUrl: "https://cdn/a?token=1", error: null }],

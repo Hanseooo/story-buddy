@@ -1,5 +1,6 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 
 from contracts.story_memory import ModerationResult, StoryMemory
 from providers import classify_text_backstop, classify_text_primary, redact_pii
@@ -11,12 +12,12 @@ def input_gate(state: StoryMemory) -> dict:
     text = state.input.raw_text
     # Moderation is unconditional; only the PII rewrite is skippable, and only for text the
     # caller declares synthetic. See `Input.synthetic_no_pii`.
-    skip_redaction = state.input.synthetic_no_pii
+    skip_redaction = state.input.synthetic_no_pii or state.moderation_context.mode == "teacher_review_v1"
 
     # Steps 1 & 2 are independent — run concurrently (spec §4a).
     with ThreadPoolExecutor(max_workers=2) as pool:
-        primary_fut = pool.submit(classify_text_primary, text)
-        redact_fut = None if skip_redaction else pool.submit(redact_pii, text)
+        primary_fut = pool.submit(copy_context().run, classify_text_primary, text)
+        redact_fut = None if skip_redaction else pool.submit(copy_context().run, redact_pii, text)
 
         try:
             primary_safe, categories = primary_fut.result()

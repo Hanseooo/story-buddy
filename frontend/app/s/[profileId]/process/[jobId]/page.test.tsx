@@ -97,6 +97,20 @@ const RUNNING_ROW = {
   failure_reason: null, input_text: "A story.", style_preset_id: null, pages: [], reveal: {},
 };
 
+it("held child can leave and reload the same neutral saved story without images or submission", async () => {
+  mockUseJob.mockReturnValue(jobState({bucket: "teacher-held", row: {
+    ...RUNNING_ROW, status: "awaiting_teacher", current_stage: "moderation_review",
+  }}));
+  const first = await renderPage(makeParams());
+  expect(screen.getByText("Your story is saved. Your teacher will help it continue.")).toBeInTheDocument();
+  expect(screen.getByRole("link", {name: "Back to my books"})).toHaveAttribute("href", "/s/p1");
+  expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  first.unmount();
+  await renderPage(makeParams());
+  expect(screen.getByText("Your story is saved. Your teacher will help it continue.")).toBeInTheDocument();
+  expect(global.fetch).not.toHaveBeenCalled();
+});
+
 const FAILED_MACHINE_ROW = {
   id: "j1", status: "failed", current_stage: "generate_scene",
   failure_reason: "machine", input_text: "A story.", style_preset_id: null, pages: [], reveal: null,

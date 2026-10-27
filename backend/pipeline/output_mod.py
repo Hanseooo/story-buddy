@@ -3,11 +3,14 @@ import logging
 from datetime import datetime, timezone
 from uuid import UUID, uuid5
 
-from app.config import check_image_budget, settings
+from app.config import TEACHER_MODERATION_CRITERIA, check_image_budget, settings
 from contracts.story_memory import Attempt, ClassifierEvidence, ReviewContext, StoryMemory
 from pipeline.generate_scene import generate_and_store
 from pipeline.prompt_optimizer import referenced_characters
-from providers import classify_image_backstop, classify_image_primary, download_book_image, get_signed_url
+from providers import (
+    IMAGE_BACKSTOP_INSTRUCTION_VERSION, IMAGE_PRIMARY_INSTRUCTION_VERSION,
+    classify_image_backstop, classify_image_primary, download_book_image, get_signed_url,
+)
 
 log = logging.getLogger(__name__)
 
@@ -44,7 +47,7 @@ def _check_image(image_url: str, evidence: list[ClassifierEvidence] | None = Non
     if evidence is not None:
         evidence.append(ClassifierEvidence(
             layer="primary", model_id=settings.moderation_primary_image_model,
-            instruction_version="legacy_image_primary_v1",
+            instruction_version=IMAGE_PRIMARY_INSTRUCTION_VERSION,
             outcome="error" if primary_safe is None else "safe" if primary_safe else "flagged",
             checked_at=primary_time,
         ))
@@ -53,7 +56,7 @@ def _check_image(image_url: str, evidence: list[ClassifierEvidence] | None = Non
         if evidence is not None:
             evidence.append(ClassifierEvidence(
                 layer="backstop", model_id=settings.moderation_backstop_image_model,
-                instruction_version="legacy_image_backstop_v1", outcome="not_called",
+                instruction_version=IMAGE_BACKSTOP_INSTRUCTION_VERSION, outcome="not_called",
             ))
         return "primary"
 
@@ -62,7 +65,7 @@ def _check_image(image_url: str, evidence: list[ClassifierEvidence] | None = Non
     if evidence is not None:
         evidence.append(ClassifierEvidence(
             layer="backstop", model_id=settings.moderation_backstop_image_model,
-            instruction_version="legacy_image_backstop_v1",
+            instruction_version=IMAGE_BACKSTOP_INSTRUCTION_VERSION,
             outcome="safe" if backstop_safe else "flagged", checked_at=backstop_time,
         ))
     if backstop_safe:
@@ -114,7 +117,13 @@ def output_mod(state: StoryMemory) -> dict:
 
         if flagged_by is None:
             log.info("output_mod: scene_id=%s passed", scene.scene_id)
-            updated_scenes.append(scene.model_copy(update={"moderation_status": "passed"}))
+            changes = {"moderation_status": "passed"}
+            if evidence is not None:
+                changes["attempts"] = [
+                    a.model_copy(update={"safety_eligibility": "cleared"})
+                    if a.image_ref == scene.final_image_ref else a for a in scene.attempts
+                ]
+            updated_scenes.append(scene.model_copy(update=changes))
             continue
 
         if evidence is not None:
@@ -126,6 +135,7 @@ def output_mod(state: StoryMemory) -> dict:
             review = ReviewContext(
                 review_id=review_id, kind="scene_image", subject_id=scene.scene_id,
                 subject_version=subject_version, return_node="output_mod", classifier_evidence=evidence,
+                criteria=list(TEACHER_MODERATION_CRITERIA),
             )
             return {
                 "scenes": updated_scenes + [scene],

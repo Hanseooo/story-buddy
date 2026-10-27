@@ -2,6 +2,7 @@ from langfuse import Langfuse
 from langfuse.langchain import CallbackHandler
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.types import Command
+from datetime import datetime, timezone
 
 from app.config import RECURSION_LIMIT, STYLE_PRESETS, settings
 from app.db import get_supabase_client
@@ -13,6 +14,154 @@ from worker.failure_classifier import classify_failure_reason
 
 
 _SCENE_NODES = {"generate_scene", "consistency_check", "regenerate", "output_mod"}
+
+
+def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_epoch: int | None = None) -> None:
+    """Serialized, fenced teacher-review work. Captured mode survives switch-off.
+
+    Repair uses only a retained moderation checkpoint. It cannot restart classifiers
+    or generation. The final marker is written after closing the checkpointer.
+    """
+    import providers
+    from app.moderation_hold import StaleGeneration, active_author, assert_current, connect, project_hold
+    from contracts.story_memory import ModerationContext
+
+    with connect() as conn:
+        # Session lock covers graph effects, projection and the final finish marker.
+        locked = conn.execute("select pg_try_advisory_lock(hashtextextended(%s,0)) as locked", (job_id,)).fetchone()["locked"]
+        if not locked:
+            return
+        epoch, started, hold_pending = None, False, False
+        incurred = [0]
+        initial_count = 0
+        tokens = []
+        try:
+            with conn.transaction():
+                job = conn.execute("select * from jobs where id=%s for update", (job_id,)).fetchone()
+                if not job or job["moderation_mode"] != "teacher_review_v1":
+                    return
+                if expected_epoch is not None and expected_epoch != job["generation_epoch"]:
+                    return
+                if job["status"] in ("awaiting_confirm", "complete", "stopped", "deleting"):
+                    return
+                if job["status"] == "awaiting_teacher" and job["worker_finished_at"] is not None:
+                    return
+                if job["status"] == "failed" and job["error"] != "hold_projection_failed":
+                    return
+                epoch = job["generation_epoch"]
+                initial_count = job["image_count"] or 0
+                if not active_author(conn, job):
+                    raise RuntimeError("account_unavailable")
+                conn.execute("update jobs set worker_finished_at=null where id=%s", (job_id,))
+                started = True
+
+            def fence():
+                assert_current(conn, job_id, epoch)
+
+            def image_event(event):
+                if event == "completed":
+                    incurred[0] += 1
+
+            tokens = [providers._generation_fence.set(fence), providers._fal_event_sink.set(image_event)]
+            with PostgresSaver.from_conn_string(settings.supabase_db_url) as saver:
+                saver.setup()
+                graph = build_graph(checkpointer=saver)
+                config = {"configurable": {"thread_id": job_id}, "recursion_limit": RECURSION_LIMIT, "callbacks": []}
+                snapshot = graph.get_state(config)
+                if snapshot.values:
+                    retained = StoryMemory.model_validate(snapshot.values)
+                    review = retained.moderation_context.review
+                    if review and review.resolution is None:
+                        hold_pending = True
+                        # Output evidence is durable even if the process died before interrupt.
+                        if snapshot.next != ("moderation_review",):
+                            raise RuntimeError("invalid_moderation_checkpoint")
+                        if not any(task.interrupts for task in snapshot.tasks):
+                            graph.invoke(None, config)
+                            snapshot = graph.get_state(config)
+                        epoch = project_hold(conn, job_id, retained, snapshot.config["configurable"]["checkpoint_id"])
+                        return
+                    if (payload is None or snapshot.next != ("reveal",)
+                            or retained.moderation_context.generation_epoch != epoch):
+                        raise RuntimeError("checkpoint_not_resumable")
+                    graph_input = Command(resume=payload)
+                else:
+                    if job["status"] != "queued" or payload is not None:
+                        raise RuntimeError("checkpoint_unavailable")
+                    captured = job["moderation_settings_snapshot"]
+                    if not captured.get("policy_version"):
+                        raise RuntimeError("moderation_config_unavailable")
+                    chosen_id = job["style_preset_id"] or "cel"
+                    graph_input = StoryMemory(
+                        schema_version=CURRENT_SCHEMA_VERSION, story_id=job_id,
+                        classroom_id=str(job["classroom_id"]), profile_id=str(job["profile_id"]),
+                        input=Input(raw_text=job["input_text"], word_count=word_count(job["input_text"]), truncated=job["truncated"]),
+                        style=Style(style_preset_id=chosen_id, prompt_fragment=STYLE_PRESETS[chosen_id]),
+                        moderation_context=ModerationContext(mode="teacher_review_v1", generation_epoch=epoch, **captured),
+                    )
+                with conn.transaction():
+                    assert_current(conn, job_id, epoch)
+                    conn.execute("update jobs set status='running' where id=%s", (job_id,))
+                # No callbacks, trace URL or public Langfuse publication in this mode.
+                for mode, chunk in graph.stream(graph_input, config, stream_mode=["updates", "values"]):
+                    fence()
+                    if mode == "updates":
+                        node = next((k for k in chunk if k != "__interrupt__"), None)
+                        if node:
+                            conn.execute("update jobs set current_stage=%s where id=%s and generation_epoch=%s",
+                                         (node, job_id, epoch))
+                # Read back the committed checkpoint, never trust an ephemeral stream event.
+                snapshot = graph.get_state(config)
+                state = StoryMemory.model_validate(snapshot.values)
+                if state.moderation_context.review and state.moderation_context.review.resolution is None:
+                    hold_pending = True
+                    epoch = project_hold(conn, job_id, state, snapshot.config["configurable"]["checkpoint_id"])
+                else:
+                    from psycopg.types.json import Jsonb
+
+                    with conn.transaction():
+                        assert_current(conn, job_id, epoch)
+                        interrupts = [i for t in snapshot.tasks for i in t.interrupts]
+                        if interrupts:
+                            value = interrupts[0].value
+                            if snapshot.next != ("reveal",) or not isinstance(value, dict) or "characters" not in value:
+                                raise RuntimeError("invalid_reveal_checkpoint")
+                            conn.execute("update jobs set status='awaiting_confirm',current_stage='reveal',reveal=%s where id=%s",
+                                         (Jsonb(value), job_id))
+                        else:
+                            if snapshot.next or any(s.moderation_status != "passed" for s in state.scenes):
+                                raise RuntimeError("incomplete_safety_checks")
+                            pages = [{"scene_id": s.scene_id, "caption": s.caption, "image_path": s.final_image_ref} for s in state.scenes]
+                            outcomes = [outcome(s) for s in state.scenes]
+                            conn.execute("""update jobs set status='complete',current_stage='compose',pages=%s,
+                              reveal='{}',image_count=%s,regen_count=%s,ref_retry_count=%s,scenes_total=%s,
+                              scenes_passed=%s,scenes_failed=%s,scenes_unchecked=%s,usd_estimate=%s where id=%s""", (
+                                Jsonb(pages), state.cost.image_count, state.cost.regen_count, state.cost.ref_retry_count,
+                                len(state.scenes), outcomes.count("passed"), outcomes.count("failing"), outcomes.count("unchecked"),
+                                round(state.cost.image_count * 0.025, 4), job_id,
+                            ))
+                        conn.execute("update jobs set image_count=%s where id=%s", (state.cost.image_count, job_id))
+        except StaleGeneration:
+            pass  # The authoritative newer state wins. Never write a stale failure.
+        except Exception as exc:
+            if started and epoch is not None:
+                # Projection failure preserves its checkpoint for explicit repair.
+                code = "hold_projection_failed" if hold_pending else "generation_failed"
+                conn.execute("""update jobs set status='failed',error=%s,failure_reason=%s
+                  where id=%s and generation_epoch=%s and status in ('queued','running','failed')""",
+                             (code, classify_failure_reason(exc), job_id, epoch))
+            raise
+        finally:
+            if tokens:
+                providers._generation_fence.reset(tokens[0])
+                providers._fal_event_sink.reset(tokens[1])
+            if started and epoch is not None:
+                conn.execute("""update jobs set image_count=greatest(coalesce(image_count,0),%s)
+                  where id=%s and generation_epoch=%s""", (initial_count + incurred[0], job_id, epoch))
+                # After every checkpoint/provider/tracing operation, including raised failures.
+                conn.execute("""update jobs set worker_finished_at=now()
+                  where id=%s and generation_epoch=%s""", (job_id, epoch))
+            conn.execute("select pg_advisory_unlock(hashtextextended(%s,0))", (job_id,))
 
 
 def _langfuse_handler(job_id: str) -> tuple[CallbackHandler, str]:
@@ -122,6 +271,8 @@ def _finish(supabase, job_id: str, result: dict) -> None:
     if "__interrupt__" in result:
         interrupts = result["__interrupt__"]
         value = interrupts[0].value if interrupts else None
+        if isinstance(value, dict) and value.get("kind") == "moderation_review":
+            raise RuntimeError("moderation interrupt requires private durable projection")
         if not value:
             # A hard failure is the honest outcome (ADR-025 posture) — writing an empty `reveal`
             # would produce a row claiming to await a human in front of a screen with nothing on
@@ -161,13 +312,15 @@ def _finish(supabase, job_id: str, result: dict) -> None:
 
 def run_storybook_job(job_id: str) -> None:
     supabase = get_supabase_client()
-    row = supabase.table("jobs").select("input_text, style_preset_id, truncated, classroom_id, profile_id").eq("id", job_id).single().execute()
+    row = supabase.table("jobs").select("input_text, style_preset_id, truncated, classroom_id, profile_id, moderation_mode").eq("id", job_id).single().execute()
+    if row.data.get("moderation_mode") == "teacher_review_v1":
+        return run_review_storybook_job(job_id)
     input_text = row.data["input_text"]
     preset_id = row.data.get("style_preset_id")
     truncated = row.data["truncated"]
     chosen_id = preset_id if preset_id is not None else "cel"
 
-    supabase.table("jobs").update({"status": "running"}).eq("id", job_id).execute()
+    supabase.table("jobs").update({"status": "running", "worker_finished_at": None}).eq("id", job_id).execute()
 
     handler, trace_url = _langfuse_handler(job_id)
     supabase.table("jobs").update({"langfuse_trace_url": trace_url}).eq("id", job_id).execute()
@@ -203,6 +356,7 @@ def run_storybook_job(job_id: str) -> None:
         raise
     finally:
         _publish_trace(job_id)
+        supabase.table("jobs").update({"worker_finished_at": datetime.now(timezone.utc).isoformat()}).eq("id", job_id).execute()
 
 
 def resume_storybook_job(job_id: str, payload: dict) -> None:
@@ -211,7 +365,10 @@ def resume_storybook_job(job_id: str, payload: dict) -> None:
     `run_storybook_job(job_id, resume=None)` would leave one `if` away (spec §4.10).
     """
     supabase = get_supabase_client()
-    supabase.table("jobs").update({"status": "running"}).eq("id", job_id).execute()
+    mode_row = supabase.table("jobs").select("moderation_mode").eq("id", job_id).single().execute().data
+    if mode_row.get("moderation_mode") == "teacher_review_v1":
+        return run_review_storybook_job(job_id, payload)
+    supabase.table("jobs").update({"status": "running", "worker_finished_at": None}).eq("id", job_id).execute()
 
     handler, trace_url = _langfuse_handler(job_id)
     supabase.table("jobs").update({"langfuse_trace_url": trace_url}).eq("id", job_id).execute()
@@ -238,4 +395,5 @@ def resume_storybook_job(job_id: str, payload: dict) -> None:
         raise
     finally:
         _publish_trace(job_id)
+        supabase.table("jobs").update({"worker_finished_at": datetime.now(timezone.utc).isoformat()}).eq("id", job_id).execute()
 

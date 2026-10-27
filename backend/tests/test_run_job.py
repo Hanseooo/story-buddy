@@ -59,7 +59,7 @@ def test_run_storybook_job_updates_row_on_success():
         run_storybook_job("job-1")
 
     update_calls = fake_supabase.table.return_value.update.call_args_list
-    final_update = update_calls[-1][0][0]
+    final_update = update_calls[-2][0][0]
     assert final_update["status"] == "complete"
     assert final_update["pages"] == [
         {"scene_id": "s0", "caption": "stub caption", "image_path": "job-1/scene-1.png"}
@@ -124,6 +124,9 @@ def test_trace_is_published_for_unauthenticated_viewers():
     # Langfuse rebuilds the trace row from whichever root span ingested last, so publishing before
     # the graph runs is silently undone by the pipeline's own root span.
     assert events == ["stream", "publish"]
+    # ADR-044: quiescence is the last row write, after tracing has flushed.
+    final = fake_supabase.table.return_value.update.call_args_list[-1].args[0]
+    assert final.get("worker_finished_at") is not None
 
 
 def test_run_storybook_job_writes_pages_in_scene_order():
@@ -148,7 +151,7 @@ def test_run_storybook_job_writes_pages_in_scene_order():
          patch("worker.run_job.build_graph", return_value=fake_graph):
         run_storybook_job("job-1")
 
-    final_update = fake_supabase.table.return_value.update.call_args_list[-1][0][0]
+    final_update = fake_supabase.table.return_value.update.call_args_list[-2][0][0]
     assert final_update["pages"] == [
         {"scene_id": "s0", "caption": "first", "image_path": "job-1/s0-1.png"},
         {"scene_id": "s1", "caption": "second", "image_path": "job-1/s1-1.png"},
@@ -192,7 +195,7 @@ def test_run_storybook_job_tolerates_a_run_that_produced_no_scenes():
          patch("worker.run_job.build_graph", return_value=fake_graph):
         run_storybook_job("job-3")
 
-    final_update = fake_supabase.table.return_value.update.call_args_list[-1][0][0]
+    final_update = fake_supabase.table.return_value.update.call_args_list[-2][0][0]
     assert final_update["pages"] == []
 
 
@@ -208,7 +211,7 @@ def test_run_storybook_job_marks_failed_on_exception():
             pass
 
     update_calls = fake_supabase.table.return_value.update.call_args_list
-    failed_update = update_calls[-1][0][0]
+    failed_update = update_calls[-2][0][0]
     assert failed_update["status"] == "failed"
     assert "db down" in failed_update["error"]
     assert "pages" not in failed_update
@@ -342,7 +345,7 @@ def test_run_storybook_job_writes_awaiting_confirm_and_reveal_on_interrupt():
          patch("worker.run_job.build_graph", return_value=fake_graph):
         run_storybook_job("job-1")
 
-    final_update = fake_supabase.table.return_value.update.call_args_list[-1][0][0]
+    final_update = fake_supabase.table.return_value.update.call_args_list[-2][0][0]
     assert final_update["status"] == "awaiting_confirm"
     assert final_update["current_stage"] == "reveal"
     assert final_update["reveal"] == reveal_payload
@@ -360,7 +363,7 @@ def test_run_storybook_job_clean_invoke_writes_no_reveal_key():
          patch("worker.run_job.build_graph", return_value=fake_graph):
         run_storybook_job("job-1")
 
-    final_update = fake_supabase.table.return_value.update.call_args_list[-1][0][0]
+    final_update = fake_supabase.table.return_value.update.call_args_list[-2][0][0]
     assert "reveal" not in final_update
     assert final_update["status"] == "complete"
 
@@ -384,7 +387,7 @@ def test_run_storybook_job_raises_and_marks_failed_when_interrupt_has_no_usable_
         except Exception:
             pass
 
-    final_update = fake_supabase.table.return_value.update.call_args_list[-1][0][0]
+    final_update = fake_supabase.table.return_value.update.call_args_list[-2][0][0]
     assert final_update["status"] == "failed"
     assert "reveal" not in final_update
 
@@ -445,7 +448,7 @@ def test_failure_reason_is_child_text_when_content_flagged():
             run_storybook_job("job-x")
         except RuntimeError:
             pass
-    final = fake_supabase.table.return_value.update.call_args_list[-1][0][0]
+    final = fake_supabase.table.return_value.update.call_args_list[-2][0][0]
     assert final["failure_reason"] == "child_text"
 
 
@@ -460,7 +463,7 @@ def test_failure_reason_is_machine_for_moderation_error():
             run_storybook_job("job-x")
         except RuntimeError:
             pass
-    final = fake_supabase.table.return_value.update.call_args_list[-1][0][0]
+    final = fake_supabase.table.return_value.update.call_args_list[-2][0][0]
     assert final["failure_reason"] == "service_busy"
 
 
@@ -477,7 +480,7 @@ def test_failure_reason_is_character_safety_for_ref_flagged():
             run_storybook_job("job-x")
         except RuntimeError:
             pass
-    final = fake_supabase.table.return_value.update.call_args_list[-1][0][0]
+    final = fake_supabase.table.return_value.update.call_args_list[-2][0][0]
     assert final["failure_reason"] == "character_safety"
 
 
@@ -492,7 +495,7 @@ def test_failure_reason_is_scene_safety_for_output_moderation_failed():
             run_storybook_job("job-x")
         except RuntimeError:
             pass
-    final = fake_supabase.table.return_value.update.call_args_list[-1][0][0]
+    final = fake_supabase.table.return_value.update.call_args_list[-2][0][0]
     assert final["failure_reason"] == "scene_safety"
 
 
@@ -507,7 +510,7 @@ def test_failure_reason_is_system_error_for_arbitrary_provider_error():
             run_storybook_job("job-x")
         except RuntimeError:
             pass
-    final = fake_supabase.table.return_value.update.call_args_list[-1][0][0]
+    final = fake_supabase.table.return_value.update.call_args_list[-2][0][0]
     assert final["failure_reason"] == "system_error"
 
 
@@ -523,7 +526,7 @@ def test_resume_entrypoint_also_writes_failure_reason():
             resume_storybook_job("job-x", {"action": "confirm"})
         except RuntimeError:
             pass
-    final = fake_supabase.table.return_value.update.call_args_list[-1][0][0]
+    final = fake_supabase.table.return_value.update.call_args_list[-2][0][0]
     assert final["failure_reason"] == "child_text"
 
 
@@ -538,7 +541,7 @@ def test_resume_storybook_job_marks_failed_on_exception_and_writes_no_pages():
         except RuntimeError:
             pass
 
-    failed_update = fake_supabase.table.return_value.update.call_args_list[-1][0][0]
+    failed_update = fake_supabase.table.return_value.update.call_args_list[-2][0][0]
     assert failed_update["status"] == "failed"
     assert "pages" not in failed_update
 

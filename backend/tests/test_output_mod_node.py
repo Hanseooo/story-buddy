@@ -310,7 +310,8 @@ def test_primary_flag_short_circuits_the_backstop_call():
     mock_backstop.assert_not_called()
 
 
-def test_backstop_error_still_raises_moderation_error():
+@pytest.mark.parametrize("mode", ["baseline", "teacher_review_v1"])
+def test_backstop_error_still_raises_moderation_error(mode):
     """Unchanged by the posture alignment: the backstop is the layer with nothing behind it, so an
     error there means the image is genuinely unchecked and there is no proceed-without-a-check
     path. Only a PRIMARY error degrades."""
@@ -318,8 +319,11 @@ def test_backstop_error_still_raises_moderation_error():
          patch("pipeline.output_mod.classify_image_primary", return_value=True), \
          patch("pipeline.output_mod.classify_image_backstop", side_effect=Exception("OpenRouter 503")):
         from pipeline.output_mod import output_mod
+        from contracts.story_memory import ModerationContext
+        state = _state([_scene("s0")])
+        state.moderation_context = ModerationContext(mode=mode)
         with pytest.raises(RuntimeError, match="moderation_error"):
-            output_mod(_state([_scene("s0")]))
+            output_mod(state)
 
 
 # --- which classifier flagged (CC-5) ---

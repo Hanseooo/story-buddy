@@ -53,6 +53,12 @@ def route_after_output_mod(state: StoryMemory) -> str:
     return route_next_scene(state)
 
 
+def route_moderation_review(state: StoryMemory) -> str:
+    # Also used by update_state(as_node='moderation_review') when anchoring a hold.
+    # Teacher decisions and their explicit saved continuation arrive in ticket 07.
+    return "moderation_review"
+
+
 def route_next_scene(state: StoryMemory) -> str:
     """Pure label-returning router (ADR-024 Decision 4) — the graph's scene-loop router.
 
@@ -131,6 +137,7 @@ def build_graph(checkpointer=None):
     graph.add_conditional_edges("consistency_check", route_after_check)
     graph.add_edge("regenerate", "consistency_check")
     graph.add_conditional_edges("output_mod", route_after_output_mod)  # raises on failed; routes to compose
+    graph.add_conditional_edges("moderation_review", route_moderation_review)
     graph.add_edge("compose", END)
 
     return graph.compile(checkpointer=checkpointer or MemorySaver())

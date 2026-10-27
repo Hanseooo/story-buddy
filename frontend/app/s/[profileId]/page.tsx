@@ -32,6 +32,7 @@ export default function BookshelfPage({
   useEffect(() => {
     if (!profileId) return;
     let cancelled = false;
+    const imageController = new AbortController();
 
     // Subscribe first, then SELECT — same ordering as useJob (avoids missed updates)
     const channel = supabase
@@ -59,7 +60,7 @@ export default function BookshelfPage({
     (async () => {
       const { data: jobs } = await supabase
         .from("jobs")
-        .select("id, status, current_stage, failure_reason, input_text, title, pages, reveal")
+        .select("id, status, moderation_mode, current_stage, failure_reason, input_text, title, pages, reveal")
         // ponytail: explicit filter required — RLS also grants classmates' approved jobs (spec §7.2)
         .eq("profile_id", profileId)
         .order("created_at", { ascending: false });
@@ -73,7 +74,7 @@ export default function BookshelfPage({
         .map((j) => j.pages?.[0]?.image_path)
         .filter((p): p is string => Boolean(p));
 
-      const signedMap = imagePaths.length > 0 ? await signPaths(imagePaths) : {};
+      const signedMap = imagePaths.length > 0 ? await signPaths(imagePaths, jobs as JobRow[], imageController.signal) : {};
       if (cancelled) return;
 
       setCards(
@@ -91,6 +92,7 @@ export default function BookshelfPage({
 
     return () => {
       cancelled = true;
+      imageController.abort();
       supabase.removeChannel(channel);
     };
   }, [profileId]);
@@ -200,6 +202,7 @@ function BookCard({
     "terminal-success": `/s/${profileId}/book/${card.id}`,
     "in-flight": `/s/${profileId}/process/${card.id}`,
     paused: `/s/${profileId}/process/${card.id}`,
+    "teacher-held": `/s/${profileId}/process/${card.id}`,
     // Amended from /write (spec §7.2): /process renders FailureScreen, which reposts
     // the child's own input_text on one tap instead of stranding them on a blank page.
     "terminal-failure": `/s/${profileId}/process/${card.id}`,
@@ -212,7 +215,7 @@ function BookCard({
 
   const coverBg = card.coverUrl && card.bucket === "terminal-success" 
     ? "bg-background" 
-    : card.bucket === "paused" ? "bg-secondary/10"
+    : card.bucket === "paused" || card.bucket === "teacher-held" ? "bg-secondary/10"
     : (card.bucket === "terminal-failure" || card.bucket === "not-found") ? "bg-destructive/5"
     : card.bucket === "in-flight" ? "bg-primary/5"
     : "bg-background";
@@ -257,7 +260,7 @@ function BookCard({
                   <MagicWand weight="fill" className="w-8 h-8 text-primary" aria-hidden="true" />
                 </div>
               )}
-              {card.bucket === "paused" && (
+              {(card.bucket === "paused" || card.bucket === "teacher-held") && (
                 <div className="w-16 h-16 rounded-3xl bg-secondary/20 flex items-center justify-center animate-bounce mb-3">
                   <Users weight="fill" className="w-8 h-8 text-secondary" aria-hidden="true" />
                 </div>
@@ -283,10 +286,10 @@ function BookCard({
               </span>
             </div>
           )}
-          {card.bucket === "paused" && (
+          {(card.bucket === "paused" || card.bucket === "teacher-held") && (
             <div className="absolute inset-0 flex items-end justify-center pb-4">
               <span className="px-3 py-1.5 rounded-full bg-secondary text-on-secondary text-xs font-extrabold shadow-sm">
-                Needs characters
+                {card.bucket === "teacher-held" ? "Waiting for your teacher" : "Needs characters"}
               </span>
             </div>
           )}

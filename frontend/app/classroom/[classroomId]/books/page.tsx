@@ -32,6 +32,11 @@ export default function BooksPage() {
 
   const [dialogJobId, setDialogJobId] = useState<string | null>(null);
   const [dialogPageUrls, setDialogPageUrls] = useState<string[]>([]);
+  const dialogImages = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const controller = dialogImages.current;
+    return () => { controller?.abort(); };
+  }, [dialogJobId]);
 
   // ── Fetch ────────────────────────────────────────────────────────────────
 
@@ -39,7 +44,7 @@ export default function BooksPage() {
     const { data } = await supabase
       .from("jobs")
       .select(
-        "id, status, failure_reason, approved_at, rejected_at, created_at, input_text, title, pages, profile_id, profiles(display_nickname, avatar_id)"
+        "id, status, moderation_mode, failure_reason, approved_at, rejected_at, created_at, input_text, title, pages, profile_id, profiles(display_nickname, avatar_id)"
       )
       .eq("classroom_id", classroomId)
       .order("created_at", { ascending: false });
@@ -60,11 +65,13 @@ export default function BooksPage() {
 
   useEffect(() => {
     if (!jobs) return;
-    const unsigned = jobs.filter((j) => j.pages?.[0] && !thumbnails[j.id]);
+    const unsigned = jobs.filter((j) => j.status === "complete" && j.pages?.[0]);
     if (!unsigned.length) return;
 
     // One batch request, not one per thumbnail.
-    signPaths(unsigned.map((j) => j.pages![0].image_path)).then((signed) => {
+    const controller = new AbortController();
+    signPaths(unsigned.map((j) => j.pages![0].image_path), unsigned, controller.signal).then((signed) => {
+      if (controller.signal.aborted) return;
       setThumbnails((prev) => {
         const next = { ...prev };
         for (const j of unsigned) {
@@ -74,22 +81,27 @@ export default function BooksPage() {
         return next;
       });
     });
-  }, [jobs]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { controller.abort(); };
+  }, [jobs]);
 
   // ── Open dialog & sign pages ──────────────────────────────────────────────
 
   async function openDialog(jobId: string) {
+    dialogImages.current?.abort();
+    const controller = new AbortController();
+    dialogImages.current = controller;
     setDialogJobId(jobId);
     setDialogPageUrls([]);
     const job = jobs?.find((j) => j.id === jobId);
     if (!job?.pages?.length) return;
-    const signed = await signPaths(job.pages.map((p) => p.image_path));
+    const signed = await signPaths(job.pages.map((p) => p.image_path), [job], controller.signal);
+    if (controller.signal.aborted) return;
     setDialogPageUrls(job.pages.map((p) => signed[p.image_path] ?? ""));
 
     // Deciding auto-advances to the next pending book, so warm its URLs now —
     // otherwise every Approve costs the teacher a signing round trip they watch.
     const next = pendingJobs.find((j) => j.id !== jobId);
-    if (next?.pages?.length) void signPaths(next.pages.map((p) => p.image_path));
+    if (next?.pages?.length && next.moderation_mode !== "teacher_review_v1") void signPaths(next.pages.map((p) => p.image_path));
   }
 
   // ── Decision ─────────────────────────────────────────────────────────────

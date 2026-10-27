@@ -1,5 +1,6 @@
 import logging
 import sys
+from datetime import datetime, timezone
 
 from redis import Redis
 from rq import Queue, SimpleWorker, Worker
@@ -77,10 +78,26 @@ def _report_failed(job, exc_string: str) -> None:
     if not job.args:
         return
     try:
+        if job.func_name == "worker.run_job.run_review_storybook_job":
+            from app.moderation_hold import connect
+            expected_epoch = job.kwargs.get("expected_epoch")
+            if type(expected_epoch) is not int:
+                return
+            with connect() as conn:
+                # The parent has reaped the horse. Acquire the same session lock so a
+                # redelivery cannot race this terminal write. Never persist a traceback.
+                if not conn.execute("select pg_try_advisory_lock(hashtextextended(%s,0)) as locked", (job.args[0],)).fetchone()["locked"]:
+                    return
+                conn.execute("""update jobs set status='failed',error='worker_stopped',
+                  failure_reason='worker_stopped',worker_finished_at=now()
+                  where id=%s and generation_epoch=%s and moderation_mode='teacher_review_v1'
+                  and status in ('queued','running')""", (job.args[0], expected_epoch))
+            return
         # CAS on the in-flight states: `run_job` writes a precise `error` when it can, and this
         # must never overwrite that, a `complete` row, or an `awaiting_confirm` pause.
         get_supabase_client().table("jobs").update(
-            {"status": "failed", "error": exc_string, "failure_reason": "worker_stopped"}
+            {"status": "failed", "error": exc_string, "failure_reason": "worker_stopped",
+             "worker_finished_at": datetime.now(timezone.utc).isoformat()}
         ).in_("status", ["queued", "running"]).eq("id", job.args[0]).execute()
     except Exception:
         # Raising here would kill the parent that is meant to pick up the next book — strictly

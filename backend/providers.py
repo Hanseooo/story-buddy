@@ -13,7 +13,7 @@ import re
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
-from contextvars import ContextVar
+from contextvars import ContextVar, copy_context
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Callable, Generic, Literal, TypeVar
@@ -31,6 +31,13 @@ _log = logging.getLogger(__name__)
 _fal_event_sink: ContextVar[Callable[[str], None] | None] = ContextVar(
     "fal_event_sink", default=None
 )
+_generation_fence: ContextVar[Callable[[], None] | None] = ContextVar("generation_fence", default=None)
+
+
+def check_generation_fence() -> None:
+    fence = _generation_fence.get()
+    if fence is not None:
+        fence()
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
@@ -154,11 +161,14 @@ def _bounded(model: str, call):
     something httpx will not. Move to an async client if stalls ever become frequent enough for the
     leak to matter; at one stall per book it does not.
     """
+    check_generation_fence()
     pool = ThreadPoolExecutor(max_workers=1)
     try:
         # NOT `with ThreadPoolExecutor(...)`: its `__exit__` calls `shutdown(wait=True)`, which
         # joins the very thread this is abandoning and re-hangs the worker on the way out.
-        return pool.submit(call).result(timeout=CALL_TIMEOUT_SECONDS)
+        result = pool.submit(copy_context().run, call).result(timeout=CALL_TIMEOUT_SECONDS)
+        check_generation_fence()
+        return result
     except TimeoutError as exc:
         # `Future.result` raises a bare, messageless TimeoutError, and `run_job`'s handler writes
         # `str(exc)` into the row's `error` — the only account of the failure anyone gets later.
@@ -525,6 +535,7 @@ def _run_fal(endpoint: str, arguments: dict, seed: int | None) -> bytes:
         arguments = {**arguments, "seed": seed}
     sink = _fal_event_sink.get()
     for attempt in range(1, CONTENT_FLAG_ATTEMPTS + 1):
+        check_generation_fence()
         if sink:
             sink("attempted")
         try:
@@ -544,7 +555,7 @@ def _run_fal(endpoint: str, arguments: dict, seed: int | None) -> bytes:
                 raise
             if sink:
                 sink("failed")
-            if attempt == CONTENT_FLAG_ATTEMPTS:
+            if attempt == CONTENT_FLAG_ATTEMPTS or _generation_fence.get() is not None:
                 raise
             _log.warning(
                 "fal's content checker rejected the draw; asking again (%d/%d)",
@@ -554,6 +565,7 @@ def _run_fal(endpoint: str, arguments: dict, seed: int | None) -> bytes:
             continue
         if sink:
             sink("completed")
+        check_generation_fence()
         return contents
     raise AssertionError("unreachable")
 
@@ -924,14 +936,18 @@ def classify_text_backstop(text: str) -> tuple[bool, list[str]]:
 
 # ADR-032: Local Falconsai ViT removed to prevent OOM.
 
-def classify_image_primary(image_url: str) -> bool:
-    """Primary NSFW image guard via API (ADR-032). Returns True if safe."""
-    prompt = (
+IMAGE_PRIMARY_PROMPT = (
         "You are a content safety classifier for a children's education platform. "
         "Analyze the provided image and determine if it contains any NSFW (Not Safe For Work) content, "
         "such as nudity, sexual content, or explicit material. "
         "Explain your reasoning, then classify it."
     )
+IMAGE_PRIMARY_INSTRUCTION_VERSION = "sha256:" + hashlib.sha256(IMAGE_PRIMARY_PROMPT.encode("utf-8")).hexdigest()
+
+
+def classify_image_primary(image_url: str) -> bool:
+    """Primary NSFW image guard via API (ADR-032). Returns True if safe."""
+    prompt = IMAGE_PRIMARY_PROMPT
     verdict = judge(prompt, [image_url], _ImageSafetyVerdict, model=settings.moderation_primary_image_model)
     _log.info("classify_image_primary: is_safe=%s reasoning=%.300s", verdict.is_safe, verdict.safety_reasoning)
     return verdict.is_safe
@@ -941,6 +957,18 @@ class _ImageSafetyVerdict(BaseModel):
     # Reason-before-score per ADR-004.
     safety_reasoning: str
     is_safe: bool
+
+
+IMAGE_BACKSTOP_PROMPT = (
+        "You are reviewing an image for a children's educational storybook platform (ages 5–12). "
+        "Assess whether the image is safe for children. "
+        "Flag: violence, gore, sexual content, dangerous activities a child might imitate, and "
+        "imagery likely to genuinely distress a young child. "
+        "Do NOT flag ordinary storybook atmosphere: a spooky house, a dark forest, a worried or "
+        "startled character, mild suspense. Children's stories are built out of these, and the "
+        "story text this image illustrates has already passed a separate safety gate."
+    )
+IMAGE_BACKSTOP_INSTRUCTION_VERSION = "sha256:" + hashlib.sha256(IMAGE_BACKSTOP_PROMPT.encode("utf-8")).hexdigest()
 
 
 def classify_image_backstop(image_url: str) -> bool:
@@ -958,15 +986,7 @@ def classify_image_backstop(image_url: str) -> bool:
     # this, but that set is a Post-Phase-2 item and does not exist yet, and the one probe that does
     # (`spikes/phase_05.py moderation`) is TEXT-only — it cannot exercise an image rubric at all.
     # So this loosening rests on reasoning, not measurement. Build the image arm before Phase 2.
-    prompt = (
-        "You are reviewing an image for a children's educational storybook platform (ages 5–12). "
-        "Assess whether the image is safe for children. "
-        "Flag: violence, gore, sexual content, dangerous activities a child might imitate, and "
-        "imagery likely to genuinely distress a young child. "
-        "Do NOT flag ordinary storybook atmosphere: a spooky house, a dark forest, a worried or "
-        "startled character, mild suspense. Children's stories are built out of these, and the "
-        "story text this image illustrates has already passed a separate safety gate."
-    )
+    prompt = IMAGE_BACKSTOP_PROMPT
     verdict = judge(prompt, [image_url], _ImageSafetyVerdict, model=settings.moderation_backstop_image_model)
     # ADR-004 makes the model reason before it scores; both callers then discarded the reasoning and
     # kept the bool, so a flag that killed a book left no account of what the classifier saw. Logged

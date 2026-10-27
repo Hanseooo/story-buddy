@@ -132,5 +132,6 @@ def test_canonical_consistency_does_not_add_a_graph_node():
         "consistency_check",
         "regenerate",
         "output_mod",
+        "moderation_review",  # ADR-080's dedicated safety pause, independent of canonical consistency
         "compose",
     }

@@ -7,12 +7,15 @@ export type JobBucket =
   | "not-found"
   | "in-flight"
   | "paused"
+  | "teacher-held"
   | "terminal-success"
   | "terminal-failure";
 
 export type JobRow = {
   id: string;
   status: string;
+  moderation_mode?: "baseline" | "teacher_review_v1";
+  generation_epoch?: number;
   current_stage: string | null;
   failure_reason: string | null;
   profile_id: string;
@@ -35,6 +38,7 @@ export type JobRow = {
 
 export function classify(row: JobRow | null): JobBucket {
   if (!row) return "not-found";
+  if (row.status === "awaiting_teacher") return "teacher-held";
   if (row.status === "complete" && row.pages.length > 0) return "terminal-success";
   if (row.status === "awaiting_confirm") return "paused";
   if (row.status === "queued" || row.status === "running") return "in-flight";
@@ -60,7 +64,7 @@ export function useJob(jobId: string): {
       // `profile_id` is who owns the book, not who is reading it: RLS lets a classmate read an
       // approved peer row whole, so every consumer of `input_text` has to be able to tell the
       // owner's own story text from someone else's (story-titles §5).
-      .select("id, status, current_stage, failure_reason, profile_id, input_text, title, style_preset_id, approved_at, rejected_at, pages, reveal")
+      .select("id, status, moderation_mode, generation_epoch, current_stage, failure_reason, profile_id, input_text, title, style_preset_id, approved_at, rejected_at, pages, reveal")
       .eq("id", jobId)
       .single();
     // PGRST116 is `.single()` matching zero rows — the book is genuinely absent, or RLS hid it
@@ -97,7 +101,7 @@ export function useJob(jobId: string): {
           setRow(newRow);
           const b = classify(newRow);
           // Completed books can still gain or lose teacher approval while the reader is open.
-          if (b === "terminal-failure") {
+          if (b === "terminal-failure" && newRow.moderation_mode !== "teacher_review_v1") {
             supabase.removeChannel(channel);
           }
         }
@@ -107,8 +111,14 @@ export function useJob(jobId: string): {
     // Seed: subscribe first, then SELECT — discard if live UPDATE already arrived
     loadRow();
 
+    function onVisibility() {
+      if (document.visibilityState === "visible") void loadRow(true);
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+
     return () => {
       supabase.removeChannel(channel);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);

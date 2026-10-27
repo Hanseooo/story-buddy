@@ -86,6 +86,9 @@ class Settings(BaseSettings):
     # strata (`freeze_dataset.py`), and the judge has never been trained or tested on pixel art.
     enable_pixel_style: bool = False
 
+    # ADR-080: synthetic-only until educator/ethics and hosted release gates are met.
+    enable_teacher_moderation_review: bool = False
+
     # ADR-037: consistency-checked attempts per scene — the initial draw plus two corrected
     # retries. Production is 3 and the specs are written against 3; this is a field rather than a
     # constant so `finetune/build_corpus.py` can lower it for a research build, where the
@@ -105,6 +108,13 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+TEACHER_MODERATION_POLICY_VERSION = "teacher_review_policy_v1"
+# Broad image flags carry no criterion-specific label. Review the complete checklist.
+TEACHER_MODERATION_CRITERIA = (
+    "sexual_content", "exposure", "graphic_harm", "harm_instruction", "targeted_abuse",
+    "discriminatory_slur", "exploitation", "substances", "adult_detail", "privacy",
+)
 
 # ponytail: module-level dict — style presets are not env-driven; BaseSettings adds nothing here.
 # Keys mirror the CHECK constraint in supabase/migrations/0002_jobs_style_preset_id.sql.

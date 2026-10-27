@@ -16,6 +16,12 @@
 
 ## 1. Purpose
 
+**Accepted moderation extension (not built):** [moderation-stack §9.9.2](moderation-stack.md#992-exact-proposed-data-contract)
+and accepted [ADR-080](../product/adr/ADR-080-teacher-held-moderation-and-exact-content-clearance.md)
+define the accepted defaulted additive moderation fields.
+Accepted by the owner on 2026-10-27, not implemented. The schema below describes baseline;
+implementation must update this schema and every affected consumer together.
+
 Define the single Pydantic `StoryMemory` model that is simultaneously (a) the inter-module data contract,
 (b) the LangGraph runtime state, and (c) the Postgres checkpoint blob (ADR-023, Decision 1). It also freezes
 the **closed failure-reason taxonomy** shared by the judge, the regeneration-controller, and the Phase-2.5
