@@ -11,6 +11,7 @@ from pipeline.generate_scene import generate_scene
 from pipeline.consistency_check import consistency_check
 from pipeline.compose import compose
 from pipeline.output_mod import output_mod
+from pipeline.moderation_review import moderation_review
 from pipeline.regenerate import regenerate
 from pipeline.reveal import MAX_RETRY_TAPS, reveal
 
@@ -45,6 +46,8 @@ def route_after_output_mod(state: StoryMemory) -> str:
     Hands back to `route_next_scene` rather than going straight to compose: moderation now runs
     per finalized scene, so "what next" is the same question that router answers everywhere else.
     """
+    if state.moderation_context.review is not None and state.moderation_context.review.resolution is None:
+        return "moderation_review"
     if any(s.moderation_status == "failed" for s in state.scenes):
         raise RuntimeError("output_moderation_failed")
     return route_next_scene(state)
@@ -107,6 +110,7 @@ def build_graph(checkpointer=None):
     graph.add_node("consistency_check", consistency_check)
     graph.add_node("regenerate", regenerate)
     graph.add_node("output_mod", output_mod)
+    graph.add_node("moderation_review", moderation_review)
     graph.add_node("compose", compose)
 
     graph.set_entry_point("input_gate")

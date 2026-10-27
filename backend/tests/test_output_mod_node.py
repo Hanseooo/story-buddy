@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -53,6 +54,29 @@ def test_all_scenes_pass_sets_moderation_status_passed():
 
 
 # --- first check fails, retry passes ---
+
+def test_teacher_review_first_flag_preserves_exact_scene_without_redrawing():
+    from contracts.story_memory import ModerationContext
+    from pipeline.output_mod import output_mod
+
+    state = _state([_scene("s0")])
+    state.story_id = "1f7a7b8e-634f-44d1-953b-4d583ba0d13a"
+    state.moderation_context = ModerationContext(
+        mode="teacher_review_v1", policy_version="teacher_review_policy_v1"
+    )
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"), \
+         patch("pipeline.output_mod.classify_image_primary", side_effect=[False, True]), \
+         patch("pipeline.output_mod.classify_image_backstop", return_value=True), \
+         patch("pipeline.output_mod.download_book_image", return_value=Path("tests/fixtures/qwen35-resize-scene.png").read_bytes()), \
+         patch("pipeline.output_mod.generate_and_store", return_value=("retry.png", True)) as generate:
+        result = output_mod(state)
+
+    generate.assert_not_called()
+    assert result["moderation_context"].review.kind == "scene_image"
+    assert result["moderation_context"].review.subject_id == "s0"
+    assert result["moderation_context"].review.subject_version == (
+        "0e1cdbf033e2b06bb23842359a9ae55e74529a78fcdbf18a7b167e73961110ef"
+    )
 
 def test_first_check_fails_soften_retry_triggers_and_passes():
     """Spec §4c step 4: fail → soften-and-retry triggered; retry passes → moderation_status = 'passed'."""

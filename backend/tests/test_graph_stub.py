@@ -44,6 +44,28 @@ def _initial_state(story_id: str) -> StoryMemory:
     )
 
 
+def test_scene_review_interrupt_uses_checkpointed_review_without_redrawing(monkeypatch):
+    from contracts.story_memory import ModerationContext, ReviewContext, Scene
+
+    _mock_call_points(monkeypatch)
+    graph = build_graph()
+    config = {"configurable": {"thread_id": "held-scene"}}
+    state = _initial_state("held-scene")
+    state.scenes = [Scene(scene_id="s0", text_excerpt="A dog runs.", final_image_ref="held-scene/s0.png")]
+    state.moderation_context = ModerationContext(
+        mode="teacher_review_v1", policy_version="teacher_review_policy_v1",
+        review=ReviewContext(
+            review_id="1f7a7b8e-634f-44d1-953b-4d583ba0d13a", kind="scene_image",
+            subject_id="s0", subject_version="hash", return_node="output_mod",
+        ),
+    )
+    graph.update_state(config, dict(state), as_node="output_mod")
+    result = graph.invoke(None, config)
+    assert result["__interrupt__"][0].value == {
+        "kind": "moderation_review", "review_id": "1f7a7b8e-634f-44d1-953b-4d583ba0d13a"
+    }
+
+
 STUB_ANALYSIS = StoryAnalysis.model_validate(
     {
         "characters": [
