@@ -12,7 +12,14 @@ type Detail = {
   status: string; review_id: string | null; subject_version?: string; generation_epoch?: number;
   title?: string | null; author?: string | null; story_text?: string | null;
   ready?: boolean; pictures?: Picture[];
+  kind?: string; criteria?: string[]; policy_version?: string; current_policy_version?: string;
+  settings_snapshot?: { theme_ids?: string[]; settings_version?: number };
+  classifier_evidence?: { layer: string; model_id: string; instruction_version: string;
+    outcome: string; checked_at: string | null; categories: string[]; reason: string | null }[];
 };
+type Criterion = { id: string; name: string; trigger: string; exception: string };
+type Policy = { policy_version: string; audience: string; basis: string; scope: string;
+  guidance: string; theme_scope: string; criteria: Criterion[]; optional_themes: Criterion[] };
 const control = "min-h-[44px] px-4 py-2 rounded-xl font-bold text-primary hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50";
 
 async function reviewFetch(path: string, signal: AbortSignal, options?: RequestInit) {
@@ -74,6 +81,7 @@ export default function NeedsHelpQueue({ classroomId, active, onCount, onBack }:
 
   return (
     <section ref={queue} tabIndex={-1} hidden={!active} aria-label="Needs your help" className="focus-visible:outline-2 focus-visible:outline-primary">
+      <ReviewCriteria />
       {failed ? <div role="alert" className="p-6 bg-surface rounded-2xl border border-primary/15">
         <p>Could not load stories needing your help.</p>
         <button className={control} onClick={() => void load()}>Try loading again</button>
@@ -178,10 +186,97 @@ function HeldStory({ jobId, onClose }: { jobId: string; onClose: () => void }) {
             {detail.pictures?.map(picture => <ReviewPicture key={picture.asset_id} jobId={jobId}
               reviewId={detail.review_id!} version={detail.subject_version!} picture={picture} onChanged={load} />)}
           </section>}
+          {!loading && !error && <section aria-label="Why this story is held" className="space-y-4 break-words">
+            <h4 className="font-bold">Why this story is held</h4>
+            <p>{detail.kind === "optional_themes" ? "Optional classroom themes" : "Shared safety"}</p>
+            <p>Recorded criteria: {detail.criteria?.length ? detail.criteria.map(id => id.replaceAll("_", " ")).join(", ") : "Unavailable"}</p>
+            <p>Policy at submission: {detail.policy_version || "Unavailable"}</p>
+            <p>Current policy: {detail.current_policy_version || "Unavailable"}</p>
+            <p>Captured settings version: {detail.settings_snapshot?.settings_version ?? "Unavailable"}</p>
+            <p>Optional themes at submission: {detail.settings_snapshot?.theme_ids
+              ? detail.settings_snapshot.theme_ids.map(id => id.replaceAll("_", " ")).join(", ") || "None enabled"
+              : "Unavailable"}</p>
+            {!detail.classifier_evidence?.length && <p>The recorded reason is unavailable</p>}
+            {detail.classifier_evidence?.map((evidence, index) => <div key={index} className="space-y-2 border-t border-primary/15 pt-3">
+              <h5 className="font-bold">{evidence.layer === "primary" ? "Primary classifier" : "Backstop classifier"}</h5>
+              <dl className="space-y-1 text-sm">
+                <dt>Recorded model</dt><dd>{evidence.model_id || "Unavailable"}</dd>
+                <dt>Instruction version</dt><dd>{evidence.instruction_version || "Unavailable"}</dd>
+                <dt>Recorded outcome</dt><dd>{evidence.outcome.replaceAll("_", " ")}</dd>
+                <dt>Checked at</dt><dd>{evidence.checked_at ? new Date(evidence.checked_at).toLocaleString() : "Unavailable"}</dd>
+                <dt>Recorded labels</dt><dd>{evidence.categories?.join(", ") || "Unavailable"}</dd>
+              </dl>
+              <p className="whitespace-pre-wrap">{evidence.reason?.trim() || "The recorded reason is unavailable"}</p>
+            </div>)}
+            <ReviewCriteria />
+          </section>}
         </>}
       </>}
     </div>
   </dialog>;
+}
+
+function ReviewCriteria() {
+  const panel = useRef<HTMLDetailsElement>(null);
+  const request = useRef<AbortController | null>(null);
+  const [policy, setPolicy] = useState<Policy | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => () => request.current?.abort(), []);
+
+  async function load() {
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
+    setLoading(true);
+    setFailed(false);
+    try {
+      const response = await reviewFetch("/teacher/moderation-policy", controller.signal);
+      if (!response.ok) throw new Error("policy_unavailable");
+      const current: Policy = await response.json();
+      if (!controller.signal.aborted) setPolicy(current);
+    } catch {
+      if (!controller.signal.aborted) { setPolicy(null); setFailed(true); }
+    } finally {
+      if (!controller.signal.aborted) setLoading(false);
+    }
+  }
+
+  function close() {
+    if (panel.current) {
+      panel.current.open = false;
+      panel.current.querySelector("summary")?.focus();
+    }
+  }
+
+  return <details ref={panel} className="py-4 space-y-4" onToggle={event => {
+    if (event.currentTarget.open) void load();
+  }} onKeyDown={event => {
+    if (event.key === "Escape" && panel.current?.open) { event.preventDefault(); event.stopPropagation(); close(); }
+  }}>
+    <summary className={`${control} cursor-pointer`}>Review criteria</summary>
+    <button className={control} onClick={close}>Close review criteria</button>
+    {loading && <p role="status">Loading review criteria…</p>}
+    {failed && <div role="alert"><p>Review criteria are unavailable.</p>
+      <button className={control} onClick={() => void load()}>Try loading criteria again</button></div>}
+    {!loading && policy && <div className="space-y-5 max-w-prose break-words">
+      <p>{policy.basis}</p><p>{policy.audience}</p><p>Current policy: {policy.policy_version}</p>
+      <p>{policy.scope}</p><p>{policy.guidance}</p>
+      <h4 className="text-xl font-bold">Shared safety criteria</h4>
+      {policy.criteria.map(criterion => <div key={criterion.id} className="space-y-2">
+        <h5 className="font-bold">{criterion.name}</h5>
+        <p className="text-sm font-bold">Hold boundary</p><p>{criterion.trigger}</p>
+        <p className="text-sm font-bold">Permitted context and boundary examples</p><p>{criterion.exception}</p>
+      </div>)}
+      <h4 className="text-xl font-bold">Optional classroom themes</h4><p>{policy.theme_scope}</p>
+      {policy.optional_themes.map(theme => <div key={theme.id} className="space-y-2">
+        <h5 className="font-bold">{theme.name}</h5>
+        <p className="text-sm font-bold">Trigger when enabled</p><p>{theme.trigger}</p>
+        <p className="text-sm font-bold">Does not trigger</p><p>{theme.exception}</p>
+      </div>)}
+    </div>}
+  </details>;
 }
 
 function ReviewPicture({ jobId, reviewId, version, picture, onChanged }: {

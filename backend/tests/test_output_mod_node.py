@@ -17,6 +17,48 @@ from contracts.story_memory import (
 from pipeline.prompt_optimizer import build_prompt
 
 
+def test_reason_privacy_failure_does_not_discard_a_primary_verdict():
+    from contracts.story_memory import ModerationContext
+    from pipeline.output_mod import output_mod
+    from providers import ModerationEvidenceError
+
+    state = _state([_scene()])
+    state.moderation_context = ModerationContext(mode="teacher_review_v1")
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"), \
+         patch("pipeline.output_mod.classify_image_primary", side_effect=ModerationEvidenceError("unavailable")), \
+         patch("pipeline.output_mod.classify_image_backstop", return_value=True), \
+         pytest.raises(RuntimeError, match="moderation_error"):
+        output_mod(state)
+
+
+@pytest.mark.parametrize("recorded_reason", ["Synthetic review explanation", None])
+def test_teacher_hold_retains_call_evidence_after_settings_change(monkeypatch, recorded_reason):
+    from app.config import settings
+    from contracts.story_memory import ModerationContext
+    from pipeline.output_mod import output_mod
+
+    state = _state([_scene()])
+    state.story_id = "00000000-0000-0000-0000-000000000007"
+    state.moderation_context = ModerationContext(mode="teacher_review_v1", policy_version="teacher_review_policy_v1")
+    monkeypatch.setattr(settings, "moderation_backstop_image_model", "captured-model")
+
+    def flag(url, *, reasons):
+        if recorded_reason:
+            reasons.append(recorded_reason)
+        monkeypatch.setattr(settings, "moderation_backstop_image_model", "later-model")
+        return False
+
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"), \
+         patch("pipeline.output_mod.classify_image_primary", return_value=True), \
+         patch("pipeline.output_mod.classify_image_backstop", side_effect=flag), \
+         patch("pipeline.output_mod.download_book_image", return_value=b"synthetic"):
+        result = output_mod(state)
+    evidence = result["moderation_context"].review.classifier_evidence[-1]
+    assert evidence.reason == recorded_reason
+    assert evidence.model_id == "captured-model"
+    assert evidence.outcome == "flagged"
+
+
 def _state(scenes: list[Scene], characters: list[Character] | None = None) -> StoryMemory:
     return StoryMemory(
         schema_version=CURRENT_SCHEMA_VERSION,

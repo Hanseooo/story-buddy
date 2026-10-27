@@ -3,12 +3,14 @@ import logging
 from datetime import datetime, timezone
 from uuid import UUID, uuid5
 
-from app.config import TEACHER_MODERATION_CRITERIA, check_image_budget, settings
+from app.config import check_image_budget, settings
+from app.moderation_policy import TEACHER_MODERATION_CRITERIA
 from contracts.story_memory import Attempt, ClassifierEvidence, ReviewContext, StoryMemory
 from pipeline.generate_scene import generate_and_store
 from pipeline.prompt_optimizer import referenced_characters
 from providers import (
     IMAGE_BACKSTOP_INSTRUCTION_VERSION, IMAGE_PRIMARY_INSTRUCTION_VERSION,
+    ModerationEvidenceError,
     classify_image_backstop, classify_image_primary, download_book_image, get_signed_url,
 )
 
@@ -38,18 +40,24 @@ def _check_image(image_url: str, evidence: list[ClassifierEvidence] | None = Non
     ("Image content is not supported by this model"), five scenes already moderated clean.
     """
     primary_time = datetime.now(timezone.utc)
+    primary_model = settings.moderation_primary_image_model
+    primary_reasons = []
     try:
-        primary_safe = classify_image_primary(image_url)
+        primary_safe = (classify_image_primary(image_url, reasons=primary_reasons)
+                        if evidence is not None else classify_image_primary(image_url))
+    except ModerationEvidenceError:
+        raise
     except Exception as exc:
         log.warning("output_mod: primary classifier failed (%s) — falling back to backstop", exc)
         primary_safe = None  # None = primary errored, not "passed"
 
     if evidence is not None:
         evidence.append(ClassifierEvidence(
-            layer="primary", model_id=settings.moderation_primary_image_model,
+            layer="primary", model_id=primary_model,
             instruction_version=IMAGE_PRIMARY_INSTRUCTION_VERSION,
             outcome="error" if primary_safe is None else "safe" if primary_safe else "flagged",
             checked_at=primary_time,
+            reason=primary_reasons[0] if primary_reasons else None,
         ))
     if primary_safe is False:
         # A second opinion cannot change a flag (spec §4a step 3).
@@ -61,12 +69,16 @@ def _check_image(image_url: str, evidence: list[ClassifierEvidence] | None = Non
         return "primary"
 
     backstop_time = datetime.now(timezone.utc)
-    backstop_safe = classify_image_backstop(image_url)
+    backstop_model = settings.moderation_backstop_image_model
+    backstop_reasons = []
+    backstop_safe = (classify_image_backstop(image_url, reasons=backstop_reasons)
+                     if evidence is not None else classify_image_backstop(image_url))
     if evidence is not None:
         evidence.append(ClassifierEvidence(
-            layer="backstop", model_id=settings.moderation_backstop_image_model,
+            layer="backstop", model_id=backstop_model,
             instruction_version=IMAGE_BACKSTOP_INSTRUCTION_VERSION,
             outcome="safe" if backstop_safe else "flagged", checked_at=backstop_time,
+            reason=backstop_reasons[0] if backstop_reasons else None,
         ))
     if backstop_safe:
         return None

@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { jobState, type Job } from "@/lib/types/jobs";
 import { FailedBookRow } from "./page";
 import BookCard from "@/components/BookCard";
 import NeedsHelpQueue from "@/components/NeedsHelpQueue";
 // Captured from the real graph/disposable-Postgres test_teacher_hold integration run.
 import heldDetail from "./held-detail.fixture.json";
+import moderationPolicy from "./moderation-policy.fixture.json";
 
 vi.mock("@/lib/supabaseClient", () => ({ supabase: {
   auth: { getSession: async () => ({ data: { session: { access_token: "synthetic" } } }) },
@@ -14,6 +15,29 @@ vi.mock("@/lib/supabaseClient", () => ({ supabase: {
 } }));
 
 describe("held story inspection", () => {
+  it("shows captured evidence and a closable criteria reference, with honest missing reasoning", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.endsWith("/moderation-policy")) return Response.json(moderationPolicy);
+      if (url.endsWith("/moderation-review")) return Response.json(heldDetail);
+      return Response.json([{ review_id: heldDetail.review_id, job_id: "synthetic-job", title: heldDetail.title, held_at: "2026-10-28T00:00:00Z", ready: true }]);
+    }));
+    render(<NeedsHelpQueue classroomId="synthetic-class" active onCount={() => {}} onBack={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Inspect Synthetic title/ }));
+    expect(await screen.findByText("Synthetic review explanation")).toBeDefined();
+    expect(screen.getByText("The recorded reason is unavailable")).toBeDefined();
+    expect(screen.getByText(heldDetail.classifier_evidence[0].model_id)).toBeDefined();
+    expect(screen.getByText("Shared safety", { selector: "p" })).toBeDefined();
+    const dialog = screen.getByRole("dialog");
+    const summary = dialog.querySelector("summary")!;
+    fireEvent.click(summary);
+    expect(await screen.findByText(moderationPolicy.basis)).toBeDefined();
+    expect(screen.getByText(moderationPolicy.criteria[1].trigger)).toBeDefined();
+    expect(screen.getByText(moderationPolicy.optional_themes[0].trigger)).toBeDefined();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close review criteria" }));
+    expect(summary.parentElement).not.toHaveAttribute("open");
+    expect(summary).toHaveFocus();
+    vi.unstubAllGlobals();
+  });
   it.each([false, true])("reveals only on request and keeps writing readable on image failure (%s)", async (fails) => {
     let queueChanged = false;
     const fetchMock = vi.fn<(url: string, options?: RequestInit) => Promise<Response>>(async (url) => {

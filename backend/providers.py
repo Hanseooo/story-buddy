@@ -948,11 +948,21 @@ IMAGE_PRIMARY_PROMPT = (
 IMAGE_PRIMARY_INSTRUCTION_VERSION = "sha256:" + hashlib.sha256(IMAGE_PRIMARY_PROMPT.encode("utf-8")).hexdigest()
 
 
-def classify_image_primary(image_url: str) -> bool:
+class ModerationEvidenceError(RuntimeError):
+    """A successful verdict must not be discarded as a classifier outage."""
+
+
+def classify_image_primary(image_url: str, *, reasons: list[str] | None = None) -> bool:
     """Primary NSFW image guard via API (ADR-032). Returns True if safe."""
     prompt = IMAGE_PRIMARY_PROMPT
     verdict = judge(prompt, [image_url], _ImageSafetyVerdict, model=settings.moderation_primary_image_model)
-    _log.info("classify_image_primary: is_safe=%s reasoning=%.300s", verdict.is_safe, verdict.safety_reasoning)
+    try:
+        reason = redact_pii(verdict.safety_reasoning) if reasons is not None else verdict.safety_reasoning
+    except Exception:
+        raise ModerationEvidenceError("moderation_evidence_unavailable") from None
+    if reasons is not None:
+        reasons.append(reason)
+    _log.info("classify_image_primary: is_safe=%s reasoning=%.300s", verdict.is_safe, reason)
     return verdict.is_safe
 
 
@@ -974,7 +984,7 @@ IMAGE_BACKSTOP_PROMPT = (
 IMAGE_BACKSTOP_INSTRUCTION_VERSION = "sha256:" + hashlib.sha256(IMAGE_BACKSTOP_PROMPT.encode("utf-8")).hexdigest()
 
 
-def classify_image_backstop(image_url: str) -> bool:
+def classify_image_backstop(image_url: str, *, reasons: list[str] | None = None) -> bool:
     """gemma-3-27b-it via OpenRouter — violence, gore, dangerous content check."""
     # "frightening imagery" flagged the genre. Prod job 4f7698d5 (2026-08-12) lost an 8-scene book
     # at the last gate on s2 — a girl walking up to the "big, scary house" that IS the story, whose
@@ -991,10 +1001,11 @@ def classify_image_backstop(image_url: str) -> bool:
     # So this loosening rests on reasoning, not measurement. Build the image arm before Phase 2.
     prompt = IMAGE_BACKSTOP_PROMPT
     verdict = judge(prompt, [image_url], _ImageSafetyVerdict, model=settings.moderation_backstop_image_model)
-    # ADR-004 makes the model reason before it scores; both callers then discarded the reasoning and
-    # kept the bool, so a flag that killed a book left no account of what the classifier saw. Logged
-    # here rather than returned: `char_ref_mod` and `output_mod` both call these, and widening the
-    # return type would rewrite two nodes and three test files to carry a string neither branches on.
-    # ponytail: truncated, not structured — a `ModerationResult` field if it ever needs querying.
-    _log.info("classify_image_backstop: is_safe=%s reasoning=%.300s", verdict.is_safe, verdict.safety_reasoning)
+    try:
+        reason = redact_pii(verdict.safety_reasoning) if reasons is not None else verdict.safety_reasoning
+    except Exception:
+        raise ModerationEvidenceError("moderation_evidence_unavailable") from None
+    if reasons is not None:
+        reasons.append(reason)
+    _log.info("classify_image_backstop: is_safe=%s reasoning=%.300s", verdict.is_safe, reason)
     return verdict.is_safe

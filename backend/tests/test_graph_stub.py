@@ -46,7 +46,7 @@ def test_feature_bound_covers_ten_scenes_with_maximum_consistency_retries_then_h
     monkeypatch.setattr("pipeline.consistency_check.judge_attempt", lambda *a: (
         [_judge_returning(same=False)], SceneConstraintVerdict(differences_observed="none", contradictions=[]),
     ))
-    monkeypatch.setattr("pipeline.output_mod.classify_image_primary", lambda url: "s9-" not in url)
+    monkeypatch.setattr("pipeline.output_mod.classify_image_primary", lambda url, **kwargs: "s9-" not in url)
     monkeypatch.setattr("pipeline.output_mod.download_book_image", lambda path: b"synthetic graph-bound image")
     state = _initial_state("04b21cbc-ff2d-4fd8-b2ef-56431784a9a4")
     state.input.raw_text = " ".join(["The orange dog walks through the grassy field past the trees and stops near the stream." for _ in range(10)])
@@ -161,8 +161,8 @@ def _mock_call_points(monkeypatch):
     monkeypatch.setattr("pipeline.char_ref_mod.classify_image_primary", lambda url: True)
     monkeypatch.setattr("pipeline.char_ref_mod.classify_image_backstop", lambda url: True)
     monkeypatch.setattr("pipeline.char_ref_mod.get_signed_url", lambda path: f"https://signed/{path}")
-    monkeypatch.setattr("pipeline.output_mod.classify_image_primary", lambda url: True)
-    monkeypatch.setattr("pipeline.output_mod.classify_image_backstop", lambda url: True)
+    monkeypatch.setattr("pipeline.output_mod.classify_image_primary", lambda url, **kwargs: True)
+    monkeypatch.setattr("pipeline.output_mod.classify_image_backstop", lambda url, **kwargs: True)
     monkeypatch.setattr("pipeline.output_mod.get_signed_url", lambda path: f"https://signed/{path}")
 
 

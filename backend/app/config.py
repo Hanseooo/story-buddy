@@ -109,13 +109,6 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-TEACHER_MODERATION_POLICY_VERSION = "teacher_review_policy_v1"
-# Broad image flags carry no criterion-specific label. Review the complete checklist.
-TEACHER_MODERATION_CRITERIA = (
-    "sexual_content", "exposure", "graphic_harm", "harm_instruction", "targeted_abuse",
-    "discriminatory_slur", "exploitation", "substances", "adult_detail", "privacy",
-)
-
 # ponytail: module-level dict — style presets are not env-driven; BaseSettings adds nothing here.
 # Keys mirror the CHECK constraint in supabase/migrations/0002_jobs_style_preset_id.sql.
 #

@@ -1468,3 +1468,35 @@ Unrestricted `pnpm test` discovery stalled, including a retry excluding generate
 `pnpm exec vitest run app components lib utils middleware.test.ts --maxWorkers=2 --reporter=dot`
 then passed all 77 source test files and 734 tests. No source tests were excluded. Both review
 axes are clear after the failing-first detached-opener regression and focus fallback fix.
+
+### 9.12 Ticket 13 implementation (2026-10-28)
+
+`backend/app/moderation_policy.py` is the data-only source for the accepted provisional
+criteria, optional-theme boundaries, policy version, audience and validation caveat in
+§§9.9.6–9.9.7. `GET /teacher/moderation-policy` checks the stored teacher role and returns
+private, no-store data. Existing owner-only review detail now includes subject kind, captured
+criteria/policy/settings and classifier evidence, alongside the current policy version.
+Nothing is added to child or Realtime projections.
+
+Image classifiers retain their boolean result and existing prompts. In teacher-review mode
+they additionally return privacy-processed reasoning to `output_mod`, which checkpoints it in
+the existing evidence fields before hold projection. Model IDs are captured before each call.
+Reasoning privacy failure stops processing as a service error and cannot trigger primary-error
+fallback. Baseline calls do not request reasoning capture. Missing historical reasoning remains
+missing; reads do not reconstruct it from current configuration or logs.
+
+Books' Needs your help queue and inspection offer a native, keyboard-reachable **Review criteria**
+disclosure with loading, retry, close and Escape/focus recovery. Inspection shows the recorded
+origin, criteria, policy/settings, classifier outcome, labels, model/instruction version, time
+and explanation; missing evidence is labelled unavailable. Current definitions are clearly
+separate from the submission's captured evidence. No decision controls or theme detector are added.
+
+Verification: provider reasoning redaction, node capture/missing reasoning and call-time model
+identity, privacy-failure containment, real graph/Postgres projection and authorized policy/detail
+reads are covered. Frontend fixtures were captured from that synthetic integration run. The Books
+file passes all 30 tests. Backend lint and frontend lint/build/typecheck pass. The full backend
+suite reports 1,545 passes, 89 skips, six smoke deselections and the same six pre-existing native
+WeasyPrint/PDF failures recorded in §9.11. Unrestricted and explicit-source frontend fork runs
+stalled and were stopped; further runner verification is recorded with ticket 13.
+Browser/phone inspection remains unrun: browser inventory is empty and the in-app browser is
+unavailable. Hosted delivery and educator/ethics/real-child gates remain unchanged.

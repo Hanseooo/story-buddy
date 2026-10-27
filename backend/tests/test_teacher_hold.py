@@ -82,7 +82,12 @@ def test_checkpointed_scene_flag_projects_private_hold_and_reload(monkeypatch, h
     from langgraph.checkpoint.postgres import PostgresSaver
     # Real captured synthetic picture. Its hash is recorded in the fixture manifest.
     image = (Path(__file__).parent / "fixtures/qwen35-resize-scene.png").read_bytes()
-    primary = MagicMock(return_value=False)
+    def flag(url, *, reasons):
+        if failure == "projection":
+            reasons.append("Synthetic review explanation")
+        return False
+
+    primary = MagicMock(side_effect=flag)
     monkeypatch.setattr("pipeline.output_mod.classify_image_primary", primary)
     monkeypatch.setattr("pipeline.output_mod.get_signed_url", lambda path: "https://private.invalid/image")
     monkeypatch.setattr("pipeline.output_mod.download_book_image", lambda path: image)
@@ -216,6 +221,22 @@ def test_checkpointed_scene_flag_projects_private_hold_and_reload(monkeypatch, h
             body = detail.json()
             assert body["review_id"] == str(review.review_id)
             assert body["pictures"][-1]["state"] == "not_generated"
+            assert body["criteria"] == ["sexual_content", "exposure", "graphic_harm", "harm_instruction",
+                                        "targeted_abuse", "discriminatory_slur", "exploitation", "substances",
+                                        "adult_detail", "privacy"]
+            assert body["policy_version"] == "teacher_review_policy_v1"
+            assert body["settings_snapshot"] == {"theme_ids": [], "settings_version": 0}
+            captured_model = body["classifier_evidence"][0]["model_id"]
+            monkeypatch.setattr(settings, "moderation_primary_image_model", "changed-after-hold")
+            again = client.get(f"/teacher/jobs/{job}/moderation-review").json()
+            assert again["classifier_evidence"][0]["model_id"] == captured_model
+            assert again["classifier_evidence"][0]["reason"] == (
+                "Synthetic review explanation" if failure == "projection" else None)
+            policy = client.get("/teacher/moderation-policy")
+            assert policy.status_code == 200
+            assert policy.headers["cache-control"] == "private, no-store"
+            assert policy.json()["criteria"][1]["id"] == "exposure"
+            assert policy.json()["optional_themes"][0]["origin"] == "optional_theme"
             assert "image_path" not in detail.text and "https://" not in detail.text
             payload = {"review_id": str(review.review_id), "subject_version": review.subject_version}
             assert client.post(f"/teacher/jobs/{job}/moderation-review/reveal",
@@ -235,6 +256,7 @@ def test_checkpointed_scene_flag_projects_private_hold_and_reload(monkeypatch, h
             assert client.get(f"/teacher/jobs/{job}/moderation-review").json()["story_text"] == body["story_text"]
             assert conn.execute("select decision from job_moderation_reviews where job_id=%s", (job,)).fetchone()["decision"] is None
             app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+            assert client.get("/teacher/moderation-policy").status_code == 403
             assert client.get(f"/teacher/jobs/{job}/moderation-review").status_code == 404
             assert client.post(f"/teacher/jobs/{job}/moderation-review/reveal", json=payload).status_code == 404
             outsider = str(uuid4())

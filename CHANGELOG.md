@@ -14,6 +14,28 @@ instead of repeating it.
 
 ---
 
+## Ticket 13 · 2026-10-28 · Teacher criteria and held-story evidence
+
+### Code
+
+- Add the accepted provisional policy data source and teacher-only, no-store criteria read.
+- Show shared safety, optional themes and captured hold evidence in Books, with accessible
+  criteria disclosure, retry/close controls and honest unavailable states.
+- Retain privacy-processed image-classifier reasoning without changing classifier prompts.
+  Capture model identity at call time and fail safely if evidence redaction fails.
+
+### Docs
+
+- Record the synthetic-only, feature-off implementation and verification limits in
+  moderation-stack §9.12 and moderation-calibration ticket 13.
+
+### Checks
+
+- Backend lint and 139 targeted graph/node/provider checks pass. Full backend has 1,545 passes,
+  89 skips, six deselections and the six existing native WeasyPrint/PDF failures.
+- Frontend lint, production build/typecheck and all 30 Books tests pass. Full frontend workers
+  stall; browser/phone verification remains unavailable. See the spec for verification limits.
+
 ## Ticket 06 · 2026-10-28 · Teacher inspection of held stories
 
 ### Code

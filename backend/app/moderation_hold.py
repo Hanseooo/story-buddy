@@ -16,11 +16,24 @@ from pydantic import BaseModel, ConfigDict
 import providers
 from app.auth import get_current_user
 from app.config import settings
+from app.moderation_policy import POLICY, TEACHER_MODERATION_POLICY_VERSION
 from app.queue import get_queue
 from contracts.story_memory import StoryMemory
 
 hold_router = APIRouter()
 PRIVATE = {"Cache-Control": "private, no-store"}
+
+
+@hold_router.get("/teacher/moderation-policy")
+def teacher_moderation_policy(response: Response, user=Depends(get_current_user)):
+    try:
+        with connect() as conn:
+            if not conn.execute("select 1 from profiles where id=%s and role='teacher'", (str(user.id),)).fetchone():
+                raise HTTPException(403, "teacher_required", headers=PRIVATE)
+    except psycopg.Error:
+        raise HTTPException(503, "review_unavailable", headers=PRIVATE) from None
+    response.headers.update(PRIVATE)
+    return POLICY
 
 
 def teacher_classroom(conn, classroom_id: str, user_id: str):
@@ -100,6 +113,10 @@ def teacher_review_detail(job_id: UUID, response: Response, user=Depends(get_cur
                     "generation_epoch": job["generation_epoch"], "title": job["title"],
                     "author": author["display_nickname"] if author else None,
                     "story_text": review["subject"].get("story_text"),
+                    "kind": review["kind"], "criteria": review["criteria"], "policy_version": review["policy_version"],
+                    "current_policy_version": TEACHER_MODERATION_POLICY_VERSION,
+                    "settings_snapshot": review["settings_snapshot"],
+                    "classifier_evidence": review["classifier_evidence"],
                     "ready": job["worker_finished_at"] is not None,
                     "pictures": [{k: v for k, v in picture.items() if k != "path"} for picture in pictures]}
     except (psycopg.Error, ValueError):

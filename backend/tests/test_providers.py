@@ -1022,10 +1022,13 @@ def test_classify_image_primary_returns_true_for_normal():
 
 def test_classify_image_primary_returns_false_for_nsfw():
     with patch("providers.judge") as mock_judge:
-        mock_judge.return_value = MagicMock(is_safe=False)
+        mock_judge.return_value = MagicMock(is_safe=False, safety_reasoning="Contact 09171234567")
         from providers import classify_image_primary
-        result = classify_image_primary("https://example.com/bad.png")
+        reasons = []
+        result = classify_image_primary("https://example.com/bad.png", reasons=reasons)
     assert result is False
+    assert len(reasons) == 1
+    assert "09171234567" not in reasons[0]
 
 
 # --- classify_image_backstop ---
