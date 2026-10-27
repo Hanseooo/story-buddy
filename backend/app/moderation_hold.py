@@ -82,7 +82,7 @@ def project_hold(conn, job_id: str, state: StoryMemory, checkpoint_id: str) -> i
                              (review.review_id, job_id)).fetchone()
         if prior and job["status"] == "awaiting_teacher":
             return job["generation_epoch"]
-        if job["status"] == "failed" and job["error"] == "hold_projection_failed":
+        if job["status"] == "failed" and job["error"] in ("hold_projection_failed", "worker_stopped"):
             conn.execute("update jobs set status='running' where id=%s", (job_id,))
         assert_current(conn, job_id, context.generation_epoch)
         conn.execute("""insert into job_moderation_reviews
@@ -121,17 +121,34 @@ def product_job(conn, job_id: str, user_id: str) -> dict:
     raise HTTPException(404, "job_not_found", headers=PRIVATE)
 
 
+def can_reconcile_hold(conn, job: dict) -> bool:
+    if job["moderation_mode"] != "teacher_review_v1":
+        return False
+    if job["status"] == "awaiting_teacher":
+        return job["worker_finished_at"] is None
+    if job["status"] != "failed" or job["worker_finished_at"] is None:
+        return False
+    if job["error"] == "hold_projection_failed":
+        return True
+    if job["error"] == "worker_stopped":
+        checkpoint = PostgresSaver(conn).get_tuple({"configurable": {"thread_id": str(job["id"])}})
+        if checkpoint:
+            state = StoryMemory.model_validate(checkpoint.checkpoint["channel_values"])
+            review = state.moderation_context.review
+            return review is not None and review.kind == "scene_image" and review.resolution is None
+    return False
+
+
 @hold_router.get("/jobs/{job_id}/state")
 def job_state(job_id: UUID, response: Response, user=Depends(get_current_user)):
     with connect() as conn:
         job = product_job(conn, str(job_id), str(user.id))
+        repairable = can_reconcile_hold(conn, job)
     response.headers.update(PRIVATE)
     return {"job_id": str(job_id), "status": job["status"], "moderation_mode": job["moderation_mode"],
             "generation_epoch": job["generation_epoch"], "worker_finished": job["worker_finished_at"] is not None,
             "can_reconcile_hold": (str(job["profile_id"]) == str(user.id)
-                and job["moderation_mode"] == "teacher_review_v1"
-                and ((job["error"] == "hold_projection_failed" and job["worker_finished_at"] is not None)
-                     or (job["status"] == "awaiting_teacher" and job["worker_finished_at"] is None)))}
+                and repairable)}
 
 
 def authorized_asset(conn, job_id: str, asset_id: str, user_id: str) -> tuple[str, int]:
@@ -192,8 +209,7 @@ def job_image(job_id: UUID, asset_id: str, user=Depends(get_current_user)):
 def reconcile_hold(job_id: UUID, user=Depends(get_current_user)):
     with connect() as conn:
         job = product_job(conn, str(job_id), str(user.id))
-        repairable = (job["error"] == "hold_projection_failed" and job["worker_finished_at"] is not None
-                      or job["status"] == "awaiting_teacher" and job["worker_finished_at"] is None)
+        repairable = can_reconcile_hold(conn, job)
         if (str(job["profile_id"]) != str(user.id) or job["moderation_mode"] != "teacher_review_v1" or not repairable):
             raise HTTPException(409, "hold_not_repairable", headers=PRIVATE)
     # This worker only repairs the retained checkpoint. It never restarts a failed run.

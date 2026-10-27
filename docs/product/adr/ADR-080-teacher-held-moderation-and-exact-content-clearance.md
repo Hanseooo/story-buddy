@@ -1,7 +1,8 @@
 # ADR-080 — Teacher-held moderation and exact-content clearance
 
 **Status:** Accepted (2026-10-27), owner explicitly said “accept all” in response to the design,
-ADR and synthetic-only, feature-off build authorization. Not implemented. This acceptance does
+ADR and synthetic-only, feature-off build authorization. Ticket 05's scene hold and enabling
+contracts are implemented; teacher inspection/decisions and later subjects remain pending. This acceptance does
 not claim audit completion, educator/ethics approval or authorization to enable real-child use.
 
 **Amendments:** ADR-003/024 and ADR-029 (a dedicated moderation pause alongside child

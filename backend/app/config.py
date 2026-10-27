@@ -246,3 +246,6 @@ def check_image_budget(image_count: int) -> None:
 # other moved.
 SUPER_STEP_PRELUDE = 17
 RECURSION_LIMIT = MAX_SCENES * 7 + SUPER_STEP_PRELUDE
+# Ticket 05 adds one terminal review pause to the unchanged three-attempt scene
+# loop and capped reference prelude. Replacement/resume edges belong to ticket 09.
+TEACHER_REVIEW_RECURSION_LIMIT = MAX_SCENES * 7 + SUPER_STEP_PRELUDE + 1

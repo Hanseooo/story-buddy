@@ -47,8 +47,8 @@ def held_database(monkeypatch):
         conn.execute("delete from profiles where id = %s", (teacher,))
 
 
-@pytest.mark.parametrize("projection_failure", [False, True])
-def test_checkpointed_scene_flag_projects_private_hold_and_reload(monkeypatch, held_database, projection_failure):
+@pytest.mark.parametrize("failure", [None, "projection", "worker_stopped"])
+def test_checkpointed_scene_flag_projects_private_hold_and_reload(monkeypatch, held_database, failure):
     from worker.run_job import run_review_storybook_job
 
     conn, child, classroom, job, teacher = held_database
@@ -69,7 +69,7 @@ def test_checkpointed_scene_flag_projects_private_hold_and_reload(monkeypatch, h
     try:
         with TestClient(app) as client:
             submitted = client.post("/storybooks", json={
-                "title": "Synthetic title", "text": "A hedgehog walks through a field.",
+                "title": "Synthetic title", "text": "The orange dog walks through the grassy field past the trees and stops near the stream. The dog looks across the water and sees a bird perched on the branch of a tree.",
             })
             assert submitted.status_code == 200
             job = submitted.json()["job_id"]
@@ -77,8 +77,8 @@ def test_checkpointed_scene_flag_projects_private_hold_and_reload(monkeypatch, h
         app.dependency_overrides.pop(get_current_user, None)
     assert queue.enqueue.call_args.args[0] == "worker.run_job.run_review_storybook_job"
     assert conn.execute("select moderation_mode from jobs where id=%s", (job,)).fetchone()["moderation_mode"] == "teacher_review_v1"
-    # Enter via the real graph at the already-durable flag checkpoint. No classifier
-    # or generation call is allowed while repairing this exact interruption.
+    # Failure cases enter the real graph at a retained selection. The main case
+    # drives the queued worker from fresh intake through child reveal and confirm.
     from langgraph.checkpoint.postgres import PostgresSaver
     # Real captured synthetic picture. Its hash is recorded in the fixture manifest.
     image = (Path(__file__).parent / "fixtures/qwen35-resize-scene.png").read_bytes()
@@ -94,12 +94,73 @@ def test_checkpointed_scene_flag_projects_private_hold_and_reload(monkeypatch, h
                                 Scene(scene_id="s1", text_excerpt="The next scene stays undrawn.")],
                         moderation_context=ModerationContext(mode="teacher_review_v1",
                             policy_version="teacher_review_policy_v1"))
+    if failure is None:
+        import importlib
+        from contracts.story_memory import RefVerdict
+        from tests.test_graph_stub import STUB_ANALYSIS
+        from pipeline.segment import ExtractedScene, ExtractedVisualDirection, SceneSegmentation
+
+        objects = {}
+        storage = MagicMock()
+
+        def download(path):
+            if path not in objects:
+                raise FileNotFoundError(path)
+            return objects[path]
+
+        storage.storage.from_.return_value.download.side_effect = download
+        storage.storage.from_.return_value.upload.side_effect = lambda path, content, options: objects.update({path: content})
+
+        def structured(prompt, schema, **kwargs):
+            if schema.__name__ == "StoryAnalysis":
+                return STUB_ANALYSIS
+            assert schema is SceneSegmentation
+            return SceneSegmentation(scenes=[ExtractedScene(
+                start=i, end=i, characters_present=["the orange dog"],
+                visual_direction=ExtractedVisualDirection(key_action="A dog walks.", viewpoint="front view", framing="wide shot"),
+            ) for i in range(2)])
+
+        def judge(prompt, urls, schema, **kwargs):
+            if schema is RefVerdict:
+                return RefVerdict(differences_observed="none", matches_description=True, attributes_present=["dog"])
+            return schema(differences_observed="none", contradictions=[], same_character=True)
+
+        boundaries = {
+            "analyze": {"structured_text": structured}, "segment": {"structured_text": structured},
+            "input_gate": {"classify_text_primary": lambda text: (True, []), "classify_text_backstop": lambda text: (True, [])},
+            "char_bible": {"text_to_image": lambda *a, **kw: image, "judge": judge, "get_supabase_client": lambda: storage},
+            "char_ref_mod": {"classify_image_primary": lambda url: True, "classify_image_backstop": lambda url: True,
+                             "get_signed_url": lambda path: f"https://private.invalid/{path}"},
+            "generate_scene": {"edit_image": lambda *a, **kw: image, "get_signed_url": lambda path: f"https://private.invalid/{path}",
+                               "get_supabase_client": lambda: storage},
+            "consistency_check": {"judge": judge, "get_supabase_client": lambda: storage},
+        }
+        for module, replacements in boundaries.items():
+            for name, replacement in replacements.items():
+                monkeypatch.setattr(importlib.import_module(f"pipeline.{module}"), name, replacement)
+        run_review_storybook_job(job, expected_epoch=0)
+        assert conn.execute("select status from jobs where id=%s", (job,)).fetchone()["status"] == "awaiting_confirm"
+        monkeypatch.setattr("providers.download_book_image", download)
+        monkeypatch.setattr("app.moderation_hold.get_queue", lambda: queue)
+        persisted = conn.execute("select * from jobs where id=%s", (job,)).fetchone()
+        persisted["profile_id"] = child
+        db.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [persisted]
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+        try:
+            with TestClient(app) as client:
+                assert client.get(f"/jobs/{job}/images/ref-c0").content == image
+                response = client.post(f"/jobs/{job}/confirm", json={"action": "confirm"})
+                assert response.status_code == 200
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+        run_review_storybook_job(job, {"action": "confirm"}, expected_epoch=0)
     with PostgresSaver.from_conn_string(settings.supabase_db_url) as saver:
         saver.setup()
         graph = build_graph(saver)
         config = {"configurable": {"thread_id": job}}
-        graph.update_state(config, dict(state), as_node="consistency_check")
-        graph.invoke(None, config)
+        if failure is not None:
+            graph.update_state(config, dict(state), as_node="consistency_check")
+            graph.invoke(None, config)
         held = graph.get_state(config)
         review = held.values["moderation_context"].review
         assert review.subject_version == "0e1cdbf033e2b06bb23842359a9ae55e74529a78fcdbf18a7b167e73961110ef"
@@ -108,7 +169,17 @@ def test_checkpointed_scene_flag_projects_private_hold_and_reload(monkeypatch, h
         graph.update_state(config, {"moderation_context": held.values["moderation_context"]}, as_node="moderation_review")
         assert graph.get_state(config).next == ("moderation_review",)
         graph.invoke(None, config)
-    if projection_failure:
+    if failure == "worker_stopped":
+        from worker.run_worker import _report_failed
+        _report_failed(SimpleNamespace(args=[job], kwargs={"expected_epoch": 0},
+                                      func_name="worker.run_job.run_review_storybook_job"), "synthetic death")
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+        try:
+            with TestClient(app) as client:
+                assert client.get(f"/jobs/{job}/state").json()["can_reconcile_hold"] is True
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+    if failure == "projection":
         conn.execute("""create function pg_temp.reject_review() returns trigger language plpgsql as $$
           begin raise exception 'synthetic write outage'; end $$""")
         conn.execute("create trigger synthetic_review_outage before insert on job_moderation_reviews for each row execute function pg_temp.reject_review()")
@@ -133,9 +204,15 @@ def test_checkpointed_scene_flag_projects_private_hold_and_reload(monkeypatch, h
     assert saved["checkpoint_id"]
     primary.assert_called_once()
 
+    # Death after projection but before the final marker must also be repairable.
+    conn.execute("update jobs set worker_finished_at=null where id=%s", (job,))
+
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
     try:
         with TestClient(app) as client:
+            assert client.get(f"/jobs/{job}/state").json()["can_reconcile_hold"] is True
+            run_review_storybook_job(job, expected_epoch=1)
+            assert conn.execute("select worker_finished_at from jobs where id=%s", (job,)).fetchone()["worker_finished_at"] is not None
             for _ in range(2):
                 response = client.get(f"/jobs/{job}/state")
                 assert response.status_code == 200

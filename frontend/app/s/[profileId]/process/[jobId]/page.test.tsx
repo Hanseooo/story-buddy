@@ -98,6 +98,7 @@ const RUNNING_ROW = {
 };
 
 it("held child can leave and reload the same neutral saved story without images or submission", async () => {
+  vi.mocked(global.fetch).mockResolvedValue({ok: true, json: async () => ({can_reconcile_hold: false})} as Response);
   mockUseJob.mockReturnValue(jobState({bucket: "teacher-held", row: {
     ...RUNNING_ROW, status: "awaiting_teacher", current_stage: "moderation_review",
   }}));
@@ -108,13 +109,28 @@ it("held child can leave and reload the same neutral saved story without images 
   first.unmount();
   await renderPage(makeParams());
   expect(screen.getByText("Your story is saved. Your teacher will help it continue.")).toBeInTheDocument();
-  expect(global.fetch).not.toHaveBeenCalled();
+  expect(vi.mocked(global.fetch).mock.calls.every(([url, options]) => String(url).endsWith("/state") && options?.method !== "POST")).toBe(true);
 });
 
 const FAILED_MACHINE_ROW = {
   id: "j1", status: "failed", current_stage: "generate_scene",
   failure_reason: "machine", input_text: "A story.", style_preset_id: null, pages: [], reveal: null,
 };
+
+it("held child can explicitly reconcile an unfinished saved step without restarting generation", async () => {
+  mockUseJob.mockReturnValue(jobState({bucket: "teacher-held", row: {
+    ...RUNNING_ROW, status: "awaiting_teacher", moderation_mode: "teacher_review_v1",
+  }}));
+  vi.mocked(global.fetch)
+    .mockResolvedValueOnce({ok: true, json: async () => ({can_reconcile_hold: true})} as Response)
+    .mockResolvedValueOnce({ok: true, status: 202} as Response);
+  await renderPage(makeParams());
+  fireEvent.click(await screen.findByRole("button", {name: "Try saving this step again"}));
+  await waitFor(() => expect(REFETCH).toHaveBeenCalledOnce());
+  expect(vi.mocked(global.fetch).mock.calls[1][0]).toContain("/jobs/j1/reconcile-hold");
+  expect(vi.mocked(global.fetch).mock.calls[1][1]?.method).toBe("POST");
+  expect(mockCreateSignedUrls).not.toHaveBeenCalled();
+});
 
 const FAILED_CHILD_ROW = { ...FAILED_MACHINE_ROW, failure_reason: "child_text" };
 

@@ -34,6 +34,33 @@ EXPECTED_ORDER = [
 ]
 
 
+def test_feature_bound_covers_ten_scenes_with_maximum_consistency_retries_then_hold(monkeypatch):
+    from app.config import TEACHER_REVIEW_RECURSION_LIMIT
+    from contracts.story_memory import ModerationContext
+
+    _mock_call_points(monkeypatch)
+    monkeypatch.setattr("pipeline.segment.segment_scenes", lambda units, *a: SceneSegmentation(scenes=[
+        ExtractedScene(start=i, end=i, characters_present=["the orange dog"], visual_direction=_direction())
+        for i in range(10)
+    ]))
+    monkeypatch.setattr("pipeline.consistency_check.judge_attempt", lambda *a: (
+        [_judge_returning(same=False)], SceneConstraintVerdict(differences_observed="none", contradictions=[]),
+    ))
+    monkeypatch.setattr("pipeline.output_mod.classify_image_primary", lambda url: "s9-" not in url)
+    monkeypatch.setattr("pipeline.output_mod.download_book_image", lambda path: b"synthetic graph-bound image")
+    state = _initial_state("04b21cbc-ff2d-4fd8-b2ef-56431784a9a4")
+    state.input.raw_text = " ".join(["The orange dog walks through the grassy field past the trees and stops near the stream." for _ in range(10)])
+    state.moderation_context = ModerationContext(mode="teacher_review_v1", policy_version="teacher_review_policy_v1")
+    graph = build_graph()
+    config = {"configurable": {"thread_id": "bound"}, "recursion_limit": TEACHER_REVIEW_RECURSION_LIMIT}
+    graph.invoke(state, config)
+    held = graph.get_state(config)
+    assert len(held.values["scenes"]) == 10
+    assert sum(len(scene.attempts) for scene in held.values["scenes"]) == 30
+    assert held.next == ("moderation_review",)
+    assert held.tasks[0].interrupts
+
+
 def _initial_state(story_id: str) -> StoryMemory:
     return StoryMemory(
         schema_version=CURRENT_SCHEMA_VERSION,

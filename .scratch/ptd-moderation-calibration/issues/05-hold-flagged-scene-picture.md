@@ -1,8 +1,8 @@
 # 05 — A flagged scene picture holds the run and the child can leave and return
 
-**Status:** ready-for-agent
+**Status:** implemented, awaiting merge
 **Type:** task
-**Progress:** open
+**Progress:** built on `implement/held-scene-picture`
 **Blocked by:** None — ticket 02/ADR-080 accepted; synthetic-only, feature-off scope.
 **Conflict gate:** ADR-011, ADR-003 (reveal holds the only `interrupt()`), `AGENTS.md` child-safety
 rules. Discussion permission is recorded in the map; ADR-080 and the synthetic-only, feature-off build scope were accepted on 2026-10-27.
@@ -47,7 +47,7 @@ hosted verification gates remain before real-child enablement. No implementation
 
 §9.1: a child should not lose writing or restart because a classifier asked for review. This is the
 enabling slice: the hold representation it introduces is what 06–15 build on. OD-03's concrete
-contract is §9.9.2–9.9.5 and OD-10's setting/rollout contract is §9.9.8. Both were accepted on 2026-10-27; implementation/verification is pending.
+contract is §9.9.2–9.9.5 and OD-10's setting/rollout contract is §9.9.8. Both were accepted on 2026-10-27; the ticket 05 implementation record is §9.10.
 
 ## Read first
 
@@ -69,17 +69,17 @@ contract is §9.9.2–9.9.5 and OD-10's setting/rollout contract is §9.9.8. Bot
 
 ## Acceptance criteria
 
-- [ ] Setting off (default): every existing output_mod/graph test passes unchanged.
-- [ ] Setting on: first flag → hold persisted before any paid generation; no soften-and-retry call;
+- [x] Setting off (default): existing output_mod/graph behavior tests pass, with baseline recursion unchanged.
+- [x] Setting on: first flag → hold persisted before any further paid generation; no soften-and-retry call;
       later scenes not drawn while held (AC-01).
-- [ ] A classifier service error is not a hold; existing `moderation_error` path stands (AC-02, SH-01).
-- [ ] Child sees neutral teacher-help copy, never a category, reasoning or `jobs.error`; the flagged
+- [x] A classifier service error is not a hold; existing `moderation_error` path stands (AC-02, SH-01).
+- [x] Child sees neutral teacher-help copy, never a category, reasoning or `jobs.error`; the flagged
       picture is not served to the child (AC-01, SH-05).
-- [ ] In-app bookshelf exit does not cancel; bookshelf marks the story waiting with a return route;
+- [x] In-app bookshelf exit does not cancel; bookshelf marks the story waiting with a return route;
       reload or another authorized device loads persisted state first (AC-03).
-- [ ] No countdown, deadline or time-based release; existing deletion still applies (AC-04, SH-04).
-- [ ] Hold claimed only after durable write; failures show an error and reconcile (SH-11).
-- [ ] Ethics re-review is recorded as a precondition for enabling with real children (SH-10).
+- [x] No countdown, deadline or time-based release; existing deletion still applies (AC-04, SH-04).
+- [x] Hold claimed only after durable write; failures show an error and reconcile (SH-11).
+- [x] Ethics re-review is recorded as a precondition for enabling with real children (SH-10).
 
 ## Guidance
 
@@ -104,3 +104,11 @@ Design/conflict acceptance is settled in ADR-080. No repeat owner verdict is req
 accepted synthetic-only, feature-off scope. Audit/calibration and real-child release gates remain.
 
 ## Comments
+
+Built on the isolated branch with the feature disabled by default. Migration 0022 must be applied
+before feature intake is enabled. The private review table, retained checkpoint and guarded read
+boundary are available for ticket 06 after this branch is merged. No teacher inspection or decision
+UI is claimed here. See moderation-stack §9.10 for implementation and verification limits.
+
+Phone-width visual browser verification and hosted service verification remain unrun. Local SQL
+tests use a synthetic Supabase-compatible schema, not a hosted Storage/Realtime service.

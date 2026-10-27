@@ -3,10 +3,10 @@
 **Post-defense amendment:** §9 records the moderation-calibration interviews. The 2026-10-27
 technical completion in §9.9 supplies concrete contracts and project policy, explicitly accepted
 with ADR-080 on 2026-10-27 (“accept all”). Synthetic-only, feature-off implementation is authorized.
-It is not implemented; §§1–8 describe baseline behavior. Audit 01 and real-child release review
+Ticket 05's scene hold and enabling contracts are implemented; §§1–8 describe baseline behavior. Tickets 06–15, audit 01 and real-child release review
 remain outstanding. Owner acceptance does not establish externally validated policy or efficacy.
 
-**Status:** amendment accepted (2026-10-27), implementation pending · **Phase:** 2 · **Owner:** three gate nodes:
+**Status:** amendment accepted (2026-10-27), ticket 05 implemented, successors pending · **Phase:** 2 · **Owner:** three gate nodes:
 `backend/pipeline/input_gate.py`, `backend/pipeline/char_ref_mod.py`, `backend/pipeline/output_mod.py`
 **Derived from:** MASTER_SPEC §2 (system map) · **Rationale:** ADR-011c, ADR-004 (amendment b),
 ADR-017, ADR-025
@@ -1378,3 +1378,48 @@ requests or signed URLs and the limits of signed-link revocation. The guarded-de
 our inference for this withdrawal requirement, not a hosted verification result. Sources:
 [Storage access control](https://supabase.com/docs/guides/storage/security/access-control),
 [private asset delivery](https://supabase.com/docs/guides/storage/serving/downloads).
+
+### 9.10 Ticket 05 implementation record (2026-10-28)
+
+The scene-image slice and its enabling contracts are built. The setting remains false by
+default. This is synthetic-only implementation evidence, not calibration, deployment or
+real-child release approval. Tickets 06–15 retain their own acceptance criteria.
+
+- Migration `0022_teacher_moderation_hold.sql` records captured mode/settings, generation epoch,
+  quiescence marker and private immutable review subjects. Browser roles cannot read reviews or
+  feature-job Storage objects, including through existing researcher policies.
+- `app/moderation_hold.py` transactionally projects an unresolved checkpoint into one review and
+  `awaiting_teacher`. Authorized `/jobs/{job_id}/state`, `/images/{asset_id}` and
+  `/reconcile-hold` routes expose neutral state, selected cleared image bytes and explicit
+  checkpoint-only recovery. Teacher inspection/decision routes belong to 06–09.
+- `worker/run_job.py::run_review_storybook_job` serializes execution with an advisory lock,
+  fences provider/publication work by epoch and current membership, disables public tracing,
+  distinguishes child reveal from moderation review, and writes the final marker after closing
+  the checkpointer. A hard death before projection or before the finish marker is repairable
+  without repeating moderation or drawing. A timeout cannot abandon an SDK thread and then
+  report quiescence. The supervisor marks only the expected epoch after reaping the horse.
+- Feature intake processes title/story before persistence. Failure stores nothing. Captured
+  policy/settings survive a switch-off during intake or queue delay. Text, reference and title
+  flags retain baseline outcomes until their own tickets.
+- Child process/bookshelf/reader surfaces recognize the persisted hold, offer an in-app exit and
+  hide the held picture. Product image consumers use abortable, noncached guarded bytes for
+  feature jobs. Baseline signing and soften-and-retry remain intact.
+- `TEACHER_REVIEW_RECURSION_LIMIT = 88` adds the single terminal review pause to the unchanged
+  capped baseline path. A no-provider graph test reaches a last-scene hold after ten scenes and
+  thirty consistency attempts. Ticket 09 must account for its replacement edges when built.
+
+Verification uses disposable local PostgreSQL with synthetic auth/Storage schemas and all
+migrations, real PostgresSaver checkpoints, and SQL browser roles. The integration test drives
+authenticated HTTP intake, the fresh worker graph, guarded reference read, HTTP confirm and the
+first flagged scene. Separate injected projection failure and supervisor death cases prove
+checkpoint-only repair, duplicate delivery and epoch stability. Direct browser-role Storage
+selection and private review reads are denied. Component tests prove neutral leave/reload and
+explicit recovery without image signing or a new submission.
+
+Backend lint passed. The full backend suite produced 1,542 passes, 89 skips, six deselections
+and six existing PDF failures because the local WeasyPrint native library is unavailable.
+The broader existing RLS suites produce 48 passes and the same 16 failures on this branch and
+the unchanged base against the synthetic stack. This does not verify hosted Supabase
+Storage/PostgREST/Realtime behavior. Phone-width visual browser verification is unrun because
+the session exposes no browser. These limits remain explicit release checks, alongside the
+educator/ethics/consent gates in §9.9.8.

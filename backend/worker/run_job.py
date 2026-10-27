@@ -4,7 +4,7 @@ from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.types import Command
 from datetime import datetime, timezone
 
-from app.config import RECURSION_LIMIT, STYLE_PRESETS, settings
+from app.config import RECURSION_LIMIT, TEACHER_REVIEW_RECURSION_LIMIT, STYLE_PRESETS, settings
 from app.db import get_supabase_client
 from app.length import word_count
 from contracts.story_memory import CURRENT_SCHEMA_VERSION, Cost, Input, Style, StoryMemory
@@ -46,7 +46,7 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                     return
                 if job["status"] == "awaiting_teacher" and job["worker_finished_at"] is not None:
                     return
-                if job["status"] == "failed" and job["error"] != "hold_projection_failed":
+                if job["status"] == "failed" and job["error"] not in ("hold_projection_failed", "worker_stopped"):
                     return
                 epoch = job["generation_epoch"]
                 initial_count = job["image_count"] or 0
@@ -66,7 +66,7 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
             with PostgresSaver.from_conn_string(settings.supabase_db_url) as saver:
                 saver.setup()
                 graph = build_graph(checkpointer=saver)
-                config = {"configurable": {"thread_id": job_id}, "recursion_limit": RECURSION_LIMIT, "callbacks": []}
+                config = {"configurable": {"thread_id": job_id}, "recursion_limit": TEACHER_REVIEW_RECURSION_LIMIT, "callbacks": []}
                 snapshot = graph.get_state(config)
                 if snapshot.values:
                     retained = StoryMemory.model_validate(snapshot.values)

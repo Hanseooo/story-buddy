@@ -176,7 +176,10 @@ def _bounded(model: str, call):
             f"{model} did not answer within {CALL_TIMEOUT_SECONDS:.0f}s (call abandoned)"
         ) from exc
     finally:
-        pool.shutdown(wait=False)
+        # A feature worker's finish marker promises no provider work remains. It
+        # cannot abandon an SDK thread and then claim that promise. The RQ hard
+        # deadline still kills/reaps a permanently stuck horse before marking it.
+        pool.shutdown(wait=_generation_fence.get() is not None)
 
 
 def structured_text(prompt: str, schema: type[T], model: str | None = None) -> T:
