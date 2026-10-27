@@ -8,8 +8,10 @@ its LLM boundary (ADR-002).
 
 Read ADR-023 and ADR-028 before changing anything here.
 """
+from datetime import datetime
 from enum import Enum
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -97,6 +99,7 @@ class Character(BaseModel):
     # a field there is a required model output under strict json_schema, and the judge would be
     # asked to state its own prompt version. Additive → no schema_version bump (§8).
     ref_verdict_prompt_version: Optional[int] = None
+    ref_generation_prompt: Optional[str] = None
 
 
 class ReferenceRetry(BaseModel):        # ADR-029 — set by `reveal`, consumed by `char_bible`
@@ -135,6 +138,12 @@ class ModerationResult(BaseModel):  # minimal; refined by `moderation-stack` Pha
     categories: list[str] = Field(default_factory=list)
 
 
+class ModerationClearance(BaseModel):
+    subject_version: str
+    review_id: UUID
+    policy_version: str
+
+
 class Input(BaseModel):
     raw_text: str
     redacted_text: Optional[str] = None   # CC-2: redacted_text is what downstream nodes consume
@@ -145,6 +154,7 @@ class Input(BaseModel):
     word_count: int = 0
     truncated: bool = False
     moderation: Optional[ModerationResult] = None
+    moderation_clearance: Optional[ModerationClearance] = None
 
 
 # --- Style (ADR-007, ADR-022) ---
@@ -199,6 +209,7 @@ class Attempt(BaseModel):
     identity_checks: Optional[dict[str, IdentityCheck]] = None  # char_id -> evaluated identity signal;
                                        # None=legacy/unavailable, {}=no referenced subjects. Additive,
                                        # declared last; schema_version and judge wire shape unchanged.
+    safety_eligibility: Literal["unreviewed", "cleared", "teacher_allowed", "excluded"] = "unreviewed"
 
 
 class Scene(BaseModel):
@@ -223,6 +234,7 @@ class Scene(BaseModel):
                                        # and persisted memory loads unchanged (no schema_version
                                        # bump). Not a second source of scene order: it is keyed by
                                        # obj_id inside one Scene, never across them.
+    moderation_replacement_count: int = 0
 
 
 # --- LangGraph reducer (ADR-024): upsert-by-scene_id, replace-matching, keep-others ---
@@ -256,6 +268,45 @@ class Eval(BaseModel):                 # CC-7
 
 
 # --- Root ---
+class ClassifierEvidence(BaseModel):
+    layer: Literal["primary", "backstop"]
+    model_id: str
+    instruction_version: str
+    outcome: Literal["safe", "flagged", "error", "not_called"]
+    checked_at: Optional[datetime] = None
+    categories: list[str] = Field(default_factory=list)
+    reason: Optional[str] = None
+
+
+class ReviewContext(BaseModel):
+    review_id: UUID
+    kind: Literal["title", "story_text", "character_reference", "scene_image", "optional_themes"]
+    subject_id: str
+    subject_version: str
+    criteria: list[str] = Field(default_factory=list)
+    return_node: str
+    replacement: bool = False
+    resolution: Optional[Literal["allow", "replace"]] = None
+    classifier_evidence: list[ClassifierEvidence] = Field(default_factory=list)
+
+
+class ThemeDetection(BaseModel):
+    theme_id: Literal["spooky_suspense", "story_conflict", "loss_separation"]
+    reason: str
+
+
+class ModerationContext(BaseModel):
+    mode: Literal["baseline", "teacher_review_v1"] = "baseline"
+    theme_ids: list[str] = Field(default_factory=list)
+    settings_version: int = 0
+    policy_version: Optional[str] = None
+    generation_epoch: int = 0
+    review: Optional[ReviewContext] = None
+    optional_themes_checked: bool = False
+    detected_themes: list[ThemeDetection] = Field(default_factory=list)
+    accepted_theme_ids: list[str] = Field(default_factory=list)
+
+
 class StoryMemory(BaseModel):
     schema_version: int                # REQUIRED, no default — see spec §3
     # durable provenance (ADR-023 Decision 3 — NO mutable job/status block; that lives in the DB job row)
@@ -273,3 +324,4 @@ class StoryMemory(BaseModel):
     cost: Cost = Field(default_factory=Cost)
     eval: Eval = Field(default_factory=Eval)
     reference_retry: Optional[ReferenceRetry] = None   # set by `reveal`, consumed by `char_bible`
+    moderation_context: ModerationContext = Field(default_factory=ModerationContext)
