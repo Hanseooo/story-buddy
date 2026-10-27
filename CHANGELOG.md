@@ -33,7 +33,7 @@ instead of repeating it.
 ### Docs
 
 - Record the accepted ADR-080/design handoff, ticket 05 implementation and verification limits in
-  moderation-stack §9.10. Mark ticket 05 implemented and 06/14 ready after its merge.
+  moderation-stack §9.10. Ticket 05 is merged and 06/14 are ready for implementation.
 
 ### Checks
 

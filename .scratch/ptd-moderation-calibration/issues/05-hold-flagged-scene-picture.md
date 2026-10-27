@@ -1,8 +1,8 @@
 # 05 — A flagged scene picture holds the run and the child can leave and return
 
-**Status:** implemented, awaiting merge
+**Status:** complete, merged
 **Type:** task
-**Progress:** built on `implement/held-scene-picture`
+**Progress:** done — merged into `feat/account-onboarding` at `b03cc3f`
 **Blocked by:** None — ticket 02/ADR-080 accepted; synthetic-only, feature-off scope.
 **Conflict gate:** ADR-011, ADR-003 (reveal holds the only `interrupt()`), `AGENTS.md` child-safety
 rules. Discussion permission is recorded in the map; ADR-080 and the synthetic-only, feature-off build scope were accepted on 2026-10-27.
@@ -107,7 +107,7 @@ accepted synthetic-only, feature-off scope. Audit/calibration and real-child rel
 
 Built on the isolated branch with the feature disabled by default. Migration 0022 must be applied
 before deploying this code. The private review table, retained checkpoint and guarded read
-boundary are available for ticket 06 after this branch is merged. No teacher inspection or decision
+boundary are merged and available for ticket 06. No teacher inspection or decision
 UI is claimed here. See moderation-stack §9.10 for implementation and verification limits.
 
 Phone-width visual browser verification and hosted service verification remain unrun. Local SQL

@@ -19,8 +19,8 @@ the defense, and the teacher decides whether a flagged run continues.
 | 02 | [Grill: moderation policy and teacher-held runs → spec](issues/02-grill-moderation-spec.md) | grilling | done — design/ADR accepted | — (accepted build exception; audit 01 remains open) |
 | 03 | [Any researcher can open failed and unapproved runs](issues/03-researchers-inspect-failed-runs.md) | task | open | — |
 | 04 | [phase_05 text probe reads the current setting](issues/04-phase05-probe-setting-name.md) | task | open | — |
-| 05 | [Flagged scene picture holds; child leaves and returns](issues/05-hold-flagged-scene-picture.md) | task | implemented, awaiting merge | — |
-| 06 | [Teacher inspects a held story in Needs your help](issues/06-teacher-inspects-held-story.md) | task | ready after 05 merge | 05 merge |
+| 05 | [Flagged scene picture holds; child leaves and returns](issues/05-hold-flagged-scene-picture.md) | task | done, merged | — |
+| 06 | [Teacher inspects a held story in Needs your help](issues/06-teacher-inspects-held-story.md) | task | ready for agent | — (05 merged) |
 | 07 | [Teacher allows the exact held picture; run resumes](issues/07-teacher-allows-held-picture.md) | task | open | 06, 13 |
 | 08 | [Teacher or child stops a held story, writing kept](issues/08-teacher-stops-held-story.md) | task | open | 06 |
 | 09 | [Teacher requests a replacement picture within budget](issues/09-teacher-requests-replacement-picture.md) | task | open | 07 |
@@ -28,16 +28,16 @@ the defense, and the teacher decides whether a flagged run continues.
 | 11 | [Flagged story text holds; teacher can allow unchanged](issues/11-hold-flagged-story-text.md) | task | open | 07, 08 |
 | 12 | [Flagged title holds instead of 422](issues/12-hold-flagged-title.md) | task | open | 11 |
 | 13 | [Review criteria and per-hold explanation](issues/13-review-criteria-and-hold-explanation.md) | task | open | 06 |
-| 14 | [Optional classroom review themes](issues/14-optional-classroom-review-themes.md) | task | ready after 05 merge | 05 merge |
+| 14 | [Optional classroom review themes](issues/14-optional-classroom-review-themes.md) | task | ready for agent | — (05 merged) |
 | 15 | [Accepted theme holds once per submission](issues/15-accepted-theme-holds-once.md) | task | open | 07, 14 |
 
 **Current handoff (2026-10-27):** the owner explicitly said **“accept all”** to
 [moderation-stack §9.9](../../docs/specs/moderation-stack.md#99-technical-completion-proposal-2026-10-27),
 [ADR-080](../../docs/product/adr/ADR-080-teacher-held-moderation-and-exact-content-clearance.md)
 and synthetic-only, feature-off implementation while audit 01 remains open. Ticket 02 is done as
-an accepted specification handoff. Ticket 05 is implemented on `implement/held-scene-picture`
-(2026-10-28), including private persistence, guarded delivery and checkpoint-only recovery.
-Tickets 06/14 can use those contracts after merge; other successors retain their dependencies.
+an accepted specification handoff. Ticket 05 is merged into `feat/account-onboarding` at
+`b03cc3f` (2026-10-28), including private persistence, guarded delivery and checkpoint-only recovery.
+Tickets 06/14 can use those contracts now; other successors retain their dependencies.
 See moderation-stack §9.10 for verification limits. Do not repeat the conflict verdict, design
 acceptance or product interview.
 
