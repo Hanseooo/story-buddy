@@ -1418,6 +1418,8 @@ explicit recovery without image signing or a new submission.
 
 Backend lint passed. The full backend suite produced 1,542 passes, 89 skips, six deselections
 and six existing PDF failures because the local WeasyPrint native library is unavailable.
+Frontend lint and production build passed; the full unit suite produced 731 passes and one skip
+across 77 files. Standards and specification reviews found no remaining concrete blocker.
 The broader existing RLS suites produce 48 passes and the same 16 failures on this branch and
 the unchanged base against the synthetic stack. This does not verify hosted Supabase
 Storage/PostgREST/Realtime behavior. Phone-width visual browser verification is unrun because

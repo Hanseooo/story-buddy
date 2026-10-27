@@ -106,9 +106,13 @@ accepted synthetic-only, feature-off scope. Audit/calibration and real-child rel
 ## Comments
 
 Built on the isolated branch with the feature disabled by default. Migration 0022 must be applied
-before feature intake is enabled. The private review table, retained checkpoint and guarded read
+before deploying this code. The private review table, retained checkpoint and guarded read
 boundary are available for ticket 06 after this branch is merged. No teacher inspection or decision
 UI is claimed here. See moderation-stack §9.10 for implementation and verification limits.
 
 Phone-width visual browser verification and hosted service verification remain unrun. Local SQL
 tests use a synthetic Supabase-compatible schema, not a hosted Storage/Realtime service.
+
+Final checks: backend lint passed; full backend suite 1,542 passed, 89 skipped, six deselected,
+six baseline PDF native-library failures (reproduced on the base). Frontend lint/build passed;
+full suite 731 passed, one skipped. Both review axes are clear after recovery/quiescence fixes.

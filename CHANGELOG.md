@@ -14,6 +14,43 @@ instead of repeating it.
 
 ---
 
+## Ticket 05 · 2026-10-28 · Durable scene moderation holds
+
+### Code
+
+- Implement accepted ADR-080's scene-image slice behind default-off
+  `ENABLE_TEACHER_MODERATION_REVIEW`. Capture policy/settings and process private text at intake.
+- Persist exact flagged subjects in a private review table and retained graph checkpoint.
+  Transactionally publish `awaiting_teacher` before further drawing, with epoch fencing,
+  serialized workers, quiescence markers and checkpoint-only crash/projection recovery.
+- Deny browser Storage access to feature images. Deliver selected cleared assets through guarded,
+  authorized, noncached byte routes. Keep feature evidence out of public tracing.
+- Add neutral child waiting, bookshelf leave/return and explicit saved-step recovery. Preserve
+  baseline soften-and-retry. Teacher inspection/decisions remain tickets 06–09.
+- Apply migration `0022_teacher_moderation_hold.sql` before deploying this code. The feature
+  remains disabled, with hosted and real-child release gates outstanding.
+
+### Docs
+
+- Record the accepted ADR-080/design handoff, ticket 05 implementation and verification limits in
+  moderation-stack §9.10. Mark ticket 05 implemented and 06/14 ready after its merge.
+
+### Checks
+
+- Backend `uv run ruff check .` passed. `TEST_MODERATION_DB_URL=<disposable-local-db> uv run pytest`:
+  1,542 passed, 89 skipped, six deselected and six existing PDF native-library failures. The same
+  six failures reproduce in the base checkout's PDF suite (21 passed).
+- Frontend `pnpm lint`, `pnpm build` and `pnpm exec vitest run --maxWorkers=2` passed:
+  731 passed, one skipped across 77 files.
+- Local PostgreSQL integration proves authenticated fresh intake → real graph → guarded reference
+  read → child confirm → first-scene hold, projection rollback, hard-death recovery, duplicate
+  delivery and browser-role denial. The maximum graph path reaches hold after 30 scene attempts.
+  New recovery, graph-bound and provider-quiescence regressions failed before their fixes.
+- Broader existing RLS suites: 48 passed and the same 16 failed on this branch and the unchanged
+  base against the synthetic SQL stack. Hosted Storage/PostgREST/Realtime verification and
+  phone-width visual browser QA were not run. No browser is available in this session.
+- Standards and specification reviews found no remaining concrete blocker after fixes.
+
 ## Working tree update · 2026-10-26 · Research run access and moderation probe
 
 ### Code
