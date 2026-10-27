@@ -1,8 +1,9 @@
 """ADR-080's private persistence and authorized product image boundary.
 
-Teacher inspection/decisions are separate slices. No browser can read this table
+Teacher decisions are separate slices. No browser can read this table
 or choose a Storage path through these product routes.
 """
+import hashlib
 from uuid import UUID
 
 import psycopg
@@ -10,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from langgraph.checkpoint.postgres import PostgresSaver
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
+from pydantic import BaseModel, ConfigDict
 
 import providers
 from app.auth import get_current_user
@@ -19,6 +21,137 @@ from contracts.story_memory import StoryMemory
 
 hold_router = APIRouter()
 PRIVATE = {"Cache-Control": "private, no-store"}
+
+
+def teacher_classroom(conn, classroom_id: str, user_id: str):
+    if not conn.execute("""select 1 from classrooms c join profiles p on p.id=c.owner_id
+      where c.id=%s and c.owner_id=%s and p.role='teacher'""", (classroom_id, user_id)).fetchone():
+        raise HTTPException(404, "review_not_found", headers=PRIVATE)
+
+
+def teacher_review(conn, job_id: str, user_id: str):
+    job = conn.execute("select * from jobs where id=%s", (job_id,)).fetchone()
+    if not job or job["status"] == "deleting":
+        raise HTTPException(404, "review_not_found", headers=PRIVATE)
+    teacher_classroom(conn, str(job["classroom_id"]), user_id)
+    review = conn.execute("""select * from job_moderation_reviews
+      where job_id=%s and decision is null""", (job_id,)).fetchone()
+    return job, review
+
+
+@hold_router.get("/teacher/classrooms/{classroom_id}/moderation-reviews")
+def teacher_review_list(classroom_id: UUID, response: Response, user=Depends(get_current_user)):
+    try:
+        with connect() as conn:
+            teacher_classroom(conn, str(classroom_id), str(user.id))
+            rows = conn.execute("""select r.id as review_id,j.id as job_id,j.title,
+              p.display_nickname as author,r.created_at as held_at,
+              (j.worker_finished_at is not null) as ready
+              from job_moderation_reviews r join jobs j on j.id=r.job_id
+              left join profiles p on p.id=j.profile_id
+              where j.classroom_id=%s and j.status='awaiting_teacher' and r.decision is null
+              order by r.created_at,r.id""", (str(classroom_id),)).fetchall()
+    except psycopg.Error:
+        raise HTTPException(503, "review_unavailable", headers=PRIVATE) from None
+    response.headers.update(PRIVATE)
+    return rows
+
+
+def review_pictures(conn, job_id: str, review: dict):
+    # The review pins its retained checkpoint. Never use a later attempt or browser path.
+    checkpoint = PostgresSaver(conn).get_tuple({"configurable": {
+        "thread_id": job_id, "checkpoint_id": review["checkpoint_id"],
+    }})
+    pictures = []
+    try:
+        state = StoryMemory.model_validate(checkpoint.checkpoint["channel_values"]) if checkpoint else None
+    except ValueError:
+        state = None
+    if state:
+        for char in state.characters:
+            pictures.append({"asset_id": f"ref-{char.char_id}", "label": f"Reference: {char.name}",
+                             "path": char.canonical_ref_image, "state": "available" if char.canonical_ref_image else "not_generated"})
+        for scene in state.scenes:
+            held = scene.scene_id == review["subject_id"] and review["kind"] == "scene_image"
+            path = review["subject"].get("image_path") if held else scene.final_image_ref
+            pictures.append({"asset_id": f"scene-{scene.scene_id}", "label": scene.caption or scene.text_excerpt,
+                             "path": path, "state": "held" if held else "available" if path else "unavailable" if scene.attempts else "not_generated"})
+    else:
+        pictures.append({"asset_id": "context-unavailable", "label": "Other story pictures",
+                         "path": None, "state": "unavailable"})
+    if not any(p["state"] == "held" for p in pictures):
+        pictures.append({"asset_id": "held", "label": "Picture needing review",
+                         "path": review["subject"].get("image_path"), "state": "held"})
+    return pictures
+
+
+@hold_router.get("/teacher/jobs/{job_id}/moderation-review")
+def teacher_review_detail(job_id: UUID, response: Response, user=Depends(get_current_user)):
+    try:
+        with connect() as conn:
+            job, review = teacher_review(conn, str(job_id), str(user.id))
+            response.headers.update(PRIVATE)
+            if not review or job["status"] != "awaiting_teacher":
+                return {"status": job["status"], "review_id": None}
+            pictures = review_pictures(conn, str(job_id), review)
+            author = conn.execute("select display_nickname from profiles where id=%s", (job["profile_id"],)).fetchone()
+            return {"status": job["status"], "review_id": str(review["id"]),
+                    "subject_id": review["subject_id"], "subject_version": review["subject_version"],
+                    "generation_epoch": job["generation_epoch"], "title": job["title"],
+                    "author": author["display_nickname"] if author else None,
+                    "story_text": review["subject"].get("story_text"),
+                    "ready": job["worker_finished_at"] is not None,
+                    "pictures": [{k: v for k, v in picture.items() if k != "path"} for picture in pictures]}
+    except (psycopg.Error, ValueError):
+        raise HTTPException(503, "review_unavailable", headers=PRIVATE) from None
+
+
+class ReviewReveal(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    review_id: UUID
+    subject_version: str
+
+
+def review_asset(conn, job_id: str, user_id: str, review_id: UUID, version: str, asset_id: str | None):
+    job, review = teacher_review(conn, job_id, user_id)
+    if (not review or job["status"] != "awaiting_teacher" or str(review["id"]) != str(review_id)
+            or review["subject_version"] != version):
+        raise HTTPException(409, "review_changed", headers=PRIVATE)
+    picture = next((p for p in review_pictures(conn, job_id, review)
+                    if (p["state"] == "held" if asset_id is None else p["asset_id"] == asset_id and p["state"] == "available")), None)
+    path = picture["path"] if picture else None
+    if not path or not path.startswith(f"{job_id}/"):
+        raise HTTPException(404, "image_unavailable", headers=PRIVATE)
+    return path, job["generation_epoch"]
+
+
+def teacher_picture_bytes(job_id, user_id, review_id, version, asset_id=None):
+    try:
+        with connect() as conn:
+            selected = review_asset(conn, job_id, user_id, review_id, version, asset_id)
+        try:
+            contents = providers.download_book_image(selected[0])
+        except Exception:
+            raise HTTPException(503, "image_unavailable", headers=PRIVATE) from None
+        if asset_id is None and hashlib.sha256(contents).hexdigest() != version:
+            raise HTTPException(503, "image_unavailable", headers=PRIVATE)
+        with connect() as conn:
+            if review_asset(conn, job_id, user_id, review_id, version, asset_id) != selected:
+                raise HTTPException(409, "review_changed", headers=PRIVATE)
+        return Response(contents, media_type="image/png", headers=PRIVATE)
+    except (psycopg.Error, ValueError):
+        raise HTTPException(503, "image_unavailable", headers=PRIVATE) from None
+
+
+@hold_router.post("/teacher/jobs/{job_id}/moderation-review/reveal")
+def teacher_reveal(job_id: UUID, body: ReviewReveal, user=Depends(get_current_user)):
+    return teacher_picture_bytes(str(job_id), str(user.id), body.review_id, body.subject_version)
+
+
+@hold_router.get("/teacher/jobs/{job_id}/moderation-review/images/{asset_id}")
+def teacher_context_image(job_id: UUID, asset_id: str, review_id: UUID, subject_version: str,
+                          user=Depends(get_current_user)):
+    return teacher_picture_bytes(str(job_id), str(user.id), review_id, subject_version, asset_id)
 
 
 class StaleGeneration(BaseException):

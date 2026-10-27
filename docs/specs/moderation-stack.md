@@ -1425,3 +1425,46 @@ the unchanged base against the synthetic stack. This does not verify hosted Supa
 Storage/PostgREST/Realtime behavior. Phone-width visual browser verification is unrun because
 the session exposes no browser. These limits remain explicit release checks, alongside the
 educator/ethics/consent gates in §9.9.8.
+
+### 9.11 Ticket 06 implementation (2026-10-28)
+
+The owner-only Books inspection slice is implemented for the accepted synthetic-only,
+default-off scope. Books keeps **Needs review** as its default editorial tab and adds a distinct
+**Needs your help** queue. Its authenticated list counts each unresolved held job once and orders
+by hold time, then review UUID. Empty/error states include an in-app return or read-only retry.
+
+`backend/app/moderation_hold.py` implements §9.9.3's list/detail/reveal routes. Detail projects
+processed story/title and ordered reference/scene descriptors from the pinned checkpoint, never
+Storage paths or bearer URLs. Missing checkpoint/picture context stays distinct from a scene not
+yet drawn. The additional owner-only
+`GET /teacher/jobs/{job_id}/moderation-review/images/{asset_id}` context-picture route requires
+`review_id` and `subject_version` query parameters. It accepts only an available server-selected
+reference/scene descriptor. The held descriptor is readable only by the explicit reveal POST.
+Both picture routes use internal signed Storage reads, current owner/review/epoch checks before
+and after download, and `Cache-Control: private, no-store`. Reveal additionally verifies the
+downloaded bytes against the recorded subject hash. Inspection performs no writes or generation.
+
+`NeedsHelpQueue` provides a native full-screen scrolling dialog with processed writing, missing
+content states, a warning before reveal, image-read retry, and temporary blob URLs. Refresh,
+visibility return and job Realtime changes refetch current detail and hide/revoke old pictures.
+Escape/close restores the opener, or the stable queue when that item has disappeared. Safety
+decisions and criteria/explanation copy remain the separate follow-on tickets.
+
+Verification: the existing real-graph/disposable-Postgres synthetic hold test now checks owner
+list/detail/reveal, child and other-teacher denial, no leaked paths/URLs, exact bytes, read failure
+with retained writing and an unchanged review decision. Books tests use a captured response from
+that integration run and cover explicit reveal, image failure, Escape and detached-opener focus.
+Desktop/phone browser verification is unrun: the in-app browser is unavailable and the browser
+inventory is empty. Hosted Storage/Realtime delivery and owner sign-in remain release checks.
+No feature setting, classifier prompt or real-child enablement changed.
+
+Final local checks: `uv run ruff check .` passed; `uv run pytest` with disposable
+`TEST_MODERATION_DB_URL` produced 1,542 passes, 89 skips, six deselections and six existing PDF
+failures (`503` instead of the expected response because WeasyPrint cannot load native libraries).
+The same six failures are recorded on the ticket 05 base. The four targeted hold integration
+cases pass, including available context bytes, stale-version denial and ownership revoked during
+download. Frontend lint and production build/typecheck pass; the Books file passes all 29 tests.
+Unrestricted `pnpm test` discovery stalled, including a retry excluding generated caches.
+`pnpm exec vitest run app components lib utils middleware.test.ts --maxWorkers=2 --reporter=dot`
+then passed all 77 source test files and 734 tests. No source tests were excluded. Both review
+axes are clear after the failing-first detached-opener regression and focus fallback fix.

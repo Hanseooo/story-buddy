@@ -3,6 +3,53 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { jobState, type Job } from "@/lib/types/jobs";
 import { FailedBookRow } from "./page";
 import BookCard from "@/components/BookCard";
+import NeedsHelpQueue from "@/components/NeedsHelpQueue";
+// Captured from the real graph/disposable-Postgres test_teacher_hold integration run.
+import heldDetail from "./held-detail.fixture.json";
+
+vi.mock("@/lib/supabaseClient", () => ({ supabase: {
+  auth: { getSession: async () => ({ data: { session: { access_token: "synthetic" } } }) },
+  channel: () => ({ on() { return this; }, subscribe() { return this; } }),
+  removeChannel: vi.fn(),
+} }));
+
+describe("held story inspection", () => {
+  it.each([false, true])("reveals only on request and keeps writing readable on image failure (%s)", async (fails) => {
+    let queueChanged = false;
+    const fetchMock = vi.fn<(url: string, options?: RequestInit) => Promise<Response>>(async (url) => {
+      if (url.endsWith("/reveal")) return new Response(fails ? "unavailable" : "picture", { status: fails ? 503 : 200 });
+      if (url.endsWith("/moderation-review")) return Response.json(heldDetail);
+      return Response.json(queueChanged ? [] : [{ review_id: heldDetail.review_id, job_id: "synthetic-job", title: heldDetail.title, author: heldDetail.author, held_at: "2026-10-28T00:00:00Z", ready: true }]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    URL.createObjectURL = vi.fn(() => "blob:synthetic-picture");
+    URL.revokeObjectURL = vi.fn();
+    render(<NeedsHelpQueue classroomId="synthetic-class" active onCount={() => {}} onBack={() => {}} />);
+    const opener = await screen.findByRole("button", { name: /Inspect Synthetic title/ });
+    opener.focus();
+    fireEvent.click(opener);
+    expect(await screen.findByText("Synthetic story", { selector: "p.whitespace-pre-wrap" })).toBeDefined();
+    expect(fetchMock.mock.calls.some(([url]) => url.endsWith("/reveal"))).toBe(false);
+    expect(screen.getByText("Picture not generated yet")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Show picture to review" }));
+    if (fails) {
+      expect(await screen.findByText("Picture unavailable. Your story context is still here.")).toBeDefined();
+      expect(screen.getByRole("button", { name: "Try loading again" })).toBeDefined();
+    } else {
+      expect(await screen.findByRole("img", { name: "Synthetic story" })).toHaveAttribute("src", "blob:synthetic-picture");
+    }
+    if (fails) {
+      queueChanged = true;
+      fireEvent(document, new Event("visibilitychange"));
+      await waitFor(() => expect(opener.isConnected).toBe(false));
+    }
+    fireEvent(screen.getByRole("dialog"), new Event("cancel", { bubbles: true }));
+    await waitFor(() => expect(fails ? screen.getByRole("region", { name: "Needs your help" }) : opener).toHaveFocus());
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(1);
+    vi.unstubAllGlobals();
+  });
+});
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

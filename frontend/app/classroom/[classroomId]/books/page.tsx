@@ -6,12 +6,13 @@ import { supabase } from "@/lib/supabaseClient";
 import BookCard from "@/components/BookCard";
 import { StateBadge } from "@/components/BookCard";
 import BookReviewDialog from "@/components/BookReviewDialog";
+import NeedsHelpQueue from "@/components/NeedsHelpQueue";
 import { StaggerGrid, StaggerItem } from "@/components/StaggerGrid";
 import { Job, ReviewDecision, jobState } from "@/lib/types/jobs";
 import { signPaths } from "@/lib/signedUrls";
 import { displayTitle } from "@/lib/displayTitle";
 
-type Tab = "pending" | "approved" | "rejected";
+type Tab = "pending" | "approved" | "rejected" | "held";
 
 type Toast = {
   message: string;
@@ -27,6 +28,7 @@ export default function BooksPage() {
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState<Tab>("pending");
+  const [heldCount, setHeldCount] = useState(0);
   const [toast, setToast] = useState<Toast | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -225,6 +227,7 @@ export default function BooksPage() {
     { key: "pending", label: "Needs review", count: pendingJobs.length },
     { key: "approved", label: "Approved", count: approvedJobs.length },
     { key: "rejected", label: "Rejected", count: rejectedJobs.length },
+    { key: "held", label: "Needs your help", count: heldCount },
   ];
 
   const visibleJobs =
@@ -271,7 +274,7 @@ export default function BooksPage() {
       <div
         role="tablist"
         aria-label="Book review tabs"
-        className="flex gap-1 mb-6 border-b border-primary/10"
+        className="flex flex-wrap gap-1 mb-6 border-b border-primary/10"
         onKeyDown={(e) => {
           const keys = ["ArrowLeft", "ArrowRight"];
           if (!keys.includes(e.key)) return;
@@ -281,6 +284,8 @@ export default function BooksPage() {
               ? (idx + 1) % tabs.length
               : (idx - 1 + tabs.length) % tabs.length;
           setActiveTab(tabs[next].key);
+          e.preventDefault();
+          e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
         }}
       >
         {tabs.map((t) => (
@@ -288,8 +293,9 @@ export default function BooksPage() {
             key={t.key}
             role="tab"
             aria-selected={activeTab === t.key}
+            tabIndex={activeTab === t.key ? 0 : -1}
             onClick={() => setActiveTab(t.key)}
-            className={`px-4 py-2 text-sm font-bold rounded-t-xl transition-colors relative ${
+            className={`min-h-[44px] px-4 py-2 text-sm font-bold rounded-t-xl transition-colors relative focus-visible:outline-2 focus-visible:outline-primary ${
               activeTab === t.key
                 ? "text-primary after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary"
                 : "text-foreground/50 hover:text-foreground/80"
@@ -306,7 +312,8 @@ export default function BooksPage() {
       </div>
 
       {/* Book list */}
-      {visibleJobs.length === 0 ? (
+      <NeedsHelpQueue classroomId={classroomId} active={activeTab === "held"} onCount={setHeldCount} onBack={() => setActiveTab("pending")} />
+      {activeTab === "held" ? null : visibleJobs.length === 0 ? (
         <EmptyState tab={activeTab} />
       ) : (
         <>

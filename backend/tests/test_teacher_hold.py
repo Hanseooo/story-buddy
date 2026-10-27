@@ -204,6 +204,61 @@ def test_checkpointed_scene_flag_projects_private_hold_and_reload(monkeypatch, h
     assert saved["checkpoint_id"]
     primary.assert_called_once()
 
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=teacher)
+    monkeypatch.setattr("providers.download_book_image", lambda path: image)
+    try:
+        with TestClient(app) as client:
+            listing = client.get(f"/teacher/classrooms/{classroom}/moderation-reviews")
+            assert listing.status_code == 200
+            assert [r["job_id"] for r in listing.json()] == [job]
+            detail = client.get(f"/teacher/jobs/{job}/moderation-review")
+            assert detail.status_code == 200
+            body = detail.json()
+            assert body["review_id"] == str(review.review_id)
+            assert body["pictures"][-1]["state"] == "not_generated"
+            assert "image_path" not in detail.text and "https://" not in detail.text
+            payload = {"review_id": str(review.review_id), "subject_version": review.subject_version}
+            assert client.post(f"/teacher/jobs/{job}/moderation-review/reveal",
+                               json={**payload, "subject_version": "stale"}).status_code == 409
+            assert client.get(f"/teacher/jobs/{job}/moderation-review/images/scene-s0", params=payload).status_code == 404
+            if failure is None:
+                context_image = client.get(f"/teacher/jobs/{job}/moderation-review/images/ref-c0", params=payload)
+                assert context_image.status_code == 200 and context_image.content == image
+                assert context_image.headers["cache-control"] == "private, no-store"
+            revealed = client.post(f"/teacher/jobs/{job}/moderation-review/reveal", json=payload)
+            assert revealed.status_code == 200 and revealed.content == image
+            assert revealed.headers["cache-control"] == "private, no-store"
+            monkeypatch.setattr("providers.download_book_image", lambda path: b"changed picture")
+            assert client.post(f"/teacher/jobs/{job}/moderation-review/reveal", json=payload).status_code == 503
+            monkeypatch.setattr("providers.download_book_image", MagicMock(side_effect=OSError("signing failed")))
+            assert client.post(f"/teacher/jobs/{job}/moderation-review/reveal", json=payload).status_code == 503
+            assert client.get(f"/teacher/jobs/{job}/moderation-review").json()["story_text"] == body["story_text"]
+            assert conn.execute("select decision from job_moderation_reviews where job_id=%s", (job,)).fetchone()["decision"] is None
+            app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+            assert client.get(f"/teacher/jobs/{job}/moderation-review").status_code == 404
+            assert client.post(f"/teacher/jobs/{job}/moderation-review/reveal", json=payload).status_code == 404
+            outsider = str(uuid4())
+            conn.execute("insert into auth.users(id,raw_app_meta_data) values (%s,%s)",
+                         (outsider, Jsonb({"role": "teacher", "display_name": "Other synthetic teacher"})))
+            try:
+                app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=outsider)
+                assert client.get(f"/teacher/classrooms/{classroom}/moderation-reviews").status_code == 404
+                assert client.get(f"/teacher/jobs/{job}/moderation-review").status_code == 404
+                assert client.post(f"/teacher/jobs/{job}/moderation-review/reveal", json=payload).status_code == 404
+                app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=teacher)
+
+                def lose_ownership(path):
+                    conn.execute("update classrooms set owner_id=%s where id=%s", (outsider, classroom))
+                    return image
+
+                monkeypatch.setattr("providers.download_book_image", lose_ownership)
+                assert client.post(f"/teacher/jobs/{job}/moderation-review/reveal", json=payload).status_code == 404
+            finally:
+                conn.execute("update classrooms set owner_id=%s where id=%s", (teacher, classroom))
+                conn.execute("delete from profiles where id=%s", (outsider,))
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
     # Death after projection but before the final marker must also be repairable.
     conn.execute("update jobs set worker_finished_at=null where id=%s", (job,))
 

@@ -14,6 +14,30 @@ instead of repeating it.
 
 ---
 
+## Ticket 06 · 2026-10-28 · Teacher inspection of held stories
+
+### Code
+
+- Add Books **Needs your help** with an owner-only oldest-first held-story queue and a separate
+  inspection dialog. Keep editorial approval behavior and its default tab.
+- Show processed writing and available picture context. Keep the exact held picture behind an
+  explicit reveal. Serve authenticated, noncached bytes with ownership/current-review rechecks
+  and held-content hash verification. Inspection never changes the hold or generates pictures.
+- Include read retries, missing/undrawn pictures, current-state refresh and Escape/focus recovery.
+
+### Docs
+
+- Record ticket 06 implementation and verification limits in moderation-stack §9.11. Feature
+  enablement, hosted verification and real-child release gates remain outstanding.
+
+### Checks
+
+- Backend lint and synthetic hold integration tests pass. Full backend: 1,542 passed, 89 skipped,
+  six deselected and the six previously recorded PDF native-library failures.
+- Frontend lint, production build/typecheck and Books tests pass. All 77 source test files pass
+  (734 tests) with explicit source-directory filters after unrestricted discovery stalled.
+  Browser verification is unrun because no browser is available. See moderation-stack §9.11.
+
 ## Ticket 05 · 2026-10-28 · Durable scene moderation holds
 
 ### Code
