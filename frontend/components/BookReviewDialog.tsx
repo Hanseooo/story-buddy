@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
+import { supabase } from "@/lib/supabaseClient";
 import { Job, ReviewDecision, jobState } from "@/lib/types/jobs";
 import { StateBadge } from "./BookCard";
 import { Avatar } from "@/components/Avatar";
@@ -10,6 +11,7 @@ import { ClearanceWithdrawal } from "./NeedsHelpQueue";
 type Props = {
   job: Job | null;
   pageUrls: string[];
+  notesEnabled?: boolean;
   onDecide: (decision: ReviewDecision) => void;
   onClose: () => void;
 };
@@ -17,10 +19,12 @@ type Props = {
 export default function BookReviewDialog({
   job,
   pageUrls,
+  notesEnabled = false,
   onDecide,
   onClose,
 }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
+  const noteRow = useRef<HTMLDetailsElement>(null);
   const [pending, setPending] = useState(false);
   const [withdrawnJob, setWithdrawnJob] = useState<string | null>(null);
   const withdrawn = !!job && withdrawnJob === job.id;
@@ -122,6 +126,9 @@ export default function BookReviewDialog({
             ))}
             {job.moderation_mode === "teacher_review_v1" && <ClearanceWithdrawal key={job.id}
               jobId={job.id} onPending={setPending} onWithdrawn={() => setWithdrawnJob(job.id)} />}
+            {!withdrawn && notesEnabled && job.status === "complete" && (
+              <TeacherNoteRow key={job.id} jobId={job.id} name={name} detailsRef={noteRow} />
+            )}
           </div>
 
           {/* Decision footer — fixed at bottom, thumb-reachable */}
@@ -133,7 +140,10 @@ export default function BookReviewDialog({
             <div className="flex flex-wrap gap-3 justify-end">
               {state !== "rejected" && state !== "pending" ? null : (
                 <button
-                  onClick={() => onDecide("rejected")}
+                  onClick={() => {
+                    if (noteRow.current) noteRow.current.open = true;
+                    onDecide("rejected");
+                  }}
                   className="min-h-[44px] px-6 py-2 rounded-xl border border-destructive text-destructive font-bold text-sm hover:bg-destructive/10 transition-colors"
                 >
                   Reject
@@ -160,5 +170,121 @@ export default function BookReviewDialog({
         </div>
       )}
     </dialog>
+  );
+}
+
+function TeacherNoteRow({ jobId, name, detailsRef }: {
+  jobId: string;
+  name: string;
+  detailsRef: RefObject<HTMLDetailsElement | null>;
+}) {
+  const [body, setBody] = useState("");
+  const [sent, setSent] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const box = useRef<HTMLTextAreaElement>(null);
+  const endpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/teacher/jobs/${jobId}/note`;
+
+  useEffect(() => {
+    if (detailsRef.current?.open && (editing || sent === null)) box.current?.focus();
+  }, [editing, sent, detailsRef]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    async function load() {
+      setLoading(true);
+      setLoadFailed(false);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const response = await fetch(endpoint, {
+          headers: { Authorization: `Bearer ${session?.access_token}` },
+          cache: "no-store", signal: controller.signal,
+        });
+        if (response.status !== 404) {
+          if (!response.ok) throw new Error("load failed");
+          const note: { body: string } = await response.json();
+          if (!controller.signal.aborted) { setSent(note.body); setBody(note.body); }
+        }
+      } catch {
+        if (!controller.signal.aborted) setLoadFailed(true);
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }
+    void load();
+    return () => controller.abort();
+  }, [endpoint, loadAttempt]);
+
+  async function save(method: "PUT" | "DELETE") {
+    if (loading || saving || loadFailed) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(endpoint, {
+        method, headers: { Authorization: `Bearer ${session?.access_token}`, "Content-Type": "application/json" },
+        ...(method === "PUT" ? { body: JSON.stringify({ body }) } : {}),
+      });
+      if (!response.ok) {
+        if (response.status === 409 && (await response.json()).detail === "notes_disabled") {
+          setError("Notes are turned off for this class. Your text is kept.");
+        } else if (response.status === 422) {
+          setError("Write a note with 1–500 characters, including something other than spaces.");
+        } else {
+          setError(method === "DELETE" ? "Could not delete the note. Try again." : "Could not save the note. Your text is kept. Try again.");
+        }
+        return;
+      }
+      const note: { body: string } | null = method === "PUT" ? await response.json() : null;
+      setSent(note?.body ?? null);
+      setBody(note?.body ?? "");
+      setEditing(false);
+    } catch {
+      setError(method === "DELETE" ? "Could not delete the note. Try again." : "Could not save the note. Your text is kept. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const actionClass = "min-h-[44px] px-4 py-2 rounded-xl border border-primary/20 font-bold text-sm hover:bg-muted disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-primary";
+  return (
+    <details ref={detailsRef} className="rounded-xl border border-primary/15 bg-surface px-4">
+      <summary className="min-h-[44px] py-3 cursor-pointer font-bold text-sm focus-visible:outline-2 focus-visible:outline-primary">
+        Add a note for {name}
+      </summary>
+      <div className="pb-4 space-y-3">
+        <p aria-live="polite" className="text-sm text-destructive">{error}</p>
+        {loading && <p role="status" className="text-sm text-foreground/70">Loading note…</p>}
+        {loadFailed && <p aria-live="polite" className="text-sm text-destructive">
+          Could not load the note. <button className={actionClass} onClick={() => setLoadAttempt(n => n + 1)}>Try loading note again</button>
+        </p>}
+        {sent !== null && !editing ? <>
+          <p role="status" className="text-sm text-success">Note sent</p>
+          <p className="whitespace-pre-wrap break-words text-sm">{sent}</p>
+          <div className="flex flex-wrap gap-2">
+            <button className={actionClass} disabled={saving} aria-label={`Edit note for ${name}`} onClick={() => {
+              setEditing(true);
+            }}>Edit</button>
+            <button className={actionClass} disabled={saving} aria-label={`Delete note for ${name}`} onClick={() => void save("DELETE")}>{saving ? "Deleting…" : "Delete"}</button>
+          </div>
+        </> : <form onSubmit={e => { e.preventDefault(); if (body.trim()) void save("PUT"); }} className="space-y-3">
+          <label className="block text-sm font-bold">
+            Note for {name}
+            <textarea ref={box} value={body} onChange={e => setBody(e.target.value)} disabled={loading || saving || loadFailed}
+              placeholder="Something kind and specific…" rows={3}
+              className="mt-2 block w-full rounded-xl border border-primary/20 bg-background p-3 font-normal focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50" />
+          </label>
+          <p className="text-sm text-foreground/70">{name} will be able to read this note.</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="submit" className={actionClass} disabled={loading || saving || loadFailed || !body.trim()} aria-label={`Send note for ${name}`}>{saving ? "Sending…" : "Send"}</button>
+            {editing && <button type="button" className={actionClass} disabled={saving} onClick={() => { setBody(sent ?? ""); setEditing(false); }}>Cancel edit</button>}
+          </div>
+        </form>}
+      </div>
+    </details>
   );
 }

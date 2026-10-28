@@ -18,10 +18,17 @@ notes, usable on mobile.
 | 01 | [Audit: review decisions and what a child sees](issues/01-audit-review-feedback.md) | research | resolved | — |
 | 02 | [Grill: feedback, comments and highlights → spec](issues/02-grill-review-feedback-spec.md) | grilling | open | 01 |
 | 06 | ["Let students read my notes" switch](issues/06-review-notes-switch-setting.md) | task | resolved | 05 |
+| 07 | [Teacher note row in the review dialog](issues/07-teacher-note-row-in-review-dialog.md) | task | resolved | 05 |
 
 Highlights are a separate build ticket after comments ship, per the 2026-10-25 grill.
 
 ## Answers
+
+**07 (2026-10-29).** [Teacher note row implemented](issues/07-teacher-note-row-in-review-dialog.md#answer):
+native switch-gated row with send/edit/delete, current-note loading, readable errors and job-keyed
+draft reset. Decisions, advance and Undo are unchanged. Lint, build/typecheck and all 78 source test
+files pass (755 tests, one existing freeze-dependent skip). Standards and Spec reviews are clear.
+The seeded-classroom browser pass remains unverified because no browser is available in the session.
 
 **06 (2026-10-29).** [Classroom notes switch implemented](issues/06-review-notes-switch-setting.md#answer):
 server-only ownership-checked PATCH, native checkbox, live save feedback and rollback. Stored notes

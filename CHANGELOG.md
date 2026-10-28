@@ -14,6 +14,26 @@ instead of repeating it.
 
 ---
 
+## Review feedback ticket 07 · 2026-10-29 · Teacher note row
+
+### Code
+
+- Add the switch-gated, native collapsed note row to complete books in the teacher review dialog.
+  Load, send, edit and delete one note independently of review decisions. Keep drafts on write errors
+  and discard them on dialog advance or close. Read the switch alongside the books-page jobs query.
+
+### Docs
+
+- Record the implemented row and immediate decision/advance behavior in teacher-review-and-approval §14.
+
+### Checks
+
+- The two new journey/error tests failed before implementation and pass afterward. Frontend lint,
+  TypeScript and production build pass. All 78 source test files pass: 755 tests passed and one
+  existing freeze-dependent test skipped. Startup/Windows argument retries are recorded in ticket 07.
+- Browser verification remains unrun: no browser is exposed in this session and the in-app browser
+  reports unavailable. Backend, provider and hosted checks are outside this frontend-only change.
+
 ## Ticket 09 · 2026-10-28 · Replace a held scene picture within budget
 
 ### Code
