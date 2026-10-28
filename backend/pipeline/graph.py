@@ -55,7 +55,11 @@ def route_after_output_mod(state: StoryMemory) -> str:
 
 def route_moderation_review(state: StoryMemory) -> str:
     # Also used by update_state(as_node='moderation_review') when anchoring a hold.
-    # Teacher decisions and their explicit saved continuation arrive in ticket 07.
+    review = state.moderation_context.review
+    if review and review.resolution == "allow" and review.return_node in (
+        "output_mod", "generate_scene", "consistency_check", "reveal", "compose", "__end__"
+    ):
+        return review.return_node
     return "moderation_review"
 
 

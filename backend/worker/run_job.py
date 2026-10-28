@@ -16,19 +16,28 @@ from worker.failure_classifier import classify_failure_reason
 _SCENE_NODES = {"generate_scene", "consistency_check", "regenerate", "output_mod"}
 
 
-def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_epoch: int | None = None) -> None:
+def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_epoch: int | None = None,
+                             review_id: str | None = None) -> None:
     """Serialized, fenced teacher-review work. Captured mode survives switch-off.
 
     Repair uses only a retained moderation checkpoint. It cannot restart classifiers
     or generation. The final marker is written after closing the checkpointer.
     """
     import providers
-    from app.moderation_hold import StaleGeneration, active_author, assert_current, connect, project_hold
-    from contracts.story_memory import ModerationContext
+    from app.moderation_hold import (
+        StaleGeneration, active_author, assert_current, connect, project_hold,
+        teacher_classroom, validate_review_checkpoint,
+    )
+    from contracts.story_memory import ModerationContext, ReviewContext
 
     with connect() as conn:
         # Session lock covers graph effects, projection and the final finish marker.
-        locked = conn.execute("select pg_try_advisory_lock(hashtextextended(%s,0)) as locked", (job_id,)).fetchone()["locked"]
+        # Control deliveries wait for any fenced provider call to finish before anchoring.
+        if review_id is not None:
+            conn.execute("select pg_advisory_lock(hashtextextended(%s,0))", (job_id,))
+            locked = True
+        else:
+            locked = conn.execute("select pg_try_advisory_lock(hashtextextended(%s,0)) as locked", (job_id,)).fetchone()["locked"]
         if not locked:
             return
         epoch, started, hold_pending = None, False, False
@@ -42,6 +51,84 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                     return
                 if expected_epoch is not None and expected_epoch != job["generation_epoch"]:
                     return
+                withdrawal = conn.execute("""select * from job_moderation_reviews where job_id=%s
+                  and decision is null and withdraws_review_id is not null""", (job_id,)).fetchone()
+                if withdrawal and withdrawal["checkpoint_id"] is None and str(withdrawal["id"]) != review_id:
+                    return
+                if withdrawal and str(withdrawal["id"]) == review_id and withdrawal["checkpoint_id"] is not None:
+                    epoch, started = job["generation_epoch"], True
+                    if validate_review_checkpoint(conn, job_id, withdrawal) is None:
+                        raise RuntimeError("checkpoint_unavailable")
+                    conn.execute("update job_moderation_reviews set dispatch_state='consumed',dispatch_error_code=null where id=%s",
+                                 (withdrawal["id"],))
+                    return
+                if withdrawal and str(withdrawal["id"]) == review_id and withdrawal["checkpoint_id"] is None:
+                    epoch, started = job["generation_epoch"], True
+                    with PostgresSaver.from_conn_string(settings.supabase_db_url) as saver:
+                        graph = build_graph(checkpointer=saver)
+                        config = {"configurable": {"thread_id": job_id}, "callbacks": []}
+                        snapshot = graph.get_state(config)
+                        retained = StoryMemory.model_validate(snapshot.values)
+                        existing_review = retained.moderation_context.review
+                        repairing = (existing_review is not None and existing_review.resolution is None
+                                     and str(existing_review.review_id) == str(withdrawal["id"]))
+                        if existing_review and existing_review.resolution is None and not repairing:
+                            # A later allow can commit just before this withdrawal fences
+                            # its queued worker. Apply only that pure decision node; never
+                            # run its paid continuation while anchoring the new hold.
+                            prior = conn.execute("""select * from job_moderation_reviews where id=%s and job_id=%s
+                              and decision='allow' and decision_epoch<%s""", (existing_review.review_id, job_id, epoch)).fetchone()
+                            if (snapshot.next != ("moderation_review",) or not prior
+                                    or validate_review_checkpoint(conn, job_id, prior) is None
+                                    or (job["image_count"] or 0) > retained.cost.image_count):
+                                raise RuntimeError("checkpoint_not_resumable")
+                            if not active_author(conn, job):
+                                raise RuntimeError("account_unavailable")
+                            teacher_classroom(conn, str(job["classroom_id"]), str(prior["actor_id"]))
+                            import hashlib
+                            if hashlib.sha256(providers.download_book_image(prior["subject"]["image_path"])).hexdigest() != prior["subject_version"]:
+                                raise RuntimeError("moderation_subject_unavailable")
+                            graph.invoke(Command(resume={"action": "allow", "review_id": str(prior["id"]),
+                                "subject_version": prior["subject_version"], "generation_epoch": prior["decision_epoch"]}),
+                                config, interrupt_after=["moderation_review"])
+                            snapshot = graph.get_state(config)
+                            retained = StoryMemory.model_validate(snapshot.values)
+                            existing_review = retained.moderation_context.review
+                            conn.execute("update job_moderation_reviews set dispatch_state='consumed',dispatch_error_code=null where id=%s",
+                                         (prior["id"],))
+                        if (len(snapshot.next) > 1 or (existing_review
+                                and existing_review.resolution is None and not repairing)
+                                or (job["image_count"] or 0) > retained.cost.image_count):
+                            raise RuntimeError("checkpoint_not_resumable")
+                        return_node = existing_review.return_node if repairing else snapshot.next[0] if snapshot.next else "__end__"
+                        if return_node not in ("output_mod", "generate_scene", "consistency_check", "reveal", "compose", "__end__"):
+                            raise RuntimeError("checkpoint_not_resumable")
+                        scene = next(s for s in retained.scenes if s.scene_id == withdrawal["subject_id"])
+                        if scene.final_image_ref != withdrawal["subject"]["image_path"]:
+                            raise RuntimeError("moderation_subject_unavailable")
+                        import hashlib
+                        if hashlib.sha256(providers.download_book_image(scene.final_image_ref)).hexdigest() != withdrawal["subject_version"]:
+                            raise RuntimeError("moderation_subject_unavailable")
+                        context = retained.moderation_context.model_copy(update={"generation_epoch": epoch,
+                            "review": ReviewContext(review_id=withdrawal["id"], kind="scene_image", subject_id=scene.scene_id,
+                                subject_version=withdrawal["subject_version"], criteria=withdrawal["criteria"], return_node=return_node)})
+                        graph.update_state(config, {"moderation_context": context, "scenes": [scene.model_copy(update={
+                            "moderation_status": None, "attempts": [a.model_copy(update={"safety_eligibility": "unreviewed"})
+                                if a.image_ref == scene.final_image_ref else a for a in scene.attempts],
+                        })]}, as_node="moderation_review")
+                        graph.invoke(None, config)
+                        anchored = graph.get_state(config)
+                        conn.execute("""update job_moderation_reviews set checkpoint_id=%s,return_node=%s where id=%s""",
+                            (anchored.config["configurable"]["checkpoint_id"], return_node, withdrawal["id"]))
+                    conn.execute("update job_moderation_reviews set dispatch_state='consumed',dispatch_error_code=null where id=%s",
+                                 (withdrawal["id"],))
+                    return
+                decision = conn.execute("""select * from job_moderation_reviews where job_id=%s
+                  and decision_epoch=%s and dispatch_kind='resume'""", (job_id, job["generation_epoch"])).fetchone()
+                if review_id is not None and (not decision or str(decision["id"]) != review_id):
+                    return
+                if decision and decision["dispatch_state"] == "consumed":
+                    return
                 if job["status"] in ("awaiting_confirm", "complete", "stopped", "deleting"):
                     return
                 if job["status"] == "awaiting_teacher" and job["worker_finished_at"] is not None:
@@ -52,6 +139,8 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                 initial_count = job["image_count"] or 0
                 if not active_author(conn, job):
                     raise RuntimeError("account_unavailable")
+                if decision:
+                    teacher_classroom(conn, str(job["classroom_id"]), str(decision["actor_id"]))
                 conn.execute("update jobs set worker_finished_at=null where id=%s", (job_id,))
                 started = True
 
@@ -71,7 +160,19 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                 if snapshot.values:
                     retained = StoryMemory.model_validate(snapshot.values)
                     review = retained.moderation_context.review
-                    if review and review.resolution is None:
+                    if review and review.resolution is None and decision:
+                        if (decision["decision"] != "allow" or validate_review_checkpoint(conn, job_id, decision) is None
+                                or str(review.review_id) != str(decision["id"])
+                                or snapshot.next != ("moderation_review",)):
+                            raise RuntimeError("checkpoint_not_resumable")
+                        contents = providers.download_book_image(decision["subject"]["image_path"])
+                        import hashlib
+                        if hashlib.sha256(contents).hexdigest() != decision["subject_version"]:
+                            raise RuntimeError("moderation_subject_unavailable")
+                        config["configurable"]["checkpoint_id"] = decision["checkpoint_id"]
+                        graph_input = Command(resume={"action": "allow", "review_id": str(decision["id"]),
+                            "subject_version": decision["subject_version"], "generation_epoch": epoch})
+                    elif review and review.resolution is None:
                         hold_pending = True
                         # Output evidence is durable even if the process died before interrupt.
                         if snapshot.next != ("moderation_review",):
@@ -81,12 +182,13 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                             snapshot = graph.get_state(config)
                         epoch = project_hold(conn, job_id, retained, snapshot.config["configurable"]["checkpoint_id"])
                         return
-                    if (payload is None or snapshot.next != ("reveal",)
+                    elif (payload is None or snapshot.next != ("reveal",)
                             or retained.moderation_context.generation_epoch != epoch):
                         raise RuntimeError("checkpoint_not_resumable")
-                    graph_input = Command(resume=payload)
+                    else:
+                        graph_input = Command(resume=payload)
                 else:
-                    if job["status"] != "queued" or payload is not None:
+                    if job["status"] != "queued" or payload is not None or decision is not None or review_id is not None:
                         raise RuntimeError("checkpoint_unavailable")
                     captured = job["moderation_settings_snapshot"]
                     if not captured.get("policy_version"):
@@ -111,6 +213,7 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                             conn.execute("update jobs set current_stage=%s where id=%s and generation_epoch=%s",
                                          (node, job_id, epoch))
                 # Read back the committed checkpoint, never trust an ephemeral stream event.
+                config["configurable"].pop("checkpoint_id", None)
                 snapshot = graph.get_state(config)
                 state = StoryMemory.model_validate(snapshot.values)
                 if state.moderation_context.review and state.moderation_context.review.resolution is None:
@@ -129,7 +232,7 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                             conn.execute("update jobs set status='awaiting_confirm',current_stage='reveal',reveal=%s where id=%s",
                                          (Jsonb(value), job_id))
                         else:
-                            if snapshot.next or any(s.moderation_status != "passed" for s in state.scenes):
+                            if snapshot.next or any(s.moderation_status not in ("passed", "teacher_allowed") for s in state.scenes):
                                 raise RuntimeError("incomplete_safety_checks")
                             pages = [{"scene_id": s.scene_id, "caption": s.caption, "image_path": s.final_image_ref} for s in state.scenes]
                             outcomes = [outcome(s) for s in state.scenes]
@@ -141,6 +244,9 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                                 round(state.cost.image_count * 0.025, 4), job_id,
                             ))
                         conn.execute("update jobs set image_count=%s where id=%s", (state.cost.image_count, job_id))
+                if decision:
+                    conn.execute("update job_moderation_reviews set dispatch_state='consumed',dispatch_error_code=null where id=%s",
+                                 (decision["id"],))
         except StaleGeneration:
             pass  # The authoritative newer state wins. Never write a stale failure.
         except Exception as exc:
@@ -148,7 +254,7 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                 # Projection failure preserves its checkpoint for explicit repair.
                 code = "hold_projection_failed" if hold_pending else "generation_failed"
                 conn.execute("""update jobs set status='failed',error=%s,failure_reason=%s
-                  where id=%s and generation_epoch=%s and status in ('queued','running','failed')""",
+                  where id=%s and generation_epoch=%s and status in ('queued','running','failed','awaiting_teacher')""",
                              (code, classify_failure_reason(exc), job_id, epoch))
             raise
         finally:
@@ -157,7 +263,7 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                 providers._fal_event_sink.reset(tokens[1])
             if started and epoch is not None:
                 conn.execute("""update jobs set image_count=greatest(coalesce(image_count,0),%s)
-                  where id=%s and generation_epoch=%s""", (initial_count + incurred[0], job_id, epoch))
+                  where id=%s and generation_epoch>=%s and status<>'deleting'""", (initial_count + incurred[0], job_id, epoch))
                 # After every checkpoint/provider/tracing operation, including raised failures.
                 conn.execute("""update jobs set worker_finished_at=now()
                   where id=%s and generation_epoch=%s""", (job_id, epoch))

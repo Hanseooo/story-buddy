@@ -60,7 +60,7 @@ def owned_classroom(classroom_id: str = Path(...), teacher=Depends(require_teach
 def owned_job(job_id: str = Path(...), teacher=Depends(require_teacher)) -> dict:
     rows = (
         get_supabase_client().table("jobs")
-        .select("id, status, failure_reason, approved_at, rejected_at, classroom_id, profile_id")
+        .select("id, status, failure_reason, approved_at, rejected_at, classroom_id, profile_id, moderation_mode")
         .eq("id", job_id)
         .execute().data
     )

@@ -5,6 +5,7 @@ tests create and remove their own synthetic accounts and never use a hosted proj
 """
 import os
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -44,14 +45,16 @@ def held_database(monkeypatch):
         saver = PostgresSaver(conn)
         for row in conn.execute("select id from jobs where classroom_id=%s", (classroom,)).fetchall():
             saver.delete_thread(str(row["id"]))
+        conn.execute("delete from jobs where classroom_id=%s", (classroom,))
         conn.execute("delete from profiles where id = %s", (teacher,))
 
 
-@pytest.mark.parametrize("failure", [None, "projection", "worker_stopped"])
+@pytest.mark.parametrize("failure", [None, "projection", "worker_stopped", "withdraw_inflight", "withdraw_queued_allow", "withdraw_queued_allow_revoked"])
 def test_checkpointed_scene_flag_projects_private_hold_and_reload(monkeypatch, held_database, failure):
     from worker.run_job import run_review_storybook_job
 
     conn, child, classroom, job, teacher = held_database
+    full_run = failure not in ("projection", "worker_stopped")
     monkeypatch.setattr(settings, "enable_teacher_moderation_review", True)
     db, queue = MagicMock(), MagicMock()
     db.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{"classroom_id": classroom}]
@@ -99,7 +102,7 @@ def test_checkpointed_scene_flag_projects_private_hold_and_reload(monkeypatch, h
                                 Scene(scene_id="s1", text_excerpt="The next scene stays undrawn.")],
                         moderation_context=ModerationContext(mode="teacher_review_v1",
                             policy_version="teacher_review_policy_v1"))
-    if failure is None:
+    if full_run:
         import importlib
         from contracts.story_memory import RefVerdict
         from tests.test_graph_stub import STUB_ANALYSIS
@@ -158,12 +161,13 @@ def test_checkpointed_scene_flag_projects_private_hold_and_reload(monkeypatch, h
                 assert response.status_code == 200
         finally:
             app.dependency_overrides.pop(get_current_user, None)
+
         run_review_storybook_job(job, {"action": "confirm"}, expected_epoch=0)
     with PostgresSaver.from_conn_string(settings.supabase_db_url) as saver:
         saver.setup()
         graph = build_graph(saver)
         config = {"configurable": {"thread_id": job}}
-        if failure is not None:
+        if not full_run:
             graph.update_state(config, dict(state), as_node="consistency_check")
             graph.invoke(None, config)
         held = graph.get_state(config)
@@ -311,6 +315,173 @@ def test_checkpointed_scene_flag_projects_private_hold_and_reload(monkeypatch, h
                 with conn.transaction():
                     conn.execute("select * from job_moderation_reviews")
     conn.execute("delete from storage.objects where name=%s", (f"{job}/s0-1.png",))
+
+    if full_run:
+        # Continue the real graph via the public command, including duplicate delivery.
+        monkeypatch.setattr("providers.download_book_image", lambda path: image)
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=teacher)
+        try:
+            with TestClient(app) as client:
+                detail = client.get(f"/teacher/jobs/{job}/moderation-review").json()
+                command = {"review_id": detail["review_id"], "subject_version": detail["subject_version"],
+                           "expected_epoch": detail["generation_epoch"], "request_id": str(uuid4()),
+                           "action": "allow", "policy_version": detail["current_policy_version"],
+                           "confirmed_criteria": detail["criteria"], "confirmed": True}
+                conn.execute("update profiles set removed_at=now() where id=%s", (child,))
+                assert client.post(f"/teacher/jobs/{job}/moderation-review/decision", json=command).status_code == 404
+                conn.execute("update profiles set removed_at=null where id=%s", (child,))
+                assert client.post(f"/teacher/jobs/{job}/moderation-review/decision", json={**command, "subject_version": "stale"}).status_code == 409
+                queue.enqueue.side_effect = RuntimeError("synthetic Redis outage")
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    responses = list(pool.map(lambda _: client.post(f"/teacher/jobs/{job}/moderation-review/decision", json=command), range(2)))
+                assert sorted(r.status_code for r in responses) == [200, 202]
+                assert all(r.json()["dispatch_state"] == "pending" for r in responses)
+                assert conn.execute("select generation_epoch from jobs where id=%s", (job,)).fetchone()["generation_epoch"] == 2
+                pending_detail = client.get(f"/teacher/jobs/{job}/moderation-review").json()
+                assert pending_detail["pending_command"] == command
+                pending_list = client.get(f"/teacher/classrooms/{classroom}/moderation-reviews").json()
+                assert pending_list[0]["continuation_pending"] is True
+                queue.enqueue.side_effect = None
+                assert client.post(f"/teacher/jobs/{job}/moderation-review/decision", json=command).status_code == 200
+                assert client.post(f"/teacher/jobs/{job}/moderation-review/decision", json={**command, "subject_version": "stale"}).status_code == 409
+                if failure == "withdraw_inflight":
+                    from app.moderation_hold import StaleGeneration
+                    import providers
+                    withdrawal = {"clearance_review_id": command["review_id"], "subject_version": command["subject_version"],
+                                  "expected_epoch": 2, "request_id": str(uuid4()), "confirmed": True}
+                    def finish_inflight(*args, **kwargs):
+                        providers._generation_fence.get()()
+                        providers._fal_event_sink.get()("completed")
+                        assert client.post(f"/teacher/jobs/{job}/moderation-review/withdraw", json=withdrawal).status_code == 202
+                        with pytest.raises(StaleGeneration):
+                            providers._generation_fence.get()()
+                        # Real provider fencing exits before upload or another call.
+                        providers._generation_fence.get()()
+                    monkeypatch.setattr("pipeline.generate_scene.edit_image", finish_inflight)
+                    run_review_storybook_job(job, expected_epoch=2)
+                    hidden = conn.execute("select * from jobs where id=%s", (job,)).fetchone()
+                    assert hidden["status"] == "awaiting_teacher" and hidden["generation_epoch"] == 3
+                    assert hidden["image_count"] == 3 and not hidden["pages"] and hidden["worker_finished_at"] is None
+                    run_review_storybook_job(job, expected_epoch=2)
+                    with pytest.raises(RuntimeError, match="checkpoint_not_resumable"):
+                        run_review_storybook_job(job, expected_epoch=3, review_id=withdrawal["request_id"])
+                    failed = conn.execute("select * from jobs where id=%s", (job,)).fetchone()
+                    assert failed["status"] == "failed" and failed["image_count"] == 3
+                    assert failed["worker_finished_at"] is not None
+                    primary.assert_called_once()
+                    return
+                run_review_storybook_job(job, expected_epoch=2)
+                run_review_storybook_job(job, expected_epoch=2)
+                later = client.get(f"/teacher/jobs/{job}/moderation-review").json()
+                assert later["subject_id"] == "s1"
+                assert later["review_id"] != detail["review_id"]
+                assert primary.call_count == 2
+                assert conn.execute("select image_count from jobs where id=%s", (job,)).fetchone()["image_count"] == 3
+                assert client.post(f"/teacher/jobs/{job}/moderation-review/decision", json=command).status_code == 200
+                assert conn.execute("select status from jobs where id=%s", (job,)).fetchone()["status"] == "awaiting_teacher"
+                later_command = {**command, "review_id": later["review_id"], "subject_version": later["subject_version"],
+                                 "expected_epoch": later["generation_epoch"], "request_id": str(uuid4())}
+                assert client.post(f"/teacher/jobs/{job}/moderation-review/decision", json=later_command).status_code == 202
+                if failure in ("withdraw_queued_allow", "withdraw_queued_allow_revoked"):
+                    withdrawal = {"clearance_review_id": command["review_id"], "subject_version": command["subject_version"],
+                                  "expected_epoch": 4, "request_id": str(uuid4()), "confirmed": True}
+                    assert client.post(f"/teacher/jobs/{job}/moderation-review/withdraw", json=withdrawal).status_code == 202
+                    if failure == "withdraw_queued_allow_revoked":
+                        from fastapi import HTTPException
+                        new_owner = uuid4()
+                        conn.execute("insert into auth.users(id,raw_app_meta_data) values (%s,%s)",
+                                     (new_owner, Jsonb({"role": "teacher", "display_name": "New synthetic owner"})))
+                        conn.execute("update classrooms set owner_id=%s where id=%s", (new_owner, classroom))
+                        try:
+                            with pytest.raises(HTTPException) as denied:
+                                run_review_storybook_job(job, expected_epoch=5, review_id=withdrawal["request_id"])
+                            assert denied.value.status_code == 404
+                            failed = conn.execute("select * from jobs where id=%s", (job,)).fetchone()
+                            assert failed["status"] == "failed" and failed["image_count"] == 3
+                            assert primary.call_count == 2
+                        finally:
+                            conn.execute("update classrooms set owner_id=%s where id=%s", (teacher, classroom))
+                            conn.execute("delete from profiles where id=%s", (new_owner,))
+                        return
+                    run_review_storybook_job(job, expected_epoch=5, review_id=withdrawal["request_id"])
+                    reopened = client.get(f"/teacher/jobs/{job}/moderation-review").json()
+                    assert reopened["ready"] is True
+                    release = {**command, "review_id": reopened["review_id"], "expected_epoch": 5, "request_id": str(uuid4())}
+                    assert client.post(f"/teacher/jobs/{job}/moderation-review/decision", json=release).status_code == 202
+                    run_review_storybook_job(job, expected_epoch=6)
+                    completed = conn.execute("select * from jobs where id=%s", (job,)).fetchone()
+                    assert completed["status"] == "complete" and completed["image_count"] == 3
+                    assert completed["approved_at"] is None and primary.call_count == 2
+                    return
+                run_review_storybook_job(job, expected_epoch=4)
+                complete = conn.execute("select * from jobs where id=%s", (job,)).fetchone()
+                assert complete["status"] == "complete"
+                assert complete["image_count"] == 3 and complete["approved_at"] is None
+                assert len(client.get(f"/teacher/jobs/{job}/moderation-review").json()["clearances"]) == 2
+                conn.execute("update jobs set approved_at=now() where id=%s", (job,))
+                withdrawal = {"clearance_review_id": command["review_id"], "subject_version": command["subject_version"],
+                              "expected_epoch": 4, "request_id": str(uuid4()), "confirmed": True}
+                withdrawn = client.post(f"/teacher/jobs/{job}/moderation-review/withdraw", json=withdrawal)
+                assert withdrawn.status_code == 202, withdrawn.text
+                assert client.post(f"/teacher/jobs/{job}/moderation-review/withdraw", json=withdrawal).status_code == 200
+                hidden = conn.execute("select * from jobs where id=%s", (job,)).fetchone()
+                assert hidden["status"] == "awaiting_teacher" and hidden["approved_at"] is None
+                from worker.run_worker import _report_failed
+                _report_failed(SimpleNamespace(args=[job], kwargs={"expected_epoch": 5, "review_id": withdrawal["request_id"]},
+                                              func_name="worker.run_job.run_review_storybook_job"), "synthetic anchor death")
+                dispatch = conn.execute("select dispatch_state from job_moderation_reviews where id=%s", (withdrawal["request_id"],)).fetchone()
+                assert dispatch["dispatch_state"] == "failed"
+                from rq.exceptions import DuplicateJobError
+                queue.enqueue.side_effect = DuplicateJobError("synthetic existing failed anchor")
+                queue.fetch_job.return_value.get_status.return_value = "failed"
+                assert client.post(f"/teacher/jobs/{job}/moderation-review/withdraw", json=withdrawal).status_code == 200
+                queue.fetch_job.return_value.requeue.assert_called_once()
+                queue.enqueue.side_effect = None
+                from app.auth import owned_job, require_teacher
+                app.dependency_overrides[owned_job] = lambda: complete
+                app.dependency_overrides[require_teacher] = lambda: {"id": teacher}
+                try:
+                    assert client.post(f"/jobs/{job}/review", json={"decision": "approved"}).status_code == 409
+                finally:
+                    app.dependency_overrides.pop(owned_job, None)
+                    app.dependency_overrides.pop(require_teacher, None)
+                run_review_storybook_job(job, expected_epoch=5, review_id=withdrawn.json()["review_id"])
+                reopened = client.get(f"/teacher/jobs/{job}/moderation-review").json()
+                assert reopened["ready"] is True and reopened["review_id"] == withdrawal["request_id"]
+                release = {**command, "review_id": reopened["review_id"], "expected_epoch": 5, "request_id": str(uuid4())}
+                assert client.post(f"/teacher/jobs/{job}/moderation-review/decision", json=release).status_code == 202
+                run_review_storybook_job(job, expected_epoch=6)
+                restored = conn.execute("select * from jobs where id=%s", (job,)).fetchone()
+                assert restored["status"] == "complete" and restored["approved_at"] is None
+                assert restored["image_count"] == 3 and primary.call_count == 2
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+    elif failure == "projection":
+        # Missing retained evidence must never become a restart or a new paid job.
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=teacher)
+        monkeypatch.setattr("providers.download_book_image", lambda path: image)
+        try:
+            with TestClient(app) as client:
+                detail = client.get(f"/teacher/jobs/{job}/moderation-review").json()
+                command = {"review_id": detail["review_id"], "subject_version": detail["subject_version"],
+                           "expected_epoch": detail["generation_epoch"], "request_id": str(uuid4()),
+                           "action": "allow", "policy_version": detail["current_policy_version"],
+                           "confirmed_criteria": detail["criteria"], "confirmed": True}
+                queue = MagicMock()
+                monkeypatch.setattr("app.moderation_hold.get_queue", lambda: queue)
+                assert client.post(f"/teacher/jobs/{job}/moderation-review/decision", json=command).status_code == 202
+                PostgresSaver(conn).delete_thread(job)
+                primary_text, backstop_text = MagicMock(side_effect=RuntimeError("unexpected restart")), MagicMock(side_effect=RuntimeError("unexpected restart"))
+                monkeypatch.setattr("pipeline.input_gate.classify_text_primary", primary_text)
+                monkeypatch.setattr("pipeline.input_gate.classify_text_backstop", backstop_text)
+                with pytest.raises(RuntimeError, match="checkpoint_unavailable"):
+                    run_review_storybook_job(job, expected_epoch=2, review_id=detail["review_id"])
+                assert conn.execute("select status from jobs where id=%s", (job,)).fetchone()["status"] == "failed"
+                primary.assert_called_once()
+                primary_text.assert_not_called()
+                backstop_text.assert_not_called()
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
 
 
 def test_review_interrupt_cannot_be_written_to_child_reveal():

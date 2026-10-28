@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Job, ReviewDecision, jobState } from "@/lib/types/jobs";
 import { StateBadge } from "./BookCard";
 import { Avatar } from "@/components/Avatar";
 import { displayTitle } from "@/lib/displayTitle";
+import { ClearanceWithdrawal } from "./NeedsHelpQueue";
 
 type Props = {
   job: Job | null;
@@ -20,6 +21,9 @@ export default function BookReviewDialog({
   onClose,
 }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
+  const [pending, setPending] = useState(false);
+  const [withdrawnJob, setWithdrawnJob] = useState<string | null>(null);
+  const withdrawn = !!job && withdrawnJob === job.id;
 
   useEffect(() => {
     const el = ref.current;
@@ -86,12 +90,12 @@ export default function BookReviewDialog({
 
           {/* Pages */}
           <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 space-y-8 bg-background/30">
-            {pageUrls.length === 0 && (
+            {!withdrawn && pageUrls.length === 0 && (
               <div className="py-12 text-center text-foreground/40 text-sm">
                 Loading pages…
               </div>
             )}
-            {job.pages?.map((page, i) => (
+            {!withdrawn && job.pages?.map((page, i) => (
               <div
                 key={page.scene_id}
                 className="bg-surface rounded-2xl overflow-hidden border border-primary/10 shadow-[0_6px_18px_rgb(49_85_217/10%)]"
@@ -116,10 +120,12 @@ export default function BookReviewDialog({
                 </p>
               </div>
             ))}
+            {job.moderation_mode === "teacher_review_v1" && <ClearanceWithdrawal key={job.id}
+              jobId={job.id} onPending={setPending} onWithdrawn={() => setWithdrawnJob(job.id)} />}
           </div>
 
           {/* Decision footer — fixed at bottom, thumb-reachable */}
-          <div className="px-6 py-4 border-t border-primary/10 bg-surface shrink-0 space-y-3">
+          {!withdrawn && <fieldset disabled={pending} className="px-6 py-4 border-t border-primary/10 bg-surface shrink-0 space-y-3">
             <p id="book-sharing-note" className="text-sm leading-relaxed text-foreground/75">
               Classmates will be able to read and download this book. Copies already saved remain
               after approval is withdrawn or the book is deleted.
@@ -150,7 +156,7 @@ export default function BookReviewDialog({
                 </button>
               )}
             </div>
-          </div>
+          </fieldset>}
         </div>
       )}
     </dialog>

@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabaseClient";
 type HeldItem = {
   review_id: string; job_id: string; title: string | null; author: string | null;
   held_at: string; ready: boolean;
+  continuation_pending?: boolean;
 };
 type Picture = { asset_id: string; label: string; state: "held" | "available" | "not_generated" | "unavailable" };
 type Detail = {
@@ -13,9 +14,13 @@ type Detail = {
   title?: string | null; author?: string | null; story_text?: string | null;
   ready?: boolean; pictures?: Picture[];
   kind?: string; criteria?: string[]; policy_version?: string; current_policy_version?: string;
-  settings_snapshot?: { theme_ids?: string[]; settings_version?: number };
+  settings_snapshot?: { theme_ids?: string[]; settings_version?: number; withdrawal_epoch?: number };
   classifier_evidence?: { layer: string; model_id: string; instruction_version: string;
     outcome: string; checked_at: string | null; categories: string[]; reason: string | null }[];
+  clearances?: { review_id: string; subject_version: string; label: string }[];
+  withdraws_review_id?: string | null; dispatch_state?: string | null;
+  pending_command?: { review_id: string; subject_version: string; expected_epoch: number; request_id: string;
+    action: "allow"; policy_version: string; confirmed_criteria: string[]; confirmed: true } | null;
 };
 type Criterion = { id: string; name: string; trigger: string; exception: string };
 type Policy = { policy_version: string; audience: string; basis: string; scope: string;
@@ -50,7 +55,7 @@ export default function NeedsHelpQueue({ classroomId, active, onCount, onBack }:
       const rows: HeldItem[] = await response.json();
       if (controller.signal.aborted) return;
       setItems(rows);
-      onCount(rows.length);
+      onCount(rows.filter(row => !row.continuation_pending).length);
     } catch {
       if (!controller.signal.aborted) setFailed(true);
     }
@@ -93,7 +98,7 @@ export default function NeedsHelpQueue({ classroomId, active, onCount, onBack }:
           {items.map(item => <li key={item.job_id} className="p-4 flex flex-wrap items-center justify-between gap-4">
             <div className="min-w-0 break-words">
               <p className="font-bold">{item.title || "Untitled story"}</p>
-              <p className="text-sm text-foreground/70">{item.author || "Student"} · Waiting for teacher help</p>
+              <p className="text-sm text-foreground/70">{item.author || "Student"} · {item.continuation_pending ? "Decision saved. Delivery pending" : "Waiting for teacher help"}</p>
               <p className="text-sm text-foreground/60">Held {new Date(item.held_at).toLocaleString()}</p>
             </div>
             <button className={control} aria-label={`Inspect ${item.title || "Untitled story"}`} onClick={event => {
@@ -113,6 +118,8 @@ function HeldStory({ jobId, onClose }: { jobId: string; onClose: () => void }) {
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [revision, setRevision] = useState(0);
+  const [inspected, setInspected] = useState(false);
+  const [pending, setPending] = useState(false);
   const request = useRef<AbortController | null>(null);
   const load = useCallback(async () => {
     request.current?.abort();
@@ -120,6 +127,7 @@ function HeldStory({ jobId, onClose }: { jobId: string; onClose: () => void }) {
     request.current = controller;
     setLoading(true);
     setError(false);
+    setInspected(false);
     // Unmount pictures immediately on invalidation, including previously revealed blobs.
     setRevision(value => value + 1);
     try {
@@ -166,16 +174,25 @@ function HeldStory({ jobId, onClose }: { jobId: string; onClose: () => void }) {
         <button autoFocus className={control} onClick={close}>Back to Needs your help</button>
       </div>
       <p className="text-sm text-foreground/70">Inspection leaves this story waiting. No picture is released to the child.</p>
-      <button className={control} disabled={loading} onClick={() => void load()}>Refresh story status</button>
+      <button className={control} disabled={loading || pending} onClick={() => void load()}>Refresh story status</button>
       {loading && <p role="status">Loading current story…</p>}
       {error && <div role="alert"><p>This review is unavailable or your access has changed.</p>
         <button className={control} onClick={() => void load()}>Try loading again</button></div>}
       {detail && <>
         <header><h3 className="text-2xl font-bold break-words">{detail.title || "Untitled story"}</h3>
           <p>{detail.author || "Student"}</p></header>
-        {!detail.review_id ? <p role="status">This story has changed. Current status: {detail.status.replaceAll("_", " ")}.</p> : <>
+        {!detail.review_id ? <>
+          <p role="status">This story has changed. Current status: {detail.status.replaceAll("_", " ")}.</p>
+          {detail.pending_command && <>
+            <p className="whitespace-pre-wrap break-words leading-relaxed">{detail.story_text || "Saved story text is unavailable."}</p>
+            <ContinueSavedDecision jobId={jobId} command={detail.pending_command} onChanged={load} />
+          </>}
+        </> : <>
           <p className="font-bold">Waiting for teacher help</p>
+          <p>The whole book stays hidden while this review is open. Earlier clearances cannot be withdrawn here. If uncertain, leave this story waiting.</p>
           {!detail.ready && <p role="status">Finishing the current step. Inspection is available.</p>}
+          {!detail.ready && detail.withdraws_review_id && ["pending", "failed"].includes(detail.dispatch_state || "") &&
+            <FinishWithdrawal jobId={jobId} detail={detail} onChanged={load} />}
           <section aria-label="Saved story" className="space-y-3">
             <h4 className="font-bold">Saved story</h4>
             <p className="whitespace-pre-wrap break-words leading-relaxed">{detail.story_text || "Saved story text is unavailable."}</p>
@@ -184,7 +201,8 @@ function HeldStory({ jobId, onClose }: { jobId: string; onClose: () => void }) {
             <h4 className="font-bold">Story pictures</h4>
             {!detail.pictures?.length && <p>No generated pictures are available.</p>}
             {detail.pictures?.map(picture => <ReviewPicture key={picture.asset_id} jobId={jobId}
-              reviewId={detail.review_id!} version={detail.subject_version!} picture={picture} onChanged={load} />)}
+              reviewId={detail.review_id!} version={detail.subject_version!} picture={picture} onChanged={load}
+              onInspected={picture.state === "held" ? setInspected : undefined} />)}
           </section>}
           {!loading && !error && <section aria-label="Why this story is held" className="space-y-4 break-words">
             <h4 className="font-bold">Why this story is held</h4>
@@ -210,10 +228,234 @@ function HeldStory({ jobId, onClose }: { jobId: string; onClose: () => void }) {
             </div>)}
             <ReviewCriteria />
           </section>}
+          {!loading && !error && detail.kind === "scene_image" && <AllowPicture
+            key={`${detail.review_id}-${detail.subject_version}-${detail.generation_epoch}-${revision}`}
+            jobId={jobId} detail={detail} inspected={inspected} onPending={setPending} />}
         </>}
       </>}
     </div>
   </dialog>;
+}
+
+function ContinueSavedDecision({ jobId, command, onChanged }: {
+  jobId: string; command: NonNullable<Detail["pending_command"]>; onChanged: () => void;
+}) {
+  const [pending, setPending] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const summary = useRef<HTMLHeadingElement>(null);
+  const request = useRef<AbortController | null>(null);
+  useEffect(() => () => request.current?.abort(), []);
+  useEffect(() => { if (message || success) summary.current?.focus(); }, [message, success]);
+  async function retry() {
+    const controller = new AbortController();
+    request.current = controller;
+    setPending(true); setMessage(null);
+    try {
+      const response = await reviewFetch(`/teacher/jobs/${jobId}/moderation-review/decision`, controller.signal,
+        { method: "POST", body: JSON.stringify(command) });
+      const current = await response.json();
+      if (controller.signal.aborted) return;
+      if (!response.ok || ["pending", "failed"].includes(current.dispatch_state)) setMessage("Could not finish delivery. Retry the saved decision or refresh story status.");
+      else if (["queued", "running"].includes(current.status)) setSuccess(true);
+      else onChanged();
+    } catch { if (!controller.signal.aborted) setMessage("Could not finish delivery. Retry the saved decision or refresh story status."); }
+    finally { if (!controller.signal.aborted) setPending(false); }
+  }
+  return <section aria-label="Saved safety decision" className="space-y-3">
+    {success ? <h4 ref={summary} tabIndex={-1} className="font-bold focus-visible:outline-2 focus-visible:outline-primary">Story continuing</h4> : <>
+      <p>Your decision is saved. Continue story retries its pending delivery.</p>
+      {message && <h4 ref={summary} tabIndex={-1} role="alert">{message}</h4>}
+      <button className={control} disabled={pending} onClick={() => void retry()}>{pending ? "Continuing…" : "Continue story"}</button>
+    </>}
+  </section>;
+}
+
+function AllowPicture({ jobId, detail, inspected, onPending }: {
+  jobId: string; detail: Detail; inspected: boolean; onPending: (pending: boolean) => void;
+}) {
+  const [confirmed, setConfirmed] = useState<string[]>([]);
+  const [pending, setPending] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [outcome, setOutcome] = useState("Story continuing");
+  const summary = useRef<HTMLHeadingElement>(null);
+  const request = useRef<AbortController | null>(null);
+  const body = useRef<string | null>(null);
+  useEffect(() => () => { request.current?.abort(); onPending(false); }, [onPending]);
+  useEffect(() => { if (message || success) summary.current?.focus(); }, [message, success]);
+
+  async function allow() {
+    if (pending) return;
+    body.current ??= JSON.stringify({ review_id: detail.review_id, subject_version: detail.subject_version,
+      expected_epoch: detail.generation_epoch, request_id: crypto.randomUUID(), action: "allow",
+      policy_version: detail.current_policy_version, confirmed_criteria: confirmed, confirmed: true });
+    setSubmitted(true);
+    const controller = new AbortController();
+    request.current = controller;
+    setPending(true); onPending(true); setMessage(null);
+    try {
+      const response = await reviewFetch(`/teacher/jobs/${jobId}/moderation-review/decision`, controller.signal,
+        { method: "POST", body: body.current });
+      const current = await response.json();
+      if (controller.signal.aborted) return;
+      if (!response.ok) {
+        setMessage(response.status === 409 ? "This review has changed or cannot continue. Refresh story status to review it again."
+          : "Could not confirm the saved decision. Continue story retries the same request, or refresh story status.");
+      } else if (current.dispatch_state === "pending" || current.dispatch_state === "failed") {
+        setMessage("Your decision is saved. Delivery is pending. Choose Continue story to retry it.");
+      } else {
+        setOutcome(current.status === "complete" ? "Story complete" : current.status === "awaiting_teacher"
+          ? "Story waiting for teacher help" : ["queued", "running"].includes(current.status)
+            ? "Story continuing" : `Current story status: ${String(current.status).replaceAll("_", " ")}`);
+        setSuccess(true);
+      }
+    } catch {
+      if (!controller.signal.aborted) setMessage("Could not confirm the saved decision. Continue story retries the same request, or refresh story status.");
+    } finally {
+      if (!controller.signal.aborted) { setPending(false); onPending(false); }
+    }
+  }
+
+  return <section aria-label="Allow the inspected picture" className="space-y-4 border-t border-primary/15 pt-5">
+    {success ? <h4 ref={summary} tabIndex={-1} className="font-bold text-lg focus-visible:outline-2 focus-visible:outline-primary">{outcome}</h4> : <>
+      <h4 className="font-bold text-lg">Allow this exact picture</h4>
+      <p>If you are uncertain, leave this story waiting and return later. Allowing safety clearance does not approve classroom sharing.</p>
+      {!inspected && <p>Show the picture and wait for it to load before allowing it.</p>}
+      {!detail.ready && <p role="status">Finishing the current step. Refresh story status before deciding.</p>}
+      <fieldset disabled={pending || submitted} className="space-y-2">
+        <legend className="font-bold">After inspection, confirm each named review criterion</legend>
+        {detail.criteria?.map(id => <label key={id} className="flex items-center gap-3 min-h-[44px]">
+          <input type="checkbox" checked={confirmed.includes(id)} onChange={event => setConfirmed(values =>
+            event.target.checked ? [...values, id] : values.filter(value => value !== id))} />
+          This picture meets {id.replaceAll("_", " ")}
+        </label>)}
+      </fieldset>
+      {message && <h4 ref={summary} tabIndex={-1} role="alert" className="font-bold focus-visible:outline-2 focus-visible:outline-primary">{message}</h4>}
+      {pending && <p role="status">Saving your decision…</p>}
+      <button className={control} disabled={pending || !detail.ready || (!submitted &&
+        (!inspected || !detail.current_policy_version || !detail.criteria?.length || confirmed.length !== detail.criteria.length))}
+        onClick={() => void allow()}>{pending ? "Saving…" : submitted ? "Continue story" : "Allow this picture"}</button>
+    </>}
+  </section>;
+}
+
+function FinishWithdrawal({ jobId, detail, onChanged }: { jobId: string; detail: Detail; onChanged: () => void }) {
+  const [pending, setPending] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const request = useRef<AbortController | null>(null);
+  useEffect(() => () => request.current?.abort(), []);
+  async function retry() {
+    const controller = new AbortController();
+    request.current = controller;
+    setPending(true); setFailed(false);
+    try {
+      const response = await reviewFetch(`/teacher/jobs/${jobId}/moderation-review/withdraw`, controller.signal, {
+        method: "POST", body: JSON.stringify({ clearance_review_id: detail.withdraws_review_id,
+          subject_version: detail.subject_version, expected_epoch: detail.settings_snapshot!.withdrawal_epoch! - 1,
+          request_id: detail.review_id, confirmed: true }),
+      });
+      if (!response.ok) throw new Error("withdrawal_unavailable");
+      if (!controller.signal.aborted) onChanged();
+    } catch { if (!controller.signal.aborted) setFailed(true); }
+    finally { if (!controller.signal.aborted) setPending(false); }
+  }
+  return <div className="space-y-2">
+    <p>The book is hidden. Returning it to review still needs delivery.</p>
+    {failed && <p role="alert">Could not finish delivery. Your saved withdrawal remains in place.</p>}
+    <button className={control} disabled={pending || detail.settings_snapshot?.withdrawal_epoch === undefined}
+      onClick={() => void retry()}>{pending ? "Retrying…" : "Finish returning to review"}</button>
+  </div>;
+}
+
+export function ClearanceWithdrawal({ jobId, onPending, onWithdrawn }: {
+  jobId: string; onPending: (pending: boolean) => void; onWithdrawn: () => void;
+}) {
+  const [detail, setDetail] = useState<Detail | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [selected, setSelected] = useState<NonNullable<Detail["clearances"]>[number] | null>(null);
+  const [pending, setPending] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [outcome, setOutcome] = useState("Story returned to teacher review");
+  const [submitted, setSubmitted] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const request = useRef<AbortController | null>(null);
+  const command = useRef<string | null>(null);
+  const summary = useRef<HTMLHeadingElement>(null);
+  const keep = useRef<HTMLButtonElement>(null);
+  const opener = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    request.current = controller;
+    async function load() {
+      try {
+        const response = await reviewFetch(`/teacher/jobs/${jobId}/moderation-review`, controller.signal);
+        if (!response.ok) throw new Error("clearances_unavailable");
+        const current: Detail = await response.json();
+        if (!controller.signal.aborted) { setDetail(current); setFailed(false); }
+      } catch { if (!controller.signal.aborted) setFailed(true); }
+    }
+    void load();
+    return () => { request.current?.abort(); onPending(false); };
+  }, [jobId, retry, onPending]);
+  useEffect(() => { if (selected) keep.current?.focus(); else opener.current?.focus(); }, [selected]);
+  useEffect(() => { if (message || success) summary.current?.focus(); }, [message, success]);
+
+  async function withdraw() {
+    if (!selected || pending) return;
+    command.current ??= JSON.stringify({ clearance_review_id: selected.review_id, subject_version: selected.subject_version,
+      expected_epoch: detail?.generation_epoch, request_id: crypto.randomUUID(), confirmed: true });
+    setSubmitted(true);
+    const controller = new AbortController();
+    request.current = controller;
+    setPending(true); onPending(true); setMessage(null);
+    try {
+      const response = await reviewFetch(`/teacher/jobs/${jobId}/moderation-review/withdraw`, controller.signal,
+        { method: "POST", body: command.current });
+      const current = await response.json();
+      if (controller.signal.aborted) return;
+      if (!response.ok) setMessage("Could not confirm withdrawal. Retry the same withdrawal or reload safety clearance status.");
+      else {
+        if (current.status === "awaiting_teacher") {
+          onWithdrawn();
+          if (["pending", "failed"].includes(current.dispatch_state)) setMessage("The book is hidden and returned to review. Retry withdrawal to finish delivery.");
+          else setSuccess(true);
+        } else {
+          setOutcome(`Current story status: ${String(current.status).replaceAll("_", " ")}`);
+          setSuccess(true);
+        }
+      }
+    } catch {
+      if (!controller.signal.aborted) setMessage("Could not confirm withdrawal. Retry the same withdrawal or reload safety clearance status.");
+    } finally { if (!controller.signal.aborted) { setPending(false); onPending(false); } }
+  }
+
+  return <section aria-label="Safety clearances" className="space-y-3 border-t border-primary/15 pt-4">
+    {success ? <h3 ref={summary} tabIndex={-1} className="font-bold focus-visible:outline-2 focus-visible:outline-primary">{outcome}</h3> : <>
+      <h3 className="font-bold">Safety clearances</h3>
+      {failed ? <p role="alert">Safety clearance status is unavailable.</p> : !detail ? <p role="status">Loading safety clearances…</p>
+        : !detail.clearances?.length ? <p>No current picture clearances to withdraw.</p> : <div hidden={!!selected}>{detail.clearances.map(clearance =>
+          <button key={clearance.review_id} className={control} onClick={event => {
+            opener.current = event.currentTarget; command.current = null; setSubmitted(false); setMessage(null); setSelected(clearance);
+          }}>Withdraw clearance for {clearance.label}</button>)}</div>}
+      {selected && <div role="group" aria-label="Confirm safety withdrawal" className="space-y-3" onKeyDown={event => {
+        if (event.key === "Escape" && !pending && !message) {
+          event.preventDefault(); event.stopPropagation(); setSelected(null); opener.current?.focus();
+        }
+      }}>
+        <p>Withdrawing clearance hides the whole book from the child and classmates, stops further generation, and clears classroom sharing approval. Writing and review history stay saved. Copies already viewed or downloaded cannot be recalled.</p>
+        <button ref={keep} className={control} disabled={pending} onClick={() => {
+          setSelected(null); setMessage(null); command.current = null;
+          if (submitted) setRetry(value => value + 1);
+        }}>{submitted ? "Back to clearance status" : "Keep clearance"}</button>
+        <button className={control} disabled={pending} onClick={() => void withdraw()}>{pending ? "Withdrawing…" : "Withdraw safety clearance"}</button>
+      </div>}
+      {message && <h3 ref={summary} role="alert" tabIndex={-1} className="font-bold focus-visible:outline-2 focus-visible:outline-primary">{message}</h3>}
+      <button className={control} disabled={pending} onClick={() => { setSelected(null); setMessage(null); setRetry(value => value + 1); }}>Reload safety clearance status</button>
+    </>}
+  </section>;
 }
 
 function ReviewCriteria() {
@@ -279,8 +521,9 @@ function ReviewCriteria() {
   </details>;
 }
 
-function ReviewPicture({ jobId, reviewId, version, picture, onChanged }: {
+function ReviewPicture({ jobId, reviewId, version, picture, onChanged, onInspected }: {
   jobId: string; reviewId: string; version: string; picture: Picture; onChanged: () => void;
+  onInspected?: (loaded: boolean) => void;
 }) {
   const [revealed, setRevealed] = useState(picture.state === "available");
   const [attempt, setAttempt] = useState(0);
@@ -325,7 +568,9 @@ function ReviewPicture({ jobId, reviewId, version, picture, onChanged }: {
         {!loaded && <p role="status">Loading picture…</p>}
         {/* Guarded bytes only. No Storage URL is exposed to the browser. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        {url && <img src={url} alt={picture.label || "Story picture"} className="w-full h-auto rounded-2xl" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />}
+        {url && <img src={url} alt={picture.label || "Story picture"} className="w-full h-auto rounded-2xl"
+          onLoad={() => { setLoaded(true); onInspected?.(true); }}
+          onError={() => { setFailed(true); onInspected?.(false); }} />}
       </>}
   </figure>;
 }

@@ -34,6 +34,21 @@ def review_job(
     job: dict = Depends(owned_job),
     teacher: dict = Depends(require_teacher),
 ) -> ReviewResponse:
+    if job.get("moderation_mode") == "teacher_review_v1":
+        from app.moderation_hold import PRIVATE, connect, teacher_classroom
+        with connect() as conn, conn.transaction():
+            current_job = conn.execute("select * from jobs where id=%s for update", (job["id"],)).fetchone()
+            if not current_job or current_job["status"] == "deleting":
+                raise HTTPException(404, "not found", headers=PRIVATE)
+            teacher_classroom(conn, str(current_job["classroom_id"]), str(teacher["id"]))
+            if current_job["status"] != "complete" or conn.execute(
+                "select 1 from job_moderation_reviews where job_id=%s and decision is null", (job["id"],)
+            ).fetchone():
+                raise HTTPException(409, "book_needs_review", headers=PRIVATE)
+            row = conn.execute("""update jobs set approved_at=case when %s='approved' then now() else null end,
+              rejected_at=case when %s='rejected' then now() else null end where id=%s returning approved_at,rejected_at""",
+                               (payload.decision, payload.decision, job["id"])).fetchone()
+            return ReviewResponse(**{key: value.isoformat() if value else None for key, value in row.items()})
     if job["status"] != "complete":
         raise HTTPException(422, f"job status is {job['status']!r}, not 'complete'")
 

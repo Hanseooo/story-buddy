@@ -88,6 +88,18 @@ def _report_failed(job, exc_string: str) -> None:
                 # redelivery cannot race this terminal write. Never persist a traceback.
                 if not conn.execute("select pg_try_advisory_lock(hashtextextended(%s,0)) as locked", (job.args[0],)).fetchone()["locked"]:
                     return
+                with conn.transaction():
+                    held = conn.execute("select * from jobs where id=%s for update", (job.args[0],)).fetchone()
+                    if (held and held["generation_epoch"] == expected_epoch and held["status"] == "awaiting_teacher"
+                            and job.kwargs.get("review_id")):
+                        # This control worker never generates. A reaped anchor can be
+                        # explicitly redelivered at the same epoch, including after
+                        # its graph checkpoint committed but before the finish marker.
+                        conn.execute("""update job_moderation_reviews set dispatch_state='failed',
+                          dispatch_error_code='worker_stopped' where id=%s and job_id=%s
+                          and decision is null and dispatch_kind='anchor_withdrawal'""",
+                                     (job.kwargs["review_id"], job.args[0]))
+                        return
                 conn.execute("""update jobs set status='failed',error='worker_stopped',
                   failure_reason='worker_stopped',worker_finished_at=now()
                   where id=%s and generation_epoch=%s and moderation_mode='teacher_review_v1'

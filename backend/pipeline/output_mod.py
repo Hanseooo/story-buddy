@@ -106,7 +106,9 @@ def output_mod(state: StoryMemory) -> dict:
     current_image_count = state.cost.image_count
 
     for scene in state.scenes:
-        if scene.moderation_status in {"passed", OVERRIDE_STATUS}:
+        if scene.moderation_status in {"passed", OVERRIDE_STATUS} or (
+            state.moderation_context.mode == "teacher_review_v1" and scene.moderation_status == "teacher_allowed"
+        ):
             # Screened on an earlier turn of the loop. This node now runs once per finalized scene
             # rather than once over the finished book (see `route_next_scene`), so without this it
             # would re-pay for a classifier call per already-cleared scene, per scene, per book.

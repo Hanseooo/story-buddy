@@ -21,7 +21,7 @@ the defense, and the teacher decides whether a flagged run continues.
 | 04 | [phase_05 text probe reads the current setting](issues/04-phase05-probe-setting-name.md) | task | open | — |
 | 05 | [Flagged scene picture holds; child leaves and returns](issues/05-hold-flagged-scene-picture.md) | task | done, merged | — |
 | 06 | [Teacher inspects a held story in Needs your help](issues/06-teacher-inspects-held-story.md) | task | ready for agent | — (05 merged) |
-| 07 | [Teacher allows the exact held picture; run resumes](issues/07-teacher-allows-held-picture.md) | task | open | 06, 13 |
+| 07 | [Teacher allows the exact held picture; run resumes](issues/07-teacher-allows-held-picture.md) | task | implemented; browser/hosted verification pending | — (06/13 implemented) |
 | 08 | [Teacher or child stops a held story, writing kept](issues/08-teacher-stops-held-story.md) | task | open | 06 |
 | 09 | [Teacher requests a replacement picture within budget](issues/09-teacher-requests-replacement-picture.md) | task | open | 07 |
 | 10 | [Flagged character reference holds](issues/10-hold-flagged-character-reference.md) | task | open | 07, 08, 09 |
@@ -42,6 +42,9 @@ See moderation-stack §9.10 for verification limits. Do not repeat the conflict 
 acceptance or product interview.
 
 Tickets 03–15 were written on 2026-10-26. The accepted §9.9 contracts now govern 05–15.
+Ticket [07](issues/07-teacher-allows-held-picture.md) implements scene allow, durable delivery
+recovery and whole-book withdrawal in the synthetic-only, feature-off scope. Verification and
+remaining release gates are in [moderation-stack §9.13](../../docs/specs/moderation-stack.md#913-ticket-07-implementation-2026-10-28).
 The audit-dependency exception applies only to synthetic-only build work with the feature
 disabled by default. Audit 01 still owns AC-17/18, OD-09 and §7's replay evidence. Changed
 classifier prompts, paid replay, production enablement and real-child use are not authorized.

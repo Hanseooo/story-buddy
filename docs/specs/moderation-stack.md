@@ -1025,7 +1025,7 @@ from a classifier/service failure. Neither status alone proves worker quiescence
 | Allow | Owner teacher, matching open review/version/epoch/current policy; exact subject inspectable; quiescent | Record immutable `allow`, advance epoch, set `queued`, clear finish marker, dispatch `pending` | Resume exact checkpoint, apply explicit teacher clearance, follow saved continuation |
 | Replace | Same authority/version/quiescence; picture; allowance and image budget available | Record `replace`, advance epoch, set `queued`, clear marker, dispatch `pending` | Draw one replacement; new checks; no release of old candidate |
 | Stop | Owner teacher or active child author; matching open review/epoch; quiescent; confirmation | Record `stop`, advance epoch, set `stopped`; no dispatch | No continuation; writing remains |
-| Withdraw | Owner teacher; previous `allow` for that exact currently selected or dependency subject; not stopped/deleting/failed | New open review referencing old clearance, advance epoch, set `awaiting_teacher`, clear sharing timestamps | Fence old worker; anchor new review after it quiesces |
+| Withdraw | Owner teacher; previous `allow` for that exact currently selected or dependency subject; not stopped/deleting/failed; no other open review | New open review referencing old clearance, advance epoch, set `awaiting_teacher`, clear sharing timestamps | Fence old worker; anchor new review after it quiesces |
 | Delete | Child owner; allowed terminal/pause status; non-null finish marker | ADR-044 CAS to `deleting`, advance epoch; all reads denied except owner tombstone | Existing four-store cleanup, plus cascading private review rows |
 
 Use a database transaction with `SELECT ... FOR UPDATE` on the job for each transition, review
@@ -1504,3 +1504,70 @@ unavailable. Hosted delivery and educator/ethics/real-child gates remain unchang
 Both requested independent review agents hit the account usage limit without returning findings.
 Local Standards/Spec review corrected the policy fixture's audience string; independent review
 remains uncompleted.
+
+### 9.13 Ticket 07 implementation (2026-10-28)
+
+Synthetic-only, captured `teacher_review_v1` scene-picture allow and whole-book withdrawal
+implement §§9.9.3–9.9.5. Intake remains disabled by default. Other subjects, stop and replacement
+remain later tickets. Allow requires the current owner, active author, matching review/hash/epoch,
+current policy and explicit confirmation of every recorded criterion. The retained checkpoint
+and exact image bytes must still exist. An immutable decision commits with its pending dispatch
+before unique RQ delivery. Explicit retries reuse that command; reads never enqueue.
+
+The serialized worker reads committed decisions, resumes the pinned evidence checkpoint, and
+sets only the selected attempt's safety eligibility and scene status to `teacher_allowed`.
+Consistency verdicts and classifier evidence remain unchanged. Completed scenes are not redrawn;
+later scenes are independently moderated and can create another hold. The persisted job image
+count includes the held checkpoint's draws. Normal image-budget checks remain in place.
+
+Withdrawal is available for current selected picture clearances from teacher book detail.
+It immediately advances the epoch, hides all pages/reveal and clears both editorial timestamps.
+The control worker waits for the old worker's per-job lock, validates retained bytes and safe
+checkpoint progress, clears the affected graph eligibility and anchors a new review through the
+real `update_state(as_node='moderation_review')` seam. Migration
+`0023_anchor_withdrawn_clearance.sql` permits only the initial checkpoint/continuation attachment
+to an undecided withdrawal; evidence and decided records stay immutable. Re-allow can restore a
+completed book through `END`, without restoring sharing approval. Editorial writes for these
+jobs use the same job-row transaction as withdrawal. An incomplete paid effect fails honestly
+instead of replaying it, with incurred image count retained.
+
+The teacher must explicitly reveal and load the held picture before confirmation. Pending,
+unknown-response, retry and durable-success states preserve context and focus the outcome.
+Withdrawal confirms whole-book hiding and sharing reset, initially focuses Keep clearance, and
+has an explicit delivery retry. Existing child progress/review subscriptions observe the status
+transition without receiving policy or private evidence. Browser and hosted verification remain
+unrun: no browser is connected and the in-app browser is unavailable. No paid replay, prompt
+calibration, feature enablement or real-child release is included.
+
+Verification (synthetic data, mocked provider boundaries, disposable Postgres on localhost):
+
+- `uv run ruff check .`: passed.
+- `uv run pytest tests/test_teacher_hold.py tests/test_run_job.py tests/test_graph_stub.py tests/test_main.py tests/test_review.py -q`: 150 passed.
+  Real graph/SQL scenarios cover concurrent same-request commands, stale/version/access denial,
+  Redis outage and durable retry after reload, later holds, withdrawal/re-allow through `END`,
+  stale editorial writes, killed control delivery, committed-but-unapplied later clearance,
+  ownership loss before its pure replay, missing post-commit checkpoints and in-flight paid
+  effects. New failure cases were observed red before their corresponding fixes.
+- `uv run pytest`: 1,548 passed, 89 skipped, six smoke deselections and the same six native
+  WeasyPrint/PDF failures recorded in §§9.11–9.12. Representative output:
+  `assert 503 == 200` and `PDF download failed (OSError)` in `tests/test_pdf_export.py`.
+  Local failure output is retained in `.scratch/ticket07-backend-final.txt`; no PDF test was
+  skipped, removed or loosened. Credential/local-Supabase-dependent skips remain unchanged.
+- `pnpm lint` and `pnpm build`: passed, with CI placeholder public Supabase values for build.
+  The build includes TypeScript checking. Intermediate `pnpm exec tsc --noEmit` also passed.
+- `pnpm test --pool=threads --maxWorkers=2` stalled during unrestricted discovery and was
+  stopped. The complete source command
+  `pnpm exec vitest run app components lib utils middleware.test.ts --maxWorkers=2 --pool=threads --reporter=dot`
+  passed all 77 files and 738 tests. The Books file passes all 33 tests, including refresh-safe
+  same-command retry, loaded-picture/criterion gates, withdrawal focus and current-state replay.
+- Migration 0023 applied successfully to the disposable database. Hosted application is unrun.
+- Both Standards and Spec review agents re-reviewed the fixes and report zero unresolved
+  findings. Browser/phone UI, hosted access, paid providers and real-child enablement are unrun.
+
+Owner-delegated boundary decision (2026-10-28): preserve one open review. While a different
+picture is held, the whole book is already hidden and generation paused; earlier-clearance
+withdrawal is unavailable. The teacher view says so and offers leaving it waiting, without
+requiring an uncertain allow. No second review queue or new review-state contract is introduced.
+This differs from an already-committed later allow: that decision has closed its database review,
+so the control worker applies only its pure review node, stopping before its paid continuation,
+before anchoring withdrawal of the earlier picture.

@@ -7,6 +7,9 @@ import NeedsHelpQueue from "@/components/NeedsHelpQueue";
 // Captured from the real graph/disposable-Postgres test_teacher_hold integration run.
 import heldDetail from "./held-detail.fixture.json";
 import moderationPolicy from "./moderation-policy.fixture.json";
+import clearances from "./clearances.fixture.json";
+import pendingContinuation from "./pending-continuation.fixture.json";
+import BookReviewDialog from "@/components/BookReviewDialog";
 
 vi.mock("@/lib/supabaseClient", () => ({ supabase: {
   auth: { getSession: async () => ({ data: { session: { access_token: "synthetic" } } }) },
@@ -15,6 +18,71 @@ vi.mock("@/lib/supabaseClient", () => ({ supabase: {
 } }));
 
 describe("held story inspection", () => {
+  it.each([false, true])("confirms withdrawal and reconciles a later release on replay (%s)", async (replayed) => {
+    let writes = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.endsWith("/withdraw")) {
+        writes++;
+        if (replayed && writes === 1) throw new Error("lost response");
+        return Response.json({ status: replayed ? "complete" : "awaiting_teacher", dispatch_state: replayed ? "consumed" : "queued" }, { status: replayed ? 200 : 202 });
+      }
+      return Response.json(clearances);
+    }));
+    render(<BookReviewDialog job={makeJob({ moderation_mode: "teacher_review_v1" })} pageUrls={[]}
+      onClose={() => {}} onDecide={() => {}} />);
+    const buttons = await screen.findAllByRole("button", { name: /^Withdraw clearance for/ });
+    fireEvent.click(buttons[0]);
+    expect(screen.getByRole("button", { name: "Keep clearance" })).toHaveFocus();
+    expect(writes).toBe(0);
+    fireEvent.click(screen.getByRole("button", { name: "Keep clearance" }));
+    await waitFor(() => expect(screen.getAllByRole("button", { name: /^Withdraw clearance for/ })[0]).toHaveFocus());
+    fireEvent.click(screen.getAllByRole("button", { name: /^Withdraw clearance for/ })[0]);
+    expect(screen.getByText(/hides the whole book/)).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Withdraw safety clearance" }));
+    if (replayed) {
+      expect(await screen.findByRole("alert")).toHaveFocus();
+      fireEvent.click(screen.getByRole("button", { name: "Withdraw safety clearance" }));
+    }
+    expect(await screen.findByRole("heading", { name: replayed ? "Current story status: complete" : "Story returned to teacher review" })).toHaveFocus();
+    if (!replayed) expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+    expect(writes).toBe(replayed ? 2 : 1);
+    vi.unstubAllGlobals();
+  });
+  it("allows only after image load and explicit criteria confirmation, and retries the same request", async () => {
+    let submissions = 0;
+    const bodies: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, options?: RequestInit) => {
+      if (url.endsWith("/decision")) {
+        bodies.push(options!.body as string);
+        if (++submissions === 1) throw new Error("lost response");
+        return Response.json({ status: "queued", dispatch_state: "queued" }, { status: 200 });
+      }
+      if (url.endsWith("/reveal")) return new Response("picture");
+      if (url.endsWith("/moderation-policy")) return Response.json(moderationPolicy);
+      if (url.endsWith("/moderation-review")) return Response.json(submissions
+        ? { ...pendingContinuation, pending_command: JSON.parse(bodies[0]) } : heldDetail);
+      return Response.json([{ review_id: heldDetail.review_id, job_id: "synthetic-job", title: heldDetail.title, held_at: "2026-10-28T00:00:00Z", ready: true }]);
+    }));
+    URL.createObjectURL = vi.fn(() => "blob:synthetic-picture");
+    URL.revokeObjectURL = vi.fn();
+    render(<NeedsHelpQueue classroomId="synthetic-class" active onCount={() => {}} onBack={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Inspect Synthetic title/ }));
+    const allow = await screen.findByRole("button", { name: "Allow this picture" });
+    expect(allow).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Show picture to review" }));
+    fireEvent.load(await screen.findByRole("img", { name: "Synthetic story" }));
+    expect(allow).toBeDisabled();
+    for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);
+    fireEvent.click(allow);
+    expect(await screen.findByRole("alert")).toHaveFocus();
+    fireEvent(document, new Event("visibilitychange"));
+    expect(await screen.findByText("Your decision is saved. Continue story retries its pending delivery.")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Continue story" }));
+    expect(await screen.findByRole("heading", { name: "Story continuing" })).toHaveFocus();
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]).toBe(bodies[1]);
+    vi.unstubAllGlobals();
+  });
   it("shows captured evidence and a closable criteria reference, with honest missing reasoning", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (url.endsWith("/moderation-policy")) return Response.json(moderationPolicy);
