@@ -150,6 +150,7 @@ def output_mod(state: StoryMemory) -> dict:
                 review_id=review_id, kind="scene_image", subject_id=scene.scene_id,
                 subject_version=subject_version, return_node="output_mod", classifier_evidence=evidence,
                 criteria=list(TEACHER_MODERATION_CRITERIA),
+                replacement=bool(scene.moderation_replacement_count),
             )
             return {
                 "scenes": updated_scenes + [scene],

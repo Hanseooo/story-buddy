@@ -161,7 +161,7 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                     retained = StoryMemory.model_validate(snapshot.values)
                     review = retained.moderation_context.review
                     if review and review.resolution is None and decision:
-                        if (decision["decision"] != "allow" or validate_review_checkpoint(conn, job_id, decision) is None
+                        if (decision["decision"] not in ("allow", "replace") or validate_review_checkpoint(conn, job_id, decision) is None
                                 or str(review.review_id) != str(decision["id"])
                                 or snapshot.next != ("moderation_review",)):
                             raise RuntimeError("checkpoint_not_resumable")
@@ -170,7 +170,7 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                         if hashlib.sha256(contents).hexdigest() != decision["subject_version"]:
                             raise RuntimeError("moderation_subject_unavailable")
                         config["configurable"]["checkpoint_id"] = decision["checkpoint_id"]
-                        graph_input = Command(resume={"action": "allow", "review_id": str(decision["id"]),
+                        graph_input = Command(resume={"action": decision["decision"], "review_id": str(decision["id"]),
                             "subject_version": decision["subject_version"], "generation_epoch": epoch})
                     elif review and review.resolution is None:
                         hold_pending = True

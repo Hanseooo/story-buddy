@@ -1404,9 +1404,8 @@ real-child release approval. Tickets 06–15 retain their own acceptance criteri
 - Child process/bookshelf/reader surfaces recognize the persisted hold, offer an in-app exit and
   hide the held picture. Product image consumers use abortable, noncached guarded bytes for
   feature jobs. Baseline signing and soften-and-retry remain intact.
-- `TEACHER_REVIEW_RECURSION_LIMIT = 88` adds the single terminal review pause to the unchanged
-  capped baseline path. A no-provider graph test reaches a last-scene hold after ten scenes and
-  thirty consistency attempts. Ticket 09 must account for its replacement edges when built.
+- Ticket 05 initially added a single terminal review pause to the unchanged capped baseline path.
+  Ticket 09 now bounds the full feature path as described in §9.15, including replacements.
 
 Verification uses disposable local PostgreSQL with synthetic auth/Storage schemas and all
 migrations, real PostgresSaver checkpoints, and SQL browser roles. The integration test drives
@@ -1508,8 +1507,9 @@ remains uncompleted.
 ### 9.13 Ticket 07 implementation (2026-10-28)
 
 Synthetic-only, captured `teacher_review_v1` scene-picture allow and whole-book withdrawal
-implement §§9.9.3–9.9.5. Intake remains disabled by default. Other subjects and replacement
-remain later tickets; stopped-run recovery is recorded in §9.14. Allow requires the current owner, active author, matching review/hash/epoch,
+implement §§9.9.3–9.9.5. Intake remains disabled by default. Other subjects remain later tickets;
+stopped-run recovery is recorded in §9.14 and scene replacement in §9.15.
+Allow requires the current owner, active author, matching review/hash/epoch,
 current policy and explicit confirmation of every recorded criterion. The retained checkpoint
 and exact image bytes must still exist. An immutable decision commits with its pending dispatch
 before unique RQ delivery. Explicit retries reuse that command; reads never enqueue.
@@ -1623,3 +1623,64 @@ passes all 78 files and 742 tests, with no source tests excluded. Full output is
 `.scratch/ticket08-frontend-serial.txt`. Browser/phone verification is unrun: browser inventory is empty and
 creating an in-app browser returns `Browser is not available: iab`. Hosted delivery, paid
 providers and real-child release are unrun. The feature remains disabled by default.
+
+### 9.15 Ticket 09 implementation (2026-10-28)
+
+Scene-picture replacement extends the existing serialized decision transaction and durable
+dispatch. `ReviewDecision.action` now accepts `replace`. The teacher detail returns
+`replacement_available` and `replacement_disabled_reason` (`image_budget_exhausted`,
+`replacement_already_used`, or `replacement_source_unavailable`). The command rechecks the
+retained checkpoint, exact bytes, active author, epoch, quiescence and current spend before
+committing. Unavailable replacement returns 422 without consuming the hold. Pending replacement
+delivery remains reachable through the queue and detail after reload, using the same request ID.
+
+`moderation_review → moderation_replace → consistency_check → output_mod` is implemented.
+The pure review decision marks the rejected attempt excluded, without granting clearance.
+The new node guards spend with `check_image_budget`, reuses the source scene prompt and the
+same ordered `referenced_characters` roll, and appends one new attempt. The named
+`MAX_SCENE_MOD_REPLACEMENTS` cap is one. `settings.max_scene_attempts` is still read at call time.
+Only the fresh attempt receives judgment and selection in replacement mode, with its actual
+passing/failing/unchecked result. A failing verdict buys no consistency redraw and cannot select
+the rejected original. A safety flag creates a new exact-candidate hold with allow/stop only.
+Provider refusal before an image propagates as the existing failure, with no substituted picture,
+softened retry or releasable flag. Baseline behavior is unchanged.
+
+The teacher action reuses the existing inspection/decision section and same-request recovery.
+Inspection must load before requesting replacement. No safety-criteria confirmation is required
+for replacing a picture. Exhausted slot/budget explanations retain inspection, leave, allow and
+stop. No custom prompt field, dependency, schema migration or new image allowance was added.
+
+`TEACHER_REVIEW_RECURSION_LIMIT = MAX_SCENES * (7 + 8) + SUPER_STEP_PRELUDE + 1` bounds
+the cumulative feature path, including both review pauses, both decisions, replacement, fresh
+check/moderation and allowed continuation per scene. The no-provider worst-path graph test
+executes 157 steps with the ordinary six-step prelude and all ten scenes using three consistency
+attempts plus one replacement, a second flag and allow. The named bound also reserves the full
+capped reference prelude. Baseline `RECURSION_LIMIT` and `IMAGE_BUDGET` remain unchanged.
+
+Verification uses the existing real-graph/disposable-Postgres seam and the captured synthetic
+image fixture, with provider I/O mocked. The main safety-pass/re-flag variants cover fresh failing
+consistency, rejected-candidate exclusion, exact source prompt/reference roll, duplicate commands,
+queue-response loss/reopen, stale allow denial, one consumed slot and retained billed cost.
+Failure variants cover budget exhaustion with no draw and refusal without a new picture/check.
+UI tests cover replacement recovery across a lost response/reload and disabled budget copy while
+preserving other actions. Browser/phone inspection, hosted delivery, paid providers and
+real-child release remain unrun. Intake remains disabled by default.
+
+Checks: `uv run ruff check .` passes. The ticket's
+`uv run pytest tests/test_output_mod_node.py tests/test_run_job.py tests/test_teacher_hold.py tests/test_graph_stub.py -q --tb=short`
+passes 101 tests. After review fixes,
+`uv run pytest tests/test_teacher_hold.py tests/test_canonical_character_consistency.py tests/test_graph_stub.py -q --tb=short`
+passes 42 tests. Full `uv run pytest` with disposable `TEST_MODERATION_DB_URL` reports
+1,555 passes, 89 skips, six smoke deselections and the same six native WeasyPrint/PDF failures
+recorded in §§9.11–9.14. Representative output: `assert 503 == 200` and
+`PDF download failed (OSError)` in `tests/test_pdf_export.py`; full output is in
+`.scratch/ticket09-backend-final.txt`. No PDF assertion was skipped, removed or loosened.
+The first full run also caught the graph's exact inventory expectation, now updated to include
+ADR-080's authorized replacement node; its test passes in the final full run.
+Frontend `pnpm lint`, `pnpm build` with CI public placeholders and `pnpm exec tsc --noEmit`
+pass. The affected Books test file passes all 36 tests. Windows commands use `pnpm.cmd` because
+PowerShell blocks the installed `pnpm.ps1`. Standards and Spec re-reviews have no unresolved findings.
+The unrestricted frontend discovery attempts did not finish and were stopped. The complete
+source command `pnpm exec vitest run app components lib utils middleware.test.ts --pool=threads --maxWorkers=1 --reporter=verbose`
+passes all 78 files and 744 tests, with no source test excluded. Full output is in
+`.scratch/ticket09-frontend-source.txt`; build output is in `.scratch/ticket09-build.txt`.

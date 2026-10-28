@@ -73,7 +73,7 @@ moderated but overridden; the rule's amendment is OD-02/OD-10. No existing test 
 - [x] The decision and the policy/settings evidence approved under OD-03 are persisted (SH-06).
 - [x] Explicit confirmation follows inspection against the named criterion; record teacher, exact
       content/version, criterion and current policy version without mandatory written justification (AC-10, SH-06).
-- [ ] An uncertain teacher can leave held, return later, replace within budget or stop; no release
+- [x] An uncertain teacher can leave held, return later, replace within budget or stop; no release
       pretending uncertainty is a pass and no new escalation service (AC-10).
 - [x] Withdrawal hides affected content from child/gallery, blocks further generation and returns
       the story to review, retaining writing/history; an in-flight result cannot bypass it (AC-19).
@@ -105,8 +105,8 @@ accepted synthetic-only, feature-off scope. Audit/calibration and real-child rel
 
 ## Comments
 
-The uncertainty criterion remains unchecked only for its stop/replacement portions, explicitly
-out of this ticket's scope (08/09). Leaving held and returning later are implemented. No uncertain
+The uncertainty criterion is now complete across tickets 07–09: leave held, return later,
+stop, or replace within budget. These later actions are implemented in tickets 08/09. No uncertain
 teacher must allow content. Owner delegated the open-review withdrawal choice on 2026-10-28:
 keep one open review, with earlier-clearance withdrawal unavailable while another picture is
 held. The whole book remains hidden and paused; the inspection explains this boundary.

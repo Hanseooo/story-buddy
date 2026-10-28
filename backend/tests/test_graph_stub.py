@@ -34,7 +34,9 @@ EXPECTED_ORDER = [
 ]
 
 
-def test_feature_bound_covers_ten_scenes_with_maximum_consistency_retries_then_hold(monkeypatch):
+def test_feature_bound_covers_ten_scenes_with_maximum_consistency_retries_and_replacements(monkeypatch):
+    from unittest.mock import MagicMock
+    from langgraph.types import Command
     from app.config import TEACHER_REVIEW_RECURSION_LIMIT
     from contracts.story_memory import ModerationContext
 
@@ -46,19 +48,36 @@ def test_feature_bound_covers_ten_scenes_with_maximum_consistency_retries_then_h
     monkeypatch.setattr("pipeline.consistency_check.judge_attempt", lambda *a: (
         [_judge_returning(same=False)], SceneConstraintVerdict(differences_observed="none", contradictions=[]),
     ))
-    monkeypatch.setattr("pipeline.output_mod.classify_image_primary", lambda url, **kwargs: "s9-" not in url)
+    monkeypatch.setattr("pipeline.output_mod.classify_image_primary", lambda url, **kwargs: False)
     monkeypatch.setattr("pipeline.output_mod.download_book_image", lambda path: b"synthetic graph-bound image")
     state = _initial_state("04b21cbc-ff2d-4fd8-b2ef-56431784a9a4")
     state.input.raw_text = " ".join(["The orange dog walks through the grassy field past the trees and stops near the stream." for _ in range(10)])
     state.moderation_context = ModerationContext(mode="teacher_review_v1", policy_version="teacher_review_policy_v1")
     graph = build_graph()
     config = {"configurable": {"thread_id": "bound"}, "recursion_limit": TEACHER_REVIEW_RECURSION_LIMIT}
-    graph.invoke(state, config)
-    held = graph.get_state(config)
-    assert len(held.values["scenes"]) == 10
-    assert sum(len(scene.attempts) for scene in held.values["scenes"]) == 30
-    assert held.next == ("moderation_review",)
-    assert held.tasks[0].interrupts
+    # The new node uses the real draw/storage helper, with only provider I/O mocked.
+    storage = MagicMock()
+    storage.storage.from_.return_value.download.side_effect = FileNotFoundError
+    monkeypatch.setattr("pipeline.generate_scene.get_supabase_client", lambda: storage)
+    monkeypatch.setattr("pipeline.generate_scene.edit_image", lambda *a: b"synthetic image")
+    monkeypatch.setattr("pipeline.generate_scene.get_signed_url", lambda path: path)
+    steps = [key for chunk in graph.stream(state, config) for key in chunk]
+    for index in range(10):
+        for action in ("replace", "allow"):
+            held = graph.get_state(config)
+            assert held.next == ("moderation_review",)
+            assert held.tasks[0].interrupts
+            context = held.values["moderation_context"]
+            review = context.review
+            assert review.subject_id == f"s{index}"
+            command = Command(resume={"action": action, "review_id": str(review.review_id),
+                "subject_version": review.subject_version, "generation_epoch": context.generation_epoch + 1})
+            steps += [key for chunk in graph.stream(command, config) for key in chunk]
+    complete = graph.get_state(config)
+    assert complete.next == ()
+    assert sum(len(scene.attempts) for scene in complete.values["scenes"]) == 40
+    assert all(scene.moderation_replacement_count == 1 for scene in complete.values["scenes"])
+    assert len(steps) <= TEACHER_REVIEW_RECURSION_LIMIT
 
 
 def _initial_state(story_id: str) -> StoryMemory:

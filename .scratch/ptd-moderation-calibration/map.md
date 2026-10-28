@@ -23,7 +23,7 @@ the defense, and the teacher decides whether a flagged run continues.
 | 06 | [Teacher inspects a held story in Needs your help](issues/06-teacher-inspects-held-story.md) | task | ready for agent | — (05 merged) |
 | 07 | [Teacher allows the exact held picture; run resumes](issues/07-teacher-allows-held-picture.md) | task | implemented; browser/hosted verification pending | — (06/13 implemented) |
 | 08 | [Teacher or child stops a held story, writing kept](issues/08-teacher-stops-held-story.md) | task | open | 06 |
-| 09 | [Teacher requests a replacement picture within budget](issues/09-teacher-requests-replacement-picture.md) | task | open | 07 |
+| 09 | [Teacher requests a replacement picture within budget](issues/09-teacher-requests-replacement-picture.md) | task | implemented; browser/hosted verification pending | — (07 implemented) |
 | 10 | [Flagged character reference holds](issues/10-hold-flagged-character-reference.md) | task | open | 07, 08, 09 |
 | 11 | [Flagged story text holds; teacher can allow unchanged](issues/11-hold-flagged-story-text.md) | task | open | 07, 08 |
 | 12 | [Flagged title holds instead of 422](issues/12-hold-flagged-title.md) | task | open | 11 |
@@ -49,8 +49,11 @@ The audit-dependency exception applies only to synthetic-only build work with th
 disabled by default. Audit 01 still owns AC-17/18, OD-09 and §7's replay evidence. Changed
 classifier prompts, paid replay, production enablement and real-child use are not authorized.
 Educator/ethics/consent, applicable erasure and hosted-verification gates remain for real-child use.
-The accepted D-N/replacement design addresses #78 through ticket 09; current code's unchecked
-retry is not fixed by acceptance. The baseline backstop-error policy remains a separate decision.
+Ticket [09](issues/09-teacher-requests-replacement-picture.md) implements the accepted D-N
+replacement path with fresh consistency judgment in teacher-review mode. See
+[moderation-stack §9.15](../../docs/specs/moderation-stack.md#915-ticket-09-implementation-2026-10-28)
+for checks and release limits. Baseline automatic retries remain unjudged; the baseline
+backstop-error policy remains a separate decision.
 ## Answers
 
 ### Interview decisions (2026-10-26; specification only)

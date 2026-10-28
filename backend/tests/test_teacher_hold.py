@@ -50,7 +50,7 @@ def held_database(monkeypatch):
         conn.execute("delete from profiles where id = %s", (teacher,))
 
 
-@pytest.mark.parametrize("failure", [None, "projection", "worker_stopped", "withdraw_inflight", "withdraw_queued_allow", "withdraw_queued_allow_revoked", "child_stop", "teacher_stop", "stop_race"])
+@pytest.mark.parametrize("failure", [None, "projection", "worker_stopped", "withdraw_inflight", "withdraw_queued_allow", "withdraw_queued_allow_revoked", "child_stop", "teacher_stop", "stop_race", "replacement_pass", "replacement_flag", "replacement_refusal", "replacement_budget"])
 def test_checkpointed_scene_flag_projects_private_hold_and_reload(monkeypatch, held_database, failure):
     from worker.run_job import run_review_storybook_job
 
@@ -328,6 +328,95 @@ def test_checkpointed_scene_flag_projects_private_hold_and_reload(monkeypatch, h
                            "expected_epoch": detail["generation_epoch"], "request_id": str(uuid4()),
                            "action": "allow", "policy_version": detail["current_policy_version"],
                            "confirmed_criteria": detail["criteria"], "confirmed": True}
+                if failure and failure.startswith("replacement_"):
+                    from app.config import IMAGE_BUDGET
+                    from pipeline.consistency_check import Contradiction, SceneConstraintVerdict
+
+                    graph = build_graph(PostgresSaver(conn))
+                    route = f"/teacher/jobs/{job}/moderation-review/decision"
+                    replacement = {**command, "action": "replace", "confirmed_criteria": []}
+                    assert detail["replacement_available"] is True
+                    draws = []
+                    def draw(prompt, urls):
+                        draws.append((prompt, urls))
+                        if failure == "replacement_refusal":
+                            raise RuntimeError("synthetic provider refusal before image")
+                        return image
+                    monkeypatch.setattr("pipeline.generate_scene.edit_image", draw)
+                    if failure == "replacement_budget":
+                        conn.execute("update jobs set image_count=%s where id=%s", (IMAGE_BUDGET, job))
+                        exhausted = client.get(f"/teacher/jobs/{job}/moderation-review").json()
+                        assert exhausted["replacement_available"] is False
+                        assert exhausted["replacement_disabled_reason"] == "image_budget_exhausted"
+                        assert client.post(route, json=replacement).status_code == 422
+                        assert draws == []
+                        assert client.get(f"/teacher/jobs/{job}/moderation-review").json()["review_id"] == detail["review_id"]
+                        return
+                    queue.enqueue.side_effect = RuntimeError("synthetic lost queue response")
+                    with ThreadPoolExecutor(max_workers=2) as pool:
+                        results = list(pool.map(lambda _: client.post(route, json=replacement), range(2)))
+                    assert sorted(r.status_code for r in results) == [200, 202]
+                    pending = client.get(f"/teacher/jobs/{job}/moderation-review").json()
+                    assert pending["pending_command"] == replacement
+                    assert client.get(f"/teacher/classrooms/{classroom}/moderation-reviews").json()[0]["continuation_pending"] is True
+                    queue.enqueue.side_effect = None
+                    assert client.post(route, json=replacement).status_code == 200
+                    # A failing fresh judgment must finalize the fresh image, even when
+                    # the rejected original had a clean verdict and attempts remain.
+                    checks = []
+                    def fresh_judge(prompt, urls, schema, **kwargs):
+                        checks.append(schema.__name__)
+                        if schema is SceneConstraintVerdict:
+                            return schema(differences_observed="action differs", contradictions=[Contradiction(
+                                subject="dog", required="walking", observed="sitting")] if len(checks) == 2 else [])
+                        return schema(differences_observed="none", same_character=True)
+                    monkeypatch.setattr("pipeline.consistency_check.judge", fresh_judge)
+                    monkeypatch.setattr("pipeline.output_mod.classify_image_primary",
+                                        lambda url, **kwargs: failure != "replacement_flag")
+                    monkeypatch.setattr("pipeline.output_mod.classify_image_backstop", lambda url, **kwargs: True)
+                    # Stop at a later flag so only this replacement is charged.
+                    state_before = graph.get_state(config)
+                    source_scene = state_before.values["scenes"][0]
+                    if failure == "replacement_refusal":
+                        with pytest.raises(RuntimeError, match="synthetic provider refusal"):
+                            run_review_storybook_job(job, expected_epoch=2)
+                        assert client.get(f"/teacher/jobs/{job}/moderation-review").json()["status"] == "failed"
+                        assert checks == []
+                    else:
+                        if failure == "replacement_pass":
+                            monkeypatch.setattr("pipeline.output_mod.classify_image_primary",
+                                lambda url, **kwargs: "s1-" not in url)
+                            monkeypatch.setattr("pipeline.output_mod.get_signed_url", lambda path: path)
+                        run_review_storybook_job(job, expected_epoch=2)
+                        after = StoryMemory.model_validate(graph.get_state(config).values)
+                        scene = after.scenes[0]
+                        assert scene.final_image_ref == f"{job}/s0-2.png"
+                        assert scene.attempts[0].safety_eligibility == "excluded"
+                        assert scene.attempts[-1].passed is False
+                        assert scene.attempts[-1].scene_contradictions == ["dog: sitting, but the constraints require walking"]
+                        assert scene.moderation_replacement_count == 1
+                        assert draws[0] == (source_scene.prompt, [f"https://private.invalid/{job}/ref-c0-1.png"])
+                        assert scene.moderation_status == (None if failure == "replacement_flag" else "passed")
+                        current = client.get(f"/teacher/jobs/{job}/moderation-review").json()
+                        if failure == "replacement_flag":
+                            assert current["subject_id"] == "s0"
+                            assert current["replacement_available"] is False
+                            assert current["replacement_disabled_reason"] == "replacement_already_used"
+                            assert client.post(route, json={**replacement, "review_id": current["review_id"],
+                                "subject_version": current["subject_version"], "expected_epoch": current["generation_epoch"],
+                                "request_id": str(uuid4())}).status_code == 422
+                        else:
+                            assert current["subject_id"] == "s1"
+                        assert current["review_id"] != detail["review_id"]
+                    before_replay = len(draws)
+                    run_review_storybook_job(job, expected_epoch=2)
+                    assert len(draws) == before_replay
+                    assert client.post(route, json=command).status_code == 409
+                    assert client.post(route, json=replacement).status_code == 200
+                    assert len(draws) == (2 if failure == "replacement_pass" else 1)
+                    assert conn.execute("select image_count from jobs where id=%s", (job,)).fetchone()["image_count"] == (
+                        4 if failure == "replacement_pass" else 2 if failure == "replacement_refusal" else 3)
+                    return
                 if failure == "stop_race":
                     def race_user(request: Request):
                         return SimpleNamespace(id=teacher if request.url.path.startswith("/teacher/") else child)

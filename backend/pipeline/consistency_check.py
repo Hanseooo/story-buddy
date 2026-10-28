@@ -369,7 +369,10 @@ def consistency_check(state: StoryMemory) -> dict:
         (identity_applicable and verdict is not None and not identity_clean)
         or bool(scene_contradictions)
     )
-    finalize = passed or not concrete_failure or len(scene.attempts) >= settings.max_scene_attempts
+    review = state.moderation_context.review
+    replacing = (state.moderation_context.mode == "teacher_review_v1" and review is not None
+                 and review.resolution == "replace" and review.replacement and review.subject_id == scene.scene_id)
+    finalize = replacing or passed or not concrete_failure or len(scene.attempts) >= settings.max_scene_attempts
 
     updated = [
         *scene.attempts[:-1],
@@ -384,7 +387,10 @@ def consistency_check(state: StoryMemory) -> dict:
         ),
     ]
 
-    best = max(reversed(range(len(updated))), key=lambda i: _rank(updated[i])) if finalize else None
+    # A replacement consumes the moderation slot, never a fresh consistency retry.
+    # Earlier attempts remain history and cannot beat the teacher's fresh candidate.
+    best = (len(updated) - 1 if replacing else
+            max(reversed(range(len(updated))), key=lambda i: _rank(updated[i]))) if finalize else None
 
     ref_prompt_versions = sorted(
         {

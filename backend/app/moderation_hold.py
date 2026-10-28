@@ -20,6 +20,7 @@ from app.config import settings
 from app.moderation_policy import POLICY, TEACHER_MODERATION_POLICY_VERSION
 from app.queue import get_queue
 from contracts.story_memory import StoryMemory
+from pipeline.moderation_replace import scene_replacement_disabled_reason
 
 hold_router = APIRouter()
 PRIVATE = {"Cache-Control": "private, no-store"}
@@ -60,12 +61,12 @@ def teacher_review_list(classroom_id: UUID, response: Response, user=Depends(get
             teacher_classroom(conn, str(classroom_id), str(user.id))
             rows = conn.execute("""select r.id as review_id,j.id as job_id,j.title,
               p.display_nickname as author,r.created_at as held_at,
-              (r.decision='allow') as continuation_pending,
+              (r.decision in ('allow','replace')) as continuation_pending,
               (j.worker_finished_at is not null) as ready
               from job_moderation_reviews r join jobs j on j.id=r.job_id
               left join profiles p on p.id=j.profile_id
               where j.classroom_id=%s and ((j.status='awaiting_teacher' and r.decision is null)
-                or (j.status='queued' and r.decision='allow' and r.decision_epoch=j.generation_epoch
+                or (j.status='queued' and r.decision in ('allow','replace') and r.decision_epoch=j.generation_epoch
                     and r.dispatch_state in ('pending','failed')))
               order by r.created_at,r.id""", (str(classroom_id),)).fetchall()
     except psycopg.Error:
@@ -111,7 +112,7 @@ def teacher_review_detail(job_id: UUID, response: Response, user=Depends(get_cur
             if not review or job["status"] != "awaiting_teacher":
                 clearances = []
                 pending = conn.execute("""select * from job_moderation_reviews where job_id=%s
-                  and decision='allow' and decision_epoch=%s and dispatch_state in ('pending','failed')""",
+                  and decision in ('allow','replace') and decision_epoch=%s and dispatch_state in ('pending','failed')""",
                                        (job_id, job["generation_epoch"])).fetchone() if job["status"] == "queued" else None
                 if job["moderation_mode"] == "teacher_review_v1" and job["status"] in ("queued", "running", "awaiting_confirm", "complete"):
                     checkpoint = PostgresSaver(conn).get_tuple({"configurable": {"thread_id": str(job_id)}})
@@ -131,9 +132,12 @@ def teacher_review_detail(job_id: UUID, response: Response, user=Depends(get_cur
                         "story_text": pending["subject"].get("story_text") if pending else None,
                         "pending_command": {"review_id": str(pending["id"]), "subject_version": pending["subject_version"],
                             "expected_epoch": pending["decision_epoch"] - 1, "request_id": str(pending["request_id"]),
-                            "action": "allow", "policy_version": pending["decision_policy_version"],
+                            "action": pending["decision"], "policy_version": pending["decision_policy_version"],
                             "confirmed_criteria": pending["confirmed_criteria"], "confirmed": True} if pending else None}
             pictures = review_pictures(conn, str(job_id), review)
+            retained = validate_review_checkpoint(conn, str(job_id), review)
+            replacement_reason = (scene_replacement_disabled_reason(retained, review["subject_id"], job["image_count"] or 0)
+                                  if retained else "replacement_source_unavailable")
             author = conn.execute("select display_nickname from profiles where id=%s", (job["profile_id"],)).fetchone()
             return {"status": job["status"], "review_id": str(review["id"]),
                     "subject_id": review["subject_id"], "subject_version": review["subject_version"],
@@ -145,6 +149,8 @@ def teacher_review_detail(job_id: UUID, response: Response, user=Depends(get_cur
                     "settings_snapshot": review["settings_snapshot"],
                     "classifier_evidence": review["classifier_evidence"],
                     "ready": job["worker_finished_at"] is not None,
+                    "replacement_available": replacement_reason is None,
+                    "replacement_disabled_reason": replacement_reason,
                     "dispatch_state": review["dispatch_state"],
                     "withdraws_review_id": str(review["withdraws_review_id"]) if review["withdraws_review_id"] else None,
                     "pictures": [{k: v for k, v in picture.items() if k != "path"} for picture in pictures]}
@@ -161,7 +167,7 @@ class ReviewReveal(BaseModel):
 class ReviewDecision(ReviewReveal):
     expected_epoch: int = Field(ge=0)
     request_id: UUID
-    action: Literal["allow", "stop"]
+    action: Literal["allow", "replace", "stop"]
     policy_version: str
     confirmed_criteria: list[str]
     confirmed: Literal[True]
@@ -337,11 +343,16 @@ def teacher_decision(job_id: UUID, body: ReviewDecision, response: Response, use
                     command_conflict("review_changed", job, review)
                 if job["worker_finished_at"] is None:
                     command_conflict("finishing_current_step", job, review)
-                if (body.policy_version != TEACHER_MODERATION_POLICY_VERSION
+                if body.action == "allow" and (body.policy_version != TEACHER_MODERATION_POLICY_VERSION
                         or set(body.confirmed_criteria) != set(review["criteria"])):
                     command_conflict("policy_confirmation_required", job, review)
-                if validate_review_checkpoint(conn, jid, review) is None:
+                retained = validate_review_checkpoint(conn, jid, review)
+                if retained is None:
                     command_conflict("checkpoint_unavailable", job, review)
+                if body.action == "replace":
+                    reason = scene_replacement_disabled_reason(retained, review["subject_id"], job["image_count"] or 0)
+                    if reason:
+                        raise HTTPException(422, reason, headers=PRIVATE)
                 # Bound to retained immutable bytes, including recovery after a failed read.
                 try:
                     picture = providers.download_book_image(review["subject"]["image_path"])
@@ -349,10 +360,10 @@ def teacher_decision(job_id: UUID, body: ReviewDecision, response: Response, use
                     command_conflict("image_unavailable", job, review)
                 if hashlib.sha256(picture).hexdigest() != review["subject_version"]:
                     command_conflict("image_unavailable", job, review)
-                conn.execute("""update job_moderation_reviews set decision='allow',actor_id=%s,decided_at=now(),
+                conn.execute("""update job_moderation_reviews set decision=%s,actor_id=%s,decided_at=now(),
                   decision_policy_version=%s,confirmed_criteria=%s,request_id=%s,decision_epoch=%s,
                   dispatch_state='pending',dispatch_kind='resume' where id=%s""",
-                             (uid, body.policy_version, body.confirmed_criteria, body.request_id,
+                             (body.action, uid, body.policy_version, body.confirmed_criteria, body.request_id,
                               body.expected_epoch + 1, body.review_id))
                 conn.execute("""update jobs set status='queued',generation_epoch=generation_epoch+1,
                   worker_finished_at=null where id=%s""", (jid,))

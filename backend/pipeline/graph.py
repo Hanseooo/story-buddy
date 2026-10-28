@@ -12,6 +12,7 @@ from pipeline.consistency_check import consistency_check
 from pipeline.compose import compose
 from pipeline.output_mod import output_mod
 from pipeline.moderation_review import moderation_review
+from pipeline.moderation_replace import moderation_replace
 from pipeline.regenerate import regenerate
 from pipeline.reveal import MAX_RETRY_TAPS, reveal
 
@@ -56,6 +57,8 @@ def route_after_output_mod(state: StoryMemory) -> str:
 def route_moderation_review(state: StoryMemory) -> str:
     # Also used by update_state(as_node='moderation_review') when anchoring a hold.
     review = state.moderation_context.review
+    if review and review.resolution == "replace" and review.kind == "scene_image":
+        return "moderation_replace"
     if review and review.resolution == "allow" and review.return_node in (
         "output_mod", "generate_scene", "consistency_check", "reveal", "compose", "__end__"
     ):
@@ -121,6 +124,7 @@ def build_graph(checkpointer=None):
     graph.add_node("regenerate", regenerate)
     graph.add_node("output_mod", output_mod)
     graph.add_node("moderation_review", moderation_review)
+    graph.add_node("moderation_replace", moderation_replace)
     graph.add_node("compose", compose)
 
     graph.set_entry_point("input_gate")
@@ -142,6 +146,7 @@ def build_graph(checkpointer=None):
     graph.add_edge("regenerate", "consistency_check")
     graph.add_conditional_edges("output_mod", route_after_output_mod)  # raises on failed; routes to compose
     graph.add_conditional_edges("moderation_review", route_moderation_review)
+    graph.add_edge("moderation_replace", "consistency_check")
     graph.add_edge("compose", END)
 
     return graph.compile(checkpointer=checkpointer or MemorySaver())

@@ -14,6 +14,30 @@ instead of repeating it.
 
 ---
 
+## Ticket 09 · 2026-10-28 · Replace a held scene picture within budget
+
+### Code
+
+- Extend the durable teacher decision/resume flow with one same-intent replacement using the
+  existing moderation redraw slot. Judge and moderate the fresh image, retain its actual quality
+  result, and hold that exact candidate on another flag. No extra consistency redraw or budget.
+- Reuse teacher inspection/decision controls for replacement and same-request delivery recovery.
+  Explain exhausted budget/slot while preserving inspection, leave, allow and stop.
+
+### Docs
+
+- Record the accepted synthetic-only, feature-off implementation and limits in moderation-stack
+  §9.15 and moderation-calibration ticket 09.
+
+### Checks
+
+- Backend lint and the 101 affected tests pass. Review fixes pass 42 targeted tests. Final full
+  backend: 1,555 passed, 89 skipped, six smoke deselections and the six existing native PDF failures.
+- Frontend lint, build/typecheck and all 78 source test files (744 tests) pass. Root discovery
+  stalled; the documented serial source command completed with no source tests excluded.
+- Standards and Spec re-reviews have no unresolved findings. Browser/phone, hosted delivery,
+  paid providers and real-child release remain unrun. Intake remains disabled by default.
+
 ## Ticket 08 · 2026-10-28 · Stop a held story and retain writing
 
 ### Code

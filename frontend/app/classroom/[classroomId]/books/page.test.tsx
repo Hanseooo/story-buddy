@@ -77,7 +77,7 @@ describe("held story inspection", () => {
     expect(writes).toBe(replayed ? 2 : 1);
     vi.unstubAllGlobals();
   });
-  it("allows only after image load and explicit criteria confirmation, and retries the same request", async () => {
+  it.each(["allow", "replace"])("%s retries the same request across a lost response and reload", async (action) => {
     let submissions = 0;
     const bodies: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (url: string, options?: RequestInit) => {
@@ -89,19 +89,22 @@ describe("held story inspection", () => {
       if (url.endsWith("/reveal")) return new Response("picture");
       if (url.endsWith("/moderation-policy")) return Response.json(moderationPolicy);
       if (url.endsWith("/moderation-review")) return Response.json(submissions
-        ? { ...pendingContinuation, pending_command: JSON.parse(bodies[0]) } : heldDetail);
+        ? { ...pendingContinuation, pending_command: JSON.parse(bodies[0]) }
+        : { ...heldDetail, replacement_available: true, replacement_disabled_reason: null });
       return Response.json([{ review_id: heldDetail.review_id, job_id: "synthetic-job", title: heldDetail.title, held_at: "2026-10-28T00:00:00Z", ready: true }]);
     }));
     URL.createObjectURL = vi.fn(() => "blob:synthetic-picture");
     URL.revokeObjectURL = vi.fn();
     render(<NeedsHelpQueue classroomId="synthetic-class" active onCount={() => {}} onBack={() => {}} />);
     fireEvent.click(await screen.findByRole("button", { name: /Inspect Synthetic title/ }));
-    const allow = await screen.findByRole("button", { name: "Allow this picture" });
+    const allow = await screen.findByRole("button", { name: action === "allow" ? "Allow this picture" : "Request replacement picture" });
     expect(allow).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Show picture to review" }));
     fireEvent.load(await screen.findByRole("img", { name: "Synthetic story" }));
-    expect(allow).toBeDisabled();
-    for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);
+    if (action === "allow") {
+      expect(allow).toBeDisabled();
+      for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);
+    }
     fireEvent.click(allow);
     expect(await screen.findByRole("alert")).toHaveFocus();
     fireEvent(document, new Event("visibilitychange"));
@@ -110,6 +113,21 @@ describe("held story inspection", () => {
     expect(await screen.findByRole("heading", { name: "Story continuing" })).toHaveFocus();
     expect(bodies).toHaveLength(2);
     expect(bodies[0]).toBe(bodies[1]);
+    expect(JSON.parse(bodies[0]).action).toBe(action);
+    vi.unstubAllGlobals();
+  });
+  it("explains exhausted replacement budget while keeping other decisions available", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.endsWith("/moderation-review")) return Response.json({ ...heldDetail,
+        replacement_available: false, replacement_disabled_reason: "image_budget_exhausted" });
+      return Response.json([{ review_id: heldDetail.review_id, job_id: "synthetic-job", title: heldDetail.title, held_at: "2026-10-28T00:00:00Z", ready: true }]);
+    }));
+    render(<NeedsHelpQueue classroomId="synthetic-class" active onCount={() => {}} onBack={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Inspect Synthetic title/ }));
+    expect(await screen.findByRole("button", { name: "Request replacement picture" })).toBeDisabled();
+    expect(screen.getByText("The image budget is used up. You can still inspect, leave waiting, allow or stop this story.")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Stop this story" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Back to Needs your help" })).toBeEnabled();
     vi.unstubAllGlobals();
   });
   it("shows captured evidence and a closable criteria reference, with honest missing reasoning", async () => {
