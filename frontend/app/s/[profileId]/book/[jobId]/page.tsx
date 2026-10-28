@@ -102,11 +102,15 @@ function TeacherNote({ jobId }: { jobId: string }) {
   const version = useRef<string | null>(null);
 
   useEffect(() => {
-    const controller = new AbortController();
+    let active: AbortController | undefined;
     async function load() {
+      active?.abort();
+      const controller = new AbortController();
+      active = controller;
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session || controller.signal.aborted) return;
+        if (controller.signal.aborted) return;
+        if (!session) { setNote(null); version.current = null; return; }
         const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/me/notes`, {
           headers: { Authorization: `Bearer ${session.access_token}` },
           cache: "no-store", signal: controller.signal,
@@ -124,7 +128,7 @@ function TeacherNote({ jobId }: { jobId: string }) {
     }
     void load();
     window.addEventListener("focus", load);
-    return () => { controller.abort(); window.removeEventListener("focus", load); };
+    return () => { active?.abort(); window.removeEventListener("focus", load); };
   }, [jobId]);
 
   useEffect(() => {

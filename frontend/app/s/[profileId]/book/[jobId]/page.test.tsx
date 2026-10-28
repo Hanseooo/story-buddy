@@ -128,6 +128,12 @@ describe("BookPage — teacher note", () => {
     fireEvent.focus(window);
     await waitFor(() => expect(screen.getByText("Your new ending is lovely!")).toBeVisible());
     expect(screen.queryByText("Lovely story!")).toBeNull();
+    mockGetSession.mockResolvedValue({ data: { session: null } });
+    fireEvent.focus(window);
+    await waitFor(() => expect(screen.queryByText("A note from your teacher")).toBeNull());
+    mockGetSession.mockResolvedValue({ data: { session: { access_token: "synthetic" } } });
+    fireEvent.focus(window);
+    await waitFor(() => expect(screen.getByText("Your new ending is lovely!")).toBeVisible());
     notes = [];
     fireEvent.focus(window);
     await waitFor(() => expect(screen.queryByText("A note from your teacher")).toBeNull());
@@ -137,9 +143,22 @@ describe("BookPage — teacher note", () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
     mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
     mockGetSession.mockResolvedValue({ data: { session: { access_token: "synthetic" } } });
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+    let finish!: (response: Response) => void;
+    const network = vi.fn().mockImplementationOnce(() => new Promise<Response>(resolve => { finish = resolve; }))
+      .mockResolvedValueOnce(new Response("[]"))
+      .mockRejectedValue(new Error("offline"));
+    vi.stubGlobal("fetch", network);
     await renderPage(makeParams());
     await waitFor(() => expect(screen.getByRole("img")).toBeVisible());
+    await waitFor(() => expect(network).toHaveBeenCalledTimes(1));
+    fireEvent.focus(window);
+    await waitFor(() => expect(network).toHaveBeenCalledTimes(2));
+    await act(async () => { finish(new Response(JSON.stringify([
+      { job_id: "j1", body: "Old note", seen: true, updated_at: "2026-10-29T00:00:00Z" },
+    ]))); });
+    expect(screen.queryByText("A note from your teacher")).toBeNull();
+    fireEvent.focus(window);
+    await waitFor(() => expect(network).toHaveBeenCalledTimes(3));
     expect(screen.queryByText("A note from your teacher")).toBeNull();
   });
 });

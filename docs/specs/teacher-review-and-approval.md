@@ -737,6 +737,9 @@ when I use it.** Applies: SH-04
   its summary, which reopens it. A failed mark-seen offers a polite retry. Failed note reads hide the
   note UI without blocking the shelf or reader. Returning focus to the window refreshes notes,
   including edits, deletes and switch changes; the next shelf mount also fetches afresh.
+  Each refresh cancels its predecessor, preventing an old response from restoring hidden notes.
+  A refresh with no session clears private note state. Deferred-response and session-loss checks
+  reproduced both review findings before the fixes and now pass.
 - **No redaction (Q8).** The read path is owner-only, so a child's own name in their note is correct,
   and Presidio would turn it into a placeholder. *Inferred* cost: a teacher naming a different child.
 - **One note, edit in place (Q7).** No history. The simplest model that matches what a teacher does.
@@ -788,8 +791,6 @@ old approval-grant expectations and invalid profile fixtures. Child, settings an
 remain un-run in this slice. The full backend run also encounters six PDF failures because this
 Windows runtime lacks WeasyPrint's native libraries. No remote migration was applied.
 
-### 14.8 Blast radius
-
 **Ticket 08 verification (2026-10-29):** 28 note HTTP tests and 46 child page tests pass, including
 edit/delete refresh and Close/Escape focus return for each editorial state. Tests first failed on
 the missing endpoints, badge and panel. Frontend typecheck and both linters pass. Full backend:
@@ -798,6 +799,8 @@ Full frontend: 757 passed, one skipped, two failures in unchanged teacher-books/
 The teacher focus failure also reproduces on the starting checkout; the gallery test passes there
 in isolation after timing out in the full run. J1–J3 remain un-run: ticket 07 is not yet committed
 to the starting branch. No real-child rollout or remote database change is part of this slice.
+
+### 14.8 Blast radius
 
 New: migration `0026`, ADR-081 and its index row, a backend notes module, the note row, badge and panel.
 Changed: `books/**`, the bookshelf page, the book page, classroom settings. More than three modules, so
