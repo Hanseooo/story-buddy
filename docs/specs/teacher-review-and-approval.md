@@ -797,7 +797,10 @@ the missing endpoints, badge and panel. Frontend typecheck and both linters pass
 1,585 passed, 130 skipped, six smoke deselections, six existing native WeasyPrint failures.
 Full frontend: 757 passed, one skipped, two failures in unchanged teacher-books/gallery tests.
 The teacher focus failure also reproduces on the starting checkout; the gallery test passes there
-in isolation after timing out in the full run. J1–J3 remain un-run: ticket 07 is not yet committed
+in isolation after timing out in the full run. After the review fixes, the final full frontend run
+with two workers has 758 passed, one skipped and only that unchanged teacher focus failure;
+the gallery timeout does not recur. Re-review reports no remaining implementation findings.
+J1–J3 remain un-run: ticket 07 is not yet committed
 to the starting branch. No real-child rollout or remote database change is part of this slice.
 
 ### 14.8 Blast radius

@@ -32,8 +32,10 @@ instead of repeating it.
 
 - 28 backend note tests and 46 child page tests pass after red-first checks. Typecheck and both
   linters pass. Full backend: 1,585 passed, 130 skipped, six smoke deselections, six native PDF
-  failures. Full frontend: 757 passed, one skipped, two failures in unchanged files. Teacher focus
-  failure reproduces on the starting checkout; gallery passes in isolation there.
+  failures. Final full frontend with two workers: 758 passed, one skipped, one unchanged teacher
+  focus failure, reproduced on the starting checkout. The initial gallery timeout does not recur.
+- Review findings for stale refreshes and session loss reproduced red, then passed after fixes.
+  Re-review finds no remaining implementation issues.
 - J1–J3 browser journeys await ticket 07. No merge or worktree cleanup before owner approval.
 
 ## Ticket 09 · 2026-10-28 · Replace a held scene picture within budget
