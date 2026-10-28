@@ -12,7 +12,7 @@ type HeldItem = {
 type Picture = { asset_id: string; label: string; state: "held" | "available" | "not_generated" | "unavailable" };
 type Detail = {
   status: string; review_id: string | null; subject_version?: string; generation_epoch?: number;
-  title?: string | null; author?: string | null; story_text?: string | null;
+  title?: string | null; author?: string | null; story_text?: string | null; subject_title?: string | null;
   ready?: boolean; pictures?: Picture[];
   kind?: string; criteria?: string[]; policy_version?: string; current_policy_version?: string;
   settings_snapshot?: { theme_ids?: string[]; settings_version?: number; withdrawal_epoch?: number };
@@ -201,6 +201,10 @@ function HeldStory({ jobId, onClose }: { jobId: string; onClose: () => void }) {
             <h4 className="font-bold">Saved story</h4>
             <p className="whitespace-pre-wrap break-words leading-relaxed">{detail.story_text || "Saved story text is unavailable."}</p>
           </section>
+          {detail.kind === "title" && <section aria-label="Title needing review" className="space-y-3">
+            <h4 className="font-bold">Title needing review</h4>
+            <p className="whitespace-pre-wrap break-words leading-relaxed">{detail.subject_title || "Saved title is unavailable."}</p>
+          </section>}
           {!loading && !error && <section key={`${detail.review_id}-${detail.subject_version}-${revision}`} aria-label="Story pictures" className="space-y-6">
             <h4 className="font-bold">Story pictures</h4>
             {!detail.pictures?.length && <p>No generated pictures are available.</p>}
@@ -232,9 +236,9 @@ function HeldStory({ jobId, onClose }: { jobId: string; onClose: () => void }) {
             </div>)}
             <ReviewCriteria />
           </section>}
-          {!loading && !error && (detail.kind === "scene_image" || detail.kind === "character_reference" || detail.kind === "story_text") && <ResolveSubject
+          {!loading && !error && (detail.kind === "scene_image" || detail.kind === "character_reference" || detail.kind === "story_text" || detail.kind === "title") && <ResolveSubject
             key={`${detail.review_id}-${detail.subject_version}-${detail.generation_epoch}-${revision}`}
-            jobId={jobId} detail={detail} inspected={detail.kind === "story_text" ? !!detail.story_text : inspected}
+            jobId={jobId} detail={detail} inspected={detail.kind === "title" ? !!detail.subject_title : detail.kind === "story_text" ? !!detail.story_text : inspected}
             busy={pending} onPending={setPending} />}
           </>}
           {!loading && !error && <StopStory jobId={jobId} reviewId={detail.review_id}
@@ -284,7 +288,7 @@ function ContinueSavedDecision({ jobId, command, onChanged }: {
 function ResolveSubject({ jobId, detail, inspected, busy, onPending }: {
   jobId: string; detail: Detail; inspected: boolean; busy: boolean; onPending: (pending: boolean) => void;
 }) {
-  const subject = detail.kind === "story_text" ? "story text" : "picture";
+  const subject = detail.kind === "title" ? "title" : detail.kind === "story_text" ? "story text" : "picture";
   const [confirmed, setConfirmed] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -333,7 +337,8 @@ function ResolveSubject({ jobId, detail, inspected, busy, onPending }: {
     {success ? <h4 ref={summary} tabIndex={-1} className="font-bold text-lg focus-visible:outline-2 focus-visible:outline-primary">{outcome}</h4> : <>
       <h4 className="font-bold text-lg">Allow this exact {subject}</h4>
       <p>If you are uncertain, leave this story waiting and return later. Allowing safety clearance does not approve classroom sharing.</p>
-      {detail.kind === "story_text" ? <p>Read the saved story above. Allowing continues with this unchanged text. Every generated picture receives its own safety checks.</p>
+      {detail.kind === "title" ? <p>Read the saved title above. Allowing starts the story with this exact title. The story text and every generated picture receive their own safety checks.</p>
+        : detail.kind === "story_text" ? <p>Read the saved story above. Allowing continues with this unchanged text. Every generated picture receives its own safety checks.</p>
         : !inspected && <p>Show the picture and wait for it to load before allowing it.</p>}
       {!detail.ready && <p role="status">Finishing the current step. Refresh story status before deciding.</p>}
       <fieldset disabled={busy || pending || !!submitted} className="space-y-2">
@@ -349,7 +354,7 @@ function ResolveSubject({ jobId, detail, inspected, busy, onPending }: {
       <button className={control} disabled={busy || pending || !detail.ready || (!submitted &&
         (!inspected || !detail.current_policy_version || !detail.criteria?.length || confirmed.length !== detail.criteria.length))}
         onClick={() => void decide(submitted || "allow")}>{pending ? "Saving…" : submitted ? "Continue story" : `Allow this ${subject}`}</button>
-      {!submitted && detail.kind !== "story_text" && <>
+      {!submitted && detail.kind !== "story_text" && detail.kind !== "title" && <>
         <p>{detail.kind === "character_reference"
           ? "A replacement keeps the character description, style and any chosen emphasis. It uses the book’s one reference replacement and receives fresh checks. Other details may change."
           : "A replacement keeps the scene, approved references and style. It uses one remaining picture allowance and receives fresh checks. Other details may change."}</p>

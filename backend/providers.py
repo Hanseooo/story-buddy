@@ -847,13 +847,29 @@ def redact_pii(text: str) -> str:
     ).text
 
 
-def check_text(text: str) -> tuple[bool, list[str], str]:
+def check_text(text: str, *, evidence: list | None = None) -> tuple[bool, list[str], str]:
     """Primary-then-backstop moderation plus PII redaction, on any text.
 
     This is the sequential, short-text variant of the input gate used for synchronous
     submission checks. It returns the redacted text on every path so callers can explain
     privacy replacements before persistence.
     """
+    from datetime import datetime, timezone
+    from contracts.story_memory import ClassifierEvidence
+
+    primary_time = datetime.now(timezone.utc)
+    primary_model, backstop_model = settings.moderation_primary_model, settings.moderation_backstop_model
+
+    def record(layer, safe, categories, checked_at):
+        if evidence is not None:
+            categories = [redact_pii(category) for category in categories]
+            evidence.append(ClassifierEvidence(
+                layer=layer, model_id=primary_model if layer == "primary" else backstop_model,
+                instruction_version=f"text_{layer}_v1", checked_at=checked_at,
+                outcome="error" if safe is None else "safe" if safe else "flagged", categories=categories,
+            ))
+        return categories
+
     try:
         primary_safe, categories = classify_text_primary(text)
     except Exception as exc:
@@ -865,22 +881,29 @@ def check_text(text: str) -> tuple[bool, list[str], str]:
         categories = []
 
     redacted = redact_pii(text)
+    categories = record("primary", primary_safe, categories, primary_time)
 
     if primary_safe is False:
-        _log.info("check_text: primary flagged (categories=%s)", categories)
+        if evidence is not None:
+            evidence.append(ClassifierEvidence(layer="backstop", model_id=backstop_model,
+                instruction_version="text_backstop_v1", outcome="not_called"))
+        _log.info("check_text: primary flagged")
         return False, categories, redacted
 
     try:
+        backstop_time = datetime.now(timezone.utc)
         backstop_safe, backstop_categories = classify_text_backstop(text)
     except Exception as exc:
         _log.error(
             "check_text: backstop error — hard fail per ADR-025 (%s)",
             type(exc).__name__,
         )
+        record("backstop", None, [], backstop_time)
         return False, ["moderation_error"], redacted
 
+    backstop_categories = record("backstop", backstop_safe, backstop_categories, backstop_time)
     if not backstop_safe:
-        _log.info("check_text: backstop flagged (categories=%s)", backstop_categories)
+        _log.info("check_text: backstop flagged")
         return False, backstop_categories, redacted
 
     return True, [], redacted

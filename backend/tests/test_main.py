@@ -26,6 +26,27 @@ def test_health_check():
     assert response.json() == {"status": "ok"}
 
 
+def test_review_title_classifier_service_error_is_retryable_without_persistence(monkeypatch, caplog):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "enable_teacher_moderation_review", True)
+    db, queue = MagicMock(), MagicMock()
+    with patch("app.main.get_supabase_client", return_value=db), \
+         patch("app.main.get_queue", return_value=queue), \
+         patch("providers.redact_pii", side_effect=lambda text: text), \
+         patch("providers.classify_text_primary", return_value=(True, [])), \
+         patch("providers.classify_text_backstop", side_effect=RuntimeError("private request value")), \
+         patch("psycopg.connect") as database:
+        response = client.post("/storybooks", json={"title": "Synthetic title", "text": "A dog runs in a field."})
+    assert response.status_code == 503
+    assert response.json() == {"detail": "moderation_unavailable"}
+    database.assert_not_called()
+    db.table.return_value.insert.assert_not_called()
+    queue.enqueue.assert_not_called()
+    assert "private request value" not in caplog.text
+    assert "Synthetic title" not in caplog.text
+
+
 @pytest.mark.parametrize("failure_at", ["title", "story"])
 def test_review_intake_privacy_failure_writes_and_enqueues_nothing(monkeypatch, failure_at):
     from app.config import settings

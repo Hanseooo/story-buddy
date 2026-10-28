@@ -1824,3 +1824,59 @@ Verification (2026-10-28):
   (746 passed); unrestricted serial discovery stalled and was stopped. Explicit source discovery
   covers every repository source test without changing assertions or timeouts. Windows uses
   `pnpm.cmd`. Outputs: `.scratch/ticket11-frontend-source.txt`, `.scratch/ticket11-build-final.txt`.
+
+### 9.18 Title hold implementation (ticket 12)
+
+Implemented the accepted synthetic-only, feature-off title slice. Intake successfully processes
+title/story privacy and preserves the existing title acknowledgement before retaining anything.
+Synchronous title checks capture the actual primary/backstop evidence, including errors and a
+short-circuited backstop. Classifier service errors return retryable 503 without a job or review.
+Feature-off rejection and all existing validation remain unchanged.
+
+A flagged processed title is retained only in the private review subject with its exact UTF-8
+hash. The same transaction inserts an `awaiting_teacher` job with neutral `My story` metadata,
+processed writing, captured policy/settings, epoch 1 and a quiescent marker. No worker is queued.
+The owner-only detail adds `subject_title`; lists and child surfaces retain the neutral title.
+Existing child submission navigation reaches the neutral teacher-waiting screen without a new
+response shape or child-facing classifier copy.
+
+Allow uses the existing locked, idempotent decision transaction, promotes the exact subject title
+to job metadata and queues the existing worker through unique dispatch. The worker starts the
+graph only for that validated pre-graph clearance. The title never enters StoryMemory or prompts;
+story and picture moderation remain independent. Duplicate decisions/deliveries do not start
+another graph. Stop retains processed writing through the existing stopped-writing recovery.
+Teacher inspection exposes title-specific criteria/allow copy and no picture replacement action.
+No schema migration, classifier instruction, feature-default or model change was needed.
+
+Both review axes identified a crash-recovery gap between title start and projection of a later
+durable text hold. A database-outage regression reproduced `checkpoint_not_resumable` on retry.
+The worker now validates the title decision against the exact job and existing graph checkpoint,
+then projects the later hold without replaying title clearance or classifiers. The HTTP reconcile
+path is exercised against disposable PostgreSQL. Individual title withdrawal is outside this
+ticket's bounded allow/stop slice.
+
+Verification (2026-10-28): title hold/allow/stop and duplicate delivery run through authenticated
+HTTP, the real graph and disposable PostgreSQL with provider/network boundaries mocked. Tests
+first failed with 422 title rejection and missing title-inspection UI. A separate service-error
+regression first failed with 200 instead of 503. The frontend fixture was captured from the real
+synthetic review-detail response. The UI verifies criterion confirmation and identical-command
+retry after a lost response.
+
+- `uv sync --frozen` and `uv run ruff check .`: passed. `uv run pytest tests/test_main.py`:
+  66 passed. The affected backend files passed before the recovery addition (90 tests); final
+  full coverage includes all three title integration variants, including HTTP reconciliation.
+- Final `uv run pytest` with disposable local `TEST_MODERATION_DB_URL`: 1,580 passed, 89 skipped,
+  six smoke deselections and the same six native WeasyPrint/PDF failures recorded in §9.17.
+  Representative output: `assert 503 == 200`, `PDF download failed (OSError)` and
+  “WeasyPrint could not import some external libraries.” No failing test was changed or skipped.
+  Environment-gated RLS/annotation/onboarding/research tests remain unverified by this run.
+  Output: `.scratch/ticket12-backend-final.txt`.
+- Frontend `pnpm lint`, `pnpm build` with CI public placeholders and `pnpm exec tsc --noEmit`:
+  passed. Affected Books file: 40 passed. Full `pnpm test`: 78 files and 748 tests passed.
+  Windows uses `pnpm.cmd`. Outputs: `.scratch/ticket12-build.txt` and
+  `.scratch/ticket12-frontend-full.txt`.
+- Standards: no unresolved findings. Spec: no unresolved findings. Both axes re-reviewed
+  the checkpoint recovery fix. `git diff --check`: passed.
+
+Hosted/browser checks, paid replay, production enablement, calibration claims and real-child use
+remain unverified and unauthorized. Audit 01 and §9.9.8 release gates remain open.

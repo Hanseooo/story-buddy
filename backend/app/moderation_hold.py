@@ -4,7 +4,7 @@ Teacher decisions are separate slices. No browser can read this table
 or choose a Storage path through these product routes.
 """
 import hashlib
-from uuid import UUID
+from uuid import UUID, uuid5
 from typing import Literal
 
 import psycopg
@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 import providers
 from app.auth import get_current_user
 from app.config import settings
-from app.moderation_policy import POLICY, TEACHER_MODERATION_POLICY_VERSION
+from app.moderation_policy import POLICY, TEACHER_MODERATION_CRITERIA, TEACHER_MODERATION_POLICY_VERSION
 from app.queue import get_queue
 from contracts.story_memory import StoryMemory
 from pipeline.input_gate import has_text_clearance
@@ -77,6 +77,8 @@ def teacher_review_list(classroom_id: UUID, response: Response, user=Depends(get
 
 
 def review_pictures(conn, job_id: str, review: dict):
+    if review["kind"] == "title":
+        return []
     # The review pins its retained checkpoint. Never use a later attempt or browser path.
     checkpoint = PostgresSaver(conn).get_tuple({"configurable": {
         "thread_id": job_id, "checkpoint_id": review["checkpoint_id"],
@@ -163,6 +165,7 @@ def teacher_review_detail(job_id: UUID, response: Response, user=Depends(get_cur
                     "generation_epoch": job["generation_epoch"], "title": job["title"],
                     "author": author["display_nickname"] if author else None,
                     "story_text": review["subject"].get("story_text"),
+                    "subject_title": review["subject"].get("title") if review["kind"] == "title" else None,
                     "kind": review["kind"], "criteria": review["criteria"], "policy_version": review["policy_version"],
                     "current_policy_version": TEACHER_MODERATION_POLICY_VERSION,
                     "settings_snapshot": review["settings_snapshot"],
@@ -331,6 +334,11 @@ def validate_review_checkpoint(conn, job_id, review):
 
 def review_subject_bytes(review):
     """Exact private subject for decision, continuation and withdrawal checks."""
+    if review["kind"] == "title":
+        title = review["subject"].get("title")
+        if not isinstance(title, str):
+            raise RuntimeError("moderation_subject_unavailable")
+        return title.encode("utf-8")
     if review["kind"] == "story_text":
         text = review["subject"].get("story_text")
         if not isinstance(text, str):
@@ -384,10 +392,12 @@ def teacher_decision(job_id: UUID, body: ReviewDecision, response: Response, use
                 if body.action == "allow" and (body.policy_version != TEACHER_MODERATION_POLICY_VERSION
                         or set(body.confirmed_criteria) != set(review["criteria"])):
                     command_conflict("policy_confirmation_required", job, review)
-                retained = validate_review_checkpoint(conn, jid, review)
-                if retained is None:
+                retained = validate_review_checkpoint(conn, jid, review) if review["kind"] != "title" else None
+                if review["kind"] != "title" and retained is None:
                     command_conflict("checkpoint_unavailable", job, review)
                 if body.action == "replace":
+                    if review["kind"] == "title":
+                        raise HTTPException(422, "replacement_not_available", headers=PRIVATE)
                     reason = replacement_disabled_reason(retained, review["kind"], review["subject_id"], job["image_count"] or 0)
                     if reason:
                         raise HTTPException(422, reason, headers=PRIVATE)
@@ -405,6 +415,8 @@ def teacher_decision(job_id: UUID, body: ReviewDecision, response: Response, use
                               body.expected_epoch + 1, body.review_id))
                 conn.execute("""update jobs set status='queued',generation_epoch=generation_epoch+1,
                   worker_finished_at=null where id=%s""", (jid,))
+                if review["kind"] == "title":
+                    conn.execute("update jobs set title=%s where id=%s", (review["subject"]["title"], jid))
         dispatch_review(jid, body.review_id, body.expected_epoch + 1)
         with connect() as conn:
             job, _ = teacher_review(conn, jid, uid)
@@ -555,7 +567,7 @@ def active_author(conn, job: dict) -> bool:
                         (job["profile_id"], job["classroom_id"])).fetchone() is not None
 
 
-def insert_review_job(values: dict) -> None:
+def insert_review_job(values: dict, *, title_evidence: list | None = None) -> None:
     # Recheck authorization in the insert transaction, after privacy/provider work.
     with connect() as conn, conn.transaction():
         author = conn.execute("select * from profiles where id=%s for update", (values["profile_id"],)).fetchone()
@@ -564,10 +576,22 @@ def insert_review_job(values: dict) -> None:
         conn.execute("""insert into jobs(id,status,current_stage,input_text,title,truncated,
           style_preset_id,profile_id,classroom_id,moderation_mode,moderation_settings_snapshot)
           values (%s,'queued','queued',%s,%s,%s,%s,%s,%s,'teacher_review_v1',%s)""", (
-            values["id"], values["input_text"], values["title"], values["truncated"],
+            values["id"], values["input_text"], "My story" if title_evidence is not None else values["title"], values["truncated"],
             values["style_preset_id"], values["profile_id"], values["classroom_id"],
             Jsonb(values["moderation_settings_snapshot"]),
         ))
+        if title_evidence is not None:
+            version = hashlib.sha256(values["title"].encode("utf-8")).hexdigest()
+            review_id = uuid5(UUID(values["id"]), f"title:title:{version}:0")
+            conn.execute("""insert into job_moderation_reviews(id,job_id,kind,subject_id,subject_version,
+              subject,criteria,policy_version,settings_snapshot,classifier_evidence,return_node)
+              values (%s,%s,'title','title',%s,%s,%s,%s,%s,%s,'input_gate')""", (
+                review_id, values["id"], version, Jsonb({"title": values["title"], "story_text": values["input_text"]}),
+                list(TEACHER_MODERATION_CRITERIA), values["moderation_settings_snapshot"]["policy_version"],
+                Jsonb(values["moderation_settings_snapshot"]), Jsonb([e.model_dump(mode="json") for e in title_evidence]),
+            ))
+            conn.execute("""update jobs set status='awaiting_teacher',current_stage='moderation_review',
+              generation_epoch=1,worker_finished_at=now() where id=%s""", (values["id"],))
 
 
 def assert_current(conn, job_id: str, epoch: int) -> dict:

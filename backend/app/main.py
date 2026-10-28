@@ -170,8 +170,17 @@ def create_storybook(
 
     # ADR-059: checked synchronously, before any write, and never via input_gate/StoryMemory —
     # the title is job metadata, not pipeline input.
-    title_safe, _title_categories, checked_title = check_text(title)
-    if not title_safe:
+    title_evidence = []
+    if review_mode:
+        try:
+            title_safe, title_categories, checked_title = check_text(title, evidence=title_evidence)
+        except Exception:
+            raise HTTPException(503, "moderation_unavailable") from None
+        if "moderation_error" in title_categories:
+            raise HTTPException(503, "moderation_unavailable")
+    else:
+        title_safe, _, checked_title = check_text(title)
+    if not title_safe and not review_mode:
         raise HTTPException(422, "that title isn't allowed")
     if len(checked_title) < 1 or len(checked_title) > MAX_TITLE_CHARS:
         raise HTTPException(422, "give your story a different title")
@@ -205,13 +214,15 @@ def create_storybook(
         }
     if review_mode:
         try:
-            insert_review_job(job_values)
+            insert_review_job(job_values, title_evidence=title_evidence if not title_safe else None)
         except HTTPException:
             raise
         except Exception:
             raise HTTPException(503, "moderation_storage_unavailable") from None
     else:
         supabase.table("jobs").insert(job_values).execute()
+    if review_mode and not title_safe:
+        return CreateStorybookResponse(job_id=job_id)
     queue = get_queue()
     try:
         entry = "worker.run_job.run_review_storybook_job" if review_mode else "worker.run_job.run_storybook_job"

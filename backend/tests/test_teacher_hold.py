@@ -50,6 +50,87 @@ def held_database(monkeypatch):
         conn.execute("delete from profiles where id = %s", (teacher,))
 
 
+@pytest.mark.parametrize("action", ["allow", "stop", "projection"])
+def test_flagged_title_waits_privately_until_exact_teacher_decision(monkeypatch, held_database, action):
+    from worker.run_job import run_review_storybook_job
+
+    conn, child, classroom, _, teacher = held_database
+    title, text = "Synthetic title", "A dog runs in a field. The dog barks."
+    db, queue = MagicMock(), MagicMock()
+    db.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{"classroom_id": classroom}]
+    monkeypatch.setattr(settings, "enable_teacher_moderation_review", True)
+    monkeypatch.setattr("app.main.get_supabase_client", lambda: db)
+    monkeypatch.setattr("app.main.get_queue", lambda: queue)
+    monkeypatch.setattr("app.moderation_hold.get_queue", lambda: queue)
+    monkeypatch.setattr("providers.redact_pii", lambda value: value)
+    monkeypatch.setattr("providers.classify_text_primary", lambda value: (False, ["S1"]))
+    backstop = MagicMock()
+    monkeypatch.setattr("providers.classify_text_backstop", backstop)
+    # The real graph must perform story moderation independently after title allow.
+    story_classifier = MagicMock(return_value=(False, ["S2"]))
+    monkeypatch.setattr("pipeline.input_gate.classify_text_primary", story_classifier)
+    monkeypatch.setattr("pipeline.input_gate.redact_pii", lambda value: value)
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+    try:
+        with TestClient(app) as client:
+            submitted = client.post("/storybooks", json={"title": title, "text": text})
+            assert submitted.status_code == 200, submitted.text
+            job = submitted.json()["job_id"]
+            queue.enqueue.assert_not_called()
+            backstop.assert_not_called()
+            stored = conn.execute("select * from jobs where id=%s", (job,)).fetchone()
+            assert stored["status"] == "awaiting_teacher" and stored["title"] != title
+            app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=teacher)
+            route = f"/teacher/jobs/{job}/moderation-review"
+            detail_response = client.get(route)
+            assert detail_response.status_code == 200, detail_response.text
+            detail = detail_response.json()
+            assert detail["kind"] == "title" and detail["ready"]
+            assert detail["subject_title"] == title and detail["story_text"] == text
+            assert detail["pictures"] == [] and not detail["replacement_available"]
+            assert detail["classifier_evidence"][0]["categories"] == ["S1"]
+            command = {"review_id": detail["review_id"], "subject_version": detail["subject_version"],
+                "expected_epoch": detail["generation_epoch"], "request_id": str(uuid4()), "action": "stop" if action == "stop" else "allow",
+                "policy_version": detail["current_policy_version"], "confirmed_criteria": detail["criteria"], "confirmed": True}
+            response = client.post(f"{route}/decision", json=command)
+            assert response.status_code in (200, 202), response.text
+            assert client.post(f"{route}/decision", json=command).status_code == 200
+            if action == "stop":
+                queue.enqueue.assert_not_called()
+                app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+                saved = client.get(f"/jobs/{job}/state").json()
+                assert saved["status"] == "stopped" and saved["saved_writing"]["text"] == text
+            else:
+                queue.enqueue.assert_called_once()
+                assert conn.execute("select title from jobs where id=%s", (job,)).fetchone()["title"] == title
+                if action == "projection":
+                    execute = psycopg.Connection.execute
+
+                    def fail_projection(connection, query, params=None, **kwargs):
+                        if "insert into job_moderation_reviews" in str(query).lower():
+                            raise psycopg.OperationalError("synthetic projection outage")
+                        return execute(connection, query, params, **kwargs)
+
+                    with monkeypatch.context() as outage:
+                        outage.setattr(psycopg.Connection, "execute", fail_projection)
+                        with pytest.raises(psycopg.OperationalError, match="synthetic projection outage"):
+                            run_review_storybook_job(job, expected_epoch=2, review_id=detail["review_id"])
+                    assert conn.execute("select error from jobs where id=%s", (job,)).fetchone()["error"] == "hold_projection_failed"
+                    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+                    assert client.post(f"/jobs/{job}/reconcile-hold").status_code == 202
+                    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=teacher)
+                run_review_storybook_job(job, expected_epoch=2, review_id=detail["review_id"])
+                current = client.get(route).json()
+                assert current["kind"] == "story_text" and current["ready"]
+                assert current["story_text"] == text
+                # Duplicate worker delivery cannot start another graph.
+                run_review_storybook_job(job, expected_epoch=2, review_id=detail["review_id"])
+                assert client.get(route).json()["review_id"] == current["review_id"]
+                story_classifier.assert_called_once_with(text)
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
 @pytest.mark.parametrize("failure", [None, "projection", "worker_stopped", "withdraw_inflight", "withdraw_queued_allow", "withdraw_queued_allow_revoked", "child_stop", "teacher_stop", "stop_race", "replacement_pass", "replacement_flag", "replacement_refusal", "replacement_budget"])
 def test_checkpointed_scene_flag_projects_private_hold_and_reload(monkeypatch, held_database, failure):
     from worker.run_job import run_review_storybook_job
@@ -68,7 +149,7 @@ def test_checkpointed_scene_flag_projects_private_hold_and_reload(monkeypatch, h
         return text
 
     monkeypatch.setattr("providers.redact_pii", redact)
-    monkeypatch.setattr("app.main.check_text", lambda title: (True, [], title))
+    monkeypatch.setattr("app.main.check_text", lambda title, **kwargs: (True, [], title))
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
     try:
         with TestClient(app) as client:

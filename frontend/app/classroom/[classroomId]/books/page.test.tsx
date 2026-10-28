@@ -8,6 +8,7 @@ import NeedsHelpQueue from "@/components/NeedsHelpQueue";
 import heldDetail from "./held-detail.fixture.json";
 import heldReference from "./held-reference.fixture.json";
 import heldText from "./held-text.fixture.json";
+import heldTitle from "./held-title.fixture.json";
 import moderationPolicy from "./moderation-policy.fixture.json";
 import clearances from "./clearances.fixture.json";
 import pendingContinuation from "./pending-continuation.fixture.json";
@@ -20,7 +21,9 @@ vi.mock("@/lib/supabaseClient", () => ({ supabase: {
 } }));
 
 describe("held story inspection", () => {
-  it("allows the unchanged saved text after criteria confirmation and retries a lost response", async () => {
+  it.each([
+    { held: heldText, subject: "story text" }, { held: heldTitle, subject: "title" },
+  ])("allows the unchanged $subject after criteria confirmation and retries a lost response", async ({ held, subject }) => {
     const bodies: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (url: string, options?: RequestInit) => {
       if (url.endsWith("/decision")) {
@@ -29,14 +32,15 @@ describe("held story inspection", () => {
         return Response.json({ status: "queued", dispatch_state: "queued" }, { status: 200 });
       }
       if (url.endsWith("/moderation-policy")) return Response.json(moderationPolicy);
-      if (url.endsWith("/moderation-review")) return Response.json(heldText);
-      return Response.json([{ review_id: heldText.review_id, job_id: "synthetic-job", title: heldText.title,
+      if (url.endsWith("/moderation-review")) return Response.json(held);
+      return Response.json([{ review_id: held.review_id, job_id: "synthetic-job", title: held.title,
         held_at: "2026-10-28T00:00:00Z", ready: true }]);
     }));
     render(<NeedsHelpQueue classroomId="synthetic-class" active onCount={() => {}} onBack={() => {}} />);
-    fireEvent.click(await screen.findByRole("button", { name: /Inspect Synthetic title/ }));
-    expect(await screen.findByText(heldText.story_text)).toBeDefined();
-    const allow = await screen.findByRole("button", { name: "Allow this story text" });
+    fireEvent.click(await screen.findByRole("button", { name: `Inspect ${held.title}` }));
+    expect(await screen.findByText(held.story_text)).toBeDefined();
+    if (subject === "title") expect(screen.getByText(heldTitle.subject_title)).toBeDefined();
+    const allow = await screen.findByRole("button", { name: `Allow this ${subject}` });
     expect(allow).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Request replacement picture" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Show picture to review" })).toBeNull();
@@ -44,12 +48,12 @@ describe("held story inspection", () => {
     for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);
     fireEvent.click(allow);
     expect(await screen.findByRole("alert")).toHaveFocus();
-    expect(screen.getByText(heldText.story_text)).toBeDefined();
+    expect(screen.getByText(held.story_text)).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Continue story" }));
-    expect(await screen.findByRole("heading", { name: "Story continuing" })).toHaveFocus();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Story continuing" })).toHaveFocus());
     expect(bodies).toHaveLength(2);
     expect(bodies[0]).toBe(bodies[1]);
-    expect(JSON.parse(bodies[0]).subject_version).toBe(heldText.subject_version);
+    expect(JSON.parse(bodies[0]).subject_version).toBe(held.subject_version);
     vi.unstubAllGlobals();
   });
 

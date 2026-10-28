@@ -175,10 +175,24 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                 graph = build_graph(checkpointer=saver)
                 config = {"configurable": {"thread_id": job_id}, "recursion_limit": TEACHER_REVIEW_RECURSION_LIMIT, "callbacks": []}
                 snapshot = graph.get_state(config)
+                title_start = bool(decision and decision["kind"] == "title")
+                if title_start:
+                    import hashlib
+                    if (decision["decision"] != "allow" or decision["checkpoint_id"] is not None
+                            or decision["subject"].get("title") != job["title"]
+                            or decision["subject"].get("story_text") != job["input_text"]
+                            or hashlib.sha256(review_subject_bytes(decision)).hexdigest() != decision["subject_version"]):
+                        raise RuntimeError("moderation_subject_unavailable")
                 if snapshot.values:
                     retained = StoryMemory.model_validate(snapshot.values)
                     review = retained.moderation_context.review
-                    if review and review.resolution is None and decision:
+                    if title_start and (retained.story_id != job_id or retained.input.raw_text != job["input_text"]
+                            or retained.moderation_context.mode != "teacher_review_v1"
+                            or retained.moderation_context.generation_epoch != epoch):
+                        raise RuntimeError("checkpoint_not_resumable")
+                    # The pre-graph title decision has already started this exact graph.
+                    # Repair its later durable hold instead of resuming the title again.
+                    if review and review.resolution is None and decision and not title_start:
                         if (decision["decision"] not in ("allow", "replace") or validate_review_checkpoint(conn, job_id, decision) is None
                                 or str(review.review_id) != str(decision["id"])
                                 or snapshot.next != ("moderation_review",)):
@@ -200,6 +214,9 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                             graph.invoke(None, config)
                             snapshot = graph.get_state(config)
                         epoch = project_hold(conn, job_id, retained, snapshot.config["configurable"]["checkpoint_id"])
+                        if title_start:
+                            conn.execute("update job_moderation_reviews set dispatch_state='consumed',dispatch_error_code=null where id=%s",
+                                         (decision["id"],))
                         return
                     elif (payload is None or snapshot.next != ("reveal",)
                             or retained.moderation_context.generation_epoch != epoch):
@@ -207,7 +224,8 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                     else:
                         graph_input = Command(resume=payload)
                 else:
-                    if job["status"] != "queued" or payload is not None or decision is not None or review_id is not None:
+                    if (job["status"] != "queued" or payload is not None
+                            or ((decision is not None or review_id is not None) and not title_start)):
                         raise RuntimeError("checkpoint_unavailable")
                     captured = job["moderation_settings_snapshot"]
                     if not captured.get("policy_version"):
