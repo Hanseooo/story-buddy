@@ -565,7 +565,7 @@ the review queue's empty state reads as absence rather than as finished.
 
 ## 14. Amendment: teacher notes the child can read (2026-10-29, draft)
 
-**Status:** implemented: schema and teacher API (ticket 05, 2026-10-29). ADR-081 accepted by the owner on 2026-10-29; OD-8 settled. Settings, note UI and child endpoints remain pending. Seams and defaults confirmed 2026-10-29. **Source:**
+**Status:** implemented: schema and teacher API (05), classroom switch (06), and child endpoints, bookshelf badge and book panel (08, 2026-10-29). Teacher note UI (07), gentler labels (09), and the J1–J3 browser journeys remain pending. ADR-081 accepted by the owner on 2026-10-29; OD-8 settled. Seams and defaults confirmed 2026-10-29. **Source:**
 `.scratch/ptd-review-feedback/` (audit 01 with its owner verdict, grill 02), phase map
 `.scratch/post-technical-defense/map.md` rank 3. **Rationale:** ADR-081 (accepted 2026-10-29).
 
@@ -724,6 +724,19 @@ when I use it.** Applies: SH-04
   labeled "Let students read my notes" with a separate save button. Saving disables the control;
   success and failure announce politely. Failure restores the stored value. Turning it off keeps notes.
 - **The switch is read server-side** on every note read and write, so a stale browser cannot bypass it.
+- **Implemented child paths (08):** `GET /me/notes` returns only the active student's own complete
+  books' notes in their current classroom as `[{job_id, body, seen, updated_at}]`. The jobs list stays
+  a browser SELECT. The server checks role, removal, classroom membership, ownership, and the switch.
+  Switch off or no notes returns `[]`; disallowed roles and missing, peer or deleting jobs receive
+  `404 {"detail":"not found"}` on `POST /jobs/{job_id}/note/seen`. Authentication/onboarding may
+  refuse a request before the handler. POST takes `{updated_at}` from the opened note and updates
+  only that version, returning `204`, so a concurrent teacher edit stays unread. Responses are
+  `private, no-store`. No schema change is needed.
+- **Child panel (08):** opening the book displays a native `<details>` panel above the reader;
+  only after that panel renders open does it mark the note seen. Close and Escape restore focus to
+  its summary, which reopens it. A failed mark-seen offers a polite retry. Failed note reads hide the
+  note UI without blocking the shelf or reader. Returning focus to the window refreshes notes,
+  including edits, deletes and switch changes; the next shelf mount also fetches afresh.
 - **No redaction (Q8).** The read path is owner-only, so a child's own name in their note is correct,
   and Presidio would turn it into a placeholder. *Inferred* cost: a teacher naming a different child.
 - **One note, edit in place (Q7).** No history. The simplest model that matches what a teacher does.
@@ -776,6 +789,15 @@ remain un-run in this slice. The full backend run also encounters six PDF failur
 Windows runtime lacks WeasyPrint's native libraries. No remote migration was applied.
 
 ### 14.8 Blast radius
+
+**Ticket 08 verification (2026-10-29):** 28 note HTTP tests and 46 child page tests pass, including
+edit/delete refresh and Close/Escape focus return for each editorial state. Tests first failed on
+the missing endpoints, badge and panel. Frontend typecheck and both linters pass. Full backend:
+1,585 passed, 130 skipped, six smoke deselections, six existing native WeasyPrint failures.
+Full frontend: 757 passed, one skipped, two failures in unchanged teacher-books/gallery tests.
+The teacher focus failure also reproduces on the starting checkout; the gallery test passes there
+in isolation after timing out in the full run. J1–J3 remain un-run: ticket 07 is not yet committed
+to the starting branch. No real-child rollout or remote database change is part of this slice.
 
 New: migration `0026`, ADR-081 and its index row, a backend notes module, the note row, badge and panel.
 Changed: `books/**`, the bookshelf page, the book page, classroom settings. More than three modules, so

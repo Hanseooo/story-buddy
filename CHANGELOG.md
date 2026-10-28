@@ -14,6 +14,28 @@ instead of repeating it.
 
 ---
 
+## Review-feedback ticket 08 · 2026-10-29 · Children read their teacher's note
+
+### Code
+
+- Add owner-only child note reads and version-checked mark-seen calls. Keep notes private,
+  respect the classroom switch, and preserve unread state across concurrent teacher edits.
+- Show unread bookshelf badges and a native, reopenable reader panel with Close/Escape focus
+  return. Note failures leave books readable; returning window focus refreshes edits/deletes.
+
+### Docs
+
+- Record the child delivery paths in teacher-review-and-approval §14, inherit SH-07 in
+  classroom-sharing, and update the ADR-081 implementation row.
+
+### Checks
+
+- 28 backend note tests and 46 child page tests pass after red-first checks. Typecheck and both
+  linters pass. Full backend: 1,585 passed, 130 skipped, six smoke deselections, six native PDF
+  failures. Full frontend: 757 passed, one skipped, two failures in unchanged files. Teacher focus
+  failure reproduces on the starting checkout; gallery passes in isolation there.
+- J1–J3 browser journeys await ticket 07. No merge or worktree cleanup before owner approval.
+
 ## Ticket 09 · 2026-10-28 · Replace a held scene picture within budget
 
 ### Code

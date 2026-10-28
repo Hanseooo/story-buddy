@@ -29,18 +29,25 @@ def boundary():
     def table(name):
         query = MagicMock()
         filters = {}
+        memberships = {}
         changes = {}
         query.select.return_value = query
         def eq(key, value):
             filters[key] = value
             return query
         query.eq.side_effect = eq
+        query.is_.side_effect = lambda key, value: eq(key, None if value == "null" else value)
+        def in_(key, values):
+            memberships[key] = values
+            return query
+        query.in_.side_effect = in_
         def update(values):
             changes.update(values)
             return query
         query.update.side_effect = update
         def execute():
-            rows = [row for row in sb.rows[name] if all(row.get(key) == value for key, value in filters.items())]
+            rows = [row for row in sb.rows[name] if all(row.get(key) == value for key, value in filters.items())
+                    and all(row.get(key) in values for key, values in memberships.items())]
             for row in rows:
                 row.update(changes)
             return SimpleNamespace(data=rows)
@@ -172,3 +179,71 @@ def test_invalid_job_uuid_is_rejected_before_job_query(boundary, method):
     assert response.status_code == 422
     assert "jobs" not in [call.args[0] for call in sb.table.call_args_list]
     sb.rpc.assert_not_called()
+
+
+def student_notes(sb):
+    sb.rows["profiles"] = [{"id": "teacher-1", "role": "student", "classroom_id": "class-1",
+                            "removed_at": None, "password_reset_version": 0, "password_completed_version": 0}]
+    sb.rows["jobs"][0]["profile_id"] = "teacher-1"
+    sb.rows["classrooms"][0]["review_notes_enabled"] = True
+    sb.rows["job_review_notes"] = [dict(NOTE)]
+
+
+def test_child_reads_current_note_and_marks_only_opened_version_seen(boundary):
+    client, sb = boundary
+    student_notes(sb)
+    headers = {"Authorization": "Bearer synthetic"}
+    expected = [{"job_id": JOB, "body": "Lovely story!", "seen": False,
+                 "updated_at": "2026-10-29T00:00:00+00:00"}]
+    response = client.get("/me/notes", headers=headers)
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "private, no-store"
+    assert response.json() == expected
+    assert sb.rows["job_review_notes"][0]["seen_at"] is None
+    response = client.post(f"/jobs/{JOB}/note/seen", json={"updated_at": NOTE["updated_at"]}, headers=headers)
+    assert response.status_code == 204
+    assert client.get("/me/notes", headers=headers).json()[0]["seen"] is True
+    sb.rows["job_review_notes"][0].update(body="A new note", seen_at=None, updated_at="2026-10-29T01:00:00+00:00")
+    assert client.post(f"/jobs/{JOB}/note/seen", json={"updated_at": NOTE["updated_at"]}, headers=headers).status_code == 404
+    assert client.get("/me/notes", headers=headers).json()[0] == {
+        "job_id": JOB, "body": "A new note", "seen": False, "updated_at": "2026-10-29T01:00:00+00:00",
+    }
+    sb.rows["classrooms"][0]["review_notes_enabled"] = False
+    assert client.get("/me/notes", headers=headers).json() == []
+    assert client.post(f"/jobs/{JOB}/note/seen", json={"updated_at": NOTE["updated_at"]}, headers=headers).status_code == 404
+    sb.rows["classrooms"][0]["review_notes_enabled"] = True
+    sb.rows["job_review_notes"] = []
+    assert client.get("/me/notes", headers=headers).json() == []
+
+
+@pytest.mark.parametrize("denial", ["peer", "missing", "teacher", "researcher", "removed", "classroom", "deleting", "signed_out"])
+def test_child_note_access_never_leaks_to_other_viewers(boundary, denial):
+    client, sb = boundary
+    student_notes(sb)
+    headers = {"Authorization": "Bearer synthetic"}
+    if denial == "peer":
+        sb.rows["jobs"][0]["profile_id"] = "another-child"
+    elif denial == "missing":
+        sb.rows["jobs"] = []
+    elif denial in ("teacher", "researcher"):
+        sb.rows["profiles"][0]["role"] = denial
+    elif denial == "removed":
+        sb.rows["profiles"][0]["removed_at"] = "2026-10-29T01:00:00Z"
+    elif denial == "classroom":
+        sb.rows["jobs"][0]["classroom_id"] = "another-class"
+    elif denial == "deleting":
+        sb.rows["jobs"][0]["status"] = "deleting"
+    else:
+        headers = {}
+    response = client.get("/me/notes", headers=headers)
+    expected = 401 if denial == "signed_out" else 403 if denial == "removed" else 404 if denial in ("teacher", "researcher") else 200
+    assert response.status_code == expected
+    if expected == 200:
+        assert response.json() == []
+    else:
+        assert "Lovely story!" not in response.text
+    response = client.post(f"/jobs/{JOB}/note/seen", json={"updated_at": NOTE["updated_at"]}, headers=headers)
+    assert response.status_code == (401 if denial == "signed_out" else 403 if denial == "removed" else 404)
+    if response.status_code == 404:
+        assert response.json() == {"detail": "not found"}
+    assert sb.rows["job_review_notes"][0]["seen_at"] is None

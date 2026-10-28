@@ -6,9 +6,11 @@ const mockSelect = vi.hoisted(() => vi.fn());
 const mockChannel = vi.hoisted(() => vi.fn());
 const mockRemoveChannel = vi.hoisted(() => vi.fn());
 const mockCreateSignedUrls = vi.hoisted(() => vi.fn());
+const mockGetSession = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/supabaseClient", () => ({
   supabase: {
+    auth: { getSession: mockGetSession },
     from: () => ({
       select: () => ({
         eq: () => ({
@@ -52,8 +54,40 @@ const makeJob = (overrides: Partial<{
 describe("Bookshelf — §9.11–12", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
+    mockGetSession.mockResolvedValue({ data: { session: null } });
     mockChannel.mockReturnValue({ unsubscribe: vi.fn() });
     mockCreateSignedUrls.mockResolvedValue({ data: [] });
+  });
+
+  it("shows only unread teacher notes and removes the badge on the next shelf load", async () => {
+    mockSelect.mockResolvedValue({ data: [makeJob()] });
+    mockGetSession.mockResolvedValue({ data: { session: { access_token: "synthetic" } } });
+    const fetchNotes = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify([
+      { job_id: "job-1", body: "Lovely story!", seen: false },
+    ]))).mockResolvedValueOnce(new Response(JSON.stringify([
+      { job_id: "job-1", body: "Lovely story!", seen: true },
+    ])));
+    vi.stubGlobal("fetch", fetchNotes);
+    const view = render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
+    await waitFor(() => expect(screen.getByText("A note from your teacher")).toBeVisible());
+    expect(fetchNotes).toHaveBeenCalledWith(expect.stringContaining("/me/notes"), expect.objectContaining({
+      headers: { Authorization: "Bearer synthetic" }, cache: "no-store",
+    }));
+    view.unmount();
+    render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
+    await waitFor(() => expect(fetchNotes).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByText("My story")).toBeVisible());
+    expect(screen.queryByText("A note from your teacher")).toBeNull();
+  });
+
+  it("still renders books without a badge when notes cannot be fetched", async () => {
+    mockSelect.mockResolvedValue({ data: [makeJob()] });
+    mockGetSession.mockResolvedValue({ data: { session: { access_token: "synthetic" } } });
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+    render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
+    await waitFor(() => expect(screen.getByText("My story")).toBeVisible());
+    expect(screen.queryByText("A note from your teacher")).toBeNull();
   });
 
   it("§9.11 — shows own jobs (explicit .eq filter prevents classmate leak)", async () => {

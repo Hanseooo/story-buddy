@@ -91,6 +91,99 @@ const SWEPT_STATUS = "__swept__"; // placeholder — replace when data-deletion 
 
 type SignedPage = { scene_id: string; caption: string; signedUrl: string };
 
+type ChildNote = { job_id: string; body: string; seen: boolean; updated_at: string };
+
+function TeacherNote({ jobId }: { jobId: string }) {
+  const [note, setNote] = useState<ChildNote | null>(null);
+  const [open, setOpen] = useState(true);
+  const [saveError, setSaveError] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const summary = useRef<HTMLElement>(null);
+  const version = useRef<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    async function load() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session || controller.signal.aborted) return;
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/me/notes`, {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          cache: "no-store", signal: controller.signal,
+        });
+        if (!response.ok) throw new Error("notes unavailable");
+        const notes: ChildNote[] = await response.json();
+        if (controller.signal.aborted) return;
+        const current = notes.find(item => item.job_id === jobId) ?? null;
+        if (current?.updated_at !== version.current) setOpen(true);
+        version.current = current?.updated_at ?? null;
+        setNote(current);
+      } catch {
+        if (!controller.signal.aborted) setNote(null);
+      }
+    }
+    void load();
+    window.addEventListener("focus", load);
+    return () => { controller.abort(); window.removeEventListener("focus", load); };
+  }, [jobId]);
+
+  useEffect(() => {
+    if (!note || !open || note.seen) return;
+    const controller = new AbortController();
+    async function markSeen() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (controller.signal.aborted) return;
+        if (!session) throw new Error("session unavailable");
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/jobs/${jobId}/note/seen`, {
+          method: "POST", headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ updated_at: note!.updated_at }), signal: controller.signal,
+        });
+        if (response.status === 404) {
+          if (!controller.signal.aborted) setNote(null);
+          return;
+        }
+        if (!response.ok) throw new Error("note unavailable");
+        if (!controller.signal.aborted) {
+          setSaveError(false);
+          setNote(previous => previous?.updated_at === note!.updated_at ? { ...previous, seen: true } : previous);
+        }
+      } catch {
+        if (!controller.signal.aborted) setSaveError(true);
+      }
+    }
+    void markSeen();
+    return () => controller.abort();
+  }, [jobId, note, open, retry]);
+
+  useEffect(() => {
+    if (!note || !open) return;
+    function escape(event: KeyboardEvent) {
+      if (event.key === "Escape") { setOpen(false); summary.current?.focus(); }
+    }
+    window.addEventListener("keydown", escape);
+    return () => window.removeEventListener("keydown", escape);
+  }, [note, open]);
+
+  if (!note) return null;
+  return (
+    <details open={open} onToggle={event => setOpen(event.currentTarget.open)}
+      className="relative z-30 mx-auto my-4 w-[calc(100%-2.5rem)] max-w-3xl rounded-2xl border border-primary/15 bg-surface px-5 font-kid text-foreground">
+      <summary ref={summary} className="min-h-11 cursor-pointer py-3 font-extrabold focus-visible:outline-secondary focus-visible:outline-3">
+        A note from your teacher
+      </summary>
+      <div className="pb-4">
+        <p className="max-w-prose whitespace-pre-wrap break-words text-lg leading-relaxed">{note.body}</p>
+        <div aria-live="polite">
+          {saveError && <p className="mt-3 text-sm">We couldn&apos;t save your place. <button type="button" onClick={() => setRetry(value => value + 1)} className="min-h-11 underline focus-visible:outline-secondary">Try again</button></p>}
+        </div>
+        <button type="button" onClick={() => { setOpen(false); summary.current?.focus(); }}
+          className="mt-3 min-h-11 rounded-xl px-4 font-bold text-primary hover:bg-muted/30 focus-visible:outline-secondary focus-visible:outline-3">Close</button>
+      </div>
+    </details>
+  );
+}
+
 export default function BookPage({ params }: { params: Promise<{ jobId: string }> }) {
   const { jobId } = use(params);
   const routeParams = useParams<{ profileId: string }>();
@@ -275,6 +368,8 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
     // Layout: Mobile-first stacking, desktop splits symmetrically
     <div className="relative flex min-h-[calc(100dvh-5rem)] flex-1 w-full flex-col justify-between overflow-hidden bg-background text-foreground">
       
+      {row?.profile_id === profileId && <TeacherNote key={jobId} jobId={jobId} />}
+
       {/* Ambient magical background blobs */}
       <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-primary opacity-[0.03] md:opacity-[0.06] blur-[80px] md:blur-[140px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-5%] w-[60vw] h-[60vw] rounded-full bg-secondary opacity-[0.06] md:opacity-[0.08] blur-[80px] md:blur-[140px] pointer-events-none" />
