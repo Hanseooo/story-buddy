@@ -726,6 +726,37 @@ def test_a_hung_call_is_abandoned_at_the_wall_clock():
     assert elapsed < 5, f"call was not abandoned: returned after {elapsed:.1f}s"
 
 
+def test_feature_timeout_cannot_report_quiescence_while_sdk_thread_runs(monkeypatch):
+    entered, release, finished = threading.Event(), threading.Event(), threading.Event()
+    errors = []
+    monkeypatch.setattr(providers, "CALL_TIMEOUT_SECONDS", 0.01)
+
+    def sdk_call():
+        entered.set()
+        release.wait(5)
+
+    def worker():
+        token = providers._generation_fence.set(lambda: None)
+        try:
+            providers._bounded("synthetic", sdk_call)
+        except TimeoutError:
+            errors.append("timed_out")
+        finally:
+            providers._generation_fence.reset(token)
+            finished.set()
+
+    thread = threading.Thread(target=worker)
+    thread.start()
+    try:
+        assert entered.wait(2)
+        assert not finished.wait(0.1)
+    finally:
+        release.set()
+        thread.join(2)
+    assert finished.is_set()
+    assert errors == ["timed_out"]
+
+
 def test_the_timeout_is_catchable_by_the_pipelines_own_handlers():
     """Load-bearing: `consistency_check.judge_attempt` catches `Exception` and returns [], which
     means *unchecked* — the page still finalizes and the book still ships (ADR-025). A bound that
@@ -991,10 +1022,13 @@ def test_classify_image_primary_returns_true_for_normal():
 
 def test_classify_image_primary_returns_false_for_nsfw():
     with patch("providers.judge") as mock_judge:
-        mock_judge.return_value = MagicMock(is_safe=False)
+        mock_judge.return_value = MagicMock(is_safe=False, safety_reasoning="Contact 09171234567")
         from providers import classify_image_primary
-        result = classify_image_primary("https://example.com/bad.png")
+        reasons = []
+        result = classify_image_primary("https://example.com/bad.png", reasons=reasons)
     assert result is False
+    assert len(reasons) == 1
+    assert "09171234567" not in reasons[0]
 
 
 # --- classify_image_backstop ---

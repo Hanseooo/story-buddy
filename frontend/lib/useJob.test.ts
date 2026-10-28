@@ -20,6 +20,9 @@ const BASE: JobRow = {
 };
 
 describe("classify", () => {
+  it("awaiting_teacher remains a durable teacher hold", () => {
+    expect(classify({ ...BASE, status: "awaiting_teacher" })).toBe("teacher-held");
+  });
   it("null row → not-found", () => {
     expect(classify(null)).toBe("not-found");
   });

@@ -38,7 +38,7 @@ def _approved_book(job_id: str, user_id: str) -> dict:
         raise HTTPException(404, "book not found", headers=_PRIVATE)
     rows = (
         client.table("jobs")
-        .select("id, profile_id, classroom_id, status, approved_at, rejected_at, title, pages, "
+        .select("id, profile_id, classroom_id, status, moderation_mode, generation_epoch, approved_at, rejected_at, title, pages, "
                 "profiles!inner(role, removed_at, classroom_id)")
         .eq("id", job_id).eq("classroom_id", viewer["classroom_id"]).execute().data
     )
@@ -125,6 +125,11 @@ def download_pdf(job_id: str, user=Depends(get_current_user)) -> Response:
                     or ".." in PurePosixPath(path).parts or str(PurePosixPath(path)) != path):
                 raise ValueError("invalid image path")
             image_bytes = providers.download_book_image(path)
+            if row.get("moderation_mode") == "teacher_review_v1":
+                from app.moderation_hold import authorized_asset, connect
+                with connect() as conn:
+                    if authorized_asset(conn, job_id, f"scene-{page['scene_id']}", str(user.id)) != (path, row["generation_epoch"]):
+                        raise HTTPException(409, "book not ready for download", headers=_PRIVATE)
             total_bytes += len(image_bytes)
             if len(image_bytes) > PDF_MAX_IMAGE_BYTES or total_bytes > PDF_MAX_TOTAL_IMAGE_BYTES:
                 raise ValueError("image budget exceeded")
@@ -138,6 +143,11 @@ def download_pdf(job_id: str, user=Depends(get_current_user)) -> Response:
             images.append(image_bytes)
         pdf = render_book_pdf(title, pages, images)
         _approved_book(job_id, user.id)  # Approval or membership withdrawal must stop this download too.
+        if row.get("moderation_mode") == "teacher_review_v1":
+            with connect() as conn:
+                for page in pages:
+                    if authorized_asset(conn, job_id, f"scene-{page['scene_id']}", str(user.id)) != (page["image_path"], row["generation_epoch"]):
+                        raise HTTPException(409, "book not ready for download", headers=_PRIVATE)
         slug = re.sub(r"[^A-Za-z0-9_-]+", "-", title).strip("-_") or "storybook"
         return Response(pdf, media_type="application/pdf", headers={
             **_PRIVATE, "Content-Disposition": f'attachment; filename="storybuddy-{slug}.pdf"',

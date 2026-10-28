@@ -428,10 +428,10 @@ def moderation() -> None:
 
     ADR-011's gate is TWO independent classifiers — either one flagging fails the content — so
     what is probed is the UNION: harmful must be caught by at least one model, benign by neither.
-    Verified 2026-07-13: neither Qwen3Guard-Gen nor Granite Guardian is routable on OpenRouter;
-    `moderation_backstop_model` stays unset until ADR-011's backstop is amended or run on the worker.
+    Uses the configured primary and backstop text models. This probe calls structured_text
+    directly and does not measure the production input_gate classifier path.
     """
-    models = [settings.moderation_model]
+    models = [settings.moderation_primary_model]
     if settings.moderation_backstop_model:
         models.append(settings.moderation_backstop_model)
 

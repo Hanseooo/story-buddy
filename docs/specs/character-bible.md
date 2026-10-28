@@ -9,6 +9,14 @@ ADR-024, ADR-025, ADR-028, ADR-039, PRD §8
 > **checks it against the description it came from** (ADR-028), and persists both. This spec adds
 > **no** contract fields and bumps **no** `schema_version` — every type it needs already exists.
 
+**ADR-080 feature-mode amendment (ticket 10, 2026-10-28):** both initial and targeted minting
+record the exact `ref_generation_prompt` on captured `teacher_review_v1` characters. The
+`moderation_replace` node calls `replace_reference` for one budget-guarded same-prompt draw,
+using the existing reference-judge retry/degraded policy and a fresh immutable suffix. It resets
+`ref_moderation_status`, preserves the full character roster and increments image cost and the
+existing per-book moderation-redraw counter. It never runs the initial three-draw selection loop.
+See [moderation-stack §9.16](moderation-stack.md#916-ticket-10-implementation-2026-10-28).
+
 ## 1. Purpose
 
 Draw one canonical reference image per principal character, judge it against that character's

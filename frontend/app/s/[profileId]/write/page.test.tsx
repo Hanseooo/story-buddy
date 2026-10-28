@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import WriteStoryPage from "./page";
+import stoppedState from "@/lib/stopped-state.fixture.json";
 
 const pushMock = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -131,6 +132,23 @@ describe("Style preset sample art", () => {
 });
 
 describe("WriteStoryPage — prefill and chain counter", () => {
+  it("consumes an authorized stopped handoff only after confirming replacement of an existing draft", async () => {
+    window.history.replaceState({}, "", "/s/prof-123/write?reuse=stopped-job");
+    sessionStorage.setItem("sb.prefill", JSON.stringify({ text: "Keep this existing draft.", title: "Draft" }));
+    sessionStorage.setItem("sb.stopped.prof-123.stopped-job", JSON.stringify(stoppedState.saved_writing));
+    global.fetch = vi.fn().mockResolvedValue(Response.json(stoppedState));
+    render(<WriteStoryPage />);
+    expect(await screen.findByRole("button", { name: "Use saved writing" })).toBeDefined();
+    expect(screen.getByLabelText("story text")).toHaveValue("Keep this existing draft.");
+    fireEvent.click(screen.getByRole("button", { name: "Use saved writing" }));
+    expect(screen.getByRole("button", { name: "Keep my draft" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Replace my draft" }));
+    expect(screen.getByLabelText("story text")).toHaveValue("The orange dog walks through the grassy field past the trees and stops near the stream. The dog looks across the water and sees a bird perched on the branch of a tree.");
+    expect(screen.getByLabelText("Story title")).toHaveValue("Synthetic title");
+    expect(sessionStorage.getItem("sb.stopped.prof-123.stopped-job")).toBeNull();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    window.history.replaceState({}, "", "/");
+  });
   beforeEach(() => {
     pushMock.mockClear();
     sessionStorage.clear();

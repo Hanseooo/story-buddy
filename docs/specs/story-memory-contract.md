@@ -16,6 +16,29 @@
 
 ## 1. Purpose
 
+**Moderation extension:** [moderation-stack §9.9.2](moderation-stack.md#992-exact-proposed-data-contract)
+and accepted [ADR-080](../product/adr/ADR-080-teacher-held-moderation-and-exact-content-clearance.md)
+define the accepted defaulted additive moderation fields.
+Accepted by the owner on 2026-10-27. Implementation slices and their verification limits are
+recorded in moderation-stack §9.10 onward. The schema below describes baseline plus the
+following ticket-14 addition to the moderation extension:
+
+```python
+class OptionalThemeCheck(BaseModel):
+    subject_version: str  # SHA-256 of exact privacy-processed story text
+    settings_version: int
+    model_id: str
+    instruction_version: str
+
+# Appended last on ModerationContext. Legacy checkpoints retain their defaults.
+optional_theme_check: Optional[OptionalThemeCheck] = None
+```
+
+`ThemeDetection` uses strict validation and forbids extra keys. The transient detector
+response lives beside `pipeline/optional_themes.py`; only validated, privacy-processed reasons
+enter `ModerationContext.detected_themes`. The successful check record is retained even when
+there are no matches. Accepted-theme IDs remain ticket 15's continuation concern.
+
 Define the single Pydantic `StoryMemory` model that is simultaneously (a) the inter-module data contract,
 (b) the LangGraph runtime state, and (c) the Postgres checkpoint blob (ADR-023, Decision 1). It also freezes
 the **closed failure-reason taxonomy** shared by the judge, the regeneration-controller, and the Phase-2.5

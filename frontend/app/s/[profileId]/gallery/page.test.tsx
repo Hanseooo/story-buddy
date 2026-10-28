@@ -15,7 +15,7 @@ const {
   const mockOrder = vi.fn(() => ({ limit: mockLimit }));
   const mockIs = vi.fn(() => ({ order: mockOrder }));
   const mockNot = vi.fn(() => ({ is: mockIs }));
-  const mockSelect = vi.fn<(columns: string) => { not: typeof mockNot }>(() => ({ not: mockNot }));
+  const mockSelect = vi.fn<(columns: string) => {eq: () => {not: typeof mockNot}}>(() => ({eq: () => ({ not: mockNot })}));
   const mockFrom = vi.fn(() => ({ select: mockSelect }));
   const mockCreateSignedUrls = vi.fn();
   const mockStorageFrom = vi.fn(() => ({ createSignedUrls: mockCreateSignedUrls }));
@@ -32,6 +32,7 @@ const {
 });
 
 vi.mock("@supabase/ssr", () => ({
+  createBrowserClient: vi.fn(() => ({storage: {from: mockStorageFrom}})),
   createServerClient: vi.fn(() => ({
     from: mockFrom,
     storage: { from: mockStorageFrom },
@@ -155,6 +156,21 @@ describe("GalleryPage", () => {
 
     const links = getAllByRole("link");
     expect(links[0]).toHaveAttribute("href", `/s/${PROFILE_ID}/book/job-xyz`);
+  });
+
+  it("opens the book when a child taps a baseline cover picture", async () => {
+    mockLimit.mockResolvedValue({ data: [makeJob({ id: "job-xyz" })] });
+    mockCreateSignedUrls.mockResolvedValue({
+      data: [{ path: "covers/job-1.jpg", signedUrl: "https://storage.test/cover.jpg" }],
+    });
+
+    const { default: GalleryPage } = await import("./page");
+    const jsx = await GalleryPage({ params });
+    const { getByAltText } = render(jsx);
+
+    expect(getByAltText("Cover of book by Kai").closest("a")).toHaveAttribute(
+      "href", `/s/${PROFILE_ID}/book/job-xyz`,
+    );
   });
 
   it("requests signed URLs from bucket storybook-images", async () => {

@@ -1,0 +1,57 @@
+{
+  "status": "awaiting_teacher",
+  "review_id": "54ad380c-cd53-5a3b-9a8b-2011ba58017e",
+  "subject_id": "input",
+  "subject_version": "b40993cd1e052d60bc1b254b60c36c462001393ad78584313af6420530b8f1a8",
+  "generation_epoch": 1,
+  "title": "Synthetic title",
+  "author": "Synthetic child",
+  "story_text": "A dog runs in a field. The dog barks.",
+  "kind": "story_text",
+  "criteria": [
+    "sexual_content",
+    "exposure",
+    "graphic_harm",
+    "harm_instruction",
+    "targeted_abuse",
+    "discriminatory_slur",
+    "exploitation",
+    "substances",
+    "adult_detail",
+    "privacy"
+  ],
+  "policy_version": "teacher_review_policy_v1",
+  "current_policy_version": "teacher_review_policy_v1",
+  "settings_snapshot": {
+    "theme_ids": [],
+    "settings_version": 0
+  },
+  "classifier_evidence": [
+    {
+      "layer": "primary",
+      "reason": null,
+      "outcome": "flagged",
+      "model_id": "meta-llama/llama-guard-4-12b",
+      "categories": [
+        "S1"
+      ],
+      "checked_at": "2026-10-28T12:42:52.848224Z",
+      "instruction_version": "text_primary_v1"
+    },
+    {
+      "layer": "backstop",
+      "reason": null,
+      "outcome": "not_called",
+      "model_id": "openai/gpt-oss-safeguard-20b",
+      "categories": [],
+      "checked_at": null,
+      "instruction_version": "text_backstop_v1"
+    }
+  ],
+  "ready": true,
+  "replacement_available": false,
+  "replacement_disabled_reason": "replacement_source_unavailable",
+  "dispatch_state": null,
+  "withdraws_review_id": null,
+  "pictures": []
+}

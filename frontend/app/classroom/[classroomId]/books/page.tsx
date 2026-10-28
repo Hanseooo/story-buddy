@@ -6,12 +6,13 @@ import { supabase } from "@/lib/supabaseClient";
 import BookCard from "@/components/BookCard";
 import { StateBadge } from "@/components/BookCard";
 import BookReviewDialog from "@/components/BookReviewDialog";
+import NeedsHelpQueue from "@/components/NeedsHelpQueue";
 import { StaggerGrid, StaggerItem } from "@/components/StaggerGrid";
 import { Job, ReviewDecision, jobState } from "@/lib/types/jobs";
 import { signPaths } from "@/lib/signedUrls";
 import { displayTitle } from "@/lib/displayTitle";
 
-type Tab = "pending" | "approved" | "rejected";
+type Tab = "pending" | "approved" | "rejected" | "held";
 
 type Toast = {
   message: string;
@@ -27,11 +28,17 @@ export default function BooksPage() {
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState<Tab>("pending");
+  const [heldCount, setHeldCount] = useState(0);
   const [toast, setToast] = useState<Toast | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [dialogJobId, setDialogJobId] = useState<string | null>(null);
   const [dialogPageUrls, setDialogPageUrls] = useState<string[]>([]);
+  const dialogImages = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const controller = dialogImages.current;
+    return () => { controller?.abort(); };
+  }, [dialogJobId]);
 
   // ── Fetch ────────────────────────────────────────────────────────────────
 
@@ -39,7 +46,7 @@ export default function BooksPage() {
     const { data } = await supabase
       .from("jobs")
       .select(
-        "id, status, failure_reason, approved_at, rejected_at, created_at, input_text, title, pages, profile_id, profiles(display_nickname, avatar_id)"
+        "id, status, moderation_mode, failure_reason, approved_at, rejected_at, created_at, input_text, title, pages, profile_id, profiles(display_nickname, avatar_id)"
       )
       .eq("classroom_id", classroomId)
       .order("created_at", { ascending: false });
@@ -60,11 +67,13 @@ export default function BooksPage() {
 
   useEffect(() => {
     if (!jobs) return;
-    const unsigned = jobs.filter((j) => j.pages?.[0] && !thumbnails[j.id]);
+    const unsigned = jobs.filter((j) => j.status === "complete" && j.pages?.[0]);
     if (!unsigned.length) return;
 
     // One batch request, not one per thumbnail.
-    signPaths(unsigned.map((j) => j.pages![0].image_path)).then((signed) => {
+    const controller = new AbortController();
+    signPaths(unsigned.map((j) => j.pages![0].image_path), unsigned, controller.signal).then((signed) => {
+      if (controller.signal.aborted) return;
       setThumbnails((prev) => {
         const next = { ...prev };
         for (const j of unsigned) {
@@ -74,22 +83,27 @@ export default function BooksPage() {
         return next;
       });
     });
-  }, [jobs]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { controller.abort(); };
+  }, [jobs]);
 
   // ── Open dialog & sign pages ──────────────────────────────────────────────
 
   async function openDialog(jobId: string) {
+    dialogImages.current?.abort();
+    const controller = new AbortController();
+    dialogImages.current = controller;
     setDialogJobId(jobId);
     setDialogPageUrls([]);
     const job = jobs?.find((j) => j.id === jobId);
     if (!job?.pages?.length) return;
-    const signed = await signPaths(job.pages.map((p) => p.image_path));
+    const signed = await signPaths(job.pages.map((p) => p.image_path), [job], controller.signal);
+    if (controller.signal.aborted) return;
     setDialogPageUrls(job.pages.map((p) => signed[p.image_path] ?? ""));
 
     // Deciding auto-advances to the next pending book, so warm its URLs now —
     // otherwise every Approve costs the teacher a signing round trip they watch.
     const next = pendingJobs.find((j) => j.id !== jobId);
-    if (next?.pages?.length) void signPaths(next.pages.map((p) => p.image_path));
+    if (next?.pages?.length && next.moderation_mode !== "teacher_review_v1") void signPaths(next.pages.map((p) => p.image_path));
   }
 
   // ── Decision ─────────────────────────────────────────────────────────────
@@ -213,6 +227,7 @@ export default function BooksPage() {
     { key: "pending", label: "Needs review", count: pendingJobs.length },
     { key: "approved", label: "Approved", count: approvedJobs.length },
     { key: "rejected", label: "Rejected", count: rejectedJobs.length },
+    { key: "held", label: "Needs your help", count: heldCount },
   ];
 
   const visibleJobs =
@@ -259,7 +274,7 @@ export default function BooksPage() {
       <div
         role="tablist"
         aria-label="Book review tabs"
-        className="flex gap-1 mb-6 border-b border-primary/10"
+        className="flex flex-wrap gap-1 mb-6 border-b border-primary/10"
         onKeyDown={(e) => {
           const keys = ["ArrowLeft", "ArrowRight"];
           if (!keys.includes(e.key)) return;
@@ -269,6 +284,8 @@ export default function BooksPage() {
               ? (idx + 1) % tabs.length
               : (idx - 1 + tabs.length) % tabs.length;
           setActiveTab(tabs[next].key);
+          e.preventDefault();
+          e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
         }}
       >
         {tabs.map((t) => (
@@ -276,8 +293,9 @@ export default function BooksPage() {
             key={t.key}
             role="tab"
             aria-selected={activeTab === t.key}
+            tabIndex={activeTab === t.key ? 0 : -1}
             onClick={() => setActiveTab(t.key)}
-            className={`px-4 py-2 text-sm font-bold rounded-t-xl transition-colors relative ${
+            className={`min-h-[44px] px-4 py-2 text-sm font-bold rounded-t-xl transition-colors relative focus-visible:outline-2 focus-visible:outline-primary ${
               activeTab === t.key
                 ? "text-primary after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary"
                 : "text-foreground/50 hover:text-foreground/80"
@@ -294,7 +312,8 @@ export default function BooksPage() {
       </div>
 
       {/* Book list */}
-      {visibleJobs.length === 0 ? (
+      <NeedsHelpQueue classroomId={classroomId} active={activeTab === "held"} onCount={setHeldCount} onBack={() => setActiveTab("pending")} />
+      {activeTab === "held" ? null : visibleJobs.length === 0 ? (
         <EmptyState tab={activeTab} />
       ) : (
         <>

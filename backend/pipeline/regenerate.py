@@ -13,6 +13,7 @@ import logging
 
 from app.config import check_image_budget
 from contracts.story_memory import Attempt, StoryMemory
+from pipeline.char_ref_mod import require_reference_clearance
 from pipeline.generate_scene import generate_and_store
 from pipeline.prompt_optimizer import correct_prompt, correction_clauses, referenced_characters
 
@@ -20,6 +21,7 @@ log = logging.getLogger(__name__)
 
 
 def regenerate(state: StoryMemory) -> dict:
+    require_reference_clearance(state)
     # ADR-024: the SAME selection rule generate_scene and consistency_check use — no cursor.
     scene = next((s for s in state.scenes if s.final_image_ref is None), None)
     if scene is None or not scene.attempts:

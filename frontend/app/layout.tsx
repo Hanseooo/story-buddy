@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Outfit, Inter, JetBrains_Mono, Nunito } from "next/font/google";
 import OfflineIndicator from "@/components/OfflineIndicator";
+import StoppedWritingCleanup from "@/lib/stoppedWriting";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -40,6 +41,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col font-sans text-foreground bg-background selection:bg-primary selection:text-on-primary">
         <OfflineIndicator />
+        <StoppedWritingCleanup />
         {children}
       </body>
     </html>

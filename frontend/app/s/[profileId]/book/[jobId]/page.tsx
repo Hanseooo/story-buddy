@@ -7,6 +7,7 @@ import { motion, AnimatePresence, useScroll } from "framer-motion";
 import { useJob } from "@/lib/useJob";
 import { displayTitle } from "@/lib/displayTitle";
 import FailureScreen, { resetFailChain } from "@/components/FailureScreen";
+import StoppedStory from "@/components/StoppedStory";
 import { signPaths } from "@/lib/signedUrls";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
@@ -106,6 +107,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
   const downloadRequest = useRef<AbortController | null>(null);
+  const imageRequest = useRef<AbortController | null>(null);
   const ownsBook = Boolean(profileId && row?.profile_id === profileId);
   // RLS supplies readable classroom books; the PDF endpoint rechecks active membership/approval.
   const canDownload = Boolean(profileId && row?.approved_at) && !row?.rejected_at;
@@ -158,8 +160,10 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
     if (!row?.pages.length) return;
     const pagesList = row.pages;
     const paths = pagesList.map(p => p.image_path);
+    const controller = imageRequest.current;
     async function doSign(att: number): Promise<void> {
-      const signed = await signPaths(paths);
+      const signed = await signPaths(paths, [{id: jobId, moderation_mode: row?.moderation_mode, pages: pagesList}], controller?.signal);
+      if (controller?.signal.aborted) return;
       if (paths.some(p => !signed[p])) {
         if (att < 2) {
           console.log("sb:action", { action: "re-sign" });
@@ -178,11 +182,14 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
       resetFailChain(); // actual book is on screen — chain is over
     }
     await doSign(attempt);
-  }, [row?.pages]);
+  }, [jobId, row?.moderation_mode, row?.pages]);
 
   useEffect(() => {
     if (bucket !== "terminal-success") return;
+    const controller = new AbortController();
+    imageRequest.current = controller;
     signPages(1);
+    return () => { controller.abort(); };
   }, [bucket, signPages]);
 
   // Arrow key navigation
@@ -224,6 +231,14 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
     return <FailureScreen kind={kind} reason={row?.failure_reason} jobId={jobId} inputText={row?.input_text} title={row?.title} stylePresetId={row?.style_preset_id} />;
   }
 
+  if (bucket === "stopped") return <StoppedStory jobId={jobId} profileId={profileId} />;
+  if (bucket === "teacher-held") {
+    return <main className="flex flex-1 flex-col items-center justify-center gap-6 p-6 text-center">
+      <h1 className="font-display text-3xl font-extrabold">Waiting for your teacher</h1>
+      <p>Your story is saved. Your teacher will help it continue.</p>
+      <Link href={`/s/${profileId}`} className="min-h-11 rounded-2xl bg-primary px-6 py-3 font-bold text-on-primary">Back to my books</Link>
+    </main>;
+  }
   if (bucket === "in-flight" || bucket === "paused") {
     return <LoadingSkeleton />;
   }

@@ -46,13 +46,21 @@ describe("RunPage states", () => {
 
   it.each([
     [404, "not_found", "Run not found"],
-    [403, "not_approved", "Not approved yet"],
     [403, "researchers_only", "Researchers only"],
   ])("%i %s shows %s with a way back", async (status, detail, heading) => {
     mockFetch.mockResolvedValue(new Response(JSON.stringify({ detail }), { status }));
     await renderPage();
     expect(screen.getByRole("heading", { level: 1, name: heading })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "All runs" })).toBeInTheDocument();
+  });
+
+  it.each(["failed", "complete", "running"])("an unapproved %s run shows retained content", async (status) => {
+    mockFetch.mockResolvedValue(new Response(JSON.stringify({ ...RUN, job: { ...RUN.job, status, approved: false } })));
+    await renderPage();
+    expect(screen.getByRole("heading", { level: 1, name: "The Red Kite" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Story" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "All runs" })).toBeInTheDocument();
+    expect(screen.queryByText("Not approved yet")).toBeNull();
   });
 
   it("a run with no checkpoint shows the row and says so", async () => {

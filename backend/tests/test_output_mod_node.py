@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -14,6 +15,48 @@ from contracts.story_memory import (
     StoryMemory,
 )
 from pipeline.prompt_optimizer import build_prompt
+
+
+def test_reason_privacy_failure_does_not_discard_a_primary_verdict():
+    from contracts.story_memory import ModerationContext
+    from pipeline.output_mod import output_mod
+    from providers import ModerationEvidenceError
+
+    state = _state([_scene()])
+    state.moderation_context = ModerationContext(mode="teacher_review_v1")
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"), \
+         patch("pipeline.output_mod.classify_image_primary", side_effect=ModerationEvidenceError("unavailable")), \
+         patch("pipeline.output_mod.classify_image_backstop", return_value=True), \
+         pytest.raises(RuntimeError, match="moderation_error"):
+        output_mod(state)
+
+
+@pytest.mark.parametrize("recorded_reason", ["Synthetic review explanation", None])
+def test_teacher_hold_retains_call_evidence_after_settings_change(monkeypatch, recorded_reason):
+    from app.config import settings
+    from contracts.story_memory import ModerationContext
+    from pipeline.output_mod import output_mod
+
+    state = _state([_scene()])
+    state.story_id = "00000000-0000-0000-0000-000000000007"
+    state.moderation_context = ModerationContext(mode="teacher_review_v1", policy_version="teacher_review_policy_v1")
+    monkeypatch.setattr(settings, "moderation_backstop_image_model", "captured-model")
+
+    def flag(url, *, reasons):
+        if recorded_reason:
+            reasons.append(recorded_reason)
+        monkeypatch.setattr(settings, "moderation_backstop_image_model", "later-model")
+        return False
+
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"), \
+         patch("pipeline.output_mod.classify_image_primary", return_value=True), \
+         patch("pipeline.output_mod.classify_image_backstop", side_effect=flag), \
+         patch("pipeline.output_mod.download_book_image", return_value=b"synthetic"):
+        result = output_mod(state)
+    evidence = result["moderation_context"].review.classifier_evidence[-1]
+    assert evidence.reason == recorded_reason
+    assert evidence.model_id == "captured-model"
+    assert evidence.outcome == "flagged"
 
 
 def _state(scenes: list[Scene], characters: list[Character] | None = None) -> StoryMemory:
@@ -53,6 +96,29 @@ def test_all_scenes_pass_sets_moderation_status_passed():
 
 
 # --- first check fails, retry passes ---
+
+def test_teacher_review_first_flag_preserves_exact_scene_without_redrawing():
+    from contracts.story_memory import ModerationContext
+    from pipeline.output_mod import output_mod
+
+    state = _state([_scene("s0")])
+    state.story_id = "1f7a7b8e-634f-44d1-953b-4d583ba0d13a"
+    state.moderation_context = ModerationContext(
+        mode="teacher_review_v1", policy_version="teacher_review_policy_v1"
+    )
+    with patch("pipeline.output_mod.get_signed_url", return_value="https://signed/s0.png"), \
+         patch("pipeline.output_mod.classify_image_primary", side_effect=[False, True]), \
+         patch("pipeline.output_mod.classify_image_backstop", return_value=True), \
+         patch("pipeline.output_mod.download_book_image", return_value=Path("tests/fixtures/qwen35-resize-scene.png").read_bytes()), \
+         patch("pipeline.output_mod.generate_and_store", return_value=("retry.png", True)) as generate:
+        result = output_mod(state)
+
+    generate.assert_not_called()
+    assert result["moderation_context"].review.kind == "scene_image"
+    assert result["moderation_context"].review.subject_id == "s0"
+    assert result["moderation_context"].review.subject_version == (
+        "0e1cdbf033e2b06bb23842359a9ae55e74529a78fcdbf18a7b167e73961110ef"
+    )
 
 def test_first_check_fails_soften_retry_triggers_and_passes():
     """Spec §4c step 4: fail → soften-and-retry triggered; retry passes → moderation_status = 'passed'."""
@@ -286,7 +352,8 @@ def test_primary_flag_short_circuits_the_backstop_call():
     mock_backstop.assert_not_called()
 
 
-def test_backstop_error_still_raises_moderation_error():
+@pytest.mark.parametrize("mode", ["baseline", "teacher_review_v1"])
+def test_backstop_error_still_raises_moderation_error(mode):
     """Unchanged by the posture alignment: the backstop is the layer with nothing behind it, so an
     error there means the image is genuinely unchecked and there is no proceed-without-a-check
     path. Only a PRIMARY error degrades."""
@@ -294,8 +361,11 @@ def test_backstop_error_still_raises_moderation_error():
          patch("pipeline.output_mod.classify_image_primary", return_value=True), \
          patch("pipeline.output_mod.classify_image_backstop", side_effect=Exception("OpenRouter 503")):
         from pipeline.output_mod import output_mod
+        from contracts.story_memory import ModerationContext
+        state = _state([_scene("s0")])
+        state.moderation_context = ModerationContext(mode=mode)
         with pytest.raises(RuntimeError, match="moderation_error"):
-            output_mod(_state([_scene("s0")]))
+            output_mod(state)
 
 
 # --- which classifier flagged (CC-5) ---

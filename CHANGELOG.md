@@ -14,6 +14,168 @@ instead of repeating it.
 
 ---
 
+## Ticket 09 · 2026-10-28 · Replace a held scene picture within budget
+
+### Code
+
+- Extend the durable teacher decision/resume flow with one same-intent replacement using the
+  existing moderation redraw slot. Judge and moderate the fresh image, retain its actual quality
+  result, and hold that exact candidate on another flag. No extra consistency redraw or budget.
+- Reuse teacher inspection/decision controls for replacement and same-request delivery recovery.
+  Explain exhausted budget/slot while preserving inspection, leave, allow and stop.
+
+### Docs
+
+- Record the accepted synthetic-only, feature-off implementation and limits in moderation-stack
+  §9.15 and moderation-calibration ticket 09.
+
+### Checks
+
+- Backend lint and the 101 affected tests pass. Review fixes pass 42 targeted tests. Final full
+  backend: 1,555 passed, 89 skipped, six smoke deselections and the six existing native PDF failures.
+- Frontend lint, build/typecheck and all 78 source test files (744 tests) pass. Root discovery
+  stalled; the documented serial source command completed with no source tests excluded.
+- Standards and Spec re-reviews have no unresolved findings. Browser/phone, hosted delivery,
+  paid providers and real-child release remain unrun. Intake remains disabled by default.
+
+## Ticket 08 · 2026-10-28 · Stop a held story and retain writing
+
+### Code
+
+- Add confirmed, idempotent teacher/active-author stop through the existing held-job transaction.
+  Stop advances the epoch without dispatch, preserves writing/spend and cannot reopen a run.
+- Add shared stop confirmation, neutral child stopped routes and a Writing saved bookshelf entry.
+  Recover processed writing through the existing form with draft-replacement confirmation,
+  author revalidation, reload-safe sign-out/access-loss cleanup and copy recovery.
+
+### Docs
+
+- Record the accepted synthetic-only, feature-off implementation and verification limits in
+  moderation-stack §9.14 and moderation-calibration ticket 08.
+
+### Checks
+
+- Backend lint and 74 targeted API/real-graph/Postgres checks pass, including concurrent stop/allow.
+  Full backend: 1,551 passed, 89 skipped, six deselected and six existing native WeasyPrint/PDF failures.
+- Frontend lint, production build/typecheck and 113 targeted UI/cleanup checks pass.
+  The complete serial source suite passes all 78 files and 742 tests after two-worker runs
+  failed to finish. The unrestricted run's withdrawal-replay failure passes in the complete run.
+- Standards and Spec re-reviews have zero unresolved findings. Browser/phone, hosted delivery,
+  paid providers and real-child release remain unrun. Intake stays off by default.
+
+## Ticket 13 · 2026-10-28 · Teacher criteria and held-story evidence
+
+### Code
+
+- Add the accepted provisional policy data source and teacher-only, no-store criteria read.
+- Show shared safety, optional themes and captured hold evidence in Books, with accessible
+  criteria disclosure, retry/close controls and honest unavailable states.
+- Retain privacy-processed image-classifier reasoning without changing classifier prompts.
+  Capture model identity at call time and fail safely if evidence redaction fails.
+
+### Docs
+
+- Record the synthetic-only, feature-off implementation and verification limits in
+  moderation-stack §9.12 and moderation-calibration ticket 13.
+
+### Checks
+
+- Backend lint and 139 targeted graph/node/provider checks pass. Full backend has 1,545 passes,
+  89 skips, six deselections and the six existing native WeasyPrint/PDF failures.
+- Frontend lint, production build/typecheck and all 30 Books tests pass. The complete source
+  suite passes all 77 files and 735 tests with the threads pool after fork runs stalled.
+  Browser/phone verification remains unavailable. Independent review agents hit a usage limit;
+  local Standards/Spec review completed. See the spec for verification limits.
+
+## Ticket 06 · 2026-10-28 · Teacher inspection of held stories
+
+### Code
+
+- Add Books **Needs your help** with an owner-only oldest-first held-story queue and a separate
+  inspection dialog. Keep editorial approval behavior and its default tab.
+- Show processed writing and available picture context. Keep the exact held picture behind an
+  explicit reveal. Serve authenticated, noncached bytes with ownership/current-review rechecks
+  and held-content hash verification. Inspection never changes the hold or generates pictures.
+- Include read retries, missing/undrawn pictures, current-state refresh and Escape/focus recovery.
+
+### Docs
+
+- Record ticket 06 implementation and verification limits in moderation-stack §9.11. Feature
+  enablement, hosted verification and real-child release gates remain outstanding.
+
+### Checks
+
+- Backend lint and synthetic hold integration tests pass. Full backend: 1,542 passed, 89 skipped,
+  six deselected and the six previously recorded PDF native-library failures.
+- Frontend lint, production build/typecheck and Books tests pass. All 77 source test files pass
+  (734 tests) with explicit source-directory filters after unrestricted discovery stalled.
+  Browser verification is unrun because no browser is available. See moderation-stack §9.11.
+
+## Ticket 05 · 2026-10-28 · Durable scene moderation holds
+
+### Code
+
+- Implement accepted ADR-080's scene-image slice behind default-off
+  `ENABLE_TEACHER_MODERATION_REVIEW`. Capture policy/settings and process private text at intake.
+- Persist exact flagged subjects in a private review table and retained graph checkpoint.
+  Transactionally publish `awaiting_teacher` before further drawing, with epoch fencing,
+  serialized workers, quiescence markers and checkpoint-only crash/projection recovery.
+- Deny browser Storage access to feature images. Deliver selected cleared assets through guarded,
+  authorized, noncached byte routes. Keep feature evidence out of public tracing.
+- Add neutral child waiting, bookshelf leave/return and explicit saved-step recovery. Preserve
+  baseline soften-and-retry. Teacher inspection/decisions remain tickets 06–09.
+- Apply migration `0022_teacher_moderation_hold.sql` before deploying this code. The feature
+  remains disabled, with hosted and real-child release gates outstanding.
+
+### Docs
+
+- Record the accepted ADR-080/design handoff, ticket 05 implementation and verification limits in
+  moderation-stack §9.10. Ticket 05 is merged and 06/14 are ready for implementation.
+
+### Checks
+
+- Backend `uv run ruff check .` passed. `TEST_MODERATION_DB_URL=<disposable-local-db> uv run pytest`:
+  1,542 passed, 89 skipped, six deselected and six existing PDF native-library failures. The same
+  six failures reproduce in the base checkout's PDF suite (21 passed).
+- Frontend `pnpm lint`, `pnpm build` and `pnpm exec vitest run --maxWorkers=2` passed:
+  731 passed, one skipped across 77 files.
+- Local PostgreSQL integration proves authenticated fresh intake → real graph → guarded reference
+  read → child confirm → first-scene hold, projection rollback, hard-death recovery, duplicate
+  delivery and browser-role denial. The maximum graph path reaches hold after 30 scene attempts.
+  New recovery, graph-bound and provider-quiescence regressions failed before their fixes.
+- Broader existing RLS suites: 48 passed and the same 16 failed on this branch and the unchanged
+  base against the synthetic SQL stack. Hosted Storage/PostgREST/Realtime verification and
+  phone-width visual browser QA were not run. No browser is available in this session.
+- Standards and specification reviews found no remaining concrete blocker after fixes.
+
+## Working tree update · 2026-10-26 · Research run access and moderation probe
+
+### Code
+
+- Implement moderation-calibration ticket 03 and accepted ADR-079: every signed-in researcher
+  can inspect failed, unapproved, in-progress and approved runs. Show their titles, run links
+  and flag-enabled Langfuse controls. Remove the approval-only forbidden state.
+- Preserve backend role enforcement, private-field projection and signed-image lifetimes.
+- Fix ticket 04's Phase 0.5 text probe to read the current primary and backstop settings,
+  and clarify that its direct classifier call is not production-path evidence.
+
+### Docs
+
+- Mark the research-run-browser access amendment built and correct the obsolete probe-setting note.
+
+### Checks
+
+- Backend `uv run ruff check .` passed. `uv run pytest`: 1,531 passed, 89 skipped,
+  6 deselected, 6 PDF-export failures. WeasyPrint cannot load the local native library
+  `libgobject-2.0-0`; the PDF file reproduces all six failures independently.
+- Backend access regressions failed first (403 instead of 200); all 28 research route/projection
+  tests now pass. Frontend access/loader regressions failed first; targeted checks pass
+  (36 tests across four files).
+- Frontend `pnpm lint`, `pnpm build` and `pnpm test` passed: 728 tests across 77 files.
+- The zero-cost Phase 0.5 import/settings check passed. No obsolete `moderation_model` field
+  reference remains in backend code. The paid probe was not run.
+- Signed-in desktop/phone browser verification and database-backed RLS checks were not run.
+
 ## PR #129 · 2026-10-23 · Student login and classroom UI
 
 ### Code

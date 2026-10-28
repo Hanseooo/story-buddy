@@ -1,6 +1,12 @@
 # Feature Spec — Story titles end to end
 
 **Status:** implemented 2026-09-10; backend slice and frontend surfaces are built and verified.
+The feature-off behavior below remains the baseline. ADR-080 amends ADR-059 for captured
+`teacher_review_v1` submissions: privacy processing and title-redaction confirmation precede
+persistence; a classifier flag creates a private title review and a neutral-title
+`awaiting_teacher` job without dispatch. Owner allow restores the exact processed title and
+starts story moderation once. Stop keeps the processed writing. Service errors create no hold.
+See [moderation-stack §9.18](moderation-stack.md#918-title-hold-implementation-ticket-12).
 **Owner:** story submission, job metadata, and existing child/teacher book surfaces.
 **Derived from:** [MASTER_SPEC](../MASTER_SPEC.md) §5, [DESIGN](../../DESIGN.md),
 [book persistence](kid-flow-book-persistence.md), [classroom sharing](classroom-sharing.md).

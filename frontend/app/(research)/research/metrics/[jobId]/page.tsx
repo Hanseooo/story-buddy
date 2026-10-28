@@ -15,10 +15,6 @@ import SummaryStrip from "./SummaryStrip";
 
 const MESSAGES = {
   not_found: { title: "Run not found", body: "There is no run with this id. It may have been typed or copied wrong." },
-  not_approved: {
-    title: "Not approved yet",
-    body: "Researchers can open a run once a teacher approves its book. Failed and unapproved runs are open to the adjudicator only.",
-  },
   researchers_only: { title: "Researchers only", body: "Run pages are for researcher accounts." },
 } as const;
 
@@ -46,7 +42,7 @@ export default async function RunPage({ params }: { params: Promise<{ jobId: str
   // /login would bounce them to /classroom, so error.tsx offers Retry and the way back instead.
   if (result.kind === "signed_out") throw new Error("Unauthorized");
   if (result.kind === "not_found") return <RunMessage which="not_found" />;
-  if (result.kind === "forbidden") return <RunMessage which={result.reason} />;
+  if (result.kind === "forbidden") return <RunMessage which="researchers_only" />;
 
   const { run } = result;
   const { job } = run;

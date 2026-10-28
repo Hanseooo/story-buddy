@@ -3,6 +3,7 @@ import logging
 from app.config import check_image_budget, settings
 from app.db import get_supabase_client
 from contracts.story_memory import Attempt, StoryMemory
+from pipeline.char_ref_mod import require_reference_clearance
 from pipeline.prompt_optimizer import SCENE_PROMPT_VERSION, build_prompt, referenced_characters
 from providers import edit_image, get_signed_url, text_to_image
 
@@ -55,6 +56,7 @@ def generate_and_store(
 
 
 def generate_scene(state: StoryMemory) -> dict:
+    require_reference_clearance(state)
     # ADR-024: loop position is the first scene with no final_image_ref — no cursor field.
     scene = next((s for s in state.scenes if s.final_image_ref is None), None)
     if scene is None:

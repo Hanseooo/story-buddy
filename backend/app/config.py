@@ -86,6 +86,9 @@ class Settings(BaseSettings):
     # strata (`freeze_dataset.py`), and the judge has never been trained or tested on pixel art.
     enable_pixel_style: bool = False
 
+    # ADR-080: synthetic-only until educator/ethics and hosted release gates are met.
+    enable_teacher_moderation_review: bool = False
+
     # ADR-037: consistency-checked attempts per scene — the initial draw plus two corrected
     # retries. Production is 3 and the specs are written against 3; this is a field rather than a
     # constant so `finetune/build_corpus.py` can lower it for a research build, where the
@@ -179,6 +182,7 @@ SELECTABLE_STYLE_PRESET_IDS: frozenset[str] = frozenset({"cel", "gouache", "cut_
 # Spec `docs/specs/image-generator.md` §4: ADR-025 D4 domain-level breaker.
 # IMAGE_BUDGET derives from MAX_SCENES so both share one source of truth.
 MAX_SCENES = 10
+MAX_SCENE_MOD_REPLACEMENTS = 1  # ADR-080: the existing output-moderation redraw slot
 # Issue #31. MAX_SCENES was a ceiling with no floor, so `segment` shipped a page whose entire
 # excerpt was `"Ana decided to help."` and another that was the story's title line. `build_prompt`
 # passes the excerpt through verbatim (invariant 2, correct), so the image model filled the vacuum.
@@ -236,3 +240,12 @@ def check_image_budget(image_count: int) -> None:
 # other moved.
 SUPER_STEP_PRELUDE = 17
 RECURSION_LIMIT = MAX_SCENES * 7 + SUPER_STEP_PRELUDE
+# Each scene may add two review pauses, two decision resumes, replacement,
+# fresh check, fresh moderation and allowed continuation to its seven-step loop.
+# References add at most six holds: two initial references, three child taps,
+# and the one per-book replacement. Reserve four steps each for review pause,
+# decision, reference recheck and the repeated reveal pause. The existing prelude
+# still covers mint/retry edges. This is a step bound, never an image allowance.
+# One optional-text detector step, its review pause and decision continuation add
+# three steps to the earlier text-hold allowance. Baseline bounds are unchanged.
+TEACHER_REVIEW_RECURSION_LIMIT = MAX_SCENES * (7 + 8) + SUPER_STEP_PRELUDE + (2 + 3 + 1) * 4 + 4

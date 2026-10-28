@@ -1,0 +1,66 @@
+{
+  "status": "awaiting_teacher",
+  "review_id": "5fa75156-92d5-55df-9a6e-1de331cd3134",
+  "subject_id": "c0",
+  "subject_version": "0e1cdbf033e2b06bb23842359a9ae55e74529a78fcdbf18a7b167e73961110ef",
+  "generation_epoch": 1,
+  "title": "Synthetic title",
+  "author": "Synthetic child",
+  "story_text": "The dog walks across the field.",
+  "kind": "character_reference",
+  "criteria": [
+    "sexual_content",
+    "exposure",
+    "graphic_harm",
+    "harm_instruction",
+    "targeted_abuse",
+    "discriminatory_slur",
+    "exploitation",
+    "substances",
+    "adult_detail",
+    "privacy"
+  ],
+  "policy_version": "teacher_review_policy_v1",
+  "current_policy_version": "teacher_review_policy_v1",
+  "settings_snapshot": {
+    "theme_ids": [],
+    "settings_version": 0
+  },
+  "classifier_evidence": [
+    {
+      "layer": "primary",
+      "reason": null,
+      "outcome": "flagged",
+      "model_id": "mistralai/mistral-small-3.2-24b-instruct",
+      "categories": [],
+      "checked_at": "2026-10-28T10:01:40.500198Z",
+      "instruction_version": "sha256:519f1f08eba0b868589c168057db510306f11c518134aa0c37da7cc4a37436a7"
+    },
+    {
+      "layer": "backstop",
+      "reason": null,
+      "outcome": "not_called",
+      "model_id": "google/gemma-3-27b-it",
+      "categories": [],
+      "checked_at": null,
+      "instruction_version": "sha256:4ef1767515e901e4849c82df12e648eb0b2c02a66a3037a1b8e473e072dd4d4a"
+    }
+  ],
+  "ready": true,
+  "replacement_available": true,
+  "replacement_disabled_reason": null,
+  "dispatch_state": null,
+  "withdraws_review_id": null,
+  "pictures": [
+    {
+      "asset_id": "ref-c0",
+      "label": "Reference: Dog",
+      "state": "held"
+    },
+    {
+      "asset_id": "scene-s0",
+      "label": "The dog walks.",
+      "state": "not_generated"
+    }
+  ]
+}

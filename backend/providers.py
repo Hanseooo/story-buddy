@@ -13,7 +13,7 @@ import re
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
-from contextvars import ContextVar
+from contextvars import ContextVar, copy_context
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Callable, Generic, Literal, TypeVar
@@ -31,6 +31,13 @@ _log = logging.getLogger(__name__)
 _fal_event_sink: ContextVar[Callable[[str], None] | None] = ContextVar(
     "fal_event_sink", default=None
 )
+_generation_fence: ContextVar[Callable[[], None] | None] = ContextVar("generation_fence", default=None)
+
+
+def check_generation_fence() -> None:
+    fence = _generation_fence.get()
+    if fence is not None:
+        fence()
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
@@ -154,11 +161,14 @@ def _bounded(model: str, call):
     something httpx will not. Move to an async client if stalls ever become frequent enough for the
     leak to matter; at one stall per book it does not.
     """
+    check_generation_fence()
     pool = ThreadPoolExecutor(max_workers=1)
     try:
         # NOT `with ThreadPoolExecutor(...)`: its `__exit__` calls `shutdown(wait=True)`, which
         # joins the very thread this is abandoning and re-hangs the worker on the way out.
-        return pool.submit(call).result(timeout=CALL_TIMEOUT_SECONDS)
+        result = pool.submit(copy_context().run, call).result(timeout=CALL_TIMEOUT_SECONDS)
+        check_generation_fence()
+        return result
     except TimeoutError as exc:
         # `Future.result` raises a bare, messageless TimeoutError, and `run_job`'s handler writes
         # `str(exc)` into the row's `error` — the only account of the failure anyone gets later.
@@ -166,7 +176,10 @@ def _bounded(model: str, call):
             f"{model} did not answer within {CALL_TIMEOUT_SECONDS:.0f}s (call abandoned)"
         ) from exc
     finally:
-        pool.shutdown(wait=False)
+        # A feature worker's finish marker promises no provider work remains. It
+        # cannot abandon an SDK thread and then claim that promise. The RQ hard
+        # deadline still kills/reaps a permanently stuck horse before marking it.
+        pool.shutdown(wait=_generation_fence.get() is not None)
 
 
 def structured_text(prompt: str, schema: type[T], model: str | None = None) -> T:
@@ -525,6 +538,7 @@ def _run_fal(endpoint: str, arguments: dict, seed: int | None) -> bytes:
         arguments = {**arguments, "seed": seed}
     sink = _fal_event_sink.get()
     for attempt in range(1, CONTENT_FLAG_ATTEMPTS + 1):
+        check_generation_fence()
         if sink:
             sink("attempted")
         try:
@@ -544,7 +558,7 @@ def _run_fal(endpoint: str, arguments: dict, seed: int | None) -> bytes:
                 raise
             if sink:
                 sink("failed")
-            if attempt == CONTENT_FLAG_ATTEMPTS:
+            if attempt == CONTENT_FLAG_ATTEMPTS or _generation_fence.get() is not None:
                 raise
             _log.warning(
                 "fal's content checker rejected the draw; asking again (%d/%d)",
@@ -554,6 +568,7 @@ def _run_fal(endpoint: str, arguments: dict, seed: int | None) -> bytes:
             continue
         if sink:
             sink("completed")
+        check_generation_fence()
         return contents
     raise AssertionError("unreachable")
 
@@ -832,13 +847,29 @@ def redact_pii(text: str) -> str:
     ).text
 
 
-def check_text(text: str) -> tuple[bool, list[str], str]:
+def check_text(text: str, *, evidence: list | None = None) -> tuple[bool, list[str], str]:
     """Primary-then-backstop moderation plus PII redaction, on any text.
 
     This is the sequential, short-text variant of the input gate used for synchronous
     submission checks. It returns the redacted text on every path so callers can explain
     privacy replacements before persistence.
     """
+    from datetime import datetime, timezone
+    from contracts.story_memory import ClassifierEvidence
+
+    primary_time = datetime.now(timezone.utc)
+    primary_model, backstop_model = settings.moderation_primary_model, settings.moderation_backstop_model
+
+    def record(layer, safe, categories, checked_at):
+        if evidence is not None:
+            categories = [redact_pii(category) for category in categories]
+            evidence.append(ClassifierEvidence(
+                layer=layer, model_id=primary_model if layer == "primary" else backstop_model,
+                instruction_version=f"text_{layer}_v1", checked_at=checked_at,
+                outcome="error" if safe is None else "safe" if safe else "flagged", categories=categories,
+            ))
+        return categories
+
     try:
         primary_safe, categories = classify_text_primary(text)
     except Exception as exc:
@@ -850,22 +881,29 @@ def check_text(text: str) -> tuple[bool, list[str], str]:
         categories = []
 
     redacted = redact_pii(text)
+    categories = record("primary", primary_safe, categories, primary_time)
 
     if primary_safe is False:
-        _log.info("check_text: primary flagged (categories=%s)", categories)
+        if evidence is not None:
+            evidence.append(ClassifierEvidence(layer="backstop", model_id=backstop_model,
+                instruction_version="text_backstop_v1", outcome="not_called"))
+        _log.info("check_text: primary flagged")
         return False, categories, redacted
 
     try:
+        backstop_time = datetime.now(timezone.utc)
         backstop_safe, backstop_categories = classify_text_backstop(text)
     except Exception as exc:
         _log.error(
             "check_text: backstop error — hard fail per ADR-025 (%s)",
             type(exc).__name__,
         )
+        record("backstop", None, [], backstop_time)
         return False, ["moderation_error"], redacted
 
+    backstop_categories = record("backstop", backstop_safe, backstop_categories, backstop_time)
     if not backstop_safe:
-        _log.info("check_text: backstop flagged (categories=%s)", backstop_categories)
+        _log.info("check_text: backstop flagged")
         return False, backstop_categories, redacted
 
     return True, [], redacted
@@ -924,16 +962,30 @@ def classify_text_backstop(text: str) -> tuple[bool, list[str]]:
 
 # ADR-032: Local Falconsai ViT removed to prevent OOM.
 
-def classify_image_primary(image_url: str) -> bool:
-    """Primary NSFW image guard via API (ADR-032). Returns True if safe."""
-    prompt = (
+IMAGE_PRIMARY_PROMPT = (
         "You are a content safety classifier for a children's education platform. "
         "Analyze the provided image and determine if it contains any NSFW (Not Safe For Work) content, "
         "such as nudity, sexual content, or explicit material. "
         "Explain your reasoning, then classify it."
     )
+IMAGE_PRIMARY_INSTRUCTION_VERSION = "sha256:" + hashlib.sha256(IMAGE_PRIMARY_PROMPT.encode("utf-8")).hexdigest()
+
+
+class ModerationEvidenceError(RuntimeError):
+    """A successful verdict must not be discarded as a classifier outage."""
+
+
+def classify_image_primary(image_url: str, *, reasons: list[str] | None = None) -> bool:
+    """Primary NSFW image guard via API (ADR-032). Returns True if safe."""
+    prompt = IMAGE_PRIMARY_PROMPT
     verdict = judge(prompt, [image_url], _ImageSafetyVerdict, model=settings.moderation_primary_image_model)
-    _log.info("classify_image_primary: is_safe=%s reasoning=%.300s", verdict.is_safe, verdict.safety_reasoning)
+    try:
+        reason = redact_pii(verdict.safety_reasoning) if reasons is not None else verdict.safety_reasoning
+    except Exception:
+        raise ModerationEvidenceError("moderation_evidence_unavailable") from None
+    if reasons is not None:
+        reasons.append(reason)
+    _log.info("classify_image_primary: is_safe=%s reasoning=%.300s", verdict.is_safe, reason)
     return verdict.is_safe
 
 
@@ -943,7 +995,19 @@ class _ImageSafetyVerdict(BaseModel):
     is_safe: bool
 
 
-def classify_image_backstop(image_url: str) -> bool:
+IMAGE_BACKSTOP_PROMPT = (
+        "You are reviewing an image for a children's educational storybook platform (ages 5–12). "
+        "Assess whether the image is safe for children. "
+        "Flag: violence, gore, sexual content, dangerous activities a child might imitate, and "
+        "imagery likely to genuinely distress a young child. "
+        "Do NOT flag ordinary storybook atmosphere: a spooky house, a dark forest, a worried or "
+        "startled character, mild suspense. Children's stories are built out of these, and the "
+        "story text this image illustrates has already passed a separate safety gate."
+    )
+IMAGE_BACKSTOP_INSTRUCTION_VERSION = "sha256:" + hashlib.sha256(IMAGE_BACKSTOP_PROMPT.encode("utf-8")).hexdigest()
+
+
+def classify_image_backstop(image_url: str, *, reasons: list[str] | None = None) -> bool:
     """gemma-3-27b-it via OpenRouter — violence, gore, dangerous content check."""
     # "frightening imagery" flagged the genre. Prod job 4f7698d5 (2026-08-12) lost an 8-scene book
     # at the last gate on s2 — a girl walking up to the "big, scary house" that IS the story, whose
@@ -958,20 +1022,13 @@ def classify_image_backstop(image_url: str) -> bool:
     # this, but that set is a Post-Phase-2 item and does not exist yet, and the one probe that does
     # (`spikes/phase_05.py moderation`) is TEXT-only — it cannot exercise an image rubric at all.
     # So this loosening rests on reasoning, not measurement. Build the image arm before Phase 2.
-    prompt = (
-        "You are reviewing an image for a children's educational storybook platform (ages 5–12). "
-        "Assess whether the image is safe for children. "
-        "Flag: violence, gore, sexual content, dangerous activities a child might imitate, and "
-        "imagery likely to genuinely distress a young child. "
-        "Do NOT flag ordinary storybook atmosphere: a spooky house, a dark forest, a worried or "
-        "startled character, mild suspense. Children's stories are built out of these, and the "
-        "story text this image illustrates has already passed a separate safety gate."
-    )
+    prompt = IMAGE_BACKSTOP_PROMPT
     verdict = judge(prompt, [image_url], _ImageSafetyVerdict, model=settings.moderation_backstop_image_model)
-    # ADR-004 makes the model reason before it scores; both callers then discarded the reasoning and
-    # kept the bool, so a flag that killed a book left no account of what the classifier saw. Logged
-    # here rather than returned: `char_ref_mod` and `output_mod` both call these, and widening the
-    # return type would rewrite two nodes and three test files to carry a string neither branches on.
-    # ponytail: truncated, not structured — a `ModerationResult` field if it ever needs querying.
-    _log.info("classify_image_backstop: is_safe=%s reasoning=%.300s", verdict.is_safe, verdict.safety_reasoning)
+    try:
+        reason = redact_pii(verdict.safety_reasoning) if reasons is not None else verdict.safety_reasoning
+    except Exception:
+        raise ModerationEvidenceError("moderation_evidence_unavailable") from None
+    if reasons is not None:
+        reasons.append(reason)
+    _log.info("classify_image_backstop: is_safe=%s reasoning=%.300s", verdict.is_safe, reason)
     return verdict.is_safe

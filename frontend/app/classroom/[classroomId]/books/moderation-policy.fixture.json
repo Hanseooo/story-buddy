@@ -1,0 +1,103 @@
+{
+  "policy_version": "teacher_review_policy_v1",
+  "audience": "Grade 5-6 / ages 10-12; English, Filipino and Taglish",
+  "basis": "Owner-accepted project policy pending educator/ethics review before real-child use.",
+  "scope": "Assess meaning and visible evidence in context, not keywords, genre, species or language alone. Assess threatening or encouraging visual framing independently of a cautionary caption.",
+  "guidance": "An automated label is evidence, not a category veto. Allow means the exact subject does not cross the prohibited boundary. For a broad or unknown label, review the full checklist. Privacy failures, service errors, missing pictures and provider refusals cannot be cleared. If uncertain, leave the story held. Replacement and stop are separate decisions.",
+  "theme_scope": "Optional classroom themes default off and apply only to submitted story text. They are separate from shared safety and are not detected again per picture.",
+  "criteria": [
+    {
+      "id": "sexual_content",
+      "name": "Sexual content",
+      "trigger": "Sexual acts, erotic detail, sexualized pose/focus, sexual coercion or exploitation, including fictional/animal characters",
+      "exception": "Ordinary affection and age-appropriate non-erotic factual body discussion; never an exemption for prohibited exposure",
+      "origin": "shared_safety"
+    },
+    {
+      "id": "exposure",
+      "name": "Exposure",
+      "trigger": "Visible genitals, clearly exposed buttocks or bare breasts in generated images",
+      "exception": "Ordinary swimwear, covered caregiving and changing behind a screen, with no sexualization",
+      "origin": "shared_safety"
+    },
+    {
+      "id": "graphic_harm",
+      "name": "Graphic harm",
+      "trigger": "Gore, visible organs, dismemberment, graphic wounds or prolonged graphic suffering, including animals",
+      "exception": "Non-graphic conflict/injury, danger, loss and rescue without graphic detail",
+      "origin": "shared_safety"
+    },
+    {
+      "id": "harm_instruction",
+      "name": "Harm instruction",
+      "trigger": "Actionable steps, encouragement or celebratory framing inviting imitation of violence, self-harm, dangerous challenges, weapon-making or abuse",
+      "exception": "Non-actionable, non-graphic narrative depiction, prevention, seeking help and recovery",
+      "origin": "shared_safety"
+    },
+    {
+      "id": "targeted_abuse",
+      "name": "Targeted abuse",
+      "trigger": "Encouraged bullying, credible threats, dehumanization or violence toward a person/group, including discriminatory attacks",
+      "exception": "Clearly critical non-graphic depiction, standing up to bullying, reconciliation and indirect narration of prejudice",
+      "origin": "shared_safety"
+    },
+    {
+      "id": "discriminatory_slur",
+      "name": "Discriminatory slur",
+      "trigger": "Explicit discriminatory slurs in material cleared for generation/display, including critical quotation",
+      "exception": "Indirect narration without reproducing the slur; revised wording is a new child submission",
+      "origin": "shared_safety"
+    },
+    {
+      "id": "exploitation",
+      "name": "Exploitation",
+      "trigger": "Encouraging grooming, coercion, sexual exploitation, trafficking or abuse of a child/person/animal; instructions facilitating it",
+      "exception": "Non-graphic prevention/help-seeking or a critical reference without exploitative detail",
+      "origin": "shared_safety"
+    },
+    {
+      "id": "substances",
+      "name": "Substances",
+      "trigger": "Instructions encouraging a child to obtain, prepare, misuse or conceal intoxicants, drugs or poisons",
+      "exception": "Non-graphic critical depiction, refusal, prevention or recovery without instructions/encouragement",
+      "origin": "shared_safety"
+    },
+    {
+      "id": "adult_detail",
+      "name": "Adult detail",
+      "trigger": "Explicit non-discriminatory sexual/abusive language or non-educational adult sexual detail intended for child presentation",
+      "exception": "Ordinary disagreement, mild exclamations, factual non-erotic discussion and emotional expression",
+      "origin": "shared_safety"
+    },
+    {
+      "id": "privacy",
+      "name": "Privacy",
+      "trigger": "Structured personal identifiers not successfully redacted, contact solicitation or exposing someone's private information",
+      "exception": "Successfully privacy-processed fictional narrative; cannot override a failed privacy process",
+      "origin": "shared_safety"
+    }
+  ],
+  "optional_themes": [
+    {
+      "id": "spooky_suspense",
+      "name": "Mild suspense/spooky settings",
+      "trigger": "Narrative fear, threatening suspense, frightening supernatural encounters or deliberately spooky settings",
+      "exception": "Friendly magic/creatures or darkness with no fear/threat/suspense",
+      "origin": "optional_theme"
+    },
+    {
+      "id": "story_conflict",
+      "name": "Non-graphic fighting, arguments or bullying",
+      "trigger": "Physical fighting, hostile arguments or bullying between story characters, without requiring graphic harm",
+      "exception": "Friendly competition, respectful disagreement or merely describing a past resolved disagreement",
+      "origin": "optional_theme"
+    },
+    {
+      "id": "loss_separation",
+      "name": "Sadness, loss or separation",
+      "trigger": "Narrative sadness about death/loss, grief, abandonment or separation from an important person/animal",
+      "exception": "Brief disappointment or a routine goodbye with no sadness/loss/separation theme",
+      "origin": "optional_theme"
+    }
+  ]
+}

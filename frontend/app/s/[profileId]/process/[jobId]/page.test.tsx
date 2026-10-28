@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 import ProcessingPage from "./page";
+// Captured from test_teacher_hold's synthetic real graph/Postgres stopped response.
+import stoppedState from "@/lib/stopped-state.fixture.json";
 
 const pushMock = vi.fn();
 const replaceMock = vi.fn();
@@ -31,6 +33,20 @@ vi.mock("@/lib/supabaseClient", () => ({
 }));
 
 const PROFILE_ID = "p1";
+
+it("shows stopped writing recovery without a paid retry and preserves context on storage failure", async () => {
+  mockUseJob.mockReturnValue(jobState({ bucket: "stopped", row: { id: "j1", status: "stopped", profile_id: PROFILE_ID } }));
+  global.fetch = vi.fn().mockResolvedValue(Response.json(stoppedState));
+  await renderPage(makeParams());
+  expect(await screen.findByRole("heading", { name: "This book has stopped. Your writing is saved." })).toBeDefined();
+  const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("storage unavailable"); });
+  fireEvent.click(await screen.findByRole("button", { name: "Use my writing" }));
+  expect(await screen.findByLabelText("Saved writing")).toHaveValue("The orange dog walks through the grassy field past the trees and stops near the stream. The dog looks across the water and sees a bird perched on the branch of a tree.");
+  expect(pushMock).not.toHaveBeenCalled();
+  expect(screen.getByRole("link", { name: "Back to my books" })).toHaveAttribute("href", "/s/p1");
+  expect(screen.queryByText("Make my book")).toBeNull();
+  setItem.mockRestore();
+});
 
 function makeParams(jobId = "j1") {
   const value = { profileId: PROFILE_ID, jobId };
@@ -97,10 +113,40 @@ const RUNNING_ROW = {
   failure_reason: null, input_text: "A story.", style_preset_id: null, pages: [], reveal: {},
 };
 
+it("held child can leave and reload the same neutral saved story without images or submission", async () => {
+  vi.mocked(global.fetch).mockResolvedValue({ok: true, json: async () => ({can_reconcile_hold: false})} as Response);
+  mockUseJob.mockReturnValue(jobState({bucket: "teacher-held", row: {
+    ...RUNNING_ROW, status: "awaiting_teacher", current_stage: "moderation_review",
+  }}));
+  const first = await renderPage(makeParams());
+  expect(screen.getByText("Your story is saved. Your teacher will help it continue.")).toBeInTheDocument();
+  expect(screen.getByRole("link", {name: "Back to my books"})).toHaveAttribute("href", "/s/p1");
+  expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  first.unmount();
+  await renderPage(makeParams());
+  expect(screen.getByText("Your story is saved. Your teacher will help it continue.")).toBeInTheDocument();
+  expect(vi.mocked(global.fetch).mock.calls.every(([url, options]) => String(url).endsWith("/state") && options?.method !== "POST")).toBe(true);
+});
+
 const FAILED_MACHINE_ROW = {
   id: "j1", status: "failed", current_stage: "generate_scene",
   failure_reason: "machine", input_text: "A story.", style_preset_id: null, pages: [], reveal: null,
 };
+
+it("held child can explicitly reconcile an unfinished saved step without restarting generation", async () => {
+  mockUseJob.mockReturnValue(jobState({bucket: "teacher-held", row: {
+    ...RUNNING_ROW, status: "awaiting_teacher", moderation_mode: "teacher_review_v1",
+  }}));
+  vi.mocked(global.fetch)
+    .mockResolvedValueOnce({ok: true, json: async () => ({can_reconcile_hold: true})} as Response)
+    .mockResolvedValueOnce({ok: true, status: 202} as Response);
+  await renderPage(makeParams());
+  fireEvent.click(await screen.findByRole("button", {name: "Try saving this step again"}));
+  await waitFor(() => expect(REFETCH).toHaveBeenCalledOnce());
+  expect(vi.mocked(global.fetch).mock.calls[1][0]).toContain("/jobs/j1/reconcile-hold");
+  expect(vi.mocked(global.fetch).mock.calls[1][1]?.method).toBe("POST");
+  expect(mockCreateSignedUrls).not.toHaveBeenCalled();
+});
 
 const FAILED_CHILD_ROW = { ...FAILED_MACHINE_ROW, failure_reason: "child_text" };
 

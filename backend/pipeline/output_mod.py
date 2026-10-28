@@ -1,10 +1,18 @@
+import hashlib
 import logging
+from datetime import datetime, timezone
+from uuid import UUID, uuid5
 
 from app.config import check_image_budget, settings
-from contracts.story_memory import Attempt, StoryMemory
+from app.moderation_policy import TEACHER_MODERATION_CRITERIA
+from contracts.story_memory import Attempt, ClassifierEvidence, ReviewContext, StoryMemory
 from pipeline.generate_scene import generate_and_store
 from pipeline.prompt_optimizer import referenced_characters
-from providers import classify_image_backstop, classify_image_primary, get_signed_url
+from providers import (
+    IMAGE_BACKSTOP_INSTRUCTION_VERSION, IMAGE_PRIMARY_INSTRUCTION_VERSION,
+    ModerationEvidenceError,
+    classify_image_backstop, classify_image_primary, download_book_image, get_signed_url,
+)
 
 log = logging.getLogger(__name__)
 
@@ -14,7 +22,7 @@ BACKSTOP_ALONE = "backstop (primary said safe)"
 OVERRIDE_STATUS = "passed_operator_override"
 
 
-def _check_image(image_url: str) -> str | None:
+def _check_image(image_url: str, evidence: list[ClassifierEvidence] | None = None) -> str | None:
     """`None` if the image is safe, else a log label naming the classifier that flagged it.
 
     Posture mirrors `char_ref_mod` (spec §4b, aligned with
@@ -31,17 +39,48 @@ def _check_image(image_url: str) -> str | None:
     Prod job f4d0fd74 died exactly there: scene s5, OpenRouter 400 from Venice
     ("Image content is not supported by this model"), five scenes already moderated clean.
     """
+    primary_time = datetime.now(timezone.utc)
+    primary_model = settings.moderation_primary_image_model
+    primary_reasons = []
     try:
-        primary_safe = classify_image_primary(image_url)
+        primary_safe = (classify_image_primary(image_url, reasons=primary_reasons)
+                        if evidence is not None else classify_image_primary(image_url))
+    except ModerationEvidenceError:
+        raise
     except Exception as exc:
         log.warning("output_mod: primary classifier failed (%s) — falling back to backstop", exc)
         primary_safe = None  # None = primary errored, not "passed"
 
+    if evidence is not None:
+        evidence.append(ClassifierEvidence(
+            layer="primary", model_id=primary_model,
+            instruction_version=IMAGE_PRIMARY_INSTRUCTION_VERSION,
+            outcome="error" if primary_safe is None else "safe" if primary_safe else "flagged",
+            checked_at=primary_time,
+            reason=primary_reasons[0] if primary_reasons else None,
+        ))
     if primary_safe is False:
         # A second opinion cannot change a flag (spec §4a step 3).
+        if evidence is not None:
+            evidence.append(ClassifierEvidence(
+                layer="backstop", model_id=settings.moderation_backstop_image_model,
+                instruction_version=IMAGE_BACKSTOP_INSTRUCTION_VERSION, outcome="not_called",
+            ))
         return "primary"
 
-    if classify_image_backstop(image_url):
+    backstop_time = datetime.now(timezone.utc)
+    backstop_model = settings.moderation_backstop_image_model
+    backstop_reasons = []
+    backstop_safe = (classify_image_backstop(image_url, reasons=backstop_reasons)
+                     if evidence is not None else classify_image_backstop(image_url))
+    if evidence is not None:
+        evidence.append(ClassifierEvidence(
+            layer="backstop", model_id=backstop_model,
+            instruction_version=IMAGE_BACKSTOP_INSTRUCTION_VERSION,
+            outcome="safe" if backstop_safe else "flagged", checked_at=backstop_time,
+            reason=backstop_reasons[0] if backstop_reasons else None,
+        ))
+    if backstop_safe:
         return None
 
     # WHICH classifier flagged, and whether the other was even consulted, is the whole diagnosis
@@ -67,7 +106,9 @@ def output_mod(state: StoryMemory) -> dict:
     current_image_count = state.cost.image_count
 
     for scene in state.scenes:
-        if scene.moderation_status in {"passed", OVERRIDE_STATUS}:
+        if scene.moderation_status in {"passed", OVERRIDE_STATUS} or (
+            state.moderation_context.mode == "teacher_review_v1" and scene.moderation_status == "teacher_allowed"
+        ):
             # Screened on an earlier turn of the loop. This node now runs once per finalized scene
             # rather than once over the finished book (see `route_next_scene`), so without this it
             # would re-pay for a classifier call per already-cleared scene, per scene, per book.
@@ -81,16 +122,41 @@ def output_mod(state: StoryMemory) -> dict:
 
         signed_url = get_signed_url(scene.final_image_ref)
 
+        evidence = [] if state.moderation_context.mode == "teacher_review_v1" else None
         try:
-            flagged_by = _check_image(signed_url)
+            flagged_by = _check_image(signed_url, evidence)
         except Exception as exc:
             log.error("output_mod: scene_id=%s classifier error (%s)", scene.scene_id, exc)
             raise RuntimeError("moderation_error") from exc
 
         if flagged_by is None:
             log.info("output_mod: scene_id=%s passed", scene.scene_id)
-            updated_scenes.append(scene.model_copy(update={"moderation_status": "passed"}))
+            changes = {"moderation_status": "passed"}
+            if evidence is not None:
+                changes["attempts"] = [
+                    a.model_copy(update={"safety_eligibility": "cleared"})
+                    if a.image_ref == scene.final_image_ref else a for a in scene.attempts
+                ]
+            updated_scenes.append(scene.model_copy(update=changes))
             continue
+
+        if evidence is not None:
+            subject_version = hashlib.sha256(download_book_image(scene.final_image_ref)).hexdigest()
+            review_id = uuid5(
+                UUID(state.story_id),
+                f"scene_image:{scene.scene_id}:{subject_version}:{state.moderation_context.generation_epoch}",
+            )
+            review = ReviewContext(
+                review_id=review_id, kind="scene_image", subject_id=scene.scene_id,
+                subject_version=subject_version, return_node="output_mod", classifier_evidence=evidence,
+                criteria=list(TEACHER_MODERATION_CRITERIA),
+                replacement=bool(scene.moderation_replacement_count),
+            )
+            return {
+                "scenes": updated_scenes + [scene],
+                "moderation_context": state.moderation_context.model_copy(update={"review": review}),
+                "cost": state.cost.model_copy(update={"image_count": current_image_count}),
+            }
 
         # ADR-025 D4: breaker before any spend.
         check_image_budget(current_image_count)

@@ -73,6 +73,32 @@ def test_minimal_story_memory_validates():
     assert sm.characters == []
 
 
+def test_moderation_review_context_round_trips_and_legacy_defaults_to_baseline():
+    legacy = _minimal().model_dump()
+    assert StoryMemory(**legacy).moderation_context.mode == "baseline"
+    assert Input(raw_text="story").moderation_clearance is None
+    assert Attempt(image_ref="image").safety_eligibility == "unreviewed"
+    assert Scene(scene_id="s0", text_excerpt="story").moderation_replacement_count == 0
+    assert Character(char_id="c0", name="Cat").ref_generation_prompt is None
+
+    legacy["moderation_context"] = {
+        "mode": "teacher_review_v1",
+        "policy_version": "teacher_review_policy_v1",
+        "review": {
+            "review_id": "1f7a7b8e-634f-44d1-953b-4d583ba0d13a",
+            "kind": "scene_image",
+            "subject_id": "s0",
+            "subject_version": "abc",
+            "criteria": ["safety"],
+            "return_node": "output_mod",
+        },
+    }
+    state = StoryMemory(**legacy)
+    restored = StoryMemory.model_validate_json(state.model_dump_json())
+    assert restored == state
+    assert restored.moderation_context.review.subject_id == "s0"
+
+
 def test_schema_version_is_required():
     """No default, deliberately: a checkpoint missing the key must NOT deserialize as current."""
     data = _minimal().model_dump()
@@ -325,8 +351,10 @@ def test_visual_continuity_fields_round_trip_and_stay_last():
     assert StoryObject.model_validate(obj.model_dump()) == obj
     assert Scene.model_validate(scene.model_dump()) == scene
     assert list(StoryObject.model_fields)[-1] == "owner_char_id"
-    assert list(Scene.model_fields)[-3:] == ["objects_present", "visual_direction", "object_states"]
-    assert list(Attempt.model_fields)[-2:] == ["scene_contradictions", "identity_checks"]
+    assert list(Scene.model_fields)[-4:] == [
+        "objects_present", "visual_direction", "object_states", "moderation_replacement_count"
+    ]
+    assert list(Attempt.model_fields)[-3:] == ["scene_contradictions", "identity_checks", "safety_eligibility"]
     assert CURRENT_SCHEMA_VERSION == 1
     assert [reason.value for reason in FailureReason] == [
         "wrong_colour",

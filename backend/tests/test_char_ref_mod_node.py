@@ -155,16 +155,20 @@ def test_gemma_error_raises_moderation_error():
 
 # --- no canonical_ref_image ---
 
-def test_character_with_no_canonical_ref_image_is_skipped_as_passed():
+@pytest.mark.parametrize("mode", ["baseline", "teacher_review_v1"])
+def test_character_with_no_canonical_ref_image_is_skipped_as_passed(mode):
     """Spec §4b: char with no canonical_ref_image has nothing to moderate — mark passed."""
     with patch("pipeline.char_ref_mod.get_signed_url") as mock_sign, \
          patch("pipeline.char_ref_mod.classify_image_primary", return_value=True), \
          patch("pipeline.char_ref_mod.classify_image_backstop", return_value=True):
         from pipeline.char_ref_mod import char_ref_mod
-        result = char_ref_mod(_state([_char("c0", ref_path=None)]))
+        state = _state([_char("c0", ref_path=None)])
+        state.moderation_context.mode = mode
+        result = char_ref_mod(state)
 
     mock_sign.assert_not_called()
     assert result["characters"][0].ref_moderation_status == "passed"
+    assert "moderation_context" not in result
 
 
 # --- image download retry ---
@@ -265,4 +269,60 @@ def test_char_ref_mod_bumps_no_counter_and_returns_no_cost():
 
     assert set(result) == {"characters"}
     assert state.cost.ref_mod_retry_count == 0
+
+
+def test_reference_replacement_invalidates_clearance_and_is_screened_again(monkeypatch):
+    from pathlib import Path
+    from unittest.mock import MagicMock
+    from contracts.story_memory import ModerationContext, ReviewContext, RefVerdict
+    from pipeline.char_ref_mod import char_ref_mod
+    from pipeline.moderation_replace import moderation_replace
+
+    image = (Path(__file__).parent / "fixtures/qwen35-resize-scene.png").read_bytes()
+    state = _state([_char("c0").model_copy(update={
+        "ref_moderation_status": "teacher_allowed", "ref_generation_prompt": "A dog. Be sure to include: white paws.",
+    })])
+    state.story_id = "04b21cbc-ff2d-4fd8-b2ef-56431784a9a4"
+    state.moderation_context = ModerationContext(mode="teacher_review_v1", policy_version="teacher_review_policy_v1",
+        review=ReviewContext(review_id="1f7a7b8e-634f-44d1-953b-4d583ba0d13a", kind="character_reference",
+            subject_id="c0", subject_version="old", return_node="char_ref_mod", resolution="replace", replacement=True))
+    draw, storage = MagicMock(return_value=image), MagicMock()
+    monkeypatch.setattr("pipeline.char_bible.text_to_image", draw)
+    monkeypatch.setattr("pipeline.char_bible.get_supabase_client", lambda: storage)
+    monkeypatch.setattr("pipeline.char_bible.judge", lambda *a: RefVerdict(differences_observed="none", matches_description=True, attributes_present=["dog"]))
+    result = moderation_replace(state)
+    assert result["characters"][0].ref_moderation_status is None
+    assert result["characters"][0].canonical_ref_image == f"{state.story_id}/ref-c0-2.png"
+    assert result["characters"][0].ref_generation_prompt == "A dog. Be sure to include: white paws."
+    assert result["cost"].ref_mod_retry_count == 1 and result["cost"].image_count == 1
+    assert draw.call_count == 1 and draw.call_args.args[0] == "A dog. Be sure to include: white paws."
+    fresh = state.model_copy(update=result)
+    monkeypatch.setattr("pipeline.char_ref_mod.get_signed_url", lambda path: path)
+    monkeypatch.setattr("pipeline.char_ref_mod.classify_image_primary", lambda *a, **kw: False)
+    monkeypatch.setattr("pipeline.char_ref_mod.download_book_image", lambda path: image)
+    flagged = char_ref_mod(fresh)
+    assert flagged["moderation_context"].review.replacement is True
+    assert flagged["characters"][0].canonical_ref_image == f"{state.story_id}/ref-c0-2.png"
+    with pytest.raises(RuntimeError, match="replacement_already_used"):
+        moderation_replace(fresh)
+    from app.config import IMAGE_BUDGET
+    from contracts.story_memory import Attempt, Scene
+    state.cost.image_count = IMAGE_BUDGET
+    with pytest.raises(RuntimeError, match="image_budget_exhausted"):
+        moderation_replace(state)
+    state.cost.image_count = 0
+    state.scenes = [Scene(scene_id="s0", text_excerpt="A dog walks.", attempts=[Attempt(image_ref="scene.png", prompt="A dog walks.")])]
+    with pytest.raises(RuntimeError, match="dependent_scenes_exist"):
+        moderation_replace(state)
+    assert draw.call_count == 1
+
+
+@pytest.mark.parametrize("node", ["reveal", "generate_scene", "regenerate", "compose"])
+def test_reference_consumers_reject_uncleared_feature_reference(node):
+    from importlib import import_module
+
+    state = _state([_char("c0").model_copy(update={"ref_moderation_status": "flagged"})])
+    state.moderation_context.mode = "teacher_review_v1"
+    with pytest.raises(RuntimeError, match="unmoderated_reference"):
+        getattr(import_module(f"pipeline.{node}"), node)(state)
 

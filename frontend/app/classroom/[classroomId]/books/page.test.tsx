@@ -1,8 +1,239 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { jobState, type Job } from "@/lib/types/jobs";
 import { FailedBookRow } from "./page";
 import BookCard from "@/components/BookCard";
+import NeedsHelpQueue from "@/components/NeedsHelpQueue";
+// Captured from the real graph/disposable-Postgres test_teacher_hold integration run.
+import heldDetail from "./held-detail.fixture.json";
+import heldReference from "./held-reference.fixture.json";
+import heldText from "./held-text.fixture.json";
+import heldTitle from "./held-title.fixture.json";
+import heldThemes from "./held-themes.fixture.json";
+import moderationPolicy from "./moderation-policy.fixture.json";
+import clearances from "./clearances.fixture.json";
+import pendingContinuation from "./pending-continuation.fixture.json";
+import BookReviewDialog from "@/components/BookReviewDialog";
+
+vi.mock("@/lib/supabaseClient", () => ({ supabase: {
+  auth: { getSession: async () => ({ data: { session: { access_token: "synthetic" } } }) },
+  channel: () => ({ on() { return this; }, subscribe() { return this; } }),
+  removeChannel: vi.fn(),
+} }));
+
+describe("held story inspection", () => {
+  it.each([
+    { held: heldText, subject: "story text" }, { held: heldTitle, subject: "title" },
+    { held: heldThemes, subject: "themes" },
+  ])("allows the unchanged $subject after criteria confirmation and retries a lost response", async ({ held, subject }) => {
+    const bodies: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, options?: RequestInit) => {
+      if (url.endsWith("/decision")) {
+        bodies.push(options!.body as string);
+        if (bodies.length === 1) throw new Error("lost response");
+        return Response.json({ status: "queued", dispatch_state: "queued" }, { status: 200 });
+      }
+      if (url.endsWith("/moderation-policy")) return Response.json(moderationPolicy);
+      if (url.endsWith("/moderation-review")) return Response.json(held);
+      return Response.json([{ review_id: held.review_id, job_id: "synthetic-job", title: held.title,
+        held_at: "2026-10-28T00:00:00Z", ready: true }]);
+    }));
+    render(<NeedsHelpQueue classroomId="synthetic-class" active onCount={() => {}} onBack={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: `Inspect ${held.title}` }));
+    expect(await screen.findByText(held.story_text)).toBeDefined();
+    if (subject === "title") expect(screen.getByText(heldTitle.subject_title)).toBeDefined();
+    const allow = await screen.findByRole("button", { name: subject === "themes" ? "Accept these themes" : `Allow this ${subject}` });
+    expect(allow).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Request replacement picture" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show picture to review" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Stop this story" })).toBeEnabled();
+    for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);
+    fireEvent.click(allow);
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveFocus());
+    expect(screen.getByText(held.story_text)).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Continue story" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Story continuing" })).toHaveFocus());
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]).toBe(bodies[1]);
+    expect(JSON.parse(bodies[0]).subject_version).toBe(held.subject_version);
+    expect(JSON.parse(bodies[0]).confirmed_criteria).toEqual(held.criteria);
+    vi.unstubAllGlobals();
+  });
+
+  it("cancels stop without a write, then retries the same confirmed stop after a lost response", async () => {
+    const bodies: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, options?: RequestInit) => {
+      if (url.endsWith("/decision")) {
+        bodies.push(options!.body as string);
+        if (bodies.length === 1) throw new Error("lost response");
+        return Response.json({ status: "stopped", dispatch_state: null });
+      }
+      if (url.endsWith("/moderation-review")) return Response.json(heldDetail);
+      return Response.json([{ review_id: heldDetail.review_id, job_id: "synthetic-job", title: heldDetail.title, held_at: "2026-10-28T00:00:00Z", ready: true }]);
+    }));
+    render(<NeedsHelpQueue classroomId="synthetic-class" active onCount={() => {}} onBack={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Inspect Synthetic title/ }));
+    const stop = await screen.findByRole("button", { name: "Stop this story" });
+    fireEvent.click(stop);
+    expect(screen.getByRole("button", { name: "Keep waiting" })).toHaveFocus();
+    fireEvent(screen.getAllByRole("dialog").at(-1)!, new Event("cancel", { bubbles: true }));
+    expect(stop).toHaveFocus();
+    expect(bodies).toHaveLength(0);
+    fireEvent.click(stop);
+    fireEvent.click(within(screen.getAllByRole("dialog").at(-1)!).getByRole("button", { name: "Stop this story" }));
+    expect(await screen.findByRole("alert")).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Retry stop" }));
+    expect(await screen.findByRole("heading", { name: "Story stopped. The writing is saved." })).toHaveFocus();
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]).toBe(bodies[1]);
+    expect(JSON.parse(bodies[0]).action).toBe("stop");
+    vi.unstubAllGlobals();
+  });
+  it.each([false, true])("confirms withdrawal and reconciles a later release on replay (%s)", async (replayed) => {
+    let writes = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.endsWith("/withdraw")) {
+        writes++;
+        if (replayed && writes === 1) throw new Error("lost response");
+        return Response.json({ status: replayed ? "complete" : "awaiting_teacher", dispatch_state: replayed ? "consumed" : "queued" }, { status: replayed ? 200 : 202 });
+      }
+      return Response.json(clearances);
+    }));
+    render(<BookReviewDialog job={makeJob({ moderation_mode: "teacher_review_v1" })} pageUrls={[]}
+      onClose={() => {}} onDecide={() => {}} />);
+    const buttons = await screen.findAllByRole("button", { name: /^Withdraw clearance for/ });
+    fireEvent.click(buttons[0]);
+    expect(screen.getByRole("button", { name: "Keep clearance" })).toHaveFocus();
+    expect(writes).toBe(0);
+    fireEvent.click(screen.getByRole("button", { name: "Keep clearance" }));
+    await waitFor(() => expect(screen.getAllByRole("button", { name: /^Withdraw clearance for/ })[0]).toHaveFocus());
+    fireEvent.click(screen.getAllByRole("button", { name: /^Withdraw clearance for/ })[0]);
+    expect(screen.getByText(/hides the whole book/)).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Withdraw safety clearance" }));
+    if (replayed) {
+      expect(await screen.findByRole("alert")).toHaveFocus();
+      fireEvent.click(screen.getByRole("button", { name: "Withdraw safety clearance" }));
+    }
+    expect(await screen.findByRole("heading", { name: replayed ? "Current story status: complete" : "Story returned to teacher review" })).toHaveFocus();
+    if (!replayed) expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+    expect(writes).toBe(replayed ? 2 : 1);
+    vi.unstubAllGlobals();
+  });
+  it.each([
+    { action: "allow", held: heldDetail }, { action: "replace", held: heldDetail },
+    { action: "allow", held: heldReference }, { action: "replace", held: heldReference },
+  ])("$action retries the same request across a lost response and reload for $held.kind", async ({ action, held }) => {
+    let submissions = 0;
+    const bodies: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, options?: RequestInit) => {
+      if (url.endsWith("/decision")) {
+        bodies.push(options!.body as string);
+        if (++submissions === 1) throw new Error("lost response");
+        return Response.json({ status: "queued", dispatch_state: "queued" }, { status: 200 });
+      }
+      if (url.endsWith("/reveal")) return new Response("picture");
+      if (url.endsWith("/moderation-policy")) return Response.json(moderationPolicy);
+      if (url.endsWith("/moderation-review")) return Response.json(submissions
+        ? { ...pendingContinuation, pending_command: JSON.parse(bodies[0]) }
+        : { ...held, replacement_available: true, replacement_disabled_reason: null });
+      return Response.json([{ review_id: heldDetail.review_id, job_id: "synthetic-job", title: heldDetail.title, held_at: "2026-10-28T00:00:00Z", ready: true }]);
+    }));
+    URL.createObjectURL = vi.fn(() => "blob:synthetic-picture");
+    URL.revokeObjectURL = vi.fn();
+    render(<NeedsHelpQueue classroomId="synthetic-class" active onCount={() => {}} onBack={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Inspect Synthetic title/ }));
+    const allow = await screen.findByRole("button", { name: action === "allow" ? "Allow this picture" : "Request replacement picture" });
+    expect(allow).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Show picture to review" }));
+    fireEvent.load(await screen.findByRole("img", { name: held.pictures.find(picture => picture.state === "held")!.label }));
+    if (action === "allow") {
+      expect(allow).toBeDisabled();
+      for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);
+    }
+    fireEvent.click(allow);
+    expect(await screen.findByRole("alert")).toHaveFocus();
+    fireEvent(document, new Event("visibilitychange"));
+    expect(await screen.findByText("Your decision is saved. Continue story retries its pending delivery.")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Continue story" }));
+    expect(await screen.findByRole("heading", { name: "Story continuing" })).toHaveFocus();
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]).toBe(bodies[1]);
+    expect(JSON.parse(bodies[0]).action).toBe(action);
+    vi.unstubAllGlobals();
+  });
+  it("explains exhausted replacement budget while keeping other decisions available", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.endsWith("/moderation-review")) return Response.json({ ...heldDetail,
+        replacement_available: false, replacement_disabled_reason: "image_budget_exhausted" });
+      return Response.json([{ review_id: heldDetail.review_id, job_id: "synthetic-job", title: heldDetail.title, held_at: "2026-10-28T00:00:00Z", ready: true }]);
+    }));
+    render(<NeedsHelpQueue classroomId="synthetic-class" active onCount={() => {}} onBack={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Inspect Synthetic title/ }));
+    expect(await screen.findByRole("button", { name: "Request replacement picture" })).toBeDisabled();
+    expect(screen.getByText("The image budget is used up. You can still inspect, leave waiting, allow or stop this story.")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Stop this story" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Back to Needs your help" })).toBeEnabled();
+    vi.unstubAllGlobals();
+  });
+  it("shows captured evidence and a closable criteria reference, with honest missing reasoning", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.endsWith("/moderation-policy")) return Response.json(moderationPolicy);
+      if (url.endsWith("/moderation-review")) return Response.json(heldDetail);
+      return Response.json([{ review_id: heldDetail.review_id, job_id: "synthetic-job", title: heldDetail.title, held_at: "2026-10-28T00:00:00Z", ready: true }]);
+    }));
+    render(<NeedsHelpQueue classroomId="synthetic-class" active onCount={() => {}} onBack={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Inspect Synthetic title/ }));
+    expect(await screen.findByText("Synthetic review explanation")).toBeDefined();
+    expect(screen.getByText("The recorded reason is unavailable")).toBeDefined();
+    expect(screen.getByText(heldDetail.classifier_evidence[0].model_id)).toBeDefined();
+    expect(screen.getByText("Shared safety", { selector: "p" })).toBeDefined();
+    const dialog = screen.getByRole("dialog");
+    const summary = dialog.querySelector("summary")!;
+    fireEvent.click(summary);
+    expect(await screen.findByText(moderationPolicy.basis)).toBeDefined();
+    expect(screen.getByText(moderationPolicy.criteria[1].trigger)).toBeDefined();
+    expect(screen.getByText(moderationPolicy.optional_themes[0].trigger)).toBeDefined();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close review criteria" }));
+    expect(summary.parentElement).not.toHaveAttribute("open");
+    expect(summary).toHaveFocus();
+    vi.unstubAllGlobals();
+  });
+  it.each([false, true])("reveals only on request and keeps writing readable on image failure (%s)", async (fails) => {
+    let queueChanged = false;
+    const fetchMock = vi.fn<(url: string, options?: RequestInit) => Promise<Response>>(async (url) => {
+      if (url.endsWith("/reveal")) return new Response(fails ? "unavailable" : "picture", { status: fails ? 503 : 200 });
+      if (url.endsWith("/moderation-review")) return Response.json(heldDetail);
+      return Response.json(queueChanged ? [] : [{ review_id: heldDetail.review_id, job_id: "synthetic-job", title: heldDetail.title, author: heldDetail.author, held_at: "2026-10-28T00:00:00Z", ready: true }]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    URL.createObjectURL = vi.fn(() => "blob:synthetic-picture");
+    URL.revokeObjectURL = vi.fn();
+    render(<NeedsHelpQueue classroomId="synthetic-class" active onCount={() => {}} onBack={() => {}} />);
+    const opener = await screen.findByRole("button", { name: /Inspect Synthetic title/ });
+    opener.focus();
+    fireEvent.click(opener);
+    expect(await screen.findByText("Synthetic story", { selector: "p.whitespace-pre-wrap" })).toBeDefined();
+    expect(fetchMock.mock.calls.some(([url]) => url.endsWith("/reveal"))).toBe(false);
+    expect(screen.getByText("Picture not generated yet")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Show picture to review" }));
+    if (fails) {
+      expect(await screen.findByText("Picture unavailable. Your story context is still here.")).toBeDefined();
+      expect(screen.getByRole("button", { name: "Try loading again" })).toBeDefined();
+    } else {
+      expect(await screen.findByRole("img", { name: "Synthetic story" })).toHaveAttribute("src", "blob:synthetic-picture");
+    }
+    if (fails) {
+      queueChanged = true;
+      fireEvent(document, new Event("visibilitychange"));
+      await waitFor(() => expect(opener.isConnected).toBe(false));
+    }
+    fireEvent(screen.getByRole("dialog"), new Event("cancel", { bubbles: true }));
+    await waitFor(() => expect(fails ? screen.getByRole("region", { name: "Needs your help" }) : opener).toHaveFocus());
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(1);
+    vi.unstubAllGlobals();
+  });
+});
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
 from app.config import MAX_TITLE_CHARS, MIN_STORY_WORDS, SELECTABLE_STYLE_PRESET_IDS, settings
+from app.moderation_policy import TEACHER_MODERATION_POLICY_VERSION
 from app.length import clamp_story, word_count
 from app.db import get_supabase_client
 from app.queue import get_queue
@@ -17,10 +18,12 @@ from app.auth import get_current_user, teacher_router
 from app.research import research_router
 from app.pdf_export import pdf_router
 from app.onboarding import onboarding_router
+from app.moderation_hold import hold_router, insert_review_job
 import app.classrooms  # noqa: F401 — registers routes on teacher_router as side-effect
 import app.review  # noqa: F401 — registers routes on teacher_router as side-effect
 from app.avatar import AvatarRequest, patch_avatar
 from providers import check_text
+import providers
 
 if settings.sentry_dsn_backend:
     sentry_sdk.init(dsn=settings.sentry_dsn_backend, traces_sample_rate=0.1)
@@ -76,6 +79,7 @@ app.include_router(teacher_router)
 app.include_router(research_router)
 app.include_router(pdf_router)
 app.include_router(onboarding_router)
+app.include_router(hold_router)
 
 
 class CreateStorybookRequest(BaseModel):
@@ -153,10 +157,30 @@ def create_storybook(
         raise HTTPException(403, "only students can submit stories")
     classroom_id = profile_rows[0]["classroom_id"]
 
+    # Snapshot once. A later switch-off cannot downgrade an accepted submission.
+    review_mode = settings.enable_teacher_moderation_review
+    text, truncated = clamp_story(payload.text)
+    title = payload.title
+    if review_mode:
+        try:
+            title = providers.redact_pii(title)
+            text = providers.redact_pii(text)
+        except Exception:
+            raise HTTPException(503, "privacy_processing_unavailable") from None
+
     # ADR-059: checked synchronously, before any write, and never via input_gate/StoryMemory —
     # the title is job metadata, not pipeline input.
-    title_safe, _title_categories, checked_title = check_text(payload.title)
-    if not title_safe:
+    title_evidence = []
+    if review_mode:
+        try:
+            title_safe, title_categories, checked_title = check_text(title, evidence=title_evidence)
+        except Exception:
+            raise HTTPException(503, "moderation_unavailable") from None
+        if "moderation_error" in title_categories:
+            raise HTTPException(503, "moderation_unavailable")
+    else:
+        title_safe, _, checked_title = check_text(title)
+    if not title_safe and not review_mode:
         raise HTTPException(422, "that title isn't allowed")
     if len(checked_title) < 1 or len(checked_title) > MAX_TITLE_CHARS:
         raise HTTPException(422, "give your story a different title")
@@ -167,12 +191,10 @@ def create_storybook(
 
     job_id = str(uuid.uuid4())
     before = word_count(payload.text)
-    text, truncated = clamp_story(payload.text)
     if truncated:
         # CC-5: log counts only, never the text (ADR-025 D5).
         _log.info("story truncated: %d words → %d words", before, word_count(text))
-    supabase.table("jobs").insert(
-        {
+    job_values = {
             "id": job_id,
             "status": "queued",
             "current_stage": "queued",
@@ -182,16 +204,39 @@ def create_storybook(
             "style_preset_id": payload.style_preset_id or "gouache",
             "profile_id": user.id,
             "classroom_id": classroom_id,
+            **({
+                "moderation_mode": "teacher_review_v1",
+                "moderation_settings_snapshot": {
+                    "policy_version": TEACHER_MODERATION_POLICY_VERSION,
+                },
+            } if review_mode else {}),
         }
-    ).execute()
+    if review_mode:
+        try:
+            insert_review_job(job_values, title_evidence=title_evidence if not title_safe else None)
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(503, "moderation_storage_unavailable") from None
+    else:
+        supabase.table("jobs").insert(job_values).execute()
+    if review_mode and not title_safe:
+        return CreateStorybookResponse(job_id=job_id)
     queue = get_queue()
     try:
-        queue.enqueue("worker.run_job.run_storybook_job", job_id, job_timeout=JOB_TIMEOUT_SECONDS)
+        entry = "worker.run_job.run_review_storybook_job" if review_mode else "worker.run_job.run_storybook_job"
+        queue.enqueue(entry, job_id, job_timeout=JOB_TIMEOUT_SECONDS,
+                      **({"expected_epoch": 0} if review_mode else {}))
     except Exception:
         # The row is already 'queued'; a Redis outage here would strand the book with no worker
         # coming and no job_id ever returned to retry against. Undo the one write — nothing else
         # ran, and the child has not seen this book. Same compensation as confirm_job below.
-        supabase.table("jobs").delete().eq("id", job_id).execute()
+        if review_mode:
+            from app.moderation_hold import connect
+            with connect() as conn:
+                conn.execute("delete from jobs where id=%s and status='queued'", (job_id,))
+        else:
+            supabase.table("jobs").delete().eq("id", job_id).execute()
         raise HTTPException(503, "could not start — try again")
     return CreateStorybookResponse(job_id=job_id)
 
@@ -204,7 +249,7 @@ def confirm_job(
 
     rows = (
         supabase.table("jobs")
-        .select("reveal, status, profile_id")
+        .select("reveal, status, profile_id, moderation_mode, generation_epoch, worker_finished_at")
         .eq("id", job_id)
         .execute()
         .data
@@ -216,6 +261,10 @@ def confirm_job(
     if row["profile_id"] != user.id:
         raise HTTPException(403, "forbidden")
 
+    if row.get("moderation_mode") == "teacher_review_v1":
+        from app.moderation_hold import confirm_review_job
+        return ConfirmResponse(status=confirm_review_job(job_id, payload.model_dump(), str(user.id)))
+
     if payload.action == "try_again":
         characters = row["reveal"].get("characters", [])
         character = next((c for c in characters if c["char_id"] == payload.char_id), None)
@@ -224,7 +273,7 @@ def confirm_job(
 
     cas = (
         supabase.table("jobs")
-        .update({"status": "queued"})
+        .update({"status": "queued", "worker_finished_at": None})
         .eq("id", job_id)
         .eq("status", "awaiting_confirm")
         .execute()
@@ -240,7 +289,8 @@ def confirm_job(
     except Exception:
         # The CAS already flipped status to 'queued'; a Redis outage here would strand the book
         # with no worker coming and no way to re-confirm. Roll it back — nothing else ran.
-        supabase.table("jobs").update({"status": "awaiting_confirm"}).eq("id", job_id).execute()
+        from datetime import datetime, timezone
+        supabase.table("jobs").update({"status": "awaiting_confirm", "worker_finished_at": datetime.now(timezone.utc).isoformat()}).eq("id", job_id).execute()
         raise HTTPException(503, "could not resume — try again")
 
     return ConfirmResponse(status="queued")

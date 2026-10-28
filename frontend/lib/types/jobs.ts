@@ -19,6 +19,7 @@ export type JobPage = {
 export type Job = {
   id: string;
   status: string;
+  moderation_mode?: "baseline" | "teacher_review_v1";
   failure_reason: string | null;
   approved_at: string | null;
   rejected_at: string | null;
