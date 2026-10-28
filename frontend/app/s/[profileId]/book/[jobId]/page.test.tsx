@@ -110,7 +110,7 @@ describe("BookPage — PDF download", () => {
       expect(screen.queryByRole("button", { name: /download pdf/i })).toBeNull();
     } else if (kind === "owner") {
       await waitFor(() => expect(screen.getByRole("button", { name: /download pdf/i })).toBeDisabled());
-      expect(screen.getByText(/your teacher needs to approve/i)).toBeDefined();
+      expect(screen.getByText("Ask your teacher about downloading this book")).toBeDefined();
       expect(screen.queryByRole("alert")).toBeNull();
     } else {
       await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("We couldn't download your book. Try again."));
@@ -133,6 +133,9 @@ describe("BookPage — PDF download", () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     await renderPage(makeParams("j1"));
     await waitFor(() => expect(screen.getByRole("button", { name: /download pdf/i })).toBeEnabled());
+    expect(screen.queryByText("Ask your teacher about downloading this book")).toBeNull();
+    expect(screen.getByRole("button", { name: /download pdf/i })).not.toHaveAttribute("aria-describedby");
+    expect(document.body).not.toHaveTextContent(/\b(?:approve|approved|rejected|pending)\b/i);
     fireEvent.click(screen.getByLabelText("Scroll View"));
     fireEvent.click(screen.getByRole("button", { name: /download pdf/i }));
     await waitFor(() => expect(fetchPdf).toHaveBeenCalledTimes(1));
@@ -183,8 +186,10 @@ describe("BookPage — PDF download", () => {
     if (kind.startsWith("peer")) expect(screen.queryByRole("button", { name: /download pdf/i })).toBeNull();
     else {
       expect(screen.getByRole("button", { name: /download pdf/i })).toBeDisabled();
-      expect(screen.getByText(/your teacher needs to approve/i)).toBeDefined();
+      expect(screen.getByText("Ask your teacher about downloading this book")).toHaveAttribute("id", "pdf-approval-hint");
+      expect(screen.getByRole("button", { name: /download pdf/i })).toHaveAttribute("aria-describedby", "pdf-approval-hint");
     }
+    expect(document.body).not.toHaveTextContent(/\b(?:approve|approved|rejected|pending)\b/i);
   });
 });
 

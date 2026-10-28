@@ -341,7 +341,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
           <div className="order-2 col-span-2 text-right font-kid text-sm lg:order-4 lg:col-span-3">
             {!canDownload && (
               <p id="pdf-approval-hint" className="text-foreground/75">
-                Your teacher needs to approve this book before you can download it.
+                Ask your teacher about downloading this book
               </p>
             )}
             {canDownload && exportError && <p role="alert" className="text-destructive">{exportError}</p>}

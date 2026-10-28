@@ -248,6 +248,16 @@ precede the reveal, so the node, migration and endpoint land together with it. `
 
 ---
 
+## Tier 2m — opened by review-feedback audit (2026-10-29)
+
+- **D-V · Child-visible review signal contradicts teacher-review spec §4.10 — closed (2026-10-29).**
+  [Teacher-review-and-approval §14](../specs/teacher-review-and-approval.md#14-amendment-teacher-notes-the-child-can-read-2026-10-29-draft),
+  AC-17 and SH-01 resolve the conflict: the book page says "Ask your teacher about downloading this
+  book" without a verdict word. The download button remains disabled until approval and keeps its
+  accessible hint. Page tests cover pending, approved and rejected rows. This rewords the explanation
+  rather than removing it, as §14.5 requires. See
+  [audit 01](../../.scratch/ptd-review-feedback/issues/01-audit-review-feedback.md).
+
 ## Tier 3 — convention formalizations (likely MASTER_SPEC edits, not ADRs)
 
 *(D-E · Testing-seam convention → MASTER_SPEC §6 "The node test seam", 2026-07-22: one module-level
