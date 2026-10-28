@@ -1,8 +1,8 @@
 # ADR-081 — Teacher notes the child can read
 
-**Status:** Proposed (2026-10-29) · proposes amending teacher-review-and-approval §4.10,
-invariants 9 and 12, and §13.6. Owner acceptance with a date is required before
-ticket 05's migration `0026` lands. This record does not authorize implementation or release.
+**Status:** Accepted (2026-10-29) · owner explicitly said “i accept”. Amends
+teacher-review-and-approval §4.10, invariants 9 and 12, and §13.6. This satisfies
+ticket 05's ADR acceptance gate for migration `0026`, not the real-child release gate.
 
 **Amendments:** `teacher-review-and-approval` §4.10, invariants 9 and 12, and §13.6,
 as specified by [§14 SH-01 and SH-05](../../specs/teacher-review-and-approval.md#143-shared-behavior).
@@ -16,7 +16,7 @@ The owner selected child-readable feedback in the
 A note column on `jobs` would expose teacher-authored text to classmates and researchers:
 the policies in `0008_authorization_surface.sql:28,46` grant whole-row reads.
 [Spec §14](../../specs/teacher-review-and-approval.md#14-amendment-teacher-notes-the-child-can-read-2026-10-29-draft)
-records the agreed scope and behavior. This ADR records that proposal, not a built feature.
+records the agreed scope and behavior. This ADR records the accepted decision, not a built feature.
 
 ## Decision
 
@@ -48,8 +48,8 @@ book's last page. Highlights remain later work.
 ## Consequences and gates
 
 The downstream build spans more than three modules and remains subject to the project approval
-gate ([§14.8](../../specs/teacher-review-and-approval.md#148-blast-radius)). This docs-only proposal
-adds no migration or code. Ticket 05 stays blocked until the owner dates acceptance of ADR-081.
+gate ([§14.8](../../specs/teacher-review-and-approval.md#148-blast-radius)). This docs-only record
+adds no migration or code. Owner acceptance on 2026-10-29 clears ticket 05's ADR prerequisite.
 
 OD-9 requires ethics re-review **before real children see a note**. It is a release gate,
 not a build gate. Owner design acceptance does not supply that ethics approval. Readiness,
