@@ -32,6 +32,8 @@ def moderation_router(state: StoryMemory) -> str:
         if "moderation_error" in mod.categories:
             raise RuntimeError("moderation_error")
         raise RuntimeError("content_flagged")
+    if state.moderation_context.review is not None and state.moderation_context.review.resolution is None:
+        return "moderation_review"
     if any(c.ref_moderation_status == "flagged" for c in state.characters):
         if state.cost.ref_mod_retry_count < MAX_MOD_REDRAWS:
             return "char_bible"
@@ -57,13 +59,17 @@ def route_after_output_mod(state: StoryMemory) -> str:
 def route_moderation_review(state: StoryMemory) -> str:
     # Also used by update_state(as_node='moderation_review') when anchoring a hold.
     review = state.moderation_context.review
-    if review and review.resolution == "replace" and review.kind == "scene_image":
+    if review and review.resolution == "replace" and review.kind in ("scene_image", "character_reference"):
         return "moderation_replace"
     if review and review.resolution == "allow" and review.return_node in (
-        "output_mod", "generate_scene", "consistency_check", "reveal", "compose", "__end__"
+        "char_ref_mod", "output_mod", "generate_scene", "consistency_check", "reveal", "compose", "__end__"
     ):
         return review.return_node
     return "moderation_review"
+
+
+def route_moderation_replace(state: StoryMemory) -> str:
+    return "char_ref_mod" if state.moderation_context.review.kind == "character_reference" else "consistency_check"
 
 
 def route_next_scene(state: StoryMemory) -> str:
@@ -146,7 +152,7 @@ def build_graph(checkpointer=None):
     graph.add_edge("regenerate", "consistency_check")
     graph.add_conditional_edges("output_mod", route_after_output_mod)  # raises on failed; routes to compose
     graph.add_conditional_edges("moderation_review", route_moderation_review)
-    graph.add_edge("moderation_replace", "consistency_check")
+    graph.add_conditional_edges("moderation_replace", route_moderation_replace)
     graph.add_edge("compose", END)
 
     return graph.compile(checkpointer=checkpointer or MemorySaver())

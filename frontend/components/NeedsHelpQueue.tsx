@@ -232,7 +232,7 @@ function HeldStory({ jobId, onClose }: { jobId: string; onClose: () => void }) {
             </div>)}
             <ReviewCriteria />
           </section>}
-          {!loading && !error && detail.kind === "scene_image" && <ResolvePicture
+          {!loading && !error && (detail.kind === "scene_image" || detail.kind === "character_reference") && <ResolvePicture
             key={`${detail.review_id}-${detail.subject_version}-${detail.generation_epoch}-${revision}`}
             jobId={jobId} detail={detail} inspected={inspected} busy={pending} onPending={setPending} />}
           </>}
@@ -347,12 +347,16 @@ function ResolvePicture({ jobId, detail, inspected, busy, onPending }: {
         (!inspected || !detail.current_policy_version || !detail.criteria?.length || confirmed.length !== detail.criteria.length))}
         onClick={() => void decide(submitted || "allow")}>{pending ? "Saving…" : submitted ? "Continue story" : "Allow this picture"}</button>
       {!submitted && <>
-        <p>A replacement keeps the scene, approved references and style. It uses one remaining picture allowance and receives fresh checks. Other details may change.</p>
+        <p>{detail.kind === "character_reference"
+          ? "A replacement keeps the character description, style and any chosen emphasis. It uses the book’s one reference replacement and receives fresh checks. Other details may change."
+          : "A replacement keeps the scene, approved references and style. It uses one remaining picture allowance and receives fresh checks. Other details may change."}</p>
         {!detail.replacement_available && <p id="replacement-unavailable">{detail.replacement_disabled_reason === "image_budget_exhausted"
           ? "The image budget is used up. You can still inspect, leave waiting, allow or stop this story."
           : detail.replacement_disabled_reason === "replacement_already_used"
-            ? "This scene has used its replacement. You can still inspect, leave waiting, allow or stop this story."
-            : "Replacement is unavailable. Refresh story status or leave this story waiting."}</p>}
+            ? `${detail.kind === "character_reference" ? "This book has used its reference replacement" : "This scene has used its replacement"}. You can still inspect, leave waiting, allow or stop this story.`
+            : detail.replacement_disabled_reason === "dependent_scenes_exist"
+              ? "Story pictures already depend on this reference. You can allow this exact reference, leave waiting or stop and start a new story."
+              : "Replacement is unavailable. Refresh story status or leave this story waiting."}</p>}
         <button className={control} aria-describedby={!detail.replacement_available ? "replacement-unavailable" : undefined}
           disabled={busy || pending || !detail.ready || !inspected || !detail.replacement_available}
           onClick={() => void decide("replace")}>Request replacement picture</button>

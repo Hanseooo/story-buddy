@@ -1,10 +1,12 @@
-"""The one test proving the graph is wired at all.
+"""Graph wiring, bounded retries and checkpointed moderation continuations.
 
 `StoryMemory` carries no `stage` — job status lives on the job row (ADR-023 Decision 3) — and
 with four pass-through stubs a graph that runs every node and one that runs none produce nearly
 identical state. `stream_mode="updates"` yields exactly one chunk per node execution, keyed by
 node name, in order, INCLUDING nodes that return {}. That is the replacement for `stage`.
 """
+import pytest
+
 from contracts.story_memory import CURRENT_SCHEMA_VERSION, FailureReason, Input, RefVerdict, StoryMemory
 from pipeline.analyze import StoryAnalysis
 from pipeline.consistency_check import SceneConstraintVerdict, SceneVerdict
@@ -35,33 +37,73 @@ EXPECTED_ORDER = [
 
 
 def test_feature_bound_covers_ten_scenes_with_maximum_consistency_retries_and_replacements(monkeypatch):
+    from pathlib import Path
     from unittest.mock import MagicMock
     from langgraph.types import Command
     from app.config import TEACHER_REVIEW_RECURSION_LIMIT
     from contracts.story_memory import ModerationContext
 
-    _mock_call_points(monkeypatch)
-    monkeypatch.setattr("pipeline.segment.segment_scenes", lambda units, *a: SceneSegmentation(scenes=[
-        ExtractedScene(start=i, end=i, characters_present=["the orange dog"], visual_direction=_direction())
+    second = STUB_ANALYSIS.characters[0].model_copy(update={"name": "the second dog"})
+    monkeypatch.setattr("pipeline.analyze.structured_text", lambda *a, **kw: STUB_ANALYSIS.model_copy(
+        update={"characters": [STUB_ANALYSIS.characters[0], second]}))
+    monkeypatch.setattr("pipeline.segment.structured_text", lambda *a, **kw: SceneSegmentation(scenes=[
+        ExtractedScene(start=i, end=i, characters_present=["the orange dog", "the second dog"], visual_direction=_direction())
         for i in range(10)
     ]))
-    monkeypatch.setattr("pipeline.consistency_check.judge_attempt", lambda *a: (
-        [_judge_returning(same=False)], SceneConstraintVerdict(differences_observed="none", contradictions=[]),
-    ))
+    monkeypatch.setattr("pipeline.consistency_check.judge", lambda prompt, urls, schema, **kw:
+        _judge_returning(same=False) if schema is SceneVerdict else SceneConstraintVerdict(differences_observed="none", contradictions=[]))
+    monkeypatch.setattr("pipeline.input_gate.classify_text_primary", lambda text: (True, []))
+    monkeypatch.setattr("pipeline.input_gate.classify_text_backstop", lambda text: (True, []))
+    monkeypatch.setattr("pipeline.input_gate.redact_pii", lambda text: text)
     monkeypatch.setattr("pipeline.output_mod.classify_image_primary", lambda url, **kwargs: False)
-    monkeypatch.setattr("pipeline.output_mod.download_book_image", lambda path: b"synthetic graph-bound image")
+    monkeypatch.setattr("pipeline.output_mod.get_signed_url", lambda path: path)
     state = _initial_state("04b21cbc-ff2d-4fd8-b2ef-56431784a9a4")
     state.input.raw_text = " ".join(["The orange dog walks through the grassy field past the trees and stops near the stream." for _ in range(10)])
     state.moderation_context = ModerationContext(mode="teacher_review_v1", policy_version="teacher_review_policy_v1")
     graph = build_graph()
     config = {"configurable": {"thread_id": "bound"}, "recursion_limit": TEACHER_REVIEW_RECURSION_LIMIT}
-    # The new node uses the real draw/storage helper, with only provider I/O mocked.
+    # Every graph helper runs for real. Only provider I/O is replaced.
+    image = (Path(__file__).parent / "fixtures/qwen35-resize-scene.png").read_bytes()
+    objects = {}
     storage = MagicMock()
-    storage.storage.from_.return_value.download.side_effect = FileNotFoundError
+    def download(path):
+        if path not in objects:
+            raise FileNotFoundError(path)
+        return objects[path]
+    storage.storage.from_.return_value.download.side_effect = download
+    storage.storage.from_.return_value.upload.side_effect = lambda path, content, options: objects.update({path: content})
     monkeypatch.setattr("pipeline.generate_scene.get_supabase_client", lambda: storage)
-    monkeypatch.setattr("pipeline.generate_scene.edit_image", lambda *a: b"synthetic image")
+    monkeypatch.setattr("pipeline.consistency_check.get_supabase_client", lambda: storage)
+    monkeypatch.setattr("pipeline.generate_scene.edit_image", lambda *a: image)
     monkeypatch.setattr("pipeline.generate_scene.get_signed_url", lambda path: path)
+    monkeypatch.setattr("pipeline.char_bible.get_supabase_client", lambda: storage)
+    monkeypatch.setattr("pipeline.char_bible.text_to_image", lambda *a, **kw: image)
+    monkeypatch.setattr("pipeline.char_bible.judge", lambda *a: RefVerdict(
+        differences_observed="none", matches_description=True, attributes_present=["dog"]))
+    monkeypatch.setattr("pipeline.char_ref_mod.classify_image_primary", lambda *a, **kw: False)
+    monkeypatch.setattr("pipeline.char_ref_mod.get_signed_url", lambda path: path)
+    monkeypatch.setattr("pipeline.char_ref_mod.download_book_image", download)
+    monkeypatch.setattr("pipeline.output_mod.download_book_image", download)
     steps = [key for chunk in graph.stream(state, config) for key in chunk]
+    for action in ("replace", "allow", "allow"):
+        held = graph.get_state(config)
+        context = held.values["moderation_context"]
+        review = context.review
+        assert held.next == ("moderation_review",) and review.kind == "character_reference"
+        steps += [key for chunk in graph.stream(Command(resume={"action": action, "review_id": str(review.review_id),
+            "subject_version": review.subject_version, "generation_epoch": context.generation_epoch + 1}), config) for key in chunk]
+    for _ in range(3):
+        assert graph.get_state(config).next == ("reveal",)
+        steps += [key for chunk in graph.stream(Command(resume={"action": "try_again", "char_id": "c0",
+                                                               "attribute": "orange fur"}), config) for key in chunk]
+        held = graph.get_state(config)
+        context = held.values["moderation_context"]
+        review = context.review
+        assert review.kind == "character_reference"
+        assert "Be sure to include: orange fur." in held.values["characters"][0].ref_generation_prompt
+        steps += [key for chunk in graph.stream(Command(resume={"action": "allow", "review_id": str(review.review_id),
+            "subject_version": review.subject_version, "generation_epoch": context.generation_epoch + 1}), config) for key in chunk]
+    steps += [key for chunk in graph.stream(Command(resume={"action": "confirm"}), config) for key in chunk]
     for index in range(10):
         for action in ("replace", "allow"):
             held = graph.get_state(config)
@@ -88,6 +130,45 @@ def _initial_state(story_id: str) -> StoryMemory:
         profile_id="dev-profile",
         input=Input(raw_text="A dog runs in a field. The dog barks."),
     )
+
+
+@pytest.mark.parametrize("flagged_layer", ["primary", "backstop"])
+def test_reference_flags_hold_sequentially_and_allow_reaches_child_reveal(monkeypatch, flagged_layer):
+    from pathlib import Path
+    from unittest.mock import MagicMock
+    from langgraph.types import Command
+    from contracts.story_memory import Character, ModerationContext, Scene
+
+    image = (Path(__file__).parent / "fixtures/qwen35-resize-scene.png").read_bytes()
+    primary = MagicMock(return_value=flagged_layer != "primary")
+    backstop = MagicMock(return_value=False)
+    monkeypatch.setattr("pipeline.char_ref_mod.classify_image_primary", primary)
+    monkeypatch.setattr("pipeline.char_ref_mod.classify_image_backstop", backstop)
+    monkeypatch.setattr("pipeline.char_ref_mod.get_signed_url", lambda path: path)
+    monkeypatch.setattr("pipeline.char_ref_mod.download_book_image", lambda path: image)
+    state = _initial_state("04b21cbc-ff2d-4fd8-b2ef-56431784a9a4")
+    state.characters = [Character(char_id=f"c{i}", name="Dog", canonical_ref_image=f"{state.story_id}/ref-c{i}-1.png") for i in range(2)]
+    state.scenes = [Scene(scene_id="s0", text_excerpt="The dog runs.")]
+    state.moderation_context = ModerationContext(mode="teacher_review_v1", policy_version="teacher_review_policy_v1")
+    graph, config = build_graph(), {"configurable": {"thread_id": "reference-hold"}}
+    graph.update_state(config, dict(state), as_node="char_bible")
+    graph.invoke(None, config, interrupt_before=["char_bible"])
+    for i in range(2):
+        held = graph.get_state(config)
+        assert held.next == ("moderation_review",)
+        review = held.values["moderation_context"].review
+        assert review.kind == "character_reference" and review.subject_id == f"c{i}"
+        assert review.subject_version == "0e1cdbf033e2b06bb23842359a9ae55e74529a78fcdbf18a7b167e73961110ef"
+        assert held.values["characters"][i].canonical_ref_image == f"{state.story_id}/ref-c{i}-1.png"
+        assert held.values["cost"].ref_mod_retry_count == 0
+        assert primary.call_count == i + 1
+        graph.invoke(Command(resume={"action": "allow", "review_id": str(review.review_id),
+            "subject_version": review.subject_version, "generation_epoch": i + 2}), config)
+    revealed = graph.get_state(config)
+    assert revealed.next == ("reveal",)
+    assert all(c.ref_moderation_status == "teacher_allowed" for c in revealed.values["characters"])
+    assert primary.call_count == 2
+    assert backstop.call_count == (2 if flagged_layer == "backstop" else 0)
 
 
 def test_scene_review_interrupt_uses_checkpointed_review_without_redrawing(monkeypatch):
@@ -177,8 +258,8 @@ def _mock_call_points(monkeypatch):
     monkeypatch.setattr("pipeline.input_gate.classify_text_primary", lambda text: (True, []))
     monkeypatch.setattr("pipeline.input_gate.classify_text_backstop", lambda text: (True, []))
     monkeypatch.setattr("pipeline.input_gate.redact_pii", lambda text: text)
-    monkeypatch.setattr("pipeline.char_ref_mod.classify_image_primary", lambda url: True)
-    monkeypatch.setattr("pipeline.char_ref_mod.classify_image_backstop", lambda url: True)
+    monkeypatch.setattr("pipeline.char_ref_mod.classify_image_primary", lambda url, **kwargs: True)
+    monkeypatch.setattr("pipeline.char_ref_mod.classify_image_backstop", lambda url, **kwargs: True)
     monkeypatch.setattr("pipeline.char_ref_mod.get_signed_url", lambda path: f"https://signed/{path}")
     monkeypatch.setattr("pipeline.output_mod.classify_image_primary", lambda url, **kwargs: True)
     monkeypatch.setattr("pipeline.output_mod.classify_image_backstop", lambda url, **kwargs: True)

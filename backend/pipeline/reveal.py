@@ -10,6 +10,7 @@ from langgraph.types import interrupt
 
 from app.config import settings
 from contracts.story_memory import Character, ReferenceRetry, StoryMemory
+from pipeline.char_ref_mod import require_reference_clearance
 from pipeline.prompt_optimizer import filtered_description, permitted_words
 
 MAX_RETRY_TAPS = 3
@@ -90,6 +91,7 @@ def reveal(state: StoryMemory) -> dict:
     progress. Payload validation is the endpoint's job (spec §4.9) — by the time a resume reaches
     here it has already been checked against the row.
     """
+    require_reference_clearance(state)
     payload = _project_reveal(state)
     if not payload["characters"]:
         return {}

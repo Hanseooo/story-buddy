@@ -24,7 +24,7 @@ series restarts at JUDGE_PROMPT_VERSION 3.
 import base64
 import logging
 
-from app.config import settings
+from app.config import check_image_budget, settings
 from app.db import get_supabase_client
 from contracts.story_memory import CharacterDescription, RefVerdict, StoryMemory
 from pipeline.prompt_optimizer import filtered_description
@@ -164,6 +164,9 @@ The character is {subject}."""
 
 HUMANOID_CLOTHING_CLAUSE = "Show age-appropriate clothing covering the torso."
 
+
+def _reference_negative(description: CharacterDescription) -> str:
+    return REFERENCE_NEGATIVE if description.is_humanoid else f"{REFERENCE_NEGATIVE}, {NON_HUMAN_NEGATIVE}"
 
 
 def _visual_axes(description: CharacterDescription) -> list[str]:
@@ -305,7 +308,7 @@ def mint_reference(
     Returns `(storage_path, verdict, draws_made)`. The draw count is reported rather than
     inferred because the loop lives in here and the node needs it for CC-3 (invariant 4).
 
-    `n` is the uniqueness suffix on the single monotonic per-book sequence both minting paths
+    `n` is the uniqueness suffix on the single monotonic per-book sequence all minting paths
     share (spec §4.4) — NOT a per-character draw count. It defaults to 1 for the initial mint;
     a moderation redraw passes a higher one so the flagged image survives as evidence.
 
@@ -322,11 +325,7 @@ def mint_reference(
         log.info("char_bible: %s legacy_name_fallback=%s", char_id, legacy_name_fallback)
     prompt = reference_prompt(description, name, style_fragment)
     judge_prompt = JUDGE_PROMPT.format(subject=_describe(description, name, notes=False))
-    negative_extra = (
-        REFERENCE_NEGATIVE
-        if description.is_humanoid
-        else f"{REFERENCE_NEGATIVE}, {NON_HUMAN_NEGATIVE}"
-    )
+    negative_extra = _reference_negative(description)
     candidates: list[tuple[bytes, RefVerdict]] = []
     draws = 0
 
@@ -392,11 +391,7 @@ def _mint_targeted(state: StoryMemory) -> dict:
         f"\n\nBe sure to include: {retry.attribute}."
     )
     judge_prompt = JUDGE_PROMPT.format(subject=_describe(description, character.name, notes=False))
-    negative_extra = (
-        REFERENCE_NEGATIVE
-        if description.is_humanoid
-        else f"{REFERENCE_NEGATIVE}, {NON_HUMAN_NEGATIVE}"
-    )
+    negative_extra = _reference_negative(description)
 
     image = text_to_image(prompt, negative_extra=negative_extra)
 
@@ -412,6 +407,7 @@ def _mint_targeted(state: StoryMemory) -> dict:
             "ref_verdict": verdict,
             "ref_verdict_prompt_version": JUDGE_PROMPT_VERSION,
             "ref_moderation_status": None,
+            "ref_generation_prompt": prompt if state.moderation_context.mode == "teacher_review_v1" else None,
         })
         if c.char_id == character.char_id
         else c
@@ -425,6 +421,25 @@ def _mint_targeted(state: StoryMemory) -> dict:
         character.char_id, retry.attribute, cost.ref_retry_count,
     )
     return {"characters": characters, "cost": cost, "reference_retry": None}
+
+
+def replace_reference(state: StoryMemory, char_id: str) -> dict:
+    """ADR-080: one same-intent draw, keeping the rejected immutable object."""
+    char = next(c for c in state.characters if c.char_id == char_id)
+    description = filtered_description(char.description, state.style.prompt_fragment or settings.default_style_fragment)
+    check_image_budget(state.cost.image_count)
+    image = text_to_image(char.ref_generation_prompt, negative_extra=_reference_negative(description))
+    verdict = _judge_reference(JUDGE_PROMPT.format(subject=_describe(description, char.name, notes=False)), image, char_id, 1)
+    n = state.cost.ref_retry_count + state.cost.ref_mod_retry_count + 2
+    path = _upload(image, state.story_id, char_id, n)
+    return {
+        "characters": [c.model_copy(update={
+            "canonical_ref_image": path, "ref_moderation_status": None, "ref_verdict": verdict,
+            "ref_verdict_prompt_version": JUDGE_PROMPT_VERSION,
+        }) if c.char_id == char_id else c for c in state.characters],
+        "cost": state.cost.model_copy(update={"image_count": state.cost.image_count + 1,
+                                             "ref_mod_retry_count": state.cost.ref_mod_retry_count + 1}),
+    }
 
 
 def char_bible(state: StoryMemory) -> dict:
@@ -486,6 +501,9 @@ def char_bible(state: StoryMemory) -> dict:
             # This path now overwrites that image on a moderation redraw, so the status has to go
             # with it (`moderation-stack.md` §4b) — `_mint_targeted` has always done the same.
             "ref_moderation_status": None,
+            "ref_generation_prompt": reference_prompt(
+                filtered_description(c.description, style_fragment), c.name, style_fragment,
+            ) if state.moderation_context.mode == "teacher_review_v1" else None,
         })
         if c.char_id in minted
         else c

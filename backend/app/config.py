@@ -242,5 +242,8 @@ SUPER_STEP_PRELUDE = 17
 RECURSION_LIMIT = MAX_SCENES * 7 + SUPER_STEP_PRELUDE
 # Each scene may add two review pauses, two decision resumes, replacement,
 # fresh check, fresh moderation and allowed continuation to its seven-step loop.
-# This bounds even the cumulative paused/resumed path, plus the capped prelude/compose.
-TEACHER_REVIEW_RECURSION_LIMIT = MAX_SCENES * (7 + 8) + SUPER_STEP_PRELUDE + 1
+# References add at most six holds: two initial references, three child taps,
+# and the one per-book replacement. Reserve four steps each for review pause,
+# decision, reference recheck and the repeated reveal pause. The existing prelude
+# still covers mint/retry edges. This is a step bound, never an image allowance.
+TEACHER_REVIEW_RECURSION_LIMIT = MAX_SCENES * (7 + 8) + SUPER_STEP_PRELUDE + (2 + 3 + 1) * 4 + 1

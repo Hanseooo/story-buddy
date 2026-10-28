@@ -11,6 +11,14 @@
 > *rubric*; this spec owns only what happens after it fires. Precedent:
 > `lettering-suppression.md`, `scene-setting-and-subject-binding.md`.
 
+**ADR-080 feature-mode amendment (ticket 10, 2026-10-28):** this document describes baseline
+redraw-once behavior. Captured `teacher_review_v1` jobs retain and hold the first flagged reference
+before any redraw. Teacher allow clears only that exact candidate; replacement uses the existing
+one-per-book slot for one budget-guarded draw from the recorded prompt, including tapped emphasis,
+then fresh reference judging and moderation. All three canonical-image writers reset moderation
+status. No replacement is offered after dependent scenes exist. See
+[moderation-stack §9.16](moderation-stack.md#916-ticket-10-implementation-2026-10-28).
+
 ## 1. Purpose
 
 A flagged character reference ends the book. It should cost one redraw.

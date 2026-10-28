@@ -3,10 +3,11 @@
 **Post-defense amendment:** §9 records the moderation-calibration interviews. The 2026-10-27
 technical completion in §9.9 supplies concrete contracts and project policy, explicitly accepted
 with ADR-080 on 2026-10-27 (“accept all”). Synthetic-only, feature-off implementation is authorized.
-Ticket 05's scene hold and enabling contracts are implemented; §§1–8 describe baseline behavior. Tickets 06–15, audit 01 and real-child release review
-remain outstanding. Owner acceptance does not establish externally validated policy or efficacy.
+Implementation records in §§9.10–9.16 track the completed slices; §§1–8 describe baseline behavior.
+Audit 01, the remaining tickets and real-child release review remain outstanding.
+Owner acceptance does not establish externally validated policy or efficacy.
 
-**Status:** amendment accepted (2026-10-27), ticket 05 implemented, successors pending · **Phase:** 2 · **Owner:** three gate nodes:
+**Status:** amendment accepted (2026-10-27), implementation records below · **Phase:** 2 · **Owner:** three gate nodes:
 `backend/pipeline/input_gate.py`, `backend/pipeline/char_ref_mod.py`, `backend/pipeline/output_mod.py`
 **Derived from:** MASTER_SPEC §2 (system map) · **Rationale:** ADR-011c, ADR-004 (amendment b),
 ADR-017, ADR-025
@@ -151,12 +152,14 @@ spent 4 classifier calls where 2 can decide it, pure waste on 0.2 vCPU / 512 MB.
 ⚠️ **A reveal retry re-moderates only the characters whose reference actually changed** — since
 `reference-moderation-retry.md` §4.1, `char_ref_mod` skips a character already marked `"passed"`.
 That optimisation is a **CC-1 safety hole** unless every path that overwrites `canonical_ref_image`
-also clears `ref_moderation_status`, and both now do: `char_bible`'s targeted mode
+also clears `ref_moderation_status`, and all three now do: `char_bible`'s targeted mode
 (`kid-flow-pause-lifecycle.md` §4.7) and its untargeted mint
-(`reference-moderation-retry.md` §4.3). A status describes the image that was in
+(`reference-moderation-retry.md` §4.3), and teacher-requested `replace_reference` (§9.16).
+A status describes the image that was in
 `canonical_ref_image` when it was written; overwriting the image without clearing the status would
 route an unmoderated image straight to a child. **Anything that adds a third write path to
 `canonical_ref_image` must clear the status too, or delete the skip.**
+The third path, `replace_reference`, now clears it (§9.16).
 
 ### 4c. `output_mod`
 
@@ -1684,3 +1687,63 @@ The unrestricted frontend discovery attempts did not finish and were stopped. Th
 source command `pnpm exec vitest run app components lib utils middleware.test.ts --pool=threads --maxWorkers=1 --reporter=verbose`
 passes all 78 files and 744 tests, with no source test excluded. Full output is in
 `.scratch/ticket09-frontend-source.txt`; build output is in `.scratch/ticket09-build.txt`.
+
+### 9.16 Ticket 10 implementation (2026-10-28)
+
+Captured `teacher_review_v1` jobs retain the exact first flagged reference in private Storage
+and checkpoint its immutable-byte hash, classifier evidence and review identity. No automatic
+redraw or further reference check occurs before the hold. Allow marks that exact reference
+`teacher_allowed`, returns to `char_ref_mod` for the remaining roster in order, then reaches
+the existing child reveal. Cleared references are not billed again. Empty rosters and characters
+without references create no review. Baseline redraw-once behavior and classifier policy remain.
+
+Both mint paths record the exact `ref_generation_prompt` in this mode, including targeted
+emphasis. `moderation_replace` uses the existing per-book `MAX_MOD_REDRAWS` slot for one fresh,
+budget-guarded same-prompt reference draw, with existing reference judging followed by fresh
+`char_ref_mod`. A new flag holds the new candidate with allow/stop only. Replacement clears
+`ref_moderation_status`, as do initial and targeted minting. The immutable suffix advances using
+the existing counters. No scene judge, softened prompt, extra image allowance or schema change
+was introduced. Missing source prompt, exhausted slot/budget or existing scene attempts/final
+images disable replacement in both the teacher command and the worker.
+
+Private teacher inspection identifies the actual reference descriptor as held, requiring explicit
+reveal. Allow/replace/stop reuse exact-subject, quiescence, epoch, authorization and idempotent
+dispatch checks. Current reference clearances can be withdrawn through the existing whole-book
+containment path, anchored to the retained next node. An allow restores the saved continuation;
+dependent scenes prevent reference replacement. Child delivery remains denied throughout a hold.
+Reveal, scene generation/regeneration, scene replacement and composition explicitly accept only
+`passed` or `teacher_allowed` reference status in this mode, before effects or delivery.
+The teacher UI reuses picture decisions and recovery, with reference-specific allowance and
+dependent-scene explanations. The UI fixture is captured from the synthetic HTTP integration.
+
+The feature-only step bound now reserves four steps per possible reference hold (two initial
+references, three child taps, one replacement), in addition to the existing scene bound and
+prelude. The expanded no-provider graph test measures 189 steps, including all ten scenes at
+their consistency/replacement caps and six reference holds. Baseline `RECURSION_LIMIT` and
+`IMAGE_BUDGET` are unchanged. This is an execution bound, not permission to spend more.
+
+Standards and Spec re-reviews have no unresolved findings. Browser/hosted
+verification, paid providers, production enablement and real-child use remain unrun. The feature
+stays disabled by default and audit 01 remains open.
+
+Verification (2026-10-28):
+
+- Failing-first regressions cover first-flag hold/allow, replacement status invalidation,
+  the cumulative step bound and all four reference consumers. Removing reference decision
+  controls makes both captured-reference UI cases fail with missing action buttons.
+- `uv run pytest tests/test_char_ref_mod_node.py tests/test_graph_stub.py -q --tb=short`:
+  50 passed after review fixes. The real-Postgres `tests/test_teacher_hold.py` seam covers
+  private reference inspection/delivery, allow/replace/stop, duplicate commands/delivery,
+  budget denial, stale decisions and withdrawal back to reveal, alongside existing scene flows.
+- `uv run ruff check .`: passed. Final full `uv run pytest` with disposable local
+  `TEST_MODERATION_DB_URL`: 1,568 passed, 89 skipped, six smoke deselections and six native
+  WeasyPrint/PDF failures, matching the environment limitation recorded in §§9.11–9.15.
+  Representative failure: `assert 503 == 200`, with `PDF download failed (OSError)` and
+  “WeasyPrint could not import some external libraries.” No PDF test was removed or loosened.
+  Output: `.scratch/ticket10-backend-final.txt`.
+- Frontend `pnpm lint`, `pnpm build` with CI public placeholders and `pnpm exec tsc --noEmit`:
+  passed. Affected Books file: 38 passed. Full source command
+  `pnpm exec vitest run app components lib utils middleware.test.ts --pool=threads --maxWorkers=1 --reporter=verbose`:
+  all 78 files and 746 tests passed. Unrestricted discovery stalled and was stopped; repository
+  enumeration confirms no source test sits outside the explicit paths. Windows uses `pnpm.cmd`.
+  Outputs: `.scratch/ticket10-frontend-source.txt`, `.scratch/ticket10-build.txt`.

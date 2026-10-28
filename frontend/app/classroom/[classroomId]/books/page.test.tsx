@@ -6,6 +6,7 @@ import BookCard from "@/components/BookCard";
 import NeedsHelpQueue from "@/components/NeedsHelpQueue";
 // Captured from the real graph/disposable-Postgres test_teacher_hold integration run.
 import heldDetail from "./held-detail.fixture.json";
+import heldReference from "./held-reference.fixture.json";
 import moderationPolicy from "./moderation-policy.fixture.json";
 import clearances from "./clearances.fixture.json";
 import pendingContinuation from "./pending-continuation.fixture.json";
@@ -77,7 +78,10 @@ describe("held story inspection", () => {
     expect(writes).toBe(replayed ? 2 : 1);
     vi.unstubAllGlobals();
   });
-  it.each(["allow", "replace"])("%s retries the same request across a lost response and reload", async (action) => {
+  it.each([
+    { action: "allow", held: heldDetail }, { action: "replace", held: heldDetail },
+    { action: "allow", held: heldReference }, { action: "replace", held: heldReference },
+  ])("$action retries the same request across a lost response and reload for $held.kind", async ({ action, held }) => {
     let submissions = 0;
     const bodies: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (url: string, options?: RequestInit) => {
@@ -90,7 +94,7 @@ describe("held story inspection", () => {
       if (url.endsWith("/moderation-policy")) return Response.json(moderationPolicy);
       if (url.endsWith("/moderation-review")) return Response.json(submissions
         ? { ...pendingContinuation, pending_command: JSON.parse(bodies[0]) }
-        : { ...heldDetail, replacement_available: true, replacement_disabled_reason: null });
+        : { ...held, replacement_available: true, replacement_disabled_reason: null });
       return Response.json([{ review_id: heldDetail.review_id, job_id: "synthetic-job", title: heldDetail.title, held_at: "2026-10-28T00:00:00Z", ready: true }]);
     }));
     URL.createObjectURL = vi.fn(() => "blob:synthetic-picture");
@@ -100,7 +104,7 @@ describe("held story inspection", () => {
     const allow = await screen.findByRole("button", { name: action === "allow" ? "Allow this picture" : "Request replacement picture" });
     expect(allow).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Show picture to review" }));
-    fireEvent.load(await screen.findByRole("img", { name: "Synthetic story" }));
+    fireEvent.load(await screen.findByRole("img", { name: held.pictures.find(picture => picture.state === "held")!.label }));
     if (action === "allow") {
       expect(allow).toBeDisabled();
       for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);

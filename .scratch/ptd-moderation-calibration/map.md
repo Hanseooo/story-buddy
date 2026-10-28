@@ -24,7 +24,7 @@ the defense, and the teacher decides whether a flagged run continues.
 | 07 | [Teacher allows the exact held picture; run resumes](issues/07-teacher-allows-held-picture.md) | task | implemented; browser/hosted verification pending | — (06/13 implemented) |
 | 08 | [Teacher or child stops a held story, writing kept](issues/08-teacher-stops-held-story.md) | task | open | 06 |
 | 09 | [Teacher requests a replacement picture within budget](issues/09-teacher-requests-replacement-picture.md) | task | implemented; browser/hosted verification pending | — (07 implemented) |
-| 10 | [Flagged character reference holds](issues/10-hold-flagged-character-reference.md) | task | open | 07, 08, 09 |
+| 10 | [Flagged character reference holds](issues/10-hold-flagged-character-reference.md) | task | implemented; browser/hosted verification pending | — (07–09 implemented) |
 | 11 | [Flagged story text holds; teacher can allow unchanged](issues/11-hold-flagged-story-text.md) | task | open | 07, 08 |
 | 12 | [Flagged title holds instead of 422](issues/12-hold-flagged-title.md) | task | open | 11 |
 | 13 | [Review criteria and per-hold explanation](issues/13-review-criteria-and-hold-explanation.md) | task | implemented; browser/hosted verification pending | — (06 inspection implemented) |
@@ -54,6 +54,11 @@ replacement path with fresh consistency judgment in teacher-review mode. See
 [moderation-stack §9.15](../../docs/specs/moderation-stack.md#915-ticket-09-implementation-2026-10-28)
 for checks and release limits. Baseline automatic retries remain unjudged; the baseline
 backstop-error policy remains a separate decision.
+Ticket [10](issues/10-hold-flagged-character-reference.md) extends private first-flag holds,
+exact-picture decisions and withdrawal to references, preserving the recorded prompt and the
+existing per-book replacement slot. See
+[moderation-stack §9.16](../../docs/specs/moderation-stack.md#916-ticket-10-implementation-2026-10-28)
+for checks and release limits. The feature remains disabled by default.
 ## Answers
 
 ### Interview decisions (2026-10-26; specification only)

@@ -20,7 +20,7 @@ from app.config import settings
 from app.moderation_policy import POLICY, TEACHER_MODERATION_POLICY_VERSION
 from app.queue import get_queue
 from contracts.story_memory import StoryMemory
-from pipeline.moderation_replace import scene_replacement_disabled_reason
+from pipeline.moderation_replace import replacement_disabled_reason
 
 hold_router = APIRouter()
 PRIVATE = {"Cache-Control": "private, no-store"}
@@ -87,8 +87,9 @@ def review_pictures(conn, job_id: str, review: dict):
         state = None
     if state:
         for char in state.characters:
+            held = char.char_id == review["subject_id"] and review["kind"] == "character_reference"
             pictures.append({"asset_id": f"ref-{char.char_id}", "label": f"Reference: {char.name}",
-                             "path": char.canonical_ref_image, "state": "available" if char.canonical_ref_image else "not_generated"})
+                             "path": char.canonical_ref_image, "state": "held" if held else "available" if char.canonical_ref_image else "not_generated"})
         for scene in state.scenes:
             held = scene.scene_id == review["subject_id"] and review["kind"] == "scene_image"
             path = review["subject"].get("image_path") if held else scene.final_image_ref
@@ -119,12 +120,20 @@ def teacher_review_detail(job_id: UUID, response: Response, user=Depends(get_cur
                     state = StoryMemory.model_validate(checkpoint.checkpoint["channel_values"]) if checkpoint else None
                     seen = set()
                     for allowed in conn.execute("""select * from job_moderation_reviews where job_id=%s
-                      and decision='allow' and kind='scene_image' order by decided_at desc,id""", (job_id,)).fetchall():
-                        if allowed["subject_id"] in seen:
+                      and decision='allow' and kind in ('scene_image','character_reference') order by decided_at desc,id""", (job_id,)).fetchall():
+                        key = (allowed["kind"], allowed["subject_id"])
+                        if key in seen:
+                            continue
+                        if allowed["kind"] == "character_reference":
+                            char = next((c for c in state.characters if c.char_id == allowed["subject_id"]), None) if state else None
+                            if char and char.ref_moderation_status == "teacher_allowed" and char.canonical_ref_image == allowed["subject"].get("image_path"):
+                                seen.add(key)
+                                clearances.append({"review_id": str(allowed["id"]), "subject_version": allowed["subject_version"],
+                                                   "label": f"Reference: {char.name}"})
                             continue
                         scene = next((s for s in state.scenes if s.scene_id == allowed["subject_id"]), None) if state else None
                         if scene and scene.moderation_status == "teacher_allowed" and scene.final_image_ref == allowed["subject"].get("image_path"):
-                            seen.add(allowed["subject_id"])
+                            seen.add(key)
                             clearances.append({"review_id": str(allowed["id"]), "subject_version": allowed["subject_version"],
                                                "label": scene.caption or scene.scene_id})
                 return {"status": job["status"], "review_id": None, "generation_epoch": job["generation_epoch"],
@@ -136,7 +145,7 @@ def teacher_review_detail(job_id: UUID, response: Response, user=Depends(get_cur
                             "confirmed_criteria": pending["confirmed_criteria"], "confirmed": True} if pending else None}
             pictures = review_pictures(conn, str(job_id), review)
             retained = validate_review_checkpoint(conn, str(job_id), review)
-            replacement_reason = (scene_replacement_disabled_reason(retained, review["subject_id"], job["image_count"] or 0)
+            replacement_reason = (replacement_disabled_reason(retained, review["kind"], review["subject_id"], job["image_count"] or 0)
                                   if retained else "replacement_source_unavailable")
             author = conn.execute("select display_nickname from profiles where id=%s", (job["profile_id"],)).fetchone()
             return {"status": job["status"], "review_id": str(review["id"]),
@@ -292,8 +301,12 @@ def validate_review_checkpoint(conn, job_id, review):
     saved = state.moderation_context.review
     if (state.story_id != job_id or state.moderation_context.mode != "teacher_review_v1"
             or not saved or str(saved.review_id) != str(review["id"]) or saved.subject_id != review["subject_id"]
+            or saved.kind != review["kind"]
             or saved.subject_version != review["subject_version"] or saved.resolution is not None):
         return None
+    if saved.kind == "character_reference":
+        char = next((c for c in state.characters if c.char_id == saved.subject_id), None)
+        return state if char and char.canonical_ref_image == review["subject"].get("image_path") and char.canonical_ref_image else None
     scene = next((s for s in state.scenes if s.scene_id == saved.subject_id), None)
     if (review["kind"] != "scene_image" or not scene or scene.final_image_ref != review["subject"].get("image_path")
             or not any(a.image_ref == scene.final_image_ref for a in scene.attempts)):
@@ -350,7 +363,7 @@ def teacher_decision(job_id: UUID, body: ReviewDecision, response: Response, use
                 if retained is None:
                     command_conflict("checkpoint_unavailable", job, review)
                 if body.action == "replace":
-                    reason = scene_replacement_disabled_reason(retained, review["subject_id"], job["image_count"] or 0)
+                    reason = replacement_disabled_reason(retained, review["kind"], review["subject_id"], job["image_count"] or 0)
                     if reason:
                         raise HTTPException(422, reason, headers=PRIVATE)
                 # Bound to retained immutable bytes, including recovery after a failed read.
@@ -415,22 +428,27 @@ def teacher_withdraw(job_id: UUID, body: ReviewWithdrawal, response: Response, u
             else:
                 if (job["moderation_mode"] != "teacher_review_v1" or job["status"] not in ("queued", "running", "awaiting_confirm", "complete")
                         or job["generation_epoch"] != body.expected_epoch or not clearance
-                        or clearance["decision"] != "allow" or clearance["kind"] != "scene_image"
+                        or clearance["decision"] != "allow" or clearance["kind"] not in ("scene_image", "character_reference")
                         or clearance["subject_version"] != body.subject_version
                         or conn.execute("select 1 from job_moderation_reviews where job_id=%s and decision is null", (jid,)).fetchone()):
                     command_conflict("clearance_changed", job)
                 checkpoint = PostgresSaver(conn).get_tuple({"configurable": {"thread_id": jid}})
                 state = StoryMemory.model_validate(checkpoint.checkpoint["channel_values"]) if checkpoint else None
-                scene = next((s for s in state.scenes if s.scene_id == clearance["subject_id"]), None) if state else None
-                if not scene or scene.final_image_ref != clearance["subject"].get("image_path") or scene.moderation_status != "teacher_allowed":
-                    command_conflict("clearance_changed", job)
+                if clearance["kind"] == "character_reference":
+                    char = next((c for c in state.characters if c.char_id == clearance["subject_id"]), None) if state else None
+                    if not char or char.canonical_ref_image != clearance["subject"].get("image_path") or char.ref_moderation_status != "teacher_allowed":
+                        command_conflict("clearance_changed", job)
+                else:
+                    scene = next((s for s in state.scenes if s.scene_id == clearance["subject_id"]), None) if state else None
+                    if not scene or scene.final_image_ref != clearance["subject"].get("image_path") or scene.moderation_status != "teacher_allowed":
+                        command_conflict("clearance_changed", job)
                 snapshot = {**clearance["settings_snapshot"], "withdrawal_epoch": body.expected_epoch + 1,
                             "withdrawal_actor_id": uid}
                 conn.execute("""insert into job_moderation_reviews
                   (id,job_id,kind,subject_id,subject_version,subject,criteria,policy_version,settings_snapshot,
                    classifier_evidence,return_node,withdraws_review_id,dispatch_kind,dispatch_state)
-                  values (%s,%s,'scene_image',%s,%s,%s,%s,%s,%s,%s,'pending',%s,'anchor_withdrawal','pending')""", (
-                    body.request_id, jid, clearance["subject_id"], clearance["subject_version"], Jsonb(clearance["subject"]),
+                  values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending',%s,'anchor_withdrawal','pending')""", (
+                    body.request_id, jid, clearance["kind"], clearance["subject_id"], clearance["subject_version"], Jsonb(clearance["subject"]),
                     clearance["criteria"], clearance["policy_version"], Jsonb(snapshot), Jsonb(clearance["classifier_evidence"]),
                     body.clearance_review_id,
                 ))
@@ -532,20 +550,25 @@ def assert_current(conn, job_id: str, epoch: int) -> dict:
 
 def project_hold(conn, job_id: str, state: StoryMemory, checkpoint_id: str) -> int:
     review, context = state.moderation_context.review, state.moderation_context
-    if (not review or review.kind != "scene_image" or review.resolution is not None
+    if (not review or review.kind not in ("scene_image", "character_reference") or review.resolution is not None
             or not checkpoint_id or not context.policy_version):
         raise RuntimeError("invalid_moderation_checkpoint")
-    scene = next(s for s in state.scenes if s.scene_id == review.subject_id)
-    if not scene.final_image_ref or not scene.final_image_ref.startswith(f"{job_id}/"):
+    if review.kind == "character_reference":
+        char = next(c for c in state.characters if c.char_id == review.subject_id)
+        path = char.canonical_ref_image
+        subject = {"image_path": path, "char_id": char.char_id, "prompt": char.ref_generation_prompt,
+                   "reference_paths": []}
+    else:
+        scene = next(s for s in state.scenes if s.scene_id == review.subject_id)
+        path = scene.final_image_ref
+        selected = next((a for a in scene.attempts if a.image_ref == path), None)
+        subject = {"image_path": path, "scene_id": scene.scene_id,
+                   "prompt": selected.prompt if selected else scene.prompt,
+                   "reference_paths": [c.canonical_ref_image for c in state.characters
+                                       if c.char_id in scene.characters_present and c.canonical_ref_image]}
+    if not path or not path.startswith(f"{job_id}/"):
         raise RuntimeError("invalid_moderation_subject")
-    selected = next((a for a in scene.attempts if a.image_ref == scene.final_image_ref), None)
-    subject = {
-        "image_path": scene.final_image_ref, "image_hash": review.subject_version,
-        "scene_id": scene.scene_id, "prompt": selected.prompt if selected else scene.prompt,
-        "reference_paths": [c.canonical_ref_image for c in state.characters
-                            if c.char_id in scene.characters_present and c.canonical_ref_image],
-        "story_text": state.input.redacted_text or state.input.raw_text,
-    }
+    subject.update(image_hash=review.subject_version, story_text=state.input.redacted_text or state.input.raw_text)
     with conn.transaction():
         job = conn.execute("select * from jobs where id=%s for update", (job_id,)).fetchone()
         prior = conn.execute("select id from job_moderation_reviews where id=%s and job_id=%s",
@@ -609,7 +632,7 @@ def can_reconcile_hold(conn, job: dict) -> bool:
         if checkpoint:
             state = StoryMemory.model_validate(checkpoint.checkpoint["channel_values"])
             review = state.moderation_context.review
-            return review is not None and review.kind == "scene_image" and review.resolution is None
+            return review is not None and review.kind in ("scene_image", "character_reference") and review.resolution is None
     return False
 
 

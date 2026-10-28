@@ -7,6 +7,7 @@ node is positioned to check, and the one per-book record the run emits.
 import logging
 
 from contracts.story_memory import Scene, StoryMemory
+from pipeline.char_ref_mod import require_reference_clearance
 
 log = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ def outcome(scene: Scene) -> str:
 
 
 def compose(state: StoryMemory) -> dict:
+    require_reference_clearance(state)
     if not state.scenes:
         raise ValueError("compose: no scenes — there is no book to compose")
 

@@ -101,21 +101,29 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                                 or (job["image_count"] or 0) > retained.cost.image_count):
                             raise RuntimeError("checkpoint_not_resumable")
                         return_node = existing_review.return_node if repairing else snapshot.next[0] if snapshot.next else "__end__"
-                        if return_node not in ("output_mod", "generate_scene", "consistency_check", "reveal", "compose", "__end__"):
+                        if return_node not in ("char_ref_mod", "output_mod", "generate_scene", "consistency_check", "reveal", "compose", "__end__"):
                             raise RuntimeError("checkpoint_not_resumable")
-                        scene = next(s for s in retained.scenes if s.scene_id == withdrawal["subject_id"])
-                        if scene.final_image_ref != withdrawal["subject"]["image_path"]:
+                        if withdrawal["kind"] == "character_reference":
+                            char = next(c for c in retained.characters if c.char_id == withdrawal["subject_id"])
+                            path = char.canonical_ref_image
+                            changes = {"characters": [c.model_copy(update={"ref_moderation_status": None})
+                                       if c.char_id == char.char_id else c for c in retained.characters]}
+                        else:
+                            scene = next(s for s in retained.scenes if s.scene_id == withdrawal["subject_id"])
+                            path = scene.final_image_ref
+                            changes = {"scenes": [scene.model_copy(update={
+                                "moderation_status": None, "attempts": [a.model_copy(update={"safety_eligibility": "unreviewed"})
+                                    if a.image_ref == scene.final_image_ref else a for a in scene.attempts],
+                            })]}
+                        if path != withdrawal["subject"]["image_path"]:
                             raise RuntimeError("moderation_subject_unavailable")
                         import hashlib
-                        if hashlib.sha256(providers.download_book_image(scene.final_image_ref)).hexdigest() != withdrawal["subject_version"]:
+                        if hashlib.sha256(providers.download_book_image(path)).hexdigest() != withdrawal["subject_version"]:
                             raise RuntimeError("moderation_subject_unavailable")
                         context = retained.moderation_context.model_copy(update={"generation_epoch": epoch,
-                            "review": ReviewContext(review_id=withdrawal["id"], kind="scene_image", subject_id=scene.scene_id,
+                            "review": ReviewContext(review_id=withdrawal["id"], kind=withdrawal["kind"], subject_id=withdrawal["subject_id"],
                                 subject_version=withdrawal["subject_version"], criteria=withdrawal["criteria"], return_node=return_node)})
-                        graph.update_state(config, {"moderation_context": context, "scenes": [scene.model_copy(update={
-                            "moderation_status": None, "attempts": [a.model_copy(update={"safety_eligibility": "unreviewed"})
-                                if a.image_ref == scene.final_image_ref else a for a in scene.attempts],
-                        })]}, as_node="moderation_review")
+                        graph.update_state(config, {"moderation_context": context, **changes}, as_node="moderation_review")
                         graph.invoke(None, config)
                         anchored = graph.get_state(config)
                         conn.execute("""update job_moderation_reviews set checkpoint_id=%s,return_node=%s where id=%s""",
