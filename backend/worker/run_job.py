@@ -102,7 +102,7 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                                 or (job["image_count"] or 0) > retained.cost.image_count):
                             raise RuntimeError("checkpoint_not_resumable")
                         return_node = existing_review.return_node if repairing else snapshot.next[0] if snapshot.next else "__end__"
-                        if return_node not in ("analyze", "segment", "char_bible", "char_ref_mod", "output_mod", "generate_scene", "consistency_check", "reveal", "compose", "__end__"):
+                        if return_node not in ("optional_themes", "analyze", "segment", "char_bible", "char_ref_mod", "output_mod", "generate_scene", "consistency_check", "reveal", "compose", "__end__"):
                             raise RuntimeError("checkpoint_not_resumable")
                         if withdrawal["kind"] == "story_text":
                             text = retained.input.redacted_text

@@ -45,6 +45,54 @@ describe("Classroom settings danger zone", () => {
   });
 });
 
+describe("optional classroom review themes", () => {
+  it("saves choices only after a durable response", async () => {
+    const themes = [
+      { id: "spooky_suspense", name: "Mild suspense/spooky settings", trigger: "Narrative fear", exception: "Friendly magic" },
+      { id: "story_conflict", name: "Non-graphic fighting, arguments or bullying", trigger: "Hostile conflict", exception: "Respectful disagreement" },
+      { id: "loss_separation", name: "Sadness, loss or separation", trigger: "Narrative grief", exception: "Routine goodbye" },
+    ];
+    let finishSave!: (response: Response) => void;
+    const fetcher = vi.fn().mockResolvedValueOnce(Response.json({ theme_ids: [], settings_version: 0, editable: true, themes }))
+      .mockImplementationOnce(() => new Promise<Response>(resolve => { finishSave = resolve; }));
+    vi.stubGlobal("fetch", fetcher);
+    render(<SettingsPage />);
+    const toggle = await screen.findByRole("checkbox", { name: /mild suspense/i });
+    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole("button", { name: "Save review themes" }));
+    expect(screen.queryByText("Review themes saved")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Saving review themes…" })).toBeDisabled();
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({ expected_version: 0, theme_ids: ["spooky_suspense"] });
+    finishSave(Response.json({ theme_ids: ["spooky_suspense"], settings_version: 1 }));
+    expect(await screen.findByText("Review themes saved")).toBeInTheDocument();
+    fireEvent.click(toggle);
+    expect(screen.getByText(/Turning a theme off.*shared safety checks still apply/i)).toBeInTheDocument();
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps unsaved choices on failure and retries the save", async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(Response.json({ theme_ids: [], settings_version: 3, editable: true,
+      themes: [{ id: "loss_separation", name: "Sadness, loss or separation", trigger: "Grief", exception: "Goodbyes" }] }))
+      .mockRejectedValueOnce(new TypeError("offline"))
+      .mockResolvedValueOnce(Response.json({ theme_ids: ["loss_separation"], settings_version: 4 }));
+    vi.stubGlobal("fetch", fetcher);
+    render(<SettingsPage />);
+    const toggle = await screen.findByRole("checkbox", { name: /sadness/i });
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole("button", { name: "Save review themes" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Could not save review themes/i);
+    expect(toggle).toBeChecked();
+    expect(screen.queryByText("Review themes saved")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry saving review themes" }));
+    expect(await screen.findByText("Review themes saved")).toBeInTheDocument();
+    expect(JSON.parse(fetcher.mock.calls[2][1].body)).toEqual({ expected_version: 3, theme_ids: ["loss_separation"] });
+    vi.unstubAllGlobals();
+  });
+});
+
 describe("failed teacher mutations are reported, not swallowed (#77)", () => {
   it("a rejected rename does not claim success", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 403 }));

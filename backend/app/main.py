@@ -208,7 +208,6 @@ def create_storybook(
                 "moderation_mode": "teacher_review_v1",
                 "moderation_settings_snapshot": {
                     "policy_version": TEACHER_MODERATION_POLICY_VERSION,
-                    "theme_ids": [], "settings_version": 0,
                 },
             } if review_mode else {}),
         }

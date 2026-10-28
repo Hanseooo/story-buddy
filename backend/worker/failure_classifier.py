@@ -18,7 +18,7 @@ def classify_failure_reason(exc: BaseException) -> str:
         return "character_safety"
     if msg == "output_moderation_failed":
         return "scene_safety"
-    if msg == "moderation_error":
+    if msg in ("moderation_error", "optional_theme_error"):
         return "service_busy"
     if msg == "worker_stopped":
         return "worker_stopped"

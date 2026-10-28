@@ -80,21 +80,21 @@
   "optional_themes": [
     {
       "id": "spooky_suspense",
-      "name": "Spooky suspense",
+      "name": "Mild suspense/spooky settings",
       "trigger": "Narrative fear, threatening suspense, frightening supernatural encounters or deliberately spooky settings",
       "exception": "Friendly magic/creatures or darkness with no fear/threat/suspense",
       "origin": "optional_theme"
     },
     {
       "id": "story_conflict",
-      "name": "Story conflict",
+      "name": "Non-graphic fighting, arguments or bullying",
       "trigger": "Physical fighting, hostile arguments or bullying between story characters, without requiring graphic harm",
       "exception": "Friendly competition, respectful disagreement or merely describing a past resolved disagreement",
       "origin": "optional_theme"
     },
     {
       "id": "loss_separation",
-      "name": "Loss separation",
+      "name": "Sadness, loss or separation",
       "trigger": "Narrative sadness about death/loss, grief, abandonment or separation from an important person/animal",
       "exception": "Brief disappointment or a routine goodbye with no sadness/loss/separation theme",
       "origin": "optional_theme"

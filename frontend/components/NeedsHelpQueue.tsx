@@ -15,6 +15,8 @@ type Detail = {
   title?: string | null; author?: string | null; story_text?: string | null; subject_title?: string | null;
   ready?: boolean; pictures?: Picture[];
   kind?: string; criteria?: string[]; policy_version?: string; current_policy_version?: string;
+  detected_themes?: { theme_id: string; reason: string }[];
+  theme_check?: { model_id: string; instruction_version: string } | null;
   settings_snapshot?: { theme_ids?: string[]; settings_version?: number; withdrawal_epoch?: number };
   classifier_evidence?: { layer: string; model_id: string; instruction_version: string;
     outcome: string; checked_at: string | null; categories: string[]; reason: string | null }[];
@@ -222,7 +224,13 @@ function HeldStory({ jobId, onClose }: { jobId: string; onClose: () => void }) {
             <p>Optional themes at submission: {detail.settings_snapshot?.theme_ids
               ? detail.settings_snapshot.theme_ids.map(id => id.replaceAll("_", " ")).join(", ") || "None enabled"
               : "Unavailable"}</p>
-            {!detail.classifier_evidence?.length && <p>The recorded reason is unavailable</p>}
+            {detail.kind === "optional_themes" && <>
+              <p>These classroom preferences request extra review. They do not label the story unsafe. Shared safety checks still apply.</p>
+              {detail.detected_themes?.map(theme => <p key={theme.theme_id}>{theme.theme_id.replaceAll("_", " ")}: {theme.reason}</p>)}
+              <p>Recorded detector: {detail.theme_check?.model_id || "Unavailable"}</p>
+              <p>Instruction version: {detail.theme_check?.instruction_version || "Unavailable"}</p>
+            </>}
+            {detail.kind !== "optional_themes" && !detail.classifier_evidence?.length && <p>The recorded reason is unavailable</p>}
             {detail.classifier_evidence?.map((evidence, index) => <div key={index} className="space-y-2 border-t border-primary/15 pt-3">
               <h5 className="font-bold">{evidence.layer === "primary" ? "Primary classifier" : "Backstop classifier"}</h5>
               <dl className="space-y-1 text-sm">

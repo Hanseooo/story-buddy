@@ -123,6 +123,7 @@ def test_canonical_consistency_does_not_add_a_graph_node():
 
     assert runtime_nodes == {
         "input_gate",
+        "optional_themes",  # ADR-080's text-only classroom check, ticket 14
         "analyze",
         "segment",
         "char_bible",

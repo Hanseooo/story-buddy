@@ -28,7 +28,7 @@ the defense, and the teacher decides whether a flagged run continues.
 | 11 | [Flagged story text holds; teacher can allow unchanged](issues/11-hold-flagged-story-text.md) | task | open | 07, 08 |
 | 12 | [Flagged title holds instead of 422](issues/12-hold-flagged-title.md) | task | open | 11 |
 | 13 | [Review criteria and per-hold explanation](issues/13-review-criteria-and-hold-explanation.md) | task | implemented; browser/hosted verification pending | — (06 inspection implemented) |
-| 14 | [Optional classroom review themes](issues/14-optional-classroom-review-themes.md) | task | ready for agent | — (05 merged) |
+| 14 | [Optional classroom review themes](issues/14-optional-classroom-review-themes.md) | task | implemented; verification/review in progress | — (05 merged) |
 | 15 | [Accepted theme holds once per submission](issues/15-accepted-theme-holds-once.md) | task | open | 07, 14 |
 
 **Current handoff (2026-10-27):** the owner explicitly said **“accept all”** to

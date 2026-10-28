@@ -50,6 +50,100 @@ def held_database(monkeypatch):
         conn.execute("delete from profiles where id = %s", (teacher,))
 
 
+def test_optional_themes_capture_grouped_review_before_paid_work(monkeypatch, held_database):
+    from worker.run_job import run_review_storybook_job
+
+    conn, child, classroom, _, teacher = held_database
+    monkeypatch.setattr(settings, "enable_teacher_moderation_review", True)
+    queue, db = MagicMock(), MagicMock()
+    db.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{"classroom_id": classroom}]
+    monkeypatch.setattr("app.main.get_supabase_client", lambda: db)
+    monkeypatch.setattr("app.main.get_queue", lambda: queue)
+    monkeypatch.setattr("providers.redact_pii", lambda text: text)
+    monkeypatch.setattr("providers.classify_text_primary", lambda text: (True, []))
+    monkeypatch.setattr("providers.classify_text_backstop", lambda text: (True, []))
+    monkeypatch.setattr("pipeline.input_gate.classify_text_primary", lambda text: (True, []))
+    monkeypatch.setattr("pipeline.input_gate.classify_text_backstop", lambda text: (True, []))
+    monkeypatch.setattr("pipeline.input_gate.redact_pii", lambda text: text)
+    # Existing captured synthetic story, not a classifier-quality fixture.
+    text = "A dog runs in a field. The dog barks."
+    detector = MagicMock(side_effect=lambda prompt, schema, **kwargs: schema.model_validate({"matches": [
+        {"theme_id": "spooky_suspense", "reason": "Synthetic detector evidence"},
+        {"theme_id": "story_conflict", "reason": "Synthetic detector evidence"},
+    ]}))
+    monkeypatch.setattr("pipeline.optional_themes.structured_text", detector)
+    monkeypatch.setattr("pipeline.optional_themes.redact_pii", lambda text: text)
+    paid = MagicMock(side_effect=AssertionError("paid generation before review"))
+    monkeypatch.setattr("providers.text_to_image", paid)
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=teacher)
+    route = f"/teacher/classrooms/{classroom}/moderation-settings"
+    try:
+        with TestClient(app) as client:
+            assert client.get(route).json()["theme_ids"] == []
+            saved = client.patch(route, json={"expected_version": 0, "theme_ids": ["spooky_suspense", "story_conflict"]})
+            assert saved.status_code == 200, saved.text
+            assert saved.json()["settings_version"] == 1
+            assert client.patch(route, json={"expected_version": 0, "theme_ids": []}).status_code == 409
+            app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+            assert client.patch(route, json={"expected_version": 1, "theme_ids": []}).status_code == 403
+            submitted = client.post("/storybooks", json={"title": "Synthetic title", "text": text})
+            assert submitted.status_code == 200, submitted.text
+            job = submitted.json()["job_id"]
+            # Change after intake but before the queued worker starts.
+            app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=teacher)
+            assert client.patch(route, json={"expected_version": 1, "theme_ids": []}).status_code == 200
+            run_review_storybook_job(job, expected_epoch=0)
+            detail = client.get(f"/teacher/jobs/{job}/moderation-review").json()
+            assert detail["kind"] == "optional_themes" and detail["origin"] == "optional_theme"
+            assert detail["criteria"] == ["spooky_suspense", "story_conflict"]
+            assert detail["settings_snapshot"]["settings_version"] == 1
+            assert detail["story_text"] == text and detail["pictures"] == []
+            assert len(detail["detected_themes"]) == 2
+            assert detail["theme_check"]["instruction_version"] == "optional_themes_v1"
+            assert detail["theme_check"]["model_id"] == settings.text_model
+            detector.assert_called_once()
+            paid.assert_not_called()
+            assert client.patch(route, json={"expected_version": 2, "theme_ids": ["loss_separation"]}).status_code == 200
+            assert client.get(f"/teacher/jobs/{job}/moderation-review").json() == detail
+            # Global switch off freezes edits, but saved settings and captured holds remain readable.
+            monkeypatch.setattr(settings, "enable_teacher_moderation_review", False)
+            assert client.get(route).json()["theme_ids"] == ["loss_separation"]
+            assert client.patch(route, json={"expected_version": 3, "theme_ids": []}).status_code == 409
+            assert conn.execute("select status from jobs where id=%s", (job,)).fetchone()["status"] == "awaiting_teacher"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.parametrize("output", [
+    {"matches": [{"theme_id": "loss_separation", "reason": "Disabled ID"}]},
+    {"matches": [{"theme_id": "spooky_suspense", "reason": "One"}, {"theme_id": "spooky_suspense", "reason": "Two"}]},
+    {"matches": [], "unexpected": "not a valid response"},
+])
+def test_optional_detector_invalid_response_is_service_failure_not_clearance(monkeypatch, held_database, output):
+    from worker.run_job import run_review_storybook_job
+
+    conn, child, classroom, job, _ = held_database
+    # Use the same persisted intake shape as the main HTTP journey, isolating the
+    # worker's malformed-provider failure path from unrelated title checks.
+    conn.execute("""insert into jobs(id,profile_id,classroom_id,status,input_text,title,moderation_mode,moderation_settings_snapshot)
+      values (%s,%s,%s,'queued','A dog runs in a field.','Synthetic title','teacher_review_v1',%s)""", (
+        job, child, classroom, Jsonb({"policy_version": "teacher_review_policy_v1", "theme_ids": ["spooky_suspense"], "settings_version": 1})))
+    monkeypatch.setattr("pipeline.input_gate.classify_text_primary", lambda text: (True, []))
+    monkeypatch.setattr("pipeline.input_gate.classify_text_backstop", lambda text: (True, []))
+    monkeypatch.setattr("pipeline.optional_themes.structured_text", lambda *args, **kwargs: output)
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+    try:
+        with pytest.raises(RuntimeError, match="optional_theme_error"):
+            run_review_storybook_job(job, expected_epoch=0)
+        with TestClient(app) as client:
+            failed = client.get(f"/jobs/{job}/state").json()
+        assert failed["status"] == "failed"
+        assert conn.execute("select failure_reason from jobs where id=%s", (job,)).fetchone()["failure_reason"] == "service_busy"
+        assert conn.execute("select count(*) as n from job_moderation_reviews where job_id=%s", (job,)).fetchone()["n"] == 0
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
 @pytest.mark.parametrize("action", ["allow", "stop", "projection"])
 def test_flagged_title_waits_privately_until_exact_teacher_decision(monkeypatch, held_database, action):
     from worker.run_job import run_review_storybook_job

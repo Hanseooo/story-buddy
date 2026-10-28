@@ -6,6 +6,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from contracts.story_memory import StoryMemory
 from pipeline.char_ref_mod import MAX_MOD_REDRAWS, char_ref_mod
 from pipeline.input_gate import has_text_clearance, input_gate
+from pipeline.optional_themes import optional_themes
 from pipeline.analyze import analyze
 from pipeline.segment import segment
 from pipeline.char_bible import char_bible
@@ -67,13 +68,22 @@ def route_after_output_mod(state: StoryMemory) -> str:
     return route_next_scene(state)
 
 
+def route_after_input(state: StoryMemory) -> str:
+    destination = moderation_router(state)
+    context = state.moderation_context
+    if (destination == "analyze" and context.mode == "teacher_review_v1"
+            and context.theme_ids and not context.optional_themes_checked):
+        return "optional_themes"
+    return destination
+
+
 def route_moderation_review(state: StoryMemory) -> str:
     # Also used by update_state(as_node='moderation_review') when anchoring a hold.
     review = state.moderation_context.review
     if review and review.resolution == "replace" and review.kind in ("scene_image", "character_reference"):
         return "moderation_replace"
     if review and review.resolution == "allow" and review.return_node in (
-        "analyze", "segment", "char_bible", "char_ref_mod", "output_mod", "generate_scene", "consistency_check", "reveal", "compose", "__end__"
+        "optional_themes", "analyze", "segment", "char_bible", "char_ref_mod", "output_mod", "generate_scene", "consistency_check", "reveal", "compose", "__end__"
     ):
         return review.return_node
     return "moderation_review"
@@ -131,6 +141,7 @@ def route_after_check(state: StoryMemory) -> str:
 def build_graph(checkpointer=None):
     graph = StateGraph(StoryMemory)
     graph.add_node("input_gate", input_gate)
+    graph.add_node("optional_themes", optional_themes)
     graph.add_node("analyze", analyze)
     graph.add_node("segment", segment)
     graph.add_node("char_bible", char_bible)
@@ -145,7 +156,8 @@ def build_graph(checkpointer=None):
     graph.add_node("compose", compose)
 
     graph.set_entry_point("input_gate")
-    graph.add_conditional_edges("input_gate", moderation_router)    # raises on fail; routes to analyze
+    graph.add_conditional_edges("input_gate", route_after_input)
+    graph.add_conditional_edges("optional_themes", moderation_router)
     graph.add_edge("analyze", "segment")
     graph.add_edge("segment", "char_bible")
     graph.add_edge("char_bible", "char_ref_mod")                    # char_ref_mod writes status, never raises on flag

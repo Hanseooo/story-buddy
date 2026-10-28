@@ -985,6 +985,10 @@ fill an older review. A title's equivalent evidence is captured directly by its 
 `ModerationClearance` embeds `subject_version: str`, `review_id: UUID`, `policy_version: str`.
 `ThemeDetection` embeds `theme_id` (one of the three IDs in §9.9.7) and a privacy-processed
 `reason: str`. List defaults use `Field(default_factory=list)`, not shared mutable defaults.
+Ticket 14 appends `ModerationContext.optional_theme_check: OptionalThemeCheck | None = None`.
+`OptionalThemeCheck` records `subject_version: str` (processed-story SHA-256),
+`settings_version: int`, `model_id: str` and `instruction_version: str`, including empty
+successful detections. `ThemeDetection` forbids extra keys and coerced values at the LLM boundary.
 
 `ModerationContext.policy_version` is optional for baseline/legacy state and required for newly
 created teacher-review jobs. Settings are immutable for a submission. `ReviewContext.return_node`
@@ -1115,7 +1119,8 @@ completion. On allow, return to the saved next node; `END` restores completed pa
 current safety eligibility and epoch checks. A withdrawal while a node has incomplete effects
 and no safe checkpoint recovery fails honestly rather than blindly paying again.
 
-Normal first-flag continuation is simpler: story text → `analyze`; character reference →
+Normal first-flag continuation is simpler: story text → `optional_themes` when captured themes
+are enabled, otherwise `analyze`; character reference →
 `char_ref_mod` to check remaining references, then existing child `reveal`; scene → `output_mod`
 to advance the normal scene loop. Title review uses a private pre-graph record with no checkpoint;
 allow initializes a **new, never-started** graph once at `input_gate`, not a failed-run restart.
@@ -1880,3 +1885,43 @@ retry after a lost response.
 
 Hosted/browser checks, paid replay, production enablement, calibration claims and real-child use
 remain unverified and unauthorized. Audit 01 and §9.9.8 release gates remain open.
+
+### 9.19 Optional classroom review themes (ticket 14)
+
+The accepted synthetic-only, feature-off slice adds owner-only, no-store GET/PATCH
+`/teacher/classrooms/{classroom_id}/moderation-settings`. PATCH validates the three exact IDs,
+rejects duplicates and stale versions, then increments the version in the durable write.
+Feature-off preserves reads and rejects edits. Migration `0025_classroom_review_themes.sql`
+adds the default-empty classroom IDs/version. Existing classroom RLS already denies browser
+writes, so no additional policy, trigger, service or dependency is introduced.
+
+`insert_review_job` captures classroom settings under a shared row lock in the job-insert
+transaction. Later settings changes cannot alter a queued submission or release a hold.
+`pipeline/optional_themes.py` runs only for enabled captured themes in teacher-review mode,
+after shared story-text safety passes or exact teacher clearance, before analysis/paid images.
+One strict structured-output call uses the configured text model and the existing provider
+boundary. Unknown/disabled/duplicate IDs, extra keys, provider errors and failed reason-redaction
+fail as `service_busy`, never an empty pass or teacher-clearable safety verdict. Successful
+checks checkpoint processed-story hash, settings version, actual model/instruction version and
+privacy-processed matches, including empty detections. All matches share one private
+`optional_themes` hold. The feature recursion allowance includes this detector/review path;
+baseline recursion and paid-image bounds stay unchanged.
+
+Classroom settings uses native checkboxes with the agreed names/definitions, shared-check
+explanation, durable-save feedback and preserved draft choices with retry. Stale-version errors
+retain the choices for explicit review/retry. Feature-off shows saved settings read-only.
+The teacher review detail identifies optional origin and presents the grouped reasons and
+recorded detector metadata. There is no optional-picture screening. Theme acceptance and its
+continuation remain ticket 15, so this slice offers inspection, leave waiting and existing stop.
+
+Verification so far: affected backend tests 165 passed; graph-node inventory check 2 passed;
+affected settings/Books tests 47 passed; `uv sync --frozen`, backend lint, frontend lint,
+`pnpm exec tsc --noEmit` and production build with CI public placeholders passed. The first
+full backend run had 1,583 passes, 89 skips, six smoke deselections, one now-corrected exact
+node-inventory assertion and the six previously recorded native WeasyPrint/PDF failures.
+The default full frontend run had 749 passes and one gallery timeout. Serial verification and
+review are in progress. No test was skipped, deleted or loosened to bypass these failures.
+
+A rolled-back disposable SQL check verifies owner reads, RLS-denied browser settings writes,
+ordinary server rename and unknown-theme rejection. Hosted services, browser visual checks,
+paid classifier calibration/replay, production enablement and real-child use remain unverified.

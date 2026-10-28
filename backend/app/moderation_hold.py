@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 import providers
 from app.auth import get_current_user
 from app.config import settings
-from app.moderation_policy import POLICY, TEACHER_MODERATION_CRITERIA, TEACHER_MODERATION_POLICY_VERSION
+from app.moderation_policy import OPTIONAL_THEMES, POLICY, TEACHER_MODERATION_CRITERIA, TEACHER_MODERATION_POLICY_VERSION
 from app.queue import get_queue
 from contracts.story_memory import StoryMemory
 from pipeline.input_gate import has_text_clearance
@@ -25,6 +25,56 @@ from pipeline.moderation_replace import replacement_disabled_reason
 
 hold_router = APIRouter()
 PRIVATE = {"Cache-Control": "private, no-store"}
+
+
+class ModerationSettingsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    expected_version: int = Field(ge=0)
+    theme_ids: list[Literal["spooky_suspense", "story_conflict", "loss_separation"]]
+
+
+@hold_router.get("/teacher/classrooms/{classroom_id}/moderation-settings")
+def classroom_moderation_settings(classroom_id: UUID, response: Response, user=Depends(get_current_user)):
+    try:
+        with connect() as conn, conn.transaction():
+            role = conn.execute("select role from profiles where id=%s", (str(user.id),)).fetchone()
+            if not role or role["role"] != "teacher":
+                raise HTTPException(403, "teacher_required", headers=PRIVATE)
+            teacher_classroom(conn, str(classroom_id), str(user.id))
+            row = conn.execute("select moderation_theme_ids,moderation_settings_version from classrooms where id=%s",
+                               (classroom_id,)).fetchone()
+    except psycopg.Error:
+        raise HTTPException(503, "settings_unavailable", headers=PRIVATE) from None
+    response.headers.update(PRIVATE)
+    return {"theme_ids": row["moderation_theme_ids"], "settings_version": row["moderation_settings_version"],
+            "editable": settings.enable_teacher_moderation_review, "themes": OPTIONAL_THEMES}
+
+
+@hold_router.patch("/teacher/classrooms/{classroom_id}/moderation-settings")
+def save_classroom_moderation_settings(classroom_id: UUID, body: ModerationSettingsRequest,
+                                      response: Response, user=Depends(get_current_user)):
+    if len(body.theme_ids) != len(set(body.theme_ids)):
+        raise HTTPException(422, "duplicate_theme_ids", headers=PRIVATE)
+    try:
+        with connect() as conn, conn.transaction():
+            role = conn.execute("select role from profiles where id=%s", (str(user.id),)).fetchone()
+            if not role or role["role"] != "teacher":
+                raise HTTPException(403, "teacher_required", headers=PRIVATE)
+            row = conn.execute("select * from classrooms where id=%s and owner_id=%s for update",
+                               (classroom_id, str(user.id))).fetchone()
+            if not row:
+                raise HTTPException(404, "classroom_not_found", headers=PRIVATE)
+            if not settings.enable_teacher_moderation_review:
+                raise HTTPException(409, "settings_disabled", headers=PRIVATE)
+            if row["moderation_settings_version"] != body.expected_version:
+                raise HTTPException(409, {"code": "settings_changed", "theme_ids": row["moderation_theme_ids"],
+                    "settings_version": row["moderation_settings_version"]}, headers=PRIVATE)
+            conn.execute("""update classrooms set moderation_theme_ids=%s,
+              moderation_settings_version=moderation_settings_version+1 where id=%s""", (body.theme_ids, classroom_id))
+    except psycopg.Error:
+        raise HTTPException(503, "settings_unavailable", headers=PRIVATE) from None
+    response.headers.update(PRIVATE)
+    return {"theme_ids": body.theme_ids, "settings_version": body.expected_version + 1}
 
 
 @hold_router.get("/teacher/moderation-policy")
@@ -101,7 +151,7 @@ def review_pictures(conn, job_id: str, review: dict):
     else:
         pictures.append({"asset_id": "context-unavailable", "label": "Other story pictures",
                          "path": None, "state": "unavailable"})
-    if review["kind"] != "story_text" and not any(p["state"] == "held" for p in pictures):
+    if review["kind"] not in ("story_text", "optional_themes") and not any(p["state"] == "held" for p in pictures):
         pictures.append({"asset_id": "held", "label": "Picture needing review",
                          "path": review["subject"].get("image_path"), "state": "held"})
     return pictures
@@ -167,6 +217,9 @@ def teacher_review_detail(job_id: UUID, response: Response, user=Depends(get_cur
                     "story_text": review["subject"].get("story_text"),
                     "subject_title": review["subject"].get("title") if review["kind"] == "title" else None,
                     "kind": review["kind"], "criteria": review["criteria"], "policy_version": review["policy_version"],
+                    "origin": "optional_theme" if review["kind"] == "optional_themes" else "shared_safety",
+                    "detected_themes": review["subject"].get("detected_themes", []),
+                    "theme_check": review["subject"].get("theme_check"),
                     "current_policy_version": TEACHER_MODERATION_POLICY_VERSION,
                     "settings_snapshot": review["settings_snapshot"],
                     "classifier_evidence": review["classifier_evidence"],
@@ -573,6 +626,10 @@ def insert_review_job(values: dict, *, title_evidence: list | None = None) -> No
         author = conn.execute("select * from profiles where id=%s for update", (values["profile_id"],)).fetchone()
         if not author or not active_author(conn, values):
             raise HTTPException(403, "account_unavailable", headers=PRIVATE)
+        classroom = conn.execute("""select moderation_theme_ids,moderation_settings_version
+          from classrooms where id=%s for share""", (values["classroom_id"],)).fetchone()
+        values["moderation_settings_snapshot"].update(
+            theme_ids=classroom["moderation_theme_ids"], settings_version=classroom["moderation_settings_version"])
         conn.execute("""insert into jobs(id,status,current_stage,input_text,title,truncated,
           style_preset_id,profile_id,classroom_id,moderation_mode,moderation_settings_snapshot)
           values (%s,'queued','queued',%s,%s,%s,%s,%s,%s,'teacher_review_v1',%s)""", (
@@ -605,15 +662,18 @@ def assert_current(conn, job_id: str, epoch: int) -> dict:
 
 def project_hold(conn, job_id: str, state: StoryMemory, checkpoint_id: str) -> int:
     review, context = state.moderation_context.review, state.moderation_context
-    if (not review or review.kind not in ("scene_image", "character_reference", "story_text") or review.resolution is not None
+    if (not review or review.kind not in ("scene_image", "character_reference", "story_text", "optional_themes") or review.resolution is not None
             or not checkpoint_id or not context.policy_version):
         raise RuntimeError("invalid_moderation_checkpoint")
-    if review.kind == "story_text":
+    if review.kind in ("story_text", "optional_themes"):
         text = state.input.redacted_text
         if (text is None or review.subject_id != "input"
                 or hashlib.sha256(text.encode("utf-8")).hexdigest() != review.subject_version):
             raise RuntimeError("invalid_moderation_subject")
         subject = {"story_text": text}
+        if review.kind == "optional_themes":
+            subject.update(detected_themes=[d.model_dump() for d in context.detected_themes],
+                           theme_check=context.optional_theme_check.model_dump())
     elif review.kind == "character_reference":
         char = next(c for c in state.characters if c.char_id == review.subject_id)
         path = char.canonical_ref_image
@@ -627,7 +687,7 @@ def project_hold(conn, job_id: str, state: StoryMemory, checkpoint_id: str) -> i
                    "prompt": selected.prompt if selected else scene.prompt,
                    "reference_paths": [c.canonical_ref_image for c in state.characters
                                        if c.char_id in scene.characters_present and c.canonical_ref_image]}
-    if review.kind != "story_text":
+    if review.kind not in ("story_text", "optional_themes"):
         if not path or not path.startswith(f"{job_id}/"):
             raise RuntimeError("invalid_moderation_subject")
         subject.update(image_hash=review.subject_version, story_text=state.input.redacted_text or state.input.raw_text)
@@ -694,7 +754,7 @@ def can_reconcile_hold(conn, job: dict) -> bool:
         if checkpoint:
             state = StoryMemory.model_validate(checkpoint.checkpoint["channel_values"])
             review = state.moderation_context.review
-            return review is not None and review.kind in ("scene_image", "character_reference", "story_text") and review.resolution is None
+            return review is not None and review.kind in ("scene_image", "character_reference", "story_text", "optional_themes") and review.resolution is None
     return False
 
 

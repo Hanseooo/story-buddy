@@ -291,8 +291,16 @@ class ReviewContext(BaseModel):
 
 
 class ThemeDetection(BaseModel):
+    model_config = {"extra": "forbid", "strict": True}
     theme_id: Literal["spooky_suspense", "story_conflict", "loss_separation"]
     reason: str
+
+
+class OptionalThemeCheck(BaseModel):
+    subject_version: str
+    settings_version: int
+    model_id: str
+    instruction_version: str
 
 
 class ModerationContext(BaseModel):
@@ -305,6 +313,7 @@ class ModerationContext(BaseModel):
     optional_themes_checked: bool = False
     detected_themes: list[ThemeDetection] = Field(default_factory=list)
     accepted_theme_ids: list[str] = Field(default_factory=list)
+    optional_theme_check: Optional[OptionalThemeCheck] = None
 
 
 class StoryMemory(BaseModel):

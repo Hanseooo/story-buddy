@@ -83,7 +83,8 @@ def input_gate(state: StoryMemory) -> dict:
                 "review": ReviewContext(
                     review_id=uuid5(UUID(state.story_id), f"story_text:input:{subject_version}:{state.moderation_context.generation_epoch}"),
                     kind="story_text", subject_id="input", subject_version=subject_version,
-                    return_node="analyze", criteria=list(TEACHER_MODERATION_CRITERIA),
+                    return_node="optional_themes" if state.moderation_context.theme_ids else "analyze",
+                    criteria=list(TEACHER_MODERATION_CRITERIA),
                     classifier_evidence=evidence,
                 ),
             })
