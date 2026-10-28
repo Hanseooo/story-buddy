@@ -15,7 +15,7 @@ notes, usable on mobile.
 
 | # | Ticket | Type | Progress | Blocked by |
 |---|---|---|---|---|
-| 01 | [Audit: review decisions and what a child sees](issues/01-audit-review-feedback.md) | research | answered, awaiting owner verdict | — |
+| 01 | [Audit: review decisions and what a child sees](issues/01-audit-review-feedback.md) | research | resolved | — |
 | 02 | [Grill: feedback, comments and highlights → spec](issues/02-grill-review-feedback-spec.md) | grilling | open | 01 |
 
 Highlights are a separate build ticket after comments ship, per the 2026-10-25 grill.

@@ -1,8 +1,8 @@
 # 01 — Audit: review decisions and what a child sees
 
-**Status:** needs-owner-verdict
+**Status:** ready-for-human
 **Type:** research
-**Progress:** answered 2026-10-29, awaiting owner
+**Progress:** resolved
 **Blocked by:** None
 **Conflict gate:** `teacher-review-and-approval.md` §12–13. Reading is allowed. Proposing a design
 that shows a decision to a child needs the owner's verdict first.
