@@ -230,7 +230,6 @@ export default function ClassroomSettingsPage() {
         </p>
       </section>
 
-      {/* Danger zone */}
       <section aria-labelledby="review-themes-heading" className="bg-surface border border-primary/15 rounded-2xl p-6 mb-6">
         <h2 id="review-themes-heading" className="font-bold text-foreground mb-2">Optional classroom review themes</h2>
         <p id="review-themes-help" className="text-sm text-foreground/70 mb-4">
@@ -269,6 +268,7 @@ export default function ClassroomSettingsPage() {
         </form>}
       </section>
 
+      {/* Danger zone */}
       <section className="bg-surface border border-destructive/30 rounded-2xl p-6">
         <h2 className="font-bold text-destructive mb-2">Danger zone</h2>
         <p className="text-sm text-foreground/60 mb-4">

@@ -246,6 +246,6 @@ RECURSION_LIMIT = MAX_SCENES * 7 + SUPER_STEP_PRELUDE
 # and the one per-book replacement. Reserve four steps each for review pause,
 # decision, reference recheck and the repeated reveal pause. The existing prelude
 # still covers mint/retry edges. This is a step bound, never an image allowance.
-TEACHER_REVIEW_RECURSION_LIMIT = MAX_SCENES * (7 + 8) + SUPER_STEP_PRELUDE + (2 + 3 + 1) * 4 + 4
 # One optional-text detector step, its review pause and decision continuation add
 # three steps to the earlier text-hold allowance. Baseline bounds are unchanged.
+TEACHER_REVIEW_RECURSION_LIMIT = MAX_SCENES * (7 + 8) + SUPER_STEP_PRELUDE + (2 + 3 + 1) * 4 + 4

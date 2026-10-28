@@ -17,16 +17,16 @@ the defense, and the teacher decides whether a flagged run continues.
 |---|---|---|---|---|
 | 01 | [Audit: why moderation over-refuses](issues/01-audit-moderation-false-alarms.md) | research | open | — |
 | 02 | [Grill: moderation policy and teacher-held runs → spec](issues/02-grill-moderation-spec.md) | grilling | done — design/ADR accepted | — (accepted build exception; audit 01 remains open) |
-| 03 | [Any researcher can open failed and unapproved runs](issues/03-researchers-inspect-failed-runs.md) | task | open | — |
-| 04 | [phase_05 text probe reads the current setting](issues/04-phase05-probe-setting-name.md) | task | open | — |
+| 03 | [Any researcher can open failed and unapproved runs](issues/03-researchers-inspect-failed-runs.md) | task | implemented; signed-in browser verification pending | — |
+| 04 | [phase_05 text probe reads the current setting](issues/04-phase05-probe-setting-name.md) | task | done (paid probe not run) | — |
 | 05 | [Flagged scene picture holds; child leaves and returns](issues/05-hold-flagged-scene-picture.md) | task | done, merged | — |
-| 06 | [Teacher inspects a held story in Needs your help](issues/06-teacher-inspects-held-story.md) | task | ready for agent | — (05 merged) |
+| 06 | [Teacher inspects a held story in Needs your help](issues/06-teacher-inspects-held-story.md) | task | implemented; browser/hosted verification pending | — (05 merged) |
 | 07 | [Teacher allows the exact held picture; run resumes](issues/07-teacher-allows-held-picture.md) | task | implemented; browser/hosted verification pending | — (06/13 implemented) |
-| 08 | [Teacher or child stops a held story, writing kept](issues/08-teacher-stops-held-story.md) | task | open | 06 |
+| 08 | [Teacher or child stops a held story, writing kept](issues/08-teacher-stops-held-story.md) | task | implemented; browser/hosted verification pending | — (06 implemented) |
 | 09 | [Teacher requests a replacement picture within budget](issues/09-teacher-requests-replacement-picture.md) | task | implemented; browser/hosted verification pending | — (07 implemented) |
 | 10 | [Flagged character reference holds](issues/10-hold-flagged-character-reference.md) | task | implemented; browser/hosted verification pending | — (07–09 implemented) |
-| 11 | [Flagged story text holds; teacher can allow unchanged](issues/11-hold-flagged-story-text.md) | task | open | 07, 08 |
-| 12 | [Flagged title holds instead of 422](issues/12-hold-flagged-title.md) | task | open | 11 |
+| 11 | [Flagged story text holds; teacher can allow unchanged](issues/11-hold-flagged-story-text.md) | task | implemented; browser/hosted verification pending | — (07/08 implemented) |
+| 12 | [Flagged title holds instead of 422](issues/12-hold-flagged-title.md) | task | implemented; browser/hosted verification pending | — (11 implemented) |
 | 13 | [Review criteria and per-hold explanation](issues/13-review-criteria-and-hold-explanation.md) | task | implemented; browser/hosted verification pending | — (06 inspection implemented) |
 | 14 | [Optional classroom review themes](issues/14-optional-classroom-review-themes.md) | task | implemented; browser/hosted verification pending | — (05 merged) |
 | 15 | [Accepted theme holds once per submission](issues/15-accepted-theme-holds-once.md) | task | implemented; browser/hosted verification pending | — (07/14 implemented) |

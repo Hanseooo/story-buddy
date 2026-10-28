@@ -39,12 +39,15 @@ stricter, the stricter rule wins.
 - Architecture: Frontend (Vercel) posts to FastAPI (Northflank), which writes a job row and returns.
   A separate RQ worker runs the LangGraph pipeline, checkpointing to Postgres after each scene; the
   frontend watches the job row over Supabase Realtime.
-- Graph (`backend/pipeline/graph.py`, 11 nodes): `input_gate → analyze → segment → char_bible →
+- Graph (`backend/pipeline/graph.py`, 14 nodes): `input_gate → analyze → segment → char_bible →
   char_ref_mod → reveal → generate_scene → consistency_check ⇄ regenerate → output_mod → compose`.
   `output_mod` runs **inside** the per-scene loop and hands back to the next scene, so a flag stops
   spend at that scene. Two capped loops return to `char_bible`: `reveal`'s `try_again` (3 taps,
   `MAX_RETRY_TAPS`) and one redraw of a moderation-flagged reference (`MAX_MOD_REDRAWS = 1`).
-  `reveal` holds the graph's only `interrupt()`. Export is cut from scope (ADR-058).
+  In baseline mode `reveal` holds the only `interrupt()`. Jobs captured in `teacher_review_v1`
+  (ADR-080, `enable_teacher_moderation_review`, off by default) can also enter `optional_themes`,
+  `moderation_review` (a second `interrupt()`, the teacher hold) and `moderation_replace`.
+  Export is cut from scope (ADR-058).
 - The worker's checkpointer uses the Supabase **direct connection (5432)**, never the 6543 pooler
   (ADR-033). Adding worker replicas is a database decision.
 - Critical paths, extra review: moderation ordering (input text → char-ref → output image, ADR-011);

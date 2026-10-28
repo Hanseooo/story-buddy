@@ -72,12 +72,38 @@ export default async function GalleryPage({
         const coverPath = job.pages?.[0]?.image_path;
         const coverUrl = coverPath ? signedMap[coverPath] : undefined;
         const nickname = job.profiles?.display_nickname ?? "Unknown";
+        const href = `/s/${profileId}/book/${job.id}`;
+        const cardClass = "block overflow-hidden rounded-2xl border border-primary/15 bg-surface shadow-[0_6px_18px_rgba(49,85,217,0.1)] outline-none h-full";
+        const details = (
+          <>
+            <p className="font-kid truncate text-sm font-bold text-foreground">
+              {displayTitle(job.title, null)}
+            </p>
+            <div className="flex items-center gap-3">
+              <Avatar avatarId={job.profiles?.avatar_id ?? null} displayNickname={nickname} size={32} />
+              <p className="font-kid truncate text-base font-bold text-foreground">
+                by {nickname}
+              </p>
+            </div>
+          </>
+        );
+        if (job.moderation_mode === "teacher_review_v1") {
+          // GuardedCover can render a retry button, which cannot sit inside a link.
+          return (
+            <StaggerItem key={job.id}>
+              <div className={cardClass}>
+                <GuardedCover job={job} alt={`Cover of book by ${nickname}`} />
+                <Link href={href} className="p-3 flex flex-col gap-1 min-h-11 focus-visible:outline-3 focus-visible:outline-secondary">
+                  {details}
+                </Link>
+              </div>
+            </StaggerItem>
+          );
+        }
         return (
           <StaggerItem key={job.id}>
-            <div
-              className="block overflow-hidden rounded-2xl border border-primary/15 bg-surface shadow-[0_6px_18px_rgba(49,85,217,0.1)] outline-none h-full"
-            >
-              {job.moderation_mode === "teacher_review_v1" ? <GuardedCover job={job} alt={`Cover of book by ${nickname}`} /> : coverUrl ? (
+            <Link href={href} className={cardClass}>
+              {coverUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={coverUrl}
@@ -88,18 +114,8 @@ export default async function GalleryPage({
               ) : (
                 <div className="aspect-[3/4] w-full border-b border-primary/15 bg-muted" />
               )}
-              <Link href={`/s/${profileId}/book/${job.id}`} className="p-3 flex flex-col gap-1 min-h-11 focus-visible:outline-3 focus-visible:outline-secondary">
-                <p className="font-kid truncate text-sm font-bold text-foreground">
-                  {displayTitle(job.title, null)}
-                </p>
-                <div className="flex items-center gap-3">
-                  <Avatar avatarId={job.profiles?.avatar_id ?? null} displayNickname={nickname} size={32} />
-                  <p className="font-kid truncate text-base font-bold text-foreground">
-                    by {nickname}
-                  </p>
-                </div>
-              </Link>
-            </div>
+              <div className="p-3 flex flex-col gap-1">{details}</div>
+            </Link>
           </StaggerItem>
         );
       })}

@@ -158,6 +158,21 @@ describe("GalleryPage", () => {
     expect(links[0]).toHaveAttribute("href", `/s/${PROFILE_ID}/book/job-xyz`);
   });
 
+  it("opens the book when a child taps a baseline cover picture", async () => {
+    mockLimit.mockResolvedValue({ data: [makeJob({ id: "job-xyz" })] });
+    mockCreateSignedUrls.mockResolvedValue({
+      data: [{ path: "covers/job-1.jpg", signedUrl: "https://storage.test/cover.jpg" }],
+    });
+
+    const { default: GalleryPage } = await import("./page");
+    const jsx = await GalleryPage({ params });
+    const { getByAltText } = render(jsx);
+
+    expect(getByAltText("Cover of book by Kai").closest("a")).toHaveAttribute(
+      "href", `/s/${PROFILE_ID}/book/job-xyz`,
+    );
+  });
+
   it("requests signed URLs from bucket storybook-images", async () => {
     mockLimit.mockResolvedValue({ data: [makeJob()] });
 
