@@ -53,6 +53,11 @@ and act on require, including teacher comments and highlights on story text?
 
 ## Comments
 
+**2026-10-29, owner verdict.** Go as recommended: W2 + W3 + N1 + C2, with highlights (H2) as a later
+ticket. Spec §4.10 and §12–13 may be amended in ticket 02. Deferred to the ticket 02 grill: what to do
+about the existing "needs to approve" copy (finding #4, logged as D-V in `DECISION_BACKLOG.md`) and
+whether to offer N2 ("start a new version"). The ethics re-review still comes before a child sees a note.
+
 ## Answer
 
 **Method.** Read-only, $0, nothing run. *Measured* = read in the file cited. *Inferred* = reasoned from
