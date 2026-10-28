@@ -110,5 +110,10 @@ $testFiles = @(rg --files -g '*.test.ts' -g '*.test.tsx' -g '!node_modules/**' -
 ```
 
 The explicit list includes every source test file. Only generated/cache directories are excluded.
-Final `pnpm lint` and `pnpm exec tsc --noEmit` also pass. Merge remains pending the owner's go-ahead;
-the worktree will be cleaned up after merge.
+Final `pnpm lint` and `pnpm exec tsc --noEmit` also pass.
+
+**Owner-approved merge (2026-10-29):** merged into `feat/account-onboarding` as `69d4b3c`, preserving
+the intervening child-note commits and the owner's local documentation edits. Post-merge verification:
+all **78 source files and 762 tests passed**, with no skips, and `pnpm exec tsc --noEmit` passed.
+The full output is in `.scratch/review-feedback-07-verification/post-merge-full.txt`.
+The temporary ticket-07 worktree, its merged branch, and its restored temporary stash were removed.
