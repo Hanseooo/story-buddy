@@ -26,6 +26,7 @@ export default function BooksPage() {
   const { classroomId } = useParams<{ classroomId: string }>();
 
   const [jobs, setJobs] = useState<Job[] | null>(null);
+  const [notesClassroom, setNotesClassroom] = useState<{ id: string; enabled: boolean } | null>(null);
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState<Tab>("pending");
   const [heldCount, setHeldCount] = useState(0);
@@ -43,14 +44,17 @@ export default function BooksPage() {
   // ── Fetch ────────────────────────────────────────────────────────────────
 
   const fetchJobs = useCallback(async () => {
-    const { data } = await supabase
+    const [{ data }, { data: classroom }] = await Promise.all([supabase
       .from("jobs")
       .select(
         "id, status, moderation_mode, failure_reason, approved_at, rejected_at, created_at, input_text, title, pages, profile_id, profiles(display_nickname, avatar_id)"
       )
       .eq("classroom_id", classroomId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false }),
+      supabase.from("classrooms").select("review_notes_enabled").eq("id", classroomId).single(),
+    ]);
     setJobs((data as unknown as Job[]) ?? []);
+    setNotesClassroom({ id: classroomId, enabled: classroom?.review_notes_enabled === true });
   }, [classroomId]);
 
   useEffect(() => {
@@ -382,6 +386,7 @@ export default function BooksPage() {
       <BookReviewDialog
         job={dialogJob}
         pageUrls={dialogPageUrls}
+        notesEnabled={notesClassroom?.id === classroomId && notesClassroom.enabled}
         onDecide={handleDecide}
         onClose={() => {
           setDialogJobId(null);

@@ -565,7 +565,7 @@ the review queue's empty state reads as absence rather than as finished.
 
 ## 14. Amendment: teacher notes the child can read (2026-10-29, draft)
 
-**Status:** implemented: schema and teacher API (05), classroom switch (06), and child endpoints, bookshelf badge and book panel (08, 2026-10-29). Teacher note UI (07), gentler labels (09), and the J1–J3 browser journeys remain pending. ADR-081 accepted by the owner on 2026-10-29; OD-8 settled. Seams and defaults confirmed 2026-10-29. **Source:**
+**Status:** implemented: schema and teacher API (05), classroom switch (06), teacher note row (07), and child endpoints, bookshelf badge and book panel (08, 2026-10-29). Gentler labels (09) and the J1–J3 browser journeys remain pending. ADR-081 accepted by the owner on 2026-10-29; OD-8 settled. Seams and defaults confirmed 2026-10-29. **Source:**
 `.scratch/ptd-review-feedback/` (audit 01 with its owner verdict, grill 02), phase map
 `.scratch/post-technical-defense/map.md` rank 3. **Rationale:** ADR-081 (accepted 2026-10-29).
 
@@ -745,6 +745,13 @@ when I use it.** Applies: SH-04
 - **One note, edit in place (Q7).** No history. The simplest model that matches what a teacher does.
 - **The note box sits outside the decision (Q6).** The fast pass stays two taps (§4.7). It opens after
   "Not ready to share yet" because that is when a teacher most wants to explain.
+  **Implemented teacher row (ticket 07):** the books page reads `review_notes_enabled` alongside its
+  jobs query and refreshes both on return to the tab. `BookReviewDialog` renders a native, collapsed
+  `<details>` only for complete books when enabled. The row loads the current note without caching,
+  offers Send/Edit/Delete independently of decisions, and preserves drafts with polite, readable
+  write errors. Load errors disable Send and offer retry. Note state is keyed by job ID, so advancing
+  or closing discards drafts and resets the row. Reject opens the outgoing row before invoking the
+  unchanged immediate advance. It does not open the next child's row or delay the decision.
 - **The badge clears (Q9).** A badge that never clears becomes noise. It costs one `seen_at` column.
 - **The download line is reworded, not removed (Q2).** A disabled button with no text is a dead end.
   The new line carries no decision.
