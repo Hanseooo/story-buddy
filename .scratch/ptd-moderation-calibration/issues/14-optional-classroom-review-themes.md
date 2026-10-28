@@ -1,8 +1,8 @@
 # 14 — Teacher turns on optional classroom review themes
 
-**Status:** implemented — verification and review in progress
+**Status:** implemented — browser/hosted verification pending
 **Type:** task
-**Progress:** implementation built in the accepted synthetic-only, feature-off scope
+**Progress:** resolved — accepted synthetic-only, feature-off scope built and reviewed
 **Blocked by:** None — ticket 05 is merged
 **Conflict gate:** ADR-011, `AGENTS.md` child-safety rules. Discussion permission is recorded;
 ADR-080 and the synthetic-only, feature-off build scope were accepted on 2026-10-27.
@@ -87,3 +87,15 @@ Design/conflict acceptance is settled in ADR-080. No repeat owner verdict is req
 accepted synthetic-only, feature-off scope. Audit/calibration and real-child release gates remain.
 
 ## Comments
+
+Implemented on `feat/account-onboarding`. Migration 0025 must be applied before deploying this
+code. Settings, transactional capture, grouped detection and private optional-origin inspection
+are available. Theme acceptance/continuation remains ticket 15. Feature defaults remain off.
+
+Fresh local evidence and limitations are recorded in moderation-stack §9.19. Both code-review
+axes reported no findings. Backend full suite: 1,584 passed, 89 skipped, six smoke deselections,
+six pre-existing native WeasyPrint/PDF failures. Frontend default full suite: 749 passed and one
+gallery timeout. Serial full suite: 748 passed and two existing Books retry-focus failures,
+reproduced against the starting component on the ninth focused baseline run. No failure was
+bypassed by changing or skipping a test. Lint, typecheck, production build and affected tests pass.
+Browser/hosted checks, calibration, paid replay, production and real-child use remain unverified.

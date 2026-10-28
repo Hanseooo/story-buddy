@@ -1914,13 +1914,22 @@ The teacher review detail identifies optional origin and presents the grouped re
 recorded detector metadata. There is no optional-picture screening. Theme acceptance and its
 continuation remain ticket 15, so this slice offers inspection, leave waiting and existing stop.
 
-Verification so far: affected backend tests 165 passed; graph-node inventory check 2 passed;
+Verification: affected backend tests 165 passed; graph-node inventory check 2 passed;
 affected settings/Books tests 47 passed; `uv sync --frozen`, backend lint, frontend lint,
 `pnpm exec tsc --noEmit` and production build with CI public placeholders passed. The first
 full backend run had 1,583 passes, 89 skips, six smoke deselections, one now-corrected exact
 node-inventory assertion and the six previously recorded native WeasyPrint/PDF failures.
-The default full frontend run had 749 passes and one gallery timeout. Serial verification and
-review are in progress. No test was skipped, deleted or loosened to bypass these failures.
+The final full backend run had 1,584 passes, 89 skips, six smoke deselections and only the six
+native WeasyPrint/PDF failures (`assert 503 == 200`, `PDF download failed (OSError)`,
+“WeasyPrint could not import some external libraries”). The default full frontend run had 749
+passes and one gallery timeout. The serial full run had 748 passes and two existing Books
+replacement-retry focus assertion failures at `books/page.test.tsx:155`. The same assertion
+failed with the starting component on focused baseline run nine. The gallery timeout did not
+recur in the serial run. No failing test was skipped, deleted or loosened. The 89 skips retain
+their existing environment gates (including RLS/annotation/onboarding/research database suites);
+smoke providers remain opt-in. Full logs: `.scratch/ticket14-backend-final.txt`,
+`.scratch/ticket14-frontend-full.txt`, `.scratch/ticket14-frontend-serial.txt`; baseline focus
+evidence: `.scratch/ticket14-focus-baseline-9.txt`. Both code-review axes reported no findings.
 
 A rolled-back disposable SQL check verifies owner reads, RLS-denied browser settings writes,
 ordinary server rename and unknown-theme rejection. Hosted services, browser visual checks,

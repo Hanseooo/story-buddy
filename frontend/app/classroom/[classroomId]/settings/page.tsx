@@ -246,7 +246,7 @@ export default function ClassroomSettingsPage() {
         {!themeLoading && !themes && <button type="button" className="min-h-[44px] font-bold text-primary"
           onClick={() => setThemeLoadAttempt(value => value + 1)}>Retry loading review themes</button>}
         {themes && <form onSubmit={saveThemes}>
-          {!themes.editable && <p className="text-sm text-foreground/70 mb-3">Review theme editing is currently unavailable. Saved settings are shown below.</p>}
+          {!themes.editable && <p className="text-sm text-foreground/70 mb-3">Review theme editing is currently unavailable.</p>}
           <fieldset disabled={!themes.editable || themeSaving} aria-describedby="review-themes-help" className="space-y-4 disabled:opacity-60">
             <legend className="sr-only">Themes requiring teacher review</legend>
             {themes.themes.map(theme => <label key={theme.id} className="flex items-start gap-3 min-h-[44px] cursor-pointer">
