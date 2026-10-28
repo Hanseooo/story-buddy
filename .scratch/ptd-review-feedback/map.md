@@ -17,9 +17,14 @@ notes, usable on mobile.
 |---|---|---|---|---|
 | 01 | [Audit: review decisions and what a child sees](issues/01-audit-review-feedback.md) | research | resolved | — |
 | 02 | [Grill: feedback, comments and highlights → spec](issues/02-grill-review-feedback-spec.md) | grilling | open | 01 |
+| 06 | ["Let students read my notes" switch](issues/06-review-notes-switch-setting.md) | task | resolved | 05 |
 
 Highlights are a separate build ticket after comments ship, per the 2026-10-25 grill.
 
 ## Answers
+
+**06 (2026-10-29).** [Classroom notes switch implemented](issues/06-review-notes-switch-setting.md#answer):
+server-only ownership-checked PATCH, native checkbox, live save feedback and rollback. Stored notes
+are kept when disabled. Focused tests, lint and build pass; full-suite failures are recorded in the ticket.
 
 **01 (2026-10-29).** Conditional go on teacher comments in a private service-role table `job_review_notes` (not a `jobs` column, which classmates can read), a read-only note for the child, and gentler teacher-facing labels. Highlights later, sentence-level. No-go on a `jobs` note column, in-place child edits, and child replies. Drift found: the book page already tells a child "Your teacher needs to approve this book", against spec §4.10. Needs the owner verdict on §4.10 and an ethics re-review. See the ticket `## Answer`.

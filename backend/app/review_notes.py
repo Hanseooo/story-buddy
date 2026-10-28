@@ -2,11 +2,27 @@
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Response
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, StrictBool, field_validator
 
-from app.auth import owned_job, require_teacher, teacher_router
+from app.auth import owned_classroom, owned_job, require_teacher, teacher_router
 from app.config import MAX_REVIEW_NOTE_CHARS
 from app.db import get_supabase_client
+
+
+class ReviewNotesSettingsRequest(BaseModel):
+    enabled: StrictBool
+
+
+@teacher_router.patch("/classrooms/{classroom_id}/review-notes")
+def save_review_notes_settings(
+    payload: ReviewNotesSettingsRequest, classroom=Depends(owned_classroom),
+):
+    rows = (get_supabase_client().table("classrooms")
+            .update({"review_notes_enabled": payload.enabled})
+            .eq("id", classroom["id"]).execute().data)
+    if not rows:
+        raise HTTPException(404, "classroom not found")
+    return {"enabled": rows[0]["review_notes_enabled"]}
 
 
 class NoteRequest(BaseModel):

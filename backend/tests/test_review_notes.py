@@ -24,19 +24,64 @@ def boundary():
     sb.rows = {
         "profiles": [{"id": "teacher-1", "role": "teacher"}],
         "jobs": [{"id": JOB, "status": "complete", "classroom_id": "class-1"}],
-        "classrooms": [{"id": "class-1"}],
+        "classrooms": [{"id": "class-1", "owner_id": "teacher-1", "review_notes_enabled": False}],
     }
     def table(name):
         query = MagicMock()
+        filters = {}
+        changes = {}
         query.select.return_value = query
-        query.eq.return_value = query
-        query.execute.return_value.data = sb.rows[name]
+        def eq(key, value):
+            filters[key] = value
+            return query
+        query.eq.side_effect = eq
+        def update(values):
+            changes.update(values)
+            return query
+        query.update.side_effect = update
+        def execute():
+            rows = [row for row in sb.rows[name] if all(row.get(key) == value for key, value in filters.items())]
+            for row in rows:
+                row.update(changes)
+            return SimpleNamespace(data=rows)
+        query.execute.side_effect = execute
         return query
     sb.table.side_effect = table
     sb.rpc.return_value.execute.return_value.data = {"status": 200, "note": NOTE}
     with patch("app.auth.get_supabase_client", return_value=sb), \
          patch("app.review_notes.get_supabase_client", return_value=sb):
         yield TestClient(app), sb
+
+
+def test_switch_saves_and_disabling_preserves_stored_note(boundary):
+    client, sb = boundary
+    headers = {"Authorization": "Bearer synthetic"}
+    for enabled in (True, False):
+        response = client.patch("/classrooms/class-1/review-notes", json={"enabled": enabled}, headers=headers)
+        assert response.status_code == 200
+        assert response.json() == {"enabled": enabled}
+        assert sb.rows["classrooms"][0]["review_notes_enabled"] is enabled
+    assert client.get(f"/teacher/jobs/{JOB}/note", headers=headers).json() == NOTE
+    assert set(call.args[0] for call in sb.table.call_args_list) <= {"profiles", "classrooms", "jobs"}
+    assert all(call.args[1]["p_operation"] == "GET" for call in sb.rpc.call_args_list)
+
+
+def test_switch_rejects_nonowners_students_and_invalid_values(boundary):
+    client, sb = boundary
+    url = "/classrooms/class-1/review-notes"
+    headers = {"Authorization": "Bearer synthetic"}
+    assert client.patch(url, json={"enabled": True}).status_code == 401
+    sb.rows["profiles"] = [{"id": "teacher-1", "role": "student", "classroom_id": "class-1",
+                            "password_reset_version": 0, "password_completed_version": 0}]
+    assert client.patch(url, json={"enabled": True}, headers=headers).status_code == 403
+    sb.rows["profiles"] = [{"id": "teacher-1", "role": "teacher"}]
+    assert client.patch(url, json={"enabled": "false"}, headers=headers).status_code == 422
+    sb.rows["classrooms"][0]["owner_id"] = "another-teacher"
+    other = client.patch(url, json={"enabled": True}, headers=headers)
+    missing = client.patch("/classrooms/missing/review-notes", json={"enabled": True}, headers=headers)
+    assert other.status_code == missing.status_code == 404
+    assert other.content == missing.content == b'{"detail":"classroom not found"}'
+    sb.rpc.assert_not_called()
 
 
 def test_teacher_can_send_and_read_note(boundary):

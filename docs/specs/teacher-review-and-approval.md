@@ -716,6 +716,13 @@ when I use it.** Applies: SH-04
   partial-index predicate for an atomic upsert. Edits preserve `id` and `created_at`, update
   `updated_at`, and clear `seen_at`. Disabled writes return `409 notes_disabled`; teacher GET still
   returns the stored note. Missing notes on DELETE return the same `404` as GET.
+- **Implemented classroom switch:** `PATCH /classrooms/{classroom_id}/review-notes` accepts
+  `{"enabled": bool}` and returns the saved `{"enabled": bool}`. It uses `require_teacher` through
+  `owned_classroom`; another teacher's classroom and a missing classroom both return
+  `404 {"detail":"classroom not found"}`. Only `classrooms.review_notes_enabled` is updated,
+  with last write wins. Classroom settings reads the stored column and shows a native checkbox
+  labeled "Let students read my notes" with a separate save button. Saving disables the control;
+  success and failure announce politely. Failure restores the stored value. Turning it off keeps notes.
 - **The switch is read server-side** on every note read and write, so a stale browser cannot bypass it.
 - **No redaction (Q8).** The read path is owner-only, so a child's own name in their note is correct,
   and Presidio would turn it into a placeholder. *Inferred* cost: a teacher naming a different child.
