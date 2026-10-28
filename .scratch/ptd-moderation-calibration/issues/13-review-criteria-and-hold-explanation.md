@@ -1,6 +1,6 @@
 # 13 — Teacher sees the review criteria and why this story is held
 
-**Status:** implemented — full frontend/browser verification pending
+**Status:** implemented — browser/hosted verification pending
 **Type:** task
 **Progress:** built in the accepted synthetic-only, feature-off scope
 **Blocked by:** None — ticket 06 inspection code is implemented.
@@ -32,7 +32,8 @@ conflict verdict or design acceptance again. Ticket 02 is complete as a specific
 Implementation is authorized in predecessor-ticket order, using synthetic data with the feature
 disabled by default. Audit 01 remains open. Changed classifier prompts, paid replay, production
 enablement and real-child use are not authorized by this acceptance. Educator/ethics/consent and
-hosted verification gates remain before real-child enablement. No implementation is claimed here.
+hosted verification gates remain before real-child enablement. Implementation and verification
+limits are recorded in moderation-stack §9.12.
 
 ## Context
 
@@ -96,6 +97,10 @@ with the accepted shared-safety and optional-theme definitions kept distinct.
 Teacher criteria/detail reads and Books disclosure are implemented. Provider/node/graph and
 disposable-Postgres integration checks pass. Frontend lint/build/typecheck and all 30 Books tests
 pass. Full backend: 1,545 passed, 89 skipped, six deselected and the same six existing native
-WeasyPrint/PDF failures as ticket 06. Full frontend runs stall in both fork and thread workers;
-no source tests were removed or loosened. Browser inventory is empty and the in-app browser is
+WeasyPrint/PDF failures as ticket 06. Frontend fork workers stalled; the threads run passed all
+77 source test files and 735 tests. No source tests were removed or loosened. Browser inventory is empty and the in-app browser is
 unavailable, so desktop/phone and hosted verification remain unrun. See §9.12 for boundaries.
+
+Required Standards/Spec review agents both stopped at the account usage limit without findings.
+Local review covered both axes instead; the stale audience string in the captured policy fixture
+was corrected. No other local findings remain. Independent review was not completed.

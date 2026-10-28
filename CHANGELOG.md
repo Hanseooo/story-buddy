@@ -33,8 +33,10 @@ instead of repeating it.
 
 - Backend lint and 139 targeted graph/node/provider checks pass. Full backend has 1,545 passes,
   89 skips, six deselections and the six existing native WeasyPrint/PDF failures.
-- Frontend lint, production build/typecheck and all 30 Books tests pass. Full frontend workers
-  stall; browser/phone verification remains unavailable. See the spec for verification limits.
+- Frontend lint, production build/typecheck and all 30 Books tests pass. The complete source
+  suite passes all 77 files and 735 tests with the threads pool after fork runs stalled.
+  Browser/phone verification remains unavailable. Independent review agents hit a usage limit;
+  local Standards/Spec review completed. See the spec for verification limits.
 
 ## Ticket 06 · 2026-10-28 · Teacher inspection of held stories
 

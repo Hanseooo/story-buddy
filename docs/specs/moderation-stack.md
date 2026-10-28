@@ -1497,6 +1497,10 @@ reads are covered. Frontend fixtures were captured from that synthetic integrati
 file passes all 30 tests. Backend lint and frontend lint/build/typecheck pass. The full backend
 suite reports 1,545 passes, 89 skips, six smoke deselections and the same six pre-existing native
 WeasyPrint/PDF failures recorded in §9.11. Unrestricted and explicit-source frontend fork runs
-stalled and were stopped; further runner verification is recorded with ticket 13.
+stalled and were stopped. The complete source suite then passed all 77 files and 735 tests using
+`pnpm exec vitest run app components lib utils middleware.test.ts --maxWorkers=2 --pool=threads --reporter=dot`.
 Browser/phone inspection remains unrun: browser inventory is empty and the in-app browser is
 unavailable. Hosted delivery and educator/ethics/real-child gates remain unchanged.
+Both requested independent review agents hit the account usage limit without returning findings.
+Local Standards/Spec review corrected the policy fixture's audience string; independent review
+remains uncompleted.
