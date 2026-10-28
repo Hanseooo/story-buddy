@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import StopStory from "@/components/StopStory";
 
 type HeldItem = {
   review_id: string; job_id: string; title: string | null; author: string | null;
@@ -120,6 +121,7 @@ function HeldStory({ jobId, onClose }: { jobId: string; onClose: () => void }) {
   const [revision, setRevision] = useState(0);
   const [inspected, setInspected] = useState(false);
   const [pending, setPending] = useState(false);
+  const [stopped, setStopped] = useState(false);
   const request = useRef<AbortController | null>(null);
   const load = useCallback(async () => {
     request.current?.abort();
@@ -173,7 +175,7 @@ function HeldStory({ jobId, onClose }: { jobId: string; onClose: () => void }) {
         <h2 id="held-story-title" className="text-2xl font-bold">Needs your help</h2>
         <button autoFocus className={control} onClick={close}>Back to Needs your help</button>
       </div>
-      <p className="text-sm text-foreground/70">Inspection leaves this story waiting. No picture is released to the child.</p>
+      {!stopped && <p className="text-sm text-foreground/70">Inspection leaves this story waiting. No picture is released to the child.</p>}
       <button className={control} disabled={loading || pending} onClick={() => void load()}>Refresh story status</button>
       {loading && <p role="status">Loading current story…</p>}
       {error && <div role="alert"><p>This review is unavailable or your access has changed.</p>
@@ -188,6 +190,7 @@ function HeldStory({ jobId, onClose }: { jobId: string; onClose: () => void }) {
             <ContinueSavedDecision jobId={jobId} command={detail.pending_command} onChanged={load} />
           </>}
         </> : <>
+          {!stopped && <>
           <p className="font-bold">Waiting for teacher help</p>
           <p>The whole book stays hidden while this review is open. Earlier clearances cannot be withdrawn here. If uncertain, leave this story waiting.</p>
           {!detail.ready && <p role="status">Finishing the current step. Inspection is available.</p>}
@@ -230,7 +233,12 @@ function HeldStory({ jobId, onClose }: { jobId: string; onClose: () => void }) {
           </section>}
           {!loading && !error && detail.kind === "scene_image" && <AllowPicture
             key={`${detail.review_id}-${detail.subject_version}-${detail.generation_epoch}-${revision}`}
-            jobId={jobId} detail={detail} inspected={inspected} onPending={setPending} />}
+            jobId={jobId} detail={detail} inspected={inspected} busy={pending} onPending={setPending} />}
+          </>}
+          {!loading && !error && <StopStory jobId={jobId} reviewId={detail.review_id}
+            epoch={detail.generation_epoch!} ready={!!detail.ready && !pending}
+            teacher={{ subjectVersion: detail.subject_version!, policyVersion: detail.current_policy_version || "" }}
+            onStopped={() => setStopped(true)} onRefresh={load} onPending={setPending} />}
         </>}
       </>}
     </div>
@@ -271,8 +279,8 @@ function ContinueSavedDecision({ jobId, command, onChanged }: {
   </section>;
 }
 
-function AllowPicture({ jobId, detail, inspected, onPending }: {
-  jobId: string; detail: Detail; inspected: boolean; onPending: (pending: boolean) => void;
+function AllowPicture({ jobId, detail, inspected, busy, onPending }: {
+  jobId: string; detail: Detail; inspected: boolean; busy: boolean; onPending: (pending: boolean) => void;
 }) {
   const [confirmed, setConfirmed] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
@@ -324,7 +332,7 @@ function AllowPicture({ jobId, detail, inspected, onPending }: {
       <p>If you are uncertain, leave this story waiting and return later. Allowing safety clearance does not approve classroom sharing.</p>
       {!inspected && <p>Show the picture and wait for it to load before allowing it.</p>}
       {!detail.ready && <p role="status">Finishing the current step. Refresh story status before deciding.</p>}
-      <fieldset disabled={pending || submitted} className="space-y-2">
+      <fieldset disabled={busy || pending || submitted} className="space-y-2">
         <legend className="font-bold">After inspection, confirm each named review criterion</legend>
         {detail.criteria?.map(id => <label key={id} className="flex items-center gap-3 min-h-[44px]">
           <input type="checkbox" checked={confirmed.includes(id)} onChange={event => setConfirmed(values =>
@@ -334,7 +342,7 @@ function AllowPicture({ jobId, detail, inspected, onPending }: {
       </fieldset>
       {message && <h4 ref={summary} tabIndex={-1} role="alert" className="font-bold focus-visible:outline-2 focus-visible:outline-primary">{message}</h4>}
       {pending && <p role="status">Saving your decision…</p>}
-      <button className={control} disabled={pending || !detail.ready || (!submitted &&
+      <button className={control} disabled={busy || pending || !detail.ready || (!submitted &&
         (!inspected || !detail.current_policy_version || !detail.criteria?.length || confirmed.length !== detail.criteria.length))}
         onClick={() => void allow()}>{pending ? "Saving…" : submitted ? "Continue story" : "Allow this picture"}</button>
     </>}

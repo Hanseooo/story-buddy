@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 import ProcessingPage from "./page";
+// Captured from test_teacher_hold's synthetic real graph/Postgres stopped response.
+import stoppedState from "@/lib/stopped-state.fixture.json";
 
 const pushMock = vi.fn();
 const replaceMock = vi.fn();
@@ -31,6 +33,20 @@ vi.mock("@/lib/supabaseClient", () => ({
 }));
 
 const PROFILE_ID = "p1";
+
+it("shows stopped writing recovery without a paid retry and preserves context on storage failure", async () => {
+  mockUseJob.mockReturnValue(jobState({ bucket: "stopped", row: { id: "j1", status: "stopped", profile_id: PROFILE_ID } }));
+  global.fetch = vi.fn().mockResolvedValue(Response.json(stoppedState));
+  await renderPage(makeParams());
+  expect(await screen.findByRole("heading", { name: "This book has stopped. Your writing is saved." })).toBeDefined();
+  const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("storage unavailable"); });
+  fireEvent.click(await screen.findByRole("button", { name: "Use my writing" }));
+  expect(await screen.findByLabelText("Saved writing")).toHaveValue("The orange dog walks through the grassy field past the trees and stops near the stream. The dog looks across the water and sees a bird perched on the branch of a tree.");
+  expect(pushMock).not.toHaveBeenCalled();
+  expect(screen.getByRole("link", { name: "Back to my books" })).toHaveAttribute("href", "/s/p1");
+  expect(screen.queryByText("Make my book")).toBeNull();
+  setItem.mockRestore();
+});
 
 function makeParams(jobId = "j1") {
   const value = { profileId: PROFILE_ID, jobId };

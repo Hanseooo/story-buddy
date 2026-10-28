@@ -161,7 +161,7 @@ class ReviewReveal(BaseModel):
 class ReviewDecision(ReviewReveal):
     expected_epoch: int = Field(ge=0)
     request_id: UUID
-    action: Literal["allow"]
+    action: Literal["allow", "stop"]
     policy_version: str
     confirmed_criteria: list[str]
     confirmed: Literal[True]
@@ -176,6 +176,63 @@ def command_state(job, review):
 
 def command_conflict(code, job, review=None):
     raise HTTPException(409, {"code": code, **command_state(job, review)}, headers=PRIVATE)
+
+
+def stop_held_job(conn, job, body, user_id, *, teacher=False):
+    review = conn.execute("select * from job_moderation_reviews where job_id=%s and id=%s",
+                          (job["id"], body.review_id)).fetchone()
+    prior = conn.execute("select * from job_moderation_reviews where job_id=%s and request_id=%s",
+                         (job["id"], body.request_id)).fetchone()
+    if prior:
+        if (str(prior["id"]) != str(body.review_id) or str(prior["actor_id"]) != user_id
+                or prior["decision"] != "stop" or prior["decision_epoch"] != body.expected_epoch + 1
+                or (teacher and (prior["subject_version"] != body.subject_version
+                    or prior["decision_policy_version"] != body.policy_version
+                    or prior["confirmed_criteria"] != body.confirmed_criteria))):
+            command_conflict("request_conflict", job, review)
+        return command_state(job, prior)
+    if conn.execute("select 1 from job_moderation_reviews where job_id=%s and id=%s",
+                    (job["id"], body.request_id)).fetchone():
+        command_conflict("request_conflict", job, review)
+    if (not review or review["decision"] is not None or job["status"] != "awaiting_teacher"
+            or job["generation_epoch"] != body.expected_epoch
+            or (teacher and review["subject_version"] != body.subject_version)):
+        command_conflict("review_changed", job, review)
+    if job["worker_finished_at"] is None:
+        command_conflict("finishing_current_step", job, review)
+    conn.execute("""update job_moderation_reviews set decision='stop',actor_id=%s,decided_at=now(),
+      decision_policy_version=%s,confirmed_criteria=%s,request_id=%s,decision_epoch=%s,
+      dispatch_state=null,dispatch_kind=null,dispatch_error_code=null where id=%s""",
+                 (user_id, body.policy_version if teacher else None,
+                  body.confirmed_criteria if teacher else [], body.request_id, body.expected_epoch + 1, body.review_id))
+    job = conn.execute("""update jobs set status='stopped',generation_epoch=generation_epoch+1,
+      pages='[]',reveal='{}',approved_at=null,rejected_at=null where id=%s returning *""", (job["id"],)).fetchone()
+    return command_state(job, {**review, "dispatch_state": None})
+
+
+class ChildStop(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    review_id: UUID
+    expected_epoch: int = Field(ge=0)
+    request_id: UUID
+    confirmed: Literal[True]
+
+
+@hold_router.post("/jobs/{job_id}/stop")
+def child_stop(job_id: UUID, body: ChildStop, response: Response, user=Depends(get_current_user)):
+    try:
+        with connect() as conn, conn.transaction():
+            job = conn.execute("select * from jobs where id=%s for update", (job_id,)).fetchone()
+            if not job or str(job["profile_id"]) != str(user.id) or job["status"] == "deleting":
+                raise HTTPException(404, "job_not_found", headers=PRIVATE)
+            conn.execute("select id from profiles where id=%s for share", (user.id,))
+            if job["moderation_mode"] != "teacher_review_v1" or not active_author(conn, job):
+                raise HTTPException(404, "job_not_found", headers=PRIVATE)
+            result = stop_held_job(conn, job, body, str(user.id))
+        response.headers.update(PRIVATE)
+        return result
+    except psycopg.Error:
+        raise HTTPException(503, "review_unavailable", headers=PRIVATE) from None
 
 
 def dispatch_review(job_id, review_id, epoch):
@@ -252,8 +309,12 @@ def teacher_decision(job_id: UUID, body: ReviewDecision, response: Response, use
                 raise HTTPException(403, "teacher_required", headers=PRIVATE)
             teacher_classroom(conn, str(job["classroom_id"]), uid)
             conn.execute("select id from profiles where id=%s for update", (job["profile_id"],))
-            if job["moderation_mode"] != "teacher_review_v1" or not active_author(conn, job):
+            if job["moderation_mode"] != "teacher_review_v1" or (body.action != "stop" and not active_author(conn, job)):
                 raise HTTPException(404, "review_not_found", headers=PRIVATE)
+            if body.action == "stop":
+                result = stop_held_job(conn, job, body, uid, teacher=True)
+                response.headers.update(PRIVATE)
+                return result
             review = conn.execute("select * from job_moderation_reviews where job_id=%s and id=%s",
                                   (jid, body.review_id)).fetchone()
             prior = conn.execute("select * from job_moderation_reviews where job_id=%s and request_id=%s",
@@ -546,11 +607,16 @@ def job_state(job_id: UUID, response: Response, user=Depends(get_current_user)):
     with connect() as conn:
         job = product_job(conn, str(job_id), str(user.id))
         repairable = can_reconcile_hold(conn, job)
+        author = str(job["profile_id"]) == str(user.id)
+        review = conn.execute("select id from job_moderation_reviews where job_id=%s and decision is null",
+                              (job_id,)).fetchone() if author and job["status"] == "awaiting_teacher" else None
     response.headers.update(PRIVATE)
     return {"job_id": str(job_id), "status": job["status"], "moderation_mode": job["moderation_mode"],
             "generation_epoch": job["generation_epoch"], "worker_finished": job["worker_finished_at"] is not None,
-            "can_reconcile_hold": (str(job["profile_id"]) == str(user.id)
-                and repairable)}
+            "can_reconcile_hold": (author and repairable),
+            "review_id": str(review["id"]) if review else None,
+            "saved_writing": {"text": job["input_text"], "title": job["title"] or ""}
+                if author and job["status"] == "stopped" and job["moderation_mode"] == "teacher_review_v1" else None}
 
 
 def authorized_asset(conn, job_id: str, asset_id: str, user_id: str) -> tuple[str, int]:

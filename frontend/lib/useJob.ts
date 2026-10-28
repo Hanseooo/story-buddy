@@ -8,6 +8,7 @@ export type JobBucket =
   | "in-flight"
   | "paused"
   | "teacher-held"
+  | "stopped"
   | "terminal-success"
   | "terminal-failure";
 
@@ -39,6 +40,7 @@ export type JobRow = {
 export function classify(row: JobRow | null): JobBucket {
   if (!row) return "not-found";
   if (row.status === "awaiting_teacher") return "teacher-held";
+  if (row.status === "stopped") return "stopped";
   if (row.status === "complete" && row.pages.length > 0) return "terminal-success";
   if (row.status === "awaiting_confirm") return "paused";
   if (row.status === "queued" || row.status === "running") return "in-flight";

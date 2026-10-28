@@ -203,6 +203,7 @@ function BookCard({
     "in-flight": `/s/${profileId}/process/${card.id}`,
     paused: `/s/${profileId}/process/${card.id}`,
     "teacher-held": `/s/${profileId}/process/${card.id}`,
+    stopped: `/s/${profileId}/process/${card.id}`,
     // Amended from /write (spec §7.2): /process renders FailureScreen, which reposts
     // the child's own input_text on one tap instead of stranding them on a blank page.
     "terminal-failure": `/s/${profileId}/process/${card.id}`,
@@ -279,6 +280,9 @@ function BookCard({
           )}
 
           {/* Status Badge Overlays */}
+          {card.bucket === "stopped" && <div className="absolute inset-0 flex items-end justify-center pb-4">
+            <span className="px-3 py-1.5 rounded-full bg-muted text-foreground text-xs font-extrabold">Writing saved</span>
+          </div>}
           {card.bucket === "in-flight" && (
             <div className="absolute inset-0 flex items-end justify-center pb-4">
               <span className="px-3 py-1.5 rounded-full bg-primary text-on-primary text-xs font-extrabold shadow-sm">

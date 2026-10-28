@@ -8,6 +8,8 @@ import { useRouter } from "next/navigation";
 import { useJob, type JobRow } from "@/lib/useJob";
 import { displayTitle } from "@/lib/displayTitle";
 import FailureScreen from "@/components/FailureScreen";
+import StopStory from "@/components/StopStory";
+import StoppedStory from "@/components/StoppedStory";
 import { supabase } from "@/lib/supabaseClient";
 import { signPaths } from "@/lib/signedUrls";
 import { motion, AnimatePresence } from "framer-motion";
@@ -181,6 +183,7 @@ const StackingVignette = () => (
 );
 
 function HoldRecovery({jobId, profileId, refetch, held = false}: {jobId: string; profileId: string; refetch: () => Promise<boolean>; held?: boolean}) {
+  const [stopState, setStopState] = useState<{review_id: string; generation_epoch: number; worker_finished: boolean} | null>(null);
   const [canRepair, setCanRepair] = useState<boolean | null>(null);
   const [error, setError] = useState(false);
   const [sending, setSending] = useState(false);
@@ -197,11 +200,17 @@ function HoldRecovery({jobId, profileId, refetch, held = false}: {jobId: string;
         });
         if (!response.ok) throw new Error();
         const state = await response.json();
-        if (!controller.signal.aborted) { setCanRepair(state.can_reconcile_hold === true); setError(false); }
+        if (!controller.signal.aborted) {
+          setCanRepair(state.can_reconcile_hold === true); setError(false);
+          setStopState(state.status === "awaiting_teacher" && state.review_id ? state : null);
+          if (state.status && state.status !== "awaiting_teacher" && held) await refetch();
+        }
       } catch { if (!controller.signal.aborted) setError(true); }
     })();
     return () => { controller.abort(); };
-  }, [jobId, readVersion]);
+    // refetch is an unstable useJob callback. Only reread on an explicit retry or route change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId, readVersion, held]);
   async function repair() {
     if (sending) return;
     setSending(true); setError(false);
@@ -226,6 +235,9 @@ function HoldRecovery({jobId, profileId, refetch, held = false}: {jobId: string;
     {error && <button type="button" disabled={sending} className="min-h-11 underline" onClick={() => {setError(false); setReadVersion(value => value + 1);}}>Try checking again</button>}
     {canRepair === false && !held && <Link href={`/s/${profileId}/write`} className="min-h-11 underline">Write a new story</Link>}
     <Link href={`/s/${profileId}`} className="inline-flex min-h-11 items-center rounded-2xl bg-primary px-6 font-bold text-on-primary">Back to my books</Link>
+    {held && stopState && !error && <StopStory key={`${stopState.review_id}-${stopState.generation_epoch}`} jobId={jobId} reviewId={stopState.review_id}
+      epoch={stopState.generation_epoch} ready={stopState.worker_finished}
+      onStopped={() => void refetch()} onRefresh={() => { void refetch(); setReadVersion(value => value + 1); }} />}
   </main>;
 }
 
@@ -480,6 +492,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   }
 
   // Derive FailureScreen kind from row state
+  if (bucket === "stopped") return <StoppedStory jobId={jobId} profileId={profileId} />;
   if (bucket === "teacher-held") {
     return <HoldRecovery jobId={jobId} profileId={profileId} refetch={refetch} held />;
   }

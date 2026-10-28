@@ -7,6 +7,7 @@ import { motion, AnimatePresence, useScroll } from "framer-motion";
 import { useJob } from "@/lib/useJob";
 import { displayTitle } from "@/lib/displayTitle";
 import FailureScreen, { resetFailChain } from "@/components/FailureScreen";
+import StoppedStory from "@/components/StoppedStory";
 import { signPaths } from "@/lib/signedUrls";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
@@ -230,6 +231,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
     return <FailureScreen kind={kind} reason={row?.failure_reason} jobId={jobId} inputText={row?.input_text} title={row?.title} stylePresetId={row?.style_preset_id} />;
   }
 
+  if (bucket === "stopped") return <StoppedStory jobId={jobId} profileId={profileId} />;
   if (bucket === "teacher-held") {
     return <main className="flex flex-1 flex-col items-center justify-center gap-6 p-6 text-center">
       <h1 className="font-display text-3xl font-extrabold">Waiting for your teacher</h1>

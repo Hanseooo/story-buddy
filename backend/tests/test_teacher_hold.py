@@ -12,6 +12,7 @@ from uuid import uuid4
 
 import psycopg
 import pytest
+from fastapi import Request
 from fastapi.testclient import TestClient
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
@@ -49,7 +50,7 @@ def held_database(monkeypatch):
         conn.execute("delete from profiles where id = %s", (teacher,))
 
 
-@pytest.mark.parametrize("failure", [None, "projection", "worker_stopped", "withdraw_inflight", "withdraw_queued_allow", "withdraw_queued_allow_revoked"])
+@pytest.mark.parametrize("failure", [None, "projection", "worker_stopped", "withdraw_inflight", "withdraw_queued_allow", "withdraw_queued_allow_revoked", "child_stop", "teacher_stop", "stop_race"])
 def test_checkpointed_scene_flag_projects_private_hold_and_reload(monkeypatch, held_database, failure):
     from worker.run_job import run_review_storybook_job
 
@@ -327,6 +328,56 @@ def test_checkpointed_scene_flag_projects_private_hold_and_reload(monkeypatch, h
                            "expected_epoch": detail["generation_epoch"], "request_id": str(uuid4()),
                            "action": "allow", "policy_version": detail["current_policy_version"],
                            "confirmed_criteria": detail["criteria"], "confirmed": True}
+                if failure == "stop_race":
+                    def race_user(request: Request):
+                        return SimpleNamespace(id=teacher if request.url.path.startswith("/teacher/") else child)
+                    app.dependency_overrides[get_current_user] = race_user
+                    child_command = {k: command[k] for k in ("review_id", "expected_epoch", "request_id", "confirmed")}
+                    child_command["request_id"] = str(uuid4())
+                    with ThreadPoolExecutor(max_workers=2) as pool:
+                        allow = pool.submit(client.post, f"/teacher/jobs/{job}/moderation-review/decision", json=command)
+                        stop = pool.submit(client.post, f"/jobs/{job}/stop", json=child_command)
+                        results = [allow.result(), stop.result()]
+                    assert sorted(r.status_code for r in results) in ([200, 409], [202, 409])
+                    current = conn.execute("select status,generation_epoch from jobs where id=%s", (job,)).fetchone()
+                    assert current["generation_epoch"] == 2
+                    assert current["status"] in ("stopped", "queued")
+                    if current["status"] == "queued":
+                        assert results[1].json()["detail"]["status"] == "queued"
+                    else:
+                        run_review_storybook_job(job, expected_epoch=1)
+                        assert conn.execute("select status from jobs where id=%s", (job,)).fetchone()["status"] == "stopped"
+                    return
+                if failure in ("child_stop", "teacher_stop"):
+                    before = conn.execute("select input_text,image_count from jobs where id=%s", (job,)).fetchone()
+                    stop = {**command, "action": "stop", "confirmed_criteria": []}
+                    route = f"/teacher/jobs/{job}/moderation-review/decision"
+                    if failure == "child_stop":
+                        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+                        route = f"/jobs/{job}/stop"
+                        stop = {k: command[k] for k in ("review_id", "expected_epoch", "request_id", "confirmed")}
+                        conn.execute("update profiles set removed_at=now() where id=%s", (child,))
+                        assert client.post(route, json=stop).status_code == 404
+                        conn.execute("update profiles set removed_at=null where id=%s", (child,))
+                    assert client.post(route, json={**stop, "confirmed": False}).status_code == 422
+                    conn.execute("update jobs set worker_finished_at=null where id=%s", (job,))
+                    assert client.post(route, json=stop).status_code == 409
+                    conn.execute("update jobs set worker_finished_at=now() where id=%s", (job,))
+                    with ThreadPoolExecutor(max_workers=2) as pool:
+                        responses = list(pool.map(lambda _: client.post(route, json=stop), range(2)))
+                    assert [r.status_code for r in responses] == [200, 200]
+                    assert all(r.json()["status"] == "stopped" for r in responses)
+                    assert client.post(route, json={**stop, "expected_epoch": 0}).status_code == 409
+                    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=teacher)
+                    assert client.post(f"/teacher/jobs/{job}/moderation-review/decision", json=command).status_code == 409
+                    run_review_storybook_job(job, expected_epoch=1)
+                    after = conn.execute("select status,input_text,image_count,generation_epoch from jobs where id=%s", (job,)).fetchone()
+                    assert after == {**before, "status": "stopped", "generation_epoch": 2}
+                    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+                    recovery = client.get(f"/jobs/{job}/state").json()
+                    assert recovery["saved_writing"] == {"text": before["input_text"], "title": "Synthetic title"}
+                    assert client.get(f"/jobs/{job}/images/scene-s0").status_code == 404
+                    return
                 conn.execute("update profiles set removed_at=now() where id=%s", (child,))
                 assert client.post(f"/teacher/jobs/{job}/moderation-review/decision", json=command).status_code == 404
                 conn.execute("update profiles set removed_at=null where id=%s", (child,))

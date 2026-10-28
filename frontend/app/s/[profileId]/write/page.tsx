@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { resetFailChain } from "@/components/FailureScreen";
 import { supabase } from "@/lib/supabaseClient";
+import { clearStoppedWriting, stoppedWritingKey, type SavedWriting } from "@/lib/stoppedWriting";
+import Link from "next/link";
 import { motion } from "framer-motion";
 
 const MIN_STORY_WORDS = 5;
@@ -50,6 +52,48 @@ export default function WriteStoryPage() {
   const redactionPanelRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const { profileId } = useParams() as { profileId: string };
+  const [recovery, setRecovery] = useState<{ jobId: string; writing?: SavedWriting; error?: boolean; loading?: boolean } | null>(null);
+  const [recoveryRevision, setRecoveryRevision] = useState(0);
+  const replacement = useRef<HTMLDialogElement>(null);
+  const keepDraft = useRef<HTMLButtonElement>(null);
+  const useWriting = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const jobId = new URLSearchParams(window.location.search).get("reuse");
+    if (!jobId) return;
+    const controller = new AbortController();
+    void (async () => {
+      setRecovery({ jobId, loading: true });
+      try {
+        if (!sessionStorage.getItem(stoppedWritingKey(profileId, jobId))) throw new Error();
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) { clearStoppedWriting(); throw new Error(); }
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/jobs/${encodeURIComponent(jobId)}/state`, {
+          headers: { Authorization: `Bearer ${session.access_token}` }, cache: "no-store", signal: controller.signal,
+        });
+        if ([401, 403, 404].includes(response.status)) clearStoppedWriting();
+        if (!response.ok) throw new Error();
+        const current = await response.json();
+        if (current.status !== "stopped" || !current.saved_writing) { clearStoppedWriting(); throw new Error(); }
+        if (!controller.signal.aborted) setRecovery({ jobId, writing: current.saved_writing });
+      } catch { if (!controller.signal.aborted) setRecovery({ jobId, error: true }); }
+    })();
+    return () => controller.abort();
+  }, [profileId, recoveryRevision]);
+
+  function consumeWriting() {
+    if (!recovery?.writing) return;
+    try {
+      sessionStorage.removeItem(stoppedWritingKey(profileId, recovery.jobId));
+      setText(recovery.writing.text); setTitle(recovery.writing.title);
+      setTitleError(null); setPendingRedactedTitle(null); resetFailChain(); setChainCount(0);
+      replacement.current?.close(); setRecovery(null); textareaRef.current?.focus();
+      window.history.replaceState(null, "", `/s/${profileId}/write`);
+    } catch { setRecovery({ ...recovery, error: true }); }
+  }
+
+  function keepExistingDraft() {
+    replacement.current?.close(); useWriting.current?.focus();
+  }
 
   useEffect(() => {
     let prefill: { text: string; title: string; stylePresetId?: StylePresetId } | null = null;
@@ -216,6 +260,25 @@ export default function WriteStoryPage() {
 
   return (
     <form aria-label="Write your story" onSubmit={handleSubmit} className="min-h-[calc(100dvh-76px)] sm:min-h-[calc(100dvh-85px)] flex flex-col py-4 sm:py-6 lg:py-8 px-4 sm:px-8 max-w-5xl mx-auto w-full relative">
+      {recovery && <section aria-label="Saved story writing" className="mb-5 space-y-3 rounded-2xl bg-muted p-4">
+        {recovery.loading ? <p role="status">Loading your saved writing…</p> : recovery.error ? <>
+          <p role="alert">We couldn’t bring your saved writing here. Your original story is still saved.</p>
+          <button type="button" className="min-h-11 px-4 underline" onClick={() => setRecoveryRevision(value => value + 1)}>Try loading again</button>
+        </> : <>
+          <p>Your saved writing is ready. You can edit it before making a new book.</p>
+          <button type="button" ref={useWriting} className="min-h-11 px-4 font-bold underline" onClick={() => {
+            if (text || title) { replacement.current?.showModal(); keepDraft.current?.focus(); }
+            else consumeWriting();
+          }}>Use saved writing</button>
+        </>}
+        <Link className="inline-flex min-h-11 items-center px-4 underline" href={`/s/${profileId}/process/${encodeURIComponent(recovery.jobId)}`}>Back to saved story</Link>
+      </section>}
+      <dialog ref={replacement} aria-labelledby="replace-draft" onCancel={event => { event.preventDefault(); keepExistingDraft(); }}
+        className="m-auto max-w-md rounded-2xl bg-background p-6 text-foreground backdrop:bg-foreground/50">
+        <h2 id="replace-draft" className="text-xl font-bold">Replace the writing in this draft?</h2>
+        <button type="button" ref={keepDraft} className="min-h-11 px-4 font-bold" onClick={keepExistingDraft}>Keep my draft</button>
+        <button type="button" className="min-h-11 px-4 font-bold" onClick={consumeWriting}>Replace my draft</button>
+      </dialog>
 
       {/* Title — story-titles spec §3 */}
       <div className="mb-3 shrink-0">

@@ -14,6 +14,31 @@ instead of repeating it.
 
 ---
 
+## Ticket 08 · 2026-10-28 · Stop a held story and retain writing
+
+### Code
+
+- Add confirmed, idempotent teacher/active-author stop through the existing held-job transaction.
+  Stop advances the epoch without dispatch, preserves writing/spend and cannot reopen a run.
+- Add shared stop confirmation, neutral child stopped routes and a Writing saved bookshelf entry.
+  Recover processed writing through the existing form with draft-replacement confirmation,
+  author revalidation, reload-safe sign-out/access-loss cleanup and copy recovery.
+
+### Docs
+
+- Record the accepted synthetic-only, feature-off implementation and verification limits in
+  moderation-stack §9.14 and moderation-calibration ticket 08.
+
+### Checks
+
+- Backend lint and 74 targeted API/real-graph/Postgres checks pass, including concurrent stop/allow.
+  Full backend: 1,551 passed, 89 skipped, six deselected and six existing native WeasyPrint/PDF failures.
+- Frontend lint, production build/typecheck and 113 targeted UI/cleanup checks pass.
+  The complete serial source suite passes all 78 files and 742 tests after two-worker runs
+  failed to finish. The unrestricted run's withdrawal-replay failure passes in the complete run.
+- Standards and Spec re-reviews have zero unresolved findings. Browser/phone, hosted delivery,
+  paid providers and real-child release remain unrun. Intake stays off by default.
+
 ## Ticket 13 · 2026-10-28 · Teacher criteria and held-story evidence
 
 ### Code

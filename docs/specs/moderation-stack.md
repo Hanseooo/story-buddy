@@ -1508,8 +1508,8 @@ remains uncompleted.
 ### 9.13 Ticket 07 implementation (2026-10-28)
 
 Synthetic-only, captured `teacher_review_v1` scene-picture allow and whole-book withdrawal
-implement §§9.9.3–9.9.5. Intake remains disabled by default. Other subjects, stop and replacement
-remain later tickets. Allow requires the current owner, active author, matching review/hash/epoch,
+implement §§9.9.3–9.9.5. Intake remains disabled by default. Other subjects and replacement
+remain later tickets; stopped-run recovery is recorded in §9.14. Allow requires the current owner, active author, matching review/hash/epoch,
 current policy and explicit confirmation of every recorded criterion. The retained checkpoint
 and exact image bytes must still exist. An immutable decision commits with its pending dispatch
 before unique RQ delivery. Explicit retries reuse that command; reads never enqueue.
@@ -1571,3 +1571,55 @@ requiring an uncertain allow. No second review queue or new review-state contrac
 This differs from an already-committed later allow: that decision has closed its database review,
 so the control worker applies only its pure review node, stopping before its paid continuation,
 before anchoring withdrawal of the earlier picture.
+
+### 9.14 Ticket 08 implementation (2026-10-28)
+
+The existing teacher decision route now accepts confirmed `stop`; active child authors use
+`POST /jobs/{job_id}/stop` with the accepted review/epoch/request identity. Both serialize on
+the job row, recheck stored authority, require an undecided matching hold and worker quiescence,
+record an immutable stop, advance the epoch once and set terminal `stopped` without dispatch.
+Idempotent retries return current state. A losing stop returns `409` with authorized current
+status and cannot cancel a released story. Stop retains processed writing and incurred spend.
+It does not implement general deletion or teacher reopening.
+
+Books and the child process route share native stop confirmation with Keep waiting initially
+focused, Escape/cancel restoring the opener, and no write before confirmation. Unknown responses
+offer same-request retry and current-state reconciliation. Teacher inspection hides old pictures
+and decision controls after stop. The child bookshelf labels stopped runs **Writing saved**;
+process and direct book routes show the accepted neutral stopped copy and bookshelf exit.
+
+Author-only `GET /jobs/{job_id}/state` adds the open `review_id` for held-stop identity and
+`saved_writing: {text, title}` only for that author's stopped teacher-review job. No private
+evidence or asset path enters this response. Use my writing stores those processed fields in
+tab-local `sb.stopped.{profileId}.{jobId}` and opens the existing writing form's `?reuse=` route.
+The form rechecks current access through the same API, shows loading/retry and an explicit use
+action, confirms replacement of any existing draft, and consumes the handoff without submitting.
+Root-mounted cleanup survives reload, clears on sign-out, and rechecks retained handoffs on
+visibility return. Lost access clears the handoff. Storage/navigation failure keeps selectable
+writing and Copy writing with honest copy-failure feedback on the stopped page.
+
+Synthetic verification: stop API tests were observed failing before implementation. Real
+graph/disposable-Postgres cases cover teacher/child stop, duplicate same-request commands,
+non-quiescence, removed-author denial, retained writing/image count, stale-worker fencing,
+reopen denial and concurrent child-stop/teacher-allow serialization. UI tests use a stopped
+response captured from that integration run and cover cancel/Escape/focus, lost-response retry,
+storage failure, existing-draft replacement and reload/sign-out/access-loss cleanup. Review
+findings about cleanup after reload and loading state are resolved; both Standards and Spec
+re-reviews report zero unresolved findings.
+
+Checks: `uv run ruff check .` passes. Targeted
+`uv run pytest tests/test_teacher_hold.py tests/test_main.py -q` passes 74 tests. Full
+`uv run pytest` with disposable `TEST_MODERATION_DB_URL` reports 1,551 passes, 89 skips, six
+smoke deselections and the same six native WeasyPrint/PDF failures recorded in §§9.11–9.13.
+Representative failure: `assert 503 == 200` and `PDF download failed (OSError)` in
+`tests/test_pdf_export.py`; full output is in `.scratch/ticket08-backend-full.txt`. No PDF test
+was skipped, removed or loosened. Credential/local-Supabase-dependent skips remain unchanged.
+Frontend lint, production build/typecheck and the 113 targeted Books/process/write/cleanup tests
+pass after review fixes. Unrestricted discovery reported a withdrawal-replay test failure before
+stalling; that test passes in targeted checks and the complete serial source run. The two-worker
+source run also stopped producing progress and was stopped. The complete source command
+`pnpm exec vitest run app components lib utils middleware.test.ts --pool=threads --maxWorkers=1 --reporter=verbose`
+passes all 78 files and 742 tests, with no source tests excluded. Full output is in
+`.scratch/ticket08-frontend-serial.txt`. Browser/phone verification is unrun: browser inventory is empty and
+creating an in-app browser returns `Browser is not available: iab`. Hosted delivery, paid
+providers and real-child release are unrun. The feature remains disabled by default.

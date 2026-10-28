@@ -18,6 +18,35 @@ vi.mock("@/lib/supabaseClient", () => ({ supabase: {
 } }));
 
 describe("held story inspection", () => {
+  it("cancels stop without a write, then retries the same confirmed stop after a lost response", async () => {
+    const bodies: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, options?: RequestInit) => {
+      if (url.endsWith("/decision")) {
+        bodies.push(options!.body as string);
+        if (bodies.length === 1) throw new Error("lost response");
+        return Response.json({ status: "stopped", dispatch_state: null });
+      }
+      if (url.endsWith("/moderation-review")) return Response.json(heldDetail);
+      return Response.json([{ review_id: heldDetail.review_id, job_id: "synthetic-job", title: heldDetail.title, held_at: "2026-10-28T00:00:00Z", ready: true }]);
+    }));
+    render(<NeedsHelpQueue classroomId="synthetic-class" active onCount={() => {}} onBack={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Inspect Synthetic title/ }));
+    const stop = await screen.findByRole("button", { name: "Stop this story" });
+    fireEvent.click(stop);
+    expect(screen.getByRole("button", { name: "Keep waiting" })).toHaveFocus();
+    fireEvent(screen.getAllByRole("dialog").at(-1)!, new Event("cancel", { bubbles: true }));
+    expect(stop).toHaveFocus();
+    expect(bodies).toHaveLength(0);
+    fireEvent.click(stop);
+    fireEvent.click(within(screen.getAllByRole("dialog").at(-1)!).getByRole("button", { name: "Stop this story" }));
+    expect(await screen.findByRole("alert")).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Retry stop" }));
+    expect(await screen.findByRole("heading", { name: "Story stopped. The writing is saved." })).toHaveFocus();
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]).toBe(bodies[1]);
+    expect(JSON.parse(bodies[0]).action).toBe("stop");
+    vi.unstubAllGlobals();
+  });
   it.each([false, true])("confirms withdrawal and reconciles a later release on replay (%s)", async (replayed) => {
     let writes = 0;
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
