@@ -7,6 +7,7 @@ import NeedsHelpQueue from "@/components/NeedsHelpQueue";
 // Captured from the real graph/disposable-Postgres test_teacher_hold integration run.
 import heldDetail from "./held-detail.fixture.json";
 import heldReference from "./held-reference.fixture.json";
+import heldText from "./held-text.fixture.json";
 import moderationPolicy from "./moderation-policy.fixture.json";
 import clearances from "./clearances.fixture.json";
 import pendingContinuation from "./pending-continuation.fixture.json";
@@ -19,6 +20,39 @@ vi.mock("@/lib/supabaseClient", () => ({ supabase: {
 } }));
 
 describe("held story inspection", () => {
+  it("allows the unchanged saved text after criteria confirmation and retries a lost response", async () => {
+    const bodies: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, options?: RequestInit) => {
+      if (url.endsWith("/decision")) {
+        bodies.push(options!.body as string);
+        if (bodies.length === 1) throw new Error("lost response");
+        return Response.json({ status: "queued", dispatch_state: "queued" }, { status: 200 });
+      }
+      if (url.endsWith("/moderation-policy")) return Response.json(moderationPolicy);
+      if (url.endsWith("/moderation-review")) return Response.json(heldText);
+      return Response.json([{ review_id: heldText.review_id, job_id: "synthetic-job", title: heldText.title,
+        held_at: "2026-10-28T00:00:00Z", ready: true }]);
+    }));
+    render(<NeedsHelpQueue classroomId="synthetic-class" active onCount={() => {}} onBack={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Inspect Synthetic title/ }));
+    expect(await screen.findByText(heldText.story_text)).toBeDefined();
+    const allow = await screen.findByRole("button", { name: "Allow this story text" });
+    expect(allow).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Request replacement picture" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show picture to review" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Stop this story" })).toBeEnabled();
+    for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);
+    fireEvent.click(allow);
+    expect(await screen.findByRole("alert")).toHaveFocus();
+    expect(screen.getByText(heldText.story_text)).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Continue story" }));
+    expect(await screen.findByRole("heading", { name: "Story continuing" })).toHaveFocus();
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]).toBe(bodies[1]);
+    expect(JSON.parse(bodies[0]).subject_version).toBe(heldText.subject_version);
+    vi.unstubAllGlobals();
+  });
+
   it("cancels stop without a write, then retries the same confirmed stop after a lost response", async () => {
     const bodies: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (url: string, options?: RequestInit) => {

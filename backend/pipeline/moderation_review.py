@@ -1,8 +1,10 @@
 """Pause on checkpointed moderation evidence without repeating provider calls."""
 
+import hashlib
+
 from langgraph.types import interrupt
 
-from contracts.story_memory import StoryMemory
+from contracts.story_memory import ModerationClearance, StoryMemory
 
 
 def moderation_review(state: StoryMemory) -> dict:
@@ -14,13 +16,24 @@ def moderation_review(state: StoryMemory) -> dict:
             or decision.get("review_id") != str(review.review_id)
             or decision.get("subject_version") != review.subject_version
             or decision.get("generation_epoch", -1) <= state.moderation_context.generation_epoch
-            or review.kind not in ("scene_image", "character_reference")):
+            or review.kind not in ("scene_image", "character_reference", "story_text")
+            or (review.kind == "story_text" and decision.get("action") != "allow")):
         raise RuntimeError("invalid_moderation_decision")
     replacing = decision["action"] == "replace"
     context = state.moderation_context.model_copy(update={
         "generation_epoch": decision["generation_epoch"],
         "review": review.model_copy(update={"resolution": decision["action"], "replacement": replacing}),
     })
+    if review.kind == "story_text":
+        text = state.input.redacted_text
+        policy_version = decision.get("policy_version")
+        if (text is None or review.subject_id != "input"
+                or hashlib.sha256(text.encode("utf-8")).hexdigest() != review.subject_version
+                or not isinstance(policy_version, str) or not policy_version):
+            raise RuntimeError("invalid_moderation_subject")
+        return {"input": state.input.model_copy(update={"moderation_clearance": ModerationClearance(
+            subject_version=review.subject_version, review_id=review.review_id, policy_version=policy_version,
+        )}), "moderation_context": context}
     if review.kind == "character_reference":
         char = next((c for c in state.characters if c.char_id == review.subject_id), None)
         if not char or not char.canonical_ref_image:

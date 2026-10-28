@@ -20,6 +20,7 @@ from app.config import settings
 from app.moderation_policy import POLICY, TEACHER_MODERATION_POLICY_VERSION
 from app.queue import get_queue
 from contracts.story_memory import StoryMemory
+from pipeline.input_gate import has_text_clearance
 from pipeline.moderation_replace import replacement_disabled_reason
 
 hold_router = APIRouter()
@@ -98,7 +99,7 @@ def review_pictures(conn, job_id: str, review: dict):
     else:
         pictures.append({"asset_id": "context-unavailable", "label": "Other story pictures",
                          "path": None, "state": "unavailable"})
-    if not any(p["state"] == "held" for p in pictures):
+    if review["kind"] != "story_text" and not any(p["state"] == "held" for p in pictures):
         pictures.append({"asset_id": "held", "label": "Picture needing review",
                          "path": review["subject"].get("image_path"), "state": "held"})
     return pictures
@@ -120,9 +121,18 @@ def teacher_review_detail(job_id: UUID, response: Response, user=Depends(get_cur
                     state = StoryMemory.model_validate(checkpoint.checkpoint["channel_values"]) if checkpoint else None
                     seen = set()
                     for allowed in conn.execute("""select * from job_moderation_reviews where job_id=%s
-                      and decision='allow' and kind in ('scene_image','character_reference') order by decided_at desc,id""", (job_id,)).fetchall():
+                      and decision='allow' and kind in ('scene_image','character_reference','story_text') order by decided_at desc,id""", (job_id,)).fetchall():
                         key = (allowed["kind"], allowed["subject_id"])
                         if key in seen:
+                            continue
+                        if allowed["kind"] == "story_text":
+                            clearance = state.input.moderation_clearance if state else None
+                            if (clearance and str(clearance.review_id) == str(allowed["id"])
+                                    and clearance.subject_version == allowed["subject_version"]
+                                    and state.input.redacted_text == allowed["subject"].get("story_text")):
+                                seen.add(key)
+                                clearances.append({"review_id": str(allowed["id"]), "subject_version": allowed["subject_version"],
+                                                   "label": "Story text"})
                             continue
                         if allowed["kind"] == "character_reference":
                             char = next((c for c in state.characters if c.char_id == allowed["subject_id"]), None) if state else None
@@ -304,6 +314,11 @@ def validate_review_checkpoint(conn, job_id, review):
             or saved.kind != review["kind"]
             or saved.subject_version != review["subject_version"] or saved.resolution is not None):
         return None
+    if saved.kind == "story_text":
+        text = state.input.redacted_text
+        return state if (saved.subject_id == "input" and text is not None
+            and text == review["subject"].get("story_text")
+            and hashlib.sha256(text.encode("utf-8")).hexdigest() == saved.subject_version) else None
     if saved.kind == "character_reference":
         char = next((c for c in state.characters if c.char_id == saved.subject_id), None)
         return state if char and char.canonical_ref_image == review["subject"].get("image_path") and char.canonical_ref_image else None
@@ -312,6 +327,16 @@ def validate_review_checkpoint(conn, job_id, review):
             or not any(a.image_ref == scene.final_image_ref for a in scene.attempts)):
         return None
     return state
+
+
+def review_subject_bytes(review):
+    """Exact private subject for decision, continuation and withdrawal checks."""
+    if review["kind"] == "story_text":
+        text = review["subject"].get("story_text")
+        if not isinstance(text, str):
+            raise RuntimeError("moderation_subject_unavailable")
+        return text.encode("utf-8")
+    return providers.download_book_image(review["subject"]["image_path"])
 
 
 @hold_router.post("/teacher/jobs/{job_id}/moderation-review/decision")
@@ -368,10 +393,10 @@ def teacher_decision(job_id: UUID, body: ReviewDecision, response: Response, use
                         raise HTTPException(422, reason, headers=PRIVATE)
                 # Bound to retained immutable bytes, including recovery after a failed read.
                 try:
-                    picture = providers.download_book_image(review["subject"]["image_path"])
+                    contents = review_subject_bytes(review)
                 except Exception:
                     command_conflict("image_unavailable", job, review)
-                if hashlib.sha256(picture).hexdigest() != review["subject_version"]:
+                if hashlib.sha256(contents).hexdigest() != review["subject_version"]:
                     command_conflict("image_unavailable", job, review)
                 conn.execute("""update job_moderation_reviews set decision=%s,actor_id=%s,decided_at=now(),
                   decision_policy_version=%s,confirmed_criteria=%s,request_id=%s,decision_epoch=%s,
@@ -428,13 +453,19 @@ def teacher_withdraw(job_id: UUID, body: ReviewWithdrawal, response: Response, u
             else:
                 if (job["moderation_mode"] != "teacher_review_v1" or job["status"] not in ("queued", "running", "awaiting_confirm", "complete")
                         or job["generation_epoch"] != body.expected_epoch or not clearance
-                        or clearance["decision"] != "allow" or clearance["kind"] not in ("scene_image", "character_reference")
+                        or clearance["decision"] != "allow" or clearance["kind"] not in ("scene_image", "character_reference", "story_text")
                         or clearance["subject_version"] != body.subject_version
                         or conn.execute("select 1 from job_moderation_reviews where job_id=%s and decision is null", (jid,)).fetchone()):
                     command_conflict("clearance_changed", job)
                 checkpoint = PostgresSaver(conn).get_tuple({"configurable": {"thread_id": jid}})
                 state = StoryMemory.model_validate(checkpoint.checkpoint["channel_values"]) if checkpoint else None
-                if clearance["kind"] == "character_reference":
+                if clearance["kind"] == "story_text":
+                    text_clearance = state.input.moderation_clearance if state else None
+                    if (not text_clearance or str(text_clearance.review_id) != str(clearance["id"])
+                            or text_clearance.subject_version != clearance["subject_version"]
+                            or state.input.redacted_text != clearance["subject"].get("story_text")):
+                        command_conflict("clearance_changed", job)
+                elif clearance["kind"] == "character_reference":
                     char = next((c for c in state.characters if c.char_id == clearance["subject_id"]), None) if state else None
                     if not char or char.canonical_ref_image != clearance["subject"].get("image_path") or char.ref_moderation_status != "teacher_allowed":
                         command_conflict("clearance_changed", job)
@@ -550,10 +581,16 @@ def assert_current(conn, job_id: str, epoch: int) -> dict:
 
 def project_hold(conn, job_id: str, state: StoryMemory, checkpoint_id: str) -> int:
     review, context = state.moderation_context.review, state.moderation_context
-    if (not review or review.kind not in ("scene_image", "character_reference") or review.resolution is not None
+    if (not review or review.kind not in ("scene_image", "character_reference", "story_text") or review.resolution is not None
             or not checkpoint_id or not context.policy_version):
         raise RuntimeError("invalid_moderation_checkpoint")
-    if review.kind == "character_reference":
+    if review.kind == "story_text":
+        text = state.input.redacted_text
+        if (text is None or review.subject_id != "input"
+                or hashlib.sha256(text.encode("utf-8")).hexdigest() != review.subject_version):
+            raise RuntimeError("invalid_moderation_subject")
+        subject = {"story_text": text}
+    elif review.kind == "character_reference":
         char = next(c for c in state.characters if c.char_id == review.subject_id)
         path = char.canonical_ref_image
         subject = {"image_path": path, "char_id": char.char_id, "prompt": char.ref_generation_prompt,
@@ -566,9 +603,10 @@ def project_hold(conn, job_id: str, state: StoryMemory, checkpoint_id: str) -> i
                    "prompt": selected.prompt if selected else scene.prompt,
                    "reference_paths": [c.canonical_ref_image for c in state.characters
                                        if c.char_id in scene.characters_present and c.canonical_ref_image]}
-    if not path or not path.startswith(f"{job_id}/"):
-        raise RuntimeError("invalid_moderation_subject")
-    subject.update(image_hash=review.subject_version, story_text=state.input.redacted_text or state.input.raw_text)
+    if review.kind != "story_text":
+        if not path or not path.startswith(f"{job_id}/"):
+            raise RuntimeError("invalid_moderation_subject")
+        subject.update(image_hash=review.subject_version, story_text=state.input.redacted_text or state.input.raw_text)
     with conn.transaction():
         job = conn.execute("select * from jobs where id=%s for update", (job_id,)).fetchone()
         prior = conn.execute("select id from job_moderation_reviews where id=%s and job_id=%s",
@@ -632,7 +670,7 @@ def can_reconcile_hold(conn, job: dict) -> bool:
         if checkpoint:
             state = StoryMemory.model_validate(checkpoint.checkpoint["channel_values"])
             review = state.moderation_context.review
-            return review is not None and review.kind in ("scene_image", "character_reference") and review.resolution is None
+            return review is not None and review.kind in ("scene_image", "character_reference", "story_text") and review.resolution is None
     return False
 
 
@@ -667,7 +705,7 @@ def authorized_asset(conn, job_id: str, asset_id: str, user_id: str) -> tuple[st
     if not checkpoint:
         raise HTTPException(404, "image_unavailable", headers=PRIVATE)
     state = StoryMemory.model_validate(checkpoint.checkpoint["channel_values"])
-    if (not state.input.moderation or not state.input.moderation.passed
+    if (not state.input.moderation or (not state.input.moderation.passed and not has_text_clearance(state))
             or any(c.canonical_ref_image and c.ref_moderation_status not in ("passed", "teacher_allowed")
                    for c in state.characters)):
         raise HTTPException(404, "image_unavailable", headers=PRIVATE)

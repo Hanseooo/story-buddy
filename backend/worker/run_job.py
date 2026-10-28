@@ -26,7 +26,7 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
     import providers
     from app.moderation_hold import (
         StaleGeneration, active_author, assert_current, connect, project_hold,
-        teacher_classroom, validate_review_checkpoint,
+        review_subject_bytes, teacher_classroom, validate_review_checkpoint,
     )
     from contracts.story_memory import ModerationContext, ReviewContext
 
@@ -86,10 +86,11 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                                 raise RuntimeError("account_unavailable")
                             teacher_classroom(conn, str(job["classroom_id"]), str(prior["actor_id"]))
                             import hashlib
-                            if hashlib.sha256(providers.download_book_image(prior["subject"]["image_path"])).hexdigest() != prior["subject_version"]:
+                            if hashlib.sha256(review_subject_bytes(prior)).hexdigest() != prior["subject_version"]:
                                 raise RuntimeError("moderation_subject_unavailable")
                             graph.invoke(Command(resume={"action": "allow", "review_id": str(prior["id"]),
-                                "subject_version": prior["subject_version"], "generation_epoch": prior["decision_epoch"]}),
+                                "subject_version": prior["subject_version"], "generation_epoch": prior["decision_epoch"],
+                                "policy_version": prior["decision_policy_version"]}),
                                 config, interrupt_after=["moderation_review"])
                             snapshot = graph.get_state(config)
                             retained = StoryMemory.model_validate(snapshot.values)
@@ -101,9 +102,14 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                                 or (job["image_count"] or 0) > retained.cost.image_count):
                             raise RuntimeError("checkpoint_not_resumable")
                         return_node = existing_review.return_node if repairing else snapshot.next[0] if snapshot.next else "__end__"
-                        if return_node not in ("char_ref_mod", "output_mod", "generate_scene", "consistency_check", "reveal", "compose", "__end__"):
+                        if return_node not in ("analyze", "segment", "char_bible", "char_ref_mod", "output_mod", "generate_scene", "consistency_check", "reveal", "compose", "__end__"):
                             raise RuntimeError("checkpoint_not_resumable")
-                        if withdrawal["kind"] == "character_reference":
+                        if withdrawal["kind"] == "story_text":
+                            text = retained.input.redacted_text
+                            if text is None or text != withdrawal["subject"].get("story_text"):
+                                raise RuntimeError("moderation_subject_unavailable")
+                            changes = {"input": retained.input.model_copy(update={"moderation_clearance": None})}
+                        elif withdrawal["kind"] == "character_reference":
                             char = next(c for c in retained.characters if c.char_id == withdrawal["subject_id"])
                             path = char.canonical_ref_image
                             changes = {"characters": [c.model_copy(update={"ref_moderation_status": None})
@@ -115,10 +121,10 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                                 "moderation_status": None, "attempts": [a.model_copy(update={"safety_eligibility": "unreviewed"})
                                     if a.image_ref == scene.final_image_ref else a for a in scene.attempts],
                             })]}
-                        if path != withdrawal["subject"]["image_path"]:
+                        if withdrawal["kind"] != "story_text" and path != withdrawal["subject"]["image_path"]:
                             raise RuntimeError("moderation_subject_unavailable")
                         import hashlib
-                        if hashlib.sha256(providers.download_book_image(path)).hexdigest() != withdrawal["subject_version"]:
+                        if hashlib.sha256(review_subject_bytes(withdrawal)).hexdigest() != withdrawal["subject_version"]:
                             raise RuntimeError("moderation_subject_unavailable")
                         context = retained.moderation_context.model_copy(update={"generation_epoch": epoch,
                             "review": ReviewContext(review_id=withdrawal["id"], kind=withdrawal["kind"], subject_id=withdrawal["subject_id"],
@@ -136,7 +142,11 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                 if review_id is not None and (not decision or str(decision["id"]) != review_id):
                     return
                 if decision and decision["dispatch_state"] == "consumed":
-                    return
+                    if payload is None:
+                        return
+                    # A later child reveal command shares the current epoch, but
+                    # does not replay the teacher decision that reached reveal.
+                    decision = None
                 if job["status"] in ("awaiting_confirm", "complete", "stopped", "deleting"):
                     return
                 if job["status"] == "awaiting_teacher" and job["worker_finished_at"] is not None:
@@ -173,13 +183,14 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                                 or str(review.review_id) != str(decision["id"])
                                 or snapshot.next != ("moderation_review",)):
                             raise RuntimeError("checkpoint_not_resumable")
-                        contents = providers.download_book_image(decision["subject"]["image_path"])
+                        contents = review_subject_bytes(decision)
                         import hashlib
                         if hashlib.sha256(contents).hexdigest() != decision["subject_version"]:
                             raise RuntimeError("moderation_subject_unavailable")
                         config["configurable"]["checkpoint_id"] = decision["checkpoint_id"]
                         graph_input = Command(resume={"action": decision["decision"], "review_id": str(decision["id"]),
-                            "subject_version": decision["subject_version"], "generation_epoch": epoch})
+                            "subject_version": decision["subject_version"], "generation_epoch": epoch,
+                            "policy_version": decision["decision_policy_version"]})
                     elif review and review.resolution is None:
                         hold_pending = True
                         # Output evidence is durable even if the process died before interrupt.

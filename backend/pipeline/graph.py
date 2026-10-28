@@ -1,9 +1,11 @@
+import hashlib
+
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
 from contracts.story_memory import StoryMemory
 from pipeline.char_ref_mod import MAX_MOD_REDRAWS, char_ref_mod
-from pipeline.input_gate import input_gate
+from pipeline.input_gate import has_text_clearance, input_gate
 from pipeline.analyze import analyze
 from pipeline.segment import segment
 from pipeline.char_bible import char_bible
@@ -31,7 +33,16 @@ def moderation_router(state: StoryMemory) -> str:
     if mod is not None and not mod.passed:
         if "moderation_error" in mod.categories:
             raise RuntimeError("moderation_error")
-        raise RuntimeError("content_flagged")
+        context = state.moderation_context
+        version = hashlib.sha256(state.input.redacted_text.encode("utf-8")).hexdigest() if state.input.redacted_text is not None else None
+        if context.mode != "teacher_review_v1":
+            raise RuntimeError("content_flagged")
+        if not has_text_clearance(state):
+            review = context.review
+            if (review and review.kind == "story_text" and review.resolution is None
+                    and review.subject_version == version):
+                return "moderation_review"
+            raise RuntimeError("content_flagged")
     if state.moderation_context.review is not None and state.moderation_context.review.resolution is None:
         return "moderation_review"
     if any(c.ref_moderation_status == "flagged" for c in state.characters):
@@ -62,7 +73,7 @@ def route_moderation_review(state: StoryMemory) -> str:
     if review and review.resolution == "replace" and review.kind in ("scene_image", "character_reference"):
         return "moderation_replace"
     if review and review.resolution == "allow" and review.return_node in (
-        "char_ref_mod", "output_mod", "generate_scene", "consistency_check", "reveal", "compose", "__end__"
+        "analyze", "segment", "char_bible", "char_ref_mod", "output_mod", "generate_scene", "consistency_check", "reveal", "compose", "__end__"
     ):
         return review.return_node
     return "moderation_review"

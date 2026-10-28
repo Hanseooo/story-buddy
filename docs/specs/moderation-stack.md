@@ -31,8 +31,12 @@ output image.
 - **Reads:** `input.raw_text`
 - **Writes:** `input.moderation` (`ModerationResult`), `input.redacted_text` (always set, even on
   flag — the teacher sees the redacted version regardless)
+  In captured `teacher_review_v1` mode, a classifier flag also writes a `story_text` review
+  in `moderation_context.review`, bound to the processed UTF-8 text hash. Exact allow writes
+  `input.moderation_clearance` without changing the classifier result (ADR-080; §9.17).
 - **Invariant:** `input.redacted_text` is never `None` after this node runs.
   `input.moderation.passed` is the signal the moderation router reads.
+  In teacher-review mode it also checks the exact processed hash in `input.moderation_clearance`.
 
 ### 2b. `char_ref_mod`
 - **Reads:** `characters[].canonical_ref_image` (durable Storage path)
@@ -1747,3 +1751,76 @@ Verification (2026-10-28):
   all 78 files and 746 tests passed. Unrestricted discovery stalled and was stopped; repository
   enumeration confirms no source test sits outside the explicit paths. Windows uses `pnpm.cmd`.
   Outputs: `.scratch/ticket10-frontend-source.txt`, `.scratch/ticket10-build.txt`.
+
+### 9.17 Ticket 11 implementation (2026-10-28)
+
+Captured `teacher_review_v1` jobs now hold a first story-text classifier flag before analysis.
+Intake still authorizes, validates/clamps and successfully processes privacy before inserting
+the job or queuing it. `Input.raw_text` receives that processed submission in this mode.
+The text hold stores only `input.redacted_text`, with SHA-256 of its exact UTF-8 bytes,
+`subject_id='input'`, the original failed `ModerationResult`, captured policy/settings and
+primary/backstop evidence. The unchanged text instructions are identified as `text_primary_v1`
+and `text_backstop_v1`; classifier category strings also pass privacy processing before retention.
+Primary-error fallback and primary-flag short circuit remain. Backstop and evidence-privacy
+failures raise `moderation_error` without a releasable review. Intake privacy failure returns
+the existing stable service error before any job, review, classification or queue write.
+
+Teacher inspection reads the retained processed text. Allow confirms the existing named criteria
+and resumes at `analyze` without rewriting the text or forging a classifier pass. The worker
+builds the resume from the committed decision, including its decision-policy version.
+`input.moderation_clearance` binds that policy and review ID to the exact processed-text hash.
+The graph router and guarded child image delivery share the exact-text clearance check, which
+never clears a `moderation_error`. Later reference/scene reviews cannot erase text permission,
+and text permission never clears a generated picture. Stop, stale-command rejection, duplicate
+delivery and missing-checkpoint behavior reuse the existing private command lifecycle.
+
+The teacher UI reuses the decision controls for text: read the saved story, confirm each criterion,
+then allow this unchanged text, leave waiting or stop. It offers no text replacement or fake held
+picture. Pending/error/retry and durable same-request continuation remain available. Child-facing
+waiting/stopped copy is unchanged and contains no classifier category or reasoning.
+
+Text clearance can be withdrawn through the existing whole-book containment flow. The worker
+clears the text permission at anchoring and retains the actual safe next node, including `segment`
+and `char_bible` when withdrawal races analysis/segmentation. Owner-approved migration
+`0024_anchor_text_clearance_withdrawal.sql` expands the existing one-time withdrawal-anchor
+trigger's node list; all immutability conditions remain. It was applied only to the disposable
+local database. Hosted application and verification remain release prerequisites.
+
+The complete text-to-book integration exposed and fixes an existing continuation gap: a child
+confirmation following a consumed teacher decision must continue the saved `reveal`, rather than
+return as a duplicate teacher delivery. This does not replay that decision or completed work.
+The maximum-path graph test now includes the text hold/allow before all reference and scene
+holds/replacements: 191 observed updates fit the existing feature recursion ceiling. No draw
+limit, model, classifier instruction, contract shape or feature default changed.
+
+Standards and Spec reviews have no unresolved findings. Browser/hosted checks, paid provider
+replay, production enablement and real-child use remain unrun. Audit 01 stays open.
+
+Verification (2026-10-28):
+
+- Failing-first compiled-graph regressions reproduce both classifier flags raising
+  `content_flagged`, then prove hold/unchanged-text allow and decision-policy attribution.
+  The real PostgreSQL/API seam proves privacy processing before persistence, allow/stop,
+  stale and duplicate decisions, independent reference/scene holds, guarded child delivery,
+  completed-book withdrawal and both early withdrawal continuations without repeated checks.
+  The latter originally failed with `moderation review is immutable`; applying approved
+  migration 0024 makes all four text-review cases pass. The text UI regression originally
+  failed with missing `Allow this story text`; its fixture is captured from real synthetic
+  review-detail HTTP output. It now verifies criterion confirmation and identical-request retry.
+- `uv sync --frozen` and `uv run ruff check .`: passed. Final full `uv run pytest` with the
+  disposable local `TEST_MODERATION_DB_URL`: 1,576 passed, 89 skipped, six smoke deselections
+  and the same six native WeasyPrint/PDF failures recorded in §§9.11–9.16. Representative
+  output: `assert 503 == 200`, `PDF download failed (OSError)` and “WeasyPrint could not import
+  some external libraries.” No failing PDF test was changed, skipped or loosened.
+  The existing RLS/annotation/onboarding/research environment skips remain unverified by this
+  full run; they are distinct from the exercised real-database moderation tests.
+  Output: `.scratch/ticket11-backend-final.txt`.
+- Exact ticket command `uv run pytest tests/test_input_gate_node.py tests/test_graph_stub.py`:
+  49 passed on the final implementation.
+- Frontend `pnpm lint`, `pnpm build` with CI public placeholders and `pnpm exec tsc --noEmit`:
+  passed. Affected Books file: 39 passed. Full source command
+  `pnpm exec vitest run app components lib utils middleware.test.ts --pool=threads --maxWorkers=1 --reporter=verbose`:
+  all 78 source files and 747 tests passed. Default `pnpm test` had one unrelated gallery timeout
+  (746 passed); unrestricted serial discovery stalled and was stopped. Explicit source discovery
+  covers every repository source test without changing assertions or timeouts. Windows uses
+  `pnpm.cmd`. Outputs: `.scratch/ticket11-frontend-source.txt`, `.scratch/ticket11-build-final.txt`.

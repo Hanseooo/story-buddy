@@ -715,6 +715,175 @@ def test_reference_hold_uses_private_teacher_decisions(monkeypatch, held_databas
         app.dependency_overrides.pop(get_current_user, None)
 
 
+@pytest.mark.parametrize("action", ["allow", "stop", "withdraw_during_analyze", "withdraw_during_segment"])
+def test_processed_story_hold_uses_exact_teacher_decision(monkeypatch, held_database, action):
+    from langgraph.checkpoint.postgres import PostgresSaver
+    from contracts.story_memory import RefVerdict
+    from pipeline.segment import ExtractedScene, ExtractedVisualDirection, SceneSegmentation
+    from tests.test_graph_stub import STUB_ANALYSIS
+    from worker.run_job import run_review_storybook_job
+
+    conn, child, classroom, job, teacher = held_database
+    text = "A dog runs in a field. The dog barks."
+    primary, backstop = MagicMock(return_value=(False, ["S1"])), MagicMock()
+    queue, storage, db = MagicMock(), MagicMock(), MagicMock()
+    db.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{"classroom_id": classroom}]
+    monkeypatch.setattr(settings, "enable_teacher_moderation_review", True)
+    monkeypatch.setattr("app.main.get_supabase_client", lambda: db)
+    monkeypatch.setattr("app.main.get_queue", lambda: queue)
+    monkeypatch.setattr("providers.classify_text_primary", lambda text: (True, []))
+    monkeypatch.setattr("providers.classify_text_backstop", lambda text: (True, []))
+    monkeypatch.setattr("providers.redact_pii", lambda text: text.replace(" Contact 09171234567.", ""))
+    image = (Path(__file__).parent / "fixtures/qwen35-resize-scene.png").read_bytes()
+    storage.storage.from_.return_value.download.return_value = image
+    monkeypatch.setattr("pipeline.input_gate.classify_text_primary", primary)
+    monkeypatch.setattr("pipeline.input_gate.classify_text_backstop", backstop)
+    monkeypatch.setattr("pipeline.input_gate.redact_pii", lambda text: text)
+    monkeypatch.setattr("app.moderation_hold.get_queue", lambda: queue)
+    analysis = MagicMock(return_value=STUB_ANALYSIS)
+    monkeypatch.setattr("pipeline.analyze.structured_text", analysis)
+    monkeypatch.setattr("pipeline.segment.structured_text", lambda *a, **kw: SceneSegmentation(scenes=[ExtractedScene(
+        start=0, end=1, characters_present=["the orange dog"],
+        visual_direction=ExtractedVisualDirection(key_action="A dog runs.", viewpoint="front view", framing="wide shot"))]))
+    monkeypatch.setattr("pipeline.char_bible.text_to_image", lambda *a, **kw: image)
+    monkeypatch.setattr("pipeline.char_bible.get_supabase_client", lambda: storage)
+    monkeypatch.setattr("pipeline.char_bible.judge", lambda *a: RefVerdict(
+        differences_observed="none", matches_description=True, attributes_present=["dog"]))
+    reference_check = MagicMock(return_value=False)
+    monkeypatch.setattr("pipeline.char_ref_mod.classify_image_primary", reference_check)
+    monkeypatch.setattr("pipeline.char_ref_mod.get_signed_url", lambda path: path)
+    monkeypatch.setattr("pipeline.char_ref_mod.download_book_image", lambda path: image)
+    monkeypatch.setattr("providers.download_book_image", lambda path: image)
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+    try:
+        with TestClient(app) as client:
+            submitted = client.post("/storybooks", json={"text": text + " Contact 09171234567.", "title": "Synthetic title"})
+            assert submitted.status_code == 200, submitted.text
+            job = submitted.json()["job_id"]
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    assert conn.execute("select input_text from jobs where id=%s", (job,)).fetchone()["input_text"] == text
+    run_review_storybook_job(job, expected_epoch=0)
+    analysis.assert_not_called()
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=teacher)
+    route = f"/teacher/jobs/{job}/moderation-review"
+    try:
+        with TestClient(app) as client:
+            detail = client.get(route).json()
+            assert detail["kind"] == "story_text" and detail["ready"]
+            assert detail["story_text"] == text and detail["pictures"] == []
+            assert detail["replacement_available"] is False
+            assert detail["classifier_evidence"][0]["categories"] == ["S1"]
+            command = {"review_id": detail["review_id"], "subject_version": detail["subject_version"],
+                "expected_epoch": detail["generation_epoch"], "request_id": str(uuid4()), "action": "stop" if action == "stop" else "allow",
+                "policy_version": detail["current_policy_version"], "confirmed_criteria": detail["criteria"], "confirmed": True}
+            assert client.post(f"{route}/decision", json={**command, "subject_version": "stale"}).status_code == 409
+            assert client.post(f"{route}/decision", json={**command, "action": "replace"}).status_code == 422
+            response = client.post(f"{route}/decision", json=command)
+            assert response.status_code == (200 if action == "stop" else 202), response.text
+            assert client.post(f"{route}/decision", json=command).status_code == 200
+            early_withdrawal = {"clearance_review_id": detail["review_id"], "subject_version": detail["subject_version"],
+                "expected_epoch": 2, "request_id": str(uuid4()), "confirmed": True}
+            if action.startswith("withdraw_during_"):
+                def withdraw_after_check(*args, **kwargs):
+                    response = client.post(f"{route}/withdraw", json=early_withdrawal)
+                    assert response.status_code == 202, response.text
+                    return STUB_ANALYSIS if action == "withdraw_during_analyze" else segmentation
+                if action == "withdraw_during_analyze":
+                    analysis.side_effect = withdraw_after_check
+                else:
+                    segmentation = SceneSegmentation(scenes=[ExtractedScene(start=0, end=1,
+                        characters_present=["the orange dog"], visual_direction=ExtractedVisualDirection(
+                            key_action="A dog runs.", viewpoint="front view", framing="wide shot"))])
+                    monkeypatch.setattr("pipeline.segment.structured_text", withdraw_after_check)
+            run_review_storybook_job(job, expected_epoch=2)
+            run_review_storybook_job(job, expected_epoch=2)
+            if action == "stop":
+                assert client.get(route).json()["status"] == "stopped"
+                analysis.assert_not_called()
+                reference_check.assert_not_called()
+                return
+            if action.startswith("withdraw_during_"):
+                run_review_storybook_job(job, expected_epoch=3, review_id=early_withdrawal["request_id"])
+                reopened = client.get(route).json()
+                assert reopened["kind"] == "story_text" and reopened["ready"]
+                retained = build_graph(PostgresSaver(conn)).get_state({"configurable": {"thread_id": job}})
+                assert retained.values["moderation_context"].review.return_node == (
+                    "segment" if action == "withdraw_during_analyze" else "char_bible")
+                release = {**command, "review_id": reopened["review_id"], "expected_epoch": 3, "request_id": str(uuid4())}
+                assert client.post(f"{route}/decision", json=release).status_code == 202
+                run_review_storybook_job(job, expected_epoch=4)
+            # Text permission cannot release a later generated picture.
+            held_reference = client.get(route).json()
+            assert held_reference["kind"] == "character_reference" and held_reference["ready"]
+            assert held_reference["review_id"] != detail["review_id"]
+            assert client.post(f"{route}/decision", json={**command, "request_id": str(uuid4())}).status_code == 409
+            next_command = {**command, "review_id": held_reference["review_id"],
+                "subject_version": held_reference["subject_version"], "expected_epoch": held_reference["generation_epoch"],
+                "request_id": str(uuid4())}
+            assert client.post(f"{route}/decision", json=next_command).status_code == 202
+            reference_epoch = held_reference["generation_epoch"] + 1
+            run_review_storybook_job(job, expected_epoch=reference_epoch)
+            assert client.get(route).json()["status"] == "awaiting_confirm"
+            app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+            assert client.get(f"/jobs/{job}/images/ref-c0").status_code == 200
+            app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=teacher)
+            retained = build_graph(PostgresSaver(conn)).get_state({"configurable": {"thread_id": job}})
+            assert retained.values["input"].redacted_text == text
+            assert retained.values["input"].moderation.passed is False
+            assert retained.values["input"].moderation_clearance.subject_version == detail["subject_version"]
+            assert retained.values["moderation_context"].review.kind == "character_reference"
+            assert analysis.call_count == reference_check.call_count == primary.call_count == 1
+            backstop.assert_not_called()
+            monkeypatch.setattr("pipeline.generate_scene.edit_image", lambda *a: image)
+            monkeypatch.setattr("pipeline.generate_scene.get_signed_url", lambda path: path)
+            monkeypatch.setattr("pipeline.generate_scene.get_supabase_client", lambda: storage)
+            monkeypatch.setattr("pipeline.consistency_check.get_supabase_client", lambda: storage)
+            monkeypatch.setattr("pipeline.consistency_check.judge", lambda prompt, urls, schema, **kw:
+                schema(differences_observed="none", contradictions=[], same_character=True))
+            scene_check = MagicMock(return_value=False)
+            monkeypatch.setattr("pipeline.output_mod.classify_image_primary", scene_check)
+            monkeypatch.setattr("pipeline.output_mod.get_signed_url", lambda path: path)
+            monkeypatch.setattr("pipeline.output_mod.download_book_image", lambda path: image)
+            db = MagicMock()
+            job_row = conn.execute("select * from jobs where id=%s", (job,)).fetchone()
+            job_row["profile_id"] = child
+            db.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [job_row]
+            monkeypatch.setattr("app.main.get_supabase_client", lambda: db)
+            app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+            assert client.post(f"/jobs/{job}/confirm", json={"action": "confirm"}).status_code == 200
+            app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=teacher)
+            run_review_storybook_job(job, {"action": "confirm"}, expected_epoch=reference_epoch)
+            held_scene = client.get(route).json()
+            assert held_scene["kind"] == "scene_image" and held_scene["ready"]
+            scene_command = {**command, "review_id": held_scene["review_id"], "subject_version": held_scene["subject_version"],
+                "expected_epoch": held_scene["generation_epoch"], "request_id": str(uuid4())}
+            assert client.post(f"{route}/decision", json=scene_command).status_code == 202
+            scene_epoch = held_scene["generation_epoch"] + 1
+            run_review_storybook_job(job, expected_epoch=scene_epoch)
+            complete = client.get(route).json()
+            assert complete["status"] == "complete"
+            app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+            assert client.get(f"/jobs/{job}/images/scene-s0").status_code == 200
+            app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=teacher)
+            text_clearance = next(c for c in complete["clearances"] if c["label"] == "Story text")
+            withdrawal = {"clearance_review_id": text_clearance["review_id"], "subject_version": text_clearance["subject_version"],
+                "expected_epoch": scene_epoch, "request_id": str(uuid4()), "confirmed": True}
+            response = client.post(f"{route}/withdraw", json=withdrawal)
+            assert response.status_code == 202, response.text
+            run_review_storybook_job(job, expected_epoch=scene_epoch + 1, review_id=withdrawal["request_id"])
+            reopened = client.get(route).json()
+            assert reopened["kind"] == "story_text" and reopened["ready"]
+            assert build_graph(PostgresSaver(conn)).get_state({"configurable": {"thread_id": job}}).values["input"].moderation_clearance is None
+            release = {**command, "review_id": reopened["review_id"], "expected_epoch": scene_epoch + 1, "request_id": str(uuid4())}
+            assert client.post(f"{route}/decision", json=release).status_code == 202
+            run_review_storybook_job(job, expected_epoch=scene_epoch + 2)
+            assert client.get(route).json()["status"] == "complete"
+            assert analysis.call_count == reference_check.call_count == scene_check.call_count == primary.call_count == 1
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
 def test_review_interrupt_cannot_be_written_to_child_reveal():
     from langgraph.types import Interrupt
     from worker.run_job import _finish

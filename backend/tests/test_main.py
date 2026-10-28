@@ -26,20 +26,26 @@ def test_health_check():
     assert response.json() == {"status": "ok"}
 
 
-def test_review_intake_privacy_failure_writes_and_enqueues_nothing(monkeypatch):
+@pytest.mark.parametrize("failure_at", ["title", "story"])
+def test_review_intake_privacy_failure_writes_and_enqueues_nothing(monkeypatch, failure_at):
     from app.config import settings
 
     monkeypatch.setattr(settings, "enable_teacher_moderation_review", True, raising=False)
     fake_supabase, fake_queue = MagicMock(), MagicMock()
     with patch("app.main.get_supabase_client", return_value=fake_supabase), \
          patch("app.main.get_queue", return_value=fake_queue), \
-         patch("app.main.check_text", return_value=(True, [], "My Story")), \
-         patch("providers.redact_pii", side_effect=RuntimeError("private service error")):
+         patch("app.main.check_text", return_value=(True, [], "My Story")) as classifier, \
+         patch("psycopg.connect") as database, \
+         patch("providers.redact_pii", side_effect=(
+             [RuntimeError("private service error")] if failure_at == "title"
+             else ["My Story", RuntimeError("private service error")])):
         response = client.post("/storybooks", json={
             "text": "A dog runs in a field.", "title": "My Story",
         })
     assert response.status_code == 503
     assert "private service error" not in response.text
+    classifier.assert_not_called()
+    database.assert_not_called()
     fake_supabase.table.return_value.insert.assert_not_called()
     fake_queue.enqueue.assert_not_called()
 

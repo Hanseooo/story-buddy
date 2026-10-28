@@ -36,6 +36,49 @@ EXPECTED_ORDER = [
 ]
 
 
+@pytest.mark.parametrize("flagged_layer", ["primary", "backstop"])
+def test_flagged_story_holds_then_allows_exact_processed_text(monkeypatch, flagged_layer):
+    from unittest.mock import MagicMock
+    from langgraph.types import Command
+    from contracts.story_memory import ModerationContext
+
+    text = "A dog runs in a field. The dog barks."
+    primary = MagicMock(return_value=(flagged_layer != "primary", ["S1"] if flagged_layer == "primary" else []))
+    backstop = MagicMock(return_value=(False, ["S2"]))
+    analysis = MagicMock(return_value=STUB_ANALYSIS)
+    monkeypatch.setattr("pipeline.input_gate.classify_text_primary", primary)
+    monkeypatch.setattr("pipeline.input_gate.classify_text_backstop", backstop)
+    monkeypatch.setattr("pipeline.input_gate.redact_pii", lambda text: text)
+    monkeypatch.setattr("pipeline.analyze.structured_text", analysis)
+    state = _initial_state("04b21cbc-ff2d-4fd8-b2ef-56431784a9a4")
+    state.moderation_context = ModerationContext(mode="teacher_review_v1", policy_version="teacher_review_policy_v1")
+    graph, config = build_graph(), {"configurable": {"thread_id": "text-hold"}}
+    graph.invoke(state, config)
+    held = graph.get_state(config)
+    assert held.next == ("moderation_review",)
+    assert held.values["input"].redacted_text == text
+    assert held.values["input"].moderation.passed is False
+    analysis.assert_not_called()
+    review = held.values["moderation_context"].review
+    assert review.kind == "story_text" and review.return_node == "analyze"
+    assert review.subject_version == "b40993cd1e052d60bc1b254b60c36c462001393ad78584313af6420530b8f1a8"
+    assert [e.outcome for e in review.classifier_evidence] == (
+        ["flagged", "not_called"] if flagged_layer == "primary" else ["safe", "flagged"])
+    graph.invoke(Command(resume={"action": "allow", "review_id": str(review.review_id),
+        "subject_version": review.subject_version, "generation_epoch": 2,
+        "policy_version": "policy-at-decision"}), config, interrupt_after=["analyze"])
+    allowed = graph.get_state(config)
+    assert allowed.next == ("segment",)
+    assert allowed.values["input"].redacted_text == text
+    assert allowed.values["input"].moderation.passed is False
+    assert allowed.values["input"].moderation_clearance.subject_version == review.subject_version
+    assert allowed.values["input"].moderation_clearance.policy_version == "policy-at-decision"
+    assert allowed.values["characters"][0].name == "the orange dog"
+    primary.assert_called_once_with(text)
+    assert backstop.call_count == (1 if flagged_layer == "backstop" else 0)
+    assert text in analysis.call_args.args[0]
+
+
 def test_feature_bound_covers_ten_scenes_with_maximum_consistency_retries_and_replacements(monkeypatch):
     from pathlib import Path
     from unittest.mock import MagicMock
@@ -52,7 +95,7 @@ def test_feature_bound_covers_ten_scenes_with_maximum_consistency_retries_and_re
     ]))
     monkeypatch.setattr("pipeline.consistency_check.judge", lambda prompt, urls, schema, **kw:
         _judge_returning(same=False) if schema is SceneVerdict else SceneConstraintVerdict(differences_observed="none", contradictions=[]))
-    monkeypatch.setattr("pipeline.input_gate.classify_text_primary", lambda text: (True, []))
+    monkeypatch.setattr("pipeline.input_gate.classify_text_primary", lambda text: (False, ["S1"]))
     monkeypatch.setattr("pipeline.input_gate.classify_text_backstop", lambda text: (True, []))
     monkeypatch.setattr("pipeline.input_gate.redact_pii", lambda text: text)
     monkeypatch.setattr("pipeline.output_mod.classify_image_primary", lambda url, **kwargs: False)
@@ -85,6 +128,11 @@ def test_feature_bound_covers_ten_scenes_with_maximum_consistency_retries_and_re
     monkeypatch.setattr("pipeline.char_ref_mod.download_book_image", download)
     monkeypatch.setattr("pipeline.output_mod.download_book_image", download)
     steps = [key for chunk in graph.stream(state, config) for key in chunk]
+    text_review = graph.get_state(config).values["moderation_context"].review
+    assert text_review.kind == "story_text"
+    steps += [key for chunk in graph.stream(Command(resume={"action": "allow", "review_id": str(text_review.review_id),
+        "subject_version": text_review.subject_version, "generation_epoch": 2,
+        "policy_version": "teacher_review_policy_v1"}), config) for key in chunk]
     for action in ("replace", "allow", "allow"):
         held = graph.get_state(config)
         context = held.values["moderation_context"]
@@ -119,6 +167,7 @@ def test_feature_bound_covers_ten_scenes_with_maximum_consistency_retries_and_re
     assert complete.next == ()
     assert sum(len(scene.attempts) for scene in complete.values["scenes"]) == 40
     assert all(scene.moderation_replacement_count == 1 for scene in complete.values["scenes"])
+    assert len(steps) == 191
     assert len(steps) <= TEACHER_REVIEW_RECURSION_LIMIT
 
 

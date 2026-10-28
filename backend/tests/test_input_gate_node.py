@@ -108,14 +108,17 @@ def test_primary_error_backstop_flags_sets_passed_false():
 
 # --- backstop error ---
 
-def test_backstop_error_raises_moderation_error():
+@pytest.mark.parametrize("mode", ["baseline", "teacher_review_v1"])
+def test_backstop_error_raises_moderation_error(mode):
     """Spec §4a edge case: backstop OpenRouter error → hard fail with RuntimeError('moderation_error')."""
     with patch("pipeline.input_gate.classify_text_primary", return_value=(True, [])), \
          patch("pipeline.input_gate.classify_text_backstop", side_effect=Exception("OpenRouter 500")), \
          patch("pipeline.input_gate.redact_pii", return_value="A dog runs."):
         from pipeline.input_gate import input_gate
+        state = _state()
+        state.moderation_context.mode = mode
         with pytest.raises(RuntimeError, match="moderation_error"):
-            input_gate(_state())
+            input_gate(state)
 
 
 def test_resume_after_a_backstop_error_calls_the_backstop_again():
