@@ -110,6 +110,87 @@ def test_optional_themes_capture_grouped_review_before_paid_work(monkeypatch, he
             assert client.get(route).json()["theme_ids"] == ["loss_separation"]
             assert client.patch(route, json={"expected_version": 3, "theme_ids": []}).status_code == 409
             assert conn.execute("select status from jobs where id=%s", (job,)).fetchone()["status"] == "awaiting_teacher"
+            # Accept the captured group even though current settings and the feature switch changed.
+            from langgraph.checkpoint.postgres import PostgresSaver
+            from contracts.story_memory import RefVerdict
+            from pipeline.segment import ExtractedScene, ExtractedVisualDirection, SceneSegmentation
+            from tests.test_graph_stub import STUB_ANALYSIS, _judge_returning
+            from pipeline.consistency_check import SceneVerdict, SceneConstraintVerdict
+
+            monkeypatch.setattr("app.moderation_hold.get_queue", lambda: queue)
+            review_route = f"/teacher/jobs/{job}/moderation-review"
+            command = {"review_id": detail["review_id"], "subject_version": detail["subject_version"],
+                "expected_epoch": detail["generation_epoch"], "request_id": str(uuid4()), "action": "allow",
+                "policy_version": detail["current_policy_version"], "confirmed_criteria": detail["criteria"], "confirmed": True}
+            accepted = client.post(f"{review_route}/decision", json=command)
+            assert accepted.status_code == 202, accepted.text
+            assert client.post(f"{review_route}/decision", json=command).status_code == 200
+            recorded = conn.execute("select * from job_moderation_reviews where id=%s", (detail["review_id"],)).fetchone()
+            assert recorded["confirmed_criteria"] == ["spooky_suspense", "story_conflict"]
+            assert recorded["settings_snapshot"]["settings_version"] == 1
+            image = (Path(__file__).parent / "fixtures/qwen35-resize-scene.png").read_bytes()
+            storage = MagicMock()
+            objects = {}
+            def download(path):
+                if path not in objects:
+                    raise FileNotFoundError(path)
+                return objects[path]
+            storage.storage.from_.return_value.download.side_effect = download
+            storage.storage.from_.return_value.upload.side_effect = lambda path, content, options: objects.update({path: content})
+            monkeypatch.setattr("pipeline.analyze.structured_text", lambda *a, **kw: STUB_ANALYSIS)
+            monkeypatch.setattr("pipeline.segment.structured_text", lambda *a, **kw: SceneSegmentation(scenes=[
+                ExtractedScene(start=i, end=i, characters_present=["the orange dog"], visual_direction=ExtractedVisualDirection(
+                    key_action="A dog runs." if i == 0 else "The dog barks.", viewpoint="front view", framing="wide shot"))
+                for i in range(2)]))
+            draws = MagicMock(return_value=image)
+            monkeypatch.setattr("pipeline.char_bible.text_to_image", draws)
+            monkeypatch.setattr("pipeline.char_bible.get_supabase_client", lambda: storage)
+            monkeypatch.setattr("pipeline.char_bible.judge", lambda *a: RefVerdict(
+                differences_observed="none", matches_description=True, attributes_present=["dog"]))
+            monkeypatch.setattr("pipeline.char_ref_mod.classify_image_primary", lambda *a, **kw: True)
+            monkeypatch.setattr("pipeline.char_ref_mod.classify_image_backstop", lambda *a, **kw: True)
+            monkeypatch.setattr("pipeline.char_ref_mod.get_signed_url", lambda path: path)
+            monkeypatch.setattr("pipeline.generate_scene.edit_image", draws)
+            monkeypatch.setattr("pipeline.generate_scene.get_supabase_client", lambda: storage)
+            monkeypatch.setattr("pipeline.generate_scene.get_signed_url", lambda path: path)
+            monkeypatch.setattr("pipeline.consistency_check.get_supabase_client", lambda: storage)
+            monkeypatch.setattr("pipeline.consistency_check.judge", lambda prompt, urls, schema, **kw:
+                _judge_returning(same=True) if schema is SceneVerdict else SceneConstraintVerdict(differences_observed="none", contradictions=[]))
+            scene_safety = MagicMock(side_effect=[True, False])
+            monkeypatch.setattr("pipeline.output_mod.classify_image_primary", scene_safety)
+            monkeypatch.setattr("pipeline.output_mod.classify_image_backstop", lambda *a, **kw: True)
+            monkeypatch.setattr("pipeline.output_mod.get_signed_url", lambda path: path)
+            monkeypatch.setattr("pipeline.output_mod.download_book_image", lambda path: image)
+            monkeypatch.setattr("providers.download_book_image", lambda path: image)
+            epoch = detail["generation_epoch"] + 1
+            run_review_storybook_job(job, expected_epoch=epoch)
+            job_row = conn.execute("select * from jobs where id=%s", (job,)).fetchone()
+            job_row["profile_id"] = child
+            db.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [job_row]
+            app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+            assert client.post(f"/jobs/{job}/confirm", json={"action": "confirm"}).status_code == 200
+            app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=teacher)
+            run_review_storybook_job(job, {"action": "confirm"}, expected_epoch=epoch)
+            later = client.get(review_route).json()
+            assert later["kind"] == "scene_image" and later["subject_id"] == "s1"
+            assert later["origin"] == "shared_safety" and later["ready"]
+            snapshot = build_graph(checkpointer=PostgresSaver(conn)).get_state({"configurable": {"thread_id": job}})
+            context = snapshot.values["moderation_context"]
+            assert context.accepted_theme_ids == ["spooky_suspense", "story_conflict"]
+            assert context.optional_theme_check.subject_version == detail["subject_version"]
+            assert context.optional_theme_check.settings_version == context.settings_version == 1
+            assert snapshot.values["input"].moderation_clearance is None
+            assert snapshot.values["scenes"][0].moderation_status == "passed"
+            assert scene_safety.call_count == 2
+            assert draws.call_count == 3  # One reference plus two scene pictures, once each.
+            detector.assert_called_once()
+            # A new submission captures current settings, never the earlier acceptance.
+            monkeypatch.setattr(settings, "enable_teacher_moderation_review", True)
+            app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+            new_job = client.post("/storybooks", json={"title": "Synthetic title", "text": text}).json()["job_id"]
+            captured = conn.execute("select moderation_settings_snapshot from jobs where id=%s", (new_job,)).fetchone()
+            assert captured["moderation_settings_snapshot"]["theme_ids"] == ["loss_separation"]
+            assert "accepted_theme_ids" not in captured["moderation_settings_snapshot"]
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 

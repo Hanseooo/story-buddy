@@ -29,7 +29,7 @@ the defense, and the teacher decides whether a flagged run continues.
 | 12 | [Flagged title holds instead of 422](issues/12-hold-flagged-title.md) | task | open | 11 |
 | 13 | [Review criteria and per-hold explanation](issues/13-review-criteria-and-hold-explanation.md) | task | implemented; browser/hosted verification pending | — (06 inspection implemented) |
 | 14 | [Optional classroom review themes](issues/14-optional-classroom-review-themes.md) | task | implemented; browser/hosted verification pending | — (05 merged) |
-| 15 | [Accepted theme holds once per submission](issues/15-accepted-theme-holds-once.md) | task | open | 07, 14 |
+| 15 | [Accepted theme holds once per submission](issues/15-accepted-theme-holds-once.md) | task | implemented; browser/hosted verification pending | — (07/14 implemented) |
 
 **Current handoff (2026-10-27):** the owner explicitly said **“accept all”** to
 [moderation-stack §9.9](../../docs/specs/moderation-stack.md#99-technical-completion-proposal-2026-10-27),

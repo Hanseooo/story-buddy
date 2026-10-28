@@ -9,6 +9,7 @@ import heldDetail from "./held-detail.fixture.json";
 import heldReference from "./held-reference.fixture.json";
 import heldText from "./held-text.fixture.json";
 import heldTitle from "./held-title.fixture.json";
+import heldThemes from "./held-themes.fixture.json";
 import moderationPolicy from "./moderation-policy.fixture.json";
 import clearances from "./clearances.fixture.json";
 import pendingContinuation from "./pending-continuation.fixture.json";
@@ -23,6 +24,7 @@ vi.mock("@/lib/supabaseClient", () => ({ supabase: {
 describe("held story inspection", () => {
   it.each([
     { held: heldText, subject: "story text" }, { held: heldTitle, subject: "title" },
+    { held: heldThemes, subject: "themes" },
   ])("allows the unchanged $subject after criteria confirmation and retries a lost response", async ({ held, subject }) => {
     const bodies: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (url: string, options?: RequestInit) => {
@@ -40,20 +42,21 @@ describe("held story inspection", () => {
     fireEvent.click(await screen.findByRole("button", { name: `Inspect ${held.title}` }));
     expect(await screen.findByText(held.story_text)).toBeDefined();
     if (subject === "title") expect(screen.getByText(heldTitle.subject_title)).toBeDefined();
-    const allow = await screen.findByRole("button", { name: `Allow this ${subject}` });
+    const allow = await screen.findByRole("button", { name: subject === "themes" ? "Accept these themes" : `Allow this ${subject}` });
     expect(allow).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Request replacement picture" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Show picture to review" })).toBeNull();
     expect(screen.getByRole("button", { name: "Stop this story" })).toBeEnabled();
     for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);
     fireEvent.click(allow);
-    expect(await screen.findByRole("alert")).toHaveFocus();
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveFocus());
     expect(screen.getByText(held.story_text)).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Continue story" }));
     await waitFor(() => expect(screen.getByRole("heading", { name: "Story continuing" })).toHaveFocus());
     expect(bodies).toHaveLength(2);
     expect(bodies[0]).toBe(bodies[1]);
     expect(JSON.parse(bodies[0]).subject_version).toBe(held.subject_version);
+    expect(JSON.parse(bodies[0]).confirmed_criteria).toEqual(held.criteria);
     vi.unstubAllGlobals();
   });
 

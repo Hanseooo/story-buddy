@@ -21,6 +21,7 @@ from app.moderation_policy import OPTIONAL_THEMES, POLICY, TEACHER_MODERATION_CR
 from app.queue import get_queue
 from contracts.story_memory import StoryMemory
 from pipeline.input_gate import has_text_clearance
+from pipeline.optional_themes import has_bound_theme_review
 from pipeline.moderation_replace import replacement_disabled_reason
 
 hold_router = APIRouter()
@@ -370,6 +371,15 @@ def validate_review_checkpoint(conn, job_id, review):
             or saved.kind != review["kind"]
             or saved.subject_version != review["subject_version"] or saved.resolution is not None):
         return None
+    if saved.kind == "optional_themes":
+        context = state.moderation_context
+        return state if (has_bound_theme_review(state)
+            and review["criteria"] == saved.criteria
+            and review["subject"].get("story_text") == state.input.redacted_text
+            and review["subject"].get("detected_themes") == [d.model_dump() for d in context.detected_themes]
+            and review["subject"].get("theme_check") == context.optional_theme_check.model_dump()
+            and review["settings_snapshot"].get("theme_ids") == context.theme_ids
+            and review["settings_snapshot"].get("settings_version") == context.settings_version) else None
     if saved.kind == "story_text":
         text = state.input.redacted_text
         return state if (saved.subject_id == "input" and text is not None
@@ -392,7 +402,7 @@ def review_subject_bytes(review):
         if not isinstance(title, str):
             raise RuntimeError("moderation_subject_unavailable")
         return title.encode("utf-8")
-    if review["kind"] == "story_text":
+    if review["kind"] in ("story_text", "optional_themes"):
         text = review["subject"].get("story_text")
         if not isinstance(text, str):
             raise RuntimeError("moderation_subject_unavailable")

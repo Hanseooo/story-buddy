@@ -81,7 +81,7 @@ Failure: toggling during a hold leaves that hold and its settings unchanged.
 
 ## Blocked by
 
-None — predecessor 05 is merged. Grouped-theme acceptance remains ticket 15.
+None — predecessor 05 is merged. Grouped-theme acceptance is implemented in ticket 15.
 
 Design/conflict acceptance is settled in ADR-080. No repeat owner verdict is required for the
 accepted synthetic-only, feature-off scope. Audit/calibration and real-child release gates remain.
@@ -90,7 +90,8 @@ accepted synthetic-only, feature-off scope. Audit/calibration and real-child rel
 
 Implemented on `feat/account-onboarding`. Migration 0025 must be applied before deploying this
 code. Settings, transactional capture, grouped detection and private optional-origin inspection
-are available. Theme acceptance/continuation remains ticket 15. Feature defaults remain off.
+are available. Theme acceptance/continuation is implemented in ticket 15 (moderation-stack §9.20).
+Feature defaults remain off.
 
 Fresh local evidence and limitations are recorded in moderation-stack §9.19. Both code-review
 axes reported no findings. Backend full suite: 1,584 passed, 89 skipped, six smoke deselections,

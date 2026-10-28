@@ -1911,8 +1911,8 @@ Classroom settings uses native checkboxes with the agreed names/definitions, sha
 explanation, durable-save feedback and preserved draft choices with retry. Stale-version errors
 retain the choices for explicit review/retry. Feature-off shows saved settings read-only.
 The teacher review detail identifies optional origin and presents the grouped reasons and
-recorded detector metadata. There is no optional-picture screening. Theme acceptance and its
-continuation remain ticket 15, so this slice offers inspection, leave waiting and existing stop.
+recorded detector metadata. There is no optional-picture screening. At ticket 14 completion this
+slice offered inspection, leave waiting and existing stop; ticket 15 adds acceptance in §9.20.
 
 Verification: affected backend tests 165 passed; graph-node inventory check 2 passed;
 affected settings/Books tests 47 passed; `uv sync --frozen`, backend lint, frontend lint,
@@ -1934,3 +1934,54 @@ evidence: `.scratch/ticket14-focus-baseline-9.txt`. Both code-review axes report
 A rolled-back disposable SQL check verifies owner reads, RLS-denied browser settings writes,
 ordinary server rename and unknown-theme rejection. Hosted services, browser visual checks,
 paid classifier calibration/replay, production enablement and real-child use remain unverified.
+
+### 9.20 Grouped theme acceptance (ticket 15, 2026-10-29)
+
+The existing teacher `allow` command now accepts an `optional_themes` review as one group.
+Checkpoint validation binds its processed-story SHA-256, captured settings IDs/version, detected
+themes, detector metadata and criteria to the private review record before the durable decision.
+The pure `moderation_review` continuation validates the hash/settings binding again and records
+all detected IDs as `ModerationContext.accepted_theme_ids`. Existing decision history records the
+teacher, exact subject, confirmed group, policy and captured settings. No schema, route or prompt
+changes are needed. Duplicate requests reuse the saved decision and delivery identity.
+
+Acceptance returns to `analyze` in the same job. The checkpointed one-time text check stays
+complete; no picture performs optional-theme screening. Acceptance never writes shared-safety
+clearance. Later reference/scene flags still create their own exact-content safety holds. A new
+submission captures its own settings and starts without accepted IDs. Later settings edits or
+feature switch-off do not change the original acceptance or prevent its authorized continuation.
+
+Inspection reuses native confirmation checkboxes and the existing pending/error/retry controls.
+Teachers confirm every detected theme together, see that acceptance covers only this submission
+and that picture safety checks still apply, and retain leave/stop actions. Optional themes never
+offer picture replacement or require picture reveal. Classroom sharing remains separate.
+
+Verification used synthetic fixtures, mocked provider calls and the existing disposable local
+Postgres, never hosted services or real-child data:
+
+- `uv sync --frozen`, `uv run ruff check .`, `pnpm lint`, `pnpm exec tsc --noEmit` and
+  `pnpm build` with CI public placeholders passed.
+- `uv run pytest tests/test_teacher_hold.py tests/test_graph_stub.py tests/test_run_job.py tests/test_main.py -q --tb=short`:
+  162 passed. The grouped HTTP acceptance first failed with `409 checkpoint_unavailable`, then
+  passed through the real checkpointed graph. One detector call, grouped recorded acceptance,
+  a passing first scene and an exact later shared-safety hold are verified, with three image
+  draws (one reference, two scenes). A new submission inherits no accepted IDs. Changed text or
+  settings rejects acceptance; a final focused recheck of those two cases also passed.
+- `pnpm exec vitest run 'app/classroom/[classroomId]/books/page.test.tsx'`: 41 passed. The captured
+  optional-theme fixture first failed to find **Accept these themes**, then passed grouped
+  confirmation, disabled state, absence of picture actions and identical-request retry after a
+  lost response. The test waits for the existing focus effect before asserting focus.
+- Full `uv run pytest`: 1,586 passed, 89 skipped, six smoke deselections, six existing native
+  WeasyPrint/PDF failures (`assert 503 == 200`, `PDF download failed (OSError)`, missing external
+  libraries), matching §9.19. Existing environment-gated RLS/annotation/research checks remain
+  skipped. Log: `.scratch/ticket15-backend-full.txt`.
+- Full `pnpm test`: 750 passed, one character-reference allow retry-focus failure at
+  `books/page.test.tsx:154` (expected alert focus, received **Back to Needs your help**).
+  Log: `.scratch/ticket15-frontend-full.txt`. This is in the existing retry-focus test family
+  whose baseline failures are recorded in §9.19; no failing assertion was removed or loosened.
+- Full serial recheck `pnpm test --maxWorkers=1`: all 78 files and 751 tests passed.
+  Log: `.scratch/ticket15-frontend-serial.txt`.
+
+Standards and Spec code reviews found no unresolved issues. The feature remains off by default.
+Browser/hosted verification, classifier calibration, paid replay, production enablement and
+real-child use remain unrun and are not authorized by this implementation.

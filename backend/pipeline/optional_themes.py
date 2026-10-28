@@ -14,6 +14,20 @@ from providers import redact_pii, structured_text
 OPTIONAL_THEME_INSTRUCTION_VERSION = "optional_themes_v1"
 
 
+def has_bound_theme_review(state: StoryMemory) -> bool:
+    context = state.moderation_context
+    review, check = context.review, context.optional_theme_check
+    ids = [match.theme_id for match in context.detected_themes]
+    text = state.input.redacted_text
+    return bool(context.mode == "teacher_review_v1" and context.optional_themes_checked
+        and review and review.kind == "optional_themes" and review.subject_id == "input"
+        and check and text is not None
+        and hashlib.sha256(text.encode("utf-8")).hexdigest() == review.subject_version == check.subject_version
+        and check.settings_version == context.settings_version
+        and ids and len(ids) == len(set(ids)) and set(ids).issubset(context.theme_ids)
+        and review.criteria == ids and review.return_node == "analyze")
+
+
 class ThemeMatches(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     matches: list[ThemeDetection]

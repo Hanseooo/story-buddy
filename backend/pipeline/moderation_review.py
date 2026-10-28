@@ -5,6 +5,7 @@ import hashlib
 from langgraph.types import interrupt
 
 from contracts.story_memory import ModerationClearance, StoryMemory
+from pipeline.optional_themes import has_bound_theme_review
 
 
 def moderation_review(state: StoryMemory) -> dict:
@@ -16,14 +17,18 @@ def moderation_review(state: StoryMemory) -> dict:
             or decision.get("review_id") != str(review.review_id)
             or decision.get("subject_version") != review.subject_version
             or decision.get("generation_epoch", -1) <= state.moderation_context.generation_epoch
-            or review.kind not in ("scene_image", "character_reference", "story_text")
-            or (review.kind == "story_text" and decision.get("action") != "allow")):
+            or review.kind not in ("scene_image", "character_reference", "story_text", "optional_themes")
+            or (review.kind in ("story_text", "optional_themes") and decision.get("action") != "allow")):
         raise RuntimeError("invalid_moderation_decision")
     replacing = decision["action"] == "replace"
     context = state.moderation_context.model_copy(update={
         "generation_epoch": decision["generation_epoch"],
         "review": review.model_copy(update={"resolution": decision["action"], "replacement": replacing}),
     })
+    if review.kind == "optional_themes":
+        if not has_bound_theme_review(state):
+            raise RuntimeError("invalid_moderation_subject")
+        return {"moderation_context": context.model_copy(update={"accepted_theme_ids": review.criteria})}
     if review.kind == "story_text":
         text = state.input.redacted_text
         policy_version = decision.get("policy_version")

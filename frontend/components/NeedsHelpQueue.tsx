@@ -244,9 +244,9 @@ function HeldStory({ jobId, onClose }: { jobId: string; onClose: () => void }) {
             </div>)}
             <ReviewCriteria />
           </section>}
-          {!loading && !error && (detail.kind === "scene_image" || detail.kind === "character_reference" || detail.kind === "story_text" || detail.kind === "title") && <ResolveSubject
+          {!loading && !error && (detail.kind === "scene_image" || detail.kind === "character_reference" || detail.kind === "story_text" || detail.kind === "title" || detail.kind === "optional_themes") && <ResolveSubject
             key={`${detail.review_id}-${detail.subject_version}-${detail.generation_epoch}-${revision}`}
-            jobId={jobId} detail={detail} inspected={detail.kind === "title" ? !!detail.subject_title : detail.kind === "story_text" ? !!detail.story_text : inspected}
+            jobId={jobId} detail={detail} inspected={detail.kind === "title" ? !!detail.subject_title : detail.kind === "story_text" || detail.kind === "optional_themes" ? !!detail.story_text : inspected}
             busy={pending} onPending={setPending} />}
           </>}
           {!loading && !error && <StopStory jobId={jobId} reviewId={detail.review_id}
@@ -296,7 +296,8 @@ function ContinueSavedDecision({ jobId, command, onChanged }: {
 function ResolveSubject({ jobId, detail, inspected, busy, onPending }: {
   jobId: string; detail: Detail; inspected: boolean; busy: boolean; onPending: (pending: boolean) => void;
 }) {
-  const subject = detail.kind === "title" ? "title" : detail.kind === "story_text" ? "story text" : "picture";
+  const themes = detail.kind === "optional_themes";
+  const subject = themes ? "themes" : detail.kind === "title" ? "title" : detail.kind === "story_text" ? "story text" : "picture";
   const [confirmed, setConfirmed] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -343,9 +344,10 @@ function ResolveSubject({ jobId, detail, inspected, busy, onPending }: {
 
   return <section aria-label={`Resolve the inspected ${subject}`} className="space-y-4 border-t border-primary/15 pt-5">
     {success ? <h4 ref={summary} tabIndex={-1} className="font-bold text-lg focus-visible:outline-2 focus-visible:outline-primary">{outcome}</h4> : <>
-      <h4 className="font-bold text-lg">Allow this exact {subject}</h4>
-      <p>If you are uncertain, leave this story waiting and return later. Allowing safety clearance does not approve classroom sharing.</p>
+      <h4 className="font-bold text-lg">{themes ? "Accept these themes together" : `Allow this exact ${subject}`}</h4>
+      <p>If you are uncertain, leave this story waiting and return later. {themes ? "Accepting themes" : "Allowing safety clearance"} does not approve classroom sharing.</p>
       {detail.kind === "title" ? <p>Read the saved title above. Allowing starts the story with this exact title. The story text and every generated picture receive their own safety checks.</p>
+        : themes ? <p>Read the saved story and detected themes above. Acceptance covers these themes together for this submission only. They will not prompt another theme review on later pages. Shared safety checks still apply to every picture.</p>
         : detail.kind === "story_text" ? <p>Read the saved story above. Allowing continues with this unchanged text. Every generated picture receives its own safety checks.</p>
         : !inspected && <p>Show the picture and wait for it to load before allowing it.</p>}
       {!detail.ready && <p role="status">Finishing the current step. Refresh story status before deciding.</p>}
@@ -354,15 +356,15 @@ function ResolveSubject({ jobId, detail, inspected, busy, onPending }: {
         {detail.criteria?.map(id => <label key={id} className="flex items-center gap-3 min-h-[44px]">
           <input type="checkbox" checked={confirmed.includes(id)} onChange={event => setConfirmed(values =>
             event.target.checked ? [...values, id] : values.filter(value => value !== id))} />
-          This {subject} meets {id.replaceAll("_", " ")}
+          {themes ? `I accept ${id.replaceAll("_", " ")} in this submission` : `This ${subject} meets ${id.replaceAll("_", " ")}`}
         </label>)}
       </fieldset>
       {message && <h4 ref={summary} tabIndex={-1} role="alert" className="font-bold focus-visible:outline-2 focus-visible:outline-primary">{message}</h4>}
       {pending && <p role="status">Saving your decision…</p>}
       <button className={control} disabled={busy || pending || !detail.ready || (!submitted &&
         (!inspected || !detail.current_policy_version || !detail.criteria?.length || confirmed.length !== detail.criteria.length))}
-        onClick={() => void decide(submitted || "allow")}>{pending ? "Saving…" : submitted ? "Continue story" : `Allow this ${subject}`}</button>
-      {!submitted && detail.kind !== "story_text" && detail.kind !== "title" && <>
+        onClick={() => void decide(submitted || "allow")}>{pending ? "Saving…" : submitted ? "Continue story" : themes ? "Accept these themes" : `Allow this ${subject}`}</button>
+      {!submitted && !themes && detail.kind !== "story_text" && detail.kind !== "title" && <>
         <p>{detail.kind === "character_reference"
           ? "A replacement keeps the character description, style and any chosen emphasis. It uses the book’s one reference replacement and receives fresh checks. Other details may change."
           : "A replacement keeps the scene, approved references and style. It uses one remaining picture allowance and receives fresh checks. Other details may change."}</p>

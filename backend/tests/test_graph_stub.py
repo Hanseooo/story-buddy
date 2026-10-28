@@ -36,6 +36,35 @@ EXPECTED_ORDER = [
 ]
 
 
+@pytest.mark.parametrize("changed", ["text", "settings"])
+def test_theme_acceptance_rejects_changed_submission(monkeypatch, changed):
+    from langgraph.types import Command
+    from contracts.story_memory import ModerationContext
+
+    monkeypatch.setattr("pipeline.input_gate.classify_text_primary", lambda text: (True, []))
+    monkeypatch.setattr("pipeline.input_gate.classify_text_backstop", lambda text: (True, []))
+    monkeypatch.setattr("pipeline.input_gate.redact_pii", lambda text: text)
+    monkeypatch.setattr("pipeline.optional_themes.redact_pii", lambda text: text)
+    monkeypatch.setattr("pipeline.optional_themes.structured_text", lambda prompt, schema, **kw:
+        schema.model_validate({"matches": [{"theme_id": "spooky_suspense", "reason": "Synthetic detector evidence"}]}))
+    state = _initial_state("04b21cbc-ff2d-4fd8-b2ef-56431784a9a4")
+    state.moderation_context = ModerationContext(mode="teacher_review_v1", theme_ids=["spooky_suspense"], settings_version=1)
+    graph, config = build_graph(), {"configurable": {"thread_id": "changed-theme"}}
+    graph.invoke(state, config)
+    held = graph.get_state(config)
+    context = held.values["moderation_context"]
+    review = context.review
+    changes = {"input": held.values["input"].model_copy(update={"redacted_text": "Changed story"})} if changed == "text" else {
+        "moderation_context": context.model_copy(update={"settings_version": 2})}
+    graph.update_state(config, changes, as_node="optional_themes")
+    graph.invoke(None, config)
+    with pytest.raises(RuntimeError, match="invalid_moderation_subject"):
+        graph.invoke(Command(resume={"action": "allow", "review_id": str(review.review_id),
+            "subject_version": review.subject_version, "generation_epoch": 2}), config,
+            interrupt_after=["moderation_review"])
+    assert graph.get_state(config).values["moderation_context"].accepted_theme_ids == []
+
+
 @pytest.mark.parametrize("flagged_layer", ["primary", "backstop"])
 def test_flagged_story_holds_then_allows_exact_processed_text(monkeypatch, flagged_layer):
     from unittest.mock import MagicMock
