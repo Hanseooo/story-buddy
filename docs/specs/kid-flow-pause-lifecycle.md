@@ -15,6 +15,12 @@ ADR-011 / PRD §13 (moderation ordering), ADR-006 (durable paths)
 
 ## 1. Purpose
 
+**Accepted moderation amendment (not built):** [moderation-stack §9.9](moderation-stack.md#99-technical-completion-proposal-2026-10-27)
+and accepted [ADR-080](../product/adr/ADR-080-teacher-held-moderation-and-exact-content-clearance.md)
+specify a separate teacher-review interrupt, exact-content commands, worker projection and
+quiescent resume. Accepted by the owner on 2026-10-27, not built. The existing child reveal and `/confirm`
+contract below remains baseline; it must never be used to approve a teacher-held flag.
+
 A book pauses once for a human. PRD §8 step 7 promises the child sees the moderated canonical
 reference before full generation, with a confirm and a *"try again."* ADR-029 decided its shape and
 built nothing. This spec gives the pause a durable lifecycle: how the worker enters it, what the

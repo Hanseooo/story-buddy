@@ -11,6 +11,12 @@ ADR-029, ADR-030
 
 ## 1. Purpose
 
+**Accepted held-state extension (not built):** [moderation-stack §9.9.5](moderation-stack.md#995-privacy-delivery-withdrawal-and-lifecycle)
+and accepted [ADR-080](../product/adr/ADR-080-teacher-held-moderation-and-exact-content-clearance.md)
+add quiescent `awaiting_teacher`/`stopped` eligibility and cascading removal of private moderation
+reviews. They preserve ADR-044's finish marker, tombstone, four-store cleanup and no active-job
+deletion. This extension is accepted (2026-10-27), not built; the deletion feature below is also unbuilt.
+
 Let a child permanently delete one of their own finished, failed, or paused storybooks without
 allowing cross-account deletion, racing an active worker, or leaving StoryBuddy-controlled copies
 in Storage, LangGraph checkpoints, Langfuse, or the `jobs` table.

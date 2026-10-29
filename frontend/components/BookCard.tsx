@@ -65,7 +65,7 @@ export function StateBadge({
       <span
         className={`bg-success/90 text-on-success text-xs font-bold px-2 py-1 rounded-lg ${className}`}
       >
-        Approved
+        Shared with class
       </span>
     );
   if (state === "rejected")
@@ -73,7 +73,7 @@ export function StateBadge({
       <span
         className={`bg-destructive/90 text-on-destructive text-xs font-bold px-2 py-1 rounded-lg ${className}`}
       >
-        Rejected
+        Not ready yet
       </span>
     );
   return (

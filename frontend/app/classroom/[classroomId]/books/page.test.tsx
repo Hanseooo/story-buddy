@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { jobState, type Job } from "@/lib/types/jobs";
-import { FailedBookRow } from "./page";
+import BooksPage, { FailedBookRow } from "./page";
+import { supabase } from "@/lib/supabaseClient";
 import BookCard from "@/components/BookCard";
 import NeedsHelpQueue from "@/components/NeedsHelpQueue";
 // Captured from the real graph/disposable-Postgres test_teacher_hold integration run.
@@ -14,11 +15,249 @@ import moderationPolicy from "./moderation-policy.fixture.json";
 import clearances from "./clearances.fixture.json";
 import pendingContinuation from "./pending-continuation.fixture.json";
 import BookReviewDialog from "@/components/BookReviewDialog";
+// Captured from teacher_review_note PUT in the local synthetic PostgreSQL database.
+// The fixture transaction was rolled back. HTTP GET/PUT return this note object.
+import reviewNote from "./review-note.fixture.json";
+
+const notReadyButton = () => screen.getByRole("button", { name: "Not ready to share yet" });
+
+describe("teacher decision labels", () => {
+  it("keeps the selected labels attached to the unchanged decisions", async () => {
+    const requests: { url: string; options?: RequestInit }[] = [];
+    const jobs = [
+      makeJob({ pages: [] }),
+      makeJob({ id: "job-2", pages: [], profiles: { display_nickname: "Sam", avatar_id: null } }),
+    ];
+    const from = vi.fn((table: string) => ({
+      select: () => ({
+        eq: () => table === "jobs"
+          ? { order: async () => ({ data: jobs }) }
+          : { single: async () => ({ data: { review_notes_enabled: false } }) },
+      }),
+    }));
+    Object.assign(supabase, { from });
+    vi.stubGlobal("fetch", vi.fn(async (url: string, options?: RequestInit) => {
+      requests.push({ url, options });
+      return Response.json({ approved_at: null, rejected_at: null });
+    }));
+
+    render(<BooksPage />);
+    expect(await screen.findByRole("tab", { name: /^Needs review/ })).toBeDefined();
+    expect(screen.getByRole("tab", { name: "Shared with class" })).toBeDefined();
+    expect(screen.getByRole("tab", { name: "Not ready yet" })).toBeDefined();
+    fireEvent.click(await screen.findByRole("button", { name: /Review story by Alex/ }));
+
+    const share = await screen.findByRole("button", { name: "Share with class" });
+    const sharingExplanation = screen.getByText(/Classmates will be able to read and download this book/);
+    expect(share).toHaveAttribute("aria-describedby", "book-sharing-note");
+    expect(sharingExplanation).toHaveAttribute("id", "book-sharing-note");
+    fireEvent.click(notReadyButton());
+    await waitFor(() => expect(requests.some(({ url }) => url.endsWith("/review"))).toBe(true));
+    const notReadyRequest = requests.find(({ url }) => url.endsWith("/review"));
+    expect(JSON.parse(notReadyRequest?.options?.body as string)).toEqual({ decision: "rejected" });
+    expect(await screen.findByText("Marked not ready")).toBeDefined();
+    fireEvent.click(await screen.findByRole("button", { name: "Share with class" }));
+    await waitFor(() => expect(requests.filter(({ url }) => url.endsWith("/review"))).toHaveLength(2));
+    const reviewRequests = requests.filter(({ url }) => url.endsWith("/review"));
+    expect(JSON.parse(reviewRequests[1].options?.body as string)).toEqual({ decision: "approved" });
+    expect(await screen.findByText("Shared")).toBeDefined();
+    fireEvent.click(screen.getByRole("tab", { name: /^Shared with class/ }));
+    expect(within(screen.getByRole("button", { name: /Review story by Sam/ })).getByText("Shared with class")).toBeDefined();
+    fireEvent.click(screen.getByRole("tab", { name: /^Not ready yet/ }));
+    expect(within(screen.getByRole("button", { name: /Review story by Alex/ })).getByText("Not ready yet")).toBeDefined();
+    expect(screen.queryByText(/Reject/i)).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
+  it("uses sharing language in the approved empty state and badge", async () => {
+    const jobs: Job[] = [];
+    const from = vi.fn(() => ({
+      select: () => ({ eq: () => ({
+        order: async () => ({ data: jobs }),
+        single: async () => ({ data: { review_notes_enabled: false } }),
+      }) }),
+    }));
+    Object.assign(supabase, { from });
+
+    const { rerender } = render(<BooksPage />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Shared with class" }));
+    expect(await screen.findByText("Nothing shared yet. Books you share appear in the class gallery.")).toBeDefined();
+
+    rerender(<BookCard
+      job={makeJob({ rejected_at: "2026-10-29T00:00:00Z" })}
+      thumbnailUrl={null}
+      onOpen={vi.fn()}
+    />);
+    expect(screen.getByText("Not ready yet")).toBeDefined();
+    vi.unstubAllGlobals();
+  });
+});
+
+vi.mock("next/navigation", () => ({ useParams: () => ({ classroomId: "synthetic-class" }) }));
+
+describe("teacher note row", () => {
+  it("J1: the not-ready toast reopens the book with its note row open, inside the modal dialog", async () => {
+    const puts: { url: string; body: string }[] = [];
+    const jobs = [makeJob({ pages: [] }), makeJob({ id: "job-2", pages: [], profiles: { display_nickname: "Sam", avatar_id: null } })];
+    Object.assign(supabase, { from: vi.fn((table: string) => ({
+      select: () => ({ eq: () => ({
+        order: async () => ({ data: jobs }),
+        single: async () => ({ data: { review_notes_enabled: table === "classrooms" } }),
+      }) }),
+    })) });
+    vi.stubGlobal("fetch", vi.fn(async (url: string, options?: RequestInit) => {
+      if (url.endsWith("/note") && options?.method === "PUT") {
+        puts.push({ url, body: JSON.parse(options.body as string).body });
+        return Response.json({ ...reviewNote, body: "Add an ending, please." });
+      }
+      if (url.endsWith("/note")) return Response.json({ detail: "not found" }, { status: 404 });
+      return Response.json({ approved_at: null, rejected_at: null });
+    }));
+    render(<BooksPage />);
+    fireEvent.click((await screen.findAllByRole("button", { name: /Review story by Alex/ }))[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Not ready to share yet" }));
+    expect(await screen.findByText("Add a note for Sam")).toBeDefined();
+    // A modal dialog makes the rest of the page inert, so the toast must live inside it.
+    const addNote = screen.getByRole("button", { name: "Add a note for Alex" });
+    expect(document.querySelector("dialog")).toContainElement(addNote);
+    expect(document.querySelector("dialog")).toContainElement(screen.getByRole("button", { name: "Undo" }));
+    fireEvent.click(addNote);
+    expect(await screen.findByText("Add a note for Alex")).toBeDefined();
+    expect(screen.getByText("Add a note for Alex").parentElement).toHaveAttribute("open");
+    const box = screen.getByRole("textbox", { name: "Note for Alex" });
+    await waitFor(() => expect(box).toHaveFocus());
+    fireEvent.change(box, { target: { value: "Add an ending, please." } });
+    fireEvent.click(screen.getByRole("button", { name: "Send note for Alex" }));
+    await waitFor(() => expect(puts).toEqual([{ url: "undefined/teacher/jobs/job-1/note", body: "Add an ending, please." }]));
+    expect(await screen.findByText("Note sent")).toBeDefined();
+    vi.unstubAllGlobals();
+  });
+
+  it("sends, edits and deletes independently of the review decision", async () => {
+    const requests: RequestInit[] = [];
+    let stored: string | null = null;
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, options?: RequestInit) => {
+      requests.push(options ?? {});
+      if (options?.method === "DELETE") { stored = null; return new Response(null, { status: 204 }); }
+      if (options?.method === "PUT") stored = JSON.parse(options.body as string).body;
+      if (stored !== null) return Response.json({ ...reviewNote, body: stored });
+      return Response.json({ detail: "not found" }, { status: 404 });
+    }));
+    const decide = vi.fn();
+    const props = { job: makeJob({ id: reviewNote.job_id }), pageUrls: [], notesEnabled: true, onClose: vi.fn(), onDecide: decide };
+    const { rerender, unmount } = render(<BookReviewDialog {...props} />);
+    const summary = screen.getByText("Add a note for Alex");
+    expect(summary.parentElement).not.toHaveAttribute("open");
+    fireEvent.click(notReadyButton());
+    expect(decide).toHaveBeenCalledWith("rejected");
+    // The page advances at once; the toast's "Add a note" reopens the book (J1 test above).
+    expect(summary.parentElement).not.toHaveAttribute("open");
+    fireEvent.click(summary);
+    const send = await screen.findByRole("button", { name: "Send note for Alex" });
+    await waitFor(() => expect(requests).toHaveLength(1));
+    expect(send).toBeDisabled();
+    const box = screen.getByRole("textbox", { name: "Note for Alex" });
+    expect(box).toHaveAttribute("placeholder", "Something kind and specific…");
+    expect(box).toHaveAttribute("maxlength", "500");
+    expect(screen.getByText("Alex will be able to read this note.")).toBeDefined();
+    fireEvent.change(box, { target: { value: "Lovely story!" } });
+    await waitFor(() => expect(send).toBeEnabled());
+    fireEvent.click(send);
+    expect(await screen.findByText("Lovely story!")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Edit note for Alex" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Note for Alex" }), { target: { value: "Lovely story! Well done." } });
+    fireEvent.click(screen.getByRole("button", { name: "Send note for Alex" }));
+    expect(await screen.findByText("Lovely story! Well done.")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Delete note for Alex" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Note for Alex" })).toHaveValue(""));
+    fireEvent.change(screen.getByRole("textbox", { name: "Note for Alex" }), { target: { value: "Unsent draft" } });
+    rerender(<BookReviewDialog {...props} job={makeJob({ id: "job-2" })} />);
+    expect(screen.getByText("Add a note for Alex").parentElement).not.toHaveAttribute("open");
+    fireEvent.click(screen.getByText("Add a note for Alex"));
+    expect(screen.getByRole("textbox", { name: "Note for Alex" })).toHaveValue("");
+    rerender(<BookReviewDialog {...props} notesEnabled={false} />);
+    expect(screen.queryByText("Add a note for Alex")).toBeNull();
+    for (const status of ["failed", "queued", "running", "awaiting_confirm"] as const) {
+      rerender(<BookReviewDialog {...props} job={makeJob({ status })} />);
+      expect(screen.queryByText("Add a note for Alex")).toBeNull();
+    }
+    // A new dialog load reads the current saved note, including another tab's last write.
+    stored = "Lovely story!";
+    for (const state of ["pending", "approved", "rejected"] as const) {
+      rerender(<BookReviewDialog {...props} job={null} />);
+      rerender(<BookReviewDialog {...props} job={makeJob({
+        id: reviewNote.job_id,
+        approved_at: state === "approved" ? "2026-10-29T00:00:00Z" : null,
+        rejected_at: state === "rejected" ? "2026-10-29T00:00:00Z" : null,
+      })} />);
+      expect(screen.getByText("Add a note for Alex").parentElement).not.toHaveAttribute("open");
+      fireEvent.click(screen.getByText("Add a note for Alex"));
+      expect(await screen.findByText("Lovely story!")).toBeDefined();
+      expect(screen.getByRole("button", { name: "Edit note for Alex" })).toBeEnabled();
+    }
+    unmount();
+
+    // Database and HTTP are the outer boundaries. Run the actual page, dialog and decisions.
+    const jobs = [makeJob({ pages: [] }), makeJob({ id: "job-2", pages: [], profiles: { display_nickname: "Sam", avatar_id: null } })];
+    const from = vi.fn((table: string) => ({
+      select: () => ({ eq: () => ({
+        order: async () => ({ data: jobs }),
+        single: async () => ({ data: { review_notes_enabled: table === "classrooms" } }),
+      }) }),
+    }));
+    Object.assign(supabase, { from });
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.endsWith("/note")) return Response.json({ detail: "not found" }, { status: 404 });
+      if (url.endsWith("/review")) return Response.json({ approved_at: null, rejected_at: null });
+      return Response.json([]);
+    }));
+    render(<BooksPage />);
+    fireEvent.click((await screen.findAllByRole("button", { name: /Review story by Alex/ }))[0]);
+    fireEvent.click(await screen.findByText("Add a note for Alex"));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Note for Alex" })).toBeEnabled());
+    fireEvent.change(screen.getByRole("textbox", { name: "Note for Alex" }), { target: { value: "Discard this draft" } });
+    fireEvent.click(notReadyButton());
+    expect(await screen.findByText("Add a note for Sam")).toBeDefined();
+    expect(screen.getByText("Add a note for Sam").parentElement).not.toHaveAttribute("open");
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.click(screen.getAllByRole("button", { name: /Review story by Alex/ })[0]);
+    fireEvent.click(await screen.findByText("Add a note for Alex"));
+    expect(screen.getByRole("textbox", { name: "Note for Alex" })).toHaveValue("");
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps a failed send draft and announces readable errors for disabled notes and invalid text", async () => {
+    let failure = 503;
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, options?: RequestInit) => {
+      if (options?.method === "PUT") return Response.json({ detail: failure === 409 ? "notes_disabled" : "invalid" }, { status: failure });
+      return Response.json({ detail: "not found" }, { status: 404 });
+    }));
+    render(<BookReviewDialog job={makeJob()} pageUrls={[]} notesEnabled onClose={vi.fn()} onDecide={vi.fn()} />);
+    fireEvent.click(screen.getByText("Add a note for Alex"));
+    const box = screen.getByRole("textbox", { name: "Note for Alex" });
+    await waitFor(() => expect(box).toBeEnabled());
+    fireEvent.change(box, { target: { value: "Keep this draft" } });
+    for (const [status, message] of [
+      [503, "Could not save the note. Your text is kept. Try again."],
+      [409, "Notes are turned off for this class. Your text is kept."],
+      [422, "Write a note with 1–500 characters, including something other than spaces."],
+    ] as const) {
+      failure = status;
+      fireEvent.click(screen.getByRole("button", { name: "Send note for Alex" }));
+      const error = await screen.findByText(message);
+      expect(error).toHaveAttribute("aria-live", "polite");
+      expect(box).toHaveValue("Keep this draft");
+    }
+    vi.unstubAllGlobals();
+  });
+});
 
 vi.mock("@/lib/supabaseClient", () => ({ supabase: {
   auth: { getSession: async () => ({ data: { session: { access_token: "synthetic" } } }) },
   channel: () => ({ on() { return this; }, subscribe() { return this; } }),
   removeChannel: vi.fn(),
+  from: vi.fn(),
 } }));
 
 describe("held story inspection", () => {
@@ -81,9 +320,9 @@ describe("held story inspection", () => {
     expect(bodies).toHaveLength(0);
     fireEvent.click(stop);
     fireEvent.click(within(screen.getAllByRole("dialog").at(-1)!).getByRole("button", { name: "Stop this story" }));
-    expect(await screen.findByRole("alert")).toHaveFocus();
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveFocus());
     fireEvent.click(screen.getByRole("button", { name: "Retry stop" }));
-    expect(await screen.findByRole("heading", { name: "Story stopped. The writing is saved." })).toHaveFocus();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Story stopped. The writing is saved." })).toHaveFocus());
     expect(bodies).toHaveLength(2);
     expect(bodies[0]).toBe(bodies[1]);
     expect(JSON.parse(bodies[0]).action).toBe("stop");
@@ -111,11 +350,11 @@ describe("held story inspection", () => {
     expect(screen.getByText(/hides the whole book/)).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Withdraw safety clearance" }));
     if (replayed) {
-      expect(await screen.findByRole("alert")).toHaveFocus();
+      await waitFor(() => expect(screen.getByRole("alert")).toHaveFocus());
       fireEvent.click(screen.getByRole("button", { name: "Withdraw safety clearance" }));
     }
-    expect(await screen.findByRole("heading", { name: replayed ? "Current story status: complete" : "Story returned to teacher review" })).toHaveFocus();
-    if (!replayed) expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+    await waitFor(() => expect(screen.getByRole("heading", { name: replayed ? "Current story status: complete" : "Story returned to teacher review" })).toHaveFocus());
+    if (!replayed) expect(screen.queryByRole("button", { name: "Share with class" })).toBeNull();
     expect(writes).toBe(replayed ? 2 : 1);
     vi.unstubAllGlobals();
   });
@@ -151,11 +390,11 @@ describe("held story inspection", () => {
       for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);
     }
     fireEvent.click(allow);
-    expect(await screen.findByRole("alert")).toHaveFocus();
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveFocus());
     fireEvent(document, new Event("visibilitychange"));
     expect(await screen.findByText("Your decision is saved. Continue story retries its pending delivery.")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Continue story" }));
-    expect(await screen.findByRole("heading", { name: "Story continuing" })).toHaveFocus();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Story continuing" })).toHaveFocus());
     expect(bodies).toHaveLength(2);
     expect(bodies[0]).toBe(bodies[1]);
     expect(JSON.parse(bodies[0]).action).toBe(action);

@@ -15,6 +15,13 @@ shape), PRD §11.1, `ethics_and_safety.md` §4, MASTER_SPEC §5 (CC-4, CC-5, CC-
 
 ## 1. Purpose
 
+**Accepted safety-review amendment (not built):** [moderation-stack §9.9](moderation-stack.md#99-technical-completion-proposal-2026-10-27)
+and accepted [ADR-080](../product/adr/ADR-080-teacher-held-moderation-and-exact-content-clearance.md)
+narrow invariants 8, 9, 11 and 12 for private safety-hold inspection/recovery, child waiting and
+guarded reads. Accepted by the owner on 2026-10-27, not built. Editorial review below keeps its three states;
+safety clearance does not approve sharing, and withdrawal deliberately clears prior editorial
+timestamps. The pending safety implementation must follow those accepted contracts.
+
 `0008:15` added `approved_at timestamptz` and nothing else. Today, a book the teacher looked at and
 decided against is byte-identical to one that arrived thirty seconds ago: both have
 `approved_at is null`. The teacher re-reads it every session, forever, with no way to record *I have
@@ -321,6 +328,10 @@ state-model session.
 
 ### 4.10 What the child sees: nothing (the child-facing consequence)
 
+> **Amended by §14 (ADR-081 accepted 2026-10-29).** The child still never sees a verdict word. A child may
+> now read a teacher's note, and the download line is reworded. The text below is the pre-amendment
+> reasoning and still binds everything §14 does not name.
+
 **A child is never shown a review state.** Their own book always reads as finished. Pending, approved
 and rejected are indistinguishable from inside the kid flow.
 
@@ -400,9 +411,13 @@ The teacher arriving here has ~40 books, ten minutes, and probably a phone.
 8. **No moderation category, flagged span, or `jobs.error` reaches any screen** — teacher or child
    (§4.8).
 9. **The child is never shown a review state,** and `classroom-sharing` inherits that (§4.10).
+   *Amended by §14 (SH-01): never shown a verdict word. A teacher's note and the reworded download
+   line are the only review-related text a child reads.*
 10. **There is no bulk decision and no auto-approve** (§4.7, ADR-017).
 11. **No fourth recovery verb.** The teacher cannot act on a child's failed book (§4.8).
 12. **Reads stay in the browser under RLS; the only endpoint is a write** (S1-6, S2-7).
+    *Amended by §14 (SH-05): the private notes table is service-role only, so its reads go through
+    owner-checked endpoints. Every other read in this spec stays in the browser.*
 
 ## 6. Access & the trust boundary
 
@@ -534,6 +549,8 @@ more consequentially — removes a grant and a policy that two frozen constraint
 - **Nothing records *why* a book was rejected.** A reason field would help a teacher remember and
   would be real evidence about what the gate catches — and it is also a place to write something about
   a child that the child cannot see. Not opened here; it would need its own ethics pass.
+  *Partly answered by §14 (2026-10-29): a note the child **can** read is opened. A private reason the
+  child cannot read stays closed (§14.9).*
 - **`AGENTS.md:454` is still stale** (S1's parked finding). Not this spec's to fix.
 
 ## 13. Definition of done
@@ -543,10 +560,321 @@ more consequentially — removes a grant and a policy that two frozen constraint
 3. `POST /jobs/{id}/review` handles all six transitions, is idempotent, and logs one line per change.
 4. The screen ships four views with four distinct empty states, an advancing `<dialog>`, and Undo.
 5. Failed books render two readings with *machine* as the default for everything unknown.
-6. Every kid-facing surface renders identically for all three review states.
+6. Every kid-facing surface renders identically for all three review states. *Amended by §14: no
+   kid-facing surface shows a verdict word; the download line and the note badge are the named
+   exceptions.*
 
 **Not done** if: both timestamps can be set at once; a teacher can reach a state they cannot leave; a
 client can supply a timestamp; a `404` and a `403` are distinguishable; `authenticated` retains UPDATE
 on `jobs`; an unknown `failure_reason` blames a child to anyone; a moderation category, flagged span
 or `jobs.error` reaches a screen; a child learns their book was rejected; any bulk decision exists; or
 the review queue's empty state reads as absence rather than as finished.
+
+## 14. Amendment: teacher notes the child can read (2026-10-29, draft)
+
+**Status:** implemented: schema and teacher API (05), classroom switch (06), teacher note row (07), and child endpoints, bookshelf badge and book panel (08, 2026-10-29), and gentler labels (09, `c6a7fb7`). The J1–J3 browser journeys remain pending. ADR-081 accepted by the owner on 2026-10-29; OD-8 settled. Seams and defaults confirmed 2026-10-29. **Source:**
+`.scratch/ptd-review-feedback/` (audit 01 with its owner verdict, grill 02), phase map
+`.scratch/post-technical-defense/map.md` rank 3. **Rationale:** ADR-081 (accepted 2026-10-29).
+
+Verified existing behavior this amends: the teacher sees Approve and Reject and the child sees no
+verdict (§4.10); `jobs` stores two timestamps and no reason (§4.1); a child's browser already receives
+both (`useJob.ts:69`, `0008:24`); the book page already says "Your teacher needs to approve this book
+before you can download it" (`book/[jobId]/page.tsx:340-345`, pinned by `page.test.tsx:113,186`), which
+contradicts §4.10 (DECISION_BACKLOG D-V).
+
+### 14.1 Purpose and scope
+
+A teacher can send one short note to the child who owns a book. The child finds it from the bookshelf
+and reads it beside the book. No verdict word is ever shown to a child. Teachers see gentler labels.
+The panel's complaint was that "Reject" sounds harsh and a child gets no feedback.
+
+**In:** table `job_review_notes`; teacher note endpoints; child read endpoint; teacher note UI in the
+review dialog; bookshelf badge and book-page panel; reworded download line; relabeled decision
+buttons; per-classroom switch `review_notes_enabled`, off by default; amending §4.10, invariants 9 and
+12, and §13.6.
+
+**Out (each a later ticket or a no-go):** highlights and tooltips (sentence-level, anchored by
+`scene_id` plus sentence index; the table already carries nullable `scene_id` and `anchor`); "Make a
+new version" (a paid run, N2); private teacher notes; child replies (rank 4's gate); the child editing
+page text (breaks immutable `pages` and ADR-013); a note column on `jobs` (classmates and researchers
+read the whole row, `0008:28,46`); redaction and a preview step; email or push.
+
+**Acceptance journeys.**
+- J1. A teacher presses "Not ready to share yet"; the dialog advances and the toast offers "Add a note";
+  pressing it reopens that book with the note box open; they type and Send. The child
+  opens their bookshelf, sees the badge, opens the book, reads the note, closes it. The badge is gone
+  on the next visit.
+- J2. A teacher shares a book ("Share with class") and adds praise. The child reads it the same way.
+- J3. The teacher edits the note, then deletes it. The child sees the new text, then no badge and no
+  panel, with no explanation.
+
+### 14.2 User stories and acceptance criteria
+
+**US-01. As a teacher, I want to add a note to a child's book without slowing my review pass, so that
+I can say what to change or what I liked.** Applies: SH-02, SH-03, SH-05, SH-06
+- AC-01. When the switch is on, the review dialog shows a collapsed row "Add a note for [nickname]"
+  (native `<details>`) on every `complete` book, in any review state.
+- AC-02. Opening the row shows a labeled text box (placeholder "Something kind and specific…") and a
+  Send button. A line under the box says the child reads the note. Approve and Reject work without
+  touching it.
+- AC-03. Pressing "Not ready to share yet" raises the toast with "Add a note" beside Undo, which
+  reopens that book with the row open and the text box focused. It does not require a note and does
+  not block the dialog advancing (§4.7). The toast renders inside the open `<dialog>`, because a
+  modal makes the rest of the page inert (checked in Chromium, 2026-10-29).
+- AC-04. Send stores the note and shows it as sent in the row. The row then offers Edit and Delete.
+- AC-05. A book has at most one note. Sending again edits it. Edit and Delete are one tap from the
+  row. Delete asks no confirmation. After Delete the row is empty and a new note can be written.
+- AC-06. An empty, whitespace-only or over-500-character body is refused by the endpoint with `422`,
+  and the Send button is disabled while the box is empty.
+- AC-07. A failed send keeps the typed text and shows the error in an `aria-live="polite"` region.
+- AC-08. A `failed`, `queued`, `running` or `awaiting_confirm` book offers no note row (§4.8).
+
+**US-02. As a teacher, I want kinder decision labels, so that the screen does not say "reject" about a
+child's story.** Applies: SH-04
+- AC-09. The two decision buttons read "Share with class" and "Not ready to share yet". Their API
+  values stay `approved` and `rejected`. `pending` and Undo are unchanged.
+- AC-10. The ADR-072 download explanation (§4.7) stays beside "Share with class".
+
+**US-03. As a child, I want to find and read my teacher's note, so that I know what they said about my
+book.** Applies: SH-01, SH-02, SH-05, SH-07
+- AC-11. When the switch is on and the book has a note the child has not opened, its bookshelf card
+  shows a badge reading "A note from your teacher".
+- AC-12. Opening the book shows the note in a panel above the book, headed "A note from your teacher",
+  with a "Close" button. Escape also closes it. The note can be reopened from the same control.
+- AC-13. Opening the note sets `seen_at`. The badge no longer shows from the next bookshelf load. Editing
+  the note clears `seen_at`.
+- AC-14. The panel and badge never contain the words approved, rejected, pending or any verdict.
+- AC-15. Classmates, the gallery and researchers have no path to a note.
+- AC-16. If the child is offline or logged out when the note is sent, the badge appears on their next
+  bookshelf load. No push or email.
+
+**US-04. As a child, I want the download line to tell me what to do, so that I am not stuck.**
+Applies: SH-01
+- AC-17. Where the book page shows "Your teacher needs to approve this book before you can download
+  it", it shows "Ask your teacher about downloading this book". The button stays disabled until the
+  book is approved, exactly as today.
+
+**US-05. As a teacher, I want to choose whether my class sees notes, so that I only get the note UI
+when I use it.** Applies: SH-04
+- AC-18. Classroom settings has a control "Let students read my notes", off by default.
+- AC-19. When off, no note row appears in the dialog and no badge or panel appears for the class. Stored
+  notes are kept.
+- AC-20. The value is written only by the server, the way `0025` classroom settings are.
+
+### 14.3 Shared behavior
+
+- **SH-01 No verdict word.** No child surface shows approved, rejected or pending. The reworded download
+  line and the note badge are the only review-related text a child reads. The child can still tell
+  approved from not-approved through the disabled download button, as today. This replaces "the child
+  is never shown a review state" (§4.10, invariant 9, §13.6).
+- **SH-02 Close.** Every note panel closes by a "Close" button and by Escape, and returns focus to the
+  control that opened it.
+- **SH-03 Teacher note row states.** Loading: Send disabled. Empty: collapsed. Error: message in an
+  `aria-live` region, text kept. Switch off: the row is not rendered.
+- **SH-04 API values.** Relabeling changes no API value, schema or log field (§4.3, CC-5).
+- **SH-05 Private reads.** `job_review_notes` is readable only through server endpoints that check
+  ownership: the teacher via `owned_job`, the child by `jobs.profile_id`. Not through RLS.
+- **SH-06 Accessible names.** The note row, text box, Send, Edit and Delete have accessible names that
+  include the child's nickname where useful. Controls are native elements.
+- **SH-07 Badge is not an absence badge.** It shows only when a note exists. A book without a badge
+  says nothing (honors §4.10's ban on absence signals).
+
+### 14.4 Edge cases
+
+| Case | Expected behavior | Home |
+|---|---|---|
+| Book deleted while a note exists | Note rows go with the book (`on delete cascade`). Nothing added to the four-store cleanup, to be confirmed against `storybook-deletion.md` §1 | §14.5, OD-5 |
+| Teacher Undoes a decision after the child read the note | Note stays. It is tied to the book, not the decision | AC-05, SH-01 |
+| Teacher moves a shared book back to "Not ready to share yet" after the child saw the note | Same. No note text depends on the state | SH-01 |
+| Teacher deletes the note after the child read it | Badge and panel disappear with no explanation | J3, AC-05 |
+| Teacher edits the note after the child opened it | Child sees the current text and the badge returns (`seen_at` cleared) | OD-2 |
+| Switch turned off while notes exist | Child view hides them. Rows are kept | OD-3 |
+| Child offline or logged out | Badge on next bookshelf load | AC-16 |
+| Teacher names another child in a note | Not redacted. Only the owner reads it. Accepted (Q8) | §14.5 |
+| Teacher writes something about a child that the child should not read | There is no private kind. A line under the box says the child reads the note | OD-6 |
+| Two tabs, same teacher, same book | Last write wins, as §4.12 | §4.12 |
+| Book in another teacher's classroom | `404`, identical to a nonexistent job | §14.5 |
+| Student or researcher token on a teacher note endpoint | Rejected before the handler (`require_teacher`) | §14.5 |
+| A child requests another child's note | `404`, identical to none | §14.5 |
+| Removed student's book | Teacher can still note it (§4.5). The child cannot sign in, so nothing is read | §4.5 |
+| Non-`complete` book | No note row | AC-08 |
+| Dialog advances (§4.7) with the note row open | Row collapses for the next book. An unsent draft is discarded without a warning | OD-4 |
+| Maximum note length | 500 characters, `422` beyond it | OD-1 |
+| Screen reader or keyboard only | Native `<details>`, labels, `aria-live` errors, focus returns on close | SH-02, SH-03, SH-06 |
+
+### 14.5 Design decisions and rationale
+
+- **Table `job_review_notes`, not a `jobs` column.** `students read approved peer jobs` and
+  `researchers read approved jobs` select the whole row, so any new `jobs` column leaks to classmates
+  once a book is approved (*measured*, `0008:28,46`). Precedent for a private service-role table:
+  `job_moderation_reviews` (`0022`): RLS on, `revoke all` from `authenticated`, reached through FastAPI.
+- **Columns:** `id`, `job_id` (cascade), `author_id`, `body`, `scene_id` and `anchor` (nullable, unused
+  until highlights), `seen_at`, `created_at`, `updated_at`. One row per book for now, unique on `job_id`
+  where `scene_id is null`. The audit's `withdrawn_at` is dropped, since Delete removes the row.
+- **Migration `0026`** (next free after `0025`). It adds the table and `classrooms.review_notes_enabled
+  boolean not null default false`, following `0025`: classroom columns are browser-readable and
+  server-written only. ADR-flagged (`AGENTS.md` §2): ADR-081, accepted 2026-10-29.
+- **Endpoints (proposed shapes, final paths belong to the build ticket):** teacher `PUT`, `DELETE` and
+  `GET` on a job's note behind `require_teacher` and `owned_job`; child `GET` returning only the
+  caller's own notes and a call to mark one seen. Child reads check `jobs.profile_id` against the
+  signed-in student. Every miss is the same `404`.
+  **Implemented teacher paths:** `GET/PUT/DELETE /teacher/jobs/{job_id}/note`. GET and PUT return the
+  note row; DELETE returns `204`. Missing notes and jobs use `404 {"detail":"not found"}`.
+  PUT validates the untrimmed body (1–500 characters, nonblank), takes the author from the session,
+  and requires a complete book. Reads are not cached. A service-only, security-invoker RPC
+  `teacher_review_note` locks the book and classroom, reads the switch on every call, and uses the
+  partial-index predicate for an atomic upsert. Edits preserve `id` and `created_at`, update
+  `updated_at`, and clear `seen_at`. Disabled writes return `409 notes_disabled`; teacher GET still
+  returns the stored note. Missing notes on DELETE return the same `404` as GET.
+- **Implemented classroom switch:** `PATCH /classrooms/{classroom_id}/review-notes` accepts
+  `{"enabled": bool}` and returns the saved `{"enabled": bool}`. It uses `require_teacher` through
+  `owned_classroom`; another teacher's classroom and a missing classroom both return
+  `404 {"detail":"classroom not found"}`. Only `classrooms.review_notes_enabled` is updated,
+  with last write wins. Classroom settings reads the stored column and shows a native checkbox
+  labeled "Let students read my notes" with a separate save button. Saving disables the control;
+  success and failure announce politely. Failure restores the stored value. Turning it off keeps notes.
+- **The switch is read server-side** on every note read and write, so a stale browser cannot bypass it.
+- **Implemented child paths (08):** `GET /me/notes` returns only the active student's own complete
+  books' notes in their current classroom as `[{job_id, body, seen, updated_at}]`. The jobs list stays
+  a browser SELECT. The server checks role, removal, classroom membership, ownership, and the switch.
+  Switch off or no notes returns `[]`; disallowed roles and missing, peer or deleting jobs receive
+  `404 {"detail":"not found"}` on `POST /jobs/{job_id}/note/seen`. Authentication/onboarding may
+  refuse a request before the handler. POST takes `{updated_at}` from the opened note and updates
+  only that version, returning `204`, so a concurrent teacher edit stays unread. Responses are
+  `private, no-store`. No schema change is needed.
+- **Child panel (08):** opening the book displays a native `<details>` panel above the reader;
+  only after that panel renders open does it mark the note seen. Close and Escape restore focus to
+  its summary, which reopens it. A failed mark-seen offers a polite retry. Failed note reads hide the
+  note UI without blocking the shelf or reader. Returning focus to the window refreshes notes,
+  including edits, deletes and switch changes; the next shelf mount also fetches afresh.
+  Each refresh cancels its predecessor, preventing an old response from restoring hidden notes.
+  A refresh with no session clears private note state. Deferred-response and session-loss checks
+  reproduced both review findings before the fixes and now pass.
+- **No redaction (Q8).** The read path is owner-only, so a child's own name in their note is correct,
+  and Presidio would turn it into a placeholder. *Inferred* cost: a teacher naming a different child.
+- **One note, edit in place (Q7).** No history. The simplest model that matches what a teacher does.
+- **The note box sits outside the decision (Q6).** The fast pass stays two taps (§4.7). It opens after
+  "Not ready to share yet" because that is when a teacher most wants to explain.
+  **Implemented teacher row (ticket 07):** the books page reads `review_notes_enabled` alongside its
+  jobs query and refreshes both on return to the tab. `BookReviewDialog` renders a native, collapsed
+  `<details>` only for complete books when enabled. The row loads the current note without caching,
+  offers Send/Edit/Delete independently of decisions, and preserves drafts with polite, readable
+  write errors. Load errors disable Send and offer retry. Note state is keyed by job ID, so advancing
+  or closing discards drafts and resets the row. *Superseded 2026-10-29:* opening the outgoing row
+  before the immediate advance unmounted it unseen whenever another book was pending (code review).
+  The "Marked not ready" toast now carries "Add a note", which reopens that book with its row open.
+  The pass stays two taps; a note costs one more. It does not open the next child's row or delay the
+  decision.
+- **The badge clears (Q9).** A badge that never clears becomes noise. It costs one `seen_at` column.
+- **The download line is reworded, not removed (Q2).** A disabled button with no text is a dead end.
+  The new line carries no decision.
+- **Structure:** follows the existing pattern: a backend module beside `app/review.py`, dependencies in
+  `app/auth.py`, teacher UI under `books/**`, child UI in the existing bookshelf and book page. No new
+  framework. The exact module layout is the build ticket's, under `AGENTS.md`.
+- **Rationale not recorded:** the 500-character cap (OD-1) was accepted as proposed, with no stated reason.
+
+### 14.6 Invariants added
+
+13. A child sees a teacher note only if it is theirs, it exists, and the classroom switch is on.
+14. No `jobs` column holds teacher-authored text.
+15. No role other than the owning teacher and the owning child can read a note. No researcher or export
+    path exists.
+16. A note is deleted with its book.
+
+### 14.7 Verification
+
+**Confirmed seams (owner, 2026-10-29):**
+1. Backend HTTP behavior through the FastAPI test client in `backend/tests/test_review.py` or a sibling
+   `test_review_notes.py`: auth, ownership, `404` parity, `422`, one note per book, owner-only child
+   read, `seen_at`.
+2. Privilege checks in `backend/tests/test_rls_isolation.py`: `authenticated` and anon have no access
+   to `job_review_notes`; `0008` policies still return the same rows.
+3. Frontend page tests in the existing files: `books/page.test.tsx` (note row, relabel, auto-open after
+   "Not ready to share yet", advance), `s/[profileId]/page.test.tsx` (badge), `book/[jobId]/page.test.tsx`
+   (panel, Escape, download line; replace the pinned strings at `:113,186`).
+4. One real-browser pass per journey J1 to J3 on seeded synthetic jobs, console clean. Cost $0.
+
+**Required checks.** Expected values are hand-worked literals. Each test is run red first by breaking
+what it covers. Mock only at the network boundary.
+- A note by a teacher in another classroom returns `404`, identical to a nonexistent job.
+- A classmate, a researcher and a signed-out caller get no note, and the `authenticated` role cannot
+  select the table.
+- A second send edits the same row. Delete removes it. An empty body returns `422`.
+- With the switch off, the child endpoint returns none and the dialog shows no row.
+- Opening the note sets `seen_at`, and the next list omits the badge.
+- No child surface renders approved, rejected or pending text for any of the three states.
+
+**Ticket 05 verification (2026-10-29):** teacher HTTP checks and real local PostgreSQL privilege,
+lifecycle, cascade and concurrent-write checks run in `test_review_notes.py` and
+`test_rls_isolation.py`. The unchanged HEAD RLS suite reproduces nine existing failures caused by
+old approval-grant expectations and invalid profile fixtures. Child, settings and browser journeys
+remain un-run in this slice. The full backend run also encounters six PDF failures because this
+Windows runtime lacks WeasyPrint's native libraries. No remote migration was applied.
+
+**Ticket 08 verification (2026-10-29):** 28 note HTTP tests and 46 child page tests pass, including
+edit/delete refresh and Close/Escape focus return for each editorial state. Tests first failed on
+the missing endpoints, badge and panel. Frontend typecheck and both linters pass. Full backend:
+1,585 passed, 130 skipped, six smoke deselections, six existing native WeasyPrint failures.
+Full frontend: 757 passed, one skipped, two failures in unchanged teacher-books/gallery tests.
+The teacher focus failure also reproduces on the starting checkout; the gallery test passes there
+in isolation after timing out in the full run. After the review fixes, the final full frontend run
+with two workers has 758 passed, one skipped and only that unchanged teacher focus failure;
+the gallery timeout does not recur. Re-review reports no remaining implementation findings.
+J1–J3 remain un-run: ticket 07 is not yet committed
+to the starting branch. No real-child rollout or remote database change is part of this slice.
+
+### 14.8 Blast radius
+
+New: migration `0026`, ADR-081 and its index row, a backend notes module, the note row, badge and panel.
+Changed: `books/**`, the bookshelf page, the book page, classroom settings. More than three modules, so
+the `AGENTS.md` §2 gate applies to the build tickets. Pipeline, contracts and `run_job.py` are untouched.
+
+Docs to change with the build: this spec, `DECISION_BACKLOG.md` (D-V closed), `classroom-sharing`
+(inherits SH-07), `ROUTE_MAP.md` only if a route is added.
+
+### 14.9 Rejected alternatives
+
+Private teacher notes (a place to write about a child that the child cannot read; §12 flagged it);
+several notes per book now (highlights will need them); a verdict badge ("Shared with class"); redaction
+with a preview; a note column on `jobs`; the note as the book's last page.
+
+### 14.10 Open decisions, readiness and sources
+
+**Readiness: Ready for build tickets.** OD-8 is settled. Owner acceptance of ADR-081 on 2026-10-29 satisfies the ADR prerequisite for migration `0026`. OD-9 remains a release gate.
+
+| ID | Open decision | Blocks |
+|---|---|---|
+| OD-1 | **Settled:** 500 characters, enforced by the endpoint (`422`). | AC-06 |
+| OD-2 | **Settled:** editing clears `seen_at`, so the badge returns. | AC-13, J3 |
+| OD-3 | **Settled:** rows are kept and hidden while the switch is off. | AC-19 |
+| OD-4 | **Settled:** no warning. The unsent draft is discarded when the dialog advances. | AC-03, §4.7 |
+| OD-5 | **Checked in text:** `storybook-deletion.md` §1 deletes the `jobs` row last, so the cascade covers notes (*inferred*, as ADR-080 did for `0022`). The build ticket adds a test that deleting a book removes its note. | Build ticket test |
+| OD-6 | **Settled:** a line under the box says the child reads the note. | AC-02 |
+| OD-7 | **Settled:** the four seams in §14.7. | — |
+| OD-8 | **Settled (owner, 2026-10-29):** tabs and state badges mirror the buttons, "Shared with class" and "Not ready yet". The toast reads "Shared" or "Marked not ready", and Undo is unchanged. | AC-09 |
+| OD-11 | **Settled (owner, 2026-10-29):** with the switch off, teacher note writes return `409 notes_disabled` and the teacher's `GET` still returns the note. Child reads return none. | AC-19, §14.5 |
+| OD-9 | Ethics re-review is a rollout step before real children see a note. Owner: not a design input. | Release, not build |
+| OD-10 | Child "Make a new version" (N2): the finished-book entry point is unchecked, and each run is paid. | Later ticket |
+
+**Sources:** audit 01 (`## Answer`, owner verdict 2026-10-29); grill 02 decisions Q1 to Q10 and the
+three additions (auto-open after "Not ready to share yet", `seen_at`, edit and delete); map decision 6;
+this spec §4.10, §12, §13; DECISION_BACKLOG D-V.
+
+### 14.11 Coverage index
+
+| Source requirement | Home |
+|---|---|
+| Q1 per-classroom switch, off by default | US-05, AC-18 to AC-20, OD-3 |
+| Q2 reword download line, amend §4.10 | US-04, AC-17, SH-01 |
+| Q3 child notes only | §14.1 out, §14.9 |
+| Q4 N2 later | §14.1 out, OD-10 |
+| Q5 any book, badge | AC-01, AC-11, SH-07 |
+| Q6 collapsed row, independent, opens after "Not ready" | AC-01 to AC-03 |
+| Q7 one note, edit, delete | AC-04, AC-05 |
+| Q8 no redaction | §14.5, edge table |
+| Q9 badge, panel above book, close, clears | AC-11 to AC-13, SH-02 |
+| Q10 wording and retention | AC-02, AC-09, AC-12, invariant 16 |
+| W2 labels, API unchanged | US-02, SH-04 |
+| Offline child | AC-16 |
+| Highlights later | §14.1 out |
+| Ethics re-review | OD-9 |

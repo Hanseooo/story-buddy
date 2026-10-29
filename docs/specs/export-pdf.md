@@ -38,7 +38,7 @@ Approval guidance and download errors appear beneath the action row, aligned tow
 control. Use current tokens, a 44px minimum target, keyboard activation and visible focus.
 
 An owner's completed book awaiting approval shows a disabled download action with the explanation
-**Your teacher needs to approve this book before you can download it.** Do not expose moderation
+**Ask your teacher about downloading this book** (teacher-review-and-approval §14, AC-17). Do not expose moderation
 categories or technical errors. Approved classmates' books offer the same download action.
 
 The teacher review dialog explains before approval: **Classmates will be able to read and download

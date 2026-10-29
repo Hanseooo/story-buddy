@@ -79,6 +79,11 @@ const COMPLETE_ROW = {
 
 const SIGNED = PAGES.map((p, i) => ({ signedUrl: `https://cdn/${i}.png`, error: null }));
 
+function stubPdfFetch(fetchPdf: (...args: unknown[]) => unknown) {
+  vi.stubGlobal("fetch", (url: string, init?: RequestInit) => url.endsWith("/me/notes")
+    ? Promise.resolve(new Response("[]")) : fetchPdf(url, init));
+}
+
 beforeEach(() => {
   sessionStorage.clear(); // signPaths caches signed URLs across renders
   pushMock.mockClear();
@@ -88,6 +93,74 @@ beforeEach(() => {
   mockSingle.mockReset();
   vi.unstubAllGlobals();
   vi.mocked(resetFailChain).mockReset();
+});
+
+describe("BookPage — teacher note", () => {
+  it.each(["approved", "rejected", "pending"])("opens, closes and reopens a note without a %s verdict", async (review) => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: {
+      ...COMPLETE_ROW, approved_at: review === "approved" ? COMPLETE_ROW.approved_at : null,
+      rejected_at: review === "rejected" ? "2026-10-29T00:00:00Z" : null,
+    } }));
+    mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
+    mockGetSession.mockResolvedValue({ data: { session: { access_token: "synthetic" } } });
+    let notes = [{ job_id: "j1", body: "Lovely story!", seen: false, updated_at: "2026-10-29T00:00:00Z" }];
+    const network = vi.fn(async (_url: string, init?: RequestInit) => init?.method === "POST"
+      ? new Response(null, { status: 204 })
+      : new Response(JSON.stringify(notes)));
+    vi.stubGlobal("fetch", network);
+    await renderPage(makeParams());
+    await waitFor(() => expect(screen.getByText("Lovely story!")).toBeVisible());
+    await waitFor(() => expect(network).toHaveBeenCalledWith(expect.stringContaining("/jobs/j1/note/seen"), expect.objectContaining({
+      method: "POST", body: JSON.stringify({ updated_at: "2026-10-29T00:00:00Z" }),
+    })));
+    const close = screen.getByRole("button", { name: "Close" });
+    fireEvent.click(close);
+    const control = screen.getByText("A note from your teacher");
+    expect(control).toHaveFocus();
+    expect(screen.getByText("Lovely story!")).not.toBeVisible();
+    fireEvent.click(control);
+    await waitFor(() => expect(screen.getByText("Lovely story!")).toBeVisible());
+    fireEvent.keyDown(screen.getByText("Lovely story!"), { key: "Escape" });
+    expect(control).toHaveFocus();
+    expect(screen.getByText("Lovely story!")).not.toBeVisible();
+    expect(document.body).not.toHaveTextContent(/\b(?:approved|rejected|pending)\b/i);
+    notes = [{ job_id: "j1", body: "Your new ending is lovely!", seen: false, updated_at: "2026-10-29T01:00:00Z" }];
+    fireEvent.focus(window);
+    await waitFor(() => expect(screen.getByText("Your new ending is lovely!")).toBeVisible());
+    expect(screen.queryByText("Lovely story!")).toBeNull();
+    mockGetSession.mockResolvedValue({ data: { session: null } });
+    fireEvent.focus(window);
+    await waitFor(() => expect(screen.queryByText("A note from your teacher")).toBeNull());
+    mockGetSession.mockResolvedValue({ data: { session: { access_token: "synthetic" } } });
+    fireEvent.focus(window);
+    await waitFor(() => expect(screen.getByText("Your new ending is lovely!")).toBeVisible());
+    notes = [];
+    fireEvent.focus(window);
+    await waitFor(() => expect(screen.queryByText("A note from your teacher")).toBeNull());
+  });
+
+  it("keeps the reader usable when notes fail to load", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
+    mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
+    mockGetSession.mockResolvedValue({ data: { session: { access_token: "synthetic" } } });
+    let finish!: (response: Response) => void;
+    const network = vi.fn().mockImplementationOnce(() => new Promise<Response>(resolve => { finish = resolve; }))
+      .mockResolvedValueOnce(new Response("[]"))
+      .mockRejectedValue(new Error("offline"));
+    vi.stubGlobal("fetch", network);
+    await renderPage(makeParams());
+    await waitFor(() => expect(screen.getByRole("img")).toBeVisible());
+    await waitFor(() => expect(network).toHaveBeenCalledTimes(1));
+    fireEvent.focus(window);
+    await waitFor(() => expect(network).toHaveBeenCalledTimes(2));
+    await act(async () => { finish(new Response(JSON.stringify([
+      { job_id: "j1", body: "Old note", seen: true, updated_at: "2026-10-29T00:00:00Z" },
+    ]))); });
+    expect(screen.queryByText("A note from your teacher")).toBeNull();
+    fireEvent.focus(window);
+    await waitFor(() => expect(network).toHaveBeenCalledTimes(3));
+    expect(screen.queryByText("A note from your teacher")).toBeNull();
+  });
 });
 
 describe("BookPage — PDF download", () => {
@@ -101,7 +174,7 @@ describe("BookPage — PDF download", () => {
     });
     mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
     mockGetSession.mockResolvedValue({ data: { session: { access_token: "test-token" } } });
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: kind === "owner" ? 409 : 404 })));
+    stubPdfFetch(vi.fn().mockResolvedValue(new Response(null, { status: kind === "owner" ? 409 : 404 })));
     await renderPage(makeParams("j1"));
     await waitFor(() => expect(screen.getByRole("button", { name: /download pdf/i })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: /download pdf/i }));
@@ -110,7 +183,7 @@ describe("BookPage — PDF download", () => {
       expect(screen.queryByRole("button", { name: /download pdf/i })).toBeNull();
     } else if (kind === "owner") {
       await waitFor(() => expect(screen.getByRole("button", { name: /download pdf/i })).toBeDisabled());
-      expect(screen.getByText(/your teacher needs to approve/i)).toBeDefined();
+      expect(screen.getByText("Ask your teacher about downloading this book")).toBeDefined();
       expect(screen.queryByRole("alert")).toBeNull();
     } else {
       await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("We couldn't download your book. Try again."));
@@ -126,13 +199,16 @@ describe("BookPage — PDF download", () => {
     mockGetSession.mockResolvedValue({ data: { session: { access_token: "test-token" } } });
     let finish!: (response: Response) => void;
     const fetchPdf = vi.fn(() => new Promise<Response>(resolve => { finish = resolve; }));
-    vi.stubGlobal("fetch", fetchPdf);
+    stubPdfFetch(fetchPdf);
     const createUrl = vi.fn(() => "blob:storybook");
     const revokeUrl = vi.fn();
     vi.stubGlobal("URL", { createObjectURL: createUrl, revokeObjectURL: revokeUrl });
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     await renderPage(makeParams("j1"));
     await waitFor(() => expect(screen.getByRole("button", { name: /download pdf/i })).toBeEnabled());
+    expect(screen.queryByText("Ask your teacher about downloading this book")).toBeNull();
+    expect(screen.getByRole("button", { name: /download pdf/i })).not.toHaveAttribute("aria-describedby");
+    expect(document.body).not.toHaveTextContent(/\b(?:approve|approved|rejected|pending)\b/i);
     fireEvent.click(screen.getByLabelText("Scroll View"));
     fireEvent.click(screen.getByRole("button", { name: /download pdf/i }));
     await waitFor(() => expect(fetchPdf).toHaveBeenCalledTimes(1));
@@ -157,7 +233,7 @@ describe("BookPage — PDF download", () => {
     mockGetSession.mockResolvedValue({ data: { session: { access_token: "test-token" } } });
     const fetchPdf = vi.fn().mockRejectedValueOnce(new Error("network unavailable"))
       .mockImplementationOnce(() => new Promise(() => {}));
-    vi.stubGlobal("fetch", fetchPdf);
+    stubPdfFetch(fetchPdf);
     const { unmount } = await renderPage(makeParams("j1"));
     await waitFor(() => expect(screen.getByRole("button", { name: /download pdf/i })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: /download pdf/i }));
@@ -183,8 +259,10 @@ describe("BookPage — PDF download", () => {
     if (kind.startsWith("peer")) expect(screen.queryByRole("button", { name: /download pdf/i })).toBeNull();
     else {
       expect(screen.getByRole("button", { name: /download pdf/i })).toBeDisabled();
-      expect(screen.getByText(/your teacher needs to approve/i)).toBeDefined();
+      expect(screen.getByText("Ask your teacher about downloading this book")).toHaveAttribute("id", "pdf-approval-hint");
+      expect(screen.getByRole("button", { name: /download pdf/i })).toHaveAttribute("aria-describedby", "pdf-approval-hint");
     }
+    expect(document.body).not.toHaveTextContent(/\b(?:approve|approved|rejected|pending)\b/i);
   });
 });
 

@@ -20,6 +20,7 @@ export default function ClassroomSettingsPage() {
   const [classroom, setClassroom] = useState<{
     name: string;
     code: string;
+    review_notes_enabled: boolean;
   } | null>(null);
   const [newName, setNewName] = useState("");
   const [saving, setSaving] = useState(false);
@@ -33,6 +34,9 @@ export default function ClassroomSettingsPage() {
   const [themeSaving, setThemeSaving] = useState(false);
   const [themeSaved, setThemeSaved] = useState(false);
   const [themeLoadAttempt, setThemeLoadAttempt] = useState(0);
+  const [notesEnabled, setNotesEnabled] = useState(false);
+  const [notesSaving, setNotesSaving] = useState(false);
+  const [notesMessage, setNotesMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -99,13 +103,14 @@ export default function ClassroomSettingsPage() {
   useEffect(() => {
     supabase
       .from("classrooms")
-      .select("name, code")
+      .select("name, code, review_notes_enabled")
       .eq("id", classroomId)
       .single()
       .then(({ data }) => {
         if (data) {
           setClassroom(data);
           setNewName(data.name);
+          setNotesEnabled(data.review_notes_enabled);
         }
       });
   }, [classroomId]);
@@ -115,6 +120,30 @@ export default function ClassroomSettingsPage() {
       data: { session },
     } = await supabase.auth.getSession();
     return session?.access_token;
+  }
+
+  async function saveNotesSetting(e: React.FormEvent) {
+    e.preventDefault();
+    if (!classroom || notesSaving) return;
+    setNotesSaving(true);
+    setNotesMessage(null);
+    try {
+      const tok = await getToken();
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/classrooms/${classroomId}/review-notes`, {
+        method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
+        body: JSON.stringify({ enabled: notesEnabled }),
+      });
+      if (!response.ok) throw new Error("save failed");
+      const saved: { enabled: boolean } = await response.json();
+      setClassroom(c => c && { ...c, review_notes_enabled: saved.enabled });
+      setNotesEnabled(saved.enabled);
+      setNotesMessage("Note setting saved");
+    } catch {
+      setNotesEnabled(classroom.review_notes_enabled);
+      setNotesMessage("Could not save note setting. Your saved setting is restored. Try again.");
+    } finally {
+      setNotesSaving(false);
+    }
   }
 
   async function handleRename(e: React.FormEvent) {
@@ -266,6 +295,26 @@ export default function ClassroomSettingsPage() {
           </button>
           {themeSaved && <p role="status" className="mt-3 text-sm text-success">Review themes saved</p>}
         </form>}
+      </section>
+
+      <section aria-labelledby="review-notes-heading" className="bg-surface border border-primary/15 rounded-2xl p-6 mb-6">
+        <h2 id="review-notes-heading" className="font-bold text-foreground mb-2">Notes for students</h2>
+        <p id="review-notes-help" className="text-sm text-foreground/70 mb-4">
+          Students can read the notes you send about their own books. Turning this off keeps your stored notes.
+        </p>
+        <form onSubmit={saveNotesSetting}>
+          <label className="flex items-center gap-3 min-h-[44px] cursor-pointer text-sm font-bold">
+            <input type="checkbox" checked={notesEnabled} disabled={notesSaving} aria-describedby="review-notes-help"
+              className="w-5 h-5 accent-primary focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-60"
+              onChange={e => { setNotesEnabled(e.target.checked); setNotesMessage(null); }} />
+            Let students read my notes
+          </label>
+          <button type="submit" disabled={notesSaving || notesEnabled === classroom.review_notes_enabled}
+            className="mt-5 min-h-[44px] px-4 py-2 bg-primary text-on-primary rounded-xl text-sm font-bold disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+            {notesSaving ? "Saving note setting…" : "Save note setting"}
+          </button>
+          <p role="status" aria-live="polite" className="mt-3 text-sm text-foreground/70">{notesMessage}</p>
+        </form>
       </section>
 
       {/* Danger zone */}

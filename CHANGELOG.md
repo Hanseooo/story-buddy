@@ -14,6 +14,75 @@ instead of repeating it.
 
 ---
 
+## §14 code review fixes · 2026-10-29 · "Add a note" toast, clickable Undo mid-pass
+
+### Code
+
+- Mid-pass, the review toast was outside the modal `<dialog>`, so its Undo could not be clicked: a tap
+  landed on the backdrop and closed the dialog (checked in Chromium). The toast now renders inside the
+  dialog while it is open.
+- "Not ready to share yet" opened the note row and then advanced past it at once, so J1 was never
+  reachable in the real page. The "Marked not ready" toast now offers "Add a note", which reopens that
+  book with its row open and the text box focused.
+- The note text box enforces the 500-character limit with `maxLength`.
+
+### Docs
+
+- `teacher-review-and-approval.md`: J1, AC-03 and the §14.5 ticket-07 note match the toast flow; the
+  §14 status line records ticket 09. `ROUTE_MAP.md` §8b lists the six note endpoints.
+
+### Checks
+
+- Full frontend suite: 78 files, 765 tests pass. The new J1 page test failed first and goes red again
+  if the toast is moved back outside the dialog. Typecheck and lint pass. No app-level browser pass:
+  J1–J3 remain pending.
+
+---
+
+## Review-feedback ticket 08 · 2026-10-29 · Children read their teacher's note
+
+### Code
+
+- Add owner-only child note reads and version-checked mark-seen calls. Keep notes private,
+  respect the classroom switch, and preserve unread state across concurrent teacher edits.
+- Show unread bookshelf badges and a native, reopenable reader panel with Close/Escape focus
+  return. Note failures leave books readable; returning window focus refreshes edits/deletes.
+
+### Docs
+
+- Record the child delivery paths in teacher-review-and-approval §14, inherit SH-07 in
+  classroom-sharing, and update the ADR-081 implementation row.
+
+### Checks
+
+- 28 backend note tests and 46 child page tests pass after red-first checks. Typecheck and both
+  linters pass. Full backend: 1,585 passed, 130 skipped, six smoke deselections, six native PDF
+  failures. Final full frontend with two workers: 758 passed, one skipped, one unchanged teacher
+  focus failure, reproduced on the starting checkout. The initial gallery timeout does not recur.
+- Review findings for stale refreshes and session loss reproduced red, then passed after fixes.
+  Re-review finds no remaining implementation issues.
+- J1–J3 browser journeys remain unrun; ticket 07 records the unavailable session browser.
+
+## Review feedback ticket 07 · 2026-10-29 · Teacher note row
+
+### Code
+
+- Add the switch-gated, native collapsed note row to complete books in the teacher review dialog.
+  Load, send, edit and delete one note independently of review decisions. Keep drafts on write errors
+  and discard them on dialog advance or close. Read the switch alongside the books-page jobs query.
+
+### Docs
+
+- Record the implemented row and immediate decision/advance behavior in teacher-review-and-approval §14.
+
+### Checks
+
+- The two new journey/error tests failed before implementation and pass afterward. Frontend lint,
+  TypeScript and production build pass. All 78 source test files pass: 755 tests passed and one
+  existing freeze-dependent test skipped. Startup/Windows argument retries are recorded in ticket 07.
+- Browser verification remains unrun: no browser is exposed in this session and the in-app browser
+  reports unavailable. Backend, provider and hosted checks are outside this frontend-only change.
+
 ## Ticket 09 · 2026-10-28 · Replace a held scene picture within budget
 
 ### Code

@@ -180,6 +180,14 @@ precede the reveal, so the node, migration and endpoint land together with it. `
   existing checker risks best-of selecting the unsafe original, while judging inside `output_mod`
   mixes concerns and duplicates ownership. Resolve in a dedicated ADR session before S2 is specced.
 
+  **Accepted resolution (2026-10-27):** owner-requested completion of moderation
+  ticket 02 produced [ADR-080](adr/ADR-080-teacher-held-moderation-and-exact-content-clearance.md)
+  and [moderation-stack §9.9.4](../specs/moderation-stack.md#994-checkpoints-fencing-and-replacement-routing).
+  A dedicated replacement node draws once using the existing moderation slot; the existing checker
+  judges/finalizes only that fresh candidate, preserves its actual quality verdict and cannot
+  reselect the rejected original or buy another consistency redraw. D-N is resolved architecturally;
+  implementation and verification remain pending.
+
 ---
 
 ## Tier 2h — deferred by canonical-character consistency (2026-08-17)
@@ -210,6 +218,9 @@ precede the reveal, so the node, migration and endpoint land together with it. `
   to mask the callback payload or project only approved research fields. Verify the chosen
   behavior on the actual public page and preserve the PII-before-storage rule. See
   `docs/capstone/pipeline-gate-audit-2026-09.md`; do not record a story or trace URL here.
+
+  Accepted ADR-080 requires no public traces for new teacher-review-mode jobs. This scoped private
+  review requirement does not resolve D-R for baseline/public traces and is not yet implemented.
 
 ---
 
@@ -247,6 +258,29 @@ precede the reveal, so the node, migration and endpoint land together with it. `
 
 
 ---
+
+## Tier 2l — opened by moderation technical completion (2026-10-27)
+
+- **D-U · Teacher-held moderation architecture — accepted (2026-10-27).** The owner
+  requested completion of ticket 02. Concrete hold/status/schema, authority, exact-content
+  release/withdrawal, worker/checkpoint/dispatch, private delivery and rollout contracts are in
+  [moderation-stack §9.9](../specs/moderation-stack.md#99-technical-completion-proposal-2026-10-27).
+  [ADR-080](adr/ADR-080-teacher-held-moderation-and-exact-content-clearance.md) records conflicts
+  and alternatives. The owner explicitly said “accept all” to the design and synthetic-only,
+  feature-off build exception to ticket 02's audit dependency. Ticket 02's specification handoff
+  is complete and ticket 05 is ready. Audit 01, changed-classifier validation and real-child
+  educator/ethics/consent/hosted verification remain outstanding. Do not repeat the completed
+  product interview or request the same architecture acceptance again. No implementation is claimed.
+
+## Tier 2m — opened by review-feedback audit (2026-10-29)
+
+- **D-V · Child-visible review signal contradicts teacher-review spec §4.10 — closed (2026-10-29).**
+  [Teacher-review-and-approval §14](../specs/teacher-review-and-approval.md#14-amendment-teacher-notes-the-child-can-read-2026-10-29-draft),
+  AC-17 and SH-01 resolve the conflict: the book page says "Ask your teacher about downloading this
+  book" without a verdict word. The download button remains disabled until approval and keeps its
+  accessible hint. Page tests cover pending, approved and rejected rows. This rewords the explanation
+  rather than removing it, as §14.5 requires. See
+  [audit 01](../../.scratch/ptd-review-feedback/issues/01-audit-review-feedback.md).
 
 ## Tier 3 — convention formalizations (likely MASTER_SPEC edits, not ADRs)
 

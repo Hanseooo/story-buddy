@@ -690,6 +690,10 @@ steps 9–15 are in `docs/capstone/research_runbook.md`.
 
 ### Phase E — back up, clean up, downgrade Supabase
 
+**Procedure correction, 2026-10-14 · [#114](https://github.com/Hanseooo/story-buddy/issues/114).**
+The owner chose to downgrade now, superseding #110's recommendation to wait until after the
+defense. These instructions do not establish that backup, cleanup or downgrade has happened.
+
 Safe once C6's freeze folder is backed up, and it can run alongside Phase D: the freeze copies every
 image from the local bundles into its own `assets/` (`freeze_dataset.py:291-299`), and `train.py` and
 `evaluate.py` never call Supabase. Back up before deleting. If the ethics approval sets how long
@@ -699,28 +703,62 @@ donated data is kept, it overrides this phase.
 checkpoints, to a private second drive. It contains the donated stories: never git, never a shared
 link.
 
+An archive on the same physical disk is not a second copy. HDD, SSD or removable flash can hold
+the copy. Verify capacity and filesystem first: some training archives exceed FAT32's 4 GiB file
+limit. Do not format a borrowed drive or overwrite its files. Keep donated material private under
+the approved retention rules. Local disk-to-disk copying consumes no mobile data.
+
+Copy into a new dated destination without `/MIR` or `/PURGE`. Require zero copy failures, matching
+relative paths, counts and byte totals, then compare source/destination SHA-256 hashes and check
+archive integrity. Unreadable paths or mismatches block cleanup. The smaller campaign-only copy
+in #114 protects that subset, not the training and evaluation outputs.
+
+**Partial E1 evidence, 2026-10-14:** with the owner's choice of an unencrypted folder backup,
+the campaign subset was copied to `E:\StoryBuddy-backup-2026-10-14-campaign\judge` on a separate
+physical disk. All 2,277 files (319,998,378 bytes) matched source/destination SHA-256 checks, with
+zero copy failures. `backup-manifest.json` and `verification.json` sit beside `judge/`. This excludes
+`qualification` and `evaluations`; full E1 remains incomplete. It includes no live database export
+and does not establish coverage of every cloud Storage object. E2–E5 remain unverified.
+
 **E2 · Export the label tables — `[YOU]`.** Table Editor → `annotations`, `research_pairs`,
 `profiles` → Export → CSV. The freeze keeps resolved labels and each round's same/different answer
 (`annotation_agreement.jsonl`); every per-round failure reason and timestamp exists only in these
 tables.
 
-**E3 · Delete the campaign's Storage objects — `[YOU]`, dashboard.** In `private_assets`: `research/`
-(`materialize_pairs.py:109-110`) and every folder named after a story ID — `syn-*`, `don-*`, `fix-*`,
+The CSVs are not a database recovery backup. Before destructive cleanup, preserve roles, schema
+and data, including Auth accounts and all four checkpoint tables. Follow the current
+[Supabase backup/restore guide](https://supabase.com/docs/guides/platform/migrating-within-supabase/backup-restore),
+including custom Auth/Storage policies, triggers and Realtime configuration. Verify live
+customizations rather than assuming the migration files describe the deployed database. The owner
+handles credentials without sharing them with the agent. Keep exports private.
+
+[Database backups](https://supabase.com/docs/guides/platform/backups) exclude Storage file contents.
+Every campaign object to be deleted needs a verified local copy or separate preservation first.
+App recovery also needs the UUID-folder images, which are outside the campaign corpus. Newer
+physical daily backups may not be downloadable; use a logical export where necessary.
+
+**E3 · Delete the campaign's Storage objects — `[YOU]`, dashboard.** Preview counts and bytes by
+bucket/prefix first. In `private_assets`, candidates are `research/`
+(`materialize_pairs.py:109-110`). In `storybook-images`, candidates are folders named after a story
+ID — `syn-*`, `don-*`, `fix-*`,
 with or without a `--campaign-<hash>` suffix, smoke folders included. Leave every UUID-named folder
 and anything unrecognised: app storybooks live under the job UUID (`worker/run_job.py:191`,
 `generate_scene.py:33`, `char_bible.py:259`). Storage files cannot be removed by SQL
 (`storage.protect_delete`).
 
 **E4 · Delete the campaign's checkpoint rows — `[YOU]`, SQL editor.** They hold story text, donated
-stories included. App threads are job UUIDs, so the filter excludes them. Run the preview first; only
-story IDs should appear.
+stories included. App threads are job UUIDs. Preview known campaign prefixes and confirm every
+candidate against campaign records. A non-UUID alone does not make a thread disposable. Leave
+unknown threads for investigation.
 
 ```sql
-select thread_id, count(*) from checkpoints where thread_id !~ '^[0-9a-f-]{36}$' group by 1;
-delete from checkpoint_writes where thread_id !~ '^[0-9a-f-]{36}$';
-delete from checkpoint_blobs  where thread_id !~ '^[0-9a-f-]{36}$';
-delete from checkpoints       where thread_id !~ '^[0-9a-f-]{36}$';
+select thread_id, count(*) from checkpoints
+where thread_id ~ '^(syn|don|fix)-' group by 1 order by 1;
 ```
+
+After backup verification and owner confirmation, delete only the exact reviewed IDs from
+`checkpoint_writes`, `checkpoint_blobs`, then `checkpoints`, in one transaction. Do not clear tables
+or use the old negative UUID filter. Leave `checkpoint_migrations` unchanged.
 
 Then, as a statement on its own, `vacuum full checkpoints, checkpoint_blobs, checkpoint_writes;` —
 a delete alone does not shrink the reported database size.
@@ -729,6 +767,31 @@ a delete alone does not shrink the reported database size.
 and the database limit on the current pricing page. Then Billing → change plan → Free. **Keep the label
 tables:** re-running C6 reads them. A Free project pauses after ~7 days idle; restore it from the
 dashboard before any re-freeze.
+
+**E5 preflight and billing clarification (2026-10-14).** Check the `SUPABASE_DB_URL` host shape on
+both Northflank services without exposing credentials. The API run-detail route now uses it too
+(`backend/app/research.py:45`); ADR-033's historical claim that the API is unaffected predates that
+route. Keep the frozen ADR intact. If direct IPv6 is unavailable after losing the Pro IPv4 add-on,
+the ADR's workaround is the [session pooler on 5432](https://supabase.com/docs/guides/platform/ipv4-address),
+never transaction port 6543. Verify API reads and worker checkpoint/resume after any owner-approved
+connection change. API reads alone do not verify worker writes.
+
+Check live Usage for every project, including `daytrace`. Current
+[Free quotas](https://supabase.com/docs/guides/platform/billing-on-supabase) are 500 MB database per
+project, 1 GB Storage and 5 GB egress across the organization, and two active Free projects across
+organizations where the account is Owner/Admin. Keep `jobs`, `classrooms`, `profiles`,
+`annotations`, `research_pairs`, Auth users and checkpoint tables. Deleting Auth users can cascade
+to research records. Use live Usage, not compressed backup sizes.
+
+Check Billing's actual cycle and invoice status rather than inferring renewal from a receipt date.
+[Cancellation by changing to Free is immediate](https://supabase.com/docs/guides/platform/manage-your-subscription).
+Unused prepaid subscription time becomes organization credit, not a card refund; accrued usage can
+still be invoiced. Inspect downgrade warnings before confirmation. Do not delete projects to cancel.
+The full local copy can proceed independently of billing inspection.
+
+After downgrade, verify login, a run detail, gallery images and Usage. Existing synthetic demos
+use bundled examples (`?demo=1`); illustrative demo answers do not replace real label exports.
+Check for an idle pause before the defense. Record sanitized live results in #114.
 
 ---
 

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi, beforeEach, describe } from "vitest";
 import BookshelfPage from "./page";
 
@@ -6,9 +6,11 @@ const mockSelect = vi.hoisted(() => vi.fn());
 const mockChannel = vi.hoisted(() => vi.fn());
 const mockRemoveChannel = vi.hoisted(() => vi.fn());
 const mockCreateSignedUrls = vi.hoisted(() => vi.fn());
+const mockGetSession = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/supabaseClient", () => ({
   supabase: {
+    auth: { getSession: mockGetSession },
     from: () => ({
       select: () => ({
         eq: () => ({
@@ -52,8 +54,55 @@ const makeJob = (overrides: Partial<{
 describe("Bookshelf — §9.11–12", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
+    mockGetSession.mockResolvedValue({ data: { session: null } });
     mockChannel.mockReturnValue({ unsubscribe: vi.fn() });
     mockCreateSignedUrls.mockResolvedValue({ data: [] });
+  });
+
+  it("shows only unread teacher notes and removes the badge on the next shelf load", async () => {
+    mockSelect.mockResolvedValue({ data: [makeJob()] });
+    mockGetSession.mockResolvedValue({ data: { session: { access_token: "synthetic" } } });
+    const fetchNotes = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify([
+      { job_id: "job-1", body: "Lovely story!", seen: false },
+    ]))).mockResolvedValueOnce(new Response(JSON.stringify([
+      { job_id: "job-1", body: "Lovely story!", seen: true },
+    ])));
+    vi.stubGlobal("fetch", fetchNotes);
+    const view = render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
+    await waitFor(() => expect(screen.getByText("A note from your teacher")).toBeVisible());
+    expect(fetchNotes).toHaveBeenCalledWith(expect.stringContaining("/me/notes"), expect.objectContaining({
+      headers: { Authorization: "Bearer synthetic" }, cache: "no-store",
+    }));
+    mockGetSession.mockResolvedValue({ data: { session: null } });
+    fireEvent.focus(window);
+    await waitFor(() => expect(screen.queryByText("A note from your teacher")).toBeNull());
+    mockGetSession.mockResolvedValue({ data: { session: { access_token: "synthetic" } } });
+    view.unmount();
+    render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
+    await waitFor(() => expect(fetchNotes).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByText("My story")).toBeVisible());
+    expect(screen.queryByText("A note from your teacher")).toBeNull();
+  });
+
+  it("still renders books without a badge when notes cannot be fetched", async () => {
+    mockSelect.mockResolvedValue({ data: [makeJob()] });
+    mockGetSession.mockResolvedValue({ data: { session: { access_token: "synthetic" } } });
+    let finish!: (response: Response) => void;
+    const network = vi.fn().mockImplementationOnce(() => new Promise<Response>(resolve => { finish = resolve; }))
+      .mockResolvedValueOnce(new Response("[]"))
+      .mockRejectedValue(new Error("offline"));
+    vi.stubGlobal("fetch", network);
+    render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
+    await waitFor(() => expect(screen.getByText("My story")).toBeVisible());
+    await waitFor(() => expect(network).toHaveBeenCalledTimes(1));
+    fireEvent.focus(window);
+    await waitFor(() => expect(network).toHaveBeenCalledTimes(2));
+    await act(async () => { finish(new Response(JSON.stringify([{ job_id: "job-1", seen: false }]))); });
+    expect(screen.queryByText("A note from your teacher")).toBeNull();
+    fireEvent.focus(window);
+    await waitFor(() => expect(network).toHaveBeenCalledTimes(3));
+    expect(screen.queryByText("A note from your teacher")).toBeNull();
   });
 
   it("§9.11 — shows own jobs (explicit .eq filter prevents classmate leak)", async () => {
