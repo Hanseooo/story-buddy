@@ -172,7 +172,7 @@ export default function BooksPage() {
 
     if (decision !== "pending") {
       showToast({
-        message: decision === "approved" ? "Approved" : "Rejected",
+        message: decision === "approved" ? "Shared" : "Marked not ready",
         jobId: dialogJobId,
         undoDecision: prevDecision,
       });
@@ -229,8 +229,8 @@ export default function BooksPage() {
 
   const tabs: { key: Tab; label: string; count: number }[] = [
     { key: "pending", label: "Needs review", count: pendingJobs.length },
-    { key: "approved", label: "Approved", count: approvedJobs.length },
-    { key: "rejected", label: "Rejected", count: rejectedJobs.length },
+    { key: "approved", label: "Shared with class", count: approvedJobs.length },
+    { key: "rejected", label: "Not ready yet", count: rejectedJobs.length },
     { key: "held", label: "Needs your help", count: heldCount },
   ];
 
@@ -429,7 +429,7 @@ function EmptyState({ tab }: { tab: Tab }) {
     return (
       <div className="bg-surface border border-primary/15 rounded-2xl p-10 text-center">
         <p className="text-sm text-foreground/50">
-          Nothing approved yet. Books you approve appear in the class gallery.
+          Nothing shared yet. Books you share appear in the class gallery.
         </p>
       </div>
     );

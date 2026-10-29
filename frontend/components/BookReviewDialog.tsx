@@ -146,7 +146,7 @@ export default function BookReviewDialog({
                   }}
                   className="min-h-[44px] px-6 py-2 rounded-xl border border-destructive text-destructive font-bold text-sm hover:bg-destructive/10 transition-colors"
                 >
-                  Reject
+                  Not ready to share yet
                 </button>
               )}
               {state !== "approved" ? (
@@ -155,7 +155,7 @@ export default function BookReviewDialog({
                   aria-describedby="book-sharing-note"
                   className="min-h-[44px] px-8 py-2 rounded-xl bg-primary text-on-primary font-bold text-sm hover:bg-primary-deep transition-colors"
                 >
-                  Approve
+                  Share with class
                 </button>
               ) : (
                 <button
