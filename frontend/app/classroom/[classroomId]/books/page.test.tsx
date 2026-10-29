@@ -320,9 +320,9 @@ describe("held story inspection", () => {
     expect(bodies).toHaveLength(0);
     fireEvent.click(stop);
     fireEvent.click(within(screen.getAllByRole("dialog").at(-1)!).getByRole("button", { name: "Stop this story" }));
-    expect(await screen.findByRole("alert")).toHaveFocus();
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveFocus());
     fireEvent.click(screen.getByRole("button", { name: "Retry stop" }));
-    expect(await screen.findByRole("heading", { name: "Story stopped. The writing is saved." })).toHaveFocus();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Story stopped. The writing is saved." })).toHaveFocus());
     expect(bodies).toHaveLength(2);
     expect(bodies[0]).toBe(bodies[1]);
     expect(JSON.parse(bodies[0]).action).toBe("stop");
@@ -350,10 +350,10 @@ describe("held story inspection", () => {
     expect(screen.getByText(/hides the whole book/)).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Withdraw safety clearance" }));
     if (replayed) {
-      expect(await screen.findByRole("alert")).toHaveFocus();
+      await waitFor(() => expect(screen.getByRole("alert")).toHaveFocus());
       fireEvent.click(screen.getByRole("button", { name: "Withdraw safety clearance" }));
     }
-    expect(await screen.findByRole("heading", { name: replayed ? "Current story status: complete" : "Story returned to teacher review" })).toHaveFocus();
+    await waitFor(() => expect(screen.getByRole("heading", { name: replayed ? "Current story status: complete" : "Story returned to teacher review" })).toHaveFocus());
     if (!replayed) expect(screen.queryByRole("button", { name: "Share with class" })).toBeNull();
     expect(writes).toBe(replayed ? 2 : 1);
     vi.unstubAllGlobals();
@@ -390,11 +390,11 @@ describe("held story inspection", () => {
       for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);
     }
     fireEvent.click(allow);
-    expect(await screen.findByRole("alert")).toHaveFocus();
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveFocus());
     fireEvent(document, new Event("visibilitychange"));
     expect(await screen.findByText("Your decision is saved. Continue story retries its pending delivery.")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Continue story" }));
-    expect(await screen.findByRole("heading", { name: "Story continuing" })).toHaveFocus();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Story continuing" })).toHaveFocus());
     expect(bodies).toHaveLength(2);
     expect(bodies[0]).toBe(bodies[1]);
     expect(JSON.parse(bodies[0]).action).toBe(action);
