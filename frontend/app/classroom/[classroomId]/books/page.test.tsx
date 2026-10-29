@@ -96,7 +96,44 @@ describe("teacher decision labels", () => {
 vi.mock("next/navigation", () => ({ useParams: () => ({ classroomId: "synthetic-class" }) }));
 
 describe("teacher note row", () => {
-  it("opens on reject, sends, edits and deletes independently of the review decision", async () => {
+  it("J1: the not-ready toast reopens the book with its note row open, inside the modal dialog", async () => {
+    const puts: { url: string; body: string }[] = [];
+    const jobs = [makeJob({ pages: [] }), makeJob({ id: "job-2", pages: [], profiles: { display_nickname: "Sam", avatar_id: null } })];
+    Object.assign(supabase, { from: vi.fn((table: string) => ({
+      select: () => ({ eq: () => ({
+        order: async () => ({ data: jobs }),
+        single: async () => ({ data: { review_notes_enabled: table === "classrooms" } }),
+      }) }),
+    })) });
+    vi.stubGlobal("fetch", vi.fn(async (url: string, options?: RequestInit) => {
+      if (url.endsWith("/note") && options?.method === "PUT") {
+        puts.push({ url, body: JSON.parse(options.body as string).body });
+        return Response.json({ ...reviewNote, body: "Add an ending, please." });
+      }
+      if (url.endsWith("/note")) return Response.json({ detail: "not found" }, { status: 404 });
+      return Response.json({ approved_at: null, rejected_at: null });
+    }));
+    render(<BooksPage />);
+    fireEvent.click((await screen.findAllByRole("button", { name: /Review story by Alex/ }))[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Not ready to share yet" }));
+    expect(await screen.findByText("Add a note for Sam")).toBeDefined();
+    // A modal dialog makes the rest of the page inert, so the toast must live inside it.
+    const addNote = screen.getByRole("button", { name: "Add a note for Alex" });
+    expect(document.querySelector("dialog")).toContainElement(addNote);
+    expect(document.querySelector("dialog")).toContainElement(screen.getByRole("button", { name: "Undo" }));
+    fireEvent.click(addNote);
+    expect(await screen.findByText("Add a note for Alex")).toBeDefined();
+    expect(screen.getByText("Add a note for Alex").parentElement).toHaveAttribute("open");
+    const box = screen.getByRole("textbox", { name: "Note for Alex" });
+    await waitFor(() => expect(box).toHaveFocus());
+    fireEvent.change(box, { target: { value: "Add an ending, please." } });
+    fireEvent.click(screen.getByRole("button", { name: "Send note for Alex" }));
+    await waitFor(() => expect(puts).toEqual([{ url: "undefined/teacher/jobs/job-1/note", body: "Add an ending, please." }]));
+    expect(await screen.findByText("Note sent")).toBeDefined();
+    vi.unstubAllGlobals();
+  });
+
+  it("sends, edits and deletes independently of the review decision", async () => {
     const requests: RequestInit[] = [];
     let stored: string | null = null;
     vi.stubGlobal("fetch", vi.fn(async (_url: string, options?: RequestInit) => {
@@ -113,12 +150,15 @@ describe("teacher note row", () => {
     expect(summary.parentElement).not.toHaveAttribute("open");
     fireEvent.click(notReadyButton());
     expect(decide).toHaveBeenCalledWith("rejected");
-    expect(summary.parentElement).toHaveAttribute("open");
+    // The page advances at once; the toast's "Add a note" reopens the book (J1 test above).
+    expect(summary.parentElement).not.toHaveAttribute("open");
+    fireEvent.click(summary);
     const send = await screen.findByRole("button", { name: "Send note for Alex" });
     await waitFor(() => expect(requests).toHaveLength(1));
     expect(send).toBeDisabled();
     const box = screen.getByRole("textbox", { name: "Note for Alex" });
     expect(box).toHaveAttribute("placeholder", "Something kind and specific…");
+    expect(box).toHaveAttribute("maxlength", "500");
     expect(screen.getByText("Alex will be able to read this note.")).toBeDefined();
     fireEvent.change(box, { target: { value: "Lovely story!" } });
     await waitFor(() => expect(send).toBeEnabled());

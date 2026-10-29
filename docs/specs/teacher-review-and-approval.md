@@ -15,6 +15,13 @@ shape), PRD §11.1, `ethics_and_safety.md` §4, MASTER_SPEC §5 (CC-4, CC-5, CC-
 
 ## 1. Purpose
 
+**Accepted safety-review amendment (not built):** [moderation-stack §9.9](moderation-stack.md#99-technical-completion-proposal-2026-10-27)
+and accepted [ADR-080](../product/adr/ADR-080-teacher-held-moderation-and-exact-content-clearance.md)
+narrow invariants 8, 9, 11 and 12 for private safety-hold inspection/recovery, child waiting and
+guarded reads. Accepted by the owner on 2026-10-27, not built. Editorial review below keeps its three states;
+safety clearance does not approve sharing, and withdrawal deliberately clears prior editorial
+timestamps. The pending safety implementation must follow those accepted contracts.
+
 `0008:15` added `approved_at timestamptz` and nothing else. Today, a book the teacher looked at and
 decided against is byte-identical to one that arrived thirty seconds ago: both have
 `approved_at is null`. The teacher re-reads it every session, forever, with no way to record *I have
@@ -565,7 +572,7 @@ the review queue's empty state reads as absence rather than as finished.
 
 ## 14. Amendment: teacher notes the child can read (2026-10-29, draft)
 
-**Status:** implemented: schema and teacher API (05), classroom switch (06), teacher note row (07), and child endpoints, bookshelf badge and book panel (08, 2026-10-29). Gentler labels (09) and the J1–J3 browser journeys remain pending. ADR-081 accepted by the owner on 2026-10-29; OD-8 settled. Seams and defaults confirmed 2026-10-29. **Source:**
+**Status:** implemented: schema and teacher API (05), classroom switch (06), teacher note row (07), and child endpoints, bookshelf badge and book panel (08, 2026-10-29), and gentler labels (09, `c6a7fb7`). The J1–J3 browser journeys remain pending. ADR-081 accepted by the owner on 2026-10-29; OD-8 settled. Seams and defaults confirmed 2026-10-29. **Source:**
 `.scratch/ptd-review-feedback/` (audit 01 with its owner verdict, grill 02), phase map
 `.scratch/post-technical-defense/map.md` rank 3. **Rationale:** ADR-081 (accepted 2026-10-29).
 
@@ -593,7 +600,8 @@ page text (breaks immutable `pages` and ADR-013); a note column on `jobs` (class
 read the whole row, `0008:28,46`); redaction and a preview step; email or push.
 
 **Acceptance journeys.**
-- J1. A teacher presses "Not ready to share yet"; the note box opens; they type and Send. The child
+- J1. A teacher presses "Not ready to share yet"; the dialog advances and the toast offers "Add a note";
+  pressing it reopens that book with the note box open; they type and Send. The child
   opens their bookshelf, sees the badge, opens the book, reads the note, closes it. The badge is gone
   on the next visit.
 - J2. A teacher shares a book ("Share with class") and adds praise. The child reads it the same way.
@@ -609,8 +617,10 @@ I can say what to change or what I liked.** Applies: SH-02, SH-03, SH-05, SH-06
 - AC-02. Opening the row shows a labeled text box (placeholder "Something kind and specific…") and a
   Send button. A line under the box says the child reads the note. Approve and Reject work without
   touching it.
-- AC-03. Pressing "Not ready to share yet" opens the row. It does not require a note and does not
-  block the dialog advancing (§4.7).
+- AC-03. Pressing "Not ready to share yet" raises the toast with "Add a note" beside Undo, which
+  reopens that book with the row open and the text box focused. It does not require a note and does
+  not block the dialog advancing (§4.7). The toast renders inside the open `<dialog>`, because a
+  modal makes the rest of the page inert (checked in Chromium, 2026-10-29).
 - AC-04. Send stores the note and shows it as sent in the row. The row then offers Edit and Delete.
 - AC-05. A book has at most one note. Sending again edits it. Edit and Delete are one tap from the
   row. Delete asks no confirmation. After Delete the row is empty and a new note can be written.
@@ -750,8 +760,11 @@ when I use it.** Applies: SH-04
   `<details>` only for complete books when enabled. The row loads the current note without caching,
   offers Send/Edit/Delete independently of decisions, and preserves drafts with polite, readable
   write errors. Load errors disable Send and offer retry. Note state is keyed by job ID, so advancing
-  or closing discards drafts and resets the row. Reject opens the outgoing row before invoking the
-  unchanged immediate advance. It does not open the next child's row or delay the decision.
+  or closing discards drafts and resets the row. *Superseded 2026-10-29:* opening the outgoing row
+  before the immediate advance unmounted it unseen whenever another book was pending (code review).
+  The "Marked not ready" toast now carries "Add a note", which reopens that book with its row open.
+  The pass stays two taps; a note costs one more. It does not open the next child's row or delay the
+  decision.
 - **The badge clears (Q9).** A badge that never clears becomes noise. It costs one `seen_at` column.
 - **The download line is reworded, not removed (Q2).** A disabled button with no text is a dead end.
   The new line carries no decision.

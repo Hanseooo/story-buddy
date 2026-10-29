@@ -14,6 +14,31 @@ instead of repeating it.
 
 ---
 
+## §14 code review fixes · 2026-10-29 · "Add a note" toast, clickable Undo mid-pass
+
+### Code
+
+- Mid-pass, the review toast was outside the modal `<dialog>`, so its Undo could not be clicked: a tap
+  landed on the backdrop and closed the dialog (checked in Chromium). The toast now renders inside the
+  dialog while it is open.
+- "Not ready to share yet" opened the note row and then advanced past it at once, so J1 was never
+  reachable in the real page. The "Marked not ready" toast now offers "Add a note", which reopens that
+  book with its row open and the text box focused.
+- The note text box enforces the 500-character limit with `maxLength`.
+
+### Docs
+
+- `teacher-review-and-approval.md`: J1, AC-03 and the §14.5 ticket-07 note match the toast flow; the
+  §14 status line records ticket 09. `ROUTE_MAP.md` §8b lists the six note endpoints.
+
+### Checks
+
+- Full frontend suite: 78 files, 765 tests pass. The new J1 page test failed first and goes red again
+  if the toast is moved back outside the dialog. Typecheck and lint pass. No app-level browser pass:
+  J1–J3 remain pending.
+
+---
+
 ## Review-feedback ticket 08 · 2026-10-29 · Children read their teacher's note
 
 ### Code

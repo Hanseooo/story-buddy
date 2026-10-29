@@ -18,6 +18,8 @@ type Toast = {
   message: string;
   jobId: string;
   undoDecision: ReviewDecision;
+  /** Child's nickname; offers "Add a note" for that book. */
+  noteFor?: string;
 };
 
 const TOAST_MS = 5000;
@@ -34,6 +36,7 @@ export default function BooksPage() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [dialogJobId, setDialogJobId] = useState<string | null>(null);
+  const [noteJobId, setNoteJobId] = useState<string | null>(null);
   const [dialogPageUrls, setDialogPageUrls] = useState<string[]>([]);
   const dialogImages = useRef<AbortController | null>(null);
   useEffect(() => {
@@ -92,11 +95,12 @@ export default function BooksPage() {
 
   // ── Open dialog & sign pages ──────────────────────────────────────────────
 
-  async function openDialog(jobId: string) {
+  async function openDialog(jobId: string, withNote = false) {
     dialogImages.current?.abort();
     const controller = new AbortController();
     dialogImages.current = controller;
     setDialogJobId(jobId);
+    setNoteJobId(withNote ? jobId : null);
     setDialogPageUrls([]);
     const job = jobs?.find((j) => j.id === jobId);
     if (!job?.pages?.length) return;
@@ -175,6 +179,9 @@ export default function BooksPage() {
         message: decision === "approved" ? "Shared" : "Marked not ready",
         jobId: dialogJobId,
         undoDecision: prevDecision,
+        noteFor: decision === "rejected" && notesEnabled
+          ? prevJob.profiles?.display_nickname ?? ""
+          : undefined,
       });
     }
 
@@ -202,6 +209,12 @@ export default function BooksPage() {
     }
   }
 
+  function handleAddNote() {
+    if (!toast) return;
+    clearToast();
+    void openDialog(toast.jobId, true);
+  }
+
   // ── Toast helpers ─────────────────────────────────────────────────────────
 
   function showToast(t: Toast) {
@@ -226,6 +239,31 @@ export default function BooksPage() {
   const failedJobs = jobs?.filter((j) => j.status === "failed") ?? [];
 
   const dialogJob = jobs?.find((j) => j.id === dialogJobId) ?? null;
+  const notesEnabled = notesClassroom?.id === classroomId && notesClassroom.enabled;
+
+  const toastElement = toast && (
+    <div
+      role="status"
+      className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-foreground text-background px-5 py-3 rounded-xl text-sm font-bold shadow-lg z-50 flex items-center gap-3 max-w-sm"
+    >
+      <span>{toast.message}</span>
+      {toast.noteFor !== undefined && (
+        <button
+          onClick={handleAddNote}
+          aria-label={`Add a note for ${toast.noteFor}`}
+          className="text-secondary font-bold hover:underline min-h-[44px] px-1"
+        >
+          Add a note
+        </button>
+      )}
+      <button
+        onClick={handleUndo}
+        className="text-secondary font-bold hover:underline min-h-[44px] px-1"
+      >
+        Undo
+      </button>
+    </div>
+  );
 
   const tabs: { key: Tab; label: string; count: number }[] = [
     { key: "pending", label: "Needs review", count: pendingJobs.length },
@@ -386,29 +424,19 @@ export default function BooksPage() {
       <BookReviewDialog
         job={dialogJob}
         pageUrls={dialogPageUrls}
-        notesEnabled={notesClassroom?.id === classroomId && notesClassroom.enabled}
+        notesEnabled={notesEnabled}
+        openNoteFor={noteJobId}
         onDecide={handleDecide}
         onClose={() => {
           setDialogJobId(null);
           setDialogPageUrls([]);
         }}
-      />
+      >
+        {dialogJob && toastElement}
+      </BookReviewDialog>
 
-      {/* Toast */}
-      {toast && (
-        <div
-          role="status"
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-foreground text-background px-5 py-3 rounded-xl text-sm font-bold shadow-lg z-50 flex items-center gap-3 max-w-sm"
-        >
-          <span>{toast.message}</span>
-          <button
-            onClick={handleUndo}
-            className="text-secondary font-bold hover:underline min-h-[44px] px-1"
-          >
-            Undo
-          </button>
-        </div>
-      )}
+      {/* Toast — inside the dialog while it is open, since a modal makes the page inert */}
+      {!dialogJob && toastElement}
     </div>
   );
 }

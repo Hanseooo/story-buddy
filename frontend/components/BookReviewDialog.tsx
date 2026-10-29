@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Job, ReviewDecision, jobState } from "@/lib/types/jobs";
 import { StateBadge } from "./BookCard";
@@ -12,16 +12,22 @@ type Props = {
   job: Job | null;
   pageUrls: string[];
   notesEnabled?: boolean;
+  /** Job whose note row opens on load: set when the teacher picks "Add a note" from the toast. */
+  openNoteFor?: string | null;
   onDecide: (decision: ReviewDecision) => void;
   onClose: () => void;
+  /** Rendered inside the modal so it stays clickable; the rest of the page is inert. */
+  children?: ReactNode;
 };
 
 export default function BookReviewDialog({
   job,
   pageUrls,
   notesEnabled = false,
+  openNoteFor = null,
   onDecide,
   onClose,
+  children,
 }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const noteRow = useRef<HTMLDetailsElement>(null);
@@ -127,7 +133,8 @@ export default function BookReviewDialog({
             {job.moderation_mode === "teacher_review_v1" && <ClearanceWithdrawal key={job.id}
               jobId={job.id} onPending={setPending} onWithdrawn={() => setWithdrawnJob(job.id)} />}
             {!withdrawn && notesEnabled && job.status === "complete" && (
-              <TeacherNoteRow key={job.id} jobId={job.id} name={name} detailsRef={noteRow} />
+              <TeacherNoteRow key={job.id} jobId={job.id} name={name} detailsRef={noteRow}
+                openOnMount={openNoteFor === job.id} />
             )}
           </div>
 
@@ -140,10 +147,7 @@ export default function BookReviewDialog({
             <div className="flex flex-wrap gap-3 justify-end">
               {state !== "rejected" && state !== "pending" ? null : (
                 <button
-                  onClick={() => {
-                    if (noteRow.current) noteRow.current.open = true;
-                    onDecide("rejected");
-                  }}
+                  onClick={() => onDecide("rejected")}
                   className="min-h-[44px] px-6 py-2 rounded-xl border border-destructive text-destructive font-bold text-sm hover:bg-destructive/10 transition-colors"
                 >
                   Not ready to share yet
@@ -169,14 +173,19 @@ export default function BookReviewDialog({
           </fieldset>}
         </div>
       )}
+      {children}
     </dialog>
   );
 }
 
-function TeacherNoteRow({ jobId, name, detailsRef }: {
+// Mirrors MAX_REVIEW_NOTE_CHARS in backend/app/config.py; the endpoint still enforces it.
+const MAX_NOTE_CHARS = 500;
+
+function TeacherNoteRow({ jobId, name, detailsRef, openOnMount }: {
   jobId: string;
   name: string;
   detailsRef: RefObject<HTMLDetailsElement | null>;
+  openOnMount: boolean;
 }) {
   const [body, setBody] = useState("");
   const [sent, setSent] = useState<string | null>(null);
@@ -190,8 +199,12 @@ function TeacherNoteRow({ jobId, name, detailsRef }: {
   const endpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/teacher/jobs/${jobId}/note`;
 
   useEffect(() => {
-    if (detailsRef.current?.open && (editing || sent === null)) box.current?.focus();
-  }, [editing, sent, detailsRef]);
+    if (openOnMount && detailsRef.current) detailsRef.current.open = true;
+  }, [openOnMount, detailsRef]);
+
+  useEffect(() => {
+    if (!loading && detailsRef.current?.open && (editing || sent === null)) box.current?.focus();
+  }, [loading, editing, sent, detailsRef]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -233,7 +246,7 @@ function TeacherNoteRow({ jobId, name, detailsRef }: {
         if (response.status === 409 && (await response.json()).detail === "notes_disabled") {
           setError("Notes are turned off for this class. Your text is kept.");
         } else if (response.status === 422) {
-          setError("Write a note with 1–500 characters, including something other than spaces.");
+          setError(`Write a note with 1–${MAX_NOTE_CHARS} characters, including something other than spaces.`);
         } else {
           setError(method === "DELETE" ? "Could not delete the note. Try again." : "Could not save the note. Your text is kept. Try again.");
         }
@@ -275,7 +288,7 @@ function TeacherNoteRow({ jobId, name, detailsRef }: {
           <label className="block text-sm font-bold">
             Note for {name}
             <textarea ref={box} value={body} onChange={e => setBody(e.target.value)} disabled={loading || saving || loadFailed}
-              placeholder="Something kind and specific…" rows={3}
+              placeholder="Something kind and specific…" rows={3} maxLength={MAX_NOTE_CHARS}
               className="mt-2 block w-full rounded-xl border border-primary/20 bg-background p-3 font-normal focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50" />
           </label>
           <p className="text-sm text-foreground/70">{name} will be able to read this note.</p>

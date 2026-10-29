@@ -320,6 +320,12 @@ Each route group also gets an `error.tsx`:
 | `POST /classrooms/{classroom_id}/students/{profile_id}/remove` | Teacher (`owned_classroom`) | Soft-removes student (`removed_at` + auth ban) (204) |
 | `POST /classrooms/{classroom_id}/students/{profile_id}/restore` | Teacher (`owned_classroom`) | Restores removed student and returns new password |
 | `POST /jobs/{job_id}/review` | Teacher (`require_teacher` + `owned_job`) | Sets review state (`approved`, `rejected`, `pending`) |
+| `GET /teacher/jobs/{job_id}/note` | Teacher (`require_teacher` + `owned_job`) | Returns the book's note (ADR-081). Works with the switch off. 404 `not found` for missing note or job |
+| `PUT /teacher/jobs/{job_id}/note` | Teacher (`require_teacher` + `owned_job`) | Creates or edits the one note on a complete book; clears `seen_at`. 422 for blank or over 500 characters, 409 `notes_disabled` |
+| `DELETE /teacher/jobs/{job_id}/note` | Teacher (`require_teacher` + `owned_job`) | Deletes the note (204). 409 `notes_disabled`, 404 when none |
+| `PATCH /classrooms/{classroom_id}/review-notes` | Teacher (`owned_classroom`) | Body `{"enabled": bool}`. Sets `review_notes_enabled`; returns the saved value |
+| `GET /me/notes` | Student (`get_current_user`) | The caller's notes on their own complete books in their current classroom. `[]` when the switch is off. `private, no-store` |
+| `POST /jobs/{job_id}/note/seen` | Student (`get_current_user`) | Body `{"updated_at"}`. Marks that note version seen (204); 404 for any job that is not the caller's |
 | `GET /research/runs/{job_id}` | Researcher (`require_researcher`); adjudicator any run, others approved runs only | Run viewer projection of the checkpoint history (ADR-064). 403 `researchers_only` / `not_approved`, 404 `not_found`, 422 for a non-UUID id |
 
 ---
