@@ -552,14 +552,17 @@ def test_confirm_rejects_unknown_char_id_with_422_and_does_not_change_status():
     fake_supabase.table.return_value.update.assert_not_called()
 
 
-def test_confirm_rejects_a_version_choice_on_a_baseline_job_with_422():
-    """Magic pencil SH-01: versions exist only on teacher_review_v1 jobs."""
+@pytest.mark.parametrize("choice", [
+    {"action": "choose_version", "version_id": "ref-c0-1"},
+    {"action": "pencil", "text": "a red hat"},
+    {"action": "pencil_choice", "choice": "old"},
+])
+def test_confirm_rejects_a_version_choice_on_a_baseline_job_with_422(choice):
+    """Magic pencil SH-01: versions and the pencil exist only on teacher_review_v1 jobs."""
     fake_supabase = MagicMock()
     _select_returns(fake_supabase, [REVEAL_ROW])
     with patch("app.main.get_supabase_client", return_value=fake_supabase):
-        response = client.post("/jobs/job-1/confirm", json={
-            "action": "choose_version", "char_id": "c0", "version_id": "ref-c0-1", "source": "job-1/ref-c0-2.png",
-        })
+        response = client.post("/jobs/job-1/confirm", json={**choice, "char_id": "c0", "source": "job-1/ref-c0-2.png"})
     assert response.status_code == 422
     fake_supabase.table.return_value.update.assert_not_called()
 

@@ -1,0 +1,64 @@
+{
+  "status": "awaiting_teacher",
+  "review_id": "9395d7f5-9b73-5488-9b05-e6d2f2f10290",
+  "subject_id": "pencil-1",
+  "subject_version": "c8d5dfab9dd806c21bf9d400c4c7a9633c76fd03ab57ffea9169580c04ea237c",
+  "generation_epoch": 1,
+  "title": "Synthetic title",
+  "author": "Synthetic child",
+  "story_text": "The orange dog walks through the grassy field past the trees and stops near the stream.",
+  "subject_title": null,
+  "pencil_text": "a big sword",
+  "kind": "character_pencil_text",
+  "criteria": [
+    "sexual_content",
+    "exposure",
+    "graphic_harm",
+    "harm_instruction",
+    "targeted_abuse",
+    "discriminatory_slur",
+    "exploitation",
+    "substances",
+    "adult_detail",
+    "privacy"
+  ],
+  "policy_version": "teacher_review_policy_v1",
+  "origin": "shared_safety",
+  "detected_themes": [],
+  "theme_check": null,
+  "current_policy_version": "teacher_review_policy_v1",
+  "settings_snapshot": {
+    "theme_ids": [],
+    "settings_version": 0
+  },
+  "classifier_evidence": [
+    {
+      "layer": "primary",
+      "reason": null,
+      "outcome": "flagged",
+      "model_id": "synthetic",
+      "categories": [
+        "violence"
+      ],
+      "checked_at": null,
+      "instruction_version": "v1"
+    }
+  ],
+  "ready": true,
+  "replacement_available": false,
+  "replacement_disabled_reason": "replacement_source_unavailable",
+  "dispatch_state": null,
+  "withdraws_review_id": null,
+  "pictures": [
+    {
+      "asset_id": "ref-c0",
+      "label": "Reference: the orange dog",
+      "state": "available"
+    },
+    {
+      "asset_id": "scene-s0",
+      "label": "The orange dog walks through the grassy field past the trees and stops near the stream.",
+      "state": "not_generated"
+    }
+  ]
+}

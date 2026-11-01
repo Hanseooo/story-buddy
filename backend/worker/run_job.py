@@ -25,7 +25,7 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
     """
     import providers
     from app.moderation_hold import (
-        StaleGeneration, active_author, assert_current, connect, project_hold,
+        StaleGeneration, active_author, assert_current, connect, project_hold, record_pencil_uses,
         review_subject_bytes, teacher_classroom, validate_review_checkpoint,
     )
     from contracts.story_memory import ModerationContext, ReviewContext
@@ -193,7 +193,8 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                     # The pre-graph title decision has already started this exact graph.
                     # Repair its later durable hold instead of resuming the title again.
                     if review and review.resolution is None and decision and not title_start:
-                        if (decision["decision"] not in ("allow", "replace") or validate_review_checkpoint(conn, job_id, decision) is None
+                        if (decision["decision"] not in (("allow", "stop") if decision["kind"] == "character_pencil_text"
+                                                         else ("allow", "replace")) or validate_review_checkpoint(conn, job_id, decision) is None
                                 or str(review.review_id) != str(decision["id"])
                                 or snapshot.next != ("moderation_review",)):
                             raise RuntimeError("checkpoint_not_resumable")
@@ -281,6 +282,7 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                                     conn.execute("""insert into job_picture_records(job_id,kind,target_id,version_id,image_path,source)
                                       values (%s,'version',%s,%s,%s,%s) on conflict do nothing""",
                                                  (job_id, char.char_id, version.version_id, version.image_path, version.source))
+                            record_pencil_uses(conn, job_id, state)
                         else:
                             if snapshot.next or any(s.moderation_status not in ("passed", "teacher_allowed") for s in state.scenes):
                                 raise RuntimeError("incomplete_safety_checks")

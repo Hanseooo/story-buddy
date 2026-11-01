@@ -940,3 +940,80 @@ def test_a_version_choice_pauses_at_reveal_again(monkeypatch):
     ]
     assert ran.count("char_bible") == 2
     assert ran.count("reveal") == 2
+
+
+# --- ADR-082 Decision 2: the character magic pencil (magic-pencil 06) ---
+
+def _paused_at_reveal(monkeypatch, thread: str):
+    from unittest.mock import MagicMock
+    from contracts.story_memory import Character, ModerationContext, Scene
+
+    monkeypatch.setattr("pipeline.char_ref_mod.classify_image_primary", MagicMock(return_value=True))
+    monkeypatch.setattr("pipeline.char_ref_mod.classify_image_backstop", MagicMock(return_value=True))
+    monkeypatch.setattr("pipeline.char_ref_mod.get_signed_url", lambda path: path)
+    monkeypatch.setattr("pipeline.char_bible.get_signed_url", lambda path: f"https://signed/{path}")
+    monkeypatch.setattr("pipeline.char_bible.get_supabase_client", MagicMock())
+    state = _initial_state("04b21cbc-ff2d-4fd8-b2ef-56431784a9a4")
+    state.characters = [Character(char_id="c0", name="Dog", ref_moderation_status="passed",
+                                  canonical_ref_image=f"{state.story_id}/ref-c0-1.png")]
+    state.scenes = [Scene(scene_id="s0", text_excerpt="The dog runs.")]
+    state.moderation_context = ModerationContext(mode="teacher_review_v1", policy_version="teacher_review_policy_v1",
+                                                 magic_pencil=True)
+    graph, config = build_graph(), {"configurable": {"thread_id": thread}}
+    graph.update_state(config, dict(state), as_node="char_ref_mod")
+    graph.invoke(None, config)
+    assert graph.get_state(config).next == ("reveal",)
+    return graph, config, state
+
+
+def _held_pencil(graph, config, state):
+    from langgraph.types import Command
+
+    graph.invoke(Command(resume={"action": "pencil", "char_id": "c0", "text": "a sword",
+                                 "source": f"{state.story_id}/ref-c0-1.png", "flagged": True}), config)
+    held = graph.get_state(config)
+    assert held.next == ("moderation_review",)
+    return held.values["moderation_context"].review
+
+
+def test_a_teacher_stop_on_held_pencil_text_ends_only_the_request_and_the_reveal_returns(monkeypatch):
+    from unittest.mock import MagicMock
+    from langgraph.types import Command
+
+    edit = MagicMock(return_value=b"edited")
+    monkeypatch.setattr("pipeline.char_bible.edit_image", edit)
+    graph, config, state = _paused_at_reveal(monkeypatch, "pencil-stop")
+    review = _held_pencil(graph, config, state)
+
+    graph.invoke(Command(resume={"action": "stop", "review_id": str(review.review_id),
+                                 "subject_version": review.subject_version, "generation_epoch": 1}), config)
+
+    back = graph.get_state(config)
+    assert back.next == ("reveal",)
+    assert back.values["characters"][0].canonical_ref_image == f"{state.story_id}/ref-c0-1.png"
+    assert back.values["reference_pencil"] is None
+    use = back.values["pencil_uses"][0]
+    assert (use.text_moderation, use.reason) == ("teacher_stopped", "text_stopped")
+    assert back.values["cost"].ref_retry_count == 0
+    edit.assert_not_called()
+
+
+def test_a_teacher_allow_on_held_pencil_text_runs_the_edit_and_the_child_chooses(monkeypatch):
+    from unittest.mock import MagicMock
+    from langgraph.types import Command
+
+    edit = MagicMock(return_value=b"edited")
+    monkeypatch.setattr("pipeline.char_bible.edit_image", edit)
+    graph, config, state = _paused_at_reveal(monkeypatch, "pencil-allow")
+    review = _held_pencil(graph, config, state)
+
+    result = graph.invoke(Command(resume={"action": "allow", "review_id": str(review.review_id),
+                                          "subject_version": review.subject_version, "generation_epoch": 1}), config)
+
+    assert graph.get_state(config).next == ("reveal",)
+    assert edit.call_count == 1
+    character = result["__interrupt__"][0].value["characters"][0]
+    assert character["image_path"] == f"{state.story_id}/ref-c0-2.png"
+    assert character["pencil_choice"] == {"use_id": "pencil-1", "version_id": "ref-c0-1",
+                                          "image_path": f"{state.story_id}/ref-c0-1.png"}
+    assert result["__interrupt__"][0].value["taps_left"] == 2

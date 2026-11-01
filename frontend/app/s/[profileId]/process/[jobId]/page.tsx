@@ -184,6 +184,7 @@ const StackingVignette = () => (
 
 function HoldRecovery({jobId, profileId, refetch, held = false}: {jobId: string; profileId: string; refetch: () => Promise<boolean>; held?: boolean}) {
   const [stopState, setStopState] = useState<{review_id: string; generation_epoch: number; worker_finished: boolean} | null>(null);
+  const [pencilHold, setPencilHold] = useState(false);
   const [canRepair, setCanRepair] = useState<boolean | null>(null);
   const [error, setError] = useState(false);
   const [sending, setSending] = useState(false);
@@ -203,6 +204,7 @@ function HoldRecovery({jobId, profileId, refetch, held = false}: {jobId: string;
         if (!controller.signal.aborted) {
           setCanRepair(state.can_reconcile_hold === true); setError(false);
           setStopState(state.status === "awaiting_teacher" && state.review_id ? state : null);
+          setPencilHold(state.pencil_hold === true);
           if (state.status && state.status !== "awaiting_teacher" && held) await refetch();
         }
       } catch { if (!controller.signal.aborted) setError(true); }
@@ -227,15 +229,15 @@ function HoldRecovery({jobId, profileId, refetch, held = false}: {jobId: string;
   }
   return <main className="flex flex-1 flex-col items-center justify-center gap-6 p-6 text-center">
     {held && <Users weight="duotone" className="size-16 text-primary" aria-hidden="true" />}
-    <h1 className="font-display text-3xl font-extrabold text-primary">{held ? "Waiting for your teacher" : "Your writing is saved"}</h1>
-    <p role="status">{held ? "Your story is saved. Your teacher will help it continue." : submitted ? "We’re checking the saved step. You can return to your books." : "We couldn’t finish the last step. Your writing is still here."}</p>
+    <h1 className="font-display text-3xl font-extrabold text-primary">{held && pencilHold ? "Your teacher is taking a look" : held ? "Waiting for your teacher" : "Your writing is saved"}</h1>
+    <p role="status">{held && pencilHold ? "Your story is saved. Your teacher will look at your picture change." : held ? "Your story is saved. Your teacher will help it continue." : submitted ? "We’re checking the saved step. You can return to your books." : "We couldn’t finish the last step. Your writing is still here."}</p>
     {error && <p role="alert">We couldn’t check your saved story. Try again.</p>}
     {canRepair === null && !error && <p role="status">Checking your saved story…</p>}
     {canRepair && !submitted && <button type="button" disabled={sending} onClick={() => void repair()} className="min-h-11 rounded-2xl bg-primary px-6 font-bold text-on-primary disabled:opacity-50">{sending ? "Checking…" : "Try saving this step again"}</button>}
     {error && <button type="button" disabled={sending} className="min-h-11 underline" onClick={() => {setError(false); setReadVersion(value => value + 1);}}>Try checking again</button>}
     {canRepair === false && !held && <Link href={`/s/${profileId}/write`} className="min-h-11 underline">Write a new story</Link>}
     <Link href={`/s/${profileId}`} className="inline-flex min-h-11 items-center rounded-2xl bg-primary px-6 font-bold text-on-primary">Back to my books</Link>
-    {held && stopState && !error && <StopStory key={`${stopState.review_id}-${stopState.generation_epoch}`} jobId={jobId} reviewId={stopState.review_id}
+    {held && stopState && !pencilHold && !error && <StopStory key={`${stopState.review_id}-${stopState.generation_epoch}`} jobId={jobId} reviewId={stopState.review_id}
       epoch={stopState.generation_epoch} ready={stopState.worker_finished}
       onStopped={() => void refetch()} onRefresh={() => { void refetch(); setReadVersion(value => value + 1); }} />}
   </main>;
@@ -389,6 +391,191 @@ function OtherVersions({ jobId, moderationMode, character, disabled, onChoose }:
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+// Mirrors backend `app.config.MAX_PENCIL_CHARS`; the API rejects anything longer.
+const MAX_PENCIL_CHARS = 200;
+
+// ADR-082 Decision 2: the child's words edit the picture on screen once, sent as written (SH-10).
+// The API redacts and moderates the text before anything is stored or drawn (SH-03).
+function MagicPencil({ character, tapsLeft, disabled, onSubmit }: {
+  character: RevealCharacter; tapsLeft: number; disabled: boolean; onSubmit: (text: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const openerRef = useRef<HTMLButtonElement | null>(null);
+  const fieldRef = useRef<HTMLTextAreaElement | null>(null);
+  const panelId = `magic-pencil-${character.char_id}`;
+  const fieldId = `${panelId}-text`;
+  const empty = text.trim() === "";
+
+  useEffect(() => { if (open) fieldRef.current?.focus(); }, [open]);
+
+  function close() {
+    setOpen(false);
+    openerRef.current?.focus();
+  }
+
+  function submit() {
+    if (empty || disabled) return;
+    onSubmit(text.trim());
+  }
+
+  return (
+    <div className="w-full">
+      <button
+        ref={openerRef}
+        type="button"
+        aria-label={`Magic pencil for ${character.name}`}
+        aria-expanded={open}
+        aria-controls={panelId}
+        disabled={tapsLeft === 0 || (disabled && !open)}
+        onClick={() => setOpen((value) => !value)}
+        className="min-h-[44px] w-full rounded-xl border border-[var(--color-primary)]/20 bg-background px-4 py-2 font-kid text-sm font-bold text-foreground hover:bg-[var(--color-primary)]/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        Magic pencil
+      </button>
+      {tapsLeft === 0 && <p className="mt-1 text-center font-kid text-sm text-foreground/70">No pencils left for this book</p>}
+      {character.pencil_refused && (
+        <p role="alert" className="mt-2 text-center font-kid text-sm text-[var(--color-destructive)]">
+          We couldn&apos;t change this picture. Try different words.
+        </p>
+      )}
+      {open && tapsLeft > 0 && (
+        <div
+          id={panelId}
+          role="group"
+          aria-label={`Magic pencil for ${character.name}`}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || disabled) return;
+            event.stopPropagation();
+            close();
+          }}
+          className="mt-3 w-full rounded-[16px] bg-[var(--color-primary)]/5 p-4 text-left"
+        >
+          <label htmlFor={fieldId} className="font-kid text-sm font-bold text-foreground">
+            What should change about {character.name}?
+          </label>
+          <textarea
+            ref={fieldRef}
+            id={fieldId}
+            value={text}
+            maxLength={MAX_PENCIL_CHARS}
+            rows={3}
+            disabled={disabled}
+            aria-describedby={`${fieldId}-count ${fieldId}-goes`}
+            placeholder="Like: give them a red hat"
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" || event.shiftKey) return;
+              event.preventDefault();
+              submit();
+            }}
+            className="mt-2 w-full rounded-xl border border-[var(--color-primary)]/30 bg-background p-3 font-kid text-base text-foreground focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50"
+          />
+          <div className="mt-1 flex justify-between gap-2 font-kid text-sm text-foreground/70">
+            <p id={`${fieldId}-goes`}>This uses 1 of your {tapsLeft} {tapsLeft === 1 ? "go" : "goes"} left.</p>
+            <p id={`${fieldId}-count`}>{text.length}/{MAX_PENCIL_CHARS}</p>
+          </div>
+          <p role="status" className="font-kid text-sm text-foreground/70">{disabled ? "Changing your picture…" : ""}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              aria-label={`Change ${character.name}'s picture`}
+              disabled={empty || disabled}
+              onClick={submit}
+              className="min-h-[44px] rounded-xl border border-[var(--color-primary)]/40 bg-[var(--color-surface)] px-4 py-2 font-kid font-bold text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Change picture
+            </button>
+            <button
+              type="button"
+              aria-label={`Cancel magic pencil for ${character.name}`}
+              disabled={disabled}
+              onClick={close}
+              className="min-h-[44px] rounded-xl px-4 py-2 font-kid font-bold text-foreground focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// AC-11: the new picture is shown above; the old one waits beside the choice. The go is spent either
+// way, and the book cannot go on until the child chooses (the API rejects confirm meanwhile).
+function PencilChoice({ jobId, moderationMode, character, disabled, onChoose }: {
+  jobId: string; moderationMode?: string; character: RevealCharacter; disabled: boolean;
+  onChoose: (choice: "kept" | "old") => void;
+}) {
+  const old = character.pencil_choice!;
+  const [url, setUrl] = useState<string | null>(null);
+  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void (async () => {
+      let signed: Record<string, string> = {};
+      try {
+        signed = await signPaths([old.image_path],
+          [{ id: jobId, moderation_mode: moderationMode, reveal: { characters: [character] } }], controller.signal);
+      } catch { /* shown as the error state below */ }
+      if (controller.signal.aborted) return;
+      setUrl(signed[old.image_path] ?? null);
+      setState(signed[old.image_path] ? "ready" : "error");
+    })();
+    return () => controller.abort();
+    // The old picture re-reads on an explicit retry only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attempt]);
+
+  return (
+    <div role="group" aria-label={`Keep the new picture of ${character.name}?`} className="w-full rounded-[16px] bg-[var(--color-primary)]/5 p-4 text-left">
+      <p className="font-kid text-sm leading-relaxed text-foreground">
+        Here is your changed picture of {character.name}. Keep it, or go back to the old one.
+      </p>
+      {state === "error" ? (
+        <div role="alert" className="mt-2 flex flex-col items-start gap-2 font-kid text-sm">
+          <p>We couldn&apos;t load the old picture right now.</p>
+          <button
+            type="button"
+            onClick={() => { setState("loading"); setAttempt((value) => value + 1); }}
+            className="min-h-[44px] rounded-xl bg-[var(--color-surface)] px-4 py-2 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
+          >
+            Try loading {character.name}&apos;s old picture again
+          </button>
+        </div>
+      ) : url ? (
+        <img src={url} alt={`Old picture of ${character.name}`} className="mt-2 w-24 aspect-square object-contain rounded-[8px] bg-[var(--color-muted)]" />
+      ) : (
+        <div className="mt-2 w-24 aspect-square rounded-[8px] bg-[var(--color-muted)] animate-pulse" />
+      )}
+      <p role="status" className="font-kid text-sm text-foreground/70">{disabled ? "Changing your picture…" : ""}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          aria-label={`Keep this new picture of ${character.name}`}
+          disabled={disabled}
+          onClick={() => onChoose("kept")}
+          className="min-h-[44px] rounded-xl bg-[var(--color-primary)] px-4 py-2 font-kid font-bold text-[var(--color-surface)] focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Keep this
+        </button>
+        <button
+          type="button"
+          aria-label={`Use the old picture of ${character.name}`}
+          disabled={disabled}
+          onClick={() => onChoose("old")}
+          className="min-h-[44px] rounded-xl border border-[var(--color-primary)]/40 bg-[var(--color-surface)] px-4 py-2 font-kid font-bold text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Use the old one
+        </button>
+      </div>
     </div>
   );
 }
@@ -586,14 +773,14 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   }, [bucket, profileId, jobId, router]);
 
   async function handleConfirm(
-    action: "confirm" | "try_again" | "choose_version",
+    action: "confirm" | "try_again" | "choose_version" | "pencil" | "pencil_choice",
     char_id?: string,
     attribute?: string,
-    version?: { version_id: string; source: string }
+    extra?: Record<string, string>
   ) {
     if (submissionInFlight.current || submissionsDisabled) return;
     submissionInFlight.current = true;
-    // Only a redraw or a version choice returns to this stage; a plain confirm advances, and
+    // Only a redraw, a version choice or a pencil request returns to this stage; a plain confirm advances, and
     // bridging it made the continue path claim a redraw was under way.
     setBridgeStage(action !== "confirm" ? row?.current_stage ?? null : null);
     setSubmissionState("sending");
@@ -609,7 +796,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
           "Content-Type": "application/json",
           Authorization: `Bearer ${session?.access_token}`,
         },
-        body: JSON.stringify({ action, char_id: char_id ?? null, attribute: attribute ?? null, ...version }),
+        body: JSON.stringify({ action, char_id: char_id ?? null, attribute: attribute ?? null, ...extra }),
       });
       requestFailed = !res.ok;
     } catch {
@@ -685,6 +872,10 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
 
   if (bucket === "paused" && row?.reveal) {
     const { characters, taps_left } = row.reveal;
+    // Magic pencil jobs (ADR-082) share the goes between Redraw and the pencil (AC-06).
+    const pencil = characters.some((character) => character.versions !== undefined);
+    const goes = pencil ? ["go", "goes"] : ["redraw", "redraws"];
+    const waiting = characters.find((character) => character.pencil_choice);
     const allRequiredImagesLoaded = characters.every(
       (character) => characterImageState[character.char_id] === "loaded"
     );
@@ -739,13 +930,15 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
           {taps_left > 0 ? (
             <>
               <p className="font-bold">
-                {taps_left} {taps_left === 1 ? "redraw" : "redraws"} left for this book
+                {taps_left} {taps_left === 1 ? goes[0] : goes[1]} left for this book
               </p>
-              <p className="text-sm text-foreground/70">Shared by all your characters.</p>
+              <p className="text-sm text-foreground/70">
+                {pencil ? "Redraw and Magic pencil share them, for all your characters." : "Shared by all your characters."}
+              </p>
             </>
           ) : (
             <p className="max-w-lg">
-              No redraws left for this book. You can use these characters or go back to your bookshelf.
+              No {goes[1]} left for this book. You can use these characters or go back to your bookshelf.
             </p>
           )}
         </div>
@@ -802,6 +995,23 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                 {c.name}
               </h2>
 
+              {c.pencil_choice ? (
+                <PencilChoice
+                  key={c.image_path}
+                  jobId={jobId}
+                  moderationMode={moderationMode}
+                  character={c}
+                  disabled={submissionsDisabled}
+                  onChoose={(choice) => {
+                    setSelectedTrait(null);
+                    setPendingRedrawName(null);
+                    setChangingPicture(true);
+                    lastSelectedCharId.current = c.char_id;
+                    selectedControlWasFocused.current = true;
+                    void handleConfirm("pencil_choice", c.char_id, undefined, { choice, source: c.image_path });
+                  }}
+                />
+              ) : (<>
               <OtherVersions
                 key={c.image_path}
                 jobId={jobId}
@@ -817,6 +1027,23 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                   void handleConfirm("choose_version", c.char_id, undefined, { version_id: versionId, source: c.image_path });
                 }}
               />
+
+              {c.versions !== undefined && c.pencil_ready && (
+                <MagicPencil
+                  key={`pencil-${c.image_path}`}
+                  character={c}
+                  tapsLeft={taps_left}
+                  disabled={submissionsDisabled || characterImageState[c.char_id] !== "loaded"}
+                  onSubmit={(text) => {
+                    setSelectedTrait(null);
+                    setPendingRedrawName(null);
+                    setChangingPicture(true);
+                    lastSelectedCharId.current = c.char_id;
+                    selectedControlWasFocused.current = true;
+                    void handleConfirm("pencil", c.char_id, undefined, { text, source: c.image_path });
+                  }}
+                />
+              )}
 
               {taps_left > 0 && c.chips.length === 0 && (
                 <p className="w-full text-center font-kid text-sm text-foreground/70">
@@ -878,15 +1105,18 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                   </div>
                 </div>
               )}
+              </>)}
             </motion.div>
           ))}
         </motion.div>
 
         <div className="mt-12 w-full flex flex-col items-center justify-center gap-3">
-          <p className="font-kid text-sm text-foreground/70">Continue with the pictures shown.</p>
+          <p className="font-kid text-sm text-foreground/70">
+            {waiting ? `Choose Keep this or Use the old one for ${waiting.name} first.` : "Continue with the pictures shown."}
+          </p>
           <button
             type="button"
-            disabled={submissionsDisabled || !allRequiredImagesLoaded}
+            disabled={submissionsDisabled || !allRequiredImagesLoaded || waiting !== undefined}
             onClick={() => {
               setSelectedTrait(null);
               setPendingRedrawName(null);

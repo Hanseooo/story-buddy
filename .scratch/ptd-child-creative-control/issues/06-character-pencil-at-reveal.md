@@ -2,7 +2,7 @@
 
 **Status:** ready-for-agent
 **Type:** task
-**Progress:** open
+**Progress:** resolved
 **Blocked by:** `.scratch/ptd-child-creative-control/issues/04-draw-again-undoable-at-reveal.md`
 
 **Parent:** `docs/specs/magic-pencil.md` (US-02, US-06)
@@ -76,3 +76,60 @@ API and worker tests, providers mocked (spec §6.2–6.3); vitest; one `playwrig
 a build gate).
 
 ## Comments
+
+## Answer (2026-11-02)
+
+Done on feature jobs only (`has_versions`). The pencil request is a `pencil` confirm with the text and
+the picture on screen. The API strips the text, caps it at `app.config.MAX_PENCIL_CHARS` (200),
+redacts it (failure: 503, nothing spent) and moderates it (error: 503). Only the redacted text goes
+past the API.
+
+- **Cleared.** `char_bible` makes one `edit_image` call with the text and `PENCIL_KEEP_CLAUSE`. There
+  is no judge call and one shared go is spent. A fal flag records `reason="refused"`, spends nothing,
+  and the reveal shows "We couldn't change this picture. Try different words."
+- **Flagged.** The hold is a new `character_pencil_text` kind, with no picture and no go spent. The
+  child sees "Your teacher is taking a look" (`/state.pencil_hold`) and has no story stop. Allow runs
+  the edit. "Stop this change" ends only the request, and the reveal comes back with the old picture
+  and all its goes.
+- **Keep/old.** "Keep this" or "Use the old one". "Old" restores the kept picture and keeps the
+  result as a version. A stale source, a repeated submit, or a choice on a picture no longer waiting
+  changes nothing (SH-08).
+- **Log.** Every use is a `job_picture_records` row (`kind='pencil'`, migration 0029). It holds the
+  before, the after or the reason, the redacted text, both moderation outcomes, and the choice.
+
+Deviations:
+- **The result is current while the choice waits.** The ticket guidance said to keep it as a
+  pending candidate. Instead the result is the current reference with `ref_moderation_status=None`,
+  so `char_ref_mod` and the ADR-080 reference hold handle it unchanged (AC-10). The old picture is a
+  version. The API refuses `confirm` (422 `choice_pending`) and the UI hides the other tools and
+  disables Continue until the child chooses, so the book cannot go on with an unchosen result. The
+  spec's "the old one stays current" is not met literally. Closing the tab leaves the choice waiting
+  with the new picture shown and the old one beside it.
+- **A teacher stop on the AC-10 reference hold of a pencil result stops the story**, as any
+  ADR-080 reference hold does.
+- **The keep clause drops "its colours"** from the probe's clause, because the child may be asking
+  for a colour change.
+- **The pencil is offered only on a classifier-passed picture.** A teacher-allowed picture is
+  never kept as a version (ticket 04), so "Use the old one" could not bring it back. The API and
+  `char_bible` refuse it too.
+- **A teacher-allowed pencil result is dropped, not kept, when the child picks "Use the old
+  one"**, for the same reason. Its log row keeps the `teacher_allowed` outcome.
+- **A removed child's pencil hold:** "Stop this change" stops the story, because nobody can come
+  back to the reveal.
+- Baseline jobs keep the old "redraws left" copy.
+
+Checks: unit tests on reveal, char_bible, the contract and main, and Postgres integration runs for
+cleared text (redaction, dedup, stale, keep/old, log row), redaction failure, and flagged text (stop,
+allow, stop for a removed child). Each new test went red first. Frontend: vitest for every SH-07
+state, focus, Escape/Enter, the shared-goes copy, keep/old, the held-pencil copy, and the teacher
+queue (fixture captured from the integration run). Full suites: backend has only the 6 known
+`test_pdf_export` failures (local PDF `OSError`, as on HEAD). Frontend lint, build and 784 tests
+pass.
+
+Not done or not verified:
+- **No `playwright-cli` pass for US-02** (login wall, real fal edits).
+- Migration 0029 must be applied to any hosted DB before the setting is turned on, after 0028.
+- The `coalesce` that keeps a teacher-allowed outcome in the log row has no test of its own.
+- Pencil free text must not ship before `ptd-moderation-calibration` audit 01.
+- AC-12 (the change reaches later pages) is ticket 08. Teacher replacement of a held result is 07,
+  and until then `moderation_replace` reports `replacement_source_unavailable` for it.

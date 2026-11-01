@@ -12,6 +12,9 @@ def reference_replacement_disabled_reason(state: StoryMemory, subject_id: str, i
     char = next((c for c in state.characters if c.char_id == subject_id), None)
     if not char or not char.canonical_ref_image or not char.ref_generation_prompt:
         return "replacement_source_unavailable"
+    if any(u.after_path == char.canonical_ref_image for u in state.pencil_uses):
+        # A pencil result is replaced by re-running its edit (AC-10, ticket 07), never a fresh draw.
+        return "replacement_source_unavailable"
     if any(s.attempts or s.final_image_ref for s in state.scenes):
         return "dependent_scenes_exist"
     if state.cost.ref_mod_retry_count >= MAX_MOD_REDRAWS:

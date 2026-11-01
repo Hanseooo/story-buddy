@@ -6,13 +6,21 @@ the reason it is a dedicated node rather than folded into `char_bible`: LangGrap
 resumed node from the top, so an `interrupt()` inside `char_bible` would redraw every reference
 on each confirm.
 """
+import hashlib
+from uuid import UUID, uuid5
+
 from langgraph.types import interrupt
 
 from app.config import settings
-from contracts.story_memory import Character, ReferenceChoice, ReferenceRetry, StoryMemory
+from app.moderation_policy import TEACHER_MODERATION_CRITERIA
+from contracts.story_memory import (
+    Character, ClassifierEvidence, PencilChoice, PencilUse, ReferenceChoice, ReferenceRetry, ReviewContext,
+    StoryMemory,
+)
 from pipeline.char_ref_mod import require_reference_clearance
 from pipeline.prompt_optimizer import filtered_description, permitted_words
 
+# Character goes per book, shared by "Draw again" and the magic pencil (ADR-082 Decision 5).
 MAX_RETRY_TAPS = 3
 
 # ADR-069: finite chip-scope exclusions, never canonical-description normalization.
@@ -72,6 +80,22 @@ def has_versions(state: StoryMemory) -> bool:
     return context.mode == "teacher_review_v1" and context.magic_pencil
 
 
+def _pencil_choice(state: StoryMemory, c: Character) -> dict | None:
+    """The pencil result waiting for "Keep this" or "Use the old one": the current picture came from
+    a pencil use nobody chose for, and the old picture is still a kept version."""
+    use = next((u for u in state.pencil_uses if u.char_id == c.char_id and u.choice is None
+                and u.after_path is not None and u.after_path == c.canonical_ref_image), None)
+    old = next((v for v in c.versions if use and v.image_path == use.before_path
+                and v.ref_moderation_status == "passed"), None)
+    return {"use_id": use.use_id, "version_id": old.version_id, "image_path": old.image_path} if old else None
+
+
+def _pencil_refused(state: StoryMemory, c: Character) -> bool:
+    """fal refused the latest edit of this picture, and the picture has not changed since (SH-04)."""
+    use = next((u for u in reversed(state.pencil_uses) if u.char_id == c.char_id), None)
+    return bool(use and use.reason == "refused" and use.before_path == c.canonical_ref_image)
+
+
 def _project_reveal(state: StoryMemory) -> dict:
     """Pure — no effect, no mocks needed to test it. The worker writes this dict verbatim to
     `jobs.reveal` (spec §4.2)."""
@@ -91,6 +115,11 @@ def _project_reveal(state: StoryMemory) -> dict:
                 # magic-pencil 05 (SH-02): unchosen draws nobody has opened, by id only. The API
                 # moderates them when the child opens "Other versions".
                 "unreviewed": [v.version_id for v in c.versions if v.ref_moderation_status is None],
+                # ADR-082 Decision 2 (magic-pencil 06).
+                "pencil_choice": _pencil_choice(state, c),
+                "pencil_refused": _pencil_refused(state, c),
+                # Only a classifier-passed picture is kept as a version, so only it can come back (AC-11).
+                "pencil_ready": c.ref_moderation_status == "passed",
             } if has_versions(state) else {}),
         }
         for c in state.characters
@@ -120,4 +149,30 @@ def reveal(state: StoryMemory) -> dict:
         return {"reference_choice": ReferenceChoice(
             char_id=answer["char_id"], version_id=answer["version_id"], source=answer["source"],
             cleared=answer.get("cleared") is True)}
+    if isinstance(answer, dict) and answer.get("action") == "pencil" and has_versions(state):
+        return _pencil_request(state, answer)
+    if isinstance(answer, dict) and answer.get("action") == "pencil_choice" and has_versions(state):
+        return {"reference_pencil_choice": PencilChoice(
+            char_id=answer["char_id"], choice=answer["choice"], source=answer["source"])}
     return {}
+
+
+def _pencil_request(state: StoryMemory, answer: dict) -> dict:
+    """ADR-082 Decision 2. The API already redacted and moderated the text (SH-03, SH-02), so this
+    only records the use. Flagged text is held for the teacher with nothing drawn and no go spent
+    (SH-05); `moderation_review` then sends it to `char_bible` or back here (OD-08)."""
+    use = PencilUse(use_id=f"pencil-{len(state.pencil_uses) + 1}", char_id=answer["char_id"],
+                    text=answer["text"], before_path=answer["source"],
+                    text_moderation="held" if answer.get("flagged") else "cleared")
+    update = {"reference_pencil": use.use_id, "pencil_uses": [*state.pencil_uses, use]}
+    if answer.get("flagged"):
+        context = state.moderation_context
+        version = hashlib.sha256(use.text.encode("utf-8")).hexdigest()
+        update["moderation_context"] = context.model_copy(update={"review": ReviewContext(
+            review_id=uuid5(UUID(state.story_id),
+                            f"character_pencil_text:{use.use_id}:{version}:{context.generation_epoch}"),
+            kind="character_pencil_text", subject_id=use.use_id, subject_version=version,
+            return_node="char_bible", criteria=list(TEACHER_MODERATION_CRITERIA),
+            classifier_evidence=[ClassifierEvidence.model_validate(e) for e in answer.get("evidence", [])],
+        )})
+    return update

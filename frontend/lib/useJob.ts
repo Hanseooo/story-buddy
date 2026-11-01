@@ -36,6 +36,12 @@ export type JobRow = {
       versions?: Array<{ version_id: string; image_path: string }>;
       // Unchosen first-round draws nobody has opened, by id only; moderated on open (ticket 05).
       unreviewed?: string[];
+      // A pencil result waiting for "Keep this" or "Use the old one"; `image_path` is the old picture (ticket 06).
+      pencil_choice?: { use_id: string; version_id: string; image_path: string } | null;
+      // The edit model refused the latest pencil change of this picture (SH-04).
+      pencil_refused?: boolean;
+      // Only a classifier-passed picture can come back as "the old one" (AC-11).
+      pencil_ready?: boolean;
     }>;
     taps_left: number;
   } | null;

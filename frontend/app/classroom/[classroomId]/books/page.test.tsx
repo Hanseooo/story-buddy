@@ -11,6 +11,7 @@ import heldReference from "./held-reference.fixture.json";
 import heldText from "./held-text.fixture.json";
 import heldTitle from "./held-title.fixture.json";
 import heldThemes from "./held-themes.fixture.json";
+import heldPencil from "./held-pencil.fixture.json";
 import moderationPolicy from "./moderation-policy.fixture.json";
 import clearances from "./clearances.fixture.json";
 import pendingContinuation from "./pending-continuation.fixture.json";
@@ -398,6 +399,39 @@ describe("held story inspection", () => {
     expect(bodies).toHaveLength(2);
     expect(bodies[0]).toBe(bodies[1]);
     expect(JSON.parse(bodies[0]).action).toBe(action);
+    vi.unstubAllGlobals();
+  });
+  it.each(["allow", "stop"])("a held pencil change shows the child's words and %s decides only that change", async (action) => {
+    const bodies: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, options?: RequestInit) => {
+      if (url.endsWith("/decision")) {
+        bodies.push(options!.body as string);
+        return Response.json({ status: "queued", dispatch_state: "queued" }, { status: 202 });
+      }
+      if (url.endsWith("/moderation-policy")) return Response.json(moderationPolicy);
+      if (url.endsWith("/moderation-review")) return Response.json(heldPencil);
+      if (url.includes("/pictures/")) return new Response("picture");
+      return Response.json([{ review_id: heldPencil.review_id, job_id: "synthetic-job", title: heldPencil.title, held_at: "2026-10-28T00:00:00Z", ready: true }]);
+    }));
+    render(<NeedsHelpQueue classroomId="synthetic-class" active onCount={() => {}} onBack={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Inspect Synthetic title/ }));
+    const change = await screen.findByRole("region", { name: "Picture change needing review" });
+    expect(within(change).getByText("a big sword")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Request replacement picture" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Stop this story" })).toBeNull();
+    expect(screen.getByText("Stopping ends only this change. The story continues with the old picture.")).toBeDefined();
+    if (action === "allow") {
+      const allow = screen.getByRole("button", { name: "Allow this picture change" });
+      expect(allow).toBeDisabled();
+      for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);
+      fireEvent.click(allow);
+    } else {
+      fireEvent.click(screen.getByRole("button", { name: "Stop this change" }));
+    }
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Story continuing" })).toHaveFocus());
+    expect(bodies).toHaveLength(1);
+    expect(JSON.parse(bodies[0])).toEqual(expect.objectContaining({
+      action, review_id: heldPencil.review_id, subject_version: heldPencil.subject_version }));
     vi.unstubAllGlobals();
   });
   it("explains exhausted replacement budget while keeping other decisions available", async () => {

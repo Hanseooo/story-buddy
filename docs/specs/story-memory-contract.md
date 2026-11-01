@@ -300,6 +300,14 @@ Ticket 05 adds `ReferenceVersion.source = "unchosen_draw"` and `ReferenceChoice.
 moderated by the API when the child opens it, while the run is paused, and that outcome is stored in
 `job_picture_records.moderation_status`, not in the checkpoint. `cleared` is set only by the API
 after that record says `passed`; `char_bible` restores such a draw as `passed`.
+Ticket 06 adds `PencilUse`, `PencilChoice`, `StoryMemory.reference_pencil`,
+`reference_pencil_choice` and `pencil_uses` (default `None`, `None`, `[]`), `ReferenceVersion.source
+= "pencil"`, `ReviewContext.kind = "character_pencil_text"` and resolution `"stop"`. A `PencilUse`
+holds only redacted text. A pencil result becomes the current reference with
+`ref_moderation_status = None`, so `char_ref_mod` moderates it like a redraw, and the picture it
+replaced is kept as a version. While a use has an `after_path` that is current and no `choice`, the
+reveal waits for keep/old and the API refuses `confirm`. Every use is mirrored to
+`job_picture_records` (`kind = 'pencil'`, migration 0029).
 
 - One version covers the whole contract, **including `FailureReason`** — an enum change is a contract change.
 

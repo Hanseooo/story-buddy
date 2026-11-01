@@ -14,6 +14,36 @@ instead of repeating it.
 
 ---
 
+## Magic pencil ticket 06 · 2026-11-02 · Character magic pencil at the reveal
+
+### Code
+
+- On feature jobs each classifier-passed character picture has "Magic pencil" next to the chips. It
+  is a `pencil` confirm with the text and the picture on screen. The API strips and caps the text
+  (`MAX_PENCIL_CHARS` 200), redacts it (failure: 503, nothing spent), then moderates it (error: 503).
+- Cleared text: `char_bible` makes one `edit_image` call with the text and `PENCIL_KEEP_CLAUSE`, no
+  judge, one shared go. The result is current and goes through `char_ref_mod`; the old picture is
+  kept as a version. The reveal asks "Keep this" or "Use the old one" (`pencil_choice`), and
+  `confirm` returns 422 `choice_pending` until it is answered. A fal refusal spends nothing and shows
+  "We couldn't change this picture. Try different words."
+- Flagged text: a `character_pencil_text` hold with no picture and no go. The child sees "Your
+  teacher is taking a look" and no story stop. The teacher sees the redacted words and can allow
+  (runs the edit) or "Stop this change" (ends only the request). `/state` adds `pencil_hold`.
+- A stale source, a missing go or a repeated submit is rejected or deduplicated (SH-08).
+- Every use is a `job_picture_records` row (`kind = 'pencil'`). Migration
+  `0029_magic_pencil_uses.sql` adds the hold kind and the record columns.
+
+### Docs
+
+- `story-memory-contract.md` §3 lists the new fields. One `research-changelog.md` row.
+
+### Checks
+
+- Backend: 1672 passed; the same 6 `test_pdf_export` failures as on `HEAD` (local PDF `OSError`).
+  Frontend: lint, build and 784 tests pass. No browser pass.
+
+---
+
 ## Magic pencil ticket 05 · 2026-11-01 · Unchosen first-round pictures, moderated on open
 
 ### Code

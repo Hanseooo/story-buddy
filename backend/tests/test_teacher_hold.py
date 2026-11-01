@@ -1386,3 +1386,222 @@ def test_unchosen_draws_are_moderated_once_when_opened_and_a_passed_one_can_be_c
       where job_id=%s and source='unchosen_draw' order by version_id""", (job,)).fetchall()
     assert [(r["version_id"], r["moderation_status"]) for r in recorded] == [
         ("ref-c0-1-u1", "passed"), ("ref-c0-1-u3", "excluded")]
+
+
+def _pencil_book(monkeypatch, held_database, text_check):
+    """A feature job paused at the reveal, with every provider boundary stubbed (spec §6.2-6.3).
+    `text_check` stands in for `check_text` on the child's pencil text."""
+    import importlib
+    from contracts.story_memory import RefVerdict
+    from pipeline.segment import ExtractedScene, ExtractedVisualDirection, SceneSegmentation
+    from tests.test_graph_stub import STUB_ANALYSIS
+    from worker.run_job import run_review_storybook_job
+
+    conn, child, classroom, _, teacher = held_database
+    monkeypatch.setattr(settings, "enable_teacher_moderation_review", True)
+    monkeypatch.setattr(settings, "enable_magic_pencil", True)
+    db, queue = MagicMock(), MagicMock()
+    db.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{"classroom_id": classroom}]
+    monkeypatch.setattr("app.main.get_supabase_client", lambda: db)
+    monkeypatch.setattr("app.main.get_queue", lambda: queue)
+    monkeypatch.setattr("app.moderation_hold.get_queue", lambda: queue)
+    redacted = []
+
+    def redact(text):
+        redacted.append(text)
+        return text.replace("Ana Cruz", "<PERSON>")
+
+    monkeypatch.setattr("providers.redact_pii", redact)
+    monkeypatch.setattr("app.main.check_text", lambda title, **kwargs: (True, [], title))
+    monkeypatch.setattr("app.moderation_hold.check_text", text_check)
+    objects, storage = {}, MagicMock()
+    storage.storage.from_.return_value.upload.side_effect = lambda path, content, options: objects.update({path: content})
+    monkeypatch.setattr("providers.download_book_image", lambda path: objects[path])
+
+    def structured(prompt, schema, **kwargs):
+        if schema.__name__ == "StoryAnalysis":
+            return STUB_ANALYSIS
+        return SceneSegmentation(scenes=[ExtractedScene(
+            start=0, end=0, characters_present=["the orange dog"],
+            visual_direction=ExtractedVisualDirection(key_action="A dog walks.", viewpoint="front view", framing="wide shot"),
+        )])
+
+    edit = MagicMock(return_value=b"edited")
+    judge = MagicMock(return_value=RefVerdict(differences_observed="none", matches_description=True, attributes_present=["dog"]))
+    boundaries = {
+        "analyze": {"structured_text": structured}, "segment": {"structured_text": structured},
+        "input_gate": {"classify_text_primary": lambda text: (True, []), "classify_text_backstop": lambda text: (True, [])},
+        "char_bible": {"text_to_image": lambda *a, **kw: b"first", "edit_image": edit, "judge": judge,
+                       "get_supabase_client": lambda: storage, "get_signed_url": lambda path: f"https://private.invalid/{path}"},
+        "char_ref_mod": {"classify_image_primary": lambda url, **kw: True, "classify_image_backstop": lambda url, **kw: True,
+                         "get_signed_url": lambda path: f"https://private.invalid/{path}"},
+    }
+    for module, replacements in boundaries.items():
+        for name, replacement in replacements.items():
+            monkeypatch.setattr(importlib.import_module(f"pipeline.{module}"), name, replacement)
+
+    def reveal_of(job):
+        persisted = conn.execute("select * from jobs where id=%s", (job,)).fetchone()
+        db.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{**persisted, "profile_id": child}]
+        return persisted["reveal"]
+
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+    client = TestClient(app)
+    job = client.post("/storybooks", json={
+        "title": "Synthetic title", "text": "The orange dog walks through the grassy field past the trees and stops near the stream.",
+    }).json()["job_id"]
+    run_review_storybook_job(job, expected_epoch=0)
+    redacted.clear()
+    judge.reset_mock()
+    return SimpleNamespace(conn=conn, client=client, job=job, queue=queue, edit=edit, judge=judge, objects=objects,
+                           redacted=redacted, reveal_of=reveal_of, run=run_review_storybook_job, child=child, teacher=teacher)
+
+
+def _pencil_rows(conn, job):
+    return [dict(r) for r in conn.execute("""select target_id,version_id,before_path,image_path,pencil_text,
+      text_moderation,picture_moderation,reason,choice from job_picture_records where job_id=%s and kind='pencil'
+      order by version_id""", (job,)).fetchall()]
+
+
+def test_a_cleared_pencil_text_edits_the_picture_once_and_the_child_keeps_or_goes_back(monkeypatch, held_database):
+    """Magic pencil ticket 06 (US-02 AC-07..AC-11, SH-03, SH-08, SH-10, AC-22)."""
+    checked = []
+
+    def text_check(text, *, evidence=None):
+        checked.append(text)
+        return True, [], text
+
+    book = _pencil_book(monkeypatch, held_database, text_check)
+    job, client, queue = book.job, book.client, book.queue
+    try:
+        first = book.reveal_of(job)
+        assert first["taps_left"] == 3 and first["characters"][0]["pencil_ready"] is True
+        old = first["characters"][0]["image_path"]
+        pencil = {"action": "pencil", "char_id": "c0", "text": "  give Ana Cruz a red hat ", "source": old}
+        for bad in ({**pencil, "text": "   "}, {**pencil, "text": "x" * 201}):
+            assert client.post(f"/jobs/{job}/confirm", json=bad).status_code == 422
+        assert client.post(f"/jobs/{job}/confirm", json={**pencil, "source": f"{job}/ref-c0-9.png"}).status_code == 422
+        assert book.redacted == [] and checked == []   # nothing was redacted, moderated or queued
+        queue.enqueue.reset_mock()
+        assert client.post(f"/jobs/{job}/confirm", json=pencil).json()["status"] == "queued"
+        assert client.post(f"/jobs/{job}/confirm", json=pencil).json()["status"] == "queued"   # SH-08
+        assert queue.enqueue.call_count == 1
+        # SH-03: redacted before moderation; only the redacted text leaves the API.
+        assert book.redacted == ["give Ana Cruz a red hat"] and checked == ["give <PERSON> a red hat"]
+        resume = queue.enqueue.call_args.args[2]
+        assert (resume["text"], resume["flagged"]) == ("give <PERSON> a red hat", False)
+        assert "Ana Cruz" not in str(resume)
+
+        book.run(job, resume, expected_epoch=0)
+        edited = book.reveal_of(job)
+        book.edit.assert_called_once()
+        assert book.edit.call_args.args[0].startswith("give <PERSON> a red hat\n\n")
+        book.judge.assert_not_called()
+        assert edited["taps_left"] == 2
+        character = edited["characters"][0]
+        assert character["image_path"] == f"{job}/ref-c0-2.png"
+        assert character["pencil_choice"] == {"use_id": "pencil-1", "version_id": "ref-c0-1", "image_path": old}
+        assert client.get(f"/jobs/{job}/images/version-ref-c0-1").content == b"first"
+        assert client.get(f"/jobs/{job}/images/ref-c0").content == b"edited"
+        # The book cannot go on from an unchosen pencil result.
+        assert client.post(f"/jobs/{job}/confirm", json={"action": "confirm"}).status_code == 422
+
+        choose = {"action": "pencil_choice", "char_id": "c0", "choice": "old", "source": character["image_path"]}
+        assert client.post(f"/jobs/{job}/confirm", json={**choose, "source": old}).status_code == 422
+        queue.enqueue.reset_mock()
+        assert client.post(f"/jobs/{job}/confirm", json=choose).json()["status"] == "queued"
+        book.run(job, queue.enqueue.call_args.args[2], expected_epoch=0)
+        back = book.reveal_of(job)
+        assert back["taps_left"] == 2   # AC-11: the go is spent either way
+        assert back["characters"][0]["image_path"] == old
+        assert back["characters"][0]["pencil_choice"] is None
+        assert {"version_id": "ref-c0-2", "image_path": f"{job}/ref-c0-2.png"} in back["characters"][0]["versions"]
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    assert _pencil_rows(book.conn, job) == [{
+        "target_id": "c0", "version_id": "pencil-1", "before_path": old, "image_path": f"{job}/ref-c0-2.png",
+        "pencil_text": "give <PERSON> a red hat", "text_moderation": "cleared", "picture_moderation": "passed",
+        "reason": None, "choice": "old"}]
+
+
+def test_a_redaction_failure_rejects_the_pencil_text_and_spends_nothing(monkeypatch, held_database):
+    book = _pencil_book(monkeypatch, held_database, lambda text, **kw: (True, [], text))
+    monkeypatch.setattr("providers.redact_pii", MagicMock(side_effect=RuntimeError("presidio down")))
+    try:
+        source = book.reveal_of(book.job)["characters"][0]["image_path"]
+        book.queue.enqueue.reset_mock()
+        response = book.client.post(f"/jobs/{book.job}/confirm", json={
+            "action": "pencil", "char_id": "c0", "text": "a red hat", "source": source})
+        assert (response.status_code, response.json()["detail"]) == (503, "privacy_processing_unavailable")
+        book.queue.enqueue.assert_not_called()
+        assert book.conn.execute("select status from jobs where id=%s", (book.job,)).fetchone()["status"] == "awaiting_confirm"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.parametrize("decision", ["stop", "allow", "stop_removed"])
+def test_flagged_pencil_text_is_held_with_no_picture_and_a_teacher_stop_ends_only_the_request(
+        monkeypatch, held_database, decision):
+    """Ticket 06 (AC-08, SH-05, OD-08): no image and no go while held; allow runs the edit; stop
+    returns the child to the reveal with the old picture and the story goes on."""
+    from contracts.story_memory import ClassifierEvidence
+
+    def text_check(text, *, evidence=None):
+        evidence.append(ClassifierEvidence(layer="primary", model_id="synthetic", instruction_version="v1",
+                                           outcome="flagged", categories=["violence"]))
+        return False, ["violence"], text
+
+    book = _pencil_book(monkeypatch, held_database, text_check)
+    job, client, queue, conn = book.job, book.client, book.queue, book.conn
+    try:
+        old = book.reveal_of(job)["characters"][0]["image_path"]
+        queue.enqueue.reset_mock()
+        assert client.post(f"/jobs/{job}/confirm", json={
+            "action": "pencil", "char_id": "c0", "text": "a big sword", "source": old}).json()["status"] == "queued"
+        book.run(job, queue.enqueue.call_args.args[2], expected_epoch=0)
+        held = conn.execute("select * from jobs where id=%s", (job,)).fetchone()
+        assert held["status"] == "awaiting_teacher"
+        book.edit.assert_not_called()
+        assert client.get(f"/jobs/{job}/state").json()["pencil_hold"] is True   # SH-05 neutral copy
+
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=book.teacher)
+        route = f"/teacher/jobs/{job}/moderation-review"
+        detail = client.get(route).json()
+        assert (detail["kind"], detail["pencil_text"], detail["replacement_available"]) == (
+            "character_pencil_text", "a big sword", False)
+        assert detail["classifier_evidence"][0]["categories"] == ["violence"]
+        command = {"review_id": detail["review_id"], "subject_version": detail["subject_version"],
+                   "expected_epoch": detail["generation_epoch"], "request_id": str(uuid4()),
+                   "policy_version": detail["current_policy_version"], "confirmed_criteria": detail["criteria"],
+                   "confirmed": True}
+        assert client.post(f"{route}/decision", json={**command, "action": "replace"}).status_code == 422
+        if decision == "stop_removed":
+            # A removed child cannot come back to the reveal, so the stop ends the story instead of
+            # leaving a hold nobody can clear.
+            conn.execute("update profiles set removed_at=now() where id=%s", (book.child,))
+            response = client.post(f"{route}/decision", json={**command, "action": "stop", "confirmed_criteria": []})
+            conn.execute("update profiles set removed_at=null where id=%s", (book.child,))
+            assert (response.status_code, response.json()["status"]) == (200, "stopped")
+            book.edit.assert_not_called()
+            return
+        queue.enqueue.reset_mock()
+        assert client.post(f"{route}/decision", json={**command, "action": decision}).status_code == 202
+        dispatched = queue.enqueue.call_args.kwargs
+        book.run(job, expected_epoch=dispatched["expected_epoch"], review_id=dispatched["review_id"])
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=book.child)
+        after = book.reveal_of(job)
+        assert conn.execute("select status from jobs where id=%s", (job,)).fetchone()["status"] == "awaiting_confirm"
+        if decision == "stop":
+            assert after["taps_left"] == 3 and after["characters"][0]["image_path"] == old
+            book.edit.assert_not_called()
+        else:
+            assert after["taps_left"] == 2 and after["characters"][0]["pencil_choice"]["image_path"] == old
+            book.edit.assert_called_once()
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    row = _pencil_rows(conn, job)[0]
+    assert (row["pencil_text"], row["before_path"]) == ("a big sword", old)
+    if decision == "stop":
+        assert (row["text_moderation"], row["reason"], row["image_path"]) == ("teacher_stopped", "text_stopped", None)
+    else:
+        assert (row["text_moderation"], row["image_path"]) == ("teacher_allowed", f"{job}/ref-c0-2.png")

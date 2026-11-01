@@ -15,6 +15,7 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, Field
 
 import providers
+from providers import check_text
 from app.auth import get_current_user
 from app.config import settings
 from app.moderation_policy import OPTIONAL_THEMES, POLICY, TEACHER_MODERATION_CRITERIA, TEACHER_MODERATION_POLICY_VERSION
@@ -115,12 +116,13 @@ def teacher_review_list(classroom_id: UUID, response: Response, user=Depends(get
             teacher_classroom(conn, str(classroom_id), str(user.id))
             rows = conn.execute("""select r.id as review_id,j.id as job_id,j.title,
               p.display_nickname as author,r.created_at as held_at,
-              (r.decision in ('allow','replace')) as continuation_pending,
+              (r.decision in ('allow','replace') or (r.decision='stop' and r.kind='character_pencil_text')) as continuation_pending,
               (j.worker_finished_at is not null) as ready
               from job_moderation_reviews r join jobs j on j.id=r.job_id
               left join profiles p on p.id=j.profile_id
               where j.classroom_id=%s and ((j.status='awaiting_teacher' and r.decision is null)
-                or (j.status='queued' and r.decision in ('allow','replace') and r.decision_epoch=j.generation_epoch
+                or (j.status='queued' and (r.decision in ('allow','replace') or (r.decision='stop' and r.kind='character_pencil_text'))
+                    and r.decision_epoch=j.generation_epoch
                     and r.dispatch_state in ('pending','failed')))
               order by r.created_at,r.id""", (str(classroom_id),)).fetchall()
     except psycopg.Error:
@@ -154,7 +156,7 @@ def review_pictures(conn, job_id: str, review: dict):
     else:
         pictures.append({"asset_id": "context-unavailable", "label": "Other story pictures",
                          "path": None, "state": "unavailable"})
-    if review["kind"] not in ("story_text", "optional_themes") and not any(p["state"] == "held" for p in pictures):
+    if review["kind"] not in ("story_text", "optional_themes", "character_pencil_text") and not any(p["state"] == "held" for p in pictures):
         pictures.append({"asset_id": "held", "label": "Picture needing review",
                          "path": review["subject"].get("image_path"), "state": "held"})
     return pictures
@@ -169,7 +171,8 @@ def teacher_review_detail(job_id: UUID, response: Response, user=Depends(get_cur
             if not review or job["status"] != "awaiting_teacher":
                 clearances = []
                 pending = conn.execute("""select * from job_moderation_reviews where job_id=%s
-                  and decision in ('allow','replace') and decision_epoch=%s and dispatch_state in ('pending','failed')""",
+                  and (decision in ('allow','replace') or (decision='stop' and kind='character_pencil_text'))
+                  and decision_epoch=%s and dispatch_state in ('pending','failed')""",
                                        (job_id, job["generation_epoch"])).fetchone() if job["status"] == "queued" else None
                 if job["moderation_mode"] == "teacher_review_v1" and job["status"] in ("queued", "running", "awaiting_confirm", "complete"):
                     checkpoint = PostgresSaver(conn).get_tuple({"configurable": {"thread_id": str(job_id)}})
@@ -219,6 +222,7 @@ def teacher_review_detail(job_id: UUID, response: Response, user=Depends(get_cur
                     "author": author["display_nickname"] if author else None,
                     "story_text": review["subject"].get("story_text"),
                     "subject_title": review["subject"].get("title") if review["kind"] == "title" else None,
+                    "pencil_text": review["subject"].get("pencil_text") if review["kind"] == "character_pencil_text" else None,
                     "kind": review["kind"], "criteria": review["criteria"], "policy_version": review["policy_version"],
                     "origin": "optional_theme" if review["kind"] == "optional_themes" else "shared_safety",
                     "detected_themes": review["subject"].get("detected_themes", []),
@@ -387,6 +391,11 @@ def validate_review_checkpoint(conn, job_id, review):
         return state if (saved.subject_id == "input" and text is not None
             and text == review["subject"].get("story_text")
             and hashlib.sha256(text.encode("utf-8")).hexdigest() == saved.subject_version) else None
+    if saved.kind == "character_pencil_text":
+        use = next((u for u in state.pencil_uses if u.use_id == saved.subject_id), None)
+        return state if (use and state.reference_pencil == use.use_id and use.text_moderation == "held"
+            and use.text == review["subject"].get("pencil_text")
+            and hashlib.sha256(use.text.encode("utf-8")).hexdigest() == saved.subject_version) else None
     if saved.kind == "character_reference":
         char = next((c for c in state.characters if c.char_id == saved.subject_id), None)
         return state if char and char.canonical_ref_image == review["subject"].get("image_path") and char.canonical_ref_image else None
@@ -404,8 +413,8 @@ def review_subject_bytes(review):
         if not isinstance(title, str):
             raise RuntimeError("moderation_subject_unavailable")
         return title.encode("utf-8")
-    if review["kind"] in ("story_text", "optional_themes"):
-        text = review["subject"].get("story_text")
+    if review["kind"] in ("story_text", "optional_themes", "character_pencil_text"):
+        text = review["subject"].get("pencil_text" if review["kind"] == "character_pencil_text" else "story_text")
         if not isinstance(text, str):
             raise RuntimeError("moderation_subject_unavailable")
         return text.encode("utf-8")
@@ -426,9 +435,15 @@ def teacher_decision(job_id: UUID, body: ReviewDecision, response: Response, use
                 raise HTTPException(403, "teacher_required", headers=PRIVATE)
             teacher_classroom(conn, str(job["classroom_id"]), uid)
             conn.execute("select id from profiles where id=%s for update", (job["profile_id"],))
-            if job["moderation_mode"] != "teacher_review_v1" or (body.action != "stop" and not active_author(conn, job)):
+            # OD-08: stopping a held pencil text ends only that change; the story goes on. A removed
+            # author cannot come back to the reveal, so their story stops as any other hold would.
+            request_only = body.action == "stop" and active_author(conn, job) and bool(conn.execute(
+                "select 1 from job_moderation_reviews where job_id=%s and id=%s and kind='character_pencil_text'",
+                (jid, body.review_id)).fetchone())
+            if job["moderation_mode"] != "teacher_review_v1" or (
+                    body.action != "stop" and not active_author(conn, job)):
                 raise HTTPException(404, "review_not_found", headers=PRIVATE)
-            if body.action == "stop":
+            if body.action == "stop" and not request_only:
                 result = stop_held_job(conn, job, body, uid, teacher=True)
                 response.headers.update(PRIVATE)
                 return result
@@ -674,7 +689,8 @@ def assert_current(conn, job_id: str, epoch: int) -> dict:
 
 def project_hold(conn, job_id: str, state: StoryMemory, checkpoint_id: str) -> int:
     review, context = state.moderation_context.review, state.moderation_context
-    if (not review or review.kind not in ("scene_image", "character_reference", "story_text", "optional_themes") or review.resolution is not None
+    if (not review or review.kind not in ("scene_image", "character_reference", "story_text", "optional_themes",
+                                          "character_pencil_text") or review.resolution is not None
             or not checkpoint_id or not context.policy_version):
         raise RuntimeError("invalid_moderation_checkpoint")
     if review.kind in ("story_text", "optional_themes"):
@@ -686,6 +702,13 @@ def project_hold(conn, job_id: str, state: StoryMemory, checkpoint_id: str) -> i
         if review.kind == "optional_themes":
             subject.update(detected_themes=[d.model_dump() for d in context.detected_themes],
                            theme_check=context.optional_theme_check.model_dump())
+    elif review.kind == "character_pencil_text":
+        use = next((u for u in state.pencil_uses if u.use_id == review.subject_id), None)
+        if use is None or hashlib.sha256(use.text.encode("utf-8")).hexdigest() != review.subject_version:
+            raise RuntimeError("invalid_moderation_subject")
+        char = next(c for c in state.characters if c.char_id == use.char_id)
+        subject = {"pencil_text": use.text, "char_id": char.char_id, "char_name": char.name,
+                   "image_path": use.before_path, "story_text": state.input.redacted_text or state.input.raw_text}
     elif review.kind == "character_reference":
         char = next(c for c in state.characters if c.char_id == review.subject_id)
         path = char.canonical_ref_image
@@ -699,7 +722,7 @@ def project_hold(conn, job_id: str, state: StoryMemory, checkpoint_id: str) -> i
                    "prompt": selected.prompt if selected else scene.prompt,
                    "reference_paths": [c.canonical_ref_image for c in state.characters
                                        if c.char_id in scene.characters_present and c.canonical_ref_image]}
-    if review.kind not in ("story_text", "optional_themes"):
+    if review.kind not in ("story_text", "optional_themes", "character_pencil_text"):
         if not path or not path.startswith(f"{job_id}/"):
             raise RuntimeError("invalid_moderation_subject")
         subject.update(image_hash=review.subject_version, story_text=state.input.redacted_text or state.input.raw_text)
@@ -721,11 +744,32 @@ def project_hold(conn, job_id: str, state: StoryMemory, checkpoint_id: str) -> i
             Jsonb({"theme_ids": context.theme_ids, "settings_version": context.settings_version}),
             Jsonb([e.model_dump(mode="json") for e in review.classifier_evidence]), checkpoint_id, review.return_node,
         ))
+        record_pencil_uses(conn, job_id, state)
         conn.execute("""update jobs set status='awaiting_teacher',current_stage='moderation_review',
           generation_epoch=generation_epoch+1,reveal='{}',pages='[]',error=null,failure_reason=null,
           worker_finished_at=null,image_count=greatest(coalesce(image_count,0),%s) where id=%s""",
                      (state.cost.image_count, job_id))
         return job["generation_epoch"] + 1
+
+
+def record_pencil_uses(conn, job_id: str, state: StoryMemory) -> None:
+    """AC-22 / OD-04: every pencil use is a job-owned row that follows the story. The checkpoint
+    stays the source of truth, so each projection rewrites the row with what it now says."""
+    for use in state.pencil_uses:
+        char = next(c for c in state.characters if c.char_id == use.char_id)
+        status = (char.ref_moderation_status if use.after_path == char.canonical_ref_image else next(
+            (v.ref_moderation_status for v in char.versions if v.image_path == use.after_path), None))
+        picture = None if use.after_path is None or status is None else (
+            status if status in ("passed", "teacher_allowed") else "flagged")
+        conn.execute("""insert into job_picture_records(job_id,kind,target_id,version_id,image_path,source,
+          before_path,pencil_text,text_moderation,picture_moderation,reason,choice)
+          values (%s,'pencil',%s,%s,%s,'pencil',%s,%s,%s,%s,%s,%s)
+          on conflict (job_id,kind,version_id) do update set image_path=excluded.image_path,
+          text_moderation=excluded.text_moderation,
+          picture_moderation=coalesce(excluded.picture_moderation,job_picture_records.picture_moderation),
+          reason=excluded.reason,choice=excluded.choice""", (
+            job_id, use.char_id, use.use_id, use.after_path, use.before_path, use.text,
+            use.text_moderation, picture, use.reason, use.choice))
 
 
 def product_job(conn, job_id: str, user_id: str) -> dict:
@@ -776,13 +820,15 @@ def job_state(job_id: UUID, response: Response, user=Depends(get_current_user)):
         job = product_job(conn, str(job_id), str(user.id))
         repairable = can_reconcile_hold(conn, job)
         author = str(job["profile_id"]) == str(user.id)
-        review = conn.execute("select id from job_moderation_reviews where job_id=%s and decision is null",
+        review = conn.execute("select id,kind from job_moderation_reviews where job_id=%s and decision is null",
                               (job_id,)).fetchone() if author and job["status"] == "awaiting_teacher" else None
     response.headers.update(PRIVATE)
     return {"job_id": str(job_id), "status": job["status"], "moderation_mode": job["moderation_mode"],
             "generation_epoch": job["generation_epoch"], "worker_finished": job["worker_finished_at"] is not None,
             "can_reconcile_hold": (author and repairable),
             "review_id": str(review["id"]) if review else None,
+            # SH-05: a held pencil text waits alone; the child sees neutral copy and no story stop.
+            "pencil_hold": bool(review and review["kind"] == "character_pencil_text"),
             "saved_writing": {"text": job["input_text"], "title": job["title"] or ""}
                 if author and job["status"] == "stopped" and job["moderation_mode"] == "teacher_review_v1" else None}
 
@@ -913,8 +959,52 @@ def reconcile_hold(job_id: UUID, user=Depends(get_current_user)):
     return Response(status_code=202, headers=PRIVATE)
 
 
+def pencil_offered(job: dict, payload: dict) -> None:
+    """ADR-082 Decision 2 (SH-08): the pencil works on the picture on screen, with a go left, and a
+    keep/old choice answers the choice the reveal is waiting on."""
+    reveal = job["reveal"] or {}
+    character = next((c for c in reveal.get("characters", []) if c["char_id"] == payload["char_id"]
+                      and c["image_path"] == payload["source"] and "versions" in c), None)
+    if payload["action"] == "pencil":
+        offered = (character is not None and character.get("pencil_ready") is True
+                   and not character.get("pencil_choice") and reveal.get("taps_left", 0) > 0)
+    else:
+        offered = character is not None and bool(character.get("pencil_choice"))
+    if not offered:
+        raise HTTPException(422, "choice_unavailable", headers=PRIVATE)
+
+
+def checked_pencil_text(text: str) -> dict:
+    """SH-03: Presidio first, so only the redacted text reaches the classifiers, the worker and the
+    log (SH-10). A redaction or classifier failure spends nothing and holds nothing."""
+    try:
+        redacted = providers.redact_pii(text)
+    except Exception:
+        raise HTTPException(503, "privacy_processing_unavailable", headers=PRIVATE) from None
+    evidence = []
+    try:
+        safe, categories, _ = check_text(redacted, evidence=evidence)
+    except Exception:
+        raise HTTPException(503, "moderation_unavailable", headers=PRIVATE) from None
+    if categories == ["moderation_error"]:
+        raise HTTPException(503, "moderation_unavailable", headers=PRIVATE)
+    return {"text": redacted, "flagged": not safe, "evidence": [e.model_dump(mode="json") for e in evidence]}
+
+
 def confirm_review_job(job_id: str, payload: dict, user_id: str) -> str:
     from app.main import JOB_TIMEOUT_SECONDS
+
+    if payload["action"] == "pencil":
+        # The classifiers are network calls, so they run before the row lock is taken and the
+        # offer is checked again under it.
+        with connect() as conn:
+            job = conn.execute("select * from jobs where id=%s", (job_id,)).fetchone()
+            if not job or str(job["profile_id"]) != user_id or not active_author(conn, job):
+                raise HTTPException(404, "job_not_found", headers=PRIVATE)
+        if job["status"] != "awaiting_confirm":
+            return job["status"]   # SH-08: a double submit sees the first one's status
+        pencil_offered(job, payload)
+        payload = {**payload, **checked_pencil_text(payload["text"])}
 
     with connect() as conn, conn.transaction():
         job = conn.execute("select * from jobs where id=%s for update", (job_id,)).fetchone()
@@ -924,6 +1014,11 @@ def confirm_review_job(job_id: str, payload: dict, user_id: str) -> str:
             return job["status"]
         if job["worker_finished_at"] is None:
             raise HTTPException(409, "finishing_current_step", headers=PRIVATE)
+        if payload["action"] in ("pencil", "pencil_choice"):
+            pencil_offered(job, payload)
+        if payload["action"] == "confirm" and any(
+                c.get("pencil_choice") for c in (job["reveal"] or {}).get("characters", [])):
+            raise HTTPException(422, "choice_pending", headers=PRIVATE)   # no page from an unchosen picture
         if payload["action"] == "try_again" and not any(
             c["char_id"] == payload["char_id"] and payload["attribute"] in c["chips"]
             for c in (job["reveal"] or {}).get("characters", [])

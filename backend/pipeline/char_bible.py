@@ -26,10 +26,12 @@ import logging
 
 from app.config import check_image_budget, settings
 from app.db import get_supabase_client
-from contracts.story_memory import Character, CharacterDescription, RefVerdict, ReferenceVersion, StoryMemory
+from contracts.story_memory import (
+    Character, CharacterDescription, RefVerdict, ReferenceChoice, ReferenceVersion, StoryMemory,
+)
 from pipeline.prompt_optimizer import filtered_description
-from pipeline.reveal import has_versions
-from providers import judge, text_to_image
+from pipeline.reveal import MAX_RETRY_TAPS, has_versions
+from providers import edit_image, get_signed_url, is_fal_content_flag, judge, text_to_image
 
 log = logging.getLogger(__name__)
 
@@ -483,6 +485,72 @@ def _choose_version(state: StoryMemory) -> dict:
             "reference_choice": None}
 
 
+# ADR-082 Decision 2. The 2026-11-01 tap-as-edit probe's keep clause, minus "its colours": the
+# child may be asking for a colour change.
+PENCIL_KEEP_CLAUSE = "Keep everything else about the character, the art style and the plain background exactly the same."
+
+
+def _with_use(state: StoryMemory, use_id: str, **update) -> list:
+    return [u.model_copy(update=update) if u.use_id == use_id else u for u in state.pencil_uses]
+
+
+def _pencil_edit(state: StoryMemory) -> dict:
+    """ADR-082 Decision 2: one edit of the current picture with the child's redacted words as
+    written (SH-10), no judge (Decision 3). The result becomes the reference so `char_ref_mod`
+    moderates it like any redraw; the old picture is kept as a version, and the reveal waits for
+    "Keep this" or "Use the old one" before the book goes on. A go is spent only when a picture
+    comes back (SH-04)."""
+    use = next(u for u in state.pencil_uses if u.use_id == state.reference_pencil)
+    char = next((c for c in state.characters if c.char_id == use.char_id), None)
+    if (char is None or char.canonical_ref_image != use.before_path or char.ref_moderation_status != "passed"
+            or state.cost.ref_retry_count >= MAX_RETRY_TAPS):
+        return {"reference_pencil": None, "pencil_uses": _with_use(state, use.use_id, reason="stale")}
+    check_image_budget(state.cost.image_count)
+    prompt = f"{use.text}\n\n{PENCIL_KEEP_CLAUSE}"
+    try:
+        image = edit_image(prompt, [get_signed_url(char.canonical_ref_image)])
+    except Exception as exc:
+        if not is_fal_content_flag(exc):
+            raise
+        log.info("char_bible: %s pencil edit refused by fal", char.char_id)
+        return {"reference_pencil": None, "pencil_uses": _with_use(state, use.use_id, reason="refused")}
+    n = state.cost.ref_retry_count + state.cost.ref_mod_retry_count + 2
+    path = _upload(image, state.story_id, char.char_id, n)
+    edited = char.model_copy(update={
+        "canonical_ref_image": path, "ref_moderation_status": None, "ref_verdict": None,
+        "ref_verdict_prompt_version": None, "ref_generation_prompt": prompt,
+        "versions": [*char.versions, *_kept(char, "pencil")],
+    })
+    log.info("char_bible: %s pencil edit, ref_retry_count=%d", char.char_id, state.cost.ref_retry_count + 1)
+    return {
+        "characters": [edited if c.char_id == char.char_id else c for c in state.characters],
+        "cost": state.cost.model_copy(update={"image_count": state.cost.image_count + 1,
+                                             "ref_retry_count": state.cost.ref_retry_count + 1}),
+        "reference_pencil": None,
+        "pencil_uses": _with_use(state, use.use_id, after_path=path),
+    }
+
+
+def _settle_pencil(state: StoryMemory) -> dict:
+    """"Keep this" or "Use the old one" (AC-11). Old restores the kept version exactly as
+    `_choose_version` does, and the pencil result becomes a version. A choice from a picture that
+    is no longer the waiting result changes nothing (SH-08)."""
+    choice = state.reference_pencil_choice
+    char = next((c for c in state.characters if c.char_id == choice.char_id), None)
+    use = next((u for u in state.pencil_uses if char and u.char_id == char.char_id and u.choice is None
+                and u.after_path == choice.source == char.canonical_ref_image), None)
+    old = next((v for v in char.versions if use and v.image_path == use.before_path
+                and v.ref_moderation_status == "passed"), None) if char else None
+    if old is None:
+        return {"reference_pencil_choice": None}
+    update = {"reference_pencil_choice": None, "pencil_uses": _with_use(state, use.use_id, choice=choice.choice)}
+    if choice.choice == "old":
+        restored = _choose_version(state.model_copy(update={"reference_choice": ReferenceChoice(
+            char_id=char.char_id, version_id=old.version_id, source=choice.source)}))
+        update["characters"] = restored["characters"]
+    return update
+
+
 def _redraw_recorded(state: StoryMemory, char: Character, n: int) -> tuple[str, RefVerdict | None]:
     """One draw from `char.ref_generation_prompt`, judged and uploaded at suffix `n`."""
     description = filtered_description(char.description, state.style.prompt_fragment or settings.default_style_fragment)
@@ -515,6 +583,10 @@ def char_bible(state: StoryMemory) -> dict:
         return _mint_targeted(state)
     if state.reference_choice is not None:
         return _choose_version(state)
+    if state.reference_pencil is not None:
+        return _pencil_edit(state)
+    if state.reference_pencil_choice is not None:
+        return _settle_pencil(state)
 
     # Cap FIRST (invariant 1, ADR-004), THEN filter (invariant 6). The order is load-bearing:
     # filtering first slides the 2-slot window onto c2 when c0 is already referenced, producing
