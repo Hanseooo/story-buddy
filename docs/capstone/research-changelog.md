@@ -1,6 +1,6 @@
 # StoryBuddy: Research Changelog
 
-**Last updated:** 2026-10-25 · **Covers:** everything since the Objective 4 pre-registration was frozen
+**Last updated:** 2026-11-01 · **Covers:** everything since the Objective 4 pre-registration was frozen
 on 2026-08-14. **Use it to:** update the manuscript. Each entry says what changed, why, and which
 part of the paper it touches.
 
@@ -94,6 +94,7 @@ and confirmed scope"]
 
 | Date | Type | What changed | Why | Paper section | Source |
 |---|---|---|---|---|---|
+| 2026-11-01 | Decision | In baseline jobs, when automatic moderation flags a picture a child asked for with "Draw again", the one automatic redraw now replays that tap's prompt (including the tapped chip) in a single draw, instead of an untargeted three-draw re-mint that dropped the chip. It spends the moderation redraw budget, not the tap budget; a second flag still fails the job. Untapped references and teacher-review jobs are unchanged. Ships without the off-by-default setting because it corrects existing behaviour | Closes the open question in the reference-moderation-retry spec: the child's request was silently lost on a rare path | Methods (system); no change to results or Objective 4 | ADR-082 Decision 7; `docs/specs/magic-pencil.md` US-07; `backend/pipeline/char_bible.py` |
 | 2026-10-25 | Decision | The technical defense panel's suggestions are recorded and ranked as eight epics (onboarding and password change, moderation calibration, review feedback, child creative control, pipeline speed, roster views, AI-assisted review, story construction). Each starts with an audit. The defended version is tagged `technical-defense-2026-10`; later pipeline changes each get a row here. Items that touch ADR-011, ADR-017, ADR-029 or the teacher-review spec ship behind an off-by-default setting pending an ethics re-review | Panel feedback at the technical defense; owner prioritised UX | Discussion (future work); Recommendations | `.scratch/post-technical-defense/map.md`; ROADMAP "Post technical defense" |
 | 2026-10-21 | Scope | Approved books may be downloaded by active classmates in the same current classroom; teacher approval explains downloads and saved-copy permanence | Owner approved classmate downloads after reviewing the sharing implications | Methods (system), Instruments; proposed wording updated, adviser sign-off and deployed-feature verification still pending; historical results and Objective 4 unchanged | ADR-072; `docs/specs/export-pdf.md`; `research_instruments.md` |
 | 2026-10-21 | Scope | PDF download restored for the student's own teacher-approved book, using on-demand WeasyPrint without PDF storage; narration remains cut | Owner prioritised direct-download UX | Methods (system), Instruments; future Tool A includes separate export evidence, historical results and Objective 4 unchanged; questionnaire revision pending adviser sign-off | ADR-071; `docs/specs/export-pdf.md`; `research_instruments.md` |

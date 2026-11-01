@@ -17,7 +17,7 @@ rejected page image should look, and a verdict on whether custom prompts are a g
 |---|---|---|---|---|
 | 01 | [Audit: what a child can change today](issues/01-audit-child-creative-control.md) | research | resolved | — |
 | 02 | [Grill: appearance and page input → spec](issues/02-grill-creative-control-spec.md) | grilling | resolved | 01 (rank 2's audit gates shipping free text only, owner 2026-11-01) |
-| 03 | [Baseline: flagged "Draw again" redraw keeps the chip](issues/03-baseline-redraw-keeps-tapped-chip.md) | task | open | — |
+| 03 | [Baseline: flagged "Draw again" redraw keeps the chip](issues/03-baseline-redraw-keeps-tapped-chip.md) | task | resolved | — |
 | 04 | ["Draw again" is undoable: character versions at the reveal](issues/04-draw-again-undoable-at-reveal.md) | task | open | — |
 | 05 | [Unchosen first-round pictures, moderated on open](issues/05-unchosen-draws-moderated-on-open.md) | task | open | 04 |
 | 06 | [Character magic pencil at the reveal](issues/06-character-pencil-at-reveal.md) | task | open | 04 |
@@ -45,3 +45,6 @@ would change the reference but not the description the pages are drawn from. Own
 plus a write-a-change edit, at "Meet your characters" and on the finished book). Draft spec:
 [`docs/specs/magic-pencil.md`](../../docs/specs/magic-pencil.md). The A2 screen failed, 2 of 9.
 
+**03 (2026-11-01, resolved).** [Answer](issues/03-baseline-redraw-keeps-tapped-chip.md#answer-2026-11-01):
+a flagged "Draw again" picture in baseline is redrawn once from the tap's recorded prompt, chip kept;
+untapped flags and teacher-review unchanged.

@@ -2,7 +2,7 @@
 
 **Status:** ready-for-agent
 **Type:** task
-**Progress:** open
+**Progress:** resolved
 **Blocked by:** None
 
 **Parent:** `docs/specs/magic-pencil.md` (US-07)
@@ -63,3 +63,16 @@ fail on the 3-draw re-mint.
 None.
 
 ## Comments
+
+## Answer (2026-11-01)
+
+Done. In baseline, `_mint_targeted` now records the tap's `ref_generation_prompt`. When that
+character comes back flagged, `char_bible` replays the prompt in one draw (`_redraw_recorded`,
+shared with `replace_reference`) at the shared suffix `n`, spending `ref_mod_retry_count`. Untapped
+flags keep the 3-draw re-mint; teacher-review is gated out. Tests: two at the `char_bible` node
+(AC-23/24 red on 3 draws before the fix; AC-25) and one graph run tap → flag → redraw → flag →
+`ref_flagged` (red before the fix). Spec lines updated in `reference-moderation-retry.md`,
+`moderation-stack.md`, `character-bible.md`; one `research-changelog.md` row.
+
+Not done: the replay path, like `mint_reference` and `_mint_targeted`, does not call
+`check_image_budget()` itself (AGENTS.md invariant); inherited, left as is.

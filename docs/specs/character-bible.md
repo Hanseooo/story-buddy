@@ -10,7 +10,8 @@ ADR-024, ADR-025, ADR-028, ADR-039, PRD §8
 > **no** contract fields and bumps **no** `schema_version` — every type it needs already exists.
 
 **ADR-080 feature-mode amendment (ticket 10, 2026-10-28):** both initial and targeted minting
-record the exact `ref_generation_prompt` on captured `teacher_review_v1` characters. The
+record the exact `ref_generation_prompt` on captured `teacher_review_v1` characters. Since
+2026-11-01 a baseline tap records it too (ADR-082 Decision 7). The
 `moderation_replace` node calls `replace_reference` for one budget-guarded same-prompt draw,
 using the existing reference-judge retry/degraded policy and a fresh immutable suffix. It resets
 `ref_moderation_status`, preserves the full character roster and increments image cost and the

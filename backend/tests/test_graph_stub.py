@@ -859,3 +859,49 @@ def test_a_second_flag_ends_the_book_and_the_graph_does_not_loop_a_third_time(mo
 
     assert str(exc_info.value) == "ref_flagged"
     assert calls["screened"] == 2      # initial screen + one redraw screen, never a third
+
+
+def test_a_flagged_tap_is_redrawn_with_its_chip_and_a_second_flag_ends_the_book(monkeypatch):
+    """magic-pencil AC-23/24, baseline. Tap → flag → one targeted redraw → flag → `ref_flagged`.
+    Every picture after the initial mint flags, so the run must end where today's does."""
+    from unittest.mock import MagicMock
+    from contracts.story_memory import ReferenceRetry
+    _mock_call_points(monkeypatch)
+    taps = {"done": False}
+
+    def tap_once(state):
+        if taps["done"]:
+            return {}
+        taps["done"] = True
+        return {"reference_retry": ReferenceRetry(char_id="c0", attribute="orange sock")}
+
+    def flag_after_initial(state):
+        return {"characters": [
+            c.model_copy(update={"ref_moderation_status": "flagged", "canonical_ref_image": None})
+            if c.canonical_ref_image and not c.canonical_ref_image.endswith("-1.png")
+            else c.model_copy(update={"ref_moderation_status": "passed"})
+            for c in state.characters
+        ]}
+
+    t2i = MagicMock(return_value=b"img")
+    monkeypatch.setattr("pipeline.graph.reveal", tap_once)
+    monkeypatch.setattr("pipeline.graph.char_ref_mod", flag_after_initial)
+    monkeypatch.setattr("pipeline.char_bible.text_to_image", t2i)
+    monkeypatch.setattr("pipeline.char_bible.judge", lambda *a, **k: RefVerdict(
+        differences_observed="none", matches_description=True, attributes_present=["dog"]))
+    monkeypatch.setattr("pipeline.char_bible.get_supabase_client", lambda: MagicMock())
+
+    graph = build_graph()
+    costs = []
+    with pytest.raises(RuntimeError) as exc_info:
+        for chunk in graph.stream(_initial_state("job-tap-flag"), {"configurable": {"thread_id": "t-tap-flag"}},
+                                  stream_mode="updates"):
+            if "char_bible" in chunk:
+                costs.append(chunk["char_bible"]["cost"])
+
+    assert str(exc_info.value) == "ref_flagged"
+    assert t2i.call_count == 2         # the tap, then exactly one moderation redraw
+    assert all("Be sure to include: orange sock." in call.args[0] for call in t2i.call_args_list)
+    redraw = costs[-1]
+    assert (redraw.ref_retry_count, redraw.ref_mod_retry_count) == (1, 1)
+    assert redraw.image_count == costs[-2].image_count + 1

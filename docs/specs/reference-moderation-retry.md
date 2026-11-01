@@ -281,7 +281,7 @@ does **not** add a third breaker: the bound is structural and small, and a break
 | c0 flags, c1 passed | Only c0 is cleared and re-minted; §4.1's guard stops c1 being re-screened. |
 | The redraw flags too | `RuntimeError("ref_flagged")` → `failure_reason="machine"`, exactly as today. Two independent draws flagging is no longer a coin flip. |
 | Primary flags instead of the backstop | Identical path. `char_ref_mod.py:42-46` short-circuits the backstop; the retry is downstream of both. |
-| Flag lands on a **tapped** redraw | Falls back to the untargeted 3-draw mint and **loses the child's tapped attribute** — `reference_retry` was consumed by `_mint_targeted` and cleared. Accepted degradation; see §8. |
+| Flag lands on a **tapped** redraw | Baseline: one draw from the tap's recorded `ref_generation_prompt`, chip kept, spending `ref_mod_retry_count` (ADR-082 Decision 7, 2026-11-01). Until then it fell back to the untargeted 3-draw mint and lost the chip; see §8. |
 | Old checkpoint resumed | `ref_mod_retry_count` defaults to `0`, so a resumed book gets a fresh budget. Harmless — the flag is re-derived from the same image. |
 | Classifier raises rather than flags | Unchanged: primary error → backstop-only, backstop error → `moderation_error`. The retry is on the *flag* path only. |
 | Budget already spent, new flag | Router raises immediately; no clearing is wasted because the job is over. |

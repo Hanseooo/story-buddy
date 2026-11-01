@@ -26,7 +26,7 @@ import logging
 
 from app.config import check_image_budget, settings
 from app.db import get_supabase_client
-from contracts.story_memory import CharacterDescription, RefVerdict, StoryMemory
+from contracts.story_memory import Character, CharacterDescription, RefVerdict, StoryMemory
 from pipeline.prompt_optimizer import filtered_description
 from providers import judge, text_to_image
 
@@ -407,7 +407,9 @@ def _mint_targeted(state: StoryMemory) -> dict:
             "ref_verdict": verdict,
             "ref_verdict_prompt_version": JUDGE_PROMPT_VERSION,
             "ref_moderation_status": None,
-            "ref_generation_prompt": prompt if state.moderation_context.mode == "teacher_review_v1" else None,
+            # Recorded in every mode: in baseline it is how a moderation redraw knows this picture
+            # came from a tap and keeps the chip (ADR-082 Decision 7).
+            "ref_generation_prompt": prompt,
         })
         if c.char_id == character.char_id
         else c
@@ -423,15 +425,20 @@ def _mint_targeted(state: StoryMemory) -> dict:
     return {"characters": characters, "cost": cost, "reference_retry": None}
 
 
+def _redraw_recorded(state: StoryMemory, char: Character, n: int) -> tuple[str, RefVerdict | None]:
+    """One draw from `char.ref_generation_prompt`, judged and uploaded at suffix `n`."""
+    description = filtered_description(char.description, state.style.prompt_fragment or settings.default_style_fragment)
+    image = text_to_image(char.ref_generation_prompt, negative_extra=_reference_negative(description))
+    verdict = _judge_reference(JUDGE_PROMPT.format(subject=_describe(description, char.name, notes=False)), image, char.char_id, 1)
+    return _upload(image, state.story_id, char.char_id, n), verdict
+
+
 def replace_reference(state: StoryMemory, char_id: str) -> dict:
     """ADR-080: one same-intent draw, keeping the rejected immutable object."""
     char = next(c for c in state.characters if c.char_id == char_id)
-    description = filtered_description(char.description, state.style.prompt_fragment or settings.default_style_fragment)
     check_image_budget(state.cost.image_count)
-    image = text_to_image(char.ref_generation_prompt, negative_extra=_reference_negative(description))
-    verdict = _judge_reference(JUDGE_PROMPT.format(subject=_describe(description, char.name, notes=False)), image, char_id, 1)
     n = state.cost.ref_retry_count + state.cost.ref_mod_retry_count + 2
-    path = _upload(image, state.story_id, char_id, n)
+    path, verdict = _redraw_recorded(state, char, n)
     return {
         "characters": [c.model_copy(update={
             "canonical_ref_image": path, "ref_moderation_status": None, "ref_verdict": verdict,
@@ -478,15 +485,35 @@ def char_bible(state: StoryMemory) -> dict:
     mrc = state.cost.ref_mod_retry_count + (1 if was_flagged else 0)
     n = state.cost.ref_retry_count + mrc + 1
 
+    # ADR-082 Decision 7: in baseline only a tap records `ref_generation_prompt`, so a flagged
+    # character carrying one is a "Draw again" picture. Replay that prompt in one draw so the
+    # child's chip survives; the untargeted re-mint below would drop it.
+    baseline = state.moderation_context.mode != "teacher_review_v1"
+    replayed = {
+        c.char_id for c in selected
+        if baseline and c.ref_moderation_status == "flagged" and c.ref_generation_prompt
+    }
+
     minted: dict[str, tuple[str, RefVerdict | None]] = {}
     draws_made = 0
     for character in selected:
-        path, verdict, draws = mint_reference(
-            character.description, character.name, style_fragment, state.story_id,
-            character.char_id, n=n,
-        )
+        if character.char_id in replayed:
+            path, verdict = _redraw_recorded(state, character, n)
+            draws = 1
+        else:
+            path, verdict, draws = mint_reference(
+                character.description, character.name, style_fragment, state.story_id,
+                character.char_id, n=n,
+            )
         minted[character.char_id] = (path, verdict)
         draws_made += draws
+
+    def recorded_prompt(c: Character) -> str | None:
+        if c.char_id in replayed:
+            return c.ref_generation_prompt   # the tap's prompt, chip included
+        if baseline:
+            return None   # baseline records a prompt only for a tap
+        return reference_prompt(filtered_description(c.description, style_fragment), c.name, style_fragment)
 
     # Invariant 2: `characters` has NO reducer, so a partial return REPLACES the list —
     # returning only the modified entries would silently delete every other character.
@@ -501,9 +528,7 @@ def char_bible(state: StoryMemory) -> dict:
             # This path now overwrites that image on a moderation redraw, so the status has to go
             # with it (`moderation-stack.md` §4b) — `_mint_targeted` has always done the same.
             "ref_moderation_status": None,
-            "ref_generation_prompt": reference_prompt(
-                filtered_description(c.description, style_fragment), c.name, style_fragment,
-            ) if state.moderation_context.mode == "teacher_review_v1" else None,
+            "ref_generation_prompt": recorded_prompt(c),
         })
         if c.char_id in minted
         else c

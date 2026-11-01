@@ -1305,6 +1305,58 @@ def test_mint_targeted_after_a_moderation_redraw_picks_a_suffix_that_collides_wi
     assert result["characters"][0].canonical_ref_image == "story-1/ref-c0-3.png"
 
 
+def _flag(state: StoryMemory, update: dict, char_id: str = "c0") -> StoryMemory:
+    """Apply a char_bible update, then do what baseline char_ref_mod does to a flagged ref."""
+    state = state.model_copy(update=update)
+    return state.model_copy(update={"characters": [
+        c.model_copy(update={"ref_moderation_status": "flagged", "canonical_ref_image": None})
+        if c.char_id == char_id else c
+        for c in state.characters
+    ]})
+
+
+def test_a_flagged_tap_in_baseline_is_redrawn_once_with_the_tapped_chip():
+    """magic-pencil AC-23/24 (ADR-082 Decision 7). The moderation redraw of a "Draw again"
+    picture replays the tap's prompt in one draw; it does not fall back to the 3-draw re-mint
+    that loses the chip. It spends the moderation budget, not the tap budget."""
+    state = _targeted_state(attribute="orange sock")
+    with patch("pipeline.char_bible.text_to_image", return_value=b"tap"), \
+         patch("pipeline.char_bible.judge", return_value=_verdict(True, ["dog"])), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+        flagged = _flag(state, char_bible(state))
+
+    # A failing verdict: the untargeted path would re-roll to 3 draws, the targeted one must not.
+    with patch("pipeline.char_bible.text_to_image", return_value=b"redraw") as t2i, \
+         patch("pipeline.char_bible.judge", return_value=_verdict(False, ["dog"])), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+        result = char_bible(flagged)
+
+    assert t2i.call_count == 1
+    assert "Be sure to include: orange sock." in t2i.call_args.args[0]
+    c0 = result["characters"][0]
+    # rc=1 after the tap, mrc=1 after this redraw: 1 + 1 + 1 = 3, clear of the tap's suffix 2.
+    assert c0.canonical_ref_image == "story-1/ref-c0-3.png"
+    assert c0.ref_moderation_status is None
+    assert result["cost"].ref_mod_retry_count == 1
+    assert result["cost"].ref_retry_count == 1
+    assert result["cost"].image_count == 4   # 2 initial + 1 tap + 1 redraw
+
+
+def test_a_flagged_untapped_reference_in_baseline_still_gets_the_untargeted_re_mint():
+    """magic-pencil AC-25. No tap, no recorded prompt: today's 3-draw path stands."""
+    flagged = _char("c0", "the dog").model_copy(update={"ref_moderation_status": "flagged"})
+    state = _state([flagged])
+
+    with patch("pipeline.char_bible.text_to_image", side_effect=DRAWS) as t2i, \
+         patch("pipeline.char_bible.judge", return_value=_verdict(False)), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+        result = char_bible(state)
+
+    assert t2i.call_count == 3
+    assert all("Be sure to include" not in call.args[0] for call in t2i.call_args_list)
+    assert result["cost"].ref_mod_retry_count == 1
+
+
 def test_ref_mod_retry_count_bumps_by_exactly_one_when_two_characters_arrive_flagged():
     """§6 test 12 / §2. The counter is per BOOK — it measures loop iterations, not characters.
     One cycle re-mints both, so a book where c0 and c1 both flag spends 1, not 2."""
