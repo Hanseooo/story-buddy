@@ -393,7 +393,8 @@ suffix sequence), ADR-023 §8 (additive contract fields).
 1. **The tapped-attribute loss (§4.6).** A moderation flag on a child's tapped redraw falls back to
    an untargeted mint and silently drops what the child asked for. Preserving it means either not
    clearing `reference_retry` in `_mint_targeted` or reconstructing it. Rare enough to defer, ugly
-   enough to name.
+   enough to name. **Resolved 2026-11-01** by [`magic-pencil.md`](./magic-pencil.md) US-07 (ADR-082 §7)
+   for baseline jobs; teacher-review jobs already redraw from `ref_generation_prompt`.
 2. **Should a terminal `ref_flagged` say something truer than "machine"?** Considered and declined
    for now — a dedicated `failure_reason` costs an enum value, a `jobs` migration and frontend copy,
    for a path this spec is trying to make rare.

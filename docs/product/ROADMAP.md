@@ -320,7 +320,7 @@ git tag `technical-defense-2026-10`.
 | 1 | [Account onboarding and password change](../../.scratch/ptd-account-onboarding/map.md) | — |
 | 2 | [Moderation calibration](../../.scratch/ptd-moderation-calibration/map.md) | gated: ADR-011, child-safety rules |
 | 3 | [Review feedback, comments, highlights](../../.scratch/ptd-review-feedback/map.md) | gated: teacher-review spec §12–13 |
-| 4 | [Child creative control](../../.scratch/ptd-child-creative-control/map.md) | gated: ADR-029 §2, ADR-069 |
+| 4 | [Child creative control](../../.scratch/ptd-child-creative-control/map.md) | gate opened 2026-11-01: [ADR-082](./adr/ADR-082-magic-pencil-child-edits-and-other-versions.md), spec [magic-pencil](../specs/magic-pencil.md) approved; off by default |
 | 5 | [Pipeline speed](../../.scratch/ptd-pipeline-speed/map.md) | — |
 | 6 | [Roster card/table views](../../.scratch/ptd-roster-views/map.md) | — |
 | 7 | [AI-assisted review](../../.scratch/ptd-ai-assisted-review/map.md) | gated: ADR-017 |

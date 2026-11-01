@@ -27,6 +27,7 @@ One row per entry below, newest last. Each entry adds its row here when it lands
 | Stage-audit gate cuts | the 185 scene redraws removed a generator defect on 8 scenes and introduced one on 9; a failed gate marks a generator defect on 24 of 76 shipped pages, against 29% of all shipped pages | none; the attempt cap and the gate are unchanged | closed; rests on the audit's provisional AI reviews |
 | Reference repair by edit | the edit model fixed the stated count on 5 of 9 shipped references without losing the character (6 with one borderline); it missed seven stripes, four wings and nine feet | none; `char_bible` and the reveal redraw are unchanged | pass on the margin of the 6-of-9 rule; followed by the page check below |
 | Repaired reference on a page | redrawn from the repaired reference, 5 of 6 pages show the stated count and 1 is borderline; one page gained a second face | none; adopting it needs an ADR and a rate screen | passed the 4-of-6 rule; generated instructions, damage to clean references and the rate are unmeasured |
+| Tap wording as an edit | an edit with only the chip's wording fixed 2 of 9 count misses, against 5 of 9 with hand-written change instructions | none; a tap stays a fresh draw | failed the 6-of-9 rule |
 
 ## Edit-model probe: FLUX.2 klein 4B base — 2026-10-08
 
@@ -875,6 +876,64 @@ on the assistant's unblinded reading alone, and the toad stays scored borderline
 **Recommendation recorded.** Keep this as a finding and as future work through the defense, and do
 not change the pipeline before it. The finding already improves the limitation statement: stated
 counts fail at the reference draw, and an edit of the reference removes the failure in a small test.
+
+## Tap wording as an edit: plan (2026-11-01, about $0.27 at most)
+
+Approved by the owner on 2026-11-01 as a separate spend, outside the October USD 2 cap. Part of
+`.scratch/ptd-child-creative-control` ticket 01, option A2.
+
+**Question.** If a reveal tap edited the current reference instead of redrawing it, would the tap's
+own wording fix the defect? The 2026-10-11 repair used hand-written instructions; a child's tap only
+supplies a chip.
+
+**Setup.** Same 9 shipped count-miss references, same edit model (`providers.edit_image`), same seeds
+(11; syn-019 at 22). Instruction: `Be sure to include: {chip}.` plus the same fixed keep clause
+("Keep the character, its colours, the art style and the plain background exactly the same."),
+which a production tap-as-edit would also need. The chip is the one a child would tap for the
+defect, taken verbatim from `reveal._chips` on the stored memory:
+
+| Story | Chip |
+|---|---|
+| syn-002 | six legs |
+| syn-004 | seven blue stripes down back |
+| syn-005 | four wings |
+| syn-010 | five leaf ears |
+| syn-012 | eight legs |
+| syn-013 | nine spots on back |
+| syn-014 | rounded, floating mass with nine protruding raindrop feet |
+| syn-015 | three lanterns on head |
+| syn-019 | two mismatched buttons |
+
+syn-010's added face is a second defect with its own chip; one tap carries one chip, so only the
+ear count is scored. One draw each, no judge call, counted by hand by the assistant, unblinded.
+
+**Pass rule, fixed before running.** A hit shows the chip's stated count (or, for syn-019, two
+visibly different buttons) and keeps the character recognisable. Pass at 6 of 9 hits. A borderline
+counts as a miss. A fal content refusal counts as a miss and is not reseeded.
+
+## Tap wording as an edit: result (2026-11-01, about $0.27)
+
+**Failed: 2 of 9 hits, against a pass rule of 6.** 9 calls, no content refusals. Images in
+`data/judge/evaluations/tap-edit-probe-2026-11/`, script `docs/product/evidence/scripts/tap_edit_probe.py`.
+Counted by the assistant, unblinded, one draw each.
+
+| Story | Chip | Seen | Score |
+|---|---|---|---|
+| syn-002 | six legs | 4 legs | miss |
+| syn-004 | seven blue stripes down back | 6 stripes | miss |
+| syn-005 | four wings | about 5 wing-like folds | borderline, miss |
+| syn-010 | five leaf ears | about 7 leaves; badger face kept | miss |
+| syn-012 | eight legs | 6 legs | miss |
+| syn-013 | nine spots on back | about 7 dark spots on the back, more on the legs | miss |
+| syn-014 | ...nine protruding raindrop feet | face, two stick legs, two arms, falling drops | miss |
+| syn-015 | three lanterns on head | three lanterns on the head; a black stalk now hangs under the body | hit, new defect |
+| syn-019 | two mismatched buttons | one large grey and one small cream button; dot eyes kept | hit |
+
+**Reading.** The same model, references and seeds fixed 5 of 9 with hand-written instructions on
+2026-10-11. The difference is the wording: a chip states the target ("six legs"), the hand-written
+instruction stated the change ("add two more legs"). So a tap that only swaps a fresh draw for an
+edit of the same chip does not fix counts. Whether a child's own words, or an instruction generated
+from the chip and the current picture, phrase the change well enough is untested.
 
 ## Limitations to carry into the write-up (2026-10-08)
 
