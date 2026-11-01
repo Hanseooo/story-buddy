@@ -811,7 +811,7 @@ def authorized_asset(conn, job_id: str, asset_id: str, user_id: str) -> tuple[st
                 path = char.canonical_ref_image
             for version in char.versions if has_versions(state) else []:
                 if (asset_id == f"version-{version.version_id}"
-                        and version.ref_moderation_status in ("passed", "teacher_allowed")):
+                        and version.ref_moderation_status == "passed"):
                     path = version.image_path
     elif job["status"] == "complete":
         if any(s.moderation_status not in ("passed", "teacher_allowed") or not any(

@@ -86,7 +86,7 @@ def _project_reveal(state: StoryMemory) -> dict:
             # payload is the one it always was.
             **({"versions": [
                 {"version_id": v.version_id, "image_path": v.image_path}
-                for v in c.versions if v.ref_moderation_status in ("passed", "teacher_allowed")
+                for v in c.versions if v.ref_moderation_status == "passed"
             ]} if has_versions(state) else {}),
         }
         for c in state.characters

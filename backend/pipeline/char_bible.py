@@ -429,8 +429,9 @@ def _mint_targeted(state: StoryMemory) -> dict:
 
 
 def _kept(c: Character, source: str) -> list[ReferenceVersion]:
-    """The current reference as a version, or nothing when it was never cleared (AC-02)."""
-    if c.canonical_ref_image is None or c.ref_moderation_status not in ("passed", "teacher_allowed"):
+    """The current reference as a version, or nothing unless the classifier passed it (AC-02). A
+    teacher-allowed picture is not kept: `teacher_withdraw` can reach only the current reference."""
+    if c.canonical_ref_image is None or c.ref_moderation_status != "passed":
         return []
     return [ReferenceVersion(
         version_id=c.canonical_ref_image.rsplit("/", 1)[-1].removesuffix(".png"),
@@ -449,7 +450,7 @@ def _choose_version(state: StoryMemory) -> dict:
     char = next((c for c in state.characters if c.char_id == choice.char_id), None)
     chosen = next((v for v in char.versions if v.version_id == choice.version_id), None) if char else None
     if (chosen is None or char.canonical_ref_image != choice.source
-            or chosen.ref_moderation_status not in ("passed", "teacher_allowed")):
+            or chosen.ref_moderation_status != "passed"):
         return {"reference_choice": None}
     restored = char.model_copy(update={
         "canonical_ref_image": chosen.image_path, "ref_moderation_status": chosen.ref_moderation_status,

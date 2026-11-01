@@ -52,4 +52,4 @@ untapped flags and teacher-review unchanged.
 **04 (2026-11-01, resolved).** [Answer](issues/04-draw-again-undoable-at-reveal.md#answer-2026-11-01):
 behind `ENABLE_MAGIC_PENCIL` on teacher-review jobs, "Draw again" keeps the replaced picture and the
 child can choose it back at no image or go cost. Table `job_picture_records` added. No browser pass;
-owner decision open on withdrawing a teacher-allowed picture once it is a version.
+teacher-allowed pictures are never kept as versions (a teacher can withdraw only the current one).

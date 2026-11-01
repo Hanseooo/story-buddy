@@ -339,7 +339,8 @@ def test_project_reveal_offers_no_versions_for_a_first_draw_accept():
     assert _project_reveal(state)["characters"][0]["versions"] == []
 
 
-def test_project_reveal_offers_earlier_cleared_pictures_and_never_a_flagged_one():
+def test_project_reveal_offers_earlier_passed_pictures_and_never_a_flagged_or_teacher_allowed_one():
+    """A teacher can withdraw only the current picture, so a teacher-allowed one is never kept."""
     allowed = ReferenceVersion(version_id="ref-c0-2", image_path="job-1/ref-c0-2.png",
                                ref_moderation_status="teacher_allowed", source="draw_again")
     flagged = ReferenceVersion(version_id="ref-c0-3", image_path="job-1/ref-c0-3.png",
@@ -347,7 +348,6 @@ def test_project_reveal_offers_earlier_cleared_pictures_and_never_a_flagged_one(
     state = _feature_state([_with_versions(_char("c0", "Kiko", ref="job-1/ref-c0-4.png"), _EARLIER, allowed, flagged)])
     assert _project_reveal(state)["characters"][0]["versions"] == [
         {"version_id": "ref-c0-1", "image_path": "job-1/ref-c0-1.png"},
-        {"version_id": "ref-c0-2", "image_path": "job-1/ref-c0-2.png"},
     ]
 
 

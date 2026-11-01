@@ -19,7 +19,8 @@ instead of repeating it.
 ### Code
 
 - New off-by-default `ENABLE_MAGIC_PENCIL`, snapshotted per job; teacher-review jobs only. A picture
-  replaced by "Draw again" is kept on the character, and "Meet your characters" offers it under
+  the classifier passed and "Draw again" replaced is kept on the character (a teacher-allowed one
+  is not, so it stays withdrawable), and "Meet your characters" offers it under
   "Other versions". Choosing one is a `choose_version` confirm that carries the current picture; it
   swaps the reference with no draw and no go, and a stale or unknown choice is rejected with 422.
 - Version pictures are served only through `/jobs/{id}/images/version-<id>`.

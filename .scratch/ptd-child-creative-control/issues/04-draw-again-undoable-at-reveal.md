@@ -111,8 +111,10 @@ assets, which no reachable state exercises. Full suites: backend 1633 passed, 6 
 Not done or not verified:
 - **No `playwright-cli` pass.** It needs a signed-in synthetic child (login wall) and real draws.
 - `test_rls_isolation` skipped (no `SUPABASE_DB_URL`); the new table is not in it.
-- **Owner decision:** a teacher cannot withdraw a `teacher_allowed` picture once it is a version
-  (`teacher_withdraw` accepts only the current reference), yet it is still offered. Before this
-  ticket the picture was simply gone. Restoring it makes it current and withdrawable again.
+- **Decided (owner delegated):** only a classifier-`passed` picture becomes a version. A
+  `teacher_allowed` one is dropped on "Draw again", as before this ticket, because
+  `teacher_withdraw` reaches only the current reference and an offered version would sit outside
+  teacher control. Cost: a flagged-then-allowed picture cannot be chosen back. Enforced in
+  `_kept`, `_choose_version`, `_project_reveal` and `authorized_asset`.
 - A teacher `replace_reference` keeps no version: what it replaces is flagged, so never offerable.
 - Focus lands on the list group, not its first picture: pictures stay disabled until loaded.

@@ -264,6 +264,7 @@ teacher-review mode a flag already holds and a teacher replacement redraws from
 | An unchosen draw fails moderation when opened | Marked excluded, not shown; no hold | AC-03 |
 | "Draw again" replaces a picture the child liked | The old picture is another version; picking it costs nothing | AC-02, AC-05 |
 | An earlier picture was flagged or withdrawn | Never offered as a version | AC-02 |
+| An earlier picture was flagged, then teacher-allowed | Not kept as a version: a teacher can withdraw only the current picture (decided 2026-11-01, ticket 04) | AC-02 |
 | Held pencil result: teacher requests a replacement | The same edit runs once more in ADR-080's replacement slot | AC-10, AC-18 |
 | Held page pencil result: teacher stops it | Only the request ends; the book stays | AC-18 |
 | Baseline job: flag on a tapped redraw | One redraw from the recorded prompt, chip kept | AC-23 |

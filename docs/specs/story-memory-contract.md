@@ -290,7 +290,8 @@ same image.
 **`Character.versions`, `ReferenceVersion`, `ReferenceChoice`, `StoryMemory.reference_choice`,
 `ModerationContext.magic_pencil`** (added by `magic-pencil.md` US-01, 2026-11-01) are the same pattern:
 each is declared last, defaults to empty, `None` or `False`, and none bumped `CURRENT_SCHEMA_VERSION`.
-A `ReferenceVersion` is a cleared reference that "Draw again" replaced (or that a version choice
+A `ReferenceVersion` is a classifier-`passed` reference (never `teacher_allowed`, which a teacher
+must stay able to withdraw) that "Draw again" replaced (or that a version choice
 displaced), kept with its moderation status and verdict so restoring it needs no new draw or check.
 `reference_choice` is `None` except between `reveal` and `char_bible`, like `reference_retry`. An
 old checkpoint resumes with no versions and the feature off.
