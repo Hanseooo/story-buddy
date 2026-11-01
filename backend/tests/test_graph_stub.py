@@ -326,7 +326,7 @@ def _mock_call_points(monkeypatch):
     )
     monkeypatch.setattr(
         "pipeline.char_bible.mint_reference",
-        lambda description, name, style_fragment, story_id, char_id, n=1: (
+        lambda description, name, style_fragment, story_id, char_id, n=1, unchosen=None: (
             f"{story_id}/ref-{char_id}-{n}.png",
             RefVerdict(differences_observed="none", matches_description=True, attributes_present=["dog"]),
             2,

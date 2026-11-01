@@ -364,3 +364,27 @@ def test_reveal_ignores_a_choose_version_resume_on_a_job_without_the_feature():
     answer = {"action": "choose_version", "char_id": "c0", "version_id": "ref-c0-1", "source": "job-1/ref-c0-2.png"}
     with patch("pipeline.reveal.interrupt", return_value=answer):
         assert reveal(state) == {}
+
+
+def test_project_reveal_names_unopened_draws_by_id_only():
+    """magic-pencil 05: an unchosen draw nobody opened has no path in the payload, only its id."""
+    unchosen = ReferenceVersion(version_id="ref-c0-1-u1", image_path="job-1/ref-c0-1-u1.png", source="unchosen_draw")
+    state = _feature_state([_with_versions(_char("c0", "Kiko", ref="job-1/ref-c0-1.png"), unchosen)])
+    character = _project_reveal(state)["characters"][0]
+    assert character["versions"] == []
+    assert character["unreviewed"] == ["ref-c0-1-u1"]
+
+
+def test_project_reveal_has_no_unreviewed_key_without_the_feature():
+    unchosen = ReferenceVersion(version_id="ref-c0-1-u1", image_path="job-1/ref-c0-1-u1.png", source="unchosen_draw")
+    state = _feature_state([_with_versions(_char("c0", "Kiko", ref="job-1/ref-c0-1.png"), unchosen)], magic_pencil=False)
+    assert "unreviewed" not in _project_reveal(state)["characters"][0]
+
+
+def test_reveal_choose_version_carries_an_on_open_clearance():
+    state = _feature_state([_char("c0", "Kiko", ref="job-1/ref-c0-1.png")])
+    answer = {"action": "choose_version", "char_id": "c0", "version_id": "ref-c0-1-u1",
+              "source": "job-1/ref-c0-1.png", "cleared": True}
+    with patch("pipeline.reveal.interrupt", return_value=answer):
+        result = reveal(state)
+    assert result["reference_choice"].cleared is True

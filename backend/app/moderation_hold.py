@@ -20,6 +20,7 @@ from app.config import settings
 from app.moderation_policy import OPTIONAL_THEMES, POLICY, TEACHER_MODERATION_CRITERIA, TEACHER_MODERATION_POLICY_VERSION
 from app.queue import get_queue
 from contracts.story_memory import StoryMemory
+from pipeline.char_ref_mod import screen_reference
 from pipeline.input_gate import has_text_clearance
 from pipeline.optional_themes import has_bound_theme_review
 from pipeline.reveal import has_versions
@@ -810,8 +811,10 @@ def authorized_asset(conn, job_id: str, asset_id: str, user_id: str) -> tuple[st
             if asset_id == f"ref-{char.char_id}" and char.ref_moderation_status in ("passed", "teacher_allowed"):
                 path = char.canonical_ref_image
             for version in char.versions if has_versions(state) else []:
-                if (asset_id == f"version-{version.version_id}"
-                        and version.ref_moderation_status == "passed"):
+                if asset_id == f"version-{version.version_id}" and (
+                        version.ref_moderation_status == "passed" or (
+                            version.ref_moderation_status is None
+                            and opened_outcome(conn, job_id, version.version_id) == "passed")):
                     path = version.image_path
     elif job["status"] == "complete":
         if any(s.moderation_status not in ("passed", "teacher_allowed") or not any(
@@ -844,6 +847,59 @@ def job_image(job_id: UUID, asset_id: str, user=Depends(get_current_user)):
     return Response(contents, media_type="image/png", headers=PRIVATE)
 
 
+def opened_outcome(conn, job_id: str, version_id: str) -> str | None:
+    """The stored on-open outcome of an unchosen draw: 'passed', 'excluded', or None (unchecked)."""
+    row = conn.execute("""select moderation_status from job_picture_records
+      where job_id=%s and kind='version' and source='unchosen_draw' and version_id=%s""",
+                       (job_id, version_id)).fetchone()
+    return row["moderation_status"] if row else None
+
+
+@hold_router.post("/jobs/{job_id}/characters/{char_id}/versions/open")
+def open_versions(job_id: UUID, char_id: str, response: Response, user=Depends(get_current_user)):
+    """magic-pencil 05 (AC-03, SH-02, OD-03). Moderates each unchosen draw of this character that
+    nobody has opened, in this process because the run is paused at the reveal, and stores each
+    outcome once. A flag is excluded with no hold; a classifier error stores nothing and counts as
+    unavailable. Returns the pictures the child may see."""
+    job_id = str(job_id)
+    with connect() as conn:
+        job = product_job(conn, job_id, str(user.id))
+        character = next((c for c in (job["reveal"] or {}).get("characters", []) if c["char_id"] == char_id), None)
+        if (job["moderation_mode"] != "teacher_review_v1" or job["status"] != "awaiting_confirm"
+                or str(job["profile_id"]) != str(user.id) or not active_author(conn, job) or character is None
+                or "unreviewed" not in character
+                or conn.execute("select 1 from job_moderation_reviews where job_id=%s and decision is null",
+                                (job_id,)).fetchone()):
+            raise HTTPException(404, "versions_unavailable", headers=PRIVATE)
+        records = {r["version_id"]: r for r in conn.execute("""select version_id,image_path,moderation_status
+          from job_picture_records where job_id=%s and kind='version' and source='unchosen_draw'
+          and target_id=%s and version_id = any(%s)""", (job_id, char_id, character["unreviewed"])).fetchall()}
+    versions, unavailable = list(character["versions"]), 0
+    for version_id in character["unreviewed"]:
+        record = records.get(version_id)
+        if record is None or not record["image_path"].startswith(f"{job_id}/"):
+            unavailable += 1
+            continue
+        status = record["moderation_status"]
+        if status is None:
+            try:
+                status = "passed" if screen_reference(record["image_path"]) else "excluded"
+            except Exception:
+                unavailable += 1   # Not a flag (SH-02): nothing is stored, so the next open checks again.
+                continue
+            with connect() as conn:
+                # First outcome wins, so a concurrent open cannot overwrite a stored one.
+                conn.execute("""update job_picture_records set moderation_status=%s
+                  where job_id=%s and kind='version' and source='unchosen_draw' and version_id=%s
+                  and moderation_status is null""",
+                             (status, job_id, version_id))
+                status = opened_outcome(conn, job_id, version_id)
+        if status == "passed":
+            versions.append({"version_id": version_id, "image_path": record["image_path"]})
+    response.headers.update(PRIVATE)
+    return {"versions": versions, "unavailable": unavailable}
+
+
 @hold_router.post("/jobs/{job_id}/reconcile-hold")
 def reconcile_hold(job_id: UUID, user=Depends(get_current_user)):
     with connect() as conn:
@@ -873,12 +929,18 @@ def confirm_review_job(job_id: str, payload: dict, user_id: str) -> str:
             for c in (job["reveal"] or {}).get("characters", [])
         ):
             raise HTTPException(422, "choice_unavailable", headers=PRIVATE)
-        if payload["action"] == "choose_version" and not any(
-            c["char_id"] == payload["char_id"] and c["image_path"] == payload["source"]
-            and any(v["version_id"] == payload["version_id"] for v in c.get("versions", []))
-            for c in (job["reveal"] or {}).get("characters", [])
-        ):
-            raise HTTPException(422, "choice_unavailable", headers=PRIVATE)
+        if payload["action"] == "choose_version":
+            character = next((c for c in (job["reveal"] or {}).get("characters", [])
+                              if c["char_id"] == payload["char_id"] and c["image_path"] == payload["source"]), None)
+            offered = character is not None and any(
+                v["version_id"] == payload["version_id"] for v in character.get("versions", []))
+            # An unchosen draw is offered once it passed on open; the worker trusts `cleared` (SH-02).
+            cleared = (character is not None and not offered
+                       and payload["version_id"] in character.get("unreviewed", [])
+                       and opened_outcome(conn, job_id, payload["version_id"]) == "passed")
+            if not (offered or cleared):
+                raise HTTPException(422, "choice_unavailable", headers=PRIVATE)
+            payload = {**payload, "cleared": cleared}
         conn.execute("update jobs set status='queued',worker_finished_at=null where id=%s", (job_id,))
     try:
         get_queue().enqueue("worker.run_job.run_review_storybook_job", job_id, payload,

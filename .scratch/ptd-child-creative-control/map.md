@@ -19,7 +19,7 @@ rejected page image should look, and a verdict on whether custom prompts are a g
 | 02 | [Grill: appearance and page input → spec](issues/02-grill-creative-control-spec.md) | grilling | resolved | 01 (rank 2's audit gates shipping free text only, owner 2026-11-01) |
 | 03 | [Baseline: flagged "Draw again" redraw keeps the chip](issues/03-baseline-redraw-keeps-tapped-chip.md) | task | resolved | — |
 | 04 | ["Draw again" is undoable: character versions at the reveal](issues/04-draw-again-undoable-at-reveal.md) | task | resolved | — |
-| 05 | [Unchosen first-round pictures, moderated on open](issues/05-unchosen-draws-moderated-on-open.md) | task | open | 04 |
+| 05 | [Unchosen first-round pictures, moderated on open](issues/05-unchosen-draws-moderated-on-open.md) | task | resolved | — |
 | 06 | [Character magic pencil at the reveal](issues/06-character-pencil-at-reveal.md) | task | open | 04 |
 | 07 | [Held character pencil result: replacement re-runs the edit](issues/07-held-character-pencil-replacement.md) | task | open | 06 |
 | 08 | [Kept character change reaches later pages](issues/08-kept-change-reaches-later-pages.md) | task | open | 06 |
@@ -53,3 +53,7 @@ untapped flags and teacher-review unchanged.
 behind `ENABLE_MAGIC_PENCIL` on teacher-review jobs, "Draw again" keeps the replaced picture and the
 child can choose it back at no image or go cost. Table `job_picture_records` added. No browser pass;
 teacher-allowed pictures are never kept as versions (a teacher can withdraw only the current one).
+
+**05 (2026-11-01, resolved).** [Answer](issues/05-unchosen-draws-moderated-on-open.md#answer-2026-11-01):
+feature jobs keep the mint's unchosen draws; opening "Other versions" moderates each once in the API.
+Flags hidden with no hold, errors not stored. Migration 0028. No browser pass.

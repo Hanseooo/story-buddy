@@ -245,12 +245,16 @@ type RevealCharacter = NonNullable<JobRow["reveal"]>["characters"][number];
 
 // ADR-082 Decision 1: earlier pictures cost no image and no go. Choosing one resumes the pause
 // with the picture it was chosen from, so a stale choice is rejected server-side (SH-08).
+// Unchosen first-round draws arrive by id only; opening asks the API to moderate them first (SH-02).
 function OtherVersions({ jobId, moderationMode, character, disabled, onChoose }: {
   jobId: string; moderationMode?: string; character: RevealCharacter; disabled: boolean;
   onChoose: (versionId: string) => void;
 }) {
   const versions = character.versions ?? [];
+  const unreviewed = character.unreviewed ?? [];
   const [open, setOpen] = useState(false);
+  const [shown, setShown] = useState(versions);
+  const [unavailable, setUnavailable] = useState(0);
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [loaded, setLoaded] = useState<Record<string, boolean>>({});
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
@@ -264,13 +268,28 @@ function OtherVersions({ jobId, moderationMode, character, disabled, onChoose }:
     const controller = new AbortController();
     void (async () => {
       let signed: Record<string, string> = {};
+      let list = versions;
+      let missing = 0;
+      let failed = false;
       try {
-        signed = await signPaths(versions.map((v) => v.image_path),
-          [{ id: jobId, moderation_mode: moderationMode, reveal: { characters: [character] } }], controller.signal);
-      } catch { /* shown as the error state below */ }
+        if (unreviewed.length > 0) {
+          const { data: { session } } = await supabase.auth.getSession();
+          const response = await fetch(
+            `${process.env.NEXT_PUBLIC_API_BASE_URL}/jobs/${jobId}/characters/${encodeURIComponent(character.char_id)}/versions/open`,
+            { method: "POST", headers: { Authorization: `Bearer ${session?.access_token}` }, signal: controller.signal },
+          );
+          if (!response.ok) throw new Error("versions_unavailable");
+          ({ versions: list, unavailable: missing } = await response.json());
+        }
+        signed = await signPaths(list.map((v) => v.image_path),
+          [{ id: jobId, moderation_mode: moderationMode, reveal: { characters: [{ ...character, versions: list }] } }],
+          controller.signal);
+      } catch { failed = true; /* shown as the error state below */ }
       if (controller.signal.aborted) return;
+      setShown(list);
+      setUnavailable(missing);
       setUrls(signed);
-      setState(versions.every((v) => signed[v.image_path]) ? "ready" : "error");
+      setState(!failed && list.every((v) => signed[v.image_path]) ? "ready" : "error");
     })();
     return () => controller.abort();
     // The list re-reads on open and on an explicit retry only.
@@ -279,7 +298,7 @@ function OtherVersions({ jobId, moderationMode, character, disabled, onChoose }:
 
   useEffect(() => { if (open) listRef.current?.focus(); }, [open]);
 
-  if (versions.length === 0) return null;
+  if (versions.length === 0 && unreviewed.length === 0) return null;
 
   function close() {
     setOpen(false);
@@ -321,7 +340,7 @@ function OtherVersions({ jobId, moderationMode, character, disabled, onChoose }:
           <p role="status" className="font-kid text-sm text-foreground/70">
             {disabled ? "Changing your picture…" : state === "loading" ? `Loading ${character.name}'s other pictures…` : ""}
           </p>
-          {state === "error" ? (
+          {(state === "error" || (state === "ready" && unavailable > 0)) && (
             <div role="alert" className="mt-2 flex flex-col items-start gap-2 font-kid text-sm">
               <p>We couldn&apos;t load this picture right now.</p>
               <button
@@ -332,9 +351,13 @@ function OtherVersions({ jobId, moderationMode, character, disabled, onChoose }:
                 Try loading {character.name}&apos;s other pictures again
               </button>
             </div>
-          ) : state === "ready" && (
+          )}
+          {state === "ready" && shown.length === 0 && unavailable === 0 && (
+            <p className="mt-2 font-kid text-sm">There are no other pictures of {character.name} right now.</p>
+          )}
+          {state === "ready" && shown.length > 0 && (
             <ul className="mt-2 grid grid-cols-2 gap-2">
-              {versions.map((version, index) => (
+              {shown.map((version, index) => (
                 <li key={version.version_id}>
                   <button
                     type="button"

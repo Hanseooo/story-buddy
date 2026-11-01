@@ -34,6 +34,8 @@ export type JobRow = {
       chips: string[];
       // Magic pencil (ADR-082): absent unless the job was submitted with the setting on.
       versions?: Array<{ version_id: string; image_path: string }>;
+      // Unchosen first-round draws nobody has opened, by id only; moderated on open (ticket 05).
+      unreviewed?: string[];
     }>;
     taps_left: number;
   } | null;

@@ -928,6 +928,51 @@ describe("ProcessingPage — other versions (magic pencil ticket 04)", () => {
   });
 });
 
+describe("ProcessingPage — unchosen draws moderated on open (magic pencil ticket 05)", () => {
+  // Accepted first time, with the mint's two other draws not yet opened.
+  const UNOPENED_ROW = {
+    ...PAUSED_ROW, moderation_mode: "teacher_review_v1",
+    reveal: { taps_left: 3, characters: [{
+      ...PAUSED_ROW.reveal.characters[0], image_path: "j1/ref-c0-1.png",
+      versions: [], unreviewed: ["ref-c0-1-u1", "ref-c0-1-u3"],
+    }] },
+  };
+
+  function serve(opened: { versions: Array<{ version_id: string; image_path: string }>; unavailable: number }) {
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:picture"), revokeObjectURL: vi.fn() }));
+    global.fetch = vi.fn((url: string) => {
+      if (url.endsWith("/versions/open")) return Promise.resolve({ ok: true, json: async () => opened } as Response);
+      return Promise.resolve({ ok: true, blob: async () => new Blob(["image"]) } as Response);
+    }) as unknown as typeof fetch;
+  }
+
+  const openCalls = () => vi.mocked(global.fetch).mock.calls.filter(([url]) => String(url).endsWith("/versions/open"));
+
+  it("offers the control, moderates on open, shows the passed picture and says one could not load", async () => {
+    serve({ versions: [{ version_id: "ref-c0-1-u1", image_path: "j1/ref-c0-1-u1.png" }], unavailable: 1 });
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: UNOPENED_ROW }));
+    await renderPausedPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Other versions of Kiko" }));
+    expect(await screen.findByRole("img", { name: "Earlier picture 1 of Kiko" })).toBeDefined();
+    expect(openCalls()).toHaveLength(1);
+    expect(String(openCalls()[0][0])).toContain("/jobs/j1/characters/c0/versions/open");
+    expect(openCalls()[0][1]?.method).toBe("POST");
+    expect(vi.mocked(global.fetch).mock.calls.some(([url]) => String(url).includes("/images/version-ref-c0-1-u1"))).toBe(true);
+    expect(screen.getByText("We couldn't load this picture right now.")).toBeDefined();
+  });
+
+  it("says there are no other pictures when every unopened draw was excluded", async () => {
+    serve({ versions: [], unavailable: 0 });
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: UNOPENED_ROW }));
+    await renderPausedPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Other versions of Kiko" }));
+    expect(await screen.findByText("There are no other pictures of Kiko right now.")).toBeDefined();
+    expect(screen.queryByText("We couldn't load this picture right now.")).toBeNull();
+  });
+});
+
 describe("ProcessingPage — stall timer (spec §4.1)", () => {
   it("stall line appears after STALL_MS of no stage change", async () => {
     vi.useFakeTimers();

@@ -2,7 +2,7 @@
 
 **Status:** ready-for-agent
 **Type:** task
-**Progress:** open
+**Progress:** resolved
 **Blocked by:** `.scratch/ptd-child-creative-control/issues/04-draw-again-undoable-at-reveal.md`
 
 **Parent:** `docs/specs/magic-pencil.md` (US-01)
@@ -61,3 +61,42 @@ Worker test for the gated uploads; API tests for on-open moderation (flag, pass,
 04 (table, setting snapshot, version delivery).
 
 ## Comments
+
+## Answer (2026-11-01)
+
+Done on feature jobs only (`has_versions`: `ENABLE_MAGIC_PENCIL` snapshot and `teacher_review_v1`).
+
+- **Kept.** The initial mint uploads its up to 2 unchosen judged draws at
+  `{story_id}/ref-<char>-<n>-u<draw>.png` (own suffix, same prefix, so a tap or redraw cannot collide
+  and story deletion removes them) and records them as `ReferenceVersion(source="unchosen_draw")`
+  with `ref_moderation_status=None` and their own verdict. Not on a moderation re-mint. Without the
+  feature, `mint_reference` uploads exactly once, as before.
+- **Projection.** The reveal lists them by id only (`unreviewed`), no path. The worker drops ids
+  already stored as excluded, so a character whose kept draws all failed loses the control at the
+  next pause (AC-01).
+- **On open.** `POST /jobs/{id}/characters/{char_id}/versions/open`, in the API, same gate as the
+  image route. Each unreviewed draw goes through `char_ref_mod.screen_reference` (primary, then
+  backstop; primary error falls back; backstop or signing error is unchecked). The outcome is stored
+  once in `job_picture_records.moderation_status` (migration 0028, `passed`/`excluded`, first write
+  wins). A flag is excluded, never shown, no review row. An error stores nothing, counts as
+  `unavailable`, and the page shows "We couldn't load this picture right now." with retry.
+- **Delivery and choice.** `authorized_asset` serves a draw whose record is `passed`.
+  `confirm_review_job` accepts choosing it and adds `cleared: true` to the resume (not a client
+  field); `_choose_version` restores it as `passed`, otherwise as in 04.
+
+Checks: worker test (draws 1 and 3 kept on best-of draw 2; non-feature uploads once), reveal and
+contract tests, and one Postgres integration run (kept → not served → open: pass shown, error
+unavailable and not stored → second open re-checks only the errored one, flag excluded → third open
+spends nothing → no review row → excluded choice 422 → passed choice restored → excluded id gone
+from the next reveal). Guards broken on purpose went red: image guard, error stored as excluded,
+confirm skipping the record, flag shown, unavailable message, open call. Full suites: backend 1644
+passed, 6 failed (`test_pdf_export`, local PDF `OSError`, as on HEAD); frontend lint, build, 773 tests.
+
+Not done or not verified:
+- **No `playwright-cli` pass** (login wall, real draws).
+- Migration 0028 must be applied to any hosted DB before the setting is turned on, after 0027.
+- Two concurrent opens can each pay for a classifier call; the stored outcome is still one.
+- Within the same pause, a character whose draws were all excluded keeps the control and shows
+  "There are no other pictures of <name> right now." until the next pause.
+- On-open checks store the outcome only, not `ClassifierEvidence`; nothing holds on them (OD-03).
+- `screen_reference` does not retry a signing failure as `char_ref_mod` does; it shows the retryable message.

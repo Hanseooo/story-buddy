@@ -259,7 +259,7 @@ def _data_uri(image: bytes) -> str:
     return "data:image/png;base64," + base64.b64encode(image).decode()
 
 
-def _upload(image: bytes, story_id: str, char_id: str, n: int) -> str:
+def _upload(image: bytes, story_id: str, char_id: str, n: int | str) -> str:
     path = f"{story_id}/ref-{char_id}-{n}.png"
     get_supabase_client().storage.from_(BUCKET).upload(
         path, image, {"content-type": "image/png", "upsert": "true"}
@@ -303,6 +303,7 @@ def mint_reference(
     story_id: str,
     char_id: str,
     n: int = 1,
+    unchosen: list[tuple[str, RefVerdict]] | None = None,
 ) -> tuple[str, RefVerdict | None, int]:
     """The node's ONE effect boundary (MASTER_SPEC §6): draw, judge, re-roll, upload.
 
@@ -315,6 +316,10 @@ def mint_reference(
 
     The loop is node-internal and adds no graph edge and no super-step (ADR-028 Decision 3),
     so ADR-003 and ADR-024 are unamended by it.
+
+    `unchosen` (ADR-082 Decision 1): when a list is passed, every judged draw that is not returned
+    is uploaded at `{n}-u{draw}` and appended as `(path, verdict)`. The `u` keeps those paths off
+    the shared `n` sequence, so no later tap or redraw can overwrite one. Omitted, one upload as before.
     """
     # ADR-035 surfaces 1 and 2. Prod job b9506307 asked for `star; glowing; tiny` under a fragment
     # ending "no glow": the draw could not satisfy it, and post-ADR-034 the judge can legitimately
@@ -345,6 +350,7 @@ def mint_reference(
                 "char_bible: %s judge failed on draw %d — accepting unchecked, ref_verdict=None",
                 char_id, draws,
             )
+            _upload_unchosen(candidates, unchosen, story_id, char_id, n)
             return _upload(image, story_id, char_id, n), None, draws
 
         # CC-5: a wrong character downstream traces back to a specific reference and draw.
@@ -360,6 +366,7 @@ def mint_reference(
         # contradiction is the wrong character, text is the right character in a marked room.
         if not verdict.contradictions and verdict.text_free:
             log.info("char_bible: %s accepted draw %d", char_id, draws)
+            _upload_unchosen(candidates, unchosen, story_id, char_id, n)
             return _upload(image, story_id, char_id, n), verdict, draws
         candidates.append((image, verdict))
 
@@ -369,7 +376,18 @@ def mint_reference(
         char_id, draws, winner + 1,
     )
     image, verdict = candidates[winner]
+    _upload_unchosen(candidates, unchosen, story_id, char_id, n, skip=winner)
     return _upload(image, story_id, char_id, n), verdict, draws
+
+
+def _upload_unchosen(candidates: list, unchosen: list | None, story_id: str, char_id: str, n: int,
+                     skip: int | None = None) -> None:
+    """Upload the judged draws the mint did not return; `skip` is the returned one's index."""
+    if unchosen is None:
+        return
+    for index, (image, verdict) in enumerate(candidates):
+        if index != skip:
+            unchosen.append((_upload(image, story_id, char_id, f"{n}-u{index + 1}"), verdict))
 
 
 def _mint_targeted(state: StoryMemory) -> dict:
@@ -449,11 +467,13 @@ def _choose_version(state: StoryMemory) -> dict:
     choice = state.reference_choice
     char = next((c for c in state.characters if c.char_id == choice.char_id), None)
     chosen = next((v for v in char.versions if v.version_id == choice.version_id), None) if char else None
-    if (chosen is None or char.canonical_ref_image != choice.source
-            or chosen.ref_moderation_status != "passed"):
+    # An unchosen draw is checked on open by the API, not here: `cleared` says it passed (SH-02).
+    passed = chosen is not None and (chosen.ref_moderation_status == "passed" or (
+        chosen.ref_moderation_status is None and chosen.source == "unchosen_draw" and choice.cleared))
+    if not passed or char.canonical_ref_image != choice.source:
         return {"reference_choice": None}
     restored = char.model_copy(update={
-        "canonical_ref_image": chosen.image_path, "ref_moderation_status": chosen.ref_moderation_status,
+        "canonical_ref_image": chosen.image_path, "ref_moderation_status": "passed",
         "ref_verdict": chosen.ref_verdict, "ref_verdict_prompt_version": chosen.ref_verdict_prompt_version,
         "ref_generation_prompt": chosen.ref_generation_prompt,
         "versions": [*(v for v in char.versions if v is not chosen), *_kept(char, "version_choice")],
@@ -534,6 +554,10 @@ def char_bible(state: StoryMemory) -> dict:
         if baseline and c.ref_moderation_status == "flagged" and c.ref_generation_prompt
     }
 
+    # ADR-082 Decision 1 (AC-02): the initial mint's unchosen draws are already paid for, so a
+    # feature job keeps them, unreviewed; they are moderated only if the child opens them.
+    keep = has_versions(state) and not was_flagged
+    unchosen: dict[str, list[tuple[str, RefVerdict]]] = {}
     minted: dict[str, tuple[str, RefVerdict | None]] = {}
     draws_made = 0
     for character in selected:
@@ -543,7 +567,7 @@ def char_bible(state: StoryMemory) -> dict:
         else:
             path, verdict, draws = mint_reference(
                 character.description, character.name, style_fragment, state.story_id,
-                character.char_id, n=n,
+                character.char_id, n=n, unchosen=unchosen.setdefault(character.char_id, []) if keep else None,
             )
         minted[character.char_id] = (path, verdict)
         draws_made += draws
@@ -569,6 +593,12 @@ def char_bible(state: StoryMemory) -> dict:
             # with it (`moderation-stack.md` §4b) — `_mint_targeted` has always done the same.
             "ref_moderation_status": None,
             "ref_generation_prompt": recorded_prompt(c),
+            "versions": [*c.versions, *(
+                ReferenceVersion(
+                    version_id=p.rsplit("/", 1)[-1].removesuffix(".png"), image_path=p, ref_verdict=v,
+                    ref_verdict_prompt_version=JUDGE_PROMPT_VERSION, ref_generation_prompt=recorded_prompt(c),
+                    source="unchosen_draw",
+                ) for p, v in unchosen.get(c.char_id, []))],
         })
         if c.char_id in minted
         else c

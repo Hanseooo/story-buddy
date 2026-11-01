@@ -1547,3 +1547,66 @@ def test_choosing_a_version_restores_it_at_no_image_cost(current_status, kept):
 def test_a_stale_or_unknown_version_choice_changes_nothing(source, version_id):
     result = char_bible(_chosen_state(source=source, version_id=version_id))
     assert result == {"reference_choice": None}
+
+
+# --- ADR-082 Decision 1: unchosen first-round draws are kept (magic-pencil 05) ---
+
+def _first_mint(state: StoryMemory) -> tuple[dict, MagicMock]:
+    """All three draws fail; best-of picks draw 2 (the most attributes present)."""
+    verdicts = [_verdict(False, ["dog"]), _verdict(False, ["dog", "orange"]), _verdict(False, ["dog"])]
+    fake_supabase = MagicMock()
+    with patch("pipeline.char_bible.text_to_image", side_effect=list(DRAWS)), \
+         patch("pipeline.char_bible.judge", side_effect=verdicts), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=fake_supabase):
+        result = char_bible(state)
+    return result, fake_supabase
+
+
+def _uploads(fake_supabase) -> list[tuple[str, bytes]]:
+    return [(c.args[0], c.args[1]) for c in fake_supabase.storage.from_.return_value.upload.call_args_list]
+
+
+def test_a_feature_mint_keeps_the_two_unchosen_draws_as_unreviewed_versions():
+    result, supabase = _first_mint(_feature(_state([_char("c0", "the dog")])))
+
+    assert sorted(_uploads(supabase)) == [
+        ("story-1/ref-c0-1-u1.png", b"draw-1-bytes"),
+        ("story-1/ref-c0-1-u3.png", b"draw-3-bytes"),
+        ("story-1/ref-c0-1.png", b"draw-2-bytes"),
+    ]
+    c0 = result["characters"][0]
+    assert c0.canonical_ref_image == "story-1/ref-c0-1.png"
+    assert [(v.version_id, v.image_path, v.ref_moderation_status, v.source) for v in c0.versions] == [
+        ("ref-c0-1-u1", "story-1/ref-c0-1-u1.png", None, "unchosen_draw"),
+        ("ref-c0-1-u3", "story-1/ref-c0-1-u3.png", None, "unchosen_draw"),
+    ]
+    assert c0.versions[0].ref_verdict == _verdict(False, ["dog"])
+    assert c0.versions[0].ref_generation_prompt == c0.ref_generation_prompt
+
+
+def test_a_mint_without_the_feature_uploads_only_the_chosen_draw():
+    result, supabase = _first_mint(_state([_char("c0", "the dog")]))
+
+    assert _uploads(supabase) == [("story-1/ref-c0-1.png", b"draw-2-bytes")]
+    assert result["characters"][0].versions == []
+
+
+@pytest.mark.parametrize("cleared,restored", [(True, True), (False, False)])
+def test_an_unchosen_draw_is_restored_only_when_cleared_on_open(cleared, restored):
+    from contracts.story_memory import ReferenceChoice, ReferenceVersion
+
+    state = _chosen_state()
+    unchosen = ReferenceVersion(version_id="ref-c0-1-u1", image_path="story-1/ref-c0-1-u1.png",
+                                ref_verdict=_verdict(False, ["dog"]), source="unchosen_draw")
+    c0 = state.characters[0].model_copy(update={"versions": [unchosen]})
+    state = state.model_copy(update={"characters": [c0, state.characters[1]], "reference_choice": ReferenceChoice(
+        char_id="c0", version_id="ref-c0-1-u1", source="story-1/ref-c0-2.png", cleared=cleared)})
+
+    result = char_bible(state)
+
+    if not restored:
+        assert result == {"reference_choice": None}
+        return
+    c0 = next(c for c in result["characters"] if c.char_id == "c0")
+    assert (c0.canonical_ref_image, c0.ref_moderation_status) == ("story-1/ref-c0-1-u1.png", "passed")
+    assert [v.version_id for v in c0.versions] == ["ref-c0-2"]

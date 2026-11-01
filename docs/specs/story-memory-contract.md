@@ -295,6 +295,11 @@ must stay able to withdraw) that "Draw again" replaced (or that a version choice
 displaced), kept with its moderation status and verdict so restoring it needs no new draw or check.
 `reference_choice` is `None` except between `reveal` and `char_bible`, like `reference_retry`. An
 old checkpoint resumes with no versions and the feature off.
+Ticket 05 adds `ReferenceVersion.source = "unchosen_draw"` and `ReferenceChoice.cleared` (default
+`False`). An unchosen draw of the initial mint is kept with `ref_moderation_status = None`: it is
+moderated by the API when the child opens it, while the run is paused, and that outcome is stored in
+`job_picture_records.moderation_status`, not in the checkpoint. `cleared` is set only by the API
+after that record says `passed`; `char_bible` restores such a draw as `passed`.
 
 - One version covers the whole contract, **including `FailureReason`** — an enum change is a contract change.
 

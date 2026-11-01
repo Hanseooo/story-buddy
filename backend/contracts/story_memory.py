@@ -109,17 +109,21 @@ class Character(BaseModel):
 class ReferenceVersion(BaseModel):     # ADR-082 — a replaced reference, restorable as it was
     version_id: str                    # the Storage object's stem, unique within the book
     image_path: str                    # durable Storage PATH, never a signed URL
-    ref_moderation_status: Optional[str] = None   # offered only when passed or teacher_allowed
+    # Offered only when passed. `None` is an unchosen draw nobody has opened yet: its on-open outcome
+    # lives in `job_picture_records.moderation_status`, because the run is paused when it is checked.
+    ref_moderation_status: Optional[str] = None
     ref_verdict: Optional[RefVerdict] = None
     ref_verdict_prompt_version: Optional[int] = None
     ref_generation_prompt: Optional[str] = None
-    source: Literal["draw_again", "version_choice"]   # what replaced it
+    source: Literal["draw_again", "version_choice", "unchosen_draw"]   # what replaced it
 
 
 class ReferenceChoice(BaseModel):      # ADR-082 — set by `reveal`, consumed by `char_bible`
     char_id: str
     version_id: str
     source: str           # the reference the child was looking at; a stale one changes nothing
+    # Set only by the API after it found the unchosen draw passed on open (magic-pencil 05).
+    cleared: bool = False
 
 
 class ReferenceRetry(BaseModel):        # ADR-029 — set by `reveal`, consumed by `char_bible`

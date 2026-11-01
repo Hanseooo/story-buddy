@@ -14,6 +14,30 @@ instead of repeating it.
 
 ---
 
+## Magic pencil ticket 05 · 2026-11-01 · Unchosen first-round pictures, moderated on open
+
+### Code
+
+- On feature jobs the initial mint keeps the up to 2 draws it did not choose, at
+  `{story_id}/ref-<char>-<n>-u<draw>.png`, as unreviewed versions. Other jobs upload as before.
+- `POST /jobs/{id}/characters/{char_id}/versions/open` moderates each unopened draw with the
+  existing image classifiers and stores the outcome once. A flag is excluded with no hold; a
+  classifier error stores nothing and the child sees "We couldn't load this picture right now."
+- A passed draw is served through the guarded image route and can be chosen like any version.
+- Migration `0028_picture_record_moderation.sql` adds `job_picture_records.moderation_status`.
+
+### Docs
+
+- `story-memory-contract.md` §3 notes the new source value and `ReferenceChoice.cleared`. One
+  `research-changelog.md` row.
+
+### Checks
+
+- Backend: 1644 passed; the same 6 `test_pdf_export` failures as on `HEAD` (local PDF `OSError`).
+  Frontend: lint, build and 773 tests pass. No browser pass.
+
+---
+
 ## Magic pencil ticket 04 · 2026-11-01 · "Draw again" is undoable at the reveal
 
 ### Code

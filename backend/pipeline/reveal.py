@@ -87,7 +87,11 @@ def _project_reveal(state: StoryMemory) -> dict:
             **({"versions": [
                 {"version_id": v.version_id, "image_path": v.image_path}
                 for v in c.versions if v.ref_moderation_status == "passed"
-            ]} if has_versions(state) else {}),
+            ],
+                # magic-pencil 05 (SH-02): unchosen draws nobody has opened, by id only. The API
+                # moderates them when the child opens "Other versions".
+                "unreviewed": [v.version_id for v in c.versions if v.ref_moderation_status is None],
+            } if has_versions(state) else {}),
         }
         for c in state.characters
         if c.canonical_ref_image is not None
@@ -114,5 +118,6 @@ def reveal(state: StoryMemory) -> dict:
     if isinstance(answer, dict) and answer.get("action") == "choose_version" and has_versions(state):
         # Not a confirm: the child is still choosing, so `char_bible` swaps and the graph pauses here again.
         return {"reference_choice": ReferenceChoice(
-            char_id=answer["char_id"], version_id=answer["version_id"], source=answer["source"])}
+            char_id=answer["char_id"], version_id=answer["version_id"], source=answer["source"],
+            cleared=answer.get("cleared") is True)}
     return {}

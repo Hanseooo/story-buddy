@@ -1261,3 +1261,128 @@ def test_draw_again_keeps_the_replaced_picture_and_choosing_it_costs_nothing(mon
     assert [r["image_path"] for r in recorded] == [first["image_path"], tapped["image_path"]]
     conn.execute("delete from jobs where id=%s", (job,))
     assert conn.execute("select count(*) as n from job_picture_records where job_id=%s", (job,)).fetchone()["n"] == 0
+
+
+def test_unchosen_draws_are_moderated_once_when_opened_and_a_passed_one_can_be_chosen(monkeypatch, held_database):
+    """Magic pencil ticket 05 (US-01 AC-02, AC-03, SH-02, OD-03): the mint's two unchosen draws are
+    kept unreviewed; opening "Other versions" moderates each once. A pass is shown, a flag is
+    excluded with no hold, a classifier error is neither shown nor stored."""
+    import importlib
+    from contracts.story_memory import RefVerdict
+    from pipeline.segment import ExtractedScene, ExtractedVisualDirection, SceneSegmentation
+    from tests.test_graph_stub import STUB_ANALYSIS
+    from worker.run_job import run_review_storybook_job
+
+    conn, child, classroom, _, _ = held_database
+    monkeypatch.setattr(settings, "enable_teacher_moderation_review", True)
+    monkeypatch.setattr(settings, "enable_magic_pencil", True)
+    db, queue = MagicMock(), MagicMock()
+    db.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{"classroom_id": classroom}]
+    monkeypatch.setattr("app.main.get_supabase_client", lambda: db)
+    monkeypatch.setattr("app.main.get_queue", lambda: queue)
+    monkeypatch.setattr("app.moderation_hold.get_queue", lambda: queue)
+    monkeypatch.setattr("providers.redact_pii", lambda text: text)
+    monkeypatch.setattr("app.main.check_text", lambda title, **kwargs: (True, [], title))
+    draws = iter([b"draw-1", b"draw-2", b"draw-3"])
+    objects, storage = {}, MagicMock()
+    storage.storage.from_.return_value.upload.side_effect = lambda path, content, options: objects.update({path: content})
+    monkeypatch.setattr("providers.download_book_image", lambda path: objects[path])
+
+    def structured(prompt, schema, **kwargs):
+        if schema.__name__ == "StoryAnalysis":
+            return STUB_ANALYSIS
+        return SceneSegmentation(scenes=[ExtractedScene(
+            start=0, end=0, characters_present=["the orange dog"],
+            visual_direction=ExtractedVisualDirection(key_action="A dog walks.", viewpoint="front view", framing="wide shot"),
+        )])
+
+    # Every draw contradicts once; draw 2 shows the most, so best-of picks it and draws 1 and 3 are unchosen.
+    shown = iter([["dog"], ["dog", "orange"], ["dog"]])
+    primary, backstop = {}, {}
+
+    def classify(table):
+        def call(url, **kwargs):
+            outcome = table.get(url.rsplit("/", 1)[-1], True)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+        return MagicMock(side_effect=call)
+
+    primary_mock, backstop_mock = classify(primary), classify(backstop)
+    boundaries = {
+        "analyze": {"structured_text": structured}, "segment": {"structured_text": structured},
+        "input_gate": {"classify_text_primary": lambda text: (True, []), "classify_text_backstop": lambda text: (True, [])},
+        "char_bible": {"text_to_image": lambda *a, **kw: next(draws), "get_supabase_client": lambda: storage,
+                       "judge": lambda *a, **kw: RefVerdict(differences_observed="a red comb", contradictions=["comb"],
+                                                            matches_description=False, attributes_present=next(shown))},
+        "char_ref_mod": {"classify_image_primary": primary_mock, "classify_image_backstop": backstop_mock,
+                         "get_signed_url": lambda path: f"https://private.invalid/{path}"},
+    }
+    for module, replacements in boundaries.items():
+        for name, replacement in replacements.items():
+            monkeypatch.setattr(importlib.import_module(f"pipeline.{module}"), name, replacement)
+
+    def reveal_of(job):
+        persisted = conn.execute("select * from jobs where id=%s", (job,)).fetchone()
+        db.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{**persisted, "profile_id": child}]
+        return persisted["reveal"]["characters"][0]
+
+    def calls():
+        return primary_mock.call_count + backstop_mock.call_count
+
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+    try:
+        with TestClient(app) as client:
+            job = client.post("/storybooks", json={
+                "title": "Synthetic title", "text": "The orange dog walks through the grassy field past the trees and stops near the stream.",
+            }).json()["job_id"]
+            run_review_storybook_job(job, expected_epoch=0)
+            first = reveal_of(job)
+            assert first["image_path"] == f"{job}/ref-c0-1.png" and objects[first["image_path"]] == b"draw-2"
+            assert first["versions"] == [] and first["unreviewed"] == ["ref-c0-1-u1", "ref-c0-1-u3"]
+            assert client.get(f"/jobs/{job}/images/version-ref-c0-1-u1").status_code == 404
+            reviews = conn.execute("select count(*) as n from job_moderation_reviews where job_id=%s", (job,)).fetchone()["n"]
+
+            route = f"/jobs/{job}/characters/c0/versions/open"
+            backstop["ref-c0-1-u3.png"] = RuntimeError("classifier down")
+            before = calls()
+            opened = client.post(route)
+            assert opened.status_code == 200
+            assert opened.json() == {"versions": [{"version_id": "ref-c0-1-u1", "image_path": f"{job}/ref-c0-1-u1.png"}],
+                                     "unavailable": 1}
+            assert calls() - before == 4   # both layers on each of two draws
+            assert client.get(f"/jobs/{job}/images/version-ref-c0-1-u1").content == b"draw-1"
+            assert client.get(f"/jobs/{job}/images/version-ref-c0-1-u3").status_code == 404
+
+            primary["ref-c0-1-u3.png"] = False
+            before = calls()
+            assert client.post(route).json() == {
+                "versions": [{"version_id": "ref-c0-1-u1", "image_path": f"{job}/ref-c0-1-u1.png"}], "unavailable": 0}
+            assert calls() - before == 1   # only the errored draw is checked again; a primary flag needs no backstop
+            before = calls()
+            assert client.post(route).json()["unavailable"] == 0
+            assert calls() == before       # every outcome is stored once
+            assert conn.execute("select count(*) as n from job_moderation_reviews where job_id=%s",
+                                (job,)).fetchone()["n"] == reviews
+            assert client.get(f"/jobs/{job}/images/version-ref-c0-1-u3").status_code == 404
+            assert client.post(f"/jobs/{job}/characters/c9/versions/open").status_code == 404
+
+            choose = {"action": "choose_version", "char_id": "c0", "version_id": "ref-c0-1-u3", "source": first["image_path"]}
+            assert client.post(f"/jobs/{job}/confirm", json=choose).status_code == 422
+            queue.enqueue.reset_mock()
+            choose["version_id"] = "ref-c0-1-u1"
+            assert client.post(f"/jobs/{job}/confirm", json=choose).json()["status"] == "queued"
+            resume = queue.enqueue.call_args.args[2]
+            assert resume["cleared"] is True
+            run_review_storybook_job(job, resume, expected_epoch=0)
+            chosen = reveal_of(job)
+            assert chosen["image_path"] == f"{job}/ref-c0-1-u1.png"
+            assert chosen["versions"] == [{"version_id": "ref-c0-1", "image_path": f"{job}/ref-c0-1.png"}]
+            assert chosen["unreviewed"] == []   # AC-01: an excluded draw no longer counts as another version
+            assert client.get(f"/jobs/{job}/images/ref-c0").content == b"draw-1"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    recorded = conn.execute("""select version_id,moderation_status from job_picture_records
+      where job_id=%s and source='unchosen_draw' order by version_id""", (job,)).fetchall()
+    assert [(r["version_id"], r["moderation_status"]) for r in recorded] == [
+        ("ref-c0-1-u1", "passed"), ("ref-c0-1-u3", "excluded")]

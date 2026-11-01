@@ -266,6 +266,13 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                             value = interrupts[0].value
                             if snapshot.next != ("reveal",) or not isinstance(value, dict) or "characters" not in value:
                                 raise RuntimeError("invalid_reveal_checkpoint")
+                            # AC-01: a draw excluded on open is not another version; the checkpoint never
+                            # learns that outcome, so the projection drops it here (magic-pencil 05).
+                            excluded = {r["version_id"] for r in conn.execute("""select version_id from job_picture_records
+                              where job_id=%s and moderation_status='excluded'""", (job_id,)).fetchall()}
+                            value = {**value, "characters": [
+                                {**c, "unreviewed": [i for i in c["unreviewed"] if i not in excluded]} if "unreviewed" in c else c
+                                for c in value["characters"]]}
                             conn.execute("update jobs set status='awaiting_confirm',current_stage='reveal',reveal=%s where id=%s",
                                          (Jsonb(value), job_id))
                             # OD-04: the job-owned record of kept pictures, deleted with the story.
