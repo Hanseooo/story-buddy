@@ -542,3 +542,95 @@ describe("BookPage — a finished book whose pictures will not load (spec §4)",
     expect(mockCreateSignedUrls).toHaveBeenCalledTimes(3);
   });
 });
+
+describe("BookPage — other versions of a page (magic pencil 09)", () => {
+  const FEATURE_ROW = {
+    ...COMPLETE_ROW, moderation_mode: "teacher_review_v1",
+    pages: [{ ...PAGES[0], other_versions: true }, PAGES[1]],
+  };
+
+  function featureNetwork(choose: () => Response = () => new Response(JSON.stringify({ image_path: "j1/s0-0.png" }))) {
+    const network = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/me/notes")) return new Response("[]");
+      if (url.endsWith("/pages/s0/versions/open")) {
+        return new Response(JSON.stringify({ versions: [{ version_id: "s0-attempt-0", image_path: "j1/s0-0.png" }], unavailable: 0 }));
+      }
+      if (url.endsWith("/pages/s0/version")) return choose();
+      if (url.includes("/images/")) return new Response("png");
+      throw new Error(`unexpected ${url} ${init?.method}`);
+    });
+    vi.stubGlobal("fetch", network);
+    return network;
+  }
+
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn((blob: Blob) => `blob:${(blob as Blob).size}-${Math.random()}`);
+    URL.revokeObjectURL = vi.fn();
+    mockGetSession.mockResolvedValue({ data: { session: { access_token: "synthetic" } } });
+    REFETCH.mockReset();
+  });
+
+  async function openVersions() {
+    await renderAndSwitchToPages(makeParams());
+    const opener = await screen.findByRole("button", { name: "Other versions of page 1" });
+    fireEvent.click(opener);
+    const choice = await screen.findByRole("button", { name: "Use other picture 1 for page 1" });
+    fireEvent.load(screen.getByAltText("Other picture 1 for page 1"));
+    await waitFor(() => expect(choice).toBeEnabled());
+    return { opener, choice };
+  }
+
+  it("asks before changing an approved book; Cancel changes nothing, confirming sends the page's source", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: FEATURE_ROW }));
+    const network = featureNetwork();
+    const { choice } = await openVersions();
+    expect(network).toHaveBeenCalledWith(expect.stringContaining("/jobs/j1/pages/s0/versions/open"), expect.objectContaining({ method: "POST" }));
+
+    fireEvent.click(choice);
+    expect(screen.getByText("Your teacher will look at your book again before classmates can see it.")).toBeVisible();
+    const confirm = screen.getByRole("button", { name: "Change page 1" });
+    expect(confirm).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Keep page 1 as it is" }));
+    expect(choice).toHaveFocus();
+    expect(network.mock.calls.some(([url]) => String(url).endsWith("/pages/s0/version"))).toBe(false);
+
+    fireEvent.click(choice);
+    fireEvent.click(screen.getByRole("button", { name: "Change page 1" }));
+    await waitFor(() => expect(REFETCH).toHaveBeenCalled());
+    const sent = network.mock.calls.find(([url]) => String(url).endsWith("/pages/s0/version"))!;
+    expect(JSON.parse(String(sent[1]!.body))).toEqual({ version_id: "s0-attempt-0", source: "j1/s0-1.png" });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Other versions of page 1" })).toHaveFocus());
+  });
+
+  it("changes a pending book without asking, shows the wait state, and Escape closes the list", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: { ...FEATURE_ROW, approved_at: null } }));
+    let release: (r: Response) => void = () => {};
+    featureNetwork(() => new Promise<Response>((resolve) => { release = resolve; }) as unknown as Response);
+    const { opener, choice } = await openVersions();
+    fireEvent.click(choice);
+    expect(await screen.findByText("Changing your picture…")).toBeDefined();
+    expect(choice).toBeDisabled();
+    await act(async () => release(new Response(null, { status: 409 })));
+    expect(await screen.findByText("This page changed. Have another look.")).toBeDefined();
+    fireEvent.keyDown(screen.getByRole("group", { name: "Other versions of page 1" }), { key: "Escape" });
+    expect(screen.queryByRole("group", { name: "Other versions of page 1" })).toBeNull();
+    expect(opener).toHaveFocus();
+  });
+
+  it("shows the load error when moderation is unavailable", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: FEATURE_ROW }));
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => url.endsWith("/me/notes") ? new Response("[]")
+      : url.includes("/images/") ? new Response("png") : new Response(null, { status: 503 })));
+    await renderAndSwitchToPages(makeParams());
+    fireEvent.click(await screen.findByRole("button", { name: "Other versions of page 1" }));
+    expect(await screen.findByText("We couldn't load this picture right now.")).toBeDefined();
+  });
+
+  it("offers no control on a page with one attempt or on a classmate's book", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: { ...FEATURE_ROW, profile_id: "someone-else" } }));
+    featureNetwork();
+    await renderAndSwitchToPages(makeParams());
+    await screen.findByAltText("The dog ran.");
+    expect(screen.queryByRole("button", { name: /Other versions/ })).toBeNull();
+  });
+});

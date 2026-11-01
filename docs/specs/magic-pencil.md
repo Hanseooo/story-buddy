@@ -228,6 +228,9 @@ teacher-review mode a flag already holds and a teacher replacement redraws from
   version token). A request whose source is no longer current is rejected without spending. A repeated
   submit (double click, two tabs, retry after a network error) is deduplicated and spends at most
   once.
+- **SH-02 storage on a finished page (ticket 09).** The checkpoint is frozen after completion (OD-01), so a
+  page attempt's on-open outcome is stored in `job_picture_records` (`kind='version'`,
+  `source='scene_attempt'`), not on `Attempt.safety_eligibility`.
 - **SH-09 — Book edits after completion.** Page tools appear only on a `complete` book that is not held
   and not stopped. An edit updates `jobs.pages` for that page and the delivery guard's eligibility for
   the new picture. Page edits run in a small worker task outside the graph that reuses `edit_image`

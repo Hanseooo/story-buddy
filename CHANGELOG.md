@@ -14,6 +14,30 @@ instead of repeating it.
 
 ---
 
+## Magic pencil ticket 09 · 2026-11-02 · Other versions of a page on the finished book
+
+### Code
+
+- A finished feature book marks each page with two attempts that are not excluded as
+  `other_versions` in `jobs.pages` (AC-13). `POST /jobs/{id}/pages/{scene_id}/versions/open`
+  moderates each unreviewed attempt once and stores the outcome in `job_picture_records`. A flag is
+  excluded with no hold. A classifier error stores nothing (AC-14, SH-02).
+- `POST /jobs/{id}/pages/{scene_id}/version` replaces that page in `jobs.pages` and clears
+  `approved_at`/`rejected_at` under the same row lock (AC-15, AC-20). A stale source returns 409 and
+  a repeat applies once (SH-08). Only for the author of a `complete` book with no open review (SH-09).
+- The delivery guard serves `scene-<id>` from `jobs.pages`, and only when it names a moderated attempt
+  in the checkpoint. The PDF follows it.
+- The book page shows "Other versions" with an approval-reset confirm, plus loading, error, empty and
+  busy states (AC-21, SH-07).
+
+### Docs
+
+- `magic-pencil.md`: where SH-02's outcome lives for a finished page.
+
+### Checks
+
+- New API tests in `test_teacher_hold.py` and book-page vitest cases. No browser pass yet.
+
 ## Magic pencil ticket 07 · 2026-11-02 · Teacher replacement of a held pencil result
 
 ### Code

@@ -25,7 +25,8 @@ export type JobRow = {
   style_preset_id: string | null;
   approved_at: string | null;
   rejected_at: string | null;
-  pages: Array<{ scene_id: string; caption: string; image_path: string }>;
+  // `other_versions`: magic-pencil 09, a page with two kept attempts on a feature job (AC-13).
+  pages: Array<{ scene_id: string; caption: string; image_path: string; other_versions?: boolean }>;
   reveal: {
     characters: Array<{
       char_id: string;

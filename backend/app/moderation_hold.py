@@ -22,6 +22,7 @@ from app.moderation_policy import OPTIONAL_THEMES, POLICY, TEACHER_MODERATION_CR
 from app.queue import get_queue
 from contracts.story_memory import StoryMemory
 from pipeline.char_ref_mod import screen_reference
+from pipeline.output_mod import screen_page
 from pipeline.input_gate import has_text_clearance
 from pipeline.optional_themes import has_bound_theme_review
 from pipeline.reveal import has_versions
@@ -868,12 +869,19 @@ def authorized_asset(conn, job_id: str, asset_id: str, user_id: str) -> tuple[st
             for a in s.attempts
         ) for s in state.scenes):
             raise HTTPException(404, "image_unavailable", headers=PRIVATE)
+        # magic-pencil 09 (OD-01): `jobs.pages` is the book, but it can only name an attempt the
+        # checkpoint holds and moderation cleared. The final as drawn, or a version the child chose.
+        pages = {p.get("scene_id"): p.get("image_path") for p in job["pages"] or [] if isinstance(p, dict)}
         for scene in state.scenes:
-            if asset_id == f"scene-{scene.scene_id}" and any(
-                a.image_ref == scene.final_image_ref and a.safety_eligibility in ("cleared", "teacher_allowed")
-                for a in scene.attempts
-            ):
-                path = scene.final_image_ref
+            for index, attempt in enumerate(scene.attempts):
+                if asset_id == f"scene-{scene.scene_id}" and attempt.image_ref == pages.get(scene.scene_id) and (
+                        (attempt.image_ref == scene.final_image_ref
+                         and attempt.safety_eligibility in ("cleared", "teacher_allowed"))
+                        or (has_versions(state) and page_version_cleared(conn, job_id, scene, index))):
+                    path = attempt.image_ref
+                if (asset_id == f"page-version-{page_version_id(scene, index)}" and str(job["profile_id"]) == user_id
+                        and has_versions(state) and page_version_cleared(conn, job_id, scene, index)):
+                    path = attempt.image_ref
     if not path or not path.startswith(f"{job_id}/"):
         raise HTTPException(404, "image_unavailable", headers=PRIVATE)
     return path, job["generation_epoch"]
@@ -893,11 +901,11 @@ def job_image(job_id: UUID, asset_id: str, user=Depends(get_current_user)):
     return Response(contents, media_type="image/png", headers=PRIVATE)
 
 
-def opened_outcome(conn, job_id: str, version_id: str) -> str | None:
-    """The stored on-open outcome of an unchosen draw: 'passed', 'excluded', or None (unchecked)."""
+def opened_outcome(conn, job_id: str, version_id: str, source: str = "unchosen_draw") -> str | None:
+    """The stored on-open outcome of an unchosen draw or page attempt: 'passed', 'excluded', or None (unchecked)."""
     row = conn.execute("""select moderation_status from job_picture_records
-      where job_id=%s and kind='version' and source='unchosen_draw' and version_id=%s""",
-                       (job_id, version_id)).fetchone()
+      where job_id=%s and kind='version' and source=%s and version_id=%s""",
+                       (job_id, source, version_id)).fetchone()
     return row["moderation_status"] if row else None
 
 
@@ -944,6 +952,115 @@ def open_versions(job_id: UUID, char_id: str, response: Response, user=Depends(g
             versions.append({"version_id": version_id, "image_path": record["image_path"]})
     response.headers.update(PRIVATE)
     return {"versions": versions, "unavailable": unavailable}
+
+
+def book_pages(state: StoryMemory) -> list[dict]:
+    """The finished book as `jobs.pages`. AC-13: a page with two attempts that can be shown
+    offers "Other versions" on a job submitted with the setting on. A teacher-allowed attempt
+    counts only as the current page (ticket 04: it is never another version)."""
+    return [{"scene_id": s.scene_id, "caption": s.caption, "image_path": s.final_image_ref,
+             **({"other_versions": True} if has_versions(state) and sum(
+                 a.image_ref == s.final_image_ref or a.safety_eligibility in ("cleared", "unreviewed")
+                 for a in s.attempts) >= 2 else {})}
+            for s in state.scenes]
+
+
+def page_version_id(scene, index: int) -> str:
+    return f"{scene.scene_id}-attempt-{index}"
+
+
+def page_version_cleared(conn, job_id: str, scene, index: int) -> bool:
+    """SH-02: an attempt the output check cleared when it was drawn, or when the child opened it.
+    A teacher-allowed attempt is never another version (ticket 04: a teacher withdraws only the current one)."""
+    attempt = scene.attempts[index]
+    return attempt.safety_eligibility == "cleared" or (
+        attempt.safety_eligibility == "unreviewed"
+        and opened_outcome(conn, job_id, page_version_id(scene, index), "scene_attempt") == "passed")
+
+
+def finished_page(conn, job: dict, scene_id: str, user_id: str):
+    """SH-09: page tools exist only for the author of a complete feature book with no open review."""
+    if (job["moderation_mode"] != "teacher_review_v1" or job["status"] != "complete"
+            or str(job["profile_id"]) != user_id or not active_author(conn, job)
+            or conn.execute("select 1 from job_moderation_reviews where job_id=%s and decision is null",
+                            (job["id"],)).fetchone()):
+        raise HTTPException(404, "versions_unavailable", headers=PRIVATE)
+    checkpoint = PostgresSaver(conn).get_tuple({"configurable": {"thread_id": str(job["id"])}})
+    state = StoryMemory.model_validate(checkpoint.checkpoint["channel_values"]) if checkpoint else None
+    scene = next((s for s in state.scenes if s.scene_id == scene_id), None) if state and has_versions(state) else None
+    page = next((p for p in job["pages"] or [] if isinstance(p, dict) and p.get("scene_id") == scene_id), None)
+    if scene is None or page is None:
+        raise HTTPException(404, "versions_unavailable", headers=PRIVATE)
+    return scene, page["image_path"]
+
+
+@hold_router.post("/jobs/{job_id}/pages/{scene_id}/versions/open")
+def open_page_versions(job_id: UUID, scene_id: str, response: Response, user=Depends(get_current_user)):
+    """magic-pencil 09 (AC-13, AC-14, SH-02, OD-03). The pipeline moderated only each page's final;
+    opening moderates every other attempt nobody checked and stores the outcome once. A flag is
+    excluded with no hold; a classifier error stores nothing and counts as unavailable."""
+    job_id = str(job_id)
+    with connect() as conn:
+        scene, current = finished_page(conn, product_job(conn, job_id, str(user.id)), scene_id, str(user.id))
+        stored = {r["version_id"]: r["moderation_status"] for r in conn.execute("""select version_id,moderation_status
+          from job_picture_records where job_id=%s and kind='version' and source='scene_attempt' and target_id=%s""",
+                                                                              (job_id, scene_id)).fetchall()}
+    versions, unavailable = [], 0
+    for index, attempt in enumerate(scene.attempts):
+        version_id = page_version_id(scene, index)
+        if attempt.image_ref == current or not attempt.image_ref.startswith(f"{job_id}/"):
+            continue
+        status = "passed" if attempt.safety_eligibility == "cleared" else stored.get(version_id)
+        if attempt.safety_eligibility == "unreviewed" and status is None:
+            try:
+                status = "passed" if screen_page(attempt.image_ref) else "excluded"
+            except Exception:
+                unavailable += 1   # Not a flag (SH-02): nothing is stored, so the next open checks again.
+                continue
+            with connect() as conn:
+                # First outcome wins, so a concurrent open cannot overwrite a stored one.
+                conn.execute("""insert into job_picture_records(job_id,kind,target_id,version_id,image_path,source,
+                  moderation_status) values (%s,'version',%s,%s,%s,'scene_attempt',%s)
+                  on conflict (job_id,kind,version_id) do nothing""",
+                             (job_id, scene_id, version_id, attempt.image_ref, status))
+                status = opened_outcome(conn, job_id, version_id, "scene_attempt")
+        if status == "passed":
+            versions.append({"version_id": version_id, "image_path": attempt.image_ref})
+    response.headers.update(PRIVATE)
+    return {"versions": versions, "unavailable": unavailable}
+
+
+class PageVersionChoice(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    version_id: str = Field(max_length=200)
+    source: str = Field(max_length=1000)
+
+
+@hold_router.post("/jobs/{job_id}/pages/{scene_id}/version")
+def choose_page_version(job_id: UUID, scene_id: str, body: PageVersionChoice, response: Response,
+                        user=Depends(get_current_user)):
+    """magic-pencil 09 (AC-15, AC-20, SH-08). The chosen attempt becomes the page in `jobs.pages`,
+    and the whole-book review returns to pending under the same row lock, so a teacher approval
+    that lands while the change is in flight is cleared by it. No image is spent."""
+    job_id, user_id = str(job_id), str(user.id)
+    with connect() as conn, conn.transaction():
+        product_job(conn, job_id, user_id)
+        job = conn.execute("select * from jobs where id=%s for update", (job_id,)).fetchone()
+        scene, current = finished_page(conn, job, scene_id, user_id)
+        index = next((i for i in range(len(scene.attempts)) if body.version_id == page_version_id(scene, i)), None)
+        if index is None:
+            raise HTTPException(422, "choice_unavailable", headers=PRIVATE)
+        chosen = scene.attempts[index].image_ref
+        if chosen != current:   # Equal is a repeat of a change already made (SH-08).
+            if body.source != current:
+                raise HTTPException(409, "stale_source", headers=PRIVATE)
+            if not page_version_cleared(conn, job_id, scene, index):
+                raise HTTPException(422, "choice_unavailable", headers=PRIVATE)
+            pages = [{**p, "image_path": chosen} if isinstance(p, dict) and p.get("scene_id") == scene_id else p
+                     for p in job["pages"]]
+            conn.execute("update jobs set pages=%s,approved_at=null,rejected_at=null where id=%s", (Jsonb(pages), job_id))
+    response.headers.update(PRIVATE)
+    return {"image_path": chosen}
 
 
 @hold_router.post("/jobs/{job_id}/reconcile-hold")

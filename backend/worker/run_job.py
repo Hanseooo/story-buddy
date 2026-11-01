@@ -25,7 +25,7 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
     """
     import providers
     from app.moderation_hold import (
-        StaleGeneration, active_author, assert_current, connect, project_hold, record_pencil_uses,
+        StaleGeneration, active_author, book_pages, assert_current, connect, project_hold, record_pencil_uses,
         review_subject_bytes, teacher_classroom, validate_review_checkpoint,
     )
     from contracts.story_memory import ModerationContext, ReviewContext
@@ -286,7 +286,7 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                         else:
                             if snapshot.next or any(s.moderation_status not in ("passed", "teacher_allowed") for s in state.scenes):
                                 raise RuntimeError("incomplete_safety_checks")
-                            pages = [{"scene_id": s.scene_id, "caption": s.caption, "image_path": s.final_image_ref} for s in state.scenes]
+                            pages = book_pages(state)
                             outcomes = [outcome(s) for s in state.scenes]
                             conn.execute("""update jobs set status='complete',current_stage='compose',pages=%s,
                               reveal='{}',image_count=%s,regen_count=%s,ref_retry_count=%s,scenes_total=%s,

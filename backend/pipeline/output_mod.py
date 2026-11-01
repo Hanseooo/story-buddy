@@ -94,6 +94,12 @@ def _check_image(image_url: str, evidence: list[ClassifierEvidence] | None = Non
     return "backstop (primary said safe)" if primary_safe else "backstop (primary errored)"
 
 
+def screen_page(path: str) -> bool:
+    """magic-pencil 09: one page attempt through this node's classifier order, opened on a finished
+    book. False is a flag. Raises when the attempt is unchecked (SH-02, a classifier error is not a flag)."""
+    return _check_image(get_signed_url(path)) is None
+
+
 def _soften_prompt(prompt: str) -> str:
     # ponytail: stock softening — prepend safety qualifier. Owned here, not by `self-refusal-fallback`
     # (that spec covers the model *refusing*; this is the model complying and the classifier flagging).

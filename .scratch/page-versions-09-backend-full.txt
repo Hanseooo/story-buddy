@@ -1,0 +1,464 @@
+........................................................................ [  4%]
+..........................sssssssssssssssssssssssssssssssssssssssss..... [  8%]
+........................................................................ [ 12%]
+........................................................................ [ 16%]
+........................................................................ [ 20%]
+........................................................................ [ 24%]
+........................................................................ [ 28%]
+........................................................................ [ 32%]
+........................................................................ [ 36%]
+........................................................................ [ 40%]
+........................................................................ [ 44%]
+........................................................................ [ 48%]
+........................................................................ [ 52%]
+........................................................................ [ 56%]
+.........................................ss...........................FF [ 60%]
+....................FFFF................................................ [ 64%]
+........................................................................ [ 68%]
+........................................................................ [ 72%]
+........................................................................ [ 76%]
+.sssssss................................................................ [ 80%]
+..............................................................ssssssssss [ 84%]
+sssssssssssssssssssssssssssssssssssssssss............................... [ 88%]
+........................................................................ [ 92%]
+........................................................................ [ 96%]
+.....................................................................    [100%]
+================================== FAILURES ===================================
+_ test_approved_classroom_student_downloads_complete_pdf_without_writes[student-1] _
+
+pdf_request = (<starlette.testclient.TestClient object at 0x000001EC15610BF0>, {'id': 'job-1', 'profile_id': 'student-1', 'classroom...': 'student-1', 'role': 'student', 'removed_at': None, 'classroom_id': 'class-1', ...}, <MagicMock id='2113939763568'>)
+viewer_id = 'student-1'
+
+    @pytest.mark.parametrize("viewer_id", ["student-1", "classmate-1"])
+    def test_approved_classroom_student_downloads_complete_pdf_without_writes(pdf_request, viewer_id):
+        client, row, query, download, viewer, profiles = pdf_request
+        viewer["id"] = viewer_id
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=viewer_id)
+        content = app.openapi()["paths"]["/jobs/{job_id}/pdf"]["get"]["responses"]["200"]["content"]
+        assert content == {"application/pdf": {"schema": {"type": "string", "format": "binary"}}}
+        response = client.get("/jobs/job-1/pdf")
+>       assert response.status_code == 200
+E       assert 503 == 200
+E        +  where 503 = <Response [503 Service Unavailable]>.status_code
+
+tests\test_pdf_export.py:52: AssertionError
+---------------------------- Captured stdout call -----------------------------
+
+-----
+
+WeasyPrint could not import some external libraries. Please carefully follow the installation steps before reporting an issue:
+https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#installation
+https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#troubleshooting 
+
+-----
+
+------------------------------ Captured log call ------------------------------
+WARNING  app.pdf_export:pdf_export.py:158 PDF download failed (OSError)
+_ test_approved_classroom_student_downloads_complete_pdf_without_writes[classmate-1] _
+
+pdf_request = (<starlette.testclient.TestClient object at 0x000001EC3141E270>, {'id': 'job-1', 'profile_id': 'student-1', 'classroom... 'classmate-1', 'role': 'student', 'removed_at': None, 'classroom_id': 'class-1', ...}, <MagicMock id='2113950163280'>)
+viewer_id = 'classmate-1'
+
+    @pytest.mark.parametrize("viewer_id", ["student-1", "classmate-1"])
+    def test_approved_classroom_student_downloads_complete_pdf_without_writes(pdf_request, viewer_id):
+        client, row, query, download, viewer, profiles = pdf_request
+        viewer["id"] = viewer_id
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=viewer_id)
+        content = app.openapi()["paths"]["/jobs/{job_id}/pdf"]["get"]["responses"]["200"]["content"]
+        assert content == {"application/pdf": {"schema": {"type": "string", "format": "binary"}}}
+        response = client.get("/jobs/job-1/pdf")
+>       assert response.status_code == 200
+E       assert 503 == 200
+E        +  where 503 = <Response [503 Service Unavailable]>.status_code
+
+tests\test_pdf_export.py:52: AssertionError
+---------------------------- Captured stdout call -----------------------------
+
+-----
+
+WeasyPrint could not import some external libraries. Please carefully follow the installation steps before reporting an issue:
+https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#installation
+https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#troubleshooting 
+
+-----
+
+------------------------------ Captured log call ------------------------------
+WARNING  app.pdf_export:pdf_export.py:158 PDF download failed (OSError)
+________ test_pdf_fails_closed_without_partial_download[withdrawn-409] ________
+
+pdf_request = (<starlette.testclient.TestClient object at 0x000001EC2F6686B0>, {'id': 'job-1', 'profile_id': 'student-1', 'classroom...': 'student-1', 'role': 'student', 'removed_at': None, 'classroom_id': 'class-1', ...}, <MagicMock id='2113919490368'>)
+failure = 'withdrawn', expected = 409
+
+    @pytest.mark.parametrize("failure, expected", [
+        ("missing", 404), ("other_class", 404), ("removed", 404), ("teacher", 404),
+        ("researcher", 404), ("viewer_removed", 404), ("viewer_missing", 404),
+        ("viewer_no_class", 404), ("author_moved", 404), ("author_not_student", 404),
+        ("peer_pending", 404), ("peer_rejected", 404), ("peer_incomplete", 404),
+        ("pending", 409), ("rejected", 409), ("incomplete", 409), ("empty", 409),
+        ("image_failure", 503), ("invalid_image", 503), ("foreign_path", 503),
+        ("withdrawn", 409), ("peer_withdrawn", 404), ("membership_withdrawn", 404),
+        ("author_removed_during_export", 404), ("unauthenticated", 401),
+    ])
+    def test_pdf_fails_closed_without_partial_download(pdf_request, failure, expected):
+        client, row, query, download, viewer, profiles = pdf_request
+        if failure == "missing":
+            query.execute.side_effect = lambda: SimpleNamespace(data=[])
+        elif failure == "other_class":
+            viewer["classroom_id"] = "other-class"
+        elif failure.startswith("peer_"):
+            row["profile_id"] = "another-student"
+            if failure == "peer_pending":
+                row["approved_at"] = None
+            elif failure == "peer_rejected":
+                row["rejected_at"] = "2026-10-21T01:00:00Z"
+            elif failure == "peer_incomplete":
+                row["status"] = "running"
+        elif failure == "removed":
+            row["profiles"]["removed_at"] = "2026-10-21T01:00:00Z"
+        elif failure == "teacher":
+            viewer["role"] = "teacher"
+        elif failure == "researcher":
+            viewer["role"] = "researcher"
+        elif failure == "viewer_removed":
+            viewer["removed_at"] = "2026-10-21T01:00:00Z"
+        elif failure == "viewer_missing":
+            profiles.execute.side_effect = lambda: SimpleNamespace(data=[])
+        elif failure == "viewer_no_class":
+            viewer["classroom_id"] = None
+        elif failure == "author_moved":
+            row["profiles"]["classroom_id"] = "other-class"
+        elif failure == "author_not_student":
+            row["profiles"]["role"] = "researcher"
+        elif failure == "pending":
+            row["approved_at"] = None
+        elif failure == "rejected":
+            row["rejected_at"] = "2026-10-21T01:00:00Z"
+        elif failure == "incomplete":
+            row["status"] = "running"
+        elif failure == "empty":
+            row["pages"] = []
+        elif failure == "image_failure":
+            download.side_effect = RuntimeError("private storage details")
+        elif failure == "invalid_image":
+            download.return_value = b"not an image"
+        elif failure == "foreign_path":
+            row["pages"][0]["image_path"] = "other-book/scene-1.png"
+        if failure in {"withdrawn", "peer_withdrawn", "membership_withdrawn", "author_removed_during_export"}:
+            def withdraw(_path):
+                if failure == "membership_withdrawn":
+                    viewer["classroom_id"] = "other-class"
+                elif failure == "author_removed_during_export":
+                    row["profiles"]["removed_at"] = "2026-10-21T01:00:00Z"
+                else:
+                    row["approved_at"] = None
+                return Path("tests/fixtures/qwen35-resize-scene.png").read_bytes()
+            download.side_effect = withdraw
+        elif failure == "unauthenticated":
+            app.dependency_overrides.pop(get_current_user)
+    
+        response = client.get("/jobs/job-1/pdf")
+>       assert response.status_code == expected
+E       assert 503 == 409
+E        +  where 503 = <Response [503 Service Unavailable]>.status_code
+
+tests\test_pdf_export.py:137: AssertionError
+---------------------------- Captured stdout call -----------------------------
+
+-----
+
+WeasyPrint could not import some external libraries. Please carefully follow the installation steps before reporting an issue:
+https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#installation
+https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#troubleshooting 
+
+-----
+
+------------------------------ Captured log call ------------------------------
+WARNING  app.pdf_export:pdf_export.py:158 PDF download failed (OSError)
+_____ test_pdf_fails_closed_without_partial_download[peer_withdrawn-404] ______
+
+pdf_request = (<starlette.testclient.TestClient object at 0x000001EC308ABBF0>, {'id': 'job-1', 'profile_id': 'another-student', 'cla...': 'student-1', 'role': 'student', 'removed_at': None, 'classroom_id': 'class-1', ...}, <MagicMock id='2113919157792'>)
+failure = 'peer_withdrawn', expected = 404
+
+    @pytest.mark.parametrize("failure, expected", [
+        ("missing", 404), ("other_class", 404), ("removed", 404), ("teacher", 404),
+        ("researcher", 404), ("viewer_removed", 404), ("viewer_missing", 404),
+        ("viewer_no_class", 404), ("author_moved", 404), ("author_not_student", 404),
+        ("peer_pending", 404), ("peer_rejected", 404), ("peer_incomplete", 404),
+        ("pending", 409), ("rejected", 409), ("incomplete", 409), ("empty", 409),
+        ("image_failure", 503), ("invalid_image", 503), ("foreign_path", 503),
+        ("withdrawn", 409), ("peer_withdrawn", 404), ("membership_withdrawn", 404),
+        ("author_removed_during_export", 404), ("unauthenticated", 401),
+    ])
+    def test_pdf_fails_closed_without_partial_download(pdf_request, failure, expected):
+        client, row, query, download, viewer, profiles = pdf_request
+        if failure == "missing":
+            query.execute.side_effect = lambda: SimpleNamespace(data=[])
+        elif failure == "other_class":
+            viewer["classroom_id"] = "other-class"
+        elif failure.startswith("peer_"):
+            row["profile_id"] = "another-student"
+            if failure == "peer_pending":
+                row["approved_at"] = None
+            elif failure == "peer_rejected":
+                row["rejected_at"] = "2026-10-21T01:00:00Z"
+            elif failure == "peer_incomplete":
+                row["status"] = "running"
+        elif failure == "removed":
+            row["profiles"]["removed_at"] = "2026-10-21T01:00:00Z"
+        elif failure == "teacher":
+            viewer["role"] = "teacher"
+        elif failure == "researcher":
+            viewer["role"] = "researcher"
+        elif failure == "viewer_removed":
+            viewer["removed_at"] = "2026-10-21T01:00:00Z"
+        elif failure == "viewer_missing":
+            profiles.execute.side_effect = lambda: SimpleNamespace(data=[])
+        elif failure == "viewer_no_class":
+            viewer["classroom_id"] = None
+        elif failure == "author_moved":
+            row["profiles"]["classroom_id"] = "other-class"
+        elif failure == "author_not_student":
+            row["profiles"]["role"] = "researcher"
+        elif failure == "pending":
+            row["approved_at"] = None
+        elif failure == "rejected":
+            row["rejected_at"] = "2026-10-21T01:00:00Z"
+        elif failure == "incomplete":
+            row["status"] = "running"
+        elif failure == "empty":
+            row["pages"] = []
+        elif failure == "image_failure":
+            download.side_effect = RuntimeError("private storage details")
+        elif failure == "invalid_image":
+            download.return_value = b"not an image"
+        elif failure == "foreign_path":
+            row["pages"][0]["image_path"] = "other-book/scene-1.png"
+        if failure in {"withdrawn", "peer_withdrawn", "membership_withdrawn", "author_removed_during_export"}:
+            def withdraw(_path):
+                if failure == "membership_withdrawn":
+                    viewer["classroom_id"] = "other-class"
+                elif failure == "author_removed_during_export":
+                    row["profiles"]["removed_at"] = "2026-10-21T01:00:00Z"
+                else:
+                    row["approved_at"] = None
+                return Path("tests/fixtures/qwen35-resize-scene.png").read_bytes()
+            download.side_effect = withdraw
+        elif failure == "unauthenticated":
+            app.dependency_overrides.pop(get_current_user)
+    
+        response = client.get("/jobs/job-1/pdf")
+>       assert response.status_code == expected
+E       assert 503 == 404
+E        +  where 503 = <Response [503 Service Unavailable]>.status_code
+
+tests\test_pdf_export.py:137: AssertionError
+---------------------------- Captured stdout call -----------------------------
+
+-----
+
+WeasyPrint could not import some external libraries. Please carefully follow the installation steps before reporting an issue:
+https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#installation
+https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#troubleshooting 
+
+-----
+
+------------------------------ Captured log call ------------------------------
+WARNING  app.pdf_export:pdf_export.py:158 PDF download failed (OSError)
+__ test_pdf_fails_closed_without_partial_download[membership_withdrawn-404] ___
+
+pdf_request = (<starlette.testclient.TestClient object at 0x000001EC3143DAC0>, {'id': 'job-1', 'profile_id': 'student-1', 'classroom...student-1', 'role': 'student', 'removed_at': None, 'classroom_id': 'other-class', ...}, <MagicMock id='2113939897904'>)
+failure = 'membership_withdrawn', expected = 404
+
+    @pytest.mark.parametrize("failure, expected", [
+        ("missing", 404), ("other_class", 404), ("removed", 404), ("teacher", 404),
+        ("researcher", 404), ("viewer_removed", 404), ("viewer_missing", 404),
+        ("viewer_no_class", 404), ("author_moved", 404), ("author_not_student", 404),
+        ("peer_pending", 404), ("peer_rejected", 404), ("peer_incomplete", 404),
+        ("pending", 409), ("rejected", 409), ("incomplete", 409), ("empty", 409),
+        ("image_failure", 503), ("invalid_image", 503), ("foreign_path", 503),
+        ("withdrawn", 409), ("peer_withdrawn", 404), ("membership_withdrawn", 404),
+        ("author_removed_during_export", 404), ("unauthenticated", 401),
+    ])
+    def test_pdf_fails_closed_without_partial_download(pdf_request, failure, expected):
+        client, row, query, download, viewer, profiles = pdf_request
+        if failure == "missing":
+            query.execute.side_effect = lambda: SimpleNamespace(data=[])
+        elif failure == "other_class":
+            viewer["classroom_id"] = "other-class"
+        elif failure.startswith("peer_"):
+            row["profile_id"] = "another-student"
+            if failure == "peer_pending":
+                row["approved_at"] = None
+            elif failure == "peer_rejected":
+                row["rejected_at"] = "2026-10-21T01:00:00Z"
+            elif failure == "peer_incomplete":
+                row["status"] = "running"
+        elif failure == "removed":
+            row["profiles"]["removed_at"] = "2026-10-21T01:00:00Z"
+        elif failure == "teacher":
+            viewer["role"] = "teacher"
+        elif failure == "researcher":
+            viewer["role"] = "researcher"
+        elif failure == "viewer_removed":
+            viewer["removed_at"] = "2026-10-21T01:00:00Z"
+        elif failure == "viewer_missing":
+            profiles.execute.side_effect = lambda: SimpleNamespace(data=[])
+        elif failure == "viewer_no_class":
+            viewer["classroom_id"] = None
+        elif failure == "author_moved":
+            row["profiles"]["classroom_id"] = "other-class"
+        elif failure == "author_not_student":
+            row["profiles"]["role"] = "researcher"
+        elif failure == "pending":
+            row["approved_at"] = None
+        elif failure == "rejected":
+            row["rejected_at"] = "2026-10-21T01:00:00Z"
+        elif failure == "incomplete":
+            row["status"] = "running"
+        elif failure == "empty":
+            row["pages"] = []
+        elif failure == "image_failure":
+            download.side_effect = RuntimeError("private storage details")
+        elif failure == "invalid_image":
+            download.return_value = b"not an image"
+        elif failure == "foreign_path":
+            row["pages"][0]["image_path"] = "other-book/scene-1.png"
+        if failure in {"withdrawn", "peer_withdrawn", "membership_withdrawn", "author_removed_during_export"}:
+            def withdraw(_path):
+                if failure == "membership_withdrawn":
+                    viewer["classroom_id"] = "other-class"
+                elif failure == "author_removed_during_export":
+                    row["profiles"]["removed_at"] = "2026-10-21T01:00:00Z"
+                else:
+                    row["approved_at"] = None
+                return Path("tests/fixtures/qwen35-resize-scene.png").read_bytes()
+            download.side_effect = withdraw
+        elif failure == "unauthenticated":
+            app.dependency_overrides.pop(get_current_user)
+    
+        response = client.get("/jobs/job-1/pdf")
+>       assert response.status_code == expected
+E       assert 503 == 404
+E        +  where 503 = <Response [503 Service Unavailable]>.status_code
+
+tests\test_pdf_export.py:137: AssertionError
+---------------------------- Captured stdout call -----------------------------
+
+-----
+
+WeasyPrint could not import some external libraries. Please carefully follow the installation steps before reporting an issue:
+https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#installation
+https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#troubleshooting 
+
+-----
+
+------------------------------ Captured log call ------------------------------
+WARNING  app.pdf_export:pdf_export.py:158 PDF download failed (OSError)
+_ test_pdf_fails_closed_without_partial_download[author_removed_during_export-404] _
+
+pdf_request = (<starlette.testclient.TestClient object at 0x000001EC3083D850>, {'id': 'job-1', 'profile_id': 'student-1', 'classroom...': 'student-1', 'role': 'student', 'removed_at': None, 'classroom_id': 'class-1', ...}, <MagicMock id='2113950438016'>)
+failure = 'author_removed_during_export', expected = 404
+
+    @pytest.mark.parametrize("failure, expected", [
+        ("missing", 404), ("other_class", 404), ("removed", 404), ("teacher", 404),
+        ("researcher", 404), ("viewer_removed", 404), ("viewer_missing", 404),
+        ("viewer_no_class", 404), ("author_moved", 404), ("author_not_student", 404),
+        ("peer_pending", 404), ("peer_rejected", 404), ("peer_incomplete", 404),
+        ("pending", 409), ("rejected", 409), ("incomplete", 409), ("empty", 409),
+        ("image_failure", 503), ("invalid_image", 503), ("foreign_path", 503),
+        ("withdrawn", 409), ("peer_withdrawn", 404), ("membership_withdrawn", 404),
+        ("author_removed_during_export", 404), ("unauthenticated", 401),
+    ])
+    def test_pdf_fails_closed_without_partial_download(pdf_request, failure, expected):
+        client, row, query, download, viewer, profiles = pdf_request
+        if failure == "missing":
+            query.execute.side_effect = lambda: SimpleNamespace(data=[])
+        elif failure == "other_class":
+            viewer["classroom_id"] = "other-class"
+        elif failure.startswith("peer_"):
+            row["profile_id"] = "another-student"
+            if failure == "peer_pending":
+                row["approved_at"] = None
+            elif failure == "peer_rejected":
+                row["rejected_at"] = "2026-10-21T01:00:00Z"
+            elif failure == "peer_incomplete":
+                row["status"] = "running"
+        elif failure == "removed":
+            row["profiles"]["removed_at"] = "2026-10-21T01:00:00Z"
+        elif failure == "teacher":
+            viewer["role"] = "teacher"
+        elif failure == "researcher":
+            viewer["role"] = "researcher"
+        elif failure == "viewer_removed":
+            viewer["removed_at"] = "2026-10-21T01:00:00Z"
+        elif failure == "viewer_missing":
+            profiles.execute.side_effect = lambda: SimpleNamespace(data=[])
+        elif failure == "viewer_no_class":
+            viewer["classroom_id"] = None
+        elif failure == "author_moved":
+            row["profiles"]["classroom_id"] = "other-class"
+        elif failure == "author_not_student":
+            row["profiles"]["role"] = "researcher"
+        elif failure == "pending":
+            row["approved_at"] = None
+        elif failure == "rejected":
+            row["rejected_at"] = "2026-10-21T01:00:00Z"
+        elif failure == "incomplete":
+            row["status"] = "running"
+        elif failure == "empty":
+            row["pages"] = []
+        elif failure == "image_failure":
+            download.side_effect = RuntimeError("private storage details")
+        elif failure == "invalid_image":
+            download.return_value = b"not an image"
+        elif failure == "foreign_path":
+            row["pages"][0]["image_path"] = "other-book/scene-1.png"
+        if failure in {"withdrawn", "peer_withdrawn", "membership_withdrawn", "author_removed_during_export"}:
+            def withdraw(_path):
+                if failure == "membership_withdrawn":
+                    viewer["classroom_id"] = "other-class"
+                elif failure == "author_removed_during_export":
+                    row["profiles"]["removed_at"] = "2026-10-21T01:00:00Z"
+                else:
+                    row["approved_at"] = None
+                return Path("tests/fixtures/qwen35-resize-scene.png").read_bytes()
+            download.side_effect = withdraw
+        elif failure == "unauthenticated":
+            app.dependency_overrides.pop(get_current_user)
+    
+        response = client.get("/jobs/job-1/pdf")
+>       assert response.status_code == expected
+E       assert 503 == 404
+E        +  where 503 = <Response [503 Service Unavailable]>.status_code
+
+tests\test_pdf_export.py:137: AssertionError
+---------------------------- Captured stdout call -----------------------------
+
+-----
+
+WeasyPrint could not import some external libraries. Please carefully follow the installation steps before reporting an issue:
+https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#installation
+https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#troubleshooting 
+
+-----
+
+------------------------------ Captured log call ------------------------------
+WARNING  app.pdf_export:pdf_export.py:158 PDF download failed (OSError)
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\Asus\Desktop\story-buddy\backend\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/test_pdf_export.py::test_approved_classroom_student_downloads_complete_pdf_without_writes[student-1]
+  C:\Users\Asus\Desktop\story-buddy\backend\.venv\Lib\site-packages\fastapi\openapi\utils.py:252: UserWarning: Duplicate Operation ID ping_classrooms__classroom_id__ping_get for function ping at C:\Users\Asus\Desktop\story-buddy\backend\tests\test_main.py
+    warnings.warn(message, stacklevel=1)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_pdf_export.py::test_approved_classroom_student_downloads_complete_pdf_without_writes[student-1]
+FAILED tests/test_pdf_export.py::test_approved_classroom_student_downloads_complete_pdf_without_writes[classmate-1]
+FAILED tests/test_pdf_export.py::test_pdf_fails_closed_without_partial_download[withdrawn-409]
+FAILED tests/test_pdf_export.py::test_pdf_fails_closed_without_partial_download[peer_withdrawn-404]
+FAILED tests/test_pdf_export.py::test_pdf_fails_closed_without_partial_download[membership_withdrawn-404]
+FAILED tests/test_pdf_export.py::test_pdf_fails_closed_without_partial_download[author_removed_during_export-404]
+6 failed, 1690 passed, 101 skipped, 6 deselected, 2 warnings in 215.92s (0:03:35)

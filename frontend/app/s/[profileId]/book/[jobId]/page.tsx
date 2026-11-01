@@ -89,7 +89,213 @@ function ScrollView({ signedPages, onImageClick }: { signedPages: SignedPage[]; 
 
 const SWEPT_STATUS = "__swept__"; // placeholder — replace when data-deletion names it
 
-type SignedPage = { scene_id: string; caption: string; signedUrl: string };
+type SignedPage = { scene_id: string; caption: string; signedUrl: string; image_path: string; other_versions?: boolean };
+
+type PageVersion = { version_id: string; image_path: string };
+
+// ADR-082 / magic-pencil 09: a finished page's other attempts cost no image. Opening asks the API to
+// moderate the ones nobody checked (SH-02). A choice carries the picture it was made from, so a stale
+// one is rejected (SH-08), and a reviewed book goes back to the teacher, so the child confirms first (AC-21).
+function PageVersions({ jobId, pageNumber, page, reviewed, busy, onBusy, onChanged }: {
+  jobId: string; pageNumber: number; page: SignedPage; reviewed: boolean; busy: boolean;
+  onBusy: (busy: boolean) => void; onChanged: () => Promise<unknown>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [versions, setVersions] = useState<PageVersion[]>([]);
+  const [unavailable, setUnavailable] = useState(0);
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const [loaded, setLoaded] = useState<Record<string, boolean>>({});
+  const [attempt, setAttempt] = useState(0);
+  const [changeError, setChangeError] = useState("");
+  const [pending, setPending] = useState<{ version: PageVersion; button: HTMLButtonElement } | null>(null);
+  const openerRef = useRef<HTMLButtonElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const confirmRef = useRef<HTMLDialogElement | null>(null);
+  const confirmButtonRef = useRef<HTMLButtonElement | null>(null);
+  const listId = `page-versions-${page.scene_id}`;
+
+  useEffect(() => {
+    if (!open) return;
+    const controller = new AbortController();
+    void (async () => {
+      let list: PageVersion[] = [];
+      let missing = 0;
+      let signed: Record<string, string> = {};
+      let failed = false;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_BASE_URL}/jobs/${jobId}/pages/${encodeURIComponent(page.scene_id)}/versions/open`,
+          { method: "POST", headers: { Authorization: `Bearer ${session?.access_token}` }, signal: controller.signal },
+        );
+        if (!response.ok) throw new Error("versions_unavailable");
+        ({ versions: list, unavailable: missing } = await response.json());
+        signed = await signPaths(list.map((v) => v.image_path),
+          [{ id: jobId, moderation_mode: "teacher_review_v1", page_versions: list }], controller.signal);
+      } catch { failed = true; /* shown as the error state below */ }
+      if (controller.signal.aborted) return;
+      setVersions(list);
+      setUnavailable(missing);
+      setUrls(signed);
+      setState(!failed && list.every((v) => signed[v.image_path]) ? "ready" : "error");
+    })();
+    return () => controller.abort();
+  }, [open, attempt, jobId, page.scene_id, page.image_path]);
+
+  useEffect(() => { if (open) listRef.current?.focus(); }, [open]);
+
+  function close() {
+    setOpen(false);
+    setChangeError("");
+    openerRef.current?.focus();
+  }
+
+  function cancelConfirm() {
+    confirmRef.current?.close();
+    pending?.button.focus();
+    setPending(null);
+  }
+
+  async function change(version: PageVersion) {
+    confirmRef.current?.close();
+    setPending(null);
+    onBusy(true);
+    setChangeError("");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/jobs/${jobId}/pages/${encodeURIComponent(page.scene_id)}/version`,
+        { method: "POST", headers: { Authorization: `Bearer ${session?.access_token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ version_id: version.version_id, source: page.image_path }) },
+      );
+      if (response.status === 409) {
+        await onChanged();
+        setChangeError("This page changed. Have another look.");
+        setState("loading");
+        setAttempt((value) => value + 1);
+        return;
+      }
+      if (!response.ok) throw new Error("change_unavailable");
+      await onChanged();
+      close();
+    } catch {
+      setChangeError("We couldn't change this picture right now. Try again.");
+    } finally {
+      onBusy(false);
+    }
+  }
+
+  function choose(version: PageVersion, button: HTMLButtonElement) {
+    if (!reviewed) { void change(version); return; }
+    setPending({ version, button });
+    confirmRef.current?.showModal();
+    confirmButtonRef.current?.focus();
+  }
+
+  return (
+    <div className="mt-4 w-full">
+      <button
+        ref={openerRef}
+        type="button"
+        aria-label={`Other versions of page ${pageNumber}`}
+        aria-expanded={open}
+        aria-controls={listId}
+        disabled={busy && !open}
+        onClick={() => {
+          setState("loading");
+          setLoaded({});
+          setChangeError("");
+          setOpen((value) => !value);
+        }}
+        className="min-h-11 rounded-xl border border-primary/20 bg-background px-4 py-2 font-kid text-sm font-bold text-foreground hover:bg-primary/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        Other versions
+      </button>
+      {open && (
+        <div
+          ref={listRef}
+          id={listId}
+          role="group"
+          aria-label={`Other versions of page ${pageNumber}`}
+          tabIndex={-1}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || busy || pending) return;
+            event.stopPropagation();
+            close();
+          }}
+          className="mt-3 w-full rounded-2xl bg-primary/5 p-4 text-left focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
+        >
+          <p role="status" className="font-kid text-sm text-foreground/70">
+            {busy ? "Changing your picture…" : state === "loading" ? `Loading other pictures for page ${pageNumber}…` : ""}
+          </p>
+          {changeError && <p role="alert" className="mt-2 font-kid text-sm">{changeError}</p>}
+          {(state === "error" || (state === "ready" && unavailable > 0)) && (
+            <div role="alert" className="mt-2 flex flex-col items-start gap-2 font-kid text-sm">
+              <p>We couldn&apos;t load this picture right now.</p>
+              <button
+                type="button"
+                onClick={() => { setState("loading"); setAttempt((value) => value + 1); }}
+                className="min-h-11 rounded-xl bg-surface px-4 py-2 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
+              >
+                Try loading the pictures for page {pageNumber} again
+              </button>
+            </div>
+          )}
+          {state === "ready" && versions.length === 0 && unavailable === 0 && (
+            <p className="mt-2 font-kid text-sm">There are no other pictures for page {pageNumber} right now.</p>
+          )}
+          {state === "ready" && versions.length > 0 && (
+            <ul className="mt-2 grid grid-cols-2 gap-2">
+              {versions.map((version, index) => (
+                <li key={version.version_id}>
+                  <button
+                    type="button"
+                    aria-label={`Use other picture ${index + 1} for page ${pageNumber}`}
+                    disabled={busy || !loaded[version.version_id]}
+                    onClick={(event) => choose(version, event.currentTarget)}
+                    className="w-full rounded-xl border border-primary/20 bg-background p-1 hover:bg-primary/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <img
+                      src={urls[version.image_path]}
+                      alt={`Other picture ${index + 1} for page ${pageNumber}`}
+                      className="aspect-square w-full rounded-lg bg-muted object-contain"
+                      onLoad={() => setLoaded((current) => ({ ...current, [version.version_id]: true }))}
+                      onError={() => setState("error")}
+                    />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <button
+            type="button"
+            aria-label={`Close other versions of page ${pageNumber}`}
+            disabled={busy}
+            onClick={close}
+            className="mt-3 min-h-11 rounded-xl px-4 py-2 font-kid font-bold text-foreground focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+      <dialog ref={confirmRef} aria-labelledby={`${listId}-confirm`} onCancel={(event) => { event.preventDefault(); cancelConfirm(); }}
+        className="m-auto max-w-md rounded-2xl bg-background p-6 font-kid text-foreground backdrop:bg-foreground/50">
+        <h2 id={`${listId}-confirm`} className="text-xl font-bold">Your teacher will look at your book again before classmates can see it.</h2>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button type="button" ref={confirmButtonRef} onClick={() => pending && void change(pending.version)}
+            className="min-h-11 rounded-xl bg-primary px-4 font-bold text-on-primary focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3">
+            Change page {pageNumber}
+          </button>
+          <button type="button" onClick={cancelConfirm}
+            className="min-h-11 rounded-xl px-4 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3">
+            Keep page {pageNumber} as it is
+          </button>
+        </div>
+      </dialog>
+    </div>
+  );
+}
 
 type ChildNote = { job_id: string; body: string; seen: boolean; updated_at: string };
 
@@ -203,6 +409,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
+  const [changingPage, setChangingPage] = useState(false); // SH-07: one page change per book at a time
   const downloadRequest = useRef<AbortController | null>(null);
   const imageRequest = useRef<AbortController | null>(null);
   const ownsBook = Boolean(profileId && row?.profile_id === profileId);
@@ -274,6 +481,8 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
         scene_id: p.scene_id,
         caption: p.caption,
         signedUrl: signed[p.image_path],
+        image_path: p.image_path,
+        other_versions: p.other_versions,
       }));
       setSignedPages(pages);
       resetFailChain(); // actual book is on screen — chain is over
@@ -582,6 +791,11 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                       <p aria-hidden="true" className="font-kid text-lg md:text-2xl lg:text-3xl leading-relaxed text-foreground text-left max-w-[60ch]">
                         {current.caption}
                       </p>
+                      {ownsBook && current.other_versions && (
+                        <PageVersions key={current.scene_id} jobId={jobId} pageNumber={pageIndex + 1} page={current}
+                          reviewed={Boolean(row?.approved_at || row?.rejected_at)} busy={changingPage}
+                          onBusy={setChangingPage} onChanged={refetch} />
+                      )}
                     </div>
                     
                     {/* Progress dots at the bottom */}

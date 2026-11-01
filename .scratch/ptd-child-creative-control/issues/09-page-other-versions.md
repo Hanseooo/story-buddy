@@ -2,7 +2,7 @@
 
 **Status:** ready-for-agent
 **Type:** task
-**Progress:** open
+**Progress:** done
 **Blocked by:** `.scratch/ptd-child-creative-control/issues/04-draw-again-undoable-at-reveal.md`
 
 **Parent:** `docs/specs/magic-pencil.md` (US-03, US-05)
@@ -70,3 +70,25 @@ US-03 and US-05 on a seeded synthetic classroom.
 04 (setting snapshot, table).
 
 ## Comments
+
+**2026-11-02 — built.** `POST /jobs/{id}/pages/{scene_id}/versions/open` and `POST /jobs/{id}/pages/{scene_id}/version`
+in `app/moderation_hold.py`. Version ids are `<scene_id>-attempt-<index>` into the frozen checkpoint's
+`Scene.attempts`. The on-open outcome is a `job_picture_records` row (`source='scene_attempt'`), so no
+migration was needed. `authorized_asset` serves `scene-<id>` from `jobs.pages` when it names the cleared or
+teacher-allowed final, or (feature jobs only) a cleared or opened-and-passed attempt. It also serves
+`page-version-<id>` to the author. The worker marks qualifying pages `other_versions: true` at completion
+(`book_pages`). The choice writes `jobs.pages` and clears `approved_at`/`rejected_at` in one `for update`
+transaction, and the confirm is browser-side only, so an approval landing mid-change is still cleared.
+Decisions taken without the owner: a teacher-allowed attempt that is no longer current is never offered (ticket
+04's rule); the control is in the Pages view only, not the Scroll view.
+Known gap, not fixed: a teacher withdrawal of a scene or text clearance on a complete book rebuilds
+`jobs.pages` from the checkpoint finals, so the child's page choices are lost (safe, but the child must choose again).
+Not done: the `playwright-cli` pass on a seeded classroom.
+
+**2026-11-02 — review.** Fixed: `book_pages` counted teacher-allowed attempts that are never offered, so a page
+could show "Other versions" with nothing to choose. It now counts the current page plus cleared or unreviewed
+attempts (red, then green). Left as they are: focus goes to the panel, not its first button, matching the reveal's
+shipped panel (`process/[jobId]/page.tsx`), because the choices are disabled while they load. The one-change-per-book
+rule holds per tab, and across tabs the `for update` lock runs the requests one at a time. Two simultaneous opens can
+both call the classifier, but only the first stored outcome counts. The flag still stays on after an on-open
+exclusion and shows the empty state.

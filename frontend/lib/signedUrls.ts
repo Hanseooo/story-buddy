@@ -14,6 +14,7 @@ export type ImageJob = {
   moderation_mode?: string;
   pages?: Array<{scene_id: string; image_path: string}> | null;
   reveal?: {characters?: Array<{char_id: string; image_path: string; versions?: Array<{version_id: string; image_path: string}>}>} | null;
+  page_versions?: Array<{version_id: string; image_path: string}>;
 };
 
 function load(): Record<string, Entry> {
@@ -55,6 +56,7 @@ export async function signPaths(paths: string[], jobs: ImageJob[] = [], signal?:
       protectedPaths.set(char.image_path, {jobId: job.id, assetId: `ref-${char.char_id}`});
       for (const v of char.versions ?? []) protectedPaths.set(v.image_path, {jobId: job.id, assetId: `version-${v.version_id}`});
     }
+    for (const v of job.page_versions ?? []) protectedPaths.set(v.image_path, {jobId: job.id, assetId: `page-version-${v.version_id}`});
   }
 
   for (const p of new Set(paths)) {
