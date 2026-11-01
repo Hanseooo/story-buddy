@@ -30,6 +30,8 @@ type Detail = {
 type Criterion = { id: string; name: string; trigger: string; exception: string };
 type Policy = { policy_version: string; audience: string; basis: string; scope: string;
   guidance: string; theme_scope: string; criteria: Criterion[]; optional_themes: Criterion[] };
+// magic-pencil 10: a held page pencil request waits alone on a finished, readable book.
+const pagePencilKinds = ["page_pencil_text", "page_pencil_result"];
 const control = "min-h-[44px] px-4 py-2 rounded-xl font-bold text-primary hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50";
 
 async function reviewFetch(path: string, signal: AbortSignal, options?: RequestInit) {
@@ -196,7 +198,9 @@ function HeldStory({ jobId, onClose }: { jobId: string; onClose: () => void }) {
         </> : <>
           {!stopped && <>
           <p className="font-bold">Waiting for teacher help</p>
-          <p>The whole book stays hidden while this review is open. Earlier clearances cannot be withdrawn here. If uncertain, leave this story waiting.</p>
+          <p>{pagePencilKinds.includes(detail.kind || "")
+            ? "The book stays readable with its current pictures. Only this change waits."
+            : "The whole book stays hidden while this review is open."} Earlier clearances cannot be withdrawn here. If uncertain, leave this story waiting.</p>
           {!detail.ready && <p role="status">Finishing the current step. Inspection is available.</p>}
           {!detail.ready && detail.withdraws_review_id && ["pending", "failed"].includes(detail.dispatch_state || "") &&
             <FinishWithdrawal jobId={jobId} detail={detail} onChanged={load} />}
@@ -208,7 +212,7 @@ function HeldStory({ jobId, onClose }: { jobId: string; onClose: () => void }) {
             <h4 className="font-bold">Title needing review</h4>
             <p className="whitespace-pre-wrap break-words leading-relaxed">{detail.subject_title || "Saved title is unavailable."}</p>
           </section>}
-          {detail.kind === "character_pencil_text" && <section aria-label="Picture change needing review" className="space-y-3">
+          {(detail.kind === "character_pencil_text" || pagePencilKinds.includes(detail.kind || "")) && <section aria-label="Picture change needing review" className="space-y-3">
             <h4 className="font-bold">Picture change needing review</h4>
             <p className="whitespace-pre-wrap break-words leading-relaxed">{detail.pencil_text || "Saved change is unavailable."}</p>
           </section>}
@@ -249,12 +253,12 @@ function HeldStory({ jobId, onClose }: { jobId: string; onClose: () => void }) {
             </div>)}
             <ReviewCriteria />
           </section>}
-          {!loading && !error && (detail.kind === "scene_image" || detail.kind === "character_reference" || detail.kind === "story_text" || detail.kind === "title" || detail.kind === "optional_themes" || detail.kind === "character_pencil_text") && <ResolveSubject
+          {!loading && !error && (detail.kind === "scene_image" || detail.kind === "character_reference" || detail.kind === "story_text" || detail.kind === "title" || detail.kind === "optional_themes" || detail.kind === "character_pencil_text" || pagePencilKinds.includes(detail.kind || "")) && <ResolveSubject
             key={`${detail.review_id}-${detail.subject_version}-${detail.generation_epoch}-${revision}`}
-            jobId={jobId} detail={detail} inspected={detail.kind === "title" ? !!detail.subject_title : detail.kind === "character_pencil_text" ? !!detail.pencil_text : detail.kind === "story_text" || detail.kind === "optional_themes" ? !!detail.story_text : inspected}
+            jobId={jobId} detail={detail} inspected={detail.kind === "title" ? !!detail.subject_title : detail.kind === "character_pencil_text" || detail.kind === "page_pencil_text" ? !!detail.pencil_text : detail.kind === "story_text" || detail.kind === "optional_themes" ? !!detail.story_text : inspected}
             busy={pending} onPending={setPending} />}
           </>}
-          {!loading && !error && detail.kind !== "character_pencil_text" && <StopStory jobId={jobId} reviewId={detail.review_id}
+          {!loading && !error && detail.kind !== "character_pencil_text" && !pagePencilKinds.includes(detail.kind || "") && <StopStory jobId={jobId} reviewId={detail.review_id}
             epoch={detail.generation_epoch!} ready={!!detail.ready && !pending}
             teacher={{ subjectVersion: detail.subject_version!, policyVersion: detail.current_policy_version || "" }}
             onStopped={() => setStopped(true)} onRefresh={load} onPending={setPending} />}
@@ -302,8 +306,10 @@ function ResolveSubject({ jobId, detail, inspected, busy, onPending }: {
   jobId: string; detail: Detail; inspected: boolean; busy: boolean; onPending: (pending: boolean) => void;
 }) {
   const themes = detail.kind === "optional_themes";
-  const pencil = detail.kind === "character_pencil_text";
-  const subject = themes ? "themes" : detail.kind === "title" ? "title" : detail.kind === "story_text" ? "story text" : pencil ? "picture change" : "picture";
+  const page = pagePencilKinds.includes(detail.kind || "");
+  const pencil = detail.kind === "character_pencil_text" || page;
+  const subject = themes ? "themes" : detail.kind === "title" ? "title" : detail.kind === "story_text" ? "story text"
+    : pencil && detail.kind !== "page_pencil_result" ? "picture change" : "picture";
   const [confirmed, setConfirmed] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -336,7 +342,8 @@ function ResolveSubject({ jobId, detail, inspected, busy, onPending }: {
       } else if (current.dispatch_state === "pending" || current.dispatch_state === "failed") {
         setMessage("Your decision is saved. Delivery is pending. Choose Continue story to retry it.");
       } else {
-        setOutcome(current.status === "complete" ? "Story complete" : current.status === "awaiting_teacher"
+        setOutcome(page ? (action === "stop" ? "Change stopped. The book is unchanged." : "Change allowed. The child can now see it.")
+          : current.status === "complete" ? "Story complete" : current.status === "awaiting_teacher"
           ? "Story waiting for teacher help" : ["queued", "running"].includes(current.status)
             ? "Story continuing" : `Current story status: ${String(current.status).replaceAll("_", " ")}`);
         setSuccess(true);
@@ -355,6 +362,7 @@ function ResolveSubject({ jobId, detail, inspected, busy, onPending }: {
       {detail.kind === "title" ? <p>Read the saved title above. Allowing starts the story with this exact title. The story text and every generated picture receive their own safety checks.</p>
         : themes ? <p>Read the saved story and detected themes above. Acceptance covers these themes together for this submission only. They will not prompt another theme review on later pages. Shared safety checks still apply to every picture.</p>
         : detail.kind === "story_text" ? <p>Read the saved story above. Allowing continues with this unchanged text. Every generated picture receives its own safety checks.</p>
+        : detail.kind === "page_pencil_result" ? (!inspected && <p>Show the picture and wait for it to load before allowing it.</p>)
         : pencil ? <p>Read the child&apos;s requested change above. Allowing makes this one change to the picture. The new picture receives its own safety checks.</p>
         : !inspected && <p>Show the picture and wait for it to load before allowing it.</p>}
       {!detail.ready && <p role="status">Finishing the current step. Refresh story status before deciding.</p>}
@@ -372,7 +380,8 @@ function ResolveSubject({ jobId, detail, inspected, busy, onPending }: {
         (!inspected || !detail.current_policy_version || !detail.criteria?.length || confirmed.length !== detail.criteria.length))}
         onClick={() => void decide(submitted || "allow")}>{pending ? "Saving…" : submitted ? "Continue story" : themes ? "Accept these themes" : `Allow this ${subject}`}</button>
       {!submitted && pencil && <>
-        <p>Stopping ends only this change. The story continues with the old picture.</p>
+        <p>{page ? "Stopping ends only this change. The book keeps its current picture."
+          : "Stopping ends only this change. The story continues with the old picture."}</p>
         <button className={control} disabled={busy || pending || !detail.ready || !inspected}
           onClick={() => void decide("stop")}>Stop this change</button>
       </>}

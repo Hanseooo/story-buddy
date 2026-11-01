@@ -12,6 +12,8 @@ import heldText from "./held-text.fixture.json";
 import heldTitle from "./held-title.fixture.json";
 import heldThemes from "./held-themes.fixture.json";
 import heldPencil from "./held-pencil.fixture.json";
+import heldPagePencil from "./held-page-pencil.fixture.json";
+import heldPageResult from "./held-page-result.fixture.json";
 import moderationPolicy from "./moderation-policy.fixture.json";
 import clearances from "./clearances.fixture.json";
 import pendingContinuation from "./pending-continuation.fixture.json";
@@ -432,6 +434,43 @@ describe("held story inspection", () => {
     expect(bodies).toHaveLength(1);
     expect(JSON.parse(bodies[0])).toEqual(expect.objectContaining({
       action, review_id: heldPencil.review_id, subject_version: heldPencil.subject_version }));
+    vi.unstubAllGlobals();
+  });
+  it.each([
+    ["text", heldPagePencil, "picture change"],
+    ["result", heldPageResult, "picture"],
+  ] as const)("a held page pencil %s waits alone on a readable book and stop ends only that change", async (_, held, subject) => {
+    const bodies: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, options?: RequestInit) => {
+      if (url.endsWith("/decision")) {
+        bodies.push(options!.body as string);
+        return Response.json({ status: "complete", dispatch_state: null });
+      }
+      if (url.endsWith("/moderation-policy")) return Response.json(moderationPolicy);
+      if (url.endsWith("/moderation-review")) return Response.json(held);
+      if (url.includes("/reveal") || url.includes("/images/")) return new Response("picture");
+      return Response.json([{ review_id: held.review_id, job_id: "synthetic-job", title: held.title, held_at: "2026-11-02T00:00:00Z", ready: true }]);
+    }));
+    render(<NeedsHelpQueue classroomId="synthetic-class" active onCount={() => {}} onBack={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Inspect Synthetic title/ }));
+    const change = await screen.findByRole("region", { name: "Picture change needing review" });
+    expect(within(change).getByText(held.pencil_text)).toBeDefined();
+    expect(screen.getByText(/The book stays readable with its current pictures. Only this change waits./)).toBeDefined();
+    expect(screen.queryByText(/The whole book stays hidden/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Request replacement picture" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Stop this story" })).toBeNull();
+    expect(screen.getByRole("button", { name: `Allow this ${subject}` })).toBeDisabled();
+    expect(screen.getByText("Stopping ends only this change. The book keeps its current picture.")).toBeDefined();
+    if (held.kind === "page_pencil_result") {
+      URL.createObjectURL = vi.fn(() => "blob:synthetic-picture");
+      fireEvent.click(screen.getByRole("button", { name: "Show picture to review" }));
+      fireEvent.load(await screen.findByRole("img", { name: "Picture needing review" }));
+    }
+    const stop = screen.getByRole("button", { name: "Stop this change" });
+    await waitFor(() => expect(stop).toBeEnabled());
+    fireEvent.click(stop);
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Change stopped. The book is unchanged." })).toHaveFocus());
+    expect(JSON.parse(bodies[0])).toEqual(expect.objectContaining({ action: "stop", review_id: held.review_id }));
     vi.unstubAllGlobals();
   });
   it("explains exhausted replacement budget while keeping other decisions available", async () => {

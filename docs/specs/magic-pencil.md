@@ -231,6 +231,10 @@ teacher-review mode a flag already holds and a teacher replacement redraws from
 - **SH-02 storage on a finished page (ticket 09).** The checkpoint is frozen after completion (OD-01), so a
   page attempt's on-open outcome is stored in `job_picture_records` (`kind='version'`,
   `source='scene_attempt'`), not on `Attempt.safety_eligibility`.
+- **Page pencil holds (ticket 10).** A page pencil use is a `job_picture_records` row (`kind='pencil'`,
+  `source='page_pencil'`). Its holds are `job_moderation_reviews` kinds `page_pencil_text` and
+  `page_pencil_result` on a `complete` job (OD-07). They are never a `ReviewContext` in the checkpoint,
+  and they do not hide the book, block teacher approval or pause anything.
 - **SH-09 — Book edits after completion.** Page tools appear only on a `complete` book that is not held
   and not stopped. An edit updates `jobs.pages` for that page and the delivery guard's eligibility for
   the new picture. Page edits run in a small worker task outside the graph that reuses `edit_image`

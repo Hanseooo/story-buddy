@@ -14,6 +14,32 @@ instead of repeating it.
 
 ---
 
+## Magic pencil ticket 10 · 2026-11-02 · Page magic pencil on the finished book
+
+### Code
+
+- Migration `0030_page_pencil_holds.sql` (apply after 0029): review kinds `page_pencil_text` and
+  `page_pencil_result`, and log reasons `refused`, `stale`, `text_stopped`, `result_stopped` (OD-07).
+- `app/page_pencil.py`: pencil status, request (redact, moderate, hold or enqueue) and keep/old choice
+  for the author of a complete feature book. 5 pencils per book inside `IMAGE_BUDGET` (AC-16, SH-04).
+  Stale source returns 409 and a repeated request id spends once (SH-08).
+- `worker/page_pencil.py`: one `edit_image` on the page's current picture outside the graph, then
+  output moderation. A fal refusal draws and spends nothing. A flagged result holds while the book
+  keeps its picture (AC-18).
+- Teacher queue, review detail, assets and decision accept page pencil holds on a `complete` job.
+  Allow and stop end only the request. The delivery guard and teacher approval ignore them.
+- Book page "Magic pencil" with text, drawing, held, refused, error, choice and confirm states
+  (SH-07). The teacher queue copy says the book stays readable.
+
+### Docs
+
+- `magic-pencil.md` and `moderation-stack.md`: where the page pencil holds live.
+- `research-changelog.md`: one row.
+
+### Checks
+
+- API and worker tests in `test_teacher_hold.py`, queue and book-page vitest cases. No browser pass.
+
 ## Magic pencil ticket 09 · 2026-11-02 · Other versions of a page on the finished book
 
 ### Code

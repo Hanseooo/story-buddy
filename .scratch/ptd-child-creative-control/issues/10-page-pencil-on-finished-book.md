@@ -2,7 +2,7 @@
 
 **Status:** ready-for-agent
 **Type:** task
-**Progress:** open
+**Progress:** done
 **Blocked by:** `.scratch/ptd-child-creative-control/issues/09-page-other-versions.md`
 
 **Parent:** `docs/specs/magic-pencil.md` (US-04, US-06)
@@ -73,3 +73,28 @@ providers mocked; vitest; `playwright-cli` pass for US-04.
 09 (page write, approval reset, guard on `jobs.pages`). Free-text release gate as in 06.
 
 ## Comments
+
+**2026-11-02 — built.** Migration `0030_page_pencil_holds.sql` (apply after 0029) adds the kinds
+`page_pencil_text` and `page_pencil_result` and the log reasons `refused`, `stale`, `text_stopped`,
+`result_stopped`. `app/page_pencil.py` holds `GET /jobs/{id}/pages/pencil`, `POST /jobs/{id}/pages/{scene_id}/pencil`
+(202, keyed by `request_id`) and `POST .../pencil/choice`. A teacher decision on a page kind goes through the existing
+`POST /teacher/reviews/{id}/decision`, which hands off to `page_pencil_decision`: no graph resume, the job stays
+`complete`. `worker/page_pencil.py` runs one `edit_image` per use in an RQ task with job id
+`page-pencil-<job>-<use>`. The checkpoint is read, never written (OD-01). A pencil is spent when the result has an
+image and an output-moderation outcome, so a refusal or a stopped text spends none. `book_review_open` replaces the
+"any open review" check in `finished_page`, `authorized_asset` and the teacher approve, so a held pencil leaves the book
+readable and approvable. "Use the old one" keeps the result as a page version (`page-version-<use>`).
+Decisions taken without the owner: the pencil is in the Pages view only, as in 09. A result the child never decides on keeps the pencil busy (one active request per book, SH-07).
+Known gaps, not fixed: a teacher withdrawal is refused while a page pencil review is open (the one-open-review index). A
+worker that dies leaves the use in an error state, and the child's retry re-sends the same request id. The fal
+no-retry path under the generation fence is not tested directly (`edit_image` is mocked).
+Not done: the `playwright-cli` pass for US-04. It needs a signed-in synthetic account, which stops at the login wall.
+
+**2026-11-02 — review.** Fixed, each red then green:
+- "Other versions" stayed open while a pencil was drawing. A version chosen then made the paid result stale on keep. `choose_page_version` now refuses with 409 `pencil_in_progress`, and the control is disabled.
+- `_run_fal` calls the fence again after fal returns, so a book change at that moment threw away a paid image and left the use drawing. Only the check before the call stops the edit now. A stop there marks the use `stale` and spends nothing.
+- Any 409 on a submit showed "This page changed". It now names the reason (pencils used up, image budget, another change in progress).
+- The page pencil kinds are SQL parameters, not a tuple pasted into the query.
+Left as they are:
+- A result waiting for keep-or-old blocks the book's next pencil and is not yet another version. The spec's "child leaves before choosing" row says it should be, so this needs the owner.
+- `page_pencil_decision` repeats much of `teacher_decision`'s command checks. It checks the active author before the replay, as `teacher_decision` does.

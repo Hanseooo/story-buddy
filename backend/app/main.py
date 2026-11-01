@@ -19,6 +19,7 @@ from app.research import research_router
 from app.pdf_export import pdf_router
 from app.onboarding import onboarding_router
 from app.moderation_hold import hold_router, insert_review_job
+from app.page_pencil import page_pencil_router
 import app.classrooms  # noqa: F401 — registers routes on teacher_router as side-effect
 import app.review  # noqa: F401 — registers routes on teacher_router as side-effect
 import app.review_notes  # noqa: F401 — registers routes on teacher_router as side-effect
@@ -82,6 +83,7 @@ app.include_router(research_router)
 app.include_router(pdf_router)
 app.include_router(onboarding_router)
 app.include_router(hold_router)
+app.include_router(page_pencil_router)
 app.include_router(child_notes_router)
 
 

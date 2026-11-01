@@ -23,8 +23,8 @@ rejected page image should look, and a verdict on whether custom prompts are a g
 | 06 | [Character magic pencil at the reveal](issues/06-character-pencil-at-reveal.md) | task | resolved | 04 |
 | 07 | [Held character pencil result: replacement re-runs the edit](issues/07-held-character-pencil-replacement.md) | task | resolved | 06 |
 | 08 | [Kept character change reaches later pages](issues/08-kept-change-reaches-later-pages.md) | task | open | 06 |
-| 09 | [Other versions of a page on the finished book](issues/09-page-other-versions.md) | task | open | 04 |
-| 10 | [Page magic pencil on the finished book](issues/10-page-pencil-on-finished-book.md) | task | open | 09 |
+| 09 | [Other versions of a page on the finished book](issues/09-page-other-versions.md) | task | done | 04 |
+| 10 | [Page magic pencil on the finished book](issues/10-page-pencil-on-finished-book.md) | task | done | 09 |
 | 11 | [Held page pencil result: replacement re-runs the edit](issues/11-held-page-pencil-replacement.md) | task | open | 10 |
 
 **Build tickets (2026-11-01).** Cut from [`docs/specs/magic-pencil.md`](../../docs/specs/magic-pencil.md).

@@ -30,6 +30,7 @@ from pipeline.moderation_replace import replacement_disabled_reason
 
 hold_router = APIRouter()
 PRIVATE = {"Cache-Control": "private, no-store"}
+PAGE_PENCIL_KINDS = ("page_pencil_text", "page_pencil_result")
 
 
 class ModerationSettingsRequest(BaseModel):
@@ -122,10 +123,11 @@ def teacher_review_list(classroom_id: UUID, response: Response, user=Depends(get
               from job_moderation_reviews r join jobs j on j.id=r.job_id
               left join profiles p on p.id=j.profile_id
               where j.classroom_id=%s and ((j.status='awaiting_teacher' and r.decision is null)
+                or (j.status='complete' and r.decision is null and r.kind = any(%s))
                 or (j.status='queued' and (r.decision in ('allow','replace') or (r.decision='stop' and r.kind='character_pencil_text'))
                     and r.decision_epoch=j.generation_epoch
                     and r.dispatch_state in ('pending','failed')))
-              order by r.created_at,r.id""", (str(classroom_id),)).fetchall()
+              order by r.created_at,r.id""", (str(classroom_id), list(PAGE_PENCIL_KINDS))).fetchall()
     except psycopg.Error:
         raise HTTPException(503, "review_unavailable", headers=PRIVATE) from None
     response.headers.update(PRIVATE)
@@ -135,6 +137,12 @@ def teacher_review_list(classroom_id: UUID, response: Response, user=Depends(get
 def review_pictures(conn, job_id: str, review: dict):
     if review["kind"] == "title":
         return []
+    if review["kind"] in PAGE_PENCIL_KINDS:
+        # magic-pencil 10: the finished book stays readable, so the context is the page as it is.
+        before = {"asset_id": "page-before", "label": "The page before the change",
+                  "path": review["subject"].get("before_path"), "state": "available"}
+        return [before] if review["kind"] == "page_pencil_text" else [before, {
+            "asset_id": "held", "label": "Picture needing review", "path": review["subject"].get("image_path"), "state": "held"}]
     # The review pins its retained checkpoint. Never use a later attempt or browser path.
     checkpoint = PostgresSaver(conn).get_tuple({"configurable": {
         "thread_id": job_id, "checkpoint_id": review["checkpoint_id"],
@@ -169,7 +177,7 @@ def teacher_review_detail(job_id: UUID, response: Response, user=Depends(get_cur
         with connect() as conn:
             job, review = teacher_review(conn, str(job_id), str(user.id))
             response.headers.update(PRIVATE)
-            if not review or job["status"] != "awaiting_teacher":
+            if not review or job["status"] != ("complete" if review["kind"] in PAGE_PENCIL_KINDS else "awaiting_teacher"):
                 clearances = []
                 pending = conn.execute("""select * from job_moderation_reviews where job_id=%s
                   and (decision in ('allow','replace') or (decision='stop' and kind='character_pencil_text'))
@@ -223,7 +231,8 @@ def teacher_review_detail(job_id: UUID, response: Response, user=Depends(get_cur
                     "author": author["display_nickname"] if author else None,
                     "story_text": review["subject"].get("story_text"),
                     "subject_title": review["subject"].get("title") if review["kind"] == "title" else None,
-                    "pencil_text": review["subject"].get("pencil_text") if review["kind"] == "character_pencil_text" else None,
+                    "pencil_text": review["subject"].get("pencil_text")
+                        if review["kind"] in ("character_pencil_text", *PAGE_PENCIL_KINDS) else None,
                     "kind": review["kind"], "criteria": review["criteria"], "policy_version": review["policy_version"],
                     "origin": "optional_theme" if review["kind"] == "optional_themes" else "shared_safety",
                     "detected_themes": review["subject"].get("detected_themes", []),
@@ -414,8 +423,8 @@ def review_subject_bytes(review):
         if not isinstance(title, str):
             raise RuntimeError("moderation_subject_unavailable")
         return title.encode("utf-8")
-    if review["kind"] in ("story_text", "optional_themes", "character_pencil_text"):
-        text = review["subject"].get("pencil_text" if review["kind"] == "character_pencil_text" else "story_text")
+    if review["kind"] in ("story_text", "optional_themes", "character_pencil_text", "page_pencil_text"):
+        text = review["subject"].get("story_text" if review["kind"] in ("story_text", "optional_themes") else "pencil_text")
         if not isinstance(text, str):
             raise RuntimeError("moderation_subject_unavailable")
         return text.encode("utf-8")
@@ -426,6 +435,12 @@ def review_subject_bytes(review):
 def teacher_decision(job_id: UUID, body: ReviewDecision, response: Response, user=Depends(get_current_user)):
     jid, uid = str(job_id), str(user.id)
     replay = False
+    with connect() as conn:   # A review's kind never changes, so this read needs no lock.
+        page_pencil = conn.execute("""select 1 from job_moderation_reviews where job_id=%s and id=%s
+          and kind = any(%s)""", (jid, body.review_id, list(PAGE_PENCIL_KINDS))).fetchone()
+    if page_pencil:
+        from app.page_pencil import page_pencil_decision
+        return page_pencil_decision(jid, uid, body, response)
     try:
         with connect() as conn, conn.transaction():
             job = conn.execute("select * from jobs where id=%s for update", (jid,)).fetchone()
@@ -593,7 +608,8 @@ def teacher_withdraw(job_id: UUID, body: ReviewWithdrawal, response: Response, u
 
 def review_asset(conn, job_id: str, user_id: str, review_id: UUID, version: str, asset_id: str | None):
     job, review = teacher_review(conn, job_id, user_id)
-    if (not review or job["status"] != "awaiting_teacher" or str(review["id"]) != str(review_id)
+    if (not review or str(review["id"]) != str(review_id)
+            or job["status"] != ("complete" if review["kind"] in PAGE_PENCIL_KINDS else "awaiting_teacher")
             or review["subject_version"] != version):
         raise HTTPException(409, "review_changed", headers=PRIVATE)
     picture = next((p for p in review_pictures(conn, job_id, review)
@@ -839,7 +855,7 @@ def authorized_asset(conn, job_id: str, asset_id: str, user_id: str) -> tuple[st
     if (job["moderation_mode"] != "teacher_review_v1"
             or job["status"] not in ("awaiting_confirm", "complete")
             or not active_author(conn, job)
-            or conn.execute("select 1 from job_moderation_reviews where job_id=%s and decision is null", (job_id,)).fetchone()):
+            or book_review_open(conn, job_id)):
         raise HTTPException(404, "image_unavailable", headers=PRIVATE)
     # Read the persisted selection and verdict. Neither the URL nor browser metadata
     # can select an attempt. Do not call setup() from a product read.
@@ -882,6 +898,18 @@ def authorized_asset(conn, job_id: str, asset_id: str, user_id: str) -> tuple[st
                 if (asset_id == f"page-version-{page_version_id(scene, index)}" and str(job["profile_id"]) == user_id
                         and has_versions(state) and page_version_cleared(conn, job_id, scene, index)):
                     path = attempt.image_ref
+        # magic-pencil 10: a page pencil result is shown once output moderation passed it or a teacher
+        # allowed it. A teacher-allowed result is never another version (ticket 04), only the kept page.
+        for use in conn.execute("""select * from job_picture_records where job_id=%s and kind='pencil'
+          and source='page_pencil' and reason is null and picture_moderation in ('passed','teacher_allowed')""",
+                                (job_id,)).fetchall() if has_versions(state) else []:
+            if use["picture_moderation"] != "passed" and use["choice"] == "old":
+                continue
+            if asset_id == f"scene-{use['target_id']}" and use["image_path"] == pages.get(use["target_id"]):
+                path = use["image_path"]
+            if (str(job["profile_id"]) == user_id and (asset_id == f"page-pencil-{use['version_id']}" or (
+                    asset_id == f"page-version-{use['version_id']}" and use in page_pencil_versions(conn, job_id)))):
+                path = use["image_path"]
     if not path or not path.startswith(f"{job_id}/"):
         raise HTTPException(404, "image_unavailable", headers=PRIVATE)
     return path, job["generation_epoch"]
@@ -978,16 +1006,37 @@ def page_version_cleared(conn, job_id: str, scene, index: int) -> bool:
         and opened_outcome(conn, job_id, page_version_id(scene, index), "scene_attempt") == "passed")
 
 
-def finished_page(conn, job: dict, scene_id: str, user_id: str):
-    """SH-09: page tools exist only for the author of a complete feature book with no open review."""
+def book_review_open(conn, job_id) -> bool:
+    """An open review that holds the book. A held page pencil request (ticket 10) holds only itself:
+    the book stays readable and its page tools stay open (SH-05)."""
+    return conn.execute("""select 1 from job_moderation_reviews where job_id=%s and decision is null
+      and kind <> all(%s)""", (job_id, list(PAGE_PENCIL_KINDS))).fetchone() is not None
+
+
+def finished_book(conn, job: dict, user_id: str) -> StoryMemory:
+    """SH-09: page tools exist only for the author of a complete feature book that is not held."""
     if (job["moderation_mode"] != "teacher_review_v1" or job["status"] != "complete"
             or str(job["profile_id"]) != user_id or not active_author(conn, job)
-            or conn.execute("select 1 from job_moderation_reviews where job_id=%s and decision is null",
-                            (job["id"],)).fetchone()):
+            or book_review_open(conn, job["id"])):
         raise HTTPException(404, "versions_unavailable", headers=PRIVATE)
     checkpoint = PostgresSaver(conn).get_tuple({"configurable": {"thread_id": str(job["id"])}})
     state = StoryMemory.model_validate(checkpoint.checkpoint["channel_values"]) if checkpoint else None
-    scene = next((s for s in state.scenes if s.scene_id == scene_id), None) if state and has_versions(state) else None
+    if state is None or not has_versions(state):
+        raise HTTPException(404, "versions_unavailable", headers=PRIVATE)
+    return state
+
+
+def page_pencil_versions(conn, job_id: str, scene_id: str | None = None) -> list[dict]:
+    """magic-pencil 10 (AC-19): a page pencil result the child decided on and output moderation passed
+    is another version of its page. A teacher-allowed one is only ever the kept page (ticket 04)."""
+    return conn.execute("""select * from job_picture_records where job_id=%s and kind='pencil'
+      and source='page_pencil' and reason is null and picture_moderation='passed' and choice is not null
+      and (%s::text is null or target_id=%s) order by created_at""", (job_id, scene_id, scene_id)).fetchall()
+
+
+def finished_page(conn, job: dict, scene_id: str, user_id: str):
+    state = finished_book(conn, job, user_id)
+    scene = next((s for s in state.scenes if s.scene_id == scene_id), None)
     page = next((p for p in job["pages"] or [] if isinstance(p, dict) and p.get("scene_id") == scene_id), None)
     if scene is None or page is None:
         raise HTTPException(404, "versions_unavailable", headers=PRIVATE)
@@ -1005,6 +1054,7 @@ def open_page_versions(job_id: UUID, scene_id: str, response: Response, user=Dep
         stored = {r["version_id"]: r["moderation_status"] for r in conn.execute("""select version_id,moderation_status
           from job_picture_records where job_id=%s and kind='version' and source='scene_attempt' and target_id=%s""",
                                                                               (job_id, scene_id)).fetchall()}
+        pencil = page_pencil_versions(conn, job_id, scene_id)
     versions, unavailable = [], 0
     for index, attempt in enumerate(scene.attempts):
         version_id = page_version_id(scene, index)
@@ -1026,6 +1076,7 @@ def open_page_versions(job_id: UUID, scene_id: str, response: Response, user=Dep
                 status = opened_outcome(conn, job_id, version_id, "scene_attempt")
         if status == "passed":
             versions.append({"version_id": version_id, "image_path": attempt.image_ref})
+    versions += [{"version_id": u["version_id"], "image_path": u["image_path"]} for u in pencil if u["image_path"] != current]
     response.headers.update(PRIVATE)
     return {"versions": versions, "unavailable": unavailable}
 
@@ -1047,14 +1098,18 @@ def choose_page_version(job_id: UUID, scene_id: str, body: PageVersionChoice, re
         product_job(conn, job_id, user_id)
         job = conn.execute("select * from jobs where id=%s for update", (job_id,)).fetchone()
         scene, current = finished_page(conn, job, scene_id, user_id)
+        from app.page_pencil import pencil_in_progress
+        if pencil_in_progress(conn, job_id):   # SH-07: a paid pencil result must not go stale under it
+            raise HTTPException(409, "pencil_in_progress", headers=PRIVATE)
         index = next((i for i in range(len(scene.attempts)) if body.version_id == page_version_id(scene, i)), None)
-        if index is None:
+        pencil = next((u for u in page_pencil_versions(conn, job_id, scene_id) if u["version_id"] == body.version_id), None)
+        if index is None and pencil is None:
             raise HTTPException(422, "choice_unavailable", headers=PRIVATE)
-        chosen = scene.attempts[index].image_ref
+        chosen = scene.attempts[index].image_ref if index is not None else pencil["image_path"]
         if chosen != current:   # Equal is a repeat of a change already made (SH-08).
             if body.source != current:
                 raise HTTPException(409, "stale_source", headers=PRIVATE)
-            if not page_version_cleared(conn, job_id, scene, index):
+            if index is not None and not page_version_cleared(conn, job_id, scene, index):
                 raise HTTPException(422, "choice_unavailable", headers=PRIVATE)
             pages = [{**p, "image_path": chosen} if isinstance(p, dict) and p.get("scene_id") == scene_id else p
                      for p in job["pages"]]

@@ -208,6 +208,7 @@ MIN_STORY_WORDS = 5     # a book needs at least one scene's worth of text
 MAX_TITLE_CHARS = 80
 MAX_REVIEW_NOTE_CHARS = 500
 MAX_PENCIL_CHARS = 200   # ADR-082 Decision 2, AC-07
+MAX_PAGE_PENCILS = 5   # SH-04: page pencils per book, inside IMAGE_BUDGET
 PDF_MAX_CAPTION_CHARS = 15_000
 PDF_MAX_IMAGE_BYTES = 8 * 1024 * 1024
 PDF_MAX_TOTAL_IMAGE_BYTES = 32 * 1024 * 1024
