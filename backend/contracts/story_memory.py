@@ -100,6 +100,26 @@ class Character(BaseModel):
     # asked to state its own prompt version. Additive → no schema_version bump (§8).
     ref_verdict_prompt_version: Optional[int] = None
     ref_generation_prompt: Optional[str] = None
+    # ADR-082 Decision 1: earlier pictures of this character the child can pick again. Recorded
+    # only on jobs submitted with `moderation_context.magic_pencil`. Additive, defaulted → no
+    # schema_version bump; an old checkpoint loads with none.
+    versions: list["ReferenceVersion"] = Field(default_factory=list)
+
+
+class ReferenceVersion(BaseModel):     # ADR-082 — a replaced reference, restorable as it was
+    version_id: str                    # the Storage object's stem, unique within the book
+    image_path: str                    # durable Storage PATH, never a signed URL
+    ref_moderation_status: Optional[str] = None   # offered only when passed or teacher_allowed
+    ref_verdict: Optional[RefVerdict] = None
+    ref_verdict_prompt_version: Optional[int] = None
+    ref_generation_prompt: Optional[str] = None
+    source: Literal["draw_again", "version_choice"]   # what replaced it
+
+
+class ReferenceChoice(BaseModel):      # ADR-082 — set by `reveal`, consumed by `char_bible`
+    char_id: str
+    version_id: str
+    source: str           # the reference the child was looking at; a stale one changes nothing
 
 
 class ReferenceRetry(BaseModel):        # ADR-029 — set by `reveal`, consumed by `char_bible`
@@ -314,6 +334,7 @@ class ModerationContext(BaseModel):
     detected_themes: list[ThemeDetection] = Field(default_factory=list)
     accepted_theme_ids: list[str] = Field(default_factory=list)
     optional_theme_check: Optional[OptionalThemeCheck] = None
+    magic_pencil: bool = False         # ADR-082 Decision 6: the setting, snapshotted at submission
 
 
 class StoryMemory(BaseModel):
@@ -334,3 +355,4 @@ class StoryMemory(BaseModel):
     eval: Eval = Field(default_factory=Eval)
     reference_retry: Optional[ReferenceRetry] = None   # set by `reveal`, consumed by `char_bible`
     moderation_context: ModerationContext = Field(default_factory=ModerationContext)
+    reference_choice: Optional[ReferenceChoice] = None  # set by `reveal`, consumed by `char_bible`

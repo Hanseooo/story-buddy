@@ -1150,3 +1150,114 @@ def test_review_interrupt_cannot_be_written_to_child_reveal():
             "kind": "moderation_review", "review_id": str(uuid4()),
         })]})
     db.table.return_value.update.assert_not_called()
+
+
+def test_draw_again_keeps_the_replaced_picture_and_choosing_it_costs_nothing(monkeypatch, held_database):
+    """Magic pencil ticket 04 (US-01): tap → the old picture is offered → choosing it restores it
+    with no draw and no go. Stale and repeated choices change nothing; the record follows the story."""
+    import importlib
+    from contracts.story_memory import RefVerdict
+    from langgraph.checkpoint.postgres import PostgresSaver
+    from pipeline.segment import ExtractedScene, ExtractedVisualDirection, SceneSegmentation
+    from tests.test_graph_stub import STUB_ANALYSIS
+    from worker.run_job import run_review_storybook_job
+
+    conn, child, classroom, _, _ = held_database
+    monkeypatch.setattr(settings, "enable_teacher_moderation_review", True)
+    monkeypatch.setattr(settings, "enable_magic_pencil", True)
+    db, queue = MagicMock(), MagicMock()
+    db.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{"classroom_id": classroom}]
+    monkeypatch.setattr("app.main.get_supabase_client", lambda: db)
+    monkeypatch.setattr("app.main.get_queue", lambda: queue)
+    monkeypatch.setattr("app.moderation_hold.get_queue", lambda: queue)
+
+    def redact(text):
+        # SH-01: the setting is captured at submission; turning it off later changes nothing.
+        settings.enable_magic_pencil = False
+        return text
+
+    monkeypatch.setattr("providers.redact_pii", redact)
+    monkeypatch.setattr("app.main.check_text", lambda title, **kwargs: (True, [], title))
+    image = (Path(__file__).parent / "fixtures/qwen35-resize-scene.png").read_bytes()
+    objects, storage = {}, MagicMock()
+
+    def download(path):
+        if path not in objects:
+            raise FileNotFoundError(path)
+        return objects[path]
+
+    storage.storage.from_.return_value.download.side_effect = download
+    storage.storage.from_.return_value.upload.side_effect = lambda path, content, options: objects.update({path: content})
+    monkeypatch.setattr("providers.download_book_image", download)
+
+    def structured(prompt, schema, **kwargs):
+        if schema.__name__ == "StoryAnalysis":
+            return STUB_ANALYSIS
+        return SceneSegmentation(scenes=[ExtractedScene(
+            start=0, end=0, characters_present=["the orange dog"],
+            visual_direction=ExtractedVisualDirection(key_action="A dog walks.", viewpoint="front view", framing="wide shot"),
+        )])
+
+    drawn = MagicMock(side_effect=lambda *a, **kw: image)
+    boundaries = {
+        "analyze": {"structured_text": structured}, "segment": {"structured_text": structured},
+        "input_gate": {"classify_text_primary": lambda text: (True, []), "classify_text_backstop": lambda text: (True, [])},
+        "char_bible": {"text_to_image": drawn, "get_supabase_client": lambda: storage,
+                       "judge": lambda *a, **kw: RefVerdict(differences_observed="none", matches_description=True, attributes_present=["dog"])},
+        "char_ref_mod": {"classify_image_primary": lambda url, **kw: True, "classify_image_backstop": lambda url, **kw: True,
+                         "get_signed_url": lambda path: f"https://private.invalid/{path}"},
+    }
+    for module, replacements in boundaries.items():
+        for name, replacement in replacements.items():
+            monkeypatch.setattr(importlib.import_module(f"pipeline.{module}"), name, replacement)
+
+    def reveal_of(job):
+        # confirm_job reads the row through the Supabase client; serve it the persisted one.
+        persisted = conn.execute("select * from jobs where id=%s", (job,)).fetchone()
+        db.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{**persisted, "profile_id": child}]
+        return persisted["reveal"]["characters"][0]
+
+    def counts(job):
+        with PostgresSaver.from_conn_string(settings.supabase_db_url) as saver:
+            cost = build_graph(saver).get_state({"configurable": {"thread_id": job}}).values["cost"]
+        return cost.image_count, cost.ref_retry_count
+
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+    try:
+        with TestClient(app) as client:
+            job = client.post("/storybooks", json={
+                "title": "Synthetic title", "text": "The orange dog walks through the grassy field past the trees and stops near the stream.",
+            }).json()["job_id"]
+            run_review_storybook_job(job, expected_epoch=0)
+            first = reveal_of(job)
+            assert first["image_path"] == f"{job}/ref-c0-1.png" and first["versions"] == []
+            tap = {"action": "try_again", "char_id": "c0", "attribute": first["chips"][0]}
+            assert client.post(f"/jobs/{job}/confirm", json=tap).json()["status"] == "queued"
+            run_review_storybook_job(job, tap, expected_epoch=0)
+            tapped = reveal_of(job)
+            assert tapped["image_path"] == f"{job}/ref-c0-2.png"
+            version = {"version_id": "ref-c0-1", "image_path": f"{job}/ref-c0-1.png"}
+            assert tapped["versions"] == [version]
+            assert client.get(f"/jobs/{job}/images/version-{version['version_id']}").content == image
+            assert client.get(f"/jobs/{job}/images/version-nope").status_code == 404
+            before = counts(job)
+            choose = {"action": "choose_version", "char_id": "c0", "version_id": version["version_id"], "source": tapped["image_path"]}
+            assert client.post(f"/jobs/{job}/confirm", json={**choose, "source": first["image_path"]}).status_code == 422
+            assert client.post(f"/jobs/{job}/confirm", json={**choose, "version_id": "ref-c0-9"}).status_code == 422
+            queue.enqueue.reset_mock()
+            assert client.post(f"/jobs/{job}/confirm", json=choose).json()["status"] == "queued"
+            assert client.post(f"/jobs/{job}/confirm", json=choose).json()["status"] == "queued"
+            assert queue.enqueue.call_count == 1
+            draws = drawn.call_count
+            run_review_storybook_job(job, queue.enqueue.call_args.args[2], expected_epoch=0)
+            restored = reveal_of(job)
+            assert restored["image_path"] == first["image_path"]
+            assert restored["versions"] == [{"version_id": "ref-c0-2", "image_path": f"{job}/ref-c0-2.png"}]
+            assert drawn.call_count == draws and counts(job) == before
+            assert client.get(f"/jobs/{job}/images/ref-c0").content == image
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    recorded = conn.execute("select image_path from job_picture_records where job_id=%s order by created_at", (job,)).fetchall()
+    assert [r["image_path"] for r in recorded] == [first["image_path"], tapped["image_path"]]
+    conn.execute("delete from jobs where id=%s", (job,))
+    assert conn.execute("select count(*) as n from job_picture_records where job_id=%s", (job,)).fetchone()["n"] == 0

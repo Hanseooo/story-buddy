@@ -9,7 +9,7 @@ on each confirm.
 from langgraph.types import interrupt
 
 from app.config import settings
-from contracts.story_memory import Character, ReferenceRetry, StoryMemory
+from contracts.story_memory import Character, ReferenceChoice, ReferenceRetry, StoryMemory
 from pipeline.char_ref_mod import require_reference_clearance
 from pipeline.prompt_optimizer import filtered_description, permitted_words
 
@@ -65,6 +65,13 @@ def _chips(character: Character, style_fragment: str | None) -> list[str]:
     return chips or ["overall physical appearance"]
 
 
+def has_versions(state: StoryMemory) -> bool:
+    """ADR-082 Decision 6: only a job submitted with the setting on, in teacher-review mode, where
+    every flag has a hold (OD-05)."""
+    context = state.moderation_context
+    return context.mode == "teacher_review_v1" and context.magic_pencil
+
+
 def _project_reveal(state: StoryMemory) -> dict:
     """Pure — no effect, no mocks needed to test it. The worker writes this dict verbatim to
     `jobs.reveal` (spec §4.2)."""
@@ -75,6 +82,12 @@ def _project_reveal(state: StoryMemory) -> dict:
             "name": c.name,
             "image_path": c.canonical_ref_image,   # durable path, never a signed URL (ADR-006)
             "chips": _chips(c, style_fragment),
+            # ADR-082 Decision 6 (SH-01): absent, not empty, on a job without the feature, so its
+            # payload is the one it always was.
+            **({"versions": [
+                {"version_id": v.version_id, "image_path": v.image_path}
+                for v in c.versions if v.ref_moderation_status in ("passed", "teacher_allowed")
+            ]} if has_versions(state) else {}),
         }
         for c in state.characters
         if c.canonical_ref_image is not None
@@ -98,4 +111,8 @@ def reveal(state: StoryMemory) -> dict:
     answer = interrupt(payload)
     if isinstance(answer, dict) and answer.get("action") == "try_again":
         return {"reference_retry": ReferenceRetry(char_id=answer["char_id"], attribute=answer["attribute"])}
+    if isinstance(answer, dict) and answer.get("action") == "choose_version" and has_versions(state):
+        # Not a confirm: the child is still choosing, so `char_bible` swaps and the graph pauses here again.
+        return {"reference_choice": ReferenceChoice(
+            char_id=answer["char_id"], version_id=answer["version_id"], source=answer["source"])}
     return {}

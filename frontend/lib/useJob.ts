@@ -32,6 +32,8 @@ export type JobRow = {
       name: string;
       image_path: string;
       chips: string[];
+      // Magic pencil (ADR-082): absent unless the job was submitted with the setting on.
+      versions?: Array<{ version_id: string; image_path: string }>;
     }>;
     taps_left: number;
   } | null;

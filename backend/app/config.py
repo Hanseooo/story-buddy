@@ -88,6 +88,8 @@ class Settings(BaseSettings):
 
     # ADR-080: synthetic-only until educator/ethics and hosted release gates are met.
     enable_teacher_moderation_review: bool = False
+    # ADR-082 SH-01: magic pencil tools, snapshotted per job; teacher_review_v1 jobs only.
+    enable_magic_pencil: bool = False
 
     # ADR-037: consistency-checked attempts per scene — the initial draw plus two corrected
     # retries. Production is 3 and the specs are written against 3; this is a field rather than a

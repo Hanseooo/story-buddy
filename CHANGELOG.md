@@ -14,6 +14,29 @@ instead of repeating it.
 
 ---
 
+## Magic pencil ticket 04 · 2026-11-01 · "Draw again" is undoable at the reveal
+
+### Code
+
+- New off-by-default `ENABLE_MAGIC_PENCIL`, snapshotted per job; teacher-review jobs only. A picture
+  replaced by "Draw again" is kept on the character, and "Meet your characters" offers it under
+  "Other versions". Choosing one is a `choose_version` confirm that carries the current picture; it
+  swaps the reference with no draw and no go, and a stale or unknown choice is rejected with 422.
+- Version pictures are served only through `/jobs/{id}/images/version-<id>`.
+- Migration `0027_job_picture_records.sql`: a service-role-only, job-owned record of kept pictures,
+  deleted with the story.
+
+### Docs
+
+- `story-memory-contract.md` §3 lists the new additive fields. One `research-changelog.md` row.
+
+### Checks
+
+- Backend: 1633 passed; 6 `test_pdf_export` failures that occur identically on the previous `HEAD`
+  (local PDF `OSError`). Frontend: lint, build and 771 tests pass. No browser pass.
+
+---
+
 ## §14 code review fixes · 2026-10-29 · "Add a note" toast, clickable Undo mid-pass
 
 ### Code

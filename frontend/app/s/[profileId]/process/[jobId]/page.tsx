@@ -241,6 +241,135 @@ function HoldRecovery({jobId, profileId, refetch, held = false}: {jobId: string;
   </main>;
 }
 
+type RevealCharacter = NonNullable<JobRow["reveal"]>["characters"][number];
+
+// ADR-082 Decision 1: earlier pictures cost no image and no go. Choosing one resumes the pause
+// with the picture it was chosen from, so a stale choice is rejected server-side (SH-08).
+function OtherVersions({ jobId, moderationMode, character, disabled, onChoose }: {
+  jobId: string; moderationMode?: string; character: RevealCharacter; disabled: boolean;
+  onChoose: (versionId: string) => void;
+}) {
+  const versions = character.versions ?? [];
+  const [open, setOpen] = useState(false);
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const [loaded, setLoaded] = useState<Record<string, boolean>>({});
+  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [attempt, setAttempt] = useState(0);
+  const openerRef = useRef<HTMLButtonElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const listId = `other-versions-${character.char_id}`;
+
+  useEffect(() => {
+    if (!open) return;
+    const controller = new AbortController();
+    void (async () => {
+      let signed: Record<string, string> = {};
+      try {
+        signed = await signPaths(versions.map((v) => v.image_path),
+          [{ id: jobId, moderation_mode: moderationMode, reveal: { characters: [character] } }], controller.signal);
+      } catch { /* shown as the error state below */ }
+      if (controller.signal.aborted) return;
+      setUrls(signed);
+      setState(versions.every((v) => signed[v.image_path]) ? "ready" : "error");
+    })();
+    return () => controller.abort();
+    // The list re-reads on open and on an explicit retry only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, attempt]);
+
+  useEffect(() => { if (open) listRef.current?.focus(); }, [open]);
+
+  if (versions.length === 0) return null;
+
+  function close() {
+    setOpen(false);
+    openerRef.current?.focus();
+  }
+
+  return (
+    <div className="w-full">
+      <button
+        ref={openerRef}
+        type="button"
+        aria-label={`Other versions of ${character.name}`}
+        aria-expanded={open}
+        aria-controls={listId}
+        disabled={disabled && !open}
+        onClick={() => {
+          setState("loading");
+          setLoaded({});
+          setOpen((value) => !value);
+        }}
+        className="min-h-[44px] w-full rounded-xl border border-[var(--color-primary)]/20 bg-background px-4 py-2 font-kid text-sm font-bold text-foreground hover:bg-[var(--color-primary)]/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        Other versions
+      </button>
+      {open && (
+        <div
+          ref={listRef}
+          id={listId}
+          role="group"
+          aria-label={`Other versions of ${character.name}`}
+          tabIndex={-1}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || disabled) return;
+            event.stopPropagation();
+            close();
+          }}
+          className="mt-3 w-full rounded-[16px] bg-[var(--color-primary)]/5 p-4 text-left focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
+        >
+          <p role="status" className="font-kid text-sm text-foreground/70">
+            {disabled ? "Changing your picture…" : state === "loading" ? `Loading ${character.name}'s other pictures…` : ""}
+          </p>
+          {state === "error" ? (
+            <div role="alert" className="mt-2 flex flex-col items-start gap-2 font-kid text-sm">
+              <p>We couldn&apos;t load this picture right now.</p>
+              <button
+                type="button"
+                onClick={() => { setState("loading"); setAttempt((value) => value + 1); }}
+                className="min-h-[44px] rounded-xl bg-[var(--color-surface)] px-4 py-2 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
+              >
+                Try loading {character.name}&apos;s other pictures again
+              </button>
+            </div>
+          ) : state === "ready" && (
+            <ul className="mt-2 grid grid-cols-2 gap-2">
+              {versions.map((version, index) => (
+                <li key={version.version_id}>
+                  <button
+                    type="button"
+                    aria-label={`Use earlier picture ${index + 1} of ${character.name}`}
+                    disabled={disabled || !loaded[version.version_id]}
+                    onClick={() => onChoose(version.version_id)}
+                    className="w-full rounded-[12px] border border-[var(--color-primary)]/20 bg-background p-1 hover:bg-[var(--color-primary)]/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <img
+                      src={urls[version.image_path]}
+                      alt={`Earlier picture ${index + 1} of ${character.name}`}
+                      className="w-full aspect-square object-contain rounded-[8px] bg-[var(--color-muted)]"
+                      onLoad={() => setLoaded((current) => ({ ...current, [version.version_id]: true }))}
+                      onError={() => setState("error")}
+                    />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <button
+            type="button"
+            aria-label={`Cancel other versions of ${character.name}`}
+            disabled={disabled}
+            onClick={close}
+            className="mt-3 min-h-[44px] rounded-xl px-4 py-2 font-kid font-bold text-foreground focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ProcessingPage({ params }: { params: Promise<{ profileId: string; jobId: string }> }) {
   const { profileId, jobId } = use(params);
   const { bucket, row, refetch } = useJob(jobId);
@@ -255,6 +384,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   const [confirmError, setConfirmError] = useState(false);
   const [selectedTrait, setSelectedTrait] = useState<SelectedTrait>(null);
   const [pendingRedrawName, setPendingRedrawName] = useState<string | null>(null);
+  const [changingPicture, setChangingPicture] = useState(false);
   const submissionInFlight = useRef(false);
   const characterHeadingRefs = useRef<Record<string, HTMLHeadingElement | null>>({});
   const characterCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -302,6 +432,12 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
     );
     const revealChanged = previous !== null && previous !== revealFingerprint;
 
+    if (changingPicture && revealChanged) {
+      // The chosen picture is back; the focus effect below returns the child to its heading.
+      setChangingPicture(false);
+      setChoiceUpdated(true);
+    }
+
     if (selectedTrait && (!selectionStillOffered || revealChanged)) {
       lastSelectedCharId.current = selectedTrait.charId;
       // Two questions, not one. The latch answers "was the child working in this card when they
@@ -321,7 +457,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
     }
 
     previousRevealFingerprint.current = revealFingerprint;
-  }, [bucket, revealFingerprint, row?.reveal, selectedTrait]);
+  }, [bucket, revealFingerprint, row?.reveal, selectedTrait, changingPicture]);
 
   useEffect(() => {
     if (!selectedTrait || submissionsDisabled) return;
@@ -427,15 +563,16 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   }, [bucket, profileId, jobId, router]);
 
   async function handleConfirm(
-    action: "confirm" | "try_again",
+    action: "confirm" | "try_again" | "choose_version",
     char_id?: string,
-    attribute?: string
+    attribute?: string,
+    version?: { version_id: string; source: string }
   ) {
     if (submissionInFlight.current || submissionsDisabled) return;
     submissionInFlight.current = true;
-    // Only a redraw returns to this stage; a plain confirm advances, and bridging it made the
-    // continue path claim a redraw was under way.
-    setBridgeStage(action === "try_again" ? row?.current_stage ?? null : null);
+    // Only a redraw or a version choice returns to this stage; a plain confirm advances, and
+    // bridging it made the continue path claim a redraw was under way.
+    setBridgeStage(action !== "confirm" ? row?.current_stage ?? null : null);
     setSubmissionState("sending");
     setConfirmError(false);
     let requestFailed = false;
@@ -449,7 +586,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
           "Content-Type": "application/json",
           Authorization: `Bearer ${session?.access_token}`,
         },
-        body: JSON.stringify({ action, char_id: char_id ?? null, attribute: attribute ?? null }),
+        body: JSON.stringify({ action, char_id: char_id ?? null, attribute: attribute ?? null, ...version }),
       });
       requestFailed = !res.ok;
     } catch {
@@ -469,7 +606,10 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
       return;
     }
 
-    if (requestFailed) setConfirmError(true);
+    if (requestFailed) {
+      setConfirmError(true);
+      setChangingPicture(false);
+    }
     setSubmissionState("idle");
     submissionInFlight.current = false;
   }
@@ -639,6 +779,22 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                 {c.name}
               </h2>
 
+              <OtherVersions
+                key={c.image_path}
+                jobId={jobId}
+                moderationMode={moderationMode}
+                character={c}
+                disabled={submissionsDisabled || characterImageState[c.char_id] !== "loaded"}
+                onChoose={(versionId) => {
+                  setSelectedTrait(null);
+                  setPendingRedrawName(null);
+                  setChangingPicture(true);
+                  lastSelectedCharId.current = c.char_id;
+                  selectedControlWasFocused.current = true;
+                  void handleConfirm("choose_version", c.char_id, undefined, { version_id: versionId, source: c.image_path });
+                }}
+              />
+
               {taps_left > 0 && c.chips.length === 0 && (
                 <p className="w-full text-center font-kid text-sm text-foreground/70">
                   No suggested changes are available for this character.
@@ -681,6 +837,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                       disabled={submissionsDisabled || characterImageState[c.char_id] !== "loaded"}
                       onClick={() => {
                         setPendingRedrawName(c.name);
+                        setChangingPicture(false);
                         void handleConfirm("try_again", c.char_id, selectedTrait.attribute);
                       }}
                       className="min-h-[44px] rounded-xl border border-[var(--color-primary)]/40 bg-[var(--color-surface)] px-4 py-2 font-kid font-bold text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -844,7 +1001,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
             >
                <DrawingVignette />
                <h2 className="font-display text-3xl md:text-4xl text-foreground tracking-tight">
-                 {pendingRedrawName ? `Redrawing ${pendingRedrawName}…` : "Redrawing your character…"}
+                 {changingPicture ? "Changing your picture…" : pendingRedrawName ? `Redrawing ${pendingRedrawName}…` : "Redrawing your character…"}
                </h2>
             </motion.div>
           ) : (

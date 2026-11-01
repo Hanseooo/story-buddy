@@ -94,6 +94,7 @@ class Character(BaseModel):
     ref_moderation_status: Optional[str] = None
     ref_verdict: Optional[RefVerdict] = None        # ADR-028: the reference is checked, not assumed
     ref_verdict_prompt_version: Optional[int] = None  # which char_bible.JUDGE_PROMPT produced it
+    versions: list[ReferenceVersion] = Field(default_factory=list)  # ADR-082 — §3 below
 
 class Location(BaseModel):     # minimal; refined by `story-analyzer` (§8, additive)
     loc_id: str
@@ -285,6 +286,14 @@ pattern again: declared **last** in `Cost`, defaults to `0`, no `CURRENT_SCHEMA_
 screens the whole roster in one node run, so a book where both c0 and c1 flag spends one cycle, not two.
 An old checkpoint resumes with a fresh budget of 0, which is harmless: the flag is re-derived from the
 same image.
+
+**`Character.versions`, `ReferenceVersion`, `ReferenceChoice`, `StoryMemory.reference_choice`,
+`ModerationContext.magic_pencil`** (added by `magic-pencil.md` US-01, 2026-11-01) are the same pattern:
+each is declared last, defaults to empty, `None` or `False`, and none bumped `CURRENT_SCHEMA_VERSION`.
+A `ReferenceVersion` is a cleared reference that "Draw again" replaced (or that a version choice
+displaced), kept with its moderation status and verdict so restoring it needs no new draw or check.
+`reference_choice` is `None` except between `reveal` and `char_bible`, like `reference_retry`. An
+old checkpoint resumes with no versions and the feature off.
 
 - One version covers the whole contract, **including `FailureReason`** — an enum change is a contract change.
 

@@ -905,3 +905,38 @@ def test_a_flagged_tap_is_redrawn_with_its_chip_and_a_second_flag_ends_the_book(
     redraw = costs[-1]
     assert (redraw.ref_retry_count, redraw.ref_mod_retry_count) == (1, 1)
     assert redraw.image_count == costs[-2].image_count + 1
+
+
+def test_route_reveal_sends_a_version_choice_back_to_char_bible():
+    from pipeline.graph import route_reveal
+    from contracts.story_memory import ReferenceChoice
+
+    state = _initial_state("job-1")
+    state.reference_choice = ReferenceChoice(char_id="c0", version_id="ref-c0-1", source="s/ref-c0-2.png")
+    assert route_reveal(state) == "choose_version"
+
+
+def test_a_version_choice_pauses_at_reveal_again(monkeypatch):
+    """ADR-082 Decision 1: a choice is applied by char_bible and comes back to the child through
+    char_ref_mod, inside the run's recursion bound."""
+    _mock_call_points(monkeypatch)
+    chose = {"done": False}
+
+    def fake_reveal(state):
+        if not chose["done"]:
+            chose["done"] = True
+            from contracts.story_memory import ReferenceChoice
+            return {"reference_choice": ReferenceChoice(char_id="c0", version_id="ref-c0-9", source="stale")}
+        return {}
+
+    monkeypatch.setattr("pipeline.graph.reveal", fake_reveal)
+    ran = [
+        next(iter(chunk))
+        for chunk in build_graph().stream(
+            _initial_state("test-job-choose"),
+            config={"configurable": {"thread_id": "test-job-choose"}},
+            stream_mode="updates",
+        )
+    ]
+    assert ran.count("char_bible") == 2
+    assert ran.count("reveal") == 2

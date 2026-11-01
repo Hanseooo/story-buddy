@@ -11,7 +11,10 @@ from contracts.story_memory import (
     CharacterDescription,
     Cost,
     Input,
+    ModerationContext,
+    ReferenceChoice,
     ReferenceRetry,
+    ReferenceVersion,
     RefVerdict,
     StoryMemory,
     Style,
@@ -306,3 +309,58 @@ def test_project_reveal_still_offers_the_chip_when_the_active_style_permits_it()
     payload = _project_reveal(_state([star], style=Style(prompt_fragment=STYLE_PRESETS["cel"])))
 
     assert "glowing" in payload["characters"][0]["chips"]
+
+
+# --- ADR-082 Decision 1: other versions of a character (magic-pencil US-01) ---
+
+def _feature_state(characters: list[Character], *, mode="teacher_review_v1", magic_pencil=True) -> StoryMemory:
+    state = _state([c.model_copy(update={"ref_moderation_status": "passed"}) for c in characters])
+    state.moderation_context = ModerationContext(mode=mode, magic_pencil=magic_pencil)
+    return state
+
+
+def _with_versions(char: Character, *versions: ReferenceVersion) -> Character:
+    return char.model_copy(update={"versions": list(versions)})
+
+
+_EARLIER = ReferenceVersion(version_id="ref-c0-1", image_path="job-1/ref-c0-1.png",
+                            ref_moderation_status="passed", source="draw_again")
+
+
+@pytest.mark.parametrize("mode,magic_pencil", [("teacher_review_v1", False), ("baseline", True), ("baseline", False)])
+def test_project_reveal_has_no_versions_unless_the_job_was_submitted_with_the_feature(mode, magic_pencil):
+    state = _feature_state([_with_versions(_char("c0", "Kiko", ref="job-1/ref-c0-2.png"), _EARLIER)],
+                           mode=mode, magic_pencil=magic_pencil)
+    assert "versions" not in _project_reveal(state)["characters"][0]
+
+
+def test_project_reveal_offers_no_versions_for_a_first_draw_accept():
+    state = _feature_state([_char("c0", "Kiko")])
+    assert _project_reveal(state)["characters"][0]["versions"] == []
+
+
+def test_project_reveal_offers_earlier_cleared_pictures_and_never_a_flagged_one():
+    allowed = ReferenceVersion(version_id="ref-c0-2", image_path="job-1/ref-c0-2.png",
+                               ref_moderation_status="teacher_allowed", source="draw_again")
+    flagged = ReferenceVersion(version_id="ref-c0-3", image_path="job-1/ref-c0-3.png",
+                               ref_moderation_status="flagged", source="draw_again")
+    state = _feature_state([_with_versions(_char("c0", "Kiko", ref="job-1/ref-c0-4.png"), _EARLIER, allowed, flagged)])
+    assert _project_reveal(state)["characters"][0]["versions"] == [
+        {"version_id": "ref-c0-1", "image_path": "job-1/ref-c0-1.png"},
+        {"version_id": "ref-c0-2", "image_path": "job-1/ref-c0-2.png"},
+    ]
+
+
+def test_reveal_choose_version_resume_records_the_choice_with_its_source():
+    state = _feature_state([_with_versions(_char("c0", "Kiko", ref="job-1/ref-c0-2.png"), _EARLIER)])
+    answer = {"action": "choose_version", "char_id": "c0", "version_id": "ref-c0-1", "source": "job-1/ref-c0-2.png"}
+    with patch("pipeline.reveal.interrupt", return_value=answer):
+        result = reveal(state)
+    assert result == {"reference_choice": ReferenceChoice(char_id="c0", version_id="ref-c0-1", source="job-1/ref-c0-2.png")}
+
+
+def test_reveal_ignores_a_choose_version_resume_on_a_job_without_the_feature():
+    state = _feature_state([_with_versions(_char("c0", "Kiko", ref="job-1/ref-c0-2.png"), _EARLIER)], magic_pencil=False)
+    answer = {"action": "choose_version", "char_id": "c0", "version_id": "ref-c0-1", "source": "job-1/ref-c0-2.png"}
+    with patch("pipeline.reveal.interrupt", return_value=answer):
+        assert reveal(state) == {}

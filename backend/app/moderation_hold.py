@@ -22,6 +22,7 @@ from app.queue import get_queue
 from contracts.story_memory import StoryMemory
 from pipeline.input_gate import has_text_clearance
 from pipeline.optional_themes import has_bound_theme_review
+from pipeline.reveal import has_versions
 from pipeline.moderation_replace import replacement_disabled_reason
 
 hold_router = APIRouter()
@@ -808,6 +809,10 @@ def authorized_asset(conn, job_id: str, asset_id: str, user_id: str) -> tuple[st
         for char in state.characters:
             if asset_id == f"ref-{char.char_id}" and char.ref_moderation_status in ("passed", "teacher_allowed"):
                 path = char.canonical_ref_image
+            for version in char.versions if has_versions(state) else []:
+                if (asset_id == f"version-{version.version_id}"
+                        and version.ref_moderation_status in ("passed", "teacher_allowed")):
+                    path = version.image_path
     elif job["status"] == "complete":
         if any(s.moderation_status not in ("passed", "teacher_allowed") or not any(
             a.image_ref == s.final_image_ref and a.safety_eligibility in ("cleared", "teacher_allowed")
@@ -865,6 +870,12 @@ def confirm_review_job(job_id: str, payload: dict, user_id: str) -> str:
             raise HTTPException(409, "finishing_current_step", headers=PRIVATE)
         if payload["action"] == "try_again" and not any(
             c["char_id"] == payload["char_id"] and payload["attribute"] in c["chips"]
+            for c in (job["reveal"] or {}).get("characters", [])
+        ):
+            raise HTTPException(422, "choice_unavailable", headers=PRIVATE)
+        if payload["action"] == "choose_version" and not any(
+            c["char_id"] == payload["char_id"] and c["image_path"] == payload["source"]
+            and any(v["version_id"] == payload["version_id"] for v in c.get("versions", []))
             for c in (job["reveal"] or {}).get("characters", [])
         ):
             raise HTTPException(422, "choice_unavailable", headers=PRIVATE)

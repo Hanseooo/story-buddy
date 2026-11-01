@@ -18,7 +18,7 @@ rejected page image should look, and a verdict on whether custom prompts are a g
 | 01 | [Audit: what a child can change today](issues/01-audit-child-creative-control.md) | research | resolved | — |
 | 02 | [Grill: appearance and page input → spec](issues/02-grill-creative-control-spec.md) | grilling | resolved | 01 (rank 2's audit gates shipping free text only, owner 2026-11-01) |
 | 03 | [Baseline: flagged "Draw again" redraw keeps the chip](issues/03-baseline-redraw-keeps-tapped-chip.md) | task | resolved | — |
-| 04 | ["Draw again" is undoable: character versions at the reveal](issues/04-draw-again-undoable-at-reveal.md) | task | open | — |
+| 04 | ["Draw again" is undoable: character versions at the reveal](issues/04-draw-again-undoable-at-reveal.md) | task | resolved | — |
 | 05 | [Unchosen first-round pictures, moderated on open](issues/05-unchosen-draws-moderated-on-open.md) | task | open | 04 |
 | 06 | [Character magic pencil at the reveal](issues/06-character-pencil-at-reveal.md) | task | open | 04 |
 | 07 | [Held character pencil result: replacement re-runs the edit](issues/07-held-character-pencil-replacement.md) | task | open | 06 |
@@ -48,3 +48,8 @@ plus a write-a-change edit, at "Meet your characters" and on the finished book).
 **03 (2026-11-01, resolved).** [Answer](issues/03-baseline-redraw-keeps-tapped-chip.md#answer-2026-11-01):
 a flagged "Draw again" picture in baseline is redrawn once from the tap's recorded prompt, chip kept;
 untapped flags and teacher-review unchanged.
+
+**04 (2026-11-01, resolved).** [Answer](issues/04-draw-again-undoable-at-reveal.md#answer-2026-11-01):
+behind `ENABLE_MAGIC_PENCIL` on teacher-review jobs, "Draw again" keeps the replaced picture and the
+child can choose it back at no image or go cost. Table `job_picture_records` added. No browser pass;
+owner decision open on withdrawing a teacher-allowed picture once it is a version.

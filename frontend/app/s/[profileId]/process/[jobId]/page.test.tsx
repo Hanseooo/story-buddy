@@ -845,6 +845,89 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
   });
 });
 
+describe("ProcessingPage — other versions (magic pencil ticket 04)", () => {
+  // A feature job: pictures arrive as authenticated bytes through the guarded product route.
+  const VERSION_ROW = {
+    ...PAUSED_ROW, moderation_mode: "teacher_review_v1",
+    reveal: { taps_left: 1, characters: [{
+      ...PAUSED_ROW.reveal.characters[0], image_path: "j1/ref-c0-2.png",
+      versions: [{ version_id: "ref-c0-1", image_path: "j1/ref-c0-1.png" }],
+    }] },
+  };
+
+  function serve({ versionFails = false, confirm }: { versionFails?: boolean; confirm?: Promise<Response> } = {}) {
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:picture"), revokeObjectURL: vi.fn() }));
+    global.fetch = vi.fn((url: string) => {
+      if (url.endsWith("/confirm")) return confirm ?? Promise.resolve({ ok: true, status: 200 } as Response);
+      if (versionFails && url.includes("/images/version-")) return Promise.resolve({ ok: false, status: 503 } as Response);
+      return Promise.resolve({ ok: true, blob: async () => new Blob(["image"]) } as Response);
+    }) as unknown as typeof fetch;
+  }
+
+  const confirmCalls = () => vi.mocked(global.fetch).mock.calls.filter(([url]) => String(url).endsWith("/confirm"));
+
+  it("offers no control when there is no earlier picture", async () => {
+    serve();
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: { ...VERSION_ROW, reveal: {
+      ...VERSION_ROW.reveal, characters: [{ ...VERSION_ROW.reveal.characters[0], versions: [] }] } } }));
+    await renderPausedPage();
+    expect(screen.queryByRole("button", { name: /Other versions/ })).toBeNull();
+  });
+
+  it("opens into the list, chooses an earlier picture once and says the picture is changing", async () => {
+    let resolveConfirm!: (value: Response) => void;
+    serve({ confirm: new Promise<Response>((resolve) => { resolveConfirm = resolve; }) });
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: VERSION_ROW }));
+    await renderPausedPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Other versions of Kiko" }));
+    expect(document.activeElement).toBe(screen.getByRole("group", { name: "Other versions of Kiko" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Loading Kiko's other pictures…");
+    const option = await screen.findByRole("button", { name: "Use earlier picture 1 of Kiko" });
+    expect(option).toBeDisabled();
+    fireEvent.load(screen.getByRole("img", { name: "Earlier picture 1 of Kiko" }));
+    expect(option).toBeEnabled();
+
+    fireEvent.click(option);
+    fireEvent.click(option);
+    await waitFor(() => expect(confirmCalls()).toHaveLength(1));
+    expect(confirmCalls()[0][1]).toEqual(expect.objectContaining({ body: JSON.stringify({
+      action: "choose_version", char_id: "c0", attribute: null, version_id: "ref-c0-1", source: "j1/ref-c0-2.png",
+    }) }));
+    expect(screen.getByText("Changing your picture…")).toBeDefined();
+    expect(option).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Use these characters" })).toBeDisabled();
+    resolveConfirm({ ok: true, status: 200 } as Response);
+    await waitFor(() => expect(REFETCH).toHaveBeenCalledTimes(1));
+  });
+
+  it.each(["Escape", "Cancel"])("%s closes the list and returns focus to its opener", async (way) => {
+    serve();
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: VERSION_ROW }));
+    await renderPausedPage();
+    const opener = screen.getByRole("button", { name: "Other versions of Kiko" });
+    fireEvent.click(opener);
+    const list = screen.getByRole("group", { name: "Other versions of Kiko" });
+    if (way === "Escape") fireEvent.keyDown(list, { key: "Escape" });
+    else fireEvent.click(screen.getByRole("button", { name: "Cancel other versions of Kiko" }));
+    expect(screen.queryByRole("group", { name: "Other versions of Kiko" })).toBeNull();
+    expect(document.activeElement).toBe(opener);
+    expect(confirmCalls()).toHaveLength(0);
+  });
+
+  it("shows a retryable error when an earlier picture cannot load", async () => {
+    serve({ versionFails: true });
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: VERSION_ROW }));
+    await renderPausedPage();
+    fireEvent.click(screen.getByRole("button", { name: "Other versions of Kiko" }));
+    expect(await screen.findByText("We couldn't load this picture right now.")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Use earlier picture 1 of Kiko" })).toBeNull();
+    serve();
+    fireEvent.click(screen.getByRole("button", { name: "Try loading Kiko's other pictures again" }));
+    expect(await screen.findByRole("img", { name: "Earlier picture 1 of Kiko" })).toBeDefined();
+  });
+});
+
 describe("ProcessingPage — stall timer (spec §4.1)", () => {
   it("stall line appears after STALL_MS of no stage change", async () => {
     vi.useFakeTimers();

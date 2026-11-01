@@ -2,7 +2,7 @@
 
 **Status:** ready-for-agent
 **Type:** task
-**Progress:** open
+**Progress:** resolved
 **Blocked by:** None
 
 **Parent:** `docs/specs/magic-pencil.md` (US-01)
@@ -75,3 +75,44 @@ process page; a `playwright-cli` pass on a seeded synthetic classroom (no projec
 None.
 
 ## Comments
+
+## Answer (2026-11-01)
+
+Done behind the new off-by-default `ENABLE_MAGIC_PENCIL`, snapshotted as
+`moderation_settings_snapshot.magic_pencil` next to `review_mode` (before redaction, so a mid-request
+switch-off cannot downgrade the job). It reaches `ModerationContext.magic_pencil`; `has_versions`
+also requires `teacher_review_v1`.
+
+- **State is the source of truth.** A "Draw again" on a feature job keeps the replaced, cleared
+  reference as a `Character.versions` entry with its status and verdict (`char_bible._kept`).
+- **Choosing** is a `choose_version` resume carrying `char_id`, `version_id` and `source` (the
+  current picture). `confirm_review_job` rejects anything not offered in `jobs.reveal` with 422
+  `choice_unavailable`; baseline `confirm_job` always rejects it; the status CAS dedupes a double
+  submit. `reveal` records a `ReferenceChoice`, `route_reveal` sends it to `char_bible`, which swaps
+  with no draw, no judge and no cost change and re-checks the source against the checkpoint. The
+  displaced picture becomes a version. `char_ref_mod` passes the cleared picture and the run pauses
+  at `reveal` again (graph test proves it inside the recursion bound).
+- **Delivery:** `authorized_asset` serves `version-<version_id>` only to the author, on an
+  `awaiting_confirm` feature job, for a cleared version. `signPaths` maps version paths to that id.
+- **Record:** `0027_job_picture_records.sql` (OD-04: service-role only, RLS on, cascade from `jobs`),
+  written by the worker with the reveal; `kind` allows only `version` until 06 adds pencil rows.
+- **UI:** "Other versions" under each character with versions; absent when there are none (AC-05
+  read over SH-07's "empty state"). Loading, error with retry, disabled while a request runs,
+  "Changing your picture…", focus into the list group and back to the opener on Escape/Cancel,
+  names with the character name. Enter is the native button press.
+
+Checks: node tests (reveal, char_bible), graph tests, `test_main` baseline 422, and one Postgres
+integration run (tap → version offered and served → stale and unknown choices 422 → double submit
+enqueues once → restored, no draw, `image_count`/`ref_retry_count` unchanged → cascade delete).
+Each guard was broken on purpose and the test went red, except the cleared-status check on version
+assets, which no reachable state exercises. Full suites: backend 1633 passed, 6 failed
+(`test_pdf_export`, identical on a clean `HEAD`, local PDF `OSError`); frontend lint, build, 771 tests pass.
+
+Not done or not verified:
+- **No `playwright-cli` pass.** It needs a signed-in synthetic child (login wall) and real draws.
+- `test_rls_isolation` skipped (no `SUPABASE_DB_URL`); the new table is not in it.
+- **Owner decision:** a teacher cannot withdraw a `teacher_allowed` picture once it is a version
+  (`teacher_withdraw` accepts only the current reference), yet it is still offered. Before this
+  ticket the picture was simply gone. Restoring it makes it current and withdrawable again.
+- A teacher `replace_reference` keeps no version: what it replaces is flagged, so never offerable.
+- Focus lands on the list group, not its first picture: pictures stay disabled until loaded.

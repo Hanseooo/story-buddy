@@ -1464,3 +1464,72 @@ def test_char_bible_references_the_whole_roster_when_no_scene_names_anyone():
         char_bible(state)
 
     assert mint.call_count == 2
+
+
+# --- ADR-082 Decision 1: "Draw again" is undoable (magic-pencil US-01) ---
+
+def _feature(state: StoryMemory) -> StoryMemory:
+    from contracts.story_memory import ModerationContext
+
+    return state.model_copy(update={"moderation_context": ModerationContext(mode="teacher_review_v1", magic_pencil=True)})
+
+
+def test_a_tap_on_a_feature_job_keeps_the_replaced_picture_as_a_version():
+    state = _feature(_targeted_state())
+    with patch("pipeline.char_bible.text_to_image", return_value=b"x"), \
+         patch("pipeline.char_bible.judge", return_value=_verdict(True)), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+        result = char_bible(state)
+
+    c0 = next(c for c in result["characters"] if c.char_id == "c0")
+    assert c0.canonical_ref_image == "story-1/ref-c0-2.png"
+    assert [(v.version_id, v.image_path, v.ref_moderation_status, v.source) for v in c0.versions] == [
+        ("ref-c0-1", "story-1/ref-c0-1.png", "passed", "draw_again")]
+    assert c0.versions[0].ref_verdict == _verdict(True, ["dog"])
+
+
+def test_a_tap_on_a_job_without_the_feature_records_no_version():
+    with patch("pipeline.char_bible.text_to_image", return_value=b"x"), \
+         patch("pipeline.char_bible.judge", return_value=_verdict(True)), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+        result = char_bible(_targeted_state())
+
+    assert next(c for c in result["characters"] if c.char_id == "c0").versions == []
+
+
+def _chosen_state(source: str = "story-1/ref-c0-2.png", version_id: str = "ref-c0-1") -> StoryMemory:
+    from contracts.story_memory import ReferenceChoice, ReferenceVersion
+
+    state = _feature(_targeted_state()).model_copy(update={"reference_retry": None})
+    earlier = ReferenceVersion(version_id="ref-c0-1", image_path="story-1/ref-c0-1.png", ref_moderation_status="passed",
+                               ref_verdict=_verdict(True, ["dog"]), ref_verdict_prompt_version=7, source="draw_again")
+    c0 = state.characters[0].model_copy(update={
+        "canonical_ref_image": "story-1/ref-c0-2.png", "ref_moderation_status": "teacher_allowed",
+        "ref_verdict": _verdict(False, ["dog"]), "ref_generation_prompt": "tap prompt", "versions": [earlier]})
+    return state.model_copy(update={
+        "characters": [c0, state.characters[1]],
+        "cost": Cost(image_count=3, ref_retry_count=1),
+        "reference_choice": ReferenceChoice(char_id="c0", version_id=version_id, source=source),
+    })
+
+
+def test_choosing_a_version_restores_it_and_keeps_the_replaced_one_at_no_image_cost():
+    with patch("pipeline.char_bible.text_to_image") as t2i, patch("pipeline.char_bible.judge") as judge_mock:
+        result = char_bible(_chosen_state())
+
+    t2i.assert_not_called()
+    judge_mock.assert_not_called()
+    c0 = next(c for c in result["characters"] if c.char_id == "c0")
+    assert (c0.canonical_ref_image, c0.ref_moderation_status) == ("story-1/ref-c0-1.png", "passed")
+    assert c0.ref_verdict == _verdict(True, ["dog"])
+    assert c0.ref_generation_prompt is None
+    assert [(v.version_id, v.image_path, v.ref_moderation_status, v.ref_generation_prompt, v.source) for v in c0.versions] == [
+        ("ref-c0-2", "story-1/ref-c0-2.png", "teacher_allowed", "tap prompt", "version_choice")]
+    assert "cost" not in result
+    assert result["reference_choice"] is None
+
+
+@pytest.mark.parametrize("source,version_id", [("story-1/ref-c0-1.png", "ref-c0-1"), ("story-1/ref-c0-2.png", "ref-c0-9")])
+def test_a_stale_or_unknown_version_choice_changes_nothing(source, version_id):
+    result = char_bible(_chosen_state(source=source, version_id=version_id))
+    assert result == {"reference_choice": None}

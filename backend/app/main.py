@@ -127,9 +127,12 @@ class CreateStorybookResponse(BaseModel):
 
 
 class ConfirmRequest(BaseModel):
-    action: Literal["confirm", "try_again"]
+    action: Literal["confirm", "try_again", "choose_version"]
     char_id: str | None = None
     attribute: str | None = None
+    # choose_version (ADR-082 Decision 1): `source` is the picture the child chose from (SH-08).
+    version_id: str | None = None
+    source: str | None = None
 
 
 class ConfirmResponse(BaseModel):
@@ -162,6 +165,7 @@ def create_storybook(
 
     # Snapshot once. A later switch-off cannot downgrade an accepted submission.
     review_mode = settings.enable_teacher_moderation_review
+    magic_pencil = settings.enable_magic_pencil
     text, truncated = clamp_story(payload.text)
     title = payload.title
     if review_mode:
@@ -211,6 +215,7 @@ def create_storybook(
                 "moderation_mode": "teacher_review_v1",
                 "moderation_settings_snapshot": {
                     "policy_version": TEACHER_MODERATION_POLICY_VERSION,
+                    "magic_pencil": magic_pencil,
                 },
             } if review_mode else {}),
         }
@@ -266,8 +271,12 @@ def confirm_job(
 
     if row.get("moderation_mode") == "teacher_review_v1":
         from app.moderation_hold import confirm_review_job
-        return ConfirmResponse(status=confirm_review_job(job_id, payload.model_dump(), str(user.id)))
+        # Only a version choice carries version fields, so the other resume payloads keep their shape.
+        resume = payload.model_dump(exclude=None if payload.action == "choose_version" else {"version_id", "source"})
+        return ConfirmResponse(status=confirm_review_job(job_id, resume, str(user.id)))
 
+    if payload.action == "choose_version":
+        raise HTTPException(422, "choice_unavailable")  # SH-01: baseline jobs have no versions
     if payload.action == "try_again":
         characters = row["reveal"].get("characters", [])
         character = next((c for c in characters if c["char_id"] == payload.char_id), None)
@@ -288,7 +297,7 @@ def confirm_job(
 
     queue = get_queue()
     try:
-        queue.enqueue("worker.run_job.resume_storybook_job", job_id, payload.model_dump(), job_timeout=JOB_TIMEOUT_SECONDS)
+        queue.enqueue("worker.run_job.resume_storybook_job", job_id, payload.model_dump(exclude={"version_id", "source"}), job_timeout=JOB_TIMEOUT_SECONDS)
     except Exception:
         # The CAS already flipped status to 'queued'; a Redis outage here would strand the book
         # with no worker coming and no way to re-confirm. Roll it back — nothing else ran.

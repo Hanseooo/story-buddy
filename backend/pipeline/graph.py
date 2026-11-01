@@ -119,6 +119,8 @@ def route_reveal(state: StoryMemory) -> str:
     """
     if state.reference_retry is not None and state.cost.ref_retry_count < MAX_RETRY_TAPS:
         return "try_again"
+    if state.reference_choice is not None:
+        return "choose_version"
     return route_next_scene(state)
 
 
@@ -167,7 +169,7 @@ def build_graph(checkpointer=None):
         # "compose" is reachable here only on a resume into a book that is already fully drawn AND
         # moderated — rare, but route_next_scene can return it now, and an unmapped label is a
         # graph-build error rather than a routing bug anyone would see in a log.
-        {"try_again": "char_bible", "generate_scene": "generate_scene", "output_mod": "output_mod",
+        {"try_again": "char_bible", "choose_version": "char_bible", "generate_scene": "generate_scene", "output_mod": "output_mod",
          "compose": "compose"},
     )
     graph.add_edge("generate_scene", "consistency_check")

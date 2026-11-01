@@ -268,6 +268,12 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                                 raise RuntimeError("invalid_reveal_checkpoint")
                             conn.execute("update jobs set status='awaiting_confirm',current_stage='reveal',reveal=%s where id=%s",
                                          (Jsonb(value), job_id))
+                            # OD-04: the job-owned record of kept pictures, deleted with the story.
+                            for char in state.characters:
+                                for version in char.versions:
+                                    conn.execute("""insert into job_picture_records(job_id,kind,target_id,version_id,image_path,source)
+                                      values (%s,'version',%s,%s,%s,%s) on conflict do nothing""",
+                                                 (job_id, char.char_id, version.version_id, version.image_path, version.source))
                         else:
                             if snapshot.next or any(s.moderation_status not in ("passed", "teacher_allowed") for s in state.scenes):
                                 raise RuntimeError("incomplete_safety_checks")

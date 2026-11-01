@@ -26,8 +26,9 @@ import logging
 
 from app.config import check_image_budget, settings
 from app.db import get_supabase_client
-from contracts.story_memory import Character, CharacterDescription, RefVerdict, StoryMemory
+from contracts.story_memory import Character, CharacterDescription, RefVerdict, ReferenceVersion, StoryMemory
 from pipeline.prompt_optimizer import filtered_description
+from pipeline.reveal import has_versions
 from providers import judge, text_to_image
 
 log = logging.getLogger(__name__)
@@ -410,6 +411,8 @@ def _mint_targeted(state: StoryMemory) -> dict:
             # Recorded in every mode: in baseline it is how a moderation redraw knows this picture
             # came from a tap and keeps the chip (ADR-082 Decision 7).
             "ref_generation_prompt": prompt,
+            # ADR-082 Decision 2: the overwrite stays, but the replaced picture is kept.
+            "versions": [*c.versions, *_kept(c, "draw_again")] if has_versions(state) else c.versions,
         })
         if c.char_id == character.char_id
         else c
@@ -423,6 +426,40 @@ def _mint_targeted(state: StoryMemory) -> dict:
         character.char_id, retry.attribute, cost.ref_retry_count,
     )
     return {"characters": characters, "cost": cost, "reference_retry": None}
+
+
+def _kept(c: Character, source: str) -> list[ReferenceVersion]:
+    """The current reference as a version, or nothing when it was never cleared (AC-02)."""
+    if c.canonical_ref_image is None or c.ref_moderation_status not in ("passed", "teacher_allowed"):
+        return []
+    return [ReferenceVersion(
+        version_id=c.canonical_ref_image.rsplit("/", 1)[-1].removesuffix(".png"),
+        image_path=c.canonical_ref_image, ref_moderation_status=c.ref_moderation_status,
+        ref_verdict=c.ref_verdict, ref_verdict_prompt_version=c.ref_verdict_prompt_version,
+        ref_generation_prompt=c.ref_generation_prompt, source=source,
+    )]
+
+
+def _choose_version(state: StoryMemory) -> dict:
+    """ADR-082 Decision 1: no draw, no judge, no go. The chosen picture comes back exactly as it was
+    kept, moderation verdict included, so `char_ref_mod` passes it through; the one it replaces
+    becomes a version. A choice made from a picture that is no longer current changes nothing
+    (SH-08)."""
+    choice = state.reference_choice
+    char = next((c for c in state.characters if c.char_id == choice.char_id), None)
+    chosen = next((v for v in char.versions if v.version_id == choice.version_id), None) if char else None
+    if (chosen is None or char.canonical_ref_image != choice.source
+            or chosen.ref_moderation_status not in ("passed", "teacher_allowed")):
+        return {"reference_choice": None}
+    restored = char.model_copy(update={
+        "canonical_ref_image": chosen.image_path, "ref_moderation_status": chosen.ref_moderation_status,
+        "ref_verdict": chosen.ref_verdict, "ref_verdict_prompt_version": chosen.ref_verdict_prompt_version,
+        "ref_generation_prompt": chosen.ref_generation_prompt,
+        "versions": [*(v for v in char.versions if v is not chosen), *_kept(char, "version_choice")],
+    })
+    log.info("char_bible: %s version %s chosen", char.char_id, chosen.version_id)
+    return {"characters": [restored if c.char_id == char.char_id else c for c in state.characters],
+            "reference_choice": None}
 
 
 def _redraw_recorded(state: StoryMemory, char: Character, n: int) -> tuple[str, RefVerdict | None]:
@@ -455,6 +492,8 @@ def char_bible(state: StoryMemory) -> dict:
     """
     if state.reference_retry is not None:
         return _mint_targeted(state)
+    if state.reference_choice is not None:
+        return _choose_version(state)
 
     # Cap FIRST (invariant 1, ADR-004), THEN filter (invariant 6). The order is load-bearing:
     # filtering first slides the 2-slot window onto c2 when c0 is already referenced, producing
