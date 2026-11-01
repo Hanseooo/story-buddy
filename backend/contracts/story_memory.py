@@ -104,6 +104,10 @@ class Character(BaseModel):
     # only on jobs submitted with `moderation_context.magic_pencil`. Additive, defaulted → no
     # schema_version bump; an old checkpoint loads with none.
     versions: list["ReferenceVersion"] = Field(default_factory=list)
+    # ADR-082 Decision 4 (SH-06): each kept pencil text, redacted, in the order kept. Apart from
+    # `description`, which stays as analysed (ADR-069). Only `build_prompt` reads it; the reference
+    # judge must never see it as a stated attribute. Additive, defaulted → no schema_version bump.
+    child_changes: list[str] = Field(default_factory=list)
 
 
 class ReferenceVersion(BaseModel):     # ADR-082 — a replaced reference, restorable as it was

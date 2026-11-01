@@ -1702,10 +1702,18 @@ def _choice_state(choice: str, source: str = "story-1/ref-c0-2.png") -> StoryMem
                                     "reference_pencil_choice": PencilChoice(char_id="c0", choice=choice, source=source)})
 
 
-def test_keeping_the_pencil_result_records_the_choice_and_changes_no_picture():
-    result = char_bible(_choice_state("kept"))
+def test_keeping_the_pencil_result_records_the_choice_and_appends_the_text_as_a_child_change():
+    """AC-12, SH-06: the kept text reaches later pages; the picture and description stay as they are."""
+    state = _choice_state("kept")
+    state.characters[0].child_changes = ["blue hair"]
 
-    assert "characters" not in result
+    result = char_bible(state)
+
+    c0 = next(c for c in result["characters"] if c.char_id == "c0")
+    assert c0.child_changes == ["blue hair", "a red hat"]
+    assert c0.canonical_ref_image == "story-1/ref-c0-2.png"
+    assert c0.description == state.characters[0].description
+    assert result["characters"][1] == state.characters[1]
     assert result["pencil_uses"][0].choice == "kept"
     assert result["reference_pencil_choice"] is None
 
@@ -1721,6 +1729,7 @@ def test_using_the_old_one_restores_it_and_keeps_the_pencil_result_as_a_version(
     assert [(v.version_id, v.image_path, v.source) for v in c0.versions] == [
         ("ref-c0-2", "story-1/ref-c0-2.png", "version_choice")]
     assert result["pencil_uses"][0].choice == "old"
+    assert c0.child_changes == []
     assert "cost" not in result
     assert result["reference_pencil_choice"] is None
 
@@ -1738,6 +1747,7 @@ def test_a_teacher_replacement_of_a_held_pencil_result_reruns_the_same_edit():
     state = _choice_state("kept").model_copy(update={"reference_pencil_choice": None})
     state.characters[0].ref_moderation_status = "flagged"
     state.pencil_uses[0].choice = "kept"   # a withdrawn clearance on a kept result is held again
+    state.characters[0].child_changes = ["blue hair", "a red hat"]
     state.cost.ref_retry_count = 1         # the edit spent a go
     state.moderation_context.review = ReviewContext(
         review_id="1f7a7b8e-634f-44d1-953b-4d583ba0d13a", kind="character_reference", subject_id="c0",
@@ -1762,3 +1772,4 @@ def test_a_teacher_replacement_of_a_held_pencil_result_reruns_the_same_edit():
     assert [v.image_path for v in c0.versions] == ["story-1/ref-c0-1.png"]
     assert (result["cost"].image_count, result["cost"].ref_retry_count, result["cost"].ref_mod_retry_count) == (3, 1, 1)
     assert (result["pencil_uses"][0].after_path, result["pencil_uses"][0].choice) == ("story-1/ref-c0-3.png", None)
+    assert c0.child_changes == ["blue hair"]   # the keep is asked again, so its change is withdrawn until then

@@ -95,6 +95,7 @@ class Character(BaseModel):
     ref_verdict: Optional[RefVerdict] = None        # ADR-028: the reference is checked, not assumed
     ref_verdict_prompt_version: Optional[int] = None  # which char_bible.JUDGE_PROMPT produced it
     versions: list[ReferenceVersion] = Field(default_factory=list)  # ADR-082 — §3 below
+    child_changes: list[str] = Field(default_factory=list)  # ADR-082 Decision 4 — §3 below
 
 class Location(BaseModel):     # minimal; refined by `story-analyzer` (§8, additive)
     loc_id: str
@@ -310,6 +311,13 @@ reveal waits for keep/old and the API refuses `confirm`. Every use is mirrored t
 `job_picture_records` (`kind = 'pencil'`, migration 0029).
 Ticket 07: a teacher replacement of a held pencil result re-runs that use's edit on its
 `before_path`. The use's `after_path` moves to the new picture and its `choice` resets to `None`.
+Ticket 08 adds `Character.child_changes` (default `[]`): each kept pencil text, redacted, in the
+order kept. "Use the old one" appends nothing, and a teacher replacement of a kept result removes
+that use's text until the child chooses again. `description` is never changed (ADR-069). Only
+`build_prompt` reads the list: each change follows the character's description in both the image
+roll and the unreferenced description line, filtered all-or-nothing by ADR-035's style prohibitions
+like `notes`, and rendered even when it contradicts the description. The reference judge never sees
+it. A character with no changes renders byte-identically, so `SCENE_PROMPT_VERSION` is unchanged.
 
 - One version covers the whole contract, **including `FailureReason`** — an enum change is a contract change.
 

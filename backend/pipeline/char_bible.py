@@ -552,6 +552,11 @@ def _settle_pencil(state: StoryMemory) -> dict:
         restored = _choose_version(state.model_copy(update={"reference_choice": ReferenceChoice(
             char_id=char.char_id, version_id=old.version_id, source=choice.source)}))
         update["characters"] = restored["characters"]
+    else:
+        # ADR-082 Decision 4: the kept words reach later pages through `build_prompt`; the
+        # analysed description stays as it was (ADR-069).
+        kept = char.model_copy(update={"child_changes": [*char.child_changes, use.text]})
+        update["characters"] = [kept if c.char_id == char.char_id else c for c in state.characters]
     return update
 
 
@@ -577,13 +582,19 @@ def replace_reference(state: StoryMemory, char_id: str) -> dict:
         path = _upload(image, state.story_id, char_id, n)
         verdict = version = None
         update = {"pencil_uses": _with_use(state, use.use_id, after_path=path, choice=None)}
+        if use.choice == "kept":
+            # Keep/old is asked again, so the change this use added waits for it (SH-06).
+            changes = char.child_changes[::-1]   # the latest entry with this text is the one it added
+            if use.text in changes:
+                changes.remove(use.text)
+            char = char.model_copy(update={"child_changes": changes[::-1]})   # read by the return below
     else:
         path, verdict = _redraw_recorded(state, char, n)
         version = JUDGE_PROMPT_VERSION
         update = {}
     return {
         **update,
-        "characters": [c.model_copy(update={
+        "characters": [char.model_copy(update={
             "canonical_ref_image": path, "ref_moderation_status": None, "ref_verdict": verdict,
             "ref_verdict_prompt_version": version,
         }) if c.char_id == char_id else c for c in state.characters],

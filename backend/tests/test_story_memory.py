@@ -400,6 +400,17 @@ def test_a_checkpoint_from_before_magic_pencil_05_loads_with_no_kept_draws():
     assert state.reference_choice.cleared is False
 
 
+def test_a_checkpoint_from_before_magic_pencil_08_loads_with_no_child_changes():
+    """magic-pencil 08 (SH-06): a character saved before child changes existed has none."""
+    from contracts.story_memory import StoryMemory
+
+    state = StoryMemory.model_validate({
+        "schema_version": 1, "story_id": "s1", "classroom_id": "c", "profile_id": "p", "input": {"raw_text": "A dog."},
+        "characters": [{"char_id": "c0", "name": "Kiko", "description": {"species": "dog"}}],
+    })
+    assert state.characters[0].child_changes == []
+
+
 def test_a_checkpoint_from_before_magic_pencil_06_loads_with_no_pencil_uses():
     """magic-pencil 06: a paused reveal saved before the pencil existed resumes with nothing pending."""
     from contracts.story_memory import StoryMemory

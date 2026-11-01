@@ -2,7 +2,7 @@
 
 **Status:** ready-for-agent
 **Type:** task
-**Progress:** open
+**Progress:** done
 **Blocked by:** `.scratch/ptd-child-creative-control/issues/06-character-pencil-at-reveal.md`
 
 **Parent:** `docs/specs/magic-pencil.md` (US-02)
@@ -35,14 +35,14 @@ description that disagrees with the kept reference (audit 01).
 None for characters without child changes: prompts stay byte-identical. Assert that in tests.
 
 ## Acceptance criteria
-- [ ] Keep → the redacted text is appended; "Use the old one" → nothing appended (AC-12).
-- [ ] A scene with that character renders its child changes after its description, in order, in
+- [x] Keep → the redacted text is appended; "Use the old one" → nothing appended (AC-12).
+- [x] A scene with that character renders its child changes after its description, in order, in
       both the referenced (roll) and unreferenced paths (SH-06).
-- [ ] A change containing a style-forbidden word (e.g. "glowing" under comic) is stored verbatim and
+- [x] A change containing a style-forbidden word (e.g. "glowing" under comic) is stored verbatim and
       filtered out of the rendered prompt (ADR-035).
-- [ ] A contradicting change ("blue hair" vs story's black) is rendered, not dropped.
-- [ ] An old checkpoint loads with an empty list; prompts unchanged.
-- [ ] Contract doc and changelog row updated.
+- [x] A contradicting change ("blue hair" vs story's black) is rendered, not dropped.
+- [x] An old checkpoint loads with an empty list; prompts unchanged.
+- [x] Contract doc and changelog row updated.
 
 ## Guidance
 Trap: `_describe` is shared by the draw prompt and the reference judge prompt. Adding child changes

@@ -200,6 +200,20 @@ def _describe(description: CharacterDescription, name: str) -> str:
     return base
 
 
+def _scene_subject(character: Character, style_fragment: str) -> str:
+    """`_describe` plus the child's kept changes after it, in order (ADR-082 Decision 4, SH-06).
+    Rendered even when a change contradicts the description: the child's word wins on the page.
+
+    Here and not in `_describe`, because char_bible's reference judge shares that describer and
+    must not see a change as a stated attribute. Each change is free prose, so it is filtered
+    all-or-nothing like `notes` (ADR-035 limit 6); the stored text stays verbatim."""
+    forbidden = style_prohibitions(style_fragment)
+    changes = [allowed for change in character.child_changes
+               if (allowed := _kept_whole(change.strip().rstrip("."), forbidden))]
+    return ", ".join([_describe(filtered_description(character.description, style_fragment), character.name),
+                      *changes])
+
+
 def referenced_characters(
     characters_present: list[str], characters: list[Character]
 ) -> list[Character]:
@@ -293,7 +307,7 @@ def build_prompt(
     roll = [
         " ".join(
             f"Image {n} is "
-            f"{_describe(filtered_description(character.description, style), character.name)}."
+            f"{_scene_subject(character, style)}."
             for n, character in enumerate(referenced, 1)
         )
         + " "
@@ -304,7 +318,7 @@ def build_prompt(
     # forbade it and the reference obeyed `style`, so the edit model saw the scene's noun
     # describing something Image 2 visibly was not, and drew a second one.
     descriptions = [
-        _describe(filtered_description(character.description, style), character.name)
+        _scene_subject(character, style)
         for character in present
         if character.char_id not in referenced_ids
     ]
