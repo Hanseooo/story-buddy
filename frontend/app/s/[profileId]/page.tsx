@@ -24,10 +24,38 @@ export default function BookshelfPage({
   const [profileId, setProfileId] = useState<string | null>(null);
   const [cards, setCards] = useState<JobCard[]>([]);
   const [loading, setLoading] = useState(true);
+  const [unreadNotes, setUnreadNotes] = useState<string[]>([]);
 
   useEffect(() => {
     params.then(({ profileId: pid }) => setProfileId(pid));
   }, [params]);
+
+  useEffect(() => {
+    if (!profileId) return;
+    let active: AbortController | undefined;
+    async function loadNotes() {
+      active?.abort();
+      const controller = new AbortController();
+      active = controller;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (controller.signal.aborted) return;
+        if (!session) { setUnreadNotes([]); return; }
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/me/notes`, {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          cache: "no-store", signal: controller.signal,
+        });
+        if (!response.ok) throw new Error("notes unavailable");
+        const notes: { job_id: string; seen: boolean }[] = await response.json();
+        if (!controller.signal.aborted) setUnreadNotes(notes.filter(note => !note.seen).map(note => note.job_id));
+      } catch {
+        if (!controller.signal.aborted) setUnreadNotes([]);
+      }
+    }
+    void loadNotes();
+    window.addEventListener("focus", loadNotes);
+    return () => { active?.abort(); window.removeEventListener("focus", loadNotes); };
+  }, [profileId]);
 
   useEffect(() => {
     if (!profileId) return;
@@ -155,7 +183,7 @@ export default function BookshelfPage({
             }}
           >
             {shelfCards.map((card, idx) => (
-              <BookCard key={card.id} card={card} profileId={profileId} index={idx} />
+              <BookCard key={card.id} card={card} profileId={profileId} index={idx} hasNote={unreadNotes.includes(card.id)} />
             ))}
           </motion.div>
 
@@ -193,10 +221,12 @@ function BookCard({
   card,
   profileId,
   index,
+  hasNote = false,
 }: {
   card: JobCard;
   profileId: string;
   index: number;
+  hasNote?: boolean;
 }) {
   const href: Record<JobBucket, string> = {
     "terminal-success": `/s/${profileId}/book/${card.id}`,
@@ -311,6 +341,11 @@ function BookCard({
           <p className="font-extrabold text-sm sm:text-base text-foreground line-clamp-2 leading-snug">
             {card.title}
           </p>
+          {hasNote && card.bucket === "terminal-success" && (
+            <p className="mt-2 rounded-xl bg-secondary/20 px-2 py-1 text-xs font-extrabold text-foreground">
+              A note from your teacher
+            </p>
+          )}
         </div>
       </Link>
     </motion.div>

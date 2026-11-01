@@ -204,6 +204,7 @@ MIN_SCENES = 3
 MIN_STORY_WORDS = 5     # a book needs at least one scene's worth of text
 # docs/specs/story-titles.md §1/§3: fixed length independent of story word count.
 MAX_TITLE_CHARS = 80
+MAX_REVIEW_NOTE_CHARS = 500
 PDF_MAX_CAPTION_CHARS = 15_000
 PDF_MAX_IMAGE_BYTES = 8 * 1024 * 1024
 PDF_MAX_TOTAL_IMAGE_BYTES = 32 * 1024 * 1024

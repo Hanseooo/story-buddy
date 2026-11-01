@@ -14,7 +14,7 @@ vi.mock("@supabase/ssr", () => ({
       select: () => ({
         eq: () => ({
           single: () =>
-            Promise.resolve({ data: { name: "Grade 3", code: "XYZ789" } }),
+            Promise.resolve({ data: { name: "Grade 3", code: "XYZ789", review_notes_enabled: false } }),
         }),
       }),
     }),
@@ -58,7 +58,7 @@ describe("optional classroom review themes", () => {
     vi.stubGlobal("fetch", fetcher);
     render(<SettingsPage />);
     const toggle = await screen.findByRole("checkbox", { name: /mild suspense/i });
-    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+    expect(screen.getAllByRole("checkbox")).toHaveLength(4);
     expect(toggle).not.toBeChecked();
     fireEvent.click(toggle);
     fireEvent.click(screen.getByRole("button", { name: "Save review themes" }));
@@ -100,7 +100,7 @@ describe("failed teacher mutations are reported, not swallowed (#77)", () => {
 
     const nameInput = await screen.findByDisplayValue("Grade 3");
     fireEvent.change(nameInput, { target: { value: "Grade 4" } });
-    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
       expect(screen.queryByText(/classroom renamed/i)).not.toBeInTheDocument()
@@ -135,10 +135,10 @@ describe("failed teacher mutations are reported, not swallowed (#77)", () => {
 
     const nameInput = await screen.findByDisplayValue("Grade 3");
     fireEvent.change(nameInput, { target: { value: "Grade 4" } });
-    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByText(/could not rename/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /save/i })).not.toHaveAttribute("disabled");
+    expect(screen.getByRole("button", { name: "Save" })).not.toHaveAttribute("disabled");
     vi.unstubAllGlobals();
   });
 
@@ -156,6 +156,57 @@ describe("failed teacher mutations are reported, not swallowed (#77)", () => {
 
     expect(await screen.findByText(/could not delete/i)).toBeInTheDocument();
     expect(REPLACE).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("student-readable notes setting", () => {
+  it("defaults off and saves only after the server responds", async () => {
+    let finishSave!: (response: Response) => void;
+    const fetcher = vi.fn().mockResolvedValueOnce(Response.json({ theme_ids: [], settings_version: 0, editable: true, themes: [] }))
+      .mockImplementationOnce(() => new Promise<Response>(resolve => { finishSave = resolve; }));
+    vi.stubGlobal("fetch", fetcher);
+    render(<SettingsPage />);
+    const toggle = await screen.findByRole("checkbox", { name: "Let students read my notes" });
+    expect(toggle).not.toBeChecked();
+    expect(toggle).toHaveAccessibleDescription(/students.*read.*notes/i);
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole("button", { name: "Save note setting" }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+    expect(toggle).toBeDisabled();
+    expect(screen.queryByText("Note setting saved")).not.toBeInTheDocument();
+    expect(fetcher.mock.calls[1]).toEqual([expect.stringContaining("/classrooms/cls-123/review-notes"), {
+      method: "PATCH", headers: { "Content-Type": "application/json", Authorization: "Bearer tok" },
+      body: JSON.stringify({ enabled: true }),
+    }]);
+    finishSave(Response.json({ enabled: true }));
+    expect(await screen.findByText("Note setting saved")).toHaveAttribute("aria-live", "polite");
+    expect(toggle).toBeChecked();
+    expect(toggle).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save note setting" })).toBeDisabled();
+    vi.unstubAllGlobals();
+  });
+
+  it("reverts to the stored value when saving fails, including turning off", async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(Response.json({ theme_ids: [], settings_version: 0, editable: true, themes: [] }))
+      .mockResolvedValueOnce(Response.json({}, { status: 500 }))
+      .mockResolvedValueOnce(Response.json({ enabled: true }))
+      .mockRejectedValueOnce(new TypeError("offline"));
+    vi.stubGlobal("fetch", fetcher);
+    render(<SettingsPage />);
+    const toggle = await screen.findByRole("checkbox", { name: "Let students read my notes" });
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole("button", { name: "Save note setting" }));
+    expect(await screen.findByText(/Could not save note setting/)).toHaveAttribute("aria-live", "polite");
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole("button", { name: "Save note setting" }));
+    expect(await screen.findByText("Note setting saved")).toBeInTheDocument();
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole("button", { name: "Save note setting" }));
+    expect(await screen.findByText(/Could not save note setting/)).toHaveAttribute("aria-live", "polite");
+    expect(toggle).toBeChecked();
+    expect(toggle).not.toBeDisabled();
     vi.unstubAllGlobals();
   });
 });

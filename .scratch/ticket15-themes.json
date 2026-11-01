@@ -1,0 +1,49 @@
+{
+  "status": "awaiting_teacher",
+  "review_id": "d2aa35f8-aa90-5a4b-a505-6179d3dc4a9b",
+  "subject_id": "input",
+  "subject_version": "b40993cd1e052d60bc1b254b60c36c462001393ad78584313af6420530b8f1a8",
+  "generation_epoch": 1,
+  "title": "Synthetic title",
+  "author": "Synthetic child",
+  "story_text": "A dog runs in a field. The dog barks.",
+  "subject_title": null,
+  "kind": "optional_themes",
+  "criteria": [
+    "spooky_suspense",
+    "story_conflict"
+  ],
+  "policy_version": "teacher_review_policy_v1",
+  "origin": "optional_theme",
+  "detected_themes": [
+    {
+      "reason": "Synthetic detector evidence",
+      "theme_id": "spooky_suspense"
+    },
+    {
+      "reason": "Synthetic detector evidence",
+      "theme_id": "story_conflict"
+    }
+  ],
+  "theme_check": {
+    "model_id": "mistralai/mistral-small-3.2-24b-instruct",
+    "subject_version": "b40993cd1e052d60bc1b254b60c36c462001393ad78584313af6420530b8f1a8",
+    "settings_version": 1,
+    "instruction_version": "optional_themes_v1"
+  },
+  "current_policy_version": "teacher_review_policy_v1",
+  "settings_snapshot": {
+    "theme_ids": [
+      "spooky_suspense",
+      "story_conflict"
+    ],
+    "settings_version": 1
+  },
+  "classifier_evidence": [],
+  "ready": true,
+  "replacement_available": false,
+  "replacement_disabled_reason": "replacement_source_unavailable",
+  "dispatch_state": null,
+  "withdraws_review_id": null,
+  "pictures": []
+}

@@ -18,6 +18,7 @@ Local run:
 import json
 import os
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -689,3 +690,108 @@ def test_0011_existing_select_policies_unchanged(conn):
 
     rows = _select_jobs(conn, teacher_id, job_id)
     assert len(rows) == 1
+
+
+@_skip
+@pytest.mark.parametrize("role", ["anon", "authenticated"])
+@pytest.mark.parametrize("privilege", ["SELECT", "INSERT", "UPDATE", "DELETE"])
+def test_review_notes_browser_privileges_denied(conn, role, privilege):
+    assert conn.execute(
+        "select has_table_privilege(%s, 'public.job_review_notes', %s)", (role, privilege)
+    ).fetchone() == (False,)
+    assert conn.execute(
+        "select has_function_privilege(%s, 'public.teacher_review_note(uuid,uuid,text,text)', 'EXECUTE')",
+        (role,),
+    ).fetchone() == (False,)
+
+
+@_skip
+def test_review_notes_lifecycle_and_guards(conn, fx):
+    """Run the real SQL boundary. Edits survive switch-off, not book deletion."""
+    def call(operation, body=None, teacher=None, job=None):
+        return conn.execute(
+            "select public.teacher_review_note(%s,%s,%s,%s)",
+            (job or fx.ba1, teacher or fx.ta, operation, body),
+        ).fetchone()[0]
+
+    assert conn.execute("select review_notes_enabled from classrooms where id=%s", (fx.cls_a,)).fetchone() == (False,)
+    assert call("PUT", "Hello") == {"status": 409, "detail": "notes_disabled"}
+    assert call("GET") == {"status": 404, "detail": "not found"}
+    conn.execute("update classrooms set review_notes_enabled=true where id=%s", (fx.cls_a,))
+    conn.execute("set local role service_role")
+    first = call("PUT", "Lovely story!")
+    assert first["status"] == 200
+    note_id = first["note"]["id"]
+    assert first["note"]["body"] == "Lovely story!"
+    assert first["note"]["author_id"] == str(fx.ta)
+    conn.execute("update job_review_notes set seen_at=now() where id=%s", (note_id,))
+    edited = call("PUT", "Keep going!")["note"]
+    assert edited["id"] == note_id
+    assert edited["body"] == "Keep going!"
+    assert edited["seen_at"] is None
+    assert edited["created_at"] == first["note"]["created_at"]
+    assert edited["updated_at"] > first["note"]["updated_at"]
+    assert call("PUT", "x" * 500)["status"] == 200
+    assert call("GET", teacher=fx.tb) == call("GET", job=uuid.uuid4()) == {"status": 404, "detail": "not found"}
+    conn.execute("update classrooms set review_notes_enabled=false where id=%s", (fx.cls_a,))
+    for operation in ("PUT", "DELETE"):
+        assert call(operation, "Do not save") == {"status": 409, "detail": "notes_disabled"}
+    assert call("GET")["note"]["body"] == "x" * 500
+    conn.execute("update classrooms set review_notes_enabled=true where id=%s", (fx.cls_a,))
+    assert call("DELETE") == {"status": 200, "note": None}
+    assert call("GET") == {"status": 404, "detail": "not found"}
+    fresh = call("PUT", "New note")["note"]
+    assert fresh["id"] != note_id
+    conn.execute("update profiles set removed_at=now() where id=%s", (fx.s1,))
+    assert call("PUT", "Still available")["status"] == 200
+    conn.execute("update jobs set status='queued' where id=%s", (fx.ba1,))
+    assert call("PUT", "No") == {"status": 422, "detail": "book_not_complete"}
+    conn.execute("delete from jobs where id=%s", (fx.ba1,))
+    assert conn.execute("select id from job_review_notes where id=%s", (fresh["id"],)).fetchall() == []
+
+
+@_skip
+def test_review_notes_switch_is_server_written(conn, fx):
+    _as_user(conn, fx.ta)
+    try:
+        updated = conn.execute(
+            "update classrooms set review_notes_enabled=true where id=%s", (fx.cls_a,)
+        ).rowcount
+        assert updated == 0
+    except psycopg.errors.InsufficientPrivilege:
+        pass
+
+
+@_skip
+def test_review_notes_unique_book_and_rls(conn, fx):
+    assert conn.execute(
+        "select relrowsecurity from pg_class where oid='public.job_review_notes'::regclass"
+    ).fetchone() == (True,)
+    conn.execute("insert into job_review_notes(job_id,author_id,body) values (%s,%s,'Hello')", (fx.ba1, fx.ta))
+    with pytest.raises(psycopg.errors.UniqueViolation):
+        conn.execute("insert into job_review_notes(job_id,author_id,body) values (%s,%s,'Again')", (fx.ba1, fx.ta))
+
+
+@_skip
+def test_review_notes_two_tabs_keep_one_row(conn, fx):
+    conn.execute("update classrooms set review_notes_enabled=true where id=%s", (fx.cls_a,))
+    conn.commit()
+    def send(body):
+        with psycopg.connect(_DB_URL, connect_timeout=3) as tab:
+            tab.execute("set local role service_role")
+            return tab.execute("select public.teacher_review_note(%s,%s,'PUT',%s)",
+                               (fx.ba1, fx.ta, body)).fetchone()[0]["note"]
+    try:
+        with ThreadPoolExecutor(max_workers=2) as tabs:
+            first, second = list(tabs.map(send, ["First tab", "Second tab"]))
+        assert first["id"] == second["id"]
+        assert conn.execute("select body from job_review_notes where job_id=%s", (fx.ba1,)).fetchall() in (
+            [("First tab",)], [("Second tab",)],
+        )
+        last = send("Last write")
+        assert last["id"] == first["id"]
+        assert last["body"] == "Last write"
+    finally:
+        conn.execute("delete from job_review_notes where job_id=%s", (fx.ba1,))
+        conn.execute("update classrooms set review_notes_enabled=false where id=%s", (fx.cls_a,))
+        conn.commit()

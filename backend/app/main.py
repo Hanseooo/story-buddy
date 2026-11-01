@@ -21,6 +21,8 @@ from app.onboarding import onboarding_router
 from app.moderation_hold import hold_router, insert_review_job
 import app.classrooms  # noqa: F401 — registers routes on teacher_router as side-effect
 import app.review  # noqa: F401 — registers routes on teacher_router as side-effect
+import app.review_notes  # noqa: F401 — registers routes on teacher_router as side-effect
+from app.review_notes import child_notes_router
 from app.avatar import AvatarRequest, patch_avatar
 from providers import check_text
 import providers
@@ -48,7 +50,7 @@ JOB_TIMEOUT_SECONDS = 1800
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.frontend_origin],
-    allow_methods=["POST", "GET", "PATCH"],
+    allow_methods=["POST", "GET", "PATCH", "PUT", "DELETE"],
     allow_headers=["*"],
     expose_headers=["Content-Disposition"],
 )
@@ -80,6 +82,7 @@ app.include_router(research_router)
 app.include_router(pdf_router)
 app.include_router(onboarding_router)
 app.include_router(hold_router)
+app.include_router(child_notes_router)
 
 
 class CreateStorybookRequest(BaseModel):

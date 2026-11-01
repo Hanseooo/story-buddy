@@ -263,6 +263,9 @@ Out of this row's scope (AGENTS.md *Surgical Changes*), surfaced rather than sil
   new decision, not a reinterpretation.
 - **`teacher-review-and-approval.md` §4.10** — no rejection signal, no absence badge, no
   "why isn't mine here" (§4.5). Binding.
+  Inherits §14 SH-07 (ADR-081): the owner's unread-note badge says only "A note from your teacher".
+  No badge implies no editorial decision. Notes stay on owner-only server paths; classmates,
+  the gallery and researchers receive no note data or note controls.
 - ~~**`narration`**~~ — **cut (ADR-058)**. The gallery reader ships without a play button, permanently.
 - **Open:** none. Pagination past 60 and any peer-reader chrome are deliberate deferrals, not
   unresolved questions.

@@ -18,6 +18,8 @@ type Toast = {
   message: string;
   jobId: string;
   undoDecision: ReviewDecision;
+  /** Child's nickname; offers "Add a note" for that book. */
+  noteFor?: string;
 };
 
 const TOAST_MS = 5000;
@@ -26,6 +28,7 @@ export default function BooksPage() {
   const { classroomId } = useParams<{ classroomId: string }>();
 
   const [jobs, setJobs] = useState<Job[] | null>(null);
+  const [notesClassroom, setNotesClassroom] = useState<{ id: string; enabled: boolean } | null>(null);
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState<Tab>("pending");
   const [heldCount, setHeldCount] = useState(0);
@@ -33,6 +36,7 @@ export default function BooksPage() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [dialogJobId, setDialogJobId] = useState<string | null>(null);
+  const [noteJobId, setNoteJobId] = useState<string | null>(null);
   const [dialogPageUrls, setDialogPageUrls] = useState<string[]>([]);
   const dialogImages = useRef<AbortController | null>(null);
   useEffect(() => {
@@ -43,14 +47,17 @@ export default function BooksPage() {
   // ── Fetch ────────────────────────────────────────────────────────────────
 
   const fetchJobs = useCallback(async () => {
-    const { data } = await supabase
+    const [{ data }, { data: classroom }] = await Promise.all([supabase
       .from("jobs")
       .select(
         "id, status, moderation_mode, failure_reason, approved_at, rejected_at, created_at, input_text, title, pages, profile_id, profiles(display_nickname, avatar_id)"
       )
       .eq("classroom_id", classroomId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false }),
+      supabase.from("classrooms").select("review_notes_enabled").eq("id", classroomId).single(),
+    ]);
     setJobs((data as unknown as Job[]) ?? []);
+    setNotesClassroom({ id: classroomId, enabled: classroom?.review_notes_enabled === true });
   }, [classroomId]);
 
   useEffect(() => {
@@ -88,11 +95,12 @@ export default function BooksPage() {
 
   // ── Open dialog & sign pages ──────────────────────────────────────────────
 
-  async function openDialog(jobId: string) {
+  async function openDialog(jobId: string, withNote = false) {
     dialogImages.current?.abort();
     const controller = new AbortController();
     dialogImages.current = controller;
     setDialogJobId(jobId);
+    setNoteJobId(withNote ? jobId : null);
     setDialogPageUrls([]);
     const job = jobs?.find((j) => j.id === jobId);
     if (!job?.pages?.length) return;
@@ -168,9 +176,12 @@ export default function BooksPage() {
 
     if (decision !== "pending") {
       showToast({
-        message: decision === "approved" ? "Approved" : "Rejected",
+        message: decision === "approved" ? "Shared" : "Marked not ready",
         jobId: dialogJobId,
         undoDecision: prevDecision,
+        noteFor: decision === "rejected" && notesEnabled
+          ? prevJob.profiles?.display_nickname ?? ""
+          : undefined,
       });
     }
 
@@ -198,6 +209,12 @@ export default function BooksPage() {
     }
   }
 
+  function handleAddNote() {
+    if (!toast) return;
+    clearToast();
+    void openDialog(toast.jobId, true);
+  }
+
   // ── Toast helpers ─────────────────────────────────────────────────────────
 
   function showToast(t: Toast) {
@@ -222,11 +239,36 @@ export default function BooksPage() {
   const failedJobs = jobs?.filter((j) => j.status === "failed") ?? [];
 
   const dialogJob = jobs?.find((j) => j.id === dialogJobId) ?? null;
+  const notesEnabled = notesClassroom?.id === classroomId && notesClassroom.enabled;
+
+  const toastElement = toast && (
+    <div
+      role="status"
+      className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-foreground text-background px-5 py-3 rounded-xl text-sm font-bold shadow-lg z-50 flex items-center gap-3 max-w-sm"
+    >
+      <span>{toast.message}</span>
+      {toast.noteFor !== undefined && (
+        <button
+          onClick={handleAddNote}
+          aria-label={`Add a note for ${toast.noteFor}`}
+          className="text-secondary font-bold hover:underline min-h-[44px] px-1"
+        >
+          Add a note
+        </button>
+      )}
+      <button
+        onClick={handleUndo}
+        className="text-secondary font-bold hover:underline min-h-[44px] px-1"
+      >
+        Undo
+      </button>
+    </div>
+  );
 
   const tabs: { key: Tab; label: string; count: number }[] = [
     { key: "pending", label: "Needs review", count: pendingJobs.length },
-    { key: "approved", label: "Approved", count: approvedJobs.length },
-    { key: "rejected", label: "Rejected", count: rejectedJobs.length },
+    { key: "approved", label: "Shared with class", count: approvedJobs.length },
+    { key: "rejected", label: "Not ready yet", count: rejectedJobs.length },
     { key: "held", label: "Needs your help", count: heldCount },
   ];
 
@@ -382,28 +424,19 @@ export default function BooksPage() {
       <BookReviewDialog
         job={dialogJob}
         pageUrls={dialogPageUrls}
+        notesEnabled={notesEnabled}
+        openNoteFor={noteJobId}
         onDecide={handleDecide}
         onClose={() => {
           setDialogJobId(null);
           setDialogPageUrls([]);
         }}
-      />
+      >
+        {dialogJob && toastElement}
+      </BookReviewDialog>
 
-      {/* Toast */}
-      {toast && (
-        <div
-          role="status"
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-foreground text-background px-5 py-3 rounded-xl text-sm font-bold shadow-lg z-50 flex items-center gap-3 max-w-sm"
-        >
-          <span>{toast.message}</span>
-          <button
-            onClick={handleUndo}
-            className="text-secondary font-bold hover:underline min-h-[44px] px-1"
-          >
-            Undo
-          </button>
-        </div>
-      )}
+      {/* Toast — inside the dialog while it is open, since a modal makes the page inert */}
+      {!dialogJob && toastElement}
     </div>
   );
 }
@@ -424,7 +457,7 @@ function EmptyState({ tab }: { tab: Tab }) {
     return (
       <div className="bg-surface border border-primary/15 rounded-2xl p-10 text-center">
         <p className="text-sm text-foreground/50">
-          Nothing approved yet. Books you approve appear in the class gallery.
+          Nothing shared yet. Books you share appear in the class gallery.
         </p>
       </div>
     );
