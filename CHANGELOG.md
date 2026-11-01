@@ -14,6 +14,29 @@ instead of repeating it.
 
 ---
 
+## Magic pencil ticket 07 · 2026-11-02 · Teacher replacement of a held pencil result
+
+### Code
+
+- `replace_reference` recognises a pencil result (the current picture is a `PencilUse.after_path`)
+  and makes one `edit_image` call with the use's redacted text and `PENCIL_KEEP_CLAUSE` on its
+  source picture, instead of a fresh `text_to_image` draw (AC-10). It spends ADR-080's one slot
+  and no child go. The result goes through `char_ref_mod`. On pass, the child is offered keep/old
+  again. On flag, it holds again.
+- `reference_replacement_disabled_reason` no longer refuses pencil results. The teacher detail and
+  the decision use the same reasons for slot and budget.
+
+### Docs
+
+- Ticket 07 answer and map row. `story-memory-contract.md` notes the replacement.
+
+### Checks
+
+- New unit test and Postgres integration test (passes, flags again, budget). Full backend suite with
+  the disposable DB: 1,675 passed. The only failures are the six known `test_pdf_export` ones.
+
+---
+
 ## Magic pencil ticket 06 · 2026-11-02 · Character magic pencil at the reveal
 
 ### Code

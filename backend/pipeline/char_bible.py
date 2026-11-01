@@ -27,7 +27,7 @@ import logging
 from app.config import check_image_budget, settings
 from app.db import get_supabase_client
 from contracts.story_memory import (
-    Character, CharacterDescription, RefVerdict, ReferenceChoice, ReferenceVersion, StoryMemory,
+    Character, CharacterDescription, PencilUse, RefVerdict, ReferenceChoice, ReferenceVersion, StoryMemory,
 )
 from pipeline.prompt_optimizer import filtered_description
 from pipeline.reveal import MAX_RETRY_TAPS, has_versions
@@ -490,6 +490,10 @@ def _choose_version(state: StoryMemory) -> dict:
 PENCIL_KEEP_CLAUSE = "Keep everything else about the character, the art style and the plain background exactly the same."
 
 
+def _pencil_prompt(use: PencilUse) -> str:
+    return f"{use.text}\n\n{PENCIL_KEEP_CLAUSE}"
+
+
 def _with_use(state: StoryMemory, use_id: str, **update) -> list:
     return [u.model_copy(update=update) if u.use_id == use_id else u for u in state.pencil_uses]
 
@@ -506,7 +510,7 @@ def _pencil_edit(state: StoryMemory) -> dict:
             or state.cost.ref_retry_count >= MAX_RETRY_TAPS):
         return {"reference_pencil": None, "pencil_uses": _with_use(state, use.use_id, reason="stale")}
     check_image_budget(state.cost.image_count)
-    prompt = f"{use.text}\n\n{PENCIL_KEEP_CLAUSE}"
+    prompt = _pencil_prompt(use)
     try:
         image = edit_image(prompt, [get_signed_url(char.canonical_ref_image)])
     except Exception as exc:
@@ -560,15 +564,28 @@ def _redraw_recorded(state: StoryMemory, char: Character, n: int) -> tuple[str, 
 
 
 def replace_reference(state: StoryMemory, char_id: str) -> dict:
-    """ADR-080: one same-intent draw, keeping the rejected immutable object."""
+    """ADR-080: one same-intent picture, keeping the rejected immutable object. A pencil result is
+    replaced by the same edit of the same source picture, never a fresh draw (AC-10), and the new
+    result waits for "Keep this" or "Use the old one" again."""
     char = next(c for c in state.characters if c.char_id == char_id)
     check_image_budget(state.cost.image_count)
     n = state.cost.ref_retry_count + state.cost.ref_mod_retry_count + 2
-    path, verdict = _redraw_recorded(state, char, n)
+    use = next((u for u in state.pencil_uses if u.char_id == char_id and u.after_path == char.canonical_ref_image), None)
+    if use:
+        # A fal refusal propagates, as it does for any ADR-080 replacement.
+        image = edit_image(_pencil_prompt(use), [get_signed_url(use.before_path)])
+        path = _upload(image, state.story_id, char_id, n)
+        verdict = version = None
+        update = {"pencil_uses": _with_use(state, use.use_id, after_path=path, choice=None)}
+    else:
+        path, verdict = _redraw_recorded(state, char, n)
+        version = JUDGE_PROMPT_VERSION
+        update = {}
     return {
+        **update,
         "characters": [c.model_copy(update={
             "canonical_ref_image": path, "ref_moderation_status": None, "ref_verdict": verdict,
-            "ref_verdict_prompt_version": JUDGE_PROMPT_VERSION,
+            "ref_verdict_prompt_version": version,
         }) if c.char_id == char_id else c for c in state.characters],
         "cost": state.cost.model_copy(update={"image_count": state.cost.image_count + 1,
                                              "ref_mod_retry_count": state.cost.ref_mod_retry_count + 1}),

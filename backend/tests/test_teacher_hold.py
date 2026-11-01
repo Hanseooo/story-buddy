@@ -1605,3 +1605,77 @@ def test_flagged_pencil_text_is_held_with_no_picture_and_a_teacher_stop_ends_onl
         assert (row["text_moderation"], row["reason"], row["image_path"]) == ("teacher_stopped", "text_stopped", None)
     else:
         assert (row["text_moderation"], row["image_path"]) == ("teacher_allowed", f"{job}/ref-c0-2.png")
+
+
+@pytest.mark.parametrize("outcome", ["passes", "flags_again", "budget"])
+def test_a_held_pencil_result_is_replaced_by_the_same_edit_once(monkeypatch, held_database, outcome):
+    """Ticket 07 (AC-10, AC-22): a teacher replacement of a held pencil result re-runs the same edit
+    of the same source picture in ADR-080's one replacement slot; no fresh draw, no child go."""
+    from app.config import IMAGE_BUDGET
+    from langgraph.checkpoint.postgres import PostgresSaver
+
+    book = _pencil_book(monkeypatch, held_database, lambda text, **kw: (True, [], text))
+    job, client, queue, conn = book.job, book.client, book.queue, book.conn
+    draw = MagicMock()
+    monkeypatch.setattr("pipeline.char_bible.text_to_image", draw)
+    flagged = {f"{job}/ref-c0-2.png"} | ({f"{job}/ref-c0-3.png"} if outcome == "flags_again" else set())
+    monkeypatch.setattr("pipeline.char_ref_mod.classify_image_primary",
+                        lambda url, **kw: url.removeprefix("https://private.invalid/") not in flagged)
+    monkeypatch.setattr("pipeline.char_ref_mod.download_book_image", lambda path: book.objects[path])
+    try:
+        old = book.reveal_of(job)["characters"][0]["image_path"]
+        queue.enqueue.reset_mock()
+        assert client.post(f"/jobs/{job}/confirm", json={
+            "action": "pencil", "char_id": "c0", "text": "a red hat", "source": old}).json()["status"] == "queued"
+        book.run(job, queue.enqueue.call_args.args[2], expected_epoch=0)
+        assert conn.execute("select status from jobs where id=%s", (job,)).fetchone()["status"] == "awaiting_teacher"
+
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=book.teacher)
+        route = f"/teacher/jobs/{job}/moderation-review"
+        if outcome == "budget":
+            conn.execute("update jobs set image_count=%s where id=%s", (IMAGE_BUDGET, job))
+        detail = client.get(route).json()
+        assert detail["kind"] == "character_reference"
+        assert (detail["replacement_available"], detail["replacement_disabled_reason"]) == (
+            (False, "image_budget_exhausted") if outcome == "budget" else (True, None))
+        command = {"review_id": detail["review_id"], "subject_version": detail["subject_version"],
+                   "expected_epoch": detail["generation_epoch"], "request_id": str(uuid4()), "action": "replace",
+                   "policy_version": detail["current_policy_version"], "confirmed_criteria": detail["criteria"],
+                   "confirmed": True}
+        queue.enqueue.reset_mock()
+        response = client.post(f"{route}/decision", json=command)
+        if outcome == "budget":
+            assert (response.status_code, response.json()["detail"]) == (422, "image_budget_exhausted")
+            assert book.edit.call_count == 1
+            assert [(r["image_path"], r["picture_moderation"]) for r in _pencil_rows(conn, job)] == [
+                (f"{job}/ref-c0-2.png", "flagged")]
+            return
+        assert response.status_code == 202, response.text
+        dispatched = queue.enqueue.call_args.kwargs
+        book.run(job, expected_epoch=dispatched["expected_epoch"], review_id=dispatched["review_id"])
+
+        draw.assert_not_called()
+        book.judge.assert_not_called()
+        assert book.edit.call_count == 2
+        prompt, sources = book.edit.call_args.args
+        assert prompt.startswith("a red hat\n\n") and sources == [f"https://private.invalid/{old}"]
+        assert book.edit.call_args_list[1] == book.edit.call_args_list[0]
+        values = build_graph(PostgresSaver(conn)).get_state({"configurable": {"thread_id": job}}).values
+        assert (values["cost"].ref_mod_retry_count, values["cost"].ref_retry_count) == (1, 1)
+        if outcome == "flags_again":
+            current = client.get(route).json()
+            assert current["status"] == "awaiting_teacher" and current["review_id"] != detail["review_id"]
+            assert current["replacement_disabled_reason"] == "replacement_already_used"
+        else:
+            app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=book.child)
+            after = book.reveal_of(job)
+            assert after["taps_left"] == 2   # the replacement spends the book's slot, not a child go
+            character = after["characters"][0]
+            assert character["image_path"] == f"{job}/ref-c0-3.png"
+            assert character["pencil_choice"] == {"use_id": "pencil-1", "version_id": "ref-c0-1", "image_path": old}
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    assert _pencil_rows(conn, job) == [{
+        "target_id": "c0", "version_id": "pencil-1", "before_path": old, "image_path": f"{job}/ref-c0-3.png",
+        "pencil_text": "a red hat", "text_moderation": "cleared",
+        "picture_moderation": "flagged" if outcome == "flags_again" else "passed", "reason": None, "choice": None}]

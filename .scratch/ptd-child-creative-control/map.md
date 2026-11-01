@@ -21,7 +21,7 @@ rejected page image should look, and a verdict on whether custom prompts are a g
 | 04 | ["Draw again" is undoable: character versions at the reveal](issues/04-draw-again-undoable-at-reveal.md) | task | resolved | — |
 | 05 | [Unchosen first-round pictures, moderated on open](issues/05-unchosen-draws-moderated-on-open.md) | task | resolved | — |
 | 06 | [Character magic pencil at the reveal](issues/06-character-pencil-at-reveal.md) | task | resolved | 04 |
-| 07 | [Held character pencil result: replacement re-runs the edit](issues/07-held-character-pencil-replacement.md) | task | open | 06 |
+| 07 | [Held character pencil result: replacement re-runs the edit](issues/07-held-character-pencil-replacement.md) | task | resolved | 06 |
 | 08 | [Kept character change reaches later pages](issues/08-kept-change-reaches-later-pages.md) | task | open | 06 |
 | 09 | [Other versions of a page on the finished book](issues/09-page-other-versions.md) | task | open | 04 |
 | 10 | [Page magic pencil on the finished book](issues/10-page-pencil-on-finished-book.md) | task | open | 09 |
@@ -62,3 +62,7 @@ Flags hidden with no hold, errors not stored. Migration 0028. No browser pass.
 redacted, moderated pencil text edits the current picture once; the result is current, moderated by
 `char_ref_mod`, and keep/old blocks confirm until answered. Flagged text holds as its own kind with
 a request-only stop. Migration 0029. No browser pass.
+
+**07 (2026-11-02, resolved).** [Answer](issues/07-held-character-pencil-replacement.md#answer-2026-11-02):
+a teacher replacement of a held pencil result re-runs the same edit on the same source picture in
+ADR-080's slot; the new result is moderated and offered for keep/old again. No schema change.

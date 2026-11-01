@@ -308,6 +308,8 @@ holds only redacted text. A pencil result becomes the current reference with
 replaced is kept as a version. While a use has an `after_path` that is current and no `choice`, the
 reveal waits for keep/old and the API refuses `confirm`. Every use is mirrored to
 `job_picture_records` (`kind = 'pencil'`, migration 0029).
+Ticket 07: a teacher replacement of a held pencil result re-runs that use's edit on its
+`before_path`. The use's `after_path` moves to the new picture and its `choice` resets to `None`.
 
 - One version covers the whole contract, **including `FailureReason`** — an enum change is a contract change.
 

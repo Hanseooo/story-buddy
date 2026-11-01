@@ -1729,10 +1729,36 @@ def test_a_stale_keep_or_old_choice_changes_nothing():
     assert char_bible(_choice_state("old", source="story-1/ref-c0-1.png")) == {"reference_pencil_choice": None}
 
 
-def test_a_held_pencil_result_offers_no_teacher_replacement_until_ticket_07():
-    """AC-10: a replacement re-runs the same edit, never a fresh text-to-image draw (ticket 07)."""
-    from pipeline.moderation_replace import reference_replacement_disabled_reason
+def test_a_teacher_replacement_of_a_held_pencil_result_reruns_the_same_edit():
+    """AC-10 (ticket 07): the same source picture and redacted text, edited once more in ADR-080's
+    replacement slot, never a fresh text-to-image draw. The new result waits for keep or old again."""
+    from contracts.story_memory import ReviewContext
+    from pipeline.moderation_replace import moderation_replace
 
     state = _choice_state("kept").model_copy(update={"reference_pencil_choice": None})
     state.characters[0].ref_moderation_status = "flagged"
-    assert reference_replacement_disabled_reason(state, "c0") == "replacement_source_unavailable"
+    state.pencil_uses[0].choice = "kept"   # a withdrawn clearance on a kept result is held again
+    state.cost.ref_retry_count = 1         # the edit spent a go
+    state.moderation_context.review = ReviewContext(
+        review_id="1f7a7b8e-634f-44d1-953b-4d583ba0d13a", kind="character_reference", subject_id="c0",
+        subject_version="held", return_node="char_ref_mod", resolution="replace", replacement=True)
+    supabase = MagicMock()
+    with patch("pipeline.char_bible.edit_image", return_value=b"again") as edit_mock, \
+         patch("pipeline.char_bible.get_signed_url", return_value="https://signed/ref-c0-1") as sign, \
+         patch("pipeline.char_bible.text_to_image") as t2i, \
+         patch("pipeline.char_bible.judge") as judge_mock, \
+         patch("pipeline.char_bible.get_supabase_client", return_value=supabase):
+        result = moderation_replace(state)
+
+    t2i.assert_not_called()
+    judge_mock.assert_not_called()
+    sign.assert_called_once_with("story-1/ref-c0-1.png")
+    edit_mock.assert_called_once_with(
+        "a red hat\n\nKeep everything else about the character, the art style and the plain "
+        "background exactly the same.", ["https://signed/ref-c0-1"])
+    assert _uploads(supabase) == [("story-1/ref-c0-3.png", b"again")]
+    c0 = next(c for c in result["characters"] if c.char_id == "c0")
+    assert (c0.canonical_ref_image, c0.ref_moderation_status, c0.ref_verdict) == ("story-1/ref-c0-3.png", None, None)
+    assert [v.image_path for v in c0.versions] == ["story-1/ref-c0-1.png"]
+    assert (result["cost"].image_count, result["cost"].ref_retry_count, result["cost"].ref_mod_retry_count) == (3, 1, 1)
+    assert (result["pencil_uses"][0].after_path, result["pencil_uses"][0].choice) == ("story-1/ref-c0-3.png", None)

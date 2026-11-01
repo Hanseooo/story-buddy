@@ -2,7 +2,7 @@
 
 **Status:** ready-for-agent
 **Type:** task
-**Progress:** open
+**Progress:** resolved
 **Blocked by:** `.scratch/ptd-child-creative-control/issues/06-character-pencil-at-reveal.md`
 
 **Parent:** `docs/specs/magic-pencil.md` (US-02)
@@ -50,3 +50,34 @@ Worker test, providers mocked; extend the replacement tests in `test_teacher_hol
 06.
 
 ## Comments
+
+## Answer (2026-11-02)
+
+Done. When the held reference is a pencil result (the `PencilUse` whose `after_path` is current),
+`replace_reference` makes one `edit_image` call with that use's redacted text plus
+`PENCIL_KEEP_CLAUSE` on its `before_path` picture. It makes no `text_to_image` or judge call. It
+spends ADR-080's slot (`ref_mod_retry_count` +1, `image_count` +1) and no child go. The use's
+`after_path` moves to the new picture, and `char_ref_mod` moderates it. On pass, the reveal offers
+keep/old. On flag, it holds again with `replacement_already_used`.
+`reference_replacement_disabled_reason` no longer refuses pencil results, so `teacher_review_detail`
+and `teacher_decision` both see the same slot and budget reasons.
+
+Deviations:
+- **The choice is reset.** A held pencil result that already has a choice can only be a kept result
+  whose clearance a teacher withdrew. The replacement is a new picture, so the child is asked keep/old
+  again and the row's earlier "kept" is cleared.
+- **No new log column.** The use's row (AC-22) now shows the replacement picture and its moderation
+  outcome. `record_pencil_uses` runs only at the reveal and hold projections, both after
+  `char_ref_mod`, so the row never shows the new picture with the old outcome. The replaced, flagged
+  picture is still in the first review's subject.
+- A fal refusal of the replacement edit propagates, as it does for every ADR-080 replacement.
+
+Checks: unit test of the replacement in `test_char_bible_node.py` (it replaces the ticket-06 test
+that pinned the refusal). Postgres integration test in `test_teacher_hold.py` for three cases:
+passes (keep/old, two goes left, row `passed`), flags again (new hold, `replacement_already_used`,
+row `flagged`), and budget (422 `image_budget_exhausted`, no edit). The integration cases went red
+on HEAD's code, and red again when the edit branch was switched off, falling back to the fresh draw.
+Full backend suite with the disposable DB: 1,675 passed, 101 skipped. The only failures are the six
+known `test_pdf_export` ones (native PDF `OSError`). No frontend change.
+
+Not done or not verified: no test for a fal refusal on the replacement edit. No browser pass.
