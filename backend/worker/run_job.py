@@ -25,7 +25,7 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
     """
     import providers
     from app.moderation_hold import (
-        StaleGeneration, active_author, book_pages, assert_current, connect, project_hold, record_pencil_uses,
+        StaleGeneration, active_author, book_on_completion, assert_current, connect, project_hold, record_pencil_uses,
         review_subject_bytes, teacher_classroom, validate_review_checkpoint,
     )
     from contracts.story_memory import ModerationContext, ReviewContext
@@ -262,6 +262,7 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
 
                     with conn.transaction():
                         assert_current(conn, job_id, epoch)
+                        image_count = state.cost.image_count
                         interrupts = [i for t in snapshot.tasks for i in t.interrupts]
                         if interrupts:
                             value = interrupts[0].value
@@ -286,16 +287,16 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                         else:
                             if snapshot.next or any(s.moderation_status not in ("passed", "teacher_allowed") for s in state.scenes):
                                 raise RuntimeError("incomplete_safety_checks")
-                            pages = book_pages(state)
+                            pages, image_count = book_on_completion(conn, job_id, state)
                             outcomes = [outcome(s) for s in state.scenes]
                             conn.execute("""update jobs set status='complete',current_stage='compose',pages=%s,
                               reveal='{}',image_count=%s,regen_count=%s,ref_retry_count=%s,scenes_total=%s,
                               scenes_passed=%s,scenes_failed=%s,scenes_unchecked=%s,usd_estimate=%s where id=%s""", (
-                                Jsonb(pages), state.cost.image_count, state.cost.regen_count, state.cost.ref_retry_count,
+                                Jsonb(pages), image_count, state.cost.regen_count, state.cost.ref_retry_count,
                                 len(state.scenes), outcomes.count("passed"), outcomes.count("failing"), outcomes.count("unchecked"),
-                                round(state.cost.image_count * 0.025, 4), job_id,
+                                round(image_count * 0.025, 4), job_id,
                             ))
-                        conn.execute("update jobs set image_count=%s where id=%s", (state.cost.image_count, job_id))
+                        conn.execute("update jobs set image_count=%s where id=%s", (image_count, job_id))
                 if decision:
                     conn.execute("update job_moderation_reviews set dispatch_state='consumed',dispatch_error_code=null where id=%s",
                                  (decision["id"],))

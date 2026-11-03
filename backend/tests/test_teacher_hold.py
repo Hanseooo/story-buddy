@@ -2070,6 +2070,100 @@ def test_a_book_that_changes_mid_edit_spends_only_for_an_image_it_got(monkeypatc
     assert row["image_count"] == (4 if changed == "before_the_edit" else 5)
 
 
+@pytest.mark.parametrize("result_safe", [True, False])
+def test_a_withdrawal_during_a_page_edit_ends_the_use_without_a_hold(monkeypatch, held_database, result_safe):
+    """Magic pencil review 2026-11-03 (SH-09, SH-07): a teacher withdrawal reopens the book while the edit
+    runs. The paid image is counted, but the use ends as stale: no pencil result hold on a book that is not
+    complete, and nothing left in progress to block the page tools once the book is finished again."""
+    import providers
+
+    book = _page_pencil_book(monkeypatch, held_database, result_safe=result_safe)
+
+    def withdrawn(*args):
+        providers.check_generation_fence()
+        book.conn.execute("""update jobs set status='awaiting_teacher',generation_epoch=generation_epoch+1,
+          pages='[]' where id=%s""", (book.job,))
+        book.conn.execute("""insert into job_moderation_reviews(id,job_id,kind,subject_id,subject_version,subject,
+          policy_version,settings_snapshot,classifier_evidence,return_node)
+          values (%s,%s,'scene_image','s1','v','{}','p','{}','[]','pending')""", (uuid4(), book.job))
+        return b"edited"
+
+    book.edit.side_effect = withdrawn
+    use_id = str(uuid4())
+    try:
+        assert book.client.post(f"/jobs/{book.job}/pages/s0/pencil", json={
+            "request_id": use_id, "text": "a hat", "source": book.paths["s0-a1"]}).status_code == 202
+        book.run()
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    use = book.conn.execute("""select reason,picture_moderation from job_picture_records where job_id=%s
+      and kind='pencil'""", (book.job,)).fetchone()
+    assert (use["reason"], use["picture_moderation"]) == ("stale", None)
+    assert book.conn.execute("""select count(*) from job_moderation_reviews where job_id=%s
+      and kind='page_pencil_result'""", (book.job,)).fetchone()["count"] == 0
+    assert book.conn.execute("select image_count from jobs where id=%s", (book.job,)).fetchone()["image_count"] == 5
+
+
+def _rerun(state, scene_id, path):
+    """The checkpoint after a withdrawal rerun redrew one page."""
+    return state.model_copy(update={"scenes": [s.model_copy(update={
+        "final_image_ref": path, "attempts": [*s.attempts, Attempt(image_ref=path, safety_eligibility="cleared")]})
+        if s.scene_id == scene_id else s for s in state.scenes]})
+
+
+def test_a_version_choice_survives_a_rerun_only_on_a_page_the_rerun_did_not_redraw(monkeypatch, held_database):
+    """Magic pencil review 2026-11-03 (SH-09, AC-15): a teacher withdrawal rebuilds `jobs.pages` from the
+    checkpoint. The child's version choice comes back on a page the rerun left alone, never on a redrawn one."""
+    from langgraph.checkpoint.postgres import PostgresSaver
+    from app.moderation_hold import book_on_completion
+
+    conn, child, classroom, job, _ = held_database
+    paths = _finished_feature_book(conn, child, classroom, job)
+    monkeypatch.setattr("pipeline.output_mod.get_signed_url", lambda path: path)
+    monkeypatch.setattr("pipeline.output_mod.classify_image_primary", MagicMock(return_value=True))
+    monkeypatch.setattr("pipeline.output_mod.classify_image_backstop", MagicMock(return_value=True))
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+    try:
+        with TestClient(app) as client:
+            assert client.post(f"/jobs/{job}/pages/s0/versions/open").status_code == 200
+            assert client.post(f"/jobs/{job}/pages/s0/version",
+                               json={"version_id": "s0-attempt-0", "source": paths["s0-a1"]}).status_code == 200
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    state = StoryMemory.model_validate(
+        PostgresSaver(conn).get_tuple({"configurable": {"thread_id": job}}).checkpoint["channel_values"])
+
+    pages, _ = book_on_completion(conn, job, _rerun(state, "s1", f"{job}/s1-2.png"))
+    assert [p["image_path"] for p in pages] == [paths["s0-a0"], f"{job}/s1-2.png"]
+    pages, _ = book_on_completion(conn, job, _rerun(state, "s0", f"{job}/s0-4.png"))
+    assert [p["image_path"] for p in pages] == [f"{job}/s0-4.png", paths["s1-a0"]]
+
+
+def test_a_kept_page_pencil_result_and_its_image_survive_a_rerun(monkeypatch, held_database):
+    """Magic pencil review 2026-11-03 (SH-09, SH-04): a kept page pencil result comes back after a rerun,
+    and its paid image stays in the book's image count, which the checkpoint never learned."""
+    from langgraph.checkpoint.postgres import PostgresSaver
+    from app.moderation_hold import book_on_completion
+
+    book = _page_pencil_book(monkeypatch, held_database)
+    use_id = str(uuid4())
+    after = f"{book.job}/s0-pencil-{use_id}.png"
+    try:
+        assert book.client.post(f"/jobs/{book.job}/pages/s0/pencil", json={
+            "request_id": use_id, "text": "a hat", "source": book.paths["s0-a1"]}).status_code == 202
+        book.run()
+        assert book.client.post(f"/jobs/{book.job}/pages/s0/pencil/choice", json={
+            "use_id": use_id, "choice": "kept", "source": after}).status_code == 200
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    state = StoryMemory.model_validate(
+        PostgresSaver(book.conn).get_tuple({"configurable": {"thread_id": book.job}}).checkpoint["channel_values"])
+
+    pages, image_count = book_on_completion(book.conn, book.job, _rerun(state, "s1", f"{book.job}/s1-2.png"))
+    assert pages[0] == {"scene_id": "s0", "caption": "The dog ran.", "image_path": after, "other_versions": True}
+    assert image_count == 1   # the checkpoint's 0 plus the one page pencil edit
+
+
 def test_other_versions_wait_while_a_page_pencil_is_in_progress(monkeypatch, held_database):
     """Magic pencil ticket 10 (SH-07): one page change per book at a time, so a version choice cannot
     make a paid pencil result stale while it is drawing."""

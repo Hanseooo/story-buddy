@@ -14,6 +14,30 @@ instead of repeating it.
 
 ---
 
+## Magic pencil code review · 2026-11-03 · Child page changes survive a withdrawal rerun
+
+### Code
+
+- Migration `0032_page_choice_records.sql` (apply after 0031): `job_picture_records.kind` allows `page`,
+  one row per scene recording the child's current page change and the checkpoint picture it replaced.
+- `app/moderation_hold.py`: a version choice and a kept page pencil result record the page.
+  `book_on_completion` builds `jobs.pages` and `image_count` when a run completes. After a teacher
+  withdrawal reruns a finished book, a recorded change comes back only on a page the rerun did not
+  redraw and only if the picture still passes its choice's check. Page pencil images stay in the count.
+- `worker/page_pencil.py`: an edit that finishes after a withdrawal reopened the book ends as `stale`
+  instead of holding on a book that is not complete (which blocked every page tool).
+- `pipeline/char_bible.py`: the US-07 baseline redraw calls `check_image_budget()` first.
+
+### Docs
+
+- ADR-082 status and its `ADRs.md` row record what is implemented and what is pending. Spec SH-09 and
+  tickets 03, 09 and 10 record the fixes.
+
+### Checks
+
+- Migrations 0001–0032 applied in order to a scratch database: clean. Full backend suite against it:
+  see the review note in ticket 10.
+
 ## Magic pencil ticket 11 · 2026-11-03 · Held page pencil result: replacement re-runs the edit
 
 ### Code

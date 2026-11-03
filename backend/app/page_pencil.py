@@ -16,7 +16,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.auth import get_current_user
 from app.config import IMAGE_BUDGET, MAX_PAGE_PENCILS, MAX_PENCIL_CHARS
 from app.moderation_hold import (PRIVATE, active_author, checked_pencil_text, command_conflict, command_state, connect,
-                                 finished_book, finished_page, product_job, review_subject_bytes, teacher_classroom)
+                                 finished_book, finished_page, product_job, record_page_choice, review_subject_bytes,
+                                 teacher_classroom)
 from app.moderation_policy import TEACHER_MODERATION_CRITERIA, TEACHER_MODERATION_POLICY_VERSION
 from app.queue import get_queue
 
@@ -218,7 +219,7 @@ def page_pencil_choice(job_id: UUID, scene_id: str, body: PagePencilChoice, resp
     with connect() as conn, conn.transaction():
         product_job(conn, job_id, user_id)
         job = conn.execute("select * from jobs where id=%s for update", (job_id,)).fetchone()
-        _, current = finished_page(conn, job, scene_id, user_id)
+        scene, current = finished_page(conn, job, scene_id, user_id)
         use = conn.execute("""select * from job_picture_records where job_id=%s and kind='pencil'
           and source='page_pencil' and version_id=%s and target_id=%s for update""",
                            (job_id, use_id, scene_id)).fetchone()
@@ -240,6 +241,7 @@ def page_pencil_choice(job_id: UUID, scene_id: str, body: PagePencilChoice, resp
             if body.choice == "kept":
                 conn.execute("update jobs set pages=%s,approved_at=null,rejected_at=null where id=%s",
                              (Jsonb(pages), job_id))
+                record_page_choice(conn, job_id, scene, use["image_path"], "page_pencil")
             else:
                 conn.execute("update jobs set pages=%s where id=%s", (Jsonb(pages), job_id))
     if stale:

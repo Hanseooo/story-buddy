@@ -98,3 +98,16 @@ Not done: the `playwright-cli` pass for US-04. It needs a signed-in synthetic ac
 Left as they are:
 - A result waiting for keep-or-old blocks the book's next pencil and is not yet another version. The spec's "child leaves before choosing" row says it should be, so this needs the owner.
 - `page_pencil_decision` repeats much of `teacher_decision`'s command checks. It checks the active author before the replay, as `teacher_decision` does.
+
+**2026-11-03 — code review (`5197353..HEAD`).** Fixed, red then green: a teacher withdrawal that reopened the book
+while the edit ran left the worker writing the result onto a book that was no longer `complete`. A flagged result's
+`page_pencil_result` insert hit `job_moderation_one_open` and rolled back, leaving the use `drawing`, which blocked every
+page tool. A safe result was marked `passed` on the reopened book. The worker now ends the use as `stale` when the book is
+not `complete` at the final step. The paid image is still counted. Checked against a scratch database with migrations
+0001–0032 applied: all apply cleanly in order. Full `uv run pytest` against it: 1711 passed, 101 skipped, the same six
+PDF export failures as ticket 11's run (`.scratch/magic-pencil-review-backend-full.txt`).
+Fixed after the owner chose "record and restore": a withdrawal on a complete book rebuilt `jobs.pages` from the checkpoint,
+losing version choices and kept page pencil results (ticket 09's known gap), and reset `image_count` to the checkpoint's,
+dropping paid page pencil images. Each page change is now a `kind='page'` row (migration 0032, apply after 0031).
+`book_on_completion` restores it only on a page the rerun did not redraw and only if the picture passes its choice's
+check again, and adds page pencil images to the count. Red then green, and each test went red again with its check removed.

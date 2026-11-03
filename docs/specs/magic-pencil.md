@@ -242,7 +242,10 @@ teacher-review mode a flag already holds and a teacher replacement redraws from
   and not stopped. An edit updates `jobs.pages` for that page and the delivery guard's eligibility for
   the new picture. Page edits run in a small worker task outside the graph that reuses `edit_image`
   and output moderation; `jobs.pages` is the book. The checkpointed `StoryMemory` is not changed: it
-  stays the pipeline's record, and the US-06 log holds the edits (OD-01).
+  stays the pipeline's record, and the US-06 log holds the edits (OD-01). A teacher withdrawal reruns the
+  book from the checkpoint; each child page change (one `kind='page'` row per scene, migration 0032)
+  then comes back only on a page the rerun did not redraw, and only if the picture still passes the
+  check its choice passed. Page pencil images stay in `image_count` (code review, 2026-11-03).
 - **SH-10 — Child's words as written.** Pencil text is sent to the edit model as the child wrote it
   (after redaction), in any language; it is never translated or rewritten by another model (OD-06).
 

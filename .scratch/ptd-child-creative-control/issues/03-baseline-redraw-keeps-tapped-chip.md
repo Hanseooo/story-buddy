@@ -76,3 +76,7 @@ flags keep the 3-draw re-mint; teacher-review is gated out. Tests: two at the `c
 
 Not done: the replay path, like `mint_reference` and `_mint_targeted`, does not call
 `check_image_budget()` itself (AGENTS.md invariant); inherited, left as is.
+
+**2026-11-03 — code review.** Fixed, red then green: `_redraw_recorded` now calls `check_image_budget()` before its draw,
+covering this replay and the ADR-080 replacement. The untargeted `mint_reference` re-mint still has no check of its
+own; that predates this epic and is left as it is.

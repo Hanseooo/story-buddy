@@ -999,6 +999,43 @@ def book_pages(state: StoryMemory) -> list[dict]:
             for s in state.scenes]
 
 
+def record_page_choice(conn, job_id: str, scene, image_path: str, source: str) -> None:
+    """SH-09: the child's page change outlives a rebuild of `jobs.pages`. `before_path` is the
+    checkpoint's picture of the page the change was made over (migration 0032)."""
+    conn.execute("""insert into job_picture_records(job_id,kind,target_id,version_id,image_path,source,before_path)
+      values (%s,'page',%s,%s,%s,%s,%s) on conflict (job_id,kind,version_id) do update set
+      image_path=excluded.image_path,source=excluded.source,before_path=excluded.before_path""",
+                 (job_id, scene.scene_id, scene.scene_id, image_path, source, scene.final_image_ref))
+
+
+def book_on_completion(conn, job_id: str, state: StoryMemory) -> tuple[list[dict], int]:
+    """`jobs.pages` and `image_count` when a run completes. A teacher withdrawal reruns a finished book
+    from the checkpoint, which never learns the child's page changes (OD-01). Each one comes back only
+    on a page the rerun did not redraw, and only if the picture passes the check its choice passed.
+    Page pencil images were paid after the checkpoint, so they are added to its count."""
+    scenes = {s.scene_id: s for s in state.scenes}
+    pencils = conn.execute("""select * from job_picture_records where job_id=%s and kind='pencil'
+      and source='page_pencil'""", (job_id,)).fetchall()
+
+    def allowed(record) -> bool:
+        scene = scenes.get(record["target_id"])
+        if scene is None or scene.final_image_ref != record["before_path"]:
+            return False
+        if record["source"] == "page_pencil":
+            return any(u["target_id"] == scene.scene_id and u["image_path"] == record["image_path"]
+                       and u["reason"] is None and u["choice"] is not None
+                       and u["picture_moderation"] in ("passed", "teacher_allowed") for u in pencils)
+        return any(a.image_ref == record["image_path"] and page_version_cleared(conn, job_id, scene, i)
+                   for i, a in enumerate(scene.attempts))
+
+    chosen = {r["target_id"]: r["image_path"] for r in conn.execute(
+        "select * from job_picture_records where job_id=%s and kind='page'", (job_id,)).fetchall() if allowed(r)}
+    pages = [{**p, "image_path": chosen[p["scene_id"]], "other_versions": True} if p["scene_id"] in chosen else p
+             for p in book_pages(state)]
+    paid = sum(u["image_path"] is not None for u in pencils) + sum(u["replaced_path"] is not None for u in pencils)
+    return pages, state.cost.image_count + paid
+
+
 def page_version_id(scene, index: int) -> str:
     return f"{scene.scene_id}-attempt-{index}"
 
@@ -1120,6 +1157,7 @@ def choose_page_version(job_id: UUID, scene_id: str, body: PageVersionChoice, re
             pages = [{**p, "image_path": chosen} if isinstance(p, dict) and p.get("scene_id") == scene_id else p
                      for p in job["pages"]]
             conn.execute("update jobs set pages=%s,approved_at=null,rejected_at=null where id=%s", (Jsonb(pages), job_id))
+            record_page_choice(conn, job_id, scene, chosen, "scene_attempt" if index is not None else "page_pencil")
     response.headers.update(PRIVATE)
     return {"image_path": chosen}
 

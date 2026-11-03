@@ -102,6 +102,12 @@ def run_page_pencil(job_id: str, use_id: str) -> None:
     digest = None if safe else hashlib.sha256(providers.download_book_image(path)).hexdigest()
     with connect() as conn, conn.transaction():
         job = conn.execute("select * from jobs where id=%s for update", (job_id,)).fetchone()
+        if job["status"] != "complete":
+            # A withdrawal reopened the book mid-edit. The result is never shown and holds nothing, and
+            # the use ends so the page tools are free once the book is finished again (SH-07).
+            conn.execute("update job_picture_records set reason='stale' where id=%s and picture_moderation is null",
+                         (use["id"],))
+            return
         if not conn.execute("""update job_picture_records set picture_moderation=%s where id=%s
           and picture_moderation is null""", ("passed" if safe else "flagged", use["id"])).rowcount or safe:
             return

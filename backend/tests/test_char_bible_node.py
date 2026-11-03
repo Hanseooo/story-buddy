@@ -1342,6 +1342,24 @@ def test_a_flagged_tap_in_baseline_is_redrawn_once_with_the_tapped_chip():
     assert result["cost"].image_count == 4   # 2 initial + 1 tap + 1 redraw
 
 
+def test_the_baseline_redraw_of_a_tap_checks_the_image_budget_first():
+    """magic-pencil SH-04, AGENTS.md "every spend site calls check_image_budget first": the replay
+    is a paid draw, so a book at the 55-image budget draws nothing."""
+    state = _targeted_state(attribute="orange sock")
+    with patch("pipeline.char_bible.text_to_image", return_value=b"tap"), \
+         patch("pipeline.char_bible.judge", return_value=_verdict(True, ["dog"])), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+        flagged = _flag(state, char_bible(state))
+    flagged = flagged.model_copy(update={"cost": flagged.cost.model_copy(update={"image_count": 55})})
+
+    with patch("pipeline.char_bible.text_to_image", return_value=b"redraw") as t2i, \
+         patch("pipeline.char_bible.judge", return_value=_verdict(True, ["dog"])), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()), \
+         pytest.raises(RuntimeError, match="image budget exceeded"):
+        char_bible(flagged)
+    t2i.assert_not_called()
+
+
 def test_a_flagged_untapped_reference_in_baseline_still_gets_the_untargeted_re_mint():
     """magic-pencil AC-25. No tap, no recorded prompt: today's 3-draw path stands."""
     flagged = _char("c0", "the dog").model_copy(update={"ref_moderation_status": "flagged"})

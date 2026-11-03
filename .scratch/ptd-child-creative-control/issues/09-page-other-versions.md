@@ -81,8 +81,9 @@ teacher-allowed final, or (feature jobs only) a cleared or opened-and-passed att
 transaction, and the confirm is browser-side only, so an approval landing mid-change is still cleared.
 Decisions taken without the owner: a teacher-allowed attempt that is no longer current is never offered (ticket
 04's rule); the control is in the Pages view only, not the Scroll view.
-Known gap, not fixed: a teacher withdrawal of a scene or text clearance on a complete book rebuilds
-`jobs.pages` from the checkpoint finals, so the child's page choices are lost (safe, but the child must choose again).
+Known gap, fixed 2026-11-03 (code review, see ticket 10): a teacher withdrawal of a scene or text clearance on a complete
+book rebuilt `jobs.pages` from the checkpoint finals, so the child's page choices were lost. They now come back on pages
+the rerun did not redraw.
 Not done: the `playwright-cli` pass on a seeded classroom.
 
 **2026-11-02 — review.** Fixed: `book_pages` counted teacher-allowed attempts that are never offered, so a page

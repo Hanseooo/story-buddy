@@ -3,7 +3,8 @@
 **Status:** Accepted (2026-11-01) · the owner opened the ADR-029 §2 / ADR-069 conflict gate, took every
 recommendation in the interview and the spec, and approved the spec. Synthetic-only and off by default;
 ethics re-review before real children; pencil free text ships only after `ptd-moderation-calibration`
-audit 01. Not implemented.
+audit 01. Implemented behind the setting (tickets 03–11, 2026-11-03); migrations 0027–0032 not yet
+applied and the US-01–US-05 browser pass pending.
 
 **Amends:** ADR-029 §2 (what a reveal change is, and the unconditional overwrite) and ADR-069 (chips are
 the only child input; the description is never extended). Specified by

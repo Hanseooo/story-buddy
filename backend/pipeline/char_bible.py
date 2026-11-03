@@ -562,6 +562,7 @@ def _settle_pencil(state: StoryMemory) -> dict:
 
 def _redraw_recorded(state: StoryMemory, char: Character, n: int) -> tuple[str, RefVerdict | None]:
     """One draw from `char.ref_generation_prompt`, judged and uploaded at suffix `n`."""
+    check_image_budget(state.cost.image_count)
     description = filtered_description(char.description, state.style.prompt_fragment or settings.default_style_fragment)
     image = text_to_image(char.ref_generation_prompt, negative_extra=_reference_negative(description))
     verdict = _judge_reference(JUDGE_PROMPT.format(subject=_describe(description, char.name, notes=False)), image, char.char_id, 1)
