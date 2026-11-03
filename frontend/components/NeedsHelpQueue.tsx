@@ -342,7 +342,9 @@ function ResolveSubject({ jobId, detail, inspected, busy, onPending }: {
       } else if (current.dispatch_state === "pending" || current.dispatch_state === "failed") {
         setMessage("Your decision is saved. Delivery is pending. Choose Continue story to retry it.");
       } else {
-        setOutcome(page ? (action === "stop" ? "Change stopped. The book is unchanged." : "Change allowed. The child can now see it.")
+        setOutcome(page ? (action === "stop" ? "Change stopped. The book is unchanged."
+          : action === "replace" ? "Replacement requested. The new picture is checked before the child sees it."
+          : "Change allowed. The child can now see it.")
           : current.status === "complete" ? "Story complete" : current.status === "awaiting_teacher"
           ? "Story waiting for teacher help" : ["queued", "running"].includes(current.status)
             ? "Story continuing" : `Current story status: ${String(current.status).replaceAll("_", " ")}`);
@@ -385,14 +387,18 @@ function ResolveSubject({ jobId, detail, inspected, busy, onPending }: {
         <button className={control} disabled={busy || pending || !detail.ready || !inspected}
           onClick={() => void decide("stop")}>Stop this change</button>
       </>}
-      {!submitted && !themes && !pencil && detail.kind !== "story_text" && detail.kind !== "title" && <>
-        <p>{detail.kind === "character_reference"
+      {!submitted && !themes && (!pencil || detail.kind === "page_pencil_result") && detail.kind !== "story_text" && detail.kind !== "title" && <>
+        <p>{detail.kind === "page_pencil_result"
+          ? "A replacement runs the same change on the same page picture once more. It uses one picture allowance and receives fresh checks. Other details may change."
+          : detail.kind === "character_reference"
           ? "A replacement keeps the character description, style and any chosen emphasis. It uses the book’s one reference replacement and receives fresh checks. Other details may change."
           : "A replacement keeps the scene, approved references and style. It uses one remaining picture allowance and receives fresh checks. Other details may change."}</p>
         {!detail.replacement_available && <p id="replacement-unavailable">{detail.replacement_disabled_reason === "image_budget_exhausted"
           ? "The image budget is used up. You can still inspect, leave waiting, allow or stop this story."
           : detail.replacement_disabled_reason === "replacement_already_used"
-            ? `${detail.kind === "character_reference" ? "This book has used its reference replacement" : "This scene has used its replacement"}. You can still inspect, leave waiting, allow or stop this story.`
+            ? detail.kind === "page_pencil_result"
+              ? "This change has used its replacement. You can still inspect, leave waiting, allow or stop this change."
+              : `${detail.kind === "character_reference" ? "This book has used its reference replacement" : "This scene has used its replacement"}. You can still inspect, leave waiting, allow or stop this story.`
             : detail.replacement_disabled_reason === "dependent_scenes_exist"
               ? "Story pictures already depend on this reference. You can allow this exact reference, leave waiting or stop and start a new story."
               : "Replacement is unavailable. Refresh story status or leave this story waiting."}</p>}

@@ -25,7 +25,7 @@ rejected page image should look, and a verdict on whether custom prompts are a g
 | 08 | [Kept character change reaches later pages](issues/08-kept-change-reaches-later-pages.md) | task | open | 06 |
 | 09 | [Other versions of a page on the finished book](issues/09-page-other-versions.md) | task | done | 04 |
 | 10 | [Page magic pencil on the finished book](issues/10-page-pencil-on-finished-book.md) | task | done | 09 |
-| 11 | [Held page pencil result: replacement re-runs the edit](issues/11-held-page-pencil-replacement.md) | task | open | 10 |
+| 11 | [Held page pencil result: replacement re-runs the edit](issues/11-held-page-pencil-replacement.md) | task | done | 10 |
 
 **Build tickets (2026-11-01).** Cut from [`docs/specs/magic-pencil.md`](../../docs/specs/magic-pencil.md).
 Owner rulings at breakdown: OD-07 (page pencil holds reuse `job_moderation_reviews`, job stays
@@ -66,3 +66,7 @@ a request-only stop. Migration 0029. No browser pass.
 **07 (2026-11-02, resolved).** [Answer](issues/07-held-character-pencil-replacement.md#answer-2026-11-02):
 a teacher replacement of a held pencil result re-runs the same edit on the same source picture in
 ADR-080's slot; the new result is moderated and offered for keep/old again. No schema change.
+
+**11 (2026-11-03, done).** [Comment](issues/11-held-page-pencil-replacement.md#comments): a teacher
+replacement of a held page result re-runs the same edit once; the slot is the log's new `replaced_path`
+(migration 0031, owner-approved). No browser pass.

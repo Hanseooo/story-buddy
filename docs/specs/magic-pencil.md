@@ -235,6 +235,9 @@ teacher-review mode a flag already holds and a teacher replacement redraws from
   `source='page_pencil'`). Its holds are `job_moderation_reviews` kinds `page_pencil_text` and
   `page_pencil_result` on a `complete` job (OD-07). They are never a `ReviewContext` in the checkpoint,
   and they do not hide the book, block teacher approval or pause anything.
+- **Page pencil replacement (ticket 11).** A held page result is replaced once per use, counted from
+  the log's `replaced_path` (the held picture), not checkpoint attempts. The same edit runs again on
+  `before_path` with the stored text and spends one image, not another page pencil.
 - **SH-09 — Book edits after completion.** Page tools appear only on a `complete` book that is not held
   and not stopped. An edit updates `jobs.pages` for that page and the delivery guard's eligibility for
   the new picture. Page edits run in a small worker task outside the graph that reuses `edit_image`
@@ -272,7 +275,7 @@ teacher-review mode a flag already holds and a teacher replacement redraws from
 | "Draw again" replaces a picture the child liked | The old picture is another version; picking it costs nothing | AC-02, AC-05 |
 | An earlier picture was flagged or withdrawn | Never offered as a version | AC-02 |
 | An earlier picture was flagged, then teacher-allowed | Not kept as a version: a teacher can withdraw only the current picture (decided 2026-11-01, ticket 04) | AC-02 |
-| Held pencil result: teacher requests a replacement | The same edit runs once more in ADR-080's replacement slot | AC-10, AC-18 |
+| Held pencil result: teacher requests a replacement | The same edit runs once more: a character result in ADR-080's per-book slot, a page result once per use (ticket 11) | AC-10, AC-18 |
 | Held page pencil result: teacher stops it | Only the request ends; the book stays | AC-18 |
 | Baseline job: flag on a tapped redraw | One redraw from the recorded prompt, chip kept | AC-23 |
 | Baseline job: that redraw flags too | Job fails as today | AC-24 |

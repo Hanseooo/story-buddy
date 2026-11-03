@@ -46,7 +46,9 @@ def run_page_pencil(job_id: str, use_id: str) -> None:
         path = use["image_path"]
         if path is None:
             page = next((p for p in job["pages"] or [] if isinstance(p, dict) and p.get("scene_id") == use["target_id"]), None)
-            if page is None or page["image_path"] != use["before_path"] or pencils_spent(page_uses(conn, job_id)) >= MAX_PAGE_PENCILS:
+            # A teacher replacement re-runs a go already spent (ticket 11), so only a first edit counts here.
+            spent = use["replaced_path"] is None and pencils_spent(page_uses(conn, job_id)) >= MAX_PAGE_PENCILS
+            if page is None or page["image_path"] != use["before_path"] or spent:
                 conn.execute("update job_picture_records set reason='stale' where id=%s", (use["id"],))
                 return
     if path is None:
@@ -87,7 +89,8 @@ def run_page_pencil(job_id: str, use_id: str) -> None:
             return
         finally:
             providers._generation_fence.reset(token)
-        path = f"{job_id}/{use['target_id']}-pencil-{use_id}.png"
+        # A replacement never overwrites the held picture its review is bound to.
+        path = f"{job_id}/{use['target_id']}-pencil-{use_id}{'-replacement' if use['replaced_path'] else ''}.png"
         get_supabase_client().storage.from_(BUCKET).upload(path, image, {"content-type": "image/png", "upsert": "true"})
         with connect() as conn, conn.transaction():
             if conn.execute("update job_picture_records set image_path=%s where id=%s and image_path is null",

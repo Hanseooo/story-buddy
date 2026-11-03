@@ -33,8 +33,8 @@
   },
   "classifier_evidence": [],
   "ready": true,
-  "replacement_available": false,
-  "replacement_disabled_reason": "replacement_source_unavailable",
+  "replacement_available": true,
+  "replacement_disabled_reason": null,
   "dispatch_state": null,
   "withdraws_review_id": null,
   "pictures": [

@@ -47,8 +47,8 @@ class PagePencilChoice(BaseModel):
     source: str = Field(max_length=1000)
 
 
-def task_id(job_id: str, use_id: str) -> str:
-    return f"page-pencil-{job_id}-{use_id}"
+def task_id(job_id: str, use_id: str, replacement: bool = False) -> str:
+    return f"page-pencil-{job_id}-{use_id}" + ("-replacement" if replacement else "")
 
 
 def use_state(row: dict) -> str:
@@ -78,8 +78,9 @@ def pencil_in_progress(conn, job_id: str) -> bool:
 
 def pencils_spent(uses: list[dict]) -> int:
     """SH-04: a go is spent when an image came back and was checked. A refusal or a classifier
-    error spends nothing."""
-    return sum(u["image_path"] is not None and u["picture_moderation"] is not None for u in uses)
+    error spends nothing. A teacher replacement re-runs a spent go, so it spends no other."""
+    return sum((u["image_path"] is not None and u["picture_moderation"] is not None)
+               or u["replaced_path"] is not None for u in uses)
 
 
 def disabled_reason(job: dict, uses: list[dict]) -> str | None:
@@ -90,16 +91,29 @@ def disabled_reason(job: dict, uses: list[dict]) -> str | None:
     return None
 
 
-def enqueue_edit(job_id: str, use_id: str) -> None:
-    """One RQ job per use. A retry of a task that died re-runs it; a live one is left alone."""
+def page_replacement_disabled_reason(job: dict, kind: str, use: dict | None) -> str | None:
+    """AC-18: a held result is replaced once, by the same edit, within the image budget. The teacher
+    dialog and the decision both ask here, so they cannot disagree."""
+    if kind != "page_pencil_result" or use is None or not use["before_path"]:
+        return "replacement_source_unavailable"
+    if use["replaced_path"] is not None:
+        return "replacement_already_used"
+    if (job["image_count"] or 0) >= IMAGE_BUDGET:
+        return "image_budget_exhausted"
+    return None
+
+
+def enqueue_edit(job_id: str, use_id: str, replacement: bool = False) -> None:
+    """One RQ job per edit of a use. A retry of a task that died re-runs it; a live one is left alone.
+    A replacement is its own task, since the first one stays in RQ's registry after it finished."""
     from rq.exceptions import DuplicateJobError
 
     queue = get_queue()
+    key = task_id(job_id, use_id, replacement)
     try:
-        queue.enqueue("worker.page_pencil.run_page_pencil", job_id, use_id,
-                      job_id=task_id(job_id, use_id), unique=True)
+        queue.enqueue("worker.page_pencil.run_page_pencil", job_id, use_id, job_id=key, unique=True)
     except DuplicateJobError:
-        existing = queue.fetch_job(task_id(job_id, use_id))
+        existing = queue.fetch_job(key)
         if existing and existing.get_status() == "failed":
             existing.requeue()
 
@@ -113,9 +127,9 @@ def child_view(row: dict, failed: bool = False) -> dict:
             "after_path": row["image_path"] if state in ("choice", "kept", "old") else None}
 
 
-def task_failed(job_id: str, use_id: str) -> bool:
+def task_failed(job_id: str, use: dict) -> bool:
     try:
-        existing = get_queue().fetch_job(task_id(job_id, use_id))
+        existing = get_queue().fetch_job(task_id(job_id, use["version_id"], use["replaced_path"] is not None))
     except Exception:
         return False
     return existing is None or existing.get_status() == "failed"
@@ -131,7 +145,7 @@ def page_pencil_status(job_id: UUID, response: Response, user=Depends(get_curren
     left = max(MAX_PAGE_PENCILS - pencils_spent(uses), 0)
     response.headers.update(PRIVATE)
     return {"pencils_left": left, "disabled_reason": disabled_reason(job, uses),
-            "uses": [child_view(u, use_state(u) == "drawing" and task_failed(job_id, u["version_id"]))
+            "uses": [child_view(u, use_state(u) == "drawing" and task_failed(job_id, u))
                      for u in uses]}
 
 
@@ -163,8 +177,8 @@ def page_pencil(job_id: UUID, scene_id: str, body: PagePencilRequest, response: 
             with conn.transaction():
                 admit(conn)
     if existing is not None:   # SH-08: a repeat of this request spends nothing more.
-        if use_state(existing) == "drawing" and task_failed(job_id, use_id):
-            enqueue_edit(job_id, use_id)   # the retry after a task that died (a closed tab never needs one)
+        if use_state(existing) == "drawing" and task_failed(job_id, existing):
+            enqueue_edit(job_id, use_id, existing["replaced_path"] is not None)   # the retry after a task that died (a closed tab never needs one)
         response.headers.update(PRIVATE)
         return child_view(existing)
 
@@ -238,7 +252,7 @@ def page_pencil_decision(job_id: str, user_id: str, body, response: Response) ->
     """AC-17, AC-18, SH-05. A held page pencil request waits alone on a readable book, so a decision
     never changes the job. Allow on the text queues the edit; allow on a result offers keep-or-old.
     Stop ends only the request, also for a removed author, whose book is already out of the gallery.
-    Replacement of a held result is ticket 11."""
+    Replace on a result runs the same edit once more (ticket 11); its result is moderated again."""
     try:
         with connect() as conn, conn.transaction():
             job = conn.execute("select * from jobs where id=%s for update", (job_id,)).fetchone()
@@ -265,8 +279,10 @@ def page_pencil_decision(job_id: str, user_id: str, body, response: Response) ->
             if (review["decision"] is not None or job["status"] != "complete"
                     or job["generation_epoch"] != body.expected_epoch or review["subject_version"] != body.subject_version):
                 command_conflict("review_changed", job, review)
-            if body.action == "replace":
-                raise HTTPException(422, "replacement_not_available", headers=PRIVATE)
+            use = conn.execute("""select * from job_picture_records where job_id=%s and kind='pencil'
+              and source='page_pencil' and version_id=%s for update""", (job_id, review["subject_id"])).fetchone()
+            if body.action == "replace" and (reason := page_replacement_disabled_reason(job, review["kind"], use)):
+                raise HTTPException(422, reason, headers=PRIVATE)
             if body.action == "allow" and (body.policy_version != TEACHER_MODERATION_POLICY_VERSION
                                            or set(body.confirmed_criteria) != set(review["criteria"])):
                 command_conflict("policy_confirmation_required", job, review)
@@ -283,13 +299,17 @@ def page_pencil_decision(job_id: str, user_id: str, body, response: Response) ->
             update = {("page_pencil_text", "allow"): "text_moderation='teacher_allowed'",
                       ("page_pencil_text", "stop"): "text_moderation='teacher_stopped',reason='text_stopped'",
                       ("page_pencil_result", "allow"): "picture_moderation='teacher_allowed'",
-                      ("page_pencil_result", "stop"): "reason='result_stopped'"}[(review["kind"], body.action)]
+                      ("page_pencil_result", "stop"): "reason='result_stopped'",
+                      # The held picture moves to the log's replaced_path, which spends the slot.
+                      ("page_pencil_result", "replace"): "replaced_path=image_path,image_path=null,picture_moderation=null",
+                      }[(review["kind"], body.action)]
             conn.execute(f"""update job_picture_records set {update} where job_id=%s and kind='pencil'
               and source='page_pencil' and version_id=%s""", (job_id, review["subject_id"]))
     except psycopg.Error:
         raise HTTPException(503, "review_unavailable", headers=PRIVATE) from None
-    if (review["kind"], body.action) == ("page_pencil_text", "allow"):
-        enqueue_edit(job_id, review["subject_id"])
-    response.status_code = 202 if body.action == "allow" and review["kind"] == "page_pencil_text" else 200
+    queued = (review["kind"], body.action) in (("page_pencil_text", "allow"), ("page_pencil_result", "replace"))
+    if queued:
+        enqueue_edit(job_id, review["subject_id"], body.action == "replace")
+    response.status_code = 202 if queued else 200
     response.headers.update(PRIVATE)
     return command_state(job, review)

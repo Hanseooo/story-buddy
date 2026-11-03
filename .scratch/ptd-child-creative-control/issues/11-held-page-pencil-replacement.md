@@ -2,7 +2,7 @@
 
 **Status:** ready-for-agent
 **Type:** task
-**Progress:** open
+**Progress:** done
 **Blocked by:** `.scratch/ptd-child-creative-control/issues/10-page-pencil-on-finished-book.md`
 
 **Parent:** `docs/specs/magic-pencil.md` (US-04)
@@ -31,11 +31,11 @@ include pencil results (OD-01). The slot for a page pencil result is counted fro
 None for in-run scene holds.
 
 ## Acceptance criteria
-- [ ] Held page result, teacher replaces: one `edit_image` with the recorded source and text; no
+- [x] Held page result, teacher replaces: one `edit_image` with the recorded source and text; no
       `text_to_image`; one image spent (AC-18).
-- [ ] Slot used or `image_count` at `IMAGE_BUDGET`: replace unavailable with the reason in the dialog.
-- [ ] New result moderated; pass → keep/old for the child; flag → held again.
-- [ ] The log row records the replacement outcome (AC-22).
+- [x] Slot used or `image_count` at `IMAGE_BUDGET`: replace unavailable with the reason in the dialog.
+- [x] New result moderated; pass → keep/old for the child; flag → held again.
+- [x] The log row records the replacement outcome (AC-22).
 
 ## Guidance
 Keep `replacement_disabled_reason` the one function both `teacher_review_detail` and
@@ -50,3 +50,17 @@ API and worker tests, providers mocked.
 10.
 
 ## Comments
+
+**2026-11-03 — built.** Owner chose a schema column over counting `replace` decisions: migration
+`0031_page_pencil_replacement.sql` (apply after 0030) adds `job_picture_records.replaced_path`. A
+replace decision moves the held picture there and clears `image_path`/`picture_moderation`, so the
+ticket 10 worker re-runs the edit on `before_path` with the stored text. The RQ task id gets a
+`-replacement` suffix because the first task stays in RQ's registry after it finishes. The new
+picture is stored at `...-pencil-<use>-replacement.png`, so the held picture the review is bound to
+is never overwritten. `pencils_spent` counts a replaced use, so the child's count does not jump back
+during the redraw, and the worker's five-pencil check skips a replacement. A fal refusal on the
+replacement ends the use as `refused`; the go stays spent. The teacher dialog now shows the replace
+button for a held page result. Fixture `held-page-result.fixture.json` updated to the new detail
+values (`replacement_available: true`), matching the backend test's assertion for the same state.
+Checks: targeted backend and vitest green; backend full suite has the same 6 `test_pdf_export.py`
+failures as ticket 10's run. No `playwright-cli` pass (login wall).

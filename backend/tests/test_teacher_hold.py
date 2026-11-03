@@ -2202,6 +2202,90 @@ def test_a_flagged_page_pencil_result_holds_while_the_book_keeps_its_picture(mon
         app.dependency_overrides.pop(get_current_user, None)
 
 
+@pytest.mark.parametrize("second", ["passes", "flagged"])
+def test_a_teacher_replacement_of_a_held_page_result_reruns_the_same_edit(monkeypatch, held_database, second):
+    """Magic pencil ticket 11 (AC-18, AC-22): one more edit of the recorded source with the same text,
+    no fresh draw, one image spent. A pass is offered for keep-or-old; a flag holds again with the
+    slot used. The log row keeps the replaced picture. The held use is the book's fifth pencil, so the
+    replacement must not count it twice."""
+    book = _page_pencil_book(monkeypatch, held_database, result_safe=False)
+    job, client, conn, paths = book.job, book.client, book.conn, book.paths
+    for n in range(4):
+        conn.execute("""insert into job_picture_records(job_id,kind,target_id,version_id,image_path,source,
+          before_path,pencil_text,text_moderation,picture_moderation,choice)
+          values (%s,'pencil','s1',%s,%s,'page_pencil',%s,'a hat','cleared','passed','old')""",
+                     (job, str(uuid4()), f"{job}/s1-pencil-{n}.png", paths["s1-a0"]))
+    use_id = str(uuid4())
+    first, after = f"{job}/s0-pencil-{use_id}.png", f"{job}/s0-pencil-{use_id}-replacement.png"
+    route = f"/teacher/jobs/{job}/moderation-review"
+
+    def command(detail, action):
+        return {"review_id": detail["review_id"], "subject_version": detail["subject_version"],
+                "expected_epoch": detail["generation_epoch"], "request_id": str(uuid4()),
+                "policy_version": detail["current_policy_version"], "confirmed_criteria": detail["criteria"],
+                "confirmed": True, "action": action}
+
+    try:
+        assert client.post(f"/jobs/{job}/pages/s0/pencil", json={
+            "request_id": use_id, "text": "a hat", "source": paths["s0-a1"]}).status_code == 202
+        book.run()
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=book.teacher)
+        detail = client.get(route).json()
+        assert (detail["replacement_available"], detail["replacement_disabled_reason"]) == (True, None)
+        book.checks["result"] = second == "passes"
+        book.edit.return_value = b"edited again"
+        assert client.post(f"{route}/decision", json=command(detail, "replace")).status_code == 202
+        # Its own RQ task: the first one stays in the registry after it finished.
+        assert book.queue.enqueue.call_args.kwargs["job_id"] == f"page-pencil-{job}-{use_id}-replacement"
+        book.run()
+        assert book.edit.call_count == 2 and book.edit.call_args_list[1] == book.edit.call_args_list[0]
+        assert conn.execute("select image_count from jobs where id=%s", (job,)).fetchone()["image_count"] == 6
+        if second == "flagged":
+            again = client.get(route).json()
+            assert again["review_id"] != detail["review_id"] and again["kind"] == "page_pencil_result"
+            assert (again["replacement_available"], again["replacement_disabled_reason"]) == (False, "replacement_already_used")
+            refused = client.post(f"{route}/decision", json=command(again, "replace"))
+            assert (refused.status_code, refused.json()["detail"]) == (422, "replacement_already_used")
+            assert book.queue.enqueue.call_count == 2
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=book.child)
+        status = book.status()
+        assert status["pencils_left"] == 0
+        assert status["uses"][-1]["state"] == ("choice" if second == "passes" else "held")
+        if second == "passes":
+            assert client.get(f"/jobs/{job}/images/page-pencil-{use_id}").content == b"edited again"
+            assert client.post(f"/jobs/{job}/pages/s0/pencil/choice", json={
+                "use_id": use_id, "choice": "kept", "source": after}).status_code == 200
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    row = conn.execute("""select image_path,replaced_path,picture_moderation,reason from job_picture_records
+      where job_id=%s and kind='pencil' and version_id=%s""", (job, use_id)).fetchone()
+    assert dict(row) == {"image_path": after, "replaced_path": first, "reason": None,
+                         "picture_moderation": "passed" if second == "passes" else "flagged"}
+
+
+def test_a_held_page_result_cannot_be_replaced_at_the_image_budget(monkeypatch, held_database):
+    """Magic pencil ticket 11 (AC-18): the dialog and the decision give the same reason."""
+    book = _page_pencil_book(monkeypatch, held_database, result_safe=False)
+    job, client = book.job, book.client
+    route = f"/teacher/jobs/{job}/moderation-review"
+    try:
+        assert client.post(f"/jobs/{job}/pages/s0/pencil", json={
+            "request_id": str(uuid4()), "text": "a hat", "source": book.paths["s0-a1"]}).status_code == 202
+        book.run()
+        book.conn.execute("update jobs set image_count=55 where id=%s", (job,))
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=book.teacher)
+        detail = client.get(route).json()
+        assert (detail["replacement_available"], detail["replacement_disabled_reason"]) == (False, "image_budget_exhausted")
+        refused = client.post(f"{route}/decision", json={
+            "review_id": detail["review_id"], "subject_version": detail["subject_version"],
+            "expected_epoch": detail["generation_epoch"], "request_id": str(uuid4()), "action": "replace",
+            "policy_version": detail["current_policy_version"], "confirmed_criteria": detail["criteria"], "confirmed": True})
+        assert (refused.status_code, refused.json()["detail"]) == (422, "image_budget_exhausted")
+        assert book.queue.enqueue.call_count == 1 and book.edit.call_count == 1
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
 def test_using_the_old_picture_keeps_a_page_pencil_result_as_another_version(monkeypatch, held_database):
     """Magic pencil ticket 10 (AC-19): "Use the old one" leaves the page and its approval alone, and the
     result is offered later as another version of that page."""

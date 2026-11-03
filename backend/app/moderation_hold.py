@@ -221,9 +221,15 @@ def teacher_review_detail(job_id: UUID, response: Response, user=Depends(get_cur
                             "action": pending["decision"], "policy_version": pending["decision_policy_version"],
                             "confirmed_criteria": pending["confirmed_criteria"], "confirmed": True} if pending else None}
             pictures = review_pictures(conn, str(job_id), review)
-            retained = validate_review_checkpoint(conn, str(job_id), review)
-            replacement_reason = (replacement_disabled_reason(retained, review["kind"], review["subject_id"], job["image_count"] or 0)
-                                  if retained else "replacement_source_unavailable")
+            if review["kind"] in PAGE_PENCIL_KINDS:   # no checkpoint: the slot is in the pencil log (OD-01)
+                from app.page_pencil import page_replacement_disabled_reason
+                use = conn.execute("""select * from job_picture_records where job_id=%s and kind='pencil'
+                  and source='page_pencil' and version_id=%s""", (str(job_id), review["subject_id"])).fetchone()
+                replacement_reason = page_replacement_disabled_reason(job, review["kind"], use)
+            else:
+                retained = validate_review_checkpoint(conn, str(job_id), review)
+                replacement_reason = (replacement_disabled_reason(retained, review["kind"], review["subject_id"], job["image_count"] or 0)
+                                      if retained else "replacement_source_unavailable")
             author = conn.execute("select display_nickname from profiles where id=%s", (job["profile_id"],)).fetchone()
             return {"status": job["status"], "review_id": str(review["id"]),
                     "subject_id": review["subject_id"], "subject_version": review["subject_version"],

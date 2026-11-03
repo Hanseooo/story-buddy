@@ -14,6 +14,31 @@ instead of repeating it.
 
 ---
 
+## Magic pencil ticket 11 · 2026-11-03 · Held page pencil result: replacement re-runs the edit
+
+### Code
+
+- Migration `0031_page_pencil_replacement.sql` (apply after 0030): `job_picture_records.replaced_path`.
+  Non-null means the use's one replacement is spent; it keeps the held picture in the log (AC-22).
+- `app/page_pencil.py`: a teacher replace on a `page_pencil_result` moves the held picture to
+  `replaced_path` and enqueues the same edit as its own RQ task (`...-replacement`). One
+  `replacement_disabled_reason` serves the review detail and the decision: slot used, or
+  `image_count` at `IMAGE_BUDGET`. A replacement spends no second page pencil.
+- `worker/page_pencil.py`: the replacement edits the recorded source with the recorded text, stores
+  the result under a new path, spends one image and moderates it. Pass offers keep/old, flag holds again.
+- Teacher dialog shows "Request replacement picture" for a held page result, with the slot reason.
+
+### Docs
+
+- `magic-pencil.md`: where the replacement slot is counted.
+
+### Checks
+
+- Backend full suite: 1706 passed, 6 failed (the same `test_pdf_export.py` failures as ticket 10's run).
+- Frontend: 799 passed. Lint clean.
+
+---
+
 ## Magic pencil ticket 10 · 2026-11-02 · Page magic pencil on the finished book
 
 ### Code
