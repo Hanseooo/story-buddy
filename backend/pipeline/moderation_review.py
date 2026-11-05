@@ -13,11 +13,14 @@ def moderation_review(state: StoryMemory) -> dict:
     if review is None or review.resolution is not None:
         raise RuntimeError("invalid moderation review state")
     decision = interrupt({"kind": "moderation_review", "review_id": str(review.review_id)})
-    if (not isinstance(decision, dict) or decision.get("action") not in ("allow", "replace")
+    pencil = review.kind == "character_pencil_text"
+    if (not isinstance(decision, dict)
+            or decision.get("action") not in (("allow", "stop") if pencil else ("allow", "replace"))
             or decision.get("review_id") != str(review.review_id)
             or decision.get("subject_version") != review.subject_version
             or decision.get("generation_epoch", -1) <= state.moderation_context.generation_epoch
-            or review.kind not in ("scene_image", "character_reference", "story_text", "optional_themes")
+            or review.kind not in ("scene_image", "character_reference", "story_text", "optional_themes",
+                                   "character_pencil_text")
             or (review.kind in ("story_text", "optional_themes") and decision.get("action") != "allow")):
         raise RuntimeError("invalid_moderation_decision")
     replacing = decision["action"] == "replace"
@@ -25,6 +28,17 @@ def moderation_review(state: StoryMemory) -> dict:
         "generation_epoch": decision["generation_epoch"],
         "review": review.model_copy(update={"resolution": decision["action"], "replacement": replacing}),
     })
+    if pencil:
+        # ADR-082 Decision 2. Allow runs the edit in `char_bible`; stop ends only this request (OD-08).
+        use = next((u for u in state.pencil_uses if u.use_id == review.subject_id), None)
+        if (use is None or state.reference_pencil != use.use_id
+                or hashlib.sha256(use.text.encode("utf-8")).hexdigest() != review.subject_version):
+            raise RuntimeError("invalid_moderation_subject")
+        stopped = decision["action"] == "stop"
+        return {"moderation_context": context, "reference_pencil": None if stopped else use.use_id,
+                "pencil_uses": [u.model_copy(update={"text_moderation": "teacher_stopped", "reason": "text_stopped"}
+                                             if stopped else {"text_moderation": "teacher_allowed"})
+                                if u is use else u for u in state.pencil_uses]}
     if review.kind == "optional_themes":
         if not has_bound_theme_review(state):
             raise RuntimeError("invalid_moderation_subject")

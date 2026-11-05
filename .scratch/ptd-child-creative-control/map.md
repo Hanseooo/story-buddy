@@ -15,9 +15,58 @@ rejected page image should look, and a verdict on whether custom prompts are a g
 
 | # | Ticket | Type | Progress | Blocked by |
 |---|---|---|---|---|
-| 01 | [Audit: what a child can change today](issues/01-audit-child-creative-control.md) | research | open | — |
-| 02 | [Grill: appearance and page input → spec](issues/02-grill-creative-control-spec.md) | grilling | open | 01, `ptd-moderation-calibration` 01 |
+| 01 | [Audit: what a child can change today](issues/01-audit-child-creative-control.md) | research | resolved | — |
+| 02 | [Grill: appearance and page input → spec](issues/02-grill-creative-control-spec.md) | grilling | resolved | 01 (rank 2's audit gates shipping free text only, owner 2026-11-01) |
+| 03 | [Baseline: flagged "Draw again" redraw keeps the chip](issues/03-baseline-redraw-keeps-tapped-chip.md) | task | resolved | — |
+| 04 | ["Draw again" is undoable: character versions at the reveal](issues/04-draw-again-undoable-at-reveal.md) | task | resolved | — |
+| 05 | [Unchosen first-round pictures, moderated on open](issues/05-unchosen-draws-moderated-on-open.md) | task | resolved | — |
+| 06 | [Character magic pencil at the reveal](issues/06-character-pencil-at-reveal.md) | task | resolved | 04 |
+| 07 | [Held character pencil result: replacement re-runs the edit](issues/07-held-character-pencil-replacement.md) | task | resolved | 06 |
+| 08 | [Kept character change reaches later pages](issues/08-kept-change-reaches-later-pages.md) | task | open | 06 |
+| 09 | [Other versions of a page on the finished book](issues/09-page-other-versions.md) | task | done | 04 |
+| 10 | [Page magic pencil on the finished book](issues/10-page-pencil-on-finished-book.md) | task | done | 09 |
+| 11 | [Held page pencil result: replacement re-runs the edit](issues/11-held-page-pencil-replacement.md) | task | done | 10 |
+
+**Build tickets (2026-11-01).** Cut from [`docs/specs/magic-pencil.md`](../../docs/specs/magic-pencil.md).
+Owner rulings at breakdown: OD-07 (page pencil holds reuse `job_moderation_reviews`, job stays
+`complete`) and OD-08 (a stop on a held character pencil text ends only the request), recorded in
+spec §7. Release gates unchanged: off by default, synthetic-only, free text ships after rank 2 audit 01.
 
 ## Answers
 
-None yet.
+**01 (2026-11-01).** [Audit](issues/01-audit-child-creative-control.md#answer-2026-11-01-0-no-model-calls):
+today a child controls only 3 chip redraws at the reveal and no pages. Recommended: keep the
+child's chip through a moderation flag (A1), make taps edits of the reference if a $0.27 screen
+passes (A2), and a chips-only redraw of a finished page (P1), all behind the off-by-default
+setting. Free text and custom prompts: no-go for this milestone, mainly because a child's text
+would change the reference but not the description the pages are drawn from. Owner has not ruled.
+
+**02 (2026-11-01, resolved).** Spec approved and ADR-082 accepted. Owner opened the gate and agreed the magic pencil (other versions
+plus a write-a-change edit, at "Meet your characters" and on the finished book). Draft spec:
+[`docs/specs/magic-pencil.md`](../../docs/specs/magic-pencil.md). The A2 screen failed, 2 of 9.
+
+**03 (2026-11-01, resolved).** [Answer](issues/03-baseline-redraw-keeps-tapped-chip.md#answer-2026-11-01):
+a flagged "Draw again" picture in baseline is redrawn once from the tap's recorded prompt, chip kept;
+untapped flags and teacher-review unchanged.
+
+**04 (2026-11-01, resolved).** [Answer](issues/04-draw-again-undoable-at-reveal.md#answer-2026-11-01):
+behind `ENABLE_MAGIC_PENCIL` on teacher-review jobs, "Draw again" keeps the replaced picture and the
+child can choose it back at no image or go cost. Table `job_picture_records` added. No browser pass;
+teacher-allowed pictures are never kept as versions (a teacher can withdraw only the current one).
+
+**05 (2026-11-01, resolved).** [Answer](issues/05-unchosen-draws-moderated-on-open.md#answer-2026-11-01):
+feature jobs keep the mint's unchosen draws; opening "Other versions" moderates each once in the API.
+Flags hidden with no hold, errors not stored. Migration 0028. No browser pass.
+
+**06 (2026-11-02, resolved).** [Answer](issues/06-character-pencil-at-reveal.md#answer-2026-11-02):
+redacted, moderated pencil text edits the current picture once; the result is current, moderated by
+`char_ref_mod`, and keep/old blocks confirm until answered. Flagged text holds as its own kind with
+a request-only stop. Migration 0029. No browser pass.
+
+**07 (2026-11-02, resolved).** [Answer](issues/07-held-character-pencil-replacement.md#answer-2026-11-02):
+a teacher replacement of a held pencil result re-runs the same edit on the same source picture in
+ADR-080's slot; the new result is moderated and offered for keep/old again. No schema change.
+
+**11 (2026-11-03, done).** [Comment](issues/11-held-page-pencil-replacement.md#comments): a teacher
+replacement of a held page result re-runs the same edit once; the slot is the log's new `replaced_path`
+(migration 0031, owner-approved). No browser pass.

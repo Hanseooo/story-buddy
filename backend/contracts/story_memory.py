@@ -100,6 +100,51 @@ class Character(BaseModel):
     # asked to state its own prompt version. Additive → no schema_version bump (§8).
     ref_verdict_prompt_version: Optional[int] = None
     ref_generation_prompt: Optional[str] = None
+    # ADR-082 Decision 1: earlier pictures of this character the child can pick again. Recorded
+    # only on jobs submitted with `moderation_context.magic_pencil`. Additive, defaulted → no
+    # schema_version bump; an old checkpoint loads with none.
+    versions: list["ReferenceVersion"] = Field(default_factory=list)
+    # ADR-082 Decision 4 (SH-06): each kept pencil text, redacted, in the order kept. Apart from
+    # `description`, which stays as analysed (ADR-069). Only `build_prompt` reads it; the reference
+    # judge must never see it as a stated attribute. Additive, defaulted → no schema_version bump.
+    child_changes: list[str] = Field(default_factory=list)
+
+
+class ReferenceVersion(BaseModel):     # ADR-082 — a replaced reference, restorable as it was
+    version_id: str                    # the Storage object's stem, unique within the book
+    image_path: str                    # durable Storage PATH, never a signed URL
+    # Offered only when passed. `None` is an unchosen draw nobody has opened yet: its on-open outcome
+    # lives in `job_picture_records.moderation_status`, because the run is paused when it is checked.
+    ref_moderation_status: Optional[str] = None
+    ref_verdict: Optional[RefVerdict] = None
+    ref_verdict_prompt_version: Optional[int] = None
+    ref_generation_prompt: Optional[str] = None
+    source: Literal["draw_again", "version_choice", "unchosen_draw", "pencil"]   # what replaced it
+
+
+class ReferenceChoice(BaseModel):      # ADR-082 — set by `reveal`, consumed by `char_bible`
+    char_id: str
+    version_id: str
+    source: str           # the reference the child was looking at; a stale one changes nothing
+    # Set only by the API after it found the unchosen draw passed on open (magic-pencil 05).
+    cleared: bool = False
+
+
+class PencilUse(BaseModel):            # ADR-082 Decision 2, AC-22 — one magic-pencil use, as logged
+    use_id: str                        # "pencil-<n>", unique within the book
+    char_id: str
+    text: str                          # redacted (SH-03); the raw text is never stored
+    before_path: str                   # the reference the child wrote the change for (SH-08)
+    after_path: Optional[str] = None   # the edited picture; while it is current and unchosen, keep/old waits
+    text_moderation: Literal["cleared", "held", "teacher_allowed", "teacher_stopped"]
+    reason: Optional[Literal["refused", "stale", "text_stopped"]] = None   # why there is no after picture
+    choice: Optional[Literal["kept", "old"]] = None
+
+
+class PencilChoice(BaseModel):         # ADR-082 Decision 2 — set by `reveal`, consumed by `char_bible`
+    char_id: str
+    choice: Literal["kept", "old"]
+    source: str           # the pencil result the child was looking at; a stale one changes nothing
 
 
 class ReferenceRetry(BaseModel):        # ADR-029 — set by `reveal`, consumed by `char_bible`
@@ -280,13 +325,15 @@ class ClassifierEvidence(BaseModel):
 
 class ReviewContext(BaseModel):
     review_id: UUID
-    kind: Literal["title", "story_text", "character_reference", "scene_image", "optional_themes"]
+    kind: Literal["title", "story_text", "character_reference", "scene_image", "optional_themes",
+                  "character_pencil_text"]
     subject_id: str
     subject_version: str
     criteria: list[str] = Field(default_factory=list)
     return_node: str
     replacement: bool = False
-    resolution: Optional[Literal["allow", "replace"]] = None
+    # "stop" only on a pencil text: it ends that request and the run returns to the reveal (OD-08).
+    resolution: Optional[Literal["allow", "replace", "stop"]] = None
     classifier_evidence: list[ClassifierEvidence] = Field(default_factory=list)
 
 
@@ -314,6 +361,7 @@ class ModerationContext(BaseModel):
     detected_themes: list[ThemeDetection] = Field(default_factory=list)
     accepted_theme_ids: list[str] = Field(default_factory=list)
     optional_theme_check: Optional[OptionalThemeCheck] = None
+    magic_pencil: bool = False         # ADR-082 Decision 6: the setting, snapshotted at submission
 
 
 class StoryMemory(BaseModel):
@@ -334,3 +382,8 @@ class StoryMemory(BaseModel):
     eval: Eval = Field(default_factory=Eval)
     reference_retry: Optional[ReferenceRetry] = None   # set by `reveal`, consumed by `char_bible`
     moderation_context: ModerationContext = Field(default_factory=ModerationContext)
+    reference_choice: Optional[ReferenceChoice] = None  # set by `reveal`, consumed by `char_bible`
+    # ADR-082 Decision 2. Additive, defaulted → no schema_version bump.
+    reference_pencil: Optional[str] = None             # a `pencil_uses` id `char_bible` edits for
+    reference_pencil_choice: Optional[PencilChoice] = None  # set by `reveal`, consumed by `char_bible`
+    pencil_uses: list[PencilUse] = Field(default_factory=list)

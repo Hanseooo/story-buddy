@@ -1,0 +1,62 @@
+$ next build
+▲ Next.js 16.2.11 (Turbopack)
+- Environments: .env.local
+
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+  Creating an optimized production build ...
+✓ Compiled successfully in 9.6s
+  Running TypeScript ...
+  Finished TypeScript in 23.8s ...
+  Collecting page data using 11 workers ...
+  Generating static pages using 11 workers (0/22) ...
+  Generating static pages using 11 workers (5/22) 
+  Generating static pages using 11 workers (10/22) 
+  Generating static pages using 11 workers (16/22) 
+✓ Generating static pages using 11 workers (22/22) in 1199ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /adjudicate
+├ ƒ /annotate
+├ ○ /apple-icon.png
+├ ƒ /auth/signout
+├ ƒ /classroom
+├ ƒ /classroom/[classroomId]
+├ ƒ /classroom/[classroomId]/add
+├ ƒ /classroom/[classroomId]/books
+├ ƒ /classroom/[classroomId]/settings
+├ ○ /icon0.svg
+├ ○ /icon1.png
+├ ○ /join
+├ ƒ /join/[code]
+├ ○ /login
+├ ○ /manifest.json
+├ ○ /privacy
+├ ƒ /research
+├ ○ /research/dataset
+├ ○ /research/docs
+├ ○ /research/limitations
+├ ƒ /research/metrics
+├ ƒ /research/metrics/[jobId]
+├ ○ /research/results
+├ ƒ /s/[profileId]
+├ ƒ /s/[profileId]/book/[jobId]
+├ ƒ /s/[profileId]/change-password
+├ ƒ /s/[profileId]/gallery
+├ ƒ /s/[profileId]/introduction
+├ ƒ /s/[profileId]/process/[jobId]
+├ ƒ /s/[profileId]/settings
+├ ƒ /s/[profileId]/write
+├ ƒ /settings
+├ ○ /signup
+├ ○ /terms
+└ ○ /welcome
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

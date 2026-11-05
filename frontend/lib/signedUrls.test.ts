@@ -37,6 +37,17 @@ describe("signPaths", () => {
     expect(revoke).toHaveBeenCalledWith("blob:feature-image");
     fetchMock.mockRestore();
   });
+  it("a kept version is fetched by its own asset id, never as the current reference", async () => {
+    mockSession.mockResolvedValue({data: {session: {access_token: "test-token"}}});
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue({ok: true, blob: async () => new Blob(["image"])} as Response);
+    vi.stubGlobal("URL", Object.assign(URL, {createObjectURL: vi.fn(() => "blob:version"), revokeObjectURL: vi.fn()}));
+    await signPaths(["j/ref-c0-1.png"], [{id: "j", moderation_mode: "teacher_review_v1", reveal: {characters: [
+      {char_id: "c0", image_path: "j/ref-c0-2.png", versions: [{version_id: "ref-c0-1", image_path: "j/ref-c0-1.png"}]},
+    ]}}], new AbortController().signal);
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/jobs/j/images/version-ref-c0-1"), expect.anything());
+    expect(mockCreateSignedUrls).not.toHaveBeenCalled();
+    fetchMock.mockRestore();
+  });
   it("returns a path -> url map", async () => {
     mockCreateSignedUrls.mockResolvedValue({
       data: [{ path: "a.png", signedUrl: "https://cdn/a?token=1", error: null }],

@@ -1150,3 +1150,1287 @@ def test_review_interrupt_cannot_be_written_to_child_reveal():
             "kind": "moderation_review", "review_id": str(uuid4()),
         })]})
     db.table.return_value.update.assert_not_called()
+
+
+def test_draw_again_keeps_the_replaced_picture_and_choosing_it_costs_nothing(monkeypatch, held_database):
+    """Magic pencil ticket 04 (US-01): tap → the old picture is offered → choosing it restores it
+    with no draw and no go. Stale and repeated choices change nothing; the record follows the story."""
+    import importlib
+    from contracts.story_memory import RefVerdict
+    from langgraph.checkpoint.postgres import PostgresSaver
+    from pipeline.segment import ExtractedScene, ExtractedVisualDirection, SceneSegmentation
+    from tests.test_graph_stub import STUB_ANALYSIS
+    from worker.run_job import run_review_storybook_job
+
+    conn, child, classroom, _, _ = held_database
+    monkeypatch.setattr(settings, "enable_teacher_moderation_review", True)
+    monkeypatch.setattr(settings, "enable_magic_pencil", True)
+    db, queue = MagicMock(), MagicMock()
+    db.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{"classroom_id": classroom}]
+    monkeypatch.setattr("app.main.get_supabase_client", lambda: db)
+    monkeypatch.setattr("app.main.get_queue", lambda: queue)
+    monkeypatch.setattr("app.moderation_hold.get_queue", lambda: queue)
+
+    def redact(text):
+        # SH-01: the setting is captured at submission; turning it off later changes nothing.
+        settings.enable_magic_pencil = False
+        return text
+
+    monkeypatch.setattr("providers.redact_pii", redact)
+    monkeypatch.setattr("app.main.check_text", lambda title, **kwargs: (True, [], title))
+    image = (Path(__file__).parent / "fixtures/qwen35-resize-scene.png").read_bytes()
+    objects, storage = {}, MagicMock()
+
+    def download(path):
+        if path not in objects:
+            raise FileNotFoundError(path)
+        return objects[path]
+
+    storage.storage.from_.return_value.download.side_effect = download
+    storage.storage.from_.return_value.upload.side_effect = lambda path, content, options: objects.update({path: content})
+    monkeypatch.setattr("providers.download_book_image", download)
+
+    def structured(prompt, schema, **kwargs):
+        if schema.__name__ == "StoryAnalysis":
+            return STUB_ANALYSIS
+        return SceneSegmentation(scenes=[ExtractedScene(
+            start=0, end=0, characters_present=["the orange dog"],
+            visual_direction=ExtractedVisualDirection(key_action="A dog walks.", viewpoint="front view", framing="wide shot"),
+        )])
+
+    drawn = MagicMock(side_effect=lambda *a, **kw: image)
+    boundaries = {
+        "analyze": {"structured_text": structured}, "segment": {"structured_text": structured},
+        "input_gate": {"classify_text_primary": lambda text: (True, []), "classify_text_backstop": lambda text: (True, [])},
+        "char_bible": {"text_to_image": drawn, "get_supabase_client": lambda: storage,
+                       "judge": lambda *a, **kw: RefVerdict(differences_observed="none", matches_description=True, attributes_present=["dog"])},
+        "char_ref_mod": {"classify_image_primary": lambda url, **kw: True, "classify_image_backstop": lambda url, **kw: True,
+                         "get_signed_url": lambda path: f"https://private.invalid/{path}"},
+    }
+    for module, replacements in boundaries.items():
+        for name, replacement in replacements.items():
+            monkeypatch.setattr(importlib.import_module(f"pipeline.{module}"), name, replacement)
+
+    def reveal_of(job):
+        # confirm_job reads the row through the Supabase client; serve it the persisted one.
+        persisted = conn.execute("select * from jobs where id=%s", (job,)).fetchone()
+        db.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{**persisted, "profile_id": child}]
+        return persisted["reveal"]["characters"][0]
+
+    def counts(job):
+        with PostgresSaver.from_conn_string(settings.supabase_db_url) as saver:
+            cost = build_graph(saver).get_state({"configurable": {"thread_id": job}}).values["cost"]
+        return cost.image_count, cost.ref_retry_count
+
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+    try:
+        with TestClient(app) as client:
+            job = client.post("/storybooks", json={
+                "title": "Synthetic title", "text": "The orange dog walks through the grassy field past the trees and stops near the stream.",
+            }).json()["job_id"]
+            run_review_storybook_job(job, expected_epoch=0)
+            first = reveal_of(job)
+            assert first["image_path"] == f"{job}/ref-c0-1.png" and first["versions"] == []
+            tap = {"action": "try_again", "char_id": "c0", "attribute": first["chips"][0]}
+            assert client.post(f"/jobs/{job}/confirm", json=tap).json()["status"] == "queued"
+            run_review_storybook_job(job, tap, expected_epoch=0)
+            tapped = reveal_of(job)
+            assert tapped["image_path"] == f"{job}/ref-c0-2.png"
+            version = {"version_id": "ref-c0-1", "image_path": f"{job}/ref-c0-1.png"}
+            assert tapped["versions"] == [version]
+            assert client.get(f"/jobs/{job}/images/version-{version['version_id']}").content == image
+            assert client.get(f"/jobs/{job}/images/version-nope").status_code == 404
+            before = counts(job)
+            choose = {"action": "choose_version", "char_id": "c0", "version_id": version["version_id"], "source": tapped["image_path"]}
+            assert client.post(f"/jobs/{job}/confirm", json={**choose, "source": first["image_path"]}).status_code == 422
+            assert client.post(f"/jobs/{job}/confirm", json={**choose, "version_id": "ref-c0-9"}).status_code == 422
+            queue.enqueue.reset_mock()
+            assert client.post(f"/jobs/{job}/confirm", json=choose).json()["status"] == "queued"
+            assert client.post(f"/jobs/{job}/confirm", json=choose).json()["status"] == "queued"
+            assert queue.enqueue.call_count == 1
+            draws = drawn.call_count
+            run_review_storybook_job(job, queue.enqueue.call_args.args[2], expected_epoch=0)
+            restored = reveal_of(job)
+            assert restored["image_path"] == first["image_path"]
+            assert restored["versions"] == [{"version_id": "ref-c0-2", "image_path": f"{job}/ref-c0-2.png"}]
+            assert drawn.call_count == draws and counts(job) == before
+            assert client.get(f"/jobs/{job}/images/ref-c0").content == image
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    recorded = conn.execute("select image_path from job_picture_records where job_id=%s order by created_at", (job,)).fetchall()
+    assert [r["image_path"] for r in recorded] == [first["image_path"], tapped["image_path"]]
+    conn.execute("delete from jobs where id=%s", (job,))
+    assert conn.execute("select count(*) as n from job_picture_records where job_id=%s", (job,)).fetchone()["n"] == 0
+
+
+def test_unchosen_draws_are_moderated_once_when_opened_and_a_passed_one_can_be_chosen(monkeypatch, held_database):
+    """Magic pencil ticket 05 (US-01 AC-02, AC-03, SH-02, OD-03): the mint's two unchosen draws are
+    kept unreviewed; opening "Other versions" moderates each once. A pass is shown, a flag is
+    excluded with no hold, a classifier error is neither shown nor stored."""
+    import importlib
+    from contracts.story_memory import RefVerdict
+    from pipeline.segment import ExtractedScene, ExtractedVisualDirection, SceneSegmentation
+    from tests.test_graph_stub import STUB_ANALYSIS
+    from worker.run_job import run_review_storybook_job
+
+    conn, child, classroom, _, _ = held_database
+    monkeypatch.setattr(settings, "enable_teacher_moderation_review", True)
+    monkeypatch.setattr(settings, "enable_magic_pencil", True)
+    db, queue = MagicMock(), MagicMock()
+    db.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{"classroom_id": classroom}]
+    monkeypatch.setattr("app.main.get_supabase_client", lambda: db)
+    monkeypatch.setattr("app.main.get_queue", lambda: queue)
+    monkeypatch.setattr("app.moderation_hold.get_queue", lambda: queue)
+    monkeypatch.setattr("providers.redact_pii", lambda text: text)
+    monkeypatch.setattr("app.main.check_text", lambda title, **kwargs: (True, [], title))
+    draws = iter([b"draw-1", b"draw-2", b"draw-3"])
+    objects, storage = {}, MagicMock()
+    storage.storage.from_.return_value.upload.side_effect = lambda path, content, options: objects.update({path: content})
+    monkeypatch.setattr("providers.download_book_image", lambda path: objects[path])
+
+    def structured(prompt, schema, **kwargs):
+        if schema.__name__ == "StoryAnalysis":
+            return STUB_ANALYSIS
+        return SceneSegmentation(scenes=[ExtractedScene(
+            start=0, end=0, characters_present=["the orange dog"],
+            visual_direction=ExtractedVisualDirection(key_action="A dog walks.", viewpoint="front view", framing="wide shot"),
+        )])
+
+    # Every draw contradicts once; draw 2 shows the most, so best-of picks it and draws 1 and 3 are unchosen.
+    shown = iter([["dog"], ["dog", "orange"], ["dog"]])
+    primary, backstop = {}, {}
+
+    def classify(table):
+        def call(url, **kwargs):
+            outcome = table.get(url.rsplit("/", 1)[-1], True)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+        return MagicMock(side_effect=call)
+
+    primary_mock, backstop_mock = classify(primary), classify(backstop)
+    boundaries = {
+        "analyze": {"structured_text": structured}, "segment": {"structured_text": structured},
+        "input_gate": {"classify_text_primary": lambda text: (True, []), "classify_text_backstop": lambda text: (True, [])},
+        "char_bible": {"text_to_image": lambda *a, **kw: next(draws), "get_supabase_client": lambda: storage,
+                       "judge": lambda *a, **kw: RefVerdict(differences_observed="a red comb", contradictions=["comb"],
+                                                            matches_description=False, attributes_present=next(shown))},
+        "char_ref_mod": {"classify_image_primary": primary_mock, "classify_image_backstop": backstop_mock,
+                         "get_signed_url": lambda path: f"https://private.invalid/{path}"},
+    }
+    for module, replacements in boundaries.items():
+        for name, replacement in replacements.items():
+            monkeypatch.setattr(importlib.import_module(f"pipeline.{module}"), name, replacement)
+
+    def reveal_of(job):
+        persisted = conn.execute("select * from jobs where id=%s", (job,)).fetchone()
+        db.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{**persisted, "profile_id": child}]
+        return persisted["reveal"]["characters"][0]
+
+    def calls():
+        return primary_mock.call_count + backstop_mock.call_count
+
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+    try:
+        with TestClient(app) as client:
+            job = client.post("/storybooks", json={
+                "title": "Synthetic title", "text": "The orange dog walks through the grassy field past the trees and stops near the stream.",
+            }).json()["job_id"]
+            run_review_storybook_job(job, expected_epoch=0)
+            first = reveal_of(job)
+            assert first["image_path"] == f"{job}/ref-c0-1.png" and objects[first["image_path"]] == b"draw-2"
+            assert first["versions"] == [] and first["unreviewed"] == ["ref-c0-1-u1", "ref-c0-1-u3"]
+            assert client.get(f"/jobs/{job}/images/version-ref-c0-1-u1").status_code == 404
+            reviews = conn.execute("select count(*) as n from job_moderation_reviews where job_id=%s", (job,)).fetchone()["n"]
+
+            route = f"/jobs/{job}/characters/c0/versions/open"
+            backstop["ref-c0-1-u3.png"] = RuntimeError("classifier down")
+            before = calls()
+            opened = client.post(route)
+            assert opened.status_code == 200
+            assert opened.json() == {"versions": [{"version_id": "ref-c0-1-u1", "image_path": f"{job}/ref-c0-1-u1.png"}],
+                                     "unavailable": 1}
+            assert calls() - before == 4   # both layers on each of two draws
+            assert client.get(f"/jobs/{job}/images/version-ref-c0-1-u1").content == b"draw-1"
+            assert client.get(f"/jobs/{job}/images/version-ref-c0-1-u3").status_code == 404
+
+            primary["ref-c0-1-u3.png"] = False
+            before = calls()
+            assert client.post(route).json() == {
+                "versions": [{"version_id": "ref-c0-1-u1", "image_path": f"{job}/ref-c0-1-u1.png"}], "unavailable": 0}
+            assert calls() - before == 1   # only the errored draw is checked again; a primary flag needs no backstop
+            before = calls()
+            assert client.post(route).json()["unavailable"] == 0
+            assert calls() == before       # every outcome is stored once
+            assert conn.execute("select count(*) as n from job_moderation_reviews where job_id=%s",
+                                (job,)).fetchone()["n"] == reviews
+            assert client.get(f"/jobs/{job}/images/version-ref-c0-1-u3").status_code == 404
+            assert client.post(f"/jobs/{job}/characters/c9/versions/open").status_code == 404
+
+            choose = {"action": "choose_version", "char_id": "c0", "version_id": "ref-c0-1-u3", "source": first["image_path"]}
+            assert client.post(f"/jobs/{job}/confirm", json=choose).status_code == 422
+            queue.enqueue.reset_mock()
+            choose["version_id"] = "ref-c0-1-u1"
+            assert client.post(f"/jobs/{job}/confirm", json=choose).json()["status"] == "queued"
+            resume = queue.enqueue.call_args.args[2]
+            assert resume["cleared"] is True
+            run_review_storybook_job(job, resume, expected_epoch=0)
+            chosen = reveal_of(job)
+            assert chosen["image_path"] == f"{job}/ref-c0-1-u1.png"
+            assert chosen["versions"] == [{"version_id": "ref-c0-1", "image_path": f"{job}/ref-c0-1.png"}]
+            assert chosen["unreviewed"] == []   # AC-01: an excluded draw no longer counts as another version
+            assert client.get(f"/jobs/{job}/images/ref-c0").content == b"draw-1"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    recorded = conn.execute("""select version_id,moderation_status from job_picture_records
+      where job_id=%s and source='unchosen_draw' order by version_id""", (job,)).fetchall()
+    assert [(r["version_id"], r["moderation_status"]) for r in recorded] == [
+        ("ref-c0-1-u1", "passed"), ("ref-c0-1-u3", "excluded")]
+
+
+def _pencil_book(monkeypatch, held_database, text_check):
+    """A feature job paused at the reveal, with every provider boundary stubbed (spec §6.2-6.3).
+    `text_check` stands in for `check_text` on the child's pencil text."""
+    import importlib
+    from contracts.story_memory import RefVerdict
+    from pipeline.segment import ExtractedScene, ExtractedVisualDirection, SceneSegmentation
+    from tests.test_graph_stub import STUB_ANALYSIS
+    from worker.run_job import run_review_storybook_job
+
+    conn, child, classroom, _, teacher = held_database
+    monkeypatch.setattr(settings, "enable_teacher_moderation_review", True)
+    monkeypatch.setattr(settings, "enable_magic_pencil", True)
+    db, queue = MagicMock(), MagicMock()
+    db.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{"classroom_id": classroom}]
+    monkeypatch.setattr("app.main.get_supabase_client", lambda: db)
+    monkeypatch.setattr("app.main.get_queue", lambda: queue)
+    monkeypatch.setattr("app.moderation_hold.get_queue", lambda: queue)
+    redacted = []
+
+    def redact(text):
+        redacted.append(text)
+        return text.replace("Ana Cruz", "<PERSON>")
+
+    monkeypatch.setattr("providers.redact_pii", redact)
+    monkeypatch.setattr("app.main.check_text", lambda title, **kwargs: (True, [], title))
+    monkeypatch.setattr("app.moderation_hold.check_text", text_check)
+    objects, storage = {}, MagicMock()
+    storage.storage.from_.return_value.upload.side_effect = lambda path, content, options: objects.update({path: content})
+    monkeypatch.setattr("providers.download_book_image", lambda path: objects[path])
+
+    def structured(prompt, schema, **kwargs):
+        if schema.__name__ == "StoryAnalysis":
+            return STUB_ANALYSIS
+        return SceneSegmentation(scenes=[ExtractedScene(
+            start=0, end=0, characters_present=["the orange dog"],
+            visual_direction=ExtractedVisualDirection(key_action="A dog walks.", viewpoint="front view", framing="wide shot"),
+        )])
+
+    edit = MagicMock(return_value=b"edited")
+    judge = MagicMock(return_value=RefVerdict(differences_observed="none", matches_description=True, attributes_present=["dog"]))
+    boundaries = {
+        "analyze": {"structured_text": structured}, "segment": {"structured_text": structured},
+        "input_gate": {"classify_text_primary": lambda text: (True, []), "classify_text_backstop": lambda text: (True, [])},
+        "char_bible": {"text_to_image": lambda *a, **kw: b"first", "edit_image": edit, "judge": judge,
+                       "get_supabase_client": lambda: storage, "get_signed_url": lambda path: f"https://private.invalid/{path}"},
+        "char_ref_mod": {"classify_image_primary": lambda url, **kw: True, "classify_image_backstop": lambda url, **kw: True,
+                         "get_signed_url": lambda path: f"https://private.invalid/{path}"},
+    }
+    for module, replacements in boundaries.items():
+        for name, replacement in replacements.items():
+            monkeypatch.setattr(importlib.import_module(f"pipeline.{module}"), name, replacement)
+
+    def reveal_of(job):
+        persisted = conn.execute("select * from jobs where id=%s", (job,)).fetchone()
+        db.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{**persisted, "profile_id": child}]
+        return persisted["reveal"]
+
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+    client = TestClient(app)
+    job = client.post("/storybooks", json={
+        "title": "Synthetic title", "text": "The orange dog walks through the grassy field past the trees and stops near the stream.",
+    }).json()["job_id"]
+    run_review_storybook_job(job, expected_epoch=0)
+    redacted.clear()
+    judge.reset_mock()
+    return SimpleNamespace(conn=conn, client=client, job=job, queue=queue, edit=edit, judge=judge, objects=objects,
+                           redacted=redacted, reveal_of=reveal_of, run=run_review_storybook_job, child=child, teacher=teacher)
+
+
+def _pencil_rows(conn, job):
+    return [dict(r) for r in conn.execute("""select target_id,version_id,before_path,image_path,pencil_text,
+      text_moderation,picture_moderation,reason,choice from job_picture_records where job_id=%s and kind='pencil'
+      order by version_id""", (job,)).fetchall()]
+
+
+def test_a_cleared_pencil_text_edits_the_picture_once_and_the_child_keeps_or_goes_back(monkeypatch, held_database):
+    """Magic pencil ticket 06 (US-02 AC-07..AC-11, SH-03, SH-08, SH-10, AC-22)."""
+    checked = []
+
+    def text_check(text, *, evidence=None):
+        checked.append(text)
+        return True, [], text
+
+    book = _pencil_book(monkeypatch, held_database, text_check)
+    job, client, queue = book.job, book.client, book.queue
+    try:
+        first = book.reveal_of(job)
+        assert first["taps_left"] == 3 and first["characters"][0]["pencil_ready"] is True
+        old = first["characters"][0]["image_path"]
+        pencil = {"action": "pencil", "char_id": "c0", "text": "  give Ana Cruz a red hat ", "source": old}
+        for bad in ({**pencil, "text": "   "}, {**pencil, "text": "x" * 201}):
+            assert client.post(f"/jobs/{job}/confirm", json=bad).status_code == 422
+        assert client.post(f"/jobs/{job}/confirm", json={**pencil, "source": f"{job}/ref-c0-9.png"}).status_code == 422
+        assert book.redacted == [] and checked == []   # nothing was redacted, moderated or queued
+        queue.enqueue.reset_mock()
+        assert client.post(f"/jobs/{job}/confirm", json=pencil).json()["status"] == "queued"
+        assert client.post(f"/jobs/{job}/confirm", json=pencil).json()["status"] == "queued"   # SH-08
+        assert queue.enqueue.call_count == 1
+        # SH-03: redacted before moderation; only the redacted text leaves the API.
+        assert book.redacted == ["give Ana Cruz a red hat"] and checked == ["give <PERSON> a red hat"]
+        resume = queue.enqueue.call_args.args[2]
+        assert (resume["text"], resume["flagged"]) == ("give <PERSON> a red hat", False)
+        assert "Ana Cruz" not in str(resume)
+
+        book.run(job, resume, expected_epoch=0)
+        edited = book.reveal_of(job)
+        book.edit.assert_called_once()
+        assert book.edit.call_args.args[0].startswith("give <PERSON> a red hat\n\n")
+        book.judge.assert_not_called()
+        assert edited["taps_left"] == 2
+        character = edited["characters"][0]
+        assert character["image_path"] == f"{job}/ref-c0-2.png"
+        assert character["pencil_choice"] == {"use_id": "pencil-1", "version_id": "ref-c0-1", "image_path": old}
+        assert client.get(f"/jobs/{job}/images/version-ref-c0-1").content == b"first"
+        assert client.get(f"/jobs/{job}/images/ref-c0").content == b"edited"
+        # The book cannot go on from an unchosen pencil result.
+        assert client.post(f"/jobs/{job}/confirm", json={"action": "confirm"}).status_code == 422
+
+        choose = {"action": "pencil_choice", "char_id": "c0", "choice": "old", "source": character["image_path"]}
+        assert client.post(f"/jobs/{job}/confirm", json={**choose, "source": old}).status_code == 422
+        queue.enqueue.reset_mock()
+        assert client.post(f"/jobs/{job}/confirm", json=choose).json()["status"] == "queued"
+        book.run(job, queue.enqueue.call_args.args[2], expected_epoch=0)
+        back = book.reveal_of(job)
+        assert back["taps_left"] == 2   # AC-11: the go is spent either way
+        assert back["characters"][0]["image_path"] == old
+        assert back["characters"][0]["pencil_choice"] is None
+        assert {"version_id": "ref-c0-2", "image_path": f"{job}/ref-c0-2.png"} in back["characters"][0]["versions"]
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    assert _pencil_rows(book.conn, job) == [{
+        "target_id": "c0", "version_id": "pencil-1", "before_path": old, "image_path": f"{job}/ref-c0-2.png",
+        "pencil_text": "give <PERSON> a red hat", "text_moderation": "cleared", "picture_moderation": "passed",
+        "reason": None, "choice": "old"}]
+
+
+def test_a_redaction_failure_rejects_the_pencil_text_and_spends_nothing(monkeypatch, held_database):
+    book = _pencil_book(monkeypatch, held_database, lambda text, **kw: (True, [], text))
+    monkeypatch.setattr("providers.redact_pii", MagicMock(side_effect=RuntimeError("presidio down")))
+    try:
+        source = book.reveal_of(book.job)["characters"][0]["image_path"]
+        book.queue.enqueue.reset_mock()
+        response = book.client.post(f"/jobs/{book.job}/confirm", json={
+            "action": "pencil", "char_id": "c0", "text": "a red hat", "source": source})
+        assert (response.status_code, response.json()["detail"]) == (503, "privacy_processing_unavailable")
+        book.queue.enqueue.assert_not_called()
+        assert book.conn.execute("select status from jobs where id=%s", (book.job,)).fetchone()["status"] == "awaiting_confirm"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.parametrize("decision", ["stop", "allow", "stop_removed"])
+def test_flagged_pencil_text_is_held_with_no_picture_and_a_teacher_stop_ends_only_the_request(
+        monkeypatch, held_database, decision):
+    """Ticket 06 (AC-08, SH-05, OD-08): no image and no go while held; allow runs the edit; stop
+    returns the child to the reveal with the old picture and the story goes on."""
+    from contracts.story_memory import ClassifierEvidence
+
+    def text_check(text, *, evidence=None):
+        evidence.append(ClassifierEvidence(layer="primary", model_id="synthetic", instruction_version="v1",
+                                           outcome="flagged", categories=["violence"]))
+        return False, ["violence"], text
+
+    book = _pencil_book(monkeypatch, held_database, text_check)
+    job, client, queue, conn = book.job, book.client, book.queue, book.conn
+    try:
+        old = book.reveal_of(job)["characters"][0]["image_path"]
+        queue.enqueue.reset_mock()
+        assert client.post(f"/jobs/{job}/confirm", json={
+            "action": "pencil", "char_id": "c0", "text": "a big sword", "source": old}).json()["status"] == "queued"
+        book.run(job, queue.enqueue.call_args.args[2], expected_epoch=0)
+        held = conn.execute("select * from jobs where id=%s", (job,)).fetchone()
+        assert held["status"] == "awaiting_teacher"
+        book.edit.assert_not_called()
+        assert client.get(f"/jobs/{job}/state").json()["pencil_hold"] is True   # SH-05 neutral copy
+
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=book.teacher)
+        route = f"/teacher/jobs/{job}/moderation-review"
+        detail = client.get(route).json()
+        assert (detail["kind"], detail["pencil_text"], detail["replacement_available"]) == (
+            "character_pencil_text", "a big sword", False)
+        assert detail["classifier_evidence"][0]["categories"] == ["violence"]
+        command = {"review_id": detail["review_id"], "subject_version": detail["subject_version"],
+                   "expected_epoch": detail["generation_epoch"], "request_id": str(uuid4()),
+                   "policy_version": detail["current_policy_version"], "confirmed_criteria": detail["criteria"],
+                   "confirmed": True}
+        assert client.post(f"{route}/decision", json={**command, "action": "replace"}).status_code == 422
+        if decision == "stop_removed":
+            # A removed child cannot come back to the reveal, so the stop ends the story instead of
+            # leaving a hold nobody can clear.
+            conn.execute("update profiles set removed_at=now() where id=%s", (book.child,))
+            response = client.post(f"{route}/decision", json={**command, "action": "stop", "confirmed_criteria": []})
+            conn.execute("update profiles set removed_at=null where id=%s", (book.child,))
+            assert (response.status_code, response.json()["status"]) == (200, "stopped")
+            book.edit.assert_not_called()
+            return
+        queue.enqueue.reset_mock()
+        assert client.post(f"{route}/decision", json={**command, "action": decision}).status_code == 202
+        dispatched = queue.enqueue.call_args.kwargs
+        book.run(job, expected_epoch=dispatched["expected_epoch"], review_id=dispatched["review_id"])
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=book.child)
+        after = book.reveal_of(job)
+        assert conn.execute("select status from jobs where id=%s", (job,)).fetchone()["status"] == "awaiting_confirm"
+        if decision == "stop":
+            assert after["taps_left"] == 3 and after["characters"][0]["image_path"] == old
+            book.edit.assert_not_called()
+        else:
+            assert after["taps_left"] == 2 and after["characters"][0]["pencil_choice"]["image_path"] == old
+            book.edit.assert_called_once()
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    row = _pencil_rows(conn, job)[0]
+    assert (row["pencil_text"], row["before_path"]) == ("a big sword", old)
+    if decision == "stop":
+        assert (row["text_moderation"], row["reason"], row["image_path"]) == ("teacher_stopped", "text_stopped", None)
+    else:
+        assert (row["text_moderation"], row["image_path"]) == ("teacher_allowed", f"{job}/ref-c0-2.png")
+
+
+@pytest.mark.parametrize("outcome", ["passes", "flags_again", "budget"])
+def test_a_held_pencil_result_is_replaced_by_the_same_edit_once(monkeypatch, held_database, outcome):
+    """Ticket 07 (AC-10, AC-22): a teacher replacement of a held pencil result re-runs the same edit
+    of the same source picture in ADR-080's one replacement slot; no fresh draw, no child go."""
+    from app.config import IMAGE_BUDGET
+    from langgraph.checkpoint.postgres import PostgresSaver
+
+    book = _pencil_book(monkeypatch, held_database, lambda text, **kw: (True, [], text))
+    job, client, queue, conn = book.job, book.client, book.queue, book.conn
+    draw = MagicMock()
+    monkeypatch.setattr("pipeline.char_bible.text_to_image", draw)
+    flagged = {f"{job}/ref-c0-2.png"} | ({f"{job}/ref-c0-3.png"} if outcome == "flags_again" else set())
+    monkeypatch.setattr("pipeline.char_ref_mod.classify_image_primary",
+                        lambda url, **kw: url.removeprefix("https://private.invalid/") not in flagged)
+    monkeypatch.setattr("pipeline.char_ref_mod.download_book_image", lambda path: book.objects[path])
+    try:
+        old = book.reveal_of(job)["characters"][0]["image_path"]
+        queue.enqueue.reset_mock()
+        assert client.post(f"/jobs/{job}/confirm", json={
+            "action": "pencil", "char_id": "c0", "text": "a red hat", "source": old}).json()["status"] == "queued"
+        book.run(job, queue.enqueue.call_args.args[2], expected_epoch=0)
+        assert conn.execute("select status from jobs where id=%s", (job,)).fetchone()["status"] == "awaiting_teacher"
+
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=book.teacher)
+        route = f"/teacher/jobs/{job}/moderation-review"
+        if outcome == "budget":
+            conn.execute("update jobs set image_count=%s where id=%s", (IMAGE_BUDGET, job))
+        detail = client.get(route).json()
+        assert detail["kind"] == "character_reference"
+        assert (detail["replacement_available"], detail["replacement_disabled_reason"]) == (
+            (False, "image_budget_exhausted") if outcome == "budget" else (True, None))
+        command = {"review_id": detail["review_id"], "subject_version": detail["subject_version"],
+                   "expected_epoch": detail["generation_epoch"], "request_id": str(uuid4()), "action": "replace",
+                   "policy_version": detail["current_policy_version"], "confirmed_criteria": detail["criteria"],
+                   "confirmed": True}
+        queue.enqueue.reset_mock()
+        response = client.post(f"{route}/decision", json=command)
+        if outcome == "budget":
+            assert (response.status_code, response.json()["detail"]) == (422, "image_budget_exhausted")
+            assert book.edit.call_count == 1
+            assert [(r["image_path"], r["picture_moderation"]) for r in _pencil_rows(conn, job)] == [
+                (f"{job}/ref-c0-2.png", "flagged")]
+            return
+        assert response.status_code == 202, response.text
+        dispatched = queue.enqueue.call_args.kwargs
+        book.run(job, expected_epoch=dispatched["expected_epoch"], review_id=dispatched["review_id"])
+
+        draw.assert_not_called()
+        book.judge.assert_not_called()
+        assert book.edit.call_count == 2
+        prompt, sources = book.edit.call_args.args
+        assert prompt.startswith("a red hat\n\n") and sources == [f"https://private.invalid/{old}"]
+        assert book.edit.call_args_list[1] == book.edit.call_args_list[0]
+        values = build_graph(PostgresSaver(conn)).get_state({"configurable": {"thread_id": job}}).values
+        assert (values["cost"].ref_mod_retry_count, values["cost"].ref_retry_count) == (1, 1)
+        if outcome == "flags_again":
+            current = client.get(route).json()
+            assert current["status"] == "awaiting_teacher" and current["review_id"] != detail["review_id"]
+            assert current["replacement_disabled_reason"] == "replacement_already_used"
+        else:
+            app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=book.child)
+            after = book.reveal_of(job)
+            assert after["taps_left"] == 2   # the replacement spends the book's slot, not a child go
+            character = after["characters"][0]
+            assert character["image_path"] == f"{job}/ref-c0-3.png"
+            assert character["pencil_choice"] == {"use_id": "pencil-1", "version_id": "ref-c0-1", "image_path": old}
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    assert _pencil_rows(conn, job) == [{
+        "target_id": "c0", "version_id": "pencil-1", "before_path": old, "image_path": f"{job}/ref-c0-3.png",
+        "pencil_text": "a red hat", "text_moderation": "cleared",
+        "picture_moderation": "flagged" if outcome == "flags_again" else "passed", "reason": None, "choice": None}]
+
+
+def _finished_feature_book(conn, child, classroom, job, *, magic_pencil=True):
+    """A complete teacher-review book. Page s0 has three kept attempts: the cleared final (a1) and two
+    the pipeline never moderated (a0, a2). Page s1 has only its final."""
+    from langgraph.checkpoint.postgres import PostgresSaver
+    from contracts.story_memory import ModerationResult
+
+    paths = {name: f"{job}/{name}.png" for name in ("s0-a0", "s0-a1", "s0-a2", "s1-a0")}
+    pages = [{"scene_id": "s0", "caption": "The dog ran.", "image_path": paths["s0-a1"], "other_versions": True},
+             {"scene_id": "s1", "caption": "It found a stick.", "image_path": paths["s1-a0"]}]
+    conn.execute("""insert into jobs(id,status,input_text,title,profile_id,classroom_id,moderation_mode,
+      moderation_settings_snapshot,pages,image_count,worker_finished_at)
+      values (%s,'complete','The dog ran. It found a stick.','Synthetic title',%s,%s,'teacher_review_v1',%s,%s,4,now())""",
+                 (job, child, classroom, Jsonb({"policy_version": "teacher_review_policy_v1", "magic_pencil": magic_pencil}),
+                  Jsonb(pages)))
+    state = StoryMemory(schema_version=1, story_id=job, profile_id=child, classroom_id=classroom,
+        input=Input(raw_text="The dog ran. It found a stick.", moderation=ModerationResult(passed=True)),
+        scenes=[Scene(scene_id="s0", text_excerpt="The dog ran.", caption="The dog ran.", moderation_status="passed",
+                      final_image_ref=paths["s0-a1"], attempts=[
+                          Attempt(image_ref=paths["s0-a0"]),
+                          Attempt(image_ref=paths["s0-a1"], safety_eligibility="cleared"),
+                          Attempt(image_ref=paths["s0-a2"])]),
+                Scene(scene_id="s1", text_excerpt="It found a stick.", caption="It found a stick.", moderation_status="passed",
+                      final_image_ref=paths["s1-a0"], attempts=[Attempt(image_ref=paths["s1-a0"], safety_eligibility="cleared")])],
+        moderation_context=ModerationContext(mode="teacher_review_v1", policy_version="teacher_review_policy_v1",
+                                             magic_pencil=magic_pencil))
+    saver = PostgresSaver(conn)
+    saver.setup()
+    build_graph(saver).update_state({"configurable": {"thread_id": job}}, dict(state), as_node="compose")
+    return paths
+
+
+def test_a_finished_page_offers_its_other_attempts_moderated_once_on_open(monkeypatch, held_database):
+    """Magic pencil ticket 09 (US-03 AC-13, AC-14, SH-02, OD-03): opening a page's other versions
+    moderates each attempt nobody checked, once. A pass is shown, a flag is excluded with no hold, a
+    classifier error is neither shown nor stored."""
+    conn, child, classroom, job, _ = held_database
+    paths = _finished_feature_book(conn, child, classroom, job)
+    objects = {path: name.encode() for name, path in paths.items()}
+    monkeypatch.setattr("providers.download_book_image", lambda path: objects[path])
+    monkeypatch.setattr("pipeline.output_mod.get_signed_url", lambda path: f"https://private.invalid/{path}")
+    outcomes = {"s0-a0.png": True, "s0-a2.png": RuntimeError("classifier down")}
+
+    def classify(url, **kwargs):
+        outcome = outcomes[url.rsplit("/", 1)[-1]]
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    primary, backstop = MagicMock(return_value=True), MagicMock(side_effect=classify)
+    monkeypatch.setattr("pipeline.output_mod.classify_image_primary", primary)
+    monkeypatch.setattr("pipeline.output_mod.classify_image_backstop", backstop)
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+    try:
+        with TestClient(app) as client:
+            route = f"/jobs/{job}/pages/s0/versions/open"
+            opened = client.post(route)
+            assert opened.status_code == 200, opened.text
+            assert opened.json() == {"versions": [{"version_id": "s0-attempt-0", "image_path": paths["s0-a0"]}],
+                                     "unavailable": 1}
+            assert primary.call_count == backstop.call_count == 2
+            assert client.get(f"/jobs/{job}/images/page-version-s0-attempt-0").content == b"s0-a0"
+            assert client.get(f"/jobs/{job}/images/page-version-s0-attempt-2").status_code == 404
+
+            outcomes["s0-a2.png"] = False
+            assert client.post(route).json() == {
+                "versions": [{"version_id": "s0-attempt-0", "image_path": paths["s0-a0"]}], "unavailable": 0}
+            assert backstop.call_count == 3   # only the errored attempt is checked again
+            assert client.post(route).json()["unavailable"] == 0
+            assert backstop.call_count == 3   # every outcome is stored once
+            assert client.get(f"/jobs/{job}/images/page-version-s0-attempt-2").status_code == 404
+            assert conn.execute("select count(*) as n from job_moderation_reviews where job_id=%s",
+                                (job,)).fetchone()["n"] == 0
+            assert client.post(f"/jobs/{job}/pages/s1/versions/open").json() == {"versions": [], "unavailable": 0}
+            assert client.post(f"/jobs/{job}/pages/s9/versions/open").status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.parametrize("review", ["approved", "rejected"])
+def test_choosing_a_page_version_changes_the_book_and_returns_it_to_the_teacher(monkeypatch, held_database, review):
+    """Magic pencil ticket 09 (AC-15, AC-20, SH-08): a chosen version replaces that page in
+    `jobs.pages` and on the delivery guard, costs no image, and sets a reviewed book back to pending.
+    A repeat applies once; a choice made from a picture that has since changed is rejected."""
+    conn, child, classroom, job, _ = held_database
+    paths = _finished_feature_book(conn, child, classroom, job)
+    conn.execute(f"update jobs set {review}_at=now() where id=%s", (job,))
+    objects = {path: name.encode() for name, path in paths.items()}
+    monkeypatch.setattr("providers.download_book_image", lambda path: objects[path])
+    monkeypatch.setattr("pipeline.output_mod.get_signed_url", lambda path: path)
+    monkeypatch.setattr("pipeline.output_mod.classify_image_primary", MagicMock(return_value=True))
+    monkeypatch.setattr("pipeline.output_mod.classify_image_backstop",
+                        MagicMock(side_effect=lambda url, **kw: url.endswith("s0-a0.png")))
+    paid = MagicMock(side_effect=AssertionError("a version choice drew a picture"))
+    monkeypatch.setattr("providers.text_to_image", paid)
+    monkeypatch.setattr("providers.edit_image", paid)
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+    try:
+        with TestClient(app) as client:
+            route = f"/jobs/{job}/pages/s0/version"
+            assert client.get(f"/jobs/{job}/images/scene-s0").content == b"s0-a1"
+            # Not opened yet, so not moderated: nothing to choose.
+            assert client.post(route, json={"version_id": "s0-attempt-0", "source": paths["s0-a1"]}).status_code == 422
+            client.post(f"/jobs/{job}/pages/s0/versions/open")
+            assert client.post(route, json={"version_id": "s0-attempt-2", "source": paths["s0-a1"]}).status_code == 422
+
+            choice = {"version_id": "s0-attempt-0", "source": paths["s0-a1"]}
+            chosen = client.post(route, json=choice)
+            assert chosen.status_code == 200, chosen.text
+            row = conn.execute("select * from jobs where id=%s", (job,)).fetchone()
+            assert row["pages"] == [
+                {"scene_id": "s0", "caption": "The dog ran.", "image_path": paths["s0-a0"], "other_versions": True},
+                {"scene_id": "s1", "caption": "It found a stick.", "image_path": paths["s1-a0"]}]
+            assert row["approved_at"] is None and row["rejected_at"] is None
+            assert row["image_count"] == 4 and row["status"] == "complete"
+            assert client.get(f"/jobs/{job}/images/scene-s0").content == b"s0-a0"
+
+            conn.execute("update jobs set approved_at=now() where id=%s", (job,))
+            assert client.post(route, json=choice).status_code == 200   # a double submit applies once
+            assert conn.execute("select approved_at from jobs where id=%s", (job,)).fetchone()["approved_at"] is not None
+            stale = client.post(route, json={"version_id": "s0-attempt-1", "source": paths["s0-a1"]})
+            assert stale.status_code == 409 and stale.json()["detail"] == "stale_source"
+            assert client.post(f"/jobs/{job}/pages/s0/versions/open").json()["versions"] == [
+                {"version_id": "s0-attempt-1", "image_path": paths["s0-a1"]}]
+            assert client.post(route, json={"version_id": "s0-attempt-1", "source": paths["s0-a0"]}).status_code == 200
+            assert client.get(f"/jobs/{job}/images/scene-s0").content == b"s0-a1"
+            # The teacher approved while that change was in flight: the change still wins.
+            assert conn.execute("select approved_at from jobs where id=%s", (job,)).fetchone()["approved_at"] is None
+            paid.assert_not_called()
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.parametrize("book", ["setting_off", "held", "stopped", "classmate"])
+def test_page_versions_are_closed_on_a_book_that_is_not_a_finished_feature_book(monkeypatch, held_database, book):
+    """Magic pencil ticket 09 (SH-01, SH-09): no page tools on a book submitted with the setting off,
+    held for the teacher, or stopped, and none for anyone but the author."""
+    conn, child, classroom, job, teacher = held_database
+    paths = _finished_feature_book(conn, child, classroom, job, magic_pencil=book != "setting_off")
+    conn.execute("insert into job_picture_records(job_id,kind,target_id,version_id,image_path,source,moderation_status) "
+                 "values (%s,'version','s0','s0-attempt-0',%s,'scene_attempt','passed')", (job, paths["s0-a0"]))
+    viewer = teacher if book == "classmate" else child
+    if book == "classmate":
+        conn.execute("update jobs set approved_at=now() where id=%s", (job,))
+    if book == "stopped":
+        conn.execute("update jobs set status='stopped' where id=%s", (job,))
+    if book == "held":
+        conn.execute("""insert into job_moderation_reviews(id,job_id,kind,subject_id,subject_version,subject,criteria,
+          policy_version,settings_snapshot,classifier_evidence,return_node)
+          values (%s,%s,'scene_image','s1','v',%s,%s,'teacher_review_policy_v1',%s,%s,'output_mod')""",
+                     (uuid4(), job, Jsonb({}), ["violence"], Jsonb({}), Jsonb([])))
+    monkeypatch.setattr("providers.download_book_image", lambda path: b"picture")
+    screen = MagicMock(side_effect=AssertionError("moderated a closed book"))
+    monkeypatch.setattr("pipeline.output_mod.classify_image_primary", screen)
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=viewer)
+    try:
+        with TestClient(app) as client:
+            assert client.post(f"/jobs/{job}/pages/s0/versions/open").status_code == 404
+            assert client.post(f"/jobs/{job}/pages/s0/version",
+                               json={"version_id": "s0-attempt-0", "source": paths["s0-a1"]}).status_code == 404
+            assert client.get(f"/jobs/{job}/images/page-version-s0-attempt-0").status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    assert conn.execute("select pages from jobs where id=%s", (job,)).fetchone()["pages"][0]["image_path"] == paths["s0-a1"]
+
+
+@pytest.mark.parametrize("magic_pencil", [True, False])
+def test_the_finished_book_marks_only_pages_with_two_kept_attempts(magic_pencil):
+    """Magic pencil ticket 09 (AC-13, SH-01): "Other versions" is offered on a page with at least two
+    attempts that are not excluded, and only on a job submitted with the setting on."""
+    from app.moderation_hold import book_pages
+
+    state = StoryMemory(schema_version=1, story_id=str(uuid4()), profile_id="p", classroom_id="c",
+        input=Input(raw_text="Synthetic story"),
+        scenes=[Scene(scene_id="s0", text_excerpt="a", caption="One.", final_image_ref="j/s0-2.png", attempts=[
+                    Attempt(image_ref="j/s0-1.png"), Attempt(image_ref="j/s0-2.png", safety_eligibility="cleared")]),
+                Scene(scene_id="s1", text_excerpt="b", caption="Two.", final_image_ref="j/s1-1.png", attempts=[
+                    Attempt(image_ref="j/s1-1.png", safety_eligibility="cleared"),
+                    Attempt(image_ref="j/s1-2.png", safety_eligibility="excluded")]),
+                Scene(scene_id="s2", text_excerpt="c", caption="Three.", final_image_ref="j/s2-2.png", attempts=[
+                    Attempt(image_ref="j/s2-1.png", safety_eligibility="teacher_allowed"),
+                    Attempt(image_ref="j/s2-2.png", safety_eligibility="cleared")])],
+        moderation_context=ModerationContext(mode="teacher_review_v1", magic_pencil=magic_pencil))
+    assert book_pages(state) == [
+        {"scene_id": "s0", "caption": "One.", "image_path": "j/s0-2.png", **({"other_versions": True} if magic_pencil else {})},
+        {"scene_id": "s1", "caption": "Two.", "image_path": "j/s1-1.png"},
+        {"scene_id": "s2", "caption": "Three.", "image_path": "j/s2-2.png"}]
+
+
+def test_the_pdf_of_a_reapproved_book_prints_the_chosen_page_version(monkeypatch, held_database):
+    """Magic pencil ticket 09 (AC-15, edge row "PDF export after an edit"): the export reads the
+    current `jobs.pages` picture, and the delivery guard accepts it."""
+    from io import BytesIO
+    from PIL import Image
+
+    conn, child, classroom, job, _ = held_database
+    paths = _finished_feature_book(conn, child, classroom, job)
+
+    def png(shade):
+        buffer = BytesIO()
+        Image.new("RGB", (4, 4), (shade, 0, 0)).save(buffer, "PNG")
+        return buffer.getvalue()
+
+    objects = {paths["s0-a0"]: png(10), paths["s0-a1"]: png(20), paths["s1-a0"]: png(30)}
+    monkeypatch.setattr("providers.download_book_image", lambda path: objects[path])
+    monkeypatch.setattr("pipeline.output_mod.get_signed_url", lambda path: path)
+    monkeypatch.setattr("pipeline.output_mod.classify_image_primary", MagicMock(return_value=True))
+    monkeypatch.setattr("pipeline.output_mod.classify_image_backstop", MagicMock(return_value=True))
+    printed = MagicMock(return_value=b"%PDF-synthetic")
+    monkeypatch.setattr("app.pdf_export.render_book_pdf", printed)
+
+    def supabase():
+        profile = conn.execute("select * from profiles where id=%s", (child,)).fetchone()
+        row = conn.execute("select * from jobs where id=%s", (job,)).fetchone()
+        client = MagicMock()
+        client.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{
+            **profile, "classroom_id": str(profile["classroom_id"])}]
+        client.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = [{
+            **row, "classroom_id": str(row["classroom_id"]), "profile_id": str(row["profile_id"]),
+            "approved_at": row["approved_at"] and row["approved_at"].isoformat(),
+            "profiles": {"role": "student", "removed_at": None, "classroom_id": str(row["classroom_id"])}}]
+        return client
+
+    monkeypatch.setattr("app.db.get_supabase_client", supabase)
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+    try:
+        with TestClient(app) as client:
+            client.post(f"/jobs/{job}/pages/s0/versions/open")
+            assert client.post(f"/jobs/{job}/pages/s0/version",
+                               json={"version_id": "s0-attempt-0", "source": paths["s0-a1"]}).status_code == 200
+            conn.execute("update jobs set approved_at=now() where id=%s", (job,))
+            response = client.get(f"/jobs/{job}/pdf")
+            assert response.status_code == 200, response.text
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    assert printed.call_args.args[2] == [png(10), png(30)]
+
+
+def _page_pencil_book(monkeypatch, held_database, *, text_safe=True, result_safe=True):
+    """A finished feature book with every provider boundary of the page pencil stubbed (spec §6.2-6.3)."""
+    conn, child, classroom, job, teacher = held_database
+    paths = _finished_feature_book(conn, child, classroom, job)
+    queue = MagicMock()
+    monkeypatch.setattr("app.page_pencil.get_queue", lambda: queue)
+    redacted, checks = [], {"text": text_safe, "result": result_safe}
+
+    def redact(text):
+        redacted.append(text)
+        return text.replace("Ana Cruz", "<PERSON>")
+
+    monkeypatch.setattr("providers.redact_pii", redact)
+    monkeypatch.setattr("app.moderation_hold.check_text",
+                        lambda text, **kw: (checks["text"], [] if checks["text"] else ["violence"], text))
+    objects = {path: name.encode() for name, path in paths.items()}
+    storage = MagicMock()
+    storage.storage.from_.return_value.upload.side_effect = lambda path, content, options: objects.update({path: content})
+    monkeypatch.setattr("worker.page_pencil.get_supabase_client", lambda: storage)
+    monkeypatch.setattr("providers.download_book_image", lambda path: objects[path])
+    edit = MagicMock(return_value=b"edited")
+    monkeypatch.setattr("worker.page_pencil.edit_image", edit)
+    monkeypatch.setattr("worker.page_pencil.get_signed_url", lambda path: f"https://private.invalid/{path}")
+    monkeypatch.setattr("pipeline.output_mod.get_signed_url", lambda path: path)
+    monkeypatch.setattr("pipeline.output_mod.classify_image_primary", MagicMock(return_value=True))
+    monkeypatch.setattr("pipeline.output_mod.classify_image_backstop",
+                        MagicMock(side_effect=lambda url, **kw: checks["result"] if "pencil" in url else True))
+    monkeypatch.setattr("providers.text_to_image", MagicMock(side_effect=AssertionError("a page pencil drew from scratch")))
+
+    def run():
+        from worker.page_pencil import run_page_pencil
+        assert queue.enqueue.call_args.args[0] == "worker.page_pencil.run_page_pencil"
+        run_page_pencil(*queue.enqueue.call_args.args[1:])
+
+    def status():
+        response = client.get(f"/jobs/{job}/pages/pencil")
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+    client = TestClient(app)
+    return SimpleNamespace(conn=conn, client=client, job=job, paths=paths, queue=queue, edit=edit, objects=objects,
+                           redacted=redacted, checks=checks, run=run, status=status, child=child, teacher=teacher)
+
+
+def test_a_cleared_page_pencil_edits_that_page_once_and_keeping_it_changes_the_book(monkeypatch, held_database):
+    """Magic pencil ticket 10 (US-04 AC-16..AC-19, AC-20, AC-22, SH-03, SH-08, SH-10)."""
+    book = _page_pencil_book(monkeypatch, held_database)
+    job, client, paths, conn = book.job, book.client, book.paths, book.conn
+    conn.execute("update jobs set approved_at=now() where id=%s", (job,))
+    route = f"/jobs/{job}/pages/s0/pencil"
+    request = {"request_id": str(uuid4()), "text": "  give Ana Cruz a red hat ", "source": paths["s0-a1"]}
+    try:
+        assert book.status() == {"pencils_left": 5, "disabled_reason": None, "uses": []}
+        for bad in ({**request, "text": "   "}, {**request, "text": "x" * 201}):
+            assert client.post(route, json=bad).status_code == 422
+        stale = client.post(route, json={**request, "source": paths["s0-a0"]})
+        assert stale.status_code == 409 and stale.json()["detail"] == "stale_source"
+        assert book.redacted == []   # nothing was redacted, moderated or queued
+
+        assert client.post(route, json=request).status_code == 202
+        assert client.post(route, json=request).status_code == 202   # SH-08: a double submit spends once
+        assert book.queue.enqueue.call_count == 1 and book.redacted == ["give Ana Cruz a red hat"]
+        use_id = request["request_id"]
+        assert book.status()["uses"] == [{"use_id": use_id, "scene_id": "s0", "state": "drawing",
+                                          "text": "give <PERSON> a red hat", "before_path": paths["s0-a1"], "after_path": None}]
+
+        book.run()   # the worker task, outside the graph (OD-01)
+        book.run()   # a redelivery spends nothing more
+        book.edit.assert_called_once()
+        prompt, sources = book.edit.call_args.args
+        assert prompt.startswith("give <PERSON> a red hat\n\n") and sources == [f"https://private.invalid/{paths['s0-a1']}"]
+        after = f"{job}/s0-pencil-{use_id}.png"
+        assert book.status() == {"pencils_left": 4, "disabled_reason": None, "uses": [
+            {"use_id": use_id, "scene_id": "s0", "state": "choice", "text": "give <PERSON> a red hat",
+             "before_path": paths["s0-a1"], "after_path": after}]}
+        row = conn.execute("select * from jobs where id=%s", (job,)).fetchone()
+        assert row["image_count"] == 5 and row["status"] == "complete" and row["approved_at"] is not None
+        assert client.get(f"/jobs/{job}/images/page-pencil-{use_id}").content == b"edited"
+        assert client.get(f"/jobs/{job}/images/scene-s0").content == b"s0-a1"   # the book is unchanged until keep
+
+        choice = f"{route}/choice"
+        keep = {"use_id": use_id, "choice": "kept", "source": after}
+        assert client.post(choice, json={**keep, "source": paths["s0-a1"]}).status_code == 409
+        assert client.post(choice, json=keep).status_code == 200
+        assert client.post(choice, json=keep).status_code == 200   # a repeat changes nothing
+        row = conn.execute("select * from jobs where id=%s", (job,)).fetchone()
+        assert row["pages"][0] == {"scene_id": "s0", "caption": "The dog ran.", "image_path": after, "other_versions": True}
+        assert row["approved_at"] is None and row["image_count"] == 5
+        assert client.get(f"/jobs/{job}/images/scene-s0").content == b"edited"
+        assert book.status()["uses"][0]["state"] == "kept"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    assert [dict(r) for r in conn.execute("""select target_id,source,before_path,image_path,pencil_text,
+      text_moderation,picture_moderation,reason,choice from job_picture_records where job_id=%s and kind='pencil'""",
+                                          (job,)).fetchall()] == [{
+        "target_id": "s0", "source": "page_pencil", "before_path": paths["s0-a1"], "image_path": after,
+        "pencil_text": "give <PERSON> a red hat", "text_moderation": "cleared", "picture_moderation": "passed",
+        "reason": None, "choice": "kept"}]
+    from langgraph.checkpoint.postgres import PostgresSaver
+    retained = PostgresSaver(conn).get_tuple({"configurable": {"thread_id": job}}).checkpoint["channel_values"]
+    assert StoryMemory.model_validate(retained).scenes[0].final_image_ref == paths["s0-a1"]   # OD-01, AC-19
+
+
+def test_a_refused_page_pencil_draws_nothing_and_spends_no_pencil(monkeypatch, held_database):
+    """Magic pencil ticket 10 (SH-04 edge case): fal's checker refuses the edit. No image, no go spent,
+    and the child may try different words."""
+    from providers import FalFlaggedImage
+
+    book = _page_pencil_book(monkeypatch, held_database)
+    book.edit.side_effect = FalFlaggedImage()
+    route, use_id = f"/jobs/{book.job}/pages/s0/pencil", str(uuid4())
+    try:
+        assert book.client.post(route, json={"request_id": use_id, "text": "a hat",
+                                             "source": book.paths["s0-a1"]}).status_code == 202
+        book.run()
+        assert book.status() == {"pencils_left": 5, "disabled_reason": None, "uses": [
+            {"use_id": use_id, "scene_id": "s0", "state": "refused", "text": "a hat", "before_path": book.paths["s0-a1"],
+             "after_path": None}]}
+        again = {"request_id": str(uuid4()), "text": "a blue hat", "source": book.paths["s0-a1"]}
+        assert book.client.post(route, json=again).status_code == 202   # a refusal does not block a new request
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    assert book.conn.execute("select image_count from jobs where id=%s", (book.job,)).fetchone()["image_count"] == 4
+
+
+@pytest.mark.parametrize("changed", ["before_the_edit", "after_the_edit"])
+def test_a_book_that_changes_mid_edit_spends_only_for_an_image_it_got(monkeypatch, held_database, changed):
+    """Magic pencil ticket 10 (SH-04): the book changes while the edit runs. Stopped before fal is asked,
+    the use ends with nothing spent. Once fal returned, the paid image is kept and counted."""
+    import providers
+
+    book = _page_pencil_book(monkeypatch, held_database)
+    bump = "update jobs set generation_epoch=generation_epoch+1 where id=%s"
+    if changed == "before_the_edit":
+        book.edit.side_effect = lambda *a: (book.conn.execute(bump, (book.job,)), providers.check_generation_fence(),
+                                            b"edited")[-1]
+    else:
+        book.edit.side_effect = lambda *a: (providers.check_generation_fence(), book.conn.execute(bump, (book.job,)),
+                                            providers.check_generation_fence(), b"edited")[-1]
+    use_id = str(uuid4())
+    try:
+        assert book.client.post(f"/jobs/{book.job}/pages/s0/pencil", json={
+            "request_id": use_id, "text": "a hat", "source": book.paths["s0-a1"]}).status_code == 202
+        book.run()
+        assert book.status()["uses"][0]["state"] == ("stale" if changed == "before_the_edit" else "choice")
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    row = book.conn.execute("select image_count from jobs where id=%s", (book.job,)).fetchone()
+    assert row["image_count"] == (4 if changed == "before_the_edit" else 5)
+
+
+@pytest.mark.parametrize("result_safe", [True, False])
+def test_a_withdrawal_during_a_page_edit_ends_the_use_without_a_hold(monkeypatch, held_database, result_safe):
+    """Magic pencil review 2026-11-03 (SH-09, SH-07): a teacher withdrawal reopens the book while the edit
+    runs. The paid image is counted, but the use ends as stale: no pencil result hold on a book that is not
+    complete, and nothing left in progress to block the page tools once the book is finished again."""
+    import providers
+
+    book = _page_pencil_book(monkeypatch, held_database, result_safe=result_safe)
+
+    def withdrawn(*args):
+        providers.check_generation_fence()
+        book.conn.execute("""update jobs set status='awaiting_teacher',generation_epoch=generation_epoch+1,
+          pages='[]' where id=%s""", (book.job,))
+        book.conn.execute("""insert into job_moderation_reviews(id,job_id,kind,subject_id,subject_version,subject,
+          policy_version,settings_snapshot,classifier_evidence,return_node)
+          values (%s,%s,'scene_image','s1','v','{}','p','{}','[]','pending')""", (uuid4(), book.job))
+        return b"edited"
+
+    book.edit.side_effect = withdrawn
+    use_id = str(uuid4())
+    try:
+        assert book.client.post(f"/jobs/{book.job}/pages/s0/pencil", json={
+            "request_id": use_id, "text": "a hat", "source": book.paths["s0-a1"]}).status_code == 202
+        book.run()
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    use = book.conn.execute("""select reason,picture_moderation from job_picture_records where job_id=%s
+      and kind='pencil'""", (book.job,)).fetchone()
+    assert (use["reason"], use["picture_moderation"]) == ("stale", None)
+    assert book.conn.execute("""select count(*) from job_moderation_reviews where job_id=%s
+      and kind='page_pencil_result'""", (book.job,)).fetchone()["count"] == 0
+    assert book.conn.execute("select image_count from jobs where id=%s", (book.job,)).fetchone()["image_count"] == 5
+
+
+def _rerun(state, scene_id, path):
+    """The checkpoint after a withdrawal rerun redrew one page."""
+    return state.model_copy(update={"scenes": [s.model_copy(update={
+        "final_image_ref": path, "attempts": [*s.attempts, Attempt(image_ref=path, safety_eligibility="cleared")]})
+        if s.scene_id == scene_id else s for s in state.scenes]})
+
+
+def test_a_version_choice_survives_a_rerun_only_on_a_page_the_rerun_did_not_redraw(monkeypatch, held_database):
+    """Magic pencil review 2026-11-03 (SH-09, AC-15): a teacher withdrawal rebuilds `jobs.pages` from the
+    checkpoint. The child's version choice comes back on a page the rerun left alone, never on a redrawn one."""
+    from langgraph.checkpoint.postgres import PostgresSaver
+    from app.moderation_hold import book_on_completion
+
+    conn, child, classroom, job, _ = held_database
+    paths = _finished_feature_book(conn, child, classroom, job)
+    monkeypatch.setattr("pipeline.output_mod.get_signed_url", lambda path: path)
+    monkeypatch.setattr("pipeline.output_mod.classify_image_primary", MagicMock(return_value=True))
+    monkeypatch.setattr("pipeline.output_mod.classify_image_backstop", MagicMock(return_value=True))
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
+    try:
+        with TestClient(app) as client:
+            assert client.post(f"/jobs/{job}/pages/s0/versions/open").status_code == 200
+            assert client.post(f"/jobs/{job}/pages/s0/version",
+                               json={"version_id": "s0-attempt-0", "source": paths["s0-a1"]}).status_code == 200
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    state = StoryMemory.model_validate(
+        PostgresSaver(conn).get_tuple({"configurable": {"thread_id": job}}).checkpoint["channel_values"])
+
+    pages, _ = book_on_completion(conn, job, _rerun(state, "s1", f"{job}/s1-2.png"))
+    assert [p["image_path"] for p in pages] == [paths["s0-a0"], f"{job}/s1-2.png"]
+    pages, _ = book_on_completion(conn, job, _rerun(state, "s0", f"{job}/s0-4.png"))
+    assert [p["image_path"] for p in pages] == [f"{job}/s0-4.png", paths["s1-a0"]]
+
+
+def test_a_kept_page_pencil_result_and_its_image_survive_a_rerun(monkeypatch, held_database):
+    """Magic pencil review 2026-11-03 (SH-09, SH-04): a kept page pencil result comes back after a rerun,
+    and its paid image stays in the book's image count, which the checkpoint never learned."""
+    from langgraph.checkpoint.postgres import PostgresSaver
+    from app.moderation_hold import book_on_completion
+
+    book = _page_pencil_book(monkeypatch, held_database)
+    use_id = str(uuid4())
+    after = f"{book.job}/s0-pencil-{use_id}.png"
+    try:
+        assert book.client.post(f"/jobs/{book.job}/pages/s0/pencil", json={
+            "request_id": use_id, "text": "a hat", "source": book.paths["s0-a1"]}).status_code == 202
+        book.run()
+        assert book.client.post(f"/jobs/{book.job}/pages/s0/pencil/choice", json={
+            "use_id": use_id, "choice": "kept", "source": after}).status_code == 200
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    state = StoryMemory.model_validate(
+        PostgresSaver(book.conn).get_tuple({"configurable": {"thread_id": book.job}}).checkpoint["channel_values"])
+
+    pages, image_count = book_on_completion(book.conn, book.job, _rerun(state, "s1", f"{book.job}/s1-2.png"))
+    assert pages[0] == {"scene_id": "s0", "caption": "The dog ran.", "image_path": after, "other_versions": True}
+    assert image_count == 1   # the checkpoint's 0 plus the one page pencil edit
+
+
+def test_other_versions_wait_while_a_page_pencil_is_in_progress(monkeypatch, held_database):
+    """Magic pencil ticket 10 (SH-07): one page change per book at a time, so a version choice cannot
+    make a paid pencil result stale while it is drawing."""
+    book = _page_pencil_book(monkeypatch, held_database)
+    try:
+        assert book.client.post(f"/jobs/{book.job}/pages/s0/pencil", json={
+            "request_id": str(uuid4()), "text": "a hat", "source": book.paths["s0-a1"]}).status_code == 202
+        chosen = book.client.post(f"/jobs/{book.job}/pages/s0/version",
+                                  json={"version_id": "s0-attempt-0", "source": book.paths["s0-a1"]})
+        assert chosen.status_code == 409 and chosen.json()["detail"] == "pencil_in_progress"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    assert book.conn.execute("select pages from jobs where id=%s", (book.job,)).fetchone()["pages"][0]["image_path"] \
+        == book.paths["s0-a1"]
+
+
+@pytest.mark.parametrize("decision", ["allow", "stop", "stop_removed"])
+def test_held_page_pencil_text_keeps_the_book_readable_and_a_stop_ends_only_the_request(
+        monkeypatch, held_database, decision):
+    """Magic pencil ticket 10 (AC-17, AC-18, SH-05): flagged text holds with no image while the book
+    stays complete and readable. Allow runs the edit; stop ends only the request, even for a removed author."""
+    book = _page_pencil_book(monkeypatch, held_database, text_safe=False)
+    job, client, conn, paths = book.job, book.client, book.conn, book.paths
+    use_id = str(uuid4())
+    try:
+        assert client.post(f"/jobs/{job}/pages/s0/pencil", json={
+            "request_id": use_id, "text": "a big sword", "source": paths["s0-a1"]}).status_code == 202
+        book.queue.enqueue.assert_not_called()
+        assert book.status()["uses"][0]["state"] == "held"
+        assert client.get(f"/jobs/{job}/images/scene-s0").content == b"s0-a1"   # the book stays readable
+        assert client.post(f"/jobs/{job}/pages/s1/versions/open").status_code == 200   # versions still work
+        assert client.post(f"/jobs/{job}/pages/s1/pencil", json={   # one request per book (SH-07)
+            "request_id": str(uuid4()), "text": "a hat", "source": paths["s1-a0"]}).json()["detail"] == "pencil_in_progress"
+
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=book.teacher)
+        assert [r["job_id"] for r in client.get(f"/teacher/classrooms/{held_database[2]}/moderation-reviews").json()] == [job]
+        route = f"/teacher/jobs/{job}/moderation-review"
+        detail = client.get(route).json()
+        assert (detail["status"], detail["kind"], detail["pencil_text"], detail["replacement_available"]) == (
+            "complete", "page_pencil_text", "a big sword", False)
+        assert [(p["asset_id"], p["state"]) for p in detail["pictures"]] == [("page-before", "available")]
+        context = client.get(f"{route}/images/page-before", params={
+            "review_id": detail["review_id"], "subject_version": detail["subject_version"]})
+        assert context.content == b"s0-a1"
+        command = {"review_id": detail["review_id"], "subject_version": detail["subject_version"],
+                   "expected_epoch": detail["generation_epoch"], "request_id": str(uuid4()),
+                   "policy_version": detail["current_policy_version"], "confirmed_criteria": detail["criteria"],
+                   "confirmed": True}
+        assert client.post(f"{route}/decision", json={**command, "action": "replace"}).status_code == 422
+        from app.auth import owned_job, require_teacher
+        app.dependency_overrides[owned_job] = lambda: {"id": job, "moderation_mode": "teacher_review_v1"}
+        app.dependency_overrides[require_teacher] = lambda: {"id": book.teacher}
+        try:   # The held request waits alone: the teacher can still approve the book (spec §4).
+            assert client.post(f"/jobs/{job}/review", json={"decision": "approved"}).status_code == 200
+        finally:
+            app.dependency_overrides.pop(owned_job, None)
+            app.dependency_overrides.pop(require_teacher, None)
+        if decision == "stop_removed":
+            conn.execute("update profiles set removed_at=now() where id=%s", (book.child,))
+        action = "allow" if decision == "allow" else "stop"
+        response = client.post(f"{route}/decision", json={**command, "action": action})
+        assert response.status_code == (202 if action == "allow" else 200), response.text
+        assert client.post(f"{route}/decision", json={**command, "action": action}).status_code == 200   # replay
+        assert client.get(f"/teacher/classrooms/{held_database[2]}/moderation-reviews").json() == []
+        assert conn.execute("select status from jobs where id=%s", (job,)).fetchone()["status"] == "complete"
+        if decision == "stop_removed":
+            book.queue.enqueue.assert_not_called()
+            return
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=book.child)
+        if action == "allow":
+            book.run()
+            book.edit.assert_called_once()
+            assert book.status()["uses"][0]["state"] == "choice"
+        else:
+            book.queue.enqueue.assert_not_called()
+            assert book.status() == {"pencils_left": 5, "disabled_reason": None, "uses": [
+                {"use_id": use_id, "scene_id": "s0", "state": "stopped", "text": "a big sword", "before_path": paths["s0-a1"],
+                 "after_path": None}]}
+    finally:
+        conn.execute("update profiles set removed_at=null where id=%s", (book.child,))
+        app.dependency_overrides.pop(get_current_user, None)
+    row = conn.execute("select * from job_picture_records where job_id=%s and kind='pencil'", (job,)).fetchone()
+    assert (row["text_moderation"], row["reason"]) == (
+        ("teacher_allowed", None) if action == "allow" else ("teacher_stopped", "text_stopped"))
+
+
+@pytest.mark.parametrize("decision", ["allow", "stop"])
+def test_a_flagged_page_pencil_result_holds_while_the_book_keeps_its_picture(monkeypatch, held_database, decision):
+    """Magic pencil ticket 10 (AC-18, SH-05): the edit is paid, so the pencil is spent; the result waits
+    for the teacher while the page keeps its picture. Allow offers keep-or-old; stop ends the request."""
+    book = _page_pencil_book(monkeypatch, held_database, result_safe=False)
+    job, client, paths = book.job, book.client, book.paths
+    use_id = str(uuid4())
+    after = f"{job}/s0-pencil-{use_id}.png"
+    try:
+        assert client.post(f"/jobs/{job}/pages/s0/pencil", json={
+            "request_id": use_id, "text": "a hat", "source": paths["s0-a1"]}).status_code == 202
+        book.run()
+        assert book.status() == {"pencils_left": 4, "disabled_reason": None, "uses": [
+            {"use_id": use_id, "scene_id": "s0", "state": "held", "text": "a hat", "before_path": paths["s0-a1"], "after_path": None}]}
+        assert client.get(f"/jobs/{job}/images/page-pencil-{use_id}").status_code == 404
+        assert client.get(f"/jobs/{job}/images/scene-s0").content == b"s0-a1"
+
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=book.teacher)
+        route = f"/teacher/jobs/{job}/moderation-review"
+        detail = client.get(route).json()
+        assert (detail["kind"], detail["pencil_text"]) == ("page_pencil_result", "a hat")
+        assert [(p["asset_id"], p["state"]) for p in detail["pictures"]] == [("page-before", "available"), ("held", "held")]
+        reveal = {"review_id": detail["review_id"], "subject_version": detail["subject_version"]}
+        assert client.post(f"{route}/reveal", json=reveal).content == b"edited"
+        command = {**reveal, "expected_epoch": detail["generation_epoch"], "request_id": str(uuid4()),
+                   "policy_version": detail["current_policy_version"], "confirmed_criteria": detail["criteria"],
+                   "confirmed": True, "action": decision}
+        assert client.post(f"{route}/decision", json=command).status_code == 200
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=book.child)
+        if decision == "stop":
+            assert book.status()["uses"][0]["state"] == "stopped"
+            assert client.get(f"/jobs/{job}/images/page-pencil-{use_id}").status_code == 404
+            return
+        assert book.status()["uses"][0] == {"use_id": use_id, "scene_id": "s0", "state": "choice", "text": "a hat",
+                                            "before_path": paths["s0-a1"], "after_path": after}
+        assert client.get(f"/jobs/{job}/images/page-pencil-{use_id}").content == b"edited"
+        assert client.post(f"/jobs/{job}/pages/s0/pencil/choice", json={
+            "use_id": use_id, "choice": "kept", "source": after}).status_code == 200
+        assert client.get(f"/jobs/{job}/images/scene-s0").content == b"edited"
+        # A teacher-allowed result is only ever the current page, never another version (ticket 04).
+        versions = client.post(f"/jobs/{job}/pages/s0/versions/open").json()["versions"]
+        assert use_id not in [v["version_id"] for v in versions]
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.parametrize("second", ["passes", "flagged"])
+def test_a_teacher_replacement_of_a_held_page_result_reruns_the_same_edit(monkeypatch, held_database, second):
+    """Magic pencil ticket 11 (AC-18, AC-22): one more edit of the recorded source with the same text,
+    no fresh draw, one image spent. A pass is offered for keep-or-old; a flag holds again with the
+    slot used. The log row keeps the replaced picture. The held use is the book's fifth pencil, so the
+    replacement must not count it twice."""
+    book = _page_pencil_book(monkeypatch, held_database, result_safe=False)
+    job, client, conn, paths = book.job, book.client, book.conn, book.paths
+    for n in range(4):
+        conn.execute("""insert into job_picture_records(job_id,kind,target_id,version_id,image_path,source,
+          before_path,pencil_text,text_moderation,picture_moderation,choice)
+          values (%s,'pencil','s1',%s,%s,'page_pencil',%s,'a hat','cleared','passed','old')""",
+                     (job, str(uuid4()), f"{job}/s1-pencil-{n}.png", paths["s1-a0"]))
+    use_id = str(uuid4())
+    first, after = f"{job}/s0-pencil-{use_id}.png", f"{job}/s0-pencil-{use_id}-replacement.png"
+    route = f"/teacher/jobs/{job}/moderation-review"
+
+    def command(detail, action):
+        return {"review_id": detail["review_id"], "subject_version": detail["subject_version"],
+                "expected_epoch": detail["generation_epoch"], "request_id": str(uuid4()),
+                "policy_version": detail["current_policy_version"], "confirmed_criteria": detail["criteria"],
+                "confirmed": True, "action": action}
+
+    try:
+        assert client.post(f"/jobs/{job}/pages/s0/pencil", json={
+            "request_id": use_id, "text": "a hat", "source": paths["s0-a1"]}).status_code == 202
+        book.run()
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=book.teacher)
+        detail = client.get(route).json()
+        assert (detail["replacement_available"], detail["replacement_disabled_reason"]) == (True, None)
+        book.checks["result"] = second == "passes"
+        book.edit.return_value = b"edited again"
+        assert client.post(f"{route}/decision", json=command(detail, "replace")).status_code == 202
+        # Its own RQ task: the first one stays in the registry after it finished.
+        assert book.queue.enqueue.call_args.kwargs["job_id"] == f"page-pencil-{job}-{use_id}-replacement"
+        book.run()
+        assert book.edit.call_count == 2 and book.edit.call_args_list[1] == book.edit.call_args_list[0]
+        assert conn.execute("select image_count from jobs where id=%s", (job,)).fetchone()["image_count"] == 6
+        if second == "flagged":
+            again = client.get(route).json()
+            assert again["review_id"] != detail["review_id"] and again["kind"] == "page_pencil_result"
+            assert (again["replacement_available"], again["replacement_disabled_reason"]) == (False, "replacement_already_used")
+            refused = client.post(f"{route}/decision", json=command(again, "replace"))
+            assert (refused.status_code, refused.json()["detail"]) == (422, "replacement_already_used")
+            assert book.queue.enqueue.call_count == 2
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=book.child)
+        status = book.status()
+        assert status["pencils_left"] == 0
+        assert status["uses"][-1]["state"] == ("choice" if second == "passes" else "held")
+        if second == "passes":
+            assert client.get(f"/jobs/{job}/images/page-pencil-{use_id}").content == b"edited again"
+            assert client.post(f"/jobs/{job}/pages/s0/pencil/choice", json={
+                "use_id": use_id, "choice": "kept", "source": after}).status_code == 200
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    row = conn.execute("""select image_path,replaced_path,picture_moderation,reason from job_picture_records
+      where job_id=%s and kind='pencil' and version_id=%s""", (job, use_id)).fetchone()
+    assert dict(row) == {"image_path": after, "replaced_path": first, "reason": None,
+                         "picture_moderation": "passed" if second == "passes" else "flagged"}
+
+
+def test_a_held_page_result_cannot_be_replaced_at_the_image_budget(monkeypatch, held_database):
+    """Magic pencil ticket 11 (AC-18): the dialog and the decision give the same reason."""
+    book = _page_pencil_book(monkeypatch, held_database, result_safe=False)
+    job, client = book.job, book.client
+    route = f"/teacher/jobs/{job}/moderation-review"
+    try:
+        assert client.post(f"/jobs/{job}/pages/s0/pencil", json={
+            "request_id": str(uuid4()), "text": "a hat", "source": book.paths["s0-a1"]}).status_code == 202
+        book.run()
+        book.conn.execute("update jobs set image_count=55 where id=%s", (job,))
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=book.teacher)
+        detail = client.get(route).json()
+        assert (detail["replacement_available"], detail["replacement_disabled_reason"]) == (False, "image_budget_exhausted")
+        refused = client.post(f"{route}/decision", json={
+            "review_id": detail["review_id"], "subject_version": detail["subject_version"],
+            "expected_epoch": detail["generation_epoch"], "request_id": str(uuid4()), "action": "replace",
+            "policy_version": detail["current_policy_version"], "confirmed_criteria": detail["criteria"], "confirmed": True})
+        assert (refused.status_code, refused.json()["detail"]) == (422, "image_budget_exhausted")
+        assert book.queue.enqueue.call_count == 1 and book.edit.call_count == 1
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_using_the_old_picture_keeps_a_page_pencil_result_as_another_version(monkeypatch, held_database):
+    """Magic pencil ticket 10 (AC-19): "Use the old one" leaves the page and its approval alone, and the
+    result is offered later as another version of that page."""
+    book = _page_pencil_book(monkeypatch, held_database)
+    job, client, conn, paths = book.job, book.client, book.conn, book.paths
+    conn.execute("update jobs set approved_at=now() where id=%s", (job,))
+    use_id = str(uuid4())
+    after = f"{job}/s1-pencil-{use_id}.png"
+    try:
+        assert client.post(f"/jobs/{job}/pages/s1/pencil", json={
+            "request_id": use_id, "text": "a hat", "source": paths["s1-a0"]}).status_code == 202
+        book.run()
+        assert client.post(f"/jobs/{job}/pages/s1/pencil/choice", json={
+            "use_id": use_id, "choice": "old", "source": after}).status_code == 200
+        row = conn.execute("select pages,approved_at from jobs where id=%s", (job,)).fetchone()
+        assert row["pages"][1] == {"scene_id": "s1", "caption": "It found a stick.", "image_path": paths["s1-a0"],
+                                   "other_versions": True}
+        assert row["approved_at"] is not None
+        assert book.status()["uses"][0]["state"] == "old"
+        opened = client.post(f"/jobs/{job}/pages/s1/versions/open").json()
+        assert opened == {"versions": [{"version_id": use_id, "image_path": after}], "unavailable": 0}
+        assert client.get(f"/jobs/{job}/images/page-version-{use_id}").content == b"edited"
+        chosen = client.post(f"/jobs/{job}/pages/s1/version", json={"version_id": use_id, "source": paths["s1-a0"]})
+        assert chosen.status_code == 200
+        assert client.get(f"/jobs/{job}/images/scene-s1").content == b"edited"
+        assert conn.execute("select approved_at from jobs where id=%s", (job,)).fetchone()["approved_at"] is None
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.parametrize("limit", ["no_pencils", "image_budget"])
+def test_the_page_pencil_is_disabled_with_its_reason_and_versions_still_work(monkeypatch, held_database, limit):
+    """Magic pencil ticket 10 (SH-04): five page pencils per book, and none once the book's image_count
+    reaches IMAGE_BUDGET (55). Nothing is redacted or spent; other versions still open."""
+    book = _page_pencil_book(monkeypatch, held_database)
+    job, client, conn, paths = book.job, book.client, book.conn, book.paths
+    if limit == "image_budget":
+        conn.execute("update jobs set image_count=55 where id=%s", (job,))
+    else:
+        for n in range(5):
+            conn.execute("""insert into job_picture_records(job_id,kind,target_id,version_id,image_path,source,
+              before_path,pencil_text,text_moderation,picture_moderation,choice)
+              values (%s,'pencil','s1',%s,%s,'page_pencil',%s,'a hat','cleared','passed','old')""",
+                         (job, str(uuid4()), f"{job}/s1-pencil-{n}.png", paths["s1-a0"]))
+    try:
+        status = book.status()
+        assert (status["pencils_left"], status["disabled_reason"]) == (0 if limit == "no_pencils" else 5, limit)
+        refused = client.post(f"/jobs/{job}/pages/s0/pencil", json={
+            "request_id": str(uuid4()), "text": "a hat", "source": paths["s0-a1"]})
+        assert (refused.status_code, refused.json()["detail"]) == (409, limit)
+        assert book.redacted == [] and book.queue.enqueue.call_count == 0
+        assert client.post(f"/jobs/{job}/pages/s0/versions/open").status_code == 200
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)

@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
-from app.config import MAX_TITLE_CHARS, MIN_STORY_WORDS, SELECTABLE_STYLE_PRESET_IDS, settings
+from app.config import MAX_PENCIL_CHARS, MAX_TITLE_CHARS, MIN_STORY_WORDS, SELECTABLE_STYLE_PRESET_IDS, settings
 from app.moderation_policy import TEACHER_MODERATION_POLICY_VERSION
 from app.length import clamp_story, word_count
 from app.db import get_supabase_client
@@ -19,6 +19,7 @@ from app.research import research_router
 from app.pdf_export import pdf_router
 from app.onboarding import onboarding_router
 from app.moderation_hold import hold_router, insert_review_job
+from app.page_pencil import page_pencil_router
 import app.classrooms  # noqa: F401 — registers routes on teacher_router as side-effect
 import app.review  # noqa: F401 — registers routes on teacher_router as side-effect
 import app.review_notes  # noqa: F401 — registers routes on teacher_router as side-effect
@@ -82,6 +83,7 @@ app.include_router(research_router)
 app.include_router(pdf_router)
 app.include_router(onboarding_router)
 app.include_router(hold_router)
+app.include_router(page_pencil_router)
 app.include_router(child_notes_router)
 
 
@@ -127,9 +129,25 @@ class CreateStorybookResponse(BaseModel):
 
 
 class ConfirmRequest(BaseModel):
-    action: Literal["confirm", "try_again"]
+    action: Literal["confirm", "try_again", "choose_version", "pencil", "pencil_choice"]
     char_id: str | None = None
     attribute: str | None = None
+    # choose_version (ADR-082 Decision 1): `source` is the picture the child chose from (SH-08).
+    version_id: str | None = None
+    source: str | None = None
+    # pencil (ADR-082 Decision 2): the child's change, raw until the hold path redacts it.
+    text: str | None = None
+    choice: Literal["kept", "old"] | None = None
+
+    @field_validator("text")
+    @classmethod
+    def validate_pencil_text(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        trimmed = v.strip()
+        if not trimmed or len(trimmed) > MAX_PENCIL_CHARS:
+            raise ValueError(f"Write between 1 and {MAX_PENCIL_CHARS} characters.")
+        return trimmed
 
 
 class ConfirmResponse(BaseModel):
@@ -162,6 +180,7 @@ def create_storybook(
 
     # Snapshot once. A later switch-off cannot downgrade an accepted submission.
     review_mode = settings.enable_teacher_moderation_review
+    magic_pencil = settings.enable_magic_pencil
     text, truncated = clamp_story(payload.text)
     title = payload.title
     if review_mode:
@@ -211,6 +230,7 @@ def create_storybook(
                 "moderation_mode": "teacher_review_v1",
                 "moderation_settings_snapshot": {
                     "policy_version": TEACHER_MODERATION_POLICY_VERSION,
+                    "magic_pencil": magic_pencil,
                 },
             } if review_mode else {}),
         }
@@ -266,8 +286,14 @@ def confirm_job(
 
     if row.get("moderation_mode") == "teacher_review_v1":
         from app.moderation_hold import confirm_review_job
-        return ConfirmResponse(status=confirm_review_job(job_id, payload.model_dump(), str(user.id)))
+        # Each action carries only its own fields, so the other resume payloads keep their shape.
+        keep = {"choose_version": {"version_id", "source"}, "pencil": {"text", "source"},
+                "pencil_choice": {"choice", "source"}}.get(payload.action, set())
+        resume = payload.model_dump(exclude={"version_id", "source", "text", "choice"} - keep)
+        return ConfirmResponse(status=confirm_review_job(job_id, resume, str(user.id)))
 
+    if payload.action in ("choose_version", "pencil", "pencil_choice"):
+        raise HTTPException(422, "choice_unavailable")  # SH-01: baseline jobs have no versions
     if payload.action == "try_again":
         characters = row["reveal"].get("characters", [])
         character = next((c for c in characters if c["char_id"] == payload.char_id), None)
@@ -288,7 +314,7 @@ def confirm_job(
 
     queue = get_queue()
     try:
-        queue.enqueue("worker.run_job.resume_storybook_job", job_id, payload.model_dump(), job_timeout=JOB_TIMEOUT_SECONDS)
+        queue.enqueue("worker.run_job.resume_storybook_job", job_id, payload.model_dump(exclude={"version_id", "source", "text", "choice"}), job_timeout=JOB_TIMEOUT_SECONDS)
     except Exception:
         # The CAS already flipped status to 'queued'; a Redis outage here would strand the book
         # with no worker coming and no way to re-confirm. Roll it back — nothing else ran.

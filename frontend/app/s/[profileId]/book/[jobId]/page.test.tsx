@@ -542,3 +542,221 @@ describe("BookPage — a finished book whose pictures will not load (spec §4)",
     expect(mockCreateSignedUrls).toHaveBeenCalledTimes(3);
   });
 });
+
+describe("BookPage — other versions of a page (magic pencil 09)", () => {
+  const FEATURE_ROW = {
+    ...COMPLETE_ROW, moderation_mode: "teacher_review_v1",
+    pages: [{ ...PAGES[0], other_versions: true }, PAGES[1]],
+  };
+
+  function featureNetwork(choose: () => Response = () => new Response(JSON.stringify({ image_path: "j1/s0-0.png" }))) {
+    const network = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/me/notes")) return new Response("[]");
+      if (url.endsWith("/pages/s0/versions/open")) {
+        return new Response(JSON.stringify({ versions: [{ version_id: "s0-attempt-0", image_path: "j1/s0-0.png" }], unavailable: 0 }));
+      }
+      if (url.endsWith("/pages/s0/version")) return choose();
+      if (url.includes("/images/")) return new Response("png");
+      throw new Error(`unexpected ${url} ${init?.method}`);
+    });
+    vi.stubGlobal("fetch", network);
+    return network;
+  }
+
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn((blob: Blob) => `blob:${(blob as Blob).size}-${Math.random()}`);
+    URL.revokeObjectURL = vi.fn();
+    mockGetSession.mockResolvedValue({ data: { session: { access_token: "synthetic" } } });
+    REFETCH.mockReset();
+  });
+
+  async function openVersions() {
+    await renderAndSwitchToPages(makeParams());
+    const opener = await screen.findByRole("button", { name: "Other versions of page 1" });
+    fireEvent.click(opener);
+    const choice = await screen.findByRole("button", { name: "Use other picture 1 for page 1" });
+    fireEvent.load(screen.getByAltText("Other picture 1 for page 1"));
+    await waitFor(() => expect(choice).toBeEnabled());
+    return { opener, choice };
+  }
+
+  it("asks before changing an approved book; Cancel changes nothing, confirming sends the page's source", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: FEATURE_ROW }));
+    const network = featureNetwork();
+    const { choice } = await openVersions();
+    expect(network).toHaveBeenCalledWith(expect.stringContaining("/jobs/j1/pages/s0/versions/open"), expect.objectContaining({ method: "POST" }));
+
+    fireEvent.click(choice);
+    expect(screen.getByText("Your teacher will look at your book again before classmates can see it.")).toBeVisible();
+    const confirm = screen.getByRole("button", { name: "Change page 1" });
+    expect(confirm).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Keep page 1 as it is" }));
+    expect(choice).toHaveFocus();
+    expect(network.mock.calls.some(([url]) => String(url).endsWith("/pages/s0/version"))).toBe(false);
+
+    fireEvent.click(choice);
+    fireEvent.click(screen.getByRole("button", { name: "Change page 1" }));
+    await waitFor(() => expect(REFETCH).toHaveBeenCalled());
+    const sent = network.mock.calls.find(([url]) => String(url).endsWith("/pages/s0/version"))!;
+    expect(JSON.parse(String(sent[1]!.body))).toEqual({ version_id: "s0-attempt-0", source: "j1/s0-1.png" });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Other versions of page 1" })).toHaveFocus());
+  });
+
+  it("changes a pending book without asking, shows the wait state, and Escape closes the list", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: { ...FEATURE_ROW, approved_at: null } }));
+    let release: (r: Response) => void = () => {};
+    featureNetwork(() => new Promise<Response>((resolve) => { release = resolve; }) as unknown as Response);
+    const { opener, choice } = await openVersions();
+    fireEvent.click(choice);
+    expect(await screen.findByText("Changing your picture…")).toBeDefined();
+    expect(choice).toBeDisabled();
+    await act(async () => release(new Response(null, { status: 409 })));
+    expect(await screen.findByText("This page changed. Have another look.")).toBeDefined();
+    fireEvent.keyDown(screen.getByRole("group", { name: "Other versions of page 1" }), { key: "Escape" });
+    expect(screen.queryByRole("group", { name: "Other versions of page 1" })).toBeNull();
+    expect(opener).toHaveFocus();
+  });
+
+  it("shows the load error when moderation is unavailable", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: FEATURE_ROW }));
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => url.endsWith("/me/notes") ? new Response("[]")
+      : url.includes("/images/") ? new Response("png") : new Response(null, { status: 503 })));
+    await renderAndSwitchToPages(makeParams());
+    fireEvent.click(await screen.findByRole("button", { name: "Other versions of page 1" }));
+    expect(await screen.findByText("We couldn't load this picture right now.")).toBeDefined();
+  });
+
+  it("offers no control on a page with one attempt or on a classmate's book", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: { ...FEATURE_ROW, profile_id: "someone-else" } }));
+    featureNetwork();
+    await renderAndSwitchToPages(makeParams());
+    await screen.findByAltText("The dog ran.");
+    expect(screen.queryByRole("button", { name: /Other versions/ })).toBeNull();
+  });
+});
+
+describe("BookPage — magic pencil on a finished page (magic pencil 10)", () => {
+  const FEATURE_ROW = { ...COMPLETE_ROW, moderation_mode: "teacher_review_v1" };
+  const AFTER = "j1/s0-pencil-u1.png";
+  const use = (state: string, after: string | null = null) => ({
+    use_id: "u1", scene_id: "s0", state, text: "a red hat", before_path: "j1/s0-1.png", after_path: after });
+
+  function pencilNetwork(statuses: object[], respond: (url: string, init?: RequestInit) => Response | undefined = () => undefined) {
+    const network = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/me/notes")) return new Response("[]");
+      const answer = respond(url, init);
+      if (answer) return answer;
+      if (url.endsWith("/pages/pencil")) return Response.json(statuses.length > 1 ? statuses.shift() : statuses[0]);
+      if (url.includes("/images/")) return new Response("png");
+      throw new Error(`unexpected ${url} ${init?.method}`);
+    });
+    vi.stubGlobal("fetch", network);
+    return network;
+  }
+
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn((blob: Blob) => `blob:${(blob as Blob).size}-${Math.random()}`);
+    URL.revokeObjectURL = vi.fn();
+    mockGetSession.mockResolvedValue({ data: { session: { access_token: "synthetic" } } });
+    REFETCH.mockReset();
+  });
+
+  it("writes a change for page 1, waits for it, and keeps it after confirming on an approved book", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: FEATURE_ROW }));
+    const network = pencilNetwork([
+      { pencils_left: 5, disabled_reason: null, uses: [] },
+      { pencils_left: 5, disabled_reason: null, uses: [use("drawing")] },
+      { pencils_left: 4, disabled_reason: null, uses: [use("choice", AFTER)] },
+    ], (url) => url.endsWith("/pages/s0/pencil") ? Response.json(use("drawing"), { status: 202 })
+      : url.endsWith("/pages/s0/pencil/choice") ? Response.json({ choice: "kept" }) : undefined);
+    await renderAndSwitchToPages(makeParams());
+    const opener = await screen.findByRole("button", { name: "Magic pencil for page 1" });
+    expect(screen.getByText("5 magic pencils left")).toBeDefined();
+    fireEvent.click(opener);
+    const box = screen.getByLabelText("What should change on page 1?");
+    expect(box).toHaveFocus();
+    const submit = screen.getByRole("button", { name: "Change page 1 with the magic pencil" });
+    expect(submit).toBeDisabled();
+    fireEvent.change(box, { target: { value: "  a red hat " } });
+    expect(screen.getByText("12/200")).toBeDefined();
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(await screen.findByText("Changing your picture…")).toBeDefined();
+    const sent = network.mock.calls.find(([url]) => String(url).endsWith("/pages/s0/pencil"))!;
+    expect(JSON.parse(String(sent[1]!.body))).toEqual({ request_id: expect.any(String), text: "a red hat", source: "j1/s0-1.png" });
+
+    const keep = await screen.findByRole("button", { name: "Keep this picture for page 1" }, { timeout: 5000 });
+    expect(screen.getByRole("button", { name: "Use the old picture for page 1" })).toBeDefined();
+    expect(network).toHaveBeenCalledWith(expect.stringContaining("/jobs/j1/images/page-pencil-u1"), expect.anything());
+    fireEvent.load(await screen.findByAltText("Your changed picture for page 1"));
+    await waitFor(() => expect(keep).toBeEnabled());
+    fireEvent.click(keep);
+    const confirm = screen.getByRole("button", { name: "Change page 1" });
+    expect(confirm).toHaveFocus();
+    fireEvent.click(confirm);
+    await waitFor(() => expect(REFETCH).toHaveBeenCalled());
+    const chosen = network.mock.calls.find(([url]) => String(url).endsWith("/pages/s0/pencil/choice"))!;
+    expect(JSON.parse(String(chosen[1]!.body))).toEqual({ use_id: "u1", choice: "kept", source: AFTER });
+  });
+
+  it("Escape closes the pencil and returns focus to it", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: FEATURE_ROW }));
+    pencilNetwork([{ pencils_left: 5, disabled_reason: null, uses: [] }]);
+    await renderAndSwitchToPages(makeParams());
+    const opener = await screen.findByRole("button", { name: "Magic pencil for page 1" });
+    fireEvent.click(opener);
+    fireEvent.keyDown(screen.getByLabelText("What should change on page 1?"), { key: "Escape" });
+    expect(screen.queryByLabelText("What should change on page 1?")).toBeNull();
+    expect(opener).toHaveFocus();
+  });
+
+  it.each([
+    ["held", "Your teacher is taking a look"],
+    ["refused", "We couldn't change this picture. Try different words."],
+  ])("a %s change shows neutral copy and the book keeps its picture", async (state, copy) => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: FEATURE_ROW }));
+    pencilNetwork([{ pencils_left: 5, disabled_reason: null, uses: [use(state)] }]);
+    await renderAndSwitchToPages(makeParams());
+    expect(await screen.findByText(copy)).toBeDefined();
+    expect(screen.getByAltText("The dog ran.")).toBeDefined();
+    const opener = screen.getByRole("button", { name: "Magic pencil for page 1" });
+    if (state === "held") expect(opener).toBeDisabled();   // one request per book (SH-07)
+    else expect(opener).toBeEnabled();
+  });
+
+  it("keeps other versions waiting while a pencil change is in progress (SH-07)", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success",
+      row: { ...FEATURE_ROW, pages: [{ ...PAGES[0], other_versions: true }, PAGES[1]] } }));
+    pencilNetwork([{ pencils_left: 5, disabled_reason: null, uses: [use("drawing")] }]);
+    await renderAndSwitchToPages(makeParams());
+    await screen.findByText("Changing your picture…");
+    expect(screen.getByRole("button", { name: "Other versions of page 1" })).toBeDisabled();
+  });
+
+  it("says why a request was turned away when another change got there first", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: FEATURE_ROW }));
+    pencilNetwork([{ pencils_left: 5, disabled_reason: null, uses: [] }],
+      (url) => url.endsWith("/pages/s0/pencil") ? Response.json({ detail: "pencil_in_progress" }, { status: 409 }) : undefined);
+    await renderAndSwitchToPages(makeParams());
+    fireEvent.click(await screen.findByRole("button", { name: "Magic pencil for page 1" }));
+    fireEvent.change(screen.getByLabelText("What should change on page 1?"), { target: { value: "a hat" } });
+    fireEvent.keyDown(screen.getByLabelText("What should change on page 1?"), { key: "Enter" });
+    expect(await screen.findByText("Another change is still going on this book. Try again soon.")).toBeDefined();
+  });
+
+  it("is disabled with its reason when the book's pencils are used up", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: FEATURE_ROW }));
+    pencilNetwork([{ pencils_left: 0, disabled_reason: "no_pencils", uses: [] }]);
+    await renderAndSwitchToPages(makeParams());
+    const opener = await screen.findByRole("button", { name: "Magic pencil for page 1" });
+    expect(opener).toBeDisabled();
+    expect(screen.getByText("No pencils left for this book")).toBeDefined();
+  });
+
+  it("offers no pencil on a classmate's book or when the book has no pencil", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: { ...FEATURE_ROW, profile_id: "someone-else" } }));
+    pencilNetwork([{ pencils_left: 5, disabled_reason: null, uses: [] }]);
+    await renderAndSwitchToPages(makeParams());
+    await screen.findByAltText("The dog ran.");
+    expect(screen.queryByRole("button", { name: /Magic pencil/ })).toBeNull();
+  });
+});

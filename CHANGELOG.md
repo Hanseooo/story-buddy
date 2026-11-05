@@ -14,6 +14,206 @@ instead of repeating it.
 
 ---
 
+## Magic pencil code review · 2026-11-03 · Child page changes survive a withdrawal rerun
+
+### Code
+
+- Migration `0032_page_choice_records.sql` (apply after 0031): `job_picture_records.kind` allows `page`,
+  one row per scene recording the child's current page change and the checkpoint picture it replaced.
+- `app/moderation_hold.py`: a version choice and a kept page pencil result record the page.
+  `book_on_completion` builds `jobs.pages` and `image_count` when a run completes. After a teacher
+  withdrawal reruns a finished book, a recorded change comes back only on a page the rerun did not
+  redraw and only if the picture still passes its choice's check. Page pencil images stay in the count.
+- `worker/page_pencil.py`: an edit that finishes after a withdrawal reopened the book ends as `stale`
+  instead of holding on a book that is not complete (which blocked every page tool).
+- `pipeline/char_bible.py`: the US-07 baseline redraw calls `check_image_budget()` first.
+
+### Docs
+
+- ADR-082 status and its `ADRs.md` row record what is implemented and what is pending. Spec SH-09 and
+  tickets 03, 09 and 10 record the fixes.
+
+### Checks
+
+- Migrations 0001–0032 applied in order to a scratch database: clean. Full backend suite against it:
+  see the review note in ticket 10.
+
+## Magic pencil ticket 11 · 2026-11-03 · Held page pencil result: replacement re-runs the edit
+
+### Code
+
+- Migration `0031_page_pencil_replacement.sql` (apply after 0030): `job_picture_records.replaced_path`.
+  Non-null means the use's one replacement is spent; it keeps the held picture in the log (AC-22).
+- `app/page_pencil.py`: a teacher replace on a `page_pencil_result` moves the held picture to
+  `replaced_path` and enqueues the same edit as its own RQ task (`...-replacement`). One
+  `replacement_disabled_reason` serves the review detail and the decision: slot used, or
+  `image_count` at `IMAGE_BUDGET`. A replacement spends no second page pencil.
+- `worker/page_pencil.py`: the replacement edits the recorded source with the recorded text, stores
+  the result under a new path, spends one image and moderates it. Pass offers keep/old, flag holds again.
+- Teacher dialog shows "Request replacement picture" for a held page result, with the slot reason.
+
+### Docs
+
+- `magic-pencil.md`: where the replacement slot is counted.
+
+### Checks
+
+- Backend full suite: 1706 passed, 6 failed (the same `test_pdf_export.py` failures as ticket 10's run).
+- Frontend: 799 passed. Lint clean.
+
+---
+
+## Magic pencil ticket 10 · 2026-11-02 · Page magic pencil on the finished book
+
+### Code
+
+- Migration `0030_page_pencil_holds.sql` (apply after 0029): review kinds `page_pencil_text` and
+  `page_pencil_result`, and log reasons `refused`, `stale`, `text_stopped`, `result_stopped` (OD-07).
+- `app/page_pencil.py`: pencil status, request (redact, moderate, hold or enqueue) and keep/old choice
+  for the author of a complete feature book. 5 pencils per book inside `IMAGE_BUDGET` (AC-16, SH-04).
+  Stale source returns 409 and a repeated request id spends once (SH-08).
+- `worker/page_pencil.py`: one `edit_image` on the page's current picture outside the graph, then
+  output moderation. A fal refusal draws and spends nothing. A flagged result holds while the book
+  keeps its picture (AC-18).
+- Teacher queue, review detail, assets and decision accept page pencil holds on a `complete` job.
+  Allow and stop end only the request. The delivery guard and teacher approval ignore them.
+- Book page "Magic pencil" with text, drawing, held, refused, error, choice and confirm states
+  (SH-07). The teacher queue copy says the book stays readable.
+
+### Docs
+
+- `magic-pencil.md` and `moderation-stack.md`: where the page pencil holds live.
+- `research-changelog.md`: one row.
+
+### Checks
+
+- API and worker tests in `test_teacher_hold.py`, queue and book-page vitest cases. No browser pass.
+
+## Magic pencil ticket 09 · 2026-11-02 · Other versions of a page on the finished book
+
+### Code
+
+- A finished feature book marks each page with two attempts that are not excluded as
+  `other_versions` in `jobs.pages` (AC-13). `POST /jobs/{id}/pages/{scene_id}/versions/open`
+  moderates each unreviewed attempt once and stores the outcome in `job_picture_records`. A flag is
+  excluded with no hold. A classifier error stores nothing (AC-14, SH-02).
+- `POST /jobs/{id}/pages/{scene_id}/version` replaces that page in `jobs.pages` and clears
+  `approved_at`/`rejected_at` under the same row lock (AC-15, AC-20). A stale source returns 409 and
+  a repeat applies once (SH-08). Only for the author of a `complete` book with no open review (SH-09).
+- The delivery guard serves `scene-<id>` from `jobs.pages`, and only when it names a moderated attempt
+  in the checkpoint. The PDF follows it.
+- The book page shows "Other versions" with an approval-reset confirm, plus loading, error, empty and
+  busy states (AC-21, SH-07).
+
+### Docs
+
+- `magic-pencil.md`: where SH-02's outcome lives for a finished page.
+
+### Checks
+
+- New API tests in `test_teacher_hold.py` and book-page vitest cases. No browser pass yet.
+
+## Magic pencil ticket 07 · 2026-11-02 · Teacher replacement of a held pencil result
+
+### Code
+
+- `replace_reference` recognises a pencil result (the current picture is a `PencilUse.after_path`)
+  and makes one `edit_image` call with the use's redacted text and `PENCIL_KEEP_CLAUSE` on its
+  source picture, instead of a fresh `text_to_image` draw (AC-10). It spends ADR-080's one slot
+  and no child go. The result goes through `char_ref_mod`. On pass, the child is offered keep/old
+  again. On flag, it holds again.
+- `reference_replacement_disabled_reason` no longer refuses pencil results. The teacher detail and
+  the decision use the same reasons for slot and budget.
+
+### Docs
+
+- Ticket 07 answer and map row. `story-memory-contract.md` notes the replacement.
+
+### Checks
+
+- New unit test and Postgres integration test (passes, flags again, budget). Full backend suite with
+  the disposable DB: 1,675 passed. The only failures are the six known `test_pdf_export` ones.
+
+---
+
+## Magic pencil ticket 06 · 2026-11-02 · Character magic pencil at the reveal
+
+### Code
+
+- On feature jobs each classifier-passed character picture has "Magic pencil" next to the chips. It
+  is a `pencil` confirm with the text and the picture on screen. The API strips and caps the text
+  (`MAX_PENCIL_CHARS` 200), redacts it (failure: 503, nothing spent), then moderates it (error: 503).
+- Cleared text: `char_bible` makes one `edit_image` call with the text and `PENCIL_KEEP_CLAUSE`, no
+  judge, one shared go. The result is current and goes through `char_ref_mod`; the old picture is
+  kept as a version. The reveal asks "Keep this" or "Use the old one" (`pencil_choice`), and
+  `confirm` returns 422 `choice_pending` until it is answered. A fal refusal spends nothing and shows
+  "We couldn't change this picture. Try different words."
+- Flagged text: a `character_pencil_text` hold with no picture and no go. The child sees "Your
+  teacher is taking a look" and no story stop. The teacher sees the redacted words and can allow
+  (runs the edit) or "Stop this change" (ends only the request). `/state` adds `pencil_hold`.
+- A stale source, a missing go or a repeated submit is rejected or deduplicated (SH-08).
+- Every use is a `job_picture_records` row (`kind = 'pencil'`). Migration
+  `0029_magic_pencil_uses.sql` adds the hold kind and the record columns.
+
+### Docs
+
+- `story-memory-contract.md` §3 lists the new fields. One `research-changelog.md` row.
+
+### Checks
+
+- Backend: 1672 passed; the same 6 `test_pdf_export` failures as on `HEAD` (local PDF `OSError`).
+  Frontend: lint, build and 784 tests pass. No browser pass.
+
+---
+
+## Magic pencil ticket 05 · 2026-11-01 · Unchosen first-round pictures, moderated on open
+
+### Code
+
+- On feature jobs the initial mint keeps the up to 2 draws it did not choose, at
+  `{story_id}/ref-<char>-<n>-u<draw>.png`, as unreviewed versions. Other jobs upload as before.
+- `POST /jobs/{id}/characters/{char_id}/versions/open` moderates each unopened draw with the
+  existing image classifiers and stores the outcome once. A flag is excluded with no hold; a
+  classifier error stores nothing and the child sees "We couldn't load this picture right now."
+- A passed draw is served through the guarded image route and can be chosen like any version.
+- Migration `0028_picture_record_moderation.sql` adds `job_picture_records.moderation_status`.
+
+### Docs
+
+- `story-memory-contract.md` §3 notes the new source value and `ReferenceChoice.cleared`. One
+  `research-changelog.md` row.
+
+### Checks
+
+- Backend: 1644 passed; the same 6 `test_pdf_export` failures as on `HEAD` (local PDF `OSError`).
+  Frontend: lint, build and 773 tests pass. No browser pass.
+
+---
+
+## Magic pencil ticket 04 · 2026-11-01 · "Draw again" is undoable at the reveal
+
+### Code
+
+- New off-by-default `ENABLE_MAGIC_PENCIL`, snapshotted per job; teacher-review jobs only. A picture
+  the classifier passed and "Draw again" replaced is kept on the character (a teacher-allowed one
+  is not, so it stays withdrawable), and "Meet your characters" offers it under
+  "Other versions". Choosing one is a `choose_version` confirm that carries the current picture; it
+  swaps the reference with no draw and no go, and a stale or unknown choice is rejected with 422.
+- Version pictures are served only through `/jobs/{id}/images/version-<id>`.
+- Migration `0027_job_picture_records.sql`: a service-role-only, job-owned record of kept pictures,
+  deleted with the story.
+
+### Docs
+
+- `story-memory-contract.md` §3 lists the new additive fields. One `research-changelog.md` row.
+
+### Checks
+
+- Backend: 1633 passed; 6 `test_pdf_export` failures that occur identically on the previous `HEAD`
+  (local PDF `OSError`). Frontend: lint, build and 771 tests pass. No browser pass.
+
+---
+
 ## §14 code review fixes · 2026-10-29 · "Add a note" toast, clickable Undo mid-pass
 
 ### Code

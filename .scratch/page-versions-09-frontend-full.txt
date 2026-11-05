@@ -1,0 +1,10 @@
+$ vitest run
+
+ RUN  v4.1.10 C:/Users/Asus/Desktop/story-buddy/frontend
+
+
+ Test Files  78 passed (78)
+      Tests  788 passed (788)
+   Start at  05:27:07
+   Duration  134.54s (transform 10.04s, setup 48.56s, import 841.10s, tests 91.48s, environment 418.38s)
+

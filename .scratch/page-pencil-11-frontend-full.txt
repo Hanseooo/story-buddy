@@ -1,0 +1,9 @@
+
+ RUN  v4.1.10 C:/Users/Asus/Desktop/story-buddy/frontend
+
+
+ Test Files  78 passed (78)
+      Tests  799 passed (799)
+   Start at  15:54:41
+   Duration  151.91s (transform 9.76s, setup 55.40s, import 972.89s, tests 95.92s, environment 448.05s)
+

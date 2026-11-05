@@ -281,7 +281,7 @@ does **not** add a third breaker: the bound is structural and small, and a break
 | c0 flags, c1 passed | Only c0 is cleared and re-minted; §4.1's guard stops c1 being re-screened. |
 | The redraw flags too | `RuntimeError("ref_flagged")` → `failure_reason="machine"`, exactly as today. Two independent draws flagging is no longer a coin flip. |
 | Primary flags instead of the backstop | Identical path. `char_ref_mod.py:42-46` short-circuits the backstop; the retry is downstream of both. |
-| Flag lands on a **tapped** redraw | Falls back to the untargeted 3-draw mint and **loses the child's tapped attribute** — `reference_retry` was consumed by `_mint_targeted` and cleared. Accepted degradation; see §8. |
+| Flag lands on a **tapped** redraw | Baseline: one draw from the tap's recorded `ref_generation_prompt`, chip kept, spending `ref_mod_retry_count` (ADR-082 Decision 7, 2026-11-01). Until then it fell back to the untargeted 3-draw mint and lost the chip; see §8. |
 | Old checkpoint resumed | `ref_mod_retry_count` defaults to `0`, so a resumed book gets a fresh budget. Harmless — the flag is re-derived from the same image. |
 | Classifier raises rather than flags | Unchanged: primary error → backstop-only, backstop error → `moderation_error`. The retry is on the *flag* path only. |
 | Budget already spent, new flag | Router raises immediately; no clearing is wasted because the job is over. |
@@ -393,7 +393,8 @@ suffix sequence), ADR-023 §8 (additive contract fields).
 1. **The tapped-attribute loss (§4.6).** A moderation flag on a child's tapped redraw falls back to
    an untargeted mint and silently drops what the child asked for. Preserving it means either not
    clearing `reference_retry` in `_mint_targeted` or reconstructing it. Rare enough to defer, ugly
-   enough to name.
+   enough to name. **Resolved 2026-11-01** by [`magic-pencil.md`](./magic-pencil.md) US-07 (ADR-082 §7)
+   for baseline jobs; teacher-review jobs already redraw from `ref_generation_prompt`.
 2. **Should a terminal `ref_flagged` say something truer than "machine"?** Considered and declined
    for now — a dedicated `failure_reason` costs an enum value, a `jobs` migration and frontend copy,
    for a path this spec is trying to make rare.

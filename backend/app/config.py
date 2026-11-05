@@ -88,6 +88,8 @@ class Settings(BaseSettings):
 
     # ADR-080: synthetic-only until educator/ethics and hosted release gates are met.
     enable_teacher_moderation_review: bool = False
+    # ADR-082 SH-01: magic pencil tools, snapshotted per job; teacher_review_v1 jobs only.
+    enable_magic_pencil: bool = False
 
     # ADR-037: consistency-checked attempts per scene — the initial draw plus two corrected
     # retries. Production is 3 and the specs are written against 3; this is a field rather than a
@@ -205,6 +207,8 @@ MIN_STORY_WORDS = 5     # a book needs at least one scene's worth of text
 # docs/specs/story-titles.md §1/§3: fixed length independent of story word count.
 MAX_TITLE_CHARS = 80
 MAX_REVIEW_NOTE_CHARS = 500
+MAX_PENCIL_CHARS = 200   # ADR-082 Decision 2, AC-07
+MAX_PAGE_PENCILS = 5   # SH-04: page pencils per book, inside IMAGE_BUDGET
 PDF_MAX_CAPTION_CHARS = 15_000
 PDF_MAX_IMAGE_BYTES = 8 * 1024 * 1024
 PDF_MAX_TOTAL_IMAGE_BYTES = 32 * 1024 * 1024

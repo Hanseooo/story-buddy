@@ -26,9 +26,12 @@ import logging
 
 from app.config import check_image_budget, settings
 from app.db import get_supabase_client
-from contracts.story_memory import CharacterDescription, RefVerdict, StoryMemory
+from contracts.story_memory import (
+    Character, CharacterDescription, PencilUse, RefVerdict, ReferenceChoice, ReferenceVersion, StoryMemory,
+)
 from pipeline.prompt_optimizer import filtered_description
-from providers import judge, text_to_image
+from pipeline.reveal import MAX_RETRY_TAPS, has_versions
+from providers import edit_image, get_signed_url, is_fal_content_flag, judge, text_to_image
 
 log = logging.getLogger(__name__)
 
@@ -258,7 +261,7 @@ def _data_uri(image: bytes) -> str:
     return "data:image/png;base64," + base64.b64encode(image).decode()
 
 
-def _upload(image: bytes, story_id: str, char_id: str, n: int) -> str:
+def _upload(image: bytes, story_id: str, char_id: str, n: int | str) -> str:
     path = f"{story_id}/ref-{char_id}-{n}.png"
     get_supabase_client().storage.from_(BUCKET).upload(
         path, image, {"content-type": "image/png", "upsert": "true"}
@@ -302,6 +305,7 @@ def mint_reference(
     story_id: str,
     char_id: str,
     n: int = 1,
+    unchosen: list[tuple[str, RefVerdict]] | None = None,
 ) -> tuple[str, RefVerdict | None, int]:
     """The node's ONE effect boundary (MASTER_SPEC §6): draw, judge, re-roll, upload.
 
@@ -314,6 +318,10 @@ def mint_reference(
 
     The loop is node-internal and adds no graph edge and no super-step (ADR-028 Decision 3),
     so ADR-003 and ADR-024 are unamended by it.
+
+    `unchosen` (ADR-082 Decision 1): when a list is passed, every judged draw that is not returned
+    is uploaded at `{n}-u{draw}` and appended as `(path, verdict)`. The `u` keeps those paths off
+    the shared `n` sequence, so no later tap or redraw can overwrite one. Omitted, one upload as before.
     """
     # ADR-035 surfaces 1 and 2. Prod job b9506307 asked for `star; glowing; tiny` under a fragment
     # ending "no glow": the draw could not satisfy it, and post-ADR-034 the judge can legitimately
@@ -344,6 +352,7 @@ def mint_reference(
                 "char_bible: %s judge failed on draw %d — accepting unchecked, ref_verdict=None",
                 char_id, draws,
             )
+            _upload_unchosen(candidates, unchosen, story_id, char_id, n)
             return _upload(image, story_id, char_id, n), None, draws
 
         # CC-5: a wrong character downstream traces back to a specific reference and draw.
@@ -359,6 +368,7 @@ def mint_reference(
         # contradiction is the wrong character, text is the right character in a marked room.
         if not verdict.contradictions and verdict.text_free:
             log.info("char_bible: %s accepted draw %d", char_id, draws)
+            _upload_unchosen(candidates, unchosen, story_id, char_id, n)
             return _upload(image, story_id, char_id, n), verdict, draws
         candidates.append((image, verdict))
 
@@ -368,7 +378,18 @@ def mint_reference(
         char_id, draws, winner + 1,
     )
     image, verdict = candidates[winner]
+    _upload_unchosen(candidates, unchosen, story_id, char_id, n, skip=winner)
     return _upload(image, story_id, char_id, n), verdict, draws
+
+
+def _upload_unchosen(candidates: list, unchosen: list | None, story_id: str, char_id: str, n: int,
+                     skip: int | None = None) -> None:
+    """Upload the judged draws the mint did not return; `skip` is the returned one's index."""
+    if unchosen is None:
+        return
+    for index, (image, verdict) in enumerate(candidates):
+        if index != skip:
+            unchosen.append((_upload(image, story_id, char_id, f"{n}-u{index + 1}"), verdict))
 
 
 def _mint_targeted(state: StoryMemory) -> dict:
@@ -407,7 +428,11 @@ def _mint_targeted(state: StoryMemory) -> dict:
             "ref_verdict": verdict,
             "ref_verdict_prompt_version": JUDGE_PROMPT_VERSION,
             "ref_moderation_status": None,
-            "ref_generation_prompt": prompt if state.moderation_context.mode == "teacher_review_v1" else None,
+            # Recorded in every mode: in baseline it is how a moderation redraw knows this picture
+            # came from a tap and keeps the chip (ADR-082 Decision 7).
+            "ref_generation_prompt": prompt,
+            # ADR-082 Decision 2: the overwrite stays, but the replaced picture is kept.
+            "versions": [*c.versions, *_kept(c, "draw_again")] if has_versions(state) else c.versions,
         })
         if c.char_id == character.char_id
         else c
@@ -423,19 +448,156 @@ def _mint_targeted(state: StoryMemory) -> dict:
     return {"characters": characters, "cost": cost, "reference_retry": None}
 
 
-def replace_reference(state: StoryMemory, char_id: str) -> dict:
-    """ADR-080: one same-intent draw, keeping the rejected immutable object."""
-    char = next(c for c in state.characters if c.char_id == char_id)
-    description = filtered_description(char.description, state.style.prompt_fragment or settings.default_style_fragment)
+def _kept(c: Character, source: str) -> list[ReferenceVersion]:
+    """The current reference as a version, or nothing unless the classifier passed it (AC-02). A
+    teacher-allowed picture is not kept: `teacher_withdraw` can reach only the current reference."""
+    if c.canonical_ref_image is None or c.ref_moderation_status != "passed":
+        return []
+    return [ReferenceVersion(
+        version_id=c.canonical_ref_image.rsplit("/", 1)[-1].removesuffix(".png"),
+        image_path=c.canonical_ref_image, ref_moderation_status=c.ref_moderation_status,
+        ref_verdict=c.ref_verdict, ref_verdict_prompt_version=c.ref_verdict_prompt_version,
+        ref_generation_prompt=c.ref_generation_prompt, source=source,
+    )]
+
+
+def _choose_version(state: StoryMemory) -> dict:
+    """ADR-082 Decision 1: no draw, no judge, no go. The chosen picture comes back exactly as it was
+    kept, moderation verdict included, so `char_ref_mod` passes it through; the one it replaces
+    becomes a version. A choice made from a picture that is no longer current changes nothing
+    (SH-08)."""
+    choice = state.reference_choice
+    char = next((c for c in state.characters if c.char_id == choice.char_id), None)
+    chosen = next((v for v in char.versions if v.version_id == choice.version_id), None) if char else None
+    # An unchosen draw is checked on open by the API, not here: `cleared` says it passed (SH-02).
+    passed = chosen is not None and (chosen.ref_moderation_status == "passed" or (
+        chosen.ref_moderation_status is None and chosen.source == "unchosen_draw" and choice.cleared))
+    if not passed or char.canonical_ref_image != choice.source:
+        return {"reference_choice": None}
+    restored = char.model_copy(update={
+        "canonical_ref_image": chosen.image_path, "ref_moderation_status": "passed",
+        "ref_verdict": chosen.ref_verdict, "ref_verdict_prompt_version": chosen.ref_verdict_prompt_version,
+        "ref_generation_prompt": chosen.ref_generation_prompt,
+        "versions": [*(v for v in char.versions if v is not chosen), *_kept(char, "version_choice")],
+    })
+    log.info("char_bible: %s version %s chosen", char.char_id, chosen.version_id)
+    return {"characters": [restored if c.char_id == char.char_id else c for c in state.characters],
+            "reference_choice": None}
+
+
+# ADR-082 Decision 2. The 2026-11-01 tap-as-edit probe's keep clause, minus "its colours": the
+# child may be asking for a colour change.
+PENCIL_KEEP_CLAUSE = "Keep everything else about the character, the art style and the plain background exactly the same."
+
+
+def _pencil_prompt(use: PencilUse) -> str:
+    return f"{use.text}\n\n{PENCIL_KEEP_CLAUSE}"
+
+
+def _with_use(state: StoryMemory, use_id: str, **update) -> list:
+    return [u.model_copy(update=update) if u.use_id == use_id else u for u in state.pencil_uses]
+
+
+def _pencil_edit(state: StoryMemory) -> dict:
+    """ADR-082 Decision 2: one edit of the current picture with the child's redacted words as
+    written (SH-10), no judge (Decision 3). The result becomes the reference so `char_ref_mod`
+    moderates it like any redraw; the old picture is kept as a version, and the reveal waits for
+    "Keep this" or "Use the old one" before the book goes on. A go is spent only when a picture
+    comes back (SH-04)."""
+    use = next(u for u in state.pencil_uses if u.use_id == state.reference_pencil)
+    char = next((c for c in state.characters if c.char_id == use.char_id), None)
+    if (char is None or char.canonical_ref_image != use.before_path or char.ref_moderation_status != "passed"
+            or state.cost.ref_retry_count >= MAX_RETRY_TAPS):
+        return {"reference_pencil": None, "pencil_uses": _with_use(state, use.use_id, reason="stale")}
     check_image_budget(state.cost.image_count)
-    image = text_to_image(char.ref_generation_prompt, negative_extra=_reference_negative(description))
-    verdict = _judge_reference(JUDGE_PROMPT.format(subject=_describe(description, char.name, notes=False)), image, char_id, 1)
+    prompt = _pencil_prompt(use)
+    try:
+        image = edit_image(prompt, [get_signed_url(char.canonical_ref_image)])
+    except Exception as exc:
+        if not is_fal_content_flag(exc):
+            raise
+        log.info("char_bible: %s pencil edit refused by fal", char.char_id)
+        return {"reference_pencil": None, "pencil_uses": _with_use(state, use.use_id, reason="refused")}
     n = state.cost.ref_retry_count + state.cost.ref_mod_retry_count + 2
-    path = _upload(image, state.story_id, char_id, n)
+    path = _upload(image, state.story_id, char.char_id, n)
+    edited = char.model_copy(update={
+        "canonical_ref_image": path, "ref_moderation_status": None, "ref_verdict": None,
+        "ref_verdict_prompt_version": None, "ref_generation_prompt": prompt,
+        "versions": [*char.versions, *_kept(char, "pencil")],
+    })
+    log.info("char_bible: %s pencil edit, ref_retry_count=%d", char.char_id, state.cost.ref_retry_count + 1)
     return {
-        "characters": [c.model_copy(update={
+        "characters": [edited if c.char_id == char.char_id else c for c in state.characters],
+        "cost": state.cost.model_copy(update={"image_count": state.cost.image_count + 1,
+                                             "ref_retry_count": state.cost.ref_retry_count + 1}),
+        "reference_pencil": None,
+        "pencil_uses": _with_use(state, use.use_id, after_path=path),
+    }
+
+
+def _settle_pencil(state: StoryMemory) -> dict:
+    """"Keep this" or "Use the old one" (AC-11). Old restores the kept version exactly as
+    `_choose_version` does, and the pencil result becomes a version. A choice from a picture that
+    is no longer the waiting result changes nothing (SH-08)."""
+    choice = state.reference_pencil_choice
+    char = next((c for c in state.characters if c.char_id == choice.char_id), None)
+    use = next((u for u in state.pencil_uses if char and u.char_id == char.char_id and u.choice is None
+                and u.after_path == choice.source == char.canonical_ref_image), None)
+    old = next((v for v in char.versions if use and v.image_path == use.before_path
+                and v.ref_moderation_status == "passed"), None) if char else None
+    if old is None:
+        return {"reference_pencil_choice": None}
+    update = {"reference_pencil_choice": None, "pencil_uses": _with_use(state, use.use_id, choice=choice.choice)}
+    if choice.choice == "old":
+        restored = _choose_version(state.model_copy(update={"reference_choice": ReferenceChoice(
+            char_id=char.char_id, version_id=old.version_id, source=choice.source)}))
+        update["characters"] = restored["characters"]
+    else:
+        # ADR-082 Decision 4: the kept words reach later pages through `build_prompt`; the
+        # analysed description stays as it was (ADR-069).
+        kept = char.model_copy(update={"child_changes": [*char.child_changes, use.text]})
+        update["characters"] = [kept if c.char_id == char.char_id else c for c in state.characters]
+    return update
+
+
+def _redraw_recorded(state: StoryMemory, char: Character, n: int) -> tuple[str, RefVerdict | None]:
+    """One draw from `char.ref_generation_prompt`, judged and uploaded at suffix `n`."""
+    check_image_budget(state.cost.image_count)
+    description = filtered_description(char.description, state.style.prompt_fragment or settings.default_style_fragment)
+    image = text_to_image(char.ref_generation_prompt, negative_extra=_reference_negative(description))
+    verdict = _judge_reference(JUDGE_PROMPT.format(subject=_describe(description, char.name, notes=False)), image, char.char_id, 1)
+    return _upload(image, state.story_id, char.char_id, n), verdict
+
+
+def replace_reference(state: StoryMemory, char_id: str) -> dict:
+    """ADR-080: one same-intent picture, keeping the rejected immutable object. A pencil result is
+    replaced by the same edit of the same source picture, never a fresh draw (AC-10), and the new
+    result waits for "Keep this" or "Use the old one" again."""
+    char = next(c for c in state.characters if c.char_id == char_id)
+    check_image_budget(state.cost.image_count)
+    n = state.cost.ref_retry_count + state.cost.ref_mod_retry_count + 2
+    use = next((u for u in state.pencil_uses if u.char_id == char_id and u.after_path == char.canonical_ref_image), None)
+    if use:
+        # A fal refusal propagates, as it does for any ADR-080 replacement.
+        image = edit_image(_pencil_prompt(use), [get_signed_url(use.before_path)])
+        path = _upload(image, state.story_id, char_id, n)
+        verdict = version = None
+        update = {"pencil_uses": _with_use(state, use.use_id, after_path=path, choice=None)}
+        if use.choice == "kept":
+            # Keep/old is asked again, so the change this use added waits for it (SH-06).
+            changes = char.child_changes[::-1]   # the latest entry with this text is the one it added
+            if use.text in changes:
+                changes.remove(use.text)
+            char = char.model_copy(update={"child_changes": changes[::-1]})   # read by the return below
+    else:
+        path, verdict = _redraw_recorded(state, char, n)
+        version = JUDGE_PROMPT_VERSION
+        update = {}
+    return {
+        **update,
+        "characters": [char.model_copy(update={
             "canonical_ref_image": path, "ref_moderation_status": None, "ref_verdict": verdict,
-            "ref_verdict_prompt_version": JUDGE_PROMPT_VERSION,
+            "ref_verdict_prompt_version": version,
         }) if c.char_id == char_id else c for c in state.characters],
         "cost": state.cost.model_copy(update={"image_count": state.cost.image_count + 1,
                                              "ref_mod_retry_count": state.cost.ref_mod_retry_count + 1}),
@@ -448,6 +610,12 @@ def char_bible(state: StoryMemory) -> dict:
     """
     if state.reference_retry is not None:
         return _mint_targeted(state)
+    if state.reference_choice is not None:
+        return _choose_version(state)
+    if state.reference_pencil is not None:
+        return _pencil_edit(state)
+    if state.reference_pencil_choice is not None:
+        return _settle_pencil(state)
 
     # Cap FIRST (invariant 1, ADR-004), THEN filter (invariant 6). The order is load-bearing:
     # filtering first slides the 2-slot window onto c2 when c0 is already referenced, producing
@@ -478,15 +646,39 @@ def char_bible(state: StoryMemory) -> dict:
     mrc = state.cost.ref_mod_retry_count + (1 if was_flagged else 0)
     n = state.cost.ref_retry_count + mrc + 1
 
+    # ADR-082 Decision 7: in baseline only a tap records `ref_generation_prompt`, so a flagged
+    # character carrying one is a "Draw again" picture. Replay that prompt in one draw so the
+    # child's chip survives; the untargeted re-mint below would drop it.
+    baseline = state.moderation_context.mode != "teacher_review_v1"
+    replayed = {
+        c.char_id for c in selected
+        if baseline and c.ref_moderation_status == "flagged" and c.ref_generation_prompt
+    }
+
+    # ADR-082 Decision 1 (AC-02): the initial mint's unchosen draws are already paid for, so a
+    # feature job keeps them, unreviewed; they are moderated only if the child opens them.
+    keep = has_versions(state) and not was_flagged
+    unchosen: dict[str, list[tuple[str, RefVerdict]]] = {}
     minted: dict[str, tuple[str, RefVerdict | None]] = {}
     draws_made = 0
     for character in selected:
-        path, verdict, draws = mint_reference(
-            character.description, character.name, style_fragment, state.story_id,
-            character.char_id, n=n,
-        )
+        if character.char_id in replayed:
+            path, verdict = _redraw_recorded(state, character, n)
+            draws = 1
+        else:
+            path, verdict, draws = mint_reference(
+                character.description, character.name, style_fragment, state.story_id,
+                character.char_id, n=n, unchosen=unchosen.setdefault(character.char_id, []) if keep else None,
+            )
         minted[character.char_id] = (path, verdict)
         draws_made += draws
+
+    def recorded_prompt(c: Character) -> str | None:
+        if c.char_id in replayed:
+            return c.ref_generation_prompt   # the tap's prompt, chip included
+        if baseline:
+            return None   # baseline records a prompt only for a tap
+        return reference_prompt(filtered_description(c.description, style_fragment), c.name, style_fragment)
 
     # Invariant 2: `characters` has NO reducer, so a partial return REPLACES the list —
     # returning only the modified entries would silently delete every other character.
@@ -501,9 +693,13 @@ def char_bible(state: StoryMemory) -> dict:
             # This path now overwrites that image on a moderation redraw, so the status has to go
             # with it (`moderation-stack.md` §4b) — `_mint_targeted` has always done the same.
             "ref_moderation_status": None,
-            "ref_generation_prompt": reference_prompt(
-                filtered_description(c.description, style_fragment), c.name, style_fragment,
-            ) if state.moderation_context.mode == "teacher_review_v1" else None,
+            "ref_generation_prompt": recorded_prompt(c),
+            "versions": [*c.versions, *(
+                ReferenceVersion(
+                    version_id=p.rsplit("/", 1)[-1].removesuffix(".png"), image_path=p, ref_verdict=v,
+                    ref_verdict_prompt_version=JUDGE_PROMPT_VERSION, ref_generation_prompt=recorded_prompt(c),
+                    source="unchosen_draw",
+                ) for p, v in unchosen.get(c.char_id, []))],
         })
         if c.char_id in minted
         else c

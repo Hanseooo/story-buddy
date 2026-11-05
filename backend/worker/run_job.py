@@ -25,7 +25,7 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
     """
     import providers
     from app.moderation_hold import (
-        StaleGeneration, active_author, assert_current, connect, project_hold,
+        StaleGeneration, active_author, book_on_completion, assert_current, connect, project_hold, record_pencil_uses,
         review_subject_bytes, teacher_classroom, validate_review_checkpoint,
     )
     from contracts.story_memory import ModerationContext, ReviewContext
@@ -193,7 +193,8 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                     # The pre-graph title decision has already started this exact graph.
                     # Repair its later durable hold instead of resuming the title again.
                     if review and review.resolution is None and decision and not title_start:
-                        if (decision["decision"] not in ("allow", "replace") or validate_review_checkpoint(conn, job_id, decision) is None
+                        if (decision["decision"] not in (("allow", "stop") if decision["kind"] == "character_pencil_text"
+                                                         else ("allow", "replace")) or validate_review_checkpoint(conn, job_id, decision) is None
                                 or str(review.review_id) != str(decision["id"])
                                 or snapshot.next != ("moderation_review",)):
                             raise RuntimeError("checkpoint_not_resumable")
@@ -261,26 +262,41 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
 
                     with conn.transaction():
                         assert_current(conn, job_id, epoch)
+                        image_count = state.cost.image_count
                         interrupts = [i for t in snapshot.tasks for i in t.interrupts]
                         if interrupts:
                             value = interrupts[0].value
                             if snapshot.next != ("reveal",) or not isinstance(value, dict) or "characters" not in value:
                                 raise RuntimeError("invalid_reveal_checkpoint")
+                            # AC-01: a draw excluded on open is not another version; the checkpoint never
+                            # learns that outcome, so the projection drops it here (magic-pencil 05).
+                            excluded = {r["version_id"] for r in conn.execute("""select version_id from job_picture_records
+                              where job_id=%s and moderation_status='excluded'""", (job_id,)).fetchall()}
+                            value = {**value, "characters": [
+                                {**c, "unreviewed": [i for i in c["unreviewed"] if i not in excluded]} if "unreviewed" in c else c
+                                for c in value["characters"]]}
                             conn.execute("update jobs set status='awaiting_confirm',current_stage='reveal',reveal=%s where id=%s",
                                          (Jsonb(value), job_id))
+                            # OD-04: the job-owned record of kept pictures, deleted with the story.
+                            for char in state.characters:
+                                for version in char.versions:
+                                    conn.execute("""insert into job_picture_records(job_id,kind,target_id,version_id,image_path,source)
+                                      values (%s,'version',%s,%s,%s,%s) on conflict do nothing""",
+                                                 (job_id, char.char_id, version.version_id, version.image_path, version.source))
+                            record_pencil_uses(conn, job_id, state)
                         else:
                             if snapshot.next or any(s.moderation_status not in ("passed", "teacher_allowed") for s in state.scenes):
                                 raise RuntimeError("incomplete_safety_checks")
-                            pages = [{"scene_id": s.scene_id, "caption": s.caption, "image_path": s.final_image_ref} for s in state.scenes]
+                            pages, image_count = book_on_completion(conn, job_id, state)
                             outcomes = [outcome(s) for s in state.scenes]
                             conn.execute("""update jobs set status='complete',current_stage='compose',pages=%s,
                               reveal='{}',image_count=%s,regen_count=%s,ref_retry_count=%s,scenes_total=%s,
                               scenes_passed=%s,scenes_failed=%s,scenes_unchecked=%s,usd_estimate=%s where id=%s""", (
-                                Jsonb(pages), state.cost.image_count, state.cost.regen_count, state.cost.ref_retry_count,
+                                Jsonb(pages), image_count, state.cost.regen_count, state.cost.ref_retry_count,
                                 len(state.scenes), outcomes.count("passed"), outcomes.count("failing"), outcomes.count("unchecked"),
-                                round(state.cost.image_count * 0.025, 4), job_id,
+                                round(image_count * 0.025, 4), job_id,
                             ))
-                        conn.execute("update jobs set image_count=%s where id=%s", (state.cost.image_count, job_id))
+                        conn.execute("update jobs set image_count=%s where id=%s", (image_count, job_id))
                 if decision:
                     conn.execute("update job_moderation_reviews set dispatch_state='consumed',dispatch_error_code=null where id=%s",
                                  (decision["id"],))

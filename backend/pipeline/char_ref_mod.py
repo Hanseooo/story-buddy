@@ -134,6 +134,21 @@ def char_ref_mod(state: StoryMemory) -> dict:
     return {"characters": updated}
 
 
+def screen_reference(path: str) -> bool:
+    """magic-pencil 05: one picture through `char_ref_mod`'s classifier order, for an unchosen draw
+    opened while the run is paused. False is a flag. Raises when the picture is unchecked: the
+    backstop or signing failed (SH-02, a classifier error is not a flag)."""
+    signed_url = get_signed_url(path)
+    try:
+        primary_safe = classify_image_primary(signed_url)
+    except Exception as exc:
+        log.warning("screen_reference: primary classifier failed (%s) — falling back to backstop", exc)
+        primary_safe = None
+    if primary_safe is False:
+        return False
+    return classify_image_backstop(signed_url)
+
+
 def _hold_reference(state: StoryMemory, updated: list, index: int, evidence: list[ClassifierEvidence]) -> dict:
     char = state.characters[index]
     version = hashlib.sha256(download_book_image(char.canonical_ref_image)).hexdigest()

@@ -94,6 +94,8 @@ class Character(BaseModel):
     ref_moderation_status: Optional[str] = None
     ref_verdict: Optional[RefVerdict] = None        # ADR-028: the reference is checked, not assumed
     ref_verdict_prompt_version: Optional[int] = None  # which char_bible.JUDGE_PROMPT produced it
+    versions: list[ReferenceVersion] = Field(default_factory=list)  # ADR-082 — §3 below
+    child_changes: list[str] = Field(default_factory=list)  # ADR-082 Decision 4 — §3 below
 
 class Location(BaseModel):     # minimal; refined by `story-analyzer` (§8, additive)
     loc_id: str
@@ -285,6 +287,37 @@ pattern again: declared **last** in `Cost`, defaults to `0`, no `CURRENT_SCHEMA_
 screens the whole roster in one node run, so a book where both c0 and c1 flag spends one cycle, not two.
 An old checkpoint resumes with a fresh budget of 0, which is harmless: the flag is re-derived from the
 same image.
+
+**`Character.versions`, `ReferenceVersion`, `ReferenceChoice`, `StoryMemory.reference_choice`,
+`ModerationContext.magic_pencil`** (added by `magic-pencil.md` US-01, 2026-11-01) are the same pattern:
+each is declared last, defaults to empty, `None` or `False`, and none bumped `CURRENT_SCHEMA_VERSION`.
+A `ReferenceVersion` is a classifier-`passed` reference (never `teacher_allowed`, which a teacher
+must stay able to withdraw) that "Draw again" replaced (or that a version choice
+displaced), kept with its moderation status and verdict so restoring it needs no new draw or check.
+`reference_choice` is `None` except between `reveal` and `char_bible`, like `reference_retry`. An
+old checkpoint resumes with no versions and the feature off.
+Ticket 05 adds `ReferenceVersion.source = "unchosen_draw"` and `ReferenceChoice.cleared` (default
+`False`). An unchosen draw of the initial mint is kept with `ref_moderation_status = None`: it is
+moderated by the API when the child opens it, while the run is paused, and that outcome is stored in
+`job_picture_records.moderation_status`, not in the checkpoint. `cleared` is set only by the API
+after that record says `passed`; `char_bible` restores such a draw as `passed`.
+Ticket 06 adds `PencilUse`, `PencilChoice`, `StoryMemory.reference_pencil`,
+`reference_pencil_choice` and `pencil_uses` (default `None`, `None`, `[]`), `ReferenceVersion.source
+= "pencil"`, `ReviewContext.kind = "character_pencil_text"` and resolution `"stop"`. A `PencilUse`
+holds only redacted text. A pencil result becomes the current reference with
+`ref_moderation_status = None`, so `char_ref_mod` moderates it like a redraw, and the picture it
+replaced is kept as a version. While a use has an `after_path` that is current and no `choice`, the
+reveal waits for keep/old and the API refuses `confirm`. Every use is mirrored to
+`job_picture_records` (`kind = 'pencil'`, migration 0029).
+Ticket 07: a teacher replacement of a held pencil result re-runs that use's edit on its
+`before_path`. The use's `after_path` moves to the new picture and its `choice` resets to `None`.
+Ticket 08 adds `Character.child_changes` (default `[]`): each kept pencil text, redacted, in the
+order kept. "Use the old one" appends nothing, and a teacher replacement of a kept result removes
+that use's text until the child chooses again. `description` is never changed (ADR-069). Only
+`build_prompt` reads the list: each change follows the character's description in both the image
+roll and the unreferenced description line, filtered all-or-nothing by ADR-035's style prohibitions
+like `notes`, and rendered even when it contradicts the description. The reference judge never sees
+it. A character with no changes renders byte-identically, so `SCENE_PROMPT_VERSION` is unchanged.
 
 - One version covers the whole contract, **including `FailureReason`** — an enum change is a contract change.
 

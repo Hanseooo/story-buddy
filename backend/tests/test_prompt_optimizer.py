@@ -7,6 +7,7 @@ from pipeline.prompt_optimizer import (
     ANATOMY_CLAUSE,
     COMPOSITION_CLAUSE,
     IDENTITY_CLAUSE,
+    REFERENCE_CLAUSE,
     SCENE_PROMPT_VERSION,
     TEXT_CLAUSE,
     build_prompt,
@@ -1347,3 +1348,47 @@ def test_correction_clauses_returns_exact_list_of_rendered_clauses():
 
 
 
+
+
+# --- ADR-082 Decision 4 / SH-06: a kept pencil change is drawn on later pages ---
+
+_ONE_ANA = (
+    "This illustration contains exactly 1 named cast character: Ana. Draw each named cast character "
+    "exactly once. Include background people or creatures only when explicitly requested by the "
+    "Visual direction or Setting."
+)
+
+
+def test_child_changes_render_after_the_description_in_order_even_when_they_contradict_it():
+    ana = _char("c0", "Ana", species="girl", colours=["black hair"])
+    ana.child_changes = ["blue hair", "a big red hat"]
+
+    assert build_prompt(["c0"], [ana], FRAG) == (
+        f"Ana, girl, black hair, blue hair, a big red hat\n\n{_ONE_ANA}\n\n{FRAG}"
+    )
+
+
+def test_child_changes_render_inside_the_referenced_characters_roll_sentence():
+    ana = _char("c0", "Ana", species="girl")
+    ana.canonical_ref_image = "job-123/ref-c0-1.png"
+    ana.child_changes = ["Give her a red hat."]
+
+    assert build_prompt(["c0"], [ana], FRAG) == (
+        f"Image 1 is Ana, girl, Give her a red hat. {REFERENCE_CLAUSE}\n\n{_ONE_ANA}\n\n{FRAG}"
+    )
+
+
+def test_a_child_change_with_a_style_forbidden_word_is_kept_verbatim_but_not_rendered():
+    ana = _char("c0", "Ana", species="girl")
+    ana.child_changes = ["glowing eyes", "a red hat"]
+
+    prompt = build_prompt(["c0"], [ana], COMIC)
+
+    assert prompt == f"Ana, girl, a red hat\n\n{_ONE_ANA}\n\n{COMIC}"
+    assert ana.child_changes == ["glowing eyes", "a red hat"]
+
+
+def test_a_character_from_a_checkpoint_without_child_changes_gets_the_prompt_it_always_got():
+    ana = Character.model_validate({"char_id": "c0", "name": "Ana", "description": {"species": "girl"}})
+
+    assert build_prompt(["c0"], [ana], FRAG) == f"Ana, girl\n\n{_ONE_ANA}\n\n{FRAG}"

@@ -1305,6 +1305,76 @@ def test_mint_targeted_after_a_moderation_redraw_picks_a_suffix_that_collides_wi
     assert result["characters"][0].canonical_ref_image == "story-1/ref-c0-3.png"
 
 
+def _flag(state: StoryMemory, update: dict, char_id: str = "c0") -> StoryMemory:
+    """Apply a char_bible update, then do what baseline char_ref_mod does to a flagged ref."""
+    state = state.model_copy(update=update)
+    return state.model_copy(update={"characters": [
+        c.model_copy(update={"ref_moderation_status": "flagged", "canonical_ref_image": None})
+        if c.char_id == char_id else c
+        for c in state.characters
+    ]})
+
+
+def test_a_flagged_tap_in_baseline_is_redrawn_once_with_the_tapped_chip():
+    """magic-pencil AC-23/24 (ADR-082 Decision 7). The moderation redraw of a "Draw again"
+    picture replays the tap's prompt in one draw; it does not fall back to the 3-draw re-mint
+    that loses the chip. It spends the moderation budget, not the tap budget."""
+    state = _targeted_state(attribute="orange sock")
+    with patch("pipeline.char_bible.text_to_image", return_value=b"tap"), \
+         patch("pipeline.char_bible.judge", return_value=_verdict(True, ["dog"])), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+        flagged = _flag(state, char_bible(state))
+
+    # A failing verdict: the untargeted path would re-roll to 3 draws, the targeted one must not.
+    with patch("pipeline.char_bible.text_to_image", return_value=b"redraw") as t2i, \
+         patch("pipeline.char_bible.judge", return_value=_verdict(False, ["dog"])), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+        result = char_bible(flagged)
+
+    assert t2i.call_count == 1
+    assert "Be sure to include: orange sock." in t2i.call_args.args[0]
+    c0 = result["characters"][0]
+    # rc=1 after the tap, mrc=1 after this redraw: 1 + 1 + 1 = 3, clear of the tap's suffix 2.
+    assert c0.canonical_ref_image == "story-1/ref-c0-3.png"
+    assert c0.ref_moderation_status is None
+    assert result["cost"].ref_mod_retry_count == 1
+    assert result["cost"].ref_retry_count == 1
+    assert result["cost"].image_count == 4   # 2 initial + 1 tap + 1 redraw
+
+
+def test_the_baseline_redraw_of_a_tap_checks_the_image_budget_first():
+    """magic-pencil SH-04, AGENTS.md "every spend site calls check_image_budget first": the replay
+    is a paid draw, so a book at the 55-image budget draws nothing."""
+    state = _targeted_state(attribute="orange sock")
+    with patch("pipeline.char_bible.text_to_image", return_value=b"tap"), \
+         patch("pipeline.char_bible.judge", return_value=_verdict(True, ["dog"])), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+        flagged = _flag(state, char_bible(state))
+    flagged = flagged.model_copy(update={"cost": flagged.cost.model_copy(update={"image_count": 55})})
+
+    with patch("pipeline.char_bible.text_to_image", return_value=b"redraw") as t2i, \
+         patch("pipeline.char_bible.judge", return_value=_verdict(True, ["dog"])), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()), \
+         pytest.raises(RuntimeError, match="image budget exceeded"):
+        char_bible(flagged)
+    t2i.assert_not_called()
+
+
+def test_a_flagged_untapped_reference_in_baseline_still_gets_the_untargeted_re_mint():
+    """magic-pencil AC-25. No tap, no recorded prompt: today's 3-draw path stands."""
+    flagged = _char("c0", "the dog").model_copy(update={"ref_moderation_status": "flagged"})
+    state = _state([flagged])
+
+    with patch("pipeline.char_bible.text_to_image", side_effect=DRAWS) as t2i, \
+         patch("pipeline.char_bible.judge", return_value=_verdict(False)), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+        result = char_bible(state)
+
+    assert t2i.call_count == 3
+    assert all("Be sure to include" not in call.args[0] for call in t2i.call_args_list)
+    assert result["cost"].ref_mod_retry_count == 1
+
+
 def test_ref_mod_retry_count_bumps_by_exactly_one_when_two_characters_arrive_flagged():
     """§6 test 12 / §2. The counter is per BOOK — it measures loop iterations, not characters.
     One cycle re-mints both, so a book where c0 and c1 both flag spends 1, not 2."""
@@ -1412,3 +1482,312 @@ def test_char_bible_references_the_whole_roster_when_no_scene_names_anyone():
         char_bible(state)
 
     assert mint.call_count == 2
+
+
+# --- ADR-082 Decision 1: "Draw again" is undoable (magic-pencil US-01) ---
+
+def _feature(state: StoryMemory) -> StoryMemory:
+    from contracts.story_memory import ModerationContext
+
+    return state.model_copy(update={"moderation_context": ModerationContext(mode="teacher_review_v1", magic_pencil=True)})
+
+
+def test_a_tap_on_a_feature_job_keeps_the_replaced_picture_as_a_version():
+    state = _feature(_targeted_state())
+    with patch("pipeline.char_bible.text_to_image", return_value=b"x"), \
+         patch("pipeline.char_bible.judge", return_value=_verdict(True)), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+        result = char_bible(state)
+
+    c0 = next(c for c in result["characters"] if c.char_id == "c0")
+    assert c0.canonical_ref_image == "story-1/ref-c0-2.png"
+    assert [(v.version_id, v.image_path, v.ref_moderation_status, v.source) for v in c0.versions] == [
+        ("ref-c0-1", "story-1/ref-c0-1.png", "passed", "draw_again")]
+    assert c0.versions[0].ref_verdict == _verdict(True, ["dog"])
+
+
+def test_a_tap_on_a_teacher_allowed_picture_keeps_no_version():
+    state = _feature(_targeted_state())
+    state.characters[0].ref_moderation_status = "teacher_allowed"
+    with patch("pipeline.char_bible.text_to_image", return_value=b"x"),          patch("pipeline.char_bible.judge", return_value=_verdict(True)),          patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+        result = char_bible(state)
+
+    assert next(c for c in result["characters"] if c.char_id == "c0").versions == []
+
+
+def test_a_tap_on_a_job_without_the_feature_records_no_version():
+    with patch("pipeline.char_bible.text_to_image", return_value=b"x"), \
+         patch("pipeline.char_bible.judge", return_value=_verdict(True)), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=MagicMock()):
+        result = char_bible(_targeted_state())
+
+    assert next(c for c in result["characters"] if c.char_id == "c0").versions == []
+
+
+def _chosen_state(source: str = "story-1/ref-c0-2.png", version_id: str = "ref-c0-1",
+                  current_status: str = "passed") -> StoryMemory:
+    from contracts.story_memory import ReferenceChoice, ReferenceVersion
+
+    state = _feature(_targeted_state()).model_copy(update={"reference_retry": None})
+    earlier = ReferenceVersion(version_id="ref-c0-1", image_path="story-1/ref-c0-1.png", ref_moderation_status="passed",
+                               ref_verdict=_verdict(True, ["dog"]), ref_verdict_prompt_version=7, source="draw_again")
+    c0 = state.characters[0].model_copy(update={
+        "canonical_ref_image": "story-1/ref-c0-2.png", "ref_moderation_status": current_status,
+        "ref_verdict": _verdict(False, ["dog"]), "ref_generation_prompt": "tap prompt", "versions": [earlier]})
+    return state.model_copy(update={
+        "characters": [c0, state.characters[1]],
+        "cost": Cost(image_count=3, ref_retry_count=1),
+        "reference_choice": ReferenceChoice(char_id="c0", version_id=version_id, source=source),
+    })
+
+
+@pytest.mark.parametrize("current_status,kept", [
+    ("passed", [("ref-c0-2", "story-1/ref-c0-2.png", "passed", "tap prompt", "version_choice")]),
+    ("teacher_allowed", []),
+])
+def test_choosing_a_version_restores_it_at_no_image_cost(current_status, kept):
+    with patch("pipeline.char_bible.text_to_image") as t2i, patch("pipeline.char_bible.judge") as judge_mock:
+        result = char_bible(_chosen_state(current_status=current_status))
+
+    t2i.assert_not_called()
+    judge_mock.assert_not_called()
+    c0 = next(c for c in result["characters"] if c.char_id == "c0")
+    assert (c0.canonical_ref_image, c0.ref_moderation_status) == ("story-1/ref-c0-1.png", "passed")
+    assert c0.ref_verdict == _verdict(True, ["dog"])
+    assert c0.ref_generation_prompt is None
+    assert [(v.version_id, v.image_path, v.ref_moderation_status, v.ref_generation_prompt, v.source)
+            for v in c0.versions] == kept
+    assert "cost" not in result
+    assert result["reference_choice"] is None
+
+
+@pytest.mark.parametrize("source,version_id", [("story-1/ref-c0-1.png", "ref-c0-1"), ("story-1/ref-c0-2.png", "ref-c0-9")])
+def test_a_stale_or_unknown_version_choice_changes_nothing(source, version_id):
+    result = char_bible(_chosen_state(source=source, version_id=version_id))
+    assert result == {"reference_choice": None}
+
+
+# --- ADR-082 Decision 1: unchosen first-round draws are kept (magic-pencil 05) ---
+
+def _first_mint(state: StoryMemory) -> tuple[dict, MagicMock]:
+    """All three draws fail; best-of picks draw 2 (the most attributes present)."""
+    verdicts = [_verdict(False, ["dog"]), _verdict(False, ["dog", "orange"]), _verdict(False, ["dog"])]
+    fake_supabase = MagicMock()
+    with patch("pipeline.char_bible.text_to_image", side_effect=list(DRAWS)), \
+         patch("pipeline.char_bible.judge", side_effect=verdicts), \
+         patch("pipeline.char_bible.get_supabase_client", return_value=fake_supabase):
+        result = char_bible(state)
+    return result, fake_supabase
+
+
+def _uploads(fake_supabase) -> list[tuple[str, bytes]]:
+    return [(c.args[0], c.args[1]) for c in fake_supabase.storage.from_.return_value.upload.call_args_list]
+
+
+def test_a_feature_mint_keeps_the_two_unchosen_draws_as_unreviewed_versions():
+    result, supabase = _first_mint(_feature(_state([_char("c0", "the dog")])))
+
+    assert sorted(_uploads(supabase)) == [
+        ("story-1/ref-c0-1-u1.png", b"draw-1-bytes"),
+        ("story-1/ref-c0-1-u3.png", b"draw-3-bytes"),
+        ("story-1/ref-c0-1.png", b"draw-2-bytes"),
+    ]
+    c0 = result["characters"][0]
+    assert c0.canonical_ref_image == "story-1/ref-c0-1.png"
+    assert [(v.version_id, v.image_path, v.ref_moderation_status, v.source) for v in c0.versions] == [
+        ("ref-c0-1-u1", "story-1/ref-c0-1-u1.png", None, "unchosen_draw"),
+        ("ref-c0-1-u3", "story-1/ref-c0-1-u3.png", None, "unchosen_draw"),
+    ]
+    assert c0.versions[0].ref_verdict == _verdict(False, ["dog"])
+    assert c0.versions[0].ref_generation_prompt == c0.ref_generation_prompt
+
+
+def test_a_mint_without_the_feature_uploads_only_the_chosen_draw():
+    result, supabase = _first_mint(_state([_char("c0", "the dog")]))
+
+    assert _uploads(supabase) == [("story-1/ref-c0-1.png", b"draw-2-bytes")]
+    assert result["characters"][0].versions == []
+
+
+@pytest.mark.parametrize("cleared,restored", [(True, True), (False, False)])
+def test_an_unchosen_draw_is_restored_only_when_cleared_on_open(cleared, restored):
+    from contracts.story_memory import ReferenceChoice, ReferenceVersion
+
+    state = _chosen_state()
+    unchosen = ReferenceVersion(version_id="ref-c0-1-u1", image_path="story-1/ref-c0-1-u1.png",
+                                ref_verdict=_verdict(False, ["dog"]), source="unchosen_draw")
+    c0 = state.characters[0].model_copy(update={"versions": [unchosen]})
+    state = state.model_copy(update={"characters": [c0, state.characters[1]], "reference_choice": ReferenceChoice(
+        char_id="c0", version_id="ref-c0-1-u1", source="story-1/ref-c0-2.png", cleared=cleared)})
+
+    result = char_bible(state)
+
+    if not restored:
+        assert result == {"reference_choice": None}
+        return
+    c0 = next(c for c in result["characters"] if c.char_id == "c0")
+    assert (c0.canonical_ref_image, c0.ref_moderation_status) == ("story-1/ref-c0-1-u1.png", "passed")
+    assert [v.version_id for v in c0.versions] == ["ref-c0-2"]
+
+
+# --- ADR-082 Decision 2: the character magic pencil (magic-pencil 06) ---
+
+def _pencil_state(source: str = "story-1/ref-c0-1.png", ref_retry_count: int = 0) -> StoryMemory:
+    from contracts.story_memory import PencilUse
+
+    state = _feature(_targeted_state(ref_retry_count=ref_retry_count)).model_copy(update={"reference_retry": None})
+    use = PencilUse(use_id="pencil-1", char_id="c0", text="dale un sombrero rojo", before_path=source,
+                    text_moderation="cleared")
+    return state.model_copy(update={"reference_pencil": "pencil-1", "pencil_uses": [use]})
+
+
+def _pencil(state: StoryMemory, edit=None):
+    supabase = MagicMock()
+    with patch("pipeline.char_bible.edit_image", **(edit or {"return_value": b"edited"})) as edit_mock, \
+         patch("pipeline.char_bible.get_signed_url", return_value="https://signed/ref-c0-1") as sign, \
+         patch("pipeline.char_bible.text_to_image") as t2i, \
+         patch("pipeline.char_bible.judge") as judge_mock, \
+         patch("pipeline.char_bible.get_supabase_client", return_value=supabase):
+        result = char_bible(state)
+    t2i.assert_not_called()
+    judge_mock.assert_not_called()   # AC-09: no checker on the child's choice
+    return result, edit_mock, sign, supabase
+
+
+def test_the_pencil_edits_the_current_picture_once_with_the_childs_words_and_the_keep_clause():
+    result, edit_mock, sign, supabase = _pencil(_pencil_state())
+
+    sign.assert_called_once_with("story-1/ref-c0-1.png")
+    # SH-10: the redacted text reaches the model as written, in any language.
+    edit_mock.assert_called_once_with(
+        "dale un sombrero rojo\n\nKeep everything else about the character, the art style and the plain "
+        "background exactly the same.", ["https://signed/ref-c0-1"])
+    assert _uploads(supabase) == [("story-1/ref-c0-2.png", b"edited")]
+    c0 = next(c for c in result["characters"] if c.char_id == "c0")
+    assert (c0.canonical_ref_image, c0.ref_moderation_status, c0.ref_verdict) == ("story-1/ref-c0-2.png", None, None)
+    assert [(v.version_id, v.image_path, v.ref_moderation_status, v.source) for v in c0.versions] == [
+        ("ref-c0-1", "story-1/ref-c0-1.png", "passed", "pencil")]
+    assert (result["cost"].image_count, result["cost"].ref_retry_count) == (3, 1)
+    assert result["pencil_uses"][0].after_path == "story-1/ref-c0-2.png"
+    assert result["reference_pencil"] is None
+
+
+def test_a_fal_refusal_of_the_pencil_edit_spends_no_go_and_changes_no_picture():
+    from providers import FalFlaggedImage
+
+    result, _, _, supabase = _pencil(_pencil_state(), edit={"side_effect": FalFlaggedImage()})
+
+    assert _uploads(supabase) == []
+    assert "characters" not in result and "cost" not in result
+    assert (result["pencil_uses"][0].after_path, result["pencil_uses"][0].reason) == (None, "refused")
+    assert result["reference_pencil"] is None
+
+
+@pytest.mark.parametrize("source,taps", [("story-1/ref-c0-9.png", 0), ("story-1/ref-c0-1.png", 3)])
+def test_a_stale_pencil_request_or_one_past_the_shared_goes_draws_nothing(source, taps):
+    result, edit_mock, _, _ = _pencil(_pencil_state(source=source, ref_retry_count=taps))
+
+    edit_mock.assert_not_called()
+    assert "characters" not in result and "cost" not in result
+    assert result["pencil_uses"][0].reason == "stale"
+    assert result["reference_pencil"] is None
+
+
+def test_the_pencil_draws_nothing_on_a_picture_it_could_not_bring_back():
+    """`_kept` keeps only a classifier-passed picture, so a teacher-allowed one has no "old one" (AC-11)."""
+    state = _pencil_state()
+    state.characters = [state.characters[0].model_copy(update={"ref_moderation_status": "teacher_allowed"}),
+                        *state.characters[1:]]
+    result, edit_mock, _, _ = _pencil(state)
+
+    edit_mock.assert_not_called()
+    assert "characters" not in result and "cost" not in result
+    assert result["pencil_uses"][0].reason == "stale"
+
+
+def _choice_state(choice: str, source: str = "story-1/ref-c0-2.png") -> StoryMemory:
+    from contracts.story_memory import PencilChoice, PencilUse, ReferenceVersion
+
+    state = _feature(_targeted_state()).model_copy(update={"reference_retry": None})
+    old = ReferenceVersion(version_id="ref-c0-1", image_path="story-1/ref-c0-1.png", ref_moderation_status="passed",
+                           ref_verdict=_verdict(True, ["dog"]), source="pencil")
+    c0 = state.characters[0].model_copy(update={
+        "canonical_ref_image": "story-1/ref-c0-2.png", "ref_moderation_status": "passed", "ref_verdict": None,
+        "ref_generation_prompt": "a red hat\n\nKeep", "versions": [old]})
+    use = PencilUse(use_id="pencil-1", char_id="c0", text="a red hat", before_path="story-1/ref-c0-1.png",
+                    after_path="story-1/ref-c0-2.png", text_moderation="cleared")
+    return state.model_copy(update={"characters": [c0, state.characters[1]], "pencil_uses": [use],
+                                    "reference_pencil_choice": PencilChoice(char_id="c0", choice=choice, source=source)})
+
+
+def test_keeping_the_pencil_result_records_the_choice_and_appends_the_text_as_a_child_change():
+    """AC-12, SH-06: the kept text reaches later pages; the picture and description stay as they are."""
+    state = _choice_state("kept")
+    state.characters[0].child_changes = ["blue hair"]
+
+    result = char_bible(state)
+
+    c0 = next(c for c in result["characters"] if c.char_id == "c0")
+    assert c0.child_changes == ["blue hair", "a red hat"]
+    assert c0.canonical_ref_image == "story-1/ref-c0-2.png"
+    assert c0.description == state.characters[0].description
+    assert result["characters"][1] == state.characters[1]
+    assert result["pencil_uses"][0].choice == "kept"
+    assert result["reference_pencil_choice"] is None
+
+
+def test_using_the_old_one_restores_it_and_keeps_the_pencil_result_as_a_version():
+    with patch("pipeline.char_bible.edit_image") as edit_mock, patch("pipeline.char_bible.text_to_image") as t2i:
+        result = char_bible(_choice_state("old"))
+
+    edit_mock.assert_not_called()
+    t2i.assert_not_called()
+    c0 = next(c for c in result["characters"] if c.char_id == "c0")
+    assert (c0.canonical_ref_image, c0.ref_moderation_status) == ("story-1/ref-c0-1.png", "passed")
+    assert [(v.version_id, v.image_path, v.source) for v in c0.versions] == [
+        ("ref-c0-2", "story-1/ref-c0-2.png", "version_choice")]
+    assert result["pencil_uses"][0].choice == "old"
+    assert c0.child_changes == []
+    assert "cost" not in result
+    assert result["reference_pencil_choice"] is None
+
+
+def test_a_stale_keep_or_old_choice_changes_nothing():
+    assert char_bible(_choice_state("old", source="story-1/ref-c0-1.png")) == {"reference_pencil_choice": None}
+
+
+def test_a_teacher_replacement_of_a_held_pencil_result_reruns_the_same_edit():
+    """AC-10 (ticket 07): the same source picture and redacted text, edited once more in ADR-080's
+    replacement slot, never a fresh text-to-image draw. The new result waits for keep or old again."""
+    from contracts.story_memory import ReviewContext
+    from pipeline.moderation_replace import moderation_replace
+
+    state = _choice_state("kept").model_copy(update={"reference_pencil_choice": None})
+    state.characters[0].ref_moderation_status = "flagged"
+    state.pencil_uses[0].choice = "kept"   # a withdrawn clearance on a kept result is held again
+    state.characters[0].child_changes = ["blue hair", "a red hat"]
+    state.cost.ref_retry_count = 1         # the edit spent a go
+    state.moderation_context.review = ReviewContext(
+        review_id="1f7a7b8e-634f-44d1-953b-4d583ba0d13a", kind="character_reference", subject_id="c0",
+        subject_version="held", return_node="char_ref_mod", resolution="replace", replacement=True)
+    supabase = MagicMock()
+    with patch("pipeline.char_bible.edit_image", return_value=b"again") as edit_mock, \
+         patch("pipeline.char_bible.get_signed_url", return_value="https://signed/ref-c0-1") as sign, \
+         patch("pipeline.char_bible.text_to_image") as t2i, \
+         patch("pipeline.char_bible.judge") as judge_mock, \
+         patch("pipeline.char_bible.get_supabase_client", return_value=supabase):
+        result = moderation_replace(state)
+
+    t2i.assert_not_called()
+    judge_mock.assert_not_called()
+    sign.assert_called_once_with("story-1/ref-c0-1.png")
+    edit_mock.assert_called_once_with(
+        "a red hat\n\nKeep everything else about the character, the art style and the plain "
+        "background exactly the same.", ["https://signed/ref-c0-1"])
+    assert _uploads(supabase) == [("story-1/ref-c0-3.png", b"again")]
+    c0 = next(c for c in result["characters"] if c.char_id == "c0")
+    assert (c0.canonical_ref_image, c0.ref_moderation_status, c0.ref_verdict) == ("story-1/ref-c0-3.png", None, None)
+    assert [v.image_path for v in c0.versions] == ["story-1/ref-c0-1.png"]
+    assert (result["cost"].image_count, result["cost"].ref_retry_count, result["cost"].ref_mod_retry_count) == (3, 1, 1)
+    assert (result["pencil_uses"][0].after_path, result["pencil_uses"][0].choice) == ("story-1/ref-c0-3.png", None)
+    assert c0.child_changes == ["blue hair"]   # the keep is asked again, so its change is withdrawn until then

@@ -1,0 +1,52 @@
+{
+  "status": "complete",
+  "review_id": "e4cc120d-fb93-484a-b575-b29971d302ec",
+  "subject_id": "eab2a2c6-4046-4cbd-aa77-42b267163b4f",
+  "subject_version": "1fb9f4097256db2d7b1e13aff79cee44339891a31c556b9cf6093885773b3618",
+  "generation_epoch": 0,
+  "title": "Synthetic title",
+  "author": "Synthetic child",
+  "story_text": null,
+  "subject_title": null,
+  "pencil_text": "a hat",
+  "kind": "page_pencil_result",
+  "criteria": [
+    "sexual_content",
+    "exposure",
+    "graphic_harm",
+    "harm_instruction",
+    "targeted_abuse",
+    "discriminatory_slur",
+    "exploitation",
+    "substances",
+    "adult_detail",
+    "privacy"
+  ],
+  "policy_version": "teacher_review_policy_v1",
+  "origin": "shared_safety",
+  "detected_themes": [],
+  "theme_check": null,
+  "current_policy_version": "teacher_review_policy_v1",
+  "settings_snapshot": {
+    "magic_pencil": true,
+    "policy_version": "teacher_review_policy_v1"
+  },
+  "classifier_evidence": [],
+  "ready": true,
+  "replacement_available": true,
+  "replacement_disabled_reason": null,
+  "dispatch_state": null,
+  "withdraws_review_id": null,
+  "pictures": [
+    {
+      "asset_id": "page-before",
+      "label": "The page before the change",
+      "state": "available"
+    },
+    {
+      "asset_id": "held",
+      "label": "Picture needing review",
+      "state": "held"
+    }
+  ]
+}

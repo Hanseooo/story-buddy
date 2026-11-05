@@ -1,0 +1,47 @@
+{
+  "status": "complete",
+  "review_id": "065d1f33-f89d-4549-8343-4231aa8cd6da",
+  "subject_id": "5f0137d7-2c3a-4d31-92f0-14ec3329a3ae",
+  "subject_version": "c8d5dfab9dd806c21bf9d400c4c7a9633c76fd03ab57ffea9169580c04ea237c",
+  "generation_epoch": 0,
+  "title": "Synthetic title",
+  "author": "Synthetic child",
+  "story_text": null,
+  "subject_title": null,
+  "pencil_text": "a big sword",
+  "kind": "page_pencil_text",
+  "criteria": [
+    "sexual_content",
+    "exposure",
+    "graphic_harm",
+    "harm_instruction",
+    "targeted_abuse",
+    "discriminatory_slur",
+    "exploitation",
+    "substances",
+    "adult_detail",
+    "privacy"
+  ],
+  "policy_version": "teacher_review_policy_v1",
+  "origin": "shared_safety",
+  "detected_themes": [],
+  "theme_check": null,
+  "current_policy_version": "teacher_review_policy_v1",
+  "settings_snapshot": {
+    "magic_pencil": true,
+    "policy_version": "teacher_review_policy_v1"
+  },
+  "classifier_evidence": [],
+  "ready": true,
+  "replacement_available": false,
+  "replacement_disabled_reason": "replacement_source_unavailable",
+  "dispatch_state": null,
+  "withdraws_review_id": null,
+  "pictures": [
+    {
+      "asset_id": "page-before",
+      "label": "The page before the change",
+      "state": "available"
+    }
+  ]
+}

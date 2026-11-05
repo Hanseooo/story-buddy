@@ -11,7 +11,12 @@ from contracts.story_memory import (
     CharacterDescription,
     Cost,
     Input,
+    ModerationContext,
+    PencilChoice,
+    PencilUse,
+    ReferenceChoice,
     ReferenceRetry,
+    ReferenceVersion,
     RefVerdict,
     StoryMemory,
     Style,
@@ -306,3 +311,164 @@ def test_project_reveal_still_offers_the_chip_when_the_active_style_permits_it()
     payload = _project_reveal(_state([star], style=Style(prompt_fragment=STYLE_PRESETS["cel"])))
 
     assert "glowing" in payload["characters"][0]["chips"]
+
+
+# --- ADR-082 Decision 1: other versions of a character (magic-pencil US-01) ---
+
+def _feature_state(characters: list[Character], *, mode="teacher_review_v1", magic_pencil=True) -> StoryMemory:
+    state = _state([c.model_copy(update={"ref_moderation_status": "passed"}) for c in characters])
+    state.moderation_context = ModerationContext(mode=mode, magic_pencil=magic_pencil)
+    return state
+
+
+def _with_versions(char: Character, *versions: ReferenceVersion) -> Character:
+    return char.model_copy(update={"versions": list(versions)})
+
+
+_EARLIER = ReferenceVersion(version_id="ref-c0-1", image_path="job-1/ref-c0-1.png",
+                            ref_moderation_status="passed", source="draw_again")
+
+
+@pytest.mark.parametrize("mode,magic_pencil", [("teacher_review_v1", False), ("baseline", True), ("baseline", False)])
+def test_project_reveal_has_no_versions_unless_the_job_was_submitted_with_the_feature(mode, magic_pencil):
+    state = _feature_state([_with_versions(_char("c0", "Kiko", ref="job-1/ref-c0-2.png"), _EARLIER)],
+                           mode=mode, magic_pencil=magic_pencil)
+    assert "versions" not in _project_reveal(state)["characters"][0]
+
+
+def test_project_reveal_offers_no_versions_for_a_first_draw_accept():
+    state = _feature_state([_char("c0", "Kiko")])
+    assert _project_reveal(state)["characters"][0]["versions"] == []
+
+
+def test_project_reveal_offers_earlier_passed_pictures_and_never_a_flagged_or_teacher_allowed_one():
+    """A teacher can withdraw only the current picture, so a teacher-allowed one is never kept."""
+    allowed = ReferenceVersion(version_id="ref-c0-2", image_path="job-1/ref-c0-2.png",
+                               ref_moderation_status="teacher_allowed", source="draw_again")
+    flagged = ReferenceVersion(version_id="ref-c0-3", image_path="job-1/ref-c0-3.png",
+                               ref_moderation_status="flagged", source="draw_again")
+    state = _feature_state([_with_versions(_char("c0", "Kiko", ref="job-1/ref-c0-4.png"), _EARLIER, allowed, flagged)])
+    assert _project_reveal(state)["characters"][0]["versions"] == [
+        {"version_id": "ref-c0-1", "image_path": "job-1/ref-c0-1.png"},
+    ]
+
+
+def test_reveal_choose_version_resume_records_the_choice_with_its_source():
+    state = _feature_state([_with_versions(_char("c0", "Kiko", ref="job-1/ref-c0-2.png"), _EARLIER)])
+    answer = {"action": "choose_version", "char_id": "c0", "version_id": "ref-c0-1", "source": "job-1/ref-c0-2.png"}
+    with patch("pipeline.reveal.interrupt", return_value=answer):
+        result = reveal(state)
+    assert result == {"reference_choice": ReferenceChoice(char_id="c0", version_id="ref-c0-1", source="job-1/ref-c0-2.png")}
+
+
+def test_reveal_ignores_a_choose_version_resume_on_a_job_without_the_feature():
+    state = _feature_state([_with_versions(_char("c0", "Kiko", ref="job-1/ref-c0-2.png"), _EARLIER)], magic_pencil=False)
+    answer = {"action": "choose_version", "char_id": "c0", "version_id": "ref-c0-1", "source": "job-1/ref-c0-2.png"}
+    with patch("pipeline.reveal.interrupt", return_value=answer):
+        assert reveal(state) == {}
+
+
+def test_project_reveal_names_unopened_draws_by_id_only():
+    """magic-pencil 05: an unchosen draw nobody opened has no path in the payload, only its id."""
+    unchosen = ReferenceVersion(version_id="ref-c0-1-u1", image_path="job-1/ref-c0-1-u1.png", source="unchosen_draw")
+    state = _feature_state([_with_versions(_char("c0", "Kiko", ref="job-1/ref-c0-1.png"), unchosen)])
+    character = _project_reveal(state)["characters"][0]
+    assert character["versions"] == []
+    assert character["unreviewed"] == ["ref-c0-1-u1"]
+
+
+def test_project_reveal_has_no_unreviewed_key_without_the_feature():
+    unchosen = ReferenceVersion(version_id="ref-c0-1-u1", image_path="job-1/ref-c0-1-u1.png", source="unchosen_draw")
+    state = _feature_state([_with_versions(_char("c0", "Kiko", ref="job-1/ref-c0-1.png"), unchosen)], magic_pencil=False)
+    assert "unreviewed" not in _project_reveal(state)["characters"][0]
+
+
+def test_reveal_choose_version_carries_an_on_open_clearance():
+    state = _feature_state([_char("c0", "Kiko", ref="job-1/ref-c0-1.png")])
+    answer = {"action": "choose_version", "char_id": "c0", "version_id": "ref-c0-1-u1",
+              "source": "job-1/ref-c0-1.png", "cleared": True}
+    with patch("pipeline.reveal.interrupt", return_value=answer):
+        result = reveal(state)
+    assert result["reference_choice"].cleared is True
+
+
+# --- ADR-082 Decision 2: the character magic pencil (magic-pencil US-02, ticket 06) ---
+
+def test_reveal_pencil_resume_with_cleared_text_requests_one_edit_and_logs_the_use():
+    state = _feature_state([_char("c0", "Kiko")])
+    answer = {"action": "pencil", "char_id": "c0", "text": "give her a red hat",
+              "source": "job-1/ref-c0-1.png", "flagged": False}
+    with patch("pipeline.reveal.interrupt", return_value=answer):
+        result = reveal(state)
+    assert result == {"reference_pencil": "pencil-1", "pencil_uses": [PencilUse(
+        use_id="pencil-1", char_id="c0", text="give her a red hat", before_path="job-1/ref-c0-1.png",
+        text_moderation="cleared")]}
+
+
+def test_reveal_pencil_resume_with_flagged_text_holds_it_for_the_teacher_and_spends_nothing():
+    state = _feature_state([_char("c0", "Kiko")])
+    state.story_id = "00000000-0000-4000-8000-000000000001"   # review ids are uuid5 of the story id
+    evidence = [{"layer": "primary", "model_id": "m", "instruction_version": "v", "outcome": "flagged"}]
+    answer = {"action": "pencil", "char_id": "c0", "text": "a scary knife",
+              "source": "job-1/ref-c0-1.png", "flagged": True, "evidence": evidence}
+    with patch("pipeline.reveal.interrupt", return_value=answer):
+        result = reveal(state)
+    review = result["moderation_context"].review
+    assert (review.kind, review.subject_id, review.return_node) == ("character_pencil_text", "pencil-1", "char_bible")
+    # sha256("a scary knife"), worked out of band
+    assert review.subject_version == "bd50d2ed71a5bc5fe2ce9ad1f3241c9c9174c415ca9555655b185ead769b9a36"
+    assert review.classifier_evidence[0].outcome == "flagged"
+    assert result["pencil_uses"][0].text_moderation == "held"
+    assert result["reference_pencil"] == "pencil-1"
+    assert "cost" not in result
+
+
+def test_reveal_ignores_a_pencil_resume_on_a_job_without_the_feature():
+    state = _feature_state([_char("c0", "Kiko")], magic_pencil=False)
+    answer = {"action": "pencil", "char_id": "c0", "text": "a red hat", "source": "job-1/ref-c0-1.png", "flagged": False}
+    with patch("pipeline.reveal.interrupt", return_value=answer):
+        assert reveal(state) == {}
+
+
+_PENCILLED = ReferenceVersion(version_id="ref-c0-1", image_path="job-1/ref-c0-1.png",
+                              ref_moderation_status="passed", source="pencil")
+_USE = PencilUse(use_id="pencil-1", char_id="c0", text="a red hat", before_path="job-1/ref-c0-1.png",
+                 after_path="job-1/ref-c0-2.png", text_moderation="cleared")
+
+
+def test_project_reveal_offers_keep_or_old_for_a_pencil_result_nobody_chose_yet():
+    state = _feature_state([_with_versions(_char("c0", "Kiko", ref="job-1/ref-c0-2.png"), _PENCILLED)])
+    state.pencil_uses = [_USE]
+    assert _project_reveal(state)["characters"][0]["pencil_choice"] == {
+        "use_id": "pencil-1", "version_id": "ref-c0-1", "image_path": "job-1/ref-c0-1.png"}
+
+
+def test_project_reveal_has_no_pencil_choice_once_the_child_chose():
+    state = _feature_state([_with_versions(_char("c0", "Kiko", ref="job-1/ref-c0-2.png"), _PENCILLED)])
+    state.pencil_uses = [_USE.model_copy(update={"choice": "kept"})]
+    assert _project_reveal(state)["characters"][0]["pencil_choice"] is None
+
+
+@pytest.mark.parametrize("status,ready", [("passed", True), ("teacher_allowed", False)])
+def test_project_reveal_offers_the_pencil_only_on_a_picture_it_can_bring_back(status, ready):
+    """A teacher-allowed picture is never kept as a version, so "Use the old one" could not restore it (AC-11)."""
+    state = _feature_state([_char("c0", "Kiko")])
+    state.characters[0].ref_moderation_status = status
+    assert _project_reveal(state)["characters"][0]["pencil_ready"] is ready
+
+
+def test_project_reveal_reports_a_refused_edit_until_the_picture_changes():
+    state = _feature_state([_char("c0", "Kiko")])
+    state.pencil_uses = [_USE.model_copy(update={"after_path": None, "reason": "refused"})]
+    assert _project_reveal(state)["characters"][0]["pencil_refused"] is True
+    state.characters = [state.characters[0].model_copy(update={"canonical_ref_image": "job-1/ref-c0-3.png"})]
+    assert _project_reveal(state)["characters"][0]["pencil_refused"] is False
+
+
+def test_reveal_pencil_choice_resume_records_keep_or_old_with_its_source():
+    state = _feature_state([_with_versions(_char("c0", "Kiko", ref="job-1/ref-c0-2.png"), _PENCILLED)])
+    state.pencil_uses = [_USE]
+    answer = {"action": "pencil_choice", "char_id": "c0", "choice": "old", "source": "job-1/ref-c0-2.png"}
+    with patch("pipeline.reveal.interrupt", return_value=answer):
+        result = reveal(state)
+    assert result == {"reference_pencil_choice": PencilChoice(char_id="c0", choice="old", source="job-1/ref-c0-2.png")}

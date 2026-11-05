@@ -845,6 +845,271 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
   });
 });
 
+describe("ProcessingPage — other versions (magic pencil ticket 04)", () => {
+  // A feature job: pictures arrive as authenticated bytes through the guarded product route.
+  const VERSION_ROW = {
+    ...PAUSED_ROW, moderation_mode: "teacher_review_v1",
+    reveal: { taps_left: 1, characters: [{
+      ...PAUSED_ROW.reveal.characters[0], image_path: "j1/ref-c0-2.png",
+      versions: [{ version_id: "ref-c0-1", image_path: "j1/ref-c0-1.png" }],
+    }] },
+  };
+
+  function serve({ versionFails = false, confirm }: { versionFails?: boolean; confirm?: Promise<Response> } = {}) {
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:picture"), revokeObjectURL: vi.fn() }));
+    global.fetch = vi.fn((url: string) => {
+      if (url.endsWith("/confirm")) return confirm ?? Promise.resolve({ ok: true, status: 200 } as Response);
+      if (versionFails && url.includes("/images/version-")) return Promise.resolve({ ok: false, status: 503 } as Response);
+      return Promise.resolve({ ok: true, blob: async () => new Blob(["image"]) } as Response);
+    }) as unknown as typeof fetch;
+  }
+
+  const confirmCalls = () => vi.mocked(global.fetch).mock.calls.filter(([url]) => String(url).endsWith("/confirm"));
+
+  it("offers no control when there is no earlier picture", async () => {
+    serve();
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: { ...VERSION_ROW, reveal: {
+      ...VERSION_ROW.reveal, characters: [{ ...VERSION_ROW.reveal.characters[0], versions: [] }] } } }));
+    await renderPausedPage();
+    expect(screen.queryByRole("button", { name: /Other versions/ })).toBeNull();
+  });
+
+  it("opens into the list, chooses an earlier picture once and says the picture is changing", async () => {
+    let resolveConfirm!: (value: Response) => void;
+    serve({ confirm: new Promise<Response>((resolve) => { resolveConfirm = resolve; }) });
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: VERSION_ROW }));
+    await renderPausedPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Other versions of Kiko" }));
+    expect(document.activeElement).toBe(screen.getByRole("group", { name: "Other versions of Kiko" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Loading Kiko's other pictures…");
+    const option = await screen.findByRole("button", { name: "Use earlier picture 1 of Kiko" });
+    expect(option).toBeDisabled();
+    fireEvent.load(screen.getByRole("img", { name: "Earlier picture 1 of Kiko" }));
+    expect(option).toBeEnabled();
+
+    fireEvent.click(option);
+    fireEvent.click(option);
+    await waitFor(() => expect(confirmCalls()).toHaveLength(1));
+    expect(confirmCalls()[0][1]).toEqual(expect.objectContaining({ body: JSON.stringify({
+      action: "choose_version", char_id: "c0", attribute: null, version_id: "ref-c0-1", source: "j1/ref-c0-2.png",
+    }) }));
+    expect(screen.getByText("Changing your picture…")).toBeDefined();
+    expect(option).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Use these characters" })).toBeDisabled();
+    resolveConfirm({ ok: true, status: 200 } as Response);
+    await waitFor(() => expect(REFETCH).toHaveBeenCalledTimes(1));
+  });
+
+  it.each(["Escape", "Cancel"])("%s closes the list and returns focus to its opener", async (way) => {
+    serve();
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: VERSION_ROW }));
+    await renderPausedPage();
+    const opener = screen.getByRole("button", { name: "Other versions of Kiko" });
+    fireEvent.click(opener);
+    const list = screen.getByRole("group", { name: "Other versions of Kiko" });
+    if (way === "Escape") fireEvent.keyDown(list, { key: "Escape" });
+    else fireEvent.click(screen.getByRole("button", { name: "Cancel other versions of Kiko" }));
+    expect(screen.queryByRole("group", { name: "Other versions of Kiko" })).toBeNull();
+    expect(document.activeElement).toBe(opener);
+    expect(confirmCalls()).toHaveLength(0);
+  });
+
+  it("shows a retryable error when an earlier picture cannot load", async () => {
+    serve({ versionFails: true });
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: VERSION_ROW }));
+    await renderPausedPage();
+    fireEvent.click(screen.getByRole("button", { name: "Other versions of Kiko" }));
+    expect(await screen.findByText("We couldn't load this picture right now.")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Use earlier picture 1 of Kiko" })).toBeNull();
+    serve();
+    fireEvent.click(screen.getByRole("button", { name: "Try loading Kiko's other pictures again" }));
+    expect(await screen.findByRole("img", { name: "Earlier picture 1 of Kiko" })).toBeDefined();
+  });
+});
+
+describe("ProcessingPage — unchosen draws moderated on open (magic pencil ticket 05)", () => {
+  // Accepted first time, with the mint's two other draws not yet opened.
+  const UNOPENED_ROW = {
+    ...PAUSED_ROW, moderation_mode: "teacher_review_v1",
+    reveal: { taps_left: 3, characters: [{
+      ...PAUSED_ROW.reveal.characters[0], image_path: "j1/ref-c0-1.png",
+      versions: [], unreviewed: ["ref-c0-1-u1", "ref-c0-1-u3"],
+    }] },
+  };
+
+  function serve(opened: { versions: Array<{ version_id: string; image_path: string }>; unavailable: number }) {
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:picture"), revokeObjectURL: vi.fn() }));
+    global.fetch = vi.fn((url: string) => {
+      if (url.endsWith("/versions/open")) return Promise.resolve({ ok: true, json: async () => opened } as Response);
+      return Promise.resolve({ ok: true, blob: async () => new Blob(["image"]) } as Response);
+    }) as unknown as typeof fetch;
+  }
+
+  const openCalls = () => vi.mocked(global.fetch).mock.calls.filter(([url]) => String(url).endsWith("/versions/open"));
+
+  it("offers the control, moderates on open, shows the passed picture and says one could not load", async () => {
+    serve({ versions: [{ version_id: "ref-c0-1-u1", image_path: "j1/ref-c0-1-u1.png" }], unavailable: 1 });
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: UNOPENED_ROW }));
+    await renderPausedPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Other versions of Kiko" }));
+    expect(await screen.findByRole("img", { name: "Earlier picture 1 of Kiko" })).toBeDefined();
+    expect(openCalls()).toHaveLength(1);
+    expect(String(openCalls()[0][0])).toContain("/jobs/j1/characters/c0/versions/open");
+    expect(openCalls()[0][1]?.method).toBe("POST");
+    expect(vi.mocked(global.fetch).mock.calls.some(([url]) => String(url).includes("/images/version-ref-c0-1-u1"))).toBe(true);
+    expect(screen.getByText("We couldn't load this picture right now.")).toBeDefined();
+  });
+
+  it("says there are no other pictures when every unopened draw was excluded", async () => {
+    serve({ versions: [], unavailable: 0 });
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: UNOPENED_ROW }));
+    await renderPausedPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Other versions of Kiko" }));
+    expect(await screen.findByText("There are no other pictures of Kiko right now.")).toBeDefined();
+    expect(screen.queryByText("We couldn't load this picture right now.")).toBeNull();
+  });
+});
+
+describe("ProcessingPage — magic pencil (ticket 06)", () => {
+  const PENCIL_ROW = {
+    ...PAUSED_ROW, moderation_mode: "teacher_review_v1",
+    reveal: { taps_left: 2, characters: [{
+      ...PAUSED_ROW.reveal.characters[0], image_path: "j1/ref-c0-1.png", versions: [], pencil_choice: null, pencil_ready: true,
+    }] },
+  };
+  const character = PENCIL_ROW.reveal.characters[0];
+  const withCharacter = (changes: object, tapsLeft = 2) => ({
+    ...PENCIL_ROW, reveal: { taps_left: tapsLeft, characters: [{ ...character, ...changes }] },
+  });
+
+  function serve(confirm?: Promise<Response>) {
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:picture"), revokeObjectURL: vi.fn() }));
+    global.fetch = vi.fn((url: string) => {
+      if (url.endsWith("/confirm")) return confirm ?? Promise.resolve({ ok: true, status: 200 } as Response);
+      return Promise.resolve({ ok: true, blob: async () => new Blob(["image"]) } as Response);
+    }) as unknown as typeof fetch;
+  }
+  const confirmCalls = () => vi.mocked(global.fetch).mock.calls.filter(([url]) => String(url).endsWith("/confirm"));
+
+  it("says the goes are shared by both tools", async () => {
+    serve();
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PENCIL_ROW }));
+    await renderPausedPage();
+    expect(screen.getByText("2 goes left for this book")).toBeDefined();
+    expect(screen.getByText("Redraw and Magic pencil share them, for all your characters.")).toBeDefined();
+  });
+
+  it("opens a labelled, capped text box and Enter sends the change once", async () => {
+    let resolveConfirm!: (value: Response) => void;
+    serve(new Promise<Response>((resolve) => { resolveConfirm = resolve; }));
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PENCIL_ROW }));
+    await renderPausedPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Magic pencil for Kiko" }));
+    const box = screen.getByRole("textbox", { name: "What should change about Kiko?" });
+    expect(document.activeElement).toBe(box);
+    expect(box).toHaveAttribute("maxLength", "200");
+    expect(screen.getByText("This uses 1 of your 2 goes left.")).toBeDefined();
+    const send = screen.getByRole("button", { name: "Change Kiko's picture" });
+    expect(send).toBeDisabled();
+    fireEvent.change(box, { target: { value: "   " } });
+    expect(send).toBeDisabled();
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(confirmCalls()).toHaveLength(0);
+
+    fireEvent.change(box, { target: { value: "give her a red hat " } });
+    expect(screen.getByText("19/200")).toBeDefined();
+    fireEvent.keyDown(box, { key: "Enter" });
+    fireEvent.keyDown(box, { key: "Enter" });
+    await waitFor(() => expect(confirmCalls()).toHaveLength(1));
+    expect(confirmCalls()[0][1]).toEqual(expect.objectContaining({ body: JSON.stringify({
+      action: "pencil", char_id: "c0", attribute: null, text: "give her a red hat", source: "j1/ref-c0-1.png",
+    }) }));
+    expect(screen.getByText("Changing your picture…")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Use these characters" })).toBeDisabled();
+    resolveConfirm({ ok: true, status: 200 } as Response);
+    await waitFor(() => expect(REFETCH).toHaveBeenCalledTimes(1));
+  });
+
+  it.each(["Escape", "Cancel"])("%s closes the pencil and returns focus to its opener", async (way) => {
+    serve();
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PENCIL_ROW }));
+    await renderPausedPage();
+    const opener = screen.getByRole("button", { name: "Magic pencil for Kiko" });
+    fireEvent.click(opener);
+    const box = screen.getByRole("textbox", { name: "What should change about Kiko?" });
+    if (way === "Escape") fireEvent.keyDown(box, { key: "Escape" });
+    else fireEvent.click(screen.getByRole("button", { name: "Cancel magic pencil for Kiko" }));
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(document.activeElement).toBe(opener);
+    expect(confirmCalls()).toHaveLength(0);
+  });
+
+  it("is disabled with the reason when the goes are used up", async () => {
+    serve();
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: withCharacter({}, 0) }));
+    await renderPausedPage();
+    expect(screen.getByRole("button", { name: "Magic pencil for Kiko" })).toBeDisabled();
+    expect(screen.getByText("No pencils left for this book")).toBeDefined();
+    expect(screen.getByText(
+      "No goes left for this book. You can use these characters or go back to your bookshelf.")).toBeDefined();
+  });
+
+  it("is not offered on a picture that could not come back as the old one", async () => {
+    serve();
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: withCharacter({ pencil_ready: false }) }));
+    await renderPausedPage();
+    expect(screen.getByText("2 goes left for this book")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Magic pencil for Kiko" })).toBeNull();
+  });
+
+  it("says when the picture could not be changed", async () => {
+    serve();
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: withCharacter({ pencil_refused: true }) }));
+    await renderPausedPage();
+    expect(screen.getByText("We couldn't change this picture. Try different words.")).toBeDefined();
+  });
+
+  it("asks keep or old before the book can go on, and sends the choice for the picture shown", async () => {
+    serve();
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: withCharacter({
+      image_path: "j1/ref-c0-2.png", versions: [{ version_id: "ref-c0-1", image_path: "j1/ref-c0-1.png" }],
+      pencil_choice: { use_id: "pencil-1", version_id: "ref-c0-1", image_path: "j1/ref-c0-1.png" },
+    }, 1) }));
+    await renderPausedPage();
+    expect(screen.getByRole("img", { name: "Old picture of Kiko" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Magic pencil for Kiko" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Other versions/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "orange sock" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Use these characters" })).toBeDisabled();
+    expect(screen.getByText("Choose Keep this or Use the old one for Kiko first.")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Keep this new picture of Kiko" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Use the old picture of Kiko" }));
+    await waitFor(() => expect(confirmCalls()).toHaveLength(1));
+    expect(confirmCalls()[0][1]).toEqual(expect.objectContaining({ body: JSON.stringify({
+      action: "pencil_choice", char_id: "c0", attribute: null, choice: "old", source: "j1/ref-c0-2.png",
+    }) }));
+  });
+
+  it("a held pencil change uses the neutral copy and offers no story stop", async () => {
+    vi.mocked(global.fetch).mockResolvedValue({ ok: true, json: async () => ({
+      status: "awaiting_teacher", review_id: "r1", generation_epoch: 2, worker_finished: true,
+      can_reconcile_hold: false, pencil_hold: true,
+    }) } as Response);
+    mockUseJob.mockReturnValue(jobState({ bucket: "teacher-held", row: {
+      ...RUNNING_ROW, status: "awaiting_teacher", moderation_mode: "teacher_review_v1", current_stage: "moderation_review",
+    } }));
+    await renderPage(makeParams());
+    expect(await screen.findByRole("heading", { name: "Your teacher is taking a look" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: /stop/i })).toBeNull();
+    expect(screen.getByRole("link", { name: "Back to my books" })).toHaveAttribute("href", "/s/p1");
+  });
+});
+
 describe("ProcessingPage — stall timer (spec §4.1)", () => {
   it("stall line appears after STALL_MS of no stage change", async () => {
     vi.useFakeTimers();
