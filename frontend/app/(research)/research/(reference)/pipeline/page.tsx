@@ -4,6 +4,7 @@ import ScrollTable from "../../../_shared/components/ScrollTable";
 import Source from "../../../_shared/components/Source";
 import { githubUrl } from "../docs/entries";
 import { CAPS, CORPUS_WORD_LIMIT, FIGURES, MODULES, NODE_COUNTS, SOURCES } from "./data";
+import OnThisPage from "../../../_shared/components/OnThisPage";
 
 export const metadata = {
   title: "Conceptual framework and pipeline",
@@ -86,20 +87,7 @@ export default function PipelinePage() {
         </dl>
       </section>
 
-      <nav aria-label="On this page">
-        <ul className="flex flex-wrap gap-2">
-          {SECTIONS.map((section) => (
-            <li key={section.id}>
-              <a
-                href={`#${section.id}`}
-                className={`inline-flex min-h-11 items-center rounded-xl border border-primary/20 bg-surface px-3 text-sm font-bold text-primary hover:bg-primary/5 ${FOCUS}`}
-              >
-                {section.label}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </nav>
+      <OnThisPage sections={SECTIONS} />
 
       <section aria-labelledby="ipo" className="space-y-4">
         <h2 id="ipo" className={H2}>The IPO model</h2>

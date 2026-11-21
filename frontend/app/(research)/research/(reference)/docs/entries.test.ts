@@ -114,7 +114,9 @@ describe("last-changed dates", () => {
   });
 
   it.each(entries.map((e) => [e.path, e.lastChanged]))("%s date is not in the future", (_file, date) => {
-    expect(date <= new Date().toISOString().slice(0, 10)).toBe(true);
+    // Today where it is latest (UTC+14), so a date written in any timezone today is never "future".
+    const latestToday = new Date(Date.now() + 14 * 3_600_000).toISOString().slice(0, 10);
+    expect(date <= latestToday, `${date} is after ${latestToday}`).toBe(true);
   });
 
   it.each(entries.map((e) => [e.path, e.lastChanged]))("%s date is not older than its last commit", (file, date) => {

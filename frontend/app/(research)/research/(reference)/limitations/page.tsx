@@ -4,6 +4,7 @@ import ChartFigure from "../../../_shared/components/ChartFigure";
 import ScrollTable from "../../../_shared/components/ScrollTable";
 import Source from "../../../_shared/components/Source";
 import { AUDIT, AUDIT_NOTE, BY_KIND, CHARTS, CHARTS_AS_OF, CHECKS, CHECK_SENTENCES, DEFECTS, EXAMPLES, KLEIN, KLEIN_NOTES, LIMITATIONS, PHASE_05, SOURCES, TRIED, type Share } from "./data";
+import OnThisPage from "../../../_shared/components/OnThisPage";
 
 export const metadata = {
   title: "StoryBuddy Findings and Limitations",
@@ -85,20 +86,7 @@ export default function LimitationsPage() {
         </div>
       </div>
 
-      <nav aria-label="On this page">
-        <ul className="flex flex-wrap gap-2">
-          {SECTIONS.map((section) => (
-            <li key={section.id}>
-              <a
-                href={`#${section.id}`}
-                className={`inline-flex min-h-11 items-center rounded-xl border border-primary/20 bg-surface px-3 text-sm font-bold text-primary hover:bg-primary/5 ${FOCUS}`}
-              >
-                {section.label}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </nav>
+      <OnThisPage sections={SECTIONS} />
 
       <section aria-labelledby="kinds" className="space-y-4">
         <h2 id="kinds" className={H2}>Human and non-human characters</h2>

@@ -2,6 +2,7 @@ import ChartFigure from "../../../_shared/components/ChartFigure";
 import ScrollTable from "../../../_shared/components/ScrollTable";
 import Source from "../../../_shared/components/Source";
 import { BACKEND_LIBS, COMPONENTS, DEV_HARDWARE, DIAGRAM, FRONTEND_LIBS, HOSTING, MODELS, OWNER_TO_SUPPLY, PYTHON_VERSION, RUNBOOK_GPU_LINE, SOURCES, TRAINING } from "./data";
+import OnThisPage from "../../../_shared/components/OnThisPage";
 
 export const metadata = {
   title: "StoryBuddy System Architecture and Specifications",
@@ -45,20 +46,7 @@ export default function ArchitecturePage() {
         </p>
       </div>
 
-      <nav aria-label="On this page">
-        <ul className="flex flex-wrap gap-2">
-          {SECTIONS.map((section) => (
-            <li key={section.id}>
-              <a
-                href={`#${section.id}`}
-                className={`inline-flex min-h-11 items-center rounded-xl border border-primary/20 bg-surface px-3 text-sm font-bold text-primary hover:bg-primary/5 ${FOCUS}`}
-              >
-                {section.label}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </nav>
+      <OnThisPage sections={SECTIONS} />
 
       <aside aria-label="Terms used on this page" className={`${CARD} space-y-2`}>
         <h2 className="font-display text-xl font-extrabold tracking-tight">Terms on this page</h2>

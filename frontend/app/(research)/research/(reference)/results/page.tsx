@@ -32,6 +32,7 @@ import {
   calledDifferent,
   wrong,
 } from "./data";
+import OnThisPage from "../../../_shared/components/OnThisPage";
 
 export const metadata = {
   title: "StoryBuddy Judge Results",
@@ -226,6 +227,23 @@ function SplitBar({ title, first, second }: { title: string; first: Part; second
   );
 }
 
+const SECTIONS = [
+  { id: "howto", label: "How to read this page" },
+  { id: "summary", label: "What the scores show" },
+  { id: "tested", label: "What was tested" },
+  { id: "training", label: "How the judge was trained" },
+  { id: "scores", label: "F1, precision and recall" },
+  { id: "answers", label: "What each judge did" },
+  { id: "table", label: "Every value" },
+  { id: "accuracy", label: "Why accuracy misleads" },
+  { id: "unreadable", label: "Unreadable answers" },
+  { id: "comparison", label: "Seed 1 vs untrained" },
+  { id: "sensitivity", label: "Ambiguous reference dropped" },
+  { id: "reading", label: "What we take from this" },
+  { id: "recommend", label: "What we recommend" },
+  { id: "limits", label: "What this does not show" },
+];
+
 export default function ResultsPage() {
   return (
     <main className="space-y-10 pt-4 lg:space-y-14">
@@ -235,6 +253,8 @@ export default function ResultsPage() {
           {`Training the judge did not make it better at catching a different character on this run. The untrained model has the higher F1: ${UNTRAINED.f1}, against ${SEED_1.f1} for the trained judge picked in advance. This is a partial result from ${RESULT_DATE}. Every number names the file it comes from.`}
         </p>
       </div>
+
+      <OnThisPage sections={SECTIONS} />
 
       <section aria-labelledby="howto" className={`${CARD} space-y-4`}>
         <h2 id="howto" className={H2}>How to read this page</h2>

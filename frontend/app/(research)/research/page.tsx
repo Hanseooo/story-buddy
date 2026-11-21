@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight } from "@phosphor-icons/react/dist/ssr";
+import { ArrowLeft, ArrowRight } from "@phosphor-icons/react/dist/ssr";
 import ResearchHeader from "../_shared/components/ResearchHeader";
 import { HUB_GROUPS, RESEARCH_PAGES, READING_ORDER } from "../_shared/readingOrder";
 
@@ -18,6 +18,14 @@ export default function ResearchHubPage() {
       <ResearchHeader viewer={null} showAccount={false} />
       <main className="mx-auto max-w-5xl space-y-10 p-4 font-sans sm:p-6 lg:space-y-12 lg:p-10">
         <div className="flex flex-col gap-3">
+          {/* The way out of the research site (old hub: "Back to Landing"). "/" sends a signed-in user to their own home. */}
+          <Link
+            href="/"
+            className={`inline-flex min-h-11 w-fit items-center gap-2 rounded-xl px-2 text-sm font-bold text-foreground/70 hover:text-foreground ${FOCUS}`}
+          >
+            <ArrowLeft weight="bold" className="size-4" aria-hidden />
+            Back to StoryBuddy
+          </Link>
           <h1 className="font-display text-4xl font-extrabold tracking-tight md:text-5xl">StoryBuddy research</h1>
           <p className="max-w-[65ch] text-base text-foreground/70">
             Every research page, in the order of the paper. Each page names the paper sections it feeds and ends with links

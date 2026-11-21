@@ -11,6 +11,11 @@ const createClient = vi.fn(() => {
 vi.mock("@/utils/supabase/server", () => ({ createSupabaseServerClient: () => createClient() }));
 
 describe("/research hub", () => {
+  it("offers a way back to StoryBuddy's home", () => {
+    render(<ResearchHubPage />);
+    expect(screen.getByRole("link", { name: "Back to StoryBuddy" })).toHaveAttribute("href", "/");
+  });
+
   it("lists three groups in the order of index 4.1, each page once with its title, line and paper sections", () => {
     const { container } = render(<ResearchHubPage />);
 

@@ -8,7 +8,8 @@ import type { ResearchViewer } from "../viewer";
 
 const FOCUS = "focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3";
 
-// Not sticky: the annotate and adjudicate task bars below it already stick to the top.
+// Sticky only on the static pages (showAccount off): the annotate and adjudicate task bars already stick to the top.
+// The logo leaves the research site for StoryBuddy's home; the middleware sends a signed-in user on to their own home.
 // The row wraps: on a phone the tabs fill the first line and the account block drops to a second.
 // showAccount is off on the static pages (ADR-065): they read no session, so they cannot say who is signed in.
 export default function ResearchHeader({
@@ -24,11 +25,11 @@ export default function ResearchHeader({
     viewer?.role === "researcher" ? (viewer.isAdjudicator ? "Adjudicator" : "Annotator") : null;
 
   return (
-    <header className="border-b border-primary/10 bg-background">
+    <header className={`border-b border-primary/10 bg-background ${showAccount ? "" : "sticky top-0 z-40"}`}>
       <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-1 px-3 py-2 sm:gap-4 sm:px-6">
         <Link
-          href="/research"
-          aria-label="StoryBuddy research home"
+          href="/"
+          aria-label="StoryBuddy home"
           className={`flex shrink-0 items-center gap-2 rounded-lg ${FOCUS}`}
         >
           <span className="grid size-11 place-items-center overflow-hidden rounded-[9px_9px_9px_3px] bg-surface shadow-sm">

@@ -200,7 +200,7 @@ export const DOC_CHAPTERS: DocChapter[] = [
       {
         path: "docs/product/adr/ADR-083-research-pages-hub-chapter-routes-and-png-diagram-export.md",
         answers: "Why does the research site have a hub, chapter pages and PNG diagram export?",
-        lastChanged: "2026-11-21",
+        lastChanged: "2026-11-22",
       },
     ],
   },

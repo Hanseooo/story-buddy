@@ -9,7 +9,7 @@ export default function ReferenceLayout({ children }: { children: React.ReactNod
   return (
     <div className="min-h-[100dvh] bg-background text-foreground">
       <ResearchHeader viewer={null} showAccount={false} />
-      <div className="mx-auto max-w-5xl p-4 font-sans sm:p-6 lg:p-10">
+      <div className="mx-auto max-w-5xl p-4 font-sans sm:p-6 lg:p-10 [&_h2[id]]:scroll-mt-20">
         <Link
           href="/research"
           className="inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-sm font-bold text-foreground/70 hover:text-foreground focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"

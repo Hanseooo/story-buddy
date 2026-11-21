@@ -27,6 +27,7 @@ import {
   VERBATIM_RECORD,
   type Example,
 } from "./data";
+import OnThisPage from "../../../_shared/components/OnThisPage";
 
 export const metadata = {
   title: "StoryBuddy Judge Dataset",
@@ -112,6 +113,19 @@ function ExampleCard({ example }: { example: Example }) {
   );
 }
 
+const SECTIONS = [
+  { id: "words", label: "Words used" },
+  { id: "pairs", label: "What is a pair?" },
+  { id: "process", label: "Ten steps" },
+  { id: "record", label: "One record" },
+  { id: "labelling", label: "How a pair was labelled" },
+  { id: "tool", label: "The labelling tool" },
+  { id: "splits", label: "The splits" },
+  { id: "agreement", label: "Rater agreement" },
+  { id: "examples", label: "Six example pairs" },
+  { id: "training", label: "A training record" },
+];
+
 export default function DatasetPage() {
   const { pairs, books, natural, constructed, laterAttempt } = PAIR_FACTS;
   const kept = LABEL_FACTS.kept;
@@ -125,6 +139,8 @@ export default function DatasetPage() {
           number names the file it comes from.
         </p>
       </div>
+
+      <OnThisPage sections={SECTIONS} />
 
       <section aria-labelledby="words" className="space-y-4">
         <h2 id="words" className={H2}>Words used on this page</h2>

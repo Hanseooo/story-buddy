@@ -2,12 +2,12 @@ import ScrollTable from "../../../_shared/components/ScrollTable";
 import Source from "../../../_shared/components/Source";
 import { MODELS } from "../architecture/data";
 import { BASIS, CONSENT, LIMITS, MODERATION_LAYERS, PRIVACY, SAFETY_FEATURES, SOURCES, type Fact } from "./data";
+import OnThisPage from "../../../_shared/components/OnThisPage";
 
 export const metadata = {
   title: "StoryBuddy Ethics and Safety",
 };
 
-const FOCUS = "focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3";
 const CARD = "rounded-3xl bg-surface p-5 neo-border neo-shadow-sm sm:p-6";
 const H2 = "font-display text-2xl font-extrabold tracking-tight md:text-3xl";
 const H3 = "font-display text-xl font-extrabold tracking-tight";
@@ -51,20 +51,7 @@ export default function EthicsPage() {
         </p>
       </div>
 
-      <nav aria-label="On this page">
-        <ul className="flex flex-wrap gap-2">
-          {SECTIONS.map((section) => (
-            <li key={section.id}>
-              <a
-                href={`#${section.id}`}
-                className={`inline-flex min-h-11 items-center rounded-xl border border-primary/20 bg-surface px-3 text-sm font-bold text-primary hover:bg-primary/5 ${FOCUS}`}
-              >
-                {section.label}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </nav>
+      <OnThisPage sections={SECTIONS} />
 
       <aside aria-label="Terms used on this page" className={`${CARD} space-y-2`}>
         <h2 className={H3}>Terms on this page</h2>

@@ -1,6 +1,7 @@
 import { ArrowSquareOut, FileText, Pencil } from "@phosphor-icons/react/dist/ssr";
 import { DOC_CHAPTERS, githubUrl } from "./entries";
 import { CHANGELOG_POINTS, PAPER_CORRECTIONS, PAPER_TYPOS, type Correction } from "./paper";
+import OnThisPage from "../../../_shared/components/OnThisPage";
 
 export const metadata = {
   title: "StoryBuddy Research Documents",
@@ -164,12 +165,16 @@ export default function DocsPage() {
         </p>
       </div>
 
+      <OnThisPage
+        sections={[{ id: "paper-panel", label: "What the paper must say" }, ...DOC_CHAPTERS.map((c) => ({ id: c.id, label: c.title }))]}
+      />
+
       <PaperPanel />
 
       <ul className="space-y-6">
         {DOC_CHAPTERS.map((chapter) => (
           <li key={chapter.id} className="rounded-3xl bg-surface p-5 neo-border neo-shadow-sm sm:p-6">
-            <h2 className="flex flex-col gap-1">
+            <h2 id={chapter.id} className="flex flex-col gap-1">
               <span className="font-display text-xl font-extrabold tracking-tight">{chapter.title}</span>
             </h2>
             <p className="text-sm text-foreground/60">{chapter.blurb}</p>

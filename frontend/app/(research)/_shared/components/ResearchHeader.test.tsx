@@ -15,6 +15,11 @@ function tabNames() {
 }
 
 describe("ResearchHeader", () => {
+  it("the logo leaves the research site for StoryBuddy's home", () => {
+    render(<ResearchHeader viewer={null} />);
+    expect(screen.getByRole("link", { name: "StoryBuddy home" })).toHaveAttribute("href", "/");
+  });
+
   it("signed out: three tabs, Runs marked current, with a sign-in link back here", () => {
     render(<ResearchHeader viewer={null} />);
 

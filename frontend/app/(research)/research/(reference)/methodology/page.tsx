@@ -3,6 +3,7 @@ import { ArrowRight } from "@phosphor-icons/react/dist/ssr";
 import ScrollTable from "../../../_shared/components/ScrollTable";
 import Source from "../../../_shared/components/Source";
 import { CORPUS, DESIGN, PHASE_05, PHASES, RESPONDENTS, SETTING, SITES, SOURCES, SPIRAL } from "./data";
+import OnThisPage from "../../../_shared/components/OnThisPage";
 
 export const metadata = {
   title: "StoryBuddy Methodology at a Glance",
@@ -26,6 +27,16 @@ const TERMS = [
   { term: "Held-out test set", meaning: "stories kept apart from training and used once at the end to measure the judge." },
 ];
 
+const SECTIONS = [
+  { id: "design", label: "Research design" },
+  { id: "phases", label: "Spiral phases" },
+  { id: "setting", label: "Setting" },
+  { id: "site", label: "Implementation site" },
+  { id: "corpus", label: "Corpus" },
+  { id: "respondents", label: "Respondents" },
+  { id: "terms", label: "Words used" },
+];
+
 export default function MethodologyPage() {
   return (
     <main className="space-y-10 pt-4 lg:space-y-14">
@@ -36,6 +47,8 @@ export default function MethodologyPage() {
           the file it comes from.
         </p>
       </div>
+
+      <OnThisPage sections={SECTIONS} />
 
       <section aria-labelledby="design" className="space-y-4">
         <h2 id="design" className={H2}>Research design</h2>
