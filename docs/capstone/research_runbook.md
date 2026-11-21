@@ -204,6 +204,11 @@ booleans, `true` = Same.
   carry the same story ids). Script: `docs/specs/research-page-refresh/evidence/kinds.py`.
 - **Different pairs per split.** Train 157 of 484 (104 constructed, 53 natural of 380 natural). Validation 4 of 86.
   Test 47 of 329. Validation has no constructed pairs.
+- **Constructed matches.** The 14 frozen matches in `dataset_selection.json` (`hard_negative_matches`) each pair two
+  characters of the same species. 12 of the 14 are human with human and 2 are tortoise with tortoise (`syn-020:c0` and
+  `syn-020:c1`). Counted on 2026-11-21 from the Character Bible `species` field in `data/judge/corpus/runs/syn-*/memory.json`
+  (read-only). Each match is a hand-picked pair of characters of the same art style, frozen on 2026-09-16 before labelling;
+  no code in the repo searches for the most similar character.
 
 ## Held-out resume context (2026-10-07)
 

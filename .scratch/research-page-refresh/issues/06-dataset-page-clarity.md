@@ -2,7 +2,7 @@
 
 **Status:** ready-for-agent
 **Type:** task
-**Progress:** open
+**Progress:** resolved
 **Parent:** [`docs/specs/research-page-refresh.md`](../../../docs/specs/research-page-refresh.md)
 **What to build:** A non-ML groupmate can read `/research/dataset` and explain the dataset correctly.
 **Source criteria:** US-04 AC-01–04, US-05 AC-05–09, US-06 AC-10–12, US-07 AC-13–18, US-08 AC-19–20, US-09 AC-21–25, US-27 AC-26, AC-28; SH-01–03, SH-05, SH-06, SH-09, SH-10
@@ -40,3 +40,12 @@ Shorten long values with "…" only; never reformat the JSON.
 
 ## Blocked by
 03 (labelling-tool reasons), 04 (runbook facts), 10 (dataset-flow figure)
+
+## Answer
+
+- `/research/dataset` rewritten: definitions box, what a pair is, ten steps with the dataset-flow figure (inline SVG copy, PNG download link, GitHub source link), one verbatim record plus a 13-field table, labelling rules and who decided, why the team built its own tool, splits and why test is donated-only, corrected human/non-human table, agreement, examples, training record. Files: `dataset/{page.tsx,data.ts,data.test.ts,page.test.tsx}`, `public/research/diagrams/dataset_build_and_annotation_flow.drawio.svg` (byte copy, tested).
+- New fact recorded first (SH-02): the 14 constructed matches are 12 human with human and 2 tortoise with tortoise. Runbook entry "Constructed matches" and one changelog row. Counted read-only from the freeze and corpus run memories.
+- Tests: split rows, reason counts and agreement read the runbook (red when a runbook row changes). The verbatim record is compared with `manifest.val.jsonl` (red when a field is altered); it runs where the freeze exists, including a worktree via the main checkout, and skips elsewhere.
+- AC-28: `/annotate?demo=1` sits behind researcher sign-in (middleware) and no tracked demo screenshots exist, so the page links the demo spec and says the demo needs sign-in.
+- Deviation from AC-14: the page says "12 of the 15 donated candidate stories finished" and that the 3 failures are not in the dataset. It does not say they were replaced by backups, because no tracked doc states it.
+- The PNG is not created. Ticket 11 exports it. The download link will 404 until then.
