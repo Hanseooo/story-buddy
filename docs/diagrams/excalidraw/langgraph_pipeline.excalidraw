@@ -939,6 +939,28 @@
       "startArrowhead": null,
       "endArrowhead": "arrow",
       "boundElements": []
+    },
+    {
+      "id": "planned_banner",
+      "type": "text",
+      "x": 100,
+      "y": 20,
+      "width": 440,
+      "height": 24,
+      "strokeColor": "#b85450",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "text": "Planned design, July 2026 (not as built)",
+      "fontSize": 20,
+      "fontFamily": 5,
+      "textAlign": "left",
+      "verticalAlign": "top",
+      "containerId": null
     }
   ],
   "appState": {

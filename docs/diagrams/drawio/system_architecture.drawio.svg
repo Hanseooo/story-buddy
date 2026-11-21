@@ -1,0 +1,256 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="1900px" height="980px" viewBox="0 0 1900 980" content="&lt;mxfile host=&quot;embed.diagrams.net&quot; version=&quot;26.0.0&quot;&gt;&lt;diagram id=&quot;arch-2026-11&quot; name=&quot;System architecture (as built 2026-11-21)&quot;&gt;&lt;mxGraphModel dx=&quot;1000&quot; dy=&quot;800&quot; grid=&quot;1&quot; gridSize=&quot;10&quot; guides=&quot;1&quot; tooltips=&quot;1&quot; connect=&quot;1&quot; arrows=&quot;1&quot; fold=&quot;1&quot; page=&quot;1&quot; pageScale=&quot;1&quot; pageWidth=&quot;1900&quot; pageHeight=&quot;980&quot; math=&quot;0&quot; shadow=&quot;0&quot; background=&quot;#ffffff&quot;&gt;&lt;root&gt;&lt;mxCell id=&quot;0&quot; /&gt;&lt;mxCell id=&quot;1&quot; parent=&quot;0&quot; /&gt;&lt;mxCell id=&quot;title&quot; value=&quot;&amp;lt;b&amp;gt;&amp;lt;font style=&amp;quot;font-size: 19px;&amp;quot;&amp;gt;System architecture, as built 2026-11-21&amp;lt;/font&amp;gt;&amp;lt;/b&amp;gt;&quot; style=&quot;text;html=1;whiteSpace=wrap;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontSize=14;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;20&quot; y=&quot;12&quot; width=&quot;900&quot; height=&quot;30&quot; as=&quot;geometry&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;subtitle&quot; value=&quot;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;Frontend on Vercel, backend on Northflank (ADR-031), data and auth on Supabase. One web service and one worker share a Redis queue.&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;Orange arrows: calls to outside providers. Every box below is a component named in code; the diagram shows no host region.&amp;lt;/font&amp;gt;&quot; style=&quot;text;html=1;whiteSpace=wrap;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontSize=13;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;20&quot; y=&quot;44&quot; width=&quot;1600&quot; height=&quot;40&quot; as=&quot;geometry&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;g_vercel&quot; value=&quot;&amp;lt;b&amp;gt;Vercel&amp;lt;/b&amp;gt;&quot; style=&quot;rounded=1;arcSize=3;whiteSpace=wrap;html=1;fillColor=#fafafa;strokeColor=#b0b0b0;fontSize=13;align=left;verticalAlign=top;fontColor=#000000;spacingLeft=8;spacingRight=8;spacingTop=4;dashed=1;dashPattern=6 4;container=0;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontStyle=1;fontColor=#555555;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;20&quot; y=&quot;215&quot; width=&quot;300&quot; height=&quot;585&quot; as=&quot;geometry&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;g_supa&quot; value=&quot;&amp;lt;b&amp;gt;Supabase&amp;lt;/b&amp;gt;&quot; style=&quot;rounded=1;arcSize=3;whiteSpace=wrap;html=1;fillColor=#fafafa;strokeColor=#b0b0b0;fontSize=13;align=left;verticalAlign=top;fontColor=#000000;spacingLeft=8;spacingRight=8;spacingTop=4;dashed=1;dashPattern=6 4;container=0;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontStyle=1;fontColor=#555555;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;460&quot; y=&quot;215&quot; width=&quot;280&quot; height=&quot;605&quot; as=&quot;geometry&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;g_nf&quot; value=&quot;&amp;lt;b&amp;gt;Northflank&amp;lt;/b&amp;gt;&quot; style=&quot;rounded=1;arcSize=3;whiteSpace=wrap;html=1;fillColor=#fafafa;strokeColor=#b0b0b0;fontSize=13;align=left;verticalAlign=top;fontColor=#000000;spacingLeft=8;spacingRight=8;spacingTop=4;dashed=1;dashPattern=6 4;container=0;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontStyle=1;fontColor=#555555;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;850&quot; y=&quot;215&quot; width=&quot;700&quot; height=&quot;640&quot; as=&quot;geometry&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;g_ext&quot; value=&quot;&amp;lt;b&amp;gt;Outside providers&amp;lt;/b&amp;gt;&quot; style=&quot;rounded=1;arcSize=3;whiteSpace=wrap;html=1;fillColor=#fafafa;strokeColor=#b0b0b0;fontSize=13;align=left;verticalAlign=top;fontColor=#000000;spacingLeft=8;spacingRight=8;spacingTop=4;dashed=1;dashPattern=6 4;container=0;verticalAlign=top;align=left;spacingLeft=10;spacingTop=4;fontStyle=1;fontColor=#555555;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;1620&quot; y=&quot;215&quot; width=&quot;230&quot; height=&quot;640&quot; as=&quot;geometry&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;users&quot; value=&quot;&amp;lt;b&amp;gt;Browsers&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;student, teacher, researcher&amp;lt;/font&amp;gt;&quot; style=&quot;rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;align=center;verticalAlign=middle;fontColor=#000000;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;40&quot; y=&quot;100&quot; width=&quot;240&quot; height=&quot;60&quot; as=&quot;geometry&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;nextjs&quot; value=&quot;&amp;lt;b&amp;gt;Next.js frontend&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;student: /s/[profileId], write, book&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;teacher: /classroom&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;research pages, run viewer, annotate&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;Supabase browser client (@supabase/ssr):&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;sign-in, RLS reads, Realtime, signed URLs&amp;lt;/font&amp;gt;&quot; style=&quot;rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;align=center;verticalAlign=middle;fontColor=#000000;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;40&quot; y=&quot;260&quot; width=&quot;260&quot; height=&quot;520&quot; as=&quot;geometry&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;realtime&quot; value=&quot;&amp;lt;b&amp;gt;Realtime&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;publication on the jobs table&amp;lt;/font&amp;gt;&quot; style=&quot;rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;align=center;verticalAlign=middle;fontColor=#000000;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;480&quot; y=&quot;260&quot; width=&quot;240&quot; height=&quot;90&quot; as=&quot;geometry&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;auth&quot; value=&quot;&amp;lt;b&amp;gt;Supabase Auth&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;password sign-in, JWT&amp;lt;/font&amp;gt;&quot; style=&quot;rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;align=center;verticalAlign=middle;fontColor=#000000;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;480&quot; y=&quot;380&quot; width=&quot;240&quot; height=&quot;90&quot; as=&quot;geometry&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;postgres&quot; value=&quot;&amp;lt;b&amp;gt;Postgres&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;jobs, profiles, classrooms&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;job_moderation_reviews, job_review_notes&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;job_picture_records, annotations,&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;research_pairs&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;LangGraph checkpoints&amp;lt;/font&amp;gt;&quot; style=&quot;rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;align=center;verticalAlign=middle;fontColor=#000000;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;480&quot; y=&quot;500&quot; width=&quot;240&quot; height=&quot;170&quot; as=&quot;geometry&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;storage&quot; value=&quot;&amp;lt;b&amp;gt;Storage&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;private bucket storybook-images:&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;every reference and page draw&amp;lt;/font&amp;gt;&quot; style=&quot;rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;align=center;verticalAlign=middle;fontColor=#000000;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;480&quot; y=&quot;700&quot; width=&quot;240&quot; height=&quot;90&quot; as=&quot;geometry&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;fastapi&quot; value=&quot;&amp;lt;b&amp;gt;FastAPI web service&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;app/main.py (Procfile: web)&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;Before the job row: Presidio redaction,&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;then text moderation (web tier)&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;POST /storybooks, /jobs/{id}/confirm&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;teacher classrooms, holds, review, notes&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;page magic pencil (enqueues a job)&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;PDF export (WeasyPrint), onboarding&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;run viewer endpoint (reads checkpoints)&amp;lt;/font&amp;gt;&quot; style=&quot;rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;align=center;verticalAlign=middle;fontColor=#000000;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;880&quot; y=&quot;260&quot; width=&quot;300&quot; height=&quot;300&quot; as=&quot;geometry&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;presidio&quot; value=&quot;&amp;lt;b&amp;gt;Presidio + spaCy&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;PII redaction, in-process&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;web service and pipeline nodes&amp;lt;/font&amp;gt;&quot; style=&quot;rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=13;align=center;verticalAlign=middle;fontColor=#000000;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;1270&quot; y=&quot;260&quot; width=&quot;220&quot; height=&quot;100&quot; as=&quot;geometry&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;redis&quot; value=&quot;&amp;lt;b&amp;gt;Redis&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;queue &#x27;storybook&#x27; (RQ)&amp;lt;/font&amp;gt;&quot; style=&quot;rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=13;align=center;verticalAlign=middle;fontColor=#000000;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;1270&quot; y=&quot;420&quot; width=&quot;220&quot; height=&quot;80&quot; as=&quot;geometry&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;worker&quot; value=&quot;&amp;lt;b&amp;gt;RQ worker&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;worker/run_worker.py (Procfile: worker)&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;run_storybook_job, resume_storybook_job,&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;run_review_storybook_job, page_pencil&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;runs the LangGraph pipeline, 14 nodes&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;PostgresSaver checkpointer&amp;lt;/font&amp;gt;&quot; style=&quot;rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;align=center;verticalAlign=middle;fontColor=#000000;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;880&quot; y=&quot;620&quot; width=&quot;300&quot; height=&quot;200&quot; as=&quot;geometry&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;openrouter&quot; value=&quot;&amp;lt;b&amp;gt;OpenRouter&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;text: Mistral Small 3.2 24B&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;judge: Gemma-3 27B&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;text moderation: Llama Guard 4,&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;gpt-oss-safeguard 20B&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;image moderation: Mistral&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;Small 3.2, Gemma-3&amp;lt;/font&amp;gt;&quot; style=&quot;rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;align=center;verticalAlign=middle;fontColor=#000000;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;1640&quot; y=&quot;260&quot; width=&quot;190&quot; height=&quot;200&quot; as=&quot;geometry&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;fal&quot; value=&quot;&amp;lt;b&amp;gt;fal.ai&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;qwen-image: references&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;qwen-image-edit-2511:&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;pages and pencil edits&amp;lt;/font&amp;gt;&quot; style=&quot;rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;align=center;verticalAlign=middle;fontColor=#000000;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;1640&quot; y=&quot;490&quot; width=&quot;190&quot; height=&quot;110&quot; as=&quot;geometry&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;langfuse&quot; value=&quot;&amp;lt;b&amp;gt;Langfuse&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;run traces from the worker&amp;lt;/font&amp;gt;&quot; style=&quot;rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;align=center;verticalAlign=middle;fontColor=#000000;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;1640&quot; y=&quot;740&quot; width=&quot;190&quot; height=&quot;70&quot; as=&quot;geometry&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;sentry&quot; value=&quot;&amp;lt;b&amp;gt;Sentry&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 11px;&amp;quot;&amp;gt;errors from the web service&amp;lt;/font&amp;gt;&quot; style=&quot;rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;align=center;verticalAlign=middle;fontColor=#000000;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;1640&quot; y=&quot;100&quot; width=&quot;190&quot; height=&quot;70&quot; as=&quot;geometry&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;e_users&quot; value=&quot;HTTPS&quot; style=&quot;edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;jettySize=auto;strokeColor=#000000;strokeWidth=1.5;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.2500;exitY=1.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.2308;entryY=0.0000;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=block;endFill=1;endSize=6;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;users&quot; target=&quot;nextjs&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot; x=&quot;0.0000&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;e_rt&quot; value=&quot;job updates&quot; style=&quot;edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;jettySize=auto;strokeColor=#000000;strokeWidth=1.5;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.0000;exitY=0.5000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.0865;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=block;endFill=1;endSize=6;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;realtime&quot; target=&quot;nextjs&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot; x=&quot;0.0000&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;e_auth&quot; value=&quot;sign in&quot; style=&quot;edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;jettySize=auto;strokeColor=#000000;strokeWidth=1.5;fontSize=11;labelBackgroundColor=#ffffff;exitX=1.0000;exitY=0.3173;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.0000;entryY=0.5000;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=block;endFill=1;endSize=6;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;nextjs&quot; target=&quot;auth&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot; x=&quot;0.0000&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;e_rls&quot; value=&quot;RLS reads&quot; style=&quot;edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;jettySize=auto;strokeColor=#000000;strokeWidth=1.5;fontSize=11;labelBackgroundColor=#ffffff;exitX=1.0000;exitY=0.5865;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.0000;entryY=0.3824;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=block;endFill=1;endSize=6;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;nextjs&quot; target=&quot;postgres&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot; x=&quot;0.0000&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;e_sign&quot; value=&quot;signed URLs&quot; style=&quot;edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;jettySize=auto;strokeColor=#000000;strokeWidth=1.5;fontSize=11;labelBackgroundColor=#ffffff;exitX=1.0000;exitY=0.9327;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.0000;entryY=0.5000;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=block;endFill=1;endSize=6;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;nextjs&quot; target=&quot;storage&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot; x=&quot;0.0000&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;e_api&quot; value=&quot;REST + Supabase JWT&quot; style=&quot;edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;jettySize=auto;strokeColor=#000000;strokeWidth=1.5;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.6923;exitY=0.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.4000;entryY=0.0000;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=block;endFill=1;endSize=6;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;nextjs&quot; target=&quot;fastapi&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot; x=&quot;0.0000&quot;&gt;&lt;Array as=&quot;points&quot;&gt;&lt;mxPoint x=&quot;220&quot; y=&quot;190&quot; /&gt;&lt;mxPoint x=&quot;1000&quot; y=&quot;190&quot; /&gt;&lt;/Array&gt;&lt;/mxGeometry&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;e_fa_auth&quot; value=&quot;verify JWT&quot; style=&quot;edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;jettySize=auto;strokeColor=#000000;strokeWidth=1.5;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.0000;exitY=0.5500;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.5000;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=block;endFill=1;endSize=6;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;fastapi&quot; target=&quot;auth&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot; x=&quot;0.0000&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;e_fa_pg&quot; value=&quot;rows, holds, checkpoints&quot; style=&quot;edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;jettySize=auto;strokeColor=#000000;strokeWidth=1.5;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.0000;exitY=0.9000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.1765;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=block;endFill=1;endSize=6;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;fastapi&quot; target=&quot;postgres&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot; x=&quot;0.0000&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;e_fa_pres&quot; value=&quot;redact&quot; style=&quot;edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;jettySize=auto;strokeColor=#000000;strokeWidth=1.5;fontSize=11;labelBackgroundColor=#ffffff;exitX=1.0000;exitY=0.1667;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.0000;entryY=0.5000;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=block;endFill=1;endSize=6;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;fastapi&quot; target=&quot;presidio&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot; x=&quot;0.0000&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;e_fa_or&quot; value=&quot;text moderation&quot; style=&quot;edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;jettySize=auto;strokeColor=#d79b00;strokeWidth=1.5;fontSize=11;labelBackgroundColor=#ffffff;exitX=1.0000;exitY=0.4333;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.0000;entryY=0.6500;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=block;endFill=1;endSize=6;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;fastapi&quot; target=&quot;openrouter&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot; x=&quot;0.4000&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;e_fa_rd&quot; value=&quot;enqueue&quot; style=&quot;edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;jettySize=auto;strokeColor=#000000;strokeWidth=1.5;fontSize=11;labelBackgroundColor=#ffffff;exitX=1.0000;exitY=0.6667;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.0000;entryY=0.5000;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=block;endFill=1;endSize=6;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;fastapi&quot; target=&quot;redis&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot; x=&quot;0.0000&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;e_rd_wk&quot; value=&quot;pull job&quot; style=&quot;edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;jettySize=auto;strokeColor=#000000;strokeWidth=1.5;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5000;exitY=1.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.5333;entryY=0.0000;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=block;endFill=1;endSize=6;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;redis&quot; target=&quot;worker&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot; x=&quot;0.0000&quot;&gt;&lt;Array as=&quot;points&quot;&gt;&lt;mxPoint x=&quot;1380&quot; y=&quot;590&quot; /&gt;&lt;mxPoint x=&quot;1040&quot; y=&quot;590&quot; /&gt;&lt;/Array&gt;&lt;/mxGeometry&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;e_wk_pg&quot; value=&quot;status, checkpoints&quot; style=&quot;edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;jettySize=auto;strokeColor=#000000;strokeWidth=1.5;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.0000;exitY=0.1500;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.8824;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=block;endFill=1;endSize=6;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;worker&quot; target=&quot;postgres&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot; x=&quot;0.0000&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;e_wk_st&quot; value=&quot;upload draws&quot; style=&quot;edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;jettySize=auto;strokeColor=#000000;strokeWidth=1.5;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.0000;exitY=0.6250;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1.0000;entryY=0.5000;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=block;endFill=1;endSize=6;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;worker&quot; target=&quot;storage&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot; x=&quot;0.0000&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;e_wk_or&quot; value=&quot;text, judge, moderation&quot; style=&quot;edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;jettySize=auto;strokeColor=#d79b00;strokeWidth=1.5;fontSize=11;labelBackgroundColor=#ffffff;exitX=1.0000;exitY=0.2000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.0000;entryY=0.8500;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=block;endFill=1;endSize=6;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;worker&quot; target=&quot;openrouter&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot; x=&quot;-0.4000&quot;&gt;&lt;Array as=&quot;points&quot;&gt;&lt;mxPoint x=&quot;1570&quot; y=&quot;660&quot; /&gt;&lt;mxPoint x=&quot;1570&quot; y=&quot;430&quot; /&gt;&lt;/Array&gt;&lt;/mxGeometry&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;e_wk_fal&quot; value=&quot;draw and edit images&quot; style=&quot;edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;jettySize=auto;strokeColor=#d79b00;strokeWidth=1.5;fontSize=11;labelBackgroundColor=#ffffff;exitX=1.0000;exitY=0.4500;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.0000;entryY=0.7273;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=block;endFill=1;endSize=6;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;worker&quot; target=&quot;fal&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot; x=&quot;-0.4000&quot;&gt;&lt;Array as=&quot;points&quot;&gt;&lt;mxPoint x=&quot;1600&quot; y=&quot;710&quot; /&gt;&lt;mxPoint x=&quot;1600&quot; y=&quot;570&quot; /&gt;&lt;/Array&gt;&lt;/mxGeometry&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;e_wk_lf&quot; value=&quot;traces&quot; style=&quot;edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;jettySize=auto;strokeColor=#d79b00;strokeWidth=1.5;fontSize=11;labelBackgroundColor=#ffffff;exitX=1.0000;exitY=0.7750;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.0000;entryY=0.5000;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=block;endFill=1;endSize=6;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;worker&quot; target=&quot;langfuse&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot; x=&quot;0.0000&quot; /&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;e_fa_se&quot; value=&quot;errors&quot; style=&quot;edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;jettySize=auto;strokeColor=#d79b00;strokeWidth=1.5;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.9333;exitY=0.0000;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.0000;entryY=0.5000;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=block;endFill=1;endSize=6;&quot; edge=&quot;1&quot; parent=&quot;1&quot; source=&quot;fastapi&quot; target=&quot;sentry&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot; x=&quot;0.2000&quot;&gt;&lt;Array as=&quot;points&quot;&gt;&lt;mxPoint x=&quot;1160&quot; y=&quot;135&quot; /&gt;&lt;/Array&gt;&lt;/mxGeometry&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;source&quot; value=&quot;&amp;lt;font style=&amp;quot;font-size: 9px;&amp;quot;&amp;gt;Source: backend/Procfile, app/main.py (web-tier gate, routes), app/queue.py, worker/run_worker.py, worker/run_job.py, app/config.py (model IDs),&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 9px;&amp;quot;&amp;gt;providers.py, app/page_pencil.py, app/pdf_export.py, app/research.py, frontend/lib/supabaseClient.ts, useJob.ts, signedUrls.ts, ADR-031, ADR-033.&amp;lt;/font&amp;gt;&amp;lt;br&amp;gt;&amp;lt;font style=&amp;quot;font-size: 9px;&amp;quot;&amp;gt;As built 2026-11-21.&amp;lt;/font&amp;gt;&quot; style=&quot;text;html=1;whiteSpace=wrap;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontSize=11;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;20&quot; y=&quot;900&quot; width=&quot;1600&quot; height=&quot;60&quot; as=&quot;geometry&quot; /&gt;&lt;/mxCell&gt;&lt;/root&gt;&lt;/mxGraphModel&gt;&lt;/diagram&gt;&lt;/mxfile&gt;" font-family="Helvetica,Arial,sans-serif">
+<defs/>
+<rect x="0" y="0" width="1900" height="980" fill="#ffffff"/>
+<g data-cell-id="title">
+<text x="28.0" y="33.6" text-anchor="start" font-size="19" fill="#000000" font-weight="bold">System architecture, as built 2026-11-21</text>
+</g>
+<g data-cell-id="subtitle">
+<text x="28.0" y="61.0" text-anchor="start" font-size="11" fill="#000000">Frontend on Vercel, backend on Northflank (ADR-031), data and auth on Supabase. One web service and one worker share a Redis queue.</text>
+<text x="28.0" y="74.7" text-anchor="start" font-size="11" fill="#000000">Orange arrows: calls to outside providers. Every box below is a component named in code; the diagram shows no host region.</text>
+</g>
+<g data-cell-id="g_vercel">
+<rect x="20" y="215" width="300" height="585" rx="3.0" fill="#fafafa" stroke="#b0b0b0" stroke-width="1" stroke-dasharray="6 4"/>
+<text x="28.0" y="233.7" text-anchor="start" font-size="13" fill="#000000" font-weight="bold">Vercel</text>
+</g>
+<g data-cell-id="g_supa">
+<rect x="460" y="215" width="280" height="605" rx="3.0" fill="#fafafa" stroke="#b0b0b0" stroke-width="1" stroke-dasharray="6 4"/>
+<text x="468.0" y="233.7" text-anchor="start" font-size="13" fill="#000000" font-weight="bold">Supabase</text>
+</g>
+<g data-cell-id="g_nf">
+<rect x="850" y="215" width="700" height="640" rx="3.0" fill="#fafafa" stroke="#b0b0b0" stroke-width="1" stroke-dasharray="6 4"/>
+<text x="858.0" y="233.7" text-anchor="start" font-size="13" fill="#000000" font-weight="bold">Northflank</text>
+</g>
+<g data-cell-id="g_ext">
+<rect x="1620" y="215" width="230" height="640" rx="3.0" fill="#fafafa" stroke="#b0b0b0" stroke-width="1" stroke-dasharray="6 4"/>
+<text x="1628.0" y="233.7" text-anchor="start" font-size="13" fill="#000000" font-weight="bold">Outside providers</text>
+</g>
+<g data-cell-id="users">
+<rect x="40" y="100" width="240" height="60" rx="6.0" fill="#e1d5e7" stroke="#9673a6" stroke-width="1"/>
+<text x="160.0" y="127.7" text-anchor="middle" font-size="13" fill="#000000" font-weight="bold">Browsers</text>
+<text x="160.0" y="142.0" text-anchor="middle" font-size="11" fill="#000000">student, teacher, researcher</text>
+</g>
+<g data-cell-id="nextjs">
+<rect x="40" y="260" width="260" height="520" rx="26.0" fill="#dae8fc" stroke="#6c8ebf" stroke-width="1"/>
+<text x="170.0" y="490.2" text-anchor="middle" font-size="13" fill="#000000" font-weight="bold">Next.js frontend</text>
+<text x="170.0" y="504.5" text-anchor="middle" font-size="11" fill="#000000">student: /s/[profileId], write, book</text>
+<text x="170.0" y="518.2" text-anchor="middle" font-size="11" fill="#000000">teacher: /classroom</text>
+<text x="170.0" y="532.0" text-anchor="middle" font-size="11" fill="#000000">research pages, run viewer, annotate</text>
+<text x="170.0" y="545.7" text-anchor="middle" font-size="11" fill="#000000">Supabase browser client (@supabase/ssr):</text>
+<text x="170.0" y="559.5" text-anchor="middle" font-size="11" fill="#000000">sign-in, RLS reads, Realtime, signed URLs</text>
+</g>
+<g data-cell-id="realtime">
+<rect x="480" y="260" width="240" height="90" rx="9.0" fill="#f8cecc" stroke="#b85450" stroke-width="1"/>
+<text x="600.0" y="302.7" text-anchor="middle" font-size="13" fill="#000000" font-weight="bold">Realtime</text>
+<text x="600.0" y="317.0" text-anchor="middle" font-size="11" fill="#000000">publication on the jobs table</text>
+</g>
+<g data-cell-id="auth">
+<rect x="480" y="380" width="240" height="90" rx="9.0" fill="#f8cecc" stroke="#b85450" stroke-width="1"/>
+<text x="600.0" y="422.7" text-anchor="middle" font-size="13" fill="#000000" font-weight="bold">Supabase Auth</text>
+<text x="600.0" y="437.0" text-anchor="middle" font-size="11" fill="#000000">password sign-in, JWT</text>
+</g>
+<g data-cell-id="postgres">
+<rect x="480" y="500" width="240" height="170" rx="17.0" fill="#f8cecc" stroke="#b85450" stroke-width="1"/>
+<text x="600.0" y="555.2" text-anchor="middle" font-size="13" fill="#000000" font-weight="bold">Postgres</text>
+<text x="600.0" y="569.5" text-anchor="middle" font-size="11" fill="#000000">jobs, profiles, classrooms</text>
+<text x="600.0" y="583.2" text-anchor="middle" font-size="11" fill="#000000">job_moderation_reviews, job_review_notes</text>
+<text x="600.0" y="597.0" text-anchor="middle" font-size="11" fill="#000000">job_picture_records, annotations,</text>
+<text x="600.0" y="610.7" text-anchor="middle" font-size="11" fill="#000000">research_pairs</text>
+<text x="600.0" y="624.5" text-anchor="middle" font-size="11" fill="#000000">LangGraph checkpoints</text>
+</g>
+<g data-cell-id="storage">
+<rect x="480" y="700" width="240" height="90" rx="9.0" fill="#f8cecc" stroke="#b85450" stroke-width="1"/>
+<text x="600.0" y="735.8" text-anchor="middle" font-size="13" fill="#000000" font-weight="bold">Storage</text>
+<text x="600.0" y="750.1" text-anchor="middle" font-size="11" fill="#000000">private bucket storybook-images:</text>
+<text x="600.0" y="763.9" text-anchor="middle" font-size="11" fill="#000000">every reference and page draw</text>
+</g>
+<g data-cell-id="fastapi">
+<rect x="880" y="260" width="300" height="300" rx="30.0" fill="#dae8fc" stroke="#6c8ebf" stroke-width="1"/>
+<text x="1030.0" y="359.6" text-anchor="middle" font-size="13" fill="#000000" font-weight="bold">FastAPI web service</text>
+<text x="1030.0" y="373.9" text-anchor="middle" font-size="11" fill="#000000">app/main.py (Procfile: web)</text>
+<text x="1030.0" y="387.6" text-anchor="middle" font-size="11" fill="#000000">Before the job row: Presidio redaction,</text>
+<text x="1030.0" y="401.4" text-anchor="middle" font-size="11" fill="#000000">then text moderation (web tier)</text>
+<text x="1030.0" y="415.1" text-anchor="middle" font-size="11" fill="#000000">POST /storybooks, /jobs/{id}/confirm</text>
+<text x="1030.0" y="428.9" text-anchor="middle" font-size="11" fill="#000000">teacher classrooms, holds, review, notes</text>
+<text x="1030.0" y="442.6" text-anchor="middle" font-size="11" fill="#000000">page magic pencil (enqueues a job)</text>
+<text x="1030.0" y="456.4" text-anchor="middle" font-size="11" fill="#000000">PDF export (WeasyPrint), onboarding</text>
+<text x="1030.0" y="470.1" text-anchor="middle" font-size="11" fill="#000000">run viewer endpoint (reads checkpoints)</text>
+</g>
+<g data-cell-id="presidio">
+<rect x="1270" y="260" width="220" height="100" rx="10.0" fill="#ffffff" stroke="#666666" stroke-width="1"/>
+<text x="1380.0" y="300.8" text-anchor="middle" font-size="13" fill="#000000" font-weight="bold">Presidio + spaCy</text>
+<text x="1380.0" y="315.1" text-anchor="middle" font-size="11" fill="#000000">PII redaction, in-process</text>
+<text x="1380.0" y="328.9" text-anchor="middle" font-size="11" fill="#000000">web service and pipeline nodes</text>
+</g>
+<g data-cell-id="redis">
+<rect x="1270" y="420" width="220" height="80" rx="8.0" fill="#ffffff" stroke="#666666" stroke-width="1"/>
+<text x="1380.0" y="457.7" text-anchor="middle" font-size="13" fill="#000000" font-weight="bold">Redis</text>
+<text x="1380.0" y="472.0" text-anchor="middle" font-size="11" fill="#000000">queue 'storybook' (RQ)</text>
+</g>
+<g data-cell-id="worker">
+<rect x="880" y="620" width="300" height="200" rx="20.0" fill="#dae8fc" stroke="#6c8ebf" stroke-width="1"/>
+<text x="1030.0" y="690.2" text-anchor="middle" font-size="13" fill="#000000" font-weight="bold">RQ worker</text>
+<text x="1030.0" y="704.5" text-anchor="middle" font-size="11" fill="#000000">worker/run_worker.py (Procfile: worker)</text>
+<text x="1030.0" y="718.2" text-anchor="middle" font-size="11" fill="#000000">run_storybook_job, resume_storybook_job,</text>
+<text x="1030.0" y="732.0" text-anchor="middle" font-size="11" fill="#000000">run_review_storybook_job, page_pencil</text>
+<text x="1030.0" y="745.7" text-anchor="middle" font-size="11" fill="#000000">runs the LangGraph pipeline, 14 nodes</text>
+<text x="1030.0" y="759.5" text-anchor="middle" font-size="11" fill="#000000">PostgresSaver checkpointer</text>
+</g>
+<g data-cell-id="openrouter">
+<rect x="1640" y="260" width="190" height="200" rx="19.0" fill="#e1d5e7" stroke="#9673a6" stroke-width="1"/>
+<text x="1735.0" y="323.3" text-anchor="middle" font-size="13" fill="#000000" font-weight="bold">OpenRouter</text>
+<text x="1735.0" y="337.6" text-anchor="middle" font-size="11" fill="#000000">text: Mistral Small 3.2 24B</text>
+<text x="1735.0" y="351.4" text-anchor="middle" font-size="11" fill="#000000">judge: Gemma-3 27B</text>
+<text x="1735.0" y="365.1" text-anchor="middle" font-size="11" fill="#000000">text moderation: Llama Guard 4,</text>
+<text x="1735.0" y="378.9" text-anchor="middle" font-size="11" fill="#000000">gpt-oss-safeguard 20B</text>
+<text x="1735.0" y="392.6" text-anchor="middle" font-size="11" fill="#000000">image moderation: Mistral</text>
+<text x="1735.0" y="406.4" text-anchor="middle" font-size="11" fill="#000000">Small 3.2, Gemma-3</text>
+</g>
+<g data-cell-id="fal">
+<rect x="1640" y="490" width="190" height="110" rx="11.0" fill="#e1d5e7" stroke="#9673a6" stroke-width="1"/>
+<text x="1735.0" y="528.9" text-anchor="middle" font-size="13" fill="#000000" font-weight="bold">fal.ai</text>
+<text x="1735.0" y="543.2" text-anchor="middle" font-size="11" fill="#000000">qwen-image: references</text>
+<text x="1735.0" y="557.0" text-anchor="middle" font-size="11" fill="#000000">qwen-image-edit-2511:</text>
+<text x="1735.0" y="570.7" text-anchor="middle" font-size="11" fill="#000000">pages and pencil edits</text>
+</g>
+<g data-cell-id="langfuse">
+<rect x="1640" y="740" width="190" height="70" rx="7.0" fill="#e1d5e7" stroke="#9673a6" stroke-width="1"/>
+<text x="1735.0" y="772.7" text-anchor="middle" font-size="13" fill="#000000" font-weight="bold">Langfuse</text>
+<text x="1735.0" y="787.0" text-anchor="middle" font-size="11" fill="#000000">run traces from the worker</text>
+</g>
+<g data-cell-id="sentry">
+<rect x="1640" y="100" width="190" height="70" rx="7.0" fill="#e1d5e7" stroke="#9673a6" stroke-width="1"/>
+<text x="1735.0" y="132.7" text-anchor="middle" font-size="13" fill="#000000" font-weight="bold">Sentry</text>
+<text x="1735.0" y="147.0" text-anchor="middle" font-size="11" fill="#000000">errors from the web service</text>
+</g>
+<g data-cell-id="source">
+<text x="28.0" y="921.9" text-anchor="start" font-size="9" fill="#000000">Source: backend/Procfile, app/main.py (web-tier gate, routes), app/queue.py, worker/run_worker.py, worker/run_job.py, app/config.py (model IDs),</text>
+<text x="28.0" y="933.1" text-anchor="start" font-size="9" fill="#000000">providers.py, app/page_pencil.py, app/pdf_export.py, app/research.py, frontend/lib/supabaseClient.ts, useJob.ts, signedUrls.ts, ADR-031, ADR-033.</text>
+<text x="28.0" y="944.4" text-anchor="start" font-size="9" fill="#000000">As built 2026-11-21.</text>
+</g>
+<g data-cell-id="e_users">
+<path d="M 100.0 160.0 L 100.0 251.0" fill="none" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="100.0,260.0 95.5,251.0 104.5,251.0" fill="#000000" stroke="#000000" stroke-width="1"/>
+</g>
+<g data-cell-id="e_rt">
+<path d="M 480.0 305.0 L 309.0 305.0" fill="none" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="300.0,305.0 309.0,300.5 309.0,309.5" fill="#000000" stroke="#000000" stroke-width="1"/>
+</g>
+<g data-cell-id="e_auth">
+<path d="M 300.0 425.0 L 471.0 425.0" fill="none" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="480.0,425.0 471.0,429.5 471.0,420.5" fill="#000000" stroke="#000000" stroke-width="1"/>
+</g>
+<g data-cell-id="e_rls">
+<path d="M 300.0 565.0 L 471.0 565.0" fill="none" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="480.0,565.0 471.0,569.5 471.0,560.5" fill="#000000" stroke="#000000" stroke-width="1"/>
+</g>
+<g data-cell-id="e_sign">
+<path d="M 300.0 745.0 L 471.0 745.0" fill="none" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="480.0,745.0 471.0,749.5 471.0,740.5" fill="#000000" stroke="#000000" stroke-width="1"/>
+</g>
+<g data-cell-id="e_api">
+<path d="M 220.0 260.0 L 220.0 190.0 L 1000.0 190.0 L 1000.0 251.0" fill="none" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="1000.0,260.0 995.5,251.0 1004.5,251.0" fill="#000000" stroke="#000000" stroke-width="1"/>
+</g>
+<g data-cell-id="e_fa_auth">
+<path d="M 880.0 425.0 L 729.0 425.0" fill="none" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="720.0,425.0 729.0,420.5 729.0,429.5" fill="#000000" stroke="#000000" stroke-width="1"/>
+</g>
+<g data-cell-id="e_fa_pg">
+<path d="M 880.0 530.0 L 729.0 530.0" fill="none" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="720.0,530.0 729.0,525.5 729.0,534.5" fill="#000000" stroke="#000000" stroke-width="1"/>
+</g>
+<g data-cell-id="e_fa_pres">
+<path d="M 1180.0 310.0 L 1261.0 310.0" fill="none" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="1270.0,310.0 1261.0,314.5 1261.0,305.5" fill="#000000" stroke="#000000" stroke-width="1"/>
+</g>
+<g data-cell-id="e_fa_or">
+<path d="M 1180.0 390.0 L 1631.0 390.0" fill="none" stroke="#d79b00" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="1640.0,390.0 1631.0,394.5 1631.0,385.5" fill="#d79b00" stroke="#d79b00" stroke-width="1"/>
+</g>
+<g data-cell-id="e_fa_rd">
+<path d="M 1180.0 460.0 L 1261.0 460.0" fill="none" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="1270.0,460.0 1261.0,464.5 1261.0,455.5" fill="#000000" stroke="#000000" stroke-width="1"/>
+</g>
+<g data-cell-id="e_rd_wk">
+<path d="M 1380.0 500.0 L 1380.0 590.0 L 1040.0 590.0 L 1040.0 611.0" fill="none" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="1040.0,620.0 1035.5,611.0 1044.5,611.0" fill="#000000" stroke="#000000" stroke-width="1"/>
+</g>
+<g data-cell-id="e_wk_pg">
+<path d="M 880.0 650.0 L 729.0 650.0" fill="none" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="720.0,650.0 729.0,645.5 729.0,654.5" fill="#000000" stroke="#000000" stroke-width="1"/>
+</g>
+<g data-cell-id="e_wk_st">
+<path d="M 880.0 745.0 L 729.0 745.0" fill="none" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="720.0,745.0 729.0,740.5 729.0,749.5" fill="#000000" stroke="#000000" stroke-width="1"/>
+</g>
+<g data-cell-id="e_wk_or">
+<path d="M 1180.0 660.0 L 1570.0 660.0 L 1570.0 430.0 L 1631.0 430.0" fill="none" stroke="#d79b00" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="1640.0,430.0 1631.0,434.5 1631.0,425.5" fill="#d79b00" stroke="#d79b00" stroke-width="1"/>
+</g>
+<g data-cell-id="e_wk_fal">
+<path d="M 1180.0 710.0 L 1600.0 710.0 L 1600.0 570.0 L 1631.0 570.0" fill="none" stroke="#d79b00" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="1640.0,570.0 1631.0,574.5 1631.0,565.5" fill="#d79b00" stroke="#d79b00" stroke-width="1"/>
+</g>
+<g data-cell-id="e_wk_lf">
+<path d="M 1180.0 775.0 L 1631.0 775.0" fill="none" stroke="#d79b00" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="1640.0,775.0 1631.0,779.5 1631.0,770.5" fill="#d79b00" stroke="#d79b00" stroke-width="1"/>
+</g>
+<g data-cell-id="e_fa_se">
+<path d="M 1160.0 260.0 L 1160.0 135.0 L 1631.0 135.0" fill="none" stroke="#d79b00" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="1640.0,135.0 1631.0,139.5 1631.0,130.5" fill="#d79b00" stroke="#d79b00" stroke-width="1"/>
+</g>
+<g data-cell-id="e_users-label"><rect x="79.0" y="201.1" width="42.1" height="17.8" fill="#ffffff"/>
+<text x="100.0" y="213.8" text-anchor="middle" font-size="11" fill="#000000">HTTPS</text>
+</g>
+<g data-cell-id="e_rt-label"><rect x="357.7" y="296.1" width="64.5" height="17.8" fill="#ffffff"/>
+<text x="390.0" y="308.8" text-anchor="middle" font-size="11" fill="#000000">job updates</text>
+</g>
+<g data-cell-id="e_auth-label"><rect x="369.4" y="416.1" width="41.2" height="17.8" fill="#ffffff"/>
+<text x="390.0" y="428.8" text-anchor="middle" font-size="11" fill="#000000">sign in</text>
+</g>
+<g data-cell-id="e_rls-label"><rect x="359.5" y="556.1" width="60.9" height="17.8" fill="#ffffff"/>
+<text x="390.0" y="568.8" text-anchor="middle" font-size="11" fill="#000000">RLS reads</text>
+</g>
+<g data-cell-id="e_sign-label"><rect x="355.0" y="736.1" width="70.0" height="17.8" fill="#ffffff"/>
+<text x="390.0" y="748.8" text-anchor="middle" font-size="11" fill="#000000">signed URLs</text>
+</g>
+<g data-cell-id="e_api-label"><rect x="549.2" y="181.1" width="121.6" height="17.8" fill="#ffffff"/>
+<text x="610.0" y="193.8" text-anchor="middle" font-size="11" fill="#000000">REST + Supabase JWT</text>
+</g>
+<g data-cell-id="e_fa_auth-label"><rect x="766.6" y="416.1" width="66.7" height="17.8" fill="#ffffff"/>
+<text x="800.0" y="428.8" text-anchor="middle" font-size="11" fill="#000000">verify JWT</text>
+</g>
+<g data-cell-id="e_fa_pg-label"><rect x="733.1" y="521.1" width="133.7" height="17.8" fill="#ffffff"/>
+<text x="800.0" y="533.8" text-anchor="middle" font-size="11" fill="#000000">rows, holds, checkpoints</text>
+</g>
+<g data-cell-id="e_fa_pres-label"><rect x="1204.8" y="301.1" width="40.5" height="17.8" fill="#ffffff"/>
+<text x="1225.0" y="313.8" text-anchor="middle" font-size="11" fill="#000000">redact</text>
+</g>
+<g data-cell-id="e_fa_or-label"><rect x="1458.8" y="381.1" width="86.3" height="17.8" fill="#ffffff"/>
+<text x="1502.0" y="393.8" text-anchor="middle" font-size="11" fill="#000000">text moderation</text>
+</g>
+<g data-cell-id="e_fa_rd-label"><rect x="1200.6" y="451.1" width="48.8" height="17.8" fill="#ffffff"/>
+<text x="1225.0" y="463.8" text-anchor="middle" font-size="11" fill="#000000">enqueue</text>
+</g>
+<g data-cell-id="e_rd_wk-label"><rect x="1217.7" y="581.1" width="44.5" height="17.8" fill="#ffffff"/>
+<text x="1240.0" y="593.8" text-anchor="middle" font-size="11" fill="#000000">pull job</text>
+</g>
+<g data-cell-id="e_wk_pg-label"><rect x="748.2" y="641.1" width="103.6" height="17.8" fill="#ffffff"/>
+<text x="800.0" y="653.8" text-anchor="middle" font-size="11" fill="#000000">status, checkpoints</text>
+</g>
+<g data-cell-id="e_wk_st-label"><rect x="761.8" y="736.1" width="76.4" height="17.8" fill="#ffffff"/>
+<text x="800.0" y="748.8" text-anchor="middle" font-size="11" fill="#000000">upload draws</text>
+</g>
+<g data-cell-id="e_wk_or-label"><rect x="1325.6" y="651.1" width="122.8" height="17.8" fill="#ffffff"/>
+<text x="1387.0" y="663.8" text-anchor="middle" font-size="11" fill="#000000">text, judge, moderation</text>
+</g>
+<g data-cell-id="e_wk_fal-label"><rect x="1301.8" y="701.1" width="116.5" height="17.8" fill="#ffffff"/>
+<text x="1360.0" y="713.8" text-anchor="middle" font-size="11" fill="#000000">draw and edit images</text>
+</g>
+<g data-cell-id="e_wk_lf-label"><rect x="1389.8" y="766.1" width="40.5" height="17.8" fill="#ffffff"/>
+<text x="1410.0" y="778.8" text-anchor="middle" font-size="11" fill="#000000">traces</text>
+</g>
+<g data-cell-id="e_fa_se-label"><rect x="1376.5" y="126.1" width="43.0" height="17.8" fill="#ffffff"/>
+<text x="1398.0" y="138.8" text-anchor="middle" font-size="11" fill="#000000">errors</text>
+</g>
+</svg>
