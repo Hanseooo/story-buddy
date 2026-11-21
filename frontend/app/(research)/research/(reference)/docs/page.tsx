@@ -13,6 +13,7 @@ const LINK_TIGHT = LINK.replace("min-h-11", "min-h-9");
 
 const STATUS_LABEL: Record<Correction["status"], string> = {
   open: "Open",
+  unconfirmed: "Unconfirmed, owner to confirm",
   settled: "Settled",
   "repo-right": "Repo is right",
 };
@@ -31,7 +32,7 @@ function CorrectionRow({ item }: { item: Correction }) {
         <h4 className="font-sans text-base font-bold">{item.topic}</h4>
         <span
           className={`rounded-full px-2 py-0.5 font-sans text-xs font-bold text-foreground ${
-            item.status === "open" ? "bg-secondary/40" : "bg-primary/15"
+            item.status === "open" || item.status === "unconfirmed" ? "bg-secondary/40" : "bg-primary/15"
           }`}
         >
           {STATUS_LABEL[item.status]}
@@ -69,7 +70,8 @@ function CorrectionRow({ item }: { item: Correction }) {
 
 function PaperPanel() {
   const open = PAPER_CORRECTIONS.filter((c) => c.status === "open");
-  const closed = PAPER_CORRECTIONS.filter((c) => c.status !== "open");
+  const unconfirmed = PAPER_CORRECTIONS.filter((c) => c.status === "unconfirmed");
+  const closed = PAPER_CORRECTIONS.filter((c) => c.status === "settled" || c.status === "repo-right");
   return (
     <section
       aria-labelledby="paper-panel"
@@ -89,6 +91,15 @@ function PaperPanel() {
         <h3 className="font-sans text-lg font-bold">Open, not yet settled ({open.length})</h3>
         <ul className="space-y-3">
           {open.map((item) => (
+            <CorrectionRow key={item.id} item={item} />
+          ))}
+        </ul>
+      </div>
+
+      <div className="space-y-3">
+        <h3 className="font-sans text-lg font-bold">Unconfirmed, owner to confirm ({unconfirmed.length})</h3>
+        <ul className="space-y-3">
+          {unconfirmed.map((item) => (
             <CorrectionRow key={item.id} item={item} />
           ))}
         </ul>

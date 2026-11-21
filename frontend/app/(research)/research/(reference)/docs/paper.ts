@@ -7,7 +7,7 @@ const SPEC = "docs/specs/research-page-refresh.md";
 const issue = (n: number) => `https://github.com/Hanseooo/story-buddy/issues/${n}`;
 
 export type Pin = { file: string } & ({ has: string; lacks?: undefined } | { lacks: string; has?: undefined });
-export type CorrectionStatus = "settled" | "repo-right" | "open";
+export type CorrectionStatus = "settled" | "repo-right" | "open" | "unconfirmed";
 export type Correction = {
   id: string;
   topic: string;
@@ -118,8 +118,8 @@ export const PAPER_CORRECTIONS: Correction[] = [
     topic: "Who removed the names",
     paper: "Teachers removed the learners' names",
     value:
-      "The repo plan has the researchers hand-redact the 15 stories, substituting identifiers. If teachers also removed names, say both.",
-    status: "repo-right",
+      "The repo plan has the researchers hand-redact the 15 stories, substituting identifiers. Who actually removed the names is unconfirmed. The owner confirms before the paper says it.",
+    status: "unconfirmed",
     pins: [{ file: "docs/specs/obj4-readiness-audit.md", has: "Hand-redact the 15 stories" }],
   },
   {
@@ -287,15 +287,16 @@ export const PAPER_CORRECTIONS: Correction[] = [
     topic: "Development hardware",
     paper: "i5 12th gen, 16 GB, RTX 3050 Ti 4 GB",
     value:
-      "Print the RTX 3050 Ti with 4 GB VRAM, the only confirmed development hardware. The processor, memory and storage rows are July recommendations the owner has not confirmed.",
-    status: "repo-right",
+      "Only the RTX 3050 Ti with 4 GB VRAM is confirmed. The processor, memory and storage are unconfirmed. The owner supplies them in hardware_and_hosting.md.",
+    status: "unconfirmed",
     pins: [
+      { file: `${CAPSTONE}research_runbook.md`, has: "RTX 3050 Ti has 4 GB VRAM" },
       {
         file: `${CAPSTONE}hardware_and_hosting.md`,
         has: "the only confirmed development hardware is the RTX 3050 Ti with 4 GB VRAM",
       },
     ],
-  },
+ },
 ];
 
 // research-changelog.md section 1, each point worded as in the changelog (the test checks).

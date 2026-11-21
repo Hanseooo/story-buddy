@@ -61,4 +61,14 @@ describe("/research/docs", () => {
     expect(within(row).getByText("Repo is right")).toBeInTheDocument();
     expect(within(row).queryByText("Open")).toBeNull();
   });
+
+  it("shows P7 and P24 as unconfirmed for the owner", () => {
+    render(<DocsPage />);
+
+    for (const id of ["P7", "P24"]) {
+      const row = screen.getByTestId(`correction-${id}`);
+      expect(within(row).getByText("Unconfirmed, owner to confirm")).toBeInTheDocument();
+      expect(within(row).queryByRole("link", { name: /issue/ })).toBeNull();
+    }
+  });
 });

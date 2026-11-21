@@ -27,7 +27,7 @@ describe("what the paper must say: source pins (SH-02)", () => {
 
   it("gives every correction a settled value, 'repo is right', or an open flag, with a source", () => {
     for (const c of PAPER_CORRECTIONS) {
-      expect(["settled", "repo-right", "open"]).toContain(c.status);
+      expect(["settled", "repo-right", "open", "unconfirmed"]).toContain(c.status);
       expect(c.pins.length).toBeGreaterThan(0);
     }
   });
@@ -49,6 +49,15 @@ describe("what the paper must say: source pins (SH-02)", () => {
       "O-07",
       "O-12",
     ]);
+  });
+
+  it("shows P7 and P24 as unconfirmed, with no issue link", () => {
+    const unconfirmed = PAPER_CORRECTIONS.filter((c) => c.status === "unconfirmed");
+    expect(unconfirmed.map((c) => c.id).sort()).toEqual(["P24", "P7"]);
+    for (const c of unconfirmed) expect(c.open).toBeUndefined();
+    expect(PAPER_CORRECTIONS.find((c) => c.id === "P24")!.pins.map((p) => p.file)).toContain(
+      "docs/capstone/research_runbook.md"
+    );
   });
 
   it("links the open owner decisions to their GitHub issues", () => {
