@@ -32,7 +32,7 @@ _ROW_FIELDS = (
 JOB_COLUMNS = ", ".join((*_ROW_FIELDS, "approved_at"))
 
 # `complete` is absent on purpose: a finished run did not end on a node.
-_ENDED_KIND = {"failed": "failed", "awaiting_confirm": "waiting", "queued": "running", "running": "running"}
+_ENDED_KIND = {"failed": "failed", "awaiting_confirm": "waiting", "awaiting_teacher": "teacher", "queued": "running", "running": "running"}
 
 _SCENE_FIELDS = {
     "scene_id", "text_excerpt", "caption", "visual_direction", "characters_present", "objects_present",

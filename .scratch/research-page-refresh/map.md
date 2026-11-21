@@ -23,6 +23,10 @@ Spec: [`docs/specs/research-page-refresh.md`](../../docs/specs/research-page-ref
 
 First frontier: 01, 02, 03, 04, 05, 09, 10.
 
+## Resolved
+
+- 05: both pipeline maps show the 14 nodes of `graph.py`, all visible, with a teacher-waiting state. [Answer](issues/05-pipeline-map-14-nodes.md#answer)
+
 ## Open decisions (GitHub issues)
 
 - O-04 analysis method: https://github.com/Hanseooo/story-buddy/issues/135

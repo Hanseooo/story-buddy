@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { RunStep } from "./types";
 import { nodeName, pathCounts, PIPELINE_GRAPH } from "./pipelineGraph";
@@ -40,13 +42,38 @@ describe("nodeName", () => {
   });
 });
 
+// Seam S-3: node names come from backend/pipeline/graph.py read as text.
+const GRAPH_PY = readFileSync(path.resolve(__dirname, "../../../../../../backend/pipeline/graph.py"), "utf8");
+const GRAPH_NODES = [...GRAPH_PY.matchAll(/add_node\("([a-z_]+)"/g)].map((m) => m[1]);
+
 describe("PIPELINE_GRAPH", () => {
-  it("has 11 nodes and every edge joins two of them", () => {
+  it("has the 14 nodes graph.py adds and every edge joins two of them", () => {
     const ids = new Set(PIPELINE_GRAPH.nodes.map((n) => n.id));
-    expect(ids.size).toBe(11);
-    expect(PIPELINE_GRAPH.edges).toHaveLength(18);
+    expect(GRAPH_NODES).toHaveLength(14);
+    expect([...ids].sort()).toEqual([...GRAPH_NODES].sort());
+    expect(PIPELINE_GRAPH.edges).toHaveLength(28);
     for (const e of PIPELINE_GRAPH.edges) {
       expect(ids.has(e.from) && ids.has(e.to)).toBe(true);
     }
+  });
+
+  it("draws the teacher-review edges and keeps a run in the new nodes on the map", () => {
+    const keys = PIPELINE_GRAPH.edges.map((e) => `${e.from}->${e.to}`);
+    for (const k of [
+      "input_gate->optional_themes", "optional_themes->analyze", "input_gate->moderation_review",
+      "optional_themes->moderation_review", "char_ref_mod->moderation_review", "reveal->moderation_review",
+      "output_mod->moderation_review", "moderation_review->moderation_replace",
+      "moderation_replace->char_ref_mod", "moderation_replace->consistency_check",
+    ]) expect(keys).toContain(k);
+    expect(pathCounts(steps("input_gate", "moderation_review", "moderation_replace")).unknownSteps).toBe(0);
+  });
+});
+
+describe("nodeName for a teacher hold", () => {
+  it("says the run is waiting for the teacher, not the child", () => {
+    const held = pathCounts(steps("input_gate", "moderation_review"));
+    expect(nodeName(node("moderation_review"), held, { node: "moderation_review", kind: "teacher" })).toBe(
+      "Teacher review, ran once, waiting for the teacher"
+    );
   });
 });

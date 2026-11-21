@@ -2,7 +2,7 @@
 
 **Status:** ready-for-agent
 **Type:** task
-**Progress:** open
+**Progress:** resolved
 **Parent:** [`docs/specs/research-page-refresh.md`](../../../docs/specs/research-page-refresh.md)
 **What to build:** `PipelineMap` and the run viewer's map show the 14 nodes of `graph.py`, all visible, with no console error.
 **Source criteria:** US-01 AC-04; US-15 AC-04; US-23 AC-11–AC-13; SH-08; D-25
@@ -40,3 +40,10 @@ Read node names with a regex on `add_node("…"`; don't import Python.
 
 ## Blocked by
 None
+
+## Answer
+Both maps show the 14 nodes in `backend/pipeline/graph.py`, read as text by two parity tests (seam S-3).
+- `PipelineMap` is a plain list with no SVG and no scroll reveal, so every node is visible on first render and in print, and the `calc()` error is gone. Each node is marked "Both modes" (11) or "Teacher review only" (`optional_themes`, `moderation_review`, `moderation_replace`). The teacher-review branch and its entry points are described under the main flow.
+- The run viewer's `pipelineGraph.ts` has the 14 nodes and 28 edges, including the teacher-review edges. Left out on purpose: `moderation_review` back to the node it held (an allowed hold resumes where the run stopped).
+- Teacher-waiting: `EndedOn.kind` gains `"teacher"` ("Waiting for the teacher"), and `awaiting_teacher` jobs get a status line. Backend `_ENDED_KIND` maps `awaiting_teacher` to `"teacher"`; without it the frontend never receives the kind. The backend test for it was added but not run (no `fastapi` in this environment).
+- Red before the fix: the `PipelineMap` test found no `data-node` elements, and the run-viewer test lacked `moderation_replace`, `moderation_review`, `optional_themes`.
