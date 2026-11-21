@@ -12,7 +12,7 @@ Spec: [`docs/specs/research-page-refresh.md`](../../docs/specs/research-page-ref
 | 06 | [Dataset page explains pairs, labels, splits and process](issues/06-dataset-page-clarity.md) | 03 (labelling-tool reasons), 04 (runbook facts), 10 (dataset-flow figure) |
 | 07 | [Results page in plain words with the false-alarm tradeoff](issues/07-results-page-plain-words.md) | 04 |
 | 08 | [Limitations page brought up to November](issues/08-limitations-november.md) | 04 |
-| 09 | [Existing diagrams match the system as built](issues/09-update-existing-diagrams.md) | None |
+| 09 | [Existing diagrams match the system as built](issues/09-update-existing-diagrams.md) | None (resolved: three diagrams rebuilt from code, see its Answer) |
 | 10 | [New diagrams: IPO, dataset flow, student and teacher journeys](issues/10-new-diagrams.md) | None |
 | 11 | [PNG export with a manifest and tests](issues/11-png-export-and-manifest.md) | 07, 08, 09, 10 |
 | 12 | [/research/pipeline page](issues/12-pipeline-page.md) | 01, 05, 09, 10, 11 |
