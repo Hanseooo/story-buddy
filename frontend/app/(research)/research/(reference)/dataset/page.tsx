@@ -1,8 +1,8 @@
-import { CheckCircle, DownloadSimple, XCircle } from "@phosphor-icons/react/dist/ssr";
+import { CheckCircle, XCircle } from "@phosphor-icons/react/dist/ssr";
 import { TAXONOMY_LABELS, type TaxonomyState } from "../../../_shared/constants";
+import ChartFigure from "../../../_shared/components/ChartFigure";
 import ScrollTable from "../../../_shared/components/ScrollTable";
 import Source from "../../../_shared/components/Source";
-import { githubUrl } from "../docs/entries";
 import {
   AGREEMENT,
   CHARACTER_KINDS,
@@ -40,8 +40,6 @@ const TD = "px-3 py-2 tabular-nums";
 const PROSE = "max-w-[70ch] text-foreground/80";
 const LIST = "max-w-[70ch] list-disc space-y-2 pl-5 text-foreground/80 marker:text-primary";
 const SPLIT_NAMES = { train: "Train", val: "Validation" } as const;
-const DIAGRAM_FILE = FLOW_DIAGRAM.png.split("/").pop() as string;
-const DIAGRAM_SOURCE_FILE = FLOW_DIAGRAM.source.split("/").pop() as string;
 
 const sum = (key: "stories" | "characters" | "pairs" | "same" | "different") =>
   SPLITS.reduce((total, split) => total + split[key], 0);
@@ -173,7 +171,16 @@ export default function DatasetPage() {
           ))}
         </ol>
 
-        <figure aria-label="Dataset build and annotation flow" className={`${CARD} space-y-4`}>
+        <ChartFigure
+          id="dataset-build-flow"
+          wide
+          alt="The ten steps from story to held-out test: stories, generated books, pairs, two raters, adjudication, freeze, splits, training, checkpoint choice and one read of the test set."
+          asOf={FLOW_DIAGRAM.asOf}
+          png={FLOW_DIAGRAM.png}
+          source={FLOW_DIAGRAM.source}
+          sourceNoun="the editable diagram"
+          caption={<strong className="text-foreground">Dataset build and annotation flow. On a narrow screen, scroll the diagram sideways.</strong>}
+        >
           <div
             role="region"
             aria-label="Dataset flow diagram. It scrolls sideways on a narrow screen."
@@ -189,32 +196,7 @@ export default function DatasetPage() {
               className="h-auto w-full min-w-[60rem] lg:min-w-0"
             />
           </div>
-          <figcaption className="space-y-2 text-sm text-foreground/70">
-            <p>
-              <strong className="text-foreground">Dataset build and annotation flow.</strong> As of {FLOW_DIAGRAM.asOf}. On a
-              narrow screen, scroll the diagram sideways.
-            </p>
-            <p className="flex flex-wrap gap-x-6 gap-y-1">
-              <a
-                href={FLOW_DIAGRAM.png}
-                download={DIAGRAM_FILE}
-                className={`inline-flex min-h-11 items-center gap-1.5 rounded-lg font-mono font-bold text-primary hover:text-primary-deep hover:underline sm:min-h-0 ${FOCUS}`}
-              >
-                <DownloadSimple weight="bold" className="size-4 shrink-0" aria-hidden />
-                <span className="break-all">Download {DIAGRAM_FILE}</span>
-              </a>
-              <a
-                href={githubUrl(FLOW_DIAGRAM.source)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`inline-flex min-h-11 items-center gap-1 rounded-lg font-mono font-bold text-primary hover:text-primary-deep hover:underline sm:min-h-0 ${FOCUS}`}
-              >
-                <span className="break-all">{DIAGRAM_SOURCE_FILE} on GitHub</span>
-                <span className="sr-only"> (opens in a new tab)</span>
-              </a>
-            </p>
-          </figcaption>
-        </figure>
+        </ChartFigure>
         <Source path={SOURCES.runbook} where="“Dataset handoff (2026-09-30)”" />
       </section>
 

@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import ResearchHeader from "./ResearchHeader";
 import type { ResearchViewer } from "../viewer";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/research/metrics" }));
+let mockPath = "/research/metrics";
+vi.mock("next/navigation", () => ({ usePathname: () => mockPath }));
 
 const annotator: ResearchViewer = { id: "r-1", role: "researcher", isAdjudicator: false, displayName: "Ana" };
 const adjudicator: ResearchViewer = { id: "r-2", role: "researcher", isAdjudicator: true, displayName: "Owner" };
@@ -14,10 +15,10 @@ function tabNames() {
 }
 
 describe("ResearchHeader", () => {
-  it("signed out: the public tabs, Runs marked current, with a sign-in link back here", () => {
+  it("signed out: three tabs, Runs marked current, with a sign-in link back here", () => {
     render(<ResearchHeader viewer={null} />);
 
-    expect(tabNames()).toEqual(["Runs", "Dataset", "Results", "Limitations", "Docs"]);
+    expect(tabNames()).toEqual(["Research home", "Docs", "Runs"]);
     expect(screen.getByRole("link", { name: "Runs" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Researcher sign in" })).toHaveAttribute(
       "href",
@@ -26,18 +27,31 @@ describe("ResearchHeader", () => {
     expect(screen.queryByRole("button", { name: "Log out" })).toBeNull();
   });
 
-  it("annotator: the public tabs and Annotate, Annotator chip, Log out", () => {
+  it("marks Research home current only on the hub, not on every page under /research", () => {
+    const { rerender } = render(<ResearchHeader viewer={null} showAccount={false} />);
+    expect(screen.getByRole("link", { name: "Research home" })).not.toHaveAttribute("aria-current");
+    mockPath = "/research";
+    rerender(<ResearchHeader viewer={null} showAccount={false} />);
+    expect(screen.getByRole("link", { name: "Research home" })).toHaveAttribute("aria-current", "page");
+    mockPath = "/research/docs";
+    rerender(<ResearchHeader viewer={null} showAccount={false} />);
+    expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Research home" })).not.toHaveAttribute("aria-current");
+    mockPath = "/research/metrics";
+  });
+
+  it("annotator: three tabs and Annotate, Annotator chip, Log out", () => {
     render(<ResearchHeader viewer={annotator} />);
 
-    expect(tabNames()).toEqual(["Runs", "Dataset", "Results", "Limitations", "Docs", "Annotate"]);
+    expect(tabNames()).toEqual(["Research home", "Docs", "Runs", "Annotate"]);
     expect(screen.getByText("Annotator")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Log out" })).toBeInTheDocument();
   });
 
-  it("adjudicator: the public tabs and Adjudicate, Adjudicator chip", () => {
+  it("adjudicator: three tabs and Adjudicate, Adjudicator chip", () => {
     render(<ResearchHeader viewer={adjudicator} />);
 
-    expect(tabNames()).toEqual(["Runs", "Dataset", "Results", "Limitations", "Docs", "Adjudicate"]);
+    expect(tabNames()).toEqual(["Research home", "Docs", "Runs", "Adjudicate"]);
     expect(screen.getByText("Adjudicator")).toBeInTheDocument();
   });
 
@@ -45,7 +59,7 @@ describe("ResearchHeader", () => {
   it("showAccount off: tabs only, no sign-in link and no Log out", () => {
     render(<ResearchHeader viewer={null} showAccount={false} />);
 
-    expect(tabNames()).toEqual(["Runs", "Dataset", "Results", "Limitations", "Docs"]);
+    expect(tabNames()).toEqual(["Research home", "Docs", "Runs"]);
     expect(screen.queryByRole("link", { name: "Researcher sign in" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Log out" })).toBeNull();
   });

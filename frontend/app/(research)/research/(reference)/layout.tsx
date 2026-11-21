@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { ArrowLeft } from "@phosphor-icons/react/dist/ssr";
+import PageNav from "../../_shared/components/PageNav";
 import ResearchHeader from "../../_shared/components/ResearchHeader";
 
 // Static on purpose (ADR-065): no session read, so these pages work with Supabase down or paused.
+// Focus order (US-02 AC-08): header, back link, the page, then Previous and Next.
 export default function ReferenceLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-[100dvh] bg-background text-foreground">
@@ -13,9 +15,10 @@ export default function ReferenceLayout({ children }: { children: React.ReactNod
           className="inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-sm font-bold text-foreground/70 hover:text-foreground focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
         >
           <ArrowLeft weight="bold" className="size-4" aria-hidden />
-          Back to Methodology
+          Back to research home
         </Link>
         {children}
+        <PageNav />
       </div>
     </div>
   );

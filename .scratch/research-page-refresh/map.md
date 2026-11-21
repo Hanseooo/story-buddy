@@ -25,6 +25,8 @@ First frontier: 01, 02, 03, 04, 05, 09, 10.
 
 ## Resolved
 
+All 16 tickets are resolved. Each ticket's Progress says so and its Answer section holds the result. The last one, 15, is the hub, header, Previous/Next and objectives page. [Answer](issues/15-hub-header-objectives.md#answer)
+
 - 05: both pipeline maps show the 14 nodes of `graph.py`, all visible, with a teacher-waiting state. [Answer](issues/05-pipeline-map-14-nodes.md#answer)
 
 ## Open decisions (GitHub issues)

@@ -14,6 +14,7 @@ export default function ChartFigure({
   source,
   caption,
   sourceNoun = "the chart data",
+  wide = false,
   children,
 }: {
   id: string;
@@ -23,6 +24,8 @@ export default function ChartFigure({
   source: string;
   caption: React.ReactNode;
   sourceNoun?: string;
+  /** A wide diagram uses the full content width. Charts keep the readable cap. */
+  wide?: boolean;
   children: React.ReactNode;
 }) {
   const file = png.slice(png.lastIndexOf("/") + 1);
@@ -31,7 +34,7 @@ export default function ChartFigure({
       id={id}
       data-chart-id={id}
       aria-label={alt}
-      className="max-w-3xl space-y-5 rounded-3xl bg-surface p-5 neo-border neo-shadow-sm sm:p-6"
+      className={`${wide ? "" : "max-w-3xl "}space-y-5 rounded-3xl bg-surface p-5 neo-border neo-shadow-sm sm:p-6`}
     >
       <figcaption className="space-y-2 text-sm text-foreground/80">
         {caption}
@@ -41,10 +44,10 @@ export default function ChartFigure({
       <p className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
         <a href={png} download={file} className={LINK}>
           <DownloadSimple weight="bold" className="size-4 shrink-0" aria-hidden />
-          {`Download ${file}`}
+          <span className="break-all">{`Download ${file}`}</span>
         </a>
         <a href={githubUrl(source)} target="_blank" rel="noopener noreferrer" className={LINK}>
-          <span className="font-mono">{source.slice(source.lastIndexOf("/") + 1)}</span>
+          <span className="break-all font-mono">{source.slice(source.lastIndexOf("/") + 1)}</span>
           <ArrowSquareOut weight="bold" className="size-3.5 shrink-0" aria-hidden />
           <span className="sr-only">{`, ${sourceNoun} (opens on GitHub in a new tab)`}</span>
         </a>

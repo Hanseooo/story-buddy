@@ -64,7 +64,8 @@ describe("/research/dataset", () => {
     expect(within(steps).getAllByRole("listitem")).toHaveLength(10);
     expect(within(steps).getAllByRole("listitem")[9]).toHaveTextContent(/329 held-out test pairs.*once/i);
 
-    const figure = screen.getByRole("figure", { name: /dataset build and annotation flow/i });
+    const figure = screen.getByRole("figure", { name: /ten steps from story to held-out test/i });
+    expect(figure).toHaveAttribute("data-chart-id", "dataset-build-flow");
     expect(within(figure).getByRole("img")).toHaveAttribute("src", "/research/diagrams/dataset_build_and_annotation_flow.drawio.svg");
     expect(within(figure).getByRole("img").getAttribute("alt")).toMatch(/stories.*books.*pairs.*raters/i);
     expect(figure).toHaveTextContent("As of 2026-11-21");
