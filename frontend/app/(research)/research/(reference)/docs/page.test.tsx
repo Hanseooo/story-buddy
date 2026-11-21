@@ -15,7 +15,7 @@ describe("/research/docs", () => {
     expect(guide).toHaveAttribute("target", "_blank");
     expect(guide).toHaveAttribute("rel", "noopener noreferrer");
     const total = DOC_CHAPTERS.reduce((n, c) => n + c.entries.length, 0);
-    expect(total).toBe(38);
+    expect(total).toBe(39);
     expect(screen.getAllByRole("link", { name: /opens on GitHub in a new tab/ })).toHaveLength(total);
   });
 

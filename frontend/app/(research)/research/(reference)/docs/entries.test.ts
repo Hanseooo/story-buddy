@@ -15,6 +15,7 @@ const ISSUE_105 = [
   "docs/capstone/research_direction_and_goals.md",
   "docs/product/PREREGISTRATION_OBJ4.md",
   "docs/capstone/research_runbook.md",
+  "docs/capstone/sdlc-record.md",
   "docs/specs/labelling-rulebook.md",
   "docs/product/ADRs.md",
   "docs/capstone/model-probes-2026-10.md",

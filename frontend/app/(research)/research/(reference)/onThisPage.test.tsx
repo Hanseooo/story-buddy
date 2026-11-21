@@ -4,13 +4,15 @@ import DatasetPage from "./dataset/page";
 import DocsPage from "./docs/page";
 import MethodologyPage from "./methodology/page";
 import ResultsPage from "./results/page";
+import SdlcPage from "./sdlc/page";
 
 // The long pages open with jump links (a phone reader otherwise scrolls up to 19,000px). Every link must land
 // on a section heading, and every section heading must be linked.
 describe.each([
   ["results", ResultsPage, 14],
   ["dataset", DatasetPage, 10],
-  ["methodology", MethodologyPage, 7],
+  ["methodology", MethodologyPage, 6],
+  ["sdlc", SdlcPage, 7],
   ["docs", DocsPage, 9],
 ] as const)("/research/%s contents", (_name, Page, count) => {
   it("links every section heading, and nothing else", () => {
@@ -26,7 +28,7 @@ describe.each([
 
 // Long lists fold behind a tap (14 chips fill most of a phone's first screen); short ones stay open.
 describe("contents fold", () => {
-  it("folds the 14-section results list and leaves the 7-section methodology list open", () => {
+  it("folds the 14-section results list and leaves the 6-section methodology list open", () => {
     const results = render(<ResultsPage />);
     const folded = results.container.querySelector('nav[aria-label="On this page"] details');
     expect(folded).not.toBeNull();

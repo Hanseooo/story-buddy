@@ -57,6 +57,11 @@ export const DOC_CHAPTERS: DocChapter[] = [
         lastChanged: "2026-11-22",
       },
       {
+        path: "docs/capstone/sdlc-record.md",
+        answers: "Which loop did each merged pull request belong to, and was each loop's gate met?",
+        lastChanged: "2026-11-22",
+      },
+      {
         path: "docs/product/RESEARCH_PROTOCOL.md",
         answers: "What is the research protocol, and what is its current status?",
         lastChanged: "2026-11-21",

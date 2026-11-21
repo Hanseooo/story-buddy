@@ -35,9 +35,9 @@ describe("static research pages layout", () => {
     renderAt("/research/dataset");
 
     const pager = screen.getByRole("navigation", { name: "Previous and next page" });
-    const previous = within(pager).getByRole("link", { name: /Previous.*Methodology at a glance/ });
+    const previous = within(pager).getByRole("link", { name: /Previous.*Development loops \(SDLC\)/ });
     const next = within(pager).getByRole("link", { name: /Next.*Evaluation instruments/ });
-    expect(previous).toHaveAttribute("href", "/research/methodology");
+    expect(previous).toHaveAttribute("href", "/research/sdlc");
     expect(next).toHaveAttribute("href", "/research/instruments");
   });
 
