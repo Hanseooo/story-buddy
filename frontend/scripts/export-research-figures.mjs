@@ -2,7 +2,7 @@
 // Hand-run, from frontend/:  node scripts/export-research-figures.mjs [baseUrl]
 //
 // Prerequisites
-//   - the globally installed `playwright-cli` (npm i -g @playwright/cli) with Chromium installed
+//   - the globally installed `playwright-cli` (pnpm add -g @playwright/cli) with Chromium installed
 //   - `pnpm dev` running (default http://localhost:3000; pass another base URL as the first argument)
 //   No project dependency is added: the script uses node's stdlib and shells out to playwright-cli.
 //
@@ -10,9 +10,10 @@
 //   - <name>.png for each docs/diagrams/drawio/<name>.drawio.svg (inlined in a white page by a throwaway local
 //     server, because the browser blocks file: URLs)
 //   - <chart-id>.png for each chart, a screenshot of its [data-chart-id] figure on the running page
-//   - manifest.json: per PNG its source, the SHA-256 of the drawio source file (diagrams) and the export date
+//   - manifest.json: per PNG its source, the SHA-256 of its source file (the drawio file, or a chart's data.ts)
+//     and the export date
 //
-// Re-run after editing any .drawio.svg or chart; figures.test.ts fails on a stale hash or a missing PNG.
+// Re-run after editing any .drawio.svg or a chart page's data.ts; figures.test.ts fails on a stale hash or a missing PNG.
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
@@ -28,7 +29,9 @@ const OUT_DIR = join(FRONTEND, "public/research/diagrams");
 const BASE = (process.argv[2] ?? "http://localhost:3000").replace(/\/$/, "");
 const SESSION = "research-figures";
 
-// Charts are [data-chart-id] figures. Add a new chart's id and page here.
+// Charts are [data-chart-id] figures. Add a new chart's id and page here; figures.test.ts fails until
+// this list matches the CHARTS in each page's data.ts. A chart's numbers live in its page's data.ts,
+// so that file's hash is the chart's source hash.
 const CHARTS = [
   ["/research/results", "judge-confusion-matrices"],
   ["/research/results", "judge-f1-precision-recall"],
@@ -37,6 +40,7 @@ const CHARTS = [
   ["/research/limitations", "reference-check-outcomes"],
   ["/research/limitations", "page-check-outcomes"],
 ];
+const dataFile = (page) => `frontend/app/(research)/research/(reference)/${page.split("/").pop()}/data.ts`;
 
 const cfgPath = join(tmpdir(), `${SESSION}.config.json`);
 writeFileSync(
@@ -113,7 +117,13 @@ try {
   for (const [page, id] of CHARTS) {
     await cli("goto", q(`${BASE}${page}`));
     await shot(`[data-chart-id=${id}]`, join(OUT_DIR, `${id}.png`), PLAIN_CHART);
-    entries.push({ png: `${id}.png`, kind: "chart", source: { page, chartId: id }, exportedOn: date });
+    entries.push({
+      png: `${id}.png`,
+      kind: "chart",
+      source: { page, chartId: id, dataFile: dataFile(page) },
+      sourceSha256: sha256(resolve(FRONTEND, "..", dataFile(page))),
+      exportedOn: date,
+    });
     console.log(`chart ${id}`);
   }
 } finally {

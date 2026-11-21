@@ -55,8 +55,10 @@
       "kind": "chart",
       "source": {
         "page": "/research/results",
-        "chartId": "judge-confusion-matrices"
+        "chartId": "judge-confusion-matrices",
+        "dataFile": "frontend/app/(research)/research/(reference)/results/data.ts"
       },
+      "sourceSha256": "8a40f719fa4f00f1d6fbbb4c225e876952c4dc2fb57c34e539dc5523da640a54",
       "exportedOn": "2026-11-21"
     },
     {
@@ -64,8 +66,10 @@
       "kind": "chart",
       "source": {
         "page": "/research/results",
-        "chartId": "judge-f1-precision-recall"
+        "chartId": "judge-f1-precision-recall",
+        "dataFile": "frontend/app/(research)/research/(reference)/results/data.ts"
       },
+      "sourceSha256": "8a40f719fa4f00f1d6fbbb4c225e876952c4dc2fb57c34e539dc5523da640a54",
       "exportedOn": "2026-11-21"
     },
     {
@@ -73,8 +77,10 @@
       "kind": "chart",
       "source": {
         "page": "/research/results",
-        "chartId": "judge-catches-false-alarms"
+        "chartId": "judge-catches-false-alarms",
+        "dataFile": "frontend/app/(research)/research/(reference)/results/data.ts"
       },
+      "sourceSha256": "8a40f719fa4f00f1d6fbbb4c225e876952c4dc2fb57c34e539dc5523da640a54",
       "exportedOn": "2026-11-21"
     },
     {
@@ -82,8 +88,10 @@
       "kind": "chart",
       "source": {
         "page": "/research/results",
-        "chartId": "judge-validation-checkpoints"
+        "chartId": "judge-validation-checkpoints",
+        "dataFile": "frontend/app/(research)/research/(reference)/results/data.ts"
       },
+      "sourceSha256": "8a40f719fa4f00f1d6fbbb4c225e876952c4dc2fb57c34e539dc5523da640a54",
       "exportedOn": "2026-11-21"
     },
     {
@@ -91,8 +99,10 @@
       "kind": "chart",
       "source": {
         "page": "/research/limitations",
-        "chartId": "reference-check-outcomes"
+        "chartId": "reference-check-outcomes",
+        "dataFile": "frontend/app/(research)/research/(reference)/limitations/data.ts"
       },
+      "sourceSha256": "fb895abf7035ecb4f90c8e49e6b05ebcc924403851877a2fd48e9cc27e64e01a",
       "exportedOn": "2026-11-21"
     },
     {
@@ -100,8 +110,10 @@
       "kind": "chart",
       "source": {
         "page": "/research/limitations",
-        "chartId": "page-check-outcomes"
+        "chartId": "page-check-outcomes",
+        "dataFile": "frontend/app/(research)/research/(reference)/limitations/data.ts"
       },
+      "sourceSha256": "fb895abf7035ecb4f90c8e49e6b05ebcc924403851877a2fd48e9cc27e64e01a",
       "exportedOn": "2026-11-21"
     }
   ]

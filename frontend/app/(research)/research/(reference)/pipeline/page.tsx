@@ -21,7 +21,7 @@ const LINK = `inline-flex min-h-11 items-center rounded-lg font-mono text-sm fon
 const SECTIONS = [
   { id: "ipo", label: "IPO model" },
   { id: "diagram", label: "Pipeline diagram" },
-  { id: "nodes", label: "The 14 nodes" },
+  { id: "nodes", label: `The ${NODE_COUNTS.total} nodes` },
   { id: "modules", label: "Paper modules" },
   { id: "caps", label: "Limits" },
   { id: "failures", label: "When a check fails" },

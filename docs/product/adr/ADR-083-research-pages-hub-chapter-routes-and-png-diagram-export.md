@@ -33,14 +33,16 @@ AGENTS.md freezes ADRs and requires a new one before a new public route is built
 4. **Diagrams export to PNG (D-13).** Each diagram under `docs/diagrams/` is exported to a PNG,
    committed with a manifest of source hashes, and shown on its page with alt text, an "As of"
    caption, a download link and a link to the editable source. A missing PNG, or a source changed
-   without re-export, fails a test. Export uses Playwright, which is already installed.
+   without re-export, fails a test. Export uses the globally installed `playwright-cli`, so no project
+   dependency is added.
 5. **Rules kept from ADR-065/066/067.** Static pages only. Synthetic material only: no donated image
    and no held-out test image, and donated material only as whole-split counts (ADR-065 decision 5).
    Every number and factual sentence on a page lives in a tracked source file that the page names,
    and its `data.test.ts` fails when the page and the source disagree (ADR-066 decision 6).
 6. **Pipeline facts come from code (SH-08).** The node count and names, the page and attempt caps,
    the retry taps and the word limit (ADR-068) are tested against `backend/pipeline/graph.py` and
-   `backend/app/config.py`, so a code change fails the page test.
+   `backend/app/config.py`, and the "try again" limit against `backend/pipeline/reveal.py`, which holds
+   it (config.py has no constant for it), so a code change fails the page test.
 
 ## Consequences
 
@@ -61,4 +63,4 @@ AGENTS.md freezes ADRs and requires a new one before a new public route is built
   paper's chapters.
 - **A flat header with a tab per page.** Rejected (D-03): about 11 tabs would hide most items
   off-screen on a phone.
-- **Export diagrams with draw.io desktop.** Rejected (D-13): not installed. Playwright is.
+- **Export diagrams with draw.io desktop.** Rejected (D-13): not installed. `playwright-cli` is, globally.

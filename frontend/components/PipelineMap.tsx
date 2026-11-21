@@ -1,5 +1,6 @@
 import { ArrowsClockwise, ShieldCheck, PaintBrush, CheckCircle, Database, Robot, Warning, Eye, UserCheck, Swap, Palette } from "@phosphor-icons/react/dist/ssr";
 import { ReactNode } from "react";
+import { NODE_COUNTS } from "@/app/(research)/research/(reference)/pipeline/data";
 
 type Mode = "both" | "teacher-review";
 
@@ -59,7 +60,7 @@ const NODES: { id: string; title: string; desc: string; mode: Mode; icon: ReactN
 ];
 
 const LOOP = ["generate_scene", "consistency_check", "regenerate", "output_mod"];
-const TEACHER_BRANCH =["moderation_review", "moderation_replace"];
+const TEACHER_BRANCH = ["moderation_review", "moderation_replace"];
 
 const MODE_LABEL: Record<Mode, string> = { both: "Both modes", "teacher-review": "Teacher review only" };
 
@@ -109,13 +110,14 @@ function FlowNodeWithArrow({ id, last }: { id: string; last: boolean }) {
 }
 
 export default function PipelineMap() {
-  const before = NODES.map((n) => n.id).slice(0, NODES.findIndex((n) => n.id === LOOP[0]));  return (
+  const before = NODES.map((n) => n.id).slice(0, NODES.findIndex((n) => n.id === LOOP[0]));
+  return (
     <div className="relative mx-auto w-full max-w-4xl px-4 py-10">
       <div className="pointer-events-none absolute left-1/2 top-1/2 -z-20 aspect-square w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/5 blur-3xl" />
 
       <p className="mx-auto mb-6 max-w-[420px] text-sm font-medium text-foreground/80">
-        14 nodes in total. 11 run in baseline mode, the mode the study corpus was made in. All 14 run in
-        teacher-review mode, the default since 2026-11-21. Nodes marked “Teacher review only” are skipped in baseline mode.
+        {NODE_COUNTS.total} nodes in total. {NODE_COUNTS.baseline} run in baseline mode, the mode the study corpus was made in. All{" "}
+        {NODE_COUNTS.teacherReview} run in teacher-review mode, the default since 2026-11-21. Nodes marked “Teacher review only” are skipped in baseline mode.
       </p>
 
       <ol aria-label="Pipeline nodes" className="relative z-0 flex flex-col items-center">

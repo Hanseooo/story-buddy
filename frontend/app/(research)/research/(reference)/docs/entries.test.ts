@@ -113,6 +113,10 @@ describe("last-changed dates", () => {
     expect(Number.isNaN(Date.parse(date))).toBe(false);
   });
 
+  it.each(entries.map((e) => [e.path, e.lastChanged]))("%s date is not in the future", (_file, date) => {
+    expect(date <= new Date().toISOString().slice(0, 10)).toBe(true);
+  });
+
   it.each(entries.map((e) => [e.path, e.lastChanged]))("%s date is not older than its last commit", (file, date) => {
     const committed = lastCommitDate(file);
     if (committed === null) return; // no usable history (shallow clone or no git): nothing to compare
