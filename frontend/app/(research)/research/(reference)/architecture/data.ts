@@ -15,8 +15,8 @@ export const SOURCES = {
 export const DIAGRAM = {
   source: "docs/diagrams/drawio/system_architecture.drawio.svg",
   png: "/research/diagrams/system_architecture.png",
-  asOf: "2026-11-21",
-  alt: "System architecture as built on 2026-11-21. Browsers reach the Next.js frontend on Vercel. The frontend signs in with Supabase Auth and reads Postgres, Realtime and Storage. The FastAPI web service on Northflank redacts and moderates the title, then puts the job on a Redis queue. An RQ worker pulls the job, runs the LangGraph pipeline and calls OpenRouter and fal.ai. Sentry and Langfuse receive errors and traces.",
+  asOf: "2026-11-22",
+  alt: "System architecture as built on 2026-11-22. Browsers reach the Next.js frontend on Vercel. The frontend signs in with Supabase Auth and reads Postgres, Realtime and Storage. The FastAPI web service on Northflank redacts and moderates the title, then puts the job on a Redis queue. It also reads private Storage to build a book's PDF. An RQ worker pulls the job, runs the LangGraph pipeline and calls OpenRouter and fal.ai. Langfuse receives the worker's traces.",
 } as const;
 
 // `mentions` is a literal the first file must contain, so a renamed or emptied file fails the test.
@@ -33,7 +33,6 @@ export const COMPONENTS = [
   { name: "Web-tier moderation and Presidio", role: "Before the job row is written, the web service redacts the title and checks it. In teacher review mode it redacts the story text too.", files: ["backend/app/main.py", "backend/providers.py"], mentions: "check_text" },
   { name: "Worker moderation", role: "Checks the story text and every picture before a child sees it.", files: ["backend/pipeline/input_gate.py", "backend/pipeline/char_ref_mod.py", "backend/pipeline/output_mod.py"], mentions: "classify_text_primary" },
   { name: "Langfuse", role: "Run traces from the worker.", files: ["backend/worker/run_job.py"], mentions: "Langfuse" },
-  { name: "Sentry", role: "Error reports from the web service, sent only when a Sentry DSN is set. The frontend has the package but never starts it (there is no instrumentation file), and the worker does not use it.", files: ["backend/app/main.py"], mentions: "if settings.sentry_dsn_backend" },
   { name: "Research endpoint", role: "Gives researchers the run viewer's data. Needs a researcher account.", files: ["backend/app/research.py"], mentions: "research_router" },
   { name: "Teacher review", role: "A teacher approves or rejects each book. In teacher review mode a first moderation flag holds the job for the teacher.", files: ["backend/app/review.py", "backend/app/moderation_hold.py"], mentions: "def review_job" },
   { name: "Teacher notes", role: "A note from the teacher that the child can read.", files: ["backend/app/review_notes.py"], mentions: "child_notes_router" },
@@ -70,7 +69,6 @@ export const BACKEND_LIBS = [
   { name: "presidio-anonymizer", version: ">=2.2", role: "Redacts it" },
   { name: "spacy", version: ">=3.7", role: "Language model behind Presidio" },
   { name: "langfuse", version: ">=2.0", role: "Run traces" },
-  { name: "sentry-sdk[fastapi]", version: ">=2.17", role: "Error reports" },
   { name: "weasyprint", version: ">=70,<71", role: "PDF export" },
 ] as const;
 
@@ -80,7 +78,6 @@ export const FRONTEND_LIBS = [
   { name: "react-dom", version: "19.2.4", role: "Interface" },
   { name: "@supabase/supabase-js", version: "^2.110.1", role: "Database and sign-in client" },
   { name: "@supabase/ssr", version: "^0.12.4", role: "Sign-in on the server" },
-  { name: "@sentry/nextjs", version: "^10.64.0", role: "Error reports" },
   { name: "tailwindcss", version: "^4", role: "Styles" },
   { name: "vitest", version: "^4.1.10", role: "Tests" },
 ] as const;

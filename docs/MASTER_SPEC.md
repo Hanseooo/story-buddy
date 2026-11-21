@@ -218,13 +218,13 @@ Product/architecture choices are in the ADRs; this is the working reference, **i
 | Pipeline engine | LangGraph (deterministic) + `langgraph-checkpoint-postgres`. Checkpoints go over the **direct** Postgres connection (5432), not the 6543 transaction pooler | ADR-003,005,033 |
 | LLM / VLM | `mistralai/mistral-small-3.2-24b-instruct` (nodes; ~~`qwen/qwen3-32b`~~ until 2026-08-11) + prompted judge `gemma-3-27b-it`; fine-tuned `Qwen3.5-9B` is the amended Objective 4 candidate and ships only if its product gate passes | ADR-002 (amended 2026-08-11),004,015,018,061 |
 | Image model | `fal-ai/qwen-image` (text→image refs & fallback) + `fal-ai/qwen-image-edit-2511` (reference-conditioned scenes) via fal.ai | ADR-001, ADR-015 |
-| Judge serving | vLLM on a scale-to-zero GPU container (Modal). OpenAI-compatible — `JUDGE_BASE_URL` is the swap | ADR-019 |
+| Judge serving | Planned: vLLM on a scale-to-zero GPU container (Modal). OpenAI-compatible — `JUDGE_BASE_URL` is the swap. **Not deployed:** the product uses the prompted judge on OpenRouter (`docs/capstone/hardware_and_hosting.md` §2) | ADR-019 |
 | Model access layer | `backend/providers.py` — thin functions, one impl each. **The only file naming a *provider*** (model *ids* are env vars read in `app/config.py` — ADR-015: "swapping a model is an env var; swapping a provider is one file") | ADR-015 |
 | Data / auth / storage / realtime | Supabase (Postgres + Auth + Storage + Realtime + RLS). **Classroom-scoped** | ADR-006, ADR-017 |
 | Structured extraction | `json_schema` (strict) + `require_parameters` (OpenRouter only) + Pydantic | §12, §3, ADR-002 |
 | Moderation | **meta-llama/llama-guard-4-12b** (OpenRouter) **+ gpt-oss-safeguard-20b** (OpenRouter backstop) (text) + Presidio **+ Filipino recognizers** (structured identifiers only — persons off by default, ADR-045) + **mistral-small-3.2-24b** (NSFW gate via OpenRouter) & **gemma-3-27b-it** safety rubric (image) | ADR-011, ADR-032, ADR-045, ADR-002 (amended) |
 | Fine-tuning | **The consistency judge only.** Identity = reference conditioning; style = ADR-007 constant; safety = never | ADR-018 (supersedes ADR-016) |
-| Observability | **Langfuse** (tracing, ADR-030 — supersedes LangSmith/ADR-014) + Sentry (errors) | ADR-030, §16 |
+| Observability | **Langfuse** (tracing, ADR-030 — supersedes LangSmith/ADR-014). Errors are logged by the services and read in the host's logs; there is no error-tracking service | ADR-030, §16 |
 | Rate limiting | ⚙️`slowapi` + cost circuit-breaker; **per-classroom** daily cap deferred to Phase 2 (ADR-025) | §14,§15, ADR-025 |
 | **Testing — FE unit** | **vitest** | mock model calls; component + logic |
 | **Testing — BE unit** | **pytest** | mock every `providers.py` call (via the node helper — §6 seam); node logic, contracts, RLS, routing |

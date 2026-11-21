@@ -30,7 +30,8 @@ is solo; the research track is not. They run in parallel and meet at Phase 2.5 a
 
 One hardcoded story flows end-to-end through real infrastructure and produces one real slideshow.
 `POST /storybooks` → job row → RQ worker → LangGraph stub nodes → image in Supabase Storage →
-slideshow live via Realtime. Langfuse + Sentry on from the first commit.
+slideshow live via Realtime. Langfuse on from the first commit. (Sentry was scaffolded then, never initialised on the frontend, and
+removed on 2026-11-22.)
 
 **Status:** ✅ complete. Originally built against Gemini + Nano Banana; the open-weight swap
 (ADR-001, ADR-002, ADR-015) landed with `backend/providers.py`, and `google-genai` is out of the

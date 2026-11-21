@@ -4,7 +4,6 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { WarningCircle, ArrowsClockwise, Books } from "@phosphor-icons/react";
-import * as Sentry from "@sentry/nextjs";
 
 export default function ErrorBoundary({
   error,
@@ -18,11 +17,7 @@ export default function ErrorBoundary({
   const bookshelfHref = profileId ? `/s/${profileId}` : "/";
 
   useEffect(() => {
-    if (process.env.NODE_ENV === "production") {
-      Sentry.captureException(error);
-    } else {
-      console.error("Student section error caught:", error);
-    }
+    console.error("Student section error caught:", error);
   }, [error]);
 
   return (

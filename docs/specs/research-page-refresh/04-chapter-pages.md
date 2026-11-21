@@ -104,7 +104,7 @@ Applies: SH-02, SH-06, SH-08
   - the FastAPI → Redis enqueue
   - OpenRouter and fal.ai
   - moderation and Presidio in the web tier (`backend/app/main.py:171-200`)
-  - Langfuse and Sentry
+  - Langfuse (Sentry was listed here until its removal on 2026-11-22)
   - the research endpoint
   - teacher review, notes, magic pencil and PDF export
 - **AC-17** Specification tables (paper Tables 5–8), each value citing its source:

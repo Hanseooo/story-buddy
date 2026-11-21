@@ -3,12 +3,10 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowsClockwise, WarningCircle } from "@phosphor-icons/react";
-import * as Sentry from "@sentry/nextjs";
 
 export default function ResearchPageError({ error, unstable_retry }: { error: Error & { digest?: string }; unstable_retry: () => void }) {
   useEffect(() => {
-    if (process.env.NODE_ENV === "production") Sentry.captureException(error);
-    else console.error("Research page error caught:", error);
+    console.error("Research page error caught:", error);
   }, [error]);
 
   return (

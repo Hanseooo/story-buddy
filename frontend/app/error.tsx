@@ -4,7 +4,6 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { House, ArrowsClockwise, WarningCircle, Sparkle, ArrowLeft } from "@phosphor-icons/react";
-import * as Sentry from "@sentry/nextjs";
 
 export default function ErrorBoundary({
   error,
@@ -15,11 +14,7 @@ export default function ErrorBoundary({
 }) {
   useEffect(() => {
     // Log exception safely without swallowing or echoing sensitive payload
-    if (process.env.NODE_ENV === "production") {
-      Sentry.captureException(error);
-    } else {
-      console.error("ErrorBoundary caught runtime exception:", error);
-    }
+    console.error("ErrorBoundary caught runtime exception:", error);
   }, [error]);
 
   return (

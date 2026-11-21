@@ -131,13 +131,13 @@ A deterministic pipeline of **ten logical modules**, in order:
 |---|---|---|
 | 1 | Input Moderation | Text safety gate, then personally-identifiable-information redaction |
 | 2 | Story Analyzer | Entity and coreference extraction into the Story Memory contract |
-| 3 | Scene Segmentation | Selects **3 to 10** scenes (`MIN_SCENES = 3`, `MAX_SCENES = 10`, `backend/app/config.py:186,204`; ADR-037 decision 1); scene count tracks the story's distinct major plot points (target ≥ 3 where the arc supports it); never padded to reach a count and never invents content — never-invent overrides the floor |
+| 3 | Scene Segmentation | Selects **3 to 10** scenes (`MIN_SCENES = 3`, `MAX_SCENES = 10`, `backend/app/config.py:185,203`; ADR-037 decision 1); scene count tracks the story's distinct major plot points (target ≥ 3 where the arc supports it); never padded to reach a count and never invents content — never-invent overrides the floor |
 | 4 | Story Memory Manager | Maintains the versioned Pydantic *Story Memory* contract that carries state across every stage |
 | 5 | Character Bible | ≤ 2 canonical characters, each rendered **once** as a reference image |
 | 6 | Style Preset | `cel`, `gouache`, or `cut_paper`, explicitly assigned and frozen for the storybook |
 | 7 | Prompt Optimizer | Scene + character bible + style preset + story memory → structured prompt |
 | 8 | AI Scene Generation | Reference-conditioned image edit — the pipeline's single generation mode |
-| 9 | Consistency Judge & Targeted Regeneration | Vision-language judge (emits `differences_observed` **before** `same_character`); up to two prompt-corrected redraws (three attempts, `max_scene_attempts = 3`, `backend/app/config.py:101`; ADR-037); best-of fallback; capped |
+| 9 | Consistency Judge & Targeted Regeneration | Vision-language judge (emits `differences_observed` **before** `same_character`); up to two prompt-corrected redraws (three attempts, `max_scene_attempts = 3`, `backend/app/config.py:100`; ADR-037); best-of fallback; capped |
 | 10 | Picture Book Composition | Slide composer (in-app reader) + on-demand PDF download of teacher-approved classroom books (ADR-071/072). Narration remains cut — ADR-058 |
 
 > **Logical vs. implemented.** These are the manuscript's ten logical modules. In the implementation graph

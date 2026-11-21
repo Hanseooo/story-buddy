@@ -3,12 +3,10 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowsClockwise, WarningCircle } from "@phosphor-icons/react";
-import * as Sentry from "@sentry/nextjs";
 
 export default function MetricsError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
-    if (process.env.NODE_ENV === "production") Sentry.captureException(error);
-    else console.error("Runs list error caught:", error);
+    console.error("Runs list error caught:", error);
   }, [error]);
 
   return (

@@ -19,7 +19,7 @@ The school (the deployment/client side) needs nothing more than a **web browser 
 Every heavy model runs off-device, in one of two ways:
 
 - **Hosted inference of open weights** — the model's weights are open (Apache-2.0 / MIT), but we call them
-  over HTTP on a managed GPU provider (fal.ai for images and narration, OpenRouter for text/VLM). We do not
+  over HTTP on a managed GPU provider (fal.ai for images, OpenRouter for text/VLM and moderation). We do not
   own or operate the GPU; we make an API call. This is what satisfies the open-weight mandate (ADR-015):
   *openness is a property of the weights; hosting is a separate question.*
   > ⚠️ **This reading is an operating assumption, not a confirmed one.** ADR-015 records that the project
@@ -28,12 +28,13 @@ Every heavy model runs off-device, in one of two ways:
   > *self-hosted*, this section's architecture changes: a GPU service and its ops. The pipeline code does
   > not, because every vendor call is isolated in `backend/providers.py` — that isolation is the insurance
   > premium for this assumption.
-- **A couple of small CPU models on our own server worker** — the moderation classifiers (and, as a fallback,
-  Kokoro narration) are small enough to run on the CPU of the backend worker container (Northflank). No GPU.
+- **One small CPU model on our own servers** — the spaCy NER model behind Presidio PII redaction, in the web
+  service and the worker. No GPU. *(updated 2026-11-22: ADR-032 moved the moderation classifiers to
+  OpenRouter, and ADR-058 cut narration, so neither runs on our servers.)*
 
 This is why the "should we run three models locally?" question dissolves: **in v1 we run essentially none of
-the models locally** — not on the child's device and not on a developer GPU in production. Heavy models are
-hosted; only tiny CPU classifiers sit on the server. Running models *on the user's machine* is a different
+the models locally** — not on the child's device and not on a developer GPU in production. Every generative and
+moderation model is hosted; only Presidio's spaCy model sits on the server. Running models *on the user's machine* is a different
 architecture entirely ("on-device," ADR-015 Reading 3), and it is explicitly **Future Work**, not v1.
 
 ---
@@ -51,11 +52,12 @@ architecture entirely ("on-device," ADR-015 Reading 3), and it is explicitly **F
 | **Narration (TTS)** | **Cut, never built** *(updated 2026-11-21: ADR-058 superseded ADR-020)* | none | The Chatterbox and Kokoro rows of the July plan no longer apply |
 | Narration fallback | **Cut** *(updated 2026-11-21: ADR-058)* | none | See the row above |
 | Input-text moderation | `meta-llama/llama-guard-4-12b` (primary) + `openai/gpt-oss-safeguard-20b` (backstop) *(updated 2026-11-21: `config.py:61,70`)* | **OpenRouter** | Two independent open classifiers (ADR-011) |
-| PII redaction | Presidio + spaCy | **Northflank worker CPU** *(updated 2026-11-21)* | Redact before storage/captioning/export (ADR-011) |
+| PII redaction | Presidio + spaCy | **Northflank web service and worker CPU** *(updated 2026-11-22: the web service redacts titles and pencil text, `app/main.py`, `app/moderation_hold.py`)* | Redact before storage/captioning/export (ADR-011) |
 | Output-image moderation | `mistralai/mistral-small-3.2-24b-instruct` (primary) + `google/gemma-3-27b-it` (backstop) *(updated 2026-11-21: `config.py:68,73`; ADR-032 dropped the local NSFW ViT)* | **OpenRouter** | Both hosted (ADR-011, ADR-032) |
-| Tracing / errors | Langfuse, Sentry *(updated 2026-11-21: ADR-030 replaced LangSmith)* | Managed services | Observability, not models |
+| Tracing | Langfuse *(updated 2026-11-21: ADR-030 replaced LangSmith)* | Managed service | Observability, not models |
+| Errors | Service logs (stdout, browser console) *(updated 2026-11-22: no error-tracking service)* | The host's logs | Observability, not models |
 
-**Reading of the map (July 2026 text; as of 2026-11-21 the moderation models are OpenRouter calls, so no model is resident on hardware we operate):** the only models resident on hardware *we* operate were small CPU classifiers on the
+**Reading of the map (July 2026 text; as of 2026-11-21 the moderation models are OpenRouter calls, so the only model resident on hardware we operate is Presidio's spaCy NER model):** the only models resident on hardware *we* operate were small CPU classifiers on the
 Northflank worker. Everything expressive or large (image, text, VLM, expressive TTS) is a hosted API call. The
 one optionally self-hosted GPU service — Modal, for the fine-tuned judge (ADR-019) — is **the first thing on
 the de-scope ladder** and nothing may hard-depend on it.
@@ -74,7 +76,7 @@ workstation, not a server — it never serves the deployed product to users.
 | Component | Recommended specification | Purpose in development |
 |---|---|---|
 | Processor | Intel Core i5 (12th Generation) | Running the frontend dev server, FastAPI backend, and RQ worker locally |
-| Memory (RAM) | 24 GB (minimum 16 GB) | The local worker holds the small CPU models (moderation classifiers, Kokoro fallback) during development |
+| Memory (RAM) | 24 GB (minimum 16 GB) | The local worker holds Presidio and its spaCy model during development *(updated 2026-11-22)* |
 | Graphics (GPU) | NVIDIA RTX 3050 Laptop GPU | **Light local prototyping only** — trying small models locally. *Not* used to serve production and *not* used to train the judge |
 | Storage | 512 GB SSD | Codebase, story corpus, model caches, generated-output samples |
 
@@ -105,7 +107,7 @@ school can run this on ordinary hardware.
 |---|---|---|
 | Client device | Any modern PC, laptop, Chromebook, or tablet | Runs a **web browser only** — no installation, no GPU, no special hardware |
 | Web browser | Current Chrome, Edge, Safari, or Firefox | The app is a responsive web application |
-| Network | Broadband internet connection | All model inference happens in the cloud; the device sends text and streams back images, audio, and PDFs |
+| Network | Broadband internet connection | All model inference happens in the cloud; the device sends text and streams back images and PDFs |
 | (Server side — provisioned by the developer, **not** the school) | Vercel + Northflank + Supabase + fal.ai + OpenRouter + optional Modal | Listed for completeness. The school provisions none of this; it is the hosted backend |
 
 **The distinction that matters for the defense:** the RTX 3050 answers "what did the *researcher* need to
@@ -122,15 +124,15 @@ same machine, and conflating them overstated the deployment requirement.
 | FastAPI (Python) | Backend framework for API routing and job handling |
 | Supabase | Database (Postgres), Authentication, Storage, and Realtime syncing |
 | LangGraph & Redis | AI pipeline orchestration and background job queuing |
-| OpenRouter | Hosted inference for open-weight LLMs / VLMs (text pipeline, prompted judge) |
-| fal.ai | Hosted inference for the open-weight **image model** (Qwen-Image-Edit) **and narration** (Chatterbox) |
+| OpenRouter | Hosted inference for open-weight LLMs / VLMs (text pipeline, prompted judge, moderation) |
+| fal.ai | Hosted inference for the open-weight **image models** (Qwen-Image, Qwen-Image-Edit) |
 | Modal *(optional, late/de-scopable)* | Scale-to-zero GPU serving the fine-tuned judge via vLLM (ADR-019) |
-| LangSmith & Sentry | Pipeline tracing (doubles as research instrumentation) and error tracking |
+| Langfuse | Pipeline tracing (doubles as research instrumentation). Errors go to the service logs; there is no error-tracking service |
 | Visual Studio Code | Primary source-code editor |
 | Vercel & Northflank | Cloud hosting for the frontend and backend, respectively |
 
-*Change from the earlier table:* fal.ai is now noted as serving **both image and narration** inference, and
-Modal is added as the optional GPU service for the fine-tuned judge.
+*Change from the earlier table:* Modal is added as the optional GPU service for the fine-tuned judge.
+*(Updated 2026-11-22: narration is cut (ADR-058), tracing is Langfuse (ADR-030), and Sentry was removed.)*
 
 ---
 

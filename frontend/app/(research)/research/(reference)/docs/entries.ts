@@ -54,7 +54,7 @@ export const DOC_CHAPTERS: DocChapter[] = [
       {
         path: "docs/capstone/methodology.md",
         answers: "How was the system built, and how is each objective evaluated?",
-        lastChanged: "2026-11-21",
+        lastChanged: "2026-11-22",
       },
       {
         path: "docs/product/RESEARCH_PROTOCOL.md",
@@ -175,22 +175,22 @@ export const DOC_CHAPTERS: DocChapter[] = [
       {
         path: "docs/capstone/system_architecture.md",
         answers: "What are the system's components and pipeline stages, in both graph modes?",
-        lastChanged: "2026-11-21",
+        lastChanged: "2026-11-22",
       },
       {
         path: "docs/MASTER_SPEC.md",
         answers: "What is the master spec for the pipeline? Section 2 is the architecture.",
-        lastChanged: "2026-11-21",
+        lastChanged: "2026-11-22",
       },
       {
         path: "docs/TECH_STACK.md",
         answers: "Which tools, versions and hosting region does the system use?",
-        lastChanged: "2026-11-21",
+        lastChanged: "2026-11-22",
       },
       {
         path: "docs/capstone/hardware_and_hosting.md",
         answers: "Which hardware did development and training use, and where is the system hosted?",
-        lastChanged: "2026-11-21",
+        lastChanged: "2026-11-22",
       },
       {
         path: "docs/product/ADRs.md",
@@ -240,7 +240,7 @@ export const DOC_CHAPTERS: DocChapter[] = [
       {
         path: `${D}system_architecture.drawio.svg`,
         answers: "Which services and models make up the system, as built on 2026-11-21?",
-        lastChanged: "2026-11-21",
+        lastChanged: "2026-11-22",
       },
       {
         path: `${D}ipo_model.drawio.svg`,

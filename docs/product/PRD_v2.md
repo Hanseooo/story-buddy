@@ -420,26 +420,26 @@ use only, not any evaluation leg.
 
 ## 12. Technical Architecture
 
-**Frontend:** Next.js (React) + Tailwind + shadcn/ui (teacher) + hand-built cartoon-pop components (kid) + Motion (micro-interactions) + Lottie (wait states). Deployed on Vercel.
+**Frontend:** Next.js (React) + Tailwind + hand-built components (teacher and kid) + Motion (`framer-motion`, micro-interactions). Deployed on Vercel. *(Updated 2026-11-22: shadcn/ui and Lottie were planned but are not in `frontend/package.json`.)*
 
 **Backend:** FastAPI (web) + **separate RQ worker** + **Redis** (broker), on Northflank (Render/Fly.io equivalent; North America region, free tier, D-07). *A long pipeline cannot run in a request cycle — this is a 3-service deployment, not one.*
 
-**Pipeline engine:** **LangGraph as a deterministic state machine** (explicit nodes; conditional edges only at moderation pass/fail and consistency pass/fail). LangChain omitted unless a concrete need appears. Model APIs called directly through `backend/providers.py` — the only file that names a vendor (ADR-003, ADR-015).
+**Pipeline engine:** **LangGraph as a deterministic state machine** (explicit nodes; conditional edges only at moderation pass/fail and consistency pass/fail). LangChain is installed only because Langfuse's LangGraph `CallbackHandler` needs it (`worker/run_job.py`); no node uses it. Model APIs called directly through `backend/providers.py` — the only file that names a vendor (ADR-003, ADR-015).
 
 **State/persistence:** Supabase Postgres (app data + LangGraph checkpoints via `langgraph-checkpoint-postgres`); Supabase Auth (teacher) + classroom-scoped student auth + RLS; Supabase Storage (images, signed URLs); Supabase Realtime (job progress). ADR-006.
 
 **Structured extraction:** strict `json_schema` structured output + `provider.require_parameters: true` + Pydantic validation on every LLM boundary. The Story Memory schema is the contract between modules. ADR-002.
 
-**Flow:** `POST /storybooks` creates a job row, returns `job_id` immediately → worker runs the LangGraph pipeline, checkpointing after each scene, updating job status → frontend subscribes to the job row via Realtime → on completion, images in Storage, book in library.
+**Flow:** `POST /storybooks` redacts and moderates the title (web tier, `app/main.py`), creates a job row, returns `job_id` immediately → the job goes on the Redis queue → worker runs the LangGraph pipeline, checkpointing after each scene, updating job status → frontend subscribes to the job row via Realtime → on completion, images in Storage, book in library.
 
 ---
 
 ## 13. Moderation & Safety Stack
 
-Four distinct concerns, four mechanisms. **Open classifier as the gate, free proprietary classifier as
-an independent backstop; either one flagging fails the content** (ADR-011).
+Four distinct concerns, four mechanisms. **Open classifier as the gate, a second open classifier from another vendor as
+an independent backstop; either one flagging fails the content** (ADR-011, revised by ADR-011c and ADR-015).
 
-1. **Input text moderation** — **`meta-llama/llama-guard-4-12b`** (Apache-2.0, 119 languages, the 0.6B variant on the
+1. **Input text moderation** — **`meta-llama/llama-guard-4-12b`** (Apache-2.0, 12B, via
    OpenRouter) + **`openai/gpt-oss-safeguard-20b`** (Apache-2.0 open *weights*, via OpenRouter, independent
    backstop) on the child's story before any processing. Gentle, non-scary failure copy.
    meta-llama/llama-guard-4-12b's multilingual coverage closes the Filipino/Taglish hole *by construction*; gpt-oss-safeguard
@@ -517,7 +517,7 @@ image generation:
 
 ## 16. Observability (doubles as research instrumentation)
 
-Instrument the pipeline with **Langfuse** (LangGraph tracing via a per-job `CallbackHandler`; ADR-030, superseding ADR-014's LangSmith). This captures generation time, per-scene regeneration counts, cost per book, and VLM-judge scores — i.e. the "AI Resource Usage" metrics and a large share of the eval dataset. Add **Sentry** for error tracking. Instrument from the walking-skeleton phase so data collection is free by the time you evaluate.
+Instrument the pipeline with **Langfuse** (LangGraph tracing via a per-job `CallbackHandler`; ADR-030, superseding ADR-014's LangSmith). This captures generation time, per-scene regeneration counts, cost per book, and VLM-judge scores — i.e. the "AI Resource Usage" metrics and a large share of the eval dataset. There is no error-tracking service: errors are logged by the services and read in the host's logs. Instrument from the walking-skeleton phase so data collection is free by the time you evaluate.
 
 ---
 

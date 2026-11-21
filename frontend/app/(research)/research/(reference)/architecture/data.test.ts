@@ -27,7 +27,7 @@ describe("architecture page data", () => {
     expect(existsSync(path.join(REPO_ROOT, data.DIAGRAM.source))).toBe(true);
     expect(existsSync(path.join(FRONTEND, "public", data.DIAGRAM.png))).toBe(true);
     expect(data.DIAGRAM.png).toBe("/research/diagrams/system_architecture.png");
-    expect(data.DIAGRAM.asOf).toBe("2026-11-21");
+    expect(data.DIAGRAM.asOf).toBe("2026-11-22");
   });
 
   it("names a real source file for each component, and the file mentions what the row claims", () => {
@@ -40,7 +40,7 @@ describe("architecture page data", () => {
 
   it("lists the components the old diagram missed", () => {
     const names = data.COMPONENTS.map((c) => c.name).join(" | ");
-    for (const wanted of ["Supabase Auth", "Redis", "OpenRouter", "fal.ai", "Presidio", "Langfuse", "Sentry", "Research", "Teacher review", "Teacher notes", "Magic pencil", "PDF export"]) {
+    for (const wanted of ["Supabase Auth", "Redis", "OpenRouter", "fal.ai", "Presidio", "Langfuse", "Research", "Teacher review", "Teacher notes", "Magic pencil", "PDF export"]) {
       expect(names, wanted).toContain(wanted);
     }
   });

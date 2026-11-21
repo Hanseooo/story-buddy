@@ -39,11 +39,11 @@ export const TEACHER_ONLY_NODES = ["optional_themes", "moderation_review", "mode
 // Each cap is pinned to a source line. The test checks that `text` is on line `line` of `file`.
 // The "try again" cap lives in reveal.py, not config.py: config.py has no constant for it.
 export const CAPS = [
-  { key: "pagesMax", label: "Most pages in a book", value: "10", file: SOURCES.config, line: 186, text: "MAX_SCENES = 10" },
-  { key: "pagesMin", label: "Fewest pages in a book", value: "3", file: SOURCES.config, line: 204, text: "MIN_SCENES = 3" },
-  { key: "attempts", label: "Drawing attempts per page", value: "3", file: SOURCES.config, line: 101, text: "max_scene_attempts: int = 3" },
+  { key: "pagesMax", label: "Most pages in a book", value: "10", file: SOURCES.config, line: 185, text: "MAX_SCENES = 10" },
+  { key: "pagesMin", label: "Fewest pages in a book", value: "3", file: SOURCES.config, line: 203, text: "MIN_SCENES = 3" },
+  { key: "attempts", label: "Drawing attempts per page", value: "3", file: SOURCES.config, line: 100, text: "max_scene_attempts: int = 3" },
   { key: "taps", label: "“Try again” taps per book", value: "3", file: SOURCES.reveal, line: 24, text: "MAX_RETRY_TAPS = 3" },
-  { key: "words", label: "Words in a story", value: "500", file: SOURCES.config, line: 217, text: "MAX_STORY_WORDS = 500" },
+  { key: "words", label: "Words in a story", value: "500", file: SOURCES.config, line: 216, text: "MAX_STORY_WORDS = 500" },
 ] as const;
 
 // ADR-068: the study corpus was made before the limit rose to 500.

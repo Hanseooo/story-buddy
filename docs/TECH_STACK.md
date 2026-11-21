@@ -2,7 +2,7 @@
 
 > Derived from ADRs.md — if this doc and an ADR disagree, the ADR wins.
 
-**Last generated:** 2026-07-28
+**Last generated:** 2026-11-22
 
 **Purpose.** One page to answer "what model / service / library / API am I supposed to use here, and
 where is it configured?" without re-reading 1500 lines of ADRs. If you're about to hardcode a model ID
@@ -20,12 +20,12 @@ or an SDK call at a call site, stop and read §5 first.
 | Consistency judge (fine-tuned, replaces prompted only if gate and serving qualification pass) | `Qwen3.5-9B` + QLoRA adapter; [qualification procedure and status](capstone/research_runbook.md#qwen35-host-qualification) | Apache-2.0 | Modal (vLLM, scale-to-zero) target; serving unqualified | `settings.judge_base_url` / `settings.judge_api_key` | ADR-018, ADR-019, ADR-061 | Phase 2.5 |
 | Canonical character reference (text→image) | `fal-ai/qwen-image` | Apache-2.0 | fal.ai | `settings.fal_image_model` | ADR-001, ADR-007 | Phase 1 |
 | Scene generation (reference-conditioned edit) | `fal-ai/qwen-image-edit-2511` | Apache-2.0 | fal.ai | `settings.fal_image_edit_model` | ADR-001 | Phase 1 |
-| Input-text moderation (primary) | `meta-llama/llama-guard-4-12b` 0.6B | Apache-2.0 | OpenRouter | `settings.moderation_primary_model` | ADR-011 (revised 2026-07-21c), ADR-032 | Phase 2 |
+| Input-text moderation (primary) | `meta-llama/llama-guard-4-12b` (12B) | Apache-2.0 | OpenRouter | `settings.moderation_primary_model` | ADR-011 (revised 2026-07-21c), ADR-032 | Phase 2 |
 | Input-text moderation (backstop) | `openai/gpt-oss-safeguard-20b` | Apache-2.0 (open weights, not the OpenAI API) | OpenRouter | `settings.moderation_backstop_model` | ADR-011c | Phase 2 |
 | Output-image NSFW gate (primary image guard) | `mistralai/mistral-small-3.2-24b-instruct` | Apache-2.0 | OpenRouter | `settings.moderation_primary_image_model` | ADR-011, ADR-032, ADR-002 (amended 2026-08-11) | Phase 2 |
 | ~~Output-image NSFW gate~~ (superseded 2026-08-11) | ~~`qwen/qwen3-vl-32b-instruct`~~ | Apache-2.0 | OpenRouter | — | ADR-011, ADR-032 | Served by Alibaba Cloud it emitted `is_safe` before `safety_reasoning`; `providers._assert_field_order` rejects that under ADR-004 reason-then-score and hard-failed the job at `char_ref_mod`. Same class as the `text_model` failure one row up — the *provider*, not the model, decides structured-output fidelity. |
 | Output-image safety rubric (violence/gore) | `google/gemma-3-27b-it` (separate call, separate concern from the judge) | Gemma license | OpenRouter | `settings.moderation_backstop_image_model` — **never the fine-tuned judge** | ADR-011, ADR-004 amendment (b), ADR-032 | Phase 2 |
-| PII redaction | Presidio + spaCy + Filipino recognizers | MIT / MIT | Worker (local CPU) | `providers._presidio` | ADR-011, `input-gate-hardening` | Phase 2 |
+| PII redaction | Presidio + spaCy + Filipino recognizers | MIT / MIT | Web service and worker (local CPU) | `providers._presidio` | ADR-011, `input-gate-hardening` | Phase 2 |
 
 **Not a model, but a required call param:** every OpenRouter structured-output call must send
 `provider.require_parameters: true` in `extra_body` (`backend/providers.py:54`) — omitting it lets
@@ -48,9 +48,11 @@ self-hosted vLLM (the fine-tuned judge, post-Phase 2.5) rejects the field.
 | **Redis** | RQ broker for the async job queue | Phase 0 | Postgres-backed queue (viable simplification, revisit if Redis feels like overhead) — ADR-005 |
 | **Modal** | Scale-to-zero GPU container serving the fine-tuned judge behind vLLM (OpenAI-compatible) | Phase 2.5 / Phase 3, **first item on the de-scope ladder** | RunPod Serverless, Baseten (drop-in equivalents); HF Inference Endpoints (thinner VLM LoRA support) — ADR-019 |
 | **Langfuse** | Pipeline tracing + per-model USD cost from a built-in pricing table — a `CallbackHandler` per job (`LANGFUSE_SECRET_KEY`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_HOST`) | Phase 0 (from first commit) | LangSmith — zero-code env-var wiring but reports tokens only, no USD costs — ADR-014, switched by ADR-030 |
-| **Sentry** | Error tracking, frontend + backend | Phase 0 | — |
 | **fal.ai** | Hosted inference: image generation (both models) | Phase 0/1 | Novita, Replicate — named drop-in alternates for images (ADR-001) |
-| **OpenRouter** | Hosted inference: text pipeline, prompted judge, moderation backstop | Phase 0/1 | — (aggregator chosen specifically so a model swap is a config change, ADR-002) |
+| **OpenRouter** | Hosted inference: text pipeline, prompted judge, all four moderation models (ADR-032) | Phase 0/1 | — (aggregator chosen specifically so a model swap is a config change, ADR-002) |
+
+**Errors:** there is no error-tracking service. The services log errors to stdout (backend) and the
+console (frontend), and they show in the host's logs.
 
 ---
 
@@ -73,14 +75,19 @@ self-hosted vLLM (the fine-tuned judge, post-Phase 2.5) rejects the field.
 | `supabase` | >=2.9.1 | Supabase Python client |
 | `redis` | >=5.2 | RQ broker client |
 | `rq` | >=2.0 | Job queue |
-| `sentry-sdk[fastapi]` | >=2.17 | Error tracking |
+| `presidio-analyzer` / `presidio-anonymizer` | >=2.2 | Finds and redacts PII (ADR-011) |
+| `spacy` + `en_core_web_sm` (vendored wheel) | >=3.7 | NLP engine behind Presidio |
+| `Pillow` | >=10.0 | Image decoding for PDF export (`app/pdf_export.py`) |
+| `langfuse` | >=2.0 | Pipeline tracing (ADR-030) |
+| `langchain` | >=0.3 | Needed by Langfuse's LangGraph `CallbackHandler` (`worker/run_job.py:2`) |
+| `pyyaml` | >=6.0 | YAML config for the judge fine-tune scripts (`finetune/`) |
+| `weasyprint` | >=70,<71 | On-demand PDF export (ADR-071) |
 | **dev:** `pytest` | >=8.3 | Test runner |
 | **dev:** `pytest-mock` | >=3.14 | Mocking (every `providers.py` call is mocked in deterministic tests) |
 | **dev:** `ruff` | >=0.8 | Lint only — `ruff format` deliberately not adopted (see `pyproject.toml` comment: an 88-col reformat would rewrap the whole repo in one feature diff) |
 
-**Conditionally required, not yet added:** `pillow` — needed only if fal turns out not to accept an
-`output_format` arg (ADR-027). Confirmed absent from `backend/uv.lock` as of this doc's generation. Do not add
-it speculatively; run the fal check first.
+**Pillow is installed for PDF export only.** Image re-encoding on the worker (ADR-027) still prefers fal's
+`output_format` arg; Pillow there stays the fallback.
 
 **Tooling lock:** `uv` only. Forbidden: bare `pip install`, `poetry`, `pipenv`. Always `uv run <cmd>` from
 `backend/` (pinned to `backend/.venv`).
@@ -92,7 +99,6 @@ it speculatively; run the fal check first.
 | `next` | 16.2.11 | App Router, SSR |
 | `react` / `react-dom` | 19.2.4 | UI |
 | `@supabase/supabase-js` | ^2.110.1 | Supabase client (Realtime job-progress watch, Storage signed URLs) |
-| `@sentry/nextjs` | ^10.64.0 | Error tracking |
 | `tailwindcss` / `@tailwindcss/postcss` | ^4 | Styling |
 | **dev:** `vitest` | ^4.1.10 | Unit tests (`pnpm test`) |
 | **dev:** `@testing-library/react`, `@testing-library/jest-dom` | ^16.3.2 / ^6.9.1 | Component testing |

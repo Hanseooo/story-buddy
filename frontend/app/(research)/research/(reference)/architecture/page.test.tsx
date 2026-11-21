@@ -8,7 +8,7 @@ describe("/research/architecture", () => {
 
     const figure = screen.getByRole("figure", { name: /system architecture/i });
     expect(within(figure).getByRole("img", { name: /system architecture/i })).toHaveAttribute("src", expect.stringContaining("system_architecture"));
-    expect(within(figure).getByText("As of 2026-11-21")).toBeInTheDocument();
+    expect(within(figure).getByText("As of 2026-11-22")).toBeInTheDocument();
     const download = within(figure).getByRole("link", { name: /system_architecture\.png/ });
     expect(download).toHaveAttribute("download", "system_architecture.png");
     expect(within(figure).getByRole("link", { name: /system_architecture\.drawio\.svg/ })).toHaveAttribute(
