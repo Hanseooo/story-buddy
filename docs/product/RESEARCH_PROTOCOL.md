@@ -14,9 +14,9 @@ and a Methods section, not into a Philippine Chapter-1 template.
 
 ---
 
-~~**Product-scope amendment, 2026-10-21 (ADR-071).** On-demand PDF download of a student's own teacher-approved book is restored. Future Tool A picture-book-production verification includes composition and a separate authenticated, complete PDF download check, as specified in `docs/specs/functional-verification-matrix.md`. Preserve all historical criteria/results. Narration stays cut, Objective 4 is unchanged, and revised questionnaire wording still needs adviser sign-off before administration (`docs/capstone/research_instruments.md`).~~
+~~**Product-scope amendment, 2026-10-21 (ADR-071).** On-demand PDF download of a student's own teacher-approved book is restored. Future picture-book-production verification (the matrix was dropped 2026-11-21, D-28) includes composition and a separate authenticated, complete PDF download check, as specified in `docs/specs/functional-verification-matrix.md`. Preserve all historical criteria/results. Narration stays cut, Objective 4 is unchanged, and revised questionnaire wording still needs adviser sign-off before administration (`docs/capstone/research_instruments.md`).~~
 
-**Classroom-download amendment, 2026-10-21 (ADR-071/072).** On-demand PDF download covers teacher-approved books by active students in the viewer's current classroom, including classmates' books. Future Tool A picture-book-production verification includes composition and a separate authenticated, complete PDF download check (`docs/specs/functional-verification-matrix.md`). Preserve historical criteria/results. Narration stays cut, Objective 4 is unchanged, and revised questionnaire wording still needs adviser sign-off before administration (`docs/capstone/research_instruments.md`).
+**Classroom-download amendment, 2026-10-21 (ADR-071/072).** On-demand PDF download covers teacher-approved books by active students in the viewer's current classroom, including classmates' books. Future picture-book-production verification (the matrix was dropped 2026-11-21, D-28) includes composition and a separate authenticated, complete PDF download check (`docs/specs/functional-verification-matrix.md`). Preserve historical criteria/results. Narration stays cut, Objective 4 is unchanged, and revised questionnaire wording still needs adviser sign-off before administration (`docs/capstone/research_instruments.md`).
 
 ## 1. The problem, in one paragraph
 
@@ -95,22 +95,22 @@ That is the SDG-4 hook, and it is a design property, not a hope.
 
 | Objective | Question | Method | Respondents |
 |---|---|---|---|
-| 3 — acceptability | Are the generated picture books acceptable for presentation quality and classroom use? | Written open-ended interview form (Tool B) + content analysis, five criteria (§5) | Expert validators: Dean/Professor of the Arts College, one Arts student/intern, one Education student/intern |
+| 3 — acceptability | Are the generated picture books acceptable for presentation quality and classroom use? | Written open-ended interview form (the expert questionnaire) + content analysis, five criteria (§5) | Expert validators: Dean/Professor of the Arts College, one Arts student/intern, one Education student/intern |
 | 4 — judge classification | How well does the fine-tuned judge classify character consistency against human reference labels? | Precision / recall / F1 (F1 primary) on the character-disjoint held-out set; optional comparison vs zero-shot base + existing prompted baseline (§6) | None — model evaluated against researcher-established reference labels |
-| 5 — software quality | Is StoryBuddy's software quality acceptable on ISO/IEC 25010? | 5-point Likert questionnaire (Tool C), five characteristics, weighted mean + SD (§6) | Designated software-quality evaluators (separate from the expert validators) |
+| 5 — software quality | Is StoryBuddy's software quality acceptable on ISO/IEC 25010? | 5-point Likert questionnaire, five characteristics, weighted mean + SD (§6) | Designated software-quality evaluators (separate from the expert validators) |
 
-**Objectives 1–2 sit outside this table, and are verified by Tool A.** They are the built artifact, not an
-evaluation leg with respondents. The **Functional Verification Matrix** records system-generated pass/fail per
+**Objectives 1–2 sit outside this table, and are evidenced by the built pipeline, its tests and the 42 books (D-20, D-28).** They are the built artifact, not an
+evaluation leg with respondents. The planned **Functional Verification Matrix** (dropped 2026-11-21, never built) would have recorded system-generated pass/fail per
 functional category as `Successful ÷ Total × 100`, over **fixture stories** — so it carries no ethics load and
 is defensible in October ahead of the corpus. ⚠️ **A Pass means the stage executed and emitted valid output,
 never that the judge approved it** — for scene generation a Pass includes a page the judge flagged and
-best-of-fell-back on. Scoring Tool A by judge approval would make it a second judge-scored instrument and
+best-of-fell-back on. Scoring that matrix by judge approval would make it a second judge-scored instrument and
 break non-circularity (ADR-004). Spec: `docs/specs/functional-verification-matrix.md`.
 
 **Instrument delivery.** Objective 4's labels are collected in the `(research)/annotate/` surface, with
 `adjudicate/` for the third researcher; Objective 3's stimuli are served blinded (provenance stripped, order
 shuffled per validator) from `(research)/books/`, though its **responses stay on paper** — the instrument is
-open-ended prose, not a form. Objective 5's questionnaire is administered by form. Tool A is an offline
+open-ended prose, not a form. Objective 5's questionnaire is administered by form. The dropped matrix was to be an offline
 script. There is no researcher dashboard. See **ADR-026** and `docs/specs/annotation-surface.md`.
 
 **Scene coverage and under-length handling are described pipeline behaviours, not measured objectives.**
@@ -133,7 +133,7 @@ lives in ADR-004 and is repeated here so it is never improvised.
   **Dean/Professor of the Arts College**, one **Arts student/intern**, and one **Education student/intern**.
   Arts-sector validators judge visual/artistic presentation; the Education-sector validator judges
   educational suitability.
-- **Instrument.** A **written, open-ended interview form** (**Tool B**) — not a scored ordinal
+- **Instrument.** A **written, open-ended interview form** (**the expert questionnaire**) — not a scored ordinal
   rubric.
 - **Analysis.** **Content analysis.** Pre-set categories from the five criteria below; each written
   response is coded **positive feedback / negative feedback / suggestion for improvement** and tallied per
@@ -195,7 +195,7 @@ Three respondent groups, three roles — none of them overlap:
 |---|---|---|
 | Grade 5–6 learners | Write **original stories only** — no validation/evaluation role | Corpus (§8) |
 | Expert validators (Dean/Professor of Arts College, Arts student, Education student) | Written open-ended interview + content analysis | Objective 3 |
-| Designated software-quality evaluators (IT practitioners, teachers) | ISO/IEC 25010 questionnaire (Tool C) | Objective 5 |
+| Designated software-quality evaluators (IT practitioners, teachers) | ISO/IEC 25010 questionnaire | Objective 5 |
 
 Learners are anonymized and assigned unique IDs at intake (§9); they never see, rate, or comment on any
 generated book, their own or anyone else's — the classroom gallery is display-only (ADR-021) and carries
@@ -210,12 +210,12 @@ Test stories must be **real or realistic child writing**, not builder-authored c
 best-case only). Grade 5–6, English with Taglish code-switching tolerated.
 
 **Target: 15 stories collected, split into 10 primary corpus + 5 backup.** Collected from qualified
-**Grade 5 & 6 learners** at **Matina Aplaya Elementary School**. Learners submit **original stories only**
+**Grade 5 & 6 learners** at ~~**Matina Aplaya Elementary School**~~ **Vicente Hizon, Sr. Elementary School** (corrected 2026-11-21, D-04 of `docs/specs/research-page-refresh.md`). Learners submit **original stories only**
 — no validation/evaluation role; anonymized and assigned unique IDs at intake. **Do not use the old
 "~50 (60–70) donated stories" numbers anywhere** — that target belonged to the dropped comparative judge
 study design and no longer applies.
 
-**Locale.** Stories are collected at **Matina Aplaya Elementary School**; system development and
+**Locale.** Stories are collected at ~~**Matina Aplaya Elementary School**~~ **Vicente Hizon, Sr. Elementary School** (corrected 2026-11-21, D-04); system development and
 evaluation take place at **Holy Cross of Davao College (HCDC)**, Davao City, Philippines.
 
 **This is a recruitment decision and it is unfixable later.** By Phase 2.5 the corpus is closed. Ask for
@@ -319,7 +319,7 @@ heavier, not lighter.
 
 ## 10. Recruitment
 
-**Learners (corpus, §8).** Stories are collected at **Matina Aplaya Elementary School**, from qualified
+**Learners (corpus, §8).** Stories are collected at ~~**Matina Aplaya Elementary School**~~ **Vicente Hizon, Sr. Elementary School** (corrected 2026-11-21, D-04), from qualified
 Grade 5–6 learners. Their only role is writing their own story — no validation or evaluation role in
 Objectives 3–5.
 
@@ -360,9 +360,9 @@ moderation thresholds, and failure copy are all calibrated to a band.
 
 | Metric | What it measures | Source |
 |---|---|---|
-| Expert validation (Objective 3) | Positive / negative / suggestion tallies per criterion (narrative coherence, story faithfulness, visual presentation, visual style consistency, classroom suitability) | Content analysis of Tool B responses |
+| Expert validation (Objective 3) | Positive / negative / suggestion tallies per criterion (narrative coherence, story faithfulness, visual presentation, visual style consistency, classroom suitability) | Content analysis of the expert questionnaire responses |
 | Judge classification (Objective 4) | Precision, recall, F1 (F1 primary) vs human reference labels, character-identity-level split | Held-out test set; optional comparison vs zero-shot base + prompted baseline |
-| Software quality (Objective 5) | Weighted mean + SD per ISO/IEC 25010 characteristic (Functional Suitability, Performance Efficiency, Usability, Reliability, Security), interpreted against Table 4 bands | Tool C, designated software-quality evaluators |
+| Software quality (Objective 5) | Weighted mean + SD per ISO/IEC 25010 characteristic (Functional Suitability, Performance Efficiency, Usability, Reliability, Security), interpreted against Table 4 bands | The ISO/IEC 25010 questionnaire, designated software-quality evaluators |
 | Generation Time | Submission → completed storybook | Instrumentation (Langfuse) |
 | AI Resource Usage | Avg generation time, image count, regen count | Instrumentation (Langfuse; `Cost.image_count` / `Cost.regen_count`) |
 | AI Resource Usage — cost | API cost/story | ⚠️ **not instrumented** (see below) |

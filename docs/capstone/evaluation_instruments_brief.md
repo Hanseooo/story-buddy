@@ -5,6 +5,15 @@
 > instrument prose lives in `research_instruments.md`, and where the two disagree, `research_instruments.md`
 > (and `methodology.md` above it) win. Decisions marked ⚠️ still need **adviser sign-off** before we run them.
 >
+> **Superseded in part, 2026-11-21.** The instruments are now (D-05, D-06, D-21, D-27, D-28):
+> **Objective 3**, the expert questionnaire: seven open-ended questions, three evaluators (2 BEEd professors,
+> 1 Arts professor), text in [`expert-evaluation-questionnaire.md`](expert-evaluation-questionnaire.md).
+> **Objective 5**, the ISO/IEC 25010 questionnaire: 23 Likert items on six characteristics, at least 30
+> respondents, descriptive statistics only, text in [`iso-25010-questionnaire.md`](iso-25010-questionnaire.md).
+> The per-stage verification matrix is dropped. The five-criteria interview, the five-characteristic
+> "Poor to Excellent" scale, the CVI step and the Cronbach's α pilot below are superseded and stay as history.
+> The old letter labels for the tools are retired.
+>
 > **Date of decisions:** 2026-07-21.
 > **Realigned to manuscript:** 2026-07-25 (ADR-008 revised same date).
 
@@ -15,16 +24,14 @@
 - The study has **five objectives**, built around the **pipeline as the core**: **Implement the pipeline →
   Produce picture books through it → Determine acceptability via expert validation → Evaluate judge
   classification performance → Evaluate software quality.**
-- We use **four tools**, one per objective (Tool A supports Objectives 1–2 jointly):
-  - **Tool A — Functional Verification Matrix:** did each pipeline stage run and produce valid output?
-    (Evidence for Objectives 1–2.)
-  - **Tool B — Expert Validation Interview:** are the generated books acceptable in presentation quality and
+- We use **three instruments**, one per evaluation objective (Objectives 1–2 are evidenced by the built pipeline, its tests and the 42 books):
+  - **The expert questionnaire:** are the generated books acceptable in presentation quality and
     classroom suitability, judged by expert validators through a written, open-ended interview? (Objective 3.)
   - **Judge classification:** does the fine-tuned consistency judge classify character consistency to a
     standard comparable with human-established labels — precision, recall, F1 (F1 primary)? (Objective 4.)
-  - **Tool C — ISO/IEC 25010 questionnaire:** is the *software* functional, usable, reliable, efficient,
+  - **The ISO/IEC 25010 questionnaire:** is the *software* functional, usable, reliable, efficient,
     secure? (Objective 5.)
-- **Key decision on Tool B:** there is **no ready-made, validated instrument** for rating AI-generated
+- **Key decision on the expert questionnaire:** there is **no ready-made, validated instrument** for rating AI-generated
   children's picture books on a numeric scale, and with only a three-person validator panel a numeric rubric's
   statistics (CVI, Krippendorff's α) aren't meaningful anyway. The defensible path is a **written, open-ended
   interview form analysed by content analysis** — pre-set categories from five criteria, each response coded
@@ -59,53 +66,30 @@ see §6.)*
 
 ---
 
-## 2. The tools at a glance
+## 2. The instruments at a glance
 
 | Tool | What it measures | Answers | Instrument type |
 |---|---|---|---|
-| **A — Functional Verification Matrix** | Did each pipeline stage complete and emit valid output? | Objectives 1–2 (pipeline works) | System-generated pass/fail records |
-| **B — Expert Validation Interview** | Are the generated books acceptable — narrative coherence, story faithfulness, visual presentation, visual style consistency, suitability for classroom use? | Objective 3 (acceptability) | Written, open-ended interview form, analysed by content analysis |
+| **Expert questionnaire** | Are the generated books acceptable — narrative coherence, story faithfulness, visual presentation, visual style consistency, suitability for classroom use? | Objective 3 (acceptability) | Written, open-ended interview form, analysed by content analysis |
 | **Judge classification** | Does the fine-tuned judge classify character consistency to a standard comparable with human-established labels? | Objective 4 (classification performance) | Precision / recall / F1 (F1 primary) against human reference labels |
-| **C — ISO/IEC 25010 questionnaire** | Is the *software* good (functional, usable, reliable, efficient, secure)? | Objective 5 (software quality) | 5-point Likert questionnaire |
+| **ISO/IEC 25010 questionnaire** | Is the *software* good (functional, usable, reliable, efficient, secure)? | Objective 5 (software quality) | 5-point Likert questionnaire |
 
-**Why the split matters:** perceived software quality (Tool C) is **not** evidence that the outputs are
-acceptable (Tool B), and neither is evidence about the judge's classification performance (Objective 4).
+**Why the split matters:** perceived software quality (the ISO/IEC 25010 questionnaire) is **not** evidence that the outputs are
+acceptable (the expert questionnaire), and neither is evidence about the judge's classification performance (Objective 4).
 Keeping the legs separate is what stops a high questionnaire score from being mistaken for "the pipeline
 works."
 
 ---
 
-## 3. Tool A — AI Pipeline Functional Verification Matrix (Objectives 1–2)
+## 3. The per-stage verification matrix — dropped
 
-**What it is:** for each corpus/fixture story, we record whether every pipeline stage completed successfully,
-and report a success rate per functional category. It runs on **fixture stories**, so it needs **no ethics
-clearance** and is valid October-defense material.
-
-| Functional category | Modules | Pass = | Unit |
-|---|---|---|---|
-| Input validation & moderation | Input gate (safety + PII redaction) | Story cleared/blocked correctly, schema-valid Story Memory seed emitted | per story |
-| Story analysis | Story Analyzer | Entities/coreference extracted into schema-valid Story Memory | per story |
-| Scene structuring | Scene Segmentation, Story Memory | Story converted to sequential scenes, Story Memory still schema-valid | per story |
-| Visual planning | Character Bible, Style Preset, Prompt Optimizer | Character refs + style + structured prompt produced, all schema-valid | per scene |
-| Scene generation & refinement | Image Generator, Consistency Judge, Regeneration | **Consistency loop ran to a terminal state and a shippable page was produced** (incl. best-of fallback) | per scene |
-| Picture book production | Compose | Scenes assembled as a complete book | per book |
-
-**Two things we must get right in the write-up:**
-
-1. **The formula:** `Success Rate = Successful ÷ Total × 100`. *(An earlier draft had this inverted — it
-   would produce ≥100%.)*
-2. **"Pass" ≠ "good."** A Pass means the stage **executed and emitted valid output**, not that the output
-   was high quality. For scene generation specifically, a Pass = *the loop shipped a page* (including a page
-   the judge flagged and best-of-fell-back on) — **not** "the judge approved it." Defining Pass as
-   judge-approved would use the judge to score outputs, which breaks the non-circularity rule (ADR-004).
-   **Functional completion ≠ output quality** — Tool B measures quality, Tool A measures completion.
-
-**State the unit** (per-story vs. per-scene) in the table — the sample data mixes 50-per-story and
-500-per-scene denominators, and those rates are only comparable if the unit is labelled.
+The per-stage functional verification matrix (success rate per functional category over fixture stories) was
+never built and is dropped (D-28, 2026-11-21). Objectives 1–2 are evidenced by the built pipeline, its tests and
+the 42 books (D-20). The old design is kept as history in `docs/specs/functional-verification-matrix.md`.
 
 ---
 
-## 4. Tool B — Expert Validation Interview (Objective 3) — the researched decision
+## 4. The expert questionnaire (Objective 3)
 
 ### 4.1 Why not a numeric rubric
 
@@ -147,7 +131,7 @@ grounds the judge's structured failure-reason output.
 
 ---
 
-## 5. Tool C — ISO/IEC 25010 questionnaire (Objective 5)
+## 5. The ISO/IEC 25010 questionnaire (Objective 5)
 
 **Keep as-is** — it is the one genuinely validated *standard* in the set. Five characteristics: **Functional
 Suitability, Performance Efficiency, Usability, Reliability, Security.** Items use a **5-point Likert scale
@@ -212,10 +196,10 @@ was deleted 2026-07-27; the drift check no longer applies to it.)*
 
 | Method | Used for | Target |
 |---|---|---|
-| **Content Validity Index (CVI)** — Lawshe (1975); Polit & Beck (2006) | ISO/IEC 25010 questionnaire (Tool C), before administration | I-CVI > 0.78; S-CVI/Ave ≥ 0.90 |
-| **Cronbach's α** | Internal consistency of the ISO/IEC 25010 questionnaire (Tool C) | ≥ 0.70 |
+| **Content Validity Index (CVI)** — Lawshe (1975); Polit & Beck (2006) | ISO/IEC 25010 questionnaire (the ISO/IEC 25010 questionnaire), before administration | I-CVI > 0.78; S-CVI/Ave ≥ 0.90 |
+| **Cronbach's α** | Internal consistency of the ISO/IEC 25010 questionnaire (the ISO/IEC 25010 questionnaire) | ≥ 0.70 |
 | **Inter-annotator agreement** (statistic per `docs/specs/judge-finetune.md`) | Human reference labels for judge classification (Objective 4) | per `judge-finetune.md` |
-| **Content analysis coding** | Expert validation interview responses (Tool B) — positive / negative / suggestion, tallied per criterion | Qualitative; not a reliability statistic |
+| **Content analysis coding** | Expert validation interview responses (the expert questionnaire) — positive / negative / suggestion, tallied per criterion | Qualitative; not a reliability statistic |
 
 **Dropped from this study:** Krippendorff's α and ICC(2,k) for a numeric expert rubric, and Cohen's κ for
 naive-reader recall scoring — all tied to instruments that no longer exist (the feature-level rubric and the
@@ -240,18 +224,18 @@ comprehension study).
 
 - **DreamBench++** — Peng, Y. et al. (2024/2025), *DreamBench++: A Human-Aligned Benchmark for Personalized
   Image Generation.* arXiv:2406.16855; ICLR 2025. *(Now relevant to Objective 4's closed failure taxonomy —
-  `wrong_colour`, `wrong_species`, etc. — not to Tool B, which dropped the numeric rubric this taxonomy
+  `wrong_colour`, `wrong_species`, etc. — not to the expert questionnaire, which dropped the numeric rubric this taxonomy
   originally anchored.)*
 - **TIFA** — Hu, Y. et al. (2023), *TIFA: Accurate and Interpretable Text-to-Image Faithfulness Evaluation
   with Question Answering.* ICCV 2023; arXiv:2303.11897. *(No longer directly used by any surviving
   instrument in this brief — verify before citing.)*
 - **Lawshe, C. H. (1975)** — *A quantitative approach to content validity.* Personnel Psychology, 28(4),
-  563–575. *(Still used — grounds the ISO/IEC 25010 questionnaire's CVI step, Tool C.)*
+  563–575. *(Still used — grounds the ISO/IEC 25010 questionnaire's CVI step, the ISO/IEC 25010 questionnaire.)*
 - **Polit, D. F., & Beck, C. T. (2006)** — the Content Validity Index (CVI), Research in Nursing & Health.
-  *(Still used — Tool C.)*
+  *(Still used — the ISO/IEC 25010 questionnaire.)*
 - **Caldecott Medal criteria** — Association for Library Service to Children (ALSC/ALA). *(Recognized
-  criteria, not a validated instrument; its relevance to Tool B's five interview criteria — narrative
-  coherence, visual presentation, suitability — is plausible but unconfirmed now that Tool B is qualitative;
+  criteria, not a validated instrument; its relevance to the expert questionnaire's questions — narrative
+  coherence, visual presentation, suitability — is plausible but unconfirmed now that the expert questionnaire is qualitative;
   verify before citing.)*
 
 **Do NOT cite (unverified / could not be traced):**

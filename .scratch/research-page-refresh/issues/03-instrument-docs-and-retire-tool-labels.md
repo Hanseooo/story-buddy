@@ -2,7 +2,7 @@
 
 **Status:** ready-for-agent
 **Type:** task
-**Progress:** open
+**Progress:** resolved
 **Parent:** [`docs/specs/research-page-refresh.md`](../../../docs/specs/research-page-refresh.md)
 **What to build:** Both questionnaires exist as tracked docs, and no live doc uses Tool A/B/C.
 **Source criteria:** US-24 AC-10, AC-13; US-28 AC-14–AC-18; D-05, D-06, D-21, D-27, D-28; O-12
@@ -42,3 +42,11 @@ Grep output for AC-18 and `git diff --stat` on `docs/product/adr/` (must be empt
 
 ## Blocked by
 None
+
+## Answer
+
+- New: `docs/capstone/expert-evaluation-questionnaire.md` (7 questions, D-21) and `docs/capstone/iso-25010-questionnaire.md` (23 items, six headings, D-27, O-12 recorded). No researcher names or contacts.
+- `research_instruments.md`, `evaluation_instruments_brief.md` and `iso-25010-scope-freeze.md` carry a dated "superseded in part" banner; the brief section 3 now says the matrix is dropped. The old CVI/alpha plan stays as history.
+- Tool B/C renamed and Tool A removed or reworded in about 17 live docs; `functional-verification-matrix.md` marked "Dropped 2026-11-21 (D-28)".
+- `ADRs.md` has one dated note; `research-changelog.md` has one Correction row; frozen ADRs untouched (`git diff --stat docs/product/adr/` is empty).
+- AC-18 grep (`Tool [ABC]` over docs, frontend/app, AGENTS.md, CHANGELOG.md, README.md, backend): remaining hits are the ADRs, the dropped matrix spec, the research-page-refresh spec and evidence, the older changelog row, and the two new notes that name the labels in order to retire them.

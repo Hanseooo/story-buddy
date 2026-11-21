@@ -77,7 +77,7 @@ blind-rating workload** — this concern is now moot along with the arms themsel
 ## R2 — Corpus yield: 15 collected must clear a 10-story primary bar
 
 **Status: OPEN.** The manuscript targets **15 stories collected** from qualified Grade 5–6 learners at
-Matina Aplaya Elementary School, split into a **10-story primary corpus + 5 backup**. Both evaluation legs
+Vicente Hizon, Sr. Elementary School (D-04), split into a **10-story primary corpus + 5 backup**. Both evaluation legs
 draw from the primary 10: Objective 3's expert validators read the books generated from them; Objective 4's
 two researchers annotate character-image pairs generated from them for judge fine-tuning. There is no stated
 sizing rule yet for what happens if fewer than 10 of the 15 collected stories survive moderation, consent

@@ -1,6 +1,6 @@
 # StoryBuddy: Start Here (Group Guide)
 
-**Last updated:** 2026-10-11 · **For:** group members who need the research context without reading
+**Last updated:** 2026-11-21 · **For:** group members who need the research context without reading
 the code. Every statement below stands on its own. The repository paths in brackets are where the
 evidence lives, for anyone who wants to check it.
 
@@ -45,16 +45,21 @@ Each step runs automatically, in this order:
 | Step | What it does |
 |---|---|
 | Input gate | Checks the story is safe and usable |
+| Optional themes (teacher-review mode) | Groups the optional themes once on the submitted text, before any paid drawing |
 | Analyze | A text model reads the story and lists the characters, objects and places |
 | Segment | Splits the story into scenes (pages) and writes a short drawing direction for each |
 | Character bible | Draws one reference picture per main character, at most two characters |
 | Reference moderation | Checks those pictures are safe |
-| Reveal | Shows the references before the pages are drawn |
+| Reveal | Shows the references before the pages are drawn. The child can tap "try again" up to three times, write a short change with the magic pencil, or pick an earlier version of a picture |
 | Generate scene | Draws each page, using the reference pictures so characters look the same |
 | Consistency check | An AI judge compares each page with the references |
 | Regenerate | If the judge finds a mismatch, the page is redrawn with the reasons fed back, up to twice. The best of the (at most three) attempts is kept |
 | Output moderation | Checks the pages are safe |
-| Compose | Assembles the book |
+| Moderation review (teacher-review mode) | At the first flag the job waits for the teacher, who can allow exact content under a written policy, ask for one replacement picture, or stop it |
+| Moderation replace (teacher-review mode) | Draws the one replacement picture the teacher asked for |
+| Compose | Assembles the book. Once the teacher approves it, a classmate or the author can download it as a PDF, made on demand |
+
+Teacher-review mode (ADR-080) adds the three steps marked above, so the graph has 14 steps instead of the 11 of baseline mode. It has been on by default since 2026-11-21, along with the magic pencil (ADR-082) and teacher notes the child can read (ADR-081). The 42 study books were made in baseline mode. [`backend/pipeline/graph.py`, `backend/app/config.py:90,92`, ADR-071, ADR-072, ADR-080, ADR-081, ADR-082]
 
 **The models used today:**
 
@@ -68,14 +73,15 @@ All of them are open-weight models.
 
 [`backend/app/config.py`, `backend/pipeline/graph.py`, `docs/product/adr/ADR-001-*`]
 
-## 4. Where each objective stands (2026-10-08)
+## 4. Where each objective stands (2026-10-08; Objective 1 updated 2026-11-21)
 
 | Objective | Status |
 |---|---|
-| 1–2 | Built. The research corpus holds 42 generated books: 30 from synthetic stories and 12 from donated stories. |
-| 3 | Planned (Tool B, a written open-ended interview form). The repository records no completed session yet. |
+| 1 | **Achieved** (owner, 2026-11-21, D-20). The pipeline is built as a LangGraph graph, its automated tests pass, and it produced the 42 books end to end. The per-stage success-rate script once planned for Objectives 1–2 was never built and is dropped (D-28). |
+| 2 | Built. The research corpus holds 42 generated books: 30 from synthetic stories and 12 from donated stories. |
+| 3 | Planned (the expert questionnaire: seven open-ended questions, three evaluators). The repository records no completed session yet. |
 | 4 | Training done on three seeds. A **partial** held-out result exists (below). Paid evaluation stopped on 2026-10-07 for budget, and the Gemma baseline failed authentication, so the full registered report is incomplete. Since then the main work has been the page-drawing pipeline. |
-| 5 | Planned (Tool C, the ISO/IEC 25010 questionnaire). The repository records no completed session yet. |
+| 5 | Planned (the ISO/IEC 25010 questionnaire: 23 Likert items, at least 30 respondents). The repository records no completed session yet. |
 
 [`docs/product/ROADMAP.md` Phase 3 and C3-02, `docs/capstone/research_runbook.md` "Held-out resume context"]
 

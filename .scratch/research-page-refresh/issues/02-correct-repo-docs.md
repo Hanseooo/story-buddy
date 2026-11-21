@@ -2,7 +2,7 @@
 
 **Status:** ready-for-agent
 **Type:** task
-**Progress:** open
+**Progress:** resolved
 **Parent:** [`docs/specs/research-page-refresh.md`](../../../docs/specs/research-page-refresh.md)
 **What to build:** The source docs that the pages will pin to state the current facts.
 **Source criteria:** US-24 AC-01 (all rows except the runbook and changelog rows), AC-02, AC-12; D-04, D-07, D-08, D-09, D-15, D-16, D-20
@@ -39,3 +39,22 @@ The AC-02 grep output goes in the ticket answer. Run the existing page tests in 
 
 ## Blocked by
 None
+
+## Answer
+
+Resolved 2026-11-21. Applied the US-24 rows that are not questionnaire, runbook or changelog rows.
+
+- School (D-04): `methodology.md`, `ethics_and_safety.md`, `RESEARCH_PROTOCOL.md` (old name struck through, as pre-registered docs require), `PRD_v2.md`, plus `ROADMAP.md`, `design_decisions_and_risks.md` and `research_direction_and_goals.md`, which the grep also hit. ADR-008 is not edited. `ADRs.md` has a "Dated notes" entry instead.
+- `methodology.md`: 3 to 10 scenes (`config.py:186,204`), up to two redraws (`config.py:101`), 12 donated books generated (`obj4-readiness-audit.md` §7), teacher-review mode, implementation-site options A and B (D-16).
+- `system_architecture.md`: one retry count, Mistral primary and Gemma backstop (`config.py:68,73`), the three teacher-review nodes (`graph.py`), Northflank region.
+- `ethics_and_safety.md`: new section 5 with ADR-071/072/080/081/082, the D-08 basis and the D-09 disclosure.
+- `TECH_STACK.md`: region North America (D-07), the "unconfirmed" Supabase/Northflank bullet replaced, training-hardware bullet updated.
+- `hardware_and_hosting.md`: restored from `2cb6d2f^` (241 lines), stale rows corrected, new section 7 with the A6000 training record (`hardware.json` and `run_plan.json`, read-only) and hosting.
+- `group-guide.md` sections 3 and 4: teacher hold, magic pencil, notes, PDF; "Last updated" 2026-11-21; Objective 1 Achieved (D-20), with the dropped per-stage script described without the old label (D-28).
+- Also fixed the same facts elsewhere: scene counts in `PRD_v2.md`, `ROADMAP.md`, `research_direction_and_goals.md`; Singapore in `MASTER_SPEC.md` and `PRD_v2.md`; NSFW ViT in `ROADMAP.md` and `PRD_v2.md`.
+
+AC-02 grep (`Matina Aplaya|Railway|10[–-]15 scenes|NSFW ViT` over `docs`, `AGENTS.md`, excluding the spec, `docs/product/adr/` and `docs/diagrams`): remaining hits are history only (the struck-through names, the ADR-008 note, ADR-009/031 index rows, "was Railway" and "July plan" markers).
+
+Not changed: `docs/diagrams/drawio/system_architecture.drawio` and `docs/diagrams/excalidraw/system_architecture.excalidraw` still say Railway. Diagrams belong to tickets 09 and 10.
+
+Page tests: `pnpm exec vitest run "app/(research)"` gave 33 files passed, 2 failed (AnnotationClient and AdjudicateClient demo tests, 5000 ms timeouts under load; they render demo samples and read no edited doc). All reference-page and docs-hub data tests passed.

@@ -152,6 +152,59 @@ evidence and delete the instance when finished. The registered freeze is the inp
 the registered run; use the exploratory freeze only for an explicitly named exploratory
 run with a separate run directory.
 
+## Counts recounted for the research page refresh (2026-11-21)
+
+Each count below was rerun on 2026-11-21 from `data/judge/freezes/obj4-v1/` (read-only; `manifest.jsonl`,
+`annotation_agreement.jsonl`, `freeze_report.json`, `character_slices.json`) with a short Python script run with
+`python -I`. No scoring script was run and nothing under `data/judge/` was written. The research pages cite these
+entries (ADR-066). `annotation_agreement.jsonl` holds each rater's first `same_character` answer as a pair of
+booleans, `true` = Same.
+
+- **Pairs.** 899 pairs: train 484, validation 86, test 329. 795 natural pairs (`pair_type` `pipeline`, from the app,
+  labelled by people) and 104 constructed pairs (`pair_type` `constructed`, made by a script, not labelled by
+  anyone). All 795 natural pairs have two rater answers.
+- **Later attempts.** 422 of the 795 natural pairs use a second or later drawing attempt of the page. Counted from
+  the attempt number in the scene image filename (`_s<scene>-<attempt>.png`, `manifest.scene_images`): attempt 1 =
+  373 pairs, attempt 2 or later = 422, none unparsed. The pairs use 544 distinct scene images and 79 distinct
+  reference images. Every attempt, including ones the pipeline rejected, counts as a page drawing (ADR-060), and
+  a page with two characters makes two pairs. The attempt suffix reading comes from the `manifest.scene_images`
+  docstring, not a separate record.
+- **Raters who differed.** The two raters gave different `same_character` answers on 85 of the 795 natural pairs
+  (counted from `annotation_agreement.jsonl`).
+- **Pairs sent to the study owner.** 172 pairs were conflicted, meaning the raters differed on any field:
+  `same_character`, `anatomy_intact`, `text_free` or the set of reasons (`isConsensus` in
+  `frontend/app/(research)/_shared/validation.ts`). 85 of the 172 differed on Same/Different. The 172 is not
+  recountable from the freeze, which keeps only `same_character`. It is taken from the read-only status check in
+  `PREREGISTRATION_OBJ4.md` §12 (2026-09-23: 623 `complete`, 172 `conflicted`, 78.4% agreement). The owner also
+  wrote 10 audit rows, so 182 adjudication rows: `freeze_report.json` `adjudication_rate` 0.2289308 x 795 =
+  182.0. 182 = 172 + 10 is an inference from the counts (see "Registered agreement and sensitivity analyses").
+- **Owner visibility.** The owner could see which rater gave which label when adjudicating. Source:
+  `PREREGISTRATION_OBJ4.md` §12 (2026-09-23): "The adjudicator is not blind to which rater produced which label".
+- **AI-assisted labels.** 10 pairs (9 train, 1 validation) were relabelled by the owner after an AI-assisted,
+  image-only review (`adjudication-notes-2026-09.md`, "Label audit of agreed pairs"). They are the ten ids in
+  `AUDIT_PAIRS` (`backend/finetune/annotation_truth.py`). All ten final labels are Same. None is in the test set.
+- **Changed labels.** 23 final labels are Same although both raters first answered Different. Counted as
+  `annotation_agreement.jsonl` labels `[false, false]` with manifest `same_character` true: train 19, validation 3,
+  test 1. 10 of the 23 are the AI-assisted pairs above (9 train, 1 validation). The other 13 (train 10,
+  validation 2, test 1) went through ordinary adjudication: the raters agreed on Same/Different but differed on
+  another field. So "the AI-assisted review changed no test label" is true, and ordinary adjudication changed
+  one test label.
+- **Clothing or style alone ticked as Different.** 9 final labels are Different with only `wrong_clothing` (6) or
+  `wrong_style` (3) ticked: train 6, validation 1, test 2. All 9 are natural pairs and none is in `AUDIT_PAIRS`.
+  Rater first answers: both Different 5, split 4 (stored as `[true, false]` 3 and `[false, true]` 1). The rulebook (`labelling-rulebook.md` Step 3) says clothing or
+  style alone is Same, so these 9 are known label errors. They are kept because the freeze is registered and a
+  change after the freeze would break the registration (D-12).
+- **Human and non-human characters, by species.** The old table matched character names to the intake roster
+  (`character_slices.json`): train 19 human and 25 non-human characters, 220 and 264 pairs. Counting by the
+  Character Bible `species` field in `data/judge/corpus/runs/syn-*/memory.json` gives train 12 human and 32
+  non-human characters, 178 human and 306 non-human pairs. Seven training characters the roster called human
+  are not human: syn-009:c1 cat, syn-010:c1 deer, syn-013:c1 heron, syn-014:c1 goat, syn-015:c1 shrimp,
+  syn-016:c1 machine, syn-020:c1 tortoise. Validation is the same either way: 9 human and 2 non-human
+  characters, 75 and 11 pairs. This assumes the corpus run memories are the frozen ones (the asset filenames
+  carry the same story ids). Script: `docs/specs/research-page-refresh/evidence/kinds.py`.
+- **Different pairs per split.** Train 157 of 484 (104 constructed, 53 natural of 380 natural). Validation 4 of 86.
+  Test 47 of 329. Validation has no constructed pairs.
+
 ## Held-out resume context (2026-10-07)
 
 This section records the latest owner conversation and local artifact checks. Earlier qualification
@@ -284,6 +337,43 @@ three runs the runner varies only `seed`, `output_dir`, `run_name` and `report_t
   the first epoch ends at update 61. `checkpoint-140` is in the third epoch, which starts after
   update 122.
 - A judge's answer at evaluation is capped at 256 tokens ("Held-out resume context" above).
+
+### Results figures recounted for the research page refresh (2026-11-21)
+
+Test accuracy and its baseline are arithmetic on the counts in "Exact values of the partial comparison" and
+on `manifest.test.jsonl` (329 pairs: 282 Same, 47 Different). The checkpoint figures are read from
+`data/judge/evaluations/obj4-v1/validation_checkpoint_scores.csv` (57 rows, read-only). The preregistration
+bans accuracy as a headline (`PREREGISTRATION_OBJ4.md`, "Never accuracy"); F1 stays the primary metric.
+
+| Judge | Accuracy | Correct Same (specificity) | False-alarm rate | Miss rate |
+|---|---|---|---|---|
+| Always answering Same | 282 / 329 = 85.7% | 282 / 282 = 100% | 0% | 100% |
+| Untuned Qwen3.5-9B | 264 / 329 = 80.2% | 235 / 282 = 83.3% | 16.7% | 38.3% |
+| Seed 1 | 289 / 329 = 87.8% | 280 / 282 = 99.3% | 0.7% | 80.9% |
+| Seed 0 | 290 / 329 = 88.1% | 279 / 282 = 98.9% | 1.1% | 76.6% |
+| Seed 2 | 262 / 329 = 79.6% | 238 / 282 = 84.4% | 15.6% | 48.9% |
+
+Accuracy = (caught + correct Same) / 329. False-alarm rate = false alarms / 282. Miss rate = missed / 47. Seed 1's
+accuracy is 2.1 points above always answering Same, and it gets there by answering Same more often, not by
+finding more Different pairs.
+
+**Checkpoint tie.** The rule fixed in advance picks the checkpoint with the best validation Different-class F1
+and, on a tie, the earlier step. Seeds 0 and 1 had a tie, and the earlier step won both times:
+
+| Seed | Best validation F1 | Selected | Tied alternative | Unreadable answers out of 86 (selected, alternative) |
+|---|---|---|---|---|
+| 0 | 0.333 | checkpoint 40 (1 caught, 1 false alarm, 3 missed) | checkpoint 80 (2, 6, 2) | 13, 0 |
+| 1 | 0.444 | checkpoint 40 (2, 3, 2) | checkpoint 110 (2, 3, 2) | 8, 0 |
+| 2 | 0.364 | checkpoint 140 (2, 5, 2), no tie | none | 2 |
+
+The unreadable counts follow on the test set: seeds 1 and 0 (checkpoint 40) gave 40 and 44 unreadable answers of
+329, seed 2 gave 8. The selected checkpoint is a lead for the unreadable answers, not a tested cause: no run
+compared the alternatives on the test set. Later in training, seed 0 from checkpoint 120 and seed 1 from checkpoint 130
+caught none of the 4 validation Different pairs (0 caught, 2 false alarms, 4 missed at every step through
+checkpoint 183), so training longer would not have fixed those two seeds on this evidence. Seed 2 kept catching 2 of 4
+at every step from 120, with 5 to 26 false alarms. This replaces the earlier reading that three seeds are too few
+to call a pattern (research-changelog, 2026-10-11 Finding). The validation set has only 4 Different pairs, so every
+validation figure rests on 4 pairs.
 
 ### Verification sources for the accepted comparison
 

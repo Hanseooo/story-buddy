@@ -39,7 +39,7 @@ self-hosted vLLM (the fine-tuned judge, post-Phase 2.5) rejects the field.
 | Service | For | Phase | Alternative considered |
 |---|---|---|---|
 | **Vercel** | Frontend hosting (Next.js SSR + static) | Phase 0 | Render, Fly.io (fine); DO App Platform (not preferred) — ADR-009 |
-| **Northflank** (Singapore region) | Backend: FastAPI web + RQ worker + Redis, 3 services | Phase 0 | Render, Fly.io, DO droplet — ADR-031 |
+| **Northflank** (North America region, free tier; D-07) | Backend: FastAPI web + RQ worker + Redis, 3 services | Phase 0 | Render, Fly.io, DO droplet — ADR-031 |
 | **Supabase — Postgres** | App data + LangGraph checkpoints (`langgraph-checkpoint-postgres`). ⚠️ **Reached on the direct connection, port 5432 — not the transaction pooler on 6543** (ADR-033) | Phase 0 | Roll-your-own Postgres — more ops, no gain — ADR-006 |
 | **Supabase — Auth** | Classroom-scoped accounts: teacher/BEED-student issuer, child/student rows | Phase 0 (built), Phase 2 (real RLS) | Firebase — less Postgres/RLS-native — ADR-006. **Clerk** — rejected ADR-027: its self-serve/email product is what ADR-017 forbids, and it splits the JWT issuer from the Postgres enforcing RLS |
 | **Supabase — Storage** | Generated images via signed URLs; no public buckets. No audio and no stored PDFs. ADR-071 restores on-demand export under ADR-027, with no PDF object in Storage | Phase 0 | **Cloudflare R2 / S3** — rejected ADR-027: compression removes the need, and neither can mint signed URLs client-side, so both force asset authz out of RLS into app code |
@@ -257,20 +257,20 @@ Be honest — these are open, not silently resolved:
   uploads fal's bytes unmodified (now to `{story_id}/{scene_id}.png` — the `scene-1.png` collision was fixed
   by the `image-generator` spec, 2026-07-31). Both the path template and PNG upload change when ADR-027 is
   implemented. Until then the free-tier headroom in §7 is a plan, not a fact.
-- **Supabase project region is unconfirmed against Northflank's Singapore pin** (ADR-031). Relevant to latency and
-  to the Philippine Data Privacy Act framing in `docs/capstone/ethics_and_safety.md`, and **not changeable after
-  project creation** without a migration. Not decided by ADR-027 — it sits with ADR-006.
+- **Hosting region (D-07, 2026-11-21).** The owner chose Northflank's North America region for its free tier
+  (`docs/specs/research-page-refresh.md`), replacing the "Singapore" pin in ADR-031 and ADR-009. This is disclosed
+  in the privacy material (`docs/capstone/ethics_and_safety.md`). No tracked doc records the Supabase project
+  region, which is **not changeable after project creation** without a migration. It sits with ADR-006.
 - **ADR-015's "hosted inference counts as open-weight" reading is an unconfirmed operating assumption, not
   a supervisor ruling.** ADR-015 states explicitly: the project owner (not the supervisor) judged that
   hosted inference of open weights satisfies the mandate, and flags it for explicit confirmation before
   Phase 2 hardening. If the mandate turns out to mean *self-hosted*, this doc's entire hosting model
   (fal.ai, OpenRouter) changes to a GPU service StoryBuddy operates directly — the pipeline code itself
   would not change, because every vendor call is already isolated in `providers.py`.
-- **CyberLab training GPU VRAM is unconfirmed.** `docs/capstone/hardware_and_hosting.md` §3a: the tentative
-  spec "RTX 4060, 32 GB" almost certainly means an RTX 4060 GPU (8 GB VRAM, 16 GB on a 4060 Ti) + 32 GB
-  *system* RAM — not 32 GB VRAM. The earlier two-image 7B recipe was estimated at ~16 GB+ VRAM,
-  so an 8 GB card is unsuitable for the amended Qwen3.5-9B run. ADR-061 requires a measured
-  two-image QLoRA step before the host is qualified; the earlier 4090 cost estimate is not a 9B quote.
+- **Training hardware (2026-11-21).** The registered Qwen3.5-9B QLoRA runs used a rented NVIDIA RTX A6000
+  (49140 MiB), CUDA 12.8, LLaMA-Factory v0.9.5. The run record is git-ignored, so the values are copied into
+  `docs/capstone/hardware_and_hosting.md` §3a. The earlier CyberLab "RTX 4060, 32 GB" plan (8 GB VRAM, too small
+  for this run) is kept there as history. ADR-061 required a measured two-image QLoRA step before qualifying the host.
 - ~~**The output-image safety gate is entirely unbuilt.**~~ — resolved 2026-08-02 by `moderation-stack`:
   `input_gate` is a real implementation (meta-llama/llama-guard-4-12b OpenRouter API + Presidio PII redaction,
   concurrent, with an OpenRouter backstop), `char_ref_mod` gates every canonical reference before the

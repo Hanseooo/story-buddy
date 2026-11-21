@@ -6,6 +6,14 @@
 §"Considered and rejected as deferrals", ADR-013, ADR-020, ADR-027
 **Produces:** ADR-058, four replacement issues, and the close of #68
 
+> **Superseded in part, 2026-11-21 (D-06, D-27, D-28).** The questionnaire is now 23 Likert items on six
+> characteristics (Functional Suitability, Interaction Capability, Reliability, Performance Efficiency,
+> Security, Compatibility), at least 30 respondents, descriptive statistics only. The CVI gate and the
+> Cronbach's α floor described below are dropped. The per-stage verification matrix this note calls the first of the three tools
+> is dropped and never built. The text of the questionnaire is in
+> [`iso-25010-questionnaire.md`](../capstone/iso-25010-questionnaire.md). The scope decision itself (narration
+> cut, PDF restored by ADR-071) is unchanged. The body below stays as history.
+
 ---
 
 ## 1. The problem with #68 as written
@@ -37,7 +45,7 @@ Four things, in dependency order.
 | # | Item | Audit origin | Why it is real |
 |---|---|---|---|
 | 1 | Public policy pages assert unshipped features | §6 Group E | `terms/page.tsx:45` and `privacy/page.tsx:30,32` state PDF download and Chatterbox narration as fact. Neither exists in the codebase. Legal surface, child-facing product. |
-| 2 | Narration and PDF export scope | §4, work group 1 | Promised across the PRD, roadmap, master spec, policy pages, methodology, and Tool A; implemented nowhere. Blocks the Objective 5 instrument. |
+| 2 | Narration and PDF export scope | §4, work group 1 | Promised across the PRD, roadmap, master spec, policy pages, methodology, and the verification matrix; implemented nowhere. Blocks the Objective 5 instrument. |
 | 3 | `PRIVATE-25010-01..04` + the dependency advisory | §6 Group A | Child-data confidentiality, retention, diagnostics leakage, deployed access-control state. Adjacent to Ethics Stage 1. |
 | 4 | B1–B4 correctness gaps | §6 Group B | Ordinary defects with ordinary fixes. B5 is dropped — §5.1. |
 
@@ -72,10 +80,10 @@ mechanism beyond "large targets; minimal text".
 `DECISION_BACKLOG.md:440-444` already recorded the exact terms under which this cut is permitted:
 
 > Deferring it narrows a reported evaluation row and drops an accessibility claim — a documented
-> cost, not a free win. **Defer only as a deliberate trade, with the Tool A row narrowed in the
+> cost, not a free win. **Defer only as a deliberate trade, with the verification-matrix row narrowed in the
 > same change.**
 
-ADR-058 is that deliberate trade, and narrowing the Tool A row in the same change is a hard
+ADR-058 is that deliberate trade, and narrowing the verification-matrix row in the same change is a hard
 requirement of it (§3.3 below), not a follow-up.
 
 CC-6 is **narrowed, not retired**: it becomes "large targets; minimal text", and ADR-058 records
@@ -95,7 +103,7 @@ Both cut features sit inside a **reported** evaluation row. ADR-058 must narrow 
 compose-only in the same change. The category does not disappear; its criterion shrinks to
 "Scenes assembled as a complete book."
 
-This is the single highest-risk edit in the whole change, because Tool A produces the Objectives
+This is the single highest-risk edit in the whole change, because the verification matrix would produce the Objectives
 1–2 functional-verification results. Getting it wrong means reporting a success rate against a
 criterion the product was never built to meet.
 
@@ -161,7 +169,7 @@ Issue #68 is closed and replaced by four issues. The private findings get no pub
 architectural decision.
 
 **B — ADR-058 and the reconciliation.** §3 and §4 in one change. The ADR is written and accepted
-in its own session per AGENTS.md ("architectural decisions get their own session"). §3.3's Tool A
+in its own session per AGENTS.md ("architectural decisions get their own session"). §3.3's verification-matrix
 narrowing is part of this change, not a follow-up.
 
 **C — Direct production dependency advisory.** The audit's public release blocker. Step one is
