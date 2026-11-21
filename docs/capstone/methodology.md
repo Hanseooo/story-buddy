@@ -131,13 +131,13 @@ A deterministic pipeline of **ten logical modules**, in order:
 |---|---|---|
 | 1 | Input Moderation | Text safety gate, then personally-identifiable-information redaction |
 | 2 | Story Analyzer | Entity and coreference extraction into the Story Memory contract |
-| 3 | Scene Segmentation | Selects **up to** 10–15 scenes; scene count tracks the story's distinct major plot points (target ≥ 3 where the arc supports it); never padded to reach a count and never invents content — never-invent overrides the floor |
+| 3 | Scene Segmentation | Selects **3 to 10** scenes (`MIN_SCENES = 3`, `MAX_SCENES = 10`, `backend/app/config.py:186,204`; ADR-037 decision 1); scene count tracks the story's distinct major plot points (target ≥ 3 where the arc supports it); never padded to reach a count and never invents content — never-invent overrides the floor |
 | 4 | Story Memory Manager | Maintains the versioned Pydantic *Story Memory* contract that carries state across every stage |
 | 5 | Character Bible | ≤ 2 canonical characters, each rendered **once** as a reference image |
 | 6 | Style Preset | `cel`, `gouache`, or `cut_paper`, explicitly assigned and frozen for the storybook |
 | 7 | Prompt Optimizer | Scene + character bible + style preset + story memory → structured prompt |
 | 8 | AI Scene Generation | Reference-conditioned image edit — the pipeline's single generation mode |
-| 9 | Consistency Judge & Targeted Regeneration | Vision-language judge (emits `differences_observed` **before** `same_character`); one targeted, prompt-corrected retry; best-of fallback; capped |
+| 9 | Consistency Judge & Targeted Regeneration | Vision-language judge (emits `differences_observed` **before** `same_character`); up to two prompt-corrected redraws (three attempts, `max_scene_attempts = 3`, `backend/app/config.py:101`; ADR-037); best-of fallback; capped |
 | 10 | Picture Book Composition | Slide composer (in-app reader) + on-demand PDF download of teacher-approved classroom books (ADR-071/072). Narration remains cut — ADR-058 |
 
 > **Logical vs. implemented.** These are the manuscript's ten logical modules. In the implementation graph
@@ -145,6 +145,12 @@ A deterministic pipeline of **ten logical modules**, in order:
 > nodes — the **Story Memory Manager** is the shared Pydantic contract every node reads and writes, and
 > **Style Preset** and **Prompt Optimizer** are node *inputs* rather than standalone nodes — but the logical
 > decomposition maps one-to-one onto the deterministic pipeline. The architecture is unchanged.
+
+> **Teacher-review mode.** Jobs captured in `teacher_review_v1` (ADR-080) run a 14-node graph instead of the
+> baseline 11 (`backend/pipeline/graph.py`; `AGENTS.md` Project Context). A flagged
+> page or reference goes to a teacher hold (`moderation_review`) and can be replaced (`moderation_replace`)
+> instead of failing the job. Teacher-held moderation and the magic pencil (ADR-082) are on by default since
+> 2026-11-21 (`config.py:90,92`). The study corpus was generated in baseline mode.
 
 **Models.** Text analysis: `mistralai/mistral-small-3.2-24b-instruct` (Apache-2.0; `qwen/qwen3-32b` until
 2026-08-11, replaced after it returned schema-violating structured output in production — ADR-002
@@ -203,9 +209,13 @@ legs.
 
 Both stages require **guardian informed consent and age-appropriate child assent**, in compliance with the
 **Data Privacy Act of 2012 (Republic Act No. 10173)** and the university ethics board. Stories are collected
-at **Matina Aplaya Elementary School**; system development and evaluation are conducted at **Holy Cross of
-Davao College (HCDC), Davao City**, subject to institutional and ethics clearances. Draft consent and assent
-language is held in `docs/product/RESEARCH_PROTOCOL.md` §9.
+at **Vicente Hizon, Sr. Elementary School** (D-04 of `docs/specs/research-page-refresh.md`); system development
+is at **Holy Cross of Davao College (HCDC), Davao City**, subject to institutional and ethics clearances. Draft
+consent and assent language is held in `docs/product/RESEARCH_PROTOCOL.md` §9.
+
+**Implementation site (undecided; D-16, O-07).** Option A: Vicente Hizon, Sr. Elementary School, if the school
+admits researchers despite its PAASCU accreditation. Option B: HCDC, with 40 School of Teacher Education (STE)
+students. The owner has not chosen between them.
 
 **Ethics Stage 1 is the project's longest dependency and cannot be compressed by coding faster.** The
 fine-tuned judge sits four hops downstream of an ethics form: *clearance → stories → images → labels →
@@ -215,8 +225,9 @@ fine-tune.* Everything after `images` takes a weekend. Everything before it take
 
 Three groups, treated separately because they address different aspects of the study:
 
-- **Grade 5–6 learners** provide the child-written stories — fifteen collected, ten forming the primary
-  corpus and five retained as backup. Their participation is limited to the voluntary submission of original
+- **Grade 5–6 learners** provide the child-written stories — fifteen collected, of which twelve were
+  generated into books and three were left out on purpose (two `invalid_terminal`, one `budget_stopped`;
+  `docs/specs/obj4-readiness-audit.md` §7, `research-changelog.md` row 2026-09-16 to 17). Their participation is limited to the voluntary submission of original
   stories; they do not validate the books or evaluate the software. Stories are anonymized and assigned unique
   identifiers.
 - **Expert validators**, purposively selected from the Arts and Education colleges: the **Dean/Professor of
@@ -233,8 +244,8 @@ Three groups, treated separately because they address different aspects of the s
    generation over two probe characters (one real animal, one invented non-human), scored by the research
    team as the substrate kill-criterion. *(This is a technical substrate gate, not a research arm — the
    pipeline-ON-vs-OFF study ablation is dropped, ADR-008.)*
-2. **Corpus collection** under Ethics Stage 1: fifteen original stories from Grade 5–6 learners at Matina
-   Aplaya Elementary School, screened against the inclusion/exclusion criteria to ten primary + five backup.
+2. **Corpus collection** under Ethics Stage 1: fifteen original stories from Grade 5–6 learners at Vicente
+   Hizon, Sr. Elementary School; twelve were generated into books (the other three stay quarantined).
 3. **Generation.** Each primary story processed **once** through the full pipeline. Traces record per-scene
    verdicts, regeneration counts, latency, and cost. Seeds are fixed and reported for reproducibility.
 4. **Expert-validation sessions.** The generated picture books are presented to the expert validators, who
@@ -257,9 +268,9 @@ train and validation only. Donated child writing supplies the held-out test and 
 using it only at evaluation preserves the study's external-validity test.
 
 - **Population:** Grade 5–6 (ages 10–12), Philippines. English, with Taglish code-switching tolerated.
-- **Size:** **fifteen (15) original stories collected**; after screening against the inclusion/exclusion
-  criteria, **ten (10) eligible stories comprise the primary corpus and five (5) are retained as backup** and
-  substituted if a primary story is later excluded.
+- **Size:** **fifteen (15) original stories collected**; **twelve (12) were generated into books** and three
+  stay quarantined on purpose, because 12 clear the held-out floor (`docs/specs/obj4-readiness-audit.md` §7;
+  `research-changelog.md` row 2026-09-16 to 17).
 - **Provenance:** documented. Reviewers will ask.
 
 **One generation process, separated provenance:** donated picture books are the Objective-3 expert-validation
@@ -301,8 +312,8 @@ sizes are planning figures (`docs/specs/judge-finetune.md` §5.5) to be finalize
 character yield (§4.1).
 
 Synthetic input is fixed at 24 train and 6 validation stories—8 train and 2 validation stories for each of
-`cel`, `gouache`, and `cut_paper`. The 15 donated candidates are assigned five per style before generation;
-the 10 primary slots are 4 Gouache, 3 Cel and 3 Cut-paper. Overall held-out performance is primary, and
+`cel`, `gouache`, and `cut_paper`. The 15 donated candidates were assigned five per style before generation;
+the 12 generated books are 3 Cel, 4 Gouache and 5 Cut-paper (`docs/specs/obj4-readiness-audit.md` §7). Overall held-out performance is primary, and
 per-style results are descriptive exploratory diagnostics.
 
 **Character leakage.** Splits are by **character, never by pair**. Every image derived from a given canonical

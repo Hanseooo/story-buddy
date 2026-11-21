@@ -227,8 +227,8 @@ heavier review of children using the system. Splitting the submission is the fix
 > or delete the data.
 
 Both stages require guardian informed consent **and** age-appropriate child assent, in compliance with the
-**Data Privacy Act of 2012 (Republic Act No. 10173)**. Stories are collected at **Matina Aplaya Elementary
-School**; development and evaluation are conducted at **Holy Cross of Davao College (HCDC), Davao City**,
+**Data Privacy Act of 2012 (Republic Act No. 10173)**. Stories are collected at **Vicente Hizon, Sr. Elementary
+School** (D-04); development and evaluation are conducted at **Holy Cross of Davao College (HCDC), Davao City**,
 subject to institutional and ethics clearances.
 
 ### 4.4 Pre-registration
@@ -280,7 +280,7 @@ study's needs, not chosen for convenience:
 The corpus is one grade band in one country. **A tight population is a delimitation, not an apology.**
 
 **In scope (the pipeline's ten logical modules):** Input Moderation · Story Analyzer · Scene Segmentation
-(up to 10–15 scenes, target ≥ 3 distinct major plot points where the arc supports it — never padded, and
+(3 to 10 scenes, `MIN_SCENES`/`MAX_SCENES` in `backend/app/config.py`, target ≥ 3 distinct major plot points where the arc supports it — never padded, and
 never-invent overrides the floor) · Story Memory Manager · Character Bible + canonical reference (≤ 2
 canonical references) · Style Preset (finite catalog; see ADR-042) · Prompt Optimizer · AI Scene Generation
 (Qwen-Image-Edit) · Consistency Judge & Targeted Regeneration (prompted judge in the product; fine-tuned

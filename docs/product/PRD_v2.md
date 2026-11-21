@@ -30,7 +30,7 @@ The updated capstone manuscript is now authoritative for the study design (ADR-0
   Performance Efficiency, Usability, Reliability, Security), 5-point Likert, weighted mean + SD, Table 4
   interpretation bands.
 - **Corpus renumbered and located:** ~~"~50 (60–70) donated stories"~~ → **15 stories collected → 10
-  primary + 5 backup**, Grade 5–6. Stories collected at **Matina Aplaya Elementary School**; system
+  primary + 5 backup**, Grade 5–6. Stories collected at **Vicente Hizon, Sr. Elementary School** (D-04); system
   development and evaluation at **Holy Cross of Davao College (HCDC)**, Davao City, Philippines.
 - **ADR-018's δ = 3 non-inferiority gate is unaffected** — still a *deployment* gate (does the fine-tuned
   judge replace the prompted incumbent in the product), not a reported finding.
@@ -175,7 +175,7 @@ ten-year-olds (ADR-017).
 
 ### 5.1 MVP modules
 1. Story Analyzer (grammar-tolerant entity + coreference extraction; tolerant of light Taglish)
-2. Scene Segmentation Engine (selects up to 10–15 scenes; graceful floor behavior for short stories)
+2. Scene Segmentation Engine (selects 3 to 10 scenes, `MIN_SCENES`/`MAX_SCENES` in `backend/app/config.py`, ADR-037; graceful floor behavior for short stories)
 3. Character Bible Generator + auto-generated canonical reference image (multi-character, max 2 canonical refs in v1)
 4. **Style Presets** (selectable styles defaulting to Gouache, author picks one before generation; config, not a generator — ADR-007, ADR-022, ADR-042)
 5. Prompt Optimization Engine
@@ -255,7 +255,7 @@ it is the long pole and cannot be compressed by coding faster (§10, §18, RESEA
 
 ### MVP
 - Story Analyzer (grammar-tolerant extraction: characters/locations/objects/events + coreference)
-- Scene Segmentation (up to 10–15 scenes; **floor behavior**: fewer scenes allowed, never invent content)
+- Scene Segmentation (3 to 10 scenes, ADR-037; **floor behavior**: fewer scenes allowed, never invent content)
 - Character Bible + auto-generated canonical reference image (≤2 canonical characters)
 - **Style Presets** — hand-authored prompt fragments (Gouache default, Cel selectable, Comic compatibility); the author picks one **before** the canonical
   reference is generated, and it is then frozen for the storybook. No style-anchor image (ADR-022, ADR-042).
@@ -382,7 +382,7 @@ Full detail (recruitment, instruments, ethics staging): `docs/product/RESEARCH_P
 
 ### Story corpus (validity — do not skip)
 Corpus = **donated child writing + researcher labels**: **15 stories collected from Grade 5–6 learners at
-Matina Aplaya Elementary School → 10 primary + 5 backup.** System development and evaluation take place at
+Vicente Hizon, Sr. Elementary School → 10 primary + 5 backup.** System development and evaluation take place at
 **Holy Cross of Davao College (HCDC)**, Davao City, Philippines. Not builder-authored clean text, which
 would measure best-case behavior only. Researcher-written stories are permitted **only** as
 judge-training-split augmentation — never as evaluation stimuli and never in the judge's val/held-out-test
@@ -406,7 +406,7 @@ use only, not any evaluation leg.
 6. **Very short stories** → **fewer scenes allowed**; scene count tracks the story's distinct major plot points, target ≥3 where the arc supports it, never padded to reach it (never-invent overrides the floor). Described as a pipeline behaviour of Scene Segmentation, not a standalone evaluation objective (RESEARCH_PROTOCOL §4).
 7. **Whole-run timeout / stall** → **LangGraph checkpointing + resumability**: a stall at scene N resumes from N, never re-rolls scenes 1…N-1. Kid sees "taking a little longer…" then "we saved your progress — come back soon." ADR-005.
 8. **Image model/API** → **Qwen-Image-Edit (Apache-2.0) on fal.ai.** Open weight, hosted. ADR-001, ADR-015.
-9. **Moderation services** → text (**meta-llama/llama-guard-4-12b** on the OpenRouter + **`gpt-oss-safeguard-20b`** on OpenRouter, both Apache-2.0) + PII (Presidio + **Filipino recognizers**) + image (NSFW ViT + VLM safety rubric). **Two independent open classifiers per path.** §13, ADR-011.
+9. **Moderation services** → text (**meta-llama/llama-guard-4-12b** on the OpenRouter + **`gpt-oss-safeguard-20b`** on OpenRouter, both Apache-2.0) + PII (Presidio + **Filipino recognizers**) + image (Mistral Small 3.2 primary + gemma-3-27b-it backstop via OpenRouter, ADR-032). **Two independent open classifiers per path.** §13, ADR-011.
 10. **Fine-tuning** → **the consistency judge** (`Qwen3.5-9B`, QLoRA), served on vLLM only if qualified and selected. Identity and style
     remain the *wrong* targets — ADR-016's reasoning is preserved and is precisely why the judge is right. **ADR-018, ADR-019, ADR-061.**
 11. **What "open source" means** → **open weight**, hosted inference, self-hosting available — and, as of
@@ -425,7 +425,7 @@ use only, not any evaluation leg.
 
 **Frontend:** Next.js (React) + Tailwind + shadcn/ui (teacher) + hand-built cartoon-pop components (kid) + Motion (micro-interactions) + Lottie (wait states). Deployed on Vercel.
 
-**Backend:** FastAPI (web) + **separate RQ worker** + **Redis** (broker), on Northflank (Render/Fly.io equivalent; Singapore region). *A long pipeline cannot run in a request cycle — this is a 3-service deployment, not one.*
+**Backend:** FastAPI (web) + **separate RQ worker** + **Redis** (broker), on Northflank (Render/Fly.io equivalent; North America region, free tier, D-07). *A long pipeline cannot run in a request cycle — this is a 3-service deployment, not one.*
 
 **Pipeline engine:** **LangGraph as a deterministic state machine** (explicit nodes; conditional edges only at moderation pass/fail and consistency pass/fail). LangChain omitted unless a concrete need appears. Model APIs called directly through `backend/providers.py` — the only file that names a vendor (ADR-003, ADR-015).
 

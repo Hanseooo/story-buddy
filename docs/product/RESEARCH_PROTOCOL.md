@@ -210,12 +210,12 @@ Test stories must be **real or realistic child writing**, not builder-authored c
 best-case only). Grade 5–6, English with Taglish code-switching tolerated.
 
 **Target: 15 stories collected, split into 10 primary corpus + 5 backup.** Collected from qualified
-**Grade 5 & 6 learners** at **Matina Aplaya Elementary School**. Learners submit **original stories only**
+**Grade 5 & 6 learners** at ~~**Matina Aplaya Elementary School**~~ **Vicente Hizon, Sr. Elementary School** (corrected 2026-11-21, D-04 of `docs/specs/research-page-refresh.md`). Learners submit **original stories only**
 — no validation/evaluation role; anonymized and assigned unique IDs at intake. **Do not use the old
 "~50 (60–70) donated stories" numbers anywhere** — that target belonged to the dropped comparative judge
 study design and no longer applies.
 
-**Locale.** Stories are collected at **Matina Aplaya Elementary School**; system development and
+**Locale.** Stories are collected at ~~**Matina Aplaya Elementary School**~~ **Vicente Hizon, Sr. Elementary School** (corrected 2026-11-21, D-04); system development and
 evaluation take place at **Holy Cross of Davao College (HCDC)**, Davao City, Philippines.
 
 **This is a recruitment decision and it is unfixable later.** By Phase 2.5 the corpus is closed. Ask for
@@ -319,7 +319,7 @@ heavier, not lighter.
 
 ## 10. Recruitment
 
-**Learners (corpus, §8).** Stories are collected at **Matina Aplaya Elementary School**, from qualified
+**Learners (corpus, §8).** Stories are collected at ~~**Matina Aplaya Elementary School**~~ **Vicente Hizon, Sr. Elementary School** (corrected 2026-11-21, D-04), from qualified
 Grade 5–6 learners. Their only role is writing their own story — no validation or evaluation role in
 Objectives 3–5.
 

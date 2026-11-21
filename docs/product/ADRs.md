@@ -89,3 +89,9 @@ Each ADR now lives in its own file under `docs/product/adr/`; this page is only 
 | [ADR-081](./adr/ADR-081-teacher-notes-the-child-can-read.md) | Teacher notes the child can read | Accepted (2026-10-29) · implemented: schema, teacher API, classroom switch and child delivery; amends teacher-review-and-approval §4.10, invariants 9 and 12, and §13.6; teacher note UI, labels and J1–J3 browser verification pending; ethics re-review before real-child release |
 | [ADR-082](./adr/ADR-082-magic-pencil-child-edits-and-other-versions.md) | Magic pencil: child edits and other versions | Accepted (2026-11-01) · amends ADR-029 §2 and ADR-069; synthetic-only, off by default; free text after rank 2 audit 01; ethics re-review before real children; implemented: tickets 03–11 behind the setting; migrations 0027–0032 not yet applied; US-01–US-05 browser pass pending |
 | [ADR-083](./adr/ADR-083-research-pages-hub-chapter-routes-and-png-diagram-export.md) | `/research` is a hub, the paper's chapters get static pages, and diagrams export to PNG | Accepted (2026-11-21) · extends ADR-065/066/067; adds `/research/pipeline`, `methodology`, `instruments`, `architecture`, `ethics`, `objectives`; three-item header; PNG export of diagrams |
+
+## Dated notes
+
+Notes on frozen ADRs. The ADR files are not edited (AGENTS.md Hard Rules).
+
+- **2026-11-21 · ADR-008.** ADR-008 names Matina Aplaya Elementary School as the story source. The owner corrected this: the source school is Vicente Hizon, Sr. Elementary School (D-04 of `docs/specs/research-page-refresh.md`). Current docs state the corrected name; ADR-008 stays as written.

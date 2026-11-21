@@ -74,10 +74,24 @@ Technical gates are supplemented by strict product boundaries:
   The separate Stage-1 story-donation wording is currently an unapproved draft at
   `docs/capstone/story_donation_consent_and_assent_draft.md`; it must not be administered before adviser,
   institutional-ethics and participating-school approval.
-* **Institutional and ethics clearances:** Data collection and evaluation are gated on clearance from both sites — **Holy Cross of Davao College (HCDC)**, where the system is developed and evaluated, and the **participating elementary school** (Matina Aplaya Elementary School, Davao City), where stories are collected from Grade 5–6 learners. Neither corpus intake nor evaluation sessions begin before both clearances are in hand.
+* **Institutional and ethics clearances:** Data collection and evaluation are gated on clearance from both sites — **Holy Cross of Davao College (HCDC)**, where the system is developed and evaluated, and the **participating elementary school** (Vicente Hizon, Sr. Elementary School, Davao City; D-04), where stories are collected from Grade 5–6 learners. This bullet is the original plan. The basis the study actually rests on is recorded in §5.
 * **Row-Level Security (RLS):** Data isolation is enforced at the database level, ensuring that users can only access their specific classroom's content—and, now that each child holds an account, isolating one child's account from another's within the same classroom, not only adult-owned rows.
 * **Asset access:** RLS governs rows; it does not govern files. Every generated image lives in a **private bucket** and is reached only through a **short-lived signed URL minted on read**. There are no public buckets, and no durable asset URL is ever stored — the database holds storage *paths*. A leaked row is useless without a live signature.
 * **Failure and moderation screens receive the same design care as success screens.** A child whose story is blocked, or whose generation fails, sees an age-appropriate, non-punitive explanation rather than an error state — being refused by the system is a normal outcome of a child-facing safety stack, not an edge case, and it is the moment the product is most likely to make a child feel they did something wrong.
+
+## 5. Later features and the study's recorded ethics basis
+
+Written 2026-11-21 from the owner's answers in `docs/specs/research-page-refresh.md` (D-08, D-09, D-22) and the ADRs below.
+
+**Features added after the sections above were written.** Each is an accepted ADR; none is cleared for real children yet.
+* **PDF download (ADR-071, ADR-072).** A teacher-approved book can be downloaded as a PDF, rendered on demand and never stored. ADR-072 lets classmates download approved classroom books. The approval and safety gates stay.
+* **Teacher-held moderation (ADR-080).** In `teacher_review_v1` mode a first moderation flag holds the job for the teacher, who can allow exact content under a written policy, request one picture replacement, or stop. On by default since 2026-11-21 (`backend/app/config.py:90`); the ethics re-review and the moderation-audit gate before real-child use still apply.
+* **Teacher notes the child can read (ADR-081).** The child can read their own teacher note. On by default since 2026-11-21 (migration `0033`); same release gate.
+* **Magic pencil and other versions (ADR-082).** The child can write a short change (about 200 characters) to edit a picture and can pick earlier versions. Pencil text is moderated after PII redaction. On by default since 2026-11-21 (`config.py:92`); ADR-082 requires ethics re-review before real children.
+
+**Basis the study rests on (D-08).** No ethics committee review was sought: the researchers did not interact with the children, and learners did not use the system during the study. The system supports teacher-issued student accounts. The stories were used under a hard-copy agreement from the teacher, which is a consent form (D-22); nothing is claimed about its wider scope. Residual risk, recorded rather than closed: no separate parental consent was collected, and donated details stay public (below). This differs from the "Consent and Assent" and "Institutional and ethics clearances" bullets in §4, which describe the original plan.
+
+**Public disclosure (D-09).** Donated story IDs, plot summaries and character names stay in the public repository. The owner chose this over unlinking them from the public site; the teacher's agreement is the recorded basis. The paper's privacy section must state it.
 
 ## Conclusion
 

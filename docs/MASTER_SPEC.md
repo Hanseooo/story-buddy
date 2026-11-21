@@ -213,7 +213,7 @@ Product/architecture choices are in the ADRs; this is the working reference, **i
 | Layer | Choice | Notes / ADR |
 |---|---|---|
 | Frontend | Next.js (React) + Tailwind 4 + Cobalt Playroom components + framer-motion | Vercel, SSR landing. §9,§12 |
-| Backend web | FastAPI | Northflank (Singapore). ADR-031 |
+| Backend web | FastAPI | Northflank (North America, free tier; D-07). ADR-031 |
 | Worker / queue | RQ worker + Redis broker | Separate service. ADR-005 |
 | Pipeline engine | LangGraph (deterministic) + `langgraph-checkpoint-postgres`. Checkpoints go over the **direct** Postgres connection (5432), not the 6543 transaction pooler | ADR-003,005,033 |
 | LLM / VLM | `mistralai/mistral-small-3.2-24b-instruct` (nodes; ~~`qwen/qwen3-32b`~~ until 2026-08-11) + prompted judge `gemma-3-27b-it`; fine-tuned `Qwen3.5-9B` is the amended Objective 4 candidate and ships only if its product gate passes | ADR-002 (amended 2026-08-11),004,015,018,061 |
