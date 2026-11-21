@@ -154,6 +154,18 @@ export function summarizeNodes(run: RunDetail): Record<string, NodeSummary> {
       lines: run.scenes.length > 0 ? run.scenes.map((s, i) => `Page ${i + 1}: safety ${s.moderation_status ?? "not checked"}.`) : ["No pages were checked."],
       section: SAFETY,
     },
+    optional_themes: {
+      purpose: "Checks the themes the teacher chose for the class (teacher-review mode only).",
+      result: "Theme check ran.", lines: [], section: SAFETY,
+    },
+    moderation_review: {
+      purpose: "Holds the run until the teacher allows, replaces or stops what was flagged (teacher-review mode only).",
+      result: "The teacher reviewed a flagged item.", lines: [], section: SAFETY,
+    },
+    moderation_replace: {
+      purpose: "Swaps in a new drawing for a flagged reference or page (teacher-review mode only).",
+      result: "A flagged drawing was replaced.", lines: [], section: SAFETY,
+    },
     compose: {
       purpose: "Assembles the selected illustrations and captions into the storybook.",
       result: `${shipped} of ${run.scenes.length} pages have a drawing selected for the book.`,
@@ -162,7 +174,9 @@ export function summarizeNodes(run: RunDetail): Record<string, NodeSummary> {
   };
   for (const [id, summary] of Object.entries(summaries)) {
     const ended = run.ended_on?.node === id ? run.ended_on.kind : null;
-    if (ended === "waiting") {
+    if (ended === "teacher") {
+      summary.result = "Waiting for the teacher to review a flagged item.";
+    } else if (ended === "waiting") {
       summary.result = "Waiting for the child to confirm the character references.";
     } else if (ended === "running" || ended === "failed") {
       summary.lines.unshift(summary.result);

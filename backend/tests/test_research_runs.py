@@ -112,6 +112,8 @@ def test_ended_on_kinds():
                                    "duration_ms": None}
     assert waiting["ended_on"] == {"node": "reveal", "kind": "waiting"}
     assert running["ended_on"] == {"node": "regenerate", "kind": "running"}
+    held = project_run(_job(status="awaiting_teacher", approved_at=None), _history(("moderation_review",), _memory()), _sign)
+    assert held["ended_on"] == {"node": "moderation_review", "kind": "teacher"}
 
 
 def test_no_private_field_reaches_the_response():

@@ -33,6 +33,7 @@ const STILL_GOING: Record<string, string> = {
   queued: "This run is waiting to start. Reload to see new steps.",
   running: "This run is still going. The page shows what was recorded so far; reload to see more.",
   awaiting_confirm: "This run is waiting for the child to confirm the characters. The page shows what was recorded so far.",
+  awaiting_teacher: "This run is held for the teacher to review a flagged item. The page shows what was recorded so far.",
 };
 
 export default async function RunPage({ params }: { params: Promise<{ jobId: string }> }) {
